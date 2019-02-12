@@ -28,8 +28,8 @@ Calling a struct of type diffusive network dynamics implements the ODE:
     dnd(dx, x, p, t)
 """
 function (dnd::diffusive_network_dynamics)(dx, x, p, t)
-    mul!(dx, dnd.L, x)
-    @. dx = dx + dnd.nodes(dx, x, p, t)
+    mul!(dx, dnd.L, x) # dx .= L * x
+    @. dx = dx + dnd.nodes(dx, x, p, t) # ToDo test that this does the right thing
     nothing
 end
 
@@ -38,6 +38,49 @@ When called with a graph, the dynamics defaults to using the laplacian.
 """
 function diffusive_network_dynamics(g::AbstractGraph, nodes)
     diffusive_network_dynamics(laplacian_matrix(g), nodes)
+end
+
+# The main, fully flexible network dynamics implementation
+export network_dynamics
+
+"""
+The key functions or function arrays are:
+
+nodes: ``nodes!(dx, x, [l]_s,[l]_t, p, t)``
+
+lines: ``lines!(dl, l, x_s, x_t, p, t)``
+
+Given edges ``e``, ans nodes ``n``, as well as an orientation encoded by
+the source function ``s(e)`` and the target function ``t(e)``
+this implements the system of ODEs:
+
+``\\frac{dx_n}{dt} = dx_n``
+
+``\\frac{dl_e}{dt} = dl_e``
+
+with ``dx`` and ``dl`` calculated by
+
+``[l]_s = [l_e \\text{ if } s(e) = n]``
+
+``[l]_t = [l_e \\text{ if } t(e) = n]``
+
+``nodes![n](dx_n, x_n, [l]_s, [l]_t, p_n, t)``
+
+``lines![e](dl_e, l_e, x_{s(e)}, x_{t(e)}, p_e, t)``
+
+Alternative design:
+
+Something that relaxes to a diffusive network would for example be
+implemented by
+
+    lines = (dl, l, x_1, x_2) -> dl .= 1000. * ((x_1 - x_2) - l)
+    agg = (list_1, list_2) -> sum(list_1) - sum(list_2)
+"""
+@with_kw struct network_dynamics{T}
+    Placeholder
+end
+function (dnd::network_dynamics)(dx, x, p, t)
+    nothing
 end
 
 
