@@ -29,7 +29,11 @@ Calling a struct of type diffusive network dynamics implements the ODE:
 """
 function (dnd::diffusive_network_dynamics)(dx, x, p, t)
     mul!(dx, dnd.L, x) # dx .= L * x
-    @. dx = dx + dnd.nodes(dx, x, p, t) # ToDo test that this does the right thing
+    dx_temp = 0
+    for i in 1:length(dx)
+        dnd.nodes(dx_temp, x[i], p, t)
+        dx[i] = dx_temp - dx[i]
+    end
     nothing
 end
 
