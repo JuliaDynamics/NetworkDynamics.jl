@@ -13,8 +13,10 @@ dnd(dx0, x0, nothing, 0.)
 
 using DifferentialEquations
 
-dnd_prob = ODEProblem(dnd, x0, (0.,1.))
+dnd_prob = ODEProblem(dnd, x0, (0., 1.))
 sol = solve(dnd_prob)
 using Plots
 plot(sol, legend=false)
 println(dnd.L)
+
+#My first edit
