@@ -5,9 +5,13 @@ using LinearAlgebra
 
 
 
-A = barabasi_albert(10,5)
-dnd = NetworkDynamics.diffusive_network_dynamics(A, (dx, x, p, t) -> dx = -x^2)
-
+g = barabasi_albert(10,5)
+line! = (l,x_s,x_t,p,t) -> l = x_s - x_t
+lines! = [line! for e in edges(g)]
+node! = (dx,x,l_s,l_t,p,t) -> dx = -x-sum(l_s) + sum(l_t)
+nodes! = [node! for n in vertices(g)]
+dnd = NetworkDynamics.diffusive_network_dynamics(g, (dx, x, p, t) -> dx = -x^2)
+ssl= StaticLines.scalar_static_line(nodes!,lines!,g)
 x0 = ones(10)+rand(10)
 dx0 = ones(10)
 
@@ -20,6 +24,11 @@ sol = solve(dnd_prob)
 using Plots
 plot(sol, legend=false)
 println(dnd.L)
+
+sll_prob= ODEProblem(ssl, x0 , (0., 2.))
+sol2 = solve(sll_prob)
+plot(sol2, legend=false)
+
 
 #My first edit
 #My second edit
