@@ -32,7 +32,7 @@ function (dnd::diffusive_network_dynamics)(dx, x, p, t)
     dx_temp = 0
     for i in 1:length(dx)
         dnd.nodes(dx_temp, x[i], p, t)
-        dx[i] = dx_temp - dx[i]
+        dx[i] = dx_temp - x[i]
     end
     nothing
 end

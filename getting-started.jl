@@ -8,16 +8,16 @@ using DifferentialEquations
 using Plots
 
 g = barabasi_albert(10,5)
-line! = (l,x_s,x_t,p,t) -> l = x_s - x_t
-lines! = [line! for e in edges(g)]
-dline! = (dl,l,x_s,x_t,p,t) -> dl = x_s -x_t - l
-dlines! = [dline! for e in edges(g)]
-node! = (dx,x,l_s,l_t,p,t) -> dx = x-sum(l_s) + sum(l_t)
-nodes! = [node! for n in vertices(g)]
+line(x_s,x_t,p,t) = x_s - x_t
+lines = [line for e in edges(g)]
+dline(l,x_s,x_t,p,t) = x_s -x_t - l
+dlines = [dline for e in edges(g)]
+node(x,l_s,l_t,p,t) = x-sum(l_s) + sum(l_t)
+nodes = [node for n in vertices(g)]
 
 dnd = NetworkDynamics.diffusive_network_dynamics(g, (dx, x, p, t) -> dx = -x^2)
-ssl = StaticLines.scalar_static_line(nodes!,lines!,g)
-sdl = DynamicLines.scalar_dynamic_line(nodes!,dlines!,g)
+ssl = StaticLines.scalar_static_line(nodes,lines,g)
+sdl = DynamicLines.scalar_dynamic_line(nodes,dlines,g)
 
 x0 = ones(10)+rand(10)
 dx0 = ones(10)
@@ -35,4 +35,5 @@ plot(sol2, legend=false)
 
 sdl_prob = ODEProblem(sdl, v0, (0.,2.))
 sol3= solve(sdl_prob)
-plot(sol3, legend=false)
+#to separate lines and nodes, add something like vars=(1:10) in the plot function
+plot(sol3, legend=false,vars=(11:35))
