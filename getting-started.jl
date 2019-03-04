@@ -36,11 +36,11 @@ sol3= solve(sdl_prob)
 #to separate lines and nodes, add something like vars=(1:10) in the plot function
 plot(sol3, legend=false,vars=(11:35))
 
-line! = (l,x_s,x_t,p,t) -> l .= x_s .- x_t
+line! = (l,x_s,x_t,p,t) -> l .= x_s - x_t
 lines! = [line! for e in edges(g)]
-dline! = (dl,l,x_s,x_t,p,t) -> dl .= x_s .- x_t .- l
+dline! = (dl,l,x_s,x_t,p,t) -> dl .= x_s - x_t - l
 dlines! =[dline! for e in edges(g)]
-node! = (dx,x,l_s,l_t,p,t) -> dx .= x .- sum(l_s) .+ sum(l_t)
+node! = (dx,x,l_s,l_t,p,t) -> dx .= - sum(l_s) + sum(l_t)
 nodes! = [node! for n in vertices(g)]
 
 a= NetworkDynamics.static_line_network_dynamics(nodes!,lines!,g)

@@ -102,7 +102,7 @@ function (d::static_line_network_dynamics)(dx, x, p, t)
         d.lines![i](d.l_e[i], x[d.s_e[i]], x[d.t_e[i]], p, t)
     end
     for i in 1:d.len_n
-        d.nodes![i](view(dx,i), view(x,i), sum.(d.l_s[i]), sum.(d.l_t[i]), p, t)
+        d.nodes![i](view(dx,i), x[i], sum.(d.l_s[i]), sum.(d.l_t[i]), p, t)
     end
     nothing
 end
@@ -162,10 +162,10 @@ end
 function (d::dynamic_line_network_dynamics)(dx, x, p, t)
     for i in 1:d.len_l
         d.l_e[i] .= x[d.len_n+i]
-        d.lines![i](view(dx,d.len_n+i),view(x,d.len_n+i), x[d.s_e[i]], x[d.t_e[i]], p, t)
+        d.lines![i](view(dx,d.len_n+i),x[d.len_n+i], x[d.s_e[i]], x[d.t_e[i]], p, t)
     end
     for i in 1:d.len_n
-        d.nodes![i](view(dx,i), view(x,i), sum.(d.l_s[i]), sum.(d.l_t[i]), p, t)
+        d.nodes![i](view(dx,i), x[i], sum.(d.l_s[i]), sum.(d.l_t[i]), p, t)
     end
     nothing
 end
