@@ -1,7 +1,6 @@
 include("src/NetworkDynamics.jl")
 include("src/StaticLines.jl")
 include("src/DynamicLines.jl")
-
 using LightGraphs
 using LinearAlgebra
 using DifferentialEquations
@@ -15,7 +14,7 @@ dlines = [dline for e in edges(g)]
 node(x,l_s,l_t,p,t) = x-sum(l_s) + sum(l_t)
 nodes = [node for n in vertices(g)]
 
-dnd = NetworkDynamics.diffusive_network_dynamics(g, (dx, x, p, t) -> dx = -x^2)
+dnd = NetworkDynamics.diffusive_network_dynamics(g, (dx, x, p, t) -> dx = 0)
 ssl = StaticLines.scalar_static_line(nodes,lines,g)
 sdl = DynamicLines.scalar_dynamic_line(nodes,dlines,g)
 
@@ -27,7 +26,6 @@ v0 = rand(35)
 dnd_prob = ODEProblem(dnd, x0, (0., 2.))
 sol = solve(dnd_prob)
 plot(sol, legend=false)
-println(dnd.L)
 
 ssl_prob= ODEProblem(ssl, x0 , (0., 2.))
 sol2 = solve(ssl_prob)
@@ -42,7 +40,7 @@ line! = (l,x_s,x_t,p,t) -> l .= x_s .- x_t
 lines! = [line! for e in edges(g)]
 dline! = (dl,l,x_s,x_t,p,t) -> dl .= x_s .- x_t .- l
 dlines! =[dline! for e in edges(g)]
-node! = (dx,x,l_s,l_t,p,t) -> dx .= x .- sum(sum.(l_s)) .+ sum(sum.(l_t))
+node! = (dx,x,l_s,l_t,p,t) -> dx .= x .- sum(l_s) .+ sum(l_t)
 nodes! = [node! for n in vertices(g)]
 
 a= NetworkDynamics.static_line_network_dynamics(nodes!,lines!,g)
@@ -55,16 +53,39 @@ v0=rand(35)
 a(dx0,x0,nothing,0.)
 b(v0,v0,nothing,0.)
 
-using DifferentialEquations
-
 a_prob=ODEProblem(a,x0,(0.,2.))
 sol=solve(a_prob)
 
-using Plots
 plot(sol,legend=false)
 
-b_prob=ODEProblem(b,v0,(0.,2.))
+b_prob=ODEProblem(b,v0,(0.,5.))
 sol2=solve(b_prob)
-plot(sol2,legend=false)
+plot(sol2,legend=false,vars=(11:35))
 
-zeros(10,5)
+
+mline! = [(l,x_s,x_t,p,t) -> l .= x_s .- x_t,(l,x_s,x_t,p,t) -> l .= x_s .- x_t]
+mlines! = [mline! for e in edges(g)]
+mnode! = [(dx,x,l_s,l_t,p,t) -> dx .= .- sum(l_s) .+ sum(l_t),(dx,x,l_s,l_t,p,t) -> dx .= .- sum(l_s) .+ sum(l_t)]
+mnodes! = [mnode! for n in vertices(g)]
+mdline! = [(dl,l,x_s,x_t,p,t) -> dl .= .- l[1] .+ x_s .- x_t,(dl,l,x_s,x_t,p,t) -> dl .= .-l[2] .+ x_s .- x_t]
+mdlines! = [mdline! for e in edges(g)]
+
+c = NetworkDynamics.multi_static(mnodes!,mlines!,g)
+
+x0=rand(20)
+
+c(x0,x0,0,0)
+
+c_prob=ODEProblem(c,x0,(0.,5.))
+sol3=solve(c_prob)
+plot(sol3,legend=false)
+
+d = NetworkDynamics.multi_dynamic(mnodes!,mdlines!,g)
+
+v0=rand(70)
+
+d(v0,v0,0,0)
+
+d_prob = ODEProblem(d,v0,(0.,50.))
+sol4 = solve(d_prob)
+plot(sol4,legend=false,vars=(21:70))
