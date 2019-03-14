@@ -78,253 +78,310 @@ end
         agg = (list_1, list_2) -> sum(list_1) - sum(list_2)"""
 
 
-export static_line_network_dynamics
+export scalar_static_lines
 
 """
 Documentation!!
 """
-@with_kw struct static_line_network_dynamics
-    nodes!
-    lines!
+@with_kw struct scalar_static_lines
+    vertices!
+    edges!
     s_e
     t_e
-    l_e
-    l_e_int
-    l_s
-    l_t
-    len_l
-    len_n
+    e
+    e_int
+    e_s
+    e_t
+    num_e
+    num_v
 end
 
 
-function (d::static_line_network_dynamics)(dx, x, p, t)
-    for i in 1:d.len_l
-        d.lines![i](d.l_e[i], x[d.s_e[i]], x[d.t_e[i]], p, t)
+function (d::scalar_static_lines)(dx, x, p, t)
+    for i in 1:d.num_e
+        d.edges![i](d.e[i], x[d.s_e[i]], x[d.t_e[i]], p, t)
     end
-    for i in 1:d.len_n
-        d.nodes![i](view(dx,i), x[i], sum.(d.l_s[i]), sum.(d.l_t[i]), p, t)
+    for i in 1:d.num_v
+        d.vertices![i](view(dx,i), x[i], sum.(d.e_s[i]), sum.(d.e_t[i]), p, t)
     end
     nothing
 end
 
-function static_line_network_dynamics(nodes!, lines!, s_e, t_e)
-    len_l = length(lines!)
-    len_n = length(nodes!)
+function scalar_static_lines(vertices!, edges!, s_e, t_e)
+    num_e = length(edges!)
+    num_v = length(vertices!)
 
-    # Will get longer once we have more variables per line
-    l_e_int = rand(len_l)
+    # Will get longer once we have more variables per edge
+    e_int = rand(num_e)
 
     # This will be views to more than one variable eventually
-    l_e = [
-        view(l_e_int, i)
-        for i in 1:len_l ]
+    e = [
+        view(e_int, i)
+        for i in 1:num_e ]
 
-    # Create an array of views into the lines that selects only the sources
-    # for each node
-    l_s = [
-         [l_e[j] for j in 1:len_l if s_e[j] == i]
-        for i in 1:len_n ]
+    # Create an array of views into the edges that selects only the sources
+    # for each vertex
+    e_s = [
+         [e[j] for j in 1:num_e if s_e[j] == i]
+        for i in 1:num_v ]
     # Create an array of views into the lines that selects only the targets
     # for each node
-    l_t = [
-        [l_e[j] for j in 1:len_l if t_e[j] == i]
-        for i in 1:len_n ]
+    e_t = [
+        [e[j] for j in 1:num_e if t_e[j] == i]
+        for i in 1:num_v ]
 
-    static_line_network_dynamics(nodes!, lines!, s_e, t_e, l_e, l_e_int, l_s, l_t, len_l, len_n)
+    scalar_static_lines(vertices!, edges!, s_e, t_e, e, e_int, e_s, e_t, num_e, num_v)
 end
 
 """
 When called with a graph, we construct the source and target vectors.
 """
-function static_line_network_dynamics(nodes!, lines!, g::AbstractGraph)
+function scalar_static_lines(vertices!, edges!, g::AbstractGraph)
     s_e = [src(e) for e in edges(g)]
     t_e = [dst(e) for e in edges(g)]
-    static_line_network_dynamics(nodes!, lines!, s_e, t_e)
+    scalar_static_lines(vertices!, edges!, s_e, t_e)
 end
 
 
-export dynamic_line_network_dynamics
+export scalar_dynamic_lines
 
-@with_kw struct dynamic_line_network_dynamics
-    nodes!
-    lines!
+@with_kw struct scalar_dynamic_lines
+    vertices!
+    edges!
     s_e
     t_e
-    l_e
-    l_e_int
-    l_s
-    l_t
-    len_l
-    len_n
+    e
+    e_int
+    e_s
+    e_t
+    num_e
+    num_v
 end
 
 
-function (d::dynamic_line_network_dynamics)(dx, x, p, t)
-    for i in 1:d.len_l
-        d.l_e[i] .= x[d.len_n+i]
-        d.lines![i](view(dx,d.len_n+i),x[d.len_n+i], x[d.s_e[i]], x[d.t_e[i]], p, t)
+function (d::scalar_dynamic_lines)(dx, x, p, t)
+    for i in 1:d.num_e
+        d.e[i] .= x[d.num_v+i]
+        d.edges![i](view(dx,d.num_v+i),x[d.num_v+i], x[d.s_e[i]], x[d.t_e[i]], p, t)
     end
-    for i in 1:d.len_n
-        d.nodes![i](view(dx,i), x[i], sum.(d.l_s[i]), sum.(d.l_t[i]), p, t)
+    for i in 1:d.num_v
+        d.vertices![i](view(dx,i), x[i], sum.(d.e_s[i]), sum.(d.e_t[i]), p, t)
     end
     nothing
 end
 
-function dynamic_line_network_dynamics(nodes!, lines!, s_e, t_e)
-    len_l = length(lines!)
-    len_n = length(nodes!)
+function scalar_dynamic_lines(vertices!, edges!, s_e, t_e)
+    num_e = length(edges!)
+    num_v = length(vertices!)
 
-    # Will get longer once we have more variables per line
-    l_e_int = rand(len_l)
+    # Will get longer once we have more variables per edge
+    e_int = rand(num_e)
 
     # This will be views to more than one variable eventually
-    l_e = [
-        view(l_e_int, i)
-        for i in 1:len_l ]
+    e = [
+        view(e_int, i)
+        for i in 1:num_e ]
 
-    # Create an array of views into the lines that selects only the sources
-    # for each node
-    l_s = [
-         [l_e[j] for j in 1:len_l if s_e[j] == i]
-        for i in 1:len_n ]
-    # Create an array of views into the lines that selects only the targets
-    # for each node
-    l_t = [
-        [l_e[j] for j in 1:len_l if t_e[j] == i]
-        for i in 1:len_n ]
+    # Create an array of views into the edges that selects only the sources
+    # for each vertex
+    e_s = [
+         [e[j] for j in 1:num_e if s_e[j] == i]
+        for i in 1:num_v ]
+    # Create an array of views into the edges that selects only the targets
+    # for each vertex
+    e_t = [
+        [e[j] for j in 1:num_e if t_e[j] == i]
+        for i in 1:num_v ]
 
-    dynamic_line_network_dynamics(nodes!, lines!, s_e, t_e, l_e, l_e_int, l_s, l_t, len_l, len_n)
+    scalar_dynamic_lines(vertices!, edges!, s_e, t_e, e, e_int, e_s, e_t, num_e, num_v)
 end
 
 """
     When called with a graph, we construct the source and target vectors."""
 
-function dynamic_line_network_dynamics(nodes!, lines!, g::AbstractGraph)
+function scalar_dynamic_lines(vertices!, edges!, g::AbstractGraph)
     s_e = [src(e) for e in edges(g)]
     t_e = [dst(e) for e in edges(g)]
-    dynamic_line_network_dynamics(nodes!, lines!, s_e, t_e)
+    scalar_dynamic_lines(vertices!, edges!, s_e, t_e)
 end
 
 
-export multi_static
+export static_lines
 
-@with_kw struct multi_static
-    nodes!
-    lines!
-    s_e
-    t_e
-    l_e
-    l_e_int
-    l_s
-    l_t
-    len_l
-    len_n
-    len_var
+@with_kw struct static_lines
+    edges!
+    vertices!
+    num_v # Number of vertices
+    num_e # Number of edges
+    e_int # Variables living on edges
+    e_idx # Array of Array of indices of variables in e_int belonging to edges
+    s_idx # Array of Array of indices of variables in x belonging to source vertex of edge
+    d_idx # Array of Array of indices of variables in x belonging to destination vertex of edge
+    v_idx # Array of Array of indices of variables in x belonging to vertex
+    e_s # Array of Array of views on the variables in e_int of the edges that are source of a vertex
+    e_d # Array of Array of views on the variables in e_int of the edges that are destination of a vertex
 end
 
+function (d::static_lines)(dx, x, p, t)
+    @views begin
 
-function (d::multi_static)(dx, x, p, t)
-    for i in 1:d.len_l
-        for j in 1:d.len_var
-        d.lines![i][j](d.l_e[(i-1)*d.len_var + j], x[(d.s_e[i]-1)*d.len_var + j], x[(d.t_e[i]-1)*d.len_var + j], p, t)
-        end
+    for i in 1:d.num_e
+        # d.l_e[i] = d.l_e_int[l_idx[i]] as view
+        d.edges![i](d.e_int[d.e_idx[i]], x[d.s_idx[i]], x[d.d_idx[i]], p, t)
     end
-    for i in 1:d.len_n
-        for j in 1:d.len_var
-        d.nodes![i][j](view(dx,(i-1)*d.len_var + j ), x[((i-1)*d.len_var+1):i*d.len_var], sum.(d.l_s[(i-1)*d.len_var + j]), sum.(d.l_t[(i-1)*d.len_var + j]), p, t)
-        end
+    for i in 1:d.num_v
+        d.vertices![i](dx[d.v_idx[i]], x[d.v_idx[i]], d.e_s[i], d.e_d[i], p, t)
+    end
+
     end
     nothing
 end
 
-function multi_static(nodes!, lines!, s_e, t_e)
-    len_l = length(lines!)
-    len_n = length(nodes!)
-    len_var = length(nodes![1])
+"""
+    dim_v is an array of the number of variables per vertex
+    dim_e is an array of the number of variables per edge"""
 
-    l_e_int = rand(len_l*len_var)
+function static_lines(vertices!, edges!, s_e, d_e, dim_v, dim_e)
+    num_v = length(dim_v)
+    num_e = length(dim_e)
 
-    l_e = [
-        view(l_e_int, i)
-        for i in 1:len_l*len_var ]
+    e_int = zeros(sum(dim_e))
 
+    # x has length sum(dim_v)
+    # v_idx is an Array of Array of indices of variables in x belonging to vertex
 
-    l_s = [
-         [l_e[(j-1)*len_var + k] for j in 1:len_l if s_e[j] == i]
-        for i in 1:len_n for k in 1:len_var ]
-
-    l_t = [
-        [l_e[(j-1)*len_var + k] for j in 1:len_l if t_e[j] == i]
-        for i in 1:len_n for k in 1:len_var]
-
-    multi_static(nodes!, lines!, s_e, t_e, l_e, l_e_int, l_s, l_t, len_l, len_n,len_var)
-end
-
-function multi_static(nodes!, lines!, g::AbstractGraph)
-    s_e = [src(e) for e in edges(g)]
-    t_e = [dst(e) for e in edges(g)]
-    multi_static(nodes!, lines!, s_e, t_e)
-end
-
-
-export multi_dynamic
-
-@with_kw struct multi_dynamic
-    nodes!
-    lines!
-    s_e
-    t_e
-    l_e
-    l_e_int
-    l_s
-    l_t
-    len_l
-    len_n
-    len_var
-end
-
-
-function (d::multi_dynamic)(dx, x, p, t)
-    for i in 1:d.len_l
-        for j in 1:d.len_var
-            d.l_e[(i-1)*d.len_var + j] .= x[(d.len_n + i - 1)*d.len_var + j]
-            d.lines![i][j](view(dx,(d.len_n + i - 1)*d.len_var + j), x[((d.len_n + i - 1)*d.len_var + 1):((d.len_n+i)*d.len_var)], x[(d.s_e[i]-1)*d.len_var + j], x[(d.t_e[i]-1)*d.len_var + j], p, t)
-        end
+    counter = 1
+    v_idx = [zeros(Int32, dim) for dim in dim_v]
+    for i in 1:num_v
+        v_idx[i] .= collect(counter:counter + dim_v[i] - 1)
+        counter += dim_v[i]
     end
-    for i in 1:d.len_n
-        for j in 1:d.len_var
-        d.nodes![i][j](view(dx,(i-1)*d.len_var + j ), x[((i-1)*d.len_var+1):i*d.len_var], sum.(d.l_s[(i-1)*d.len_var + j]), sum.(d.l_t[(i-1)*d.len_var + j]), p, t)
-        end
+
+    counter = 1
+    e_idx = [zeros(Int32, dim) for dim in dim_e]
+    for i in 1:num_e
+        e_idx[i] .= collect(counter:counter + dim_e[i] - 1)
+        counter += dim_e[i]
+    end
+
+    # For every vertex, and for every edge, if the source of the edge is that vertex, take the view on the variables of that edge.
+    # Thus e_s[i] is an array of views onto the variables of the edges for which i is the source.
+    e_s = [[view(e_int, e_idx[i_e]) for i_e in 1:num_e if i_v == s_e[i_e]] for i_v in 1:num_v]
+    e_d = [[view(e_int, e_idx[i_e]) for i_e in 1:num_e if i_v == d_e[i_e]] for i_v in 1:num_v]
+
+    s_idx = [v_idx[s_e[i_e]] for i_e in 1:num_e]
+    d_idx = [v_idx[d_e[i_e]] for i_e in 1:num_e]
+
+
+    static_lines(
+    edges!,
+    vertices!,
+    num_v, # Number of vertices
+    num_e, # Number of edges
+    e_int, # Variables living on edges
+    e_idx, # Array of Array of indices of variables in e_int belonging to edges
+    s_idx, # Array of Array of indices of variables in x belonging to source vertex of edge
+    d_idx, # Array of Array of indices of variables in x belonging to destination vertex of edge
+    v_idx, # Array of Array of indices of variables in x belonging to vertex
+    e_s, # Array of Array of views on the variables in e_int of the edges that are source of a vertex
+    e_d) # Array of Array of views on the variables in e_int of the edges that are destination of a vertex
+end
+
+function static_lines(vertices!, edges!, g::AbstractGraph, dim_v, dim_e)
+    s_e = [src(e) for e in edges(g)]
+    d_e = [dst(e) for e in edges(g)]
+    static_lines(vertices!, edges!, s_e, d_e, dim_v, dim_e)
+end
+
+
+export dynamic_lines
+
+@with_kw struct dynamic_lines
+    edges!
+    vertices!
+    num_v # Number of vertices
+    num_e # Number of edges
+    e_int # Variables living on edges
+    e_idx # Array of Array of indices of variables in e_int belonging to edges
+    e_x_idx # Array of Array of indices of variables in x belonging to edges
+    s_idx # Array of Array of indices of variables in x belonging to source vertex of edge
+    d_idx # Array of Array of indices of variables in x belonging to destination vertex of edge
+    v_idx # Array of Array of indices of variables in x belonging to vertex
+    e_s # Array of Array of views on the variables in e_int of the edges that are source of a vertex
+    e_d # Array of Array of views on the variables in e_int of the edges that are destination of a vertex
+end
+
+function (d::dynamic_lines)(dx, x, p, t)
+    @views begin
+
+    for i in 1:d.num_e
+        d.e_int[d.e_idx[i]] .= x[d.e_x_idx[i]]
+        d.edges![i](dx[d.e_x_idx[i]],d.e_int[d.e_idx[i]], x[d.s_idx[i]], x[d.d_idx[i]], p, t)
+    end
+    for i in 1:d.num_v
+        d.vertices![i](dx[d.v_idx[i]], x[d.v_idx[i]], d.e_s[i], d.e_d[i], p, t)
+    end
+
     end
     nothing
 end
 
-function multi_dynamic(nodes!, lines!, s_e, t_e)
-    len_l = length(lines!)
-    len_n = length(nodes!)
-    len_var = length(nodes![1])
+"""
+dim_v is an array of the number of variables per vertex
+dim_e is an array of the number of variables per edge
+"""
+function dynamic_lines(vertices!, edges!, s_e, d_e, dim_v, dim_e)
+    num_v = length(dim_v)
+    num_e = length(dim_e)
 
-    l_e_int = rand(len_l*len_var)
+    e_int = zeros(sum(dim_e))
 
-    l_e = [
-        view(l_e_int, i)
-        for i in 1:len_l*len_var ]
+    # x has length sum(dim_v)
+    # v_idx is an Array of Array of indices of variables in x belonging to vertex
 
+    counter = 1
+    v_idx = [zeros(Int32, dim) for dim in dim_v]
+    for i in 1:num_v
+        v_idx[i] .= collect(counter:counter + dim_v[i] - 1)
+        counter += dim_v[i]
+    end
 
-    l_s = [
-         [l_e[(j-1)*len_var + k] for j in 1:len_l if s_e[j] == i]
-        for i in 1:len_n for k in 1:len_var ]
+    counter = 1
+    e_idx = [zeros(Int32, dim) for dim in dim_e]
+    for i in 1:num_e
+        e_idx[i] .= collect(counter:counter + dim_e[i] - 1)
+        counter += dim_e[i]
+    end
 
-    l_t = [
-        [l_e[(j-1)*len_var + k] for j in 1:len_l if t_e[j] == i]
-        for i in 1:len_n for k in 1:len_var]
+    e_x_idx = [e_idx[i] .+ sum(dim_v) for i in 1:num_e]
+    # For every vertex, and for every edge, if the source of the edge is that vertex, take the view on the variables of that edge.
+    # Thus e_s[i] is an array of views onto the variables of the edges for which i is the source.
+    e_s = [[view(e_int, e_idx[i_e]) for i_e in 1:num_e if i_v == s_e[i_e]] for i_v in 1:num_v]
+    e_d = [[view(e_int, e_idx[i_e]) for i_e in 1:num_e if i_v == d_e[i_e]] for i_v in 1:num_v]
 
-    multi_dynamic(nodes!, lines!, s_e, t_e, l_e, l_e_int, l_s, l_t, len_l, len_n,len_var)
+    s_idx = [v_idx[s_e[i_e]] for i_e in 1:num_e]
+    d_idx = [v_idx[d_e[i_e]] for i_e in 1:num_e]
+
+    dynamic_lines(
+    edges!,
+    vertices!,
+    num_v, # Number of vertices
+    num_e, # Number of edges
+    e_int, # Variables living on edges
+    e_idx, # Array of Array of indices of variables in e_int belonging to edges
+    e_x_idx, #Array of Array of indices of variables in x belonging to edges
+    s_idx, # Array of Array of indices of variables in x belonging to source vertex of edge
+    d_idx, # Array of Array of indices of variables in x belonging to destination vertex of edge
+    v_idx, # Array of Array of indices of variables in x belonging to vertex
+    e_s, # Array of Array of views on the variables in e_int of the edges that are source of a vertex
+    e_d) # Array of Array of views on the variables in e_int of the edges that are destination of a vertex
 end
 
-function multi_dynamic(nodes!, lines!, g::AbstractGraph)
+function dynamic_lines(vertices!, edges!, g::AbstractGraph, dim_v, dim_e)
     s_e = [src(e) for e in edges(g)]
-    t_e = [dst(e) for e in edges(g)]
-    multi_dynamic(nodes!, lines!, s_e, t_e)
+    d_e = [dst(e) for e in edges(g)]
+    dynamic_lines(vertices!, edges!, s_e, d_e, dim_v, dim_e)
 end
+
+
 end # module
