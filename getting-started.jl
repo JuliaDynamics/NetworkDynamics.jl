@@ -25,24 +25,24 @@ dnd_prob = ODEProblem(dnd, x0, (0., 2.))
 sol = solve(dnd_prob)
 plot(sol, legend=false)
 
-line! = (l,x_s,x_t,p,t) -> l .= x_s - x_t
+line! = (l,x_s,x_t,p,t) -> l .= p*(x_s - x_t)
 lines! = [line! for e in edges(g)]
 dline! = (dl,l,x_s,x_t,p,t) -> dl .= x_s - x_t - l
 dlines! =[dline! for e in edges(g)]
 node! = (dx,x,l_s,l_t,p,t) -> dx .= - sum(l_s) + sum(l_t)
 nodes! = [node! for n in vertices(g)]
 
-a= NetworkDynamics.scalar_static_lines(nodes!,lines!,g)
+a= NetworkDynamics.scalar_static_lines(nodes!,lines!,g,no_parameters=false)
 b= NetworkDynamics.scalar_dynamic_lines(nodes!,dlines!,g)
 
 x0=rand(10)
 dx0=rand(10)
 z0=rand(35)
 
-a(dx0,x0,nothing,0.)
+a(dx0,x0,ones(35),0.)
 b(z0,z0,nothing,0.)
 
-a_prob=ODEProblem(a,x0,(0.,2.))
+a_prob=ODEProblem(a,x0,(0.,2.),ones(35) *5)
 sol=solve(a_prob)
 
 plot(sol,legend=false)
@@ -50,17 +50,29 @@ b_prob=ODEProblem(b,z0,(0.,5.))
 sol2=solve(b_prob)
 plot(sol2,legend=false,vars=(1:10))
 
+function diffusion_vertex!(dv, v, e_ss, e_ds, p, t)
+    # Note that e_ss and e_ds might be empty, the code needs to be able to deal
+    # with this situation.
+    dv .= 0
+    for e_s in e_ss
+        dv .-= e_s
+    end
+    for e_d in e_ds
+        dv .+= e_d
+    end
+    nothing
+end
 
-mline! = [(l,x_s,x_t,p,t) -> l .= x_s .- x_t,(l,x_s,x_t,p,t) -> l .= x_s .- x_t]
-mlines! = [mline! for e in edges(g)]
-mnode! = [(dx,x,l_s,l_t,p,t) -> dx .= .- sum(l_s) .+ sum(l_t),(dx,x,l_s,l_t,p,t) -> dx .= .- sum(l_s) .+ sum(l_t)]
-mnodes! = [mnode! for n in vertices(g)]
-mdline! = [(dl,l,x_s,x_t,p,t) -> dl .= .- l[1] .+ x_s .- x_t,(dl,l,x_s,x_t,p,t) -> dl .= .-l[2] .+ x_s .- x_t]
-mdlines! = [mdline! for e in edges(g)]
+vertices! = [diffusion_vertex! for vertex in vertices(g)]
+edges! = [(l,x_s,x_t,p,t) -> l .= x_s - x_t for edge in edges(g)]
+dedges! = [(dl,l,x_s,x_t,p,t) -> dl .= x_s - x_t - l for edge in edges(g)]
 
-c = NetworkDynamics.multi_static(mnodes!,mlines!,g)
+dim_v = 2 * ones(Int32, nv(g))
+dim_e = 2* ones(Int32, ne(g))
 
-x0=rand(20)
+c = NetworkDynamics.static_lines(vertices!,edges!,g,dim_v,dim_e)
+
+x0=ones(20) + rand(20)
 
 c(x0,x0,0,0)
 
@@ -68,7 +80,7 @@ c_prob=ODEProblem(c,x0,(0.,5.))
 sol3=solve(c_prob)
 plot(sol3,legend=false)
 
-d = NetworkDynamics.multi_dynamic(mnodes!,mdlines!,g)
+d = NetworkDynamics.dynamic_lines(vertices!,dedges!,g,dim_v,dim_e)
 
 v0=rand(70)
 

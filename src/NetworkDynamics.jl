@@ -94,20 +94,30 @@ Documentation!!
     e_t
     num_e
     num_v
+    no_parameters
 end
 
 
 function (d::scalar_static_lines)(dx, x, p, t)
-    for i in 1:d.num_e
-        d.edges![i](d.e[i], x[d.s_e[i]], x[d.t_e[i]], p, t)
-    end
-    for i in 1:d.num_v
-        d.vertices![i](view(dx,i), x[i], sum.(d.e_s[i]), sum.(d.e_t[i]), p, t)
+    if d.no_parameters == true
+        for i in 1:d.num_e
+            d.edges![i](d.e[i], x[d.s_e[i]], x[d.t_e[i]], p, t)
+        end
+        for i in 1:d.num_v
+            d.vertices![i](view(dx,i), x[i], sum.(d.e_s[i]), sum.(d.e_t[i]), p, t)
+        end
+    else
+        for i in 1:d.num_e
+            d.edges![i](d.e[i], x[d.s_e[i]], x[d.t_e[i]], p[d.num_v + i], t)
+        end
+        for i in 1:d.num_v
+            d.vertices![i](view(dx,i), x[i], sum.(d.e_s[i]), sum.(d.e_t[i]), p[i], t)
+        end
     end
     nothing
 end
 
-function scalar_static_lines(vertices!, edges!, s_e, t_e)
+function scalar_static_lines(vertices!, edges!, s_e, t_e, no_parameters)
     num_e = length(edges!)
     num_v = length(vertices!)
 
@@ -130,16 +140,16 @@ function scalar_static_lines(vertices!, edges!, s_e, t_e)
         [e[j] for j in 1:num_e if t_e[j] == i]
         for i in 1:num_v ]
 
-    scalar_static_lines(vertices!, edges!, s_e, t_e, e, e_int, e_s, e_t, num_e, num_v)
+    scalar_static_lines(vertices!, edges!, s_e, t_e, e, e_int, e_s, e_t, num_e, num_v,no_parameters)
 end
 
 """
 When called with a graph, we construct the source and target vectors.
 """
-function scalar_static_lines(vertices!, edges!, g::AbstractGraph)
+function scalar_static_lines(vertices!, edges!, g::AbstractGraph; no_parameters=true)
     s_e = [src(e) for e in edges(g)]
     t_e = [dst(e) for e in edges(g)]
-    scalar_static_lines(vertices!, edges!, s_e, t_e)
+    scalar_static_lines(vertices!, edges!, s_e, t_e, no_parameters)
 end
 
 
@@ -156,21 +166,32 @@ export scalar_dynamic_lines
     e_t
     num_e
     num_v
+    no_parameters
 end
 
 
 function (d::scalar_dynamic_lines)(dx, x, p, t)
-    for i in 1:d.num_e
-        d.e[i] .= x[d.num_v+i]
-        d.edges![i](view(dx,d.num_v+i),x[d.num_v+i], x[d.s_e[i]], x[d.t_e[i]], p, t)
-    end
-    for i in 1:d.num_v
-        d.vertices![i](view(dx,i), x[i], sum.(d.e_s[i]), sum.(d.e_t[i]), p, t)
+    if d.no_parameters == false
+        for i in 1:d.num_e
+            d.e[i] .= x[d.num_v+i]
+            d.edges![i](view(dx,d.num_v+i),x[d.num_v+i], x[d.s_e[i]], x[d.t_e[i]], p[d.num_v + i], t)
+        end
+        for i in 1:d.num_v
+            d.vertices![i](view(dx,i), x[i], sum.(d.e_s[i]), sum.(d.e_t[i]), p[i], t)
+        end
+    else
+        for i in 1:d.num_e
+            d.e[i] .= x[d.num_v+i]
+            d.edges![i](view(dx,d.num_v+i),x[d.num_v+i], x[d.s_e[i]], x[d.t_e[i]], p, t)
+        end
+        for i in 1:d.num_v
+            d.vertices![i](view(dx,i), x[i], sum.(d.e_s[i]), sum.(d.e_t[i]), p, t)
+        end
     end
     nothing
 end
 
-function scalar_dynamic_lines(vertices!, edges!, s_e, t_e)
+function scalar_dynamic_lines(vertices!, edges!, s_e, t_e,no_parameters)
     num_e = length(edges!)
     num_v = length(vertices!)
 
@@ -192,17 +213,16 @@ function scalar_dynamic_lines(vertices!, edges!, s_e, t_e)
     e_t = [
         [e[j] for j in 1:num_e if t_e[j] == i]
         for i in 1:num_v ]
-
-    scalar_dynamic_lines(vertices!, edges!, s_e, t_e, e, e_int, e_s, e_t, num_e, num_v)
+    scalar_dynamic_lines(vertices!, edges!, s_e, t_e, e, e_int, e_s, e_t, num_e, num_v,no_parameters)
 end
 
 """
     When called with a graph, we construct the source and target vectors."""
 
-function scalar_dynamic_lines(vertices!, edges!, g::AbstractGraph)
+function scalar_dynamic_lines(vertices!, edges!, g::AbstractGraph; no_parameters = true)
     s_e = [src(e) for e in edges(g)]
     t_e = [dst(e) for e in edges(g)]
-    scalar_dynamic_lines(vertices!, edges!, s_e, t_e)
+    scalar_dynamic_lines(vertices!, edges!, s_e, t_e,no_parameters)
 end
 
 
@@ -220,19 +240,26 @@ export static_lines
     v_idx # Array of Array of indices of variables in x belonging to vertex
     e_s # Array of Array of views on the variables in e_int of the edges that are source of a vertex
     e_d # Array of Array of views on the variables in e_int of the edges that are destination of a vertex
+    no_parameters
 end
 
 function (d::static_lines)(dx, x, p, t)
     @views begin
-
-    for i in 1:d.num_e
-        # d.l_e[i] = d.l_e_int[l_idx[i]] as view
-        d.edges![i](d.e_int[d.e_idx[i]], x[d.s_idx[i]], x[d.d_idx[i]], p, t)
-    end
-    for i in 1:d.num_v
-        d.vertices![i](dx[d.v_idx[i]], x[d.v_idx[i]], d.e_s[i], d.e_d[i], p, t)
-    end
-
+        if d.no_parameters == true
+            for i in 1:d.num_e
+                d.edges![i](d.e_int[d.e_idx[i]], x[d.s_idx[i]], x[d.d_idx[i]], p, t)
+            end
+            for i in 1:d.num_v
+                d.vertices![i](dx[d.v_idx[i]], x[d.v_idx[i]], d.e_s[i], d.e_d[i], p, t)
+            end
+        else
+            for i in 1:d.num_e
+                d.edges![i](d.e_int[d.e_idx[i]], x[d.s_idx[i]], x[d.d_idx[i]], p[d.num_v + i], t)
+            end
+            for i in 1:d.num_v
+                d.vertices![i](dx[d.v_idx[i]], x[d.v_idx[i]], d.e_s[i], d.e_d[i], p[i], t)
+            end
+        end
     end
     nothing
 end
@@ -241,7 +268,7 @@ end
     dim_v is an array of the number of variables per vertex
     dim_e is an array of the number of variables per edge"""
 
-function static_lines(vertices!, edges!, s_e, d_e, dim_v, dim_e)
+function static_lines(vertices!, edges!, s_e, d_e, dim_v, dim_e, no_parameters)
     num_v = length(dim_v)
     num_e = length(dim_e)
 
@@ -284,13 +311,14 @@ function static_lines(vertices!, edges!, s_e, d_e, dim_v, dim_e)
     d_idx, # Array of Array of indices of variables in x belonging to destination vertex of edge
     v_idx, # Array of Array of indices of variables in x belonging to vertex
     e_s, # Array of Array of views on the variables in e_int of the edges that are source of a vertex
-    e_d) # Array of Array of views on the variables in e_int of the edges that are destination of a vertex
+    e_d, # Array of Array of views on the variables in e_int of the edges that are destination of a vertex
+    no_parameters)
 end
 
-function static_lines(vertices!, edges!, g::AbstractGraph, dim_v, dim_e)
+function static_lines(vertices!, edges!, g::AbstractGraph, dim_v, dim_e; no_parameters = true)
     s_e = [src(e) for e in edges(g)]
     d_e = [dst(e) for e in edges(g)]
-    static_lines(vertices!, edges!, s_e, d_e, dim_v, dim_e)
+    static_lines(vertices!, edges!, s_e, d_e, dim_v, dim_e, no_parameters)
 end
 
 
@@ -309,19 +337,28 @@ export dynamic_lines
     v_idx # Array of Array of indices of variables in x belonging to vertex
     e_s # Array of Array of views on the variables in e_int of the edges that are source of a vertex
     e_d # Array of Array of views on the variables in e_int of the edges that are destination of a vertex
+    no_parameters
 end
 
 function (d::dynamic_lines)(dx, x, p, t)
     @views begin
-
-    for i in 1:d.num_e
-        d.e_int[d.e_idx[i]] .= x[d.e_x_idx[i]]
-        d.edges![i](dx[d.e_x_idx[i]],d.e_int[d.e_idx[i]], x[d.s_idx[i]], x[d.d_idx[i]], p, t)
+    if d.no_parameters == true
+        for i in 1:d.num_e
+            d.e_int[d.e_idx[i]] .= x[d.e_x_idx[i]]
+            d.edges![i](dx[d.e_x_idx[i]],d.e_int[d.e_idx[i]], x[d.s_idx[i]], x[d.d_idx[i]], p, t)
+        end
+        for i in 1:d.num_v
+            d.vertices![i](dx[d.v_idx[i]], x[d.v_idx[i]], d.e_s[i], d.e_d[i], p, t)
+        end
+    else
+        for i in 1:d.num_e
+            d.e_int[d.e_idx[i]] .= x[d.e_x_idx[i]]
+            d.edges![i](dx[d.e_x_idx[i]],d.e_int[d.e_idx[i]], x[d.s_idx[i]], x[d.d_idx[i]], p[d.num_v +i], t)
+        end
+        for i in 1:d.num_v
+            d.vertices![i](dx[d.v_idx[i]], x[d.v_idx[i]], d.e_s[i], d.e_d[i], p[i], t)
+        end
     end
-    for i in 1:d.num_v
-        d.vertices![i](dx[d.v_idx[i]], x[d.v_idx[i]], d.e_s[i], d.e_d[i], p, t)
-    end
-
     end
     nothing
 end
@@ -330,7 +367,7 @@ end
 dim_v is an array of the number of variables per vertex
 dim_e is an array of the number of variables per edge
 """
-function dynamic_lines(vertices!, edges!, s_e, d_e, dim_v, dim_e)
+function dynamic_lines(vertices!, edges!, s_e, d_e, dim_v, dim_e, no_parameters)
     num_v = length(dim_v)
     num_e = length(dim_e)
 
@@ -374,13 +411,14 @@ function dynamic_lines(vertices!, edges!, s_e, d_e, dim_v, dim_e)
     d_idx, # Array of Array of indices of variables in x belonging to destination vertex of edge
     v_idx, # Array of Array of indices of variables in x belonging to vertex
     e_s, # Array of Array of views on the variables in e_int of the edges that are source of a vertex
-    e_d) # Array of Array of views on the variables in e_int of the edges that are destination of a vertex
+    e_d, # Array of Array of views on the variables in e_int of the edges that are destination of a vertex
+    no_parameters)
 end
 
-function dynamic_lines(vertices!, edges!, g::AbstractGraph, dim_v, dim_e)
+function dynamic_lines(vertices!, edges!, g::AbstractGraph, dim_v, dim_e; no_parameters = true)
     s_e = [src(e) for e in edges(g)]
     d_e = [dst(e) for e in edges(g)]
-    dynamic_lines(vertices!, edges!, s_e, d_e, dim_v, dim_e)
+    dynamic_lines(vertices!, edges!, s_e, d_e, dim_v, dim_e, no_parameters)
 end
 
 
