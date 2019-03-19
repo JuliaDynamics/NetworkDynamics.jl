@@ -42,7 +42,7 @@ z0=rand(35)
 a(dx0,x0,ones(35),0.)
 b(z0,z0,nothing,0.)
 
-a_prob=ODEProblem(a,x0,(0.,2.),ones(35) *5)
+a_prob=ODEProblem(a,x0,(0.,2.),ones(35)*0.5)
 sol=solve(a_prob)
 
 plot(sol,legend=false)
