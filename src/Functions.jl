@@ -1,6 +1,12 @@
 module NDFunctions
+#=
+This module needs to be documented. Together with Constructors
+it forms the backbone of the core API, users should provide us
+with Arrays of VertexFunction and EdgeFunction as well as a graph and that's it.
+=#
 
-const VertexFunction = Union{ODEVertex, StaticVertex, DDEVertex}
+const VertexFunction = Union{ODEVertex, StaticVertex}
+const EdgeFunction = Union{ODEEdge, StaticEdge}
 
 struct StaticVertex #???
     f! # ToDo
@@ -16,43 +22,24 @@ end
 
 struct ODEVertex
     f! # The function with signature (dx, x, e_s, e_t, p, t) -> nothing
-    massmatrix # Mass matrix for the equation
     dim # number of dimensions of x
+    massmatrix # Mass matrix for the equation
     sym # Symbols for the dimensions
+end
+
+function ODEVertex(f!, dim)
+    ODEVertex(f!, dim, massmatrix=sparse(1.0I, dim, dim), nothing)
 end
 
 struct ODEEdge
     f! # The function with signature (dx, x, e_s, e_t, p, t) -> nothing
-    massmatrix # Mass matrix for the equation
     dim # number of dimensions of x
+    massmatrix # Mass matrix for the equation
     sym # Symbols for the dimensions
 end
 
-struct DDEVertex
-    f! # The function with signature (dx, x, h, e_s, h_e_s, e_t, h_e_t, p, t) -> nothing
-    massmatrix # Mass matrix for the equation
-    dim # number of dimensions of x
-    sym # Symbols for the dimensions
-    taus # List of delays
-end
-
-struct DDEEdge{T}
-    f! # The function with signature (dx, x, h, e_s, h_e_s, e_t, h_e_t, p, t) -> nothing
-    massmatrix # Mass matrix for the equation
-    dim # number of dimensions of x
-    sym # Symbols for the dimensions
-    taus # list of delays
-end
-
-# SDEEdge, SDEVertex
-
-function DDEVertex(ov::ODEVertex)
-    DDEVertex(
-    (dx, x, h, e_s, h_e_s, e_t, h_e_t, p, t) -> ov.f!(dx, x, e_s, e_t, p, t),
-    ov.massmatrix # Mass matrix for the equation
-    ov.dim,
-    ov.sym,
-    [])
+function ODEEdge(f!, dim)
+    ODEEdge(f!, dim, massmatrix=sparse(1.0I, dim, dim), nothing)
 end
 
 function edge_constraint!(f!, de, e, v_s, v_t, p, t)
