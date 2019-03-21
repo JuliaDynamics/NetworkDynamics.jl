@@ -1,12 +1,15 @@
 module NetworkDynamics
 
-include("ScalarVariables.jl") #not sure if we should keep that. Functionality can actually be easily incorporated into the other functions via kwargs.
-using .ScalarVariables
+include("nd_ODE_ODE_scalar.jl")
+using .nd_ODE_ODE_scalar
 
-include("StaticLines.jl")
-using .StaticLines
+include("nd_ODE_Static_scalar.jl")
+using .nd_ODE_Static_scalar
 
-include("DynamicLines.jl")
-using .DynamicLines
+include("nd_ODE_ODE.jl")
+using .nd_ODE_ODE
 
-end # module
+include("nd_ODE_Static.jl")
+using .nd_ODE_Static
+
+end

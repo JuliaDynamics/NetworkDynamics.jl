@@ -1,3 +1,8 @@
+#=
+TODO
+Clean up.
+=#
+
 include("src/NetworkDynamics.jl")
 using .NetworkDynamics
 using LightGraphs

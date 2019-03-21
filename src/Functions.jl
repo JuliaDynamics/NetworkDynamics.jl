@@ -5,9 +5,6 @@ it forms the backbone of the core API, users should provide us
 with Arrays of VertexFunction and EdgeFunction as well as a graph and that's it.
 =#
 
-const VertexFunction = Union{ODEVertex, StaticVertex}
-const EdgeFunction = Union{ODEEdge, StaticEdge}
-
 struct StaticVertex #???
     f! # ToDo
     dim # number of dimensions of x
@@ -38,8 +35,12 @@ struct ODEEdge
     sym # Symbols for the dimensions
 end
 
+const VertexFunction = Union{ODEVertex, StaticVertex}
+const EdgeFunction = Union{ODEEdge, StaticEdge}
+
+
 function ODEEdge(f!, dim)
-    ODEEdge(f!, dim, massmatrix=sparse(1.0I, dim, dim), nothing)
+    ODEEdge(f!, dim, massmatrix=sparse(1.0I, dim, dim), [:e for i in 1:dim]])
 end
 
 function edge_constraint!(f!, de, e, v_s, v_t, p, t)
