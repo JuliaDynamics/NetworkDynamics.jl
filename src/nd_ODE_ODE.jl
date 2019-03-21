@@ -1,12 +1,12 @@
-module DynamicLines
+module nd_ODE_ODE_mod
 
 using LightGraphs
 using LinearAlgebra
 using Parameters
 
-export dynamic_lines
+export nd_ODE_ODE
 
-@with_kw struct dynamic_lines
+@with_kw struct nd_ODE_ODE
     edges!
     vertices!
     num_v # Number of vertices
@@ -19,27 +19,29 @@ export dynamic_lines
     v_idx # Array of Array of indices of variables in x belonging to vertex
     e_s # Array of Array of views on the variables in e_int of the edges that are source of a vertex
     e_d # Array of Array of views on the variables in e_int of the edges that are destination of a vertex
-    no_parameters
 end
 
-function (d::dynamic_lines)(dx, x, p, t)
+function (d::nd_ODE_ODE)(dx, x, p::Nothing, t)
     @views begin
-    if d.no_parameters == true
-        for i in 1:d.num_e
-            d.e_int[d.e_idx[i]] .= x[d.e_x_idx[i]]
-            d.edges![i](dx[d.e_x_idx[i]],d.e_int[d.e_idx[i]], x[d.s_idx[i]], x[d.d_idx[i]], p, t)
-        end
-        for i in 1:d.num_v
-            d.vertices![i](dx[d.v_idx[i]], x[d.v_idx[i]], d.e_s[i], d.e_d[i], p, t)
-        end
-    else
-        for i in 1:d.num_e
-            d.e_int[d.e_idx[i]] .= x[d.e_x_idx[i]]
-            d.edges![i](dx[d.e_x_idx[i]],d.e_int[d.e_idx[i]], x[d.s_idx[i]], x[d.d_idx[i]], p[d.num_v +i], t)
-        end
-        for i in 1:d.num_v
-            d.vertices![i](dx[d.v_idx[i]], x[d.v_idx[i]], d.e_s[i], d.e_d[i], p[i], t)
-        end
+    for i in 1:d.num_e
+        d.e_int[d.e_idx[i]] .= x[d.e_x_idx[i]]
+        d.edges![i](dx[d.e_x_idx[i]],d.e_int[d.e_idx[i]], x[d.s_idx[i]], x[d.d_idx[i]], p, t)
+    end
+    for i in 1:d.num_v
+        d.vertices![i](dx[d.v_idx[i]], x[d.v_idx[i]], d.e_s[i], d.e_d[i], p, t)
+    end
+    end
+    nothing
+end
+
+function (d::nd_ODE_ODE)(dx, x, p, t)
+    @views begin
+    for i in 1:d.num_e
+        d.e_int[d.e_idx[i]] .= x[d.e_x_idx[i]]
+        d.edges![i](dx[d.e_x_idx[i]],d.e_int[d.e_idx[i]], x[d.s_idx[i]], x[d.d_idx[i]], p[d.num_v +i], t)
+    end
+    for i in 1:d.num_v
+        d.vertices![i](dx[d.v_idx[i]], x[d.v_idx[i]], d.e_s[i], d.e_d[i], p[i], t)
     end
     end
     nothing
@@ -49,7 +51,7 @@ end
 dim_v is an array of the number of variables per vertex
 dim_e is an array of the number of variables per edge
 """
-function dynamic_lines(vertices!, edges!, s_e, d_e, dim_v, dim_e, no_parameters)
+function nd_ODE_ODE(vertices!, edges!, s_e, d_e, dim_v, dim_e)
     num_v = length(dim_v)
     num_e = length(dim_e)
 
@@ -81,7 +83,7 @@ function dynamic_lines(vertices!, edges!, s_e, d_e, dim_v, dim_e, no_parameters)
     s_idx = [v_idx[s_e[i_e]] for i_e in 1:num_e]
     d_idx = [v_idx[d_e[i_e]] for i_e in 1:num_e]
 
-    dynamic_lines(
+    nd_ODE_ODE(
     edges!,
     vertices!,
     num_v, # Number of vertices
@@ -93,14 +95,14 @@ function dynamic_lines(vertices!, edges!, s_e, d_e, dim_v, dim_e, no_parameters)
     d_idx, # Array of Array of indices of variables in x belonging to destination vertex of edge
     v_idx, # Array of Array of indices of variables in x belonging to vertex
     e_s, # Array of Array of views on the variables in e_int of the edges that are source of a vertex
-    e_d, # Array of Array of views on the variables in e_int of the edges that are destination of a vertex
-    no_parameters)
+    e_d # Array of Array of views on the variables in e_int of the edges that are destination of a vertex
+    )
 end
 
-function dynamic_lines(vertices!, edges!, g::AbstractGraph, dim_v, dim_e; no_parameters = true)
+function nd_ODE_ODE(vertices!, edges!, g::AbstractGraph, dim_v, dim_e)
     s_e = [src(e) for e in edges(g)]
     d_e = [dst(e) for e in edges(g)]
-    dynamic_lines(vertices!, edges!, s_e, d_e, dim_v, dim_e, no_parameters)
+    nd_ODE_ODE(vertices!, edges!, s_e, d_e, dim_v, dim_e)
 end
 
 end #module
