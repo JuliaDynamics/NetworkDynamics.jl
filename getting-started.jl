@@ -1,6 +1,5 @@
 include("src/NetworkDynamics.jl")
-include("src/StaticLines.jl")
-include("src/DynamicLines.jl")
+using .NetworkDynamics
 using LightGraphs
 using LinearAlgebra
 using DifferentialEquations
@@ -14,7 +13,7 @@ dlines = [dline for e in edges(g)]
 node(x,l_s,l_t,p,t) = x-sum(l_s) + sum(l_t)
 nodes = [node for n in vertices(g)]
 
-dnd = NetworkDynamics.diffusive_network_dynamics(g, (dx, x, p, t) -> dx = 0)
+dnd = diffusive_network_dynamics(g, (dx, x, p, t) -> dx = 0)
 
 x0 = ones(10)+rand(10)
 dx0 = ones(10)
@@ -32,8 +31,8 @@ dlines! =[dline! for e in edges(g)]
 node! = (dx,x,l_s,l_t,p,t) -> dx .= - sum(l_s) + sum(l_t)
 nodes! = [node! for n in vertices(g)]
 
-a= NetworkDynamics.scalar_static_lines(nodes!,lines!,g,no_parameters=false)
-b= NetworkDynamics.scalar_dynamic_lines(nodes!,dlines!,g)
+a= scalar_static_lines(nodes!,lines!,g,no_parameters=false)
+b= scalar_dynamic_lines(nodes!,dlines!,g)
 
 x0=rand(10)
 dx0=rand(10)
@@ -70,7 +69,7 @@ dedges! = [(dl,l,x_s,x_t,p,t) -> dl .= x_s - x_t - l for edge in edges(g)]
 dim_v = 2 * ones(Int32, nv(g))
 dim_e = 2* ones(Int32, ne(g))
 
-c = NetworkDynamics.static_lines(vertices!,edges!,g,dim_v,dim_e)
+c = static_lines(vertices!,edges!,g,dim_v,dim_e)
 
 x0=ones(20) + rand(20)
 
@@ -80,7 +79,7 @@ c_prob=ODEProblem(c,x0,(0.,5.))
 sol3=solve(c_prob)
 plot(sol3,legend=false)
 
-d = NetworkDynamics.dynamic_lines(vertices!,dedges!,g,dim_v,dim_e)
+d = dynamic_lines(vertices!,dedges!,g,dim_v,dim_e)
 
 v0=rand(70)
 
