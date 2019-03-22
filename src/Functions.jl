@@ -35,13 +35,12 @@ struct ODEEdge
     sym # Symbols for the dimensions
 end
 
+function ODEEdge(f!, dim)
+    ODEEdge(f!, dim, massmatrix=sparse(1.0I, dim, dim), [:e for i in 1:dim])
+end
+
 const VertexFunction = Union{ODEVertex, StaticVertex}
 const EdgeFunction = Union{ODEEdge, StaticEdge}
-
-
-function ODEEdge(f!, dim)
-    ODEEdge(f!, dim, massmatrix=sparse(1.0I, dim, dim), [:e for i in 1:dim]])
-end
 
 function edge_constraint!(f!, de, e, v_s, v_t, p, t)
     # If mass matrix = 0 the differential equation sets de = 0.
@@ -57,7 +56,7 @@ end
 function ODEEdge(se::StaticEdge)
     ODEEdge(
     edge_constraint!(se.f!, de, e, v_s, v_t, p, t),
-    massmatrix = 0. # should be zero(T)
+    massmatrix = 0., # should be zero(T)
     se.dim,
     se.sym)
 end
