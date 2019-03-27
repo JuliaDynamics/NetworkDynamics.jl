@@ -1,9 +1,20 @@
 module NDFunctions
+
+using LinearAlgebra
+using SparseArrays
+
 #=
 This module needs to be documented. Together with Constructors
 it forms the backbone of the core API, users should provide us
 with Arrays of VertexFunction and EdgeFunction as well as a graph and that's it.
 =#
+
+export StaticVertex
+export StaticEdge
+export ODEVertex
+export ODEEdge
+export VertexFunction
+export EdgeFunction
 
 struct StaticVertex #???
     f! # ToDo
@@ -14,7 +25,6 @@ end
 struct StaticEdge
     f! # (l, v_s, v_t, p, t) -> nothing
     dim # number of dimensions of x
-    sym # Symbols for the dimensions
 end
 
 struct ODEVertex
@@ -25,7 +35,7 @@ struct ODEVertex
 end
 
 function ODEVertex(f!, dim)
-    ODEVertex(f!, dim, massmatrix=sparse(1.0I, dim, dim), nothing)
+    ODEVertex(f!, dim, sparse(1.0I, dim, dim), nothing)
 end
 
 struct ODEEdge
@@ -36,7 +46,16 @@ struct ODEEdge
 end
 
 function ODEEdge(f!, dim)
-    ODEEdge(f!, dim, massmatrix=sparse(1.0I, dim, dim), [:e for i in 1:dim])
+    ODEEdge(f!, dim, sparse(1.0I, dim, dim), [:e for i in 1:dim])
+end
+
+struct DDEVertex
+    f! # The function with signature (dv, v, h_v, e_s, e_t, h_e_s, h_e_d, p, t) -> nothing where h is the history function
+    dim # number of dimensions
+    massmatrix # Mass matrix for the equation
+    sym # Symbols for the dimensions
+    tau_s # Array of Delays for the incoming currents of different variables
+    tau_d # Array of Delays for the outgoing currents of different variables
 end
 
 const VertexFunction = Union{ODEVertex, StaticVertex}
@@ -58,9 +77,11 @@ function ODEEdge(se::StaticEdge)
     edge_constraint!(se.f!, de, e, v_s, v_t, p, t),
     massmatrix = 0., # should be zero(T)
     se.dim,
-    se.sym)
+    [:e for i in 1:se.dim])
 end
 
 # investigate whether convert(::Type(ODEEdge), se::StaticEdge) = ODEEdge(se)
 # is useful, check out PowerDynamics for what it does...
+
+
 end
