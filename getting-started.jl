@@ -1,14 +1,7 @@
-#=
-TODO
-Clean up.
-=#
-
-include("src/NetworkDynamics.jl")
-using .NetworkDynamics
+using NetworkDynamics
 using LightGraphs
 using LinearAlgebra
 using DifferentialEquations
-using Plots
 
 g = barabasi_albert(10,5)
 
@@ -43,4 +36,7 @@ test_prob = ODEProblem(test,rand(20),(0.,2.))
 test(rand(70),rand(70),nothing,0.)
 
 test_sol = solve(test_prob, Rodas4(autodiff = false))
-plot(test_sol, legend = false)
+
+@assert 1 == 1
+
+using NetworkDynamics
