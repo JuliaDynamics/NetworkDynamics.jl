@@ -15,6 +15,8 @@ export ODEVertex
 export ODEEdge
 export VertexFunction
 export EdgeFunction
+export DDEVertex
+export DDEEdge
 
 struct StaticVertex #???
     f! # ToDo
@@ -58,10 +60,25 @@ struct DDEVertex
     tau_d # Array of Delays for the outgoing currents of different variables
 end
 
-const VertexFunction = Union{ODEVertex, StaticVertex}
-const EdgeFunction = Union{ODEEdge, StaticEdge}
+function DDEVertex(f!, dim, tau_s, tau_d)
+    DDEVertex(f!, dim, sparse(1.0I, dim, dim), [:v for i in 1:dim], tau_s, tau_d)
+end
 
-function edge_constraint!(f!, de, e, v_s, v_t, p, t)
+struct DDEEdge
+    f! # The function with signature (de, e, h_e, v_s, v_d, h_s, h_d, p, t)
+    dim # number of variables
+    massmatrix # Mass matrix for the equation
+    sym # Symbols for the variables
+end
+
+function DDEEdge(f!,dim)
+    DDEEdge(f!,dim,sparse(1.0I, dim, dim), [:e for i in 1:dim])
+end
+
+const VertexFunction = Union{ODEVertex, StaticVertex, DDEVertex}
+const EdgeFunction = Union{ODEEdge, StaticEdge, DDEEdge}
+
+function ODE_f(f!, de, e, v_s, v_t, p, t)
     # If mass matrix = 0 the differential equation sets de = 0.
     # To set e to the value calculated by f! we first write the value calculated
     # by f! into de, the subtract e. This leads to the  constraint
@@ -72,10 +89,12 @@ function edge_constraint!(f!, de, e, v_s, v_t, p, t)
     nothing
 end
 
+#DDE_f is used to transform StaticEdge and ODEEdge to an DDEEdge by changing its arguments accordingly.
+
 function ODEEdge(se::StaticEdge)
     ODEEdge(
-    edge_constraint!(se.f!, de, e, v_s, v_t, p, t),
-    massmatrix = 0., # should be zero(T)
+    ODE_f!(se.f!, de, e, v_s, v_t, p, t),
+    massmatrix = sparse(0.0I,se.dim,se.dim),
     se.dim,
     [:e for i in 1:se.dim])
 end
