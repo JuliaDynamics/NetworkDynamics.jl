@@ -6,6 +6,12 @@ using LinearAlgebra
 
 export nd_DDE_DDE
 
+
+#= This is under construction. It already works, but shows weird behaviour, for example
+if one tests a diffusive network, the variables keep oscillating when they should converge. =#
+
+# See the other nd_ Constructors for details on the fields.
+
 @with_kw struct nd_DDE_DDE
     vertices!
     edges!
@@ -23,9 +29,13 @@ export nd_DDE_DDE
     e_d
     dim_v
     dim_e
-    tau_s
-    tau_d
+    tau_s # Array of Arrays of Vertex Delays for the outgoing edges.
+    tau_d # Array of Arrays of Vertex Delays for the incoming edges.
 end
+
+#= This function is needed for convenience in the function call, i.e. that I can
+give a function like vertex! = -h(p, t - tau), one does not have to give the delays
+in an awkward fashion. =#
 
 struct indexed_h
     h
@@ -37,21 +47,21 @@ function (ih::indexed_h)(args...)
 end
 
 function e_s_delayed(h, p, t, tau_s, s_e, i, dim_e, num_e, e_x_idx)
-    [[h(p,t-tau_s[i][j])[e_x_idx[k][j]] for j in 1:dim_e[k]] for k in 1:num_e if s_e[k] == i]
+    [[h(p,t-tau_s[i][j]; idxs = e_x_idx[k][j])[1] for j in 1:dim_e[k]] for k in 1:num_e if s_e[k] == i]
 end
 
 function e_d_delayed(h, p, t, tau_d, d_e, i, dim_e, num_e, e_x_idx)
-    [[h(p,t-tau_d[i][j])[e_x_idx[k][j]] for j in 1:dim_e[k]] for k in 1:num_e if d_e[k] == i]
+    [[h(p,t-tau_d[i][j]; idxs = e_x_idx[k][j])[1] for j in 1:dim_e[k]] for k in 1:num_e if d_e[k] == i]
 end
 
 function (d::nd_DDE_DDE)(dx, x, h, p, t)
     @views begin
     for i in 1:d.num_e
         d.e_int[d.e_idx] .= x[d.e_x_idx]
-        d.edges![i](view(dx,d.e_x_idx), x[d.e_x_idx], indexed_h(h,d.e_x_idx), x[d.s_idx[i]], x[d.d_idx[i]], indexed_h(h,d.s_idx[i]), indexed_h(h,d.d_idx[i]), p[d.num_v + i], t)
+        d.edges![i](dx[d.e_x_idx], x[d.e_x_idx], indexed_h(h,d.e_x_idx), x[d.s_idx[i]], x[d.d_idx[i]], indexed_h(h,d.s_idx[i]), indexed_h(h,d.d_idx[i]), p[d.num_v + i], t)
     end
     for i in 1:d.num_v
-        d.vertices![i](view(dx,d.v_idx[i]), x[d.v_idx[i]], indexed_h(h,d.v_idx[i]), d.e_s[i], d.e_d[i], e_s_delayed(h, p, t, d.tau_s, d.s_e, i, d.dim_e, d.num_e, d.e_x_idx), e_d_delayed(h, p, t, d.tau_d, d.t_e, i, d.dim_e, d.num_e, d.e_x_idx), p[i], t)
+        d.vertices![i](dx[d.v_idx[i]], x[d.v_idx[i]], indexed_h(h,d.v_idx[i]), d.e_s[i], d.e_d[i], e_s_delayed(h, p, t, d.tau_s, d.s_e, i, d.dim_e, d.num_e, d.e_x_idx), e_d_delayed(h, p, t, d.tau_d, d.t_e, i, d.dim_e, d.num_e, d.e_x_idx), p[i], t)
     end
     end
     nothing

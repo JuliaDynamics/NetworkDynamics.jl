@@ -6,6 +6,16 @@ using Parameters
 
 export nd_ODE_ODE
 
+#= nd_ODE_ODE_scalar constructs a (dx,x,p,t)-function from an Array of functions for the vertices,
+ edges as well as a graph.
+The arguments of the vertex functions must be of the form (dv,v,e_s,e_d,p,t),
+where dv is the vertex variable derivative, v the vertex variable and e_s and e_d Arrays of edge variables that
+have the vertex as source and destination respectively. p and t are as usual.
+The arguments of the edge functions must be of the form (de,e,v_s,v_d,p,t),
+where de is the derivative of the edge variable, e the edge variable, v_s and v_d the vertex variables of the vertices
+the edge has as source and destination respectively. This works for arbitrary dimensional vertex and edge functions, they only
+need to fit, i.e. don't do something like edges! = v_s - v_d when v_s and v_d have not the same dimension. =#
+
 @with_kw struct nd_ODE_ODE
     edges!
     vertices!
@@ -25,7 +35,7 @@ function (d::nd_ODE_ODE)(dx, x, p::Nothing, t)
     @views begin
     for i in 1:d.num_e
         d.e_int[d.e_idx[i]] .= x[d.e_x_idx[i]]
-        d.edges![i](dx[d.e_x_idx[i]],d.e_int[d.e_idx[i]], x[d.s_idx[i]], x[d.d_idx[i]], p, t)
+        d.edges![i](dx[d.e_x_idx[i]], x[d.e_x_idx[i]], x[d.s_idx[i]], x[d.d_idx[i]], p, t)
     end
     for i in 1:d.num_v
         d.vertices![i](dx[d.v_idx[i]], x[d.v_idx[i]], d.e_s[i], d.e_d[i], p, t)

@@ -37,12 +37,13 @@ export DDEEdge
 
 export network_dynamics
 
-export network_dynamics
-
 using LinearAlgebra
 using SparseArrays
 using LightGraphs
 using DifferentialEquations
+
+#= network_dynamics: The Main Constructor of the Package. It takes Arrays of Vertex- and Edgefunction + a graph and
+spits out an ODEFunction or DDEFunction. Others still need to be implemented. =#
 
 function network_dynamics(vertices!::Array{ODEVertex,1}, edges!::Array{StaticEdge,1}, graph)
     @assert length(vertices!) == length(vertices(graph))

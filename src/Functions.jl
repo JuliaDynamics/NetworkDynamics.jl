@@ -18,6 +18,11 @@ export EdgeFunction
 export DDEVertex
 export DDEEdge
 
+#=All the structs contain the field sym, this has not been used yet in the main
+constructor network_dynamics. Shouldn't be too hard though. More of a design question. StaticVertex
+not implemented yet. =#
+
+
 struct StaticVertex #???
     f! # ToDo
     dim # number of dimensions of x
@@ -35,6 +40,8 @@ struct ODEVertex
     massmatrix # Mass matrix for the equation
     sym # Symbols for the dimensions
 end
+
+# Here it would maybe be better to use keyword arguments instead of an additional function.
 
 function ODEVertex(f!, dim)
     ODEVertex(f!, dim, sparse(1.0I, dim, dim), nothing)
@@ -78,6 +85,7 @@ end
 const VertexFunction = Union{ODEVertex, StaticVertex, DDEVertex}
 const EdgeFunction = Union{ODEEdge, StaticEdge, DDEEdge}
 
+#Experimental. Needs work.
 function ODE_f(f!, de, e, v_s, v_t, p, t)
     # If mass matrix = 0 the differential equation sets de = 0.
     # To set e to the value calculated by f! we first write the value calculated
