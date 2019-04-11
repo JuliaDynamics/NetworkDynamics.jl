@@ -44,7 +44,7 @@ end
 # Here it would maybe be better to use keyword arguments instead of an additional function.
 
 function ODEVertex(f!, dim)
-    ODEVertex(f!, dim, sparse(1.0I, dim, dim), nothing)
+    ODEVertex(f!, dim, sparse(1.0I, dim, dim), [:v for i in 1:dim])
 end
 
 struct ODEEdge
@@ -86,25 +86,46 @@ const VertexFunction = Union{ODEVertex, StaticVertex, DDEVertex}
 const EdgeFunction = Union{ODEEdge, StaticEdge, DDEEdge}
 
 #Experimental. Needs work.
-function ODE_f(f!, de, e, v_s, v_t, p, t)
+function ODE_f!(f!)
     # If mass matrix = 0 the differential equation sets de = 0.
     # To set e to the value calculated by f! we first write the value calculated
     # by f! into de, the subtract e. This leads to the  constraint
     # 0 = - e + f(v_s, v_p, p, t)
     # where f(...) denotes the value that f!(a, ...) writes into a.
-    f!(de, v_s, v_t, p, t)
-    de .-= e
-    nothing
+    func = (de,e,v_s,v_t,p,t) -> de .= f!(e,v_s,v_t,p,t) - e
+    func
+end
+#DDE_f is used to transform StaticEdge and ODEEdge to a DDEEdge by changing its arguments accordingly.
+
+function DDE_vertex_f!(f!)
+    func = (dv,v,h_v,e_s,e_d,h_s,h_d,p,t) -> dv .= f!(dv,v,e_s,e_d,p,t)
+    func
 end
 
-#DDE_f is used to transform StaticEdge and ODEEdge to an DDEEdge by changing its arguments accordingly.
+function DDEVertex(ov::ODEVertex)
+    DDEVertex(DDE_vertex_f!(ov.f!),ov.dim,ov.massmatrix,ov.sym,[],[])
+end
 
+function DDEVertex(dv::DDEVertex)
+    dv
+end
+
+function DDE_edge_f!(f!)
+    func = (de,e,h_e,v_s,v_d,h_s,h_d,p,t) -> de .= f!(de,e,v_s,v_d,p,t)
+    func
+end
+
+function DDEEdge(oe::ODEEdge)
+    DDEEdge(DDE_edge_f!(oe.f!),oe.dim,oe.massmatrix,oe.sym)
+end
+
+function DDEEdge(de::DDEEdge)
+    de
+end
+
+#This rightnow gives a Singular Exception Error because of the zero mass matrix. Easy workaround has yet to be found...
 function ODEEdge(se::StaticEdge)
-    ODEEdge(
-    ODE_f!(se.f!, de, e, v_s, v_t, p, t),
-    massmatrix = sparse(0.0I,se.dim,se.dim),
-    se.dim,
-    [:e for i in 1:se.dim])
+    ODEEdge(ODE_f!(se.f!), se.dim, sparse(0.0I,se.dim,se.dim), [:e for i in 1:se.dim])
 end
 
 # investigate whether convert(::Type(ODEEdge), se::StaticEdge) = ODEEdge(se)

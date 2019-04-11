@@ -58,7 +58,7 @@ function (d::nd_DDE_DDE)(dx, x, h, p, t)
     @views begin
     for i in 1:d.num_e
         d.e_int[d.e_idx] .= x[d.e_x_idx]
-        d.edges![i](dx[d.e_x_idx], x[d.e_x_idx], indexed_h(h,d.e_x_idx), x[d.s_idx[i]], x[d.d_idx[i]], indexed_h(h,d.s_idx[i]), indexed_h(h,d.d_idx[i]), p[d.num_v + i], t)
+        d.edges![i](dx[d.e_x_idx[i]], x[d.e_x_idx[i]], indexed_h(h,d.e_x_idx[i]), x[d.s_idx[i]], x[d.d_idx[i]], indexed_h(h,d.s_idx[i]), indexed_h(h,d.d_idx[i]), p[d.num_v + i], t)
     end
     for i in 1:d.num_v
         d.vertices![i](dx[d.v_idx[i]], x[d.v_idx[i]], indexed_h(h,d.v_idx[i]), d.e_s[i], d.e_d[i], e_s_delayed(h, p, t, d.tau_s, d.s_e, i, d.dim_e, d.num_e, d.e_x_idx), e_d_delayed(h, p, t, d.tau_d, d.t_e, i, d.dim_e, d.num_e, d.e_x_idx), p[i], t)
