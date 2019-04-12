@@ -100,7 +100,7 @@ function network_dynamics(vertices!::Array{ODEVertex}, edges!::Array{ODEEdge}, g
     # Construct mass matrix
     mmv_array = [v.massmatrix for v in vertices!]
     mme_array = [e.massmatrix for e in edges!]
-    if all(mme_array .== nothing) and all(mmv_array .== nothing)
+    if all(mme_array .== nothing) && all(mmv_array .== nothing)
         massmatrix = nothing
     else
         massmatrix = sparse(1.0I,dim_nd,dim_nd)
@@ -138,7 +138,7 @@ function network_dynamics(vertices!::Array{DDEVertex}, edges!::Array{DDEEdge}, g
     # Construct mass matrix
     mmv_array = [v.massmatrix for v in vertices!]
     mme_array = [e.massmatrix for e in edges!]
-    if all(mme_array .== nothing) and all(mmv_array .== nothing)
+    if all(mme_array .== nothing) && all(mmv_array .== nothing)
         massmatrix = nothing
     else
         massmatrix = sparse(1.0I,dim_nd,dim_nd)

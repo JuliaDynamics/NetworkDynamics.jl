@@ -4,6 +4,7 @@ using LightGraphs
 using LinearAlgebra
 using DifferentialEquations
 using Plots
+pyplot()
 
 g = barabasi_albert(10,5)
 
@@ -65,25 +66,80 @@ function (sv::SwingVertex)(dv, v, e_s, e_d, p, t)
     nothing
 end
 
-ident = diagm(0 => ones(3))
 
-vertex_list = [ODEVertex(SwingVertex(randn(), 1.), 3, ident, [:v_r, :v_i, :ω]) for v in vertices(g)]
-edge_list = [StaticEdge(complex_admittance_edge!(0.0 - 5.0im), 2) for e in edges(g)]
+struct PQVertex
+    P_complex
+end
+function (pq::PQVertex)(dv, v, e_s, e_d, p, t)
+    current = total_current(e_s, e_d)
+    voltage = v[1] + v[2] * im
+    residual = pq.P_complex - voltage * conj(current)
+    dv[1] = real(residual)
+    dv[2] = imag(residual)
+    nothing
+end
+
+# Example PQ node:
+pq_1 = ODEVertex(f! = PQVertex(randn() + randn()*im),
+                 dim = 2,
+                 massmatrix = 0.)
+
+using GraphPlot
+gplot(g)
+
+pq_list = [ODEVertex(f! = PQVertex(randn() + randn()*im),
+                     dim = 2,
+                     massmatrix = 0.,
+                     sym = [:v_r, :v_i])
+           for i in 1:5]
+
+vertex_list = [ODEVertex(f! = SwingVertex(randn(), 1.),
+                        dim = 3,
+                        sym = [:v_r, :v_i, :ω])
+              for i in 1:5]
+
+append!(vertex_list, pq_list)
+
+swing_list = [ODEVertex(f! = SwingVertex(randn(), 1.),
+                        dim = 3,
+                        sym = [:v_r, :v_i, :ω])
+              for i in 1:10]
+
+
+edge_list = [StaticEdge(f! = complex_admittance_edge!(0.0 - 5.0im),
+                        dim = 2)
+             for e in edges(g)]
 
 power_network_rhs = network_dynamics(vertex_list, edge_list, g)
 
-pyplot()
-
 begin
-    x0 = rand(30)
+    x0 = rand(25)
     test_prob = ODEProblem(power_network_rhs,x0,(0.,50.))
-    test_sol = solve(test_prob)
-    plot(test_sol, vars = :ω_1)
 end
+test_sol = solve(test_prob, Rosenbrock23(autodiff=false), force_dtmin=true)
+
+struct root_rhs
+    rhs
+    mm
+end
+function (rr::root_rhs)(x)
+    dx = similar(x)
+    rr.rhs(dx, x, nothing, 0.)
+    rr.mm * dx .- dx
+end
+
+rr = root_rhs(power_network_rhs, power_network_rhs.mass_matrix)
+
+using NLsolve
+
+nl_res = nlsolve(rr, x0)
+ic = nl_res.zero
+test_prob = ODEProblem(power_network_rhs,ic,(0.,50.))
+test_sol = solve(test_prob, Rosenbrock23(autodiff=false))
+
+test_sol
+plot(test_sol)
 
 plot(test_sol, vars = [s for s in power_network_rhs.syms if occursin("ω", string(s))])
 
 plot(test_sol, vars=[:ω_1])
-
-using GraphPlot
-gplot(g)
