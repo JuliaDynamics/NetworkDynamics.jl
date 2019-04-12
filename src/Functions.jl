@@ -3,6 +3,9 @@ module NDFunctions
 using LinearAlgebra
 using SparseArrays
 
+import Base.convert
+import Base.promote_rule
+
 #=
 This module needs to be documented. Together with Constructors
 it forms the backbone of the core API, users should provide us
@@ -72,16 +75,32 @@ end
 const VertexFunction = Union{ODEVertex, StaticVertex, DDEVertex}
 const EdgeFunction = Union{ODEEdge, StaticEdge, DDEEdge}
 
+convert(::Type{ODEVertex}, x::StaticVertex) = ODEVertex(x)
+promote_rule(::Type{ODEVertex}, ::Type{StaticVertex}) = ODEVertex
 #Experimental. Needs work.
-function ODE_f!(f!)
-    # If mass matrix = 0 the differential equation sets de = 0.
-    # To set e to the value calculated by f! we first write the value calculated
-    # by f! into de, the subtract e. This leads to the  constraint
-    # 0 = - e + f(v_s, v_p, p, t)
-    # where f(...) denotes the value that f!(a, ...) writes into a.
-    func = (de,e,v_s,v_t,p,t) -> de .= f!(e,v_s,v_t,p,t) - e
+function ODE_v(f!)
+    func = (dv,v,e_s,e_d,p,t) -> dv .= f!(v,e_s,e_d,p,t) - v
     func
 end
+
+function ODEVertex(sv::StaticVertex)
+    ODEVertex(ODE_from_Static(sv.f!), sv.dim, 0., sv.sym)
+end
+
+struct ODE_from_Static
+    f!
+end
+function (ofs::ODE_from_Static)(dx,x,args...)
+    # If mass matrix = 0 the differential equation sets dx = 0.
+    # To set x to the value calculated by f! we first write the value calculated
+    # by f! into dx, then subtract x. This leads to the  constraint
+    # 0 = - x + f(...)
+    # where f(...) denotes the value that f!(a, ...) writes into a.
+    f!(dx,x,args...)
+    dx .-= x
+    nothing
+end
+
 #DDE_f is used to transform StaticEdge and ODEEdge to a DDEEdge by changing its arguments accordingly.
 
 function DDE_vertex_f!(f!)
@@ -117,6 +136,7 @@ end
 
 # investigate whether convert(::Type(ODEEdge), se::StaticEdge) = ODEEdge(se)
 # is useful, check out PowerDynamics for what it does...
+
 
 
 end

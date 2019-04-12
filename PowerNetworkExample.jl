@@ -80,9 +80,8 @@ function (pq::PQVertex)(dv, v, e_s, e_d, p, t)
 end
 
 # Example PQ node:
-pq_1 = ODEVertex(f! = PQVertex(randn() + randn()*im),
-                 dim = 2,
-                 massmatrix = 0.)
+pq_1 = StaticVertex(f! = PQVertex(randn() + randn()*im),
+                 dim = 2)
 
 using GraphPlot
 gplot(g)
