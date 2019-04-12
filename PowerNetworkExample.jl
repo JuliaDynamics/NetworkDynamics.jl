@@ -29,17 +29,6 @@ function (cae::complex_admittance_edge!)(e,v_s,v_d,p,t)
     nothing
 end
 
-begin
-    # Making sure the function works as intended
-    v1 = [1.,2.]
-    v2 = [3.,4.]
-    e = zeros(10)
-    e1 = view(l, 5:6)
-    cae = complex_admittance_edge!(3. + 5*im)
-    cae(e1,v1,v2,nothing,0.)
-    println(e1)
-end
-
 function total_current(e_s, e_d)
     # Keeping with the convention of negative sign for outging current
     current = 0.0im
@@ -83,8 +72,8 @@ end
 pq_1 = StaticVertex(f! = PQVertex(randn() + randn()*im),
                  dim = 2)
 
-using GraphPlot
-gplot(g)
+# using GraphPlot
+# gplot(g)
 
 pq_list = [ODEVertex(f! = PQVertex(randn() + randn()*im),
                      dim = 2,
@@ -111,32 +100,10 @@ edge_list = [StaticEdge(f! = complex_admittance_edge!(0.0 - 5.0im),
 
 power_network_rhs = network_dynamics(vertex_list, edge_list, g)
 
-begin
-    x0 = rand(25)
-    test_prob = ODEProblem(power_network_rhs,x0,(0.,50.))
-end
+ic = find_valid_ic(power_network_rhs, rand(25))
+test_prob = ODEProblem(power_network_rhs,ic,(0.,1.))
 test_sol = solve(test_prob, Rosenbrock23(autodiff=false), force_dtmin=true)
 
-struct root_rhs
-    rhs
-    mm
-end
-function (rr::root_rhs)(x)
-    dx = similar(x)
-    rr.rhs(dx, x, nothing, 0.)
-    rr.mm * dx .- dx
-end
-
-rr = root_rhs(power_network_rhs, power_network_rhs.mass_matrix)
-
-using NLsolve
-
-nl_res = nlsolve(rr, x0)
-ic = nl_res.zero
-test_prob = ODEProblem(power_network_rhs,ic,(0.,50.))
-test_sol = solve(test_prob, Rosenbrock23(autodiff=false))
-
-test_sol
 plot(test_sol)
 
 plot(test_sol, vars = [s for s in power_network_rhs.syms if occursin("ω", string(s))])
