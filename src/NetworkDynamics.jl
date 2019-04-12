@@ -1,13 +1,5 @@
 module NetworkDynamics
 
-include("nd_ODE_ODE_scalar.jl")
-using .nd_ODE_ODE_scalar_mod
-export nd_ODE_ODE_scalar
-
-include("nd_ODE_Static_scalar.jl")
-using .nd_ODE_Static_scalar_mod
-export nd_ODE_Static_scalar
-
 include("nd_ODE_ODE.jl")
 using .nd_ODE_ODE_mod
 export nd_ODE_ODE
@@ -15,10 +7,6 @@ export nd_ODE_ODE
 include("nd_ODE_Static.jl")
 using .nd_ODE_Static_mod
 export nd_ODE_Static
-
-include("nd_DDE_DDE_scalar.jl")
-using .nd_DDE_DDE_scalar_mod
-export nd_DDE_DDE_scalar
 
 include("nd_DDE_DDE.jl")
 using .nd_DDE_DDE_mod
@@ -74,21 +62,25 @@ function network_dynamics(vertices!::Array{ODEVertex,1}, edges!::Array{StaticEdg
     edge_functions = [e.f! for e in edges!]
     dim_e = [e.dim for e in edges!]
     dim_nd = sum(dim_v)
-    massmatrix = sparse(1.0I,dim_nd,dim_nd)
+
     symbols = [Symbol(vertices![i].sym[j],"_",i) for i in 1:length(vertices!) for j in 1:dim_v[i]]
 
-    if all(dim_v .== 1) && all(dim_e .== 1)
-        nd! = nd_ODE_Static_scalar(vertex_functions, edge_functions, graph)
-        ODEFunction(nd!)
+    nd! = nd_ODE_Static(vertex_functions, edge_functions, graph, dim_v, dim_e)
+
+    # Construct mass matrix
+    mm_array = [v.massmatrix for v in vertices!]
+    if all(mm_array .== nothing)
+        massmatrix = nothing
     else
-        nd! = nd_ODE_Static(vertex_functions, edge_functions, graph, dim_v, dim_e)
+        massmatrix = sparse(1.0I,dim_nd,dim_nd)
         for i in 1:length(vertex_functions)
-            for idx in nd!.v_idx
-                massmatrix[idx,idx] = vertices![i].massmatrix
+            if vertices![i].massmatrix != nothing
+                massmatrix[nd!.v_idx[i],nd!.v_idx[i]] .= vertices![i].massmatrix
             end
         end
-        ODEFunction(nd!,mass_matrix = massmatrix,syms=symbols)
     end
+
+    ODEFunction(nd!,mass_matrix = massmatrix,syms=symbols)
 end
 
 function network_dynamics(vertices!::Array{ODEVertex}, edges!::Array{ODEEdge}, graph)
@@ -102,23 +94,29 @@ function network_dynamics(vertices!::Array{ODEVertex}, edges!::Array{ODEEdge}, g
     vsymbols = [Symbol(vertices![i].sym[j],"_",i) for i in 1:length(vertices!) for j in 1:dim_v[i]]
     esymbols = [Symbol(edges![i].sym[j],"_",i) for i in 1:length(edges!) for j in 1:dim_e[i]]
     symbols = append!(vsymbols,esymbols)
-    if all(dim_v .== 1) && all(dim_e .== 1)
-        nd! = nd_ODE_ODE_scalar(vertex_functions, edge_functions, graph)
-        ODEFunction(nd!)
+
+    nd! = nd_ODE_ODE(vertex_functions, edge_functions, graph, dim_v, dim_e)
+
+    # Construct mass matrix
+    mmv_array = [v.massmatrix for v in vertices!]
+    mme_array = [e.massmatrix for e in edges!]
+    if all(mme_array .== nothing) and all(mmv_array .== nothing)
+        massmatrix = nothing
     else
-        nd! = nd_ODE_ODE(vertex_functions, edge_functions, graph, dim_v, dim_e)
+        massmatrix = sparse(1.0I,dim_nd,dim_nd)
         for i in 1:length(vertex_functions)
-            for idx in nd!.v_idx
-                massmatrix[idx,idx] = vertices![i].massmatrix
+            if vertices![i].massmatrix != nothing
+                massmatrix[nd!.v_idx[i],nd!.v_idx[i]] .= vertices![i].massmatrix
             end
         end
-        for i in 1:length(edge_functions)
-            for idx in nd!.e_x_idx
-                massmatrix[idx,idx] = edges![i].massmatrix
+        for i in 1:length(edges_functions)
+            if edges![i].massmatrix != nothing
+                massmatrix[nd!.e_x_idx[i],nd!.e_x_idx[i]] = edges![i].massmatrix
             end
         end
-        ODEFunction(nd!,mass_matrix = massmatrix,syms = symbols)
     end
+
+    ODEFunction(nd!,mass_matrix = massmatrix,syms = symbols)
 end
 
 function network_dynamics(vertices!::Array{DDEVertex}, edges!::Array{DDEEdge}, graph)
@@ -135,22 +133,27 @@ function network_dynamics(vertices!::Array{DDEVertex}, edges!::Array{DDEEdge}, g
     esymbols = [Symbol(edges![i].sym[j],"_",i) for i in 1:length(edges!) for j in 1:dim_e[i]]
     symbols = append!(vsymbols,esymbols)
 
-    if all(dim_v .== 1) && all(dim_e .== 1)
-        nd! = nd_DDE_DDE_scalar(vertex_functions, edge_functions, graph, tau_s, tau_d)
-        DDEFunction(nd!)
+    nd! = nd_DDE_DDE(vertex_functions, edge_functions, graph, dim_v, dim_e, tau_s, tau_d)
+
+    # Construct mass matrix
+    mmv_array = [v.massmatrix for v in vertices!]
+    mme_array = [e.massmatrix for e in edges!]
+    if all(mme_array .== nothing) and all(mmv_array .== nothing)
+        massmatrix = nothing
     else
-        nd! = nd_DDE_DDE(vertex_functions, edge_functions, graph, dim_v, dim_e, tau_s, tau_d)
+        massmatrix = sparse(1.0I,dim_nd,dim_nd)
         for i in 1:length(vertex_functions)
-            for idx in nd!.v_idx
-                massmatrix[idx,idx] = vertices![i].massmatrix
+            if vertices![i].massmatrix != nothing
+                massmatrix[nd!.v_idx[i],nd!.v_idx[i]] .= vertices![i].massmatrix
             end
         end
-        for i in 1:length(edge_functions)
-            for idx in nd!.e_x_idx
-                massmatrix[idx,idx] = edges![i].massmatrix
+        for i in 1:length(edges_functions)
+            if edges![i].massmatrix != nothing
+                massmatrix[nd!.e_x_idx[i],nd!.e_x_idx[i]] = edges![i].massmatrix
             end
         end
-        DDEFunction(nd!,mass_matrix = massmatrix, syms = symbols)
     end
+
+    DDEFunction(nd!,mass_matrix = massmatrix, syms = symbols)
 end
 end
