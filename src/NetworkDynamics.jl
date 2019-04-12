@@ -23,6 +23,11 @@ export EdgeFunction
 export DDEVertex
 export DDEEdge
 
+include("Utilities.jl")
+using .Utilities
+export RootRhs
+export find_valid_ic
+
 export network_dynamics
 
 using LinearAlgebra
