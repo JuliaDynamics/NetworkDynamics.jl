@@ -77,15 +77,6 @@ const EdgeFunction = Union{ODEEdge, StaticEdge, DDEEdge}
 
 convert(::Type{ODEVertex}, x::StaticVertex) = ODEVertex(x)
 promote_rule(::Type{ODEVertex}, ::Type{StaticVertex}) = ODEVertex
-#Experimental. Needs work.
-function ODE_v(f!)
-    func = (dv,v,e_s,e_d,p,t) -> dv .= f!(v,e_s,e_d,p,t) - v
-    func
-end
-
-function ODEVertex(sv::StaticVertex)
-    ODEVertex(ODE_from_Static(sv.f!), sv.dim, 0., sv.sym)
-end
 
 struct ODE_from_Static
     f!
@@ -101,37 +92,12 @@ function (ofs::ODE_from_Static)(dx,x,args...)
     nothing
 end
 
-#DDE_f is used to transform StaticEdge and ODEEdge to a DDEEdge by changing its arguments accordingly.
-
-function DDE_vertex_f!(f!)
-    func = (dv,v,h_v,e_s,e_d,h_s,h_d,p,t) -> dv .= f!(dv,v,e_s,e_d,p,t)
-    func
+function ODEVertex(sv::StaticVertex)
+    ODEVertex(ODE_from_Static(sv.f!), sv.dim, 0., sv.sym)
 end
 
-function DDEVertex(ov::ODEVertex)
-    DDEVertex(DDE_vertex_f!(ov.f!),ov.dim,ov.massmatrix,ov.sym,[],[])
-end
-
-function DDEVertex(dv::DDEVertex)
-    dv
-end
-
-function DDE_edge_f!(f!)
-    func = (de,e,h_e,v_s,v_d,h_s,h_d,p,t) -> de .= f!(de,e,v_s,v_d,p,t)
-    func
-end
-
-function DDEEdge(oe::ODEEdge)
-    DDEEdge(DDE_edge_f!(oe.f!),oe.dim,oe.massmatrix,oe.sym)
-end
-
-function DDEEdge(de::DDEEdge)
-    de
-end
-
-#This rightnow gives a Singular Exception Error because of the zero mass matrix. Easy workaround has yet to be found...
 function ODEEdge(se::StaticEdge)
-    ODEEdge(ODE_f!(se.f!), se.dim, sparse(0.0I,se.dim,se.dim), [:e for i in 1:se.dim])
+    ODEEdge(ODE_from_Static(se.f!), se.dim, 0., se.sym)
 end
 
 # investigate whether convert(::Type(ODEEdge), se::StaticEdge) = ODEEdge(se)
