@@ -17,12 +17,13 @@ the edge has as source and destination respectively.
 This works for multi-dimensional variables as well. =#
 
 
-@with_kw struct nd_ODE_Static
+@with_kw struct nd_ODE_Static{T}
+    g
     edges!
     vertices!
     num_v # Number of vertices
     num_e # Number of edges
-    e_int # Variables living on edges
+    e_int::AbstractArray{T} # Variables living on edges
     e_idx # Array of Array of indices of variables in e_int belonging to edges
     s_idx # Array of Array of indices of variables in x belonging to source vertex of edge
     d_idx # Array of Array of indices of variables in x belonging to destination vertex of edge
@@ -31,7 +32,7 @@ This works for multi-dimensional variables as well. =#
     e_d # Array of Array of views on the variables in e_int of the edges that are destination of a vertex
 end
 
-function (d::nd_ODE_Static)(dx, x, p::Nothing, t)
+function (d::nd_ODE_Static{T})(dx, x::AbstractArray{T}, p::Nothing, t) where T
     @views begin
     for i in 1:d.num_e
         d.edges![i](d.e_int[d.e_idx[i]], x[d.s_idx[i]], x[d.d_idx[i]], p, t)
@@ -43,7 +44,39 @@ function (d::nd_ODE_Static)(dx, x, p::Nothing, t)
     nothing
 end
 
-function (d::nd_ODE_Static)(dx, x, p, t)
+function (d::nd_ODE_Static{T})(dx, x::AbstractArray{T}, p, t) where T
+    @views begin
+    for i in 1:d.num_e
+        d.edges![i](d.e_int[d.e_idx[i]], x[d.s_idx[i]], x[d.d_idx[i]], p[d.num_v + i], t)
+    end
+    for i in 1:d.num_v
+        d.vertices![i](dx[d.v_idx[i]], x[d.v_idx[i]], d.e_s[i], d.e_d[i], p[i], t)
+    end
+    end
+    nothing
+end
+
+#= If the type of x doesn't match that of the internal variables we construct a
+new internal variable system.
+=#
+
+function (d::nd_ODE_Static){T}(dx, x::AbstractArray{U}, p::Nothing, t) where T where U
+    e_int = zeros(U, d.dim_nd)
+    e_s = [[view(e_int, d.e_idx[i_e]) for i_e in 1:d.num_e if i_v == d.s_e[i_e]] for i_v in 1:d.num_v]
+    e_d = [[view(e_int, d.e_idx[i_e]) for i_e in 1:d.num_e if i_v == d.d_e[i_e]] for i_v in 1:d.num_v]
+
+    @views begin
+    for i in 1:d.num_e
+        d.edges![i](e_int[d.e_idx[i]], x[d.s_idx[i]], x[d.d_idx[i]], p, t)
+    end
+    for i in 1:d.num_v
+        d.vertices![i](dx[d.v_idx[i]], x[d.v_idx[i]], e_s[i], e_d[i], p, t)
+    end
+    end
+    nothing
+end
+
+function (d::nd_ODE_Static){T}(dx, x::AbstractArray{U}, p, t) where T where U
     @views begin
     for i in 1:d.num_e
         d.edges![i](d.e_int[d.e_idx[i]], x[d.s_idx[i]], x[d.d_idx[i]], p[d.num_v + i], t)
@@ -92,6 +125,7 @@ function nd_ODE_Static(vertices!, edges!, s_e, d_e, dim_v, dim_e)
 
 
     nd_ODE_Static(
+    g
     edges!,
     vertices!,
     num_v, # Number of vertices
