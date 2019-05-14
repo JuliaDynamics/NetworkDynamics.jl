@@ -7,6 +7,7 @@ export nd_ODE_ODE
 include("nd_ODE_Static.jl")
 using .nd_ODE_Static_mod
 export nd_ODE_Static
+export StaticEdgeFunction
 
 include("nd_DDE_DDE.jl")
 using .nd_DDE_DDE_mod
