@@ -138,7 +138,7 @@ function (sef::StaticEdgeFunction)(x, p, t)
     d = sef.nd_ODE_Static
     @views begin
         for i in 1:d.num_e
-            d.edges![i](d.e_int[d.e_idx[i]], x[d.s_idx[i]], x[d.d_idx[i]], p, t)
+            d.edges![i](d.e_int[d.e_idx[i]], x[d.s_idx[i]], x[d.d_idx[i]], p[d.num_v + i], t)
         end
     end
     (d.e_s, d.e_d)
