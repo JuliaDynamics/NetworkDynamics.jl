@@ -1,5 +1,5 @@
-include("src/NetworkDynamics.jl")
-using .NetworkDynamics
+# include("src/NetworkDynamics.jl")
+using NetworkDynamics
 using LightGraphs
 using LinearAlgebra
 using DifferentialEquations
@@ -28,7 +28,7 @@ staticedge! = (e,v_s,v_d,p,t) -> e .= v_s - v_d
 # We construct the Vertices and Edges with dimension 2. This means we will have
 # two parallel diffusions on the network.
 
-odevertex = ODEVertex(f! = vertex!, mass_matrix = sparse(1.0I,2,2), dim = 2, sym = [:v,:w])
+odevertex = ODEVertex(f! = vertex!,dim = 2, sym = [:v,:w])
 odeedge = ODEEdge(f! = odeedge!, dim = 2, sym = [:v,:w])
 staticedge = StaticEdge(f! = staticedge!, dim = 2, sym = [:v,:w])
 
@@ -45,7 +45,7 @@ test_sol = solve(test_prob)
 
 using Plots
 
-plot(test_sol, vars = 1:2:20)
-plot(test_sol, vars = 2:2:20)
+plot(test_sol, vars = syms_containing(test, "v"))
+plot(test_sol, vars = syms_containing(test, "w"))
 
 plot(test_sol, vars=1:20)

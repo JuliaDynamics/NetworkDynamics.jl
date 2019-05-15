@@ -28,6 +28,7 @@ include("Utilities.jl")
 using .Utilities
 export RootRhs
 export find_valid_ic
+export syms_containing
 
 export network_dynamics
 
@@ -74,7 +75,7 @@ function network_dynamics(vertices!::Array{ODEVertex,1}, edges!::Array{StaticEdg
 
     # Construct mass matrix
     mm_array = [v.mass_matrix for v in vertices!]
-    if all(mm_array .== I)
+    if all([mm == I for mm in mm_array])
         mass_matrix = I
     else
         mass_matrix = sparse(1.0I,dim_nd,dim_nd)
@@ -105,7 +106,7 @@ function network_dynamics(vertices!::Array{ODEVertex}, edges!::Array{ODEEdge}, g
     # Construct mass matrix
     mmv_array = [v.mass_matrix for v in vertices!]
     mme_array = [e.mass_matrix for e in edges!]
-    if all(mme_array .== I) && all(mmv_array .== I)
+    if all([mm == I for mm in mmv_array]) && all([mm == I for mm in mme_array])
         mass_matrix = I
     else
         mass_matrix = sparse(1.0I,dim_nd,dim_nd)
@@ -143,7 +144,7 @@ function network_dynamics(vertices!::Array{DDEVertex}, edges!::Array{DDEEdge}, g
     # Construct mass matrix
     mmv_array = [v.mass_matrix for v in vertices!]
     mme_array = [e.mass_matrix for e in edges!]
-    if all(mme_array .== I) && all(mmv_array .== I)
+    if all([mm == I for mm in mmv_array]) && all([mm == I for mm in mme_array])
         mass_matrix = I
     else
         mass_matrix = sparse(1.0I,dim_nd,dim_nd)
