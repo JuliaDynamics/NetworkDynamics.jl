@@ -162,3 +162,22 @@ function network_dynamics(vertices!::Array{DDEVertex}, edges!::Array{DDEEdge}, g
     DDEFunction(nd!,mass_matrix = mass_matrix, syms = symbols)
 end
 end
+
+
+function network_dynamic(vertices!,  edges!, graph)
+    try
+        va! = Array{NDFunctions.VertexFunction}(vertices!)
+    catch err
+        println("Cannot convert the vertices to an Array{VertexFunction}!")
+        println(err)
+        return nothing
+    end
+    try
+        ea! = Array{NDFunctions.EdgeFunction}(edges!)
+    catch err
+        println("Cannot convert the edges to an Array{EdgeFunction}!")
+        println(err)
+        return nothing
+    end
+    network_dynamic(va!,  ea!, graph)
+end
