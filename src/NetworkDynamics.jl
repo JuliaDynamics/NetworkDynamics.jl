@@ -114,7 +114,7 @@ function network_dynamics(vertices!::Array{ODEVertex}, edges!::Array{ODEEdge}, g
                 mass_matrix[nd!.v_idx[i],nd!.v_idx[i]] .= vertices![i].mass_matrix
             end
         end
-        for i in 1:length(edges_functions)
+        for i in 1:length(edge_functions)
             if edges![i].mass_matrix != I
                 mass_matrix[nd!.e_x_idx[i],nd!.e_x_idx[i]] = edges![i].mass_matrix
             end
@@ -152,7 +152,7 @@ function network_dynamics(vertices!::Array{DDEVertex}, edges!::Array{DDEEdge}, g
                 mass_matrix[nd!.v_idx[i],nd!.v_idx[i]] .= vertices![i].mass_matrix
             end
         end
-        for i in 1:length(edges_functions)
+        for i in 1:length(edge_functions)
             if edges![i].mass_matrix != I
                 mass_matrix[nd!.e_x_idx[i],nd!.e_x_idx[i]] = edges![i].mass_matrix
             end
