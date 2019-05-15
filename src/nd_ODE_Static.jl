@@ -112,4 +112,36 @@ function nd_ODE_Static(vertices!, edges!, g::AbstractGraph, dim_v, dim_e)
     nd_ODE_Static(vertices!, edges!, s_e, d_e, dim_v, dim_e)
 end
 
+struct StaticEdgeFunction
+    nd_ODE_Static:: nd_ODE_Static
+end
+
+function StaticEdgeFunction(vertices!, edges!, g::AbstractGraph)
+    dim_v = [v.dim for v in vertices!]
+    dim_e = [e.dim for e in edges!]
+    vertex_functions = [v.f! for v in vertices!]
+    edge_functions = [e.f! for e in edges!]
+    StaticEdgeFunction(nd_ODE_Static(vertex_functions, edge_functions, g, dim_v, dim_e))
+end
+
+function (sef::StaticEdgeFunction)(x, p::Nothing, t)
+    d = sef.nd_ODE_Static
+    @views begin
+        for i in 1:d.num_e
+            d.edges![i](d.e_int[d.e_idx[i]], x[d.s_idx[i]], x[d.d_idx[i]], p, t)
+        end
+    end
+    (d.e_s, d.e_d)
+end
+
+function (sef::StaticEdgeFunction)(x, p, t)
+    d = sef.nd_ODE_Static
+    @views begin
+        for i in 1:d.num_e
+            d.edges![i](d.e_int[d.e_idx[i]], x[d.s_idx[i]], x[d.d_idx[i]], p[d.num_v + i], t)
+        end
+    end
+    (d.e_s, d.e_d)
+end
+
 end #module
