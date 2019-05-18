@@ -42,7 +42,7 @@ end
 @Base.kwdef struct ODEVertex
     f! # The function with signature (dx, x, e_s, e_t, p, t) -> nothing
     dim # number of dimensions of x
-    massmatrix=nothing # Mass matrix for the equation
+    mass_matrix=I # Mass matrix for the equation
     sym=[:v for i in 1:dim] # Symbols for the dimensions
 end
 
@@ -50,7 +50,7 @@ end
 @Base.kwdef struct ODEEdge
     f! # The function with signature (dx, x, e_s, e_t, p, t) -> nothing
     dim # number of dimensions of x
-    massmatrix=nothing # Mass matrix for the equation
+    mass_matrix=I # Mass matrix for the equation
     sym=[:e for i in 1:dim] # Symbols for the dimensions
 end
 
@@ -58,7 +58,7 @@ end
 @Base.kwdef struct DDEVertex
     f! # The function with signature (dv, v, h_v, e_s, e_t, h_e_s, h_e_d, p, t) -> nothing where h is the history function
     dim # number of dimensions
-    massmatrix=nothing # Mass matrix for the equation
+    mass_matrix=I # Mass matrix for the equation
     sym=[:v for i in 1:dim] # Symbols for the dimensions
     tau_s=[] # Array of Delays for the incoming currents of different variables
     tau_d=[] # Array of Delays for the outgoing currents of different variables
@@ -68,7 +68,7 @@ end
 @Base.kwdef struct DDEEdge
     f! # The function with signature (de, e, h_e, v_s, v_d, h_s, h_d, p, t)
     dim # number of variables
-    massmatrix=nothing # Mass matrix for the equation
+    mass_matrix=I # Mass matrix for the equation
     sym=[:v for i in 1:dim] # Symbols for the dimensions
 end
 

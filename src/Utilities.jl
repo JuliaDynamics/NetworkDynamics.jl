@@ -5,7 +5,6 @@ using DifferentialEquations
 using LinearAlgebra
 
 export RootRhs
-export find_valid_ic
 
 struct RootRhs
     rhs
@@ -24,6 +23,9 @@ function RootRhs(of::ODEFunction)
     RootRhs(of.f, mpm)
 end
 
+
+export find_valid_ic
+
 function find_valid_ic(of::ODEFunction, ic_guess)
     rr = RootRhs(of)
     nl_res = nlsolve(rr, ic_guess)
@@ -33,6 +35,13 @@ function find_valid_ic(of::ODEFunction, ic_guess)
         println("Failed to find initial conditions on the constraint manifold!")
         println("Try running nlsolve with other options.")
     end
+end
+
+
+export syms_containing
+
+function syms_containing(nd, str)
+    [s for s in nd.syms if occursin(str, string(s))]
 end
 
 end #module

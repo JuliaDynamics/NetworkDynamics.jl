@@ -1,5 +1,5 @@
-include("src/NetworkDynamics.jl")
-using .NetworkDynamics
+# include("src/NetworkDynamics.jl")
+using NetworkDynamics
 using LightGraphs
 using LinearAlgebra
 using DifferentialEquations
@@ -8,8 +8,6 @@ g = barabasi_albert(10,5)
 
 #= vertex! is basically dv = sum(e_d) - sum(e_s), so basically simple diffusion with the addition
 of staticedge! and odeedge! below. =#
-
-
 
 function vertex!(dv, v, e_s, e_d, p, t)
     # Note that e_s and e_d might be empty, the code needs to be able to deal
@@ -24,40 +22,30 @@ function vertex!(dv, v, e_s, e_d, p, t)
     nothing
 end
 
-function ddevertex!(dv,v,h_v,e_s,e_d,h_s,h_d,p,t)
-    dv .= -h_v(p,t-0.1)[1:2]
-    for h in h_s
-        dv .-= h
-    end
-    for h in h_d
-        dv .+= h
-    end
-end
+odeedge! = (de,e,v_s,v_d,p,t) -> de .= 1000*(v_s - v_d - e)
+staticedge! = (e,v_s,v_d,p,t) -> e .= v_s - v_d
 
-odeedge! = (dl,l,v_s,v_d,p,t) -> dl .= 1000*(v_s - v_d - l)
-staticedge! = (l,v_s,v_d,p,t) -> l .= v_s - v_d
-ddeedge! = (de,e,h_e,v_s,v_d,h_s,h_d,p,t) -> de .= 1000*(v_s - v_d - e)
+# We construct the Vertices and Edges with dimension 2. This means we will have
+# two parallel diffusions on the network.
 
-# We construct the Vertices and Edges with dimension 2.
+odevertex = ODEVertex(f! = vertex!,dim = 2, sym = [:v,:w])
+odeedge = ODEEdge(f! = odeedge!, dim = 2, sym = [:v,:w])
+staticedge = StaticEdge(f! = staticedge!, dim = 2, sym = [:v,:w])
 
-odevertex = ODEVertex(vertex!,2,[1 0; 0 1],[:v,:v])
-odeedge = ODEEdge(odeedge! ,2)
-staticedge = StaticEdge(staticedge!, 2)
-ddevertex = DDEVertex(ddevertex!, 2, [0.001,0.1], [0,0])
-ddeedge = DDEEdge(ddeedge!, 2)
-vertexes = [ddevertex for v in vertices(g)]
-edgices = [ddeedge for e in edges(g)]
-
+vertexes = [odevertex for v in vertices(g)]
+edgices = [staticedge for e in edges(g)]
 
 test = network_dynamics(vertexes,edgices,g)
 
-x0 = rand(70)
-h0(p,t; idxs = 1:70) = x0
+x0 = rand(20)
 
-test_prob = DDEProblem(test,x0,h0,(0.,5.))
+test_prob = ODEProblem(test,x0,(0.,5.))
 
 test_sol = solve(test_prob)
 
 using Plots
 
-plot(test_sol, vars = 21:40)
+plot(test_sol, vars = syms_containing(test, "v"))
+plot(test_sol, vars = syms_containing(test, "w"))
+
+plot(test_sol, vars=1:20)

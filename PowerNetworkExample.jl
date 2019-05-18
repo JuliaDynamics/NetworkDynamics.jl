@@ -77,7 +77,7 @@ pq_1 = StaticVertex(f! = PQVertex(randn() + randn()*im),
 
 pq_list = [ODEVertex(f! = PQVertex(randn() + randn()*im),
                      dim = 2,
-                     massmatrix = 0.,
+                     mass_matrix = 0.,
                      sym = [:v_r, :v_i])
            for i in 1:5]
 
