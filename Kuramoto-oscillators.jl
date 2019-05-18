@@ -46,11 +46,18 @@ kuramoto_network! = network_dynamics(vertexes,edgices,g)
 x0 = randn(nv(g))
 dx = similar(x0)
 
-kuramoto_network!(dx, x0, parameters, 0.)
+@profile kuramoto_network!(dx, x0, parameters, 0.)
 
 prob = ODEProblem(kuramoto_network!, x0, (0.,5.), parameters)
 
 sol = solve(prob)
+
+using Profile
+using ProfileView
+
+@profile sol = solve(prob)
+
+ProfileView.view()
 
 using Plots
 
