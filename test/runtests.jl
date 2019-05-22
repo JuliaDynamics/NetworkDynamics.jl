@@ -48,6 +48,7 @@ staticedges = [StaticEdge(f! = staticedge!, dim = 1) for e in edges(g)]
 # ddevertices = [DDEVertex(f! = ddevertex!, dim = 1, mass_matrix = I) for v in vertices(g)]
 # ddeedges = [DDEEdge(f! = ddeedge!, dim = 1) for e in edges(g)]
 
+
 nd_static = network_dynamics(odevertices, staticedges, g)
 nd_ode = network_dynamics(odevertices, odeedges, g)
 # nd_dde = network_dynamics(ddevertices,ddeedges,g)
