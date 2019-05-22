@@ -45,12 +45,12 @@ ddeedge! = (de,e,h_e,v_s,v_d,h_s,h_d,p,t) -> de .= 1000*(v_s - v_d - e)
 odevertices = [ODEVertex(f! = vertex!, dim = 1, mass_matrix = I) for v in vertices(g)]
 odeedges = [ODEEdge(f! = odeedge!, dim = 1) for e in edges(g)]
 staticedges = [StaticEdge(f! = staticedge!, dim = 1) for e in edges(g)]
-ddevertices = [DDEVertex(f! = ddevertex!, dim = 1, mass_matrix = I) for v in vertices(g)]
-ddeedges = [DDEEdge(f! = ddeedge!, dim = 1) for e in edges(g)]
+# ddevertices = [DDEVertex(f! = ddevertex!, dim = 1, mass_matrix = I) for v in vertices(g)]
+# ddeedges = [DDEEdge(f! = ddeedge!, dim = 1) for e in edges(g)]
 
 nd_static = network_dynamics(odevertices, staticedges, g)
 nd_ode = network_dynamics(odevertices, odeedges, g)
-nd_dde = network_dynamics(ddevertices,ddeedges,g)
+# nd_dde = network_dynamics(ddevertices,ddeedges,g)
 
 @testset "Network dynamics function" begin
     for i in 1:10

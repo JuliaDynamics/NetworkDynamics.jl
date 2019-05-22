@@ -1,12 +1,28 @@
 module NetworkStructures
 
 using LightGraphs
+using LinearAlgebra
 #= This module contains helper functions that calculate the index structures
-and view arrays that NEtwork Dynamics makes use of.
+and view arrays that Network Dynamics makes use of.
+
+The key structure is the GraphStructure that contains the internal variables of
+the edges, as well as all the views into them, and the complete set of indices.
 =#
 
-export create_idxs, create_network_data
+export create_idxs, create_graph_structure, GraphStructure, construct_mass_matrix
 
+struct GraphStructure
+    num_v # Number of vertices
+    num_e # Number of edges
+    e_int # Variables living on edges
+    e_idx # Array of Array of indices of variables in e_int belonging to edges
+    e_x_idx # Array of Array of indices of variables in x belonging to edges if edges are dynamic
+    s_idx # Array of Array of indices of variables in x belonging to source vertex of edge
+    d_idx # Array of Array of indices of variables in x belonging to destination vertex of edge
+    v_idx # Array of Array of indices of variables in x belonging to vertex
+    e_s # Array of Array of views on the variables in e_int of the edges that are source of a vertex
+    e_d
+end
 
 function create_idxs(dims, counter=1)
     idxs = [zeros(Int32, dim) for dim in dims]
@@ -17,7 +33,7 @@ function create_idxs(dims, counter=1)
     idxs
 end
 
-function create_network_data(g, dim_v, dim_e, e_int)
+function create_graph_structure(g, dim_v, dim_e, e_int)
     s_e = [src(e) for e in edges(g)]
     d_e = [dst(e) for e in edges(g)]
 
@@ -42,7 +58,7 @@ function create_network_data(g, dim_v, dim_e, e_int)
     s_idx = [v_idx[s_e[i_e]] for i_e in 1:num_e]
     d_idx = [v_idx[d_e[i_e]] for i_e in 1:num_e]
 
-    (num_v, # Number of vertices
+    GraphStructure(num_v, # Number of vertices
     num_e, # Number of edges
     e_int, # Variables living on edges
     e_idx, # Array of Array of indices of variables in e_int belonging to edges
@@ -52,6 +68,39 @@ function create_network_data(g, dim_v, dim_e, e_int)
     v_idx, # Array of Array of indices of variables in x belonging to vertex
     e_s, # Array of Array of views on the variables in e_int of the edges that are source of a vertex
     e_d) # Array of Array of views on the variables in e_int of the edges that are destination of a vertex
+end
+
+function construct_mass_matrix(mmv_array, dim_nd, gs::GraphStructure)
+    if all([mm == I for mm in mmv_array])
+        mass_matrix = I
+    else
+        mass_matrix = sparse(1.0I,dim_nd,dim_nd)
+        for (i, mm) in enumerate(mmv_array)
+            if mm != I
+                mass_matrix[gs.v_idx[i],gs.v_idx[i]] .= mm
+            end
+        end
+    end
+    mass_matrix
+end
+
+function construct_mass_matrix(mmv_array, mme_array, dim_nd, gs::GraphStructure)
+    if all([mm == I for mm in mmv_array]) && all([mm == I for mm in mme_array])
+        mass_matrix = I
+    else
+        mass_matrix = sparse(1.0I,dim_nd,dim_nd)
+        for (i, mm) in enumerate(mmv_array)
+            if mm != I
+                mass_matrix[gs.v_idx[i],gs.v_idx[i]] .= mm
+            end
+        end
+        for (i, mm) in enumerate(mme_array)
+            if mm != I
+                mass_matrix[gs.e_x_idx[i],gs.e_x_idx[i]] .= mm
+            end
+        end
+    end
+    mass_matrix
 end
 
 end # module
