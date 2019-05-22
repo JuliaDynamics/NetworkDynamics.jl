@@ -43,14 +43,18 @@ append!(parameters, [kuramoto_parameters(0.) for v in edges(g)])
 
 kuramoto_network! = network_dynamics(vertexes,edgices,g)
 
+using ForwardDiff
+T_dual = ForwardDiff.Dual{nothing,Float64, ForwardDiff.pickchunksize(length(kuramoto_network!.f.e_int))}
+kuramoto_network! = network_dynamics(vertexes,edgices,g; T=T_dual)
+
 x0 = randn(nv(g))
 dx = similar(x0)
 
-@profile kuramoto_network!(dx, x0, parameters, 0.)
+kuramoto_network!(dx, x0, parameters, 0.)
 
 prob = ODEProblem(kuramoto_network!, x0, (0.,5.), parameters)
 
-sol = solve(prob)
+sol = solve(prob, Rodas4())
 
 using Profile
 using ProfileView

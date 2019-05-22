@@ -61,7 +61,7 @@ function network_dynamics(vertices!::Array{VertexFunction}, edges!::Array{EdgeFu
     network_dynamics(vertices!,edges!,graph)
 end
 
-function network_dynamics(vertices!::Array{ODEVertex,1}, edges!::Array{StaticEdge,1}, graph)
+function network_dynamics(vertices!::Array{ODEVertex,1}, edges!::Array{StaticEdge,1}, graph; T=Float64)
 
     vertex_functions = [v.f! for v in vertices!]
     dim_v = [v.dim for v in vertices!]
@@ -71,7 +71,7 @@ function network_dynamics(vertices!::Array{ODEVertex,1}, edges!::Array{StaticEdg
 
     symbols = [Symbol(vertices![i].sym[j],"_",i) for i in 1:length(vertices!) for j in 1:dim_v[i]]
 
-    nd! = nd_ODE_Static(vertex_functions, edge_functions, graph, dim_v, dim_e)
+    nd! = nd_ODE_Static(vertex_functions, edge_functions, graph, dim_v, dim_e, T=T)
 
     # Construct mass matrix
     mm_array = [v.mass_matrix for v in vertices!]
