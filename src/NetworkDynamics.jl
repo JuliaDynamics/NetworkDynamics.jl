@@ -59,7 +59,7 @@ function network_dynamics(vertices!::Array{ODEVertex}, edges!::Array{ODEEdge}, g
 
     dim_v = [v.dim for v in vertices!]
     dim_e = [e.dim for e in edges!]
-    dim_nd = sum(dim_v)
+    dim_nd = sum(dim_e) + sum(dim_v)
 
     e_int = zeros(sum(dim_e))
 
