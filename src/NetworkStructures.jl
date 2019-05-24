@@ -2,6 +2,7 @@ module NetworkStructures
 
 using LightGraphs
 using LinearAlgebra
+using SparseArrays
 #= This module contains helper functions that calculate the index structures
 and view arrays that Network Dynamics makes use of.
 
