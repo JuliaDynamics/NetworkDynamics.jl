@@ -8,6 +8,7 @@ using LightGraphs
 using LinearAlgebra
 
 export nd_ODE_Static
+export StaticEdgeFunction
 
 #= nd_ODE_Static constructs a (dx,x,p,t)-function from an Array of functions for the vertices,
  edges as well as a graph.
@@ -63,16 +64,16 @@ struct StaticEdgeFunction
     nd_ODE_Static::nd_ODE_Static
 end
 
-function StaticEdgeFunction(vertices!, edges!, graph::AbstractGraph)
+function StaticEdgeFunction(vertices!, edges!, graph::G) where G <: AbstractGraph
     dim_v = [v.dim for v in vertices!]
     dim_e = [e.dim for e in edges!]
     dim_nd = sum(dim_v)
 
-    e_int = zeros(dim_nd)
+    e_int = zeros(sum(dim_e))
 
     graph_stucture = create_graph_structure(graph, dim_v, dim_e, e_int)
 
-    StaticEdgeFunction(nd_ODE_Static(vertex_functions, edge_functions, g, dim_v, dim_e))
+    StaticEdgeFunction(nd_ODE_Static(vertices!, edges!, graph, graph_stucture))
 end
 
 function (sef::StaticEdgeFunction)(x, p, t)
