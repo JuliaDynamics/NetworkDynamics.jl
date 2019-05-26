@@ -1,10 +1,14 @@
 module nd_ODE_Static_mod
 
+include("NetworkStructures.jl")
+using .NetworkStructures
+
 using Parameters
 using LightGraphs
 using LinearAlgebra
 
 export nd_ODE_Static
+export StaticEdgeFunction
 
 #= nd_ODE_Static constructs a (dx,x,p,t)-function from an Array of functions for the vertices,
  edges as well as a graph.
@@ -18,130 +22,80 @@ This works for multi-dimensional variables as well. =#
 
 
 @with_kw struct nd_ODE_Static
-    edges!
     vertices!
-    num_v # Number of vertices
-    num_e # Number of edges
-    e_int # Variables living on edges
-    e_idx # Array of Array of indices of variables in e_int belonging to edges
-    s_idx # Array of Array of indices of variables in x belonging to source vertex of edge
-    d_idx # Array of Array of indices of variables in x belonging to destination vertex of edge
-    v_idx # Array of Array of indices of variables in x belonging to vertex
-    e_s # Array of Array of views on the variables in e_int of the edges that are source of a vertex
-    e_d # Array of Array of views on the variables in e_int of the edges that are destination of a vertex
-end
-
-function (d::nd_ODE_Static)(dx, x, p::Nothing, t)
-    @views begin
-    for i in 1:d.num_e
-        d.edges![i](d.e_int[d.e_idx[i]], x[d.s_idx[i]], x[d.d_idx[i]], p, t)
-    end
-    for i in 1:d.num_v
-        d.vertices![i](dx[d.v_idx[i]], x[d.v_idx[i]], d.e_s[i], d.e_d[i], p, t)
-    end
-    end
-    nothing
+    edges!
+    graph
+    graph_stucture
 end
 
 function (d::nd_ODE_Static)(dx, x, p, t)
+    gs = d.graph_stucture
     @views begin
-    for i in 1:d.num_e
-        d.edges![i](d.e_int[d.e_idx[i]], x[d.s_idx[i]], x[d.d_idx[i]], p[d.num_v + i], t)
+    for i in 1:gs.num_e
+        d.edges![i].f!(gs.e_int[gs.e_idx[i]], x[gs.s_idx[i]], x[gs.d_idx[i]], p, t)
     end
-    for i in 1:d.num_v
-        d.vertices![i](dx[d.v_idx[i]], x[d.v_idx[i]], d.e_s[i], d.e_d[i], p[i], t)
+    for i in 1:gs.num_v
+        d.vertices![i].f!(dx[gs.v_idx[i]], x[gs.v_idx[i]], gs.e_s[i], gs.e_d[i], p, t)
     end
     end
     nothing
 end
 
-"""
-    dim_v is an array of the number of variables per vertex
-    dim_e is an array of the number of variables per edge"""
+function (d::nd_ODE_Static)(dx, x, p::T, t) where T <: AbstractArray
+    gs = d.graph_stucture
+    @views begin
+    for i in 1:gs.num_e
+        d.edges![i].f!(gs.e_int[gs.e_idx[i]], x[gs.s_idx[i]], x[gs.d_idx[i]], p[i + gs.num_v], t)
+    end
+    for i in 1:gs.num_v
+        d.vertices![i].f!(dx[gs.v_idx[i]], x[gs.v_idx[i]], gs.e_s[i], gs.e_d[i], p[i], t)
+    end
+    end
+    nothing
+end
 
-function nd_ODE_Static(vertices!, edges!, s_e, d_e, dim_v, dim_e)
-    num_v = length(dim_v)
-    num_e = length(dim_e)
+
+
+#= The struct comes in a version where edges and vertices are not arrays but
+homogenous across the network.
+=#
+
+struct StaticEdgeFunction
+    nd_ODE_Static::nd_ODE_Static
+end
+
+function StaticEdgeFunction(vertices!, edges!, graph::G) where G <: AbstractGraph
+    dim_v = [v.dim for v in vertices!]
+    dim_e = [e.dim for e in edges!]
+    dim_nd = sum(dim_v)
 
     e_int = zeros(sum(dim_e))
 
-    # x has length sum(dim_v)
-    # v_idx is an Array of Array of indices of variables in x belonging to vertex
+    graph_stucture = create_graph_structure(graph, dim_v, dim_e, e_int)
 
-    counter = 1
-    v_idx = [zeros(Int32, dim) for dim in dim_v]
-    for i in 1:num_v
-        v_idx[i] .= collect(counter:counter + dim_v[i] - 1)
-        counter += dim_v[i]
-    end
-
-    counter = 1
-    e_idx = [zeros(Int32, dim) for dim in dim_e]
-    for i in 1:num_e
-        e_idx[i] .= collect(counter:counter + dim_e[i] - 1)
-        counter += dim_e[i]
-    end
-
-    # For every vertex, and for every edge, if the source of the edge is that vertex, take the view on the variables of that edge.
-    # Thus e_s[i] is an array of views onto the variables of the edges for which i is the source.
-    e_s = [[view(e_int, e_idx[i_e]) for i_e in 1:num_e if i_v == s_e[i_e]] for i_v in 1:num_v]
-    e_d = [[view(e_int, e_idx[i_e]) for i_e in 1:num_e if i_v == d_e[i_e]] for i_v in 1:num_v]
-
-    s_idx = [v_idx[s_e[i_e]] for i_e in 1:num_e]
-    d_idx = [v_idx[d_e[i_e]] for i_e in 1:num_e]
-
-
-    nd_ODE_Static(
-    edges!,
-    vertices!,
-    num_v, # Number of vertices
-    num_e, # Number of edges
-    e_int, # Variables living on edges
-    e_idx, # Array of Array of indices of variables in e_int belonging to edges
-    s_idx, # Array of Array of indices of variables in x belonging to source vertex of edge
-    d_idx, # Array of Array of indices of variables in x belonging to destination vertex of edge
-    v_idx, # Array of Array of indices of variables in x belonging to vertex
-    e_s, # Array of Array of views on the variables in e_int of the edges that are source of a vertex
-    e_d # Array of Array of views on the variables in e_int of the edges that are destination of a vertex
-    )
-end
-
-function nd_ODE_Static(vertices!, edges!, g::AbstractGraph, dim_v, dim_e)
-    s_e = [src(e) for e in edges(g)]
-    d_e = [dst(e) for e in edges(g)]
-    nd_ODE_Static(vertices!, edges!, s_e, d_e, dim_v, dim_e)
-end
-
-struct StaticEdgeFunction
-    nd_ODE_Static:: nd_ODE_Static
-end
-
-function StaticEdgeFunction(vertices!, edges!, g::AbstractGraph)
-    dim_v = [v.dim for v in vertices!]
-    dim_e = [e.dim for e in edges!]
-    vertex_functions = [v.f! for v in vertices!]
-    edge_functions = [e.f! for e in edges!]
-    StaticEdgeFunction(nd_ODE_Static(vertex_functions, edge_functions, g, dim_v, dim_e))
-end
-
-function (sef::StaticEdgeFunction)(x, p::Nothing, t)
-    d = sef.nd_ODE_Static
-    @views begin
-        for i in 1:d.num_e
-            d.edges![i](d.e_int[d.e_idx[i]], x[d.s_idx[i]], x[d.d_idx[i]], p, t)
-        end
-    end
-    (d.e_s, d.e_d)
+    StaticEdgeFunction(nd_ODE_Static(vertices!, edges!, graph, graph_stucture))
 end
 
 function (sef::StaticEdgeFunction)(x, p, t)
     d = sef.nd_ODE_Static
+    gs = d.graph_stucture
     @views begin
-        for i in 1:d.num_e
-            d.edges![i](d.e_int[d.e_idx[i]], x[d.s_idx[i]], x[d.d_idx[i]], p[d.num_v + i], t)
+        for i in 1:gs.num_e
+            d.edges![i].f!(gs.e_int[gs.e_idx[i]], x[gs.s_idx[i]], x[gs.d_idx[i]], p, t)
         end
     end
-    (d.e_s, d.e_d)
+    (gs.e_s, gs.e_d)
+end
+
+function (sef::StaticEdgeFunction)(x, p::T, t) where T <: AbstractArray
+    d = sef.nd_ODE_Static
+    gs = d.graph_stucture
+    @views begin
+        for i in 1:d.num_e
+            d.edges![i].f!(gs.e_int[gs.e_idx[i]], x[gs.s_idx[i]], x[gs.d_idx[i]], p[i + gs.num_v], t)
+        end
+    end
+    (gs.e_s, gs.e_d)
 end
 
 end #module

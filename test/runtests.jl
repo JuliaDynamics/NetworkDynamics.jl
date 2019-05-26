@@ -42,15 +42,16 @@ odeedge! = (dl,l,v_s,v_d,p,t) -> dl .= 1000*(v_s - v_d - l)
 staticedge! = (l,v_s,v_d,p,t) -> l .= v_s - v_d
 ddeedge! = (de,e,h_e,v_s,v_d,h_s,h_d,p,t) -> de .= 1000*(v_s - v_d - e)
 
-odevertices = [ODEVertex(f! = vertex!, dim = 1, mass_matrix = 1) for v in vertices(g)]
+odevertices = [ODEVertex(f! = vertex!, dim = 1, mass_matrix = I) for v in vertices(g)]
 odeedges = [ODEEdge(f! = odeedge!, dim = 1) for e in edges(g)]
 staticedges = [StaticEdge(f! = staticedge!, dim = 1) for e in edges(g)]
-ddevertices = [DDEVertex(f! = ddevertex!, dim = 1, mass_matrix = 1) for v in vertices(g)]
-ddeedges = [DDEEdge(f! = ddeedge!, dim = 1) for e in edges(g)]
+# ddevertices = [DDEVertex(f! = ddevertex!, dim = 1, mass_matrix = I) for v in vertices(g)]
+# ddeedges = [DDEEdge(f! = ddeedge!, dim = 1) for e in edges(g)]
+
 
 nd_static = network_dynamics(odevertices, staticedges, g)
 nd_ode = network_dynamics(odevertices, odeedges, g)
-nd_dde = network_dynamics(ddevertices,ddeedges,g)
+# nd_dde = network_dynamics(ddevertices,ddeedges,g)
 
 @testset "Network dynamics function" begin
     for i in 1:10
@@ -76,21 +77,21 @@ end
 
 h0(p,t; idxs = 1:nv(g)+ne(g)) = x0
 
-plot(solution_static_1, legend = false, vars = 1:10)
+# plot(solution_static_1, legend = false, vars = 1:10)
 
 problem_ode = ODEProblem(nd_ode, x0, (0.,2.))
 solution_ode = solve(problem_ode)
-plot(solution_ode,legend = false, vars= 1:10)
+# plot(solution_ode,legend = false, vars= 1:10)
 
-problem_dde = DDEProblem(nd_dde, x0, h0, (0.,2.))
-solution_dde = solve(problem_dde)
-plot(solution_dde,legend = false, vars = 1:10)
+# problem_dde = DDEProblem(nd_dde, x0, h0, (0.,2.))
+# solution_dde = solve(problem_dde)
+# plot(solution_dde,legend = false, vars = 1:10)
 
 @testset "Check if static solution == ode solution" begin
     @test isapprox(solution_static_1[end][1:10], solution_ode[end][1:10], atol=0.001)
 end
 
-for i in 1:10
-    @test isapprox(solution_static_1[end][i], solution_dde[end][i], atol=0.001)
-end
-end
+# for i in 1:10
+#     @test isapprox(solution_static_1[end][i], solution_dde[end][i], atol=0.001)
+# end
+# end
