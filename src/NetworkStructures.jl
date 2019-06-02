@@ -26,7 +26,7 @@ struct GraphStructure
 end
 
 function create_idxs(dims, counter=1)
-    idxs = [zeros(Int32, dim) for dim in dims]
+    idxs = [zeros(Int, dim) for dim in dims]
     for (i, dim) in enumerate(dims)
         idxs[i] .= collect(counter:(counter + dim - 1))
         counter += dim
