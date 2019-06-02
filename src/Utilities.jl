@@ -50,10 +50,15 @@ function find_valid_ic(of::ODEFunction, ic_guess)
 end
 
 
-export syms_containing
+export syms_containing, idx_containing
 
 function syms_containing(nd, str)
     [s for s in nd.syms if occursin(str, string(s))]
 end
+
+function idx_containing(nd, str)
+    [i for (i, s) in enumerate(nd.syms) if occursin(str, string(s))]
+end
+
 
 end #module
