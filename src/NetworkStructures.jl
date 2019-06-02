@@ -31,7 +31,7 @@ struct GS_x_View{G}
 end
 
 function getindex(gxv::GS_x_View, idx::Int)
-    gev.gs.x[idx + gs_x_view.idx_offset]
+    gxv.gs.x[idx + gs_x_view.idx_offset]
 end
 
 #
@@ -45,32 +45,32 @@ end
 #     end
 # end
 
+const Idx = UnitRange{Int}
 
-struct GraphStructure{T_e_int, T_x}
+struct GraphStructure{T_e_int}
     num_v::Int # Number of vertices
     num_e::Int # Number of edges
     e_int::T_e_int # Variables living on edges
-    x::T_x # Variables living on vertices
-    dx::T_x # Variables living on vertices
-    e_idx::Array{Array{Int, 1}, 1} # Array of Array of indices of variables in e_int belonging to edges
-    e_x_idx::Array{Array{Int, 1}, 1} # Array of Array of indices of variables in x belonging to edges if edges are dynamic
-    s_idx::Array{Array{Int, 1}, 1} # Array of Array of indices of variables in x belonging to source vertex of edge
-    d_idx::Array{Array{Int, 1}, 1} # Array of Array of indices of variables in x belonging to destination vertex of edge
-    v_idx::Array{Array{Int, 1}, 1} # Array of Array of indices of variables in x belonging to vertex
-    e_s::Array{Array{GS_e_int_View{GraphStructure{T_e_int, T_x}}, 1}, 1} # Array of Array of views on the variables in e_int of the edges that are source of a vertex
-    e_d::Array{Array{GS_e_int_View{GraphStructure{T_e_int, T_x}}, 1}, 1}
+    e_idx::Array{Idx, 1} # Array of indices of variables in e_int belonging to edges
+    e_x_idx::Array{Idx, 1} # Array of indices of variables in x belonging to edges if edges are dynamic
+    s_idx::Array{Idx, 1} # Array of indices of variables in x belonging to source vertex of edge
+    d_idx::Array{Idx, 1} # Array of indices of variables in x belonging to destination vertex of edge
+    v_idx::Array{Idx, 1} # Array of indices of variables in x belonging to vertex
+    # Array of Array of views on the variables in e_int of the edges that are source of a vertex
+    e_s::Array{Array{SubArray{Float64,1,Array{Float64,1},Tuple{Idx},true},1},1}
+    e_d::Array{Array{SubArray{Float64,1,Array{Float64,1},Tuple{Idx},true},1},1}
 end
 
-function create_idxs(dims, counter=1)
-    idxs = [zeros(Int, dim) for dim in dims]
+function create_idxs(dims, counter=1)::Array{Idx, 1}
+    idxs = [1:1 for dim in dims]
     for (i, dim) in enumerate(dims)
-        idxs[i] .= collect(counter:(counter + dim - 1))
+        idxs[i] = counter:(counter + dim - 1)
         counter += dim
     end
     idxs
 end
 
-function create_graph_structure(g, dim_v, dim_e, e_int, x, dx)
+function create_graph_structure(g, dim_v, dim_e, e_int)
     s_e = [src(e) for e in edges(g)]
     d_e = [dst(e) for e in edges(g)]
 
