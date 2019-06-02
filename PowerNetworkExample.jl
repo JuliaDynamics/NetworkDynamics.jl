@@ -10,7 +10,7 @@ g = barabasi_albert(10,5)
 
 begin
     #=
-    Conventon is the following:
+    Convention is the following:
     v[1] + 1.j*v[2] is the complex voltage at a vertex.
     e[1] + 1.j*e[2] is the complex current at an edge.
     =#
@@ -69,9 +69,10 @@ function (pq::PQVertex)(dv, v, e_s, e_d, p, t)
 end
 
 # Example PQ node:
-pq_1 = StaticVertex(f! = PQVertex(randn() + randn()*im),
-                 dim = 2)
-
+ODEVertex(f! = PQVertex(randn() + randn()*im),
+                     dim = 2,
+                     mass_matrix = 0.,
+                     sym = [:v_r, :v_i])
 # using GraphPlot
 # gplot(g)
 

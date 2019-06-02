@@ -37,7 +37,7 @@ function (d::nd_ODE_Static)(dx, x, p, t)
     for i in 1:gs.num_v
         d.vertices![i].f!(dx[gs.v_idx[i]], x[gs.v_idx[i]], gs.e_s[i], gs.e_d[i], p, t)
     end
-    end
+    end # views
     nothing
 end
 
@@ -50,7 +50,7 @@ function (d::nd_ODE_Static)(dx, x, p::T, t) where T <: AbstractArray
     for i in 1:gs.num_v
         d.vertices![i].f!(dx[gs.v_idx[i]], x[gs.v_idx[i]], gs.e_s[i], gs.e_d[i], p[i], t)
     end
-    end
+    end # views
     nothing
 end
 

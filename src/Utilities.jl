@@ -6,26 +6,14 @@ using LinearAlgebra
 
 export edge_sum!, edge_sum
 
-function edge_sum!(e_sum, e_s, e_d)
-    for e in e_s
+@inline function edge_sum!(e_sum, e_s, e_d)
+    @inbounds for e in e_s
         e_sum .-= e
     end
-    for e in e_d
+    @inbounds for e in e_d
         e_sum .+= e
     end
     nothing
-end
-
-function edge_sum(e_s, e_d)
-    e_sum = similar(e_s)
-    e_sum .= 0.
-    for e in e_s
-        e_sum .-= e
-    end
-    for e in e_d
-        e_sum .+= e
-    end
-    e_sum
 end
 
 export RootRhs
@@ -62,10 +50,15 @@ function find_valid_ic(of::ODEFunction, ic_guess)
 end
 
 
-export syms_containing
+export syms_containing, idx_containing
 
 function syms_containing(nd, str)
     [s for s in nd.syms if occursin(str, string(s))]
 end
+
+function idx_containing(nd, str)
+    [i for (i, s) in enumerate(nd.syms) if occursin(str, string(s))]
+end
+
 
 end #module
