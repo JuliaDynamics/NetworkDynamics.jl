@@ -20,6 +20,8 @@ include("Utilities.jl")
 include("NetworkStructures.jl")
 @reexport using .NetworkStructures
 
+include("SimpleAPI.jl")
+
 export network_dynamics
 
 using LinearAlgebra

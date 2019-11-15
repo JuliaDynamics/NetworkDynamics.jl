@@ -40,9 +40,18 @@ sol_L = solve(prob_L)
 @assert all([all(sol_L(t) .- sol_analytic(x0, nothing, t) .< 10^-2) for t in sol_L.t])
 
 # Now for NetworkDynamics
-# We define the fundamental edge and vertex functions:
+
+println("Building with simple API")
+
+#This cas is covered by the simple api:
+diff_network_simple_api = homogeneous_scalar_network_with_sum((x, p, t) -> 0., (x_s, x_t, p, t) -> x_t - x_s, g)
+
+#Now for full complexity:
 
 println("Building Static Network Dynamics")
+
+# We define the fundamental edge and vertex functions:
+
 # This tests that NetworkDynamics correectly reproduces the dynamics above.
 
 @inline function diffusion_edge!(e,v_s,v_d,p,t)
@@ -66,10 +75,12 @@ edge_list = [staticedge for e in edges(g)]
 diff_network_st = network_dynamics(vertex_list,edge_list,g)
 
 @test diff_network_st isa ODEFunction
+@test diff_network_simple_api isa ODEFunction
 
 x0 = rand(nv(g))
 dx_L = similar(x0)
 dx_st = similar(x0)
+dx_sa = similar(x0)
 
 @testset "Network dynamics static accuracy" begin
     for i in 1:30
@@ -77,8 +88,10 @@ dx_st = similar(x0)
 
         diff_network_L(dx_L, x0, nothing, 0.)
         diff_network_st(dx_st, x0, nothing, 0.)
+        diff_network_simple_api(dx_sa, x0, nothing, 0.)
 
         @test isapprox(dx_L, dx_st)
+        @test isapprox(dx_L, dx_sa)
     end
 end
 
