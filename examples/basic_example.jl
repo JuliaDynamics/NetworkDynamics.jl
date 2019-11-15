@@ -92,3 +92,10 @@ vertex_syms = ND.syms_containing(diff_network_ode, "v")
 
 plot(sol_ode, vars=vertex_syms)
 plot(sol_st2, vars=1:10)
+
+sol = solve(prob_st2, Rodas4())
+
+using BenchmarkTools
+
+@btime solve(prob_st2, Rodas4(autodiff=false))
+@btime solve(prob_st2, Rodas4())

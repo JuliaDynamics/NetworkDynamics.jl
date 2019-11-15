@@ -30,7 +30,7 @@ This works for multi-dimensional variables as well. =#
     graph_stucture::GS
 end
 
-function (d::nd_ODE_Static)(dx, x, p, t)
+function (d::nd_ODE_Static)(dx, x::Tx, p, t) where Tx <: AbstractArray{Float64}
     gs = d.graph_stucture
     @views begin
     for i in 1:gs.num_e
@@ -43,7 +43,7 @@ function (d::nd_ODE_Static)(dx, x, p, t)
     nothing
 end
 
-function (d::nd_ODE_Static)(dx, x, p::T, t) where T <: AbstractArray
+function (d::nd_ODE_Static)(dx, x::Tx, p::T, t) where T <: AbstractArray where Tx <: AbstractArray{Float64}
     gs = d.graph_stucture
     @views begin
     for i in 1:gs.num_e
@@ -56,6 +56,31 @@ function (d::nd_ODE_Static)(dx, x, p::T, t) where T <: AbstractArray
     nothing
 end
 
+function (d::nd_ODE_Static)(dx, x, p, t)
+    gs = GraphStructure_like(d.graph_stucture, x, d.graph)
+    @views begin
+    for i in 1:gs.num_e
+        d.edges![i].f!(gs.e_int[gs.e_idx[i]], x[gs.s_idx[i]], x[gs.d_idx[i]], p, t)
+    end
+    for i in 1:gs.num_v
+        d.vertices![i].f!(dx[gs.v_idx[i]], x[gs.v_idx[i]], gs.e_s[i], gs.e_d[i], p, t)
+    end
+    end # views
+    nothing
+end
+
+function (d::nd_ODE_Static)(dx, x, p::T, t) where T <: AbstractArray
+    gs = GraphStructure_like(d.graph_stucture, x, d.graph)
+    @views begin
+    for i in 1:gs.num_e
+        d.edges![i].f!(gs.e_int[gs.e_idx[i]], x[gs.s_idx[i]], x[gs.d_idx[i]], p[i + gs.num_v], t)
+    end
+    for i in 1:gs.num_v
+        d.vertices![i].f!(dx[gs.v_idx[i]], x[gs.v_idx[i]], gs.e_s[i], gs.e_d[i], p[i], t)
+    end
+    end # views
+    nothing
+end
 
 
 #= The struct comes in a version where edges and vertices are not arrays but

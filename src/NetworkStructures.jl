@@ -10,7 +10,7 @@ The key structure is the GraphStructure that contains the internal variables of
 the edges, as well as all the views into them, and the complete set of indices.
 =#
 
-export create_idxs, create_graph_structure, GraphStructure, construct_mass_matrix
+export create_idxs, create_graph_structure, GraphStructure, construct_mass_matrix, GraphStructure_like
 
 import Base.getindex
 
@@ -50,15 +50,36 @@ const Idx = UnitRange{Int}
 struct GraphStructure{T_e_int}
     num_v::Int # Number of vertices
     num_e::Int # Number of edges
-    e_int::T_e_int # Variables living on edges
+    e_int::Array{T_e_int, 1} # Variables living on edges
     e_idx::Array{Idx, 1} # Array of indices of variables in e_int belonging to edges
     e_x_idx::Array{Idx, 1} # Array of indices of variables in x belonging to edges if edges are dynamic
     s_idx::Array{Idx, 1} # Array of indices of variables in x belonging to source vertex of edge
     d_idx::Array{Idx, 1} # Array of indices of variables in x belonging to destination vertex of edge
     v_idx::Array{Idx, 1} # Array of indices of variables in x belonging to vertex
     # Array of Array of views on the variables in e_int of the edges that are source of a vertex
-    e_s::Array{Array{SubArray{Float64,1,Array{Float64,1},Tuple{Idx},true},1},1}
-    e_d::Array{Array{SubArray{Float64,1,Array{Float64,1},Tuple{Idx},true},1},1}
+    e_s::Array{Array{SubArray{T_e_int,1,Array{T_e_int,1},Tuple{Idx},true},1},1}
+    e_d::Array{Array{SubArray{T_e_int,1,Array{T_e_int,1},Tuple{Idx},true},1},1}
+end
+
+function GraphStructure_like(GS, x, g)
+    s_e = [src(e) for e in edges(g)]
+    d_e = [dst(e) for e in edges(g)]
+
+    e_int = zeros(eltype(x), length(GS.e_int))
+
+    e_s = [[view(e_int, GS.e_idx[i_e]) for i_e in 1:GS.num_e if i_v == s_e[i_e]] for i_v in 1:GS.num_v]
+    e_d = [[view(e_int, GS.e_idx[i_e]) for i_e in 1:GS.num_e if i_v == d_e[i_e]] for i_v in 1:GS.num_v]
+
+    GraphStructure(GS.num_v, # Number of vertices
+    GS.num_e, # Number of edges
+    e_int, # Variables living on edges
+    GS.e_idx, # Array of Array of indices of variables in e_int belonging to edges
+    GS.e_x_idx, # Array of Array of indices of variables in x belonging to edges if edges are dynamic
+    GS.s_idx, # Array of Array of indices of variables in x belonging to source vertex of edge
+    GS.d_idx, # Array of Array of indices of variables in x belonging to destination vertex of edge
+    GS.v_idx, # Array of Array of indices of variables in x belonging to vertex
+    e_s, # Array of Array of views on the variables in e_int of the edges that are source of a vertex
+    e_d) # Array of Array of views on the variables in e_int of the edges that are destination of a vertex
 end
 
 function create_idxs(dims, counter=1)::Array{Idx, 1}
