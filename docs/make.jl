@@ -20,9 +20,10 @@ makedocs(
 # Documenter can also automatically deploy documentation to gh-pages.
 # See "Hosting Documentation" and deploydocs() in the Documenter manual
 # for more information.
-# We are experimenting with the GitHubActions CI, which is not yet supported by a stable branch of Documenter
+# We are experimenting with the GitHubActions CI, which is not yet supported 
+# by a stable branch of Documenter
 deploydocs(
     repo = "github.com/FHell/NetworkDynamics.jl.git",
-    deploy_config = "GitHubActions",
+    deploy_config = Documenter.GitHubActions(), # this should work, but it's strange
     target = "build"
 )
