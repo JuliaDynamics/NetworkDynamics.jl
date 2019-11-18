@@ -10,42 +10,11 @@ The key structure is the GraphStructure that contains the internal variables of
 the edges, as well as all the views into them, and the complete set of indices.
 =#
 
+const Idx = UnitRange{Int}
+
 export create_idxs, create_graph_structure, GraphStructure, construct_mass_matrix, GraphStructure_like
 
-import Base.getindex
 
-
-struct GS_e_int_View{G}
-    gs::G
-    idx_offset::Int
-end
-
-function getindex(gev::GS_e_int_View, idx::Int)
-    gev.gs.e_int[idx + gs_x_view.idx_offset]
-end
-
-
-struct GS_x_View{G}
-    gs::G
-    idx_offset::Int
-end
-
-function getindex(gxv::GS_x_View, idx::Int)
-    gxv.gs.x[idx + gs_x_view.idx_offset]
-end
-
-#
-# mutable struct GS{T}
-#     x::T
-#     gs_x_view::GS_x_View{GS{T}}
-#     function GS(arr::T) where T
-#         gs = new{T}(arr)
-#         gs.gs_x_view = GS_x_View{GS{T}}(gs, 1)
-#         gs
-#     end
-# end
-
-const Idx = UnitRange{Int}
 
 struct GraphStructure{T_e_int}
     num_v::Int # Number of vertices
@@ -82,7 +51,7 @@ function GraphStructure_like(GS, x, g)
     e_d) # Array of Array of views on the variables in e_int of the edges that are destination of a vertex
 end
 
-function create_idxs(dims, counter=1)::Array{Idx, 1}
+function create_idxs(dims; counter=1)::Array{Idx, 1}
     idxs = [1:1 for dim in dims]
     for (i, dim) in enumerate(dims)
         idxs[i] = counter:(counter + dim - 1)
@@ -91,22 +60,24 @@ function create_idxs(dims, counter=1)::Array{Idx, 1}
     idxs
 end
 
-function create_graph_structure(g, dim_v, dim_e, e_int)
+
+
+function create_graph_structure(g, v_dims, e_dims, e_int)
     s_e = [src(e) for e in edges(g)]
     d_e = [dst(e) for e in edges(g)]
 
     num_v = nv(g)
     num_e = ne(g)
 
-    # x has length sum(dim_v)
+    # x has length sum(v_dims)
 
     # v_idx is an Array of Array of indices of variables in x belonging to vertices
     # e_idx is an Array of Array of indices of variables in e_int belonging to edges
     # e_x_idx is an Array of Array of indices of variables in x belonging to edges if edges are dynamic.
 
-    v_idx = create_idxs(dim_v)
-    e_idx = create_idxs(dim_e)
-    e_x_idx = [e_idx[i] .+ sum(dim_v) for i in 1:num_e]
+    v_idx = create_idxs(v_dims)
+    e_idx = create_idxs(e_dims)
+    e_x_idx = [e_idx[i] .+ sum(v_dims) for i in 1:num_e]
 
     # For every vertex, and for every edge, if the source of the edge is that vertex, take the view on the variables of that edge.
     # Thus e_s[i] is an array of views onto the variables of the edges for which i is the source.
@@ -127,6 +98,9 @@ function create_graph_structure(g, dim_v, dim_e, e_int)
     e_s, # Array of Array of views on the variables in e_int of the edges that are source of a vertex
     e_d) # Array of Array of views on the variables in e_int of the edges that are destination of a vertex
 end
+
+
+
 
 function construct_mass_matrix(mmv_array, dim_nd, gs::GraphStructure)
     if all([mm == I for mm in mmv_array])
