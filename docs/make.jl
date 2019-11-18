@@ -1,3 +1,6 @@
+using Pkg
+# For GitHubActions support, we need to get the latest version (DEV) of Documenter
+Pkg.add("https://github.com/JuliaDocs/Documenter.jl")
 using Documenter
 push!(LOAD_PATH, "../")
 using NetworkDynamics
@@ -17,7 +20,7 @@ makedocs(
 # Documenter can also automatically deploy documentation to gh-pages.
 # See "Hosting Documentation" and deploydocs() in the Documenter manual
 # for more information.
-# Test
+# We are experimenting with the GitHubActions CI, which is not yet supported by a stable branch of Documenter
 deploydocs(
     repo = "github.com/FHell/NetworkDynamics.jl.git",
     deploy_config = "GitHubActions",
