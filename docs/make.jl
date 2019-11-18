@@ -4,7 +4,7 @@ using NetworkDynamics
 
 makedocs(
     sitename = "NetworkDynamics",
-    format = Documenter.HTML(canonical = "https://FHell.github.io/NetworkDynamics.jl/"),
+    format = Documenter.HTML(canonical = "https://FHell.github.io/NetworkDynamics.jl/stable"),
     linkcheck=true,
     modules = [NetworkDynamics],
     pages = [
@@ -20,4 +20,6 @@ makedocs(
 # Test
 deploydocs(
     repo = "github.com/FHell/NetworkDynamics.jl.git",
+    deploy_config = "GitHubActions",
+    target = "build"
 )
