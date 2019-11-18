@@ -5,3 +5,4 @@ deps/deps.jl
 .idea
 Manifest.toml
 scratch.jl
+docs/build
