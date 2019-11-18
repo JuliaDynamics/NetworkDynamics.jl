@@ -1,6 +1,6 @@
 using Pkg
 # For GitHubActions support, we need to get the latest version (DEV) of Documenter
-Pkg.add("https://github.com/JuliaDocs/Documenter.jl")
+Pkg.add(Pkg.Spec(url="https://github.com/JuliaDocs/Documenter.jl"))
 using Documenter
 push!(LOAD_PATH, "../")
 using NetworkDynamics
