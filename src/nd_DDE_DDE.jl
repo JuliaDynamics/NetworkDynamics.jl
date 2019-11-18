@@ -135,7 +135,10 @@ function nd_DDE_DDE(vertices!, edges!, s_e, d_e, dim_v, dim_e, tau_s, tau_d)
 end
 
 """
-    When called with a graph, we construct the source and target vectors."""
+    nd_DDE_DDE(vertices!, edges!, g::AbstractGraph, dim_v, dim_e, tau_s, tau_d)
+    
+    When called with a graph, we construct the source and target vectors.
+"""
 function nd_DDE_DDE(vertices!, edges!, g::AbstractGraph, dim_v, dim_e, tau_s, tau_d)
     s_e = [src(e) for e in edges(g)]
     d_e = [dst(e) for e in edges(g)]
