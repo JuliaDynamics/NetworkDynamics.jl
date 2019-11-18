@@ -1,4 +1,4 @@
-using Documenter, Revise
+using Documenter
 push!(LOAD_PATH, "../")
 using NetworkDynamics
 
