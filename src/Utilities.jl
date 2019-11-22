@@ -4,9 +4,9 @@ using NLsolve
 using DifferentialEquations
 using LinearAlgebra
 
-export edge_sum!, edge_sum
+export oriented_edge_sum!
 
-@inline function edge_sum!(e_sum, e_s, e_d)
+@inline function oriented_edge_sum!(e_sum, e_s, e_d)
     @inbounds for e in e_s
         e_sum .-= e
     end

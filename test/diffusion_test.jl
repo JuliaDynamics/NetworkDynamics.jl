@@ -61,7 +61,7 @@ end
 
 @inline function diffusion_vertex!(dv, v, e_s, e_d, p, t)
     dv .= 0.
-    edge_sum!(dv, e_s, e_d) # Oriented sum of the incoming and outgoing edges
+    oriented_edge_sum!(dv, e_s, e_d) # Oriented sum of the incoming and outgoing edges
     nothing
 end
 

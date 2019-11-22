@@ -12,73 +12,51 @@ using LinearAlgebra
 export nd_ODE_Static
 export StaticEdgeFunction
 
-#= nd_ODE_Static constructs a (dx,x,p,t)-function from an Array of functions for the vertices,
- edges as well as a graph.
-The arguments of the vertex functions must be of the form (dv,v,e_s,e_d,p,t),
-where dv is the vertex variable derivative, v the vertex variable and e_s and e_d Arrays of edge variables that
-have the vertex as source and destination respectively. p and t are as usual.
-The arguments of the edge functions must be of the form (e,v_s,v_d,p,t),
-where e is the edge variable and v_s and v_d the vertex variables of the vertices
-the edge has as source and destination respectively.
-This works for multi-dimensional variables as well. =#
+#=  =#
+
+@inline Base.@propagate_inbounds function maybe_idx(p::T, i) where T <: AbstractArray
+    p[i]
+end
+
+@inline function maybe_idx(p, i)
+    p
+end
+
+@inline function prep_gd(x::T, gd::GraphData{T}, gs) where T
+    gd.v_array = x
+    gd
+end
+
+@inline function prep_gd(x, gd, gs)
+    e_array = similar(x, d.graph_structure.num_e)
+    GraphData(x, e_array, d.graph_structure)
+end
 
 
-@with_kw struct nd_ODE_Static{G, GS}
-    vertices!::Array{ODEVertex, 1}
-    edges!::Array{StaticEdge, 1}
+@Base.kwdef struct nd_ODE_Static{G, T, T1, T2}
+    vertices!::T1
+    edges!::T2
     graph::G
-    graph_stucture::GS
+    graph_structure::GraphStruct
+    graph_data::GraphData{T}
 end
 
-function (d::nd_ODE_Static)(dx, x::Tx, p, t) where Tx <: AbstractArray{Float64}
-    gs = d.graph_stucture
-    @views begin
-    for i in 1:gs.num_e
-        d.edges![i].f!(gs.e_int[gs.e_idx[i]], x[gs.s_idx[i]], x[gs.d_idx[i]], p, t)
-    end
-    for i in 1:gs.num_v
-        d.vertices![i].f!(dx[gs.v_idx[i]], x[gs.v_idx[i]], gs.e_s[i], gs.e_d[i], p, t)
-    end
-    end # views
-    nothing
-end
-
-function (d::nd_ODE_Static)(dx, x::Tx, p::T, t) where T <: AbstractArray where Tx <: AbstractArray{Float64}
-    gs = d.graph_stucture
-    @views begin
-    for i in 1:gs.num_e
-        d.edges![i].f!(gs.e_int[gs.e_idx[i]], x[gs.s_idx[i]], x[gs.d_idx[i]], p[i + gs.num_v], t)
-    end
-    for i in 1:gs.num_v
-        d.vertices![i].f!(dx[gs.v_idx[i]], x[gs.v_idx[i]], gs.e_s[i], gs.e_d[i], p[i], t)
-    end
-    end # views
-    nothing
-end
 
 function (d::nd_ODE_Static)(dx, x, p, t)
-    gs = GraphStructure_like(d.graph_stucture, x, d.graph)
-    @views begin
-    for i in 1:gs.num_e
-        d.edges![i].f!(gs.e_int[gs.e_idx[i]], x[gs.s_idx[i]], x[gs.d_idx[i]], p, t)
-    end
-    for i in 1:gs.num_v
-        d.vertices![i].f!(dx[gs.v_idx[i]], x[gs.v_idx[i]], gs.e_s[i], gs.e_d[i], p, t)
-    end
-    end # views
-    nothing
-end
+    gd = prep_gd(x, d.graph_data, d.graph_structure)
 
-function (d::nd_ODE_Static)(dx, x, p::T, t) where T <: AbstractArray
-    gs = GraphStructure_like(d.graph_stucture, x, d.graph)
-    @views begin
-    for i in 1:gs.num_e
-        d.edges![i].f!(gs.e_int[gs.e_idx[i]], x[gs.s_idx[i]], x[gs.d_idx[i]], p[i + gs.num_v], t)
+    @inbounds begin
+
+    for i in 1:d.graph_structure.num_e
+        d.edges![i].f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], maybe_idx(p, i+d.graph_structure.num_v), t)
     end
-    for i in 1:gs.num_v
-        d.vertices![i].f!(dx[gs.v_idx[i]], x[gs.v_idx[i]], gs.e_s[i], gs.e_d[i], p[i], t)
+
+    for i in 1:d.graph_structure.num_v
+        d.vertices![i].f!(view(dx,d.graph_structure.v_idx[i]), gd.v[i], gd.e_s_v[i], gd.e_d_v[i], maybe_idx(p, i), t)
     end
-    end # views
+
+    end
+
     nothing
 end
 
@@ -103,23 +81,13 @@ function StaticEdgeFunction(vertices!, edges!, graph::G) where G <: AbstractGrap
     StaticEdgeFunction(nd_ODE_Static(vertices!, edges!, graph, graph_stucture))
 end
 
+
 function (sef::StaticEdgeFunction)(x, p, t)
     d = sef.nd_ODE_Static
     gs = d.graph_stucture
     @views begin
-        for i in 1:gs.num_e
-            d.edges![i].f!(gs.e_int[gs.e_idx[i]], x[gs.s_idx[i]], x[gs.d_idx[i]], p, t)
-        end
-    end
-    (gs.e_s, gs.e_d)
-end
-
-function (sef::StaticEdgeFunction)(x, p::T, t) where T <: AbstractArray
-    d = sef.nd_ODE_Static
-    gs = d.graph_stucture
-    @views begin
         for i in 1:d.num_e
-            d.edges![i].f!(gs.e_int[gs.e_idx[i]], x[gs.s_idx[i]], x[gs.d_idx[i]], p[i + gs.num_v], t)
+            d.edges![i].f!(gs.e_int[gs.e_idx[i]], x[gs.s_idx[i]], x[gs.d_idx[i]], maybe_idx(p, i + gs.num_v), t)
         end
     end
     (gs.e_s, gs.e_d)
