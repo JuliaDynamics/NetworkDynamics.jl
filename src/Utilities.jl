@@ -53,11 +53,11 @@ end
 export syms_containing, idx_containing
 
 function syms_containing(nd, str)
-    [s for s in nd.syms if occursin(str, string(s))]
+    [s for s in nd.syms if occursin(string(str), string(s))]
 end
 
 function idx_containing(nd, str)
-    [i for (i, s) in enumerate(nd.syms) if occursin(str, string(s))]
+    [i for (i, s) in enumerate(nd.syms) if occursin(string(str), string(s))]
 end
 
 

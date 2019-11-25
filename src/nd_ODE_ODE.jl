@@ -1,8 +1,12 @@
 module nd_ODE_ODE_mod
 
+using ..NetworkStructures
+
+using ..NDFunctions
+
+using Parameters
 using LightGraphs
 using LinearAlgebra
-using Parameters
 
 export nd_ODE_ODE
 
@@ -16,39 +20,62 @@ where de is the derivative of the edge variable, e the edge variable, v_s and v_
 the edge has as source and destination respectively. This works for arbitrary dimensional vertex and edge functions, they only
 need to fit, i.e. don't do something like edges! = v_s - v_d when v_s and v_d have not the same dimension. =#
 
-@with_kw struct nd_ODE_ODE
-    vertices!
-    edges!
-    graph
-    graph_stucture
+
+@inline Base.@propagate_inbounds function maybe_idx(p::T, i) where T <: AbstractArray
+    p[i]
+end
+
+@inline function maybe_idx(p, i)
+    p
+end
+
+# In order to match the type, we need to pass both, a view that matches the type
+# to be constructed, and the original array we want to construct a GD on top of.
+@inline function prep_gd(y::T, x, gd::GraphData{T}, gs) where T
+    # println("Type match")
+    gd.v_array = view(x, 1:gs.dim_v)
+    gd.e_array = view(x, gs.dim_v+1:gs.dim_v+gs.dim_e)
+    gd
+end
+
+@inline function prep_gd(y, x, gd, gs)
+    # println("Type mismatch")
+    v_array = view(x, 1:gs.dim_v)
+    e_array = view(x, gs.dim_v+1:gs.dim_v+gs.dim_e)
+    GraphData(v_array, e_array, gs)
+end
+
+
+@Base.kwdef struct nd_ODE_ODE{G, T, T1, T2}
+    vertices!::T1
+    edges!::T2
+    graph::G
+    graph_structure::GraphStruct
+    graph_data::GraphData{T}
 end
 
 function (d::nd_ODE_ODE)(dx, x, p, t)
-    gs = d.graph_stucture
-    @views begin
-    for i in 1:gs.num_e
-        gs.e_int[gs.e_idx[i]] .= x[gs.e_x_idx[i]]
-        d.edges![i].f!(dx[gs.e_x_idx[i]], gs.e_int[gs.e_idx[i]], x[gs.s_idx[i]], x[gs.d_idx[i]], p, t)
+    gd = prep_gd(view(x, 1:2), x, d.graph_data, d.graph_structure)
+
+    @inbounds begin
+
+    for i in 1:d.graph_structure.num_e
+        d.edges![i].f!(view(dx,d.graph_structure.e_idx[i] .+ d.graph_structure.dim_v), gd.e[i], gd.v_s_e[i], gd.v_d_e[i], maybe_idx(p, i+d.graph_structure.num_v), t)
     end
-    for i in 1:gs.num_v
-        d.vertices![i].f!(dx[gs.v_idx[i]], x[gs.v_idx[i]], gs.e_s[i], gs.e_d[i], p, t)
+
+    for i in 1:d.graph_structure.num_v
+        d.vertices![i].f!(view(dx,d.graph_structure.v_idx[i]), gd.v[i], gd.e_s_v[i], gd.e_d_v[i], maybe_idx(p, i), t)
     end
+
     end
-    nothing
+
 end
 
-function (d::nd_ODE_ODE)(dx, x, p::T, t) where T <: AbstractArray
-    gs = d.graph_stucture
-    @views begin
-    for i in 1:gs.num_e
-        gs.e_int[gs.e_idx[i]] .= x[gs.e_x_idx[i]]
-        d.edges![i].f!(dx[gs.e_x_idx[i]], gs.e_int[gs.e_idx[i]], x[gs.s_idx[i]], x[gs.d_idx[i]], p[i + gs.num_v], t)
-    end
-    for i in 1:gs.num_v
-        d.vertices![i].f!(dx[gs.v_idx[i]], x[gs.v_idx[i]], gs.e_s[i], gs.e_d[i], p[i], t)
-    end
-    end
-    nothing
+
+function (d::nd_ODE_ODE)(x, p, t, ::Type{GetGD})
+    prep_gd(view(x, 1:2), x, d.graph_data, d.graph_structure)
 end
+
+
 
 end #module

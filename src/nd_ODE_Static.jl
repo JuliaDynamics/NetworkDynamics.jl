@@ -1,7 +1,7 @@
 module nd_ODE_Static_mod
 
-include("NetworkStructures.jl")
-using .NetworkStructures
+
+using ..NetworkStructures
 
 using ..NDFunctions
 
@@ -28,8 +28,8 @@ end
 end
 
 @inline function prep_gd(x, gd, gs)
-    e_array = similar(x, d.graph_structure.num_e)
-    GraphData(x, e_array, d.graph_structure)
+    e_array = similar(x, gs.num_e)
+    GraphData(x, e_array, gs)
 end
 
 
@@ -61,36 +61,37 @@ function (d::nd_ODE_Static)(dx, x, p, t)
 end
 
 
-#= The struct comes in a version where edges and vertices are not arrays but
-homogenous across the network.
-=#
+function (d::nd_ODE_Static)(x, p, t, ::Type{GetGD})
+    gd = prep_gd(x, d.graph_data, d.graph_structure)
+
+    @inbounds begin
+
+    for i in 1:d.graph_structure.num_e
+        d.edges![i].f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], maybe_idx(p, i+d.graph_structure.num_v), t)
+    end
+
+    end
+
+    gd
+end
+
+
+# For compatibility with PowerDynamics
 
 struct StaticEdgeFunction
     nd_ODE_Static::nd_ODE_Static
 end
 
-function StaticEdgeFunction(vertices!, edges!, graph::G) where G <: AbstractGraph
-    dim_v = [v.dim for v in vertices!]
-    dim_e = [e.dim for e in edges!]
-    dim_nd = sum(dim_v)
-
-    e_int = zeros(sum(dim_e))
-
-    graph_stucture = create_graph_structure(graph, dim_v, dim_e, e_int)
-
-    StaticEdgeFunction(nd_ODE_Static(vertices!, edges!, graph, graph_stucture))
-end
-
 
 function (sef::StaticEdgeFunction)(x, p, t)
     d = sef.nd_ODE_Static
-    gs = d.graph_stucture
-    @views begin
-        for i in 1:d.num_e
-            d.edges![i].f!(gs.e_int[gs.e_idx[i]], x[gs.s_idx[i]], x[gs.d_idx[i]], maybe_idx(p, i + gs.num_v), t)
-        end
+    gd = prep_gd(x, d.graph_data, d.graph_structure)
+
+    for i in 1:d.graph_structure.num_e
+        d.edges![i].f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], maybe_idx(p, i+d.graph_structure.num_v), t)
     end
-    (gs.e_s, gs.e_d)
+
+    (gd.e_s_v, gd.e_d_v)
 end
 
 end #module

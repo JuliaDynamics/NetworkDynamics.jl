@@ -64,6 +64,8 @@ struct GraphStruct
     num_e::Int
     v_dims::Array{Int, 1}
     e_dims::Array{Int, 1}
+    dim_v::Int
+    dim_e::Int
     s_e::Array{Int, 1}
     d_e::Array{Int, 1}
     v_offs::Array{Int, 1}
@@ -104,6 +106,8 @@ function GraphStruct(g, v_dims, e_dims)
     num_e,
     v_dims,
     e_dims,
+    sum(v_dims),
+    sum(e_dims),
     s_e,
     d_e,
     v_offs,
@@ -121,10 +125,33 @@ end
 # In order to access the data in the arrays efficiently we create views that
 # allow us to efficiently index into the underlying arrays.
 
-import Base.getindex, Base.setindex!, Base.length
+import Base.getindex, Base.setindex!, Base.length, Base.IndexStyle, Base.size, Base.eltype
 
+#= Once forward declaration of types is implemented properly we can replace this
+ by
 
-struct EdgeData{G}
+incomplete struct GraphData{T}
+end
+
+struct EdgeData{T} <: AbstractArray{T, 1}
+ gd::GraphData{T}
+ idx_offset::Int
+ len::Int
+end
+
+Then the recursive type signatures in GraphData that look like:
+
+EdgeData{GraphData{T}, T}
+
+will simplify to
+
+EdgeData{T}
+
+We should create a branch with this variant that can run on this branch of julia:
+
+https://github.com/JuliaLang/julia/pull/32658
+=#
+struct EdgeData{G,T} <: AbstractArray{T, 1}
     gd::G
     idx_offset::Int
     len::Int
@@ -139,13 +166,23 @@ end
     nothing
 end
 
-@inline function length(e_dat::EdgeData)
+@inline function Base.length(e_dat::EdgeData)
     e_dat.len
 end
 
+@inline function Base.size(e_dat::EdgeData)
+    (e_dat.len, )
+end
+
+@inline function Base.eltype(e_dat::EdgeData{G, T}) where {G, T}
+    eltype(T)
+end
+
+Base.IndexStyle(::Type{<:EdgeData}) = IndexLinear()
 
 
-struct VertexData{G}
+
+struct VertexData{G, T} <: AbstractArray{T, 1}
     gd::G
     idx_offset::Int
     len::Int
@@ -160,9 +197,20 @@ end
     nothing
 end
 
-@inline function length(v_dat::VertexData)
+@inline function Base.length(v_dat::VertexData)
     v_dat.len
 end
+
+@inline function Base.size(e_dat::VertexData)
+    (e_dat.len, )
+end
+
+@inline function Base.eltype(e_dat::VertexData{G, T}) where {G, T}
+    eltype(T)
+end
+
+Base.IndexStyle(::Type{<:VertexData}) = IndexLinear()
+
 
 # Putting the above together we create a GraphData object:
 
@@ -173,20 +221,20 @@ end
 mutable struct GraphData{T}
     v_array::T
     e_array::T
-    v::Array{VertexData{GraphData{T}}, 1}
-    e::Array{EdgeData{GraphData{T}}, 1}
-    v_s_e::Array{VertexData{GraphData{T}}, 1} # the vertex that is the source of e
-    v_d_e::Array{VertexData{GraphData{T}}, 1} # the vertex that is the destination of e
-    e_s_v::Array{Array{EdgeData{GraphData{T}}, 1}, 1} # the edges that have v as source
-    e_d_v::Array{Array{EdgeData{GraphData{T}}, 1}, 1} # the edges that have v as destination
+    v::Array{VertexData{GraphData{T}, T}, 1}
+    e::Array{EdgeData{GraphData{T}, T}, 1}
+    v_s_e::Array{VertexData{GraphData{T}, T}, 1} # the vertex that is the source of e
+    v_d_e::Array{VertexData{GraphData{T}, T}, 1} # the vertex that is the destination of e
+    e_s_v::Array{Array{EdgeData{GraphData{T}, T}, 1}, 1} # the edges that have v as source
+    e_d_v::Array{Array{EdgeData{GraphData{T}, T}, 1}, 1} # the edges that have v as destination
     function GraphData{T}(v_array::T, e_array::T, gs::GraphStruct) where T
         gd = new{T}(v_array, e_array)
-        gd.v = [VertexData{GraphData{T}}(gd, offset, dim) for (offset,dim) in zip(gs.v_offs, gs.v_dims)]
-        gd.e = [EdgeData{GraphData{T}}(gd, offset, dim) for (offset,dim) in zip(gs.e_offs, gs.e_dims)]
-        gd.v_s_e = [VertexData{GraphData{T}}(gd, offset, dim) for (offset,dim) in zip(gs.s_e_offs, gs.v_dims[gs.s_e])]
-        gd.v_d_e = [VertexData{GraphData{T}}(gd, offset, dim) for (offset,dim) in zip(gs.d_e_offs, gs.v_dims[gs.d_e])]
-        gd.e_s_v = [[EdgeData{GraphData{T}}(gd, offset, dim) for (offset,dim) in e_s_v] for e_s_v in gs.e_s_v_dat]
-        gd.e_d_v = [[EdgeData{GraphData{T}}(gd, offset, dim) for (offset,dim) in e_d_v] for e_d_v in gs.e_d_v_dat]
+        gd.v = [VertexData{GraphData{T}, T}(gd, offset, dim) for (offset,dim) in zip(gs.v_offs, gs.v_dims)]
+        gd.e = [EdgeData{GraphData{T}, T}(gd, offset, dim) for (offset,dim) in zip(gs.e_offs, gs.e_dims)]
+        gd.v_s_e = [VertexData{GraphData{T}, T}(gd, offset, dim) for (offset,dim) in zip(gs.s_e_offs, gs.v_dims[gs.s_e])]
+        gd.v_d_e = [VertexData{GraphData{T}, T}(gd, offset, dim) for (offset,dim) in zip(gs.d_e_offs, gs.v_dims[gs.d_e])]
+        gd.e_s_v = [[EdgeData{GraphData{T}, T}(gd, offset, dim) for (offset,dim) in e_s_v] for e_s_v in gs.e_s_v_dat]
+        gd.e_d_v = [[EdgeData{GraphData{T}, T}(gd, offset, dim) for (offset,dim) in e_d_v] for e_d_v in gs.e_d_v_dat]
         gd
     end
 end
@@ -198,11 +246,11 @@ end
 
 
 
-function construct_mass_matrix(mmv_array, dim_nd, gs)
+function construct_mass_matrix(mmv_array, gs)
     if all([mm == I for mm in mmv_array])
         mass_matrix = I
     else
-        mass_matrix = sparse(1.0I,dim_nd,dim_nd)
+        mass_matrix = sparse(1.0I,gs.dim_v, gs.dim_v)
         for (i, mm) in enumerate(mmv_array)
             if mm != I
                 mass_matrix[gs.v_idx[i],gs.v_idx[i]] .= mm
@@ -212,11 +260,11 @@ function construct_mass_matrix(mmv_array, dim_nd, gs)
     mass_matrix
 end
 
-function construct_mass_matrix(mmv_array, mme_array, dim_v, dim_e, gs)
+function construct_mass_matrix(mmv_array, mme_array, gs)
     if all([mm == I for mm in mmv_array]) && all([mm == I for mm in mme_array])
         mass_matrix = I
     else
-        dim_nd = dim_v + dim_e
+        dim_nd = gs.dim_v + gs.dim_e
         mass_matrix = sparse(1.0I,dim_nd,dim_nd)
         for (i, mm) in enumerate(mmv_array)
             if mm != I
@@ -225,11 +273,29 @@ function construct_mass_matrix(mmv_array, mme_array, dim_v, dim_e, gs)
         end
         for (i, mm) in enumerate(mme_array)
             if mm != I
-                mass_matrix[gs.e_idx[i] + dim_v, gs.e_idx[i] + dim_v] .= mm
+                mass_matrix[gs.e_idx[i] .+ gs.dim_v, gs.e_idx[i] .+ gs.dim_v] .= mm
             end
         end
     end
     mass_matrix
+end
+
+
+export GetGD
+
+struct GetGD
+end
+
+
+export ND_Solution
+
+struct ND_Solution
+    nd
+    p
+    sol
+end
+function (nds::ND_Solution)(t)
+    nds.nd(nds.sol(t), nds.p, t, GetGD)
 end
 
 end # module

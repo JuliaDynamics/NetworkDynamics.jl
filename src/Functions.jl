@@ -56,6 +56,8 @@ const EdgeFunction = Union{ODEEdge, StaticEdge}
 
 convert(::Type{ODEVertex}, x::StaticVertex) = ODEVertex(x)
 promote_rule(::Type{ODEVertex}, ::Type{StaticVertex}) = ODEVertex
+
+# Not sure if the next line does something?
 promote_rule(::Type{ODEVertex{T}}, ::Type{ODEVertex{U}}) where {T, U} = ODEVertex
 
 convert(::Type{ODEEdge}, x::StaticEdge) = ODEEdge(x)
