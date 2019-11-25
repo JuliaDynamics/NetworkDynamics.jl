@@ -84,12 +84,7 @@ end
 
 
 function (sef::StaticEdgeFunction)(x, p, t)
-    d = sef.nd_ODE_Static
-    gd = prep_gd(x, d.graph_data, d.graph_structure)
-
-    for i in 1:d.graph_structure.num_e
-        d.edges![i].f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], maybe_idx(p, i+d.graph_structure.num_v), t)
-    end
+    gd = sef.nd_ODE_Static(x, p, t, GetGD)
 
     (gd.e_s_v, gd.e_d_v)
 end
