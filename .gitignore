@@ -6,3 +6,4 @@ deps/deps.jl
 Manifest.toml
 scratch.jl
 docs/build
+bugs

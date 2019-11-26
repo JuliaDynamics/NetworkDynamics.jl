@@ -56,7 +56,7 @@ The assumption is that there will be two arrays, one for the vertex variables
 and one for the edge variables.
 
 The graph structure is encoded in the source and destination relationships s_e
-and d_e. THese are arrays that hold the node that is the source/destination of
+and d_e. These are arrays that hold the node that is the source/destination of
 the indexed edge. Thus ``e_i = (s_e[i], d_e[i])``
 """
 struct GraphStruct
@@ -151,7 +151,7 @@ We should create a branch with this variant that can run on this branch of julia
 
 https://github.com/JuliaLang/julia/pull/32658
 =#
-struct EdgeData{G,T} <: AbstractArray{T, 1}
+struct EdgeData{G,T} <: AbstractArray{T, 1} # This is a lie. The elements of EdgeData are not of type T but of type eltype(T).
     gd::G
     idx_offset::Int
     len::Int
@@ -221,14 +221,16 @@ Base.IndexStyle(::Type{<:VertexData}) = IndexLinear()
 mutable struct GraphData{T}
     v_array::T
     e_array::T
+    v_syms::Array{Symbol, 1}
+    e_syms::Array{Symbol, 1}
     v::Array{VertexData{GraphData{T}, T}, 1}
     e::Array{EdgeData{GraphData{T}, T}, 1}
     v_s_e::Array{VertexData{GraphData{T}, T}, 1} # the vertex that is the source of e
     v_d_e::Array{VertexData{GraphData{T}, T}, 1} # the vertex that is the destination of e
     e_s_v::Array{Array{EdgeData{GraphData{T}, T}, 1}, 1} # the edges that have v as source
     e_d_v::Array{Array{EdgeData{GraphData{T}, T}, 1}, 1} # the edges that have v as destination
-    function GraphData{T}(v_array::T, e_array::T, gs::GraphStruct) where T
-        gd = new{T}(v_array, e_array)
+    function GraphData{T}(v_array::T, e_array::T, v_syms, e_syms, gs::GraphStruct) where T
+        gd = new{T}(v_array, e_array, v_syms, e_syms)
         gd.v = [VertexData{GraphData{T}, T}(gd, offset, dim) for (offset,dim) in zip(gs.v_offs, gs.v_dims)]
         gd.e = [EdgeData{GraphData{T}, T}(gd, offset, dim) for (offset,dim) in zip(gs.e_offs, gs.e_dims)]
         gd.v_s_e = [VertexData{GraphData{T}, T}(gd, offset, dim) for (offset,dim) in zip(gs.s_e_offs, gs.v_dims[gs.s_e])]
@@ -239,10 +241,27 @@ mutable struct GraphData{T}
     end
 end
 
-function GraphData(v_array, e_array, gs)
-    GraphData{typeof(v_array)}(v_array, e_array, gs)
+function GraphData(v_array, e_array, v_syms, e_syms, gs)
+    GraphData{typeof(v_array)}(v_array, e_array, v_syms, e_syms, gs)
 end
 
+export ViewV
+struct ViewV
+end
+
+export ViewE
+struct ViewE
+end
+
+function (gd::GraphData)(::Type{ViewV}, sym="")
+    v_idx = [i for (i, s) in enumerate(gd.v_syms) if occursin(string(sym), string(s))]
+    view(gd.v_array, v_idx)
+end
+
+function (gd::GraphData)(::Type{ViewE}, sym="")
+    e_idx = [i for (i, s) in enumerate(gd.e_syms) if occursin(string(sym), string(s))]
+    view(gd.e_array, e_idx)
+end
 
 
 

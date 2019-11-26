@@ -40,9 +40,13 @@ function network_dynamics(vertices!::Array{T, 1}, edges!::Array{U, 1}, graph, p;
     v_array = similar(x_prototype, sum(v_dims))
     e_array = similar(x_prototype, sum(e_dims))
 
+    symbols_v = [Symbol(vertices![i].sym[j],"_",i) for i in 1:length(vertices!) for j in 1:v_dims[i]]
+    symbols_e = [Symbol(edges![i].sym[j],"_",i) for i in 1:length(edges!) for j in 1:e_dims[i]]
+    symbols = symbols_v
+
     graph_stucture = GraphStruct(graph, v_dims, e_dims)
 
-    graph_data = GraphData(v_array, e_array, graph_stucture)
+    graph_data = GraphData(v_array, e_array, symbols_v, symbols_e, graph_stucture)
 
     nd! = nd_ODE_Static(vertices!, edges!, graph, graph_stucture, graph_data)
 
@@ -53,8 +57,6 @@ function network_dynamics(vertices!::Array{T, 1}, edges!::Array{U, 1}, graph, p;
 
     # Construct mass matrix
     mass_matrix = construct_mass_matrix([v.mass_matrix for v in vertices!], graph_stucture)
-
-    symbols = [Symbol(vertices![i].sym[j],"_",i) for i in 1:length(vertices!) for j in 1:v_dims[i]]
 
 
     ODEFunction(nd!; mass_matrix = mass_matrix, syms=symbols) # jac_prototype=Jv
@@ -73,9 +75,13 @@ function network_dynamics(vertices!::Array{T, 1}, edges!::Array{U, 1}, graph, p;
     v_array = view(x_array, 1:sum(v_dims))
     e_array = view(x_array, sum(v_dims)+1:sum(v_dims)+sum(e_dims))
 
+    symbols_v = [Symbol(vertices![i].sym[j],"_",i) for i in 1:length(vertices!) for j in 1:v_dims[i]]
+    symbols_e = [Symbol(edges![i].sym[j],"_",i) for i in 1:length(edges!) for j in 1:e_dims[i]]
+    symbols = vcat(symbols_v, symbols_e)
+
     graph_stucture = GraphStruct(graph, v_dims, e_dims)
 
-    graph_data = GraphData(v_array, e_array, graph_stucture)
+    graph_data = GraphData(v_array, e_array, symbols_v, symbols_e, graph_stucture)
 
     nd! = nd_ODE_ODE(vertices!, edges!, graph, graph_stucture, graph_data)
 
@@ -86,10 +92,6 @@ function network_dynamics(vertices!::Array{T, 1}, edges!::Array{U, 1}, graph, p;
 
     # Construct mass matrix
     mass_matrix = construct_mass_matrix([v.mass_matrix for v in vertices!], [e.mass_matrix for e in edges!], graph_stucture)
-
-    symbols_v = [Symbol(vertices![i].sym[j],"_",i) for i in 1:length(vertices!) for j in 1:v_dims[i]]
-    symbols_e = [Symbol(edges![i].sym[j],"_",i) for i in 1:length(edges!) for j in 1:e_dims[i]]
-    symbols = vcat(symbols_v, symbols_e)
 
     ODEFunction(nd!; mass_matrix = mass_matrix, syms=symbols) # jac_prototype=Jv
 end

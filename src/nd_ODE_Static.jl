@@ -29,7 +29,7 @@ end
 
 @inline function prep_gd(x, gd, gs)
     e_array = similar(x, gs.num_e)
-    GraphData(x, e_array, gs)
+    GraphData(x, e_array, gd.v_syms, gd.e_syms, gs)
 end
 
 

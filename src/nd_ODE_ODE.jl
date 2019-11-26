@@ -42,7 +42,7 @@ end
     # println("Type mismatch")
     v_array = view(x, 1:gs.dim_v)
     e_array = view(x, gs.dim_v+1:gs.dim_v+gs.dim_e)
-    GraphData(v_array, e_array, gs)
+    GraphData(v_array, e_array, gd.v_syms, gd.e_syms, gs)
 end
 
 
