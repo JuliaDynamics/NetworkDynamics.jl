@@ -60,11 +60,11 @@ function (d::nd_ODE_ODE)(dx, x, p, t)
     @inbounds begin
 
     for i in 1:d.graph_structure.num_e
-        d.edges![i].f!(view(dx,d.graph_structure.e_idx[i] .+ d.graph_structure.dim_v), gd.e[i], gd.v_s_e[i], gd.v_d_e[i], maybe_idx(p, i+d.graph_structure.num_v), t)
+        maybe_idx(d.edges!, i).f!(view(dx,d.graph_structure.e_idx[i] .+ d.graph_structure.dim_v), gd.e[i], gd.v_s_e[i], gd.v_d_e[i], maybe_idx(p, i+d.graph_structure.num_v), t)
     end
 
     for i in 1:d.graph_structure.num_v
-        d.vertices![i].f!(view(dx,d.graph_structure.v_idx[i]), gd.v[i], gd.e_s_v[i], gd.e_d_v[i], maybe_idx(p, i), t)
+        maybe_idx(d.vertices!,i).f!(view(dx,d.graph_structure.v_idx[i]), gd.v[i], gd.e_s_v[i], gd.e_d_v[i], maybe_idx(p, i), t)
     end
 
     end

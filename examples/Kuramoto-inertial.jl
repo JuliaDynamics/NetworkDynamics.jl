@@ -69,6 +69,7 @@ p = vcat(ω, zeros(ne(g)))
 kur_network_nd = network_dynamics(vertex_list,edge_list, g, p)
 kur_network_eode = network_dynamics(vertex_list,ode_edge_list, g, p)
 
+kur_network_hom = network_dynamics(odevertex,staticedge, g, p)
 
 x0_L = 0.1 .* Array{Float64}(1:2N)
 x0_nd = similar(x0_L)
@@ -133,6 +134,8 @@ println("Benchmarking")
 @btime kur_network_nd(dx_nd, x0_nd, p, 0.)
 @btime kur_network_L(dx_L, x0_L, nothing, 0.)
 @btime kur_network_eode(dx_ode, x0_ode, p, 0.)
+@btime kur_network_hom(dx_nd, x0_nd, p, 0.)
+
 
 tspan = (0., 100.)
 prob_nd = ODEProblem(kur_network_nd, x0_nd, tspan, p)
