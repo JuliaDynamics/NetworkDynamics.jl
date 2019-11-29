@@ -1,7 +1,7 @@
 module NDFunctions
 
 using LinearAlgebra
-using SparseArrays
+# using SparseArrays
 
 import Base.convert
 import Base.promote_rule

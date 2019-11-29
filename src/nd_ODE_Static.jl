@@ -2,25 +2,14 @@ module nd_ODE_Static_mod
 
 
 using ..NetworkStructures
-
 using ..NDFunctions
+using ..Utilities
 
-using Parameters
-using LightGraphs
-using LinearAlgebra
 
 export nd_ODE_Static
 export StaticEdgeFunction
 
 #=  =#
-
-@inline Base.@propagate_inbounds function maybe_idx(p::T, i) where T <: AbstractArray
-    p[i]
-end
-
-@inline function maybe_idx(p, i)
-    p
-end
 
 @inline function prep_gd(x::T, gd::GraphData{T}, gs) where T
     gd.v_array = x
@@ -28,8 +17,8 @@ end
 end
 
 @inline function prep_gd(x, gd, gs)
-    e_array = similar(x, gs.num_e)
-    GraphData(x, e_array, gd.v_syms, gd.e_syms, gs)
+    e_array = similar(x, gs.dim_e)
+    GraphData(x, e_array, gs)
 end
 
 
@@ -49,12 +38,12 @@ function (d::nd_ODE_Static)(dx, x, p, t)
 
     for i in 1:d.graph_structure.num_e
         # maybe_idx(d.edges!,i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], maybe_idx(p, i+d.graph_structure.num_v), t)
-        d.edges!.f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], maybe_idx(p, i+d.graph_structure.num_v), t)
+        maybe_idx(d.edges!, i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], maybe_idx(p, i+d.graph_structure.num_v), t)
     end
 
     for i in 1:d.graph_structure.num_v
         # maybe_idx(d.vertices!,i).f!(view(dx,d.graph_structure.v_idx[i]), gd.v[i], gd.e_s_v[i], gd.e_d_v[i], maybe_idx(p, i), t)
-        d.vertices!.f!(view(dx,d.graph_structure.v_idx[i]), gd.v[i], gd.e_s_v[i], gd.e_d_v[i], maybe_idx(p, i), t)
+        maybe_idx(d.vertices!,i).f!(view(dx,d.graph_structure.v_idx[i]), gd.v[i], gd.e_s_v[i], gd.e_d_v[i], maybe_idx(p, i), t)
     end
 
     end
@@ -77,6 +66,10 @@ function (d::nd_ODE_Static)(x, p, t, ::Type{GetGD})
     gd
 end
 
+
+function (d::nd_ODE_Static)(::Type{GetGS})
+    d.graph_structure
+end
 
 # For compatibility with PowerDynamics
 

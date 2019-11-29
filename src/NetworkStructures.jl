@@ -64,6 +64,8 @@ struct GraphStruct
     num_e::Int
     v_dims::Array{Int, 1}
     e_dims::Array{Int, 1}
+    v_syms::Array{Symbol, 1}
+    e_syms::Array{Symbol, 1}
     dim_v::Int
     dim_e::Int
     s_e::Array{Int, 1}
@@ -79,7 +81,7 @@ struct GraphStruct
     e_s_v_dat::Array{Array{Tuple{Int,Int}, 1}}
     e_d_v_dat::Array{Array{Tuple{Int,Int}, 1}}
 end
-function GraphStruct(g, v_dims, e_dims)
+function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
     num_v = nv(g)
     num_e = ne(g)
 
@@ -106,6 +108,8 @@ function GraphStruct(g, v_dims, e_dims)
     num_e,
     v_dims,
     e_dims,
+    v_syms,
+    e_syms,
     sum(v_dims),
     sum(e_dims),
     s_e,
@@ -221,16 +225,14 @@ Base.IndexStyle(::Type{<:VertexData}) = IndexLinear()
 mutable struct GraphData{T}
     v_array::T
     e_array::T
-    v_syms::Array{Symbol, 1}
-    e_syms::Array{Symbol, 1}
     v::Array{VertexData{GraphData{T}, T}, 1}
     e::Array{EdgeData{GraphData{T}, T}, 1}
     v_s_e::Array{VertexData{GraphData{T}, T}, 1} # the vertex that is the source of e
     v_d_e::Array{VertexData{GraphData{T}, T}, 1} # the vertex that is the destination of e
     e_s_v::Array{Array{EdgeData{GraphData{T}, T}, 1}, 1} # the edges that have v as source
     e_d_v::Array{Array{EdgeData{GraphData{T}, T}, 1}, 1} # the edges that have v as destination
-    function GraphData{T}(v_array::T, e_array::T, v_syms, e_syms, gs::GraphStruct) where T
-        gd = new{T}(v_array, e_array, v_syms, e_syms)
+    function GraphData{T}(v_array::T, e_array::T, gs::GraphStruct) where T
+        gd = new{T}(v_array, e_array, )
         gd.v = [VertexData{GraphData{T}, T}(gd, offset, dim) for (offset,dim) in zip(gs.v_offs, gs.v_dims)]
         gd.e = [EdgeData{GraphData{T}, T}(gd, offset, dim) for (offset,dim) in zip(gs.e_offs, gs.e_dims)]
         gd.v_s_e = [VertexData{GraphData{T}, T}(gd, offset, dim) for (offset,dim) in zip(gs.s_e_offs, gs.v_dims[gs.s_e])]
@@ -241,25 +243,38 @@ mutable struct GraphData{T}
     end
 end
 
-function GraphData(v_array, e_array, v_syms, e_syms, gs)
-    GraphData{typeof(v_array)}(v_array, e_array, v_syms, e_syms, gs)
+function GraphData(v_array, e_array, gs)
+    GraphData{typeof(v_array)}(v_array, e_array, gs)
 end
 
-export ViewV
-struct ViewV
-end
+#= In order to manipulate initial conditions using this view of the underlying
+array we provide view functions that give access to the arrays. =#
 
-export ViewE
-struct ViewE
-end
+export view_v
+export view_e
 
-function (gd::GraphData)(::Type{ViewV}, sym="")
-    v_idx = [i for (i, s) in enumerate(gd.v_syms) if occursin(string(sym), string(s))]
+function view_v(gd::GraphData, gs::GraphStruct, sym="")
+    v_idx = [i for (i, s) in enumerate(gs.v_syms) if occursin(string(sym), string(s))]
     view(gd.v_array, v_idx)
 end
 
-function (gd::GraphData)(::Type{ViewE}, sym="")
-    e_idx = [i for (i, s) in enumerate(gd.e_syms) if occursin(string(sym), string(s))]
+function view_e(gd::GraphData, gs::GraphStruct, sym="")
+    e_idx = [i for (i, s) in enumerate(gs.e_syms) if occursin(string(sym), string(s))]
+    view(gd.e_array, e_idx)
+end
+
+
+function view_v(nd, x, p, t, sym="")
+    gd = nd(x, p, t, GetGD)
+    gs = nd(GetGS)
+    v_idx = [i for (i, s) in enumerate(gs.v_syms) if occursin(string(sym), string(s))]
+    view(gd.v_array, v_idx)
+end
+
+function view_e(nd, x, p, t, sym="")
+    gd = nd(x, p, t, GetGD)
+    gs = nd(GetGS)
+    e_idx = [i for (i, s) in enumerate(gs.e_syms) if occursin(string(sym), string(s))]
     view(gd.e_array, e_idx)
 end
 
@@ -300,12 +315,21 @@ function construct_mass_matrix(mmv_array, mme_array, gs)
 end
 
 
+#= These types are used to dispatch the network dynamics functions to provide
+access to the underlying GraphData and GraphStruct objects. =#
 export GetGD
 
 struct GetGD
 end
 
+export GetGS
 
+struct GetGS
+end
+
+
+#= Experimental and untested: Wrap a solutio object so we get back a GraphData
+object at every time. =#
 export ND_Solution
 
 struct ND_Solution

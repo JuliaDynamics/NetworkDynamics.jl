@@ -1,5 +1,6 @@
 using Pkg
-Pkg.activate(".")
+Pkg.activate(@__DIR__)
+using Revise
 
 using NetworkDynamics
 using LightGraphs
@@ -66,10 +67,9 @@ ode_sd_edge_list = [ODEEdge(se) for se in edge_list]
 ode_edge_list = [ODEEdge(f! = kuramoto_dedge!, dim = 1) for e in edges(g)]
 p = vcat(ω, zeros(ne(g)))
 
-kur_network_nd = network_dynamics(vertex_list,edge_list, g, p)
-kur_network_eode = network_dynamics(vertex_list,ode_edge_list, g, p)
-
-kur_network_hom = network_dynamics(odevertex,staticedge, g, p)
+kur_network_nd = network_dynamics(vertex_list,edge_list, g)
+kur_network_eode = network_dynamics(vertex_list,ode_edge_list, g)
+kur_network_hom = network_dynamics(odevertex, staticedge, g)
 
 x0_L = 0.1 .* Array{Float64}(1:2N)
 x0_nd = similar(x0_L)
@@ -89,14 +89,26 @@ x0_nd[ϕ_idx] .= x0_L[1+N:2N]
 # GraphData can also be called in various ways to get views into the underlying
 # arrays:
 
-
 # Using a GraphData built on top of x0_nd we can set the initial conditions this
 # way:
 gd_0 = kur_network_nd(x0_nd2, p, 0., GetGD)
-gd_0(ViewV, :ω) .= x0_L[1:N]
-gd_0(ViewV, :ϕ) .= x0_L[1+N:2N]
+gs_0 = kur_network_nd(GetGS)
+
+view_v(gd_0, gs_0, :ω) .= x0_L[1:N]
+view_v(gd_0, gs_0, :ϕ) .= x0_L[1+N:2N]
+
+# We can also skip this step and call view_v with all the required arguments:
+
+x0_nd3 = similar(x0_nd)
+
+ω_view = view_v(kur_network_nd, x0_nd3, p, 0., :ω)
+ϕ_view = view_v(kur_network_nd, x0_nd3, p, 0., :ϕ)
+
+ω_view .= x0_L[1:N]
+ϕ_view .= x0_L[1+N:2N]
 
 @assert x0_nd == x0_nd2
+@assert x0_nd == x0_nd3
 
 # Note that now the edge values gd_0(ViewE) are out of sync with the vertex
 # values. There is no automatic updating as ViewV gives direct access to the
@@ -111,8 +123,9 @@ gd_0 = kur_network_nd(x0_nd2, p, 0., GetGD)
 
 x0_ode = Array{Float64}(1:(2N+ne(g)))
 gd_ode = kur_network_eode(x0_ode, p, 0., GetGD)
-gd_ode(ViewV) .= gd_0(ViewV)
-gd_ode(ViewE) .= gd_0(ViewE)
+gs_ode = kur_network_eode(GetGS)
+view_v(gd_ode, gs_ode) .= view_v(gd_0, gs_0)
+view_e(gd_ode, gs_ode) .= view_e(gd_0, gs_0)
 
 # Now everything should be the same:
 
@@ -144,22 +157,21 @@ prob_L = ODEProblem(kur_network_L, x0_L, tspan, nothing)
 
 println("Solving")
 
-sol_nd = solve(prob_nd)
-sol_nd = solve(prob_nd)
-@time sol_nd = solve(prob_nd)
+sol_nd = solve(prob_nd, Tsit5())
+sol_nd = solve(prob_nd, Tsit5())
+@time sol_nd = solve(prob_nd, Tsit5())
 
-sol_L = solve(prob_L)
-sol_L = solve(prob_L)
-@time sol_L = solve(prob_L)
+sol_L = solve(prob_L, Tsit5())
+sol_L = solve(prob_L, Tsit5())
+@time sol_L = solve(prob_L, Tsit5())
 
-sol_ode = solve(prob_ode)
-sol_ode = solve(prob_ode)
-@time sol_ode = solve(prob_ode)
+sol_ode = solve(prob_ode, Tsit5())
+sol_ode = solve(prob_ode, Tsit5())
+@time sol_ode = solve(prob_ode, Tsit5())
 
 # Let's have a look at these solutions:
 
 using Plots
-pyplot() # GR backend doesn't display unicode
 
 ptspan = (90., 100.)
 

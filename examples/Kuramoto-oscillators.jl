@@ -1,9 +1,11 @@
-include("src/NetworkDynamics.jl")
-import .NetworkDynamics
-ND = NetworkDynamics
+using Pkg
+Pkg.activate(@__DIR__)
+using Revise
+
+using NetworkDynamics
 using LightGraphs
 using LinearAlgebra
-using DifferentialEquations
+using OrdinaryDiffEq
 
 g = barabasi_albert(50,5)
 
@@ -34,21 +36,13 @@ end
     nothing
 end
 
-odevertex = ND.ODEVertex(f! = kuramoto_vertex!, dim = 1)
-staticedge = ND.StaticEdge(f! = kuramoto_edge!, dim = 1)
-
-vertexes = [odevertex for v in vertices(g)]
-edgices = [staticedge for e in edges(g)]
+odevertex = ODEVertex(f! = kuramoto_vertex!, dim = 1)
+staticedge = StaticEdge(f! = kuramoto_edge!, dim = 1)
 
 parameters = [kuramoto_parameters(10. * randn(), 0.) for v in vertices(g)]
 append!(parameters, [kuramoto_parameters(0., 1. /30.) for v in edges(g)])
 
-kuramoto_network! = ND.network_dynamics(vertexes,edgices,g)
-#
-#
-# using ForwardDiff
-# T_dual = ForwardDiff.Dual{nothing,Float64, ForwardDiff.pickchunksize(length(kuramoto_network!.f.e_int))}
-# kuramoto_network! = network_dynamics(vertexes,edgices,g; T=T_dual)
+kuramoto_network! = network_dynamics(odevertex,staticedge,g)
 
 x0 = randn(nv(g))
 dx = similar(x0)
@@ -57,18 +51,18 @@ kuramoto_network!(dx, x0, parameters, 0.)
 
 prob = ODEProblem(kuramoto_network!, x0, (0.,150.), parameters)
 
-sol = solve(prob, Rodas4(autodiff=false))
-sol2 = solve(prob)
+sol = solve(prob, Rodas4()) # ForwardDiff error
+sol2 = solve(prob, Tsit5())
 
 using Plots
 
 plot(sol, tspan=(147.,150.))
-plot(sol.t[end-200:end],mod2pi.(sol'[end-200:end,:]),legend=false)
+plot(sol.t[:],mod2pi.(sol'[:,:]),legend=false)
 plot(sol2)
 
 using Profile
 using ProfileView
 
-@profile sol = solve(prob)
+@profile sol = solve(prob, Tsit5())
 
 ProfileView.view()

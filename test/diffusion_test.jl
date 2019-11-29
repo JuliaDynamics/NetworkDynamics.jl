@@ -3,7 +3,7 @@ using NetworkDynamics
 using LightGraphs
 using LinearAlgebra
 using SparseArrays
-using DifferentialEquations
+using OrdinaryDiffEq
 
 printstyled("--- Diffusion dynamics --- \n", bold=true, color=:white)
 
@@ -33,7 +33,7 @@ diff_network_L = ODEFunction((dx, x, p, t) -> dx .= - L * x)
 
 x0 = rand(nv(g))
 prob_L = ODEProblem(diff_network_L,x0,(0.,5.))
-sol_L = solve(prob_L)
+sol_L = solve(prob_L, Tsit5())
 
 # This checks for the accuracy of the integration, but does not test our own
 # code yet, hence is not listed as a test.
@@ -44,7 +44,7 @@ sol_L = solve(prob_L)
 println("Building with simple API")
 
 #This cas is covered by the simple api:
-diff_network_simple_api = homogeneous_scalar_network_with_sum((x, p, t) -> 0., (x_s, x_t, p, t) -> x_t - x_s, g, nothing)
+diff_network_simple_api = scalar_network_with_sum((x, p, t) -> 0., (x_s, x_t, p, t) -> x_t - x_s, g, nothing)
 
 #Now for full complexity:
 
@@ -72,7 +72,7 @@ staticedge = StaticEdge(f! = diffusion_edge!, dim = 1)
 vertex_list = [odevertex for v in vertices(g)]
 edge_list = [staticedge for e in edges(g)]
 
-diff_network_st = network_dynamics(vertex_list,edge_list,g,nothing)
+diff_network_st = network_dynamics(vertex_list,edge_list,g)
 
 @test diff_network_st isa ODEFunction
 @test diff_network_simple_api isa ODEFunction
@@ -102,7 +102,7 @@ println("Building Static Network Dynamics with artifical ODE Edges")
 odeedge = ODEEdge(staticedge) # We promote the static edge to an ODEEdge artifically
 ode_edge_list = [odeedge for e in edges(g)]
 
-diff_network_ode = network_dynamics(vertex_list,ode_edge_list,g,nothing)
+diff_network_ode = network_dynamics(vertex_list,ode_edge_list,g)
 
 x0_ode = find_valid_ic(diff_network_ode, randn(nv(g) + ne(g)))
 dx0_ode = similar(x0_ode)
@@ -118,8 +118,8 @@ prob_ode = ODEProblem(diff_network_ode,x0_ode,(0.,5.))
 #
 # Jv(dx0_ode, x0_ode, nothing, 0.)
 
-sol_L = solve(prob_L)
-sol_st = solve(prob_st)
+sol_L = solve(prob_L, Tsit5())
+sol_st = solve(prob_st, Tsit5())
 sol_ode = solve(prob_ode, Rodas5())
 
  # These two are different code paths that we want to cover. If there is a type:

@@ -1,18 +1,12 @@
 module nd_ODE_ODE_mod
 
 using ..NetworkStructures
-
 using ..NDFunctions
-
-using Parameters
-using LightGraphs
-using LinearAlgebra
+using ..Utilities
 
 export nd_ODE_ODE
 
-#= nd_ODE_ODE_scalar constructs a (dx,x,p,t)-function from an Array of functions for the vertices,
- edges as well as a graph.
-The arguments of the vertex functions must be of the form (dv,v,e_s,e_d,p,t),
+#= The arguments of the vertex functions must be of the form (dv,v,e_s,e_d,p,t),
 where dv is the vertex variable derivative, v the vertex variable and e_s and e_d Arrays of edge variables that
 have the vertex as source and destination respectively. p and t are as usual.
 The arguments of the edge functions must be of the form (de,e,v_s,v_d,p,t),
@@ -20,14 +14,6 @@ where de is the derivative of the edge variable, e the edge variable, v_s and v_
 the edge has as source and destination respectively. This works for arbitrary dimensional vertex and edge functions, they only
 need to fit, i.e. don't do something like edges! = v_s - v_d when v_s and v_d have not the same dimension. =#
 
-
-@inline Base.@propagate_inbounds function maybe_idx(p::T, i) where T <: AbstractArray
-    p[i]
-end
-
-@inline function maybe_idx(p, i)
-    p
-end
 
 # In order to match the type, we need to pass both, a view that matches the type
 # to be constructed, and the original array we want to construct a GD on top of.
@@ -42,7 +28,7 @@ end
     # println("Type mismatch")
     v_array = view(x, 1:gs.dim_v)
     e_array = view(x, gs.dim_v+1:gs.dim_v+gs.dim_e)
-    GraphData(v_array, e_array, gd.v_syms, gd.e_syms, gs)
+    GraphData(v_array, e_array, gs)
 end
 
 
@@ -76,6 +62,9 @@ function (d::nd_ODE_ODE)(x, p, t, ::Type{GetGD})
     prep_gd(view(x, 1:2), x, d.graph_data, d.graph_structure)
 end
 
+function (d::nd_ODE_ODE)(::Type{GetGS})
+    d.graph_structure
+end
 
 
 end #module

@@ -1,7 +1,6 @@
 using LightGraphs
 using OrdinaryDiffEq
 using Plots
-using Sundials
 
 N = 10
 g = barabasi_albert(N, 5)

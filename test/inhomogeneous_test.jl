@@ -3,7 +3,7 @@ using NetworkDynamics
 using LightGraphs
 using LinearAlgebra
 using SparseArrays
-using DifferentialEquations
+using OrdinaryDiffEq
 
 # We will work on a random graph:
 g = barabasi_albert(10,5)
@@ -36,7 +36,7 @@ vertex_list = [statvertex, odevertex]
 append!(vertex_list, [odevertex for i in 1:N-2])
 edge_list = [staticedge for e in edges(g)]
 
-diff_network_st_ver = network_dynamics(vertex_list, edge_list, g, nothing)
+diff_network_st_ver = network_dynamics(vertex_list, edge_list, g)
 
 @test diff_network_st_ver isa ODEFunction
 

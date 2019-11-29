@@ -1,6 +1,11 @@
 module NetworkDynamics
 
 using Reexport
+using DiffEqBase
+using LightGraphs
+
+include("Utilities.jl")
+@reexport using .Utilities
 
 include("Functions.jl")
 @reexport using .NDFunctions
@@ -14,18 +19,9 @@ include("nd_ODE_ODE.jl")
 include("nd_ODE_Static.jl")
 @reexport using .nd_ODE_Static_mod
 
-include("Utilities.jl")
-@reexport using .Utilities
-
 include("SimpleAPI.jl")
 
 export network_dynamics
-
-using LinearAlgebra
-using SparseArrays
-using LightGraphs
-using DiffEqBase
-using DiffEqOperators
 
 #= network_dynamics: The Main Constructor of the Package. It takes Arrays of Vertex- and Edgefunction + a graph and
 spits out an ODEFunction or DDEFunction. Others still need to be implemented. =#
@@ -52,17 +48,25 @@ function collect_ve_info(vertices!, edges!, graph)
         @assert length(edges!) == length(edges(graph))
         e_dims = [e.dim for e in edges!]
         symbols_e = [Symbol(edges![i].sym[j],"_",i) for i in 1:length(edges!) for j in 1:e_dims[i]]
-        mme_array = [e.mass_matrix for e in edges!]
+        if eltype(edges!) <: StaticEdge
+            mme_array = nothing
+        else
+            mme_array = [e.mass_matrix for e in edges!]
+        end
     else
         e_dims = [edges!.dim for e in edges(graph)]
         symbols_e = [Symbol(edges!.sym[j],"_",i) for i in 1:ne(graph) for j in 1:e_dims[i]]
-        mme_array = [edges!.mass_matrix for e in edges(graph)]
+        if typeof(edges!) <: StaticEdge
+            mme_array = nothing
+        else
+            mme_array = [edges!.mass_matrix for e in edges(graph)]
+        end
     end
 
     v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array
 end
 
-function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; calc_JVOp = (false, nothing), x_prototype=zeros(1)) where {T <: ODEVertex, U <: StaticEdge}
+function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; x_prototype=zeros(1)) where {T <: ODEVertex, U <: StaticEdge}
     v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array = collect_ve_info(vertices!, edges!, graph)
 
     v_array = similar(x_prototype, sum(v_dims))
@@ -70,26 +74,19 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
 
     symbols = symbols_v
 
-    graph_stucture = GraphStruct(graph, v_dims, e_dims)
+    graph_stucture = GraphStruct(graph, v_dims, e_dims, symbols_v, symbols_e)
 
-    graph_data = GraphData(v_array, e_array, symbols_v, symbols_e, graph_stucture)
+    graph_data = GraphData(v_array, e_array, graph_stucture)
 
     nd! = nd_ODE_Static(vertices!, edges!, graph, graph_stucture, graph_data)
 
-    if calc_JVOp[1]
-        Jv = JacVecOperator(nd!, x_array, calc_JVOp[2], 0.0)
-    else
-        Jv = nothing
-    end
-
-    # Construct mass matrix
     mass_matrix = construct_mass_matrix(mmv_array, graph_stucture)
 
-    ODEFunction(nd!; mass_matrix = mass_matrix, syms=symbols, jac_prototype=Jv)
+    ODEFunction(nd!; mass_matrix = mass_matrix, syms=symbols)
 end
 
 
-function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; calc_JVOp = (false, nothing), x_prototype=zeros(1)) where {T <: ODEVertex, U <: ODEEdge}
+function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; x_prototype=zeros(1)) where {T <: ODEVertex, U <: ODEEdge}
     v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array = collect_ve_info(vertices!, edges!, graph)
 
     x_array = similar(x_prototype, sum(v_dims) + sum(e_dims))
@@ -99,25 +96,18 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
 
     symbols = vcat(symbols_v, symbols_e)
 
-    graph_stucture = GraphStruct(graph, v_dims, e_dims)
+    graph_stucture = GraphStruct(graph, v_dims, e_dims, symbols_v, symbols_e)
 
-    graph_data = GraphData(v_array, e_array, symbols_v, symbols_e, graph_stucture)
+    graph_data = GraphData(v_array, e_array, graph_stucture)
 
     nd! = nd_ODE_ODE(vertices!, edges!, graph, graph_stucture, graph_data)
 
-    if calc_JVOp[1]
-        Jv = JacVecOperator(nd!, x_array, calc_JVOp[2], 0.0)
-    else
-        Jv = nothing
-    end
-
-    # Construct mass matrix
     mass_matrix = construct_mass_matrix(mmv_array, mme_array, graph_stucture)
 
-    ODEFunction(nd!; mass_matrix = mass_matrix, syms=symbols, jac_prototype=Jv)
+    ODEFunction(nd!; mass_matrix = mass_matrix, syms=symbols)
 end
 
-function network_dynamics(vertices!,  edges!, graph, p)
+function network_dynamics(vertices!,  edges!, graph)
     try
         Array{VertexFunction}(vertices!)
     catch err
@@ -134,10 +124,10 @@ function network_dynamics(vertices!,  edges!, graph, p)
     end
     va! = Array{VertexFunction}(vertices!)
     ea! = Array{EdgeFunction}(edges!)
-    network_dynamics(va!,  ea!, graph, p)
+    network_dynamics(va!,  ea!, graph)
 end
 
-function network_dynamics(vertices!::Array{VertexFunction}, edges!::Array{EdgeFunction}, graph, p)
+function network_dynamics(vertices!::Array{VertexFunction}, edges!::Array{EdgeFunction}, graph)
     @assert length(vertices!) == length(vertices(graph))
     @assert length(edges!) == length(edges(graph))
 
@@ -150,9 +140,9 @@ function network_dynamics(vertices!::Array{VertexFunction}, edges!::Array{EdgeFu
     end
 
     if contains_dyn_edge
-        return network_dynamics(Array{ODEVertex}(vertices!),Array{ODEEdge}(edges!), graph, p)
+        return network_dynamics(Array{ODEVertex}(vertices!),Array{ODEEdge}(edges!), graph)
     else
-        return network_dynamics(Array{ODEVertex}(vertices!),Array{StaticEdge}(edges!), graph, p)
+        return network_dynamics(Array{ODEVertex}(vertices!),Array{StaticEdge}(edges!), graph)
     end
     nothing
 end
