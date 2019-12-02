@@ -17,14 +17,14 @@ need to fit, i.e. don't do something like edges! = v_s - v_d when v_s and v_d ha
 
 # In order to match the type, we need to pass both, a view that matches the type
 # to be constructed, and the original array we want to construct a GD on top of.
-@inline function prep_gd(y::T, x, gd::GraphData{T, T}, gs) where T
+@inline function prep_gd(dy::T, y::T, x, gd::GraphData{T, T}, gs) where T
     # println("Type match")
     gd.v_array = view(x, 1:gs.dim_v)
     gd.e_array = view(x, gs.dim_v+1:gs.dim_v+gs.dim_e)
     gd
 end
 
-@inline function prep_gd(y, x, gd, gs)
+@inline function prep_gd(dy, y, x, gd, gs)
     # println("Type mismatch")
     v_array = view(x, 1:gs.dim_v)
     e_array = view(x, gs.dim_v+1:gs.dim_v+gs.dim_e)
@@ -41,7 +41,7 @@ end
 end
 
 function (d::nd_ODE_ODE)(dx, x, p, t)
-    gd = prep_gd(view(dx, 1:2), x, d.graph_data, d.graph_structure)
+    gd = prep_gd(view(dx, 1:2), view(x, 1:2), x, d.graph_data, d.graph_structure)
 
     @inbounds begin
 
@@ -59,7 +59,7 @@ end
 
 
 function (d::nd_ODE_ODE)(x, p, t, ::Type{GetGD})
-    prep_gd(view(x, 1:2), x, d.graph_data, d.graph_structure)
+    prep_gd(view(x, 1:2), view(x, 1:2), x, d.graph_data, d.graph_structure)
 end
 
 function (d::nd_ODE_ODE)(::Type{GetGS})
