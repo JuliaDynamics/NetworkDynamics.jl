@@ -11,28 +11,28 @@ export StaticEdgeFunction
 
 #=  =#
 
-@inline function prep_gd(x::T, gd::GraphData{T}, gs) where T
-    gd.v_array = x
+@inline function prep_gd(dx::T, x::T, gd::GraphData{T, T}, gs) where T
+    gd.v_array = x # Does not allocate
     gd
 end
 
-@inline function prep_gd(x, gd, gs)
-    e_array = similar(x, gs.dim_e)
+@inline function prep_gd(dx, x, gd, gs)
+    e_array = similar(dx, gs.dim_e)
     GraphData(x, e_array, gs)
 end
 
 
-@Base.kwdef struct nd_ODE_Static{G, T, T1, T2}
+@Base.kwdef struct nd_ODE_Static{G, Tv, Te, T1, T2}
     vertices!::T1
     edges!::T2
     graph::G
     graph_structure::GraphStruct
-    graph_data::GraphData{T}
+    graph_data::GraphData{Tv, Te}
 end
 
 
 function (d::nd_ODE_Static)(dx, x, p, t)
-    gd = prep_gd(x, d.graph_data, d.graph_structure)
+    gd = prep_gd(dx, x, d.graph_data, d.graph_structure)
 
     @inbounds begin
 
@@ -53,7 +53,7 @@ end
 
 
 function (d::nd_ODE_Static)(x, p, t, ::Type{GetGD})
-    gd = prep_gd(x, d.graph_data, d.graph_structure)
+    gd = prep_gd(x, x, d.graph_data, d.graph_structure)
 
     @inbounds begin
 

@@ -222,29 +222,33 @@ Base.IndexStyle(::Type{<:VertexData}) = IndexLinear()
 # only one array of VertexData and EdgeData and index into that, possibly with a
 # new set of access types...
 
-mutable struct GraphData{T}
-    v_array::T
-    e_array::T
-    v::Array{VertexData{GraphData{T}, T}, 1}
-    e::Array{EdgeData{GraphData{T}, T}, 1}
-    v_s_e::Array{VertexData{GraphData{T}, T}, 1} # the vertex that is the source of e
-    v_d_e::Array{VertexData{GraphData{T}, T}, 1} # the vertex that is the destination of e
-    e_s_v::Array{Array{EdgeData{GraphData{T}, T}, 1}, 1} # the edges that have v as source
-    e_d_v::Array{Array{EdgeData{GraphData{T}, T}, 1}, 1} # the edges that have v as destination
-    function GraphData{T}(v_array::T, e_array::T, gs::GraphStruct) where T
-        gd = new{T}(v_array, e_array, )
-        gd.v = [VertexData{GraphData{T}, T}(gd, offset, dim) for (offset,dim) in zip(gs.v_offs, gs.v_dims)]
-        gd.e = [EdgeData{GraphData{T}, T}(gd, offset, dim) for (offset,dim) in zip(gs.e_offs, gs.e_dims)]
-        gd.v_s_e = [VertexData{GraphData{T}, T}(gd, offset, dim) for (offset,dim) in zip(gs.s_e_offs, gs.v_dims[gs.s_e])]
-        gd.v_d_e = [VertexData{GraphData{T}, T}(gd, offset, dim) for (offset,dim) in zip(gs.d_e_offs, gs.v_dims[gs.d_e])]
-        gd.e_s_v = [[EdgeData{GraphData{T}, T}(gd, offset, dim) for (offset,dim) in e_s_v] for e_s_v in gs.e_s_v_dat]
-        gd.e_d_v = [[EdgeData{GraphData{T}, T}(gd, offset, dim) for (offset,dim) in e_d_v] for e_d_v in gs.e_d_v_dat]
+# We require potentially different data types for vertices and edges because
+# there are situations with autodifferentiation that require one of them to be
+# dual and the other not.
+
+mutable struct GraphData{Tv, Te}
+    v_array::Tv
+    e_array::Te
+    v::Array{VertexData{GraphData{Tv, Te}, Tv}, 1}
+    e::Array{EdgeData{GraphData{Tv, Te}, Te}, 1}
+    v_s_e::Array{VertexData{GraphData{Tv, Te}, Tv}, 1} # the vertex that is the source of e
+    v_d_e::Array{VertexData{GraphData{Tv, Te}, Tv}, 1} # the vertex that is the destination of e
+    e_s_v::Array{Array{EdgeData{GraphData{Tv, Te}, Te}, 1}, 1} # the edges that have v as source
+    e_d_v::Array{Array{EdgeData{GraphData{Tv, Te}, Te}, 1}, 1} # the edges that have v as destination
+    function GraphData{Tv, Te}(v_array::Tv, e_array::Te, gs::GraphStruct) where {Tv, Te}
+        gd = new{Tv, Te}(v_array, e_array, )
+        gd.v = [VertexData{GraphData{Tv, Te}, Tv}(gd, offset, dim) for (offset,dim) in zip(gs.v_offs, gs.v_dims)]
+        gd.e = [EdgeData{GraphData{Tv, Te}, Te}(gd, offset, dim) for (offset,dim) in zip(gs.e_offs, gs.e_dims)]
+        gd.v_s_e = [VertexData{GraphData{Tv, Te}, Tv}(gd, offset, dim) for (offset,dim) in zip(gs.s_e_offs, gs.v_dims[gs.s_e])]
+        gd.v_d_e = [VertexData{GraphData{Tv, Te}, Tv}(gd, offset, dim) for (offset,dim) in zip(gs.d_e_offs, gs.v_dims[gs.d_e])]
+        gd.e_s_v = [[EdgeData{GraphData{Tv, Te}, Te}(gd, offset, dim) for (offset,dim) in e_s_v] for e_s_v in gs.e_s_v_dat]
+        gd.e_d_v = [[EdgeData{GraphData{Tv, Te}, Te}(gd, offset, dim) for (offset,dim) in e_d_v] for e_d_v in gs.e_d_v_dat]
         gd
     end
 end
 
 function GraphData(v_array, e_array, gs)
-    GraphData{typeof(v_array)}(v_array, e_array, gs)
+    GraphData{typeof(v_array), typeof(e_array)}(v_array, e_array, gs)
 end
 
 #= In order to manipulate initial conditions using this view of the underlying
