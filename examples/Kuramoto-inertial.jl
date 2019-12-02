@@ -65,7 +65,7 @@ vertex_list = [odevertex for v in vertices(g)]
 edge_list = [staticedge for e in edges(g)]
 ode_sd_edge_list = [ODEEdge(se) for se in edge_list]
 ode_edge_list = [ODEEdge(f! = kuramoto_dedge!, dim = 1) for e in edges(g)]
-p = vcat(ω, zeros(ne(g)))
+p = (ω, nothing)
 
 kur_network_nd = network_dynamics(vertex_list,edge_list, g)
 kur_network_eode = network_dynamics(vertex_list,ode_edge_list, g)

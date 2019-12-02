@@ -13,20 +13,15 @@ g = barabasi_albert(50,5)
 of staticedge! and odeedge! below. =#
 
 @inline function kuramoto_edge!(e,v_s,v_d,p,t)
-    e[1] = sin(v_s[1] - v_d[1]) * (1. + t * p.T_inv)
+    e[1] = sin(v_s[1] - v_d[1]) * (1. + t * p)
     # e[2] = sin(v_d[1] - v_s[1])
     nothing
-end
-
-struct kuramoto_parameters
-    ω
-    T_inv
 end
 
 @inline function kuramoto_vertex!(dv, v, e_s, e_d, p, t)
     # Note that e_s and e_d might be empty, the code needs to be able to deal
     # with this situation.
-    dv .= p.ω
+    dv .= p
     for e in e_s
         dv .-= e[1]
     end
@@ -39,8 +34,10 @@ end
 odevertex = ODEVertex(f! = kuramoto_vertex!, dim = 1)
 staticedge = StaticEdge(f! = kuramoto_edge!, dim = 1)
 
-parameters = [kuramoto_parameters(10. * randn(), 0.) for v in vertices(g)]
-append!(parameters, [kuramoto_parameters(0., 1. /30.) for v in edges(g)])
+v_pars = [1. * randn() for v in vertices(g)]
+e_pars = [1. /3. for e in edges(g)]
+
+parameters = (v_pars, e_pars)
 
 kuramoto_network! = network_dynamics(odevertex,staticedge,g)
 
@@ -49,16 +46,17 @@ dx = similar(x0)
 
 kuramoto_network!(dx, x0, parameters, 0.)
 
-prob = ODEProblem(kuramoto_network!, x0, (0.,150.), parameters)
+prob = ODEProblem(kuramoto_network!, x0, (0.,15.), parameters)
 
-sol = solve(prob, Rodas4()) # ForwardDiff error
+sol = solve(prob, Rodas4P()) # ForwardDiff error
 sol2 = solve(prob, Tsit5())
+sol3 = solve(prob, TRBDF2())
 
 using Plots
 
-plot(sol, tspan=(147.,150.))
-plot(sol.t[:],mod2pi.(sol'[:,:]),legend=false)
+plot(sol)
 plot(sol2)
+plot(sol3)
 
 using Profile
 using ProfileView
