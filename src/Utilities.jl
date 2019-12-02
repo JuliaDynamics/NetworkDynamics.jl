@@ -3,7 +3,7 @@ module Utilities
 using NLsolve
 using LinearAlgebra
 
-export maybe_idx
+export maybe_idx, p_v_idx, p_e_idx
 
 """
 Utility function that drops the indexing operation when the argument is not
@@ -18,6 +18,31 @@ end
     p
 end
 
+@inline Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2}, i) where {T1 <: AbstractArray, T2}
+    p[1][i]
+end
+
+@inline Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2}, i) where {T1, T2}
+    p[1]
+end
+
+
+@inline function p_v_idx(p, i)
+    p
+end
+
+@inline Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2}, i) where {T1, T2 <: AbstractArray}
+    p[2][i]
+end
+
+@inline Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2}, i) where {T1, T2}
+    p[2]
+end
+
+
+@inline function p_e_idx(p, i)
+    p
+end
 
 
 export oriented_edge_sum!

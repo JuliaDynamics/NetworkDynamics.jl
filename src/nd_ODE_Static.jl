@@ -11,13 +11,13 @@ export StaticEdgeFunction
 
 #=  =#
 
-@inline function prep_gd(x::T, gd::GraphData{T}, gs) where T
+@inline function prep_gd(dx::T, x::T, gd::GraphData{T}, gs) where T
     gd.v_array = x
     gd
 end
 
-@inline function prep_gd(x, gd, gs)
-    e_array = similar(x, gs.dim_e)
+@inline function prep_gd(dx, x, gd, gs)
+    e_array = similar(dx, gs.dim_e)
     GraphData(x, e_array, gs)
 end
 
@@ -32,18 +32,18 @@ end
 
 
 function (d::nd_ODE_Static)(dx, x, p, t)
-    gd = prep_gd(x, d.graph_data, d.graph_structure)
+    gd = prep_gd(dx, x, d.graph_data, d.graph_structure)
 
     @inbounds begin
 
     for i in 1:d.graph_structure.num_e
         # maybe_idx(d.edges!,i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], maybe_idx(p, i+d.graph_structure.num_v), t)
-        maybe_idx(d.edges!, i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], maybe_idx(p, i+d.graph_structure.num_v), t)
+        maybe_idx(d.edges!, i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], p_e_idx(p, i), t)
     end
 
     for i in 1:d.graph_structure.num_v
         # maybe_idx(d.vertices!,i).f!(view(dx,d.graph_structure.v_idx[i]), gd.v[i], gd.e_s_v[i], gd.e_d_v[i], maybe_idx(p, i), t)
-        maybe_idx(d.vertices!,i).f!(view(dx,d.graph_structure.v_idx[i]), gd.v[i], gd.e_s_v[i], gd.e_d_v[i], maybe_idx(p, i), t)
+        maybe_idx(d.vertices!,i).f!(view(dx,d.graph_structure.v_idx[i]), gd.v[i], gd.e_s_v[i], gd.e_d_v[i], p_v_idx(p, i), t)
     end
 
     end
@@ -53,12 +53,12 @@ end
 
 
 function (d::nd_ODE_Static)(x, p, t, ::Type{GetGD})
-    gd = prep_gd(x, d.graph_data, d.graph_structure)
+    gd = prep_gd(x, x, d.graph_data, d.graph_structure)
 
     @inbounds begin
 
     for i in 1:d.graph_structure.num_e
-        maybe_idx(d.edges!,i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], maybe_idx(p, i+d.graph_structure.num_v), t)
+        maybe_idx(d.edges!,i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], p_e_idx(p, i), t)
     end
 
     end
