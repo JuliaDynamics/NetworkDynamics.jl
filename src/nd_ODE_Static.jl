@@ -74,9 +74,8 @@ end
 # For compatibility with PowerDynamics
 
 struct StaticEdgeFunction
-    nd_ODE_Static::nd_ODE_Static
+    nd_ODE_Static
 end
-
 
 function (sef::StaticEdgeFunction)(x, p, t)
     gd = sef.nd_ODE_Static(x, p, t, GetGD)

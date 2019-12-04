@@ -147,4 +147,12 @@ function network_dynamics(vertices!::Array{VertexFunction}, edges!::Array{EdgeFu
     nothing
 end
 
+# Allow initializing StaticEdgeFunction for Power Dynamics
+function StaticEdgeFunction(vertices!, edges!, graph)
+    # For reasons I don't fully understand we have to qualify the call to
+    # the constructor of StaticEdgeFunction here.
+    nd_ODE_Static_mod.StaticEdgeFunction(network_dynamics(vertices!, edges!, graph))
+end
+
+
 end # module
