@@ -3,7 +3,7 @@ using NetworkDynamics
 using LightGraphs
 using LinearAlgebra
 using SparseArrays
-using DifferentialEquations
+using OrdinaryDiffEq
 
 # We will work on a random graph:
 g = barabasi_albert(10,5)
@@ -23,7 +23,7 @@ end
 
 @inline function diffusion_vertex!(dv, v, e_s, e_d, p, t)
     dv .= 0.
-    edge_sum!(dv, e_s, e_d) # Oriented sum of the incoming and outgoing edges
+    oriented_edge_sum!(dv, e_s, e_d) # Oriented sum of the incoming and outgoing edges
     nothing
 end
 
@@ -36,9 +36,9 @@ vertex_list = [statvertex, odevertex]
 append!(vertex_list, [odevertex for i in 1:N-2])
 edge_list = [staticedge for e in edges(g)]
 
-diff_network_st_ver = network_dynamics(vertex_list,edge_list,g)
+diff_network_st_ver = network_dynamics(vertex_list, edge_list, g)
 
-@test diff_network_st isa ODEFunction
+@test diff_network_st_ver isa ODEFunction
 
 x0 = rand(nv(g))
 x0[1] = pi
@@ -46,8 +46,8 @@ x0[1] = pi
 # x0 = find_valid_ic(diff_network_st_ver, rand(nv(g)))
 # The finder does not converge here, this is a bit strange, TODO: investigate!
 
-prob_st_ver = ODEProblem(diff_network_st_ver,x0,(0.,500.))
-sol_st_ver = solve(prob_st_ver, Rodas4(autodiff=false))
+prob_st_ver = ODEProblem(diff_network_st_ver, x0, (0.,500.))
+sol_st_ver = solve(prob_st_ver, Rodas5())
 # The mass_matrix requires a stiff solver,
 # and autodiff doesn't work for the time being.
 

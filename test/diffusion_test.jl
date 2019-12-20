@@ -3,7 +3,7 @@ using NetworkDynamics
 using LightGraphs
 using LinearAlgebra
 using SparseArrays
-using DifferentialEquations
+using OrdinaryDiffEq
 
 printstyled("--- Diffusion dynamics --- \n", bold=true, color=:white)
 
@@ -33,7 +33,7 @@ diff_network_L = ODEFunction((dx, x, p, t) -> dx .= - L * x)
 
 x0 = rand(nv(g))
 prob_L = ODEProblem(diff_network_L,x0,(0.,5.))
-sol_L = solve(prob_L)
+sol_L = solve(prob_L, Tsit5())
 
 # This checks for the accuracy of the integration, but does not test our own
 # code yet, hence is not listed as a test.
@@ -44,7 +44,7 @@ sol_L = solve(prob_L)
 println("Building with simple API")
 
 #This cas is covered by the simple api:
-diff_network_simple_api = homogeneous_scalar_network_with_sum((x, p, t) -> 0., (x_s, x_t, p, t) -> x_t - x_s, g)
+diff_network_simple_api = scalar_network_with_sum((x, p, t) -> 0., (x_s, x_t, p, t) -> x_t - x_s, g, nothing)
 
 #Now for full complexity:
 
@@ -61,7 +61,7 @@ end
 
 @inline function diffusion_vertex!(dv, v, e_s, e_d, p, t)
     dv .= 0.
-    edge_sum!(dv, e_s, e_d) # Oriented sum of the incoming and outgoing edges
+    oriented_edge_sum!(dv, e_s, e_d) # Oriented sum of the incoming and outgoing edges
     nothing
 end
 
@@ -107,20 +107,32 @@ diff_network_ode = network_dynamics(vertex_list,ode_edge_list,g)
 x0_ode = find_valid_ic(diff_network_ode, randn(nv(g) + ne(g)))
 dx0_ode = similar(x0_ode)
 
+diff_network_ode(dx0_ode, x0_ode, nothing, 0.)
+
 prob_L = ODEProblem(diff_network_L,x0_ode[1:N],(0.,5.))
+
 prob_st = ODEProblem(diff_network_st,x0_ode[1:N],(0.,5.))
 prob_ode = ODEProblem(diff_network_ode,x0_ode,(0.,5.))
+#
+# Jv = diff_network_ode.jac_prototype
+#
+# Jv(dx0_ode, x0_ode, nothing, 0.)
 
-sol_L = solve(prob_L)
-sol_st = solve(prob_st)
-sol_ode = solve(prob_ode, Rodas4(autodiff=false))
-# The mass_matrix requires a stiff solver,
-# and autodiff doesn't work for the time being.
+sol_L = solve(prob_L, Tsit5())
+sol_st = solve(prob_st, Tsit5())
+sol_ode = solve(prob_ode, Rodas5())
+
+ # These two are different code paths that we want to cover. If there is a type:
+ # mismatch between the internal GraphData and the argument being passed in, a
+ # new GraphData object is allocated of the right type. As this is essentially a
+ # fancy view into the Graph, the allocation is relatively mild.
+diff_network_ode(dx0_ode, Array{Float32}(x0_ode),nothing,0.)
+diff_network_ode(dx0_ode, x0_ode,nothing,0.)
+
 
 max_L = [maximum(abs.(sol_L(t) .- sol_analytic(x0_ode[1:N], nothing, t))) for t in sol_L.t] |> maximum
 max_st = [maximum(abs.(sol_st(t) .- sol_analytic(x0_ode[1:N], nothing, t))) for t in sol_L.t] |> maximum
 max_ode = [maximum(abs.(sol_ode(t)[1:N] .- sol_analytic(x0_ode[1:N], nothing, t))) for t in sol_L.t] |> maximum
-# The use of a stiff solver will make this last one more accurate.
 
 println("Maximum difference to analytic solution with explicit Laplacian: $max_L")
 println("Maximum difference to analytic solution with static ND: $max_st")
@@ -135,6 +147,6 @@ sef = StaticEdgeFunction(diff_network_st.f)
 t = 1.
 e_s, e_d = sef(sol_st(t), nothing, t)
 e_int_ode = sol_ode(t)[N+1:N+ne(g)]
-e_int_st = diff_network_st.f.graph_stucture.e_int
+e_int_st = diff_network_st.f.graph_data.e_array
 
 println("Maximum difference of the static and dynamic edge variables at t=$t: $(abs.(e_int_st .- e_int_ode) |> maximum)")
