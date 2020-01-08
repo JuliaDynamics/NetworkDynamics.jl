@@ -1,3 +1,8 @@
+"""
+    This module needs to be documented. Together with Constructors
+    it forms the backbone of the core API, users should provide us
+    with Arrays of VertexFunction and EdgeFunction as well as a graph and that's it.
+"""
 module NDFunctions
 
 using LinearAlgebra
@@ -6,11 +11,7 @@ using LinearAlgebra
 import Base.convert
 import Base.promote_rule
 
-#=
-This module needs to be documented. Together with Constructors
-it forms the backbone of the core API, users should provide us
-with Arrays of VertexFunction and EdgeFunction as well as a graph and that's it.
-=#
+
 
 export StaticVertex
 export StaticEdge
