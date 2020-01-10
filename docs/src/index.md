@@ -19,7 +19,9 @@ Installation is straightforward with Julia's package manager.
 
 # Overview
 
-The key construction is a callable function compatible with the
+The key construction is the function [`network_dynamics`](@ref) that takes in
+two arrays of functions describing the local dynamics on the edges and nodes of
+a graph `g`, and returns a composite function compatible with the
 DifferentialEquations.jl calling syntax.
 
 ```julia
@@ -27,6 +29,6 @@ nd = network_dynamics(vertices!::Array{VertexFunction}, edges!::Array{EdgeFuncti
 nd(dx, x, p, t)
 ```
 
-The first two parameters are the functions, or arrays of functions that define the dynamics on the network. The types VertexFunction and EdgeFunction are specified on the next page. The last parameter g is a graph encoding the network in the LightGraphs.jl format.
+
 
 This page is still in development. :)
