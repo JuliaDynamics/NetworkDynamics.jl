@@ -25,7 +25,7 @@ a graph `g`, and returns a composite function compatible with the
 DifferentialEquations.jl calling syntax.
 
 ```julia
-nd = network_dynamics(vertices!::Array{VertexFunction}, edges!::Array{EdgeFunction}, g)
+nd = network_dynamics(vertices!::Array{VertexFunction},  edges!::Array{EdgeFunction}, g)
 nd(dx, x, p, t)
 ```
 

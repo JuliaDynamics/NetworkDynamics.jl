@@ -9,7 +9,7 @@ makedocs(
     modules = [NetworkDynamics], # creates a warning if a ND.jl docstring is missing
     pages = [
     "General" => "index.md",
-    "Functions_and_Constructors.md",
+    "BasicConstructors.md",
     "StaticEdges.md",
     "DynamicEdges.md",
     ]) #Here we have to agree on the Page structure yet.

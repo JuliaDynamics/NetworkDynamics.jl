@@ -66,6 +66,14 @@ function collect_ve_info(vertices!, edges!, graph)
     v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array
 end
 
+"""
+    network_dynamics(vertices!, edges!, g)
+
+Assembles the the dynamical equations of the network problem into an `ODEFunction`
+compatible with the `DifferentialEquations.jl` solvers. Takes as arguments an array
+of VertexFunctions **`vertices!`**, an array of EdgeFunctions **`edges!`** and a
+`LightGraph.jl` object **`g`**.
+"""
 function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; x_prototype=zeros(1)) where {T <: ODEVertex, U <: StaticEdge}
     v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array = collect_ve_info(vertices!, edges!, graph)
 
