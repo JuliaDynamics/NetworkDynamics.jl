@@ -4,7 +4,7 @@ The key constructor [`network_dynamics`](@ref) assembles the dynamics of the who
 Since the equations describing the local dynamics may differ strongly from each
 other, the types `VertexFunction` and `EdgeFunction` are introduced. They
 provide a unifying interface between different classes of nodes and edges. Both
-have several subtypes that account for the different types of equations that may
+have several subtypes that account for the different classes of equations that may
 represent the local dynamics. At the moment algebraic (static) equations and ordinary differential equations (ODEs) are supported:
 
 

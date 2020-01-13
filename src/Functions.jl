@@ -21,7 +21,27 @@ export VertexFunction
 export EdgeFunction
 # export DDEVertex
 # export DDEEdge
+"""
+    StaticVertex(f!, dim, sym)
 
+    Wrapper that ensures compatibility of a **mutating** function **`f!`** with
+    the key constructor **`network_dynamics`**.
+
+    **`f!`**  describes the local behaviour at a static node and has to respect
+    the following calling syntax
+
+    ```julia
+    f!(v, e_s, e_t, p, t) -> nothing
+    ```
+
+    Here  **`v`**, **`p`** and **`t`** are the usual ODE arguments, while
+    **`e_s`** and **`e_d`** are arrays containing the edges for which the
+    described vertex is the source or the destination respectively.
+
+    **`dim`** is the number of independent variables in the vertex equations and
+    **`sym`** is an array of symbols for these variables. For more details see
+    the documentation.
+"""
 @Base.kwdef struct StaticVertex{T}
     f!::T # (v, e_s, e_t, p, t) -> nothing
     dim::Int # number of dimensions of x
