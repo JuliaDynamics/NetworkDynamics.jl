@@ -54,7 +54,7 @@ end
     to be taken when dealing with assymetric coupling terms. A detailed example
     can be found  in the [Examples](@ref) section.
 
-### [StaticVertex](@ref)
+### [`StaticVertex`](@ref)
 
 If a vertex is described by an algebraic equation  `vertexfunction!(v, e_s, e_d, p, t)`, i.e. `dv = 0` the `VertexFunction` is constructed as
 
@@ -66,7 +66,7 @@ Here, **dim** is the number of independent variables in the vertex equations and
 models a constant input ``I = p``, then `dim = 1` and `sym = [:I]`. For more details on the use of symbols, check out the [Examples](@ref) section or the Julia [documentation](https://docs.julialang.org/en/v1/manual/metaprogramming/). The use of symbols makes it easier to later fish out the interesting variables one wants to look at.
 
 
-### [ODEVertex](@ref)
+### [`ODEVertex`](@ref)
 
 If a vertex has local dynamics `vertexfunction!(dv, v, e_s, e_d, p, t)` described by an ODE
 the `VertexFunction` is contructed as
@@ -102,7 +102,7 @@ Just like above, `de`, `e`, `p` and `t` are the usual ODE arguments, while `v_s`
 and `v_d` are the source and destination vertices respectively.
 
 
-### [StaticEdge](@ref)
+### [`StaticEdge`](@ref)
 
 Static here means, that the edge value described by `edgefunction!` only depends on the values of the vertices the edge connects to and that no derivative of the edge's internal state is involved. One very simple and natural example is a diffusive edge:
 
@@ -117,7 +117,7 @@ StaticEdge(edgefunction!, dim, sym)
 ```
 The keywords are the same as for the vertices.
 
-### [ODEEdge](@ref)
+### [`ODEEdge`](@ref)
 
 For problems where `edgefunction!` describes the differential of an edge value, we use the `ODEEdge` function. An example for such a system is given by:
 
