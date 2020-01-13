@@ -77,7 +77,7 @@ ODEVertex(vertexfunction!, dim, mass_matrix, sym)
 
 As above, **dim** is the number of independent variables in the vertex equations and **sym** corresponds to the symbols of these variables.
 
-**mass_matrix** is an optional argument that defaults to the identity matrix `I`. If a mass matrix M is given the system ``M * dv = vertexfunction!`` will be solved.
+**mass_matrix** is an optional argument that defaults to the identity matrix `I`. If a mass matrix M is given the system `M * dv = vertexfunction!` will be solved.
 
 
 One may also call ODEVertex with keyword arguments, omitting optional arguments:
@@ -127,10 +127,10 @@ edgefunction! = (de, e, v_s, v_d, p, t) -> de .= 1000 * (v_s .- v_d .- e)
 The `EdgeFunction` object is constructed as
 
 ```julia
-ODEEdge(edgefunction!, dim, sym)
+ODEEdge(edgefunction!, dim, mass_matrix, sym)
 ```
 
-For `ODEEdge` the same simplified construction rules apply when keyword arguments are used.
+The keywords are the same as for the vertices. For `ODEEdge` the same simplified construction rules apply when keyword arguments are used.
 
 ```julia
 ODEEdge(f! = edgefunction!, dim = n)
