@@ -1,48 +1,70 @@
-# The most elaborate example is Kuramoto-inertial.jl check that out for an
-# overiew of the package.
+# You will find a step-by-step guide to this example in the docs and the
+# corresponding jupyter notebook on our github repository.
 
 using NetworkDynamics
 using LightGraphs
 using OrdinaryDiffEq
 using Plots
 
-g = barabasi_albert(10,5)
+### Defining a graph
 
-#= vertex! is basically dv = sum(e_d) - sum(e_s), so basically simple diffusion with the addition
-of staticedge! and odeedge! below. =#
+N = 20 # number of nodes
+k = 4  # average degree
+g = barabasi_albert(N, k) # a little more exciting than a bare random graph
 
-function vertex!(dv, v, e_s, e_d, p, t)
-    # Note that e_s and e_d might be empty, the code needs to be able to deal
-    # with this situation.
+
+### Functions for edges and vertices
+
+function diffusionedge!(e, v_s, v_d, p, t)
+    # usually e, v_s, v_d are arrays, hence we use the broadcasting operator .
+    e .= v_s - v_d
+    nothing
+end
+
+function diffusionvertex!(dv, v, e_s, e_d, p, t)
+    # usually v, e_s, e_d are arrays, hence we use the broadcasting operator .
     dv .= 0.
+    # edges for which v is the source
     for e in e_s
         dv .-= e
     end
+    # edges for which v is the destination
     for e in e_d
         dv .+= e
     end
     nothing
 end
 
-odeedge! = (de,e,v_s,v_d,p,t) -> de .= 1000. * (v_s - v_d - e)
-staticedge! = (e,v_s,v_d,p,t) -> e .= v_s - v_d
+### Constructing the network dynamics
 
-# We construct the Vertices and Edges with dimension 2. This means we will have
-# two parallel diffusions on the network.
+nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 1)
+nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1)
 
-odevertex = ODEVertex(f! = vertex!,dim = 2, sym = [:v,:w])
-odeedge = ODEEdge(f! = odeedge!, dim = 2, sym = [:v,:w])
+nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g)
 
-staticedge = StaticEdge(f! = staticedge!, dim = 2, sym = [:v,:w])
+### Simulation
 
-test = network_dynamics(odevertex, staticedge, g)
+x0 = randn(N) # random initial conditions
+ode_prob = ODEProblem(nd, x0, (0., 4.))
+sol = solve(ode_prob, Tsit5());
 
-x0 = rand(20)
+### Plotting
 
-test_prob = ODEProblem(test,x0,(0.,5.))
-
-test_sol = solve(test_prob, Tsit5())
+plot(sol, vars = syms_containing(nd, "v"))
 
 
-plot(test_sol, vars = syms_containing(test, "v"))
-plot(test_sol, vars = syms_containing(test, "w"))
+### Bonus: Two independet diffusions with fancy symbols
+
+
+# We will have two indepent diffusions on the network, hence dim = 2
+nd_diffusion_vertex_2 = ODEVertex(f! = diffusionvertex!, dim = 2, sym = [:x, :ϕ])
+nd_diffusion_edge_2 = StaticEdge(f! = diffusionedge!, dim = 2)
+nd_2 = network_dynamics(nd_diffusion_vertex_2, nd_diffusion_edge_2, g)
+
+x0_2 = vec(transpose([randn(N) randn(N).^2])) # x ~ N(0,1); ϕ ~ x^2
+ode_prob_2 = ODEProblem(nd_2, x0_2, (0., 4.))
+sol_2 = solve(ode_prob_2, Tsit5());
+
+
+# Try plotting the variables ϕ_i yourself. [Type \phi and press TAB]
+plot(sol_2, vars = syms_containing(nd_2, "x"))
