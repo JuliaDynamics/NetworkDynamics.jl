@@ -12,10 +12,11 @@ makedocs(
     "BasicConstructors.md",
     "Library.md",
     "Examples" => [
+	    "getting_started_with_network_dynamics.md",
 		# "Examples.md",
         # "StaticEdges.md",
 		# "DynamicEdges.md",
-		"getting_started_with_network_dynamics.md"
+    ]
     ]) #Here we have to agree on the Page structure yet.
 
 # Documenter automatically deploys documentation to gh-pages.
