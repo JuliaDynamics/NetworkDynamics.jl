@@ -1,3 +1,8 @@
+"""
+Together with Constructors this module forms the backbone of the core API.
+It provide the basic types to construct Arrays of VertexFunction and
+EdgeFunction which can be handled by network_dynamics.
+"""
 module NDFunctions
 
 using LinearAlgebra
@@ -6,11 +11,7 @@ using LinearAlgebra
 import Base.convert
 import Base.promote_rule
 
-#=
-This module needs to be documented. Together with Constructors
-it forms the backbone of the core API, users should provide us
-with Arrays of VertexFunction and EdgeFunction as well as a graph and that's it.
-=#
+
 
 export StaticVertex
 export StaticEdge
@@ -21,20 +22,87 @@ export EdgeFunction
 # export DDEVertex
 # export DDEEdge
 
+"""
+    StaticVertex(f!, dim, sym)
+
+Wrapper that ensures compatibility of a **mutating** function **`f!`** with
+the key constructor `network_dynamics`.
+
+**`f!`**  describes the local behaviour at a static node and has to respect
+the following calling syntax
+
+```julia
+f!(v, e_s, e_t, p, t) -> nothing
+```
+
+Here  `v`, `p` and `t` are the usual arguments, while
+`e_s` and `e_d` are arrays containing the edges for which the
+described vertex is the source or the destination respectively.
+
+**`dim`** is the number of independent variables in the vertex equations and
+**`sym`** is an array of symbols for these variables.
+
+For more details see the documentation.
+"""
 @Base.kwdef struct StaticVertex{T}
     f!::T # (v, e_s, e_t, p, t) -> nothing
     dim::Int # number of dimensions of x
     sym=[:v for i in 1:dim] # Symbols for the dimensions
 end
 
+"""
+    StaticEdge(f!, dim, sym)
 
+Wrapper that ensures compatibility of a **mutating** function **`f!`** with
+the key constructor `network_dynamics`.
+
+**`f!`**  describes the local behaviour at a static edge and has to respect
+the following calling syntax
+
+```julia
+f!(e, v_s, v_t, p, t) -> nothing
+```
+
+Here  `e`, `p` and `t` are the usual arguments, while
+`v_s` and `v_d` are arrays containing the vertices which are
+the source and destination of the described edge.
+
+**`dim`** is the number of independent variables in the edge equations and
+**`sym`** is an array of symbols for these variables.
+
+For more details see the documentation.
+"""
 @Base.kwdef struct StaticEdge{T}
     f!::T # (e, v_s, v_t, p, t) -> nothing
     dim::Int # number of dimensions of x
     sym=[:e for i in 1:dim] # Symbols for the dimensions
 end
 
+"""
+    ODEVertex(f!, dim, mass_matrix, sym)
 
+Wrapper that ensures compatibility of a **mutating** function **`f!`** with
+the key constructor `network_dynamics`.
+
+**`f!`**  describes the local behaviour at a dynamic node and has to respect
+the following calling syntax
+
+```julia
+f!(dv, v, e_s, e_t, p, t) -> nothing
+```
+
+Here `dv`, `v`, `p` and `t` are the usual ODE arguments, while
+`e_s` and `e_d` are arrays containing the edges for which the
+described vertex is the source or the destination respectively.
+
+**`dim`** is the number of independent variables in the vertex equations and
+**`sym`** is an array of symbols for these variables.
+**`mass_matrix`** is an optional argument that defaults to the identity
+matrix `I`. If a mass matrix M is given the system `M * dv = f!` will be
+solved.
+
+For more details see the documentation.
+"""
 @Base.kwdef struct ODEVertex{T}
     f!::T # The function with signature (dx, x, e_s, e_t, p, t) -> nothing
     dim::Int # number of dimensions of x
@@ -42,7 +110,32 @@ end
     sym=[:v for i in 1:dim] # Symbols for the dimensions
 end
 
+"""
+    ODEEdge(f!, dim, mass_matrix, sym)
 
+Wrapper that ensures compatibility of a **mutating** function **`f!`** with
+the key constructor `network_dynamics`.
+
+**`f!`**  describes the local behaviour at a dynamic edge and has to respect
+the following calling syntax
+
+```julia
+f!(de, e, v_s, v_t, p, t) -> nothing
+```
+
+Here  `de`, `e`, `p` and `t` are the usual arguments, while
+`v_s` and `v_d` are arrays containing the vertices which are
+the source and destination of the described edge.
+
+**`dim`** is the number of independent variables in the edge equations and
+**`sym`** is an array of symbols for these variables. For more details see
+the documentation.
+**`mass_matrix`** is an optional argument that defaults to the identity
+matrix `I`. If a mass matrix M is given the system `M * de = f!` will be
+solved.
+
+For more details see the documentation.
+"""
 @Base.kwdef struct ODEEdge{T}
     f!::T # The function with signature (dx, x, e_s, e_t, p, t) -> nothing
     dim::Int # number of dimensions of x
@@ -62,7 +155,9 @@ promote_rule(::Type{ODEVertex{T}}, ::Type{ODEVertex{U}}) where {T, U} = ODEVerte
 
 convert(::Type{ODEEdge}, x::StaticEdge) = ODEEdge(x)
 promote_rule(::Type{ODEEdge}, ::Type{StaticEdge}) = ODEEdge
-
+"""
+Promotes a StaticVertex to an ODEVertex.
+"""
 struct ODE_from_Static{T}
     f!::T
 end

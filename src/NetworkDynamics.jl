@@ -1,3 +1,5 @@
+"""network_dynamics: The Main Constructor of the Package. It takes Arrays of Vertex- and Edgefunction + a graph and
+spits out an ODEFunction. Others still need to be implemented. """
 module NetworkDynamics
 
 using Reexport
@@ -23,8 +25,7 @@ include("SimpleAPI.jl")
 
 export network_dynamics
 
-#= network_dynamics: The Main Constructor of the Package. It takes Arrays of Vertex- and Edgefunction + a graph and
-spits out an ODEFunction or DDEFunction. Others still need to be implemented. =#
+
 
 """
 This function assembles the arrays that hold the structural information
@@ -66,6 +67,14 @@ function collect_ve_info(vertices!, edges!, graph)
     v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array
 end
 
+"""
+    network_dynamics(vertices!, edges!, g)
+
+Assembles the the dynamical equations of the network problem into an `ODEFunction`
+compatible with the `DifferentialEquations.jl` solvers. Takes as arguments an array
+of VertexFunctions **`vertices!`**, an array of EdgeFunctions **`edges!`** and a
+`LightGraph.jl` object **`g`**.
+"""
 function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; x_prototype=zeros(1)) where {T <: ODEVertex, U <: StaticEdge}
     v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array = collect_ve_info(vertices!, edges!, graph)
 
@@ -147,7 +156,9 @@ function network_dynamics(vertices!::Array{VertexFunction}, edges!::Array{EdgeFu
     nothing
 end
 
-# Allow initializing StaticEdgeFunction for Power Dynamics
+"""
+Allow initializing StaticEdgeFunction for Power Dynamics
+"""
 function StaticEdgeFunction(vertices!, edges!, graph)
     # For reasons I don't fully understand we have to qualify the call to
     # the constructor of StaticEdgeFunction here.

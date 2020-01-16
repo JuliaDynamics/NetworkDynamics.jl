@@ -1,15 +1,17 @@
+"""
+    This module contains the logic that calculate the index structures
+    and data access structs that Network Dynamics makes use of.
+
+    The key structure is the GraphData structure that allows accessing data on
+    vertices and edges of the graph in an efficient manner. The neccessary indices
+    are precomputed in GraphStructure.
+"""
 module NetworkStructures
 
 using LightGraphs
 using LinearAlgebra
 using SparseArrays
-#= This module contains the logic that calculate the index structures
-and data access structs that Network Dynamics makes use of.
 
-The key structure is the GraphData structure that allows accessing data on
-vertices and edges of the graph in an efficient manner. The neccessary indices
-are precomputed in GraphStructure.
-=#
 
 # We need rather complicated sets of indices into the arrays that hold the
 # vertex and the edge variables. We precompute everything we can and store it
@@ -332,7 +334,7 @@ struct GetGS
 end
 
 
-#= Experimental and untested: Wrap a solutio object so we get back a GraphData
+#= Experimental and untested: Wrap a solution object so we get back a GraphData
 object at every time. =#
 export ND_Solution
 
