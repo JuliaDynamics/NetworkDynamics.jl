@@ -1,14 +1,10 @@
 # The most elaborate example is Kuramoto-inertial.jl check that out for an
 # overiew of the package.
 
-using Pkg
-Pkg.activate(@__DIR__)
-using Revise
-
 using NetworkDynamics
 using LightGraphs
-using LinearAlgebra
 using OrdinaryDiffEq
+using Plots
 
 g = barabasi_albert(10,5)
 
@@ -47,7 +43,6 @@ test_prob = ODEProblem(test,x0,(0.,5.))
 
 test_sol = solve(test_prob, Tsit5())
 
-using Plots
 
 plot(test_sol, vars = syms_containing(test, "v"))
 plot(test_sol, vars = syms_containing(test, "w"))

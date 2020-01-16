@@ -11,10 +11,10 @@ makedocs(
     "General" => "index.md",
     "BasicConstructors.md",
     "Library.md",
-    "Examples" => [  
-	"Examples.md",
+    "Examples" => [
+		"Examples.md",
         "StaticEdges.md",
-	"DynamicEdges.md",
+		"DynamicEdges.md",
+		"getting_started_with_network_dynamics.md"
 	]
     ]) #Here we have to agree on the Page structure yet.
-
