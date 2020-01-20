@@ -77,7 +77,7 @@ ODEVertex(vertexfunction!, dim, mass_matrix, sym)
 
 As above, **dim** is the number of independent variables in the vertex equations and **sym** corresponds to the symbols of these variables.
 
-**mass_matrix** is an optional argument that defaults to the identity matrix `I`. If a mass matrix M is given the system `M * dv = vertexfunction!` will be solved.
+**mass_matrix** is an optional argument that defaults to the identity matrix `I`. If a mass matrix M is given the local system `M * dv = vertexfunction!` will be solved. `network_dynamics` assembles all local mass matrices into one global mass matrix that can be passed to a differential equation solver like `Rodas4`.
 
 
 One may also call ODEVertex with keyword arguments, omitting optional arguments:

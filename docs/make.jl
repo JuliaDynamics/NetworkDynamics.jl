@@ -12,10 +12,8 @@ makedocs(
     "BasicConstructors.md",
     "Library.md",
     "Examples" => [
-		# "Examples.md",
-        # "StaticEdges.md",
-		# "DynamicEdges.md",
-		"getting_started_with_network_dynamics.md"
+	    "getting_started_with_network_dynamics.md",
+    ]
     ]) #Here we have to agree on the Page structure yet.
 
 # Documenter automatically deploys documentation to gh-pages.
@@ -27,6 +25,6 @@ makedocs(
 # SSH_DEPLOY_KEY can be used as authentication method for the worker.
 deploydocs(
     repo = "github.com/FHell/NetworkDynamics.jl.git",
-#   no longernecessary
+#   no longer necessary
 #   deploy_config = Documenter.GitHubActions(), # this should work, but it's strange
 )
