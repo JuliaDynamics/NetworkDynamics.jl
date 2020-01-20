@@ -13,9 +13,6 @@ makedocs(
     "Library.md",
     "Examples" => [
 	    "getting_started_with_network_dynamics.md",
-		# "Examples.md",
-        # "StaticEdges.md",
-		# "DynamicEdges.md",
     ]
     ]) #Here we have to agree on the Page structure yet.
 
