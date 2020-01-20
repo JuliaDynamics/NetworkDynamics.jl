@@ -55,9 +55,11 @@ Just like above the input arguments `v, e_s, e_d, p, t` are mandatory for the sy
 
 Something unexpected happens in the for-loops: The contributions of the connecting edges are subtracted or added depending on `v` being the source or the destination of an edge. However we are modeling diffusion on an **undirected** network, hence the concepts of source and destination are not defined!
 
-The reason for this syntax is found in the `LightGraphs.jl` package on which `NetworkDynamics.jl` is based. LightGraphs.jl attaches a direction to every edge of a graph and ignores the directionality if the graph is undirected. A user working only with the functionality provided by LightGraphs.jl won't neccessarily notice this design decision. However since NetworkDynamics.jl is interfacing directly to the underlying graph objects, we have to keep in mind that every edge has an *abstract direction* and thus a source and a destination.
+The reason for this syntax is found in the `LightGraphs.jl` package on which `NetworkDynamics.jl` is based.
 
 #### How to deal with abstract edge directions in undirected graphs
+
+ LightGraphs.jl attaches a direction to every edge of a graph and ignores the directionality if the graph is undirected. A user working only with the functionality provided by LightGraphs.jl won't neccessarily notice this design decision. However since NetworkDynamics.jl is interfacing directly to the underlying graph objects, we have to keep in mind that every edge has an *abstract direction* and thus a source and a destination.
 
 In the diffusion example, assume node $i$ is connected to node $j$ by an undirected edge.
 
@@ -102,7 +104,7 @@ nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g)
 ```
 
 
-**`ODEVertex`** and **`StaticEdge`** are functions wrappers that equip the functions we defined above with additional information like **`dim`** and return objects of type `VertexFunction` and `EdgeFunction`. Then the key constructor **`network_dynamics`** combines them with the topological information contained in the graph **`g`** and returns an **`ODEFunction`** compatible with the solvers of `DifferentialEquations.jl`. The keyword **`dim`** specifies the number of variables at each edge or node.
+`ODEVertex`band `StaticEdge` are functions wrappers that equip the functions we defined above with additional information like **`dim`** and return objects of type `VertexFunction` and `EdgeFunction`. Then the key constructor `network_dynamics` combines them with the topological information contained in the graph **`g`** and returns an `ODEFunction` compatible with the solvers of `DifferentialEquations.jl`. The keyword **`dim`** specifies the number of variables at each edge or node.
 
 
 ```julia

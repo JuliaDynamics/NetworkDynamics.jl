@@ -28,6 +28,6 @@ makedocs(
 # SSH_DEPLOY_KEY can be used as authentication method for the worker.
 deploydocs(
     repo = "github.com/FHell/NetworkDynamics.jl.git",
-#   no longernecessary
+#   no longer necessary
 #   deploy_config = Documenter.GitHubActions(), # this should work, but it's strange
 )
