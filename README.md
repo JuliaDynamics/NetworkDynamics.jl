@@ -15,6 +15,10 @@ Installation is straightforward with Julia's package manager.
 (v1.3) pkg> add NetworkDynamics
 ```
 
+## Getting started
+
+Check out our step-by-step tutorial as a [jupyter notebook](https://github.com/FHell/NetworkDynamics.jl/blob/master/examples/getting_started_with_network_dynamics.ipynb) or [in the docs](https://fhell.github.io/NetworkDynamics.jl/dev/getting_started_with_network_dynamics/).
+
 ## PowerDynamics
 
 [PowerDynamics.jl](https://juliaenergy.github.io/PowerDynamics.jl/stable/) is an open-source framework for dynamic power grid modeling and analysis build on top of NetworkDynamics.jl.
