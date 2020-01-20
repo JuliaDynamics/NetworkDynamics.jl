@@ -39,3 +39,18 @@ prob = ODEProblem(kuramoto_network!, x0, (0.,15), parameters)
 sol = solve(prob, Tsit5())
 
 plot(sol)
+
+# Inspecting the Kuramoto order parameter
+
+function order_parameter(s)
+    θ  = 0
+    for i in s
+        θ += exp(im * i)
+    end
+    θ / length(s)
+end
+
+# First we get the indices of the vertex variables...
+u_idx = idx_containing(kuramoto_network!, :v)
+# ... then we compute the order parameter at each time step
+plot(abs.(mapslices(order_parameter, sol[u_idx, :], dims = 1))[:])
