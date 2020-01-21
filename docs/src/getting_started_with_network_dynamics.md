@@ -61,15 +61,17 @@ The reason for this syntax is found in the `LightGraphs.jl` package on which `Ne
 
 #### How to deal with abstract edge directions in undirected graphs
 
- LightGraphs.jl attaches a direction to every edge of a graph and ignores the directionality if the graph is undirected. A user working only with the functionality provided by LightGraphs.jl won't neccessarily notice this design decision. However since NetworkDynamics.jl is interfacing directly to the underlying graph objects, we have to keep in mind that every edge has an *abstract direction* and thus a source and a destination.
+LightGraphs.jl implements edges as pairs of node indices `i` and `j`. [Pairs](https://docs.julialang.org/en/v1/base/collections/#Base.Pair) are basic julia data types consisting of two fixed elements, definded by writing `i => j`. In directed graphs these pairs additionally represent the direction in which the edge is pointing (from the first two the second element). In undirected graphs every edge is represent by only a single pair `i => j` if index `i` is smaller than index `j` and `j => i` otherwise. Hence, even for undirected graphs every edge has an abstract direction, specified by the pair of indices of the attached nodes.
 
-In the diffusion example, assume node $i$ is connected to node $j$ by an undirected edge.
+A LightGraphs.jl user, who is only interested in undirected graphs, usually does not have to deal with this abstract directionality. However since NetworkDynamics.jl is interfacing directly to the underlying graph objects, we have to keep in mind that since edges are represented by pairs every edge has an *abstract direction* and thus a source and a destination.
 
-1. Case: `i -> j`
+In the diffusion example the coupling terms have to be modified accordingly. Assume node $i$ is connected to node $j$ by an undirected edge.
 
-  If the connection is realized by an abstract edge pointing from $i$ to $j$ then the edge value will be $v_i - v_j$. Hence we have to subtract this term from `dv`.
+1. Case: `i => j`
 
-2. Case: `j -> i`
+  If the abstract edge direction points from $i$ to $j$ then the edge value will be $v_i - v_j$. Hence we have to subtract this term from `dv`.
+
+2. Case: `j => i`
 
   In this case the edge value is $v_j - v_i$. Of course that's just $-(v_i - v_j)$ and can be directly added to `dv`.
 
