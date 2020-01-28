@@ -7,7 +7,6 @@ N = 50
 k = 5
 g = barabasi_albert(N, k)
 
-function order_parameter
 
 @inline function kuramoto_vertex!(dv, v, e_s, e_d, p, t)
     dv .= p
