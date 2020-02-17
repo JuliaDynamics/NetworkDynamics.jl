@@ -130,7 +130,7 @@ We are solving the diffusion problem on the time interval $[0, 4]$ with the `Tsi
 ```@example diffusion
 using Plots
 plot(sol, vars = syms_containing(nd, "v"))
-# savefig("figures/diff1.svg"); nothing # hide
+savefig("figures/diff1.svg"); nothing # hide
 ```
 
 ![svg](figures/diff1.svg)
@@ -161,7 +161,7 @@ sol_2 = solve(ode_prob_2, Tsit5());
 
 # Try plotting the variables ϕ_i yourself. [To write ϕ type \phi and press TAB]
 plot(sol_2, vars = syms_containing(nd_2, "x"))
-# savefig("figures/diff2.svg");
+savefig("figures/diff2.svg");
 ```
 
 ![svg](figures/diff2.svg)
