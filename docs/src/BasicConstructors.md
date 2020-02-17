@@ -52,7 +52,7 @@ end
 !!! warning
     The arguments `e_s` and `e_d` are **obligatory** even if the graph is undirected and no distinction between source and destination can be made. This is necessary since [LightGraphs.jl](https://github.com/JuliaGraphs/LightGraphs.jl) implements an undirected graph in the same way as a directed graphs, but ignores the directionality information. Therefore some care has
     to be taken when dealing with assymetric coupling terms. A detailed example
-    can be found  in the [Getting started](@ref) tutorial.
+    can be found  in the [Getting started](@ref getting_started) tutorial.
 
 ### [`StaticVertex`](@ref)
 
@@ -63,7 +63,7 @@ StaticVertex(vertexfunction!, dim, sym)
 ```
 
 Here, **dim** is the number of independent variables in the vertex equations and **sym** is an array of symbols for these variables. For example, if a node
-models a constant input ``I = p``, then `dim = 1` and `sym = [:I]`. For more details on the use of symbols, check out the [Getting started](@ref) tutorial and the Julia [documentation](https://docs.julialang.org/en/v1/manual/metaprogramming/). The use of symbols makes it easier to later fish out the interesting variables one wants to look at.
+models a constant input ``I = p``, then `dim = 1` and `sym = [:I]`. For more details on the use of symbols, check out the [Getting started](@ref getting_started) tutorial and the Julia [documentation](https://docs.julialang.org/en/v1/manual/metaprogramming/). The use of symbols makes it easier to later fish out the interesting variables one wants to look at.
 
 
 ### [`ODEVertex`](@ref)
@@ -121,7 +121,7 @@ The keywords are the same as for the vertices.
 
 For problems where `edgefunction!` describes the differential of an edge value, we use the `ODEEdge` function. An example for such a system is given by:
 
-```@julia
+```julia
 edgefunction! = (de, e, v_s, v_d, p, t) -> de .= 1000 * (v_s .- v_d .- e)
 ```
 The `EdgeFunction` object is constructed as
