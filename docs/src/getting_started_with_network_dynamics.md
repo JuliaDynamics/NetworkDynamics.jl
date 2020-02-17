@@ -1,4 +1,4 @@
-# Getting started with NetworkDynamics - a simple diffusion
+# Network diffusion
 
 This introductory example explains the use of the basic types and constructors in NetworkDynamics.jl by modeling a simple diffusion on an undirected network.
 
@@ -130,10 +130,10 @@ We are solving the diffusion problem on the time interval $[0, 4]$ with the `Tsi
 ```@example diffusion
 using Plots
 plot(sol, vars = syms_containing(nd, "v"))
-savefig("figures/diff1.svg"); nothing # hide
+savefig("diff1.svg"); nothing # hide
 ```
 
-![svg](figures/diff1.svg)
+![svg](diff1.svg)
 
 The plotting is straightforward. The **`vars`** keyword allows us to pass a list of indices or *symbols* specifiying the variables we want to plot. *Symbols* can be thought of as names given to the interal variables of an `ODEFunction`, much like the variables $x$ or $\phi$ in mathematical notation. The default symbol for vertex variables is `v`, however we are free to specify other symbols by passing them to the `ODEVertex` constructor.
 
@@ -161,10 +161,10 @@ sol_2 = solve(ode_prob_2, Tsit5());
 
 # Try plotting the variables ϕ_i yourself. [To write ϕ type \phi and press TAB]
 plot(sol_2, vars = syms_containing(nd_2, "x"))
-savefig("figures/diff2.svg");
+savefig("diff2.svg");
 ```
 
-![svg](figures/diff2.svg)
+![svg](diff2.svg)
 
 ## Appendix: The network Laplacian $L$
 

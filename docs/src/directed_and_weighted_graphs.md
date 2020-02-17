@@ -1,4 +1,4 @@
-# Directed and weighted graphs - a neurodynamic model of synchronization in the human brain
+# Neurodynamic model of synchronization in the human brain
 
 #### Topics covered in this tutorial include:
  * constructing a directed, weighted graph from data
@@ -10,12 +10,9 @@
 
 Dynamics of spiking neurons have been described in a simplified manner by the [FitzHugh-Nagumo model](https://en.wikipedia.org/wiki/FitzHugh%E2%80%93Nagumo_model).
 
-```math
-\begin{eqnarray}
- \varepsilon \dot u & = & u - u^3 - v \\
- \dot v & = &  u + a
-\end{eqnarray}
-```
+$$ \varepsilon \dot u  =  u - u^3 - v $$
+$$ \dot v  =   u + a $$
+
 
 Here $u$ is a fast, excitatory variable corresponding to the membrane potential and $v$ is a slower, inhibitory varibale. $\varepsilon$ is a parameter separating these time-scales, and $a$ is a control parameter.
 
@@ -25,12 +22,8 @@ In simplified models of the brain, such *relaxation oscillators* may be used to 
 
 While different coupling schemes for FitzHugh-Nagumo oscillators have been proposed, in this tutorial we focus on coupling of the excitatory variables via electrical gap junctions, as described by the following system of equations.
 
-```math
-\begin{eqnarray}
- \varepsilon \dot u_i & = & u_i - u_i^3 - v_i - \sigma \sum_{j=1}^N G_{ij}(u_i - u_j) \\
- \dot v_i & = &  u_i + a
-\end{eqnarray}
-```
+$$ \varepsilon \dot u_i =  u_i - u_i^3 - v_i - \sigma \sum_{j=1}^N G_{ij}(u_i - u_j) $$
+$$ \dot v_i  =   u_i + a $$
 
 This is a simple diffusive coupling mediated by the difference between activation potentials in pairs of neurons. A similar coupling term was introduced in the "getting started" tutorial.
 
@@ -43,8 +36,8 @@ The network weight matrix is given as a text file containing 90 lines with 90 nu
 
 ```@example fhn
 using DelimitedFiles
-
-G = readdlm("git/NetworkDynamics.jl/examples/Norm_G_DTI.txt", ',', Float64, '\n')
+# adjust the load path for your filesystem!
+G = readdlm(joinpath(@__DIR__, "../../examples/Norm_G_DTI.txt"), ',', Float64, '\n')
 nothing # hide
 ```
 
@@ -144,7 +137,7 @@ The plot of the excitatory variables shows that they synchronize for this choice
 using Plots
 
 plot(sol, vars = idx_containing(fhn_network!, :u), legend = false, ylim=(-5, 5))
-savefig("figures/fhnsync.svg") # hide
+savefig("fhnsync.svg") # hide
 ```
 
 ![svg](fhnsync.svg)

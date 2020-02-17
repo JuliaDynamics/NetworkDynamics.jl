@@ -1,6 +1,7 @@
 using Pkg
+Pkg.activate(@__DIR__)
+push!(LOAD_PATH, Base.Filesystem.abspath("../"))
 using Documenter
-push!(LOAD_PATH, "../")
 using NetworkDynamics
 
 makedocs(
@@ -11,7 +12,8 @@ makedocs(
     "General" => "index.md",
     "BasicConstructors.md",
     "Library.md",
-    "Examples" => [
-		"getting_started_with_network_dynamics.md"
-	]
-    ]) #Here we have to agree on the Page structure yet.
+    "Tutorials" => [
+		"Getting started" => "getting_started_with_network_dynamics.md",
+		"Directed and weighted graphs" => "directed_and_weighted_graphs.md"
+		]
+   	])
