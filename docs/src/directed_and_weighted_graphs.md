@@ -148,4 +148,4 @@ plot(sol, vars = idx_containing(fhn_network!, :u), legend = false, ylim=(-5, 5))
 savefig("fhnsync.svg") # hide
 ```
 
-![svg](fhnsync.svg)
+![](fhnsync.svg)
