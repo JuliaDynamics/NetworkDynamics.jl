@@ -1,4 +1,4 @@
-# Network diffusion
+# [Network diffusion](@id getting_started)
 
 This introductory example explains the use of the basic types and constructors in NetworkDynamics.jl by modeling a simple diffusion on an undirected network.
 
@@ -129,7 +129,7 @@ We are solving the diffusion problem on the time interval $[0, 4]$ with the `Tsi
 
 ```@example diffusion
 using Plots
-plot(sol, vars = syms_containing(nd, "v"))
+plot(sol, vars = syms_containing(nd, "v"));
 savefig("diff1.svg"); nothing # hide
 ```
 
@@ -160,8 +160,8 @@ sol_2 = solve(ode_prob_2, Tsit5());
 
 
 # Try plotting the variables ϕ_i yourself. [To write ϕ type \phi and press TAB]
-plot(sol_2, vars = syms_containing(nd_2, "x"))
-savefig("diff2.svg");
+plot(sol_2, vars = syms_containing(nd_2, "x"));
+savefig("diff2.svg"); nothing # hide
 ```
 
 ![svg](diff2.svg)
