@@ -11,10 +11,10 @@
 Dynamics of spiking neurons have been described in a simplified manner by the [FitzHugh-Nagumo model](https://en.wikipedia.org/wiki/FitzHugh%E2%80%93Nagumo_model).
 
 ```math
-\varepsilon \dot u  =  u - u^3 - v
-```
-```math
-\dot v  =   u + a
+\begin{aligned}
+\varepsilon \dot u &  =  u - u^3 - v \\
+\dot v & =  u + a
+\end{aligned}
 ```
 
 
@@ -27,10 +27,10 @@ In simplified models of the brain, such *relaxation oscillators* may be used to 
 While different coupling schemes for FitzHugh-Nagumo oscillators have been proposed, in this tutorial we focus on coupling of the excitatory variables via electrical gap junctions, as described by the following system of equations.
 
 ```math
-\varepsilon \dot u_i =  u_i - u_i^3 - v_i - \sigma \sum_{j=1}^N G_{ij}(u_i - u_j)
-```
-```math
-\dot v_i  =   u_i + a
+\begin{aligned}
+\varepsilon \dot u_i & =  u_i - u_i^3 - v_i - \sigma \sum_{j=1}^N G_{ij}(u_i - u_j) \\
+\dot v_i & =   u_i + a
+\end{aligned}
 ```
 
 This is a simple diffusive coupling mediated by the difference between activation potentials in pairs of neurons. A similar coupling term was introduced in the "getting started" tutorial.
