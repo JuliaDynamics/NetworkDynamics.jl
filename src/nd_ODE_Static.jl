@@ -1,6 +1,5 @@
 module nd_ODE_Static_mod
 
-
 using ..NetworkStructures
 using ..NDFunctions
 using ..Utilities
@@ -36,12 +35,12 @@ function (d::nd_ODE_Static)(dx, x, p, t)
 
     @inbounds begin
 
-    for i in 1:d.graph_structure.num_e
+    Threads.@threads for i in 1:d.graph_structure.num_e
         # maybe_idx(d.edges!,i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], maybe_idx(p, i+d.graph_structure.num_v), t)
         maybe_idx(d.edges!, i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], p_e_idx(p, i), t)
     end
 
-    for i in 1:d.graph_structure.num_v
+    Threads.@threads for i in 1:d.graph_structure.num_v
         # maybe_idx(d.vertices!,i).f!(view(dx,d.graph_structure.v_idx[i]), gd.v[i], gd.e_s_v[i], gd.e_d_v[i], maybe_idx(p, i), t)
         maybe_idx(d.vertices!,i).f!(view(dx,d.graph_structure.v_idx[i]), gd.v[i], gd.e_s_v[i], gd.e_d_v[i], p_v_idx(p, i), t)
     end
@@ -57,7 +56,7 @@ function (d::nd_ODE_Static)(x, p, t, ::Type{GetGD})
 
     @inbounds begin
 
-    for i in 1:d.graph_structure.num_e
+    Threads.@threads for i in 1:d.graph_structure.num_e
         maybe_idx(d.edges!,i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], p_e_idx(p, i), t)
     end
 
