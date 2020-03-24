@@ -35,7 +35,7 @@ constructors.
 """
 function collect_ve_info(vertices!, edges!, graph)
     if vertices! isa Array
-        @assert length(vertices!) == length(vertices(graph))
+        @assert length(vertices!) == nv(graph)
         v_dims = [v.dim for v in vertices!]
         symbols_v = [Symbol(vertices![i].sym[j],"_",i) for i in 1:length(vertices!) for j in 1:v_dims[i]]
         mmv_array = [v.mass_matrix for v in vertices!]
@@ -46,7 +46,7 @@ function collect_ve_info(vertices!, edges!, graph)
     end
 
     if edges! isa Array
-        @assert length(edges!) == length(edges(graph))
+        @assert length(edges!) == ne(graph)
         e_dims = [e.dim for e in edges!]
         symbols_e = [Symbol(edges![i].sym[j],"_",i) for i in 1:length(edges!) for j in 1:e_dims[i]]
         if eltype(edges!) <: StaticEdge
@@ -137,8 +137,8 @@ function network_dynamics(vertices!,  edges!, graph)
 end
 
 function network_dynamics(vertices!::Array{VertexFunction}, edges!::Array{EdgeFunction}, graph)
-    @assert length(vertices!) == length(vertices(graph))
-    @assert length(edges!) == length(edges(graph))
+    @assert length(vertices!) == nv(graph)
+    @assert length(edges!) == ne(graph)
 
     contains_dyn_edge = false
 
