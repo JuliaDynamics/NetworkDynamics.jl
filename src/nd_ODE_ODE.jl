@@ -5,6 +5,7 @@ using ..NDFunctions
 using ..Utilities
 
 export nd_ODE_ODE
+export nd_ODE_ODE_parallel
 
 #= The arguments of the vertex functions must be of the form (dv,v,e_s,e_d,p,t),
 where dv is the vertex variable derivative, v the vertex variable and e_s and e_d Arrays of edge variables that
@@ -31,6 +32,7 @@ end
     GraphData(v_array, e_array, gs)
 end
 
+### Single-threaded
 
 @Base.kwdef struct nd_ODE_ODE{G, T, T1, T2}
     vertices!::T1
@@ -41,6 +43,43 @@ end
 end
 
 function (d::nd_ODE_ODE)(dx, x, p, t)
+    gd = prep_gd(view(dx, 1:2), view(x, 1:2), x, d.graph_data, d.graph_structure)
+
+    @inbounds begin
+
+    for i in 1:d.graph_structure.num_e
+        maybe_idx(d.edges!, i).f!(view(dx,d.graph_structure.e_idx[i] .+ d.graph_structure.dim_v), gd.e[i], gd.v_s_e[i], gd.v_d_e[i], p_e_idx(p, i), t)
+    end
+
+    for i in 1:d.graph_structure.num_v
+        maybe_idx(d.vertices!,i).f!(view(dx,d.graph_structure.v_idx[i]), gd.v[i], gd.e_s_v[i], gd.e_d_v[i], p_v_idx(p, i), t)
+    end
+
+    end
+
+end
+
+
+function (d::nd_ODE_ODE)(x, p, t, ::Type{GetGD})
+    prep_gd(view(x, 1:2), view(x, 1:2), x, d.graph_data, d.graph_structure)
+end
+
+function (d::nd_ODE_ODE)(::Type{GetGS})
+    d.graph_structure
+end
+
+
+### Multi-threaded
+
+@Base.kwdef struct nd_ODE_ODE_parallel{G, T, T1, T2}
+    vertices!::T1
+    edges!::T2
+    graph::G
+    graph_structure::GraphStruct
+    graph_data::GraphData{T, T}
+end
+
+function (d::nd_ODE_ODE_parallel)(dx, x, p, t)
     gd = prep_gd(view(dx, 1:2), view(x, 1:2), x, d.graph_data, d.graph_structure)
 
     @inbounds begin
@@ -58,13 +97,12 @@ function (d::nd_ODE_ODE)(dx, x, p, t)
 end
 
 
-function (d::nd_ODE_ODE)(x, p, t, ::Type{GetGD})
+function (d::nd_ODE_ODE_parallel)(x, p, t, ::Type{GetGD})
     prep_gd(view(x, 1:2), view(x, 1:2), x, d.graph_data, d.graph_structure)
 end
 
-function (d::nd_ODE_ODE)(::Type{GetGS})
+function (d::nd_ODE_ODE_parallel)(::Type{GetGS})
     d.graph_structure
 end
-
 
 end #module
