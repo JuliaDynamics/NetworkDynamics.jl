@@ -68,14 +68,15 @@ function collect_ve_info(vertices!, edges!, graph)
 end
 
 """
-    network_dynamics(vertices!, edges!, g)
+    network_dynamics(vertices!, edges!, g; parallel = false)
 
 Assembles the the dynamical equations of the network problem into an `ODEFunction`
 compatible with the `DifferentialEquations.jl` solvers. Takes as arguments an array
 of VertexFunctions **`vertices!`**, an array of EdgeFunctions **`edges!`** and a
-`LightGraph.jl` object **`g`**.
+`LightGraph.jl` object **`g`**. The optional argument `parallel` is a boolean
+value that denotes if the central loop should be executed in parallel. 
 """
-function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; x_prototype=zeros(1)) where {T <: ODEVertex, U <: StaticEdge}
+function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: StaticEdge}
     v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array = collect_ve_info(vertices!, edges!, graph)
 
     v_array = similar(x_prototype, sum(v_dims))
@@ -87,15 +88,27 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
 
     graph_data = GraphData(v_array, e_array, graph_stucture)
 
-    nd! = nd_ODE_Static(vertices!, edges!, graph, graph_stucture, graph_data)
+    if parallel
+        ENV["JULIA_NUM_THREADS"] > 1 ? nothing :
+        println("Warning: You are using multi-threading with only one thread
+        available to Julia. Consider re-starting Julia with the environment
+        variable JULIA_NUM_THREADS set to the number of physical cores of your CPU")
 
+        nd! = nd_ODE_Static_parallel(vertices!, edges!, graph, graph_stucture, graph_data)
+    else
+        ENV["JULIA_NUM_THREADS"] > 1 ?
+        println("Your instance of Julia has more than one thread available for
+        executing code. Consider calling network_dynamics with the keyword
+        parallel=true.") : nothing
+        nd! = nd_ODE_Static(vertices!, edges!, graph, graph_stucture, graph_data)
+    end
     mass_matrix = construct_mass_matrix(mmv_array, graph_stucture)
 
     ODEFunction(nd!; mass_matrix = mass_matrix, syms=symbols)
 end
 
 
-function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; x_prototype=zeros(1)) where {T <: ODEVertex, U <: ODEEdge}
+function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: ODEEdge}
     v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array = collect_ve_info(vertices!, edges!, graph)
 
     x_array = similar(x_prototype, sum(v_dims) + sum(e_dims))
@@ -109,14 +122,28 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
 
     graph_data = GraphData(v_array, e_array, graph_stucture)
 
-    nd! = nd_ODE_ODE(vertices!, edges!, graph, graph_stucture, graph_data)
+    if parallel
+        ENV["JULIA_NUM_THREADS"] > 1 ? nothing :
+        println("Warning: You are using multi-threading with only one thread
+        available to Julia. Consider re-starting Julia with the environment
+        variable JULIA_NUM_THREADS set to the number of physical cores of your CPU")
+
+        nd! = nd_ODE_ODE_parallel(vertices!, edges!, graph, graph_stucture, graph_data)
+    else
+        ENV["JULIA_NUM_THREADS"] > 1 ?
+        println("Your instance of Julia has more than one thread available for
+        executing code. Consider calling network_dynamics with the keyword
+        parallel=true.") : nothing
+        nd! = nd_ODE_ODE(vertices!, edges!, graph, graph_stucture, graph_data)
+    end
+
 
     mass_matrix = construct_mass_matrix(mmv_array, mme_array, graph_stucture)
 
     ODEFunction(nd!; mass_matrix = mass_matrix, syms=symbols)
 end
 
-function network_dynamics(vertices!,  edges!, graph)
+function network_dynamics(vertices!,  edges!, graph; parallel=false)
     try
         Array{VertexFunction}(vertices!)
     catch err
@@ -133,10 +160,10 @@ function network_dynamics(vertices!,  edges!, graph)
     end
     va! = Array{VertexFunction}(vertices!)
     ea! = Array{EdgeFunction}(edges!)
-    network_dynamics(va!,  ea!, graph)
+    network_dynamics(va!,  ea!, graph, parallel = parallel)
 end
 
-function network_dynamics(vertices!::Array{VertexFunction}, edges!::Array{EdgeFunction}, graph)
+function network_dynamics(vertices!::Array{VertexFunction}, edges!::Array{EdgeFunction}, graph; parallel=false)
     @assert length(vertices!) == nv(graph)
     @assert length(edges!) == ne(graph)
 
@@ -149,9 +176,9 @@ function network_dynamics(vertices!::Array{VertexFunction}, edges!::Array{EdgeFu
     end
 
     if contains_dyn_edge
-        return network_dynamics(Array{ODEVertex}(vertices!),Array{ODEEdge}(edges!), graph)
+        return network_dynamics(Array{ODEVertex}(vertices!),Array{ODEEdge}(edges!), graph, parallel = parallel)
     else
-        return network_dynamics(Array{ODEVertex}(vertices!),Array{StaticEdge}(edges!), graph)
+        return network_dynamics(Array{ODEVertex}(vertices!),Array{StaticEdge}(edges!), graph, parallel = parallel)
     end
     nothing
 end
@@ -159,10 +186,10 @@ end
 """
 Allow initializing StaticEdgeFunction for Power Dynamics
 """
-function StaticEdgeFunction(vertices!, edges!, graph)
+function StaticEdgeFunction(vertices!, edges!, graph; parallel = false)
     # For reasons I don't fully understand we have to qualify the call to
     # the constructor of StaticEdgeFunction here.
-    nd_ODE_Static_mod.StaticEdgeFunction(network_dynamics(vertices!, edges!, graph))
+    nd_ODE_Static_mod.StaticEdgeFunction(network_dynamics(vertices!, edges!, graph, parallel = parallel))
 end
 
 
