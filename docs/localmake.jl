@@ -11,6 +11,7 @@ makedocs(
     pages = [
     "General" => "index.md",
     "BasicConstructors.md",
+	"Multithreading.md",
     "Library.md",
     "Tutorials" => [
 		"Getting started" => "getting_started_with_network_dynamics.md",
