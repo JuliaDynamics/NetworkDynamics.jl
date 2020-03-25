@@ -1,6 +1,6 @@
 # [Network diffusion](@id getting_started)
 
-This introductory example explains the use of the basic types and constructors in NetworkDynamics.jl by modeling a simple diffusion on an undirected network.
+This introductory example explains the use of the basic types and constructors in NetworkDynamics.jl by modeling a simple diffusion on an undirected network. A corresponding `IJulia` [notebook](https://github.com/FHell/NetworkDynamics.jl/tree/master/examples) is available on GitHub.
 
 ## Theoretical background
 
@@ -63,7 +63,7 @@ The reason for this syntax is found in the `LightGraphs.jl` package on which `Ne
 
 LightGraphs.jl implements edges as pairs of node indices `i` and `j`. [Pairs](https://docs.julialang.org/en/v1/base/collections/#Base.Pair) are basic julia data types consisting of two fixed elements, definded by writing `i => j`. In directed graphs these pairs additionally represent the direction in which the edge is pointing (from the first two the second element). In undirected graphs every edge is represent by only a single pair `i => j` if index `i` is smaller than index `j` and `j => i` otherwise. Hence, even for undirected graphs every edge has an abstract direction, specified by the pair of indices of the attached nodes.
 
-A LightGraphs.jl user, who is only interested in undirected graphs, usually does not have to deal with this abstract directionality. However since NetworkDynamics.jl is interfacing directly to the underlying graph objects, we have to keep in mind that since edges are represented by pairs every edge has an *abstract direction* and thus a source and a destination.
+A LightGraphs.jl user, who is only interested in undirected graphs, usually does not have to deal with this abstract directionality. However since NetworkDynamics.jl is interfacing directly to the underlying graph objects, we have to keep in mind that every edge has an *abstract direction* and thus a source and a destination.
 
 In the diffusion example the coupling terms have to be modified accordingly. Assume node $i$ is connected to node $j$ by an undirected edge.
 

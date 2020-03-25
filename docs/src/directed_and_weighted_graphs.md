@@ -1,5 +1,7 @@
 # Neurodynamic model of synchronization in the human brain
 
+ An `IJulia` [notebook](https://github.com/FHell/NetworkDynamics.jl/tree/master/examples) corresponding to this tutorial is available on GitHub.
+
 #### Topics covered in this tutorial include:
  * constructing a directed, weighted graph from data
  * some useful macros
