@@ -6,7 +6,7 @@ Since version `0.3.0` multi-threading via the `Threads.@threads` macro is possib
 network_dynamics(vertices!, edges!, graph, parallel=true)
 ```
 
-In order for this to take effect, multiple threads have to be available. This is achieved by setting the environment variable `JULIA_NUM_THREADS` **before** starting Julia.  To start Julia from a bash shell and with 4 threads use
+In order for this to take effect, multiple threads have to be available. This is achieved by setting the environment variable `JULIA_NUM_THREADS` **before** starting Julia.  To start Julia from a bash shell and with 4 threads use:
 ```
 $ env JULIA_NUM_THREADS=4 julia
 ```
