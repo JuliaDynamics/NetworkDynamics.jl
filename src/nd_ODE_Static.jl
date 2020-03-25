@@ -6,7 +6,6 @@ using ..Utilities
 
 
 export nd_ODE_Static
-export nd_ODE_Static_parallel
 export StaticEdgeFunction
 
 #=  =#
@@ -21,7 +20,7 @@ end
     GraphData(x, e_array, gs)
 end
 
-### Single-threaded
+
 
 @Base.kwdef struct nd_ODE_Static{G, Tv, Te, T1, T2}
     vertices!::T1
@@ -29,21 +28,32 @@ end
     graph::G
     graph_structure::GraphStruct
     graph_data::GraphData{Tv, Te}
+    parallel::Bool # enables multithreading for the core loop
 end
 
 
 function (d::nd_ODE_Static)(dx, x, p, t)
     gd = prep_gd(dx, x, d.graph_data, d.graph_structure)
 
-    @inbounds begin
+    @inbounds if d.parallel
 
-    for i in 1:d.graph_structure.num_e
-        maybe_idx(d.edges!, i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], p_e_idx(p, i), t)
-    end
+        Threads.@threads for i in 1:d.graph_structure.num_e
+            maybe_idx(d.edges!, i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], p_e_idx(p, i), t)
+        end
 
-    for i in 1:d.graph_structure.num_v
-        maybe_idx(d.vertices!,i).f!(view(dx,d.graph_structure.v_idx[i]), gd.v[i], gd.e_s_v[i], gd.e_d_v[i], p_v_idx(p, i), t)
-    end
+        Threads.@threads for i in 1:d.graph_structure.num_v
+            maybe_idx(d.vertices!,i).f!(view(dx,d.graph_structure.v_idx[i]), gd.v[i], gd.e_s_v[i], gd.e_d_v[i], p_v_idx(p, i), t)
+        end
+
+    else
+
+        for i in 1:d.graph_structure.num_e
+            maybe_idx(d.edges!, i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], p_e_idx(p, i), t)
+        end
+
+        for i in 1:d.graph_structure.num_v
+            maybe_idx(d.vertices!,i).f!(view(dx,d.graph_structure.v_idx[i]), gd.v[i], gd.e_s_v[i], gd.e_d_v[i], p_v_idx(p, i), t)
+        end
 
     end
 
@@ -54,11 +64,17 @@ end
 function (d::nd_ODE_Static)(x, p, t, ::Type{GetGD})
     gd = prep_gd(x, x, d.graph_data, d.graph_structure)
 
-    @inbounds begin
+    @inbounds if d.parallel
 
-    for i in 1:d.graph_structure.num_e
-        maybe_idx(d.edges!,i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], p_e_idx(p, i), t)
-    end
+        Threads.@threads for i in 1:d.graph_structure.num_e
+            maybe_idx(d.edges!,i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], p_e_idx(p, i), t)
+        end
+
+    else
+
+        for i in 1:d.graph_structure.num_e
+            maybe_idx(d.edges!,i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], p_e_idx(p, i), t)
+        end
 
     end
 
@@ -67,57 +83,6 @@ end
 
 
 function (d::nd_ODE_Static)(::Type{GetGS})
-    d.graph_structure
-end
-
-
-
-### Multi-threaded
-
-@Base.kwdef struct nd_ODE_Static_parallel{G, Tv, Te, T1, T2}
-    vertices!::T1
-    edges!::T2
-    graph::G
-    graph_structure::GraphStruct
-    graph_data::GraphData{Tv, Te}
-end
-
-
-function (d::nd_ODE_Static_parallel)(dx, x, p, t)
-    gd = prep_gd(dx, x, d.graph_data, d.graph_structure)
-
-    @inbounds begin
-
-    Threads.@threads for i in 1:d.graph_structure.num_e
-        maybe_idx(d.edges!, i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], p_e_idx(p, i), t)
-    end
-
-    Threads.@threads for i in 1:d.graph_structure.num_v
-        maybe_idx(d.vertices!,i).f!(view(dx,d.graph_structure.v_idx[i]), gd.v[i], gd.e_s_v[i], gd.e_d_v[i], p_v_idx(p, i), t)
-    end
-
-    end
-
-    nothing
-end
-
-
-function (d::nd_ODE_Static_parallel)(x, p, t, ::Type{GetGD})
-    gd = prep_gd(x, x, d.graph_data, d.graph_structure)
-
-    @inbounds begin
-
-    Threads.@threads for i in 1:d.graph_structure.num_e
-        maybe_idx(d.edges!,i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], p_e_idx(p, i), t)
-    end
-
-    end
-
-    gd
-end
-
-
-function (d::nd_ODE_Static_parallel)(::Type{GetGS})
     d.graph_structure
 end
 
