@@ -100,23 +100,3 @@ function (sef::StaticEdgeFunction)(x, p, t)
 end
 
 end #module
-
-struct gtest
-    b::Bool
-    _b::Bool
-    function gtest(b)
-        b ? new(true, true) : new(false, false)
-    end
-end
-
-function (g::gtest)(x)
-    if g._b
-      x+1
-    end
-end
-
-K = gtest(true)
-
-using BenchmarkTools
-
-@benchmark K(1)
