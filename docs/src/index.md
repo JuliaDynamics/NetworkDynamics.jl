@@ -28,7 +28,3 @@ DifferentialEquations.jl calling syntax.
 nd = network_dynamics(vertices!::Array{VertexFunction},  edges!::Array{EdgeFunction}, g)
 nd(dx, x, p, t)
 ```
-
-
-
-This page is still in development. :)
