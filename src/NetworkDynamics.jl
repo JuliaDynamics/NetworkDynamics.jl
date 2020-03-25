@@ -79,14 +79,14 @@ value that denotes if the central loop should be executed in parallel.
 function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: StaticEdge}
     if parallel
         parse(Int, ENV["JULIA_NUM_THREADS"]) > 1 ? nothing :
-        println("Warning: You are using multi-threading with only one thread
-        available to Julia. Consider re-starting Julia with the environment
-        variable JULIA_NUM_THREADS set to the number of physical cores of your CPU")
+        print("Warning: You are using multi-threading with only one thread ",
+        "available to Julia. Consider re-starting Julia with the environment ",
+        "variable JULIA_NUM_THREADS set to the number of physical cores of your CPU.")
     else
         parse(Int, ENV["JULIA_NUM_THREADS"])  > 1 ?
-        println("Your instance of Julia has more than one thread available for
-        executing code. Consider calling network_dynamics with the keyword
-        parallel=true.") : nothing
+        print("Your instance of Julia has more than one thread available for ",
+        "executing code. Consider calling network_dynamics with the keyword ",
+        "parallel=true.") : nothing
     end
 
     v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array = collect_ve_info(vertices!, edges!, graph)
@@ -110,14 +110,14 @@ end
 function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: ODEEdge}
     if parallel
         parse(Int, ENV["JULIA_NUM_THREADS"]) > 1 ? nothing :
-        println("Warning: You are using multi-threading with only one thread
-        available to Julia. Consider re-starting Julia with the environment
-        variable JULIA_NUM_THREADS set to the number of physical cores of your CPU")
+        print("Warning: You are using multi-threading with only one thread ",
+        "available to Julia. Consider re-starting Julia with the environment ",
+        "variable JULIA_NUM_THREADS set to the number of physical cores of your CPU.")
     else
         parse(Int, ENV["JULIA_NUM_THREADS"])  > 1 ?
-        println("Your instance of Julia has more than one thread available for
-        executing code. Consider calling network_dynamics with the keyword
-        parallel=true.") : nothing
+        print("Your instance of Julia has more than one thread available for ",
+        "executing code. Consider calling network_dynamics with the keyword ",
+        "parallel=true.") : nothing
     end
 
     v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array = collect_ve_info(vertices!, edges!, graph)
