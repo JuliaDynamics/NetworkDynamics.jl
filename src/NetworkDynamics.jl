@@ -78,12 +78,13 @@ value that denotes if the central loop should be executed in parallel.
 """
 function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: StaticEdge}
     if parallel
+        haskey(ENV, "JULIA_NUM_THREADS") &&
         parse(Int, ENV["JULIA_NUM_THREADS"]) > 1 ? nothing :
         print("Warning: You are using multi-threading with only one thread ",
         "available to Julia. Consider re-starting Julia with the environment ",
         "variable JULIA_NUM_THREADS set to the number of physical cores of your CPU.")
     else
-        parse(Int, ENV["JULIA_NUM_THREADS"])  > 1 ?
+        haskey(ENV, "JULIA_NUM_THREADS") && parse(Int, ENV["JULIA_NUM_THREADS"])  > 1 ?
         print("Your instance of Julia has more than one thread available for ",
         "executing code. Consider calling network_dynamics with the keyword ",
         "parallel=true.") : nothing
@@ -109,12 +110,13 @@ end
 
 function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: ODEEdge}
     if parallel
+        haskey(ENV, "JULIA_NUM_THREADS") &&
         parse(Int, ENV["JULIA_NUM_THREADS"]) > 1 ? nothing :
         print("Warning: You are using multi-threading with only one thread ",
         "available to Julia. Consider re-starting Julia with the environment ",
         "variable JULIA_NUM_THREADS set to the number of physical cores of your CPU.")
     else
-        parse(Int, ENV["JULIA_NUM_THREADS"])  > 1 ?
+        haskey(ENV, "JULIA_NUM_THREADS") && parse(Int, ENV["JULIA_NUM_THREADS"])  > 1 ?
         print("Your instance of Julia has more than one thread available for ",
         "executing code. Consider calling network_dynamics with the keyword ",
         "parallel=true.") : nothing
