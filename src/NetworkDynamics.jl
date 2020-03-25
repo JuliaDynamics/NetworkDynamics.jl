@@ -77,6 +77,18 @@ of VertexFunctions **`vertices!`**, an array of EdgeFunctions **`edges!`** and a
 value that denotes if the central loop should be executed in parallel.
 """
 function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: StaticEdge}
+    if parallel
+        parse(Int, ENV["JULIA_NUM_THREADS"]) > 1 ? nothing :
+        println("Warning: You are using multi-threading with only one thread
+        available to Julia. Consider re-starting Julia with the environment
+        variable JULIA_NUM_THREADS set to the number of physical cores of your CPU")
+    else
+        parse(Int, ENV["JULIA_NUM_THREADS"])  > 1 ?
+        println("Your instance of Julia has more than one thread available for
+        executing code. Consider calling network_dynamics with the keyword
+        parallel=true.") : nothing
+    end
+
     v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array = collect_ve_info(vertices!, edges!, graph)
 
     v_array = similar(x_prototype, sum(v_dims))
@@ -88,20 +100,7 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
 
     graph_data = GraphData(v_array, e_array, graph_stucture)
 
-    if parallel
-        parse(Int, ENV["JULIA_NUM_THREADS"]) > 1 ? nothing :
-        println("Warning: You are using multi-threading with only one thread
-        available to Julia. Consider re-starting Julia with the environment
-        variable JULIA_NUM_THREADS set to the number of physical cores of your CPU")
-
-        nd! = nd_ODE_Static_parallel(vertices!, edges!, graph, graph_stucture, graph_data)
-    else
-        parse(Int, ENV["JULIA_NUM_THREADS"])  > 1 ?
-        println("Your instance of Julia has more than one thread available for
-        executing code. Consider calling network_dynamics with the keyword
-        parallel=true.") : nothing
-        nd! = nd_ODE_Static(vertices!, edges!, graph, graph_stucture, graph_data)
-    end
+    nd! = nd_ODE_Static(vertices!, edges!, graph, graph_stucture, graph_data, parallel)
     mass_matrix = construct_mass_matrix(mmv_array, graph_stucture)
 
     ODEFunction(nd!; mass_matrix = mass_matrix, syms=symbols)
@@ -109,6 +108,18 @@ end
 
 
 function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: ODEEdge}
+    if parallel
+        parse(Int, ENV["JULIA_NUM_THREADS"]) > 1 ? nothing :
+        println("Warning: You are using multi-threading with only one thread
+        available to Julia. Consider re-starting Julia with the environment
+        variable JULIA_NUM_THREADS set to the number of physical cores of your CPU")
+    else
+        parse(Int, ENV["JULIA_NUM_THREADS"])  > 1 ?
+        println("Your instance of Julia has more than one thread available for
+        executing code. Consider calling network_dynamics with the keyword
+        parallel=true.") : nothing
+    end
+
     v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array = collect_ve_info(vertices!, edges!, graph)
 
     x_array = similar(x_prototype, sum(v_dims) + sum(e_dims))
@@ -122,21 +133,7 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
 
     graph_data = GraphData(v_array, e_array, graph_stucture)
 
-    if parallel
-        parse(Int, ENV["JULIA_NUM_THREADS"])  > 1 ? nothing :
-        println("Warning: You are using multi-threading with only one thread
-        available to Julia. Consider re-starting Julia with the environment
-        variable JULIA_NUM_THREADS set to the number of physical cores of your CPU")
-
-        nd! = nd_ODE_ODE_parallel(vertices!, edges!, graph, graph_stucture, graph_data)
-    else
-        parse(Int, ENV["JULIA_NUM_THREADS"])  > 1 ?
-        println("Your instance of Julia has more than one thread available for
-        executing code. Consider calling network_dynamics with the keyword
-        parallel=true.") : nothing
-        nd! = nd_ODE_ODE(vertices!, edges!, graph, graph_stucture, graph_data)
-    end
-
+    nd! = nd_ODE_ODE(vertices!, edges!, graph, graph_stucture, graph_data, parallel)
 
     mass_matrix = construct_mass_matrix(mmv_array, mme_array, graph_stucture)
 
