@@ -38,7 +38,7 @@ end
 nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 1)
 nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1)
 
-nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g)
+nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g, parallel=true)
 
 ### Benchmarking
 println("Number of Threads: ", ENV["JULIA_NUM_THREADS"])
@@ -69,7 +69,7 @@ end
 
 nd_diffusion_dedge = ODEEdge(f! = diffusion_dedge!, dim = 1)
 
-nd_ode = network_dynamics(nd_diffusion_vertex, nd_diffusion_dedge, g)
+nd_ode = network_dynamics(nd_diffusion_vertex, nd_diffusion_dedge, g, parallel=true)
 
 p  = (collect(1:nv(g))./nv(g) .- 0.5, 5 .* ones(ne(g)))
 
