@@ -41,7 +41,7 @@ nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1)
 nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g, parallel=true)
 
 ### Benchmarking
-println("Number of Threads: ", ENV["JULIA_NUM_THREADS"])
+println("Number of Threads: ", haskey(ENV, "JULIA_NUM_THREADS") ? ENV["JULIA_NUM_THREADS"] : "1")
 println("Benchmarking ODE_Static...")
 p  = (collect(1:nv(g))./nv(g) .- 0.5, .5 .* ones(ne(g)))
 
