@@ -38,15 +38,17 @@ end
 nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 1)
 nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1)
 
-nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g, parallel=true)
 
 ### Benchmarking
 println("Number of Threads: ", haskey(ENV, "JULIA_NUM_THREADS") ? ENV["JULIA_NUM_THREADS"] : "1")
-println("Benchmarking ODE_Static...")
+println("\nBenchmarking ODE_Static...")
 p  = (collect(1:nv(g))./nv(g) .- 0.5, .5 .* ones(ne(g)))
-
+println("\nsingle-threaded...")
+nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g, parallel=false)
 display(@benchmark nd(randn(N), randn(N), p , 0,))
-
+println("\nparallel...")
+nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g, parallel=true)
+display(@benchmark nd(randn(N), randn(N), p , 0,))
 #=
 ### Simulation
 using OrdinaryDiffEq
@@ -69,14 +71,19 @@ end
 
 nd_diffusion_dedge = ODEEdge(f! = diffusion_dedge!, dim = 1)
 
-nd_ode = network_dynamics(nd_diffusion_vertex, nd_diffusion_dedge, g, parallel=true)
+
 
 p  = (collect(1:nv(g))./nv(g) .- 0.5, 5 .* ones(ne(g)))
 
 ### Benchmarking
 println("\nBenchmarking ODE_ODE...")
-
+println("\nsingle-threaded...")
+nd_ode = network_dynamics(nd_diffusion_vertex, nd_diffusion_dedge, g, parallel=false)
 display(@benchmark nd_ode(randn(nv(g) + ne(g)), randn(nv(g) + ne(g)), p , 0,))
+println("\nparallel...")
+nd_ode = network_dynamics(nd_diffusion_vertex, nd_diffusion_dedge, g, parallel=true)
+display(@benchmark nd_ode(randn(nv(g) + ne(g)), randn(nv(g) + ne(g)), p , 0,))
+
 
 println("")
 #=
