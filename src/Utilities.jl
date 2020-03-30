@@ -7,11 +7,12 @@ export maybe_idx, p_v_idx, p_e_idx, @nd_threads
 
 
 """
-nd_threads: Allows control over threading by the 1st argument, 
-a boolean (likely from the network object). 
+nd_threads: Allows control over threading by the 1st argument,
+a boolean (likely from the network object).
 This allows you to control for multithreading at runtime without
 code duplication.
 """
+
 macro nd_threads(trigger,args...)
     na = length(args)
     if na != 1
@@ -19,8 +20,8 @@ macro nd_threads(trigger,args...)
     end
     ex = args[1]
     if ex.head == :for
-        # Need to escape the bounds of the loop, but not the whole expression, 
-        # in order to work with the base Threads.@thread macro. 
+        # Need to escape the bounds of the loop, but not the whole expression,
+        # in order to work with the base Threads.@thread macro.
         # That macro does it's own escaping, but also it's own expression
         # checking (the head of the first expression must be :for. So we will
         # escape the bounds here, keeping the expression formed in a suitable
@@ -28,9 +29,10 @@ macro nd_threads(trigger,args...)
         #
         # This is a brute-force drill down an AST of a for loop to the limits
         # of said loop. See: dump(quote for i in e.a:e.b print(i) end end)
+        ex.args[1].args[1] = esc(ex.args[1].args[1])
         ex.args[1].args[2].args[2] = esc(ex.args[1].args[2].args[2])
         ex.args[1].args[2].args[3] = esc(ex.args[1].args[2].args[3])
-       
+
         # Same for the body of the loop
         ex.args[2] = esc(ex.args[2])
         
