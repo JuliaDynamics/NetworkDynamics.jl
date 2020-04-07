@@ -7,3 +7,4 @@ Manifest.toml
 scratch.jl
 docs/build
 bugs
+design_experiments
