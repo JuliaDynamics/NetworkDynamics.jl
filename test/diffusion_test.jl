@@ -142,11 +142,3 @@ println("Maximum difference to analytic solution with fake ode edge ND: $max_ode
 syms_v = syms_containing(diff_network_ode, "v")
 idx_v = idx_containing(diff_network_ode, "v")
 @test all( diff_network_ode.syms[idx_v] .== syms_v )
-
-sef = StaticEdgeFunction(diff_network_st.f)
-t = 1.
-e_s, e_d = sef(sol_st(t), nothing, t)
-e_int_ode = sol_ode(t)[N+1:N+ne(g)]
-e_int_st = diff_network_st.f.graph_data.e_array
-
-println("Maximum difference of the static and dynamic edge variables at t=$t: $(abs.(e_int_st .- e_int_ode) |> maximum)")

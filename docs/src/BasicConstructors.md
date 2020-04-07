@@ -150,6 +150,22 @@ nd = network_dynamics(vertices!::Array{VertexFunction},
 nd(dx, x, p, t)
 ```
 
+If all vertices, respectively edges share the same `VertexFunction` or `EdgeFunction`, than `network_dynamics` can be conveniently called with these functions as arguments.
+
+```julia
+nd = network_dynamics(vertexfunction!::VertexFunction,
+                      edgefunction!::EdgeFunction, g)
+
+```
+
+The optional keyword argument `parallel` is `false` by default and can be set to `true` if a multi-threaded `ODEFunction` should be used. This may significantly improve performance on multi-core machines, for more details see section [Multi-Threading](@ref).
+
+```julia
+nd = network_dynamics(vertexfunction!::VertexFunction,
+                      edgefunction!::EdgeFunction, g, parallel=true)
+
+```
+
 ### Example
 
  Let's look at an example. First we define our graph as well as the differential systems connected to its vertices and edges:
