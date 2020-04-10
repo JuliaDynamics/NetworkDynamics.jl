@@ -35,7 +35,7 @@ macro nd_threads(trigger,args...)
 
         # Same for the body of the loop
         ex.args[2] = esc(ex.args[2])
-        
+
         return quote
             @inbounds if $(esc(trigger))
                 Threads.@threads $ex
@@ -62,7 +62,12 @@ end
     p
 end
 
+
 @inline Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2}, i) where {T1 <: AbstractArray, T2}
+    p[1][:, i]
+end
+
+@inline Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2}, i) where {T1 <: AbstractArray{T3, 1} where T3, T2}
     p[1][i]
 end
 
@@ -75,7 +80,13 @@ end
     p
 end
 
+
+
 @inline Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2}, i) where {T1, T2 <: AbstractArray}
+    p[2][:, i]
+end
+
+@inline Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2}, i) where {T1, T2 <: AbstractArray{T3, 1} where T3}
     p[2][i]
 end
 
