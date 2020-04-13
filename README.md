@@ -22,7 +22,3 @@ Check out our step-by-step tutorial as a [jupyter notebook](https://github.com/F
 ## PowerDynamics
 
 [PowerDynamics.jl](https://juliaenergy.github.io/PowerDynamics.jl/stable/) is an open-source framework for dynamic power grid modeling and analysis build on top of NetworkDynamics.jl.
-
-## Documentation
-
-The documentation is currently receiving a major rework. The old version can be found [here](https://fhell.github.io/NetworkDynamics.jl/stable).
