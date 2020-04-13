@@ -2,6 +2,7 @@
 
 [![](https://img.shields.io/badge/docs-dev-blue.svg)](https://fhell.github.io/NetworkDynamics.jl/dev)
 
+[![](https://img.shields.io/badge/docs-stable-blue.svg)](https://fhell.github.io/NetworkDynamics.jl/stable)
 
 A package for working with dynamical systems on complex networks. NetworkDynamics.jl provides an interface between [LightGraphs.jl](https://github.com/JuliaGraphs/LightGraphs.jl) and [DifferentialEquations.jl](https://github.com/JuliaDiffEq/DifferentialEquations.jl). It allows to define several types of dynamic and static nodes and edges and to link them up in order to create complex network dynamics.
 
