@@ -9,14 +9,15 @@ using LightGraphs
 end
 
 function interact!(v_in, v_out, p ,t)
-    v_in .- v_out
+    sin.(v_in .- v_out)
 end
 
 si! = StaticInteraction(f! = interact!, dim = 1, symmetric = :a)
 
 function aggregate!(agg, interaction; x = nothing, p = nothing, t = nothing) # actually we can let this depend on x, p ,t as well and maybe come up with a new array type if we have to
+  #println(agg, interaction)
   agg .+= interaction[1]
-  nothing
+  interaction
 end
 
 function node!(dv, v, p, t, inputs)
@@ -24,17 +25,16 @@ function node!(dv, v, p, t, inputs)
 end
 
 vertex! = ODEVertex(f! = node!, dim = 1)
+N = 100 # number of nodes
+k = 20  # average degree
+graph = barabasi_albert(N, k)
 
-graph = watts_strogatz(10,4,0)
 
 ## This holds the layer dependent structural information
 
 # constant and mutable information should be separate!!
 
 # StaticInteractions should subtype AbstractInteractions
-
-
-
 
 struct LayerStruct
     # Functions
@@ -103,11 +103,11 @@ function LayerData(NL::LayerStruct) # save symmetry = :u in interact!?
         interactions = something
     end
     if NL.dim > 1
-        aggregates = zeros(NL.dim, NL.num_e) # TBD types, should aggregations be able to return vectors?
+        aggregates = zeros(NL.dim, NL.num_v) # TBD types, should aggregations be able to return vectors?
     else
-        aggregates = zeros(NL.num_e)
+        aggregates = zeros(NL.num_v)
     end
-    temp = Array{Float64}(undef, NL.dim)
+    temp = zeros(NL.dim)
     LayerData(interactions, aggregates,temp)
 end
 function create_v_idxs(edge_idx, num_v)::Vector{Array{Int64,1}}
@@ -149,39 +149,6 @@ function NetworkStruct(g, v_dims, layers)# syms later, v_syms)
     layers)
 end
 
-
-"""
-Create indices for stacked array of dimensions dims
-"""
-function create_idxs(dims; counter=1)::Array{Idx, 1}
-    idxs = [1:1 for dim in dims]
-    for (i, dim) in enumerate(dims)
-        idxs[i] = counter:(counter + dim - 1)
-        counter += dim
-    end
-    idxs
-end
-
-"""
-Create offsets for stacked array of dimensions dims
-"""
-function create_offsets(dims; counter=0)::Array{Int, 1}
-    offs = [1 for dim in dims]
-    for (i, dim) in enumerate(dims)
-        offs[i] = counter
-        counter += dim
-    end
-    offs
-end
-
-"""
-Create indexes for stacked array of dimensions dims using the offsets offs
-"""
-function create_idxs(offs, dims)::Array{Idx, 1}
-    idxs = [1+off:off+dim for (off, dim) in zip(offs, dims)]
-end
-
-
 NS = NetworkStruct(graph, [1 for v in 1:nv(graph)], [NL])
 
 ### nd_ODE_Static
@@ -197,22 +164,27 @@ end
 
 function (d::proto_ODE_Static)(dx, x, p, t)
     for (ls, ld) in zip(d.network_structure.layers, d.layer_data)
+        ld.aggregates .*= 0 # this presumes aggregation is addition
         if ls.interact!.symmetric == :s
-            for i in 1:ls.num_e
+            for i in 1:ls.num_e #adjust syntax
                 ld.temp .= ls.interact!.f!(x[ls.s_e[i]], x[ls.d_e[i]], p, t) ## will need vertexdata and aggregationdata for convenient indexing,
                 ls.aggregate!(ld.aggregates[ls.s_e[i]], ld.temp)
                 ls.aggregate!(ld.aggregates[ls.d_e[i]], ld.temp)
             end
         elseif ls.interact!.symmetric == :a
-            for i in 1:ls.num_e
-                ld.temp .= ls.interact!.f!(x[ls.s_e[i]], x[ls.d_e[i]], p, t) ## will need vertexdata and aggregationdata for convenient indexing,
-                print(ld.aggregates[i])
-                ls.aggregate!(view(ld.aggregates, ls.s_e[i]), ld.temp)
-                                print(ld.aggregates[i])
-                ls.aggregate!(view(ld.aggregates, ls.d_e[i]), -1. .* ld.temp)
+          for i in 1:ls.num_e
+         #  will need vertexdata and aggregationdata for convenient indexing,
+         # confusing functional tricks?
+              ls.aggregate!(view(ld.aggregates, ls.d_e[i]), -1. .*
+                ls.aggregate!(view(ld.aggregates, ls.s_e[i]),
+                  ls.interact!.f!(x[ls.s_e[i]], x[ls.d_e[i]], p, t)))
+         # easier syntax, more allocations
+               # ld.temp .= ls.interact!.f!(x[ls.s_e[i]], x[ls.d_e[i]], p, t) ## will need vertexdata and aggregationdata for convenient indexing,
+                # ls.aggregate!(view(ld.aggregates, ls.s_e[i]), ld.temp)
+                # ls.aggregate!(view(ld.aggregates, ls.d_e[i]), -1. .* ld''.temp)
             end
        else
-           for i in 1:ls.num_e
+           for i in 1:ls.num_e #adjust syntax
                ls.aggregate!(ld.aggregates[ls.s_e[i]],
                  ls.interact!.f!(x[ls.s_e[i]], x[ls.d_e[i]], p, t))
                ls.aggregate!(ld.aggregates[ls.d_e[i]],
@@ -220,10 +192,9 @@ function (d::proto_ODE_Static)(dx, x, p, t)
             end
        end
        for i in 1:d.network_structure.num_v
-           maybe_idx(d.vertices!,i).f!(dx[d.network_structure.v_idx[i]], x[d.network_structure.v_idx[i]], p_v_idx(p, i), t, ld.aggregates[i])
+           maybe_idx(d.vertices!,i).f!(view(dx, d.network_structure.v_idx[i]), x[d.network_structure.v_idx[i]], p_v_idx(p, i), t, ld.aggregates[i])
        end
     end
-
     nothing
 end
 
@@ -233,16 +204,22 @@ x0 = randn(N)
 x = copy(x0)
 dx0 = randn(N)
 dx = copy(dx0)
-ode(x0, randn(10), nothing, 0.)
+ode(x0, dx0, nothing, 0.)
 x.-x0
+
 dx .- dx0
 
-
-
-N=10
-x0 = randn(N) # random initial conditions
+x0 = randn(N)
 using OrdinaryDiffEq, Plots
 ode_prob = ODEProblem(ode, x0, (0., 4.))
-sol = solve(ode_prob, Tsit5());
+sol = solve(ode_prob, Tsit5())
 
 plot(sol)
+
+using BenchmarkTools
+
+
+
+@benchmark ode(x0, randn(100), nothing, 0.)
+
+@btime solve(ode_prob, Tsit5())
