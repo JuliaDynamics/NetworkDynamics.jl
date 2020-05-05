@@ -164,7 +164,7 @@ end
 
 function (d::proto_ODE_Static)(dx, x, p, t)
     for (ls, ld) in zip(d.network_structure.layers, d.layer_data)
-        ld.aggregates .*= 0 # this presumes aggregation is addition
+        ld.aggregates .= 0 # this presumes aggregation is addition
         if ls.interact!.symmetric == :s
             for i in 1:ls.num_e #adjust syntax
                 ld.temp .= ls.interact!.f!(x[ls.s_e[i]], x[ls.d_e[i]], p, t) ## will need vertexdata and aggregationdata for convenient indexing,
