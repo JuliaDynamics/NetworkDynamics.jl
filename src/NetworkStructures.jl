@@ -131,7 +131,7 @@ end
 # In order to access the data in the arrays efficiently we create views that
 # allow us to efficiently index into the underlying arrays.
 
-import Base.getindex, Base.setindex!, Base.length, Base.IndexStyle, Base.size, Base.eltype
+import Base.getindex, Base.setindex!, Base.length, Base.IndexStyle, Base.size, Base.eltype, Base.dataids
 
 #= Once forward declaration of types is implemented properly we can replace this
  by
@@ -186,7 +186,7 @@ end
 
 Base.IndexStyle(::Type{<:EdgeData}) = IndexLinear()
 
-
+@inline Base.dataids(e_dat::EdgeData) = dataids(e_dat.gd.e_array)
 
 struct VertexData{G, T} <: AbstractArray{T, 1}
     gd::G
@@ -217,6 +217,7 @@ end
 
 Base.IndexStyle(::Type{<:VertexData}) = IndexLinear()
 
+@inline Base.dataids(v_dat::VertexData) = dataids(v_dat.gd.v_array)
 
 # Putting the above together we create a GraphData object:
 
