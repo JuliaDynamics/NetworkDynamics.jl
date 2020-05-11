@@ -74,7 +74,7 @@ Assembles the the dynamical equations of the network problem into an `ODEFunctio
 compatible with the `DifferentialEquations.jl` solvers. Takes as arguments an array
 of VertexFunctions **`vertices!`**, an array of EdgeFunctions **`edges!`** and a
 `LightGraph.jl` object **`g`**. The optional argument `parallel` is a boolean
-value that denotes if the central loop should be executed in parallel.
+value that denotes if the central loop should be executed in parallel with the number of threads set by the environment variable JULIA_NUM_THREADS.
 """
 function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U},
                           graph; x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: StaticEdge}
@@ -84,11 +84,6 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
         print("Warning: You are using multi-threading with only one thread ",
         "available to Julia. Consider re-starting Julia with the environment ",
         "variable JULIA_NUM_THREADS set to the number of physical cores of your CPU.")
-    else
-        haskey(ENV, "JULIA_NUM_THREADS") && parse(Int, ENV["JULIA_NUM_THREADS"])  > 1 ?
-        print("Your instance of Julia has more than one thread available for ",
-        "executing code. Consider calling network_dynamics with the keyword ",
-        "parallel=true.") : nothing
     end
 
     v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array = collect_ve_info(vertices!, edges!, graph)
@@ -116,11 +111,6 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
         println("Warning: You are using multi-threading with only one thread ",
         "available to Julia. Consider re-starting Julia with the environment ",
         "variable JULIA_NUM_THREADS set to the number of physical cores of your CPU.")
-    else
-        haskey(ENV, "JULIA_NUM_THREADS") && parse(Int, ENV["JULIA_NUM_THREADS"])  > 1 ?
-        println("Info: Your instance of Julia has more than one thread available for ",
-        "executing code. Consider calling network_dynamics with the keyword ",
-        "parallel=true.") : nothing
     end
 
     v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array = collect_ve_info(vertices!, edges!, graph)
