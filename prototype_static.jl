@@ -1,33 +1,6 @@
 using NetworkDynamics
 using LightGraphs
 
-@Base.kwdef struct StaticInteraction{T}
-    f!::T # (e, v_s, v_d, p, t) -> nothing
-    dim::Int # number of dimensions of x
-    sym=[:e for i in 1:dim] # Symbols for the dimensions
-    symmetric=:u
-end
-
-function interact!(v_in, v_out, p ,t)
-    sin.(v_in .- v_out)
-end
-
-si! = StaticInteraction(f! = interact!, dim = 1, symmetric = :a)
-
-function aggregate!(agg, interaction; x = nothing, p = nothing, t = nothing) # actually we can let this depend on x, p ,t as well and maybe come up with a new array type if we have to
-  #println(agg, interaction)
-  agg .+= interaction[1]
-  interaction
-end
-
-function node!(dv, v, p, t, inputs)
-    dv .= -inputs
-end
-
-vertex! = ODEVertex(f! = node!, dim = 1)
-N = 100 # number of nodes
-k = 20  # average degree
-graph = barabasi_albert(N, k)
 
 
 ## This holds the layer dependent structural information
@@ -93,7 +66,7 @@ end
 
 struct LayerData # {T2, T3, G, Ti} figure out typing later
     interactions # ::Ti
-    aggregates
+    aggregates::Array{Float64,1}
     temp # intermediate saving, this should really be temporary
 end
 function LayerData(NL::LayerStruct) # save symmetry = :u in interact!?
@@ -118,8 +91,7 @@ function create_v_idxs(edge_idx, num_v)::Vector{Array{Int64,1}}
     v_idx
 end
 
-NL = LayerStruct(graph, si!, aggregate!)
-LD = LayerData(NL)
+
 
 ### GraphStructure
 
@@ -149,7 +121,7 @@ function NetworkStruct(g, v_dims, layers)# syms later, v_syms)
     layers)
 end
 
-NS = NetworkStruct(graph, [1 for v in 1:nv(graph)], [NL])
+
 
 ### nd_ODE_Static
 
@@ -161,6 +133,39 @@ NS = NetworkStruct(graph, [1 for v in 1:nv(graph)], [NL])
     parallel::Bool # enables multithreading for the core loop
 end
 
+
+@Base.kwdef struct StaticInteraction{T}
+    f!::T # (e, v_s, v_d, p, t) -> nothing
+    dim::Int # number of dimensions of x
+    sym=[:e for i in 1:dim] # Symbols for the dimensions
+    symmetric=:u
+end
+
+
+function interact!(v_in, v_out, p ,t)::Float64
+    sin(v_in - v_out)
+end
+
+si! = StaticInteraction(f! = interact!, dim = 1, symmetric = :a)
+
+function aggregate!(agg, index, interaction; x = nothing, p = nothing, t = nothing) # actually we can let this depend on x, p ,t as well and maybe come up with a new array type if we have to
+  #println(agg, interaction)
+  agg[index] += interaction
+  interaction
+end
+
+function node!(dv, v, p, t, inputs)
+    dv[1] = -inputs
+end
+
+vertex! = ODEVertex(f! = node!, dim = 1)
+N = 100 # number of nodes
+k = 20  # average degree
+graph = barabasi_albert(N, k)
+
+NL = LayerStruct(graph, si!, aggregate!)
+LD = LayerData(NL)
+NS = NetworkStruct(graph, [1 for v in 1:nv(graph)], [NL])
 
 function (d::proto_ODE_Static)(dx, x, p, t)
     for (ls, ld) in zip(d.network_structure.layers, d.layer_data)
@@ -175,8 +180,8 @@ function (d::proto_ODE_Static)(dx, x, p, t)
           for i in 1:ls.num_e
          #  will need vertexdata and aggregationdata for convenient indexing,
          # confusing functional tricks?
-              ls.aggregate!(view(ld.aggregates, ls.d_e[i]), -1. .*
-                ls.aggregate!(view(ld.aggregates, ls.s_e[i]),
+               ls.aggregate!(ld.aggregates, ls.d_e[i], -1. .*
+                ls.aggregate!(ld.aggregates, ls.s_e[i],
                   ls.interact!.f!(x[ls.s_e[i]], x[ls.d_e[i]], p, t)))
          # easier syntax, more allocations
                # ld.temp .= ls.interact!.f!(x[ls.s_e[i]], x[ls.d_e[i]], p, t) ## will need vertexdata and aggregationdata for convenient indexing,
@@ -219,7 +224,7 @@ plot(sol)
 using BenchmarkTools
 
 
+x0 = randn(N)
+display(@benchmark $ode($x0, $x0, nothing, 0.))
 
-@benchmark ode(x0, randn(100), nothing, 0.)
-
-@btime solve(ode_prob, Tsit5())
+#@btime solve(ode_prob, Tsit5())
