@@ -37,8 +37,8 @@ function LayerStruct(graph, interact!, aggregate!)
     s_e = [src(e) for e in edges(graph)]
     d_e = [dst(e) for e in edges(graph)]
 
-    v_idx_s = create_v_idxs(s_e, num_v)
-    v_idx_d = create_v_idxs(d_e, num_v)
+    v_idx_s = create_v_idxs(s_e, num_v) # edges that have their source at vertex i
+    v_idx_d = create_v_idxs(d_e, num_v) # edges that have their destination at vertex i
 
     if interact!.symmetric == :u # make sure this complies with the data
         v_idx_d .+= len # we will duplicate each edge variable
@@ -228,3 +228,6 @@ x0 = randn(N)
 display(@benchmark $ode($x0, $x0, nothing, 0.))
 
 #@btime solve(ode_prob, Tsit5())
+
+using Coverage
+analyze_malloc(".")
