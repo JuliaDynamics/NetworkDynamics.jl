@@ -37,12 +37,12 @@ function LayerStruct(graph, interact!, aggregate!)
     s_e = [src(e) for e in edges(graph)]
     d_e = [dst(e) for e in edges(graph)]
 
-    v_idx_s = create_v_idxs(s_e, num_v)
-    v_idx_d = create_v_idxs(d_e, num_v)
-
-    if interact!.symmetric == :u # make sure this complies with the data
-        v_idx_d .+= len # we will duplicate each edge variable
-    end
+    v_idx_s = create_v_idxs(s_e, num_v) # edges that have their source at vertex i
+    v_idx_d = create_v_idxs(d_e, num_v) # edges that have their destination at vertex i
+    #
+    # if interact!.symmetric == :u # make sure this complies with the data
+    #     v_idx_d .+= len # we will duplicate each edge variable
+    # end
 
     v_idx = Vector{Array{Int64,1}}(undef, num_v)
     for i in 1:num_v
@@ -65,23 +65,17 @@ function LayerStruct(graph, interact!, aggregate!)
 end
 
 struct LayerData # {T2, T3, G, Ti} figure out typing later
-    interactions # ::Ti
+    interactions::Array{Float64,1} # ::Ti
     aggregates::Array{Float64,1}
-    temp # intermediate saving, this should really be temporary
 end
 function LayerData(NL::LayerStruct) # save symmetry = :u in interact!?
-    interactions = nothing
-    if !(typeof(NL.interact!) <: StaticInteraction)
-        # Let j be the index of an edge. For multidimensional edges interactions[j] should be an array. This seems to favour introducing a new data type with custom indexing.
-        interactions = something
-    end
+    interactions = zeros(NL.num_e * 2)
     if NL.dim > 1
         aggregates = zeros(NL.dim, NL.num_v) # TBD types, should aggregations be able to return vectors?
     else
         aggregates = zeros(NL.num_v)
     end
-    temp = zeros(NL.dim)
-    LayerData(interactions, aggregates,temp)
+    LayerData(interactions, aggregates)
 end
 function create_v_idxs(edge_idx, num_v)::Vector{Array{Int64,1}}
     v_idx = Vector{Array{Int64,1}}(undef, num_v)
@@ -142,20 +136,21 @@ end
 end
 
 
-function interact!(v_in, v_out, p ,t)::Float64
-    sin(v_in - v_out)
+function interact!(iarr ,v_in, v_out, p ,t)
+    iarr[1] = sin(v_in - v_out)
+    nothing
 end
 
 si! = StaticInteraction(f! = interact!, dim = 1, symmetric = :a)
 
-function aggregate!(agg, index, interaction; x = nothing, p = nothing, t = nothing) # actually we can let this depend on x, p ,t as well and maybe come up with a new array type if we have to
+function aggregate!(interactions; x = nothing, p = nothing, t = nothing) # actually we can let this depend on x, p ,t as well and maybe come up with a new array type if we have to
   #println(agg, interaction)
-  agg[index] += interaction
-  interaction
+
 end
 
 function node!(dv, v, p, t, inputs)
     dv[1] = -inputs
+    nothing
 end
 
 vertex! = ODEVertex(f! = node!, dim = 1)
@@ -168,36 +163,19 @@ LD = LayerData(NL)
 NS = NetworkStruct(graph, [1 for v in 1:nv(graph)], [NL])
 
 function (d::proto_ODE_Static)(dx, x, p, t)
-    for (ls, ld) in zip(d.network_structure.layers, d.layer_data)
-        ld.aggregates .= 0 # this presumes aggregation is addition
-        if ls.interact!.symmetric == :s
-            for i in 1:ls.num_e #adjust syntax
-                ld.temp .= ls.interact!.f!(x[ls.s_e[i]], x[ls.d_e[i]], p, t) ## will need vertexdata and aggregationdata for convenient indexing,
-                ls.aggregate!(ld.aggregates[ls.s_e[i]], ld.temp)
-                ls.aggregate!(ld.aggregates[ls.d_e[i]], ld.temp)
-            end
-        elseif ls.interact!.symmetric == :a
-          for i in 1:ls.num_e
-         #  will need vertexdata and aggregationdata for convenient indexing,
-         # confusing functional tricks?
-               ls.aggregate!(ld.aggregates, ls.d_e[i], -1. .*
-                ls.aggregate!(ld.aggregates, ls.s_e[i],
-                  ls.interact!.f!(x[ls.s_e[i]], x[ls.d_e[i]], p, t)))
-         # easier syntax, more allocations
-               # ld.temp .= ls.interact!.f!(x[ls.s_e[i]], x[ls.d_e[i]], p, t) ## will need vertexdata and aggregationdata for convenient indexing,
-                # ls.aggregate!(view(ld.aggregates, ls.s_e[i]), ld.temp)
-                # ls.aggregate!(view(ld.aggregates, ls.d_e[i]), -1. .* ld''.temp)
-            end
-       else
-           for i in 1:ls.num_e #adjust syntax
-               ls.aggregate!(ld.aggregates[ls.s_e[i]],
-                 ls.interact!.f!(x[ls.s_e[i]], x[ls.d_e[i]], p, t))
-               ls.aggregate!(ld.aggregates[ls.d_e[i]],
-                 ls.interact!.f!(x[ls.d_e[i]], x[ls.s_e[i]], p, t))
-            end
-       end
-       for i in 1:d.network_structure.num_v
-           maybe_idx(d.vertices!,i).f!(view(dx, d.network_structure.v_idx[i]), x[d.network_structure.v_idx[i]], p_v_idx(p, i), t, ld.aggregates[i])
+    for (ls, ld) in zip(d.network_structure.layers, d.layer_data) # this presumes aggregation is addition
+        for i in 1:ls.num_e # adjust syntax
+            ls.interact!.f!(view(ld.interactions,i), x[ls.s_e[i]], x[ls.d_e[i]], p, t) ## will need vertexdata and aggregationdata for convenient indexing,
+            ls.interact!.f!(view(ld.interactions,i), x[ls.d_e[i]], x[ls.s_e[i]], p, t)
+        end
+        for i in 1:d.network_structure.num_v
+        sum([ld.interactions[ls.v_idx_s[i]]; ld.interactions[ls.v_idx_d[i] .+ d.network_structure.num_v ] .* -1])
+           maybe_idx(d.vertices!,i).f!(
+            view(dx, d.network_structure.v_idx[i]), x[d.network_structure.v_idx[i]],
+            p_v_idx(p, i),
+            t,
+            sum([ld.interactions[ls.v_idx_s[i]];
+                 ld.interactions[ls.v_idx_d[i] .+ d.network_structure.num_v ] .* -1.]))
        end
     end
     nothing
@@ -225,6 +203,7 @@ using BenchmarkTools
 
 
 x0 = randn(N)
-display(@benchmark $ode($x0, $x0, nothing, 0.))
+dx0 = randn(N)
+display(@benchmark $ode($x0, $dx0, nothing, 0.))
 
 #@btime solve(ode_prob, Tsit5())
