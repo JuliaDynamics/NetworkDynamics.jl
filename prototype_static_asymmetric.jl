@@ -64,9 +64,10 @@ function LayerStruct(graph, interact!, aggregate!)
     v_idx)
 end
 
-struct LayerData # {T2, T3, G, Ti} figure out typing later
+mutable struct LayerData # {T2, T3, G, Ti} figure out typing later
     interactions::Array{Float64,1} # ::Ti
     aggregates::Array{Float64,1}
+    v::Array{Float64,1}
 end
 function LayerData(NL::LayerStruct) # save symmetry = :u in interact!?
     interactions = zeros(NL.num_e * 2)
@@ -75,7 +76,8 @@ function LayerData(NL::LayerStruct) # save symmetry = :u in interact!?
     else
         aggregates = zeros(NL.num_v)
     end
-    LayerData(interactions, aggregates)
+    v = zeros(NL.num_v)
+    LayerData(interactions, aggregates, v)
 end
 function create_v_idxs(edge_idx, num_v)::Vector{Array{Int64,1}}
     v_idx = Vector{Array{Int64,1}}(undef, num_v)
@@ -136,8 +138,8 @@ end
 end
 
 
-function interact!(iarr ,v_in, v_out, p ,t)
-    iarr[1] = sin(v_in - v_out)
+function interact!(iarr, v_in, v_out, p ,t)
+    iarr[1] = v_in - v_out
     nothing
 end
 
@@ -155,7 +157,7 @@ end
 
 vertex! = ODEVertex(f! = node!, dim = 1)
 N = 100 # number of nodes
-k = 20  # average degree
+k = 20 # average degree
 graph = barabasi_albert(N, k)
 
 NL = LayerStruct(graph, si!, aggregate!)
@@ -163,47 +165,38 @@ LD = LayerData(NL)
 NS = NetworkStruct(graph, [1 for v in 1:nv(graph)], [NL])
 
 function (d::proto_ODE_Static)(dx, x, p, t)
-    for (ls, ld) in zip(d.network_structure.layers, d.layer_data) # this presumes aggregation is addition
-        for i in 1:ls.num_e # adjust syntax
-            ls.interact!.f!(view(ld.interactions,i), x[ls.s_e[i]], x[ls.d_e[i]], p, t) ## will need vertexdata and aggregationdata for convenient indexing,
-            ls.interact!.f!(view(ld.interactions,i), x[ls.d_e[i]], x[ls.s_e[i]], p, t)
+    for (ls, ld) in zip(d.network_structure.layers, d.layer_data)
+        ld.v = x
+        for i in 1:ls.num_e
+            ls.interact!.f!(view(ld.interactions,i),ld.v[ls.s_e[i]], ld.v[ls.d_e[i]], p, t) ## will need vertexdata and aggregationdata for convenient indexing,
+            ls.interact!.f!(view(ld.interactions,i + ls.num_e), ld.v[ls.d_e[i]], ld.v[ls.s_e[i]], p, t)
         end
         for i in 1:d.network_structure.num_v
-        sum([ld.interactions[ls.v_idx_s[i]]; ld.interactions[ls.v_idx_d[i] .+ d.network_structure.num_v ] .* -1])
+
            maybe_idx(d.vertices!,i).f!(
-            view(dx, d.network_structure.v_idx[i]), x[d.network_structure.v_idx[i]],
-            p_v_idx(p, i),
-            t,
-            sum([ld.interactions[ls.v_idx_s[i]];
-                 ld.interactions[ls.v_idx_d[i] .+ d.network_structure.num_v ] .* -1.]))
+                view(dx, i),
+                ld.v[i],
+                p_v_idx(p, i),
+                t,
+                sum(ld.interactions[ls.v_idx_s[i]]) + sum(ld.interactions[ls.v_idx_d[i] .+ ls.num_e]))
        end
     end
     nothing
 end
 
+
 ode = proto_ODE_Static(vertex!, graph, NS, [LD], false)
 
 x0 = randn(N)
-x = copy(x0)
 dx0 = randn(N)
-dx = copy(dx0)
 ode(x0, dx0, nothing, 0.)
-x.-x0
-
-dx .- dx0
-
 x0 = randn(N)
-using OrdinaryDiffEq, Plots
-ode_prob = ODEProblem(ode, x0, (0., 4.))
+using OrdinaryDiffEq, Plots, BenchmarkTools
+ode_prob = ODEProblem(ode, x0, (0., 5.))
 sol = solve(ode_prob, Tsit5())
 
 plot(sol)
 
-using BenchmarkTools
-
-
-x0 = randn(N)
-dx0 = randn(N)
 display(@benchmark $ode($x0, $dx0, nothing, 0.))
 
 #@btime solve(ode_prob, Tsit5())
