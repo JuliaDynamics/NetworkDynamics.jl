@@ -88,6 +88,7 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
 
     v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array = collect_ve_info(vertices!, edges!, graph)
 
+    # These arrays are used for initializing the GraphData and will be overwritten
     v_array = similar(x_prototype, sum(v_dims))
     e_array = similar(x_prototype, sum(e_dims))
 
@@ -115,8 +116,8 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
 
     v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array = collect_ve_info(vertices!, edges!, graph)
 
+    # These arrays are used for initializing the GraphData and will be overwritten
     x_array = similar(x_prototype, sum(v_dims) + sum(e_dims))
-
     v_array = view(x_array, 1:sum(v_dims))
     e_array = view(x_array, sum(v_dims)+1:sum(v_dims)+sum(e_dims))
 
@@ -159,12 +160,14 @@ function network_dynamics(vertices!::Array{VertexFunction}, edges!::Array{EdgeFu
 
     contains_dyn_edge = false
 
+
     for e in edges!
         if isa(e, ODEEdge)
             contains_dyn_edge = true
         end
     end
-
+    # If one edge is an ODEEdge all other edges will be promoted. This should be
+    # solved more elegantly by the upcoming multilayer structure.
     if contains_dyn_edge
         return network_dynamics(Array{ODEVertex}(vertices!),Array{ODEEdge}(edges!), graph, parallel = parallel)
     else

@@ -8,14 +8,15 @@ using ..Utilities
 export nd_ODE_Static
 export StaticEdgeFunction
 
-#=  =#
 
 @inline function prep_gd(dx::T, x::T, gd::GraphData{T, T}, gs) where T
+    # Type matching
     gd.v_array = x # Does not allocate
     gd
 end
 
 @inline function prep_gd(dx, x, gd, gs)
+    # Type mismatch
     e_array = similar(dx, gs.dim_e)
     GraphData(x, e_array, gs)
 end
@@ -25,7 +26,7 @@ end
 @Base.kwdef struct nd_ODE_Static{G, Tv, Te, T1, T2}
     vertices!::T1
     edges!::T2
-    graph::G
+    graph::G #redundant?
     graph_structure::GraphStruct
     graph_data::GraphData{Tv, Te}
     parallel::Bool # enables multithreading for the core loop
