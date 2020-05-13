@@ -62,6 +62,7 @@ p = (nothing, σ * edge_weights)
 
 x0 = randn(2N) * 5
 tspan = (0., 200.)
+
 prob  = ODEProblem(fhn_network!, x0, tspan, p)
 sol   = solve(prob, AutoTsit5(TRBDF2()));
 
@@ -69,3 +70,18 @@ sol   = solve(prob, AutoTsit5(TRBDF2()));
 ### Plotting
 
 plot(sol, vars = idx_containing(fhn_network!, :u), legend = false, ylim=(-5, 5))
+
+p_edge = σ * edge_weights
+
+function fhn_wrapper!(dx,x,p,t)
+    fhn_network!(dx,x,(nothing, p), t)
+end
+
+prob  = ODEProblem(fhn_wrapper!, x0, tspan, p_edge)
+
+import Base.-, Base.~
+-(x::Operation, y::Array{Operation,1}) = x .- y
+~(x::Operation, y::Array{Operation,1}) = x .~ y
+mosys = modelingtoolkitize(prob)
+mopro = ODEProblem(mosys[1], x0, tspan, p_edge)
+plot(solve(mopro, AutoTsit5(TRBDF2())))
