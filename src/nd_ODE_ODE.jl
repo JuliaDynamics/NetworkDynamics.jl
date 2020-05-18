@@ -17,10 +17,10 @@ need to fit, i.e. don't do something like edges! = v_s - v_d when v_s and v_d ha
 
 # In order to match the type, we need to pass both, a view that matches the type
 # to be constructed, and the original array we want to construct a GD on top of.
-@inline function prep_gd(dy::T, y::T, x, gd::GraphData{T, T}, gs) where T
+@inline function prep_gd(dy::T, y::T, x, gd::GraphData{GDB, T, T}, gs) where {GDB, T}
     # println("Type match")
-    gd.v_array = view(x, 1:gs.dim_v)
-    gd.e_array = view(x, gs.dim_v+1:gs.dim_v+gs.dim_e)
+    gd.gdb.v_array = view(x, 1:gs.dim_v)
+    gd.gdb.e_array = view(x, gs.dim_v+1:gs.dim_v+gs.dim_e)
     gd
 end
 
@@ -32,12 +32,12 @@ end
 end
 
 
-@Base.kwdef struct nd_ODE_ODE{G, T, T1, T2}
+@Base.kwdef struct nd_ODE_ODE{G, GDB, T, T1, T2}
     vertices!::T1
     edges!::T2
     graph::G
     graph_structure::GraphStruct
-    graph_data::GraphData{T, T}
+    graph_data::GraphData{GDB, T, T}
     parallel::Bool
 end
 

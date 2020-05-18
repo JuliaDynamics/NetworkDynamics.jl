@@ -157,18 +157,18 @@ We should create a branch with this variant that can run on this branch of julia
 
 https://github.com/JuliaLang/julia/pull/32658
 =#
-struct EdgeData{G,T} <: AbstractArray{T, 1} # This is a lie. The elements of EdgeData are not of type T but of type eltype(T).
-    gd::G
+struct EdgeData{GDB, elE} <: AbstractArray{elE, 1}
+    gdb::GDB
     idx_offset::Int
     len::Int
 end
 
 @inline Base.@propagate_inbounds function getindex(e_dat::EdgeData, idx)
-    e_dat.gd.e_array[idx + e_dat.idx_offset]
+    e_dat.gdb.e_array[idx + e_dat.idx_offset]
 end
 
 @inline Base.@propagate_inbounds function setindex!(e_dat::EdgeData, x, idx)
-    e_dat.gd.e_array[idx + e_dat.idx_offset] = x
+    e_dat.gdb.e_array[idx + e_dat.idx_offset] = x
     nothing
 end
 
@@ -180,26 +180,26 @@ end
     (e_dat.len, )
 end
 
-@inline function Base.eltype(e_dat::EdgeData{G, T}) where {G, T}
-    eltype(T)
+@inline function Base.eltype(e_dat::EdgeData{GDB, elE}) where {GDB, elE}
+    elE
 end
 
 Base.IndexStyle(::Type{<:EdgeData}) = IndexLinear()
 
-@inline Base.dataids(e_dat::EdgeData) = dataids(e_dat.gd.e_array)
+@inline Base.dataids(e_dat::EdgeData) = dataids(e_dat.gdb.e_array)
 
-struct VertexData{G, T} <: AbstractArray{T, 1}
-    gd::G
+struct VertexData{GDB, elV} <: AbstractArray{elV, 1}
+    gdb::GDB
     idx_offset::Int
     len::Int
 end
 
 @inline Base.@propagate_inbounds function getindex(v_dat::VertexData, idx)
-    v_dat.gd.v_array[idx + v_dat.idx_offset]
+    v_dat.gdb.v_array[idx + v_dat.idx_offset]
 end
 
 @inline Base.@propagate_inbounds function setindex!(v_dat::VertexData, x, idx)
-    v_dat.gd.v_array[idx + v_dat.idx_offset] = x
+    v_dat.gdb.v_array[idx + v_dat.idx_offset] = x
     nothing
 end
 
@@ -211,13 +211,13 @@ end
     (e_dat.len, )
 end
 
-@inline function Base.eltype(e_dat::VertexData{G, T}) where {G, T}
-    eltype(T)
+@inline function Base.eltype(e_dat::VertexData{G, elV}) where {G, elV}
+    elV
 end
 
 Base.IndexStyle(::Type{<:VertexData}) = IndexLinear()
 
-@inline Base.dataids(v_dat::VertexData) = dataids(v_dat.gd.v_array)
+@inline Base.dataids(v_dat::VertexData) = dataids(v_dat.gdb.v_array)
 
 # Putting the above together we create a GraphData object:
 
@@ -229,30 +229,38 @@ Base.IndexStyle(::Type{<:VertexData}) = IndexLinear()
 # there are situations with autodifferentiation that require one of them to be
 # dual and the other not.
 
-mutable struct GraphData{Tv, Te}
+mutable struct GraphDataBuffer{Tv, Te}
     v_array::Tv
     e_array::Te
-    v::Array{VertexData{GraphData{Tv, Te}, Tv}, 1}
-    e::Array{EdgeData{GraphData{Tv, Te}, Te}, 1}
-    v_s_e::Array{VertexData{GraphData{Tv, Te}, Tv}, 1} # the vertex that is the source of e
-    v_d_e::Array{VertexData{GraphData{Tv, Te}, Tv}, 1} # the vertex that is the destination of e
-    e_s_v::Array{Array{EdgeData{GraphData{Tv, Te}, Te}, 1}, 1} # the edges that have v as source
-    e_d_v::Array{Array{EdgeData{GraphData{Tv, Te}, Te}, 1}, 1} # the edges that have v as destination
-    function GraphData{Tv, Te}(v_array::Tv, e_array::Te, gs::GraphStruct) where {Tv, Te}
-        gd = new{Tv, Te}(v_array, e_array, )
-        gd.v = [VertexData{GraphData{Tv, Te}, Tv}(gd, offset, dim) for (offset,dim) in zip(gs.v_offs, gs.v_dims)]
-        gd.e = [EdgeData{GraphData{Tv, Te}, Te}(gd, offset, dim) for (offset,dim) in zip(gs.e_offs, gs.e_dims)]
-        gd.v_s_e = [VertexData{GraphData{Tv, Te}, Tv}(gd, offset, dim) for (offset,dim) in zip(gs.s_e_offs, gs.v_dims[gs.s_e])]
-        gd.v_d_e = [VertexData{GraphData{Tv, Te}, Tv}(gd, offset, dim) for (offset,dim) in zip(gs.d_e_offs, gs.v_dims[gs.d_e])]
-        gd.e_s_v = [[EdgeData{GraphData{Tv, Te}, Te}(gd, offset, dim) for (offset,dim) in e_s_v] for e_s_v in gs.e_s_v_dat]
-        gd.e_d_v = [[EdgeData{GraphData{Tv, Te}, Te}(gd, offset, dim) for (offset,dim) in e_d_v] for e_d_v in gs.e_d_v_dat]
-        gd
-    end
 end
 
-function GraphData(v_array, e_array, gs)
-    GraphData{typeof(v_array), typeof(e_array)}(v_array, e_array, gs)
+struct GraphData{GDB, elV, elE}
+    gdb::GDB
+    v::Array{VertexData{GDB, elV}, 1}
+    e::Array{EdgeData{GDB, elE}, 1}
+    v_s_e::Array{VertexData{GDB, elV}, 1} # the vertex that is the source of e
+    v_d_e::Array{VertexData{GDB, elV}, 1} # the vertex that is the destination of e
+    e_s_v::Array{Array{EdgeData{GDB, elE}, 1}, 1} # the edges that have v as source
+    e_d_v::Array{Array{EdgeData{GDB, elE}, 1}, 1} # the edges that have v as destination
 end
+
+function GraphData(v_array::Tv, e_array::Te, gs::GraphStruct; global_offset = 0) where {Tv, Te}
+    gdb = GraphDataBuffer{Tv, Te}(v_array, e_array)
+    GDB = typeof(gdb)
+    elV = eltype(v_array)
+    elE = eltype(e_array)
+    v = [VertexData{GDB, elV}(gdb, offset + global_offset, dim) for (offset,dim) in zip(gs.v_offs, gs.v_dims)]
+    e = [EdgeData{GDB, elE}(gdb, offset + global_offset, dim) for (offset,dim) in zip(gs.e_offs, gs.e_dims)]
+    v_s_e = [VertexData{GDB, elV}(gdb, offset + global_offset, dim) for (offset,dim) in zip(gs.s_e_offs, gs.v_dims[gs.s_e])]
+    v_d_e = [VertexData{GDB, elV}(gdb, offset + global_offset, dim) for (offset,dim) in zip(gs.d_e_offs, gs.v_dims[gs.d_e])]
+    e_s_v = [[EdgeData{GDB, elE}(gdb, offset + global_offset, dim) for (offset,dim) in e_s_v] for e_s_v in gs.e_s_v_dat]
+    e_d_v = [[EdgeData{GDB, elE}(gdb, offset + global_offset, dim) for (offset,dim) in e_d_v] for e_d_v in gs.e_d_v_dat]
+    GraphData{GDB, elV, elE}(gdb, v, e, v_s_e, v_d_e, e_s_v, e_d_v)
+end
+
+# function GraphData(v_array, e_array, gs)
+#     GraphData{typeof(v_array), typeof(e_array)}(v_array, e_array, gs)
+# end
 
 #= In order to manipulate initial conditions using this view of the underlying
 array we provide view functions that give access to the arrays. =#
@@ -262,12 +270,12 @@ export view_e
 
 function view_v(gd::GraphData, gs::GraphStruct, sym="")
     v_idx = [i for (i, s) in enumerate(gs.v_syms) if occursin(string(sym), string(s))]
-    view(gd.v_array, v_idx)
+    view(gd.gdb.v_array, v_idx)
 end
 
 function view_e(gd::GraphData, gs::GraphStruct, sym="")
     e_idx = [i for (i, s) in enumerate(gs.e_syms) if occursin(string(sym), string(s))]
-    view(gd.e_array, e_idx)
+    view(gd.gdb.e_array, e_idx)
 end
 
 
@@ -275,14 +283,14 @@ function view_v(nd, x, p, t, sym="")
     gd = nd(x, p, t, GetGD)
     gs = nd(GetGS)
     v_idx = [i for (i, s) in enumerate(gs.v_syms) if occursin(string(sym), string(s))]
-    view(gd.v_array, v_idx)
+    view(gd.gdb.v_array, v_idx)
 end
 
 function view_e(nd, x, p, t, sym="")
     gd = nd(x, p, t, GetGD)
     gs = nd(GetGS)
     e_idx = [i for (i, s) in enumerate(gs.e_syms) if occursin(string(sym), string(s))]
-    view(gd.e_array, e_idx)
+    view(gd.gdb.e_array, e_idx)
 end
 
 

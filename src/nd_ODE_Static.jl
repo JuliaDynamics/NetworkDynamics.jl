@@ -10,11 +10,16 @@ export StaticEdgeFunction
 
 #=  =#
 
-@inline function prep_gd(dx::T, x::T, gd::GraphData{T, T}, gs) where T
-    gd.v_array = x # Does not allocate
+# If the type of dx and x match, we swap out v_array for x
+@inline function prep_gd(dx::T, x::T, gd::GraphData{GDB, T, T}, gs) where {GDB, T}
+    gd.gdb.v_array = x # Does not allocate
     gd
 end
 
+# If the type of dx and x do not match, we swap initialize a new GraphData object
+# that is based on the type of dx for the edge buffer.
+# Some solvers take the derivative with respect to time, thus x will not be dual
+# but dx will be, leading to errors otherwise
 @inline function prep_gd(dx, x, gd, gs)
     e_array = similar(dx, gs.dim_e)
     GraphData(x, e_array, gs)
@@ -22,12 +27,12 @@ end
 
 
 
-@Base.kwdef struct nd_ODE_Static{G, Tv, Te, T1, T2}
+@Base.kwdef struct nd_ODE_Static{G, GDB, T1, T2}
     vertices!::T1
     edges!::T2
     graph::G
     graph_structure::GraphStruct
-    graph_data::GraphData{Tv, Te}
+    graph_data::GDB
     parallel::Bool # enables multithreading for the core loop
 end
 
