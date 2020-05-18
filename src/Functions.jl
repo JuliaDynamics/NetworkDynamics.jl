@@ -10,7 +10,7 @@ using LinearAlgebra
 
 import Base.convert
 import Base.promote_rule
-
+using ..Utilities: has_nargs
 
 
 export StaticVertex
@@ -19,6 +19,8 @@ export ODEVertex
 export ODEEdge
 export VertexFunction
 export EdgeFunction
+export NDVertex
+export NDEdge
 # export DDEVertex
 # export DDEEdge
 
@@ -181,4 +183,22 @@ function ODEEdge(se::StaticEdge)
 end
 
 
+function NDVertex(; f!, dim, mass_matrix=I, sym = [:v for i in 1:dim] )
+    if has_nargs(f!, 5)
+        StaticVertex(f!, dim, sym)
+    elseif has_nargs(f!, 6)
+        ODEVertex(f!, dim, mass_matrix, sym)
+    else
+        throw(ArgumentError(f!, "All methods have to accept exactly 5 arguments for StaticVertices or exactly 6 arguments for ODEVertices."))
+    end
+end
+function NDEdge(; f!, dim, mass_matrix = I, sym = [:e for i in 1:dim] ) # ; since it accepts only keywords
+    if has_nargs(f!, 5)
+        StaticEdge(f!, dim, sym)
+    elseif has_nargs(f!, 6)
+        ODEEdge(f!, dim, mass_matrix, sym)
+    else
+        throw(ArgumentError(f!, "All methods have to accept exactly 5 arguments for StaticEdges or exactly 6 arguments for ODEEdges."))
+    end
+end
 end

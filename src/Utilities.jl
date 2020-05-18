@@ -3,7 +3,18 @@ module Utilities
 using NLsolve
 using LinearAlgebra
 
-export maybe_idx, p_v_idx, p_e_idx, @nd_threads
+export maybe_idx, p_v_idx, p_e_idx, @nd_threads, has_nargs
+
+"""
+has_nargs(f, n): Determines if all methods of a function f accept
+exactly n arguments.
+"""
+function has_nargs(f, n)
+    for m in methods(f)
+        ((m.nargs - 1) != n ) && return false
+    end
+    return true
+end
 
 
 """
@@ -12,7 +23,6 @@ a boolean (likely from the network object).
 This allows you to control for multithreading at runtime without
 code duplication.
 """
-
 macro nd_threads(trigger,args...)
     na = length(args)
     if na != 1
