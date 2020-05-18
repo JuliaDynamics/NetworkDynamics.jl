@@ -138,8 +138,8 @@ end
 end
 
 
-function interact!(iarr, v_in, v_out, p ,t)
-    iarr[1] = v_in - v_out
+@inline function interact!(iarr, v_in, v_out, p ,t)
+    @inbounds iarr[1] = v_in - v_out
     nothing
 end
 
@@ -166,30 +166,37 @@ NS = NetworkStruct(graph, [1 for v in 1:nv(graph)], [NL])
 
 function (d::proto_ODE_Static)(dx, x, p, t)
     for (ls, ld) in zip(d.network_structure.layers, d.layer_data)
-        ld.v = x
         for i in 1:ls.num_e
-            ls.interact!.f!(view(ld.interactions,i),ld.v[ls.s_e[i]], ld.v[ls.d_e[i]], p, t) ## will need vertexdata and aggregationdata for convenient indexing,
-            ls.interact!.f!(view(ld.interactions,i + ls.num_e), ld.v[ls.d_e[i]], ld.v[ls.s_e[i]], p, t)
+            @inbounds @views  ld.interactions[i] = x[ls.s_e[i]] - x[ls.d_e[i]]          #@inbounds ls.interact!.f!(view(ld.interactions,i),1., x[ls.d_e[i]], p, t) ## will need vertexdata and aggregationdata for convenient indexing,
+            @inbounds @views ld.interactions[i + ls.num_e] = x[ls.d_e[i]] - x[ls.s_e[i]]
+            #ls.interact!.f!(view(ld.interactions,i + ls.num_e), x[ls.d_e[i]], x[ls.s_e[i]], p, t)
         end
         for i in 1:d.network_structure.num_v
 
-           maybe_idx(d.vertices!,i).f!(
+            @inbounds @views d.layer_data[1].aggregates[i] = sum(ld.interactions[ls.v_idx_s[i]]) + sum( ld.interactions[ls.v_idx_d[i] .+ ls.num_e])
+
+            #@inbounds @views musum!(d.layer_data[1].aggregates[i], ld.interactions[ls.v_idx_s[i]]) #+ sum( ld.interactions[ls.v_idx_d[i] .+ ls.num_e])
+
+            @inbounds @views  maybe_idx(d.vertices!,i).f!(
                 view(dx, i),
                 ld.v[i],
                 p_v_idx(p, i),
                 t,
-                sum(ld.interactions[ls.v_idx_s[i]]) + sum(ld.interactions[ls.v_idx_d[i] .+ ls.num_e]))
+                d.layer_data[1].aggregates[i])
        end
     end
     nothing
 end
 
+@btime @inbounds @views  sum($LD.interactions[$NL.v_idx_s[1]])
 
 ode = proto_ODE_Static(vertex!, graph, NS, [LD], false)
 
 x0 = randn(N)
 dx0 = randn(N)
 ode(x0, dx0, nothing, 0.)
+@btime ode($x0, $dx0, nothing, 0.)
+
 x0 = randn(N)
 using OrdinaryDiffEq, Plots, BenchmarkTools
 ode_prob = ODEProblem(ode, x0, (0., 5.))
