@@ -27,9 +27,10 @@ end
 
 
 
-@Base.kwdef struct nd_ODE_Static{G, GDB, T1, T2}
+@Base.kwdef struct nd_ODE_Static{G, GDB, T1, T2, T3}
     vertices!::T1
     edges!::T2
+    aggregator::T3
     graph::G
     graph_structure::GraphStruct
     graph_data::GDB
@@ -45,7 +46,7 @@ function (d::nd_ODE_Static)(dx, x, p, t)
     end
 
     @nd_threads d.parallel for i in 1:d.graph_structure.num_v
-        maybe_idx(d.vertices!,i).f!(view(dx,d.graph_structure.v_idx[i]), gd.v[i], gd.e_s_v[i], gd.e_d_v[i], p_v_idx(p, i), t)
+        maybe_idx(d.vertices!,i).f!(view(dx,d.graph_structure.v_idx[i]), gd.v[i], p_v_idx(p, i), t, d.aggregator(gd.e_s_v[i], gd.e_d_v[i]))
     end
 
     nothing

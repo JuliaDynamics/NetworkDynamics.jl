@@ -21,13 +21,12 @@ println("Building Static Network Dynamics with one static vertex")
     nothing
 end
 
-@inline function diffusion_vertex!(dv, v, e_s, e_d, p, t)
-    dv .= 0.
-    oriented_edge_sum!(dv, e_s, e_d) # Oriented sum of the incoming and outgoing edges
+@inline function diffusion_vertex!(dv, v, p, t, i)
+    dv .= i
     nothing
 end
 
-statvertex = StaticVertex(f! = (v, e_s, e_d, p, t) -> v .= pi, dim = 1)
+statvertex = StaticVertex(f! = (v, p, t, i) -> v .= pi, dim = 1)
 
 odevertex = ODEVertex(f! = diffusion_vertex!, dim = 1)
 staticedge = StaticEdge(f! = diffusion_edge!, dim = 1)
@@ -36,7 +35,7 @@ vertex_list = [statvertex, odevertex]
 append!(vertex_list, [odevertex for i in 1:N-2])
 edge_list = [staticedge for e in edges(g)]
 
-diff_network_st_ver = network_dynamics(vertex_list, edge_list, g)
+diff_network_st_ver = network_dynamics(vertex_list, edge_list, oriented_edge_sum, g)
 
 @test diff_network_st_ver isa ODEFunction
 

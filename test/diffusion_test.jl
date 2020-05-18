@@ -59,9 +59,8 @@ println("Building Static Network Dynamics")
     nothing
 end
 
-@inline function diffusion_vertex!(dv, v, e_s, e_d, p, t)
-    dv .= 0.
-    oriented_edge_sum!(dv, e_s, e_d) # Oriented sum of the incoming and outgoing edges
+@inline function diffusion_vertex!(dv, v, p, t, i)
+    dv .= i
     nothing
 end
 
@@ -72,7 +71,7 @@ staticedge = StaticEdge(f! = diffusion_edge!, dim = 1)
 vertex_list = [odevertex for v in vertices(g)]
 edge_list = [staticedge for e in edges(g)]
 
-diff_network_st = network_dynamics(vertex_list,edge_list,g)
+diff_network_st = network_dynamics(vertex_list, edge_list, oriented_edge_sum, g)
 
 @test diff_network_st isa ODEFunction
 @test diff_network_simple_api isa ODEFunction
@@ -102,7 +101,7 @@ println("Building Static Network Dynamics with artifical ODE Edges")
 odeedge = ODEEdge(staticedge) # We promote the static edge to an ODEEdge artifically
 ode_edge_list = [odeedge for e in edges(g)]
 
-diff_network_ode = network_dynamics(vertex_list,ode_edge_list,g)
+diff_network_ode = network_dynamics(vertex_list, ode_edge_list, oriented_edge_sum, g)
 
 x0_ode = find_valid_ic(diff_network_ode, randn(nv(g) + ne(g)))
 dx0_ode = similar(x0_ode)

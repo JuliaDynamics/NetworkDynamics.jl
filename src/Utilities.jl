@@ -100,7 +100,7 @@ end
 end
 
 
-export oriented_edge_sum!
+export oriented_edge_sum!, oriented_edge_sum
 
 """
 A small utility function for writing diffusion dynamics. It provides the
@@ -116,6 +116,18 @@ oriented sum of all the incident edges.
     nothing
 end
 
+@inline function oriented_edge_sum(e_s, e_d)
+    e_sum = 0.
+
+    @inbounds for e in e_s
+        e_sum -= e[1]
+    end
+    @inbounds for e in e_d
+        e_sum += e[1]
+    end
+
+    e_sum
+end
 
 
 export RootRhs

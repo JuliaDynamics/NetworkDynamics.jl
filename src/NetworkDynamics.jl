@@ -76,7 +76,7 @@ of VertexFunctions **`vertices!`**, an array of EdgeFunctions **`edges!`** and a
 `LightGraph.jl` object **`g`**. The optional argument `parallel` is a boolean
 value that denotes if the central loop should be executed in parallel with the number of threads set by the environment variable JULIA_NUM_THREADS.
 """
-function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U},
+function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, aggregator,
                           graph; x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: StaticEdge}
     if parallel
         haskey(ENV, "JULIA_NUM_THREADS") &&
@@ -97,14 +97,14 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
 
     graph_data = GraphData(v_array, e_array, graph_stucture)
 
-    nd! = nd_ODE_Static(vertices!, edges!, graph, graph_stucture, graph_data, parallel)
+    nd! = nd_ODE_Static(vertices!, edges!, aggregator, graph, graph_stucture, graph_data, parallel)
     mass_matrix = construct_mass_matrix(mmv_array, graph_stucture)
 
     ODEFunction(nd!; mass_matrix = mass_matrix, syms=symbols)
 end
 
 
-function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: ODEEdge}
+function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, aggregator, graph; x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: ODEEdge}
     if parallel
         haskey(ENV, "JULIA_NUM_THREADS") &&
         parse(Int, ENV["JULIA_NUM_THREADS"]) > 1 ? nothing :
@@ -126,14 +126,14 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
 
     graph_data = GraphData(v_array, e_array, graph_stucture)
 
-    nd! = nd_ODE_ODE(vertices!, edges!, graph, graph_stucture, graph_data, parallel)
+    nd! = nd_ODE_ODE(vertices!, edges!, aggregator, graph, graph_stucture, graph_data, parallel)
 
     mass_matrix = construct_mass_matrix(mmv_array, mme_array, graph_stucture)
 
     ODEFunction(nd!; mass_matrix = mass_matrix, syms=symbols)
 end
 
-function network_dynamics(vertices!,  edges!, graph; parallel=false)
+function network_dynamics(vertices!,  edges!, aggregator, graph; parallel=false)
     try
         Array{VertexFunction}(vertices!)
     catch err
@@ -150,10 +150,10 @@ function network_dynamics(vertices!,  edges!, graph; parallel=false)
     end
     va! = Array{VertexFunction}(vertices!)
     ea! = Array{EdgeFunction}(edges!)
-    network_dynamics(va!,  ea!, graph, parallel = parallel)
+    network_dynamics(va!,  ea!, aggregator, graph, parallel = parallel)
 end
 
-function network_dynamics(vertices!::Array{VertexFunction}, edges!::Array{EdgeFunction}, graph; parallel=false)
+function network_dynamics(vertices!::Array{VertexFunction}, edges!::Array{EdgeFunction}, aggregator, graph; parallel=false)
     @assert length(vertices!) == nv(graph)
     @assert length(edges!) == ne(graph)
 
@@ -166,9 +166,9 @@ function network_dynamics(vertices!::Array{VertexFunction}, edges!::Array{EdgeFu
     end
 
     if contains_dyn_edge
-        return network_dynamics(Array{ODEVertex}(vertices!),Array{ODEEdge}(edges!), graph, parallel = parallel)
+        return network_dynamics(Array{ODEVertex}(vertices!),Array{ODEEdge}(edges!), aggregator, graph, parallel = parallel)
     else
-        return network_dynamics(Array{ODEVertex}(vertices!),Array{StaticEdge}(edges!), graph, parallel = parallel)
+        return network_dynamics(Array{ODEVertex}(vertices!),Array{StaticEdge}(edges!), aggregator, graph, parallel = parallel)
     end
     nothing
 end
@@ -176,10 +176,10 @@ end
 """
 Allow initializing StaticEdgeFunction for Power Dynamics
 """
-function StaticEdgeFunction(vertices!, edges!, graph; parallel = false)
+function StaticEdgeFunction(vertices!, edges!, aggregator, graph; parallel = false)
     # For reasons I don't fully understand we have to qualify the call to
     # the constructor of StaticEdgeFunction here.
-    nd_ODE_Static_mod.StaticEdgeFunction(network_dynamics(vertices!, edges!, graph, parallel = parallel))
+    nd_ODE_Static_mod.StaticEdgeFunction(network_dynamics(vertices!, edges!, aggregator, graph, parallel = parallel))
 end
 
 
