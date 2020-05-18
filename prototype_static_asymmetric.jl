@@ -155,8 +155,10 @@ function node!(dv, v, p, t, inputs)
     nothing
 end
 
+using OrdinaryDiffEq, Plots, BenchmarkTools
+
 vertex! = ODEVertex(f! = node!, dim = 1)
-N = 100 # number of nodes
+N = 1000 # number of nodes
 k = 20 # average degree
 graph = barabasi_albert(N, k)
 
@@ -198,7 +200,7 @@ ode(x0, dx0, nothing, 0.)
 @btime ode($x0, $dx0, nothing, 0.)
 
 x0 = randn(N)
-using OrdinaryDiffEq, Plots, BenchmarkTools
+
 ode_prob = ODEProblem(ode, x0, (0., 5.))
 sol = solve(ode_prob, Tsit5())
 
