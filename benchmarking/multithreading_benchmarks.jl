@@ -71,12 +71,12 @@ p  = (collect(1:nv(g))./nv(g) .- 0.5, 5 .* ones(ne(g)))
 ### Benchmarking
 println("\nBenchmarking ODE_ODE...")
 println("\nsingle-threaded...")
-nd_ode = network_dynamics(nd_diffusion_vertex, nd_diffusion_dedge, oriented_ege_sum, g, parallel=false)
+nd_ode = network_dynamics(nd_diffusion_vertex, nd_diffusion_dedge, oriented_edge_sum, g, parallel=false)
 x0 = randn(nv(g) + ne(g))
 dx0 = randn(nv(g) + ne(g))
 display(@benchmark nd_ode($x0, $dx0, $p , 0,))
 println("\nparallel...")
-nd_ode = network_dynamics(nd_diffusion_vertex, nd_diffusion_dedge, oriented_ege_sum, g, parallel=true)
+nd_ode = network_dynamics(nd_diffusion_vertex, nd_diffusion_dedge, oriented_edge_sum, g, parallel=true)
 display(@benchmark nd_ode($x0, $dx0, $p , 0,))
 
 
