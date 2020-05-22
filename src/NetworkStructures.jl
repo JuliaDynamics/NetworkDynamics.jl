@@ -17,7 +17,7 @@ using SparseArrays
 # vertex and the edge variables. We precompute everything we can and store it
 # in GraphStruct.
 
-export create_idxs, create_offsets, GraphStruct, GraphData, EdgeData, VertexData, construct_mass_matrix
+export create_idxs, create_offsets, GraphStruct, GraphData, GraphLayer, EdgeData, VertexData, construct_mass_matrix
 
 const Idx = UnitRange{Int}
 
@@ -258,9 +258,14 @@ function GraphData(v_array::Tv, e_array::Te, gs::GraphStruct; global_offset = 0)
     GraphData{GDB, elV, elE}(gdb, v, e, v_s_e, v_d_e, e_s_v, e_d_v)
 end
 
-# function GraphData(v_array, e_array, gs)
-#     GraphData{typeof(v_array), typeof(e_array)}(v_array, e_array, gs)
-# end
+struct GraphLayer{T2, T3, G, GD}
+    edges!::T2
+    aggregator::T3
+    graph::G
+    graph_structure::GraphStruct
+    graph_data::GD
+end
+
 
 #= In order to manipulate initial conditions using this view of the underlying
 array we provide view functions that give access to the arrays. =#

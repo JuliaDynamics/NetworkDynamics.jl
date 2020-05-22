@@ -27,26 +27,26 @@ end
 
 
 
-@Base.kwdef struct nd_ODE_Static{G, GDB, T1, T2, T3}
+@Base.kwdef struct nd_ODE_Static{T1, GL}
     vertices!::T1
-    edges!::T2
-    aggregator::T3
-    graph::G
-    graph_structure::GraphStruct
-    graph_data::GDB
+    graph_layer::GL
     parallel::Bool # enables multithreading for the core loop
 end
 
 
 function (d::nd_ODE_Static)(dx, x, p, t)
-    gd = prep_gd(dx, x, d.graph_data, d.graph_structure)
 
-    @nd_threads d.parallel for i in 1:d.graph_structure.num_e
-        maybe_idx(d.edges!, i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], p_e_idx(p, i), t)
+    gs = d.graph_layer.graph_structure
+    es! = d.graph_layer.edges!
+    gd = prep_gd(dx, x, d.graph_layer.graph_data, gs) # prep_gd will have to prep the whol tuple of layers at once
+    aggregator = d.graph_layer.aggregator
+
+    @nd_threads d.parallel for i in 1:gs.num_e
+        maybe_idx(es!, i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], p_e_idx(p, i), t)
     end
 
-    @nd_threads d.parallel for i in 1:d.graph_structure.num_v
-        maybe_idx(d.vertices!,i).f!(view(dx,d.graph_structure.v_idx[i]), gd.v[i], p_v_idx(p, i), t, d.aggregator(gd.e_s_v[i], gd.e_d_v[i]))
+    @nd_threads d.parallel for i in 1:gs.num_v
+        maybe_idx(d.vertices!,i).f!(view(dx,gs.v_idx[i]), gd.v[i], p_v_idx(p, i), t, aggregator(gd.e_s_v[i], gd.e_d_v[i]))
     end
 
     nothing
@@ -54,11 +54,14 @@ end
 
 
 function (d::nd_ODE_Static)(x, p, t, ::Type{GetGD})
-    gd = prep_gd(x, x, d.graph_data, d.graph_structure)
 
+    gs = d.graph_layer.graph_structure
+    es! = d.graph_layer.edges!
+    gd = prep_gd(dx, x, d.graph_layer.graph_data, gs) # prep_gd will have to prep the whol tuple of layers at once
+    aggregator = d.graph_layer.aggregator
 
-    @nd_threads d.parallel for i in 1:d.graph_structure.num_e
-        maybe_idx(d.edges!,i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], p_e_idx(p, i), t)
+    @nd_threads d.parallel for i in 1:d.graph_structure.num_v
+        maybe_idx(d.vertices!,i).f!(view(dx,gs.v_idx[i]), gd.v[i], p_v_idx(p, i), t, aggregator(gd.e_s_v[i], gd.e_d_v[i]))
     end
 
     gd
@@ -66,7 +69,7 @@ end
 
 
 function (d::nd_ODE_Static)(::Type{GetGS})
-    d.graph_structure
+    d.graph_layer.graph_structure
 end
 
 
