@@ -6,7 +6,7 @@ using BenchmarkTools
 
 ### Defining a graph
 
-N = 1000 # number of nodes
+N = 100 # number of nodes
 k = 20  # average degree
 g = barabasi_albert(N, k) # a little more exciting than a bare random graph
 
@@ -19,17 +19,9 @@ g = barabasi_albert(N, k) # a little more exciting than a bare random graph
     nothing
 end
 
-@inline Base.@propagate_inbounds function diffusionvertex!(dv, v, e_s, e_d, p, t)
+@inline Base.@propagate_inbounds function diffusionvertex!(dv, v, p, t, i)
     # usually v, e_s, e_d are arrays, hence we use the broadcasting operator .
-    dv[1] = p
-    # edges for which v is the source
-    for e in e_s
-        dv[1] -= e[1]
-    end
-    # edges for which v is the destination
-    for e in e_d
-        dv[1] += e[1]
-    end
+    dv[1] = p + i
     nothing
 end
 
@@ -44,12 +36,12 @@ println("Number of Threads: ", haskey(ENV, "JULIA_NUM_THREADS") ? ENV["JULIA_NUM
 println("\nBenchmarking ODE_Static...")
 p  = (collect(1:nv(g))./nv(g) .- 0.5, .5 .* ones(ne(g)))
 println("\nsingle-threaded...")
-nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g, parallel=false)
+nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, oriented_edge_sum, g, parallel=false)
 x0 = randn(N)
-display(@benchmark $nd($x0, $x0, $p , 0,))
+display(@benchmark nd($x0, $x0, $p , 0,))
 println("\nparallel...")
-nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g, parallel=true)
-display(@benchmark $nd($x0, $x0, $p , 0,))
+nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, oriented_edge_sum, g, parallel=true)
+display(@benchmark nd($x0, $x0, $p , 0,))
 #=
 ### Simulation
 using OrdinaryDiffEq
@@ -79,13 +71,13 @@ p  = (collect(1:nv(g))./nv(g) .- 0.5, 5 .* ones(ne(g)))
 ### Benchmarking
 println("\nBenchmarking ODE_ODE...")
 println("\nsingle-threaded...")
-nd_ode = network_dynamics(nd_diffusion_vertex, nd_diffusion_dedge, g, parallel=false)
+nd_ode = network_dynamics(nd_diffusion_vertex, nd_diffusion_dedge, oriented_edge_sum, g, parallel=false)
 x0 = randn(nv(g) + ne(g))
 dx0 = randn(nv(g) + ne(g))
-display(@benchmark $nd_ode($x0, $dx0, $p , 0,))
+display(@benchmark nd_ode($x0, $dx0, $p , 0,))
 println("\nparallel...")
-nd_ode = network_dynamics(nd_diffusion_vertex, nd_diffusion_dedge, g, parallel=true)
-display(@benchmark $nd_ode($x0, $dx0, $p , 0,))
+nd_ode = network_dynamics(nd_diffusion_vertex, nd_diffusion_dedge, oriented_edge_sum, g, parallel=true)
+display(@benchmark nd_ode($x0, $dx0, $p , 0,))
 
 
 println("")
