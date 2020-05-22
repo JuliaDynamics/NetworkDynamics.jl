@@ -11,7 +11,7 @@ export StaticEdgeFunction
 #=  =#
 
 # If the type of dx and x match, we swap out v_array for x
-@inline function prep_gd(dx::T, x::T, gd::GraphData{GDB, T, T}, gs) where {GDB, T}
+@inline function prep_gd(dx::T, x::T, gd::GraphData{GraphDataBuffer{T, T}, T1, T1}, gs) where {GDB, T, T1}
     gd.gdb.v_array = x # Does not allocate
     gd
 end
@@ -38,7 +38,7 @@ function (d::nd_ODE_Static)(dx, x, p, t)
 
     gs = d.graph_layer.graph_structure
     es! = d.graph_layer.edges!
-    gd = prep_gd(dx, x, d.graph_layer.graph_data, gs) # prep_gd will have to prep the whol tuple of layers at once
+    gd = prep_gd(dx, x, d.graph_layer.graph_data, gs) # prep_gd will have to prep the whole tuple of layers at once
     aggregator = d.graph_layer.aggregator
 
     @nd_threads d.parallel for i in 1:gs.num_e
@@ -56,12 +56,12 @@ end
 function (d::nd_ODE_Static)(x, p, t, ::Type{GetGD})
 
     gs = d.graph_layer.graph_structure
-    es! = d.graph_layer.edges!
-    gd = prep_gd(dx, x, d.graph_layer.graph_data, gs) # prep_gd will have to prep the whol tuple of layers at once
+    e! = d.graph_layer.edges!.f!
+    gd = prep_gd(dx, x, d.graph_layer.graph_data, gs) # prep_gd will have to prep the whole tuple of layers at once
     aggregator = d.graph_layer.aggregator
 
-    @nd_threads d.parallel for i in 1:d.graph_structure.num_v
-        maybe_idx(d.vertices!,i).f!(view(dx,gs.v_idx[i]), gd.v[i], p_v_idx(p, i), t, aggregator(gd.e_s_v[i], gd.e_d_v[i]))
+    @nd_threads d.parallel for i in 1:gs.num_e
+        e!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], p_e_idx(p, i), t)
     end
 
     gd

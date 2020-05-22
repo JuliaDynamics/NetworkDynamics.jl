@@ -17,7 +17,7 @@ using SparseArrays
 # vertex and the edge variables. We precompute everything we can and store it
 # in GraphStruct.
 
-export create_idxs, create_offsets, GraphStruct, GraphData, GraphLayer, EdgeData, VertexData, construct_mass_matrix
+export create_idxs, create_offsets, GraphStruct, GraphData, GraphDataBuffer, GraphLayer, EdgeData, VertexData, construct_mass_matrix
 
 const Idx = UnitRange{Int}
 

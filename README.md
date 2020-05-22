@@ -21,3 +21,17 @@ Check out our step-by-step tutorial as a [jupyter notebook](https://github.com/F
 ## PowerDynamics
 
 [PowerDynamics.jl](https://juliaenergy.github.io/PowerDynamics.jl/stable/) is an open-source framework for dynamic power grid modeling and analysis build on top of NetworkDynamics.jl.
+
+## The fundamental design (with layers)
+
+NetworkDynamics works on vertices and network layers.
+
+Network layers take the state of the vertices as input, calculate what happens
+on the edges, and aggregate the edges into one output per vertex. The vertices
+take this output as input and give the dynamics of the vertices given the
+network state.
+
+Taken together they specify a full ODE system that can be simulated using
+DifferentialEquations.jl.
+
+Consider the example of a flow network with potentials....
