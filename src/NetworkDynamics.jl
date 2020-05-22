@@ -95,9 +95,9 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
 
     graph_stucture = GraphStruct(graph, v_dims, e_dims, symbols_v, symbols_e)
 
-    graph_data = GraphData(v_array, e_array, graph_stucture)
+    graph_data = GraphData(v_array, e_array, graph_stucture; global_offset = 0)
 
-    nd! = nd_ODE_Static(vertices!, GraphLayer(edges!, aggregator, graph, graph_stucture, graph_data), parallel)
+    nd! = nd_ODE_Static(vertices!, (GraphLayer(edges!, aggregator, graph, graph_stucture, graph_data), ), parallel)
     mass_matrix = construct_mass_matrix(mmv_array, graph_stucture)
 
     ODEFunction(nd!; mass_matrix = mass_matrix, syms=symbols)
@@ -124,9 +124,9 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
 
     graph_stucture = GraphStruct(graph, v_dims, e_dims, symbols_v, symbols_e)
 
-    graph_data = GraphData(v_array, e_array, graph_stucture)
+    graph_data = GraphData(v_array, e_array, graph_stucture; global_offset = 0)
 
-    nd! = nd_ODE_ODE(vertices!, GraphLayer(edges!, aggregator, graph, graph_stucture, graph_data), parallel)
+    nd! = nd_ODE_ODE(vertices!, (GraphLayer(edges!, aggregator, graph, graph_stucture, graph_data), ), parallel)
 
     mass_matrix = construct_mass_matrix(mmv_array, mme_array, graph_stucture)
 

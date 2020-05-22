@@ -10,43 +10,58 @@ export StaticEdgeFunction
 
 #=  =#
 
-# If the type of dx and x match, we swap out v_array for x
-@inline function prep_gd(dx::T, x::T, gd::GraphData{GraphDataBuffer{T, T}, T1, T1}, gs) where {GDB, T, T1}
-    gd.gdb.v_array = x # Does not allocate
-    gd
+# If the type of dx and x and the e_buffer match, we swap out v_array for x
+@inline function prep_gls(dx::T, x::T, gls, e_array::T) where {T}
+    gls[1].graph_data.gdb.v_array = x
+    # Does not allocate, all graph layers are assumed to refer to the same
+    # buffer gdb.
+    gls
 end
 
 # If the type of dx and x do not match, we swap initialize a new GraphData object
 # that is based on the type of dx for the edge buffer.
 # Some solvers take the derivative with respect to time, thus x will not be dual
 # but dx will be, leading to errors otherwise
-@inline function prep_gd(dx, x, gd, gs)
-    e_array = similar(dx, gs.dim_e)
-    GraphData(x, e_array, gs)
+@inline function prep_gls(dx, x, gls, e_array)
+    new_e_array = similar(dx, length(e_array))
+    (GraphLayer(gl.edges!,
+        gl.aggregator,
+        gl.graph,
+        gl.graph_structure,
+        GraphData(x, new_e_array, gl.graph_structure)) for gl in gls)
 end
 
 
 
 @Base.kwdef struct nd_ODE_Static{T1, GL}
     vertices!::T1
-    graph_layer::GL
+    graph_layers::GL
     parallel::Bool # enables multithreading for the core loop
 end
 
-
 function (d::nd_ODE_Static)(dx, x, p, t)
 
-    gs = d.graph_layer.graph_structure
-    es! = d.graph_layer.edges!
-    gd = prep_gd(dx, x, d.graph_layer.graph_data, gs) # prep_gd will have to prep the whole tuple of layers at once
-    aggregator = d.graph_layer.aggregator
+    gls = prep_gls(dx, x, d.graph_layers, d.graph_layers[1].graph_data.gdb.e_array)
 
-    @nd_threads d.parallel for i in 1:gs.num_e
-        maybe_idx(es!, i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], p_e_idx(p, i), t)
+    p_offset = 0
+
+    for gl in gls
+        gs = gl.graph_structure
+        es! = gl.edges!
+        gd = gl.graph_data
+
+        @nd_threads d.parallel for i in 1:gs.num_e
+            maybe_idx(es!, i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], p_e_idx(p, i + p_offset), t)
+        end
+
+        p_offset += gs.num_e
     end
 
+    gs = iterate(gls)[1].graph_structure # The tuple comprehension in prep_gls provides a generator, thus we have to use iterate to get the first element.
+    gd = iterate(gls)[1].graph_data
+
     @nd_threads d.parallel for i in 1:gs.num_v
-        maybe_idx(d.vertices!,i).f!(view(dx,gs.v_idx[i]), gd.v[i], p_v_idx(p, i), t, aggregator(gd.e_s_v[i], gd.e_d_v[i]))
+        maybe_idx(d.vertices!,i).f!(view(dx,gs.v_idx[i]), gd.v[i], p_v_idx(p, i), t, (gl.aggregator(gl.graph_data.e_s_v[i], gl.graph_data.e_d_v[i]) for gl in  gls)...)
     end
 
     nothing
@@ -55,21 +70,29 @@ end
 
 function (d::nd_ODE_Static)(x, p, t, ::Type{GetGD})
 
-    gs = d.graph_layer.graph_structure
-    e! = d.graph_layer.edges!.f!
-    gd = prep_gd(dx, x, d.graph_layer.graph_data, gs) # prep_gd will have to prep the whole tuple of layers at once
-    aggregator = d.graph_layer.aggregator
+    gls = prep_gls(dx, x, d.graph_layers, d.graph_layers[1].graph_data.gdb.e_array)
 
-    @nd_threads d.parallel for i in 1:gs.num_e
-        e!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], p_e_idx(p, i), t)
+    p_offset = 0
+
+    for gl in gls
+        gs = gl.graph_structure
+        es! = gl.edges!
+        gd = gl.graph_data
+
+        @nd_threads d.parallel for i in 1:gs.num_e
+            maybe_idx(es!, i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], p_e_idx(p, i + p_offset), t)
+        end
+
+        p_offset += gs.num_e
     end
 
-    gd
+    println("Warning, only returning first layer data. API Change needed.")
+    iterate(gls)[1].graph_data
 end
 
 
 function (d::nd_ODE_Static)(::Type{GetGS})
-    d.graph_layer.graph_structure
+    d.graph_layers[1].graph_structure
 end
 
 

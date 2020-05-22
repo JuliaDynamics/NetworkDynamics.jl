@@ -236,6 +236,7 @@ end
 
 struct GraphData{GDB, elV, elE}
     gdb::GDB
+    global_offset::Int
     v::Array{VertexData{GDB, elV}, 1}
     e::Array{EdgeData{GDB, elE}, 1}
     v_s_e::Array{VertexData{GDB, elV}, 1} # the vertex that is the source of e
@@ -249,13 +250,13 @@ function GraphData(v_array::Tv, e_array::Te, gs::GraphStruct; global_offset = 0)
     GDB = typeof(gdb)
     elV = eltype(v_array)
     elE = eltype(e_array)
-    v = [VertexData{GDB, elV}(gdb, offset + global_offset, dim) for (offset,dim) in zip(gs.v_offs, gs.v_dims)]
+    v = [VertexData{GDB, elV}(gdb, offset, dim) for (offset,dim) in zip(gs.v_offs, gs.v_dims)]
     e = [EdgeData{GDB, elE}(gdb, offset + global_offset, dim) for (offset,dim) in zip(gs.e_offs, gs.e_dims)]
-    v_s_e = [VertexData{GDB, elV}(gdb, offset + global_offset, dim) for (offset,dim) in zip(gs.s_e_offs, gs.v_dims[gs.s_e])]
-    v_d_e = [VertexData{GDB, elV}(gdb, offset + global_offset, dim) for (offset,dim) in zip(gs.d_e_offs, gs.v_dims[gs.d_e])]
+    v_s_e = [VertexData{GDB, elV}(gdb, offset, dim) for (offset,dim) in zip(gs.s_e_offs, gs.v_dims[gs.s_e])]
+    v_d_e = [VertexData{GDB, elV}(gdb, offset, dim) for (offset,dim) in zip(gs.d_e_offs, gs.v_dims[gs.d_e])]
     e_s_v = [[EdgeData{GDB, elE}(gdb, offset + global_offset, dim) for (offset,dim) in e_s_v] for e_s_v in gs.e_s_v_dat]
     e_d_v = [[EdgeData{GDB, elE}(gdb, offset + global_offset, dim) for (offset,dim) in e_d_v] for e_d_v in gs.e_d_v_dat]
-    GraphData{GDB, elV, elE}(gdb, v, e, v_s_e, v_d_e, e_s_v, e_d_v)
+    GraphData{GDB, elV, elE}(gdb, global_offset, v, e, v_s_e, v_d_e, e_s_v, e_d_v)
 end
 
 struct GraphLayer{T2, T3, G, GD}
