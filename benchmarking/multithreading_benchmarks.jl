@@ -6,10 +6,15 @@ using BenchmarkTools
 
 ### Defining a graph
 
-N = 100 # number of nodes
+N = 1000 # number of nodes
 k = 20  # average degree
 g = barabasi_albert(N, k) # a little more exciting than a bare random graph
 
+println("Speed of sparse laplacian matrix multiplication:")
+L = laplacian_matrix(g)
+x0 = randn(N)
+display(@benchmark $L * $x0)
+println("")
 
 ### Functions for edges and vertices
 
