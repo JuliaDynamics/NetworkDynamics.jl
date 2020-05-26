@@ -1,3 +1,9 @@
+#=
+julia --color=yes localmake.jl
+python3 -m http.server --bind localhost
+=#
+
+
 using Pkg
 Pkg.activate(@__DIR__)
 push!(LOAD_PATH, Base.Filesystem.abspath("../"))
