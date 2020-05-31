@@ -12,15 +12,22 @@ import Base.convert
 import Base.promote_rule
 
 
-
+export VertexFunction
+export EdgeFunction
 export StaticVertex
 export StaticEdge
 export ODEVertex
 export ODEEdge
-export VertexFunction
-export EdgeFunction
-# export DDEVertex
-# export DDEEdge
+#export DDEVertex
+#export DDEEdge
+"""
+Abstract supertype for all vertex functions.
+"""
+abstract type VertexFunction end
+"""
+Abstract supertype for all edge functions.
+"""
+abstract type EdgeFunction end
 
 """
     StaticVertex(f!, dim, sym)
@@ -44,7 +51,7 @@ described vertex is the source or the destination respectively.
 
 For more details see the documentation.
 """
-@Base.kwdef struct StaticVertex{T}
+@Base.kwdef struct StaticVertex{T} <: VertexFunction
     f!::T # (v, e_s, e_t, p, t) -> nothing
     dim::Int # number of dimensions of x
     sym=[:v for i in 1:dim] # Symbols for the dimensions
@@ -72,7 +79,7 @@ the source and destination of the described edge.
 
 For more details see the documentation.
 """
-@Base.kwdef struct StaticEdge{T}
+@Base.kwdef struct StaticEdge{T} <: EdgeFunction
     f!::T # (e, v_s, v_t, p, t) -> nothing
     dim::Int # number of dimensions of x
     sym=[:e for i in 1:dim] # Symbols for the dimensions
@@ -103,7 +110,7 @@ solved.
 
 For more details see the documentation.
 """
-@Base.kwdef struct ODEVertex{T}
+@Base.kwdef struct ODEVertex{T} <: VertexFunction
     f!::T # The function with signature (dx, x, e_s, e_t, p, t) -> nothing
     dim::Int # number of dimensions of x
     mass_matrix=I # Mass matrix for the equation
@@ -136,7 +143,7 @@ solved.
 
 For more details see the documentation.
 """
-@Base.kwdef struct ODEEdge{T}
+@Base.kwdef struct ODEEdge{T} <: EdgeFunction
     f!::T # The function with signature (dx, x, e_s, e_t, p, t) -> nothing
     dim::Int # number of dimensions of x
     mass_matrix=I # Mass matrix for the equation
@@ -144,8 +151,6 @@ For more details see the documentation.
 end
 
 
-const VertexFunction = Union{ODEVertex, StaticVertex}
-const EdgeFunction = Union{ODEEdge, StaticEdge}
 
 convert(::Type{ODEVertex}, x::StaticVertex) = ODEVertex(x)
 promote_rule(::Type{ODEVertex}, ::Type{StaticVertex}) = ODEVertex
