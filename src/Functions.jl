@@ -18,7 +18,7 @@ export StaticVertex
 export StaticEdge
 export ODEVertex
 export ODEEdge
-#export DDEVertex
+export DDEVertex
 #export DDEEdge
 """
 Abstract supertype for all vertex functions.
@@ -148,6 +148,39 @@ For more details see the documentation.
     dim::Int # number of dimensions of x
     mass_matrix=I # Mass matrix for the equation
     sym=[:e for i in 1:dim] # Symbols for the dimensions
+end
+
+
+"""
+    DDEVertex(f!, dim, mass_matrix, sym)
+
+Wrapper that ensures compatibility of a **mutating** function **`f!`** with
+the key constructor `network_dynamics`.
+
+**`f!`**  describes the local behaviour at a dynamic node and has to respect
+the following calling syntax
+
+```julia
+f!(dv, v, e_s, e_t, h, p, t) -> nothing
+```
+
+Here `dv`, `v`, `p` and `t` are the usual ODE arguments, while
+`e_s` and `e_d` are arrays containing the edges for which the
+described vertex is the source or the destination respectively. `h` is the history array for `v`.
+
+**`dim`** is the number of independent variables in the vertex equations and
+**`sym`** is an array of symbols for these variables.
+**`mass_matrix`** is an optional argument that defaults to the identity
+matrix `I`. If a mass matrix M is given the system `M * dv = f!` will be
+solved.
+
+For more details see the documentation.
+"""
+@Base.kwdef struct DDEVertex{T} <: VertexFunction
+    f!::T # The function with signature (dx, x, e_s, e_t, h, p, t) -> nothing
+    dim::Int # number of dimensions of x
+    mass_matrix=I # Mass matrix for the equation
+    sym=[:v for i in 1:dim] # Symbols for the dimensions
 end
 
 
