@@ -107,6 +107,41 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
     ODEFunction(nd!; mass_matrix = mass_matrix, syms=symbols)
 end
 
+## DDE
+
+function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Uion{Array{U, 1}, U},
+                          graph; initial_history = nothing, x_prototype=zeros(1), parallel=false) where {T <: DDEVertex, U <: StaticEdge}
+    if parallel
+        haskey(ENV, "JULIA_NUM_THREADS") &&
+        parse(Int, ENV["JULIA_NUM_THREADS"]) > 1 ? nothing :
+        print("Warning: You are using multi-threading with only one thread ",
+        "available to Julia. Consider re-starting Julia with the environment ",
+        "variable JULIA_NUM_THREADS set to the number of physical cores of your CPU.")
+    end
+
+    v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array = collect_ve_info(vertices!, edges!, graph)
+
+    # These arrays are used for initializing the GraphData and will be overwritten
+    v_array = similar(x_prototype, sum(v_dims))
+    e_array = similar(x_prototype, sum(e_dims))
+
+    # default
+    if initial_history == nothing
+        initial_history = ones(sum(v_dims))
+    end
+
+    symbols = symbols_v
+
+    graph_stucture = GraphStruct(graph, v_dims, e_dims, symbols_v, symbols_e)
+
+    graph_data = GraphData(v_array, e_array, graph_stucture)
+
+    nd! = nd_DDE_Static(vertices!, edges!, graph, graph_stucture, graph_data, initial_history, parallel)
+    mass_matrix = construct_mass_matrix(mmv_array, graph_stucture)
+
+    ODEFunction(nd!; mass_matrix = mass_matrix, syms=symbols)
+end
+
 
 function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: ODEEdge}
     if parallel
