@@ -28,9 +28,9 @@ end
     graph::G #redundant?
     graph_structure::GraphStruct
     graph_data::GraphData{Tv, Te}
-    parallel::Bool # enables multithreading for the core loop
     history::Tv # fixing the type to Tv is my first guess, maybe the histry should be stored
     # in the GraphData eventually
+    parallel::Bool # enables multithreading for the core loop
 end
 
 
