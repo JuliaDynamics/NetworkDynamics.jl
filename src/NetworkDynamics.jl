@@ -109,8 +109,7 @@ end
 
 ## DDE
 
-function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Uion{Array{U, 1}, U},
-                          graph; initial_history = nothing, x_prototype=zeros(1), parallel=false) where {T <: DDEVertex, U <: StaticEdge}
+function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; initial_history=nothing, x_prototype=zeros(1), parallel=false) where {T <: DDEVertex, U <: StaticEdge}
     if parallel
         haskey(ENV, "JULIA_NUM_THREADS") &&
         parse(Int, ENV["JULIA_NUM_THREADS"]) > 1 ? nothing :
@@ -139,7 +138,7 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Uion{Array{U
     nd! = nd_DDE_Static(vertices!, edges!, graph, graph_stucture, graph_data, initial_history, parallel)
     mass_matrix = construct_mass_matrix(mmv_array, graph_stucture)
 
-    ODEFunction(nd!; mass_matrix = mass_matrix, syms=symbols)
+    DDEFunction(nd!; mass_matrix = mass_matrix, syms=symbols)
 end
 
 
