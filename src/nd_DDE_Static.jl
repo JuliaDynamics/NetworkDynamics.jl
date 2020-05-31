@@ -21,7 +21,12 @@ end
 end
 
 
+"""
+nd_DDE_Static
 
+vertices! has signature (dv, v, e_s, e_d, h_v, p ,t)
+edges! has signature (e, v_s, v_d, h_v_s, h_v_d, p, t)
+"""
 @Base.kwdef struct nd_DDE_Static{G, Tv, Te, T1, T2}
     vertices!::T1
     edges!::T2
@@ -36,10 +41,10 @@ end
 
 function (d::nd_DDE_Static)(dx, x, h!, p, t)
     gd = prep_gd(dx, x, d.graph_data, d.graph_structure)
-    h!(d.history, p, t)
+    h!(d.history, p, t - p[end])
 
     @nd_threads d.parallel for i in 1:d.graph_structure.num_e
-        maybe_idx(d.edges!, i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], p_e_idx(p, i), t)
+        maybe_idx(d.edges!, i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], view(d.history, d.graph_structure.s_e_idx[i]), view(d.history, d.graph_structure.d_e_idx[i]), p_e_idx(p, i), t)
     end
 
     @nd_threads d.parallel for i in 1:d.graph_structure.num_v
