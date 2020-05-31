@@ -62,6 +62,10 @@ end
     p
 end
 
+## allocating - fix later
+@inline Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2,T3}, i) where {T1,T2,T3}
+    p_v_idx(p[1:2],i)
+end
 
 @inline Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2}, i) where {T1 <: AbstractArray, T2}
     p[1][:, i]
@@ -81,6 +85,11 @@ end
 end
 
 
+
+## allocating - fix later
+@inline Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2,T3}, i) where {T1,T2,T3}
+    p_e_idx((p[1], p[2]), i)
+end
 
 @inline Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2}, i) where {T1, T2 <: AbstractArray}
     p[2][:, i]
