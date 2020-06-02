@@ -129,4 +129,5 @@ sol = solve(dde_prob, MethodOfSteps(Tsit5()));
 ### Plotting
 
 plot(sol, vars = syms_containing(nd, "v"), legend=false)
-savefig("kuramoto_delay.png")
+
+@btime nd!($x0, $x0, $h, p, 0.)
