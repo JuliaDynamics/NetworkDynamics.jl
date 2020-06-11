@@ -60,7 +60,7 @@ function collect_ve_info(vertices!, edges!, graph)
     else
         e_dims = [edges!.dim for e in edges(graph)]
         symbols_e = [Symbol(edges!.sym[j],"_",i) for i in 1:ne(graph) for j in 1:e_dims[i]]
-        if typeof(edges!) <: StaticEdge
+        if typeof(edges!) <: Union{StaticEdge, StaticDelayEdge} # improve type hierarchy
             mme_array = nothing
         else
             mme_array = [edges!.mass_matrix for e in edges(graph)]
@@ -109,7 +109,7 @@ end
 
 ## DDE
 
-function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; initial_history=nothing, x_prototype=zeros(1), parallel=false) where {T <: DDEVertex, U <: StaticEdge}
+function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; initial_history=nothing, x_prototype=zeros(1), parallel=false) where {T <: DDEVertex, U <: StaticDelayEdge}
     if parallel
         haskey(ENV, "JULIA_NUM_THREADS") &&
         parse(Int, ENV["JULIA_NUM_THREADS"]) > 1 ? nothing :
@@ -139,6 +139,14 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
     mass_matrix = construct_mass_matrix(mmv_array, graph_stucture)
 
     DDEFunction(nd!; mass_matrix = mass_matrix, syms=symbols)
+end
+
+function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; initial_history=nothing, x_prototype=zeros(1), parallel=false) where {T <: DDEVertex, U <: StaticEdge}
+    if edges! isa Array
+        network_dynamics(vertices!, Array{StaticDelayEdge}(edges!), graph, initial_history = initial_history, x_prototype =  x_prototype, parallel = parallel)
+    else
+        network_dynamics(vertices!, StaticDelayEdge(edges!), graph, initial_history = initial_history, x_prototype =  x_prototype, parallel = parallel)
+    end
 end
 
 
@@ -194,6 +202,27 @@ end
 function network_dynamics(vertices!::Array{VertexFunction}, edges!::Array{EdgeFunction}, graph; parallel=false)
     @assert length(vertices!) == nv(graph)
     @assert length(edges!) == ne(graph)
+
+    contains_delay = false
+
+
+    for e in edges!
+        # maybe add new abstract type instead of using a union
+        if isa(e, Union{StaticDelayEdge, ODEDelayEdge})
+            contains_delay = true
+        end
+    end
+    for v in vertices!
+        # maybe add new abstract type instead of using a union
+        if isa(v, DDEVertex)
+            contains_delay = true
+        end
+    end
+    # If one Edge or Vertex needs access to the history function, all network components are promoted to hisotry aware version -> lots more variables that are potentially not used are passed around. the multilayer structure should (partially) work around that need.
+    if contains_delay
+        return network_dynamics(Array{DDEVertex}(vertices!),Array{StaticDelayEdge}(edges!), graph, parallel = parallel)
+    end
+
 
     contains_dyn_edge = false
 

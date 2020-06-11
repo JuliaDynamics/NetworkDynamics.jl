@@ -15,7 +15,7 @@ g = watts_strogatz(N, k, 0.) # a little more exciting than a bare random graph
 # the signature of the edge and vertex functions differs from the ODE signature
 function diffusionedge!(e, v_s, v_d, h_v_s, h_v_d, p, t)
     # usually e, v_s, v_d are arrays, hence we use the broadcasting operator .
-    e .= v_s - v_d
+    e .= .1 * (v_s - v_d)
     nothing
 end
 
@@ -45,8 +45,8 @@ nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g)
 
 x0 = randn(N) # random initial conditions
 # history function defaults to all 1. and is in-place to save allocations
-h(out, p, t) = (out .= .5)
-tspan = (0., 4.)
+h(out, p, t) = (out .= 1.)
+tspan = (0., 10.)
 
 # i extended the tuple syntax to pass the delay τ as a parameter
 # the first argument should be an array (or other object) containing the vertex parameters
@@ -77,7 +77,7 @@ nd_2 = network_dynamics(nd_diffusion_vertex_2, nd_diffusion_edge_2, g)
 
 x0_2 = Array{Float64,1}(vec([randn(N).-10 randn(N).^2]')) # x ~ N(0,1); ϕ ~ N(0,1)^2
 
-p = (nothing, nothing, .5) # p = (vertexparameters, edgeparameters, delaytime)
+p = (nothing, nothing, 1.) # p = (vertexparameters, edgeparameters, delaytime)
 dde_prob_2 = DDEProblem(nd_2, x0_2, h, tspan, p)
 
 sol_2 = solve(dde_prob_2, MethodOfSteps(Tsit5()));
@@ -118,10 +118,10 @@ nd! = network_dynamics(kdvertex!, kdedge!, g)
 
 x0 = randn(N) # random initial conditions
 # history function defaults to all 1. and is in-place to save allocations
-h(out, p, t) = (out .= pi/2)
+h(out, p, t) = (out .= 1.)
 # p = (vertexparameters, edgeparameters, delaytime)
-p = (randn(N), 10., 1.)
-tspan = (0.,10.)
+p = (randn(N), 10., pi/2)
+tspan = (0.,20.)
 dde_prob = DDEProblem(nd!, x0, h, tspan, p)
 
 sol = solve(dde_prob, MethodOfSteps(Tsit5()));

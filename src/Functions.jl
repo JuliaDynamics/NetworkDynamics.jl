@@ -19,6 +19,7 @@ export StaticEdge
 export ODEVertex
 export ODEEdge
 export DDEVertex
+export StaticDelayEdge
 #export DDEEdge
 """
 Abstract supertype for all vertex functions.
@@ -183,6 +184,63 @@ For more details see the documentation.
     sym=[:v for i in 1:dim] # Symbols for the dimensions
 end
 
+function DDEVertex(ov::ODEVertex)
+    f! = (dv, v, e_s, e_d, h_v, p, t) -> ov.f!(dv, v, e_s, e_d, p, t)
+    DDEVertex(f!, ov.dim, ov.mass_matrix, ov.sym)
+end
+
+function DDEVertex(sv::StaticVertex)
+    DDEVertex(ODEVertex(sv))
+end
+
+# Promotion rules [eventually there might be too many types to hardcode everyhting]
+
+convert(::Type{DDEVertex}, x::StaticVertex) = DDEVertex(x)
+promote_rule(::Type{DDEVertex}, ::Type{StaticVertex}) = DDEVertex
+
+
+convert(::Type{DDEVertex}, x::ODEVertex) = DDEVertex(x)
+promote_rule(::Type{DDEVertex}, ::Type{ODEVertex}) = DDEVertex
+
+"""
+Like a static edge but with extra arguments for the history of the source and destination vertices. This is NOT a DDEEdge.
+"""
+ @Base.kwdef struct StaticDelayEdge{T} <: EdgeFunction
+    f!::T # (e, v_s, v_t, p, t) -> nothing
+    dim::Int # number of dimensions of x
+    sym=[:e for i in 1:dim] # Symbols for the dimensions
+end
+
+function StaticDelayEdge(se::StaticEdge)
+    f! = (e, v_s, v_d, h_v_s, h_v_d, p, t) -> se.f!(e, v_s, v_d, p, t)
+    StaticDelayEdge(f!, se.dim, se.sym)
+end
+
+# Promotion rules
+
+convert(::Type{StaticDelayEdge}, x::StaticEdge) = StaticDelayEdge(x)
+promote_rule(::Type{StaticDelayEdge}, ::Type{StaticEdge}) = StaticDelayEdge
+
+
+#= not used at the moment
+"""
+Like a ODEEdge but with extra arguments for the history of the source and destination vertices. This is NOT a DDEEdge.
+"""
+@Base.kwdef struct ODEDelayEdge{T} <: EdgeFunction
+   f!::T # (e, v_s, v_t, p, t) -> nothing
+   dim::Int # number of dimensions of x
+   mass_matrix=I # Mass matrix for the equation
+   sym=[:e for i in 1:dim] # Symbols for the dimensions
+end
+
+function ODEDelayEdge(se::ODEEdge)
+   f! = (de, e, v_s, v_d, h_v_s, h_v_d, p, t) -> se.f!(de, e, v_s, v_d, p, t)
+   ODEDelayEdge(f!, se.dim, se.sym)
+end
+
+# promotions rules are more complicated for this case
+
+=#
 
 
 convert(::Type{ODEVertex}, x::StaticVertex) = ODEVertex(x)
@@ -217,6 +275,5 @@ end
 function ODEEdge(se::StaticEdge)
     ODEEdge(ODE_from_Static(se.f!), se.dim, 0., se.sym)
 end
-
 
 end
