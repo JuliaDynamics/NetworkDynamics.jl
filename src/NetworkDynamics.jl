@@ -208,7 +208,7 @@ function network_dynamics(vertices!::Array{VertexFunction}, edges!::Array{EdgeFu
 
     for e in edges!
         # maybe add new abstract type instead of using a union
-        if isa(e, Union{StaticDelayEdge, ODEDelayEdge})
+        if isa(e, StaticDelayEdge) # eventually: Union{StaticDelayEdge, ODEDelayEdge})
             contains_delay = true
         end
     end
