@@ -190,7 +190,8 @@ function DDEVertex(ov::ODEVertex)
 end
 
 function DDEVertex(sv::StaticVertex)
-    DDEVertex(ODEVertex(sv))
+    f! = (dv, v, e_s, e_d, h_v, p, t) -> sv.f!(v, e_s, e_d, p, t)
+    DDEVertex(f! = f!, dim = sv.dim, sym= sv.sym)
 end
 
 # Promotion rules [eventually there might be too many types to hardcode everyhting]
@@ -201,6 +202,7 @@ promote_rule(::Type{DDEVertex}, ::Type{StaticVertex}) = DDEVertex
 
 convert(::Type{DDEVertex}, x::ODEVertex) = DDEVertex(x)
 promote_rule(::Type{DDEVertex}, ::Type{ODEVertex}) = DDEVertex
+
 
 """
 Like a static edge but with extra arguments for the history of the source and destination vertices. This is NOT a DDEEdge.

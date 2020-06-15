@@ -52,7 +52,7 @@ function collect_ve_info(vertices!, edges!, graph)
         @assert length(edges!) == ne(graph)
         e_dims = [e.dim for e in edges!]
         symbols_e = [Symbol(edges![i].sym[j],"_",i) for i in 1:length(edges!) for j in 1:e_dims[i]]
-        if eltype(edges!) <: StaticEdge
+        if eltype(edges!)  <: Union{StaticEdge, StaticDelayEdge}  # improve type hierarchy
             mme_array = nothing
         else
             mme_array = [e.mass_matrix for e in edges!]
@@ -208,7 +208,7 @@ function network_dynamics(vertices!::Array{VertexFunction}, edges!::Array{EdgeFu
 
     for e in edges!
         # maybe add new abstract type instead of using a union
-        if isa(e, Union{StaticDelayEdge, ODEDelayEdge})
+        if isa(e, StaticDelayEdge) # eventually: Union{StaticDelayEdge, ODEDelayEdge})
             contains_delay = true
         end
     end
