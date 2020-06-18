@@ -141,6 +141,9 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
     DDEFunction(nd!; mass_matrix = mass_matrix, syms=symbols)
 end
 
+"""
+Promotes StaticEdge to StaticDelayEdge if there is a DDEVertex
+"""
 function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; initial_history=nothing, x_prototype=zeros(1), parallel=false) where {T <: DDEVertex, U <: StaticEdge}
     if edges! isa Array
         network_dynamics(vertices!, Array{StaticDelayEdge}(edges!), graph, initial_history = initial_history, x_prototype =  x_prototype, parallel = parallel)
@@ -148,7 +151,18 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
         network_dynamics(vertices!, StaticDelayEdge(edges!), graph, initial_history = initial_history, x_prototype =  x_prototype, parallel = parallel)
     end
 end
+"""
+Promotes ODEVertex to DDEVertex if there is a StaticDelayEdge
+"""
+function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; initial_history=nothing, x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: StaticDelayEdge}
+    if vertices! isa Array
+        network_dynamics(Array{DDEVertex}(vertices!), edges!, graph, initial_history = initial_history, x_prototype =  x_prototype, parallel = parallel)
+    else
+        network_dynamics(DDEVertex(vertices!), edges!, graph, initial_history = initial_history, x_prototype =  x_prototype, parallel = parallel)
+    end
+end
 
+## ODE
 
 function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: ODEEdge}
     if parallel
