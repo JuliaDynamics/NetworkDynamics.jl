@@ -18,7 +18,8 @@ export StaticVertex
 export StaticEdge
 export ODEVertex
 export ODEEdge
-#export DDEVertex
+export DDEVertex
+export StaticDelayEdge
 #export DDEEdge
 """
 Abstract supertype for all vertex functions.
@@ -151,6 +152,98 @@ For more details see the documentation.
 end
 
 
+"""
+    DDEVertex(f!, dim, mass_matrix, sym)
+
+Wrapper that ensures compatibility of a **mutating** function **`f!`** with
+the key constructor `network_dynamics`.
+
+**`f!`**  describes the local behaviour at a dynamic node and has to respect
+the following calling syntax
+
+```julia
+f!(dv, v, e_s, e_t, h, p, t) -> nothing
+```
+
+Here `dv`, `v`, `p` and `t` are the usual ODE arguments, while
+`e_s` and `e_d` are arrays containing the edges for which the
+described vertex is the source or the destination respectively. `h` is the history array for `v`.
+
+**`dim`** is the number of independent variables in the vertex equations and
+**`sym`** is an array of symbols for these variables.
+**`mass_matrix`** is an optional argument that defaults to the identity
+matrix `I`. If a mass matrix M is given the system `M * dv = f!` will be
+solved.
+
+For more details see the documentation.
+"""
+@Base.kwdef struct DDEVertex{T} <: VertexFunction
+    f!::T # The function with signature (dx, x, e_s, e_t, h, p, t) -> nothing
+    dim::Int # number of dimensions of x
+    mass_matrix=I # Mass matrix for the equation
+    sym=[:v for i in 1:dim] # Symbols for the dimensions
+end
+
+function DDEVertex(ov::ODEVertex)
+    f! = (dv, v, e_s, e_d, h_v, p, t) -> ov.f!(dv, v, e_s, e_d, p, t)
+    DDEVertex(f!, ov.dim, ov.mass_matrix, ov.sym)
+end
+
+function DDEVertex(sv::StaticVertex)
+    f! = (dv, v, e_s, e_d, h_v, p, t) -> sv.f!(v, e_s, e_d, p, t)
+    DDEVertex(f! = f!, dim = sv.dim, sym= sv.sym)
+end
+
+# Promotion rules [eventually there might be too many types to hardcode everyhting]
+
+convert(::Type{DDEVertex}, x::StaticVertex) = DDEVertex(x)
+promote_rule(::Type{DDEVertex}, ::Type{StaticVertex}) = DDEVertex
+
+
+convert(::Type{DDEVertex}, x::ODEVertex) = DDEVertex(x)
+promote_rule(::Type{DDEVertex}, ::Type{ODEVertex}) = DDEVertex
+
+
+"""
+Like a static edge but with extra arguments for the history of the source and destination vertices. This is NOT a DDEEdge.
+"""
+ @Base.kwdef struct StaticDelayEdge{T} <: EdgeFunction
+    f!::T # (e, v_s, v_t, p, t) -> nothing
+    dim::Int # number of dimensions of x
+    sym=[:e for i in 1:dim] # Symbols for the dimensions
+end
+
+function StaticDelayEdge(se::StaticEdge)
+    f! = (e, v_s, v_d, h_v_s, h_v_d, p, t) -> se.f!(e, v_s, v_d, p, t)
+    StaticDelayEdge(f!, se.dim, se.sym)
+end
+
+# Promotion rules
+
+convert(::Type{StaticDelayEdge}, x::StaticEdge) = StaticDelayEdge(x)
+promote_rule(::Type{StaticDelayEdge}, ::Type{StaticEdge}) = StaticDelayEdge
+
+
+#= not used at the moment
+"""
+Like a ODEEdge but with extra arguments for the history of the source and destination vertices. This is NOT a DDEEdge.
+"""
+@Base.kwdef struct ODEDelayEdge{T} <: EdgeFunction
+   f!::T # (e, v_s, v_t, p, t) -> nothing
+   dim::Int # number of dimensions of x
+   mass_matrix=I # Mass matrix for the equation
+   sym=[:e for i in 1:dim] # Symbols for the dimensions
+end
+
+function ODEDelayEdge(se::ODEEdge)
+   f! = (de, e, v_s, v_d, h_v_s, h_v_d, p, t) -> se.f!(de, e, v_s, v_d, p, t)
+   ODEDelayEdge(f!, se.dim, se.sym)
+end
+
+# promotions rules are more complicated for this case
+
+=#
+
 
 convert(::Type{ODEVertex}, x::StaticVertex) = ODEVertex(x)
 promote_rule(::Type{ODEVertex}, ::Type{StaticVertex}) = ODEVertex
@@ -184,6 +277,5 @@ end
 function ODEEdge(se::StaticEdge)
     ODEEdge(ODE_from_Static(se.f!), se.dim, 0., se.sym)
 end
-
 
 end
