@@ -97,7 +97,7 @@ function kuramoto_delay_edge!(e, v_s, v_d, h_v_s, h_v_d, p, t)
     nothing
 end
 
-function kuramoto_delay_vertex!(dv, v, e_s, e_d, h_v, p, t)
+function kuramoto_vertex!(dv, v, e_s, e_d, p, t)
     dv[1] = p
     for e in e_s
         dv[1] -= e[1]
@@ -110,7 +110,7 @@ end
 
 # dim of the edge is 2 since the coupling is not symmetric
 kdedge! = StaticDelayEdge(f! = kuramoto_delay_edge!, dim=2)
-kdvertex! = DDEVertex(f! = kuramoto_delay_vertex!, dim = 1)
+kdvertex! = ODEVertex(f! = kuramoto_vertex!, dim = 1)
 
 nd! = network_dynamics(kdvertex!, kdedge!, g)
 
