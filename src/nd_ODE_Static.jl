@@ -50,18 +50,18 @@ function (d::nd_ODE_Static)(dx, x, p, t)
         es! = gl.edges!
         gd = gl.graph_data
 
-        @nd_threads d.parallel for i in 1:gs.num_e
-            maybe_idx(es!, i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], p_e_idx(p, i + p_offset), t)
+        @nd_threads d.parallel for i in (1:gs.num_e) .+ p_offset
+            es!.f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], p_e_idx(p, i), t)
         end
 
         p_offset += gs.num_e
     end
 
-    gs = iterate(gls)[1].graph_structure # The tuple comprehension in prep_gls provides a generator, thus we have to use iterate to get the first element.
-    gd = iterate(gls)[1].graph_data
+    let gs = gls[1].graph_structure,  gd = gls[1].graph_data
 
-    @nd_threads d.parallel for i in 1:gs.num_v
-        maybe_idx(d.vertices!,i).f!(view(dx,gs.v_idx[i]), gd.v[i], p_v_idx(p, i), t, (gl.aggregator(gl.graph_data.e_s_v[i], gl.graph_data.e_d_v[i]) for gl in  gls)...)
+        @nd_threads d.parallel for i in 1:gs.num_v
+            maybe_idx(d.vertices!,i).f!(view(dx,gs.v_idx[i]), gd.v[i], p_v_idx(p, i), t, (gl.aggregator(gl.graph_data.e_s_v[i], gl.graph_data.e_d_v[i]) for gl in  gls)...)
+        end
     end
 
     nothing

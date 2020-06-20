@@ -1,5 +1,5 @@
 """network_dynamics: The Main Constructor of the Package. It takes Arrays of Vertex- and Edgefunction + a graph and
-spits out an ODEFunction. Others still need to be implemented. """
+spits out an ODEFunction{isinplace}. Others still need to be implemented. """
 module NetworkDynamics
 
 using Reexport
@@ -70,7 +70,7 @@ end
 """
     network_dynamics(vertices!, edges!, g; parallel = false)
 
-Assembles the the dynamical equations of the network problem into an `ODEFunction`
+Assembles the the dynamical equations of the network problem into an `ODEFunction{isinplace}`
 compatible with the `DifferentialEquations.jl` solvers. Takes as arguments an array
 of VertexFunctions **`vertices!`**, an array of EdgeFunctions **`edges!`** and a
 `LightGraph.jl` object **`g`**. The optional argument `parallel` is a boolean
@@ -100,7 +100,7 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
     nd! = nd_ODE_Static(vertices!, (GraphLayer(edges!, aggregator, graph, graph_stucture, graph_data), ), parallel)
     mass_matrix = construct_mass_matrix(mmv_array, graph_stucture)
 
-    ODEFunction(nd!; mass_matrix = mass_matrix, syms=symbols)
+    ODEFunction{isinplace}(nd!; mass_matrix = mass_matrix, syms=symbols)
 end
 
 
@@ -130,7 +130,7 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
 
     mass_matrix = construct_mass_matrix(mmv_array, mme_array, graph_stucture)
 
-    ODEFunction(nd!; mass_matrix = mass_matrix, syms=symbols)
+    ODEFunction{isinplace}(nd!; mass_matrix = mass_matrix, syms=symbols)
 end
 
 function network_dynamics(vertices!,  edges!, aggregator, graph; parallel=false)

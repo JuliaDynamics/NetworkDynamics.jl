@@ -19,14 +19,14 @@ println("")
 ### Functions for edges and vertices
 
 @inline Base.@propagate_inbounds function diffusionedge!(e, v_s, v_d, p, t)
-    # usually e, v_s, v_d are arrays, hence we use the broadcasting operator .
     e[1] = p * (v_s[1] - v_d[1])
     nothing
 end
 
 @inline Base.@propagate_inbounds function diffusionvertex!(dv, v, p, t, i)
-    # usually v, e_s, e_d are arrays, hence we use the broadcasting operator .
-    dv[1] = p + i
+    print(i, typeof(i))
+    @assert 1==0
+    dv[1] = p + i[1]
     nothing
 end
 
@@ -38,12 +38,19 @@ nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1)
 
 ### Benchmarking
 println("Number of Threads: ", haskey(ENV, "JULIA_NUM_THREADS") ? ENV["JULIA_NUM_THREADS"] : "1")
+
+
 println("\nBenchmarking ODE_Static...")
 p  = (collect(1:nv(g))./nv(g) .- 0.5, .5 .* ones(ne(g)))
+
+
 println("\nsingle-threaded...")
 nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, oriented_edge_sum, g, parallel=false)
 x0 = randn(N)
+nd.f(x0,x0,p,0)
 display(@benchmark nd($x0, $x0, $p , 0,))
+
+
 println("\nparallel...")
 nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, oriented_edge_sum, g, parallel=true)
 display(@benchmark nd($x0, $x0, $p , 0,))
