@@ -133,30 +133,7 @@ end
 
 import Base.getindex, Base.setindex!, Base.length, Base.IndexStyle, Base.size, Base.eltype, Base.dataids
 
-#= Once forward declaration of types is implemented properly we can replace this
- by
 
-incomplete struct GraphData{T}
-end
-
-struct EdgeData{T} <: AbstractArray{T, 1}
- gd::GraphData{T}
- idx_offset::Int
- len::Int
-end
-
-Then the recursive type signatures in GraphData that look like:
-
-EdgeData{GraphData{T}, T}
-
-will simplify to
-
-EdgeData{T}
-
-We should create a branch with this variant that can run on this branch of julia:
-
-https://github.com/JuliaLang/julia/pull/32658
-=#
 struct EdgeData{GDB, elE} <: AbstractArray{elE, 1}
     gdb::GDB
     idx_offset::Int
@@ -219,11 +196,6 @@ Base.IndexStyle(::Type{<:VertexData}) = IndexLinear()
 
 @inline Base.dataids(v_dat::VertexData) = dataids(v_dat.gdb.v_array)
 
-# Putting the above together we create a GraphData object:
-
-# An alternative design that needs to be evaluated for performance is to create
-# only one array of VertexData and EdgeData and index into that, possibly with a
-# new set of access types...
 
 # We require potentially different data types for vertices and edges because
 # there are situations with autodifferentiation that require one of them to be
