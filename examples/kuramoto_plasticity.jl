@@ -1,7 +1,7 @@
 using LightGraphs
 using OrdinaryDiffEq
 using NetworkDynamics
-using Plots
+using Plots, LaTeXStrings
 
 N = 100 # number of nodes
 k = 10  # average degree
@@ -36,7 +36,7 @@ end
     for e in e_s
         dv .-= e[1]
     end
-    for e in e_d
+    for e in e_d # other direction is stored at other index
         dv .-= e[3]
     end
 end
@@ -50,24 +50,24 @@ end
 # NetworkDynamics Setup
 plasticvertex = ODEVertex(f! = kuramoto_plastic_vertex!, dim =1)
 mass_matrix_plasticedge = zeros(4,4)
-mass_matrix_plasticedge[1,1] = 1.
-mass_matrix_plasticedge[3,3] = 1.
+mass_matrix_plasticedge[2,2] = 1. # 1st and 3rd internal varibale are set to 0
+mass_matrix_plasticedge[4,4] = 1.
 
-plasticedge   = ODEEdge(f! = kuramoto_plastic_edge!, dim=4, sym=[:es, :ks,:ed,:kd]);
+plasticedge = ODEEdge(f! = kuramoto_plastic_edge!, dim=4, sym=[:es, :ks,:ed,:kd], mass_matrix = mass_matrix_plasticedge);
 kuramoto_plastic! = network_dynamics(plasticvertex, plasticedge, g)
 
 # ODE Setup & Solution
-x0_plastic        = randn(N + 4 * ne(g))
-tspan_plastic     = (0., 500.)
+x0_plastic        = vcat(randn(N), ones(4ne(g)))
+tspan_plastic     = (0., 200.)
 params_plastic    = (nothing, nothing)
-prob_plastic      = ODEProblem(kuramoto_plastic!, x0_plastic, tspan_plastic, params_plastic);
-sol_plastic       = solve(prob_plastic, Tsit5());
+prob_plastic      = ODEProblem(kuramoto_plastic!, x0_plastic, tspan_plastic, params_plastic)
+sol_plastic       = solve(prob_plastic, Rosenbrock23(), abstol = 1e-3, reltol = 1e-3)
 
 # Plotting
 v_idx = idx_containing(kuramoto_plastic!, :v)
-e_idx = idx_containing(kuramoto_plastic!, :e)
-plot(sol_plastic, vars=v_idx, legend=false)
 
-using LaTeXStrings
+plot(sol_plastic, vars=v_idx, legend=false, ylabel=L"\theta")
 
-plot!(sol_plastic, vars=e_idx, legend=false, color=:black, linewidth=0.1, ylabel=L"\theta")
+# Shows Coupling terms
+e_idx = idx_containing(kuramoto_plastic!, :k)
+# plot!(sol_plastic, vars=e_idx, legend=false, color=:black, linewidth=0.001)
