@@ -57,7 +57,7 @@ function (d::nd_ODE_Static)(dx, x, p, t)
         p_offset += gs.num_e
     end
 
-    let gs = gls[1].graph_structure,  gd = gls[1].graph_data
+    let gs = iterate(gls)[1].graph_structure,  gd = iterate(gls)[1].graph_data
 
         @nd_threads d.parallel for i in 1:gs.num_v
             maybe_idx(d.vertices!,i).f!(view(dx,gs.v_idx[i]), gd.v[i], p_v_idx(p, i), t, Tuple{Float64}(gl.aggregator(gl.graph_data.e_s_v[i], gl.graph_data.e_d_v[i]) for gl in  gls)...)
