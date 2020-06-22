@@ -24,8 +24,6 @@ println("")
 end
 
 @inline Base.@propagate_inbounds function diffusionvertex!(dv, v, p, t, i)
-    print(i, typeof(i))
-    @assert 1==0
     dv[1] = p + i[1]
     nothing
 end
