@@ -13,6 +13,7 @@ makedocs(
     pages = [
     "General" => "index.md",
     "BasicConstructors.md",
+	"parameters.md",
 	"Multithreading.md",
     "Library.md",
 	"Tutorials" => [

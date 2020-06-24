@@ -106,10 +106,10 @@ Note that the multiplication with the coupling strength $\sigma$ has been commen
 ```@example fhn
 # Defining global parameters
 
-N = 90       # number of nodes
-ϵ = 0.05
-a = .5
-σ = .5
+N = 90         # number of nodes
+const ϵ = 0.05 # global variables that are accessed several times should be declared `const`
+const a = .5
+const σ = .5
 
 # Tuple of parameters for nodes and edges
 

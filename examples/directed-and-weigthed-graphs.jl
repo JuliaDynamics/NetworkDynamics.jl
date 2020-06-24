@@ -48,12 +48,12 @@ odeelevertex = ODEVertex(f! = fhn_electrical_vertex!, dim = 2, sym=[:u, :v])
 
 fhn_network! = network_dynamics(odeelevertex, electricaledge, g_weighted)
 
-# Global parameters
+# Global parameters that are accessed several times should be `const` to improve performance
 
 N = 90 # number of nodes in the brain atlas
-ϵ = 0.05
-a = .5
-σ = .5
+const ϵ = 0.05
+const a = .5
+const σ = .5
 
 # When passing a tuple of parameters for nodes and edges, then p is passed indi-
 # vidually to every edge. For details see the docs on this example
@@ -63,9 +63,11 @@ p = (nothing, σ * edge_weights)
 x0 = randn(2N) * 5
 tspan = (0., 200.)
 prob  = ODEProblem(fhn_network!, x0, tspan, p)
-sol   = solve(prob, AutoTsit5(TRBDF2()));
+sol   = solve(prob, AutoTsit5(TRBDF2()))
 
-
+using BenchmarkTools
+display(@benchmark sol   = solve(prob, AutoTsit5(TRBDF2())))
+display(@benchmark fhn_network!($x0,$x0,$p,0.))
 ### Plotting
 
 plot(sol, vars = idx_containing(fhn_network!, :u), legend = false, ylim=(-5, 5))
