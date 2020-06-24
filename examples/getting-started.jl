@@ -5,7 +5,7 @@ using NetworkDynamics
 using LightGraphs
 using OrdinaryDiffEq
 using Plots
-
+test
 ### Defining a graph
 
 N = 20 # number of nodes
