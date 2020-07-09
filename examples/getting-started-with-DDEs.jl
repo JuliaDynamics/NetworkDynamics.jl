@@ -70,7 +70,7 @@ plot(sol, vars = syms_containing(nd, "v"), legend=false)
 
 # We will have two independent diffusions on the network, hence dim = 2
 nd_diffusion_vertex_2 = DDEVertex(f! = diffusionvertex!, dim = 2, sym = [:x, :ϕ])
-nd_diffusion_edge_2 = StaticDelayEdge(f! = diffusionedge!, dim = 2)
+nd_diffusion_edge_2 = StaticEdge(f! = diffusionedge!, dim = 2)
 nd_2 = network_dynamics(nd_diffusion_vertex_2, nd_diffusion_edge_2, g)
 
 # at the moment there are issues with higher dimensional arrays in the DDE solve
