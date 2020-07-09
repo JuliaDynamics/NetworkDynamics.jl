@@ -77,7 +77,7 @@ Assembles the the dynamical equations of the network problem into an `ODEFunctio
 compatible with the `DifferentialEquations.jl` solvers. Takes as arguments an array
 of VertexFunctions **`vertices!`**, an array of EdgeFunctions **`edges!`** and a
 `LightGraph.jl` object **`g`**. The optional argument `parallel` is a boolean
-value that denotes if the central loop should be executed in parallel with the number of threads set by the environment variable JULIA_NUM_THREADS.
+value that denotes if the central loop should be executed in parallel with the number of threads set by the environment variable `JULIA_NUM_THREADS`.
 """
 function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U},
                           graph; x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: StaticEdge}
