@@ -131,15 +131,27 @@ sol = solve(dde_prob, MethodOfSteps(Tsit5()));
 plot(sol, vars = syms_containing(nd, "v"), legend=false)
 
 
+## Add in a static Vertex
 
-svertex! = StaticVertex(f! = (x, e_s, e_d, p ,t) -> x .= 0, dim=1)
-vlist = Array{DDEVertex}([ kdvertex! for i in 1:nv(g)])
+
+svertex! = StaticVertex(f! = (x, e_s, e_d, p ,t) -> x .= 1, dim=1)
+
+# convert to list of VertexFunctions, that may contain different types of vertices
+vlist = Array{VertexFunction}([ kdvertex! for i in 1:nv(g)])
 vlist[1] = svertex!
-vlist
+# at the moment if either edges or vertices is a list, the other has to be a list as well
 elist = [kdedge! for i in 1:ne(g)]
 
-nd! = network_dynamics(vlist, elist, g)
+snd! = network_dynamics(vlist, elist, g)
 
-ddae_prob = DDEProblem(nd!, x0, h, tspan, p)
-sol = solve(dde_prob, MethodOfSteps(Tsit5()));
+# adjust initial condition to meet the constraint
+x0[1] = 1.
+
+
+ddae_prob = DDEProblem(snd!, x0, h, tspan, p)
+
+# autodiff fails for this problem, tuple params don't seem to be the problem, but it might have to do with https://docs.sciml.ai/stable/basics/faq/#I-get-Dual-number-errors-when-I-solve-my-ODE-with-Rosenbrock-or-SDIRK-methods-1
+
+# until we fix this turn off autodiff
+sol = solve(ddae_prob, MethodOfSteps(Rosenbrock23(autodiff=false)));
 plot(sol, vars = syms_containing(nd, "v"), legend=false)
