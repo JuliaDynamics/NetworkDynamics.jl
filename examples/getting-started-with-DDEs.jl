@@ -129,3 +129,17 @@ sol = solve(dde_prob, MethodOfSteps(Tsit5()));
 ### Plotting
 
 plot(sol, vars = syms_containing(nd, "v"), legend=false)
+
+
+
+svertex! = StaticVertex(f! = (x, e_s, e_d, p ,t) -> x .= 0, dim=1)
+vlist = Array{DDEVertex}([ kdvertex! for i in 1:nv(g)])
+vlist[1] = svertex!
+vlist
+elist = [kdedge! for i in 1:ne(g)]
+
+nd! = network_dynamics(vlist, elist, g)
+
+ddae_prob = DDEProblem(nd!, x0, h, tspan, p)
+sol = solve(dde_prob, MethodOfSteps(Tsit5()));
+plot(sol, vars = syms_containing(nd, "v"), legend=false)
