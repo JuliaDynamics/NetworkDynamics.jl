@@ -1,5 +1,3 @@
-"""network_dynamics: The Main Constructor of the Package. It takes Arrays of Vertex- and Edgefunction + a graph and
-spits out an ODEFunction. Others still need to be implemented. """
 module NetworkDynamics
 
 using Reexport
