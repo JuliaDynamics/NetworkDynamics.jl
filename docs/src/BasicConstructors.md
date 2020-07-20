@@ -170,7 +170,7 @@ nd = network_dynamics(vertexfunction!::VertexFunction,
 
  Let's look at an example. First we define our graph as well as the differential systems connected to its vertices and edges:
 
-```jldoctest; output = false
+```@example
 using NetworkDynamics, LightGraphs
 
 g = erdos_renyi(10, 25) # random graph with 10 vertices and 25 edges
@@ -198,10 +198,7 @@ edgearr = [edge for e in edges(g)]
 
 nd = network_dynamics(vertexarr, edgearr, g)
 
-# output
-
-(::DiffEqBase.ODEFunction{true,nd_ODE_ODE{LightGraphs.SimpleGraphs.SimpleGraph{Int64},SubArray{Float64,1,Array{Float64,1},Tuple{UnitRange{Int64}},true},Array{ODEVertex{typeof(vertexfunction!)},1},Array{ODEEdge{typeof(edgefunction!)},1}},LinearAlgebra.UniformScaling{Bool},Nothing,Nothing,Nothing,Nothing,Nothing,Nothing,Nothing,Nothing,Nothing,Array{Symbol,1},Nothing}) (generic function with 7 methods)
-
+nothing # hide
 ```
 
 Now we have an `ODEFunction nd` that can be solved with the tools provided by
