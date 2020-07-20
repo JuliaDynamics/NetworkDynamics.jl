@@ -6,13 +6,8 @@ using ..Utilities
 
 export nd_ODE_ODE
 
-#= The arguments of the vertex functions must be of the form (dv,v,e_s,e_d,p,t),
-where dv is the vertex variable derivative, v the vertex variable and e_s and e_d Arrays of edge variables that
-have the vertex as source and destination respectively. p and t are as usual.
-The arguments of the edge functions must be of the form (de,e,v_s,v_d,p,t),
-where de is the derivative of the edge variable, e the edge variable, v_s and v_d the vertex variables of the vertices
-the edge has as source and destination respectively. This works for arbitrary dimensional vertex and edge functions, they only
-need to fit, i.e. don't do something like edges! = v_s - v_d when v_s and v_d have not the same dimension. =#
+#= The signature  of the vertex functions is expected to be (dv,v,e_s,e_d,p,t),
+The signature of the edge functions is expected to be (de,e,v_s,v_d,p,t). =#
 
 
 # In order to match the type, we need to pass both, a view that matches the type
