@@ -7,8 +7,8 @@ using LightGraphs
 include("Utilities.jl")
 @reexport using .Utilities
 
-include("Functions.jl")
-@reexport using .NDFunctions
+include("ComponentFunctions.jl")
+@reexport using .ComponentFunctions
 
 include("NetworkStructures.jl")
 @reexport using .NetworkStructures

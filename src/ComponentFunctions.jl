@@ -3,7 +3,7 @@ Together with Constructors this module forms the backbone of the core API.
 It provide the basic types to construct Arrays of VertexFunction and
 EdgeFunction which can be handled by network_dynamics.
 """
-module NDFunctions
+module ComponentFunctions
 
 using LinearAlgebra
 # using SparseArrays

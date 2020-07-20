@@ -1,7 +1,7 @@
 module nd_ODE_ODE_mod
 
 using ..NetworkStructures
-using ..NDFunctions
+using ..ComponentFunctions
 using ..Utilities
 
 export nd_ODE_ODE
