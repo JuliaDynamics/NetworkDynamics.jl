@@ -39,7 +39,7 @@ This is a simple diffusive coupling mediated by the difference between activatio
 
 ## The network topology - a brain atlas
 
-In the following we will use a directed and weigthed network encoding the strength and directionality of coupling between 90 different areas of the brain [[N. Tzourio-Mazoyer, 2002]](https://www.sciencedirect.com/science/article/abs/pii/S1053811901909784).
+In the following we will use a directed and weigthed network encoding the strength and directionality of coupling between 90 different areas of the brain [Nathalie Tzourio-Mazoyer et al., 2002, Neuroimage].
 
 The network weight matrix is given as a text file containing 90 lines with 90 numbers representing the coupling strength and separated by commas `,`. The data can be conveniently read into a matrix with the `DelimitedFiles` module.
 

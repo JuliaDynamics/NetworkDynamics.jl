@@ -38,4 +38,4 @@ Forward mode (ForwardDiff.jl) and source-to-source (Zygote.jl)  automatic differ
 
 Further resources:
 
-* [DiffEqSensitivity algorithms](https://docs.sciml.ai/stable/analysis/sensitivity/#Sensitivity-Algorithms-1)
+* [DiffEqSensitivity algorithms](https://diffeq.sciml.ai/stable/analysis/sensitivity/)
