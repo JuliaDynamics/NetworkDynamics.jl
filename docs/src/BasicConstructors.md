@@ -142,7 +142,7 @@ In this case the function defaults to using the identity as mass matrix and `[:e
 ## Constructor
 
 The key constructor is the function [`network_dynamics`](@ref) that takes in
-two arrays of `EdgeFunctions` and `VertexFunctions` describing the local dynamics on the edges and nodes of a graph `g`, given as a [LightGraphs.jl](https://github.com/JuliaGraphs/LightGraphs.jl) object. It returns a composite function compatible with the [DifferentialEquations.jl](https://github.com/JuliaDiffEq/DifferentialEquations.jl) calling syntax.
+two arrays of `EdgeFunctions` and `VertexFunctions` describing the local dynamics on the edges and nodes of a graph `g`, given as a [LightGraphs.jl](https://github.com/JuliaGraphs/LightGraphs.jl) object. It returns a composite function compatible with the [DifferentialEquations.jl](https://github.com/SciML/DifferentialEquations.jl) calling syntax.
 
 ```julia
 nd = network_dynamics(vertices!::Array{VertexFunction},
@@ -205,6 +205,6 @@ nd = network_dynamics(vertexarr, edgearr, g)
 ```
 
 Now we have an `ODEFunction nd` that can be solved with the tools provided by
-[DifferentialEquations.jl](https://github.com/JuliaDiffEq/DifferentialEquations.jl).
+[DifferentialEquations.jl](https://github.com/SciML/DifferentialEquations.jl).
 
 For more details check out the Tutorials section.
