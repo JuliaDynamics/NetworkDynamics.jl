@@ -76,7 +76,7 @@ staticedge = StaticEdge(f! = kuramoto_edge!, dim = 1)
 # we can also create lists of the vertices/edges, helpful if vertices/edges have different DE's
 vertex_list = [odevertex for v in vertices(g)]
 edge_list = [staticedge for e in edges(g)]
-# StaticEdge with artificially broadcastet StaticEdges --> ODEEdges
+# StaticEdge with artificially promoted StaticEdges --> ODEEdges
 ode_sd_edge_list = [ODEEdge(se) for se in edge_list]
 # ODEEdges with ODEEdgefct
 ode_edge_list = [ODEEdge(f! = kuramoto_dedge!, dim = 1) for e in edges(g)]
@@ -88,7 +88,7 @@ p = (ω, nothing)
 kur_network_hom = network_dynamics(odevertex, staticedge, g)
 # StaticEdge case in list form
 kur_network_nd = network_dynamics(vertex_list,edge_list, g)
-# broadcastet StaticEdges --> ODEEdges
+# promotes StaticEdges --> ODEEdges
 kur_network_e_static_ode = network_dynamics(vertex_list,ode_sd_edge_list, g)
 # ODEEdges with ODEEdgefct
 kur_network_eode = network_dynamics(vertex_list,ode_edge_list, g)
@@ -103,7 +103,7 @@ x0_nd2 = similar(x0_L)
 # different ways to set the inital conditions:
 
 # explicitly addressing the ordering in x0_nd:
-# ϕ-indicesis even, ω-indicesis uneven
+# ϕ-indices are even, ω-indices are uneven
 ω_idx = idx_containing(kur_network_nd, :ω)
 ϕ_idx = idx_containing(kur_network_nd, :ϕ)
 x0_nd[ω_idx] .= x0_L[1:N]

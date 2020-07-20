@@ -31,7 +31,7 @@ L = laplacian_matrix(g)
 # first some broadcasting operations are made:
 # Array(L) converts 2 dimensional- to multidimensional array
 # Symmetric (Array(L)) ensures that object is symmetric
-# then we assign the symmetric multidemsnional array to the constructor SolAnalytic
+# then we assign the symmetric multidimensional array to the constructor SolAnalytic
 sol_analytic = SolAnalytic(Symmetric(Array(L)))
 
 ### Solving the DDEProblem
@@ -75,7 +75,8 @@ plot(sol_L.t, sol_ana)
 
 ### Functions for edges and vertices
 
-# edge and vertex functions of NetworkDynmaics are modifying functions, so we use '!'
+# edge and vertex functions of NetworkDynamics are mutating
+# by convention `!` is appended to names of mutating functions
 @inline function diffusion_edge!(e,v_s,v_d,p,t)
     # usually e, v_s, v_d are arrays, hence we use the broadcasting operator .
     e .= v_s .- v_d
@@ -119,22 +120,20 @@ plot(sol_st)
 # with usage of NetworkDynamics: diff_network_st
 
 # diff_network_L is object of type ODEFunction
-# when we hand over parameters (dx,x0,p,t) callable struct is called
+# when we hand over arguments (dx,x0,p,t) the callable struct is called
 diff_network_L(dx_L, x0, nothing, 0.)
 
-# diff_network_st is object of type NetworkDynamics
-# callable struct calls ODEFunction
 diff_network_st(dx_st, x0, nothing, 0.)
 
 isapprox(dx_L, dx_st) # inexact equality comparision
 
 ### Case with ODEEdges
 
-# now we create the network dynamics object with the artificially as ODEEdge promoted static edges (line 91)
+# now we create the network dynamics object with a StaticEdge that got promoted to an ODEEdge
 diff_network_ode = network_dynamics(odevertex,odeedge,g)
 
 ### Simulation
-# as the edges are declared as ODEEdge's now (with internal dynamics) we also need initial conditions for the edges
+# since the edges are declared as ODEEdge's now (with internal dynamics) we also need initial conditions for the edges
 # we first test valid initial conditions for the 10 nodes + 25 edges
 x0_ode = find_valid_ic(diff_network_ode, randn(10 + 25))
 dx0_ode = similar(x0_ode)
@@ -143,7 +142,7 @@ dx0_ode = similar(x0_ode)
 prob_st2 = ODEProblem(diff_network_st,x0_ode[1:10],(0.,5.))
 prob_ode = ODEProblem(diff_network_ode,x0_ode,(0.,5.))
 
-# Rodas4 - stiff solver
+# Rodas4 - stiff solver capable f handling mass matrices
 sol_st2 = solve(prob_st2, Tsit5())
 sol_ode = solve(prob_ode, Rodas4())
 

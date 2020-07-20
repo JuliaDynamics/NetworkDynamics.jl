@@ -17,7 +17,7 @@ G = readdlm(joinpath(@__DIR__, "Norm_G_DTI.txt"), ',', Float64, '\n');
 
 g_weighted = SimpleWeightedDiGraph(G)
 
-# for later use we extract the edge.weight attributes with the getfiled function
+# for later use we extract the edge.weight attributes with the getfield function
 # . is the broadcasting operator and gets the attribute: weight of every edge
 edge_weights = getfield.(collect(edges(g_weighted)), :weight);
 
@@ -40,7 +40,7 @@ Fitz-Hugh Nagumo vertex with electrical gap junctions
 end
 
 @inline Base.@propagate_inbounds function electrical_edge!(e, v_s, v_d, p, t)
-    e[1] =  p * (v_s[1] - v_d[1]) # * σ (σ will be stored in p in line 65)
+    e[1] =  p * (v_s[1] - v_d[1]) # p is the coupling strength
     nothing
 end
 
