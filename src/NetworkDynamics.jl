@@ -24,7 +24,6 @@ include("nd_ODE_Static.jl")
 include("nd_DDE_Static.jl")
 @reexport using .nd_DDE_Static_mod
 
-include("SimpleAPI.jl")
 
 export network_dynamics
 
