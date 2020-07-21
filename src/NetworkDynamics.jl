@@ -191,6 +191,15 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
 end
 
 function network_dynamics(vertices!,  edges!, graph; parallel=false)
+    # If vertices! and/or edges! are individual functions and no other dispatch was
+    # triggered, assume all vertices, respectively edges will be of that type
+    if typeof(vertices!) <: VertexFunction
+        vertices! = Array{VertexFunction}([vertices! for i in 1:nv(graph)])
+    end
+    if typeof(edges!) <: EdgeFunction
+        edges! = Array{EdgeFunction}([edges! for i in 1:ne(graph)])
+    end
+
     try
         Array{VertexFunction}(vertices!)
     catch err
@@ -198,6 +207,7 @@ function network_dynamics(vertices!,  edges!, graph; parallel=false)
         println(err)
         return nothing
     end
+
     try
         Array{EdgeFunction}(edges!)
     catch err
