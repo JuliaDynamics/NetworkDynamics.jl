@@ -49,7 +49,6 @@ electricaledge = StaticEdge(f! = electrical_edge!, dim = 1)
 odeelevertex = ODEVertex(f! = fhn_electrical_vertex!, dim = 2, sym=[:u, :v])
 
 # setting up the key constructor network_dynamics
-# returned object fhn_network! of type ODEFunction is compatible with the solvers of OrdinaryDiffEq
 fhn_network! = network_dynamics(odeelevertex, electricaledge, g_weighted)
 
 # global parameters that are accessed several times should be `const` to improve performance
