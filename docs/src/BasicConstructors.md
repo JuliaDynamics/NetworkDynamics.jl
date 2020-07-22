@@ -12,10 +12,12 @@ represent the local dynamics. At the moment algebraic (static) equations and ord
 # VertexFunctions
 StaticVertex(vertexfunction!, dimension, symbol)
 ODEVertex(vertexfunction!, dimension, mass_matrix, symbol)
+DDEVertex(vertexfunction!, dimension, mass_matrix, symbol)
 
 # EdgeFunctions
 StaticEdge(edgefunction!, dimension, symbol)
 ODEEdge(edgefunction!, dimension, mass_matrix, symbol)
+StaticDelayEdge(edgefunction!, dimension, mass_matrix, symbol)
 ```
 
 
@@ -33,9 +35,11 @@ has to respect one of the following calling syntaxes.
 function vertexfunction!(v, e_s, e_d, p, t) end
 # For dynamic nodes
 function vertexfunction!(dv, v, e_s, e_d, p, t) end
+# For delay nodes
+function vertexfunction!(dv, v, e_s, e_d, h_v, p, t) end
 ```
 
-Here `dv`, `v`, `p` and `t` are the usual ODE arguments, while `e_s` and `e_d` are arrays containing the edges for which the described vertex is the source or the destination respectively. The typical case of diffusive coupling on a directed graph could be described as
+Here `dv`, `v`, `p` and `t` are the usual ODE arguments, while `e_s` and `e_d` are arrays containing the edges for which the described vertex is the source or the destination respectively. In the delay case `h_v` denotes to the vertex history. The typical case of diffusive coupling on a directed graph could be described as
 
 ```julia
 function vertex!(dv, v, e_s, e_d, p, t)
@@ -88,6 +92,21 @@ ODEVertex(f! = vertexfunction!, dim = dim)
 
 The function then defaults to using the identity as mass matrix and `[:v for i in 1:dimension]` as symbols.
 
+### [`DDEVertex`](@ref)
+
+If a vertex has local dynamics described by an delay differential equation (DDE) the `VertexFunction` is constructed as
+
+```julia
+DDEVertex(vertexfunction!, dim, mass_matrix, sym)
+```
+As before, **dim** is the number of independent variables in the vertex function and **sym** describes the symbols of the variables. The **mass matrix** is optional, and defaults to the identity matrix `I`.
+
+As above, the DDEVertex function can also be called without the optional arguments:
+
+```julia
+DDEVertex(f! = vertexfunction!, dim = dim)
+```
+
 ## EdgeFunctions
 
 Similar to the case of vertices, an edge is described by **mutating** function `edgefunction!`. At the moment the constructors `StaticEdge` and `ODEEdge` are available. `edgefunction!` has to respect one of the following syntaxes:
@@ -97,9 +116,11 @@ Similar to the case of vertices, an edge is described by **mutating** function `
 function edgefunction!(e, v_s, v_d, p, t) end
 # For dynamics edges
 function edgefunction!(de, e, v_s, v_d, p, t) end
+# For static delay edges
+function edgefunction!(e, v_s, v_d, h_v_s, h_v_d, p, t) end
 ```
 Just like above, `de`, `e`, `p` and `t` are the usual ODE arguments, while `v_s`
-and `v_d` are the source and destination vertices respectively.
+and `v_d` are the source and destination vertices respectively and `h_v_s` and `h_v_d` the corresponding history functions.
 
 
 ### [`StaticEdge`](@ref)
@@ -138,6 +159,24 @@ ODEEdge(f! = edgefunction!, dim = n)
 
 In this case the function defaults to using the identity as mass matrix and `[:e for in 1:dimension]` as symbols.
 
+### [`StaticDelayEdge`](@ref)
+Here, the value of the edges are determined by a delay differential equation. Static again means that the edge value described by the `edgefunction!` only depends on the values of the vertices the edge is connected to and not on an internal derivate of the edge itself.
+
+As an example for such system we show a delay diffusion equation:
+
+```julia
+edgefunction! = (e, v_s, v_d, h_v_s, h_v_d, p, t) -> e .=.1 * (h_v_s .- v_d)
+```
+The `EdgeFunction` object is constructed as
+
+```julia
+StaticDelayEdge(edgefunction!, dim, mass_matrix, sym)
+```
+Again, we can also leave out the optional keywords **sym** and **mass_matrix**.
+
+```julia
+StaticDelayEdge(f! = edgefunction!, dim = n)
+```
 
 ## Constructor
 
