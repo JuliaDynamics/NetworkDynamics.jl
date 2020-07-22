@@ -38,12 +38,8 @@ vertex_array = [swing_vertex, swing_vertex, load_vertex, load_vertex]
 edge_array = [powerflow_edge for e in edges(g)]
 nd = network_dynamics(vertex_array, edge_array, g)
 
-u0 = zeros(6)
+u0 = find_fixpoint(nd, zeros(6))
 tspan = (0., 100.)
 ode_prob = ODEProblem(nd, u0, tspan, nothing)
 ode_sol = solve(ode_prob, Rosenbrock23())
 plot(ode_sol, vars = syms_containing(nd, "θ"), legend = false)
-
-nd_res = find_valid_ic(nd, zeros(6))
-
-u0 = find_fixpoint(nd, zeros(6))
