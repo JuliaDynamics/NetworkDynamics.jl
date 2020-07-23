@@ -1,13 +1,15 @@
 using ForwardDiff
 using ReverseDiff
-import Zygote
 using NetworkDynamics
 using LightGraphs
+using Test
+# import Zygote
 
-
-N = 100 # number of nodes
-k = 10  # average degree
+N = 10 # number of nodes
+k = 3  # average degree
 g = barabasi_albert(N, k) # a little more exciting than a bare random graph
+
+println("--- AutomaticDifferentiation ---")
 
 
 ### Functions for edges and vertices
@@ -52,9 +54,9 @@ function gradnd(x)
     sum(x)
 end
 
-ForwardDiff.gradient(gradnd, ones(N))
-ReverseDiff.gradient(gradnd, ones(N)) # mutation not supported
-Zygote.gradient(gradnd, ones(N))  # mutation not supported
+@test ForwardDiff.gradient(gradnd, ones(N)) isa Vector
+@test_throws ErrorException ReverseDiff.gradient(gradnd, ones(N)) # mutation not supported
+# Zygote.gradient(gradnd, ones(N))  # mutation not supported
 
 
 ## Gradient wrt. vertex parameters
@@ -65,9 +67,12 @@ function gradpnd(p)
     sum(x0int)
 end
 
-ForwardDiff.gradient(gradpnd, ones(N)) # type problem
-ReverseDiff.gradient(gradpnd, ones(N))
-Zygote.gradient(gradpnd, ones(N))  # mutation not supported
+# Forward diff throws a MethodError since multiplication with p transforms the x values
+# to dual numbers and those cant be stored in the type-specified x_array
+# Maybe this could be fixed by using more general types?
+@test_broken ForwardDiff.gradient(gradpnd, ones(N)) isa Vector # type problem
+@test ReverseDiff.gradient(gradpnd, ones(N)) isa Vector
+# Zygote.gradient(gradpnd, ones(N))  # mutation not supported
 
 
 ## parameter array instead of tuple
@@ -106,6 +111,6 @@ function gradpnd2(p)
     sum(x0)
 end
 
-ForwardDiff.gradient(gradpnd2, p) # type problem
-ReverseDiff.gradient(gradpnd2, p)
-Zygote.gradient(gradpnd2, p)
+@test_broken ForwardDiff.gradient(gradpnd2, p) isa Vector # type problem
+@test ReverseDiff.gradient(gradpnd2, p) isa Vector
+# Zygote.gradient(gradpnd2, p)
