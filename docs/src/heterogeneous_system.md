@@ -10,7 +10,7 @@ components can differ in their parameters as well as in their dynamics.
 
 A notebook corresponding to this tutorial can be found [here](https://github.com/FHell/NetworkDynamics.jl/tree/master/examples).
 
-## Hetereogenous parameters
+## Heterogenous parameters
 We start by setting up a simple system of Kuramoto oscillators.
 
 ```@example heterogeneous_system
@@ -35,8 +35,8 @@ nd! = network_dynamics(vertex!, edge!, g);
 nothing #hide
 ```
 
-Introducing hetereogenous parameters is as easy as defining an array.
-Here the vertex parameters are hetereogenous, while the edges share the same coupling
+Introducing genous parameters is as easy as defining an array.
+Here the vertex parameters are genous, while the edges share the same coupling
 parameter K.
 
 ```@example heterogeneous_system
@@ -58,7 +58,7 @@ sol = solve(prob, Tsit5())
 plot(sol, ylabel="θ")
 ```
 
-## Hetereogenous dynamics
+## Heterogenous dynamics
 
 Two paradigmatic modifications of the node model above are static nodes and nodes with
 inertia. A static node has no internal dynamics and instead fixes the variable at a
@@ -84,7 +84,7 @@ inertia! = ODEVertex(f! = kuramoto_inertia!, dim = 2, sym= [:θ, :ω]);
 nothing #hide
 ```
 
-Since now we model a system with hetereogenous node dynamics we can no longer
+Since now we model a system with genous node dynamics we can no longer
 straightforwardly pass a single VertexFunction to `network_dynamics` but instead have to
 hand over an Array.
 

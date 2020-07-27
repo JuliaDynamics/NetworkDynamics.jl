@@ -24,7 +24,6 @@ makedocs(
 		"Getting started" => "getting_started_with_network_dynamics.md",
 		"Directed and weighted graphs" => "directed_and_weighted_graphs.md",
 		"Delay differential equations" => "DDEVertex.md",
-		"Hetereogeneous systems" => "heterogeneous_system.md",
-		"Stochastic differential equations" => "SDEVertex.md",
+		"Heterogeneous systems" => "heterogeneous_system.md",
 		]
    	])
