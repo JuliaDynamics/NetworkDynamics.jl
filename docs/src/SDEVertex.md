@@ -3,8 +3,8 @@
  An `IJulia` [notebook](https://github.com/FHell/NetworkDynamics.jl/tree/master/examples) corresponding to this tutorial will be available on GitHub soon.
 
 #### Topics covered in this tutorial include:
- * swing equation
- * fixpoint search
+ * the swing equation
+ * fixpoint search of ODE systems
  * constructing an SDE problem with NetworkDynamics.jl
 
 ## Example: Fluctuations in Power Grids
@@ -84,7 +84,7 @@ nothing # hide
 
 ## Fixpoint Search
 
-Now we need to define the dynamic parameters of vertices and edges.
+Now we need to define the dynamic parameters of vertices and edges. For simplicity we assume homogeneous capacities on the lines. For the nodes we assume half of them to be net producers ($P = 1.0$) and half of them to be net consumers ($P = -1.0$) of power.
 
 ```@example SDEVertex
 K = 6.0
@@ -120,7 +120,7 @@ end
 nothing # hide
 ```
 
-Now we can construct the dynamics of the second layer by using `NetworkDynamics`. Since the graph of the stochastic layer has no edges we can take the edge function of the deterministic case as a placeholder.
+Now we can construct the dynamics of the second layer by using `NetworkDynamics`. Since the graph structure of the stochastic layer has no edges we can take the edge function of the deterministic case as a placeholder.
 
 ```@example SDEVertex
 fluctuation_vertex = ODEVertex(f! = fluctuation!, dim = 2)
@@ -139,4 +139,4 @@ sol = solve(prob)
 nothing # hide
 ```
 
-More details on SDE problems can be found in the [documentation](https://diffeq.sciml.ai/stable/types/sde_types/) of `DifferentialEquations`.
+More details on SDE problems, e.g. how to include correlations or how to define an `EnsembleProblem`, can be found in the [documentation](https://diffeq.sciml.ai/stable/types/sde_types/) of `DifferentialEquations`.
