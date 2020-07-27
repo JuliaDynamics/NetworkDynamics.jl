@@ -25,5 +25,6 @@ makedocs(
 		"Directed and weighted graphs" => "directed_and_weighted_graphs.md",
 		"Delay differential equations" => "DDEVertex.md",
 		"Heterogeneous systems" => "heterogeneous_system.md",
+		"Stochastic differential equations" => "SDEVertex.md",
 		]
    	])

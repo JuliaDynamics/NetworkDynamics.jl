@@ -99,7 +99,7 @@ We want to simulate fluctuations around an equilibrium state of our model system
 u0 = find_fixpoint(nd, p, zeros(8))
 
 using DifferentialEquations
-ode_prob = ODEProblem(nd, u0, (0.,1000.), p)
+ode_prob = ODEProblem(nd, u0, (0.,500.), p)
 ode_sol = solve(ode_prob)
 
 using Plots, LaTeXStrings
