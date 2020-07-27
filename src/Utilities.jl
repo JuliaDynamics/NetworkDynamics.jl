@@ -149,19 +149,8 @@ export find_fixpoint
 Utility function for finding fixpoints.
 """
 
-struct FixPointRhs
-    rhs
-end
-
-function (rr::FixPointRhs)(x)
-    dx = similar(x)
-    rr.rhs(dx, x, nothing, 0.)
-    dx
-end
-
-function find_fixpoint(nd, initial_guess)
-    rr = FixPointRhs(nd)
-    nl_res = nlsolve(rr, initial_guess)
+function find_fixpoint(nd, p, initial_guess)
+    nl_res = nlsolve((dx, x) -> nd(dx, x, p, 0.), initial_guess)
     if converged(nl_res) == true
         return nl_res.zero
     else
