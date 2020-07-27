@@ -70,7 +70,7 @@ g = watts_strogatz(4, 2, 0.)
 nothing # hide
 ```
 
-Then we can construct the `ODEFunction` of the deterministic system by using `NetworkDynamics`.
+Then we can construct the `ODEFunction` of the deterministic system by using `network_dynamics()`.
 
 ```@example SDEVertex
 using NetworkDynamics
@@ -97,10 +97,16 @@ We want to simulate fluctuations around an equilibrium state of our model system
 
 ```@example SDEVertex
 u0 = find_fixpoint(nd, p, zeros(8))
-nothing # hide
+
+using DifferentialEquations
+ode_prob = ODEProblem(nd, u0, (0.,1000.), p)
+ode_sol = solve(ode_prob)
+
+using Plots, LaTeXStrings
+plot(ode_sol, vars = syms_containing(nd, "ω"), ylims = (-1.0, 1.0), ylabel = L"\omega", legend = false)
 ```
 
-We will later use this as an initial condition for the numerical integration of the system.
+We see that this is in fact a fixpoint solution. We will later use this as an initial condition for the numerical integration of the SDE system.
 
 ## Adding a Stochastic Layer
 
@@ -115,12 +121,12 @@ The dynamics at the nodes has to have the same dimension as in the deterministic
 ```@example SDEVertex
 function fluctuation!(dx, x, e_s, e_d, p, t)
     dx[1] = 0.0
-    dx[2] = 0.1
+    dx[2] = 0.05
 end
 nothing # hide
 ```
 
-Now we can construct the dynamics of the second layer by using `NetworkDynamics`. Since the graph structure of the stochastic layer has no edges we can take the edge function of the deterministic case as a placeholder.
+Now we can construct the dynamics of the second layer by using `network_dynamics()`. Since the graph structure of the stochastic layer has no edges we can take the edge function of the deterministic case as a placeholder.
 
 ```@example SDEVertex
 fluctuation_vertex = ODEVertex(f! = fluctuation!, dim = 2)
@@ -133,10 +139,9 @@ nothing # hide
 Finally, we can create an `SDEProblem` and solve it with `DifferentialEquations`.
 
 ```@example SDEVertex
-using DifferentialEquations
-prob = SDEProblem(nd, nd_noise, u0, (0., 100.), p)
-sol = solve(prob)
-nothing # hide
+sde_prob = SDEProblem(nd, nd_noise, u0, (0., 500.), p)
+sde_sol = solve(sde_prob)
+plot(sde_sol, vars = syms_containing(nd, "ω"), ylims = (-1.0, 1.0), ylabel = L"\omega", legend = false)
 ```
 
 More details on SDE problems, e.g. how to include correlations or how to define an `EnsembleProblem`, can be found in the [documentation](https://diffeq.sciml.ai/stable/types/sde_types/) of `DifferentialEquations`.
