@@ -97,8 +97,10 @@ edge_list_5 = Array{EdgeFunction}(edge_list_4)
 edge_list_6 = Array{ODEEdge}(edge_list_4)
 @test eltype(edge_list_6) == ODEEdge
 
-edge_list_7 = Array{StaticDelayEdge}(edge_list_4)
-@test eltype(edge_list_7) == StaticDelayEdge
+edgelist_7 = Array{StaticDelayEdge}(edge_list_1)
+@test eltype(edgelist_7) == StaticDelayEdge
+
+@test_throws MethodError Array{StaticDelayEdge}(edge_list_4) == StaticDelayEdge
 
 @test_throws MethodError Array{StaticEdge}(edge_list_4) # this should error out
 
@@ -118,8 +120,10 @@ nd_2=network_dynamics(vertex_list_2,edge_list_2,g)
 nd_3=network_dynamics(vertex_list_3,edge_list_3,g)
 
 nd_4=network_dynamics(vertex_list_1,staticedge,g)
+nd_5=network_dynamics(odevertex,edge_list_1,g)
 
 @test nd_1 isa ODEFunction
 @test nd_2 isa ODEFunction
 @test nd_3 isa DDEFunction
-@test nd_4 isa ODEFunction # this should error out
+@test nd_4 isa ODEFunction
+@test nd_5 isa ODEFunction
