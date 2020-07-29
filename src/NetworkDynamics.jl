@@ -1,5 +1,3 @@
-"""network_dynamics: The Main Constructor of the Package. It takes Arrays of Vertex- and Edgefunction + a graph and
-spits out an ODEFunction. Others still need to be implemented. """
 module NetworkDynamics
 
 using Reexport
@@ -9,8 +7,8 @@ using LightGraphs
 include("Utilities.jl")
 @reexport using .Utilities
 
-include("Functions.jl")
-@reexport using .NDFunctions
+include("ComponentFunctions.jl")
+@reexport using .ComponentFunctions
 
 include("NetworkStructures.jl")
 @reexport using .NetworkStructures
@@ -24,7 +22,6 @@ include("nd_ODE_Static.jl")
 include("nd_DDE_Static.jl")
 @reexport using .nd_DDE_Static_mod
 
-include("SimpleAPI.jl")
 
 export network_dynamics
 
@@ -194,6 +191,15 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
 end
 
 function network_dynamics(vertices!,  edges!, graph; parallel=false)
+    # If vertices! and/or edges! are individual functions and no other dispatch was
+    # triggered, assume all vertices, respectively edges will be of that type
+    if typeof(vertices!) <: VertexFunction
+        vertices! = Array{VertexFunction}([vertices! for i in 1:nv(graph)])
+    end
+    if typeof(edges!) <: EdgeFunction
+        edges! = Array{EdgeFunction}([edges! for i in 1:ne(graph)])
+    end
+
     try
         Array{VertexFunction}(vertices!)
     catch err
@@ -201,6 +207,7 @@ function network_dynamics(vertices!,  edges!, graph; parallel=false)
         println(err)
         return nothing
     end
+
     try
         Array{EdgeFunction}(edges!)
     catch err

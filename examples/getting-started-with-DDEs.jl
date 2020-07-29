@@ -1,4 +1,4 @@
-# Experimental DDE tutorial
+# Corresponds to the DDE tutorial in the docs
 
 using NetworkDynamics
 using LightGraphs
@@ -10,23 +10,19 @@ using Plots
 
 N = 20 # number of nodes
 k = 8  # average degree
-g = watts_strogatz(N, k, 0.) # ring
+g = watts_strogatz(N, k, 0.) # ring network
 
 # the signature of the edge and vertex functions differs from the ODE signature
 function diffusionedge!(e, v_s, v_d, p, t)
-    # usually e, v_s, v_d are arrays, hence we use the broadcasting operator .
     e .= .1 * (v_s - v_d)
     nothing
 end
 
 function diffusionvertex!(dv, v, e_s, e_d, h_v, p, t)
-    # usually v, e_s, e_d are arrays, hence we use the broadcasting operator .
     dv .= -h_v
-    # edges for which v is the source
     for e in e_s
         dv .-= e
     end
-    # edges for which v is the destination
     for e in e_d
         dv .+= e
     end
@@ -35,7 +31,7 @@ end
 
 ### Constructing the network dynamics
 
-# New types: DDEVertex and StaticDelayEdge that both have access to the VERTEX history
+# DDEVertex and StaticDelayEdge  both have access to the VERTEX history
 # DDEVertex is expected to have call signature (dv, v, e_s, e_d, h_v, p, t)
 # StaticDelayEdge is expected to have  signature (e, v_s, v_d, h_v_s, h_v_d, p, t)
 # StaticEdges get promoted to StaticDelayEdges [then their signature changes]
@@ -46,17 +42,18 @@ nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g)
 
 ### Simulation
 
-x0 = randn(N) # random initial conditions
-# history function defaults to all 1. and is in-place to save allocations
-h(out, p, t) = (out .= 1.)
+const x0 = randn(N) # random initial conditions
+# constant history function, is in-place to save allocations
+h(out, p, t) = (out .= x0)
 tspan = (0., 10.)
 
-# i extended the tuple syntax to pass the delay time τ as a parameter
+# fo DDES the tuple parameter syntax is extended to hold the delay time τ as a parameter
 # the first argument should be an array (or other object) containing the vertex parameters
 # the second argument holds the edge parameters and the third specifies the delay time τ
 # p = (vertexparameters, edgeparameters, delaytime)
 p = (nothing, nothing, 1.)
 
+# you might want to use the keyword constant_lags here. check the docs of DelayDiffEq for details
 dde_prob = DDEProblem(nd, x0, h, tspan, p)
 sol = solve(dde_prob, MethodOfSteps(Tsit5()))
 
@@ -65,7 +62,7 @@ sol = solve(dde_prob, MethodOfSteps(Tsit5()))
 plot(sol, vars = syms_containing(nd, "v"), legend=false)
 
 
-### Bonus: Two independet diffusions with fancy symbols
+### Bonus: Two independent diffusions with fancy symbols
 
 
 # We will have two independent diffusions on the network, hence dim = 2
@@ -78,10 +75,12 @@ nd_2 = network_dynamics(nd_diffusion_vertex_2, nd_diffusion_edge_2, g)
 # for now we have to use flat arrays that contain the initial conditions in the right order
 # x_0_2 = (x₀_1, ϕ₀_1, x₀_2, ϕ₀_2, x₀_3, ϕ₀_3  ...)
 
-x0_2 = Array{Float64,1}(vec([randn(N).-10 randn(N).^2]')) # x ~ N(0,1); ϕ ~ N(0,1)^2
-
+const x0_2 = Array{Float64,1}(vec([randn(N).-10 randn(N).^2]')) # x ~ N(0,1); ϕ ~ N(0,1)^2
+h(out, p, t) = (out .= x0_2)
 p = (nothing, nothing, 1.) # p = (vertexparameters, edgeparameters, delaytime)
 dde_prob_2 = DDEProblem(nd_2, x0_2, h, tspan, p)
+
+
 
 sol_2 = solve(dde_prob_2, MethodOfSteps(Tsit5()));
 
@@ -114,14 +113,13 @@ kdvertex! = ODEVertex(f! = kuramoto_vertex!, dim = 1)
 
 nd! = network_dynamics(kdvertex!, kdedge!, g)
 
-x0 = randn(N) # random initial conditions
-# history function defaults to all 1. and is in-place to save allocations
-h(out, p, t) = (out .= 1.)
+const x0_3 = randn(N) # random initial conditions
+h(out, p, t) = (out .= x0_3)
 # p = (vertexparameters, edgeparameters, delaytime)
 ω = randn(N)
 ω .-= sum(ω)/N
 p = (ω, 2., 1.)
-tspan = (0.,20.)
+tspan = (0.,15.)
 dde_prob = DDEProblem(nd!, x0, h, tspan, p)
 
 sol = solve(dde_prob, MethodOfSteps(Tsit5()));

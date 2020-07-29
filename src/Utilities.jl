@@ -143,7 +143,20 @@ oriented sum of all the incident edges.
     nothing
 end
 
+export find_fixpoint
 
+"""
+Utility function for finding fixpoints.
+"""
+
+function find_fixpoint(nd, p, initial_guess)
+    nl_res = nlsolve((dx, x) -> nd(dx, x, p, 0.), initial_guess)
+    if converged(nl_res) == true
+        return nl_res.zero
+    else
+        println("Failed to find fixpoint. Algorithm did not converge.")
+    end
+end
 
 export RootRhs
 

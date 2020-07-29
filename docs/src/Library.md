@@ -10,6 +10,10 @@ The following functions are designed for public use
 network_dynamics
 StaticVertex
 ODEVertex
+DDEVertex
 StaticEdge
 ODEEdge
+StaticDelayEdge
+syms_containing
+idx_containing
 ```

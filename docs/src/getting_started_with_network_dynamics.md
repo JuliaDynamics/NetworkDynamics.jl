@@ -59,7 +59,7 @@ Something unexpected happens in the for-loops: The contributions of the connecti
 
 The reason for this syntax is found in the `LightGraphs.jl` package on which `NetworkDynamics.jl` is based.
 
-#### How to deal with abstract edge directions in undirected graphs
+## [Abstract edge directions in undirected graphs](@id abstract_direction)
 
 LightGraphs.jl implements edges as pairs of node indices `i` and `j`. [Pairs](https://docs.julialang.org/en/v1/base/collections/#Base.Pair) are basic julia data types consisting of two fixed elements, definded by writing `i => j`. In directed graphs these pairs additionally represent the direction in which the edge is pointing (from the first two the second element). In undirected graphs every edge is represent by only a single pair `i => j` if index `i` is smaller than index `j` and `j => i` otherwise. Hence, even for undirected graphs every edge has an abstract direction, specified by the pair of indices of the attached nodes.
 

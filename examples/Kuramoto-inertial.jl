@@ -8,9 +8,11 @@ using OrdinaryDiffEq
 # using DiffEqOperators
 using BenchmarkTools
 
-N = 100
-g = barabasi_albert(N, 5)
+#### First without using NetworkDynamics
 
+### Defining the graph
+N = 100 # nodes
+g = barabasi_albert(N, 5)
 B = incidence_matrix(g, oriented=true)
 
 struct kuramoto_dyn{T, T2, U}
@@ -19,32 +21,40 @@ struct kuramoto_dyn{T, T2, U}
     ω::U
     N::Int
 end
+
+# callable struct with differential equation of Kurmaoto-Oscialltor (2-dim)
+# 2-dimensional differential equations:
+# x and dx arrays containing 2 variables (x[1:N] : ω , x[N+1:2N] : ϕ)
 function (dd::kuramoto_dyn)(dx, x, p, t)
     dx[1:N] .= dd.ω .- x[1:N] .- 5. .* dd.B * sin.(dd.B_trans * x[N+1:2N])
     dx[N+1:2N] .= x[1:N]
     nothing
 end
 
+# constructing ordered eigenfrequencies of the N vertices
 ω = Array{Float64}(1:N) ./ N
 
 kn = kuramoto_dyn(B, transpose(B), ω, N)
 # Jv = JacVecOperator(kn, randn(nv(g)), nothing, 0.0)
+# callable struct kn is handed over to ODEFunction
 kur_network_L = ODEFunction(kn) #, jac_prototype=Jv)
 
-#Now for NetworkDynamics
+### Now for NetworkDynamics
 
+# StaticEdge fct
 @inline Base.@propagate_inbounds function kuramoto_edge!(e,v_s,v_d,p,t)
+    # coupling strength K=5
     e[1] = 5. * sin(v_s[2] - v_d[2])
     nothing
 end
-
+# ODEEdge fct
 @inline Base.@propagate_inbounds function kuramoto_dedge!(de, e, v_s, v_d, p, t)
     de[1] = 100. * (5. * sin(v_s[2] - v_d[2]) - e[1])
     nothing
 end
 
+# ODEVertex function
 # @inline Base.@propagate_inbounds
-
 @inline Base.@propagate_inbounds function kuramoto_vertex!(dv, v, e_s, e_d, p, t)
     dv[1] = p - v[1]
     for e in e_s
@@ -57,27 +67,41 @@ end
     nothing
 end
 
+### Constructing the network dynamics
 
+# StaticEdge case
 odevertex = ODEVertex(f! = kuramoto_vertex!, dim = 2, sym=[:ω, :ϕ])
 staticedge = StaticEdge(f! = kuramoto_edge!, dim = 1)
-
+# we can also create lists of the vertices/edges, helpful if vertices/edges have different DE's
 vertex_list = [odevertex for v in vertices(g)]
 edge_list = [staticedge for e in edges(g)]
+# StaticEdge with artificially promoted StaticEdges --> ODEEdges
 ode_sd_edge_list = [ODEEdge(se) for se in edge_list]
+# ODEEdges with ODEEdgefct
 ode_edge_list = [ODEEdge(f! = kuramoto_dedge!, dim = 1) for e in edges(g)]
+
 p = (ω, nothing)
 
-kur_network_nd = network_dynamics(vertex_list,edge_list, g)
-kur_network_eode = network_dynamics(vertex_list,ode_edge_list, g)
+# now we create the NetworkDynamics objects
+# StaticEdge case
 kur_network_hom = network_dynamics(odevertex, staticedge, g)
+# StaticEdge case in list form
+kur_network_nd = network_dynamics(vertex_list,edge_list, g)
+# promotes StaticEdges --> ODEEdges
+kur_network_e_static_ode = network_dynamics(vertex_list,ode_sd_edge_list, g)
+# ODEEdges with ODEEdgefct
+kur_network_eode = network_dynamics(vertex_list,ode_edge_list, g)
+
+### Initial conditions
 
 x0_L = 0.1 .* Array{Float64}(1:2N)
 x0_nd = similar(x0_L)
 x0_nd2 = similar(x0_L)
 
-# Different ways to set the inital conditions:
+# different ways to set the inital conditions:
 
-# Explicitly addressing the ordering in x0_nd
+# explicitly addressing the ordering in x0_nd:
+# ϕ-indices are even, ω-indices are uneven
 ω_idx = idx_containing(kur_network_nd, :ω)
 ϕ_idx = idx_containing(kur_network_nd, :ϕ)
 x0_nd[ω_idx] .= x0_L[1:N]
@@ -97,7 +121,7 @@ gs_0 = kur_network_nd(GetGS)
 view_v(gd_0, gs_0, :ω) .= x0_L[1:N]
 view_v(gd_0, gs_0, :ϕ) .= x0_L[1+N:2N]
 
-# We can also skip this step and call view_v with all the required arguments:
+# we can also skip this step and call view_v with all the required arguments:
 
 x0_nd3 = similar(x0_nd)
 
@@ -107,20 +131,21 @@ x0_nd3 = similar(x0_nd)
 ω_view .= x0_L[1:N]
 ϕ_view .= x0_L[1+N:2N]
 
-@assert x0_nd == x0_nd2
+# @assert cond [text]
+# throw an AssertionError if cond is falsex0_nd == x0_nd2
 @assert x0_nd == x0_nd3
 
 # Note that now the edge values gd_0(ViewE) are out of sync with the vertex
 # values. There is no automatic updating as ViewV gives direct access to the
 # underlying data. If we call gd_0 again on the same data, the internal edge
 # cache get's updated and contains the appropriate values:
-
 gd_0 = kur_network_nd(x0_nd2, p, 0., GetGD)
 
 
 # For the ODE version we also have to set the edge values. We can use the
 # updated gd_0 object for that.
-
+# ne(g) - number of edges
+# array with initial conditions for vertices und edges
 x0_ode = Array{Float64}(1:(2N+ne(g)))
 gd_ode = kur_network_eode(x0_ode, p, 0., GetGD)
 gs_ode = kur_network_eode(GetGS)
@@ -133,6 +158,7 @@ dx_L = similar(x0_L)
 dx_nd = similar(x0_nd)
 dx_ode = similar(x0_ode)
 
+# callable structs, calling the ODEFunction
 kur_network_nd(dx_nd, x0_nd, p, 0.)
 kur_network_eode(dx_ode, x0_ode, p, 0.)
 kur_network_L(dx_L, x0_L, nothing, 0.)
@@ -149,6 +175,7 @@ println("Benchmarking")
 @btime kur_network_eode(dx_ode, x0_ode, p, 0.)
 @btime kur_network_hom(dx_nd, x0_nd, p, 0.)
 
+### Simulation
 
 tspan = (0., 100.)
 prob_nd = ODEProblem(kur_network_nd, x0_nd, tspan, p)
@@ -157,6 +184,7 @@ prob_L = ODEProblem(kur_network_L, x0_L, tspan, nothing)
 
 println("Solving")
 
+# Tsit5 - non-stiff solver
 sol_nd = solve(prob_nd, Tsit5())
 sol_nd = solve(prob_nd, Tsit5())
 @time sol_nd = solve(prob_nd, Tsit5())
@@ -169,7 +197,7 @@ sol_ode = solve(prob_ode, Tsit5())
 sol_ode = solve(prob_ode, Tsit5())
 @time sol_ode = solve(prob_ode, Tsit5())
 
-# Let's have a look at these solutions:
+### Plotting
 
 using Plots
 

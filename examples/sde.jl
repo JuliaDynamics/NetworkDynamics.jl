@@ -87,7 +87,7 @@ plot(sol_noise, vars = syms_containing(nd, "v"))
 # SDEProblems can be constructed by inserting ODEFunctions for `f` and `g`
 # even the symbols stay the same
 sde_prob = SDEProblem(nd, nd_noise, x0, tspan, p)
-# SOSRA is recommended for additivce noise
+# SOSRA is recommended for additive noise
 sde_sol = solve(sde_prob, SOSRA())
 
 plot(sde_sol, vars = syms_containing(nd, "v"), legend = false)

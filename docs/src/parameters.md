@@ -1,4 +1,4 @@
-# Parameter handling
+# [Parameter handling](@id parameters)
 
 Let `nd!` be an ODEFunction returned by `network_dynamics`, e.g.
 
@@ -12,6 +12,7 @@ nd! = network_dynamics(vertices!, edges!, graph)
   * When `p = (p_v, p_e)` is a Tuple of two values, then the first value will be passed to all vertices and the second to all edges.
   * If `p = (p_v_arr, p_e_arr)` is a Tuple of two Arrays with lengths corresponding to the number of nodes and number of edges respectively, then the edges or nodes receive only the parameter with the corresponding index.
   * If all nodes and/or edges have no internal parameters the value `nothing` may be passed. Using `nothing` instead of dummy parameters is usually faster, since then less data are copied.
+  * If you are working with delay differential equations the parameter tuple should have a third entry that specifies the delay time, `p = (p_v, p_e, delay_time)`.
 
 Another option for specifying heterogeneous parameters is to make each `VertexFunction` a callable struct with the parameters hardcoded as fields. This approach is used in [PowerDynamics.jl](https://github.com/JuliaEnergy/PowerDynamics.jl). However it provides considerably less flexibility and interoperability with other packages.
 
@@ -37,4 +38,4 @@ Forward mode (ForwardDiff.jl) and source-to-source (Zygote.jl)  automatic differ
 
 Further resources:
 
-* [DiffEqSensitivity algorithms](https://docs.sciml.ai/stable/analysis/sensitivity/#Sensitivity-Algorithms-1)
+* [DiffEqSensitivity algorithms](https://diffeq.sciml.ai/stable/analysis/sensitivity/)

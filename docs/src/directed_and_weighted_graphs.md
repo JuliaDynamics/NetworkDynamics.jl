@@ -14,7 +14,7 @@ Dynamics of spiking neurons have been described in a simplified manner by the [F
 
 ```math
 \begin{aligned}
-\varepsilon \dot u &  =  u - u^3 /3 - v \\
+\varepsilon \dot u &  =  u - \frac{u^3}{3} - v \\
 \dot v & =  u + a
 \end{aligned}
 ```
@@ -30,7 +30,7 @@ While different coupling schemes for FitzHugh-Nagumo oscillators have been propo
 
 ```math
 \begin{aligned}
-\varepsilon \dot u_i & =  u_i - u_i^3 /3 - v_i - \sigma \sum_{j=1}^N G_{ij}(u_i - u_j) \\
+\varepsilon \dot u_i & =  u_i - \frac{u_i^3}{3} - v_i - \sigma \sum_{j=1}^N G_{ij}(u_i - u_j) \\
 \dot v_i & =   u_i + a
 \end{aligned}
 ```
@@ -39,7 +39,7 @@ This is a simple diffusive coupling mediated by the difference between activatio
 
 ## The network topology - a brain atlas
 
-In the following we will use a directed and weigthed network encoding the strength and directionality of coupling between 90 different areas of the brain [[N. Tzourio-Mazoyer, 2002]](https://www.sciencedirect.com/science/article/abs/pii/S1053811901909784).
+In the following we will use a directed and weigthed network encoding the strength and directionality of coupling between 90 different areas of the brain [Nathalie Tzourio-Mazoyer et al., 2002, Neuroimage].
 
 The network weight matrix is given as a text file containing 90 lines with 90 numbers representing the coupling strength and separated by commas `,`. The data can be conveniently read into a matrix with the `DelimitedFiles` module.
 

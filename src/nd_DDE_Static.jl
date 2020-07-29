@@ -1,7 +1,7 @@
 module nd_DDE_Static_mod
 
 using ..NetworkStructures
-using ..NDFunctions
+using ..ComponentFunctions
 using ..Utilities
 
 
