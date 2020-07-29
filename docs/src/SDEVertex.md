@@ -98,9 +98,9 @@ We want to simulate fluctuations around an equilibrium state of our model system
 ```@example SDEVertex
 u0 = find_fixpoint(nd, p, zeros(8))
 
-using DifferentialEquations
+using StochasticDiffEq
 ode_prob = ODEProblem(nd, u0, (0.,500.), p)
-ode_sol = solve(ode_prob)
+ode_sol = solve(ode_prob, Tsit5())
 
 using Plots, LaTeXStrings
 plot(ode_sol, vars = syms_containing(nd, "ω"), ylims = (-1.0, 1.0), ylabel = L"\omega", legend = false)
@@ -140,7 +140,7 @@ Finally, we can create an `SDEProblem` and solve it with `DifferentialEquations`
 
 ```@example SDEVertex
 sde_prob = SDEProblem(nd, nd_noise, u0, (0., 500.), p)
-sde_sol = solve(sde_prob)
+sde_sol = solve(sde_prob, SOSRA())
 plot(sde_sol, vars = syms_containing(nd, "ω"), ylims = (-1.0, 1.0), ylabel = L"\omega", legend = false)
 ```
 
