@@ -35,7 +35,7 @@ end
 
 ### Constructing the network dynamics
 
-# New types: DDEVertex and StaticDelayEdge that both have access to the VERTEX history
+# DDEVertex and StaticDelayEdge that both have access to the VERTEX history
 # DDEVertex is expected to have call signature (dv, v, e_s, e_d, h_v, p, t)
 # StaticDelayEdge is expected to have  signature (e, v_s, v_d, h_v_s, h_v_d, p, t)
 # StaticEdges get promoted to StaticDelayEdges [then their signature changes]
@@ -46,12 +46,12 @@ nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g)
 
 ### Simulation
 
-x0 = randn(N) # random initial conditions
-# history function defaults to all 1. and is in-place to save allocations
-h(out, p, t) = (out .= 1.)
+const x0 = randn(N) # random initial conditions
+# constant history function is in-place to save allocations
+h(out, p, t) = (out .= x0)
 tspan = (0., 10.)
 
-# i extended the tuple syntax to pass the delay time τ as a parameter
+# fo DDES the tuple syntax is extend to hold the delay time τ as a parameter
 # the first argument should be an array (or other object) containing the vertex parameters
 # the second argument holds the edge parameters and the third specifies the delay time τ
 # p = (vertexparameters, edgeparameters, delaytime)
@@ -65,12 +65,12 @@ sol = solve(dde_prob, MethodOfSteps(Tsit5()))
 plot(sol, vars = syms_containing(nd, "v"), legend=false)
 
 
-### Bonus: Two independet diffusions with fancy symbols
+### Bonus: Two independent diffusions with fancy symbols
 
 
 # We will have two independent diffusions on the network, hence dim = 2
 nd_diffusion_vertex_2 = DDEVertex(f! = diffusionvertex!, dim = 2, sym = [:x, :ϕ])
-nd_diffusion_edge_2 = StaticDelayEdge(f! = diffusionedge!, dim = 2)
+nd_diffusion_edge_2 = StaticEdge(f! = diffusionedge!, dim = 2)
 nd_2 = network_dynamics(nd_diffusion_vertex_2, nd_diffusion_edge_2, g)
 
 # at the moment there are issues with higher dimensional arrays in the DDE solve
@@ -78,10 +78,12 @@ nd_2 = network_dynamics(nd_diffusion_vertex_2, nd_diffusion_edge_2, g)
 # for now we have to use flat arrays that contain the initial conditions in the right order
 # x_0_2 = (x₀_1, ϕ₀_1, x₀_2, ϕ₀_2, x₀_3, ϕ₀_3  ...)
 
-x0_2 = Array{Float64,1}(vec([randn(N).-10 randn(N).^2]')) # x ~ N(0,1); ϕ ~ N(0,1)^2
-
+const x0_2 = Array{Float64,1}(vec([randn(N).-10 randn(N).^2]')) # x ~ N(0,1); ϕ ~ N(0,1)^2
+h(out, p, t) = (out .= x0_2)
 p = (nothing, nothing, 1.) # p = (vertexparameters, edgeparameters, delaytime)
 dde_prob_2 = DDEProblem(nd_2, x0_2, h, tspan, p)
+
+
 
 sol_2 = solve(dde_prob_2, MethodOfSteps(Tsit5()));
 
@@ -114,14 +116,13 @@ kdvertex! = ODEVertex(f! = kuramoto_vertex!, dim = 1)
 
 nd! = network_dynamics(kdvertex!, kdedge!, g)
 
-x0 = randn(N) # random initial conditions
-# history function defaults to all 1. and is in-place to save allocations
-h(out, p, t) = (out .= 1.)
+const x0_3 = randn(N) # random initial conditions
+h(out, p, t) = (out .= x0_3)
 # p = (vertexparameters, edgeparameters, delaytime)
 ω = randn(N)
 ω .-= sum(ω)/N
 p = (ω, 2., 1.)
-tspan = (0.,20.)
+tspan = (0.,15.)
 dde_prob = DDEProblem(nd!, x0, h, tspan, p)
 
 sol = solve(dde_prob, MethodOfSteps(Tsit5()));
