@@ -190,3 +190,7 @@ sol = solve(dde_prob, MethodOfSteps(Tsit5()));
 plot(sol, vars = syms_containing(nd, "v"), legend=false)
 
 ```
+
+## Delay differential equations with algebraic constraints
+
+The vertex dynamics may in principle contain algebraic equations in mass matrix form. For an experimental test case have a look at the last section of this [example on github](https://github.com/FHell/NetworkDynamics.jl/blob/master/examples/getting-started-with-DDEs.jl).

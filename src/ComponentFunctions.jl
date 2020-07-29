@@ -189,9 +189,13 @@ function DDEVertex(ov::ODEVertex)
     DDEVertex(f!, ov.dim, ov.mass_matrix, ov.sym)
 end
 
+# function DDEVertex(sv::StaticVertex)
+#     f! = (dv, v, e_s, e_d, h_v, p, t) -> sv.f!(v, e_s, e_d, p, t)
+#     DDEVertex(f! = f!, dim = sv.dim, sym= sv.sym)
+# end
 function DDEVertex(sv::StaticVertex)
-    f! = (dv, v, e_s, e_d, h_v, p, t) -> sv.f!(v, e_s, e_d, p, t)
-    DDEVertex(f! = f!, dim = sv.dim, sym= sv.sym)
+    f! = (dv, v, e_s, e_d, h_v, p, t) -> ODE_from_Static(sv.f!)(dv, v, e_s, e_d, p, t)
+    DDEVertex(f!, sv.dim, 0., sv.sym)
 end
 
 # Promotion rules [eventually there might be too many types to hardcode everyhting]
