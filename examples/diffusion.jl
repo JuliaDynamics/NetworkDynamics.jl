@@ -22,11 +22,10 @@ end
 
 ### Defining a graph
 
-# nodes N=10, nodedegree k=5
+# random graph, nodes N=10, nodedegree k=5
 g = barabasi_albert(10,5)
 L = laplacian_matrix(g)
 
-# first some broadcasting operations are made:
 sol_analytic = SolAnalytic(Symmetric(Array(L)))
 
 ### Solving the DDEProblem
@@ -35,9 +34,6 @@ sol_analytic = SolAnalytic(Symmetric(Array(L)))
 diff_network_L = ODEFunction((dx, x, p, t) -> dx .= - L * x, analytic=sol_analytic)
 
 x0 = rand(10) # random initial conditions of length N=10
-
-# by handing over the object diff_network_L,
-# the callable struct f of the ODEFunction object is delivered to ODEProblem
 prob_L = ODEProblem(diff_network_L,x0,(0.,5.))
 
 # method: Tsit5 - non-stiff solver
@@ -91,7 +87,7 @@ x0 = rand(10) # random initial conditions length N=10
 dx_L = similar(x0)
 dx_st = similar(x0)
 
-# we use same methods as above (in the case without NetworkDynamics) to solve and plot
+# we use the same methods as above (in the case without NetworkDynamics) to solve and plot
 prob_st = ODEProblem(diff_network_st,x0,(0.,5.))
 sol_st = solve(prob_st, Tsit5())
 plot(sol_st)
@@ -108,7 +104,7 @@ isapprox(dx_L, dx_st)
 
 ### Case with ODEEdges
 
-# network dynamics object with a StaticEdge that got promoted to an ODEEdge
+# network dynamics with a StaticEdge that got promoted to an ODEEdge
 diff_network_ode = network_dynamics(odevertex,odeedge,g)
 
 ### Simulation

@@ -36,7 +36,7 @@ e_pars = [1. /3. for e in edges(g)]
 
 parameters = (v_pars, e_pars)
 
-# setting up the key constructor network_dynamics
+# setting up the  network_dynamics
 kuramoto_network! = network_dynamics(odevertex, staticedge, g)
 
 ### Simulation and Plotting

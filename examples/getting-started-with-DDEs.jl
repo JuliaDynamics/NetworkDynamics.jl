@@ -1,4 +1,4 @@
-# Experimental DDE tutorial
+# Corresponds to the DDE tutorial in the docs
 
 using NetworkDynamics
 using LightGraphs
@@ -10,23 +10,19 @@ using Plots
 
 N = 20 # number of nodes
 k = 8  # average degree
-g = watts_strogatz(N, k, 0.) # ring
+g = watts_strogatz(N, k, 0.) # ring network
 
 # the signature of the edge and vertex functions differs from the ODE signature
 function diffusionedge!(e, v_s, v_d, p, t)
-    # usually e, v_s, v_d are arrays, hence we use the broadcasting operator .
     e .= .1 * (v_s - v_d)
     nothing
 end
 
 function diffusionvertex!(dv, v, e_s, e_d, h_v, p, t)
-    # usually dv, v, e_s, e_d, h_v are arrays, hence we use the broadcasting operator .
     dv .= -h_v
-    # edges for which v is the source
     for e in e_s
         dv .-= e
     end
-    # edges for which v is the destination
     for e in e_d
         dv .+= e
     end
@@ -35,7 +31,7 @@ end
 
 ### Constructing the network dynamics
 
-# DDEVertex and StaticDelayEdge that both have access to the VERTEX history
+# DDEVertex and StaticDelayEdge  both have access to the VERTEX history
 # DDEVertex is expected to have call signature (dv, v, e_s, e_d, h_v, p, t)
 # StaticDelayEdge is expected to have  signature (e, v_s, v_d, h_v_s, h_v_d, p, t)
 # StaticEdges get promoted to StaticDelayEdges [then their signature changes]
@@ -47,16 +43,17 @@ nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g)
 ### Simulation
 
 const x0 = randn(N) # random initial conditions
-# constant history function is in-place to save allocations
+# constant history function, is in-place to save allocations
 h(out, p, t) = (out .= x0)
 tspan = (0., 10.)
 
-# fo DDES the tuple syntax is extend to hold the delay time τ as a parameter
+# fo DDES the tuple parameter syntax is extended to hold the delay time τ as a parameter
 # the first argument should be an array (or other object) containing the vertex parameters
 # the second argument holds the edge parameters and the third specifies the delay time τ
 # p = (vertexparameters, edgeparameters, delaytime)
 p = (nothing, nothing, 1.)
 
+# you might want to use the keyword constant_lags here. check the docs of DelayDiffEq for details
 dde_prob = DDEProblem(nd, x0, h, tspan, p)
 sol = solve(dde_prob, MethodOfSteps(Tsit5()))
 

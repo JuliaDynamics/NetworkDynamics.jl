@@ -48,7 +48,6 @@ electricaledge = StaticEdge(f! = electrical_edge!, dim = 1)
 # since the vertex is two dimensional, we specify both symbols u,v
 odeelevertex = ODEVertex(f! = fhn_electrical_vertex!, dim = 2, sym=[:u, :v])
 
-# setting up the key constructor network_dynamics
 fhn_network! = network_dynamics(odeelevertex, electricaledge, g_weighted)
 
 # global parameters that are accessed several times should be `const` to improve performance
