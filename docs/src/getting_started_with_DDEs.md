@@ -91,7 +91,7 @@ We still have to specify the *constant* time-lag $\tau$. At the moment this is o
 p = (nothing, nothing, 1.)
 nothing # hide
 ```
- We solve the problem on the time interval $[0, 10]$ with the `Tsit5()` algorithm, recommended for solving non-stiff problems. The `MethodOfSteps(..)` translates an `OrdinaryDiffEq.jl`  solver into an efficient method for delay differential equations.
+ We solve the problem on the time interval $[0, 10]$ with the `Tsit5()` algorithm, recommended for solving non-stiff problems. The `MethodOfSteps(..)` translates an `OrdinaryDiffEq.jl`  solver into an efficient method for delay differential equations. `DDEProblem` addtional accepts the keyword `constant_lags` that can be useful in some situation, see [their docs](https://diffeq.sciml.ai/stable/tutorials/dde_example/) for details.
 
 ```@example DDEVertex
 using DelayDiffEq, Plots
