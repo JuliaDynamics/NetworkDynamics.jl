@@ -1,4 +1,4 @@
-# Parameter handling
+# [Parameter handling](@id parameters)
 
 Let `nd!` be an ODEFunction returned by `network_dynamics`, e.g.
 
