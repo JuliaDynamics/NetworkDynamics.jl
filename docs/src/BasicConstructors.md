@@ -94,7 +94,7 @@ The function then defaults to using the identity as mass matrix and `[:v for i i
 
 ### [`DDEVertex`](@ref)
 
-If a vertex has local dynamics described by a delay differential equation (DDE), the `VertexFunction` is constructed as
+If a vertex has local dynamics described by a delay differential equation (DDE) the local dynamics need to have the signature `vertexfunction!(dv, v, e_s, e_d, h_v, p, t)`, where `h_v` are the history values of `v`. Then the `VertexFunction` is constructed as
 
 ```julia
 DDEVertex(vertexfunction!, dim, mass_matrix, sym)
@@ -160,9 +160,9 @@ ODEEdge(f! = edgefunction!, dim = n)
 In this case the function defaults to using the identity as mass matrix and `[:e for in 1:dimension]` as symbols.
 
 ### [`StaticDelayEdge`](@ref)
-Here, the values of the edges are determined by a delay differential equation. Static again means that the edge value described by the `edgefunction!` only depends on the values of the vertices the edge is connected to and not on an internal derivate of the edge itself.
+This constructor is used when edge variables depend on past values of the vertex variables. In this case the `edgefunction!` has to accept two additional arguments `h_v_s` and `h_v_d` that hold the history of `v_s` and `v_d`. *Static* means that the edge depends only on the dynamics of the vertices the edge is connected to and not on an internal derivative of the edge variables itself.
 
-As an example for such system, we show a delay diffusion equation:
+As an example for such system, we show a diffusive coupling with delay:
 
 ```julia
 edgefunction! = (e, v_s, v_d, h_v_s, h_v_d, p, t) -> e .=.1 * (h_v_s .- v_d)
