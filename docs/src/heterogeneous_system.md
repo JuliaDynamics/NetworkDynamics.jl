@@ -1,7 +1,3 @@
-```@meta
-EditURL = "<unknown>/../examples/heterogeneous_system.jl"
-```
-
 # Modeling a heterogeneous system
 
 One of the main purposes of NetworkDynamics.jl is to facilitate

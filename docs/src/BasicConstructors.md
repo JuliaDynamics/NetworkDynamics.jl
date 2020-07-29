@@ -5,24 +5,26 @@ Since the equations describing the local dynamics may differ strongly from each
 other, the types `VertexFunction` and `EdgeFunction` are introduced. They
 provide a unifying interface between different classes of nodes and edges. Both
 have several subtypes that account for the different classes of equations that may
-represent the local dynamics. At the moment algebraic (static) equations and ordinary differential equations (ODEs) are supported:
+represent the local dynamics. At the moment, algebraic (static) equations, ordinary differential equations (ODEs) and delay differential equations (DDEs) are supported:
 
 
 ```julia
 # VertexFunctions
 StaticVertex(vertexfunction!, dimension, symbol)
 ODEVertex(vertexfunction!, dimension, mass_matrix, symbol)
+DDEVertex(vertexfunction!, dimension, mass_matrix, symbol)
 
 # EdgeFunctions
 StaticEdge(edgefunction!, dimension, symbol)
 ODEEdge(edgefunction!, dimension, mass_matrix, symbol)
+StaticDelayEdge(edgefunction!, dimension, mass_matrix, symbol)
 ```
 
 
 # VertexFunctions
 
 Given a set of (algebraic or differential) equations describing a node or an edge
-the first step is to turn them into a **mutating** function `vertexfunction!`. Depending on the class of the function `vertexfunction!`, the constructors `StaticVertex` or `ODEVertex` are called in order to turn `vertexfunction!` into a `VertexFunction` object compatible with [`network_dynamics`](@ref).
+the first step is to turn them into a **mutating** function `vertexfunction!`. Depending on the class of the function `vertexfunction!`, the constructors `StaticVertex`, `ODEVertex` or `DDEVertex` are called in order to turn `vertexfunction!` into a `VertexFunction` object compatible with [`network_dynamics`](@ref).
 
 
 Since in general the state of a vertex depends on the vertex value itself as well as on the in- and outgoing edges, the function `vertexfunction!`
@@ -33,9 +35,11 @@ has to respect one of the following calling syntaxes.
 function vertexfunction!(v, e_s, e_d, p, t) end
 # For dynamic nodes
 function vertexfunction!(dv, v, e_s, e_d, p, t) end
+# For delay nodes
+function vertexfunction!(dv, v, e_s, e_d, h_v, p, t) end
 ```
 
-Here `dv`, `v`, `p` and `t` are the usual ODE arguments, while `e_s` and `e_d` are arrays containing the edges for which the described vertex is the source or the destination respectively. The typical case of diffusive coupling on a directed graph could be described as
+Here `dv`, `v`, `p`, and `t` are the usual ODE arguments, while `e_s` and `e_d` are arrays containing the edges for which the described vertex is the source or the destination respectively. In the delay case, the array `h_v` denotes the vertex history. The typical case of diffusive coupling on a directed graph could be described as
 
 ```julia
 function vertex!(dv, v, e_s, e_d, p, t)
@@ -50,8 +54,8 @@ function vertex!(dv, v, e_s, e_d, p, t)
 end
 ```
 !!! warning
-    The arguments `e_s` and `e_d` are **obligatory** even if the graph is undirected and no distinction between source and destination can be made. This is necessary since [LightGraphs.jl](https://github.com/JuliaGraphs/LightGraphs.jl) implements an undirected graph in the same way as a directed graphs, but ignores the directionality information. Therefore some care has
-    to be taken when dealing with assymetric coupling terms. A detailed example
+    The arguments `e_s` and `e_d` are **obligatory** even if the graph is undirected and no distinction between source and destination can be made. This is necessary since [LightGraphs.jl](https://github.com/JuliaGraphs/LightGraphs.jl) implements an undirected graph in the same way as a directed graphs, but ignores the directionality information. Therefore, some care has
+    to be taken when dealing with asymetric coupling terms. A detailed example
     can be found  in the [Getting started](@ref getting_started) tutorial.
 
 ### [`StaticVertex`](@ref)
@@ -68,7 +72,7 @@ models a constant input ``I = p``, then `dim = 1` and `sym = [:I]`. For more det
 
 ### [`ODEVertex`](@ref)
 
-If a vertex has local dynamics `vertexfunction!(dv, v, e_s, e_d, p, t)` described by an ODE
+If a vertex has local dynamics `vertexfunction!(dv, v, e_s, e_d, p, t)` described by an ODE,
 the `VertexFunction` is contructed as
 
 ```julia
@@ -77,7 +81,7 @@ ODEVertex(vertexfunction!, dim, mass_matrix, sym)
 
 As above, **dim** is the number of independent variables in the vertex equations and **sym** corresponds to the symbols of these variables.
 
-**mass_matrix** is an optional argument that defaults to the identity matrix `I`. If a mass matrix M is given the local system `M * dv = vertexfunction!` will be solved. `network_dynamics` assembles all local mass matrices into one global mass matrix that can be passed to a differential equation solver like `Rodas4`.
+**mass_matrix** is an optional argument that defaults to the identity matrix `I`. If a mass matrix M is given, the local system `M * dv = vertexfunction!` will be solved. `network_dynamics` assembles all local mass matrices into one global mass matrix that can be passed to a differential equation solver like `Rodas4`.
 
 
 One may also call ODEVertex with keyword arguments, omitting optional arguments:
@@ -88,18 +92,35 @@ ODEVertex(f! = vertexfunction!, dim = dim)
 
 The function then defaults to using the identity as mass matrix and `[:v for i in 1:dimension]` as symbols.
 
+### [`DDEVertex`](@ref)
+
+If a vertex has local dynamics described by a delay differential equation (DDE) the local dynamics need to have the signature `vertexfunction!(dv, v, e_s, e_d, h_v, p, t)`, where `h_v` are the history values of `v`. Then the `VertexFunction` is constructed as
+
+```julia
+DDEVertex(vertexfunction!, dim, mass_matrix, sym)
+```
+As before, **dim** is the number of independent variables in the vertex function and **sym** describes the symbols of the variables. The **mass matrix** is optional and defaults to the identity matrix `I`.
+
+As above, the DDEVertex function can also be called without the optional arguments:
+
+```julia
+DDEVertex(f! = vertexfunction!, dim = dim)
+```
+
 ## EdgeFunctions
 
-Similar to the case of vertices, an edge is described by **mutating** function `edgefunction!`. At the moment the constructors `StaticEdge` and `ODEEdge` are available. `edgefunction!` has to respect one of the following syntaxes:
+Similar to the case of vertices, an edge is described by **mutating** function `edgefunction!`. At the moment the constructors `StaticEdge`, `ODEEdge`, and `StaticDelayEdge` are available. `edgefunction!` has to respect one of the following syntaxes:
 
 ```julia
 # For static edges
 function edgefunction!(e, v_s, v_d, p, t) end
 # For dynamics edges
 function edgefunction!(de, e, v_s, v_d, p, t) end
+# For static delay edges
+function edgefunction!(e, v_s, v_d, h_v_s, h_v_d, p, t) end
 ```
 Just like above, `de`, `e`, `p` and `t` are the usual ODE arguments, while `v_s`
-and `v_d` are the source and destination vertices respectively.
+and `v_d` are the source and destination vertices respectively and `h_v_s` and `h_v_d` the corresponding history arrays.
 
 
 ### [`StaticEdge`](@ref)
@@ -138,6 +159,24 @@ ODEEdge(f! = edgefunction!, dim = n)
 
 In this case the function defaults to using the identity as mass matrix and `[:e for in 1:dimension]` as symbols.
 
+### [`StaticDelayEdge`](@ref)
+This constructor is used when edge variables depend on past values of the vertex variables. In this case the `edgefunction!` has to accept two additional arguments `h_v_s` and `h_v_d` that hold the history of `v_s` and `v_d`. *Static* means that the edge depends only on the dynamics of the vertices the edge is connected to and not on an internal derivative of the edge variables itself.
+
+As an example for such system, we show a diffusive coupling with delay:
+
+```julia
+edgefunction! = (e, v_s, v_d, h_v_s, h_v_d, p, t) -> e .=.1 * (h_v_s .- v_d)
+```
+The `EdgeFunction` object is constructed as
+
+```julia
+StaticDelayEdge(edgefunction!, dim, mass_matrix, sym)
+```
+Again, we can also leave out the optional keywords **sym** and **mass_matrix**.
+
+```julia
+StaticDelayEdge(f! = edgefunction!, dim = n)
+```
 
 ## Constructor
 
@@ -168,7 +207,7 @@ nd = network_dynamics(vertexfunction!::VertexFunction,
 
 ### Example
 
- Let's look at an example. First we define our graph as well as the differential systems connected to its vertices and edges:
+ Let's look at an example. First, we define our graph as well as the differential systems connected to its vertices and edges:
 
 ```@example
 using NetworkDynamics, LightGraphs

@@ -1,6 +1,10 @@
 using Test
 import NetworkDynamics.ComponentFunctions
 using NetworkDynamics.ComponentFunctions
+using LightGraphs
+using NetworkDynamics
+using OrdinaryDiffEq
+using DelayDiffEq
 
 printstyled("--- Function Typology --- \n", bold=true, color=:white)
 
@@ -46,12 +50,11 @@ end
 
 odevertex = ODEVertex(f! = diffusion_vertex!, dim = 1)
 staticvertex = StaticVertex(f! = diff_stat_vertex!, dim = 1)
-staticedge = StaticEdge(f! = diffusion_edge!, dim = 1)
-odeedge = ODEEdge(f! = diff_dyn_edge!, dim = 1)
-# dim of the edge is 2 since the coupling is not symmetric
-sdedge = StaticDelayEdge(f! = kuramoto_delay_edge!, dim = 2)
 ddevertex = DDEVertex(f! = kuramoto_delay_vertex!, dim = 1)
 
+staticedge = StaticEdge(f! = diffusion_edge!, dim = 1)
+odeedge = ODEEdge(f! = diff_dyn_edge!, dim = 1)
+sdedge = StaticDelayEdge(f! = kuramoto_delay_edge!, dim = 2)
 
 
 vertex_list_1 = [odevertex for v in 1:10]
@@ -60,23 +63,67 @@ vertex_list_1 = [odevertex for v in 1:10]
 vertex_list_2 = [staticvertex for v in 1:10]
 @test eltype(vertex_list_2) == StaticVertex{typeof(diff_stat_vertex!)}
 
+vertex_list_3 = [ddevertex for v in 1:10]
+@test eltype(vertex_list_3) == DDEVertex{typeof(kuramoto_delay_vertex!)}
+
+vertex_list_4 = [v % 2 == 0 ? odevertex : staticvertex for v in 1:10]
+
+vertex_list_5 = Array{VertexFunction}(vertex_list_4)
+@test eltype(vertex_list_5) == VertexFunction
+
+vertex_list_6 = Array{ODEVertex}(vertex_list_4)
+@test eltype(vertex_list_6) == ODEVertex
+
+vertex_list_7 = Array{DDEVertex}(vertex_list_4)
+@test eltype(vertex_list_7) == DDEVertex
+
+@test_throws MethodError Array{StaticVertex}(vertex_list_4) # this should error out
 
 
-vertex_list_3 = [v % 2 == 0 ? odevertex : staticvertex for v in 1:10]
-vertex_list_4 = Array{VertexFunction}(vertex_list_3)
-@test eltype(vertex_list_4) == VertexFunction
+edge_list_1 = [staticedge for v in 1:25]
+@test eltype(edge_list_1) == StaticEdge{typeof(diffusion_edge!)}
 
-vertex_list_5 = Array{ODEVertex}(vertex_list_3)
-@test eltype(vertex_list_5) == ODEVertex
+edge_list_2 = [odeedge for v in 1:25]
+@test eltype(edge_list_2) == ODEEdge{typeof(diff_dyn_edge!)}
 
+edge_list_3 = [sdedge for v in 1:25]
+@test eltype(edge_list_3) == StaticDelayEdge{typeof(kuramoto_delay_edge!)}
 
-@test_throws MethodError Array{StaticVertex}(vertex_list_3) # this should error out
+edge_list_4 = [v % 2 == 0 ? odeedge : staticedge for v in 1:10]
 
-edge_list_1 = [odeedge for v in 1:10]
-@test eltype(edge_list_1) == ODEEdge{typeof(diff_dyn_edge!)}
+edge_list_5 = Array{EdgeFunction}(edge_list_4)
+@test eltype(edge_list_5) == EdgeFunction
 
-edge_list_2 = [staticedge for v in 1:10]
-edge_list_3 = [v % 2 == 0 ? odeedge : staticedge for v in 1:10]
-edge_list_4 = Array{EdgeFunction}(edge_list_3)
-edge_list_5 = Array{ODEEdge}(edge_list_3)
-@test_throws MethodError Array{StaticEdge}(edge_list_3) # this should error out
+edge_list_6 = Array{ODEEdge}(edge_list_4)
+@test eltype(edge_list_6) == ODEEdge
+
+edgelist_7 = Array{StaticDelayEdge}(edge_list_1)
+@test eltype(edgelist_7) == StaticDelayEdge
+
+@test_throws MethodError Array{StaticDelayEdge}(edge_list_4) == StaticDelayEdge
+
+@test_throws MethodError Array{StaticEdge}(edge_list_4) # this should error out
+
+# network dynamics objects
+g = barabasi_albert(10,5)
+
+nd_diff_ode_static=network_dynamics(odevertex, staticedge, g)
+nd_static_ode=network_dynamics(staticvertex, odeedge, g)
+nd_dde_sd=network_dynamics(ddevertex, sdedge, g)
+
+@test nd_diff_ode_static isa ODEFunction
+@test nd_static_ode isa ODEFunction
+@test nd_dde_sd isa DDEFunction
+
+nd_1=network_dynamics(vertex_list_1,edge_list_1,g)
+nd_2=network_dynamics(vertex_list_2,edge_list_2,g)
+nd_3=network_dynamics(vertex_list_3,edge_list_3,g)
+
+nd_4=network_dynamics(vertex_list_1,staticedge,g)
+nd_5=network_dynamics(odevertex,edge_list_1,g)
+
+@test nd_1 isa ODEFunction
+@test nd_2 isa ODEFunction
+@test nd_3 isa DDEFunction
+@test nd_4 isa ODEFunction
+@test nd_5 isa ODEFunction

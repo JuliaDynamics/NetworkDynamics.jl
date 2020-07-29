@@ -12,10 +12,9 @@ using BenchmarkTools
 
 ### Defining the graph
 N = 100 # nodes
-g = barabasi_albert(N, 5) # Barabis-Albert graph
+g = barabasi_albert(N, 5)
 B = incidence_matrix(g, oriented=true)
 
-# template {T,T2,U} parametric types, can be any type
 struct kuramoto_dyn{T, T2, U}
     B::T
     B_trans::T2
@@ -96,7 +95,6 @@ kur_network_eode = network_dynamics(vertex_list,ode_edge_list, g)
 ### Initial conditions
 
 x0_L = 0.1 .* Array{Float64}(1:2N)
-# empty arrays with same size as x0_L
 x0_nd = similar(x0_L)
 x0_nd2 = similar(x0_L)
 

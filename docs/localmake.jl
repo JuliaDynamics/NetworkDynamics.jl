@@ -13,7 +13,7 @@ using NetworkDynamics
 makedocs(
     sitename = "NetworkDynamics",
     linkcheck = true,
-    modules = [NetworkDynamics], # creates a warning if a ND.jl docstring is missing
+    # modules = [NetworkDynamics], # creates a warning if a ND.jl docstring is missing
     pages = [
     "General" => "index.md",
     "BasicConstructors.md",
@@ -23,7 +23,7 @@ makedocs(
     "Tutorials" => [
 		"Getting started" => "getting_started_with_network_dynamics.md",
 		"Directed and weighted graphs" => "directed_and_weighted_graphs.md",
-		"Delay differential equations" => "DDEVertex.md",
+		"Delay differential equations" => "getting_started_with_DDEs.md",
 		"Heterogeneous systems" => "heterogeneous_system.md",
 		"Stochastic differential equations" => "SDEVertex.md",
 		]

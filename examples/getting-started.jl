@@ -15,18 +15,12 @@ g = barabasi_albert(N, k) # a little more exciting than a bare random graph
 
 ### Functions for edges and vertices
 
-# the edge and vertex functions are mutating, hence
-# by convention `!` is appended to their names
-
-# e=edges, v_s=source-vertices, v_d=destination-vertices, p=parameters, t=time
 function diffusionedge!(e, v_s, v_d, p, t)
     # usually e, v_s, v_d are arrays, hence we use the broadcasting operator .
     e .= v_s .- v_d
     nothing
 end
 
-# dv=derivative of vertex variables, v=vertex,
-# e_s=source edges, e_d=destination edges, p=parameters, t=time
 function diffusionvertex!(dv, v, e_s, e_d, p, t)
     # usually dv, v, e_s, e_d are arrays, hence we use the broadcasting operator .
     dv .= 0.
@@ -43,13 +37,10 @@ end
 
 ### Constructing the network dynamics
 
-# ODEVertex and StaticEdge are structs that contain additional information on the function f!, such as number of variables of the internal function (dim), the symbols of those variables, and if a mass_matrix should be used
-# VertexFunction/EdgeFunction is an abstract supertype for all vertex/edge function structs in NetworkDynamics
-
-# signature of ODEVertex: (f!, dim, mass_matrix, sym) (mass_matrix and sym are optional arguments)
+# signature of ODEVertex: (f!, dim, mass_matrix, sym)
 nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 1)
 
-# signature of StaticEdge: (f!, dim, sym) (sym is optional)
+# signature of StaticEdge: (f!, dim, sym)
 nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1)
 
 # setting up the key constructor network_dynamics
@@ -61,10 +52,7 @@ nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g)
 ### Simulation
 
 x0 = randn(N) # random initial conditions
-# ODEProblem is a struct of OrdinaryDiffEq.jl
-# signature:(f::ODEFunction,u0,tspan, ...)
 ode_prob = ODEProblem(nd, x0, (0., 4.))
-# solve has signature: (prob::PDEProblem,alg::DiffEqBase.DEAlgorithm,args,kwargs)
 sol = solve(ode_prob, Tsit5());
 
 ### Plotting
@@ -72,9 +60,7 @@ sol = solve(ode_prob, Tsit5());
 # vars=list of variables we want to plot, in this case we want to plot variables with symbol "v"
 plot(sol, vars = syms_containing(nd, "v"))
 
-
 ### Bonus: Two independent diffusions with fancy symbols
-
 
 # we will have two independent diffusions on the network, hence dim = 2 (x,ϕ)
 nd_diffusion_vertex_2 = ODEVertex(f! = diffusionvertex!, dim = 2, sym = [:x, :ϕ])

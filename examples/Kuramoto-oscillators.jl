@@ -36,18 +36,16 @@ e_pars = [1. /3. for e in edges(g)]
 
 parameters = (v_pars, e_pars)
 
-# setting up the key constructor network_dynamics
+# setting up the  network_dynamics
 kuramoto_network! = network_dynamics(odevertex, staticedge, g)
 
 ### Simulation and Plotting
 
 # constructing random initial conditions for nodes (variable θ)
 x0 = randn(nv(g)) # nv(g) - number of vertices in g
-dx = similar(x0) # creating empty array of same size as x0
+dx = similar(x0)
 
-# signature: ODEProblem(f,u0,tspan,p)
 prob = ODEProblem(kuramoto_network!, x0, (0.,2000), parameters)
-# solver method: Tsit5 - non-stiff solver
 sol = solve(prob, Tsit5())
 
 plot(sol)
@@ -69,7 +67,5 @@ end
 u_idx = idx_containing(kuramoto_network!, :v)
 
 # Then we compute the order parameter at each time step:
-# Using mapslices: transforms given dimension of array and applys function f
-# mapslices(f, array, dim)
-# sol[u_idx,:] is the multidimensional solution array; dimension=(nodes x timesteps)
+# sol[u_idx,:] is the multidimensional solution array
 plot(abs.(mapslices(order_parameter, sol[u_idx, :], dims = 1))[1:1000])
