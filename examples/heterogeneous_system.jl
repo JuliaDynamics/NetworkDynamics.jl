@@ -28,19 +28,17 @@ vertex! = ODEVertex(f! = kuramoto_vertex!, dim = 1, sym=[:θ])
 edge!   = StaticEdge(f! = kuramoto_edge!, dim = 1)
 nd! = network_dynamics(vertex!, edge!, g);
 
-# Introducing genous parameters is as easy as defining an array.
-# Here the vertex parameters are genous, while the edges share the same coupling
+# Introducing heterogeneous parameters is as easy as defining an array.
+# Here the vertex parameters are hetereogeneous, while the edges share the same coupling
 # parameter K.
 
-ω = collect(1:N)./N
-ω  .-= sum(ω)/N
+ω = (collect(1:N) .- sum(1:N) / N ) / N
 K  = 3.
 p  = (ω, K); # p[1] vertex parameters, p[2] edge parameters
 
 # Integrate and plot
 
-x0 = collect(1:N)./N
-x0 .-= sum(x0)./N
+x0 = (collect(1:N) .- sum(1:N) / N ) / N
 tspan = (0., 10.)
 prob = ODEProblem(nd!, x0, tspan, p)
 sol = solve(prob, Tsit5())
@@ -70,7 +68,7 @@ end
 inertia! = ODEVertex(f! = kuramoto_inertia!, dim = 2, sym= [:θ, :ω]);
 
 
-# Since now we model a system with genous node dynamics we can no longer
+# Since now we model a system with hetereogeneous node dynamics we can no longer
 # straightforwardly pass a single VertexFunction to `network_dynamics` but instead have to
 # hand over an Array.
 
@@ -87,8 +85,8 @@ nd_hetero!   = network_dynamics(vertex_array, edge!, g);
 x0[1] = ω[1];
 
 # The node with inertia is two-dimensional, hence we need to specify two initial conditions.
-# For the first dimension we keep the ic from above and insert! another one into `x0` at
-# the correct index.
+# For the first dimension we keep the initial condition from above and insert! another one
+# into `x0` at the correct index.
 
 inertia_ic_2 = 5
 insert!(x0, 6, inertia_ic_2);
@@ -111,6 +109,7 @@ nodefillc = reshape(nodecolor[membership], 1, N);
 
 vars = syms_containing(nd_hetero!, :θ);
 plot(sol_hetero, ylabel="θ", vars=vars, lc = nodefillc)
+
 
 
 # ## Components with algebraic constraints
