@@ -8,7 +8,7 @@
 
 To now get access to the edge values at any time t, the object nd can be called as follows:
 
-```@example accessing_edge_variables
+```@example accessing_edge_values
 gd_nd = nd(x, p, t, GetGD) # exposes underlying graph data struct
 e_values_1 = gd_nd.e_array
 nothing # hide
