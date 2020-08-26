@@ -53,9 +53,11 @@ sol = solve(ode_prob, Tsit5());
 
 plot(sol, vars = syms_containing(nd, "v"))
 
-# accessing edge variables
+# accessing edge values via helper function GetGD
 gd_nd = nd(sol(1.0), p, 1.0, GetGD) # exposes underlying graph data struct
-e_values = gd_nd.e_array
+e_values_1 = gd_nd.e_array
 
-plot(e_values, vars = syms_containing(nd, "e"))
-print(e_values[:])
+plot(e_values_1, vars = syms_containing(nd, "e"))
+print(e_values_1[:])
+
+# accessing edge values using SavingCallback
