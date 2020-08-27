@@ -4,7 +4,7 @@
 
 ## Accessing edge values via helper function GetGD
 
-`NetworkDynamics.jl` includes the GetGD type, which provides access to the underlying GraphData and GraphStruct objects by multiple dispatching of the network dynamics functions. Subsequently, we use the example XXX to demonstrate the usage of `GetGD`. In this example a barabasi-albert graph 'g' with $N = 20$ nodes was created. Then, using the functions `diffusionedge!` and `diffusionvertex!` and the functions wrappers, objects of the type `VertexFunction` and `EdgeFunction` were formed. The key constructor `network_dynamics` combines these objects with the graph `g` to the object `nd` (for more information see `getting-started.jl`).
+`NetworkDynamics.jl` includes the GetGD type, which provides access to the underlying GraphData and GraphStruct objects by multiple dispatching of the network dynamics functions. Subsequently, we demonstrate the usage of `GetGD`. For the use of network dynamics we combine functions that describe the dynamics of vertices and edges with the information of the graph created before. For instance, in the example `getting-started.jl` the object `nd` has been formed (for more information see `getting-started.jl`).
 
 To now get access to the edge values at any time t, the object nd can be called as follows:
 
