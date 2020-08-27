@@ -61,3 +61,16 @@ plot(e_values_1, vars = syms_containing(nd, "e"))
 print(e_values_1[:])
 
 # accessing edge values using SavingCallback
+
+using DiffEqCallbacks: SavingCallback, SavedValues
+
+saved_values = SavedValues(Float64, Vector{Float64})
+function saving_func(u, t, integrator)
+    edgevals = Float64[]
+    for i in 1:integrator.f.f.graph_structure.num_e
+        push!(edgevals, integrator.f.f.graph_data.e[i]...)
+    end
+    edgevals
+end
+cb = SavingCallback(saving_func, saved_values)
+sol = solve(prob,Tsit5(),callback=cb)
