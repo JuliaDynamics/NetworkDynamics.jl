@@ -127,13 +127,13 @@ end
 end
 
 
-export oriented_edge_sum!
+export oriented_symmetric_edge_sum!
 
 """
 A small utility function for writing diffusion dynamics. It provides the
 oriented sum of all the incident edges.
 """
-@inline function oriented_edge_sum!(e_sum, e_s, e_d)
+@inline function oriented_symmetric_edge_sum!(e_sum, e_s, e_d)
     @inbounds for e in e_s
         e_sum .-= e
     end

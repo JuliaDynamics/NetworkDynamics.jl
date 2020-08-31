@@ -14,7 +14,7 @@ g = barabasi_albert(N, k) # graph
 @inline function kuramoto_vertex!(dv, v, e_s, e_d, p, t)
     # usually dv, v, e_s, e_d are arrays, hence we use the broadcasting operator .
     dv .= p
-    oriented_edge_sum!(dv, e_s, e_d)
+    oriented_symmetric_edge_sum!(dv, e_s, e_d)
     nothing
 end
 

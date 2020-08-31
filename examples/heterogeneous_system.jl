@@ -21,7 +21,7 @@ end
 
 function kuramoto_vertex!(dθ, θ, e_s, e_d, ω, t)
     dθ[1] = ω
-    oriented_edge_sum!(dθ, e_s, e_d)
+    oriented_symmetric_edge_sum!(dθ, e_s, e_d)
 end
 
 vertex! = ODEVertex(f! = kuramoto_vertex!, dim = 1, sym=[:θ])
