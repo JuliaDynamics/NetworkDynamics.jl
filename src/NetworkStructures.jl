@@ -297,7 +297,7 @@ function construct_mass_matrix(mmv_array, gs)
                 for k in 1:length(mm)
                     mass_matrix[gs.v_idx[i][k], gs.v_idx[i][k]] = mm[k]
                 end
-            elseif ndims(mm) == 2
+            elseif ndims(mm) == 2 # ndims(I) = 2
                 mass_matrix[gs.v_idx[i],gs.v_idx[i]] .= mm
             else
                 error("The mass matrix needs to be a 2D matrix.")
