@@ -9,14 +9,14 @@ using BenchmarkTools
 
 
 ### Constructing the graph
-N = 500
-k=340 # node degree = 2*R
-β=0
-ϵ=0.05
-sigma_inter=0.01
-sigma_intra=0.2
-a = .5
-ϕ=π/2 -0.1
+const N = 500
+const k=340 # node degree = 2*R
+const β=0
+const ϵ=0.05
+const sigma_inter=0.01
+const sigma_intra=0.2
+const a = .5
+const ϕ=π/2 -0.1
 
 
 ws = watts_strogatz(N,k,β)
