@@ -316,13 +316,29 @@ function construct_mass_matrix(mmv_array, mme_array, gs)
         dim_nd = gs.dim_v + gs.dim_e
         mass_matrix = sparse(1.0I,dim_nd,dim_nd)
         for (i, mm) in enumerate(mmv_array)
-            if mm != I
-                mass_matrix[gs.v_idx[i],gs.v_idx[i]] .= mm
+            ind = gs.v_idx[i]
+            if ndims(mm) == 0
+                copyto!(mass_matrix[ind, ind], mm*I)
+            elseif ndims(mm) == 1
+                copyto!(mass_matrix[ind, ind], Diagonal(mm))
+            elseif ndims(mm) == 2 # ndims(I) = 2
+                # `I` does not support broadcasting but copyto!
+                copyto!(mass_matrix[ind, ind], mm)
+            else
+                error("The mass matrix needs to be interpretable as a 2D matrix.")
             end
         end
         for (i, mm) in enumerate(mme_array)
-            if mm != I
-                mass_matrix[gs.e_idx[i] .+ gs.dim_v, gs.e_idx[i] .+ gs.dim_v] .= mm
+            ind = gs.e_idx[i]
+            if ndims(mm) == 0
+                copyto!(mass_matrix[ind, ind], mm*I)
+            elseif ndims(mm) == 1
+                copyto!(mass_matrix[ind, ind], Diagonal(mm))
+            elseif ndims(mm) == 2 # ndims(I) = 2
+                # `I` does not support broadcasting but copyto!
+                copyto!(mass_matrix[ind, ind], mm)
+            else
+                error("The mass matrix needs to be interpretable as a 2D matrix.")
             end
         end
     end
