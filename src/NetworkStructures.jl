@@ -293,14 +293,16 @@ function construct_mass_matrix(mmv_array, gs)
     else
         mass_matrix = sparse(1.0I,gs.dim_v, gs.dim_v)
         for (i, mm) in enumerate(mmv_array)
-            if ndims(mm) == 1
-                for k in 1:length(mm)
-                    mass_matrix[gs.v_idx[i][k], gs.v_idx[i][k]] = mm[k]
-                end
+            ind = gs.v_idx[i]
+            if ndims(mm) == 0
+                copyto!(mass_matrix[ind, ind], mm*I)
+            elseif ndims(mm) == 1
+                copyto!(mass_matrix[ind, ind], Diagonal(mm))
             elseif ndims(mm) == 2 # ndims(I) = 2
-                mass_matrix[gs.v_idx[i],gs.v_idx[i]] .= mm
+                # `I` does not support broadcasting but copyto!
+                copyto!(mass_matrix[ind, ind], mm)
             else
-                error("The mass matrix needs to be a 2D matrix.")
+                error("The mass matrix needs to be interpretable as a 2D matrix.")
             end
         end
     end
