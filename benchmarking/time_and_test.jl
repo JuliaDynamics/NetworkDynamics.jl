@@ -78,4 +78,4 @@ for N = [20,200]
 end
 
 
-# For N = [20,200] ND#master is at 1.320 μs, 10.50 μs (median time) on my machine
+# For N = [20,200] ND#master is at 1.3 μs, 10.5 μs (median time) on my machine
