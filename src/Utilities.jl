@@ -20,27 +20,30 @@ macro nd_threads(trigger,args...)
     end
     ex = args[1]
     if ex.head == :for
-        # Need to escape the bounds of the loop, but not the whole expression,
+        # Need to escape the bounds in the loop, but not the whole expression,
         # in order to work with the base Threads.@thread macro.
         # That macro does it's own escaping, but also it's own expression
         # checking (the head of the first expression must be :for. So we will
         # escape the bounds here, keeping the expression formed in a suitable
         # way for @threads
-        #
-        # This is a brute-force drill down an AST of a for loop to the limits
-        # of said loop. See: dump(quote for i in e.a:e.b print(i) end end)
-        ex.args[1].args[1] = esc(ex.args[1].args[1])
-        ex.args[1].args[2].args[2] = esc(ex.args[1].args[2].args[2])
-        ex.args[1].args[2].args[3] = esc(ex.args[1].args[2].args[3])
 
-        # Same for the body of the loop
-        ex.args[2] = esc(ex.args[2])
+        # make sure we have the form :for, iterator, block
+        @assert ex.args[1].head === :(=)
+        @assert ex.args[2].head === :block
+        @assert length(ex.args) == 2
+
+        # extract the loop iterator
+        loop_iter = Expr(:(=), esc.(ex.args[1].args)...)
+        # extract the loop body and annotate @inbounds
+        loop_body_ib = :(@inbounds $(esc(ex.args[2])))
+        # build new loop
+        loop = Expr(:for, loop_iter, loop_body_ib)
 
         return quote
-            @inbounds if $(esc(trigger))
-                Threads.@threads $ex
+            if $(esc(trigger))
+                Threads.@threads $loop
             else
-                $(ex)
+                @inbounds $(esc(ex))
             end
         end
     else
