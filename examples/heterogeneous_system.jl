@@ -58,10 +58,10 @@ function kuramoto_inertia!(dv, v, e_s, e_d, P, t)
     dv[1] = v[2]
     dv[2] = P - 1. * v[2]
     for e in e_s
-        dv[1] -= e[1]
+        dv[2] -= e[1]
     end
     for e in e_d
-        dv[1] += e[1]
+        dv[2] += e[1]
     end
 end
 
