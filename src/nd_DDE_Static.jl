@@ -44,11 +44,20 @@ function (d::nd_DDE_Static)(dx, x, h!, p, t)
     h!(d.history, p, t - p[end])
 
     @nd_threads d.parallel for i in 1:d.graph_structure.num_e
-        maybe_idx(d.edges!, i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], view(d.history, d.graph_structure.s_e_idx[i]), view(d.history, d.graph_structure.d_e_idx[i]), p_e_idx(p, i), t)
+        maybe_idx(d.edges!, i).f!(
+            get_edge(gd, i),
+            get_src_vertex(gd, i),
+            get_dst_vertex(gd, i),
+            view(d.history, d.graph_structure.s_e_idx[i]), view(d.history, d.graph_structure.d_e_idx[i]), p_e_idx(p, i), t)
     end
 
     @nd_threads d.parallel for i in 1:d.graph_structure.num_v
-        maybe_idx(d.vertices!,i).f!(view(dx,d.graph_structure.v_idx[i]), gd.v[i], gd.e_s_v[i], gd.e_d_v[i], view(d.history, d.graph_structure.v_idx[i]), p_v_idx(p, i), t)
+        maybe_idx(d.vertices!,i).f!(
+            view(dx,d.graph_structure.v_idx[i]),
+            get_vertex(gd, i),
+            get_out_edges(gd, i),
+            get_in_edges(gd, i),
+            view(d.history, d.graph_structure.v_idx[i]), p_v_idx(p, i), t)
     end
 
     nothing

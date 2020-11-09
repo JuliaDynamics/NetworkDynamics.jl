@@ -40,11 +40,23 @@ function (d::nd_ODE_ODE)(dx, x, p, t)
     gd = prep_gd(view(dx, 1:2), view(x, 1:2), x, d.graph_data, d.graph_structure)
 
     @nd_threads d.parallel for i in 1:d.graph_structure.num_e
-            maybe_idx(d.edges!, i).f!(view(dx,d.graph_structure.e_idx[i] .+ d.graph_structure.dim_v), gd.e[i], gd.v_s_e[i], gd.v_d_e[i], p_e_idx(p, i), t)
+        maybe_idx(d.edges!, i).f!(
+            view(dx,d.graph_structure.e_idx[i] .+ d.graph_structure.dim_v),
+            get_edge(gd, i),
+            get_src_vertex(gd, i),
+            get_dst_vertex(gd, i),
+            p_e_idx(p, i),
+            t)
     end
 
     @nd_threads d.parallel for i in 1:d.graph_structure.num_v
-            maybe_idx(d.vertices!,i).f!(view(dx,d.graph_structure.v_idx[i]), gd.v[i], gd.e_s_v[i], gd.e_d_v[i], p_v_idx(p, i), t)
+        maybe_idx(d.vertices!,i).f!(
+            view(dx,d.graph_structure.v_idx[i]),
+            get_vertex(gd, i),
+            get_out_edges(gd, i),
+            get_in_edges(gd, i),
+            p_v_idx(p, i),
+            t)
     end
 
     nothing

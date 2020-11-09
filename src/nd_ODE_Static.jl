@@ -37,11 +37,22 @@ function (d::nd_ODE_Static)(dx, x, p, t)
     gd = prep_gd(dx, x, d.graph_data, d.graph_structure)
 
     @nd_threads d.parallel for i in 1:d.graph_structure.num_e
-        maybe_idx(d.edges!, i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], p_e_idx(p, i), t)
+        maybe_idx(d.edges!, i).f!(
+            get_edge(gd, i),
+            get_src_vertex(gd, i),
+            get_dst_vertex(gd, i),
+            p_e_idx(p, i),
+            t)
     end
 
     @nd_threads d.parallel for i in 1:d.graph_structure.num_v
-        maybe_idx(d.vertices!,i).f!(view(dx,d.graph_structure.v_idx[i]), gd.v[i], gd.e_s_v[i], gd.e_d_v[i], p_v_idx(p, i), t)
+        maybe_idx(d.vertices!,i).f!(
+            view(dx,d.graph_structure.v_idx[i]),
+            get_vertex(gd, i),
+            get_out_edges(gd, i),
+            get_in_edges(gd, i),
+            p_v_idx(p, i),
+            t)
     end
 
     nothing
@@ -53,7 +64,12 @@ function (d::nd_ODE_Static)(x, p, t, ::Type{GetGD})
 
 
     @nd_threads d.parallel for i in 1:d.graph_structure.num_e
-        maybe_idx(d.edges!,i).f!(gd.e[i], gd.v_s_e[i], gd.v_d_e[i], p_e_idx(p, i), t)
+        maybe_idx(d.edges!,i).f!(
+            get_edge(gd, i),
+            get_src_vertex(gd, i),
+            get_dst_vertex(gd, i),
+            p_e_idx(p, i),
+            t)
     end
 
     gd
