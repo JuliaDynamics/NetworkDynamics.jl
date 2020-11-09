@@ -285,7 +285,49 @@ function view_e(nd, x, p, t, sym="")
     view(gd.e_array, e_idx)
 end
 
+export get_vertex, get_edge, get_src_vertex, get_dst_vertex, get_out_edges, get_in_edges
 
+"""
+    get_vertex(gd::GraphData, idx::Int) -> View
+
+Returns a view-like access to the underlying data of the i-th vertex.
+"""
+@inline get_vertex(gd::GraphData, i::Int) = gd.v[i]
+
+"""
+    get_edge(gd::GraphData, idx::Int) -> View
+
+Returns a view-like access to the underlying data of the i-th edge.
+"""
+@inline get_edge(gd::GraphData, i::Int) = gd.e[i]
+
+"""
+    get_src_vertex(gd::GraphData, idx::Int) -> View
+
+Returns a view-like access to the underlying data of source vertex of the i-th edge.
+"""
+@inline get_src_vertex(gd::GraphData, i::Int) = gd.v_s_e[i]
+
+"""
+    get_dst_vertex(gd::GraphData, idx::Int) -> View
+
+Returns a view-like access to the underlying data of destination vertex of the i-th edge.
+"""
+@inline get_dst_vertex(gd::GraphData, i::Int) = gd.v_d_e[i]
+
+"""
+    get_out_edges(gd::GraphData, i::Int)
+
+Returns an Vector of view-like accesses to all the outgoing edges of the i-th vertex.
+"""
+@inline get_out_edges(gd::GraphData, i::Int) = gd.e_s_v[i]
+
+"""
+    get_in_edges(gd::GraphData, i::Int)
+
+Returns an Vector of view-like accesses to all the incoming edges of the i-th vertex.
+"""
+@inline get_in_edges(gd::GraphData, i) = gd.e_d_v[i]
 
 function construct_mass_matrix(mmv_array, gs)
     if all([mm == I for mm in mmv_array])
