@@ -295,12 +295,12 @@ function construct_mass_matrix(mmv_array, gs)
         for (i, mm) in enumerate(mmv_array)
             ind = gs.v_idx[i]
             if ndims(mm) == 0
-                copyto!(mass_matrix[ind, ind], mm*I)
+                copyto!(@view(mass_matrix[ind, ind]), mm*I)
             elseif ndims(mm) == 1
-                copyto!(mass_matrix[ind, ind], Diagonal(mm))
+                copyto!(@view(mass_matrix[ind, ind]), Diagonal(mm))
             elseif ndims(mm) == 2 # ndims(I) = 2
-                # `I` does not support broadcasting but copyto!
-                copyto!(mass_matrix[ind, ind], mm)
+                # `I` does not support broadcasting but copyto! combined with views
+                copyto!(@view(mass_matrix[ind, ind]), mm)
             else
                 error("The mass matrix needs to be interpretable as a 2D matrix.")
             end
@@ -318,12 +318,12 @@ function construct_mass_matrix(mmv_array, mme_array, gs)
         for (i, mm) in enumerate(mmv_array)
             ind = gs.v_idx[i]
             if ndims(mm) == 0
-                copyto!(mass_matrix[ind, ind], mm*I)
+                copyto!(@view(mass_matrix[ind, ind]), mm*I)
             elseif ndims(mm) == 1
-                copyto!(mass_matrix[ind, ind], Diagonal(mm))
+                copyto!(@view(mass_matrix[ind, ind]), Diagonal(mm))
             elseif ndims(mm) == 2 # ndims(I) = 2
                 # `I` does not support broadcasting but copyto!
-                copyto!(mass_matrix[ind, ind], mm)
+                copyto!(@view(mass_matrix[ind, ind]), mm)
             else
                 error("The mass matrix needs to be interpretable as a 2D matrix.")
             end
@@ -331,12 +331,12 @@ function construct_mass_matrix(mmv_array, mme_array, gs)
         for (i, mm) in enumerate(mme_array)
             ind = gs.e_idx[i]
             if ndims(mm) == 0
-                copyto!(mass_matrix[ind, ind], mm*I)
+                copyto!(@view(mass_matrix[ind, ind]), mm*I)
             elseif ndims(mm) == 1
-                copyto!(mass_matrix[ind, ind], Diagonal(mm))
+                copyto!(@view(mass_matrix[ind, ind]), Diagonal(mm))
             elseif ndims(mm) == 2 # ndims(I) = 2
                 # `I` does not support broadcasting but copyto!
-                copyto!(mass_matrix[ind, ind], mm)
+                copyto!(@view(mass_matrix[ind, ind]), mm)
             else
                 error("The mass matrix needs to be interpretable as a 2D matrix.")
             end
