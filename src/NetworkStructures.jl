@@ -329,7 +329,7 @@ function construct_mass_matrix(mmv_array, mme_array, gs)
             end
         end
         for (i, mm) in enumerate(mme_array)
-            ind = gs.e_idx[i]
+            ind = gs.dim_v .+ (gs.e_idx[i])
             if ndims(mm) == 0
                 copyto!(@view(mass_matrix[ind, ind]), mm*I)
             elseif ndims(mm) == 1
