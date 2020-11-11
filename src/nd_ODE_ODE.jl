@@ -27,12 +27,12 @@ end
 end
 
 
-@Base.kwdef struct nd_ODE_ODE{G, GDB, T, T1, T2}
+@Base.kwdef struct nd_ODE_ODE{G, GD, T1, T2}
     vertices!::T1
     edges!::T2
     graph::G
     graph_structure::GraphStruct
-    graph_data::GraphData{GDB, T, T}
+    graph_data::GD
     parallel::Bool
 end
 

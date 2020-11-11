@@ -27,12 +27,12 @@ end
 
 
 
-@Base.kwdef struct nd_ODE_Static{G, GDB, T1, T2}
+@Base.kwdef struct nd_ODE_Static{G, GD, T1, T2}
     vertices!::T1
     edges!::T2
     graph::G #redundant?
     graph_structure::GraphStruct
-    graph_data::GDB
+    graph_data::GD
     parallel::Bool # enables multithreading for the core loop
 end
 
