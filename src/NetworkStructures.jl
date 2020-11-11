@@ -285,6 +285,26 @@ function view_e(nd, x, p, t, sym="")
     view(gd.e_array, e_idx)
 end
 
+export swap_v_array!, swap_e_array!
+
+"""
+    swap_v_array!(gd:GraphData, array)
+
+Swaps the underlying vertex data array of an GraphData type with a new one.
+"""
+@inline function swap_v_array!(gd::GraphData{Tv, Te}, array::Tv) where {Tv, Te}
+    gd.v_array = array
+end
+
+"""
+    swap_e_array!(gd:GraphData, array)
+
+Swaps the underlying edge data array of an GraphData type with a new one.
+"""
+@inline function swap_e_array!(gd::GraphData{Tv, Te}, array::Tv) where {Tv, Te}
+    gd.e_array = array
+end
+
 export get_vertex, get_edge, get_src_vertex, get_dst_vertex, get_out_edges, get_in_edges
 
 """
