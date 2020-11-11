@@ -17,21 +17,9 @@ using SparseArrays
 # vertex and the edge variables. We precompute everything we can and store it
 # in GraphStruct.
 
-export create_idxs, create_offsets, GraphStruct, GraphData, EdgeData, VertexData, construct_mass_matrix
+export GraphStruct, GraphData, EdgeData, VertexData, construct_mass_matrix
 
 const Idx = UnitRange{Int}
-
-"""
-Create indices for stacked array of dimensions dims
-"""
-function create_idxs(dims; counter=1)::Array{Idx, 1}
-    idxs = [1:1 for dim in dims]
-    for (i, dim) in enumerate(dims)
-        idxs[i] = counter:(counter + dim - 1)
-        counter += dim
-    end
-    idxs
-end
 
 """
 Create offsets for stacked array of dimensions dims
