@@ -50,25 +50,29 @@ and d_e. These are arrays that hold the node that is the source/destination of
 the indexed edge. Thus ``e_i = (s_e[i], d_e[i])``
 """
 struct GraphStruct
-    num_v::Int
-    num_e::Int
-    v_dims::Array{Int, 1}
-    e_dims::Array{Int, 1}
-    v_syms::Array{Symbol, 1}
-    e_syms::Array{Symbol, 1}
-    dim_v::Int
-    dim_e::Int
-    s_e::Array{Int, 1}
-    d_e::Array{Int, 1}
-    v_offs::Array{Int, 1}
-    e_offs::Array{Int, 1}
-    v_idx::Array{Idx, 1}
-    e_idx::Array{Idx, 1}
-    s_e_offs::Array{Int, 1}
-    d_e_offs::Array{Int, 1}
-    s_e_idx::Array{Idx, 1}
-    d_e_idx::Array{Idx, 1}
+    num_v::Int                                 # number of vertices
+    num_e::Int                                 # number of edges
+    v_dims::Array{Int, 1}                      # dimensions per vertex
+    e_dims::Array{Int, 1}                      # dimensions per edge
+    v_syms::Array{Symbol, 1}                   # symbol per vertex
+    e_syms::Array{Symbol, 1}                   # symbol per edge
+    dim_v::Int                                 # total vertex dimensions
+    dim_e::Int                                 # total edge dimensions
+    s_e::Array{Int, 1}                         # src-vertex idx per edge
+    d_e::Array{Int, 1}                         # dst-vertex idx per edge
+    v_offs::Array{Int, 1}                      # linear offset per vertex
+    e_offs::Array{Int, 1}                      # linear offset per edge
+    v_idx::Array{Idx, 1}                       # lin. idx-range per vertex
+    e_idx::Array{Idx, 1}                       # lin. idx-range per edge
+    s_e_offs::Array{Int, 1}                    # offset of src-vertex per edge
+    d_e_offs::Array{Int, 1}                    # offset of dst-vertex per edge
+    s_e_idx::Array{Idx, 1}                     # idx-range of src-vertex per edge
+    d_e_idx::Array{Idx, 1}                     # idx-range of dst-vertex per edge
+    # for each vertex there is an array of tuples for all of the outgoing edges
+    # for each outgoing edge the tuple contains offset and dim
     e_s_v_dat::Array{Array{Tuple{Int,Int}, 1}}
+    # for each vertex there is an array of tuples for all of the incomming edges
+    # for each outgoing edge the tuple contains offset and dim
     e_d_v_dat::Array{Array{Tuple{Int,Int}, 1}}
 end
 function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
@@ -121,30 +125,13 @@ end
 
 import Base.getindex, Base.setindex!, Base.length, Base.IndexStyle, Base.size, Base.eltype, Base.dataids
 
-#= Once forward declaration of types is implemented properly we can replace this
- by
+"""
+    struct EdgeData{GDB, elE} <: AbsstractArray{elE, 1}
 
-incomplete struct GraphData{T}
-end
-
-struct EdgeData{T} <: AbstractArray{T, 1}
- gd::GraphData{T}
- idx_offset::Int
- len::Int
-end
-
-Then the recursive type signatures in GraphData that look like:
-
-EdgeData{GraphData{T}, T}
-
-will simplify to
-
-EdgeData{T}
-
-We should create a branch with this variant that can run on this branch of julia:
-
-https://github.com/JuliaLang/julia/pull/32658
-=#
+The EdgeData object behaves like an array and allows access to the underlying
+data of a specific edge (like a View). Unlike a View, the parent array is stored
+in a mutable GraphDataBuffer object and can be swapped.
+"""
 struct EdgeData{GDB, elE} <: AbstractArray{elE, 1}
     gdb::GDB
     idx_offset::Int
@@ -176,6 +163,13 @@ Base.IndexStyle(::Type{<:EdgeData}) = IndexLinear()
 
 @inline Base.dataids(e_dat::EdgeData) = dataids(e_dat.gdb.e_array)
 
+"""
+    struct VertexData{GDB, elV} <: AbsstractArray{elV, 1}
+
+The VertexData object behaves like an array and allows access to the underlying
+data of a specific vertex (like a View). Unlike a View, the parent array is stored
+in a mutable GraphDataBuffer object and can be swapped.
+"""
 struct VertexData{GDB, elV} <: AbstractArray{elV, 1}
     gdb::GDB
     idx_offset::Int
@@ -217,11 +211,32 @@ Base.IndexStyle(::Type{<:VertexData}) = IndexLinear()
 # there are situations with autodifferentiation that require one of them to be
 # dual and the other not.
 
+"""
+    mutable struct GraphDataBuffer{Tv, Te}
+
+Is a composite type which holds two Arrays for the underlying data of a graph.
+The type is mutable, therfore the v_array and e_array can be changed.
+"""
 mutable struct GraphDataBuffer{Tv, Te}
     v_array::Tv
     e_array::Te
 end
 
+"""
+    GraphData{GDB, elV, elE}
+
+The GraphData object contains a reference to the GraphDataBuffer object and to all the
+view-like EdgeData/VertexData objects. It is used to access the underlying linear data
+of a graph in terms of edges and vertices. The underlying data kann be swapped using the
+    swap_v_array
+    swap_e_array
+methods.
+The data for specific edges/vertices can be accessed using the
+    get_vertex, get_edge
+    get_src_vertex, get_dst_vertex
+    get_out_edges, get_in_edges
+methods.
+"""
 struct GraphData{GDB, elV, elE}
     gdb::GDB
     v::Array{VertexData{GDB, elV}, 1}
