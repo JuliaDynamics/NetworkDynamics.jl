@@ -10,7 +10,7 @@ export StaticEdgeFunction
 
 
 # If the type of dx and x match, we swap out v_array for x
-@inline function prep_gd(dx::T, x::T, gd::GraphData{GDB, T, T}, gs) where {GDB, T}
+@inline function prep_gd(dx::AbstractArray{T}, x::AbstractArray{T}, gd::GraphData{GDB, T, T}, gs) where {GDB, T}
     swap_v_array!(gd, x)
     gd
 end
