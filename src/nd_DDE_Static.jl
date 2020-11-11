@@ -10,7 +10,7 @@ export nd_DDE_Static
 
 @inline function prep_gd(dx::T, x::T, gd::GraphData{T, T}, gs) where T
     # Type matching
-    gd.v_array = x # Does not allocate
+    swap_v_array!(gd, x)
     gd
 end
 
