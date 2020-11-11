@@ -300,8 +300,8 @@ export swap_v_array!, swap_e_array!
 
 Swaps the underlying vertex data array of an GraphData type with a new one.
 """
-@inline function swap_v_array!(gd::GraphData{Tv, Te}, array::Tv) where {Tv, Te}
-    gd.v_array = array
+@inline function swap_v_array!(gd::GraphData{GDB, elV, elE}, array::AbstractArray{elV}) where {GDB, elV, elE}
+    gd.gdb.v_array = array
 end
 
 """
@@ -309,8 +309,8 @@ end
 
 Swaps the underlying edge data array of an GraphData type with a new one.
 """
-@inline function swap_e_array!(gd::GraphData{Tv, Te}, array::Tv) where {Tv, Te}
-    gd.e_array = array
+@inline function swap_e_array!(gd::GraphData{GDB, elV, elE}, array::AbstractArray{elE}) where {GDB, elV, elE}
+    gd.gdb.e_array = array
 end
 
 export get_vertex, get_edge, get_src_vertex, get_dst_vertex, get_out_edges, get_in_edges
