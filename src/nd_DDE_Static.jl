@@ -8,7 +8,7 @@ using ..Utilities
 export nd_DDE_Static
 
 
-@inline function prep_gd(dx::T, x::T, gd::GraphData{T, T}, gs) where T
+@inline function prep_gd(dx::AbstractArray{T}, x::AbstractArray{T}, gd::GraphData{GDB, T, T}, gs) where {GDB, T}
     # Type matching
     swap_v_array!(gd, x)
     gd
@@ -27,13 +27,13 @@ nd_DDE_Static
 vertices! has signature (dv, v, e_s, e_d, h_v, p ,t)
 edges! has signature (e, v_s, v_d, h_v_s, h_v_d, p, t)
 """
-@Base.kwdef struct nd_DDE_Static{G, Tv, Te, T1, T2}
+@Base.kwdef struct nd_DDE_Static{G, T1, T2, GDB, elV, elE, Th<:AbstractArray{elV}}
     vertices!::T1
     edges!::T2
     graph::G #redundant?
     graph_structure::GraphStruct
-    graph_data::GraphData{Tv, Te}
-    history::Tv # fixing the type to Tv is my first guess, maybe the histry should be stored
+    graph_data::GraphData{GDB, elV, elE}
+    history::Th # fixing the type to Th is my first guess, maybe the histry should be stored
     # in the GraphData eventually
     parallel::Bool # enables multithreading for the core loop
 end
