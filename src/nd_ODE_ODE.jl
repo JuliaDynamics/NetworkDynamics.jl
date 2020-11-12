@@ -12,14 +12,14 @@ The signature of the edge functions is expected to be (de,e,v_s,v_d,p,t). =#
 
 # In order to match the type, we need to pass both, a view that matches the type
 # to be constructed, and the original array we want to construct a GD on top of.
-@inline function prep_gd(dy::AbstractArray{T}, y::AbstractArray{T}, x, gd::GraphData{GDB, T, T}, gs) where {GDB, T}
+@inline function prep_gd(dx::AbstractArray{T}, x::AbstractArray{T}, gd::GraphData{GDB, T, T}, gs) where {GDB, T}
     # println("Type match")
     swap_v_array!(gd, view(x, 1:gs.dim_v))
     swap_e_array!(gd, view(x, gs.dim_v+1:gs.dim_v+gs.dim_e))
     gd
 end
 
-@inline function prep_gd(dy, y, x, gd, gs)
+@inline function prep_gd(dx, x, gd, gs)
     # println("Type mismatch")
     v_array = view(x, 1:gs.dim_v)
     e_array = view(x, gs.dim_v+1:gs.dim_v+gs.dim_e)
@@ -37,7 +37,7 @@ end
 end
 
 function (d::nd_ODE_ODE)(dx, x, p, t)
-    gd = prep_gd(view(dx, 1:2), view(x, 1:2), x, d.graph_data, d.graph_structure)
+    gd = prep_gd(dx, x, d.graph_data, d.graph_structure)
 
     @nd_threads d.parallel for i in 1:d.graph_structure.num_e
         maybe_idx(d.edges!, i).f!(
