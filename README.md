@@ -12,7 +12,7 @@ The behavior of a node or an edge can be described by algebraic equations, by di
 Installation is straightforward with Julia's package manager.
 
 ```julia-repl
-(v1.4) pkg> add NetworkDynamics
+(v1.5) pkg> add NetworkDynamics
 ```
 
 ## Getting started
