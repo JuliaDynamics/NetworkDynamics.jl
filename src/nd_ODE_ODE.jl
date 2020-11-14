@@ -64,7 +64,7 @@ end
 
 
 function (d::nd_ODE_ODE)(x, p, t, ::Type{GetGD})
-    prep_gd(view(x, 1:2), view(x, 1:2), x, d.graph_data, d.graph_structure)
+    prep_gd(nothing, x, d.graph_data, d.graph_structure)
 end
 
 function (d::nd_ODE_ODE)(::Type{GetGS})
