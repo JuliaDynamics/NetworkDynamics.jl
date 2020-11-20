@@ -82,9 +82,12 @@ For more details see the documentation.
 """
 @Base.kwdef struct StaticEdge{T} <: EdgeFunction
     f!::T # (e, v_s, v_t, p, t) -> nothing
-    dim::Int # number of dimensions of x
+    dim::Int # number of dimensions of e
+    coupling = :unspecified # :directed, :symmetric, :antisymmetric, :undirected
     sym=[:e for i in 1:dim] # Symbols for the dimensions
 end
+
+
 
 """
     ODEVertex(f!, dim, mass_matrix, sym)

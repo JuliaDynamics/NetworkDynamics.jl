@@ -44,7 +44,7 @@ for N = [1,10]
 
     inertia!  = ODEVertex(f! = kuramoto_inertia!, dim = 2, sym= [:θ, :ω]);
     edge!     = StaticEdge(f! = kuramoto_edge!, dim = 1)
-    edge_anti! = StaticEdge(f! = kuramoto_edge!, dim = 1, hint = :antisymmetric )
+    edge_anti! = StaticEdge(f! = kuramoto_edge!, dim = 1, coupling = :antisymmetric )
 
 
 
