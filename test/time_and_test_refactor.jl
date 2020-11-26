@@ -7,10 +7,10 @@ using LightGraphs
 using Random
 
 
-for N = [1,10]
+for N = [20,200]
     # Pure Julia "ground truth"
 
-    g = watts_strogatz(N, Int(round(N/2)), 0.)
+    g = watts_strogatz(N, 5, 0.)
     println("\nTesting ND with $N nodes and $(ne(g)) edges:\n")
 
     B = incidence_matrix(g, oriented=true)
@@ -58,6 +58,7 @@ for N = [1,10]
 
     @testset "Accuracy" begin
         for i in 1:1
+            continue
             x0_θ = randn(N)
             x0_ω = randn(N)
 
@@ -87,7 +88,7 @@ for N = [1,10]
 
     dx0   = zeros(2N)
     Random.seed!(42)
-    #display(@benchmark(nd!($dx0, randn(2*$N), ($ω, 5.), 0.)))
+    display(@benchmark($nd_anti!($dx0, randn(2*$N), ($ω, 5.), 0.)))
 end
 
 
