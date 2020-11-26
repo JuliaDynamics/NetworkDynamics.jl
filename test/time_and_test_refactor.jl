@@ -147,8 +147,8 @@ nd! = network_dynamics(inertia!, edge!, g)
 nd_anti! = network_dynamics(inertia!, edge_anti!, g)
 nd_dir! = network_dynamics(inertia!, edge!, SimpleDiGraph(g))
 
-x0_θ = [1,2]
-x0_ω = [1,1]
+x0_θ = [1.0,2.0]
+x0_ω = [1.0,1.0]
 
 x0_kn = [x0_θ; x0_ω ]
 
