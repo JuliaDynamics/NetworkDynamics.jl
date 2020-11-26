@@ -335,7 +335,7 @@ end
       elseif edge.coupling == :antisymmetric
           f! = @inline (e, v_s, v_d, p, t) -> begin
               @inbounds orig_f(view(e,1:dim), v_s, v_d, p, t)
-              @inbounds view(e,dim+1:2dim) .= -view(e,1:dim)
+              @inbounds view(e,dim+1:2dim) .= -1.0 .* view(e,1:dim)
           end
       elseif edge.coupling == :symmetric
           f! = @inline (e, v_s, v_d, p, t) -> begin
