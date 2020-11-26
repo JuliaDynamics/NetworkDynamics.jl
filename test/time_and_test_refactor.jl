@@ -87,8 +87,9 @@ for N = [20,200]
     println("")
 
     dx0   = zeros(2N)
+    x0 = randn(2N)
     Random.seed!(42)
-    display(@benchmark($nd_anti!($dx0, randn(2*$N), ($ω, 5.), 0.)))
+    display(@benchmark($nd_anti!($dx0, $x0, ($ω, 5.), 0.)))
 end
 
 
@@ -161,9 +162,9 @@ dx_nd_anti = zeros(2N)
 dx_nd_dir = zeros(2N)
 
 kn!(dx_kn, x0_kn, nothing, 0.)
-@btime nd!(dx_nd, x0_nd, (ω, 5.), 0.)
-@btime nd_anti!(dx_nd_anti, x0_nd_anti, (ω, 5.), 0.)
-@btime nd_dir!(dx_nd_dir, x0_nd_dir, (ω, 5.), 0.)
+@btime $nd!($dx_nd, $x0_nd, ($ω, 5.), 0.)
+@btime $nd_anti!($dx_nd_anti, $x0_nd_anti, ($ω, 5.), 0.)
+@btime $nd_dir!($dx_nd_dir, $x0_nd_dir, ($ω, 5.), 0.)
 
 
 dx_nd
