@@ -335,12 +335,16 @@ end
       elseif edge.coupling == :antisymmetric
           f! = @inline (e, v_s, v_d, p, t) -> begin
               @inbounds orig_f(view(e,1:dim), v_s, v_d, p, t)
-              @inbounds view(e,dim+1:2dim) .= -1.0 .* view(e,1:dim)
+              @inbounds for i in 1:dim
+                  e[dim + i] = -1.0 * e[i]
+              end
           end
       elseif edge.coupling == :symmetric
           f! = @inline (e, v_s, v_d, p, t) -> begin
               @inbounds orig_f(view(e,1:dim), v_s, v_d, p, t)
-              @inbounds view(e,dim+1:2dim) .= view(e,1:dim)
+              @inbounds for i in 1:dim
+                  e[dim + i] = e[i]
+              end
           end
       else @error("Unrecognized coupling type in internal fuction. Please file a bug report.")
       end
