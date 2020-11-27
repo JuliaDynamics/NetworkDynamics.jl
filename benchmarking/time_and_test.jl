@@ -73,8 +73,9 @@ for N = [20,200]
     println("")
 
     dx0   = zeros(2N)
+    x0    = randn(2N)
     Random.seed!(42)
-    display(@benchmark(nd!($dx0, randn(2*$N), ($ω, 5.), 0.)))
+    display(@benchmark($nd!($dx0, $x0, ($ω, 5.), 0.)))
 end
 
 
