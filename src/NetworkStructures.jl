@@ -50,30 +50,47 @@ and d_e. These are arrays that hold the node that is the source/destination of
 the indexed edge. Thus ``e_i = (s_e[i], d_e[i])``
 """
 struct GraphStruct
+    #e_undirected::Array{Bool,1} # @assert that the dim % 2 == 0
+
     num_v::Int                                 # number of vertices
     num_e::Int                                 # number of edges
+
     v_dims::Array{Int, 1}                      # dimensions per vertex
     e_dims::Array{Int, 1}                      # dimensions per edge
+
     v_syms::Array{Symbol, 1}                   # symbol per vertex
     e_syms::Array{Symbol, 1}                   # symbol per edge
+
     dim_v::Int                                 # total vertex dimensions
     dim_e::Int                                 # total edge dimensions
+
     s_e::Array{Int, 1}                         # src-vertex idx per edge
     d_e::Array{Int, 1}                         # dst-vertex idx per edge
+
+    s_v::Array{Array{Int,1}}                   # indices of source edges per vertex
+    d_v::Array{Array{Int,1}}                   # indices of destination edges per vertex
+
     v_offs::Array{Int, 1}                      # linear offset per vertex
     e_offs::Array{Int, 1}                      # linear offset per edge
+
     v_idx::Array{Idx, 1}                       # lin. idx-range per vertex
     e_idx::Array{Idx, 1}                       # lin. idx-range per edge
+
     s_e_offs::Array{Int, 1}                    # offset of src-vertex per edge
     d_e_offs::Array{Int, 1}                    # offset of dst-vertex per edge
+
     s_e_idx::Array{Idx, 1}                     # idx-range of src-vertex per edge
     d_e_idx::Array{Idx, 1}                     # idx-range of dst-vertex per edge
-    # for each vertex there is an array of tuples for all of the outgoing edges
-    # for each outgoing edge the tuple contains offset and dim
+
+    # for each vertex there is an array of tuples for all of the source edges
+    # for each source edge the tuple contains offset and dim
     e_s_v_dat::Array{Array{Tuple{Int,Int}, 1}}
-    # for each vertex there is an array of tuples for all of the incomming edges
-    # for each outgoing edge the tuple contains offset and dim
+
+    # for each vertex there is an array of tuples for all of the destination edges
+    # for each destination edge the tuple contains offset and dim
     e_d_v_dat::Array{Array{Tuple{Int,Int}, 1}}
+
+    #out_edges_dat
 end
 function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
     num_v = nv(g)
@@ -81,6 +98,9 @@ function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
 
     s_e = [src(e) for e in edges(g)]
     d_e = [dst(e) for e in edges(g)]
+
+    s_v = [findall(isequal(i), src.(edges(g))) for i = 1:nv(g)]
+    d_v = [findall(isequal(i), dst.(edges(g))) for i = 1:nv(g)]
 
     v_offs = create_offsets(v_dims)
     e_offs = create_offsets(e_dims)
@@ -94,8 +114,8 @@ function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
     s_e_idx = [v_idx[s_e[i_e]] for i_e in 1:num_e]
     d_e_idx = [v_idx[d_e[i_e]] for i_e in 1:num_e]
 
-    e_s_v_dat = [[(offset, dim) for (i_e, (offset, dim)) in enumerate(zip(e_offs, e_dims)) if i_v == s_e[i_e]] for i_v in 1:num_v]
-    e_d_v_dat = [[(offset, dim) for (i_e, (offset, dim)) in enumerate(zip(e_offs, e_dims)) if i_v == d_e[i_e]] for i_v in 1:num_v]
+    e_s_v_dat = [[(e_offs[i_e], e_dims[i_e]) for i_e in s_v[i_v]] for i_v in 1:nv(g)]
+    e_d_v_dat = [[(e_offs[i_e], e_dims[i_e]) for i_e in d_v[i_v]] for i_v in 1:nv(g)]
 
     GraphStruct(
     num_v,
@@ -108,6 +128,8 @@ function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
     sum(e_dims),
     s_e,
     d_e,
+    s_v,
+    d_v,
     v_offs,
     e_offs,
     v_idx,
