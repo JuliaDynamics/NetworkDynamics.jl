@@ -90,7 +90,7 @@ struct GraphStruct
     # for each destination edge the tuple contains offset and dim
     e_d_v_dat::Array{Array{Tuple{Int,Int}, 1}}
 
-    #out_edges_dat
+    in_edges_dat::Vector{Vector{Tuple{Int,Int}}}
 end
 function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
     num_v = nv(g)
@@ -117,6 +117,31 @@ function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
     e_s_v_dat = [[(e_offs[i_e], e_dims[i_e]) for i_e in s_v[i_v]] for i_v in 1:nv(g)]
     e_d_v_dat = [[(e_offs[i_e], e_dims[i_e]) for i_e in d_v[i_v]] for i_v in 1:nv(g)]
 
+
+    in_edges_dat = Vector{Vector{Tuple{Int,Int}}}(undef, nv(g))
+    e_is_undirected=false
+    for i_v in 1:nv(g)
+        offsdim_arr = Tuple{Int,Int}[]
+        for i_e in d_v[i_v]
+            # assert that dims is a multiple of 2
+            if e_is_undirected#[i_e]
+                push!(offsdim_arr, (e_offs[i_e], e_dims[i_e] / 2))
+            else
+                push!(offsdim_arr, (e_offs[i_e], e_dims[i_e]))
+            end
+        end
+        for i_e in s_v[i_v]
+            if e_is_undirected#[i_e]
+                push!(offsdim_arr, (e_offs[i_e] +  e_dims[i_e] / 2, e_dims[i_e] / 2))
+            # for undirected graphs we remove the fiducial orientation by piping both ors.
+            # into in_edges, for directed graphs we take only src->dst
+            # else
+            #     push!(offsdim_arr, (e_offs[i_e], e_dims[i_e]))
+            end
+        end
+        in_edges_dat[i_v] = offsdim_arr
+    end
+
     GraphStruct(
     num_v,
     num_e,
@@ -139,7 +164,8 @@ function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
     s_e_idx,
     d_e_idx,
     e_s_v_dat,
-    e_d_v_dat)
+    e_d_v_dat,
+    in_edges_dat)
 end
 
 # In order to access the data in the arrays efficiently we create views that
@@ -267,6 +293,7 @@ struct GraphData{GDB, elV, elE}
     v_d_e::Array{VertexData{GDB, elV}, 1} # the vertex that is the destination of e
     e_s_v::Array{Array{EdgeData{GDB, elE}, 1}, 1} # the edges that have v as source
     e_d_v::Array{Array{EdgeData{GDB, elE}, 1}, 1} # the edges that have v as destination
+    in_edges::Array{Array{EdgeData{GDB, elE}, 1}, 1} # the edges that have v as destination
 end
 
 function GraphData(v_array::Tv, e_array::Te, gs::GraphStruct; global_offset = 0) where {Tv, Te}
@@ -280,7 +307,8 @@ function GraphData(v_array::Tv, e_array::Te, gs::GraphStruct; global_offset = 0)
     v_d_e = [VertexData{GDB, elV}(gdb, offset + global_offset, dim) for (offset,dim) in zip(gs.d_e_offs, gs.v_dims[gs.d_e])]
     e_s_v = [[EdgeData{GDB, elE}(gdb, offset + global_offset, dim) for (offset,dim) in e_s_v] for e_s_v in gs.e_s_v_dat]
     e_d_v = [[EdgeData{GDB, elE}(gdb, offset + global_offset, dim) for (offset,dim) in e_d_v] for e_d_v in gs.e_d_v_dat]
-    GraphData{GDB, elV, elE}(gdb, v, e, v_s_e, v_d_e, e_s_v, e_d_v)
+    in_edges = [[EdgeData{GDB, elE}(gdb, offset + global_offset, dim) for (offset,dim) in in_edge] for in_edge in gs.in_edges_dat]
+    GraphData{GDB, elV, elE}(gdb, v, e, v_s_e, v_d_e, e_s_v, e_d_v, in_edges)
 end
 
 # function GraphData(v_array, e_array, gs)
@@ -380,7 +408,7 @@ Returns an Vector of view-like accesses to all the outgoing edges of the i-th ve
 
 Returns an Vector of view-like accesses to all the incoming edges of the i-th vertex.
 """
-@inline get_in_edges(gd::GraphData, i) = gd.e_d_v[i]
+@inline get_in_edges(gd::GraphData, i) = gd.in_edges[i]
 
 function construct_mass_matrix(mmv_array, gs)
     if all([mm == I for mm in mmv_array])
