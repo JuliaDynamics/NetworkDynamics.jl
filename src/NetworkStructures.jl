@@ -119,19 +119,19 @@ function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
 
 
     in_edges_dat = Vector{Vector{Tuple{Int,Int}}}(undef, nv(g))
-    e_is_undirected=false
+
     for i_v in 1:nv(g)
         offsdim_arr = Tuple{Int,Int}[]
         for i_e in d_v[i_v]
-            # assert that dims is a multiple of 2
-            if e_is_undirected#[i_e]
+            # assert that dims is a multiple of 2 for SimpleGraph
+            if typeof(g) <: SimpleGraph
                 push!(offsdim_arr, (e_offs[i_e], e_dims[i_e] / 2))
             else
                 push!(offsdim_arr, (e_offs[i_e], e_dims[i_e]))
             end
         end
         for i_e in s_v[i_v]
-            if e_is_undirected#[i_e]
+            if typeof(g) <: SimpleGraph
                 push!(offsdim_arr, (e_offs[i_e] +  e_dims[i_e] / 2, e_dims[i_e] / 2))
             # for undirected graphs we remove the fiducial orientation by piping both ors.
             # into in_edges, for directed graphs we take only src->dst
