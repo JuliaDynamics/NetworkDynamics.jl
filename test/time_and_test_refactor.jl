@@ -34,6 +34,7 @@ for N = [20,200]
 
     function kuramoto_edge!(e, θ_s, θ_d, K, t)
         e[1] = K * sin(θ_s[1] - θ_d[1])
+        nothing
     end
 
     function kuramoto_inertia!(dv, v, e_s, in_edges, ω, t)
@@ -42,6 +43,7 @@ for N = [20,200]
         for e in in_edges
             dv[2] += e[1]
         end
+        nothing
     end
 
     inertia!   = ODEVertex(f! = kuramoto_inertia!, dim = 2, sym= [:θ, :ω]);
@@ -95,6 +97,7 @@ for N = [20,200]
     display(@benchmark($nd_anti!($dx0, $x0, ($ω, 5.), 0.)))
 
 end
+
 
 nd!.f.graph_structure.e_s_v_dat
 nd!.f.graph_structure.e_d_v_dat
@@ -151,7 +154,9 @@ function kuramoto_inertia!(dv, v, e_s, e_d, ω, t)
 end
 
 inertia!  = ODEVertex(f! = kuramoto_inertia!, dim = 2, sym= [:θ, :ω]);
-edge!     = StaticEdge(f! = kuramoto_edge!, dim = 1)
+edge!     = StaticEdge(f! = kuramoto_edge!, dim = 1, coupling = :undefined, sym=[:e])
+edge!     = StaticEdge(kuramoto_edge!, 1, :undefined, [:e])
+
 edge_anti! = StaticEdge(f! = kuramoto_edge!, dim = 1, coupling = :antisymmetric )
 
 

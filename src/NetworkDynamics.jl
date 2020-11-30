@@ -273,7 +273,7 @@ If only a sinlge Function is given, not an Array of EdgeFunctions.
 function prepare_edges(edge::EdgeFunction, g::SimpleGraph)
     if edge.coupling == :directed
         @error "Coupling type not available for undirected Graphs"
-    elseif edge.coupling == :unspecified
+    elseif edge.coupling == :undefined
         return reconstruct_edge(edge)
     end
     return edge
@@ -288,7 +288,7 @@ function prepare_edges(edges, g::SimpleGraph)
     for (i, edge) in enumerate(edges)
         if edge.coupling == :directed
             @error "Coupling type of edge $i not available for undirected Graphs"
-        elseif edge.coupling == :unspecified
+        elseif edge.coupling == :undefined
             new_edges[i] = reconstruct_edge(edge)
         else
             new_edges[i] = edges[i]
@@ -304,7 +304,7 @@ function prepare_edges(edges, g::SimpleDiGraph)
         if edge.coupling ∈ (:symmetric, :antisymmetric, :undirected, :fiducial)
             @error "Coupling type of edge $i not available for directed Graphs"
         #This does not work because StaticEdge is immutable. But maybe its not necessary.
-        #elseif edge.coupling == :unspecified
+        #elseif edge.coupling == :undefined
         #    edge.coupling = :directed
         end
     end

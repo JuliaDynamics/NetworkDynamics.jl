@@ -83,7 +83,7 @@ For more details see the documentation.
 @Base.kwdef struct StaticEdge{T} <: EdgeFunction
     f!::T # (e, v_s, v_t, p, t) -> nothing
     dim::Int # number of dimensions of e
-    coupling = :unspecified # :directed, :symmetric, :antisymmetric, :fiducial, :undirected
+    coupling = :undefined # :directed, :symmetric, :antisymmetric, :fiducial, :undirected
     sym=[:e for i in 1:dim] # Symbols for the dimensions
 
 
@@ -92,17 +92,17 @@ For more details see the documentation.
                            coupling::Symbol,
                            sym::Vector{Symbol}) where T
 
-        coupling_types = [:unspecified, :directed, :fiducial, :undirected, :symmetric,
-                          :antisymmetric]
+        coupling_types = (:undefined, :directed, :fiducial, :undirected, :symmetric,
+                          :antisymmetric)
 
-        coupling ∈ coupling_types ? nothing : error("Coupling type not recognized. Choose
-                                                     from $coupling_types.")
+        coupling ∈ coupling_types ? nothing :
+            error("Coupling type not recognized. Choose from $coupling_types.")
 
         dim > 0 ? nothing : error("dim has to be a positive number.")
 
         dim == length(sym) ? nothing : error("Please specify a symbol for every dimension.")
 
-        if coupling ∈ [:unspecified, :directed]
+        if coupling ∈ [:undefined, :directed]
             return new{T}(user_f!, dim, coupling, sym)
 
         elseif coupling == :fiducial
@@ -118,6 +118,7 @@ For more details see the documentation.
             f! = @inline (e, v_s, v_d, p, t) -> begin
                 @inbounds user_f!(view(e,1:dim), v_s, v_d, p, t)
                 @inbounds user_f!(view(e,dim+1:2dim), v_d, v_s, p, t)
+                nothing
             end
         elseif coupling == :antisymmetric
             f! = @inline (e, v_s, v_d, p, t) -> begin
@@ -125,6 +126,7 @@ For more details see the documentation.
                 @inbounds for i in 1:dim
                     e[dim + i] = -1.0 * e[i]
                 end
+                nothing
             end
         elseif coupling == :symmetric
             f! = @inline (e, v_s, v_d, p, t) -> begin
@@ -132,6 +134,7 @@ For more details see the documentation.
                 @inbounds for i in 1:dim
                     e[dim + i] = e[i]
                 end
+                nothing
             end
         end
         # For edges with mass matrix this will be a little more complicated
