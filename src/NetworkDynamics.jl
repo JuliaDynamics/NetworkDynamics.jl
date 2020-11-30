@@ -87,7 +87,6 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
     end
 
     # user_edges! = copy(edges!)
-
     edges! = prepare_edges(edges!, graph)
 
 
@@ -274,9 +273,10 @@ If only a sinlge Function is given, not an Array of EdgeFunctions.
 function prepare_edges(edge::EdgeFunction, g::SimpleGraph)
     if edge.coupling == :directed
         @error "Coupling type not available for undirected Graphs"
-    elseif edge.coupling ∈ (:symmetric, :antisymmetric, :unspecified)
+    elseif edge.coupling == :unspecified
         return reconstruct_edge(edge)
     end
+    return edge
 end
 
 """ prepare_edges(edges, g::SimpleGraph)
@@ -289,7 +289,7 @@ function prepare_edges(edges, g::SimpleGraph)
     for (i, edge) in enumerate(edges)
         if edge.coupling == :directed
             @error "Coupling type of edge $i not available for undirected Graphs"
-        elseif edge.coupling ∈ (:symmetric, :antisymmetric, :unspecified)
+        elseif edge.coupling == :unspecified
             new_edges[i] = reconstruct_edge(edge)
         else
             new_edges[i] = edges[i]
@@ -302,7 +302,7 @@ end
 """
 function prepare_edges(edges, g::SimpleDiGraph)
     for (i, edge) in enumerate(edges)
-        if edge.coupling ∈ (:symmetric, :antisymmetric, :undirected)
+        if edge.coupling ∈ (:symmetric, :antisymmetric, :undirected, :fiducial)
             @error "Coupling type of edge $i not available for directed Graphs"
         #This does not work because StaticEdge is immutable. But maybe its not necessary.
         #elseif edge.coupling == :unspecified
@@ -314,7 +314,7 @@ end
 
 # prepare_edge should be simplified!
 function prepare_edges(edge::EdgeFunction, g::SimpleDiGraph)
-    if edge.coupling ∈ (:symmetric, :antisymmetric, :undirected)
+    if edge.coupling ∈ (:symmetric, :antisymmetric, :undirected, :fiducial)
         @error "Coupling type of EdgeFunction not available for directed Graphs"
     end
     edge
@@ -322,35 +322,12 @@ end
 
 
 @inline function reconstruct_edge(edge::StaticEdge)
-    let dim = edge.dim, orig_f = edge.f!
-      if edge.coupling == :unspecified
-          # This might cause unexpected behaviour if source and destination vertex don't have
-          # the same internal arguments
-          # Make sure to explicitly define the edge is :undirected in that case.
-          f! = @inline (e, v_s, v_d, p, t) -> begin
-              @inbounds orig_f(view(e,1:dim), v_s, v_d, p, t)
-              @inbounds orig_f(view(e,dim+1:2dim), v_d, v_s, p, t)
-          end
-      elseif edge.coupling == :antisymmetric
-          f! = @inline (e, v_s, v_d, p, t) -> begin
-              @inbounds orig_f(view(e,1:dim), v_s, v_d, p, t)
-              @inbounds for i in 1:dim
-                  e[dim + i] = -1.0 * e[i]
-              end
-          end
-      elseif edge.coupling == :symmetric
-          f! = @inline (e, v_s, v_d, p, t) -> begin
-              @inbounds orig_f(view(e,1:dim), v_s, v_d, p, t)
-              @inbounds for i in 1:dim
-                  e[dim + i] = e[i]
-              end
-          end
-      else @error("Unrecognized coupling type in internal fuction. Please file a bug report.")
-      end
+    let f! = edge.f!, dim = edge.dim, sym = edge.sym
+
     return StaticEdge(f! = f!,
-                      dim = 2 * edge.dim,
+                      dim = dim,
                       coupling = :undirected,
-                      sym = repeat(edge.sym, 2))
+                      sym = sym)
                       # For edges with mass matrix this will be a little more complicated
     end
 end
