@@ -283,7 +283,6 @@ end
 
 
 """
-
 function prepare_edges(edges, g::SimpleGraph)
     new_edges = similar(edges)
     for (i, edge) in enumerate(edges)
@@ -312,7 +311,6 @@ function prepare_edges(edges, g::SimpleDiGraph)
     edges
 end
 
-# prepare_edge should be simplified!
 function prepare_edges(edge::EdgeFunction, g::SimpleDiGraph)
     if edge.coupling ∈ (:symmetric, :antisymmetric, :undirected, :fiducial)
         @error "Coupling type of EdgeFunction not available for directed Graphs"
@@ -323,7 +321,6 @@ end
 
 @inline function reconstruct_edge(edge::StaticEdge)
     let f! = edge.f!, dim = edge.dim, sym = edge.sym
-
     return StaticEdge(f! = f!,
                       dim = dim,
                       coupling = :undirected,
@@ -332,13 +329,6 @@ end
     end
 end
 
-"""
-Rebuilds any EdgeFunction specified in a directed manner, ie. that only computes the output
-at its destination end, to an EdgeFunction that computes output for both destination and
-source. It does so by doubling its initial dimension `dim` and using the first `dim`
-arguments to compute the dst output and the second `dim` arguments to compute the `src`
-output.
-"""
 
 
 """

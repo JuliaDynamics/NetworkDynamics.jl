@@ -6,7 +6,6 @@ EdgeFunction which can be handled by network_dynamics.
 module ComponentFunctions
 
 using LinearAlgebra
-# using SparseArrays
 
 import Base.convert
 import Base.promote_rule
@@ -20,7 +19,7 @@ export ODEVertex
 export ODEEdge
 export DDEVertex
 export StaticDelayEdge
-#export DDEEdge
+
 """
 Abstract supertype for all vertex functions.
 """
@@ -84,7 +83,7 @@ For more details see the documentation.
 @Base.kwdef struct StaticEdge{T} <: EdgeFunction
     f!::T # (e, v_s, v_t, p, t) -> nothing
     dim::Int # number of dimensions of e
-    coupling = :unspecified # :directed, :symmetric, :antisymmetric, :undirected
+    coupling = :unspecified # :directed, :symmetric, :antisymmetric, :fiducial, :undirected
     sym=[:e for i in 1:dim] # Symbols for the dimensions
 
 
@@ -246,10 +245,7 @@ function DDEVertex(ov::ODEVertex)
     DDEVertex(f!, ov.dim, ov.mass_matrix, ov.sym)
 end
 
-# function DDEVertex(sv::StaticVertex)
-#     f! = (dv, v, e_s, e_d, h_v, p, t) -> sv.f!(v, e_s, e_d, p, t)
-#     DDEVertex(f! = f!, dim = sv.dim, sym= sv.sym)
-# end
+
 function DDEVertex(sv::StaticVertex)
     f! = (dv, v, e_s, e_d, h_v, p, t) -> ODE_from_Static(sv.f!)(dv, v, e_s, e_d, p, t)
     DDEVertex(f!, sv.dim, 0., sv.sym)
@@ -284,26 +280,6 @@ end
 convert(::Type{StaticDelayEdge}, x::StaticEdge) = StaticDelayEdge(x)
 promote_rule(::Type{StaticDelayEdge}, ::Type{StaticEdge}) = StaticDelayEdge
 
-
-#= not used at the moment
-"""
-Like a ODEEdge but with extra arguments for the history of the source and destination vertices. This is NOT a DDEEdge.
-"""
-@Base.kwdef struct ODEDelayEdge{T} <: EdgeFunction
-   f!::T # (e, v_s, v_t, p, t) -> nothing
-   dim::Int # number of dimensions of x
-   mass_matrix=I # Mass matrix for the equation
-   sym=[:e for i in 1:dim] # Symbols for the dimensions
-end
-
-function ODEDelayEdge(se::ODEEdge)
-   f! = (de, e, v_s, v_d, h_v_s, h_v_d, p, t) -> se.f!(de, e, v_s, v_d, p, t)
-   ODEDelayEdge(f!, se.dim, se.sym)
-end
-
-# promotions rules are more complicated for this case
-
-=#
 
 
 convert(::Type{ODEVertex}, x::StaticVertex) = ODEVertex(x)
