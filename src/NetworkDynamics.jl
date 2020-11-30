@@ -322,7 +322,6 @@ end
 
 
 @inline function reconstruct_edge(edge::StaticEdge)
-    # Unfortunately leads to a very messy signature
     let dim = edge.dim, orig_f = edge.f!
       if edge.coupling == :unspecified
           # This might cause unexpected behaviour if source and destination vertex don't have

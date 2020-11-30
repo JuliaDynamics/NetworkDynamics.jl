@@ -47,8 +47,8 @@ Here  `v`, `p` and `t` are the usual arguments, while
 `e_s` and `e_d` are arrays containing the edges for which the
 described vertex is the source or the destination respectively.
 
-**`dim`** is the number of independent variables in the vertex equations and
-**`sym`** is an array of symbols for these variables.
+`dim` is the number of independent variables in the vertex equations and
+`sym` is an array of symbols for these variables.
 
 For more details see the documentation.
 """
@@ -61,10 +61,10 @@ end
 """
     StaticEdge(f!, dim, sym)
 
-Wrapper that ensures compatibility of a **mutating** function **`f!`** with
+Wrapper that ensures compatibility of a **mutating** function `f!` with
 the key constructor `network_dynamics`.
 
-**`f!`**  describes the local behaviour at a static edge and has to respect
+`f!`  describes the local behaviour at a static edge and has to respect
 the following calling syntax
 
 ```julia
@@ -75,8 +75,9 @@ Here  `e`, `p` and `t` are the usual arguments, while
 `v_s` and `v_d` are arrays containing the vertices which are
 the source and destination of the described edge.
 
-**`dim`** is the number of independent variables in the edge equations and
-**`sym`** is an array of symbols for these variables.
+- `dim` is the number of independent variables in the edge equations and
+- `sym` is an array of symbols for these variables.
+- `coupling` is a Symbol describing if the EdgeFunction is intended for a directed graph (`:directed`) or for an undirected graph (`{:undirected, :symmetric, :antisymmetric, :fiducial}`). `:directed` is intended for directed graphs. `:undirected` is the default option and is only compatible with SimpleGraph. in this case f! should specify the coupling from a source vertex to a destination vertex. `:symmetric` and `:antisymmetric` trigger performance optimizations, if `f!` has that symmetry property. `:fiducial` lets the user specify both the coupling from src to dst, as well as the coupling from dst to src and is intended for advanced users.
 
 For more details see the documentation.
 """
@@ -85,7 +86,59 @@ For more details see the documentation.
     dim::Int # number of dimensions of e
     coupling = :unspecified # :directed, :symmetric, :antisymmetric, :undirected
     sym=[:e for i in 1:dim] # Symbols for the dimensions
+
+    function StaticEdge{T}(user_f!::T,
+                           dim::Int,
+                           coupling::Symbol,
+                           sym::Vector{Symbol}) where T
+        
+        coupling_types = [:unspecified, :directed, :fiducial, :undirected, :symmetric,
+                          :antisymmetric]
+
+        coupling ∈ coupling_types ? nothing : error("Coupling type not recognized. Choose
+                                                     from $coupling_types.")
+
+        dim > 0 ? nothing : error("dim has to be a positive number.")
+
+        dim == length(sym) ? nothing : error("Please specify a symbol for every dimension.")
+
+        if coupling == :unspecified || :directed
+            return new(user_f!, dim, coupling, sym)
+        end
+
+        dim % 2 == 0 ? nothing : error("Undirected edges are required to have even dim.")
+
+        if coupling == :fiducial
+            return new(user_f!, dim, coupling, sym)
+
+        elseif coupling == :undirected
+            # This might cause unexpected behaviour if source and destination vertex don't
+            # have the same internal arguments.
+            # Make sure to explicitly define the edge is :fiducial in that case.
+            f! = @inline (e, v_s, v_d, p, t) -> begin
+                @inbounds user_f!(view(e,1:dim), v_s, v_d, p, t)
+                @inbounds user_f!(view(e,dim+1:2dim), v_d, v_s, p, t)
+            end
+        elseif coupling == :antisymmetric
+            f! = @inline (e, v_s, v_d, p, t) -> begin
+                @inbounds user_f!(view(e,1:dim), v_s, v_d, p, t)
+                @inbounds for i in 1:dim
+                    e[dim + i] = -1.0 * e[i]
+                end
+            end
+        elseif coupling == :symmetric
+            f! = @inline (e, v_s, v_d, p, t) -> begin
+                @inbounds user_f!(view(e,1:dim), v_s, v_d, p, t)
+                @inbounds for i in 1:dim
+                    e[dim + i] = e[i]
+                end
+            end
+        end
+        # For edges with mass matrix this will be a little more complicated
+        return new(f!, 2dim, coupling, repeat(sym, 2))
+    end
 end
+
 
 
 
