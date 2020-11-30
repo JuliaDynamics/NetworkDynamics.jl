@@ -1,10 +1,54 @@
 using Test
-import NetworkDynamics.ComponentFunctions
 using NetworkDynamics.ComponentFunctions
 using LightGraphs
 using NetworkDynamics
 using OrdinaryDiffEq
 using DelayDiffEq
+
+printstyled("--- StaticEdge errors --- \n", bold=true, color=:white)
+
+f! = (e, v_s, v_d, p, t) -> begin
+    e .= v_s .- v_d
+    nothing
+end
+
+@test_throws ErrorException StaticEdge(f!,  1, :unspecified, [:e])
+@test_throws ErrorException StaticEdge(f!,  0, :undefined, [:e])
+@test StaticEdge(f!,  1, :undefined, [:e]) isa StaticEdge
+
+
+@test_throws ErrorException StaticEdge(f!,  3, :fiducial, [:e,:e,:e])
+@test_throws ErrorException StaticEdge(f!,  2, :fiducial, [:e])
+@test StaticEdge(f!,  2, :fiducial, [:e,:e]) isa StaticEdge
+
+@test StaticEdge(f!,  1, :undirected, [:e]) isa StaticEdge
+
+seundir = StaticEdge(f! = f!,  dim = 2, coupling = :undirected)
+seanti = StaticEdge(f! = f!,  dim = 2, coupling = :antisymmetric)
+sedir = StaticEdge(f! = f!,  dim = 2, coupling = :directed)
+sesym = StaticEdge(f! = f!,  dim = 2, coupling = :symmetric)
+sefid = StaticEdge(f! = f!,  dim = 2, coupling = :fiducial)
+
+x = rand(2)
+y = rand(2)
+
+eundir = zeros(4)
+eanti  = zeros(4)
+esym   = zeros(4)
+edir   = zeros(2)
+efid   = zeros(2)
+
+seundir.f!(eundir, x, y, nothing, nothing)
+seanti.f!(eanti, x, y, nothing, nothing)
+sesym.f!(esym, x, y, nothing, nothing)
+sedir.f!(edir, x, y, nothing, nothing)
+sefid.f!(efid, x, y, nothing, nothing)
+
+@test eundir == eanti
+@test eanti[1:2] == -eanti[3:4]
+@test esym[1:2] == esym[3:4]
+@test eundir[1:2] == edir
+@test edir == efid
 
 printstyled("--- Function Typology --- \n", bold=true, color=:white)
 
