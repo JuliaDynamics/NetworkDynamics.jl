@@ -210,6 +210,67 @@ For more details see the documentation.
     sym=[:e for i in 1:dim] # Symbols for the dimensions
 end
 
+@Base.kwdef struct ODEEdge{T} <: EdgeFunction
+    f!::T # (de, e, v_s, v_t, p, t) -> nothing
+    dim::Int # number of dimensions of e
+    coupling = :undefined # :directed, :symmetric, :antisymmetric, :fiducial, :undirected
+    mass_matrix=I # Mass matrix for the equation
+    sym=[:e for i in 1:dim] # Symbols for the dimensions
+
+
+    function ODEEdge(user_f!::T,
+                     dim::Int,
+                     coupling::Symbol,
+                     mass_matrix,
+                     sym::Vector{Symbol}) where T
+
+        coupling_types = (:undefined, :directed, :fiducial, :undirected)
+
+        coupling ∈ coupling_types ? nothing :
+            error("Coupling type not recognized. Choose from $coupling_types.")
+
+        coupling ∈ (:symmetric, :antisymmetric) ? nothing :
+            error("Coupling type $coupling is not available for ODEEdges.")
+
+
+        dim > 0 ? nothing : error("dim has to be a positive number.")
+
+        dim == length(sym) ? nothing : error("Please specify a symbol for every dimension.")
+
+        if coupling ∈ [:undefined, :directed]
+            return new{T}(user_f!, dim, coupling, mass_matrix, sym)
+
+        elseif coupling == :fiducial
+            dim % 2 == 0 ? nothing : error("Fiducial edges are required to have even dim.
+                                            The first dim args are used for src -> dst,
+                                            the second for dst -> src coupling.")
+            return new{T}(user_f!, dim, mass_matrix, coupling, sym)
+
+        elseif coupling == :undirected
+            # This might cause unexpected behaviour if source and destination vertex don't
+            # have the same internal arguments.
+            # Make sure to explicitly define the edge is :fiducial in that case.
+            f! = @inline (de, e, v_s, v_d, p, t) -> begin
+                @inbounds user_f!(view(de,1:dim), view(e,1:dim), v_s, v_d, p, t)
+                @inbounds user_f!(view(de,dim+1:2dim), view(e,dim+1:2dim), v_d, v_s, p, t)
+                nothing
+            end
+            let M = mass_matrix
+                if M === I
+                    newM = M
+                elseif M isa Number
+                    newM = M
+                elseif M isa Array
+                    newM = repeat(M,2)
+                elseif M isa Matrix
+                    newM = [M zeros(size(M)); zeros(size(M)) M]
+                end
+            end
+        end
+        return new{typeof(f!)}(f!, 2dim, coupling, newM, repeat(sym, 2))
+    end
+end
+
 
 """
     DDEVertex(f!, dim, mass_matrix, sym)
@@ -228,10 +289,11 @@ Here `dv`, `v`, `p` and `t` are the usual ODE arguments, while
 `e_s` and `e_d` are arrays containing the edges for which the
 described vertex is the source or the destination respectively. `h` is the history array for `v`.
 
-**`dim`** is the number of independent variables in the vertex equations and
-**`sym`** is an array of symbols for these variables.
-**`mass_matrix`** is an optional argument that defaults to the identity
-matrix `I`. If a mass matrix M is given the system `M * dv = f!` will be
+- `dim` is the number of independent variables in the edge equations and
+- `sym` is an array of symbols for these variables.
+- `coupling` is a Symbol describing if the EdgeFunction is intended for a directed graph (`:directed`) or for an undirected graph (`{:undirected, :fiducial}`). `:directed` is intended for directed graphs. `:undirected` is the default option and is only compatible with SimpleGraph. in this case f! should specify the coupling from a source vertex to a destination vertex.  `:fiducial` lets the user specify both the coupling from src to dst, as well as the coupling from dst to src and is intended for advanced users.
+- `mass_matrix` is an optional argument that defaults to the identity
+matrix `I`. If a mass matrix M is given the system `M * de = f!` will be
 solved.
 
 For more details see the documentation.
@@ -268,14 +330,77 @@ promote_rule(::Type{DDEVertex}, ::Type{ODEVertex}) = DDEVertex
 Like a static edge but with extra arguments for the history of the source and destination vertices. This is NOT a DDEEdge.
 """
  @Base.kwdef struct StaticDelayEdge{T} <: EdgeFunction
-    f!::T # (e, v_s, v_t, p, t) -> nothing
+    f!::T # (e, v_s, v_t, h_v_s, h_v_d, p, t) -> nothing
     dim::Int # number of dimensions of x
     sym=[:e for i in 1:dim] # Symbols for the dimensions
 end
 
+@Base.kwdef struct StaticDelayEdge{T} <: EdgeFunction
+    f!::T # (e, v_s, v_t, h_v_s, h_v_d, p, t) -> nothing
+    dim::Int # number of dimensions of e
+    coupling = :undefined # :directed, :symmetric, :antisymmetric, :fiducial, :undirected
+    sym=[:e for i in 1:dim] # Symbols for the dimensions
+
+
+    function StaticEdge(user_f!::T,
+                           dim::Int,
+                           coupling::Symbol,
+                           sym::Vector{Symbol}) where T
+
+        coupling_types = (:undefined, :directed, :fiducial, :undirected, :symmetric,
+                          :antisymmetric)
+
+        coupling ∈ coupling_types ? nothing :
+            error("Coupling type not recognized. Choose from $coupling_types.")
+
+        dim > 0 ? nothing : error("dim has to be a positive number.")
+
+        dim == length(sym) ? nothing : error("Please specify a symbol for every dimension.")
+
+        if coupling ∈ [:undefined, :directed]
+            return new{T}(user_f!, dim, coupling, sym)
+
+        elseif coupling == :fiducial
+            dim % 2 == 0 ? nothing : error("Fiducial edges are required to have even dim.
+                                            The first dim args are used for src -> dst,
+                                            the second for dst -> src coupling.")
+            return new{T}(user_f!, dim, coupling, sym)
+
+        elseif coupling == :undirected
+            # This might cause unexpected behaviour if source and destination vertex don't
+            # have the same internal arguments.
+            # Make sure to explicitly define the edge is :fiducial in that case.
+            f! = @inline (e, v_s, v_d, p, t) -> begin
+                @inbounds user_f!(view(e,1:dim), v_s, v_d, h_v_s, h_v_d, p, t)
+                @inbounds user_f!(view(e,dim+1:2dim), v_d, v_s, h_v_s, h_v_d, p, t)
+                nothing
+            end
+        elseif coupling == :antisymmetric
+            f! = @inline (e, v_s, v_d, p, t) -> begin
+                @inbounds user_f!(view(e,1:dim), v_s, v_d, h_v_s, h_v_d, p, t)
+                @inbounds for i in 1:dim
+                    e[dim + i] = -1.0 * e[i]
+                end
+                nothing
+            end
+        elseif coupling == :symmetric
+            f! = @inline (e, v_s, v_d, p, t) -> begin
+                @inbounds user_f!(view(e,1:dim), v_s, v_d, h_v_s, h_v_d, p, t)
+                @inbounds for i in 1:dim
+                    e[dim + i] = e[i]
+                end
+                nothing
+            end
+        end
+        return new{typeof(f!)}(f!, 2dim, coupling, repeat(sym, 2))
+    end
+end
+
 function StaticDelayEdge(se::StaticEdge)
-    f! = (e, v_s, v_d, h_v_s, h_v_d, p, t) -> se.f!(e, v_s, v_d, p, t)
-    StaticDelayEdge(f!, se.dim, se.sym)
+    let _f! = se.f!, dim = se.dim, coupling = se.coupling, sym = se.sym
+        f! = (e, v_s, v_d, h_v_s, h_v_d, p, t) -> _f!(e, v_s, v_d, p, t)
+        return StaticDelayEdge(f!, dim, coupling, sym)
+    end
 end
 
 # Promotion rules
@@ -311,11 +436,15 @@ function (ofs::ODE_from_Static)(dx,x,args...)
 end
 
 function ODEVertex(sv::StaticVertex)
-    ODEVertex(ODE_from_Static(sv.f!), sv.dim, 0., sv.sym)
+    let _f! = sv.f!, dim = sv.dim, sym = sv.sym
+        return ODEVertex(ODE_from_Static(_f!), dim, 0., sym)
+    end
 end
 
 function ODEEdge(se::StaticEdge)
-    ODEEdge(ODE_from_Static(se.f!), se.dim, 0., se.sym)
+    let _f! = se.f!, dim = se.dim, coupling = se.coupling, sym = se.sym
+        return ODEEdge(ODE_from_Static(_f!), dim, coupling, 0., sym)
+    end
 end
 
 end
