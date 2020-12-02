@@ -37,10 +37,10 @@ for N = [20,200]
         nothing
     end
 
-    function kuramoto_inertia!(dv, v, e_s, in_edges, ω, t)
+    function kuramoto_inertia!(dv, v, in_edges, ω, t)
         dv[1] = v[2]
         dv[2] = ω - v[2]
-        for e in in_edges
+        @inbounds for e in in_edges
             dv[2] += e[1]
         end
         nothing

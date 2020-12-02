@@ -82,14 +82,6 @@ struct GraphStruct
     s_e_idx::Array{Idx, 1}                     # idx-range of src-vertex per edge
     d_e_idx::Array{Idx, 1}                     # idx-range of dst-vertex per edge
 
-    # for each vertex there is an array of tuples for all of the source edges
-    # for each source edge the tuple contains offset and dim
-    e_s_v_dat::Array{Array{Tuple{Int,Int}, 1}}
-
-    # for each vertex there is an array of tuples for all of the destination edges
-    # for each destination edge the tuple contains offset and dim
-    e_d_v_dat::Array{Array{Tuple{Int,Int}, 1}}
-
     in_edges_dat::Vector{Vector{Tuple{Int,Int}}}
 end
 function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
@@ -113,10 +105,6 @@ function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
 
     s_e_idx = [v_idx[s_e[i_e]] for i_e in 1:num_e]
     d_e_idx = [v_idx[d_e[i_e]] for i_e in 1:num_e]
-
-    e_s_v_dat = [[(e_offs[i_e], e_dims[i_e]) for i_e in s_v[i_v]] for i_v in 1:nv(g)]
-    e_d_v_dat = [[(e_offs[i_e], e_dims[i_e]) for i_e in d_v[i_v]] for i_v in 1:nv(g)]
-
 
     in_edges_dat = Vector{Vector{Tuple{Int,Int}}}(undef, nv(g))
 
@@ -163,8 +151,6 @@ function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
     d_e_offs,
     s_e_idx,
     d_e_idx,
-    e_s_v_dat,
-    e_d_v_dat,
     in_edges_dat)
 end
 
@@ -291,9 +277,7 @@ struct GraphData{GDB, elV, elE}
     e::Array{EdgeData{GDB, elE}, 1}
     v_s_e::Array{VertexData{GDB, elV}, 1} # the vertex that is the source of e
     v_d_e::Array{VertexData{GDB, elV}, 1} # the vertex that is the destination of e
-    e_s_v::Array{Array{EdgeData{GDB, elE}, 1}, 1} # the edges that have v as source
-    e_d_v::Array{Array{EdgeData{GDB, elE}, 1}, 1} # the edges that have v as destination
-    in_edges::Array{Array{EdgeData{GDB, elE}, 1}, 1} # the edges that have v as destination
+    in_edges::Array{Array{EdgeData{GDB, elE}, 1}, 1} # the half-edges that have v as destination
 end
 
 function GraphData(v_array::Tv, e_array::Te, gs::GraphStruct; global_offset = 0) where {Tv, Te}
@@ -305,10 +289,8 @@ function GraphData(v_array::Tv, e_array::Te, gs::GraphStruct; global_offset = 0)
     e = [EdgeData{GDB, elE}(gdb, offset + global_offset, dim) for (offset,dim) in zip(gs.e_offs, gs.e_dims)]
     v_s_e = [VertexData{GDB, elV}(gdb, offset + global_offset, dim) for (offset,dim) in zip(gs.s_e_offs, gs.v_dims[gs.s_e])]
     v_d_e = [VertexData{GDB, elV}(gdb, offset + global_offset, dim) for (offset,dim) in zip(gs.d_e_offs, gs.v_dims[gs.d_e])]
-    e_s_v = [[EdgeData{GDB, elE}(gdb, offset + global_offset, dim) for (offset,dim) in e_s_v] for e_s_v in gs.e_s_v_dat]
-    e_d_v = [[EdgeData{GDB, elE}(gdb, offset + global_offset, dim) for (offset,dim) in e_d_v] for e_d_v in gs.e_d_v_dat]
     in_edges = [[EdgeData{GDB, elE}(gdb, offset + global_offset, dim) for (offset,dim) in in_edge] for in_edge in gs.in_edges_dat]
-    GraphData{GDB, elV, elE}(gdb, v, e, v_s_e, v_d_e, e_s_v, e_d_v, in_edges)
+    GraphData{GDB, elV, elE}(gdb, v, e, v_s_e, v_d_e, in_edges)
 end
 
 # function GraphData(v_array, e_array, gs)
