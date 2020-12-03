@@ -395,7 +395,11 @@ end
 function StaticDelayEdge(se::StaticEdge)
     let _f! = se.f!, dim = se.dim, coupling = se.coupling, sym = se.sym
         f! = @inline (e, v_s, v_d, h_v_s, h_v_d, p, t) -> _f!(e, v_s, v_d, p, t)
-        return StaticDelayEdge(f!, dim, coupling, sym)
+        if coupling ∈ (:undefined, :fiducial, :directed)
+            return StaticDelayEdge(f!, dim, coupling, sym)
+        else
+            return StaticDelayEdge(f!, dim, :fiducial, sym)
+        end
     end
 end
 
@@ -441,7 +445,13 @@ end
 
 function ODEEdge(se::StaticEdge)
     let _f! = se.f!, dim = se.dim, coupling = se.coupling, sym = se.sym
-        return ODEEdge(ODE_from_Static(_f!), dim, coupling, 0., sym)
+        if coupling == :undirected
+            # undirected means the reconstruction has already happend and the edge may now
+            # be considered fiducial
+            return ODEEdge(ODE_from_Static(_f!), dim, :fiducial, 0., sym)
+        else
+            return ODEEdge(ODE_from_Static(_f!), dim, coupling, 0., sym)
+        end
     end
 end
 
