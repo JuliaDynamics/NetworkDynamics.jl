@@ -10,14 +10,14 @@ module NetworkStructures
 
 using LightGraphs
 using LinearAlgebra
-using SparseArrays
+
 
 
 # We need rather complicated sets of indices into the arrays that hold the
 # vertex and the edge variables. We precompute everything we can and store it
 # in GraphStruct.
 
-export GraphStruct, GraphData, EdgeData, VertexData, construct_mass_matrix
+export GraphStruct, GraphData, EdgeData, VertexData
 
 const Idx = UnitRange{Int}
 
@@ -392,63 +392,6 @@ Returns an Vector of view-like accesses to all the incoming edges of the i-th ve
 """
 @inline get_in_edges(gd::GraphData, i) = gd.in_edges[i]
 
-function construct_mass_matrix(mmv_array, gs)
-    if all([mm == I for mm in mmv_array])
-        mass_matrix = I
-    else
-        mass_matrix = sparse(1.0I,gs.dim_v, gs.dim_v)
-        for (i, mm) in enumerate(mmv_array)
-            ind = gs.v_idx[i]
-            if ndims(mm) == 0
-                copyto!(@view(mass_matrix[ind, ind]), mm*I)
-            elseif ndims(mm) == 1
-                copyto!(@view(mass_matrix[ind, ind]), Diagonal(mm))
-            elseif ndims(mm) == 2 # ndims(I) = 2
-                # `I` does not support broadcasting but copyto! combined with views
-                copyto!(@view(mass_matrix[ind, ind]), mm)
-            else
-                error("The mass matrix needs to be interpretable as a 2D matrix.")
-            end
-        end
-    end
-    mass_matrix
-end
-
-function construct_mass_matrix(mmv_array, mme_array, gs)
-    if all([mm == I for mm in mmv_array]) && all([mm == I for mm in mme_array])
-        mass_matrix = I
-    else
-        dim_nd = gs.dim_v + gs.dim_e
-        mass_matrix = sparse(1.0I,dim_nd,dim_nd)
-        for (i, mm) in enumerate(mmv_array)
-            ind = gs.v_idx[i]
-            if ndims(mm) == 0
-                copyto!(@view(mass_matrix[ind, ind]), mm*I)
-            elseif ndims(mm) == 1
-                copyto!(@view(mass_matrix[ind, ind]), Diagonal(mm))
-            elseif ndims(mm) == 2 # ndims(I) = 2
-                # `I` does not support broadcasting but copyto!
-                copyto!(@view(mass_matrix[ind, ind]), mm)
-            else
-                error("The mass matrix needs to be interpretable as a 2D matrix.")
-            end
-        end
-        for (i, mm) in enumerate(mme_array)
-            ind = gs.dim_v .+ (gs.e_idx[i])
-            if ndims(mm) == 0
-                copyto!(@view(mass_matrix[ind, ind]), mm*I)
-            elseif ndims(mm) == 1
-                copyto!(@view(mass_matrix[ind, ind]), Diagonal(mm))
-            elseif ndims(mm) == 2 # ndims(I) = 2
-                # `I` does not support broadcasting but copyto!
-                copyto!(@view(mass_matrix[ind, ind]), mm)
-            else
-                error("The mass matrix needs to be interpretable as a 2D matrix.")
-            end
-        end
-    end
-    mass_matrix
-end
 
 
 #= These types are used to dispatch the network dynamics functions to provide
