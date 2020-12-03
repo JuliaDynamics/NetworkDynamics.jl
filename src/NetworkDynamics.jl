@@ -111,6 +111,8 @@ end
 function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; initial_history=nothing, x_prototype=zeros(1), parallel=false) where {T <: DDEVertex, U <: StaticDelayEdge}
     warn_parallel(parallel)
 
+    edges! = prepare_edges(edges!, graph)
+
     v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array = collect_ve_info(vertices!, edges!, graph)
 
     # These arrays are used for initializing the GraphData and will be overwritten
