@@ -1,7 +1,6 @@
 using Pkg
 Pkg.activate(".")
 using Test
-using NetworkDynamics.ComponentFunctions
 using LightGraphs
 using NetworkDynamics
 using OrdinaryDiffEq

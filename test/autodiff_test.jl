@@ -6,7 +6,7 @@ using Test
 # import Zygote
 
 N = 10 # number of nodes
-k = 3  # average degree
+k = 3  # average degree'
 g = barabasi_albert(N, k) # a little more exciting than a bare random graph
 
 println("--- AutomaticDifferentiation ---")
@@ -21,15 +21,10 @@ println("--- AutomaticDifferentiation ---")
     nothing
 end
 
-@inline Base.@propagate_inbounds function diffusionvertex!(dv, v, e_s, e_d, p, t)
+@inline Base.@propagate_inbounds function diffusionvertex!(dv, v, edges, p, t)
     # usually v, e_s, e_d are arrays, hence we use the broadcasting operator .
     dv[1] = p
-    # edges for which v is the source
-    for e in e_s
-        dv[1] -= e[1]
-    end
-    # edges for which v is the destination
-    for e in e_d
+    for e in edges
         dv[1] += e[1]
     end
     nothing
@@ -83,17 +78,14 @@ end
     nothing
 end
 
-@inline Base.@propagate_inbounds function diffusionvertex2!(dv, v, e_s, e_d, p, t)
+@inline Base.@propagate_inbounds function diffusionvertex2!(dv, v, edges, p, t)
 
     dv[1] = p[1]
     # edges for which v is the source
-    for e in e_s
+    for e in edges
         dv[1] -= e[1]
     end
-    # edges for which v is the destination
-    for e in e_d
-        dv[1] += e[1]
-    end
+
     nothing
 end
 nd_diffusion_vertex2 = ODEVertex(f! = diffusionvertex2!, dim = 1)

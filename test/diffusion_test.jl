@@ -55,9 +55,9 @@ println("Building Static Network Dynamics")
     nothing
 end
 
-@inline function diffusion_vertex!(dv, v, e_s, e_d, p, t)
+@inline function diffusion_vertex!(dv, v, edges, p, t)
     dv .= 0.
-    oriented_symmetric_edge_sum!(dv, e_s, e_d) # Oriented sum of the incoming and outgoing edges
+    sum_coupling!(dv, edges) # Oriented sum of the incoming and outgoing edges
     nothing
 end
 
@@ -92,27 +92,55 @@ println("Building Static Network Dynamics with artifical ODE Edges")
 # This promotes the static edges to dynamic edges, the resulting ODEFunction
 # has a mass matrix that enforces the edge equations.
 
-odeedge = ODEEdge(staticedge) # We promote the static edge to an ODEEdge artifically
+
+
+@testset "Promotion rules for static edges" begin
+    @test_throws ErrorException odeedge = ODEEdge(staticedge) # We promote the static edge to an ODEEdge artifically
+
+    @inline function promotable_diffusion_edge!(e,v_s,v_d,p,t)
+        e[1] = v_s[1] - v_d[1]
+        e[2] = v_d[1] - v_s[1]
+        nothing
+    end
+
+    promotable_staticedge = StaticEdge(f! = promotable_diffusion_edge!,
+                                       dim = 2, coupling = :fiducial)
+    odeedge = ODEEdge(promotable_staticedge)
+
+    ode_edge_list = [odeedge for e in edges(g)]
+
+    diff_network_ode = network_dynamics(vertex_list,ode_edge_list,g)
+
+    x0_ode = find_valid_ic(diff_network_ode, randn(nv(g) + 2*ne(g)))
+    dx0_ode = similar(x0_ode)
+    diff_network_ode(dx0_ode, x0_ode, nothing, 0.)
+    @test_broken @allocated diff_network_ode(dx0_ode, x0_ode, nothing, 0.) == 0.
+end
+
+@inline function real_ode_edge!(de,e,v_s,v_d,p,t)
+    de[1] = v_s[1] - v_d[1] - e[1]
+    de[2] = v_d[1] - v_s[1] - e[2]
+    nothing
+end
+odeedge = ODEEdge(f! = real_ode_edge!, dim = 2, coupling = :fiducial, mass_matrix = 0.)
+
 ode_edge_list = [odeedge for e in edges(g)]
 
 diff_network_ode = network_dynamics(vertex_list,ode_edge_list,g)
 
-x0_ode = find_valid_ic(diff_network_ode, randn(nv(g) + ne(g)))
+x0_ode = find_valid_ic(diff_network_ode, randn(nv(g) + 2*ne(g)))
 dx0_ode = similar(x0_ode)
 
-diff_network_ode(dx0_ode, x0_ode, nothing, 0.)
+@allocated diff_network_ode(dx0_ode, x0_ode, nothing, 0.)
 
 prob_L = ODEProblem(diff_network_L,x0_ode[1:N],(0.,5.))
 
 prob_st = ODEProblem(diff_network_st,x0_ode[1:N],(0.,5.))
 prob_ode = ODEProblem(diff_network_ode,x0_ode,(0.,5.))
-#
-# Jv = diff_network_ode.jac_prototype
-#
-# Jv(dx0_ode, x0_ode, nothing, 0.)
 
-sol_L = solve(prob_L, Tsit5())
-sol_st = solve(prob_st, Tsit5())
+
+sol_L = solve(prob_L, Tsit5(), reltol = 1e-5)
+sol_st = solve(prob_st, Tsit5(), reltol = 1e-5)
 sol_ode = solve(prob_ode, Rodas5())
 
  # These two are different code paths that we want to cover. If there is a type:
