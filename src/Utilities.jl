@@ -141,17 +141,14 @@ end
 end
 
 
-export oriented_symmetric_edge_sum!
+export sum_coupling!
 
 """
 A small utility function for writing diffusion dynamics. It provides the
-oriented sum of all the incident edges.
+ sum of all incoming edges.
 """
-@inline function oriented_symmetric_edge_sum!(e_sum, e_s, e_d)
-    @inbounds for e in e_s
-        e_sum .-= e
-    end
-    @inbounds for e in e_d
+@inline function sum_coupling!(e_sum, in_edges)
+    @inbounds for e in in_edges
         e_sum .+= e
     end
     nothing
