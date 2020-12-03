@@ -280,8 +280,9 @@ end
 
 
 """
-function prepare_edges(edges, g::SimpleGraph)
-    new_edges = Vector{EdgeFunction}(undef, length(edges))
+function prepare_edges(edges::Vector, g::SimpleGraph)
+    # This is a bit hacky, gets the de-parametrized type
+    new_edges = Vector{Base.typename(eltype(edges)).wrapper}(undef, length(edges))
     for (i, edge) in enumerate(edges)
         if edge.coupling == :directed
             @error "Coupling type of edge $i not available for undirected Graphs"
@@ -296,8 +297,8 @@ end
 
 """
 """
-function prepare_edges(edges, g::SimpleDiGraph)
-    new_edges = Vector{EdgeFunction}(undef, length(edges))
+function prepare_edges(edges::Vector, g::SimpleDiGraph)
+    new_edges = Vector{Base.typename(eltype(edges)).wrapper}(undef, length(edges))
     for (i, edge) in enumerate(edges)
         if edge.coupling ∈ (:symmetric, :antisymmetric, :undirected, :fiducial)
             @error "Coupling type of edge $i not available for directed Graphs"
