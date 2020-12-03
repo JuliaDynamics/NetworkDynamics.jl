@@ -221,7 +221,8 @@ For more details see the documentation.
         coupling_types = (:directed, :fiducial, :undirected)
 
         coupling == :undefined ?
-            error("ODEEdges with undefined coupling type are not implemented at the"* "moment. Choose `coupling` from $coupling_types.") : nothing
+            error("ODEEdges with undefined coupling type are not implemented at the "*
+            "moment. Choose `coupling` from $coupling_types.") : nothing
 
         coupling ∈ (:symmetric, :antisymmetric) ?
              error("Coupling type $coupling is not available for ODEEdges.") : nothing
@@ -242,7 +243,7 @@ For more details see the documentation.
             dim % 2 == 0 ? nothing : error("Fiducial edges are required to have even dim.
                                             The first dim args are used for src -> dst,
                                             the second for dst -> src coupling.")
-            return new{T}(user_f!, dim, mass_matrix, coupling, sym)
+            return new{T}(user_f!, dim, coupling, mass_matrix, sym)
 
         elseif coupling == :undirected
             # This might cause unexpected behaviour if source and destination vertex don't
