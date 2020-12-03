@@ -427,7 +427,9 @@ function (ofs::ODE_from_Static)(dx,x,args...)
     # 0 = - x + f(...)
     # where f(...) denotes the value that f!(a, ...) writes into a.
     ofs.f!(dx,args...)
-    dx .-= x
+    @inbounds for i in eachindex(dx)
+        dx[i] -= x[i]
+    end
     nothing
 end
 
