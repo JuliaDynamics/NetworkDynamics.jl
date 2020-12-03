@@ -1,54 +1,157 @@
+using Pkg
+Pkg.activate(".")
 using Test
 using NetworkDynamics.ComponentFunctions
 using LightGraphs
 using NetworkDynamics
 using OrdinaryDiffEq
 using DelayDiffEq
+using LinearAlgebra
 
-printstyled("--- StaticEdge errors --- \n", bold=true, color=:white)
+@testset "StaticEdge constructor" begin
+    f! = (e, v_s, v_d, p, t) -> begin
+        e .= v_s .- v_d
+        nothing
+    end
 
-f! = (e, v_s, v_d, p, t) -> begin
-    e .= v_s .- v_d
-    nothing
+    @test_throws ErrorException StaticEdge(f!,  1, :unspecified, [:e])
+
+    @test_throws ErrorException StaticEdge(f!,  0, :undefined, [:e])
+    @test StaticEdge(f!,  1, :undefined, [:e]) isa StaticEdge
+
+
+    @test_throws ErrorException StaticEdge(f!,  3, :fiducial, [:e,:e,:e])
+    @test_throws ErrorException StaticEdge(f!,  2, :fiducial, [:e])
+    @test StaticEdge(f!,  2, :fiducial, [:e,:e]) isa StaticEdge
+
+    @test StaticEdge(f!,  1, :undirected, [:e]) isa StaticEdge
+
+    fundir = StaticEdge(f! = f!,  dim = 2, coupling = :undirected)
+    fanti = StaticEdge(f! = f!,  dim = 2, coupling = :antisymmetric)
+    fdir = StaticEdge(f! = f!,  dim = 2, coupling = :directed)
+    fsym = StaticEdge(f! = f!,  dim = 2, coupling = :symmetric)
+    ffid = StaticEdge(f! = f!,  dim = 2, coupling = :fiducial)
+
+    x = rand(2)
+    y = rand(2)
+
+    eundir = zeros(4)
+    eanti  = zeros(4)
+    esym   = zeros(4)
+    edir   = zeros(2)
+    efid   = zeros(2)
+
+    fundir.f!(eundir, x, y, nothing, nothing)
+    fanti.f!(eanti, x, y, nothing, nothing)
+    fsym.f!(esym, x, y, nothing, nothing)
+    fdir.f!(edir, x, y, nothing, nothing)
+    ffid.f!(efid, x, y, nothing, nothing)
+
+    @test eundir == eanti
+    @test eanti[1:2] == -eanti[3:4]
+    @test esym[1:2] == esym[3:4]
+    @test eundir[1:2] == edir
+    @test edir == efid
 end
 
-@test_throws ErrorException StaticEdge(f!,  1, :unspecified, [:e])
-@test_throws ErrorException StaticEdge(f!,  0, :undefined, [:e])
-@test StaticEdge(f!,  1, :undefined, [:e]) isa StaticEdge
+@testset "StaticDelayEdge constructor" begin
+    f! = (e, v_s, v_d, h_v_s, h_v_d, p, t) -> begin
+        e .= h_v_s .- h_v_d
+        nothing
+    end
+
+    @test_throws ErrorException StaticDelayEdge(f!,  1, :unspecified, [:e])
+
+    @test_throws ErrorException StaticDelayEdge(f!,  0, :undefined, [:e])
+    @test StaticDelayEdge(f!,  1, :undefined, [:e]) isa StaticDelayEdge
 
 
-@test_throws ErrorException StaticEdge(f!,  3, :fiducial, [:e,:e,:e])
-@test_throws ErrorException StaticEdge(f!,  2, :fiducial, [:e])
-@test StaticEdge(f!,  2, :fiducial, [:e,:e]) isa StaticEdge
+    @test_throws ErrorException StaticDelayEdge(f!,  3, :fiducial, [:e,:e,:e])
+    @test_throws ErrorException StaticDelayEdge(f!,  2, :fiducial, [:e])
+    @test StaticDelayEdge(f!,  2, :fiducial, [:e,:e]) isa StaticDelayEdge
 
-@test StaticEdge(f!,  1, :undirected, [:e]) isa StaticEdge
+    @test StaticDelayEdge(f!,  1, :undirected, [:e]) isa StaticDelayEdge
 
-seundir = StaticEdge(f! = f!,  dim = 2, coupling = :undirected)
-seanti = StaticEdge(f! = f!,  dim = 2, coupling = :antisymmetric)
-sedir = StaticEdge(f! = f!,  dim = 2, coupling = :directed)
-sesym = StaticEdge(f! = f!,  dim = 2, coupling = :symmetric)
-sefid = StaticEdge(f! = f!,  dim = 2, coupling = :fiducial)
+    fundir = StaticDelayEdge(f! = f!,  dim = 2, coupling = :undirected)
+    fanti = StaticDelayEdge(f! = f!,  dim = 2, coupling = :antisymmetric)
+    fdir = StaticDelayEdge(f! = f!,  dim = 2, coupling = :directed)
+    fsym = StaticDelayEdge(f! = f!,  dim = 2, coupling = :symmetric)
+    ffid = StaticDelayEdge(f! = f!,  dim = 2, coupling = :fiducial)
 
-x = rand(2)
-y = rand(2)
+    x = rand(2)
+    y = rand(2)
 
-eundir = zeros(4)
-eanti  = zeros(4)
-esym   = zeros(4)
-edir   = zeros(2)
-efid   = zeros(2)
+    eundir = zeros(4)
+    eanti  = zeros(4)
+    esym   = zeros(4)
+    edir   = zeros(2)
+    efid   = zeros(2)
 
-seundir.f!(eundir, x, y, nothing, nothing)
-seanti.f!(eanti, x, y, nothing, nothing)
-sesym.f!(esym, x, y, nothing, nothing)
-sedir.f!(edir, x, y, nothing, nothing)
-sefid.f!(efid, x, y, nothing, nothing)
+    fundir.f!(eundir, nothing, nothing, x, y, nothing, nothing)
+    fanti.f!(eanti, nothing, nothing, x, y, nothing, nothing)
+    fsym.f!(esym, nothing, nothing, x, y, nothing, nothing)
+    fdir.f!(edir, nothing, nothing, x, y, nothing, nothing)
+    ffid.f!(efid, nothing, nothing, x, y, nothing, nothing)
 
-@test eundir == eanti
-@test eanti[1:2] == -eanti[3:4]
-@test esym[1:2] == esym[3:4]
-@test eundir[1:2] == edir
-@test edir == efid
+    @test eundir == eanti
+    @test eanti[1:2] == -eanti[3:4]
+    @test esym[1:2] == esym[3:4]
+    @test eundir[1:2] == edir
+    @test edir == efid
+end
+
+
+@testset "ODEEdge constructor" begin
+    f! = (de, e, v_s, v_d, p, t) -> begin
+        de .= v_s .- v_d
+        nothing
+    end
+    MM = 1
+
+    @test_throws ErrorException ODEEdge(f!,  1, :unspecified, MM, [:e])
+    @test_throws ErrorException ODEEdge(f!,  1, :symmetric, MM, [:e])
+    @test_throws ErrorException ODEEdge(f!,  1, :antisymmetric, MM, [:e])
+
+    @test ODEEdge(f!,  1, :undefined, MM, [:e]) isa ODEEdge
+
+    # MM test
+
+    @test ODEEdge(f!,  1, :undirected, 1, [:e]).mass_matrix == 1
+    @test ODEEdge(f!,  1, :undirected, I, [:e]).mass_matrix == I
+    @test ODEEdge(f!,  1, :undirected, [0.], [:e]).mass_matrix == [0.,0.]
+    @test ODEEdge(f!,  1, :undirected, zeros(1,1), [:e]).mass_matrix == zeros(2,2)
+
+    @test_throws ErrorException ODEEdge(f!,  3, :fiducial, MM, [:e,:e,:e])
+    @test_throws ErrorException ODEEdge(f!,  2, :fiducial, MM, [:e])
+    @test ODEEdge(f!,  2, :fiducial, MM, [:e,:e]) isa ODEEdge
+
+    @test ODEEdge(f!,  1, :undirected, MM, [:e]) isa ODEEdge
+
+    fundir = ODEEdge(f! = f!,  dim = 2, coupling = :undirected)
+    fdir = ODEEdge(f! = f!,  dim = 2, coupling = :directed)
+    ffid = ODEEdge(f! = f!,  dim = 2, coupling = :fiducial)
+
+    x = rand(2)
+    y = rand(2)
+
+    eundir = ones(4)
+    edir   = ones(2)
+    efid   = ones(2)
+
+    deundir = zeros(4)
+    dedir   = zeros(2)
+    defid   = zeros(2)
+
+    fundir.f!(deundir, eundir, x, y, nothing, nothing)
+    fdir.f!(dedir, edir, x, y, nothing, nothing)
+    ffid.f!(defid, efid, x, y, nothing, nothing)
+
+    @test deundir[1:2] == -deundir[3:4]
+    @test eundir[1:2] == edir
+    @test edir == efid
+end
+
+
 
 printstyled("--- Function Typology --- \n", bold=true, color=:white)
 

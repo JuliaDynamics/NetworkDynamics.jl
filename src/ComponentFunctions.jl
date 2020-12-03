@@ -203,12 +203,6 @@ solved.
 
 For more details see the documentation.
 """
-@Base.kwdef struct ODEEdge{T} <: EdgeFunction
-    f!::T # The function with signature (dx, x, e_s, e_t, p, t) -> nothing
-    dim::Int # number of dimensions of x
-    mass_matrix=I # Mass matrix for the equation
-    sym=[:e for i in 1:dim] # Symbols for the dimensions
-end
 
 @Base.kwdef struct ODEEdge{T} <: EdgeFunction
     f!::T # (de, e, v_s, v_t, p, t) -> nothing
@@ -224,13 +218,13 @@ end
                      mass_matrix,
                      sym::Vector{Symbol}) where T
 
+        coupling ∈ (:symmetric, :antisymmetric) ?
+             error("Coupling type $coupling is not available for ODEEdges.") : nothing
+
         coupling_types = (:undefined, :directed, :fiducial, :undirected)
 
         coupling ∈ coupling_types ? nothing :
             error("Coupling type not recognized. Choose from $coupling_types.")
-
-        coupling ∈ (:symmetric, :antisymmetric) ? nothing :
-            error("Coupling type $coupling is not available for ODEEdges.")
 
 
         dim > 0 ? nothing : error("dim has to be a positive number.")
@@ -260,14 +254,14 @@ end
                     newM = M
                 elseif M isa Number
                     newM = M
-                elseif M isa Array
+                elseif M isa Vector
                     newM = repeat(M,2)
                 elseif M isa Matrix
                     newM = [M zeros(size(M)); zeros(size(M)) M]
                 end
+                return new{typeof(f!)}(f!, 2dim, coupling, newM, repeat(sym, 2))
             end
         end
-        return new{typeof(f!)}(f!, 2dim, coupling, newM, repeat(sym, 2))
     end
 end
 
@@ -329,11 +323,6 @@ promote_rule(::Type{DDEVertex}, ::Type{ODEVertex}) = DDEVertex
 """
 Like a static edge but with extra arguments for the history of the source and destination vertices. This is NOT a DDEEdge.
 """
- @Base.kwdef struct StaticDelayEdge{T} <: EdgeFunction
-    f!::T # (e, v_s, v_t, h_v_s, h_v_d, p, t) -> nothing
-    dim::Int # number of dimensions of x
-    sym=[:e for i in 1:dim] # Symbols for the dimensions
-end
 
 @Base.kwdef struct StaticDelayEdge{T} <: EdgeFunction
     f!::T # (e, v_s, v_t, h_v_s, h_v_d, p, t) -> nothing
@@ -342,7 +331,7 @@ end
     sym=[:e for i in 1:dim] # Symbols for the dimensions
 
 
-    function StaticEdge(user_f!::T,
+    function StaticDelayEdge(user_f!::T,
                            dim::Int,
                            coupling::Symbol,
                            sym::Vector{Symbol}) where T
@@ -370,13 +359,13 @@ end
             # This might cause unexpected behaviour if source and destination vertex don't
             # have the same internal arguments.
             # Make sure to explicitly define the edge is :fiducial in that case.
-            f! = @inline (e, v_s, v_d, p, t) -> begin
+            f! = @inline (e, v_s, v_d, h_v_s, h_v_d, p, t) -> begin
                 @inbounds user_f!(view(e,1:dim), v_s, v_d, h_v_s, h_v_d, p, t)
-                @inbounds user_f!(view(e,dim+1:2dim), v_d, v_s, h_v_s, h_v_d, p, t)
+                @inbounds user_f!(view(e,dim+1:2dim), v_d, v_s, h_v_d, h_v_s, p, t)
                 nothing
             end
         elseif coupling == :antisymmetric
-            f! = @inline (e, v_s, v_d, p, t) -> begin
+            f! = @inline (e, v_s, v_d, h_v_s, h_v_d, p, t) -> begin
                 @inbounds user_f!(view(e,1:dim), v_s, v_d, h_v_s, h_v_d, p, t)
                 @inbounds for i in 1:dim
                     e[dim + i] = -1.0 * e[i]
@@ -384,7 +373,7 @@ end
                 nothing
             end
         elseif coupling == :symmetric
-            f! = @inline (e, v_s, v_d, p, t) -> begin
+            f! = @inline (e, v_s, v_d, h_v_s, h_v_d, p, t) -> begin
                 @inbounds user_f!(view(e,1:dim), v_s, v_d, h_v_s, h_v_d, p, t)
                 @inbounds for i in 1:dim
                     e[dim + i] = e[i]
@@ -398,7 +387,7 @@ end
 
 function StaticDelayEdge(se::StaticEdge)
     let _f! = se.f!, dim = se.dim, coupling = se.coupling, sym = se.sym
-        f! = (e, v_s, v_d, h_v_s, h_v_d, p, t) -> _f!(e, v_s, v_d, p, t)
+        f! = @inline (e, v_s, v_d, h_v_s, h_v_d, p, t) -> _f!(e, v_s, v_d, p, t)
         return StaticDelayEdge(f!, dim, coupling, sym)
     end
 end
