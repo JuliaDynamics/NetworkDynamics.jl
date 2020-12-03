@@ -280,12 +280,11 @@ the key constructor `network_dynamics`.
 the following calling syntax
 
 ```julia
-f!(dv, v, e_s, e_t, h, p, t) -> nothing
+f!(dv, v, edges, h, p, t) -> nothing
 ```
 
 Here `dv`, `v`, `p` and `t` are the usual ODE arguments, while
-`e_s` and `e_d` are arrays containing the edges for which the
-described vertex is the source or the destination respectively. `h` is the history array for `v`.
+`edges` is an Arry of incoming edges. `h` is the history array for `v`.
 
 - `dim` is the number of independent variables in the edge equations and
 - `sym` is an array of symbols for these variables.
@@ -304,14 +303,18 @@ For more details see the documentation.
 end
 
 function DDEVertex(ov::ODEVertex)
-    f! = (dv, v, e_s, e_d, h_v, p, t) -> ov.f!(dv, v, e_s, e_d, p, t)
-    DDEVertex(f!, ov.dim, ov.mass_matrix, ov.sym)
+    let _f! = ov.f!, dim = ov.dim, sym = ov.sym
+        f! = @inline (dv, v, in_edges, h_v, p, t) -> _f!(dv, v, in_edges, p, t)
+        return DDEVertex(f!, dim, mass_matrix, sym)
+    end
 end
 
 
 function DDEVertex(sv::StaticVertex)
-    f! = (dv, v, e_s, e_d, h_v, p, t) -> ODE_from_Static(sv.f!)(dv, v, e_s, e_d, p, t)
-    DDEVertex(f!, sv.dim, 0., sv.sym)
+    let _f! = ODE_from_Static(sv.f!), dim = sv.dim, sym = sv.sym
+        f! = @inline (dv, v, in_edges, h_v, p, t) -> _f!(dv, v, in_edges, p, t)
+        return DDEVertex(f!, dim, 0., sym)
+    end
 end
 
 # Promotion rules [eventually there might be too many types to hardcode everyhting]
