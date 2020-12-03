@@ -76,15 +76,13 @@ of VertexFunctions **`vertices!`**, an array of EdgeFunctions **`edges!`** and a
 `LightGraph.jl` object **`g`**. The optional argument `parallel` is a boolean
 value that denotes if the central loop should be executed in parallel with the number of threads set by the environment variable `JULIA_NUM_THREADS`.
 """
-function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U},
-                          graph; x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: StaticEdge}
-    if parallel
-        haskey(ENV, "JULIA_NUM_THREADS") &&
-        parse(Int, ENV["JULIA_NUM_THREADS"]) > 1 ? nothing :
-        print("Warning: You are using multi-threading with only one thread ",
-        "available to Julia. Consider re-starting Julia with the environment ",
-        "variable JULIA_NUM_THREADS set to the number of physical cores of your CPU.")
-    end
+function network_dynamics(vertices!::Union{Array{T, 1}, T},
+                          edges!::Union{Array{U, 1}, U},
+                          graph;
+                          x_prototype=zeros(1),
+                          parallel=false) where {T <: ODEVertex, U <: StaticEdge}
+
+    warn_parallel(parallel)
 
     # user_edges! = copy(edges!)
     edges! = prepare_edges(edges!, graph)
@@ -111,13 +109,7 @@ end
 ## DDE
 
 function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; initial_history=nothing, x_prototype=zeros(1), parallel=false) where {T <: DDEVertex, U <: StaticDelayEdge}
-    if parallel
-        haskey(ENV, "JULIA_NUM_THREADS") &&
-        parse(Int, ENV["JULIA_NUM_THREADS"]) > 1 ? nothing :
-        print("Warning: You are using multi-threading with only one thread ",
-        "available to Julia. Consider re-starting Julia with the environment ",
-        "variable JULIA_NUM_THREADS set to the number of physical cores of your CPU.")
-    end
+    warn_parallel(parallel)
 
     v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array = collect_ve_info(vertices!, edges!, graph)
 
@@ -166,13 +158,7 @@ end
 ## ODE
 
 function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: ODEEdge}
-    if parallel
-        haskey(ENV, "JULIA_NUM_THREADS") &&
-        parse(Int, ENV["JULIA_NUM_THREADS"]) > 1 ? nothing :
-        println("Warning: You are using multi-threading with only one thread ",
-        "available to Julia. Consider re-starting Julia with the environment ",
-        "variable JULIA_NUM_THREADS set to the number of physical cores of your CPU.")
-    end
+    warn_parallel(parallel)
 
     v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array = collect_ve_info(vertices!, edges!, graph)
 
@@ -272,9 +258,18 @@ If only a sinlge Function is given, not an Array of EdgeFunctions.
 """
 function prepare_edges(edge::EdgeFunction, g::SimpleGraph)
     if edge.coupling == :directed
-        @error "Coupling type not available for undirected Graphs"
+        @error "Coupling type of EdgeFunction not available for undirected Graphs"
     elseif edge.coupling == :undefined
-        return reconstruct_edge(edge)
+        return reconstruct_edge(edge, :undirected)
+    end
+    return edge
+end
+
+function prepare_edges(edge::EdgeFunction, g::SimpleDiGraph)
+    if edge.coupling ∈ (:symmetric, :antisymmetric, :undirected, :fiducial)
+        @error "Coupling type of EdgeFunction not available for directed Graphs"
+    elseif edge.coupling == :undefined
+        return reconstruct_edge(edge, :directed)
     end
     return edge
 end
@@ -284,12 +279,12 @@ end
 
 """
 function prepare_edges(edges, g::SimpleGraph)
-    new_edges = similar(edges)
+    new_edges = Vector{EdgeFunction}(undef, length(edges))
     for (i, edge) in enumerate(edges)
         if edge.coupling == :directed
             @error "Coupling type of edge $i not available for undirected Graphs"
         elseif edge.coupling == :undefined
-            new_edges[i] = reconstruct_edge(edge)
+            new_edges[i] = reconstruct_edge(edge, :undirected)
         else
             new_edges[i] = edges[i]
         end
@@ -300,32 +295,36 @@ end
 """
 """
 function prepare_edges(edges, g::SimpleDiGraph)
+    new_edges = Vector{EdgeFunction}(undef, length(edges))
     for (i, edge) in enumerate(edges)
         if edge.coupling ∈ (:symmetric, :antisymmetric, :undirected, :fiducial)
             @error "Coupling type of edge $i not available for directed Graphs"
-        #This does not work because StaticEdge is immutable. But maybe its not necessary.
-        #elseif edge.coupling == :undefined
-        #    edge.coupling = :directed
+        elseif edge.coupling == :undefined
+            new_edges[i] = reconstruct_edge(edge, :directed)
+        else
+            new_edges[i] = edges[i]
         end
     end
-    edges
-end
-
-function prepare_edges(edge::EdgeFunction, g::SimpleDiGraph)
-    if edge.coupling ∈ (:symmetric, :antisymmetric, :undirected, :fiducial)
-        @error "Coupling type of EdgeFunction not available for directed Graphs"
-    end
-    edge
+    return new_edges
 end
 
 
-@inline function reconstruct_edge(edge::StaticEdge)
+
+
+@inline function reconstruct_edge(edge::StaticEdge, coupling::Symbol)
     let f! = edge.f!, dim = edge.dim, sym = edge.sym
     return StaticEdge(f! = f!,
                       dim = dim,
-                      coupling = :undirected,
+                      coupling = coupling,
                       sym = sym)
-                      # For edges with mass matrix this will be a little more complicated
+    end
+end
+@inline function reconstruct_edge(edge::StaticDelayEdge, coupling::Symbol)
+    let f! = edge.f!, dim = edge.dim, sym = edge.sym
+    return StaticDelayEdge(f! = f!,
+                      dim = dim,
+                      coupling = coupling,
+                      sym = sym)
     end
 end
 

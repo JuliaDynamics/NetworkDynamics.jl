@@ -111,8 +111,10 @@ end
     @test_throws ErrorException ODEEdge(f!,  1, :unspecified, MM, [:e])
     @test_throws ErrorException ODEEdge(f!,  1, :symmetric, MM, [:e])
     @test_throws ErrorException ODEEdge(f!,  1, :antisymmetric, MM, [:e])
+    @test_throws ErrorException ODEEdge(f!,  1, :undefined, MM, [:e])
 
-    @test ODEEdge(f!,  1, :undefined, MM, [:e]) isa ODEEdge
+    @test ODEEdge(f!,  1, :undirected, MM, [:e]) isa ODEEdge
+    @test_throws ErrorException ODEEdge(f!,  0, :undirected, MM, [:e])
 
     # MM test
 
@@ -200,7 +202,7 @@ staticvertex = StaticVertex(f! = diff_stat_vertex!, dim = 1)
 ddevertex = DDEVertex(f! = kuramoto_delay_vertex!, dim = 1)
 
 staticedge = StaticEdge(f! = diffusion_edge!, dim = 1)
-odeedge = ODEEdge(f! = diff_dyn_edge!, dim = 1)
+odeedge = ODEEdge(f! = diff_dyn_edge!, dim = 1, coupling = :undirected)
 sdedge = StaticDelayEdge(f! = kuramoto_delay_edge!, dim = 2)
 
 
@@ -231,7 +233,7 @@ edge_list_1 = [staticedge for v in 1:25]
 @test eltype(edge_list_1) == StaticEdge{typeof(diffusion_edge!)}
 
 edge_list_2 = [odeedge for v in 1:25]
-@test eltype(edge_list_2) == ODEEdge{typeof(diff_dyn_edge!)}
+@test eltype(edge_list_2) <: ODEEdge
 
 edge_list_3 = [sdedge for v in 1:25]
 @test eltype(edge_list_3) == StaticDelayEdge{typeof(kuramoto_delay_edge!)}
@@ -241,6 +243,8 @@ edge_list_4 = [v % 2 == 0 ? odeedge : staticedge for v in 1:10]
 edge_list_5 = Array{EdgeFunction}(edge_list_4)
 @test eltype(edge_list_5) == EdgeFunction
 
+# To fix this, either allow undefined ODEEdges, or convert static edges earlier to directed
+# respectivel undirected
 edge_list_6 = Array{ODEEdge}(edge_list_4)
 @test eltype(edge_list_6) == ODEEdge
 

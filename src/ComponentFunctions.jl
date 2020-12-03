@@ -218,10 +218,15 @@ For more details see the documentation.
                      mass_matrix,
                      sym::Vector{Symbol}) where T
 
+        coupling_types = (:directed, :fiducial, :undirected)
+
+        coupling == :undefined ?
+            error("ODEEdges with undefined coupling type are not implemented at the"* "moment. Choose `coupling` from $coupling_types.") : nothing
+
         coupling ∈ (:symmetric, :antisymmetric) ?
              error("Coupling type $coupling is not available for ODEEdges.") : nothing
 
-        coupling_types = (:undefined, :directed, :fiducial, :undirected)
+
 
         coupling ∈ coupling_types ? nothing :
             error("Coupling type not recognized. Choose from $coupling_types.")
@@ -231,9 +236,8 @@ For more details see the documentation.
 
         dim == length(sym) ? nothing : error("Please specify a symbol for every dimension.")
 
-        if coupling ∈ [:undefined, :directed]
+        if coupling == :directed
             return new{T}(user_f!, dim, coupling, mass_matrix, sym)
-
         elseif coupling == :fiducial
             dim % 2 == 0 ? nothing : error("Fiducial edges are required to have even dim.
                                             The first dim args are used for src -> dst,
