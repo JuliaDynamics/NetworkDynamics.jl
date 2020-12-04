@@ -45,7 +45,7 @@ MM[7,6] = 1
         @test prod(network_dynamics(vertex_list, static_edge, g).mass_matrix .== MM)
 
         @test prod(network_dynamics(vertex_list, ode_edge_list, g).mass_matrix .==
-                   [MM 0*similar(MM);0*similar(MM) MM])
+                   [MM zeros(size(MM));zeros(size(MM)) MM])
         @test prod(network_dynamics(static_vertex, ode_edge_list, g).mass_matrix .==
                    [zeros(N,N) zeros(N,7); zeros(7,N) MM])
 end
@@ -53,7 +53,7 @@ end
 
 # This test is broken since static_edges with undefined coupling cant be promoted to ODEdges
 @test_broken prod(network_dynamics(vertex_list, edge_list, g).mass_matrix .==
-           [MM 0*similar(MM);0*similar(MM) MM])
+           [MM zeros(size(MM));zeros(size(MM)) MM])
 
 # Testing for coupling type errors, this should go in another file
 @test_throws ArgumentError network_dynamics(no_mm_vertex, no_mm_edge, SimpleGraph(g))
