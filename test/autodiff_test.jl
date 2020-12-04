@@ -12,13 +12,13 @@ g = barabasi_albert(N, k) # a little more exciting than a bare random graph
 
 
 @testset "Automatic Differentiation compatibility" begin
-    @inline Base.@propagate_inbounds function diffusionedge!(e, v_s, v_d, p, t)
+    @inline function diffusionedge!(e, v_s, v_d, p, t)
         # usually e, v_s, v_d are arrays, hence we use the broadcasting operator .
         e[1] = p * (v_s[1] - v_d[1])
         nothing
     end
 
-    @inline Base.@propagate_inbounds function diffusionvertex!(dv, v, edges, p, t)
+    @inline function diffusionvertex!(dv, v, edges, p, t)
         # usually v, e_s, e_d are arrays, hence we use the broadcasting operator .
         dv[1] = p
         for e in edges
@@ -69,13 +69,13 @@ g = barabasi_albert(N, k) # a little more exciting than a bare random graph
 
     ## parameter array instead of tuple
 
-    @inline Base.@propagate_inbounds function diffusionedge2!(e, v_s, v_d, p, t)
+    @inline function diffusionedge2!(e, v_s, v_d, p, t)
 
         e[1] = p[2] * (v_s[1] - v_d[1])
         nothing
     end
 
-    @inline Base.@propagate_inbounds function diffusionvertex2!(dv, v, edges, p, t)
+    @inline function diffusionvertex2!(dv, v, edges, p, t)
 
         dv[1] = p[1]
         # edges for which v is the source

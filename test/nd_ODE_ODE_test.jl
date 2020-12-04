@@ -4,13 +4,13 @@ using NetworkDynamics
 
 @testset "Test nd_ODE_ODE Module" begin
     # create a simpe nd_ODE_ODE model
-    @inline Base.@propagate_inbounds function edge!(de, e, v_s, v_d, p, t)
+    @inline function edge!(de, e, v_s, v_d, p, t)
         de[1] = e[1] + v_s[1] - v_d[1]
-        de[2] = e[2] + v_d[2] - v_s[2]
+        de[2] = e[2] + v_d[1] - v_s[1]
         nothing
     end
 
-    @inline Base.@propagate_inbounds function diffusionvertex!(dv, v, edges, p, t)
+    @inline function diffusionvertex!(dv, v, edges, p, t)
         dv[1] = 0.
         for e in edges
             dv[1] += e[1]
