@@ -383,7 +383,7 @@ Returns a view-like access to the underlying data of destination vertex of the i
 
 Returns an Vector of view-like accesses to all the outgoing edges of the i-th vertex.
 """
-@inline get_out_edges(gd::GraphData, i::Int) = gd.e_s_v[i]
+@inline get_out_edges(gd::GraphData, i::Int) = error("not implemented")
 
 """
     get_in_edges(gd::GraphData, i::Int)

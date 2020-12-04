@@ -304,7 +304,7 @@ For more details see the documentation.
 end
 
 function DDEVertex(ov::ODEVertex)
-    let _f! = ov.f!, dim = ov.dim, sym = ov.sym
+    let _f! = ov.f!, dim = ov.dim, sym = ov.sym, mass_matrix = ov.mass_matrix
         f! = @inline (dv, v, in_edges, h_v, p, t) -> _f!(dv, v, in_edges, p, t)
         return DDEVertex(f!, dim, mass_matrix, sym)
     end

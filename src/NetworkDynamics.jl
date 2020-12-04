@@ -160,9 +160,18 @@ end
 ## ODE
 
 function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: ODEEdge}
+
     warn_parallel(parallel)
+    
+    # We are abusing prepare_edges here to throw errors for impossible connections of
+    # coupling type and graph. We don't save it's return value though, since reconstruction
+    # of ODEEdges is forbidden at the moment.
+
+    prepare_edges(edges!, graph)
 
     v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array = collect_ve_info(vertices!, edges!, graph)
+
+
 
     # These arrays are used for initializing the GraphData and will be overwritten
     x_array = similar(x_prototype, sum(v_dims) + sum(e_dims))
@@ -260,7 +269,7 @@ If only a sinlge Function is given, not an Array of EdgeFunctions.
 """
 function prepare_edges(edge::EdgeFunction, g::SimpleGraph)
     if edge.coupling == :directed
-        @error "Coupling type of EdgeFunction not available for undirected Graphs"
+        throw(ArgumentError("Coupling type of EdgeFunction not available for undirected Graphs"))
     elseif edge.coupling == :undefined
         return reconstruct_edge(edge, :undirected)
     end
@@ -269,7 +278,7 @@ end
 
 function prepare_edges(edge::EdgeFunction, g::SimpleDiGraph)
     if edge.coupling ∈ (:symmetric, :antisymmetric, :undirected, :fiducial)
-        @error "Coupling type of EdgeFunction not available for directed Graphs"
+        throw(ArgumentError("Coupling type of EdgeFunction not available for directed Graphs"))
     elseif edge.coupling == :undefined
         return reconstruct_edge(edge, :directed)
     end
@@ -285,7 +294,7 @@ function prepare_edges(edges::Vector, g::SimpleGraph)
     new_edges = Vector{Base.typename(eltype(edges)).wrapper}(undef, length(edges))
     for (i, edge) in enumerate(edges)
         if edge.coupling == :directed
-            @error "Coupling type of edge $i not available for undirected Graphs"
+            throw(ArgumentError("Coupling type of edge $i not available for undirected Graphs"))
         elseif edge.coupling == :undefined
             new_edges[i] = reconstruct_edge(edge, :undirected)
         else
@@ -301,7 +310,7 @@ function prepare_edges(edges::Vector, g::SimpleDiGraph)
     new_edges = Vector{Base.typename(eltype(edges)).wrapper}(undef, length(edges))
     for (i, edge) in enumerate(edges)
         if edge.coupling ∈ (:symmetric, :antisymmetric, :undirected, :fiducial)
-            @error "Coupling type of edge $i not available for directed Graphs"
+            throw(ArgumentError("Coupling type of edge $i not available for directed Graphs"))
         elseif edge.coupling == :undefined
             new_edges[i] = reconstruct_edge(edge, :directed)
         else
@@ -316,22 +325,39 @@ end
 
 @inline function reconstruct_edge(edge::StaticEdge, coupling::Symbol)
     let f! = edge.f!, dim = edge.dim, sym = edge.sym
-    return StaticEdge(f! = f!,
-                      dim = dim,
-                      coupling = coupling,
-                      sym = sym)
+        return StaticEdge(f! = f!,
+                          dim = dim,
+                          coupling = coupling,
+                          sym = sym)
     end
 end
 @inline function reconstruct_edge(edge::StaticDelayEdge, coupling::Symbol)
     let f! = edge.f!, dim = edge.dim, sym = edge.sym
-    return StaticDelayEdge(f! = f!,
-                      dim = dim,
-                      coupling = coupling,
-                      sym = sym)
+        return StaticDelayEdge(f! = f!,
+                               dim = dim,
+                               coupling = coupling,
+                               sym = sym)
     end
 end
+@inline function reconstruct_edge(edge::ODEEdge, coupling::Symbol)
+    error("Reconstruction of ODEEdges is not implemented at the moment.")
+end
 
-
+# Not used at the moment
+#
+# @inline function reconstruct_edge(edge::ODEEdge, coupling::Symbol)
+#     let f! = edge.f!, dim = edge.dim, sym = edge.sym, mass_matrix = edge.mass_matrix
+#         if coupling == :undirected
+#             @warn "Reconstructing an ODEEdge affects its internal dimension."
+#         return ODEEdge(f! = f!,
+#                        dim = dim,
+#                        coupling = coupling,
+#                        mass_matrix = mass_matrix,
+#                        sym = sym)
+#     end
+# end
+#
+#
 
 """
 Allow initializing StaticEdgeFunction for Power Dynamics

@@ -1,5 +1,3 @@
-using Pkg
-Pkg.activate(".")
 using Test
 using LightGraphs
 using NetworkDynamics

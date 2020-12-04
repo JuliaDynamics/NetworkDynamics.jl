@@ -70,8 +70,6 @@ edge_list = [staticedge for e in edges(g)]
 
 diff_network_st = network_dynamics(vertex_list,edge_list,g)
 
-@test diff_network_st isa ODEFunction
-
 x0 = rand(nv(g))
 dx_L = similar(x0)
 dx_st = similar(x0)
@@ -154,10 +152,10 @@ diff_network_ode(dx0_ode, x0_ode,nothing,0.)
 max_L = [maximum(abs.(sol_L(t) .- sol_analytic(x0_ode[1:N], nothing, t))) for t in sol_L.t] |> maximum
 max_st = [maximum(abs.(sol_st(t) .- sol_analytic(x0_ode[1:N], nothing, t))) for t in sol_L.t] |> maximum
 max_ode = [maximum(abs.(sol_ode(t)[1:N] .- sol_analytic(x0_ode[1:N], nothing, t))) for t in sol_L.t] |> maximum
-
-println("Maximum difference to analytic solution with explicit Laplacian: $max_L")
-println("Maximum difference to analytic solution with static ND: $max_st")
-println("Maximum difference to analytic solution with fake ode edge ND: $max_ode")
+println("Maximum difference between analytic solution and...")
+println("\t * and solution with explicit Laplacian: $max_L")
+println("\t * and solution with static ND: $max_st")
+println("\t * and solution  solution with promoted static edges ND: $max_ode")
 
 # We test that these helper function extract the right symbols:
 syms_v = syms_containing(diff_network_ode, "v")

@@ -9,12 +9,9 @@ using NetworkDynamics
         nothing
     end
 
-    @inline Base.@propagate_inbounds function diffusionvertex!(dv, v, e_s, e_d, p, t)
+    @inline Base.@propagate_inbounds function diffusionvertex!(dv, v, edges, p, t)
         dv[1] = 0.
-            for e in e_s
-                dv[1] -= e[1]
-            end
-        for e in e_d
+        for e in edges
             dv[1] += e[1]
         end
         nothing
