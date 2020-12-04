@@ -193,7 +193,7 @@ end
 
 function RootRhs(of)
     mm = of.mass_matrix
-    @assert mm != nothing
+    @assert mm !== nothing
     mpm = pinv(mm) * mm
     RootRhs(of.f, mpm)
 end

@@ -44,7 +44,7 @@ sol_L = solve(prob_L, Tsit5())
 
 #Now for full complexity:
 
-println("Building Static Network Dynamics")
+println("Building Static Network Dynamics...")
 
 # We define the fundamental edge and vertex functions:
 
@@ -86,7 +86,7 @@ dx_st = similar(x0)
     end
 end
 
-println("Building Static Network Dynamics with artifical ODE Edges")
+println("Building Static Network Dynamics with artifical ODE Edges...")
 # This promotes the static edges to dynamic edges, the resulting ODEFunction
 # has a mass matrix that enforces the edge equations.
 

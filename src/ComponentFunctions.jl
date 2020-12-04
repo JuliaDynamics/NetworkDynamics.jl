@@ -431,7 +431,7 @@ function (ofs::ODE_from_Static)(dx,x,args...)
     # by f! into dx, then subtract x. This leads to the  constraint
     # 0 = - x + f(...)
     # where f(...) denotes the value that f!(a, ...) writes into a.
-    ofs.f!(dx,args...)
+    ofs.f!(dx, args...)
     @inbounds for i in eachindex(dx)
         dx[i] -= x[i]
     end

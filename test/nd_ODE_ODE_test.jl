@@ -37,7 +37,7 @@ using NetworkDynamics
     gd = nd(x, nothing, 0., GetGD)
     gs = nd(GetGS)
     # first test array of same type
-    a = similar(x)
+    a = randn(size(x))
     gd_ret = nd_ODE_ODE_mod.prep_gd(dx, a, gd, gs)
     @test gd_ret === gd
     @test gd.gdb.v_array == a[1:gs.dim_v]

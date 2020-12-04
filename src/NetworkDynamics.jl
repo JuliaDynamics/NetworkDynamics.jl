@@ -120,7 +120,7 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
     e_array = similar(x_prototype, sum(e_dims))
 
     # default
-    if initial_history == nothing
+    if initial_history === nothing
         initial_history = ones(sum(v_dims))
     end
 
@@ -162,7 +162,7 @@ end
 function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: ODEEdge}
 
     warn_parallel(parallel)
-    
+
     # We are abusing prepare_edges here to throw errors for impossible connections of
     # coupling type and graph. We don't save it's return value though, since reconstruction
     # of ODEEdges is forbidden at the moment.
@@ -170,8 +170,6 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
     prepare_edges(edges!, graph)
 
     v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array = collect_ve_info(vertices!, edges!, graph)
-
-
 
     # These arrays are used for initializing the GraphData and will be overwritten
     x_array = similar(x_prototype, sum(v_dims) + sum(e_dims))
@@ -204,62 +202,55 @@ function network_dynamics(vertices!,  edges!, graph; parallel=false)
     try
         Array{VertexFunction}(vertices!)
     catch err
-        println("Cannot convert the vertices to an Array{VertexFunction}!")
-        println(err)
-        return nothing
+        throw(ArgumentError("Cannot convert the vertices to an Array{VertexFunction}!"))
     end
 
     try
         Array{EdgeFunction}(edges!)
     catch err
-        println("Cannot convert the edges to an Array{EdgeFunction}!")
-        println(err)
-        return nothing
+        throw(ArgumentError("Cannot convert the edges to an Array{EdgeFunction}!"))
     end
     va! = Array{VertexFunction}(vertices!)
     ea! = Array{EdgeFunction}(edges!)
-    network_dynamics(va!,  ea!, graph, parallel = parallel)
+    network_dynamics(va!, ea!, graph, parallel = parallel)
 end
 
-function network_dynamics(vertices!::Array{VertexFunction}, edges!::Array{EdgeFunction}, graph; parallel=false)
+function network_dynamics(vertices!::Array{VertexFunction}, edges!::Array{EdgeFunction}, graph; kwargs...)
     @assert length(vertices!) == nv(graph)
     @assert length(edges!) == ne(graph)
 
     contains_delay = false
-
-
-    for e in edges!
-        # maybe add new abstract type instead of using a union
-        if isa(e, StaticDelayEdge) # eventually: Union{StaticDelayEdge, ODEDelayEdge})
-            contains_delay = true
-        end
-    end
-    for v in vertices!
-        # maybe add new abstract type instead of using a union
-        if isa(v, DDEVertex)
-            contains_delay = true
-        end
-    end
-    # If one Edge or Vertex needs access to the history function, all network components are promoted to hisotry aware version -> lots more variables that are potentially not used are passed around. the multilayer structure should (partially) work around that need.
-    if contains_delay
-        return network_dynamics(Array{DDEVertex}(vertices!),Array{StaticDelayEdge}(edges!), graph, parallel = parallel)
-    end
-
-
     contains_dyn_edge = false
 
-
     for e in edges!
+        if isa(e, StaticDelayEdge)
+            contains_delay = true
+        end
         if isa(e, ODEEdge)
             contains_dyn_edge = true
         end
     end
+    for v in vertices!
+        if isa(v, DDEVertex)
+            contains_delay = true
+        end
+    end
+
+    contains_delay && contains_dyn_edge ? error(
+        ArgumentError("ODEEdges with delay are not supported at the moment.")) : nothing
+
+    # If one Edge or Vertex needs access to the history function, all network components are promoted to hisotry aware version -> lots more variables that are potentially not used are passed around. the multilayer structure should (partially) work around that need.
+    if contains_delay
+        return network_dynamics(Array{DDEVertex}(vertices!),Array{StaticDelayEdge}(edges!), graph; kwargs...)
+    end
+
     # If one edge is an ODEEdge all other edges will be promoted. This should be
     # solved more elegantly by the upcoming multilayer structure.
+
     if contains_dyn_edge
-        return network_dynamics(Array{ODEVertex}(vertices!),Array{ODEEdge}(edges!), graph, parallel = parallel)
+        return network_dynamics(Array{ODEVertex}(vertices!),Array{ODEEdge}(edges!), graph; kwargs...)
     else
-        return network_dynamics(Array{ODEVertex}(vertices!),Array{StaticEdge}(edges!), graph, parallel = parallel)
+        return network_dynamics(Array{ODEVertex}(vertices!),Array{StaticEdge}(edges!), graph; kwargs...)
     end
     nothing
 end
