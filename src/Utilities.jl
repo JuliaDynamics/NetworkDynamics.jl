@@ -2,9 +2,20 @@ module Utilities
 
 using NLsolve
 using LinearAlgebra
+using SparseArrays
 
-export maybe_idx, p_v_idx, p_e_idx, @nd_threads
+export maybe_idx, p_v_idx, p_e_idx, @nd_threads, construct_mass_matrix, warn_parallel
 
+
+function warn_parallel(b::Bool)
+    if b
+        haskey(ENV, "JULIA_NUM_THREADS") &&
+        parse(Int, ENV["JULIA_NUM_THREADS"]) > 1 ? nothing :
+        print("Warning: You are using multi-threading with only one thread ",
+        "available to Julia. Consider re-starting Julia with the environment ",
+        "variable JULIA_NUM_THREADS set to the number of physical cores of your CPU.")
+    end
+end
 
 """
 nd_threads: Allows control over threading by the 1st argument,
@@ -130,17 +141,14 @@ end
 end
 
 
-export oriented_symmetric_edge_sum!
+export sum_coupling!
 
 """
 A small utility function for writing diffusion dynamics. It provides the
-oriented sum of all the incident edges.
+ sum of all incoming edges.
 """
-@inline function oriented_symmetric_edge_sum!(e_sum, e_s, e_d)
-    @inbounds for e in e_s
-        e_sum .-= e
-    end
-    @inbounds for e in e_d
+@inline function sum_coupling!(e_sum, in_edges)
+    @inbounds for e in in_edges
         e_sum .+= e
     end
     nothing
@@ -185,7 +193,7 @@ end
 
 function RootRhs(of)
     mm = of.mass_matrix
-    @assert mm != nothing
+    @assert mm !== nothing
     mpm = pinv(mm) * mm
     RootRhs(of.f, mpm)
 end
@@ -229,5 +237,63 @@ function idx_containing(nd, str)
     [i for (i, s) in enumerate(nd.syms) if occursin(string(str), string(s))]
 end
 
+
+function construct_mass_matrix(mmv_array, gs)
+    if all([mm == I for mm in mmv_array])
+        mass_matrix = I
+    else
+        mass_matrix = sparse(1.0I,gs.dim_v, gs.dim_v)
+        for (i, mm) in enumerate(mmv_array)
+            ind = gs.v_idx[i]
+            if ndims(mm) == 0
+                copyto!(@view(mass_matrix[ind, ind]), mm*I)
+            elseif ndims(mm) == 1
+                copyto!(@view(mass_matrix[ind, ind]), Diagonal(mm))
+            elseif ndims(mm) == 2 # ndims(I) = 2
+                # `I` does not support broadcasting but copyto! combined with views
+                copyto!(@view(mass_matrix[ind, ind]), mm)
+            else
+                error("The mass matrix needs to be interpretable as a 2D matrix.")
+            end
+        end
+    end
+    mass_matrix
+end
+
+function construct_mass_matrix(mmv_array, mme_array, gs)
+    if all([mm == I for mm in mmv_array]) && all([mm == I for mm in mme_array])
+        mass_matrix = I
+    else
+        dim_nd = gs.dim_v + gs.dim_e
+        mass_matrix = sparse(1.0I,dim_nd,dim_nd)
+        for (i, mm) in enumerate(mmv_array)
+            ind = gs.v_idx[i]
+            if ndims(mm) == 0
+                copyto!(@view(mass_matrix[ind, ind]), mm*I)
+            elseif ndims(mm) == 1
+                copyto!(@view(mass_matrix[ind, ind]), Diagonal(mm))
+            elseif ndims(mm) == 2 # ndims(I) = 2
+                # `I` does not support broadcasting but copyto!
+                copyto!(@view(mass_matrix[ind, ind]), mm)
+            else
+                error("The mass matrix needs to be interpretable as a 2D matrix.")
+            end
+        end
+        for (i, mm) in enumerate(mme_array)
+            ind = gs.dim_v .+ (gs.e_idx[i])
+            if ndims(mm) == 0
+                copyto!(@view(mass_matrix[ind, ind]), mm*I)
+            elseif ndims(mm) == 1
+                copyto!(@view(mass_matrix[ind, ind]), Diagonal(mm))
+            elseif ndims(mm) == 2 # ndims(I) = 2
+                # `I` does not support broadcasting but copyto!
+                copyto!(@view(mass_matrix[ind, ind]), mm)
+            else
+                error("The mass matrix needs to be interpretable as a 2D matrix.")
+            end
+        end
+    end
+    mass_matrix
+end
 
 end #module

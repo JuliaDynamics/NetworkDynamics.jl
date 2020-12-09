@@ -10,14 +10,14 @@ module NetworkStructures
 
 using LightGraphs
 using LinearAlgebra
-using SparseArrays
+
 
 
 # We need rather complicated sets of indices into the arrays that hold the
 # vertex and the edge variables. We precompute everything we can and store it
 # in GraphStruct.
 
-export GraphStruct, GraphData, EdgeData, VertexData, construct_mass_matrix
+export GraphStruct, GraphData, EdgeData, VertexData
 
 const Idx = UnitRange{Int}
 
@@ -50,30 +50,39 @@ and d_e. These are arrays that hold the node that is the source/destination of
 the indexed edge. Thus ``e_i = (s_e[i], d_e[i])``
 """
 struct GraphStruct
+    #e_undirected::Array{Bool,1} # @assert that the dim % 2 == 0
+
     num_v::Int                                 # number of vertices
     num_e::Int                                 # number of edges
+
     v_dims::Array{Int, 1}                      # dimensions per vertex
     e_dims::Array{Int, 1}                      # dimensions per edge
+
     v_syms::Array{Symbol, 1}                   # symbol per vertex
     e_syms::Array{Symbol, 1}                   # symbol per edge
+
     dim_v::Int                                 # total vertex dimensions
     dim_e::Int                                 # total edge dimensions
+
     s_e::Array{Int, 1}                         # src-vertex idx per edge
     d_e::Array{Int, 1}                         # dst-vertex idx per edge
+
+    s_v::Array{Array{Int,1}}                   # indices of source edges per vertex
+    d_v::Array{Array{Int,1}}                   # indices of destination edges per vertex
+
     v_offs::Array{Int, 1}                      # linear offset per vertex
     e_offs::Array{Int, 1}                      # linear offset per edge
+
     v_idx::Array{Idx, 1}                       # lin. idx-range per vertex
     e_idx::Array{Idx, 1}                       # lin. idx-range per edge
+
     s_e_offs::Array{Int, 1}                    # offset of src-vertex per edge
     d_e_offs::Array{Int, 1}                    # offset of dst-vertex per edge
+
     s_e_idx::Array{Idx, 1}                     # idx-range of src-vertex per edge
     d_e_idx::Array{Idx, 1}                     # idx-range of dst-vertex per edge
-    # for each vertex there is an array of tuples for all of the outgoing edges
-    # for each outgoing edge the tuple contains offset and dim
-    e_s_v_dat::Array{Array{Tuple{Int,Int}, 1}}
-    # for each vertex there is an array of tuples for all of the incomming edges
-    # for each outgoing edge the tuple contains offset and dim
-    e_d_v_dat::Array{Array{Tuple{Int,Int}, 1}}
+
+    in_edges_dat::Vector{Vector{Tuple{Int,Int}}}
 end
 function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
     num_v = nv(g)
@@ -81,6 +90,9 @@ function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
 
     s_e = [src(e) for e in edges(g)]
     d_e = [dst(e) for e in edges(g)]
+
+    s_v = [findall(isequal(i), src.(edges(g))) for i = 1:nv(g)]
+    d_v = [findall(isequal(i), dst.(edges(g))) for i = 1:nv(g)]
 
     v_offs = create_offsets(v_dims)
     e_offs = create_offsets(e_dims)
@@ -94,8 +106,29 @@ function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
     s_e_idx = [v_idx[s_e[i_e]] for i_e in 1:num_e]
     d_e_idx = [v_idx[d_e[i_e]] for i_e in 1:num_e]
 
-    e_s_v_dat = [[(offset, dim) for (i_e, (offset, dim)) in enumerate(zip(e_offs, e_dims)) if i_v == s_e[i_e]] for i_v in 1:num_v]
-    e_d_v_dat = [[(offset, dim) for (i_e, (offset, dim)) in enumerate(zip(e_offs, e_dims)) if i_v == d_e[i_e]] for i_v in 1:num_v]
+    in_edges_dat = Vector{Vector{Tuple{Int,Int}}}(undef, nv(g))
+
+    for i_v in 1:nv(g)
+        offsdim_arr = Tuple{Int,Int}[]
+        for i_e in d_v[i_v]
+            # assert that dims is a multiple of 2 for SimpleGraph
+            if typeof(g) <: SimpleGraph
+                push!(offsdim_arr, (e_offs[i_e], e_dims[i_e] / 2))
+            else
+                push!(offsdim_arr, (e_offs[i_e], e_dims[i_e]))
+            end
+        end
+        for i_e in s_v[i_v]
+            if typeof(g) <: SimpleGraph
+                push!(offsdim_arr, (e_offs[i_e] +  e_dims[i_e] / 2, e_dims[i_e] / 2))
+            # for undirected graphs we remove the fiducial orientation by piping both ors.
+            # into in_edges, for directed graphs we take only src->dst
+            # else
+            #     push!(offsdim_arr, (e_offs[i_e], e_dims[i_e]))
+            end
+        end
+        in_edges_dat[i_v] = offsdim_arr
+    end
 
     GraphStruct(
     num_v,
@@ -108,6 +141,8 @@ function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
     sum(e_dims),
     s_e,
     d_e,
+    s_v,
+    d_v,
     v_offs,
     e_offs,
     v_idx,
@@ -116,8 +151,7 @@ function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
     d_e_offs,
     s_e_idx,
     d_e_idx,
-    e_s_v_dat,
-    e_d_v_dat)
+    in_edges_dat)
 end
 
 # In order to access the data in the arrays efficiently we create views that
@@ -243,8 +277,7 @@ struct GraphData{GDB, elV, elE}
     e::Array{EdgeData{GDB, elE}, 1}
     v_s_e::Array{VertexData{GDB, elV}, 1} # the vertex that is the source of e
     v_d_e::Array{VertexData{GDB, elV}, 1} # the vertex that is the destination of e
-    e_s_v::Array{Array{EdgeData{GDB, elE}, 1}, 1} # the edges that have v as source
-    e_d_v::Array{Array{EdgeData{GDB, elE}, 1}, 1} # the edges that have v as destination
+    in_edges::Array{Array{EdgeData{GDB, elE}, 1}, 1} # the half-edges that have v as destination
 end
 
 function GraphData(v_array::Tv, e_array::Te, gs::GraphStruct; global_offset = 0) where {Tv, Te}
@@ -256,9 +289,8 @@ function GraphData(v_array::Tv, e_array::Te, gs::GraphStruct; global_offset = 0)
     e = [EdgeData{GDB, elE}(gdb, offset + global_offset, dim) for (offset,dim) in zip(gs.e_offs, gs.e_dims)]
     v_s_e = [VertexData{GDB, elV}(gdb, offset + global_offset, dim) for (offset,dim) in zip(gs.s_e_offs, gs.v_dims[gs.s_e])]
     v_d_e = [VertexData{GDB, elV}(gdb, offset + global_offset, dim) for (offset,dim) in zip(gs.d_e_offs, gs.v_dims[gs.d_e])]
-    e_s_v = [[EdgeData{GDB, elE}(gdb, offset + global_offset, dim) for (offset,dim) in e_s_v] for e_s_v in gs.e_s_v_dat]
-    e_d_v = [[EdgeData{GDB, elE}(gdb, offset + global_offset, dim) for (offset,dim) in e_d_v] for e_d_v in gs.e_d_v_dat]
-    GraphData{GDB, elV, elE}(gdb, v, e, v_s_e, v_d_e, e_s_v, e_d_v)
+    in_edges = [[EdgeData{GDB, elE}(gdb, offset + global_offset, dim) for (offset,dim) in in_edge] for in_edge in gs.in_edges_dat]
+    GraphData{GDB, elV, elE}(gdb, v, e, v_s_e, v_d_e, in_edges)
 end
 
 # function GraphData(v_array, e_array, gs)
@@ -351,72 +383,15 @@ Returns a view-like access to the underlying data of destination vertex of the i
 
 Returns an Vector of view-like accesses to all the outgoing edges of the i-th vertex.
 """
-@inline get_out_edges(gd::GraphData, i::Int) = gd.e_s_v[i]
+@inline get_out_edges(gd::GraphData, i::Int) = error("not implemented")
 
 """
     get_in_edges(gd::GraphData, i::Int)
 
 Returns an Vector of view-like accesses to all the incoming edges of the i-th vertex.
 """
-@inline get_in_edges(gd::GraphData, i) = gd.e_d_v[i]
+@inline get_in_edges(gd::GraphData, i) = gd.in_edges[i]
 
-function construct_mass_matrix(mmv_array, gs)
-    if all([mm == I for mm in mmv_array])
-        mass_matrix = I
-    else
-        mass_matrix = sparse(1.0I,gs.dim_v, gs.dim_v)
-        for (i, mm) in enumerate(mmv_array)
-            ind = gs.v_idx[i]
-            if ndims(mm) == 0
-                copyto!(@view(mass_matrix[ind, ind]), mm*I)
-            elseif ndims(mm) == 1
-                copyto!(@view(mass_matrix[ind, ind]), Diagonal(mm))
-            elseif ndims(mm) == 2 # ndims(I) = 2
-                # `I` does not support broadcasting but copyto! combined with views
-                copyto!(@view(mass_matrix[ind, ind]), mm)
-            else
-                error("The mass matrix needs to be interpretable as a 2D matrix.")
-            end
-        end
-    end
-    mass_matrix
-end
-
-function construct_mass_matrix(mmv_array, mme_array, gs)
-    if all([mm == I for mm in mmv_array]) && all([mm == I for mm in mme_array])
-        mass_matrix = I
-    else
-        dim_nd = gs.dim_v + gs.dim_e
-        mass_matrix = sparse(1.0I,dim_nd,dim_nd)
-        for (i, mm) in enumerate(mmv_array)
-            ind = gs.v_idx[i]
-            if ndims(mm) == 0
-                copyto!(@view(mass_matrix[ind, ind]), mm*I)
-            elseif ndims(mm) == 1
-                copyto!(@view(mass_matrix[ind, ind]), Diagonal(mm))
-            elseif ndims(mm) == 2 # ndims(I) = 2
-                # `I` does not support broadcasting but copyto!
-                copyto!(@view(mass_matrix[ind, ind]), mm)
-            else
-                error("The mass matrix needs to be interpretable as a 2D matrix.")
-            end
-        end
-        for (i, mm) in enumerate(mme_array)
-            ind = gs.dim_v .+ (gs.e_idx[i])
-            if ndims(mm) == 0
-                copyto!(@view(mass_matrix[ind, ind]), mm*I)
-            elseif ndims(mm) == 1
-                copyto!(@view(mass_matrix[ind, ind]), Diagonal(mm))
-            elseif ndims(mm) == 2 # ndims(I) = 2
-                # `I` does not support broadcasting but copyto!
-                copyto!(@view(mass_matrix[ind, ind]), mm)
-            else
-                error("The mass matrix needs to be interpretable as a 2D matrix.")
-            end
-        end
-    end
-    mass_matrix
-end
 
 
 #= These types are used to dispatch the network dynamics functions to provide

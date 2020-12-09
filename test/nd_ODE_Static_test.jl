@@ -4,17 +4,14 @@ using NetworkDynamics
 
 @testset "Test nd_ODE_Static Module" begin
     # create a simpe nd_ODE_Static model
-    @inline Base.@propagate_inbounds function diffusionedge!(e, v_s, v_d, p, t)
+    @inline function diffusionedge!(e, v_s, v_d, p, t)
         e[1] = v_s[1] - v_d[1]
         nothing
     end
 
-    @inline Base.@propagate_inbounds function diffusionvertex!(dv, v, e_s, e_d, p, t)
+    @inline function diffusionvertex!(dv, v, edges, p, t)
         dv[1] = 0.
-            for e in e_s
-                dv[1] -= e[1]
-            end
-        for e in e_d
+        for e in edges
             dv[1] += e[1]
         end
         nothing
@@ -39,7 +36,7 @@ using NetworkDynamics
     gd = nd(x, nothing, 0., GetGD)
     gs = nd(GetGS)
     # first test array of same type
-    a = similar(x)
+    a = rand(length(x))
     gd_ret = nd_ODE_Static_mod.prep_gd(dx, a, gd, gs)
     @test gd_ret === gd
     @test gd.gdb.v_array == a

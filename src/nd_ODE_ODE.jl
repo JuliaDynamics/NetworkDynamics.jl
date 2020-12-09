@@ -53,7 +53,6 @@ function (d::nd_ODE_ODE)(dx, x, p, t)
         maybe_idx(d.vertices!,i).f!(
             view(dx,d.graph_structure.v_idx[i]),
             get_vertex(gd, i),
-            get_out_edges(gd, i),
             get_in_edges(gd, i),
             p_v_idx(p, i),
             t)
