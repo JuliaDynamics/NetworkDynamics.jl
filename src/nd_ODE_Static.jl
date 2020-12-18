@@ -38,9 +38,14 @@ end
 
 
 function (d::nd_ODE_Static)(dx, x, p, t)
+    gs = d.graph_structure
+    checkbounds(Bool, dx, 1:gs.dim_v) ? nothing : error("dx has incorrect size.")
+    checkbounds(Bool, x, 1:gs.dim_v) ? nothing : error("x has incorrect size.")
+    checkbounds_p(p, gs.num_v, gs.num_e)
+
     gd = prep_gd(dx, x, d.graph_data, d.graph_structure)
 
-    @nd_threads d.parallel for i in 1:d.graph_structure.num_e
+    @nd_threads d.parallel for i in 1:gs.num_e
         maybe_idx(d.edges!, i).f!(
             get_edge(gd, i),
             get_src_vertex(gd, i),
@@ -49,9 +54,9 @@ function (d::nd_ODE_Static)(dx, x, p, t)
             t)
     end
 
-    @nd_threads d.parallel for i in 1:d.graph_structure.num_v
+    @nd_threads d.parallel for i in 1:gs.num_v
         maybe_idx(d.vertices!,i).f!(
-            view(dx,d.graph_structure.v_idx[i]),
+            view(dx,gs.v_idx[i]),
             get_vertex(gd, i),
             get_in_edges(gd, i),
             p_v_idx(p, i),
