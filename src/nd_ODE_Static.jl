@@ -69,7 +69,9 @@ end
 
 function (d::nd_ODE_Static)(x, p, t, ::Type{GetGD})
     gd = prep_gd(x, x, d.graph_data, d.graph_structure)
-
+    gs = d.graph_structure
+    checkbounds(Bool, x, 1:gs.dim_v) ? nothing : error("x has incorrect size.")
+    checkbounds_p(p, gs.num_v, gs.num_e)
 
     @nd_threads d.parallel for i in 1:d.graph_structure.num_e
         maybe_idx(d.edges!,i).f!(

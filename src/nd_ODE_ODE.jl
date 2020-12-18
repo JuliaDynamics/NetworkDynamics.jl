@@ -37,6 +37,13 @@ end
 end
 
 function (d::nd_ODE_ODE)(dx, x, p, t)
+    gs = d.graph_structure
+    checkbounds(Bool, dx, 1:(gs.dim_v + gs.dim_e)) ? nothing :
+                error("dx has incorrect size. Remember to specify initial conditions for the edge varibales as well.")
+    checkbounds(Bool, x, 1:(gs.dim_v + gs.dim_e)) ? nothing :
+                error("x has incorrect size. Remember to specify initial conditions for the edge varibales as well.")
+    checkbounds_p(p, gs.num_v, gs.num_e)
+
     gd = prep_gd(dx, x, d.graph_data, d.graph_structure)
 
     @nd_threads d.parallel for i in 1:d.graph_structure.num_e

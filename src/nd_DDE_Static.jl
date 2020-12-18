@@ -40,6 +40,11 @@ end
 
 
 function (d::nd_DDE_Static)(dx, x, h!, p, t)
+    gs = d.graph_structure
+    checkbounds(Bool, dx, 1:gs.dim_v) ? nothing : error("dx has incorrect size.")
+    checkbounds(Bool, x, 1:gs.dim_v) ? nothing : error("x has incorrect size.")
+    checkbounds_p(p, gs.num_v, gs.num_e)
+
     gd = prep_gd(dx, x, d.graph_data, d.graph_structure)
     h!(d.history, p, t - p[end])
 
