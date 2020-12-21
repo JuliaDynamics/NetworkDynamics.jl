@@ -5,6 +5,7 @@ using Test
     include("ComponentFunctions_test.jl")
     include("nd_ODE_Static_test.jl")
     include("nd_ODE_ODE_test.jl")
+    include("checkbounds_test.jl")
 
     # complex tests of networks
     include("diffusion_test.jl")
