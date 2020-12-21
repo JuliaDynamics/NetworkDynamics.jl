@@ -14,6 +14,7 @@ The signature of the edge functions is expected to be (de,e,v_s,v_d,p,t). =#
 # to be constructed, and the original array we want to construct a GD on top of.
 @inline function prep_gd(dx::AbstractArray{T}, x::AbstractArray{T}, gd::GraphData{GDB, T, T}, gs) where {GDB, T}
     # println("Type match")
+    # We don't need to check the size of x here since view() does that by default.
     swap_v_array!(gd, view(x, 1:gs.dim_v))
     swap_e_array!(gd, view(x, gs.dim_v+1:gs.dim_v+gs.dim_e))
     gd
@@ -38,13 +39,11 @@ end
 
 function (d::nd_ODE_ODE)(dx, x, p, t)
     gs = d.graph_structure
-    checkbounds(Bool, dx, 1:(gs.dim_v + gs.dim_e)) ? nothing :
-                error("dx has incorrect size. Remember to specify initial conditions for the edge varibales as well.")
-    checkbounds(Bool, x, 1:(gs.dim_v + gs.dim_e)) ? nothing :
-                error("x has incorrect size. Remember to specify initial conditions for the edge varibales as well.")
     checkbounds_p(p, gs.num_v, gs.num_e)
 
     gd = prep_gd(dx, x, d.graph_data, d.graph_structure)
+
+    @assert size(dx) == size(x) "Sizes of dx and x do not match"
 
     @nd_threads d.parallel for i in 1:d.graph_structure.num_e
         maybe_idx(d.edges!, i).f!(

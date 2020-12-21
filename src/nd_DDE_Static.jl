@@ -10,14 +10,22 @@ export nd_DDE_Static
 
 @inline function prep_gd(dx::AbstractArray{T}, x::AbstractArray{T}, gd::GraphData{GDB, T, T}, gs) where {GDB, T}
     # Type matching
-    swap_v_array!(gd, x)
-    gd
+    if size(x) == (gs.dim_v,)
+         swap_v_array!(gd, x)
+         return gd
+    else
+         error("Size of x does not match the dimension of the system.")
+    end
 end
 
 @inline function prep_gd(dx, x, gd, gs)
     # Type mismatch
-    e_array = similar(dx, gs.dim_e)
-    GraphData(x, e_array, gs)
+    if size(x) == (gs.dim_v,)
+        e_array = similar(dx, gs.dim_e)
+        return GraphData(x, e_array, gs)
+    else
+        error("Size of x does not match the dimension of the system.")
+   end
 end
 
 
@@ -41,8 +49,6 @@ end
 
 function (d::nd_DDE_Static)(dx, x, h!, p, t)
     gs = d.graph_structure
-    checkbounds(Bool, dx, 1:gs.dim_v) ? nothing : error("dx has incorrect size.")
-    checkbounds(Bool, x, 1:gs.dim_v) ? nothing : error("x has incorrect size.")
     checkbounds_p(p, gs.num_v, gs.num_e)
 
     gd = prep_gd(dx, x, d.graph_data, d.graph_structure)
@@ -55,6 +61,8 @@ function (d::nd_DDE_Static)(dx, x, h!, p, t)
             get_dst_vertex(gd, i),
             view(d.history, d.graph_structure.s_e_idx[i]), view(d.history, d.graph_structure.d_e_idx[i]), p_e_idx(p, i), t)
     end
+
+    @assert size(dx) == size(x) "Sizes of dx and x do not match"
 
     @nd_threads d.parallel for i in 1:d.graph_structure.num_v
         maybe_idx(d.vertices!,i).f!(
