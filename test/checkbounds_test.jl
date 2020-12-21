@@ -11,7 +11,7 @@ sde = StaticDelayEdge(se)
 oe = ODEEdge(se)
 
 
-nd_static! = network_dynamics(ov,se,g)
+nd! = network_dynamics(ov,se,g)
 
 
 dx0 = zeros(N)
