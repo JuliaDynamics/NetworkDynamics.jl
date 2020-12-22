@@ -27,9 +27,6 @@ swing_vertex = ODEVertex(f! = swing_eq!, dim = 2, sym=[:θ, :ω])
 
 function load_eq!(dv, v, edges, P, t)
     dv[1] = P
-    #for e in edges
-    #    dv .+= e
-    #end
     sum_coupling!(dv, edges)
     nothing
     #oriented_symmetric_edge_sum!(dv, e_s, e_d)
