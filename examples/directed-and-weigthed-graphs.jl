@@ -30,11 +30,13 @@ Fitz-Hugh Nagumo vertex with electrical gap junctions
 @inline Base.@propagate_inbounds function fhn_electrical_vertex!(dv, v, e_s, e_d, p, t)
     dv[1] = v[1] - v[1]^3 / 3 - v[2]
     dv[2] = (v[1] - a) * ϵ # x=(u,v)^T
-    for e in e_s
+    for e in edges
         dv[1] -= e[1]
-    end
-    for e in e_d
-        dv[1] += e[1]
+    #for e in e_s
+    #    dv[1] -= e[1]
+    #end
+    #for e in e_d
+    #    dv[1] += e[1]
     end
     nothing
 end

@@ -28,14 +28,15 @@ function (sv::SwingVertex)(dv, v, e_s, e_d, p, t)
     nothing
 end
 
-function flow_sum(e_s, e_d)
+function flow_sum(edges)
     sum = 0.0
-    for e in e_d
-        sum -= e[1]
-    end
-    for e in e_s
-        sum += e[1]
-    end
+    sum_coupling!(sum, edges)
+    #for e in e_d
+    #    sum -= e[1]
+    #end
+    #for e in e_s
+    #    sum += e[1]
+    #end
     return sum
 end
 
