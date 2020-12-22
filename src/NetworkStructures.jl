@@ -10,13 +10,6 @@ module NetworkStructures
 
 using LightGraphs
 using LinearAlgebra
-
-
-
-# We need rather complicated sets of indices into the arrays that hold the
-# vertex and the edge variables. We precompute everything we can and store it
-# in GraphStruct.
-
 export GraphStruct, GraphData, EdgeData, VertexData
 
 const Idx = UnitRange{Int}
@@ -50,7 +43,6 @@ and d_e. These are arrays that hold the node that is the source/destination of
 the indexed edge. Thus ``e_i = (s_e[i], d_e[i])``
 """
 struct GraphStruct
-    #e_undirected::Array{Bool,1} # @assert that the dim % 2 == 0
 
     num_v::Int                                 # number of vertices
     num_e::Int                                 # number of edges
@@ -121,10 +113,6 @@ function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
         for i_e in s_v[i_v]
             if typeof(g) <: SimpleGraph
                 push!(offsdim_arr, (e_offs[i_e] +  e_dims[i_e] / 2, e_dims[i_e] / 2))
-            # for undirected graphs we remove the fiducial orientation by piping both ors.
-            # into in_edges, for directed graphs we take only src->dst
-            # else
-            #     push!(offsdim_arr, (e_offs[i_e], e_dims[i_e]))
             end
         end
         in_edges_dat[i_v] = offsdim_arr
@@ -154,8 +142,6 @@ function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
     in_edges_dat)
 end
 
-# In order to access the data in the arrays efficiently we create views that
-# allow us to efficiently index into the underlying arrays.
 
 import Base.getindex, Base.setindex!, Base.length, Base.IndexStyle, Base.size, Base.eltype, Base.dataids
 
@@ -235,15 +221,6 @@ Base.IndexStyle(::Type{<:VertexData}) = IndexLinear()
 
 @inline Base.dataids(v_dat::VertexData) = dataids(v_dat.gdb.v_array)
 
-# Putting the above together we create a GraphData object:
-
-# An alternative design that needs to be evaluated for performance is to create
-# only one array of VertexData and EdgeData and index into that, possibly with a
-# new set of access types...
-
-# We require potentially different data types for vertices and edges because
-# there are situations with autodifferentiation that require one of them to be
-# dual and the other not.
 
 """
     mutable struct GraphDataBuffer{Tv, Te}
@@ -293,9 +270,6 @@ function GraphData(v_array::Tv, e_array::Te, gs::GraphStruct; global_offset = 0)
     GraphData{GDB, elV, elE}(gdb, v, e, v_s_e, v_d_e, in_edges)
 end
 
-# function GraphData(v_array, e_array, gs)
-#     GraphData{typeof(v_array), typeof(e_array)}(v_array, e_array, gs)
-# end
 
 #= In order to manipulate initial conditions using this view of the underlying
 array we provide view functions that give access to the arrays. =#
@@ -394,15 +368,17 @@ Returns an Vector of view-like accesses to all the incoming edges of the i-th ve
 
 
 
-#= These types are used to dispatch the network dynamics functions to provide
-access to the underlying GraphData and GraphStruct objects. =#
-export GetGD
 
+export GetGD
+export GetGS
+
+"""This type is used to dispatch the network dynamics functions to provide
+access to the underlying GraphData object."""
 struct GetGD
 end
 
-export GetGS
-
+"""This type is used to dispatch the network dynamics functions to provide
+access to the underlying GraphStruct object."""
 struct GetGS
 end
 
