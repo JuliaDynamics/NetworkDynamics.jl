@@ -18,14 +18,15 @@ function diffusionedge!(e, v_s, v_d, p, t)
     nothing
 end
 
-function diffusionvertex!(dv, v, e_s, e_d, h_v, p, t)
+function diffusionvertex!(dv, v, edges, h_v, p, t)
     dv .= -h_v
-    for e in e_s
-        dv .-= e
-    end
-    for e in e_d
-        dv .+= e
-    end
+    sum_coupling!(dv, edges)
+    #for e in e_s
+    #    dv .-= e
+    #end
+    #for e in e_d
+    #    dv .+= e
+    #end
     nothing
 end
 
@@ -96,19 +97,23 @@ function kuramoto_delay_edge!(e, v_s, v_d, h_v_s, h_v_d, p, t)
     nothing
 end
 
-function kuramoto_vertex!(dv, v, e_s, e_d, p, t)
+function kuramoto_vertex!(dv, v, edges, p, t)
     dv[1] = p
-    for e in e_s
-        dv[1] -= e[1]
+    #sum_coupling!(dv, edges)
+    for e in edges
+        dv .+= e
     end
-    for e in e_d
-        dv[1] -= e[2]
-    end
+    #for e in e_s
+    #    dv[1] -= e[1]
+    #end
+    #for e in e_d
+    #    dv[1] -= e[2]
+    #end
     nothing
 end
 
 # dim of the edge is 2 since the coupling is not symmetric
-kdedge! = StaticDelayEdge(f! = kuramoto_delay_edge!, dim=2)
+kdedge! = StaticDelayEdge(f! = kuramoto_delay_edge!, dim=2, coupling = :fiducial)
 kdvertex! = ODEVertex(f! = kuramoto_vertex!, dim = 1)
 
 nd! = network_dynamics(kdvertex!, kdedge!, g)
@@ -132,7 +137,7 @@ plot(sol, vars = syms_containing(nd, "v"), legend=false)
 ## Add in a static Vertex
 
 
-svertex! = StaticVertex(f! = (x, e_s, e_d, p ,t) -> x .= 1, dim=1)
+svertex! = StaticVertex(f! = (x, edges, p ,t) -> x .= 1, dim=1)
 
 # convert to list of VertexFunctions, that may contain different types of vertices
 vlist = Array{VertexFunction}([ kdvertex! for i in 1:nv(g)])
