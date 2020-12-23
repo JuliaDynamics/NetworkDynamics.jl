@@ -43,13 +43,10 @@ Here, $dW_i = \xi_i dt$ is the infinitesimal increment of the Wiener process. Pr
 First we will implement the node and edge functions for the deterministic case without the fluctuations. We assume the inertia and damping parameters to be $M_i = 1.0$ and $D_i = 0.1$.
 
 ```@example SDEVertex
-function swing_equation!(dv, v, e_s, e_d, P, t)
+function swing_equation!(dv, v, edges, P, t)
     dv[1] = v[2]
     dv[2] = P - 0.1 * v[2]
-    for e in e_s
-        dv[2] -= e[1]
-    end
-    for e in e_d
+    for e in edges
         dv[2] += e[1]
     end
 end
@@ -119,7 +116,7 @@ nothing # hide
 The dynamics at the nodes has to have the same dimension as in the deterministic case. In our example we only have fluctuations in the second variable.
 
 ```@example SDEVertex
-function fluctuation!(dx, x, e_s, e_d, p, t)
+function fluctuation!(dx, x, edges, p, t)
     dx[1] = 0.0
     dx[2] = 0.05
 end
