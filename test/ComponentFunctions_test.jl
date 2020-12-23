@@ -161,31 +161,26 @@ end
         nothing
     end
 
-    @inline function diffusion_vertex!(dv, v, e_s, e_d, p, t)
+    @inline function diffusion_vertex!(dv, v, edges, p, t)
         dv .= 0.
-        oriented_symmetric_edge_sum!(dv, e_s, e_d) # Oriented sum of the incoming and outgoing edges
+        sum_coupling!(dv, edges) # Oriented sum of the incoming and outgoing edges
         nothing
     end
 
-    @inline function diff_stat_vertex!(v, e_s, e_d, p, t)
+    @inline function diff_stat_vertex!(v, edges, p, t)
         v .= 0.
         nothing
     end
 
     @inline function kuramoto_delay_edge!(e, v_s, v_d, h_v_s, h_v_d, p, t)
-        # The coupling is no longer symmetric, so we need to store BOTH values (see tutorials for details)
         e[1] = p * sin(v_s[1] - h_v_d[1])
-        e[2] = p * sin(h_v_s[1] - v_d[1])
         nothing
     end
 
-    @inline function kuramoto_delay_vertex!(dv, v, e_s, e_d, h_v, p, t)
+    @inline function kuramoto_delay_vertex!(dv, v, edges, h_v, p, t)
         dv[1] = p
-        for e in e_s
+        for e in edges
             dv[1] -= e[1]
-        end
-        for e in e_d
-            dv[1] -= e[2]
         end
         nothing
     end
