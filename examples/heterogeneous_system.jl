@@ -11,7 +11,6 @@
 
 using NetworkDynamics, OrdinaryDiffEq, Plots, LightGraphs
 
-
 N = 8
 g = watts_strogatz(N,2,0) # ring network
 
@@ -123,7 +122,8 @@ end
 M = zeros(2,2)
 M[1,1] = 1
 
-nd_edgeA! = ODEEdge(f! = edgeA!, dim = 2, coupling=:fiducial, mass_matrix = M);
+nd_edgeA! = ODEEdge(f! = edgeA!, dim = 2, coupling=:undirected, mass_matrix = M);
+
 
 # This handles the second equations as `0 = M[2,2] * de[2] = g(e, v_s, v_d, p, t) - e[2]`.
 #
