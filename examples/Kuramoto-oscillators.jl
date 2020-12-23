@@ -11,10 +11,10 @@ g = barabasi_albert(N, k) # graph
 
 ### Network dynamics vertex and edge functions
 
-@inline function kuramoto_vertex!(dv, v, e_s, e_d, p, t)
+@inline function kuramoto_vertex!(dv, v, edges, p, t)
     # usually dv, v, e_s, e_d are arrays, hence we use the broadcasting operator .
     dv .= p
-    oriented_symmetric_edge_sum!(dv, e_s, e_d)
+    sum_coupling!(dv, edges)
     nothing
 end
 
