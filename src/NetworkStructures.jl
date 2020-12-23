@@ -1,4 +1,4 @@
-src_edges"""
+"""
     This module contains the logic that calculate the index structures
     and data access structs that Network Dynamics makes use of.
 

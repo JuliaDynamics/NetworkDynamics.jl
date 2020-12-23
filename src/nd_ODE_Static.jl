@@ -111,7 +111,7 @@ function (sef::StaticEdgeFunction)(x, p, t)
     # Allocating but non-breaking. No special knowlage about the fields of
     # GraphData needed anymore. Is there a real need for this in PD.jl?
     num_v = sef.nd_ODE_Static(GetGS).num_v
-    ([get_out_edges(gd, i) for i in 1:num_v],
+    ([get_src_edges(gd, i) for i in 1:num_v],
      [get_dst_edges(gd, i) for i in 1:num_v])
 end
 
