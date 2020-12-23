@@ -4,7 +4,7 @@ using NLsolve
 using LinearAlgebra
 using SparseArrays
 
-export maybe_idx, p_v_idx, p_e_idx, @nd_threads, construct_mass_matrix, warn_parallel
+export maybe_idx, p_v_idx, p_e_idx, @nd_threads, construct_mass_matrix, warn_parallel, checkbounds_p
 
 
 function warn_parallel(b::Bool)
@@ -141,14 +141,30 @@ end
 end
 
 
+@inline function checkbounds_p(p, nv, ne)
+    nothing
+end
+
+@inline function checkbounds_p(p::T, nv, ne) where T <: Tuple
+    if p[1] isa AbstractArray
+        size(p[1])[end] == nv ? nothing : error("Error: The size of the parameter array does not match the number of nodes. Make sure the correct number of parameters is given when using the tuple syntax.")
+    end
+    if p[2] isa AbstractArray
+        size(p[2])[end] == ne ? nothing : error("Error: The size of the parameter array does not match the number of edges. Make sure the correct number of parameters is given when using the tuple syntax.")
+    end
+    nothing
+end
+
+
+
 export sum_coupling!
 
 """
 A small utility function for writing diffusion dynamics. It provides the
  sum of all incoming edges.
 """
-@inline function sum_coupling!(e_sum, in_edges)
-    @inbounds for e in in_edges
+@inline function sum_coupling!(e_sum, dst_edges)
+    @inbounds for e in dst_edges
         e_sum .+= e
     end
     nothing

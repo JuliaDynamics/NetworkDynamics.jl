@@ -10,13 +10,6 @@ module NetworkStructures
 
 using LightGraphs
 using LinearAlgebra
-
-
-
-# We need rather complicated sets of indices into the arrays that hold the
-# vertex and the edge variables. We precompute everything we can and store it
-# in GraphStruct.
-
 export GraphStruct, GraphData, EdgeData, VertexData
 
 const Idx = UnitRange{Int}
@@ -50,7 +43,6 @@ and d_e. These are arrays that hold the node that is the source/destination of
 the indexed edge. Thus ``e_i = (s_e[i], d_e[i])``
 """
 struct GraphStruct
-    #e_undirected::Array{Bool,1} # @assert that the dim % 2 == 0
 
     num_v::Int                                 # number of vertices
     num_e::Int                                 # number of edges
@@ -82,7 +74,7 @@ struct GraphStruct
     s_e_idx::Array{Idx, 1}                     # idx-range of src-vertex per edge
     d_e_idx::Array{Idx, 1}                     # idx-range of dst-vertex per edge
 
-    in_edges_dat::Vector{Vector{Tuple{Int,Int}}}
+    dst_edges_dat::Vector{Vector{Tuple{Int,Int}}}
 end
 function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
     num_v = nv(g)
@@ -106,28 +98,24 @@ function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
     s_e_idx = [v_idx[s_e[i_e]] for i_e in 1:num_e]
     d_e_idx = [v_idx[d_e[i_e]] for i_e in 1:num_e]
 
-    in_edges_dat = Vector{Vector{Tuple{Int,Int}}}(undef, nv(g))
+    dst_edges_dat = Vector{Vector{Tuple{Int,Int}}}(undef, nv(g))
 
     for i_v in 1:nv(g)
         offsdim_arr = Tuple{Int,Int}[]
         for i_e in d_v[i_v]
-            # assert that dims is a multiple of 2 for SimpleGraph
-            if typeof(g) <: SimpleGraph
+            # dims is a multiple of 2 for SimpleGraph by design of VertexFunction
+            if !is_directed(g)
                 push!(offsdim_arr, (e_offs[i_e], e_dims[i_e] / 2))
             else
                 push!(offsdim_arr, (e_offs[i_e], e_dims[i_e]))
             end
         end
         for i_e in s_v[i_v]
-            if typeof(g) <: SimpleGraph
+            if !is_directed(g)
                 push!(offsdim_arr, (e_offs[i_e] +  e_dims[i_e] / 2, e_dims[i_e] / 2))
-            # for undirected graphs we remove the fiducial orientation by piping both ors.
-            # into in_edges, for directed graphs we take only src->dst
-            # else
-            #     push!(offsdim_arr, (e_offs[i_e], e_dims[i_e]))
             end
         end
-        in_edges_dat[i_v] = offsdim_arr
+        dst_edges_dat[i_v] = offsdim_arr
     end
 
     GraphStruct(
@@ -151,11 +139,9 @@ function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
     d_e_offs,
     s_e_idx,
     d_e_idx,
-    in_edges_dat)
+    dst_edges_dat)
 end
 
-# In order to access the data in the arrays efficiently we create views that
-# allow us to efficiently index into the underlying arrays.
 
 import Base.getindex, Base.setindex!, Base.length, Base.IndexStyle, Base.size, Base.eltype, Base.dataids
 
@@ -235,15 +221,6 @@ Base.IndexStyle(::Type{<:VertexData}) = IndexLinear()
 
 @inline Base.dataids(v_dat::VertexData) = dataids(v_dat.gdb.v_array)
 
-# Putting the above together we create a GraphData object:
-
-# An alternative design that needs to be evaluated for performance is to create
-# only one array of VertexData and EdgeData and index into that, possibly with a
-# new set of access types...
-
-# We require potentially different data types for vertices and edges because
-# there are situations with autodifferentiation that require one of them to be
-# dual and the other not.
 
 """
     mutable struct GraphDataBuffer{Tv, Te}
@@ -268,7 +245,7 @@ methods.
 The data for specific edges/vertices can be accessed using the
     get_vertex, get_edge
     get_src_vertex, get_dst_vertex
-    get_out_edges, get_in_edges
+    get_src_edges, get_dst_edges
 methods.
 """
 struct GraphData{GDB, elV, elE}
@@ -277,7 +254,7 @@ struct GraphData{GDB, elV, elE}
     e::Array{EdgeData{GDB, elE}, 1}
     v_s_e::Array{VertexData{GDB, elV}, 1} # the vertex that is the source of e
     v_d_e::Array{VertexData{GDB, elV}, 1} # the vertex that is the destination of e
-    in_edges::Array{Array{EdgeData{GDB, elE}, 1}, 1} # the half-edges that have v as destination
+    dst_edges::Array{Array{EdgeData{GDB, elE}, 1}, 1} # the half-edges that have v as destination
 end
 
 function GraphData(v_array::Tv, e_array::Te, gs::GraphStruct; global_offset = 0) where {Tv, Te}
@@ -289,13 +266,10 @@ function GraphData(v_array::Tv, e_array::Te, gs::GraphStruct; global_offset = 0)
     e = [EdgeData{GDB, elE}(gdb, offset + global_offset, dim) for (offset,dim) in zip(gs.e_offs, gs.e_dims)]
     v_s_e = [VertexData{GDB, elV}(gdb, offset + global_offset, dim) for (offset,dim) in zip(gs.s_e_offs, gs.v_dims[gs.s_e])]
     v_d_e = [VertexData{GDB, elV}(gdb, offset + global_offset, dim) for (offset,dim) in zip(gs.d_e_offs, gs.v_dims[gs.d_e])]
-    in_edges = [[EdgeData{GDB, elE}(gdb, offset + global_offset, dim) for (offset,dim) in in_edge] for in_edge in gs.in_edges_dat]
-    GraphData{GDB, elV, elE}(gdb, v, e, v_s_e, v_d_e, in_edges)
+    dst_edges = [[EdgeData{GDB, elE}(gdb, offset + global_offset, dim) for (offset,dim) in in_edge] for in_edge in gs.dst_edges_dat]
+    GraphData{GDB, elV, elE}(gdb, v, e, v_s_e, v_d_e, dst_edges)
 end
 
-# function GraphData(v_array, e_array, gs)
-#     GraphData{typeof(v_array), typeof(e_array)}(v_array, e_array, gs)
-# end
 
 #= In order to manipulate initial conditions using this view of the underlying
 array we provide view functions that give access to the arrays. =#
@@ -348,7 +322,7 @@ Swaps the underlying edge data array of an GraphData type with a new one.
     gd.gdb.e_array = array
 end
 
-export get_vertex, get_edge, get_src_vertex, get_dst_vertex, get_out_edges, get_in_edges
+export get_vertex, get_edge, get_src_vertex, get_dst_vertex, get_src_edges, get_dst_edges
 
 """
     get_vertex(gd::GraphData, idx::Int) -> View
@@ -379,30 +353,32 @@ Returns a view-like access to the underlying data of destination vertex of the i
 @inline get_dst_vertex(gd::GraphData, i::Int) = gd.v_d_e[i]
 
 """
-    get_out_edges(gd::GraphData, i::Int)
+    get_src_edges(gd::GraphData, i::Int)
 
-Returns an Vector of view-like accesses to all the outgoing edges of the i-th vertex.
+Returns a Vector of view-like accesses to all the (half-)edges that have the i-th vertex as source (for directed graphs these are the out-edges).
 """
-@inline get_out_edges(gd::GraphData, i::Int) = error("not implemented")
+@inline get_src_edges(gd::GraphData, i::Int) = error("Not implemented.")
 
 """
-    get_in_edges(gd::GraphData, i::Int)
+    get_dst_edges(gd::GraphData, i::Int)
 
-Returns an Vector of view-like accesses to all the incoming edges of the i-th vertex.
+Returns a Vector of view-like accesses to all the (half-)edges that have the i-th vertex as destination (for directed graphs these are the in-edges).
 """
-@inline get_in_edges(gd::GraphData, i) = gd.in_edges[i]
+@inline get_dst_edges(gd::GraphData, i) = gd.dst_edges[i]
 
 
 
-#= These types are used to dispatch the network dynamics functions to provide
-access to the underlying GraphData and GraphStruct objects. =#
+
 export GetGD
+export GetGS
 
+"""This type is used to dispatch the network dynamics functions to provide
+access to the underlying GraphData object."""
 struct GetGD
 end
 
-export GetGS
-
+"""This type is used to dispatch the network dynamics functions to provide
+access to the underlying GraphStruct object."""
 struct GetGS
 end
 
