@@ -50,7 +50,7 @@ nothing # hide
 
 Just like above the input arguments `v, edges, p, t` are mandatory for the syntax of vertex functions. The additional input `dv` corresponding to the derivative of the vertex' state is mandatory for vertices described by ordinary differential equations.
 
-Since in NetworkDynamcics.jl only incoming edges are considered for undirected graphs, the contributions of the connected edges are added to the destination of each edge, as defined in the `diffusionvertex!` function in the for loop.
+For undirected graphs, the `edgefunction!` specifies the coupling from a source- to a destination vertex. The contributions of the connected edges are added to the destination of each edge, as defined in the `diffusionvertex!` function in the for loop.
 
 ## Constructing the network
 
