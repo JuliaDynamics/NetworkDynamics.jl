@@ -11,8 +11,14 @@ export StaticEdgeFunction
 
 # If the type of dx and x match, we swap out v_array for x
 @inline function prep_gd(dx::AbstractArray{T}, x::AbstractArray{T}, gd::GraphData{GDB, T, T}, gs) where {GDB, T}
-    swap_v_array!(gd, x)
-    gd
+    # We construct views into an Array of size dim_v, so when we swap the
+    # underlying Array it has to have to same size
+    if size(x) == (gs.dim_v,)
+         swap_v_array!(gd, x)
+         return gd
+    else
+         error("Size of x does not match the dimension of the system.")
+    end
 end
 
 # If the type of dx and x do not match, we swap initialize a new GraphData object
@@ -21,8 +27,12 @@ end
 # but dx will be, leading to errors otherwise
 @inline function prep_gd(dx, x, gd, gs)
     # Type mismatch
-    e_array = similar(dx, gs.dim_e)
-    GraphData(x, e_array, gs)
+    if size(x) == (gs.dim_v,)
+        e_array = similar(dx, gs.dim_e)
+        return GraphData(x, e_array, gs)
+    else
+        error("Size of x does not match the dimension of the system.")
+   end
 end
 
 
@@ -38,9 +48,11 @@ end
 
 
 function (d::nd_ODE_Static)(dx, x, p, t)
+    gs = d.graph_structure
+    checkbounds_p(p, gs.num_v, gs.num_e)
     gd = prep_gd(dx, x, d.graph_data, d.graph_structure)
 
-    @nd_threads d.parallel for i in 1:d.graph_structure.num_e
+    @nd_threads d.parallel for i in 1:gs.num_e
         maybe_idx(d.edges!, i).f!(
             get_edge(gd, i),
             get_src_vertex(gd, i),
@@ -49,11 +61,13 @@ function (d::nd_ODE_Static)(dx, x, p, t)
             t)
     end
 
-    @nd_threads d.parallel for i in 1:d.graph_structure.num_v
+    @assert size(dx) == size(x) "Sizes of dx and x do not match"
+
+    @nd_threads d.parallel for i in 1:gs.num_v
         maybe_idx(d.vertices!,i).f!(
-            view(dx,d.graph_structure.v_idx[i]),
+            view(dx,gs.v_idx[i]),
             get_vertex(gd, i),
-            get_in_edges(gd, i),
+            get_dst_edges(gd, i),
             p_v_idx(p, i),
             t)
     end
@@ -64,7 +78,8 @@ end
 
 function (d::nd_ODE_Static)(x, p, t, ::Type{GetGD})
     gd = prep_gd(x, x, d.graph_data, d.graph_structure)
-
+    gs = d.graph_structure
+    checkbounds_p(p, gs.num_v, gs.num_e)
 
     @nd_threads d.parallel for i in 1:d.graph_structure.num_e
         maybe_idx(d.edges!,i).f!(
@@ -96,8 +111,8 @@ function (sef::StaticEdgeFunction)(x, p, t)
     # Allocating but non-breaking. No special knowlage about the fields of
     # GraphData needed anymore. Is there a real need for this in PD.jl?
     num_v = sef.nd_ODE_Static(GetGS).num_v
-    ([get_out_edges(gd, i) for i in 1:num_v],
-     [get_in_edges(gd, i) for i in 1:num_v])
+    ([get_src_edges(gd, i) for i in 1:num_v],
+     [get_dst_edges(gd, i) for i in 1:num_v])
 end
 
 end #module

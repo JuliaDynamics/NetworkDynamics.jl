@@ -90,19 +90,16 @@ println("Building Static Network Dynamics with artifical ODE Edges...")
 # This promotes the static edges to dynamic edges, the resulting ODEFunction
 # has a mass matrix that enforces the edge equations.
 
-
-
 @testset "Promotion rules for static edges" begin
     @test_throws ErrorException odeedge = ODEEdge(staticedge) # We promote the static edge to an ODEEdge artifically
 
     @inline function promotable_diffusion_edge!(e,v_s,v_d,p,t)
         e[1] = v_s[1] - v_d[1]
-        e[2] = v_d[1] - v_s[1]
         nothing
     end
 
     promotable_staticedge = StaticEdge(f! = promotable_diffusion_edge!,
-                                       dim = 2, coupling = :fiducial)
+                                       dim = 1, coupling = :undirected)
     odeedge = ODEEdge(promotable_staticedge)
 
     ode_edge_list = [odeedge for e in edges(g)]
@@ -129,7 +126,8 @@ diff_network_ode = network_dynamics(vertex_list,ode_edge_list,g)
 x0_ode = find_valid_ic(diff_network_ode, randn(nv(g) + 2*ne(g)))
 dx0_ode = similar(x0_ode)
 
-@allocated diff_network_ode(dx0_ode, x0_ode, nothing, 0.)
+diff_network_ode(dx0_ode, x0_ode, nothing, 0.)
+@test @allocated(diff_network_ode(dx0_ode, x0_ode, nothing, 0.)) == 0
 
 prob_L = ODEProblem(diff_network_L,x0_ode[1:N],(0.,5.))
 

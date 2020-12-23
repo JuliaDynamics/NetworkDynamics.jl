@@ -255,6 +255,14 @@ function network_dynamics(vertices!::Array{VertexFunction}, edges!::Array{EdgeFu
     nothing
 end
 
+
+
+# Here is not the best place for this error,
+# but requires the least changes before the next refactor.
+function prepare_edges(edges, g)
+    @assert typeof(edges) <: Union{EdgeFunction, Vector}
+    throw(ArgumentError("Graph type not recognized. Currently only SimpleGraph and SimpleDiGraph are supported."))
+end
 """
 If only a sinlge Function is given, not an Array of EdgeFunctions.
 """
