@@ -22,11 +22,10 @@ function diffusionedge!(e, v_s, v_d, p, t)
 end
 
 function diffusionvertex!(dv, v, edges, p, t)
-    # usually dv, v, e_s, e_d are arrays, hence we use the broadcasting operator .
+    # usually dv, v, edges are arrays, hence we use the broadcasting operator .
     dv .= 0.
     for e in edges
         dv .+= e
-    #sum_coupling!(dv, edges)
     end
     nothing
 end

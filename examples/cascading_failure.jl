@@ -30,13 +30,9 @@ end
 
 function flow_sum(edges)
     sum = 0.0
-    sum_coupling!(sum, edges)
-    #for e in e_d
-    #    sum -= e[1]
-    #end
-    #for e in e_s
-    #    sum += e[1]
-    #end
+    for e in edges
+        sum -= e[1]
+    end
     return sum
 end
 
@@ -91,7 +87,7 @@ function watch_line_limit_callback(network)
     function condition(out, u, t, integrator)
         # get current edge values from integrator
         graph_data = integrator.f.f(u, integrator.p, integrator.t, GetGD)
-        edge_values = graph_data.e_array
+        edge_values = graph_data.gdb.e_array
         for i in 1:num_e
             out[i] = edges[i].f!.max_flow - abs(edge_values[i])
         end

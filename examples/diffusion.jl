@@ -67,7 +67,7 @@ end
 
 @inline function diffusion_vertex!(dv, v, edges, p, t)
     dv .= 0.
-    sum_coupling!(dv, edges) # Oriented sum of the incoming and outgoing edges
+    sum_coupling!(dv, edges)
     nothing
 end
 

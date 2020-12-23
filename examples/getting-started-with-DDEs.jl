@@ -21,19 +21,13 @@ end
 function diffusionvertex!(dv, v, edges, h_v, p, t)
     dv .= -h_v
     sum_coupling!(dv, edges)
-    #for e in e_s
-    #    dv .-= e
-    #end
-    #for e in e_d
-    #    dv .+= e
-    #end
     nothing
 end
 
 ### Constructing the network dynamics
 
 # DDEVertex and StaticDelayEdge  both have access to the VERTEX history
-# DDEVertex is expected to have call signature (dv, v, e_s, e_d, h_v, p, t)
+# DDEVertex is expected to have call signature (dv, v, edges, h_v, p, t)
 # StaticDelayEdge is expected to have  signature (e, v_s, v_d, h_v_s, h_v_d, p, t)
 # StaticEdges get promoted to StaticDelayEdges [then their signature changes]
 nd_diffusion_vertex = DDEVertex(f! = diffusionvertex!, dim = 1)
@@ -91,29 +85,19 @@ plot(sol_2, legend=false)
 ### Kuramoto model
 
 function kuramoto_delay_edge!(e, v_s, v_d, h_v_s, h_v_d, p, t)
-    # The coupling is no longer symmetric, so we need to store BOTH values (see tutorials for details)
     e[1] = p * sin(v_s[1] - h_v_d[1])
-    e[2] = p * sin(h_v_s[1] - v_d[1])
     nothing
 end
 
 function kuramoto_vertex!(dv, v, edges, p, t)
     dv[1] = p
-    #sum_coupling!(dv, edges)
     for e in edges
         dv .+= e
     end
-    #for e in e_s
-    #    dv[1] -= e[1]
-    #end
-    #for e in e_d
-    #    dv[1] -= e[2]
-    #end
     nothing
 end
 
-# dim of the edge is 2 since the coupling is not symmetric
-kdedge! = StaticDelayEdge(f! = kuramoto_delay_edge!, dim=2, coupling = :fiducial)
+kdedge! = StaticDelayEdge(f! = kuramoto_delay_edge!, dim=1)
 kdvertex! = ODEVertex(f! = kuramoto_vertex!, dim = 1)
 
 nd! = network_dynamics(kdvertex!, kdedge!, g)

@@ -21,11 +21,7 @@ g_weighted = SimpleWeightedDiGraph(G)
 # . is the broadcasting operator and gets the attribute: weight of every edge
 edge_weights = getfield.(collect(edges(g_weighted)), :weight);
 
-
-N = 20 # number of nodes
-k = 4  # average degree
-g = barabasi_albert(N, k) # a little more exciting than a bare random graph
-
+g_directed = SimpleDiGraph(g_weighted)
 
 ### Setting up network_dynamics
 
@@ -38,12 +34,6 @@ Fitz-Hugh Nagumo vertex with electrical gap junctions
     for e in edges
         dv[1] += e[1]
     end
-    #for e in e_s
-    #    dv[1] -= e[1]
-    #end
-    #for e in e_d
-    #    dv[1] += e[1]
-    #end
     nothing
 end
 
@@ -56,7 +46,7 @@ electricaledge = StaticEdge(f! = electrical_edge!, dim = 1)
 # since the vertex is two dimensional, we specify both symbols u,v
 odeelevertex = ODEVertex(f! = fhn_electrical_vertex!, dim = 2, sym=[:u, :v])
 
-fhn_network! = network_dynamics(odeelevertex, electricaledge, g_weighted)
+fhn_network! = network_dynamics(odeelevertex, electricaledge, g_directed)
 
 # global parameters that are accessed several times should be `const` to improve performance
 
