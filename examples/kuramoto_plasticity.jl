@@ -1,9 +1,9 @@
 using LightGraphs
 using OrdinaryDiffEq
 using NetworkDynamics
-using Plots, LaTeXStrings
+using Plots
 
-N = 100 # number of nodes
+const N = 100 # number of nodes
 k = 10  # average degree
 g = barabasi_albert(N, k)
 
@@ -34,10 +34,10 @@ end
 end
 
 
-    # Parameter definitions
-ϵ = 0.1
-α = .2π
-β = -.95π
+# Global parameters need to be const for type stability
+const ϵ = 0.1
+const α = .2π
+const β = -.95π
 
 # NetworkDynamics Setup
 plasticvertex = ODEVertex(f! = kuramoto_plastic_vertex!, dim =1)
@@ -52,12 +52,13 @@ x0_plastic        = vcat(randn(N), ones(4ne(g)))
 tspan_plastic     = (0., 200.)
 params_plastic    = (nothing, nothing)
 prob_plastic      = ODEProblem(kuramoto_plastic!, x0_plastic, tspan_plastic, params_plastic)
+
 sol_plastic       = solve(prob_plastic, Rosenbrock23(), abstol = 1e-3, reltol = 1e-3)
 
 # Plotting
 v_idx = idx_containing(kuramoto_plastic!, :v)
 
-plot(sol_plastic, vars=v_idx, legend=false, ylabel=L"\theta")
+plot(sol_plastic, vars=v_idx, legend=false, ylabel="θ")
 
 # Shows Coupling terms
 e_idx = idx_containing(kuramoto_plastic!, :k)
