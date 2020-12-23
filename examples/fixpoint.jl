@@ -7,6 +7,7 @@ using GraphPlot
 using Revise
 
 g = star_graph(4)
+
 gplot(g)
 
 function swing_eq!(dv, v, edges, P, t)
