@@ -21,6 +21,7 @@ g_weighted = SimpleWeightedDiGraph(G)
 # . is the broadcasting operator and gets the attribute: weight of every edge
 edge_weights = getfield.(collect(edges(g_weighted)), :weight);
 
+# we promote the g_weighted graph as a directed graph (weights of the edges are used in parameters)
 g_directed = SimpleDiGraph(g_weighted)
 
 ### Setting up network_dynamics
@@ -42,7 +43,7 @@ end
     nothing
 end
 
-electricaledge = StaticEdge(f! = electrical_edge!, dim = 1)
+electricaledge = StaticEdge(f! = electrical_edge!, dim = 1, coupling = :directed)
 # since the vertex is two dimensional, we specify both symbols u,v
 odeelevertex = ODEVertex(f! = fhn_electrical_vertex!, dim = 2, sym=[:u, :v])
 
