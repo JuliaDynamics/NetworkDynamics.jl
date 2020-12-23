@@ -103,15 +103,15 @@ function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
     for i_v in 1:nv(g)
         offsdim_arr = Tuple{Int,Int}[]
         for i_e in d_v[i_v]
-            # assert that dims is a multiple of 2 for SimpleGraph
-            if typeof(g) <: SimpleGraph
+            # dims is a multiple of 2 for SimpleGraph by design of VertexFunction
+            if !is_directed(g)
                 push!(offsdim_arr, (e_offs[i_e], e_dims[i_e] / 2))
             else
                 push!(offsdim_arr, (e_offs[i_e], e_dims[i_e]))
             end
         end
         for i_e in s_v[i_v]
-            if typeof(g) <: SimpleGraph
+            if !is_directed(g)
                 push!(offsdim_arr, (e_offs[i_e] +  e_dims[i_e] / 2, e_dims[i_e] / 2))
             end
         end
