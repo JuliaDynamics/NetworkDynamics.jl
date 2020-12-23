@@ -9,22 +9,27 @@ using Revise
 g = star_graph(4)
 gplot(g)
 
-function swing_eq!(dv, v, e_s, e_d, P, t)
+function swing_eq!(dv, v, edges, P, t)
     dv[1] = v[2]
     dv[2] = P - 0.1 * v[2]
-    for e in e_s
-        dv[2] -= e[1]
-    end
-    for e in e_d
+    for e in edges
         dv[2] += e[1]
     end
+    #for e in e_s
+    #    dv[2] -= e[1]
+    #end
+    #for e in e_d
+    #    dv[2] += e[1]
+    #end
 end
 
 swing_vertex = ODEVertex(f! = swing_eq!, dim = 2, sym=[:θ, :ω])
 
-function load_eq!(dv, v, e_s, e_d, P, t)
+function load_eq!(dv, v, edges, P, t)
     dv[1] = P
-    oriented_symmetric_edge_sum!(dv, e_s, e_d)
+    sum_coupling!(dv, edges)
+    nothing
+    #oriented_symmetric_edge_sum!(dv, e_s, e_d)
 end
 
 load_vertex    = ODEVertex(f! = load_eq!, dim = 1, mass_matrix = 0, sym=[:θ])

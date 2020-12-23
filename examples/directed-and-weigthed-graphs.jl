@@ -22,20 +22,28 @@ g_weighted = SimpleWeightedDiGraph(G)
 edge_weights = getfield.(collect(edges(g_weighted)), :weight);
 
 
+N = 20 # number of nodes
+k = 4  # average degree
+g = barabasi_albert(N, k) # a little more exciting than a bare random graph
+
+
 ### Setting up network_dynamics
 
 ```
 Fitz-Hugh Nagumo vertex with electrical gap junctions
 ```
-@inline Base.@propagate_inbounds function fhn_electrical_vertex!(dv, v, e_s, e_d, p, t)
+@inline Base.@propagate_inbounds function fhn_electrical_vertex!(dv, v, edges, p, t)
     dv[1] = v[1] - v[1]^3 / 3 - v[2]
     dv[2] = (v[1] - a) * ϵ # x=(u,v)^T
-    for e in e_s
-        dv[1] -= e[1]
-    end
-    for e in e_d
+    for e in edges
         dv[1] += e[1]
     end
+    #for e in e_s
+    #    dv[1] -= e[1]
+    #end
+    #for e in e_d
+    #    dv[1] += e[1]
+    #end
     nothing
 end
 
