@@ -62,12 +62,12 @@ function (d::nd_ODE_Static)(dx, x, p, t)
     end
 
     @assert size(dx) == size(x) "Sizes of dx and x do not match"
-    
+
     @nd_threads d.parallel for i in 1:gs.num_v
         maybe_idx(d.vertices!,i).f!(
             view(dx,gs.v_idx[i]),
             get_vertex(gd, i),
-            get_in_edges(gd, i),
+            get_dst_edges(gd, i),
             p_v_idx(p, i),
             t)
     end
@@ -112,7 +112,7 @@ function (sef::StaticEdgeFunction)(x, p, t)
     # GraphData needed anymore. Is there a real need for this in PD.jl?
     num_v = sef.nd_ODE_Static(GetGS).num_v
     ([get_out_edges(gd, i) for i in 1:num_v],
-     [get_in_edges(gd, i) for i in 1:num_v])
+     [get_dst_edges(gd, i) for i in 1:num_v])
 end
 
 end #module

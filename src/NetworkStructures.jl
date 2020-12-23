@@ -1,4 +1,4 @@
-"""
+src_edges"""
     This module contains the logic that calculate the index structures
     and data access structs that Network Dynamics makes use of.
 
@@ -74,7 +74,7 @@ struct GraphStruct
     s_e_idx::Array{Idx, 1}                     # idx-range of src-vertex per edge
     d_e_idx::Array{Idx, 1}                     # idx-range of dst-vertex per edge
 
-    in_edges_dat::Vector{Vector{Tuple{Int,Int}}}
+    dst_edges_dat::Vector{Vector{Tuple{Int,Int}}}
 end
 function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
     num_v = nv(g)
@@ -98,7 +98,7 @@ function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
     s_e_idx = [v_idx[s_e[i_e]] for i_e in 1:num_e]
     d_e_idx = [v_idx[d_e[i_e]] for i_e in 1:num_e]
 
-    in_edges_dat = Vector{Vector{Tuple{Int,Int}}}(undef, nv(g))
+    dst_edges_dat = Vector{Vector{Tuple{Int,Int}}}(undef, nv(g))
 
     for i_v in 1:nv(g)
         offsdim_arr = Tuple{Int,Int}[]
@@ -115,7 +115,7 @@ function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
                 push!(offsdim_arr, (e_offs[i_e] +  e_dims[i_e] / 2, e_dims[i_e] / 2))
             end
         end
-        in_edges_dat[i_v] = offsdim_arr
+        dst_edges_dat[i_v] = offsdim_arr
     end
 
     GraphStruct(
@@ -139,7 +139,7 @@ function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
     d_e_offs,
     s_e_idx,
     d_e_idx,
-    in_edges_dat)
+    dst_edges_dat)
 end
 
 
@@ -245,7 +245,7 @@ methods.
 The data for specific edges/vertices can be accessed using the
     get_vertex, get_edge
     get_src_vertex, get_dst_vertex
-    get_out_edges, get_in_edges
+    get_src_edges, get_dst_edges
 methods.
 """
 struct GraphData{GDB, elV, elE}
@@ -254,7 +254,7 @@ struct GraphData{GDB, elV, elE}
     e::Array{EdgeData{GDB, elE}, 1}
     v_s_e::Array{VertexData{GDB, elV}, 1} # the vertex that is the source of e
     v_d_e::Array{VertexData{GDB, elV}, 1} # the vertex that is the destination of e
-    in_edges::Array{Array{EdgeData{GDB, elE}, 1}, 1} # the half-edges that have v as destination
+    dst_edges::Array{Array{EdgeData{GDB, elE}, 1}, 1} # the half-edges that have v as destination
 end
 
 function GraphData(v_array::Tv, e_array::Te, gs::GraphStruct; global_offset = 0) where {Tv, Te}
@@ -266,8 +266,8 @@ function GraphData(v_array::Tv, e_array::Te, gs::GraphStruct; global_offset = 0)
     e = [EdgeData{GDB, elE}(gdb, offset + global_offset, dim) for (offset,dim) in zip(gs.e_offs, gs.e_dims)]
     v_s_e = [VertexData{GDB, elV}(gdb, offset + global_offset, dim) for (offset,dim) in zip(gs.s_e_offs, gs.v_dims[gs.s_e])]
     v_d_e = [VertexData{GDB, elV}(gdb, offset + global_offset, dim) for (offset,dim) in zip(gs.d_e_offs, gs.v_dims[gs.d_e])]
-    in_edges = [[EdgeData{GDB, elE}(gdb, offset + global_offset, dim) for (offset,dim) in in_edge] for in_edge in gs.in_edges_dat]
-    GraphData{GDB, elV, elE}(gdb, v, e, v_s_e, v_d_e, in_edges)
+    dst_edges = [[EdgeData{GDB, elE}(gdb, offset + global_offset, dim) for (offset,dim) in in_edge] for in_edge in gs.dst_edges_dat]
+    GraphData{GDB, elV, elE}(gdb, v, e, v_s_e, v_d_e, dst_edges)
 end
 
 
@@ -322,7 +322,7 @@ Swaps the underlying edge data array of an GraphData type with a new one.
     gd.gdb.e_array = array
 end
 
-export get_vertex, get_edge, get_src_vertex, get_dst_vertex, get_out_edges, get_in_edges
+export get_vertex, get_edge, get_src_vertex, get_dst_vertex, get_src_edges, get_dst_edges
 
 """
     get_vertex(gd::GraphData, idx::Int) -> View
@@ -353,18 +353,18 @@ Returns a view-like access to the underlying data of destination vertex of the i
 @inline get_dst_vertex(gd::GraphData, i::Int) = gd.v_d_e[i]
 
 """
-    get_out_edges(gd::GraphData, i::Int)
+    get_src_edges(gd::GraphData, i::Int)
 
-Returns an Vector of view-like accesses to all the outgoing edges of the i-th vertex.
+Returns a Vector of view-like accesses to all the (half-)edges that have the i-th vertex as source (for directed graphs these are the out-edges).
 """
-@inline get_out_edges(gd::GraphData, i::Int) = error("not implemented")
+@inline get_src_edges(gd::GraphData, i::Int) = error("Not implemented.")
 
 """
-    get_in_edges(gd::GraphData, i::Int)
+    get_dst_edges(gd::GraphData, i::Int)
 
-Returns an Vector of view-like accesses to all the incoming edges of the i-th vertex.
+Returns a Vector of view-like accesses to all the (half-)edges that have the i-th vertex as destination (for directed graphs these are the in-edges).
 """
-@inline get_in_edges(gd::GraphData, i) = gd.in_edges[i]
+@inline get_dst_edges(gd::GraphData, i) = gd.dst_edges[i]
 
 
 

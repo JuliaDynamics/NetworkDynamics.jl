@@ -39,12 +39,12 @@ the key constructor `network_dynamics`.
 the following calling syntax
 
 ```julia
-f!(v, e_s, e_t, p, t) -> nothing
+f!(v, edges, p, t) -> nothing
 ```
 
 Here  `v`, `p` and `t` are the usual arguments, while
-`e_s` and `e_d` are arrays containing the edges for which the
-described vertex is the source or the destination respectively.
+`edges` is an arrays containing the edges for which the
+described vertex the destination (in-edges for directed graphs).
 
 `dim` is the number of independent variables in the vertex equations and
 `sym` is an array of symbols for these variables.
@@ -52,9 +52,9 @@ described vertex is the source or the destination respectively.
 For more details see the documentation.
 """
 @Base.kwdef struct StaticVertex{T} <: VertexFunction
-    f!::T # (v, e_s, e_t, p, t) -> nothing
-    dim::Int # number of dimensions of x
-    sym=[:v for i in 1:dim] # Symbols for the dimensions
+    f!::T
+    dim::Int
+    sym=[:v for i in 1:dim]
 end
 
 """
@@ -155,12 +155,11 @@ the key constructor `network_dynamics`.
 the following calling syntax
 
 ```julia
-f!(dv, v, e_s, e_t, p, t) -> nothing
+f!(dv, v, edges, p, t) -> nothing
 ```
 
 Here `dv`, `v`, `p` and `t` are the usual ODE arguments, while
-`e_s` and `e_d` are arrays containing the edges for which the
-described vertex is the source or the destination respectively.
+`edges` is an Array containing the edges for which the vertex is the destination (in-edges for directed graphs).
 
 **`dim`** is the number of independent variables in the vertex equations and
 **`sym`** is an array of symbols for these variables.
@@ -171,10 +170,10 @@ solved.
 For more details see the documentation.
 """
 @Base.kwdef struct ODEVertex{T} <: VertexFunction
-    f!::T # The function with signature (dx, x, e_s, e_t, p, t) -> nothing
-    dim::Int # number of dimensions of x
-    mass_matrix=I # Mass matrix for the equation
-    sym=[:v for i in 1:dim] # Symbols for the dimensions
+    f!::T # signature (dx, x, edges, p, t) -> nothing
+    dim::Int
+    mass_matrix=I
+    sym=[:v for i in 1:dim]
 end
 
 """
@@ -297,7 +296,7 @@ solved.
 For more details see the documentation.
 """
 @Base.kwdef struct DDEVertex{T} <: VertexFunction
-    f!::T # The function with signature (dx, x, e_s, e_t, h, p, t) -> nothing
+    f!::T # The function with signature (dx, x, edges, h, p, t) -> nothing
     dim::Int # number of dimensions of x
     mass_matrix=I # Mass matrix for the equation
     sym=[:v for i in 1:dim] # Symbols for the dimensions
@@ -305,7 +304,7 @@ end
 
 function DDEVertex(ov::ODEVertex)
     let _f! = ov.f!, dim = ov.dim, sym = ov.sym, mass_matrix = ov.mass_matrix
-        f! = @inline (dv, v, in_edges, h_v, p, t) -> _f!(dv, v, in_edges, p, t)
+        f! = @inline (dv, v, dst_edges, h_v, p, t) -> _f!(dv, v, dst_edges, p, t)
         return DDEVertex(f!, dim, mass_matrix, sym)
     end
 end
@@ -313,7 +312,7 @@ end
 
 function DDEVertex(sv::StaticVertex)
     let _f! = ODE_from_Static(sv.f!), dim = sv.dim, sym = sv.sym
-        f! = @inline (dv, v, in_edges, h_v, p, t) -> _f!(dv, v, in_edges, p, t)
+        f! = @inline (dv, v, dst_edges, h_v, p, t) -> _f!(dv, v, dst_edges, p, t)
         return DDEVertex(f!, dim, 0., sym)
     end
 end

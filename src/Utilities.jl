@@ -163,8 +163,8 @@ export sum_coupling!
 A small utility function for writing diffusion dynamics. It provides the
  sum of all incoming edges.
 """
-@inline function sum_coupling!(e_sum, in_edges)
-    @inbounds for e in in_edges
+@inline function sum_coupling!(e_sum, dst_edges)
+    @inbounds for e in dst_edges
         e_sum .+= e
     end
     nothing
