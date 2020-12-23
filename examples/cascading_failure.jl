@@ -1,3 +1,5 @@
+### This script works on version 0.4 but is broken on 0.5
+
 ```
 This script was written by Hans Würfel. It reimplements the minimal
 example of a dynamic cascading failure described in Schäfer et al. (2018) [1].
@@ -11,7 +13,8 @@ https://www.nature.com/articles/s41467-018-04287-5
 
 using NetworkDynamics
 using LightGraphs
-using DifferentialEquations
+using OrdinaryDiffEq
+using DiffEqCallbacks
 using Plots
 
 struct SwingVertex
