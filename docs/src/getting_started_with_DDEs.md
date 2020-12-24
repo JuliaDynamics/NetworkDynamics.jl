@@ -1,5 +1,4 @@
 # Time-delayed network dynamics
- An `IJulia` [notebook](https://github.com/FHell/NetworkDynamics.jl/tree/master/examples) corresponding to this tutorial is available on GitHub.
 
  #### Topics covered in this tutorial include:
   * modeling time-delays with Delay Differential Equations (DDEs)

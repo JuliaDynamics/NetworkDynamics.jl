@@ -1,10 +1,9 @@
-using DifferentialEquations
+using OrdinaryDiffEq
 using NetworkDynamics
 using NLsolve
 using LightGraphs
 using Plots
 using GraphPlot
-using Revise
 
 g = star_graph(4)
 gplot(g)

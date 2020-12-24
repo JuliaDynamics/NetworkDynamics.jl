@@ -3,9 +3,7 @@
 # One of the main purposes of NetworkDynamics.jl is to facilitate
 # modeling coupled systems with heterogenities. This means that
 # components can differ in their parameters as well as in their dynamics.
-#
-#!nb # A notebook corresponding to this tutorial can be found [here](https://github.com/FHell/NetworkDynamics.jl/tree/master/examples).
-#
+
 # ## Heterogenous parameters
 # We start by setting up a simple system of Kuramoto oscillators.
 

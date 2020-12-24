@@ -3,9 +3,9 @@ using OrdinaryDiffEq
 using NetworkDynamics
 using Plots
 
-const N = 10 # number of nodes
+const N_plastic = 10 # number of nodes
 k = 4  # average degree
-g = barabasi_albert(N, k)
+g = barabasi_albert(N_plastic, k)
 
 #=
   Berner, Rico, Eckehard Schöll, and Serhiy Yanchuk.
@@ -19,7 +19,7 @@ g = barabasi_albert(N, k)
     # 0 * de[1] = e[2] * sin(v_s[1] - v_d[1] + α) / N - e[1] is equivalent to
     # e[1] = e[2] * sin(v_s[1] - v_d[1] + α) / N
 
-    de[1] =  e[2] * sin(v_s[1] - v_d[1] + α) / N - e[1]
+    de[1] =  e[2] * sin(v_s[1] - v_d[1] + α) / N_plastic - e[1]
     de[2] = - ϵ * (sin(v_s[1] - v_d[1] + β) + e[2])
 
     nothing
@@ -47,7 +47,7 @@ plasticedge = ODEEdge(f! = kuramoto_plastic_edge!, dim=2, sym=[:e, :de], couplin
 kuramoto_plastic! = network_dynamics(plasticvertex, plasticedge, g)
 
 # ODE Setup & Solution
-x0_plastic        = vcat(randn(N), ones(4ne(g)))
+x0_plastic        = vcat(randn(N_plastic), ones(4ne(g)))
 tspan_plastic     = (0., 100.)
 params_plastic    = (nothing, nothing)
 prob_plastic      = ODEProblem(kuramoto_plastic!, x0_plastic, tspan_plastic, params_plastic)
