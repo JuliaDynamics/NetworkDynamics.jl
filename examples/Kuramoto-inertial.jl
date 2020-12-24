@@ -47,20 +47,28 @@ kur_network_L = ODEFunction(kn) #, jac_prototype=Jv)
     e[1] = 5. * sin(v_s[2] - v_d[2])
     nothing
 end
-# ODEEdge fct
-@inline Base.@propagate_inbounds function kuramoto_dedge!(de, e, v_s, v_d, p, t)
-    de[1] = 100. * (5. * sin(v_s[2] - v_d[2]) - e[1])
+
+# StaticEdge fct
+@inline Base.@propagate_inbounds function promotable_kuramoto_edge!(e,v_s,v_d,p,t)
+    # coupling strength K=5
+    e[1] = 5. * sin(v_s[2] - v_d[2])
+    e[2] = 5. * sin(v_d[2] - v_s[2])
     nothing
 end
 
+# ODEdedge fct
+@inline Base.@propagate_inbounds function kuramoto_dedge!(de, e, v_s, v_d, p, t)
+    de[1] = 100. * (5. * sin(v_s[2] - v_d[2]) - e[1])
+    de[2] = 100. * (5. * sin(v_d[2] - v_s[2]) - e[2])
+    nothing
+end
+
+
 # ODEVertex function
 # @inline Base.@propagate_inbounds
-@inline Base.@propagate_inbounds function kuramoto_vertex!(dv, v, e_s, e_d, p, t)
+@inline Base.@propagate_inbounds function kuramoto_vertex!(dv, v, edges, p, t)
     dv[1] = p - v[1]
-    for e in e_s
-        dv[1] -= e[1]
-    end
-    for e in e_d
+    for e in edges
         dv[1] += e[1]
     end
     dv[2] = v[1]
@@ -72,14 +80,17 @@ end
 # StaticEdge case
 odevertex = ODEVertex(f! = kuramoto_vertex!, dim = 2, sym=[:ω, :ϕ])
 staticedge = StaticEdge(f! = kuramoto_edge!, dim = 1)
+ode_static_edge = ODEEdge(f! = promotable_kuramoto_edge!, dim = 2, coupling = :fiducial)
+#odeedge = ODEEdge(f! = real_kuramoto_dedge!, dim = 2, coupling = :fiducial, mass_matrix = 0.)
 # we can also create lists of the vertices/edges, helpful if vertices/edges have different DE's
 vertex_list = [odevertex for v in vertices(g)]
 edge_list = [staticedge for e in edges(g)]
-# StaticEdge with artificially promoted StaticEdges --> ODEEdges
-ode_sd_edge_list = [ODEEdge(se) for se in edge_list]
-# ODEEdges with ODEEdgefct
-ode_edge_list = [ODEEdge(f! = kuramoto_dedge!, dim = 1) for e in edges(g)]
 
+# StaticEdge with artificially promoted StaticEdges --> ODEEdges
+ode_sd_edge_list = [ode_static_edge for se in edge_list]
+#ode_sd_edge_list = [ODEEdge(se) for se in edge_list]
+# ODEEdges with ODEEdgefct
+ode_edge_list = [ODEEdge(f! = kuramoto_dedge!, dim = 2, coupling = :fiducial) for e in edges(g)]
 p = (ω, nothing)
 
 # now we create the NetworkDynamics objects
@@ -146,7 +157,7 @@ gd_0 = kur_network_nd(x0_nd2, p, 0., GetGD)
 # updated gd_0 object for that.
 # ne(g) - number of edges
 # array with initial conditions for vertices und edges
-x0_ode = Array{Float64}(1:(2N+ne(g)))
+x0_ode = Array{Float64}(1:(2N+ne(g)*2))
 gd_ode = kur_network_eode(x0_ode, p, 0., GetGD)
 gs_ode = kur_network_eode(GetGS)
 view_v(gd_ode, gs_ode) .= view_v(gd_0, gs_0)

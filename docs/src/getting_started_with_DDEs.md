@@ -34,15 +34,11 @@ nothing # hide
 ```
 However, the internal vertex dynamics are now determined by the time-delayed equation $\dot v_i(t) = - v_i(t-\tau)$ and are described in the vertex function with help of the history array $h_v$ containing the past values of the vertex variables.
 ```@example DDEVertex
-function delaydiffusionvertex!(dv, v, e_s, e_d, h_v, p, t)
+
+function delaydiffusionvertex!(dv, v, edges, h_v, p, t)
    # h_v is the history array of the vertex variables
    dv .= -h_v
-   for e in e_s
-       dv .-= e
-   end
-   for e in e_d
-       dv .+= e
-   end
+   sum_coupling!(dv, edges)
    nothing
 end
 nothing # hide
@@ -137,30 +133,26 @@ Unlike in the diffusion example, the edges depend on past values of the vertex v
 
 ```@example DDEVertex
 function kuramoto_delay_edge!(e, v_s, v_d, h_v_s, h_v_d, p, t)
-    # The coupling is no longer symmetric, so we need to store BOTH values (see tutorials for details)
     e[1] = p * sin(v_s[1] - h_v_d[1])
-    e[2] = p * sin(h_v_s[1] - v_d[1])
     nothing
 end
 nothing # hide
 ```
 
-The dynamics of vertices in the Kuramoto model are determined by a constant rotation frequency `p`. Contributions of the edges are summed up according to their [abstract edge direction](@ref abstract_direction) in the underlying graph topology.
+The dynamics of vertices in the Kuramoto model are determined by a constant rotation frequency `p`. Contributions of the edges are summed up according to their destinations.
+
 ```@example DDEVertex
-function kuramoto_vertex!(dv, v, e_s, e_d, p, t)
+function kuramoto_vertex!(dv, v, edges, p, t)
     dv[1] = p
-    for e in e_s
-        dv[1] -= e[1]
-    end
-    for e in e_d
-        dv[1] -= e[2]
+    for e in edges
+        dv .+= e
     end
     nothing
 end
 nothing # hide
 ```
 
-In this case the vertex function does not depend on any past values and is simply constructed as an `ODEVertex`. Since the edges depend on the history of the vertex variables their calling signature has changed and they are handed to the delay-aware constructor `StaticDelayEdge`. *Static* refers to the fact that they don't have any internal dynamics. Note that these edge functions have dimension 2 since the coupling depends on the abstract orientation of the edge and is not symmetric with respect to exchanging source and destination vertex.
+In this case the vertex function does not depend on any past values and is simply constructed as an `ODEVertex`. Since the edges depend on the history of the vertex variables their calling signature has changed and they are handed to the delay-aware constructor `StaticDelayEdge`. *Static* refers to the fact that they don't have any internal dynamics.
 
 ```@example DDEVertex
 kdedge! = StaticDelayEdge(f! = kuramoto_delay_edge!, dim = 2)

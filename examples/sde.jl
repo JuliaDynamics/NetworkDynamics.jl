@@ -22,15 +22,11 @@ function diffusionedge!(e, v_s, v_d, p, t)
     nothing
 end
 
-function diffusionvertex!(dv, v, e_s, e_d, p, t)
+function diffusionvertex!(dv, v, edges, p, t)
     # usually v, e_s, e_d are arrays, hence we use the broadcasting operator .
     dv .= 0.
     # edges for which v is the source
-    for e in e_s
-        dv .-= e
-    end
-    # edges for which v is the destination
-    for e in e_d
+    for e in edges
         dv .+= e
     end
     nothing
@@ -60,7 +56,7 @@ plot(sol, vars = syms_containing(nd, "v"))
 
 h =  SimpleGraph(N, 0)
 
-function noisevertex!(dv, v, e_s, e_d, p, t)
+function noisevertex!(dv, v, edges, p, t)
     # the noise is written as an ODE, here dv_noise is a square wave
     # when added in the SDE it seems to affect v directly and not dv
     dv[1] = round(Int,cos(t*.5*pi)) * p
@@ -87,7 +83,7 @@ plot(sol_noise, vars = syms_containing(nd, "v"))
 # SDEProblems can be constructed by inserting ODEFunctions for `f` and `g`
 # even the symbols stay the same
 sde_prob = SDEProblem(nd, nd_noise, x0, tspan, p)
-# SOSRA is recommended for additivce noise
+# SOSRA is recommended for additive noise
 sde_sol = solve(sde_prob, SOSRA())
 
 plot(sde_sol, vars = syms_containing(nd, "v"), legend = false)

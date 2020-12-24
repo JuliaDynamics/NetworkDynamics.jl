@@ -1,17 +1,18 @@
 # NetworkDynamics
 
-[![](https://img.shields.io/badge/docs-dev-blue.svg)](https://fhell.github.io/NetworkDynamics.jl/dev) [![](https://img.shields.io/badge/docs-stable-blue.svg)](https://fhell.github.io/NetworkDynamics.jl/stable)
+[![](https://img.shields.io/badge/docs-dev-blue.svg)](https://fhell.github.io/NetworkDynamics.jl/dev)
+<!-- [![](https://img.shields.io/badge/docs-stable-blue.svg)](https://fhell.github.io/NetworkDynamics.jl/stable) -->
 
 A package for working with dynamical systems on complex networks. NetworkDynamics.jl provides an interface between [LightGraphs.jl](https://github.com/JuliaGraphs/LightGraphs.jl) and [DifferentialEquations.jl](https://github.com/JuliaDiffEq/DifferentialEquations.jl). It allows to define several types of dynamic and static nodes and edges and to link them up in order to create complex network dynamics.
 
-At the moment the behaviour of a node or an edge can be described by algebraic equations, by ordinary differential equations (ODE) or by delay differential equations(DDE). Stochastic ordinary differential equations (SDE) can be implemented as a [two-layer network](https://github.com/FHell/NetworkDynamics.jl/blob/master/examples/sde.jl) - this is still an experimental feature, though.
+The behavior of a node or an edge can be described by algebraic equations, by differential algebraic equation (DAEs) in mass matrix form, by ordinary differential equations (ODE) or by delay differential equations (DDE). Stochastic ordinary differential equations (SDE) can be implemented as a [two-layer network](https://github.com/FHell/NetworkDynamics.jl/blob/master/examples/sde.jl). For details see the [docs](https://fhell.github.io/NetworkDynamics.jl/dev).
 
 ## Installation
 
 Installation is straightforward with Julia's package manager.
 
 ```julia-repl
-(v1.4) pkg> add NetworkDynamics
+(v1.5) pkg> add NetworkDynamics
 ```
 
 ## Getting started

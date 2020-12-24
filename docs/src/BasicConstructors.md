@@ -15,9 +15,9 @@ ODEVertex(vertexfunction!, dimension, mass_matrix, symbol)
 DDEVertex(vertexfunction!, dimension, mass_matrix, symbol)
 
 # EdgeFunctions
-StaticEdge(edgefunction!, dimension, symbol)
-ODEEdge(edgefunction!, dimension, mass_matrix, symbol)
-StaticDelayEdge(edgefunction!, dimension, mass_matrix, symbol)
+StaticEdge(edgefunction!, dimension, coupling, symbol)
+ODEEdge(edgefunction!, dimension, mass_matrix, coupling, symbol)
+StaticDelayEdge(edgefunction!, dimension, mass_matrix, coupling, symbol)
 ```
 
 
@@ -32,35 +32,28 @@ has to respect one of the following calling syntaxes.
 
 ```julia
 # For static nodes
-function vertexfunction!(v, e_s, e_d, p, t) end
+function vertexfunction!(v, edges, p, t) end
 # For dynamic nodes
-function vertexfunction!(dv, v, e_s, e_d, p, t) end
+function vertexfunction!(dv, v, edges, p, t) end
 # For delay nodes
-function vertexfunction!(dv, v, e_s, e_d, h_v, p, t) end
+function vertexfunction!(dv, v, edges, h_v, p, t) end
 ```
 
-Here `dv`, `v`, `p`, and `t` are the usual ODE arguments, while `e_s` and `e_d` are arrays containing the edges for which the described vertex is the source or the destination respectively. In the delay case, the array `h_v` denotes the vertex history. The typical case of diffusive coupling on a directed graph could be described as
+Here `dv`, `v`, `p`, and `t` are the usual ODE arguments, while `edges` is an array containing the edges for which the described vertex is the destination. In the delay case, the array `h_v` denotes the vertex history. The typical case of diffusive coupling on a directed graph could be described as
 
 ```julia
-function vertex!(dv, v, e_s, e_d, p, t)
+function vertex!(dv, v, edges, p, t)
     dv .= 0.
-    for e in e_s
-        dv .-= e
-    end
-    for e in e_d
+    for e in edges
         dv .+= e
     end
     nothing
 end
 ```
-!!! warning
-    The arguments `e_s` and `e_d` are **obligatory** even if the graph is undirected and no distinction between source and destination can be made. This is necessary since [LightGraphs.jl](https://github.com/JuliaGraphs/LightGraphs.jl) implements an undirected graph in the same way as a directed graphs, but ignores the directionality information. Therefore, some care has
-    to be taken when dealing with asymetric coupling terms. A detailed example
-    can be found  in the [Getting started](@ref getting_started) tutorial.
 
 ### [`StaticVertex`](@ref)
 
-If a vertex is described by an algebraic equation  `vertexfunction!(v, e_s, e_d, p, t)`, i.e. `dv = 0` the `VertexFunction` is constructed as
+If a vertex is described by an algebraic equation  `vertexfunction!(v, edges, p, t)`, i.e. `dv = 0` the `VertexFunction` is constructed as
 
 ```julia
 StaticVertex(vertexfunction!, dim, sym)
@@ -72,7 +65,7 @@ models a constant input ``I = p``, then `dim = 1` and `sym = [:I]`. For more det
 
 ### [`ODEVertex`](@ref)
 
-If a vertex has local dynamics `vertexfunction!(dv, v, e_s, e_d, p, t)` described by an ODE,
+If a vertex has local dynamics `vertexfunction!(dv, v, edges, p, t)` described by an ODE,
 the `VertexFunction` is contructed as
 
 ```julia
@@ -94,7 +87,7 @@ The function then defaults to using the identity as mass matrix and `[:v for i i
 
 ### [`DDEVertex`](@ref)
 
-If a vertex has local dynamics described by a delay differential equation (DDE), the `VertexFunction` is constructed as
+If a vertex has local dynamics described by a delay differential equation (DDE) the local dynamics need to have the signature `vertexfunction!(dv, v, edges, h_v, p, t)`, where `h_v` are the history values of `v`. Then the `VertexFunction` is constructed as
 
 ```julia
 DDEVertex(vertexfunction!, dim, mass_matrix, sym)
@@ -134,9 +127,9 @@ edgefunction! = (e, v_s, v_d, p, t) -> e .= v_s .- v_d
 In this case the `EdgeFunction` is constructed by
 
 ```julia
-StaticEdge(edgefunction!, dim, sym)
+StaticEdge(edgefunction!, dim, coupling, sym)
 ```
-The keywords are the same as for the vertices.
+The keywords are the same as for the vertices, except from the additional keyword **coupling**, which describes if the `EdgeFunction` is intended for a (`:directed`) or for an undirected graph (`{:undirected, :symmetric, :antisymmetric, :fiducial}`). `:directed` is intended for directed graphs. `:undirected` is the default option and is only compatible with SimpleGraph. In this case the `edgefunction!` should specify the coupling from a source vertex to a destination vertex. `:symmetric` and `:antisymmetric` trigger performance optimizations, if `edgefunction!` has that symmetry property. `:fiducial` lets the user specify both the coupling from source to destination, as well as the coupling from destination to source and is intended for advanced users.
 
 ### [`ODEEdge`](@ref)
 
@@ -148,21 +141,21 @@ edgefunction! = (de, e, v_s, v_d, p, t) -> de .= 1000 * (v_s .- v_d .- e)
 The `EdgeFunction` object is constructed as
 
 ```julia
-ODEEdge(edgefunction!, dim, mass_matrix, sym)
+ODEEdge(edgefunction!, dim, coupling, mass_matrix, sym)
 ```
 
-The keywords are the same as for the vertices. For `ODEEdge` the same simplified construction rules apply when keyword arguments are used.
+The keywords are the same as above for the `StaticEdge`. For `ODEEdge` the same simplified construction rules apply when keyword arguments are used.
 
 ```julia
 ODEEdge(f! = edgefunction!, dim = n)
 ```
 
-In this case the function defaults to using the identity as mass matrix and `[:e for in 1:dimension]` as symbols.
+In this case the function defaults to using undirected as coupling, the identity as mass matrix and `[:e for in 1:dimension]` as symbols.
 
 ### [`StaticDelayEdge`](@ref)
-Here, the values of the edges are determined by a delay differential equation. Static again means that the edge value described by the `edgefunction!` only depends on the values of the vertices the edge is connected to and not on an internal derivate of the edge itself.
+This constructor is used when edge variables depend on past values of the vertex variables. In this case the `edgefunction!` has to accept two additional arguments `h_v_s` and `h_v_d` that hold the history of `v_s` and `v_d`. *Static* means that the edge depends only on the dynamics of the vertices the edge is connected to and not on an internal derivative of the edge variables itself.
 
-As an example for such system, we show a delay diffusion equation:
+As an example for such system, we show a diffusive coupling with delay:
 
 ```julia
 edgefunction! = (e, v_s, v_d, h_v_s, h_v_d, p, t) -> e .=.1 * (h_v_s .- v_d)
@@ -170,9 +163,9 @@ edgefunction! = (e, v_s, v_d, h_v_s, h_v_d, p, t) -> e .=.1 * (h_v_s .- v_d)
 The `EdgeFunction` object is constructed as
 
 ```julia
-StaticDelayEdge(edgefunction!, dim, mass_matrix, sym)
+StaticDelayEdge(edgefunction!, dim, coupling, mass_matrix, sym)
 ```
-Again, we can also leave out the optional keywords **sym** and **mass_matrix**.
+Again, we can also leave out the optional keywords **coupling**, **sym** and **mass_matrix**.
 
 ```julia
 StaticDelayEdge(f! = edgefunction!, dim = n)
@@ -214,12 +207,9 @@ using NetworkDynamics, LightGraphs
 
 g = erdos_renyi(10, 25) # random graph with 10 vertices and 25 edges
 
-function vertexfunction!(dv, v, e_s, e_d, p, t)
+function vertexfunction!(dv, v, edges, p, t)
   dv .= 0
-  for e in e_s
-    dv .-= e
-  end
-  for e in e_d
+  for e in edges
     dv .+= e
   end
 end

@@ -16,7 +16,7 @@ The sum on the right hand side plays the role of a (discrete) gradient. If the t
 
 ## Modeling diffusion in NetworkDynamics.jl
 
-From the above considerations we see that in this model the nodes do not have any internal dynamics - if a node was disconnected from the rest of the network its state would never change, since then $A_{ij} = 0 \; \forall j$ and hence $\dot v_i = 0$. This means that the evolution of a node depends only on the interaction with its neighbors. In NetworkDynamics.jl interactions with neighbors are described by equations for the edges.
+From the above considerations we see that in this model the nodes do not have any internal dynamics - if a node was disconnected from the rest of the network its state would never change, since then $A_{ij} = 0 \; \forall j$ and hence $\dot v_i = 0$. This means that the evolution of a node depends only on the interaction with its neighbors. In NetworkDynamics.jl, interactions with neighbors are described by equations for the edges.
 
 
 ```@example diffusion
@@ -36,15 +36,10 @@ The contributions of the different edges are then summed up in each vertex.
 
 
 ```@example diffusion
-function diffusionvertex!(dv, v, e_s, e_d, p, t)
-    # usually v, e_s, e_d are arrays, hence we use the broadcasting operator .
+function diffusionvertex!(dv, v, edges, p, t)
+    # usually v, edges are arrays, hence we use the broadcasting operator .
     dv .= 0.
-    # edges for which v is the source
-    for e in e_s
-        dv .-= e
-    end
-    # edges for which v is the destination
-    for e in e_d
+    for e in edges
         dv .+= e
     end
     nothing
@@ -53,33 +48,9 @@ nothing # hide
 ```
 
 
-Just like above the input arguments `v, e_s, e_d, p, t` are mandatory for the syntax of vertex functions. The additional input `dv` corresponding to the derivative of the vertex' state is mandatory for vertices described by ordinary differential equations.
+Just like above the input arguments `v, edges, p, t` are mandatory for the syntax of vertex functions. The additional input `dv` corresponding to the derivative of the vertex' state is mandatory for vertices described by ordinary differential equations.
 
-Something unexpected happens in the for-loops: The contributions of the connecting edges are subtracted or added depending on `v` being the source or the destination of an edge. However we are modeling diffusion on an **undirected** network, hence the concepts of source and destination are not defined!
-
-The reason for this syntax is found in the `LightGraphs.jl` package on which `NetworkDynamics.jl` is based.
-
-#### How to deal with abstract edge directions in undirected graphs
-
-LightGraphs.jl implements edges as pairs of node indices `i` and `j`. [Pairs](https://docs.julialang.org/en/v1/base/collections/#Base.Pair) are basic julia data types consisting of two fixed elements, definded by writing `i => j`. In directed graphs these pairs additionally represent the direction in which the edge is pointing (from the first two the second element). In undirected graphs every edge is represent by only a single pair `i => j` if index `i` is smaller than index `j` and `j => i` otherwise. Hence, even for undirected graphs every edge has an abstract direction, specified by the pair of indices of the attached nodes.
-
-A LightGraphs.jl user, who is only interested in undirected graphs, usually does not have to deal with this abstract directionality. However since NetworkDynamics.jl is interfacing directly to the underlying graph objects, we have to keep in mind that every edge has an *abstract direction* and thus a source and a destination.
-
-In the diffusion example the coupling terms have to be modified accordingly. Assume node $i$ is connected to node $j$ by an undirected edge.
-
-1. Case: `i => j`
-
-  If the abstract edge direction points from $i$ to $j$ then the edge value will be $v_i - v_j$. Hence we have to subtract this term from `dv`.
-
-2. Case: `j => i`
-
-  In this case the edge value is $v_j - v_i$. Of course that's just $-(v_i - v_j)$ and can be directly added to `dv`.
-
-#### Caveat: Symmetric and asymmetric coupling terms
-
-The coupling term $g(i, j) := v_i - v_j$ is anti-symmetric, that is $g(i,j) = - g(j,i)$ and hence multiplying some edge values with `-1` restores the behaviour of undirected edges. The same property holds for other important coupling terms like $g(i,j) = \sin(v_i - v_j)$. On the other hand, if the coupling term happens to be **symmetric**, i.e. $g(i,j) = g(j,i)$ we don't have to worry about the abstract direction at all.
-
-However, some coupling terms are **neither symmetric nor anti-symmetric** like the chemical coupling between neurons. In this case it is a viable strategy to double the number of edge variables, compute both outcomes and use only one depending on the abstract direction of the edge. For more details have a look at the example on chemical coupling.
+For undirected graphs, the `edgefunction!` specifies the coupling from a source- to a destination vertex. The contributions of the connected edges are added to the destination of each edge, as defined in the `diffusionvertex!` function in the for loop.
 
 ## Constructing the network
 
