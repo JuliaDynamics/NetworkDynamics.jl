@@ -300,7 +300,7 @@ function prepare_edges(edges::Vector, g::SimpleGraph)
         elseif edge.coupling == :undefined
             if infobool
                 @info("Reconstructing EdgeFuntions with :undefined coupling type...")
-                info = false
+                infobool = false
             end
             new_edges[i] = reconstruct_edge(edge, :undirected)
         else
