@@ -1,15 +1,17 @@
 ### This script works on version 0.4 but is broken on 0.5
 
-```
-This script was written by Hans Würfel. It reimplements the minimal
-example of a dynamic cascading failure described in Schäfer et al. (2018) [1].
-It is an example how to use callback functions on single nodes or edges.
 
-[1] Schäfer, B., Witthaut, D., Timme, M., & Latora, V. (2018).
-Dynamically induced cascading failures in power grids.
-Nature communications, 9(1), 1-13.
-https://www.nature.com/articles/s41467-018-04287-5
-```
+# This script was written by Hans Würfel. It reimplements the minimal
+# example of a dynamic cascading failure described in Schäfer et al. (2018) [1].
+# It is an example how to use callback functions on single nodes or edges.
+#
+# [1] Schäfer, B., Witthaut, D., Timme, M., & Latora, V. (2018).
+# Dynamically induced cascading failures in power grids.
+# Nature communications, 9(1), 1-13.
+# https://www.nature.com/articles/s41467-018-04287-5
+
+
+
 
 using NetworkDynamics
 using LightGraphs

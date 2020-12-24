@@ -1,9 +1,7 @@
 # Functions
 
-The key constructor [`network_dynamics`](@ref) assembles the dynamics of the whole network from functions for the single vertices and edges of the graph `g`.
-Since the equations describing the local dynamics may differ strongly from each
-other, the types `VertexFunction` and `EdgeFunction` are introduced. They
-provide a unifying interface between different classes of nodes and edges. Both
+The key  [`network_dynamics`](@ref) assembles the dynamics of the whole network from functions for the single vertices and edges of the graph `g`.
+These functions have to be wrapped in types `VertexFunction` and `EdgeFunction` which store additional information on dimension and coupling type. Both
 have several subtypes that account for the different classes of equations that may
 represent the local dynamics. At the moment, algebraic (static) equations, ordinary differential equations (ODEs) and delay differential equations (DDEs) are supported:
 
@@ -39,7 +37,7 @@ function vertexfunction!(dv, v, edges, p, t) end
 function vertexfunction!(dv, v, edges, h_v, p, t) end
 ```
 
-Here `dv`, `v`, `p`, and `t` are the usual ODE arguments, while `edges` is an array containing the edges for which the described vertex is the destination. In the delay case, the array `h_v` denotes the vertex history. The typical case of diffusive coupling on a directed graph could be described as
+Here `dv`, `v`, `p`, and `t` are the usual ODE arguments, while `edges` is an array containing the edges for which the vertex is the destination (corresponding to incoming edges for directed graphs). In the delay case, the array `h_v` denotes the vertex history. The typical case of diffusive coupling on a directed graph could be described as
 
 ```julia
 function vertex!(dv, v, edges, p, t)
@@ -60,7 +58,7 @@ StaticVertex(vertexfunction!, dim, sym)
 ```
 
 Here, **dim** is the number of independent variables in the vertex equations and **sym** is an array of symbols for these variables. For example, if a node
-models a constant input ``I = p``, then `dim = 1` and `sym = [:I]`. For more details on the use of symbols, check out the [Getting started](@ref getting_started) tutorial and the Julia [documentation](https://docs.julialang.org/en/v1/manual/metaprogramming/). The use of symbols makes it easier to later fish out the interesting variables one wants to look at.
+models a constant input ``I = p``, then `dim = 1` and `sym = [:I]`. For more details on the use of symbols, check out the [Getting started](@ref getting_started) tutorial and the Julia [documentation](https://docs.julialang.org/en/v1/manual/metaprogramming/). The use of symbols makes it easier to select variables of interest from the solution object.
 
 
 ### [`ODEVertex`](@ref)
@@ -144,13 +142,13 @@ The `EdgeFunction` object is constructed as
 ODEEdge(edgefunction!, dim, coupling, mass_matrix, sym)
 ```
 
-The keywords are the same as above for the `StaticEdge`. For `ODEEdge` the same simplified construction rules apply when keyword arguments are used.
+The keywords are the same as above for the `StaticEdge`. For `ODEEdge` the same simplified construction rules apply when keyword arguments are used, except that the coupling type has to be specified explicitly to avoid ambiguities. The available coupling tyes are only `:directed, :undirected, :fiducial`. For `:undirected` coupling the internal dimension of the EdgeFunction is doubled in order to resolve both directions in an undirected network. Remember to specify 2 initial conditiosn for every edge in that case.
 
 ```julia
-ODEEdge(f! = edgefunction!, dim = n)
+ODEEdge(f! = edgefunction!, dim = n, coupling = :undirected)
 ```
 
-In this case the function defaults to using undirected as coupling, the identity as mass matrix and `[:e for in 1:dimension]` as symbols.
+In this case the function defaults to using the identity matrix as mass matrix and `[:e for in 1:dimension]` as symbols.
 
 ### [`StaticDelayEdge`](@ref)
 This constructor is used when edge variables depend on past values of the vertex variables. In this case the `edgefunction!` has to accept two additional arguments `h_v_s` and `h_v_d` that hold the history of `v_s` and `v_d`. *Static* means that the edge depends only on the dynamics of the vertices the edge is connected to and not on an internal derivative of the edge variables itself.
@@ -165,7 +163,7 @@ The `EdgeFunction` object is constructed as
 ```julia
 StaticDelayEdge(edgefunction!, dim, coupling, mass_matrix, sym)
 ```
-Again, we can also leave out the optional keywords **coupling**, **sym** and **mass_matrix**.
+Like for a StaticEdge, we can also leave out the optional keywords **coupling**, **sym** and **mass_matrix**. Available coupling types are `:unspecified, :directed, :undirected, :fiducial`.
 
 ```julia
 StaticDelayEdge(f! = edgefunction!, dim = n)
@@ -173,7 +171,7 @@ StaticDelayEdge(f! = edgefunction!, dim = n)
 
 ## Constructor
 
-The key constructor is the function [`network_dynamics`](@ref) that takes in
+The central constructor is the function [`network_dynamics`](@ref) that takes in
 two arrays of `EdgeFunctions` and `VertexFunctions` describing the local dynamics on the edges and nodes of a graph `g`, given as a [LightGraphs.jl](https://github.com/JuliaGraphs/LightGraphs.jl) object. It returns a composite function compatible with the [DifferentialEquations.jl](https://github.com/SciML/DifferentialEquations.jl) calling syntax.
 
 ```julia
@@ -222,7 +220,7 @@ end
 vertex = ODEVertex(f! = vertexfunction!, dim = 1)
 vertexarr = [vertex for v in vertices(g)]
 
-edge = ODEEdge(f! = edgefunction!, dim = 1)
+edge = ODEEdge(f! = edgefunction!, dim = 1, coupling = :undirected)
 edgearr = [edge for e in edges(g)]
 
 nd = network_dynamics(vertexarr, edgearr, g)
@@ -230,7 +228,7 @@ nd = network_dynamics(vertexarr, edgearr, g)
 nothing # hide
 ```
 
-Now we have an `ODEFunction nd` that can be solved with the tools provided by
+Now we have an `ODEFunction` `nd` that can be solved with the tools provided by
 [DifferentialEquations.jl](https://github.com/SciML/DifferentialEquations.jl).
 
 For more details check out the Tutorials section.

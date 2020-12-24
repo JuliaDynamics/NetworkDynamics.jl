@@ -4,7 +4,6 @@ One of the main purposes of NetworkDynamics.jl is to facilitate
 modeling coupled systems with heterogenities. This means that
 components can differ in their parameters as well as in their dynamics.
 
-A notebook corresponding to this tutorial can be found [here](https://github.com/FHell/NetworkDynamics.jl/tree/master/examples).
 
 ## Heterogenous parameters
 We start by setting up a simple system of Kuramoto oscillators.
@@ -31,8 +30,8 @@ nd! = network_dynamics(vertex!, edge!, g);
 nothing #hide
 ```
 
-Introducing genous parameters is as easy as defining an array.
-Here the vertex parameters are genous, while the edges share the same coupling
+Introducing heterogeneous parameters is as easy as defining an array.
+Here the vertex parameters are heterogeneous, while the edges share the same coupling
 parameter K.
 
 ```@example heterogeneous_system
@@ -54,11 +53,11 @@ sol = solve(prob, Tsit5())
 plot(sol, ylabel="θ")
 ```
 
-## Heterogenous dynamics
+## Heterogeneous dynamics
 
 Two paradigmatic modifications of the node model above are static nodes and nodes with
 inertia. A static node has no internal dynamics and instead fixes the variable at a
-constant value. A Kuramoto model with inertia consits of two interal variables leading to
+constant value. A Kuramoto model with inertia consists of two internal variables leading to
 more complicated (and for many applications more realistic) local dynamics.
 
 ```@example heterogeneous_system
@@ -77,7 +76,7 @@ inertia! = ODEVertex(f! = kuramoto_inertia!, dim = 2, sym= [:θ, :ω]);
 nothing #hide
 ```
 
-Since now we model a system with genous node dynamics we can no longer
+Since now we model a system with heterogeneous node dynamics we can no longer
 straightforwardly pass a single VertexFunction to `network_dynamics` but instead have to
 hand over an Array.
 
@@ -99,7 +98,7 @@ nothing #hide
 ```
 
 The node with inertia is two-dimensional, hence we need to specify two initial conditions.
-For the first dimension we keep the ic from above and insert! another one into `x0` at
+For the first dimension we keep the initial conditions from above and insert! another one into `x0` at
 the correct index.
 
 ```@example heterogeneous_system
@@ -109,7 +108,7 @@ nothing #hide
 ```
 
 `x0[1:4]` holds ic for nodes 1 to 4, `x0[5:6]` holds the two
-initial conditions for node 5, `x0[7:9]` holds ic for nodes 6 to 8.
+initial conditions for node 5, `x0[7:9]` holds initial conditions for nodes 6 to 8.
 
 ```@example heterogeneous_system
 prob_hetero = ODEProblem(nd_hetero!, x0, tspan, p)
@@ -117,7 +116,7 @@ sol_hetero = solve(prob_hetero, Rodas4());
 nothing #hide
 ```
 
-For clarity we plot only the variables refering to the oscillator's angle θ and color
+For clarity we plot only the variables referring to the oscillator's angle θ and color
 them according to their type.
 
 ```@example heterogeneous_system

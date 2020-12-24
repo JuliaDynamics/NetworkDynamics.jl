@@ -4,7 +4,8 @@
 
 using NetworkDynamics
 using LightGraphs
-using DifferentialEquations
+using OrdinaryDiffEq
+using StochasticDiffEq
 using Plots
 
 ### Defining a graph

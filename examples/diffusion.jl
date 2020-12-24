@@ -1,7 +1,3 @@
-using Pkg
-Pkg.activate(@__DIR__)
-using Revise
-
 using NetworkDynamics
 using LightGraphs
 using LinearAlgebra

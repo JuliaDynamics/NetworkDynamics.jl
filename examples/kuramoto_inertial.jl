@@ -5,7 +5,6 @@ using Revise
 using NetworkDynamics
 using LightGraphs
 using OrdinaryDiffEq
-# using DiffEqOperators
 using BenchmarkTools
 
 #### First without using NetworkDynamics
@@ -23,7 +22,6 @@ struct kuramoto_dyn{T, T2, U}
 end
 
 # callable struct with differential equation of Kurmaoto-Oscialltor (2-dim)
-# 2-dimensional differential equations:
 # x and dx arrays containing 2 variables (x[1:N] : ω , x[N+1:2N] : ϕ)
 function (dd::kuramoto_dyn)(dx, x, p, t)
     dx[1:N] .= dd.ω .- x[1:N] .- 5. .* dd.B * sin.(dd.B_trans * x[N+1:2N])

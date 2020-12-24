@@ -19,12 +19,11 @@ Installation is straightforward with Julia's package manager.
 
 # Overview
 
-The key construction is the function [`network_dynamics`](@ref) that takes in
-two arrays of functions describing the local dynamics on the edges and nodes of
-a graph `g`, and returns a composite function compatible with the
+The central construction is the function [`network_dynamics`](@ref) that receives functions describing the local dynamics on the edges and nodes of
+a graph `g` as inputs, and returns a composite function compatible with the
 DifferentialEquations.jl calling syntax.
 
 ```julia
-nd = network_dynamics(vertices!::Array{VertexFunction},  edges!::Array{EdgeFunction}, g)
+nd = network_dynamics(vertices!,  edges!, g)
 nd(dx, x, p, t)
 ```
