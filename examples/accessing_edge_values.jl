@@ -1,6 +1,3 @@
-# You will find a step-by-step guide to this example in the docs and the
-# corresponding jupyter notebook on our github repository.
-
 using NetworkDynamics
 using LightGraphs
 using OrdinaryDiffEq
@@ -10,26 +7,19 @@ using Plots
 
 N = 20 # number of nodes
 k = 4  # average degree
-g = barabasi_albert(N, k) # a little more exciting than a bare random graph
+g = barabasi_albert(N, k)
 
 
 ### Functions for edges and vertices
 
 function diffusionedge!(e, v_s, v_d, p, t)
-    # usually e, v_s, v_d are arrays, hence we use the broadcasting operator .
     e .= v_s .- v_d
     nothing
 end
 
-function diffusionvertex!(dv, v, e_s, e_d, p, t)
-    # usually dv, v, e_s, e_d are arrays, hence we use the broadcasting operator .
+function diffusionvertex!(dv, v, edges, p, t)
     dv .= 0.
-    # edges for which v is the source
-    for e in e_s
-        dv .-= e
-    end
-    # edges for which v is the destination
-    for e in e_d
+    for e in edges
         dv .+= e
     end
     nothing
@@ -54,11 +44,9 @@ sol = solve(ode_prob, Tsit5());
 plot(sol, vars = syms_containing(nd, "v"))
 
 # accessing edge values via helper function GetGD
-gd_nd = nd(sol(1.0), 1.0, p, GetGD) # exposes underlying graph data struct
-e_values_1 = gd_nd.e_array
+gd_nd = nd(sol(1.0), 1.0, nothing, GetGD) # exposes underlying graph data struct
+e_values = gd_nd.gdb.e_array
 
-plot(e_values_1, vars = syms_containing(nd, "e"))
-print(e_values_1[:])
 
 # accessing edge values using SavingCallback
 
@@ -72,5 +60,8 @@ function saving_func(u, t, integrator)
     end
     edgevals
 end
+
 cb = SavingCallback(saving_func, saved_values)
-sol = solve(prob,Tsit5(),callback=cb)
+sol = solve(ode_prob,Tsit5(),callback=cb)
+
+saved_values # stores e_values
