@@ -34,7 +34,6 @@ nothing # hide
 ```
 However, the internal vertex dynamics are now determined by the time-delayed equation $\dot v_i(t) = - v_i(t-\tau)$ and are described in the vertex function with help of the history array $h_v$ containing the past values of the vertex variables.
 ```@example DDEVertex
-
 function delaydiffusionvertex!(dv, v, edges, h_v, p, t)
    # h_v is the history array of the vertex variables
    dv .= -h_v
