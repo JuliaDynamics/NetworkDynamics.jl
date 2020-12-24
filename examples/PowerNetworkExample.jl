@@ -31,13 +31,10 @@ function (cae::complex_admittance_edge!)(e,v_s,v_d,p,t)
     nothing
 end
 
-function total_current(e_s, e_d)
+function total_current(edges)
     # Keeping with the convention of negative sign for outging current
     current = 0.0im
-    for e in e_s
-        current += e[1] + e[2]*im
-    end
-    for e in e_d
+    for e in edges
         current -= e[1] + e[2]*im
     end
     current
@@ -47,8 +44,8 @@ struct SwingVertex
     P
     D
 end
-function (sv::SwingVertex)(dv, v, e_s, e_d, p, t)
-    current = total_current(e_s, e_d)
+function (sv::SwingVertex)(dv, v, edges, p, t)
+    current = total_current(edges)
     voltage = v[1] + v[2] * im
     dv[3] = sv.P - sv.D * v[3] + real(voltage * conj(current))
     dvolt = 1.0im * v[3] * voltage - (abs(voltage) - 1) * voltage
@@ -61,8 +58,8 @@ end
 struct PQVertex
     P_complex
 end
-function (pq::PQVertex)(dv, v, e_s, e_d, p, t)
-    current = total_current(e_s, e_d)
+function (pq::PQVertex)(dv, v, edges, p, t)
+    current = total_current(edges)
     voltage = v[1] + v[2] * im
     residual = pq.P_complex - voltage * conj(current)
     dv[1] = real(residual)

@@ -21,15 +21,10 @@ function diffusionedge!(e, v_s, v_d, p, t)
     nothing
 end
 
-function diffusionvertex!(dv, v, e_s, e_d, p, t)
-    # usually dv, v, e_s, e_d are arrays, hence we use the broadcasting operator .
+function diffusionvertex!(dv, v, edges, p, t)
+    # usually dv, v, edges are arrays, hence we use the broadcasting operator .
     dv .= 0.
-    # edges for which v is the source
-    for e in e_s
-        dv .-= e
-    end
-    # edges for which v is the destination
-    for e in e_d
+    for e in edges
         dv .+= e
     end
     nothing

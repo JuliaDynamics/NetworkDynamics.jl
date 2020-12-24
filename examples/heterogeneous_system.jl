@@ -11,7 +11,6 @@
 
 using NetworkDynamics, OrdinaryDiffEq, Plots, LightGraphs
 
-
 N = 8
 g = watts_strogatz(N,2,0) # ring network
 
@@ -19,9 +18,9 @@ function kuramoto_edge!(e, θ_s, θ_d, K, t)
     e[1] = K * sin(θ_s[1] - θ_d[1])
 end
 
-function kuramoto_vertex!(dθ, θ, e_s, e_d, ω, t)
+function kuramoto_vertex!(dθ, θ, edges, ω, t)
     dθ[1] = ω
-    oriented_symmetric_edge_sum!(dθ, e_s, e_d)
+    sum_coupling!(dθ, edges)
 end
 
 vertex! = ODEVertex(f! = kuramoto_vertex!, dim = 1, sym=[:θ])
@@ -51,16 +50,13 @@ plot(sol, ylabel="θ")
 # constant value. A Kuramoto model with inertia consits of two interal variables leading to
 # more complicated (and for many applications more realistic) local dynamics.
 
-static! = StaticVertex(f! = (θ, e_s, e_d, c, t) -> θ .= c, dim = 1, sym = [:θ])
+static! = StaticVertex(f! = (θ, edges, c, t) -> θ .= c, dim = 1, sym = [:θ])
 
 
-function kuramoto_inertia!(dv, v, e_s, e_d, P, t)
+function kuramoto_inertia!(dv, v, edges, P, t)
     dv[1] = v[2]
     dv[2] = P - 1. * v[2]
-    for e in e_s
-        dv[2] -= e[1]
-    end
-    for e in e_d
+    for e in edges
         dv[2] += e[1]
     end
 end
@@ -126,7 +122,8 @@ end
 M = zeros(2,2)
 M[1,1] = 1
 
-nd_edgeA! = ODEEdge(f! = edgeA!, dim = 2, mass_matrix = M);
+nd_edgeA! = ODEEdge(f! = edgeA!, dim = 2, coupling=:undirected, mass_matrix = M);
+
 
 # This handles the second equations as `0 = M[2,2] * de[2] = g(e, v_s, v_d, p, t) - e[2]`.
 #
