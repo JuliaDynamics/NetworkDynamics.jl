@@ -11,15 +11,13 @@ g = barabasi_albert(N, k) # graph
 
 ### Network dynamics vertex and edge functions
 
-@inline function kuramoto_vertex!(dv, v, e_s, e_d, p, t)
-    # usually dv, v, e_s, e_d are arrays, hence we use the broadcasting operator .
+@inline function kuramoto_vertex!(dv, v, edges, p, t)
     dv .= p
-    oriented_symmetric_edge_sum!(dv, e_s, e_d)
+    sum_coupling!(dv, edges)
     nothing
 end
 
 @inline function kuramoto_edge!(e,v_s,v_d,p,t)
-    # usually e, v_s, v_d are arrays, hence we use the broadcasting operator .
     e .= p * sin.(v_s .- v_d)
     nothing
 end
@@ -45,8 +43,8 @@ kuramoto_network! = network_dynamics(odevertex, staticedge, g)
 x0 = randn(nv(g)) # nv(g) - number of vertices in g
 dx = similar(x0)
 
-prob = ODEProblem(kuramoto_network!, x0, (0.,2000), parameters)
-sol = solve(prob, Tsit5())
+prob = ODEProblem(kuramoto_network!, x0, (0.,200), parameters)
+sol = solve(prob, Tsit5(), reltol = 1e-6)
 
 plot(sol)
 
@@ -54,7 +52,7 @@ plot(sol)
 
 # s is a solution array
 function order_parameter(s)
-    θ  = 0
+    θ  = 0.
     for i in s
         θ += exp(im * i)
     end
@@ -68,4 +66,4 @@ u_idx = idx_containing(kuramoto_network!, :v)
 
 # Then we compute the order parameter at each time step:
 # sol[u_idx,:] is the multidimensional solution array
-plot(abs.(mapslices(order_parameter, sol[u_idx, :], dims = 1))[1:1000])
+plot(abs.(mapslices(order_parameter, sol[u_idx, :], dims = 1))[1:200])

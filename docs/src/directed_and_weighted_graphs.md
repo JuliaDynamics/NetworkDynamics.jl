@@ -1,7 +1,5 @@
 # Neurodynamic model of synchronization in the human brain
 
- An `IJulia` [notebook](https://github.com/FHell/NetworkDynamics.jl/tree/master/examples) corresponding to this tutorial is available on GitHub.
-
 #### Topics covered in this tutorial include:
  * constructing a directed, weighted graph from data
  * some useful macros
@@ -63,6 +61,10 @@ g_weighted = SimpleWeightedDiGraph(G)
 # For later use we extract the edge.weight attributes
 # . is the broadcasting operator and gets the attribute :weight for every edge
 edge_weights = getfield.(collect(edges(g_weighted)), :weight)
+
+# we promote the g_weighted graph as a directed graph (weights of the edges are included in parameters)
+g_directed = SimpleDiGraph(g_weighted)
+
 nothing # hide
 ```
 
@@ -74,13 +76,10 @@ Defining `VertexFunction` and `EdgeFunction` is similar to the example before. T
 ```@example fhn
 using NetworkDynamics
 
-@inline Base.@propagate_inbounds function fhn_electrical_vertex!(dv, v, e_s, e_d, p, t)
+@inline Base.@propagate_inbounds function fhn_electrical_vertex!(dv, v, edges, p, t)
     dv[1] = v[1] - v[1]^3 / 3 - v[2]
     dv[2] = (v[1] - a) * ϵ
-    for e in e_s
-        dv[1] -= e[1]
-    end
-    for e in e_d
+    for e in edges
         dv[1] += e[1]
     end
     nothing
@@ -92,12 +91,14 @@ end
 end
 
 odeelevertex = ODEVertex(f! = fhn_electrical_vertex!, dim = 2, sym=[:u, :v]);
-electricaledge = StaticEdge(f! = electrical_edge!, dim = 1)
+electricaledge = StaticEdge(f! = electrical_edge!, dim = 1, coupling = :directed)
 
-fhn_network! = network_dynamics(odeelevertex, electricaledge, g_weighted)
+fhn_network! = network_dynamics(odeelevertex, electricaledge, g_directed)
 
 nothing # hide
 ```
+
+Since this system is a directed one with thus directed edges, the keyword argument `coupling` is used to set the coupling of the edges to `:directed`.
 
 Note that the multiplication with the coupling strength $\sigma$ has been commented out. Since $\sigma$ is the same for every edge we can absorb this multiplication into the edge weight parameter `p`. Since our network has almost 8000 edges, this saves 8000 multiplications at every function call and leads to an 8-fold increase in performance.
 

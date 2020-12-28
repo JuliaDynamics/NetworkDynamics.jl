@@ -1,17 +1,22 @@
-```
-This script was written by Hans Würfel. It reimplements the minimal
-example of a dynamic cascading failure described in Schäfer et al. (2018) [1].
-It is an example how to use callback functions on single nodes or edges.
+### This script works on version 0.4 but is broken on 0.5
 
-[1] Schäfer, B., Witthaut, D., Timme, M., & Latora, V. (2018).
-Dynamically induced cascading failures in power grids.
-Nature communications, 9(1), 1-13.
-https://www.nature.com/articles/s41467-018-04287-5
-```
+
+# This script was written by Hans Würfel. It reimplements the minimal
+# example of a dynamic cascading failure described in Schäfer et al. (2018) [1].
+# It is an example how to use callback functions on single nodes or edges.
+#
+# [1] Schäfer, B., Witthaut, D., Timme, M., & Latora, V. (2018).
+# Dynamically induced cascading failures in power grids.
+# Nature communications, 9(1), 1-13.
+# https://www.nature.com/articles/s41467-018-04287-5
+
+
+
 
 using NetworkDynamics
 using LightGraphs
-using DifferentialEquations
+using OrdinaryDiffEq
+using DiffEqCallbacks
 using Plots
 
 struct SwingVertex
@@ -19,22 +24,19 @@ struct SwingVertex
     I::Float64 # inertia of node
     γ::Float64 # damping of node
 end
-function (sv::SwingVertex)(dv, v, e_s, e_d, p, t)
+function (sv::SwingVertex)(dv, v, edges, p, t)
     # v[1] -> δ, dv[1] = dγ = ω = v[2]
     # v[2] -> ω, dv[2] -> dω
     dv[1] = v[2]
-    dv[2] = sv.P - sv.γ*v[2] + flow_sum(e_s, e_d)
+    dv[2] = sv.P - sv.γ*v[2] + flow_sum(edges)
     dv[2] = dv[2]/sv.I
     nothing
 end
 
-function flow_sum(e_s, e_d)
+function flow_sum(edges)
     sum = 0.0
-    for e in e_d
+    for e in edges
         sum -= e[1]
-    end
-    for e in e_s
-        sum += e[1]
     end
     return sum
 end
@@ -90,7 +92,7 @@ function watch_line_limit_callback(network)
     function condition(out, u, t, integrator)
         # get current edge values from integrator
         graph_data = integrator.f.f(u, integrator.p, integrator.t, GetGD)
-        edge_values = graph_data.e_array
+        edge_values = graph_data.gdb.e_array
         for i in 1:num_e
             out[i] = edges[i].f!.max_flow - abs(edge_values[i])
         end
@@ -161,8 +163,9 @@ x0 = [-0.12692637482862684, -1.3649456633810975e-6, 0.14641121510104085, 4.21910
 # define callback to save edge values (for plotting)
 function save_edges(u, t, integrator)
     graph_data = integrator.f.f(u, integrator.p, integrator.t, GetGD)
-    return copy(graph_data.e_array)
+    return copy(graph_data.gdb.e_array)
 end
+
 saved_edgevalues = SavedValues(Float64, Array{Float64, 1})
 save_callback = SavingCallback(save_edges, saved_edgevalues)
 

@@ -16,4 +16,5 @@ ODEEdge
 StaticDelayEdge
 syms_containing
 idx_containing
+sum_coupling!
 ```

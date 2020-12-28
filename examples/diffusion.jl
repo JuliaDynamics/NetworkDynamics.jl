@@ -1,7 +1,3 @@
-using Pkg
-Pkg.activate(@__DIR__)
-using Revise
-
 using NetworkDynamics
 using LightGraphs
 using LinearAlgebra
@@ -65,9 +61,9 @@ plot(sol_L.t, sol_ana)
     nothing
 end
 
-@inline function diffusion_vertex!(dv, v, e_s, e_d, p, t)
+@inline function diffusion_vertex!(dv, v, edges, p, t)
     dv .= 0.
-    oriented_symmetric_edge_sum!(dv, e_s, e_d) # Oriented sum of the incoming and outgoing edges
+    sum_coupling!(dv, edges)
     nothing
 end
 
@@ -76,7 +72,7 @@ end
 # constructors of NetworkDynamics
 odevertex = ODEVertex(f! = diffusion_vertex!,dim = 1)
 staticedge = StaticEdge(f! = diffusion_edge!, dim = 1)
-odeedge = ODEEdge(staticedge) # we promote the static edge to an ODEEdge artifically
+
 
 # setting up the key constructor network_dynamics with static edges
 diff_network_st = network_dynamics(odevertex, staticedge, g)
@@ -104,13 +100,24 @@ isapprox(dx_L, dx_st)
 
 ### Case with ODEEdges
 
-# network dynamics with a StaticEdge that got promoted to an ODEEdge
+# network dynamics with a StaticEdge that got promoted to an ODEEdge artifically
+
+@inline function promotable_diffusion_edge!(e,v_s,v_d,p,t)
+    e[1] = v_s[1] - v_d[1]
+    e[2] = v_d[1] - v_s[1]
+    nothing
+end
+
+promotable_staticedge = StaticEdge(f! = promotable_diffusion_edge!,
+                                   dim = 2, coupling = :fiducial)
+odeedge = ODEEdge(promotable_staticedge)
+
 diff_network_ode = network_dynamics(odevertex,odeedge,g)
 
 ### Simulation
 # ODEEdge's (with internal dynamics) need initial conditions for the edges
 # we first test valid initial conditions for the 10 nodes + 25 edges
-x0_ode = find_valid_ic(diff_network_ode, randn(10 + 25))
+x0_ode = find_valid_ic(diff_network_ode, randn(10 + 50))
 dx0_ode = similar(x0_ode)
 
 # compare the treatment of the same problem, with StaticEdges and ODEEdges

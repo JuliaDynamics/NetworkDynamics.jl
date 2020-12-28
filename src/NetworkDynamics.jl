@@ -76,15 +76,17 @@ of VertexFunctions **`vertices!`**, an array of EdgeFunctions **`edges!`** and a
 `LightGraph.jl` object **`g`**. The optional argument `parallel` is a boolean
 value that denotes if the central loop should be executed in parallel with the number of threads set by the environment variable `JULIA_NUM_THREADS`.
 """
-function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U},
-                          graph; x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: StaticEdge}
-    if parallel
-        haskey(ENV, "JULIA_NUM_THREADS") &&
-        parse(Int, ENV["JULIA_NUM_THREADS"]) > 1 ? nothing :
-        print("Warning: You are using multi-threading with only one thread ",
-        "available to Julia. Consider re-starting Julia with the environment ",
-        "variable JULIA_NUM_THREADS set to the number of physical cores of your CPU.")
-    end
+function network_dynamics(vertices!::Union{Array{T, 1}, T},
+                          edges!::Union{Array{U, 1}, U},
+                          graph;
+                          x_prototype=zeros(1),
+                          parallel=false) where {T <: ODEVertex, U <: StaticEdge}
+
+    warn_parallel(parallel)
+
+    # user_edges! = copy(edges!)
+    edges! = prepare_edges(edges!, graph)
+
 
     v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array = collect_ve_info(vertices!, edges!, graph)
 
@@ -107,13 +109,9 @@ end
 ## DDE
 
 function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; initial_history=nothing, x_prototype=zeros(1), parallel=false) where {T <: DDEVertex, U <: StaticDelayEdge}
-    if parallel
-        haskey(ENV, "JULIA_NUM_THREADS") &&
-        parse(Int, ENV["JULIA_NUM_THREADS"]) > 1 ? nothing :
-        print("Warning: You are using multi-threading with only one thread ",
-        "available to Julia. Consider re-starting Julia with the environment ",
-        "variable JULIA_NUM_THREADS set to the number of physical cores of your CPU.")
-    end
+    warn_parallel(parallel)
+
+    edges! = prepare_edges(edges!, graph)
 
     v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array = collect_ve_info(vertices!, edges!, graph)
 
@@ -122,7 +120,7 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
     e_array = similar(x_prototype, sum(e_dims))
 
     # default
-    if initial_history == nothing
+    if initial_history === nothing
         initial_history = ones(sum(v_dims))
     end
 
@@ -162,13 +160,14 @@ end
 ## ODE
 
 function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: ODEEdge}
-    if parallel
-        haskey(ENV, "JULIA_NUM_THREADS") &&
-        parse(Int, ENV["JULIA_NUM_THREADS"]) > 1 ? nothing :
-        println("Warning: You are using multi-threading with only one thread ",
-        "available to Julia. Consider re-starting Julia with the environment ",
-        "variable JULIA_NUM_THREADS set to the number of physical cores of your CPU.")
-    end
+
+    warn_parallel(parallel)
+
+    # We are abusing prepare_edges here to throw errors for impossible connections of
+    # coupling type and graph. We don't save it's return value though, since reconstruction
+    # of ODEEdges is forbidden at the moment.
+
+    prepare_edges(edges!, graph)
 
     v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array = collect_ve_info(vertices!, edges!, graph)
 
@@ -203,65 +202,173 @@ function network_dynamics(vertices!,  edges!, graph; parallel=false)
     try
         Array{VertexFunction}(vertices!)
     catch err
-        println("Cannot convert the vertices to an Array{VertexFunction}!")
-        println(err)
-        return nothing
+        throw(ArgumentError("Cannot convert the vertices to an Array{VertexFunction}!"))
     end
 
     try
         Array{EdgeFunction}(edges!)
     catch err
-        println("Cannot convert the edges to an Array{EdgeFunction}!")
-        println(err)
-        return nothing
+        throw(ArgumentError("Cannot convert the edges to an Array{EdgeFunction}!"))
     end
     va! = Array{VertexFunction}(vertices!)
     ea! = Array{EdgeFunction}(edges!)
-    network_dynamics(va!,  ea!, graph, parallel = parallel)
+    network_dynamics(va!, ea!, graph, parallel = parallel)
 end
 
-function network_dynamics(vertices!::Array{VertexFunction}, edges!::Array{EdgeFunction}, graph; parallel=false)
+function network_dynamics(vertices!::Array{VertexFunction}, edges!::Array{EdgeFunction}, graph; kwargs...)
     @assert length(vertices!) == nv(graph)
     @assert length(edges!) == ne(graph)
 
     contains_delay = false
-
-
-    for e in edges!
-        # maybe add new abstract type instead of using a union
-        if isa(e, StaticDelayEdge) # eventually: Union{StaticDelayEdge, ODEDelayEdge})
-            contains_delay = true
-        end
-    end
-    for v in vertices!
-        # maybe add new abstract type instead of using a union
-        if isa(v, DDEVertex)
-            contains_delay = true
-        end
-    end
-    # If one Edge or Vertex needs access to the history function, all network components are promoted to hisotry aware version -> lots more variables that are potentially not used are passed around. the multilayer structure should (partially) work around that need.
-    if contains_delay
-        return network_dynamics(Array{DDEVertex}(vertices!),Array{StaticDelayEdge}(edges!), graph, parallel = parallel)
-    end
-
-
     contains_dyn_edge = false
 
-
     for e in edges!
+        if isa(e, StaticDelayEdge)
+            contains_delay = true
+        end
         if isa(e, ODEEdge)
             contains_dyn_edge = true
         end
     end
+    for v in vertices!
+        if isa(v, DDEVertex)
+            contains_delay = true
+        end
+    end
+
+    contains_delay && contains_dyn_edge ? error(
+        ArgumentError("ODEEdges with delay are not supported at the moment.")) : nothing
+
+    # If one Edge or Vertex needs access to the history function, all network components are promoted to hisotry aware version -> lots more variables that are potentially not used are passed around. the multilayer structure should (partially) work around that need.
+    if contains_delay
+        return network_dynamics(Array{DDEVertex}(vertices!),Array{StaticDelayEdge}(edges!), graph; kwargs...)
+    end
+
     # If one edge is an ODEEdge all other edges will be promoted. This should be
     # solved more elegantly by the upcoming multilayer structure.
+
     if contains_dyn_edge
-        return network_dynamics(Array{ODEVertex}(vertices!),Array{ODEEdge}(edges!), graph, parallel = parallel)
+        return network_dynamics(Array{ODEVertex}(vertices!),Array{ODEEdge}(edges!), graph; kwargs...)
     else
-        return network_dynamics(Array{ODEVertex}(vertices!),Array{StaticEdge}(edges!), graph, parallel = parallel)
+        return network_dynamics(Array{ODEVertex}(vertices!),Array{StaticEdge}(edges!), graph; kwargs...)
     end
     nothing
 end
+
+
+
+# Here is not the best place for this error,
+# but requires the least changes before the next refactor.
+function prepare_edges(edges, g)
+    @assert typeof(edges) <: Union{EdgeFunction, Vector}
+    throw(ArgumentError("Graph type not recognized. Currently only SimpleGraph and SimpleDiGraph are supported."))
+end
+"""
+If only a sinlge Function is given, not an Array of EdgeFunctions.
+"""
+function prepare_edges(edge::EdgeFunction, g::SimpleGraph)
+    if edge.coupling == :directed
+        throw(ArgumentError("Coupling type of EdgeFunction not available for undirected Graphs"))
+    elseif edge.coupling == :undefined
+        @info("Reconstructing EdgeFunction with :undefined coupling type...")
+        return reconstruct_edge(edge, :undirected)
+    end
+    return edge
+end
+
+function prepare_edges(edge::EdgeFunction, g::SimpleDiGraph)
+    if edge.coupling ∈ (:symmetric, :antisymmetric, :undirected, :fiducial)
+        throw(ArgumentError("Coupling type of EdgeFunction not available for directed Graphs"))
+    elseif edge.coupling == :undefined
+        @info("Reconstructing EdgeFunction with :undefined coupling type...")
+        return reconstruct_edge(edge, :directed)
+    end
+    return edge
+end
+
+""" prepare_edges(edges, g::SimpleGraph)
+
+
+"""
+function prepare_edges(edges::Vector, g::SimpleGraph)
+    # This is a bit hacky, gets the de-parametrized type
+    new_edges = Vector{Base.typename(eltype(edges)).wrapper}(undef, length(edges))
+    infobool = true
+    for (i, edge) in enumerate(edges)
+        if edge.coupling == :directed
+            throw(ArgumentError("Coupling type of edge $i not available for undirected Graphs"))
+        elseif edge.coupling == :undefined
+            if infobool
+                @info("Reconstructing EdgeFuntions with :undefined coupling type.")
+                infobool = false
+            end
+            new_edges[i] = reconstruct_edge(edge, :undirected)
+        else
+            new_edges[i] = edges[i]
+        end
+    end
+    return new_edges
+end
+
+"""
+"""
+function prepare_edges(edges::Vector, g::SimpleDiGraph)
+    new_edges = Vector{Base.typename(eltype(edges)).wrapper}(undef, length(edges))
+    infobool = true
+    for (i, edge) in enumerate(edges)
+        if edge.coupling ∈ (:symmetric, :antisymmetric, :undirected, :fiducial)
+            throw(ArgumentError("Coupling type of edge $i not available for directed Graphs"))
+        elseif edge.coupling == :undefined
+            if infobool
+                @info("Reconstructing EdgeFuntions with :undefined coupling type.")
+                infobool = false
+            end
+            new_edges[i] = reconstruct_edge(edge, :directed)
+        else
+            new_edges[i] = edges[i]
+        end
+    end
+    return new_edges
+end
+
+
+
+
+@inline function reconstruct_edge(edge::StaticEdge, coupling::Symbol)
+    let f! = edge.f!, dim = edge.dim, sym = edge.sym
+        return StaticEdge(f! = f!,
+                          dim = dim,
+                          coupling = coupling,
+                          sym = sym)
+    end
+end
+@inline function reconstruct_edge(edge::StaticDelayEdge, coupling::Symbol)
+    let f! = edge.f!, dim = edge.dim, sym = edge.sym
+        return StaticDelayEdge(f! = f!,
+                               dim = dim,
+                               coupling = coupling,
+                               sym = sym)
+    end
+end
+@inline function reconstruct_edge(edge::ODEEdge, coupling::Symbol)
+    error("Reconstruction of ODEEdges is not implemented at the moment.")
+end
+
+# Not used at the moment
+#
+# @inline function reconstruct_edge(edge::ODEEdge, coupling::Symbol)
+#     let f! = edge.f!, dim = edge.dim, sym = edge.sym, mass_matrix = edge.mass_matrix
+#         if coupling == :undirected
+#             @warn "Reconstructing an ODEEdge affects its internal dimension."
+#         return ODEEdge(f! = f!,
+#                        dim = dim,
+#                        coupling = coupling,
+#                        mass_matrix = mass_matrix,
+#                        sym = sym)
+#     end
+# end
+#
+#
 
 """
 Allow initializing StaticEdgeFunction for Power Dynamics

@@ -20,6 +20,7 @@ makedocs(
 	"parameters.md",
 	"Multithreading.md",
     "Library.md",
+	"accessing_edge_variables.md",
     "Tutorials" => [
 		"Getting started" => "getting_started_with_network_dynamics.md",
 		"Directed and weighted graphs" => "directed_and_weighted_graphs.md",

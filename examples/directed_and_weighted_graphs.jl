@@ -21,19 +21,18 @@ g_weighted = SimpleWeightedDiGraph(G)
 # . is the broadcasting operator and gets the attribute: weight of every edge
 edge_weights = getfield.(collect(edges(g_weighted)), :weight);
 
+# we promote the g_weighted graph as a directed graph (weights of the edges are used in parameters)
+g_directed = SimpleDiGraph(g_weighted)
 
 ### Setting up network_dynamics
 
 ```
 Fitz-Hugh Nagumo vertex with electrical gap junctions
 ```
-@inline Base.@propagate_inbounds function fhn_electrical_vertex!(dv, v, e_s, e_d, p, t)
+@inline Base.@propagate_inbounds function fhn_electrical_vertex!(dv, v, edges, p, t)
     dv[1] = v[1] - v[1]^3 / 3 - v[2]
     dv[2] = (v[1] - a) * ϵ # x=(u,v)^T
-    for e in e_s
-        dv[1] -= e[1]
-    end
-    for e in e_d
+    for e in edges
         dv[1] += e[1]
     end
     nothing
@@ -44,11 +43,11 @@ end
     nothing
 end
 
-electricaledge = StaticEdge(f! = electrical_edge!, dim = 1)
+electricaledge = StaticEdge(f! = electrical_edge!, dim = 1, coupling = :directed)
 # since the vertex is two dimensional, we specify both symbols u,v
 odeelevertex = ODEVertex(f! = fhn_electrical_vertex!, dim = 2, sym=[:u, :v])
 
-fhn_network! = network_dynamics(odeelevertex, electricaledge, g_weighted)
+fhn_network! = network_dynamics(odeelevertex, electricaledge, g_directed)
 
 # global parameters that are accessed several times should be `const` to improve performance
 
