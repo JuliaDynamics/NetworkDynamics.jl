@@ -1,4 +1,4 @@
-# Accessing edge values
+# Accessing internal edge values
 
  In the following, we will present two different ways how the edge values of an `ODEFunction` with `StaticEdge`s  can be retrieved
 
