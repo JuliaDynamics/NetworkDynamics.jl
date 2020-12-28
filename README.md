@@ -3,7 +3,7 @@
 [![](https://img.shields.io/badge/docs-stable-blue.svg)](https://fhell.github.io/NetworkDynamics.jl/dev)
 <!-- [![](https://img.shields.io/badge/docs-stable-blue.svg)](https://fhell.github.io/NetworkDynamics.jl/stable) -->
 
-IMPORTANT INFORMATION: If you are trying to reproduce the examples from our recent preprint on [arXiV] (https://arxiv.org/abs/2012.12696), make sure to use ND v0.5, available from the [dev](https://github.com/FHell/NetworkDynamics.jl/tree/dev-0.5) branch. Version 0.5 will be released early next year. The documentation is receiving a major rewrite as well, since v0.5 changes quite a lot of syntax. Updated docs can be build manually from the dev branch.
+IMPORTANT INFORMATION: If you are trying to reproduce the examples from our recent preprint on [arXiV](https://arxiv.org/abs/2012.12696), make sure to use ND v0.5, available from the [dev](https://github.com/FHell/NetworkDynamics.jl/tree/dev-0.5) branch. Version 0.5 will be released early next year. The documentation is receiving a major rewrite as well, since v0.5 changes quite a lot of syntax. Updated docs can be build manually from the dev branch.
 
 A package for working with dynamical systems on complex networks. NetworkDynamics.jl provides an interface between [LightGraphs.jl](https://github.com/JuliaGraphs/LightGraphs.jl) and [DifferentialEquations.jl](https://github.com/JuliaDiffEq/DifferentialEquations.jl). It allows to define several types of dynamic and static nodes and edges and to link them up in order to create complex network dynamics.
 
