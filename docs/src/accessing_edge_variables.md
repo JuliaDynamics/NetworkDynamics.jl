@@ -1,12 +1,12 @@
 # Accessing internal edge values
 
- In the following, we will present two different ways how the edge values of an `ODEFunction` with `StaticEdge`s  can be retrieved
+ In the following, we will present two different ways how the edge values of an `ODEFunction` with `StaticEdge`s  can be retrieved. A more extensive demonstration is available in the examples folder.
 
 ## Accessing edge values via GetGD
 
 `NetworkDynamics.jl` includes the types `GetGD` and `GetGS`, which can be used to access to the underlying GraphData and GraphStruct objects by multiple dispatching of the generated `ODEFunction`. Let `nd` be the ODEFunction that has been formed by calling `network_dynamics`. To get access to the edge values at any time $t$, `nd` can be called as follows:
 
-```@example accessing_edge_values
+```julia
 gd_nd = nd(x, p, t, GetGD) # exposes underlying graph data struct
 e_values = gd_nd.gdb.e_array
 nothing # hide
@@ -18,7 +18,7 @@ By adding `GetGD` as an argument to the call of `nd`, a `GraphData` instance at 
 
 Instead of recomputing the values of the edge variables they can be saved in parallel to an integration with `DiffEqCallbacks`.
 
-```@example
+```julia
 using DiffEqCallbacks: SavingCallback, SavedValues
 
 saved_values = SavedValues(Float64, Vector{Float64})
