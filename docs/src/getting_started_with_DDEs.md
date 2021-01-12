@@ -34,7 +34,6 @@ nothing # hide
 However, the internal vertex dynamics are now determined by the time-delayed equation $\dot v_i(t) = - v_i(t-\tau)$ and are described in the vertex function with help of the history array $h_v$ containing the past values of the vertex variables.
 ```@example DDEVertex
 function delaydiffusionvertex!(dv, v, edges, h_v, p, t)
-   # h_v is the history array of the vertex variables
    dv .= -h_v
    sum_coupling!(dv, edges)
    nothing
@@ -150,10 +149,10 @@ end
 nothing # hide
 ```
 
-In this case the vertex function does not depend on any past values and is simply constructed as an `ODEVertex`. Since the edges depend on the history of the vertex variables their calling signature has changed and they are handed to the delay-aware constructor `StaticDelayEdge`. *Static* refers to the fact that they don't have any internal dynamics.
+In this case the vertex function does not depend on any past values and is simply constructed as an `ODEVertex`. Since the edges depend on the history of the vertex variables their calling signature has changed and they are handed to the delay-aware constructor `StaticDelayEdge`. They are called *Static* since don't have internal dynamical variables.
 
 ```@example DDEVertex
-kdedge! = StaticDelayEdge(f! = kuramoto_delay_edge!, dim = 2)
+kdedge! = StaticDelayEdge(f! = kuramoto_delay_edge!, dim = 1)
 kdvertex! = ODEVertex(f! = kuramoto_vertex!, dim = 1)
 
 nd! = network_dynamics(kdvertex!, kdedge!, g)
@@ -183,4 +182,4 @@ plot(sol, vars = syms_containing(nd, "v"), legend=false)
 
 ## Delay differential equations with algebraic constraints
 
-The vertex dynamics may in principle contain algebraic equations in mass matrix form. For an experimental test case have a look at the last section of this [example on github](https://github.com/FHell/NetworkDynamics.jl/blob/master/examples/getting-started-with-DDEs.jl).
+The vertex dynamics may in principle contain algebraic equations in mass matrix form. For an experimental test case have a look at the last section of this [example on github](https://github.com/FHell/NetworkDynamics.jl/blob/master/examples/getting_started_with_DDEs.jl).

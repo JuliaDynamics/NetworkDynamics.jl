@@ -202,7 +202,6 @@ solved.
 
 For more details see the documentation.
 """
-
 @Base.kwdef struct ODEEdge{T} <: EdgeFunction
     f!::T # (de, e, v_s, v_t, p, t) -> nothing
     dim::Int # number of dimensions of e
@@ -330,7 +329,6 @@ promote_rule(::Type{DDEVertex}, ::Type{ODEVertex}) = DDEVertex
 """
 Like a static edge but with extra arguments for the history of the source and destination vertices. This is NOT a DDEEdge.
 """
-
 @Base.kwdef struct StaticDelayEdge{T} <: EdgeFunction
     f!::T # (e, v_s, v_t, h_v_s, h_v_d, p, t) -> nothing
     dim::Int # number of dimensions of e
