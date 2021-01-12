@@ -1,7 +1,7 @@
 begin
-    println("----------------------Testing ND Examples----------------------")
     using Pkg
     Pkg.activate(@__DIR__)
+    println("----------------------Testing ND Examples----------------------")
     for file in
         ("accessing_edge_values.jl",
         "cascading_failure.jl",
@@ -19,11 +19,13 @@ begin
 
 
         println("\nTesting ", file, ".\n")
-        try
-            include(file)
-        catch e
-            println(e)
-            print("!!! ERROR in ", file, ". Continuing with the next example...\n")
+        begin
+            try
+                include(file)
+            catch e
+                println(e)
+                print("!!! ERROR in ", file, ". Continuing with the next example...\n")
+            end
         end
     end
 end

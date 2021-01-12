@@ -1,4 +1,4 @@
-### This script works on version 0.4 but is broken on 0.5
+println("This script works with NetworkDynamics.jl 0.4 but is broken on 0.5 due to syntax changes.")
 
 
 # This script was written by Hans Würfel. It reimplements the minimal

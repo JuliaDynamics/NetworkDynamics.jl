@@ -4,6 +4,7 @@ authors = ["Frank Hellmann <hellmann@pik-potsdam.de>", "Michael Lindner <mlindne
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 DelayDiffEq = "bcd4f6db-9728-5f36-b5f7-82caef46ccdb"
+DiffEqCallbacks = "459566f4-90b8-5000-8ac3-15dfb0a30def"
 GraphPlot = "a2cc645c-3eea-5389-862e-a155d0052231"
 LightGraphs = "093fc24a-ae57-5d10-9952-331d41423f4d"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -15,3 +16,6 @@ SimpleWeightedGraphs = "47aef6b3-ad0c-573a-a1e2-d07658019622"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 StochasticDiffEq = "789caeaf-c7a9-5a7d-9973-96adeb23e2a0"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[compat]
+NetworkDynamics = "0.5"
