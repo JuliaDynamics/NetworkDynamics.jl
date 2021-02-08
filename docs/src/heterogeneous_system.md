@@ -50,7 +50,7 @@ x0 .-= sum(x0)./N
 tspan = (0., 10.)
 prob = ODEProblem(nd!, x0, tspan, p)
 sol = solve(prob, Tsit5())
-plot(sol, ylabel="θ")
+plot(sol, ylabel="θ", fmt = :png)
 ```
 
 ## Heterogeneous dynamics
@@ -127,7 +127,7 @@ nodecolor = [colorant"lightseagreen", colorant"orange", colorant"darkred"];
 nodefillc = reshape(nodecolor[membership], 1, N);
 
 vars = syms_containing(nd_hetero!, :θ);
-plot(sol_hetero, ylabel="θ", vars=vars, lc = nodefillc)
+plot(sol_hetero, ylabel="θ", vars=vars, lc = nodefillc, fmt = :png)
 ```
 
 ## Components with algebraic constraints

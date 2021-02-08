@@ -100,7 +100,7 @@ ode_prob = ODEProblem(nd, u0, (0.,500.), p)
 ode_sol = solve(ode_prob, Tsit5())
 
 using Plots, LaTeXStrings
-plot(ode_sol, vars = syms_containing(nd, "ω"), ylims = (-1.0, 1.0), ylabel = L"\omega", legend = false)
+plot(ode_sol, vars = syms_containing(nd, "ω"), ylims = (-1.0, 1.0), ylabel = L"\omega", legend = false, fmt = :png)
 ```
 
 We see that this is in fact a fixpoint solution. We will later use this as an initial condition for the numerical integration of the SDE system.
@@ -138,7 +138,7 @@ Finally, we can create an `SDEProblem` and solve it with `DifferentialEquations`
 ```@example SDEVertex
 sde_prob = SDEProblem(nd, nd_noise, u0, (0., 500.), p)
 sde_sol = solve(sde_prob, SOSRA())
-plot(sde_sol, vars = syms_containing(nd, "ω"), ylims = (-1.0, 1.0), ylabel = L"\omega", legend = false)
+plot(sde_sol, vars = syms_containing(nd, "ω"), ylims = (-1.0, 1.0), ylabel = L"\omega", legend = false, fmt = :png)
 ```
 
 More details on SDE problems, e.g. how to include correlations or how to define an `EnsembleProblem`, can be found in the [documentation](https://diffeq.sciml.ai/stable/types/sde_types/) of `DifferentialEquations`.

@@ -100,11 +100,8 @@ We are solving the diffusion problem on the time interval $[0, 4]$ with the `Tsi
 
 ```@example diffusion
 using Plots
-plot(sol, vars = syms_containing(nd, "v"));
-savefig("diff1.svg"); nothing # hide
+plot(sol, vars = syms_containing(nd, "v"), fmt = :png)
 ```
-
-![](diff1.svg)
 
 The plotting is straightforward. The **`vars`** keyword allows us to pass a list of indices or *symbols* specifiying the variables we want to plot. *Symbols* can be thought of as names given to the interal variables of an `ODEFunction`, much like the variables $x$ or $\phi$ in mathematical notation. The default symbol for vertex variables is `v`, however we are free to specify other symbols by passing them to the `ODEVertex` constructor.
 
@@ -131,11 +128,8 @@ sol_2 = solve(ode_prob_2, Tsit5());
 
 
 # Try plotting the variables ϕ_i yourself. [To write ϕ type \phi and press TAB]
-plot(sol_2, vars = syms_containing(nd_2, "x"));
-savefig("diff2.svg"); nothing # hide
+plot(sol_2, vars = syms_containing(nd_2, "x"), fmt = :png)
 ```
-
-![](diff2.svg)
 
 ## Appendix: The network Laplacian $L$
 

@@ -147,8 +147,5 @@ The plot of the excitatory variables shows that they synchronize for this choice
 ```@example fhn
 using Plots
 
-plot(sol, vars = idx_containing(fhn_network!, :u), legend = false, ylim=(-5, 5));
-savefig("fhnsync.svg") # hide
+plot(sol, vars = idx_containing(fhn_network!, :u), legend = false, ylim=(-5, 5), fmt = :png)
 ```
-
-![](fhnsync.svg)

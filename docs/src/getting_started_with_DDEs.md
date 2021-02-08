@@ -91,7 +91,7 @@ using DelayDiffEq, Plots
 
 dde_prob = DDEProblem(nd, x0, h, tspan, p)
 sol = solve(dde_prob, MethodOfSteps(Tsit5()))
-plot(sol, vars = syms_containing(nd, "v"))
+plot(sol, vars = syms_containing(nd, "v"), fmt = :png)
 ```
 
 ## Bonus: Two independent diffusions
@@ -119,7 +119,7 @@ Now we can define the `DDEProblem` and solve it.
 ```@example DDEVertex
 dde_prob_2 = DDEProblem(nd_2, x0_2, h_2, tspan, p)
 sol_2 = solve(dde_prob_2, MethodOfSteps(Tsit5()));
-plot(sol_2, legend=false)
+plot(sol_2, legend=false, fmt = :png)
 ```
 
 ## Kuramoto model with delay
@@ -176,7 +176,7 @@ sol = solve(dde_prob, MethodOfSteps(Tsit5()));
 
 ### Plotting
 
-plot(sol, vars = syms_containing(nd, "v"), legend=false)
+plot(sol, vars = syms_containing(nd, "v"), legend=false, fmt = :png)
 
 ```
 
