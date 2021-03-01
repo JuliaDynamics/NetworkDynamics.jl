@@ -157,7 +157,7 @@ b*x
 
 using ForwardDiff
 
-function attempt(dx, x, p, t)
+function attempt(dx, b, x, p, t)
   dx[1] = x[1]^2+x[2]^3-1
   dx[2] = x[1]^4 - x[2]^4 + x[1]*x[2]
   nothing
@@ -171,11 +171,11 @@ results = zeros(2, 2)
 
 p = 1.0
 t = 0.0
+b = [0.0, 0.0]
 
+cfg = ForwardDiff.JacobianConfig((y, x) -> attempt(y, b, x, p, t), dx, a)
 
-cfg = ForwardDiff.JacobianConfig((y, x) -> attempt(y, x, p, t), dx, a)
-
-ForwardDiff.jacobian!(results, (y, x) -> attempt(y, x, p, t), dx, a, cfg, Val{false}())
+ForwardDiff.jacobian!(results, (y, x) -> attempt(y, b, x, p, t), dx, a, cfg, Val{false}())
 
 
 

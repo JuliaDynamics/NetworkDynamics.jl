@@ -40,6 +40,8 @@ function (je::jac_edge_struct)(e, v_s, v_d, p, t) # p = [z_s z_d]
     nothing
 end
 
+
+
 vertexfunc! = jac_vertex(Jac_intern)
 edgefunc! = jac_edge_struct(Jac_src, Jac_dst)
 
