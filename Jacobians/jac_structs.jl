@@ -6,34 +6,33 @@
     mass_matrix=I # Mass matrix for the equation
     sym=[:v for i in 1:dim] # Symbols for the dimensions
     jac::bool
-    J::F1
-    z::F2
+    VertexJacobian!::F1
+    z::AbstractArray
 
     function JacVertex(f!::T, # The function with signature (dx, x, edges, h, p, t) -> nothingdim::Int, # number of dimensions of x
                        mass_matrix=I, # Mass matrix for the equation
                        sym=[:v for i in 1:dim], # Symbols for the dimensions
-                       J::F )
+                       VertexJacobian!::F1.
+                       z:AbstractArray)
         #J = internal_jacobian ...
 end
 
 
 
-@Base.kwdef struct JacEdge{T} <: EdgeFunction
+@Base.kwdef struct StaticEdge{T} <: EdgeFunction
     f!::T # (e, v_s, v_t, p, t) -> nothing
     dim::Int # number of dimensions of e
     coupling = :undefined # :directed, :symmetric, :antisymmetric, :fiducial, :undirected
     sym=[:e for i in 1:dim] # Symbols for the dimensions
     jac::bool
-    J_s::F1
-    J_d::F2
+    EdgeJacobian!::F
 
 
     function JacEdge(user_f!::T,
                            dim::Int,
                            coupling::Symbol,
-                           sym::Vector{Symbol}
-                           J_s::F1,
-                           J_d::F2) where T,
+                           sym::Vector{Symbol},
+                           EdgeJacobian!::F) where T,
 
         coupling_types = (:undefined, :directed, :fiducial, :undirected, :symmetric,
                           :antisymmetric)
