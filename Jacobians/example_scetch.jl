@@ -16,6 +16,8 @@ z_dir = zeros(Float64,N)
 z_dir[1] = 1
 dx=[]
 t_max=10.
+edges1=0.
+
 function diffusionedge!(e, v_s, v_d, p, t)
     # usually e, v_s, v_d are arrays, hence we use the broadcasting operator .
     e .= v_s .- v_d
@@ -24,15 +26,23 @@ end
 
 function diffusionvertex!(dv, v, edges, p, t)
     # usually dv, v, edges are arrays, hence we use the broadcasting operator .
-    dv .= 0.
+    dv = 0.
     for e in edges
         dv .+= e
     end
     nothing
 end
 
+
+function VertexJacobian!(J, v, p, t)
+   J = internal_jacobian(v, p, t)
+   # get_vertex_jacobian(gd, i) = something(v,p,t)
+   # gd.v_jac_array[i] = something(v,p,t)
+end
+
+
 # signature of StaticVertex: (f!, dim, mass_matrix, sym, z, jac)
-nd_jac_vertex = StaticVertex(f! = diffusionvertex!, dim = 1, z= z_dir)#, jac=true)
+nd_jac_vertex = StaticVertex(f! = diffusionvertex!, dim = 1, z= z_dir)#, jac=true
 # signature of StaticEdge: (f!, dim, coupling, sym, jac)
 nd_jac_edge = StaticEdge(f! = diffusionedge!, dim = 1)#, jac=true)
 
