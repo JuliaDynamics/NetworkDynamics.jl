@@ -12,7 +12,7 @@
     function JacVertex(f!::T, # The function with signature (dx, x, edges, h, p, t) -> nothingdim::Int, # number of dimensions of x
                        mass_matrix=I, # Mass matrix for the equation
                        sym=[:v for i in 1:dim], # Symbols for the dimensions
-                       VertexJacobian!::F1.
+                       VertexJacobian!::F1,
                        z:AbstractArray)
         #J = internal_jacobian ...
 end
