@@ -1,7 +1,7 @@
 # NetworkDynamics
 
-[![](https://img.shields.io/badge/docs-dev-blue.svg)](https://fhell.github.io/NetworkDynamics.jl/dev)
-<!-- [![](https://img.shields.io/badge/docs-stable-blue.svg)](https://fhell.github.io/NetworkDynamics.jl/stable) -->
+[![](https://img.shields.io/badge/docs-dev-blue.svg)](https://pik-icon.github.io/NetworkDynamics.jl/dev)
+<!-- [![](https://img.shields.io/badge/docs-stable-blue.svg)](https://pik-icon.github.io/NetworkDynamics.jl/stable) -->
 
 ***
 News: We just released a preprint paper about NetworkDynamics.jl on [arXiv](https://arxiv.org/abs/2012.12696). Make sure to use ND v0.5 if you want to reproduce the results shown there. For more details see also the latest docs ([dev](https://fhell.github.io/NetworkDynamics.jl/dev)).
