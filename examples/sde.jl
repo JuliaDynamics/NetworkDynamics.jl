@@ -1,6 +1,6 @@
 # Introduction to stochastic modeling based on getting-started.jl
 # For introductory tutorials to NetworkDynamics visit the docs at
-# https://fhell.github.io/NetworkDynamics.jl/dev/
+# https://pik-icon.github.io/NetworkDynamics.jl/dev/
 
 using NetworkDynamics
 using LightGraphs
