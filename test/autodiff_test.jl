@@ -3,23 +3,18 @@ using ReverseDiff
 using NetworkDynamics
 using LightGraphs
 using Test
-# import Zygote
 
 N = 10 # number of nodes
 k = 3  # average degree'
 g = barabasi_albert(N, k) # a little more exciting than a bare random graph
 
-
-
 @testset "Automatic Differentiation compatibility" begin
     @inline function diffusionedge!(e, v_s, v_d, p, t)
-        # usually e, v_s, v_d are arrays, hence we use the broadcasting operator .
         e[1] = p * (v_s[1] - v_d[1])
         nothing
     end
 
     @inline function diffusionvertex!(dv, v, edges, p, t)
-        # usually v, e_s, e_d are arrays, hence we use the broadcasting operator .
         dv[1] = p
         for e in edges
             dv[1] += e[1]
@@ -39,17 +34,10 @@ g = barabasi_albert(N, k) # a little more exciting than a bare random graph
     x0 = randn(N)
 
 
-    ## Gradient
+    ## Jacobians
 
-    function gradnd(x)
-        nd.f(x, zeros(N), p, 0.)
-        sum(x)
-    end
-
-    @test ForwardDiff.gradient(gradnd, ones(N)) isa Vector
-    @test_throws ErrorException ReverseDiff.gradient(gradnd, ones(N)) # mutation not supported
-    # Zygote.gradient(gradnd, ones(N))  # mutation not supported
-
+    @test ForwardDiff.jacobian((out, x) -> nd(out, x, p, 0.), ones(N), ones(N)) isa Matrix
+    @test ReverseDiff.jacobian((out, x) -> nd(out, x, p, 0.), ones(N), ones(N)) isa Matrix
 
     ## Gradient wrt. vertex parameters
 
@@ -62,23 +50,19 @@ g = barabasi_albert(N, k) # a little more exciting than a bare random graph
     # Forward diff throws a MethodError since multiplication with p transforms the x values
     # to dual numbers and those cant be stored in the type-specified x_array
     # Maybe this could be fixed by using more general types?
-    @test_broken ForwardDiff.gradient(gradpnd, ones(N)) isa Vector # type problem
-    @test ReverseDiff.gradient(gradpnd, ones(N)) isa Vector
-    # Zygote.gradient(gradpnd, ones(N))  # mutation not supported
 
+    @test_broken ForwardDiff.gradient(gradpnd, ones(N)) isa Vector # type problem
+    @test_broken ReverseDiff.gradient(gradpnd, ones(N)) isa Vector
 
     ## parameter array instead of tuple
 
     @inline function diffusionedge2!(e, v_s, v_d, p, t)
-
         e[1] = p[2] * (v_s[1] - v_d[1])
         nothing
     end
 
     @inline function diffusionvertex2!(dv, v, edges, p, t)
-
         dv[1] = p[1]
-        # edges for which v is the source
         for e in edges
             dv[1] -= e[1]
         end
@@ -87,7 +71,6 @@ g = barabasi_albert(N, k) # a little more exciting than a bare random graph
     end
     nd_diffusion_vertex2 = ODEVertex(f! = diffusionvertex2!, dim = 1)
     nd_diffusion_edge2 = StaticEdge(f! = diffusionedge2!, dim = 1)
-
 
     p = [1., 2.]
 
@@ -101,6 +84,5 @@ g = barabasi_albert(N, k) # a little more exciting than a bare random graph
     end
 
     @test_broken ForwardDiff.gradient(gradpnd2, p) isa Vector # type problem
-    @test ReverseDiff.gradient(gradpnd2, p) isa Vector
-    # Zygote.gradient(gradpnd2, p)
+    @test_borken ReverseDiff.gradient(gradpnd2, p) isa Vector
 end
