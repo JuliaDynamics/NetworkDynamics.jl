@@ -26,8 +26,8 @@ makedocs(
     ]
     ])
 
-# To trigger the Github pages build, one initally manual commit to gh-pages is
+# To trigger the Github pages build, one initally manual commit to gh-pages was
 # necessary
 deploydocs(
-    repo = "github.com/pik-icon/NetworkDynamics.jl.git",
+    repo = "github.com/PIK-ICoN/NetworkDynamics.jl.git",
 )
