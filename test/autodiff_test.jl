@@ -24,7 +24,7 @@ g = barabasi_albert(N, k) # a little more exciting than a bare random graph
     ### Constructing the network dynamics
 
     nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 1)
-    nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1)
+    nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1, coupling = :antisymmetric)
 
     p_v = collect(1:nv(g))./nv(g) .- 0.5
     p_e = .5 .* ones(ne(g))
@@ -42,17 +42,14 @@ g = barabasi_albert(N, k) # a little more exciting than a bare random graph
     ## Gradient wrt. vertex parameters
 
     function gradpnd(p)
-        x0int = ones(N)
-        nd.f(x0int, zeros(N), (p, p_e), 0.)
-        sum(x0int)
+        # initializing the output array with the correct type is crucial
+        out = similar(p, N)
+        nd.f(out, zeros(N), (p, p_e), 0.)
+        sum(out)
     end
 
-    # Forward diff throws a MethodError since multiplication with p transforms the x values
-    # to dual numbers and those cant be stored in the type-specified x_array
-    # Maybe this could be fixed by using more general types?
-
-    @test_broken ForwardDiff.gradient(gradpnd, ones(N)) isa Vector # type problem
-    @test_broken ReverseDiff.gradient(gradpnd, ones(N)) isa Vector
+    @test ForwardDiff.gradient(gradpnd, ones(N)) isa Vector
+    @test ReverseDiff.gradient(gradpnd, ones(N)) isa Vector
 
     ## parameter array instead of tuple
 
@@ -70,7 +67,7 @@ g = barabasi_albert(N, k) # a little more exciting than a bare random graph
         nothing
     end
     nd_diffusion_vertex2 = ODEVertex(f! = diffusionvertex2!, dim = 1)
-    nd_diffusion_edge2 = StaticEdge(f! = diffusionedge2!, dim = 1)
+    nd_diffusion_edge2 = StaticEdge(f! = diffusionedge2!, dim = 1, coupling=:antisymmetric)
 
     p = [1., 2.]
 
@@ -78,11 +75,12 @@ g = barabasi_albert(N, k) # a little more exciting than a bare random graph
     nd2.f(x0, zeros(N), p, 0.)
 
     function gradpnd2(p)
-        x0 = ones(N)
-        nd2.f(x0, zeros(N), p, 0.)
-        sum(x0)
+        # initializing the output array with the correct type is crucial
+        out = similar(p, N)
+        nd2.f(out, zeros(N), p, 0.)
+        sum(out)
     end
 
-    @test_broken ForwardDiff.gradient(gradpnd2, p) isa Vector # type problem
-    @test_borken ReverseDiff.gradient(gradpnd2, p) isa Vector
+    @test ForwardDiff.gradient(gradpnd2, p) isa Vector
+    @test ReverseDiff.gradient(gradpnd2, p) isa Vector
 end
