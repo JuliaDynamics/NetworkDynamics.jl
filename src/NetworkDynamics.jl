@@ -291,8 +291,8 @@ end
 
 """
 function prepare_edges(edges::Vector, g::SimpleGraph)
-    # This is a bit hacky, gets the de-parametrized type
-    new_edges = Vector{Base.typename(eltype(edges)).wrapper}(undef, length(edges))
+    # Depending on the coupling we might get different eltypes
+    new_edges = Vector{EdgeFunction}(undef, length(edges))
     infobool = true
     for (i, edge) in enumerate(edges)
         if edge.coupling == :directed
@@ -307,13 +307,16 @@ function prepare_edges(edges::Vector, g::SimpleGraph)
             new_edges[i] = edges[i]
         end
     end
-    return new_edges
+    # by recreating the array the eltype gets narrowed down as much as possible
+    narrowed_type = [e for e in new_edges]
+    return narrowed_type
 end
 
 """
 """
 function prepare_edges(edges::Vector, g::SimpleDiGraph)
-    new_edges = Vector{Base.typename(eltype(edges)).wrapper}(undef, length(edges))
+    # Depending on the coupling we might get different eltypes
+    new_edges = Vector{EdgeFunction}(undef, length(edges))
     infobool = true
     for (i, edge) in enumerate(edges)
         if edge.coupling ∈ (:symmetric, :antisymmetric, :undirected, :fiducial)
@@ -328,7 +331,9 @@ function prepare_edges(edges::Vector, g::SimpleDiGraph)
             new_edges[i] = edges[i]
         end
     end
-    return new_edges
+    # by recreating the array the eltype gets narrowed down as much as possible
+    narrowed_type = [e for e in new_edges]
+    return narrowed_type
 end
 
 
