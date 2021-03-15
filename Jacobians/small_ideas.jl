@@ -194,3 +194,23 @@ function auto_jacvec(f, x, v)
     vv = reshape(v, axes(x))
     ForwardDiff.partials.(vec(f(ForwardDiff.Dual{JacVecTag}.(x, vv))), 1)
 end
+
+
+
+#e_jac_array = [zeros(3,3), zeros(3,3)]
+
+e_jac_array = [[1 3 5], [2 4 6]]
+e_jac_array1 = zeros(3, 2)
+e_jac_array1[1, 1] = 1
+e_jac_array1[1, 2] = 2
+e_jac_array1[2, 1] = 3
+e_jac_array1[2, 2] = 4
+e_jac_array1[3, 1] = 5
+e_jac_array1[3, 2] = 6
+e_jac_array1
+
+i=1
+for i in 1:3
+    println(e_jac_array1[1][2])
+    #println(e_jac_array1[i, 2])
+end

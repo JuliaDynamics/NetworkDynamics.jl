@@ -2,6 +2,9 @@ using NetworkDynamics
 using ForwardDiff
 using LightGraphs
 
+
+include()
+
 N = 5
 k = 2
 g = barabasi_albert(N, k)
@@ -12,9 +15,6 @@ omegas = rand()*2π
 coupling_constant = 3.0/(N-1)
 p = (nothing, nothing)
 
-z_dir = zeros(Float64,N)
-z_dir[1] = 1
-dx=[]
 t_max=10.
 edges1=0.
 
@@ -42,7 +42,7 @@ end
 
 
 # signature of StaticVertex: (f!, dim, mass_matrix, sym, z, jac)
-nd_jac_vertex = StaticVertex(f! = diffusionvertex!, dim = 1, z= z_dir)#, jac=true
+nd_jac_vertex = StaticVertex(f! = diffusionvertex!, dim = 1)#, jac=true
 # signature of StaticEdge: (f!, dim, coupling, sym, jac)
 nd_jac_edge = StaticEdge(f! = diffusionedge!, dim = 1)#, jac=true)
 
@@ -57,3 +57,5 @@ for t in 1:tmax
 end
 
 nd_jac_operator(dx,x0,p,tspan) ## J mul!(dx,Jac,z)
+
+# jac = jacvecprod in source ordner
