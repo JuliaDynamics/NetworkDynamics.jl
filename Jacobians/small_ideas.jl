@@ -144,73 +144,219 @@ function f2(y)
 end
 
 f1!(b)
+f1!(3)
 
-function auto_jacvec_test(x)
-	x=2
-end
 
-# Operator überladen
-import Base
-Base.:*(L::funktion2, x::Array) = auto_jacvec_test(L.x)
-x=[1 2 3]
-b*x
+
 
 using ForwardDiff
 
-function attempt(dx, b, x, p, t)
+function attempt(dx, x, p, t)
   dx[1] = x[1]^2+x[2]^3-1
   dx[2] = x[1]^4 - x[2]^4 + x[1]*x[2]
   nothing
 end
 
 
-a = [1.0, 1.0]
+a = [2.0, 1.0]
 
 dx = Array{Float64,2}(undef, 2, 1)
 results = zeros(2, 2)
 
 p = 1.0
 t = 0.0
-b = [0.0, 0.0]
-
-cfg = ForwardDiff.JacobianConfig((y, x) -> attempt(y, b, x, p, t), dx, a)
-
-ForwardDiff.jacobian!(results, (y, x) -> attempt(y, b, x, p, t), dx, a, cfg, Val{false}())
 
 
+cfg = ForwardDiff.JacobianConfig((y, x) -> attempt(y, x, p, t), dx, a)
+
+ForwardDiff.jacobian!(results, (y, x) -> attempt(y, x, p, t), dx, a, cfg, Val{false}())
+
+results
 
 
-Base.:*(L::JacVecOperator,x::AbstractVector) = L.autodiff ? auto_jacvec(_u->L.f(_u,L.p,L.t),L.u,x) : num_jacvec(_u->L.f(_u,L.p,L.t),L.u,x)
-
-function auto_jacvec!(du, f, x, v,
-                 cache1 = ForwardDiff.Dual{JacVecTag}.(x, x), # this won't alias
-                 cache2 = similar(cache1))
-    cache1 .= ForwardDiff.Dual{JacVecTag}.(x, reshape(v, size(x)))
-    f(cache2,cache1)
-    du .= vec(ForwardDiff.partials.(cache2, 1))
+@Base.kwdef struct struct_with_function
+	dimension::Int64
+	funktionsname = :F
 end
 
-function auto_jacvec(f, x, v)
-    vv = reshape(v, axes(x))
-    ForwardDiff.partials.(vec(f(ForwardDiff.Dual{JacVecTag}.(x, vv))), 1)
+function funktion()
+	print("Hallo")
+end
+
+test_objekt = struct_with_function(dimension = 1)
+
+test_objekt_with_function = struct_with_function(dimension = 1, funktionsname = funktion)
+
+typeof(test_objekt.funktionsname)
+typeof(test_objekt_with_function.funktionsname)
+
+test_objekt.funktionsname = funktion
+
+using LinearAlgebra
+
+typeof(I) <: AbstractArray
+################ arrays sizes ##################################################
+
+v_dims = 2
+e_dims = 2
+num_e = 10
+
+v_jac_array = [Array{Float64,2}(undef, dim, dim) for dim in v_dims]
+
+println(v_jac_array)
+
+
+# For edges there is another array layer in the buffer since each edge has two Jacobians
+#e_jac_array = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim) in zip(gs.e_dims, v_src_dims, v_dst_dims)]
+e_jac_array = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim) in zip(e_dims, v_dims, v_dims)]
+e_jac_product = [zeros(e_dims)]
+
+println(e_jac_array)
+typeof(e_jac_array)
+
+example_v_jac_array = [1.0 3.0; 5.0 7.0] # siehe Konsole
+
+example_e_jac_array = [[1.0 3.0; 5.0 7.0], [2.0 4.0; 6.0 8.0]] # siehe Konsole
+
+example_e_jac_product = [[1.0, 2.0]] # siehe Konsole
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+filled_array[1][1]
+
+(vcat(e_jac_array, filled_array))[1][2]
+
+
+e_jac_array_num_e = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim) in zip(e_dims, v_dims, v_dims)]
+
+
+get_src_edge_jacobian(i::Int) = e_jac_array[i, 1]
+
+get_src_edge_jacobian_micha(i::Int) = e_jac_array[i][1] ## Micha: gd.e_jac_array[i][1]
+
+get_dst_edge_jacobian(i::Int) = e_jac_array[i, 2]
+
+
+get_src_edge_jacobian(1)
+
+get_dst_edge_jacobian(1)
+
+
+e_jac_array1 = [ [[1 3 5], [2 4 6]], [[7 8 9], [10 11 12]] ]
+
+############
+
+e_jac_array_part1 = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim) in zip(e_dims, v_dims, v_dims)]
+
+
+e_jac_array_part2 = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim) in zip(e_dims, v_dims, v_dims)]
+
+e_jac_array_part3 = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim) in zip(e_dims, v_dims, v_dims)]
+
+A = vcat(e_jac_array_part1, e_jac_array_part2, e_jac_array_part3)
+
+A[3][2]
+
+
+
+get_src_edge_jacobian_of_parts(i::Int) = A[i][1]
+get_dst_edge_jacobian_of_parts(i::Int) = A[i][2]
+
+get_src_edge_jacobian_of_parts(3)
+get_dst_edge_jacobian_of_parts(3)
+
+z_edge_1 = [1 3; 2 4]
+z_edge_2 = [1 2; 3 4]
+z_edge_3 = [1 2; 3 4]
+z = vcat(z_edge_1, z_edge_2, z_edge_3)
+z[1, :]
+
+
+e_jac_prod_1 = get_src_edge_jacobian_of_parts(1) * z[1, :]
+e_jac_prod_2 = get_src_edge_jacobian_of_parts(2) * z[2, :]
+
+e_jac_prod_sum = hcat(e_jac_prod_1, e_jac_prod_2)
+
+
+e_jac_prod_sum = Array{Array{Float64,2},1}
+e_jac_prod_sum = Array{Float64,2}
+e_jac_prod_sum = zeros(2, 2)
+for i in 1:2
+	#print(size(get_src_edge_jacobian_of_parts(i) * z[i, :]))
+	e_jac_prod_sum[i, :] = get_src_edge_jacobian_of_parts(i) * z[i, :]
+end
+
+e_jac_prod_sum
+
+#### other struct stuff
+
+abstract type VertexFunction end
+"""
+Abstract supertype for all edge functions.
+"""
+abstract type EdgeFunction end
+
+@Base.kwdef struct ODEVertex{T} <: VertexFunction
+    f!::T # signature (dx, x, edges, p, t) -> nothing
+    dim::Int
+	mass_matrix = I
+    #vertex_jacobian!::F # signature (J::AbstractMatrix, v, p, t)
+end
+
+@Base.kwdef struct ODEVertex1{T} <: VertexFunction
+    #f!::T # signature (dx, x, edges, p, t) -> nothing
+    dim::Int64
+	mass_matrix = I
+    #vertex_jacobian!::F # signature (J::AbstractMatrix, v, p, t)
 end
 
 
+object = ODEVertex1(dim = 1, mass_matrix = nothing)
 
-#e_jac_array = [zeros(3,3), zeros(3,3)]
-
-e_jac_array = [[1 3 5], [2 4 6]]
-e_jac_array1 = zeros(3, 2)
-e_jac_array1[1, 1] = 1
-e_jac_array1[1, 2] = 2
-e_jac_array1[2, 1] = 3
-e_jac_array1[2, 2] = 4
-e_jac_array1[3, 1] = 5
-e_jac_array1[3, 2] = 6
-e_jac_array1
-
-i=1
-for i in 1:3
-    println(e_jac_array1[1][2])
-    #println(e_jac_array1[i, 2])
+@Base.kwdef struct ODEVertex3{T}
+    #f!::T # signature (dx, x, edges, p, t) -> nothing
+    dim::Int64
+	#mass_matrix = I
+    #vertex_jacobian!::F # signature (J::AbstractMatrix, v, p, t)
 end
+
+object2 = ODEVertex3(2)
+
+@Base.kwdef struct hallo
+	zahl::Int64
+	#masse = 1.0
+end
+
+test = hallo(zahl = 3)
+
+@Base.kwdef struct hallo1
+	zahl::Int64
+	masse = 1.0
+end
+
+test1 = hallo1(zahl = 2, masse = 2.0)
+test2 = hallo1(zahl = 100)
+
+@Base.kwdef struct struct_with_function
+	dimension::Int64
+	funktionsname = :F
+end
+
+function funktion()
+	print("Hallo")
+end
+
+test_objekt = struct_with_function(dimension = 1)
+
+test_objekt_with_function = struct_with_function(dimension = 1, funktionsname = funktion)

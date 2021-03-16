@@ -1,10 +1,13 @@
+Manifest.toml
+docs/build
+examples/getting_started_with_network_dynamics.ipynb
+
+
 *.jl.cov
 *.jl.*.cov
 *.jl.mem
 deps/deps.jl
 .idea
-Manifest.toml
 scratch.jl
-docs/build
 bugs
 design_experiments
