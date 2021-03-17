@@ -655,3 +655,49 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T},
 end
 
 end
+
+####### example #########
+
+using LightGraphs
+using OrdinaryDiffEq
+
+
+N = 20 # number of nodes
+k = 4  # average degree
+g = barabasi_albert(N, k) # a little more exciting than a bare random graph
+
+
+function diffusionedge!(e, v_s, v_d, p, t)
+    # usually e, v_s, v_d are arrays, hence we use the broadcasting operator .
+    e .= v_s .- v_d
+    nothing
+end
+
+function diffusionvertex!(dv, v, edges, p, t)
+    # usually dv, v, edges are arrays, hence we use the broadcasting operator .
+    dv .= 0.
+    for e in edges
+        dv .+= e
+    end
+    nothing
+end
+
+# Jacobian stuff 1
+
+function VertexJacobian!(J::AbstractMatrix, v, p, t)
+    J[1] = 0
+end
+
+function EdgeJacobian!(J_s::AbstractMatrix, J_d::AbstractMatrix, v_s, v_d, p, t)
+   J_s[1] = 0
+   J_s[2] = 0
+
+   J_d[1] = 0
+   J_d[2] = 0
+end
+
+nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 1)
+
+nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1)
+
+nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g, jac = true)
