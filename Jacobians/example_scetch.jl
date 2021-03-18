@@ -1,17 +1,20 @@
-# using NetworkDynamics
+using NetworkDynamics
 
 using LightGraphs
 using Reexport
 
-include("/Users/lalalulu/Desktop/PIK/github/NetworkDynamics.jl/src/Utilities.jl")
-@reexport using .Utilities
+#include("/Users/lalalulu/Desktop/PIK/github/NetworkDynamics.jl/src/Utilities.jl")
+#@reexport using .Utilities
 
-include("/Users/lalalulu/Desktop/PIK/github/NetworkDynamics.jl/Jacobians/jac_structs.jl")
-@reexport using .jac_structs
+#include("/Users/lalalulu/Desktop/PIK/github/NetworkDynamics.jl/Jacobians/jac_structs.jl")
+#@reexport using .jac_structs
 
-include("/Users/lalalulu/Desktop/PIK/github/NetworkDynamics.jl/Jacobians/jac_functions.jl")
-@reexport using .jac_functions
+#include("/Users/lalalulu/Desktop/PIK/github/NetworkDynamics.jl/Jacobians/jac_functions.jl")
+#@reexport using .jac_functions
 
+N = 5
+k = 2
+g = barabasi_albert(N, k)
 
 function diffusionedge!(e, v_s, v_d, p, t)
     # usually e, v_s, v_d are arrays, hence we use the broadcasting operator .
@@ -46,7 +49,7 @@ nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 1)
 
 nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1)
 
-nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g, jac = true)
+nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g, jac=true)
 
 ### jacobian stuff 2
 
