@@ -1,13 +1,13 @@
-using NetworkDynamics
+#using NetworkDynamics
 
 using LightGraphs
 using Reexport
 
-#include("/Users/lalalulu/Desktop/PIK/github/NetworkDynamics.jl/src/Utilities.jl")
-#@reexport using .Utilities
+include("/Users/lalalulu/Desktop/PIK/github/NetworkDynamics.jl/src/Utilities.jl")
+@reexport using .Utilities
 
-#include("/Users/lalalulu/Desktop/PIK/github/NetworkDynamics.jl/Jacobians/jac_structs.jl")
-#@reexport using .jac_structs
+include("/Users/lalalulu/Desktop/PIK/github/NetworkDynamics.jl/Jacobians/jac_structs.jl")
+@reexport using .jac_structs
 
 #include("/Users/lalalulu/Desktop/PIK/github/NetworkDynamics.jl/Jacobians/jac_functions.jl")
 #@reexport using .jac_functions

@@ -654,4 +654,4 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T},
     ODEFunction(nd!; mass_matrix = mass_matrix, syms = symbols)
 end
 
-end
+end # module
