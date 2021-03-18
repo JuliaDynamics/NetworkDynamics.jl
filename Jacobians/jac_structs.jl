@@ -541,7 +541,6 @@ function JacGraphData(v_Jac_array::Tvj, e_Jac_array::Tej, e_Jac_product_array::T
     JacGraphData{JGDB}(jgdb, v_jac, e_jac, e_jac_product)
 end
 
-
 #=function JacGraphData(v_Jac_array::Tvj, e_Jac_array::Tej, e_Jac_product_array::Tep, gs::GraphStruct) where {Tvj, Tej}
     jgdb = JacGraphDataBuffer{Tvj, Tej, Tep}(v_Jac_array, e_Jac_array, e_Jac_product_array)
     JGDB = typeof(jgdb)
@@ -558,19 +557,19 @@ end =#
 
 ### TO DO: in NetworkStructures.jl
 
-@inline get_src_edge_jacobian(gd::JacGraphData, i::Int) = gd.e_jac_array[i][1]
+@inline get_src_edge_jacobian(jgd::JacGraphData, i::Int) = jgd.e_jac_array[i][1]
 
-@inline get_dst_edge_jacobian(gd::JacGraphData, i::Int) = gd.e_jac_array[i][2]
+@inline get_dst_edge_jacobian(jgd::JacGraphData, i::Int) = jgd.e_jac_array[i][2]
 
-@inline get_vertex_jacobian(gd::JacGraphData, i::Int) = gd.v_jac_array[i]
+@inline get_vertex_jacobian(jgd::JacGraphData, i::Int) = jgd.v_jac_array[i]
 
 
 ############################ NDJacVecOperator ##################################
 using DifferentialEquations
 
-mutable struct NDJacVecOperator1{uType, P, tType, G, GD, JGD, T} <: DiffEqBase.AbstractDiffEqLinearOperator{T} # mutable da x, p, t geupdated werden
+mutable struct NDJacVecOperator{uType, tType, G, GD, JGD, T} <: DiffEqBase.AbstractDiffEqLinearOperator{T} # mutable da x, p, t geupdated werden
     x::uType
-    p::P
+    p
     t::tType
     graph::G
     graph_structure::GraphStruct
@@ -579,16 +578,6 @@ mutable struct NDJacVecOperator1{uType, P, tType, G, GD, JGD, T} <: DiffEqBase.A
     parallel::Bool
 end
 
-mutable struct NDJacVecOperator2{uType, P, tType, G, GD, T} <: DiffEqBase.AbstractDiffEqLinearOperator{T} # mutable da x, p, t geupdated werden
-    x::uType
-    p::P
-    t::tType
-    graph::G
-    graph_structure::GraphStruct
-    graph_data::GD
-    # jac_graph_data::JGD - dann muss oben noch JGD hin
-    parallel::Bool
-end
 
 ############################ NetworkDynamics Structs ###########################
 
@@ -622,36 +611,34 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T},
 
     symbols = symbols_v
 
+    graph_stucture = GraphStruct(graph, v_dims, e_dims, symbols_v, symbols_e) # Funktion
+
+    graph_data = GraphData(v_array, e_array, graph_stucture) # Funktion
+
+    nd! = nd_ODE_Static(vertices!, edges!, graph, graph_stucture, graph_data, parallel) # Objekterstellung, nd_ODE_Static hier struct
+
+    mass_matrix = construct_mass_matrix(mmv_array, graph_stucture)
+
     if jac == true
         # These additional arrays are used for initializing the GraphData and will be overwritten
         v_Jac_array = similar(x_prototype, sum(v_dims))
         e_Jac_array = similar(x_prototype, sum(e_dims))
         e_Jac_product_array = similar(x_prototype, sum(num_e))
 
-        graph_stucture = GraphStruct(graph, v_dims, e_dims, symbols_v, symbols_e) # Funktion
-
-        graph_data = GraphData(v_array, e_array, graph_stucture) # Funktion
+        #v_jac_array = zeros(for i in vertices Array{Array{Float64, 2}, 1}) # benutze list comprehension
+        # initialisiere v_jac_array erstmal mit zeros, aber Dimension muss stimmen
+        # benutze v_dims, falls du num_v brauchst, kannst du dir das einfach mit graph_structure.num_v etc. holen
 
         jac_graph_data = JacGraphData(v_jac_array, e_jac_array, e_jac_product, graph_structure) # Funktion
 
-        nd! = nd_ODE_Static(vertices!, edges!, graph, graph_stucture, graph_data, parallel) # Objekterstellung, nd_ODE_Static hier struct
+        t = 0.0 # any Float64
+        # p später erstmal nothing
+        nd_jac_vec_operator = NDJacVecOperator(similar(v_array), nothing, t, graph, graph_structure, graph_data, jac_graph_data, parallel) # x, p, t werden in update_coefficients geändert
 
-        mass_matrix = construct_mass_matrix(mmv_array, graph_stucture)
-
-        nd_jac_vec_operator = NDJacVecOperator1(x, p, t, graph, graph_structure, graph_data, jac_graph_data, parallel) # Problem: x, p, t nicht da
-
-        ODEFunction(nd!; mass_matrix = mass_matrix, jac = nd_jac_vec_operator, syms = symbols)
+        return ODEFunction(nd!; mass_matrix = mass_matrix, jac = nd_jac_vec_operator, syms = symbols)
     end
 
-    graph_stucture = GraphStruct(graph, v_dims, e_dims, symbols_v, symbols_e)
-
-    graph_data = GraphData(v_array, e_array, graph_stucture)
-
-
-    nd! = nd_ODE_Static(vertices!, edges!, graph, graph_stucture, graph_data, parallel)
-    mass_matrix = construct_mass_matrix(mmv_array, graph_stucture)
-
-    ODEFunction(nd!; mass_matrix = mass_matrix, syms = symbols)
+    return ODEFunction(nd!; mass_matrix = mass_matrix, syms = symbols)
 end
 
 end # module
