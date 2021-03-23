@@ -20,23 +20,23 @@ end
 function diffusionvertex!(dv, v, edges, p, t)
     # usually dv, v, edges are arrays, hence we use the broadcasting operator .
     #dv[1] = 0.
-    dv .= 0.
-    #dv[2] = 1.
+    dv[1] .= 0.
+    dv[2] = 1.
     for e in edges
         dv .+= e
     end
     nothing
 end
 
-nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 1)
+nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 2)
 
 nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1)
 
 nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g)
 
-x0 = randn(N) # random initial conditions
-ode_prob = ODEProblem(nd, x0, (0., 4.))
-sol = solve(ode_prob, Tsit5());
+#x0 = randn(N) # random initial conditions
+#ode_prob = ODEProblem(nd, x0, (0., 4.))
+#sol = solve(ode_prob, Tsit5());
 # collecting the graph infos
 
 nd.f
@@ -54,9 +54,14 @@ end
 v_jac_array = Array{Array{Float64, 2}, 1}(undef, 2)
 v_jac_array[1] = [1.0 2.0]
 v_jac_array[2] = [3.0 4.0]
-println(v_jac_array)
-e_jac_array = Array{Array{Array{Float64, 2}, 1}, 1}
-e_jac_product = Array{Float64, 2}
+
+e_jac_array = Array{Array{Array{Float64, 2}, 1}, 1}(undef, 2)
+e_jac_array[1] = [[1.0 2.0]]
+e_jac_array[2] = [[3.0 4.0]]
+
+e_jac_product = Array{Float64, 2.0}
+e_jac_product[1] = [1.0]
+
 
 jac_graph_data_object = JacGraphData(v_jac_array, e_jac_array, e_jac_product)
 
