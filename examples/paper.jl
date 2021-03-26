@@ -1,158 +1,166 @@
 # Chapter 1 - Pure Julia
+begin
+    using LightGraphs, OrdinaryDiffEq
 
-using LightGraphs, OrdinaryDiffEq
+    N = 10
+    g = watts_strogatz(N, 2, 0.)
+    const B = incidence_matrix(g, oriented=true)
+    const B_t = transpose(B)
 
-N = 10
-g = watts_strogatz(N, 2, 0.)
-const B = incidence_matrix(g, oriented=true)
-const B_t = transpose(B)
+    function kuramoto_network!(dθ, θ, ω, t)
+        dθ .= ω .- 5. .* (B * sin.(B_t * θ))
+        return nothing
+    end
 
-function kuramoto_network!(dθ, θ, ω, t)
-    dθ .= ω .- 5 .* (B * sin.(B_t * θ))
-    return nothing
+    ω = (collect(1:N) .- sum(1:N) / N ) / N
+    x0 = (collect(1:N) .- sum(1:N) / N ) / N
+    tspan = (0., 4.)
+    prob = ODEProblem(kuramoto_network!, x0, tspan, ω)
+
+    sol = solve(prob, Tsit5())
 end
-
-ω = (collect(1:N) .- sum(1:N) / N ) / N
-x0 = (collect(1:N) .- sum(1:N) / N ) / N
-tspan = (0., 4.)
-prob = ODEProblem(kuramoto_network!, x0, tspan, ω)
-
-sol = solve(prob, Tsit5())
-
-plot(sol)
 
 # Chapter 2 - Homogeneous ND
 
-function kuramoto_edge!(edge, θ_s, θ_d, σ, t)
-    edge .= σ .* sin.(θ_s .- θ_d)
-end
-function kuramoto_vertex!(dθ,θ,edges,ω,t)
-    dθ .= ω
-    for edge in edges
-        dθ[1] += edge[1]
+begin
+    function kuramoto_edge!(edge, θ_s, θ_d, σ, t)
+        edge .= σ .* sin.(θ_s .- θ_d)
     end
+    function kuramoto_vertex!(dθ,θ,edges,ω,t)
+        dθ .= ω
+        for edge in edges
+            dθ[1] += edge[1]
+        end
+    end
+
+
+    using NetworkDynamics
+
+    f_node! = ODEVertex(f! = kuramoto_vertex!, dim = 1, sym=[:θ])
+    f_edge! = StaticEdge(f! = kuramoto_edge!, dim = 1)
+    nd! = network_dynamics(f_node!, f_edge!, g)
+
+
+    vertexp = ω
+    edgep   = 5.
+    p = (vertexp, edgep)
+
+    nd_prob = ODEProblem(nd!, x0, tspan, p)
+    nd_sol = solve(nd_prob, Tsit5())
+
+
+    using Plots
+
+    plot(nd_sol, ylabel="θ")
 end
-
-
-using NetworkDynamics
-
-f_node! = ODEVertex(f! = kuramoto_vertex!, dim = 1, sym=[:θ])
-f_edge! = StaticEdge(f! = kuramoto_edge!, dim = 1)
-nd! = network_dynamics(f_node!, f_edge!, g)
-
-
-vertexp = ω
-edgep   = 1.
-p = (vertexp, edgep)
-
-nd_prob = ODEProblem(nd!, x0, tspan, p)
-nd_sol = solve(nd_prob, Tsit5())
-
-
-using Plots
-
-plot(nd_sol, ylabel="θ")
-
 savefig("chaos_homogeneous.pdf")
 
 
 
 # Hidden Color configuration
-membership = Int64.(ones(N))
-membership[1] = 2
-membership[N ÷ 2] = 3
-nodecolor = [colorant"lightseagreen", colorant"orange", colorant"darkred"];
-nodefillc = nodecolor[membership];
-nodefillc = reshape(nodefillc, 1, N);
+begin
+    membership = Int64.(ones(N))
+    membership[1] = 2
+    membership[N ÷ 2] = 3
+    nodecolor = [colorant"lightseagreen", colorant"orange", colorant"darkred"];
+    nodefillc = nodecolor[membership]
+    nodefillc = reshape(nodefillc, 1, N)
+end
 
 # Chapter 3 - Heterogeneous ND
-
-function kuramoto_inertia!(dv,v,edges,p,t)
-    dv[1] = v[2]
-    dv[2] = p - v[2]
-    for edge in edges
-        dv[2] += edge[1]
+begin
+    function kuramoto_inertia!(dv,v,edges,p,t)
+        dv[1] = v[2]
+        dv[2] = p - v[2]
+        for edge in edges
+            dv[2] += edge[1]
+        end
     end
+
+    inertia! = ODEVertex(f! = kuramoto_inertia!, dim = 2, sym= [:θ, :ω])
+
+    static! = StaticVertex(
+              f! = (θ, edges, c, t) -> θ .= c,
+              dim = 1, sym = [:θ])
+
+    function kuramoto_edge!(edge, v_s, v_d, σ, t)
+      edge[1] = σ * sin(v_s[1] - v_d[1])
+    end
+
+    v_arr = Array{VertexFunction}(
+            [f_node! for v in vertices(g)])
+    v_arr[1] = inertia!
+    v_arr[N ÷ 2] = static!
+    nd_hetero! = network_dynamics(v_arr,f_edge!,g)
+
+    # Parameters and inital conditions
+
+    insert!(x0, 2, 3.)
+    prob_hetero = ODEProblem(nd_hetero!, x0, tspan, p);
+    sol_hetero = solve(prob_hetero, Rodas4());
+
+    vars = syms_containing(nd_hetero!, :θ);
+    plot(sol_hetero, ylabel="θ", vars=vars, lc = nodefillc)
 end
-
-inertia! = ODEVertex(f! = kuramoto_inertia!, dim = 2, sym= [:θ, :ω])
-
-static! = StaticVertex(
-          f! = (θ, edges, c, t) -> θ .= c,
-          dim = 1, sym = [:θ])
-
-function kuramoto_edge!(edge, v_s, v_d, σ, t)
-  edge[1] = σ * sin(v_s[1] - v_d[1])
-end
-
-v_arr = Array{VertexFunction}(
-        [f_node! for v in vertices(g)])
-v_arr[1] = inertia!
-v_arr[N ÷ 2] = static!
-nd_hetero! = network_dynamics(v_arr,f_edge!,g)
-
-# Parameters and inital conditions
-
-insert!(x0, 2, 3.)
-prob_hetero = ODEProblem(nd_hetero!, x0, tspan, p);
-sol_hetero = solve(prob_hetero, Rodas4());
-
-vars = syms_containing(nd_hetero!, :θ);
-plot(sol_hetero, ylabel="θ", vars=vars, lc = nodefillc)
 savefig("chaos_heterogeneous.pdf")
 
 
 # Chapter 4 - Fancy ND (Delays)
 
-function kuramoto_delay_edge!(edge, v_s, v_d, h_v_s, h_v_d, p, t)
-    edge[1] = p * sin(v_s[1] - h_v_d[1])
-    nothing
+
+begin
+    function kuramoto_delay_edge!(edge, v_s, v_d, h_v_s, h_v_d, p, t)
+        edge[1] = p * sin(v_s[1] - h_v_d[1])
+        nothing
+    end
+    kdedge! = StaticDelayEdge(f! = kuramoto_delay_edge!, dim = 1)
+
+    using DelayDiffEq
+
+    h(out, p, t) = (out .= x0)
+    τ = 0.1
+    p = (vertexp, edgep, τ)
+    nd_delay! = network_dynamics(v_arr, kdedge!, g)
+    prob_delay = DDEProblem(nd_delay!, x0, h, tspan, p; constant_lags = [τ])
+
+    sol_delay = solve(prob_delay, MethodOfSteps(Rodas4(autodiff=false)))
+
+    plot(sol_delay, ylabel="θ", vars=vars, lc = nodefillc)
 end
-kdedge! = StaticDelayEdge(f! = kuramoto_delay_edge!, dim = 1)
 
-
-using DelayDiffEq
-
-h(out, p, t) = (out .= x0)
-τ = 0.1
-tspan = (0.,10.)
-p = (vertexp,  edgep, τ)
-prob_delay = DDEProblem(nd_delay!, x0, h, tspan, p; constant_lags = [τ])
-
-sol_delay = solve(prob_delay, MethodOfSteps(Rodas4(autodiff=false)))
-
-plot(sol_delay, ylabel="θ", vars=vars, lc = nodefillc)
 savefig("chaos_delay.pdf")
 
 
 # Chapter  5 - Fancy ND II (Callbacks)
 
-using DiffEqCallbacks
+begin
+    using DiffEqCallbacks
 
-θ_idxs = idx_containing(nd_delay!, :θ)
+    θ_idxs = idx_containing(nd_delay!, :θ)
 
-function condition(out, u, t, integrator)
-  out .= (u[θ_idxs] .- 0.5) .*
-         (u[θ_idxs] .+ 0.5)
-  nothing
+    function condition(out, u, t, integrator)
+      out .= (u[θ_idxs] .- .5) .*
+             (u[θ_idxs] .+ .5)
+      nothing
+    end
+
+    function affect!(integrator, idx)
+      stable_edges =
+        map(edg -> idx ∉ edg, Pair.(edges(g)))
+      integrator.p = (integrator.p[1], stable_edges .* integrator.p[2], integrator.p[3])
+      nothing
+    end
+
+    cb = VectorContinuousCallback(condition, affect!, 10)
+    prob_cb = remake(prob_delay,
+              p=(vertexp, edgep .* ones(N), τ))
+    sol_cb = solve(prob_cb, MethodOfSteps(Rodas4(autodiff=false)), callback=cb)
+
+
+
+    plot(sol_cb, ylabel="θ", vars=vars, lc = nodefillc)
+    hline!([-.5], color = :black, width = 1., line=:dot, label="")
+    hline!([.5], color = :black, width = 1., line=:dot, label="")
 end
-
-function affect!(integrator, idx)
-  stable_edges =
-    map(edg -> idx ∉ edg, Pair.(edges(g)))
-  integrator.p = (integrator.p[1], stable_edges .* integrator.p[2], integrator.p[3])
-  nothing
-end
-
-cb = VectorContinuousCallback(condition, affect!, 10)
-prob_cb = remake(prob_delay,
-          p=(vertexp, edgep .* ones(N), τ))
-sol_cb = solve(prob_cb, MethodOfSteps(Rodas4(autodiff=false)), callback=cb)
-
-
-
-plot(sol_cb, ylabel="θ", vars=vars, lc = nodefillc)
-hline!([-.5], color = [:black], width = [1.], line=[:dot], label="")
-hline!([.5], color = [:black], width = [1.], line=[:dot], label="")
 
 savefig("chaos_callback.pdf")
