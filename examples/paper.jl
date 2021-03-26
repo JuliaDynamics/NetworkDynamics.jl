@@ -53,7 +53,7 @@ begin
 
     plot(nd_sol, ylabel="θ")
 end
-savefig("chaos_homogeneous.pdf")
+savefig("kuramoto_homogeneous.pdf")
 
 
 
@@ -102,7 +102,7 @@ begin
     vars = syms_containing(nd_hetero!, :θ);
     plot(sol_hetero, ylabel="θ", vars=vars, lc = nodefillc)
 end
-savefig("chaos_heterogeneous.pdf")
+savefig("kuramoto_heterogeneous.pdf")
 
 
 # Chapter 4 - Fancy ND (Delays)
@@ -113,14 +113,14 @@ begin
         edge[1] = p * sin(v_s[1] - h_v_d[1])
         nothing
     end
-    kdedge! = StaticDelayEdge(f! = kuramoto_delay_edge!, dim = 1)
+    dedge! = StaticDelayEdge(f! = kuramoto_delay_edge!, dim = 1)
 
     using DelayDiffEq
 
     h(out, p, t) = (out .= x0)
     τ = 0.1
     p = (vertexp, edgep, τ)
-    nd_delay! = network_dynamics(v_arr, kdedge!, g)
+    nd_delay! = network_dynamics(v_arr, dedge!, g)
     prob_delay = DDEProblem(nd_delay!, x0, h, tspan, p; constant_lags = [τ])
 
     sol_delay = solve(prob_delay, MethodOfSteps(Rodas4(autodiff=false)))
@@ -128,7 +128,7 @@ begin
     plot(sol_delay, ylabel="θ", vars=vars, lc = nodefillc)
 end
 
-savefig("chaos_delay.pdf")
+savefig("kuramoto_delay.pdf")
 
 
 # Chapter  5 - Fancy ND II (Callbacks)
@@ -163,4 +163,4 @@ begin
     hline!([.5], color = :black, width = 1., line=:dot, label="")
 end
 
-savefig("chaos_callback.pdf")
+savefig("kuramoto_callback.pdf")
