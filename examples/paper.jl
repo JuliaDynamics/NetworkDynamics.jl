@@ -25,12 +25,14 @@ end
 begin
     function kuramoto_edge!(edge, θ_s, θ_d, σ, t)
         edge .= σ .* sin.(θ_s .- θ_d)
+        return nothing
     end
     function kuramoto_vertex!(dθ,θ,edges,ω,t)
         dθ .= ω
         for edge in edges
             dθ[1] += edge[1]
         end
+        return nothing
     end
 
 
@@ -75,6 +77,7 @@ begin
         for edge in edges
             dv[2] += edge[1]
         end
+        return nothing
     end
 
     inertia! = ODEVertex(f! = kuramoto_inertia!, dim = 2, sym= [:θ, :ω])
@@ -85,6 +88,7 @@ begin
 
     function kuramoto_edge!(edge, v_s, v_d, σ, t)
       edge[1] = σ * sin(v_s[1] - v_d[1])
+      return nothing
     end
 
     v_arr = Array{VertexFunction}(
@@ -111,7 +115,7 @@ savefig("kuramoto_heterogeneous.pdf")
 begin
     function kuramoto_delay_edge!(edge, v_s, v_d, h_v_s, h_v_d, p, t)
         edge[1] = p * sin(v_s[1] - h_v_d[1])
-        nothing
+        return nothing
     end
     dedge! = StaticDelayEdge(f! = kuramoto_delay_edge!, dim = 1)
 
@@ -141,14 +145,14 @@ begin
     function condition(out, u, t, integrator)
       out .= (u[θ_idxs] .- .5) .*
              (u[θ_idxs] .+ .5)
-      nothing
+      return nothing
     end
 
     function affect!(integrator, idx)
       stable_edges =
         map(edg -> idx ∉ edg, Pair.(edges(g)))
       integrator.p = (integrator.p[1], stable_edges .* integrator.p[2], integrator.p[3])
-      nothing
+      return nothing
     end
 
     cb = VectorContinuousCallback(condition, affect!, 10)
