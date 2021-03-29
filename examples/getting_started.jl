@@ -44,6 +44,7 @@ nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1)
 # returned object nd of type ODEFunction is compatible with the solvers of OrdinaryDiffEq
 nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g)
 
+nd.f.graph_structure.e_dims
 ### Simulation
 
 x0 = randn(N) # random initial conditions

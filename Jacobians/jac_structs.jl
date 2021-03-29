@@ -621,9 +621,9 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T},
 
     if jac == true
         # These additional arrays are used for initializing the GraphData and will be overwritten
-        v_Jac_array = similar(x_prototype, sum(v_dims))
-        e_Jac_array = similar(x_prototype, sum(e_dims))
-        e_Jac_product_array = similar(x_prototype, sum(num_e))
+        v_jac_array = [Array{Float64,2}(undef, dim, dim) for dim in v_dims]
+        e_jac_array = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim) in zip(e_dims, v_dims, v_dims)] # homogene Netzwerke: v_src_dim = v_dst_dim = v_dim
+        e_jac_product =  zeros(e_dims[1], graph_stucture.num_e) # Annahme: homogene edges
 
         #v_jac_array = zeros(for i in vertices Array{Array{Float64, 2}, 1}) # benutze list comprehension
         # initialisiere v_jac_array erstmal mit zeros, aber Dimension muss stimmen
