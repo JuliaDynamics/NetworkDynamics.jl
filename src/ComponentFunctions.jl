@@ -55,6 +55,7 @@ For more details see the documentation.
     f!::T
     dim::Int
     sym=[:v for i in 1:dim]
+    vertex_jacobian! = :F
 end
 
 """
@@ -85,12 +86,13 @@ For more details see the documentation.
     dim::Int # number of dimensions of e
     coupling = :undefined # :directed, :symmetric, :antisymmetric, :fiducial, :undirected
     sym=[:e for i in 1:dim] # Symbols for the dimensions
-
+    edge_jacobian! = :F
 
     function StaticEdge(user_f!::T,
                            dim::Int,
                            coupling::Symbol,
-                           sym::Vector{Symbol}) where T
+                           sym::Vector{Symbol},
+                           edge_jacobian!) where T
 
         coupling_types = (:undefined, :directed, :fiducial, :undirected, :symmetric,
                           :antisymmetric)
@@ -174,6 +176,7 @@ For more details see the documentation.
     dim::Int
     mass_matrix=I
     sym=[:v for i in 1:dim]
+    vertex_jacobian! = :F
 end
 
 """
@@ -208,13 +211,15 @@ For more details see the documentation.
     coupling = :undefined # :directed, :symmetric, :antisymmetric, :fiducial, :undirected
     mass_matrix=I # Mass matrix for the equation
     sym=[:e for i in 1:dim] # Symbols for the dimensions
+    edge_jacobian! = :F
 
 
     function ODEEdge(user_f!::T,
                      dim::Int,
                      coupling::Symbol,
                      mass_matrix,
-                     sym::Vector{Symbol}) where T
+                     sym::Vector{Symbol},
+                     edge_jacobian!) where T
 
         coupling_types = (:directed, :fiducial, :undirected)
 
