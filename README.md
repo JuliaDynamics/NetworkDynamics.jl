@@ -16,7 +16,7 @@ An [introductory talk](https://www.youtube.com/watch?v=GrmnbDYr6mM) was recorded
 
 ## Benchmarks
 
-In our benchmark on the Kuramoto model NetworkDynamics.jl proved to be an especially performant solution, see https://github.com/PIK-ICoN/NetworkDynamicsBenchmarks.
+In our benchmark on the Kuramoto model NetworkDynamics.jl + DifferentialEquations.jl proved to be an especially performant solution, see https://github.com/PIK-ICoN/NetworkDynamicsBenchmarks.
 
 ## PowerDynamics
 
