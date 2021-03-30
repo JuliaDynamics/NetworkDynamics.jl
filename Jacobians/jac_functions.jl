@@ -7,8 +7,8 @@ using DiffEqBase
 import DiffEqBase.update_coefficients!
 
 
-include("/Users/lalalulu/Desktop/PIK/github/NetworkDynamics.jl/Jacobians/jac_structs.jl")
-@reexport using .jac_structs
+#include("/Users/lalalulu/Desktop/PIK/github/NetworkDynamics.jl/Jacobians/jac_structs.jl")
+#@reexport using .jac_structs
 
 #include("/Users/lalalulu/Desktop/PIK/github/NetworkDynamics.jl/src/nd_ODE_Static.jl")
 #@reexport using .nd_ODE_Static_mod
@@ -54,6 +54,9 @@ graph_data_ = nd.f.graph_data
 v_dims = nd.f.graph_structure.v_dims
 e_dims = nd.f.graph_structure.e_dims
 num_e = nd.f.graph_structure.num_e
+
+vertices! = nd.f.vertices!
+edges! = nd.f.edges!
 
 # build the jacobian graph data
 
@@ -131,9 +134,8 @@ function update_coefficients!(Jac::NDJacVecOperator, x, p, t)
     jgd = Jac.jac_graph_data
 
     for i in 1:gs.num_v
-        #vertices![i].VertexJacobian!(
-        #nd_diffusion_vertex[i].VertexJacobian!(
-        nd_diffusion_vertex.vertex_jacobian!(
+        #vertices![i].vertex_jacobian!(
+        vertices!.vertex_jacobian!(
           get_vertex_jacobian(jgd, i),
           get_vertex(gd, i),
           p_v_idx(p, i),
@@ -141,9 +143,8 @@ function update_coefficients!(Jac::NDJacVecOperator, x, p, t)
     end
 
     for i in 1:gs.num_e
-          #edges![i].EdgeJacobian!(
-          #nd_diffusion[i].EdgeJacobian!(
-          nd_diffusion.edge_jacobian!(
+          #edges![i].edge_jacobian!(
+          edges!.edge_jacobian!(
               get_src_edge_jacobian(jgd, i),
               get_dst_edge_jacobian(jgd, i),
               get_src_vertex(gd, i),

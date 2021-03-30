@@ -86,13 +86,13 @@ For more details see the documentation.
     dim::Int # number of dimensions of e
     coupling = :undefined # :directed, :symmetric, :antisymmetric, :fiducial, :undirected
     sym=[:e for i in 1:dim] # Symbols for the dimensions
-    edge_jacobian! = :F
+    edge_jacobian! = :F # edge_jacobian!::F
 
     function StaticEdge(user_f!::T,
                            dim::Int,
                            coupling::Symbol,
                            sym::Vector{Symbol},
-                           edge_jacobian!) where T
+                           edge_jacobian!) where T # edge_jacobian!::F) where T
 
         coupling_types = (:undefined, :directed, :fiducial, :undirected, :symmetric,
                           :antisymmetric)
@@ -176,7 +176,7 @@ For more details see the documentation.
     dim::Int
     mass_matrix=I
     sym=[:v for i in 1:dim]
-    vertex_jacobian! = :F
+    vertex_jacobian! = :F # vertex_jacobian!::F
 end
 
 """
