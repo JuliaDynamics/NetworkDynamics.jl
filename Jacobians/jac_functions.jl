@@ -55,8 +55,18 @@ v_dims = nd.f.graph_structure.v_dims
 e_dims = nd.f.graph_structure.e_dims
 num_e = nd.f.graph_structure.num_e
 
+
 vertices! = nd.f.vertices!
 edges! = nd.f.edges!
+
+# for vertices! and edges! we need to get the index
+@inline Base.@propagate_inbounds function maybe_idx(p::T, i) where T <: AbstractArray
+    p[i]
+end
+
+@inline function maybe_idx(p, i)
+    p
+end
 
 # build the jacobian graph data
 
@@ -135,7 +145,7 @@ function update_coefficients!(Jac::NDJacVecOperator, x, p, t)
 
     for i in 1:gs.num_v
         #vertices![i].vertex_jacobian!(
-        vertices!.vertex_jacobian!(
+        maybe_idx(vertices!, i).vertex_jacobian!(
           get_vertex_jacobian(jgd, i),
           get_vertex(gd, i),
           p_v_idx(p, i),
@@ -144,7 +154,7 @@ function update_coefficients!(Jac::NDJacVecOperator, x, p, t)
 
     for i in 1:gs.num_e
           #edges![i].edge_jacobian!(
-          edges!.edge_jacobian!(
+          maybe_idx(edges!, i).edge_jacobian!(
               get_src_edge_jacobian(jgd, i),
               get_dst_edge_jacobian(jgd, i),
               get_src_vertex(gd, i),
