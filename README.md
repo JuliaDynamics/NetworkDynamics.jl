@@ -34,3 +34,7 @@ If you use NetworkDynamics.jl in your research publications, please cite our [pa
   year={2020}
 }
 ```
+
+## Old Documentation
+
+Documentation for relases prior to version 0.5.3 can be found [here](https://pik-icon.github.io/NetworkDynamicsDocumentationHistory/). Current docs are [here](https://pik-icon.github.io/NetworkDynamics.jl/).
