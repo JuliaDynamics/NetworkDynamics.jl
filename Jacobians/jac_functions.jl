@@ -35,9 +35,9 @@ function diffusionvertex!(dv, v, edges, p, t)
     nothing
 end
 
-nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 2)
+nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 2, vertex_jacobian! = vertex_jacobian!)
 
-nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1)
+nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1, edge_jacobian! = edge_jacobian!)
 
 nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g)
 
