@@ -35,9 +35,26 @@ function diffusionvertex!(dv, v, edges, p, t)
     nothing
 end
 
-nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 2, vertex_jacobian! = vertex_jacobian!)
+function jac_vertex!(J::AbstractMatrix, v, p, t)
+    #J = internal_jacobian(J, v, p, t)
+    J[1, 1] = 1.0
+    J[1, 2] = 0.0
+    J[2, 1] = 1.0
+    J[2, 2] = 0.0
+end
 
-nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1, edge_jacobian! = edge_jacobian!)
+function jac_edge!(J_s::AbstractMatrix, J_d::AbstractMatrix, v_s, v_d, p, t)
+   #J_s = source_jacobian(v_s, v_d, p, t)
+   #J_d = dest_jacobian(v_s, v_d, p, t)
+   J_s[1, 1] = 1.0
+   J_s[1, 2] = 0.0
+   J_d[1, 1] = 1.0
+   J_d[1, 2] = 0.0
+end
+
+nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 2, vertex_jacobian! = jac_vertex!)
+
+nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1, edge_jacobian! = jac_edge!)
 
 nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g)
 
@@ -68,6 +85,16 @@ end
     p
 end
 
+for i in 1:num_e
+      #edges![i].edge_jacobian!(
+      maybe_idx(vertices!, i).vertex_jacobian!
+end
+
+
+for i in 1:num_e
+      #edges![i].edge_jacobian!(
+      maybe_idx(edges!, i).edge_jacobian!
+end
 # build the jacobian graph data
 
 struct JacGraphData
@@ -118,23 +145,6 @@ NDJacVecOperator_object = NDJacVecOperator(x, p, t, g, graph_structure_, graph_d
 @inline get_vertex_jacobian(jgd::JacGraphData, i::Int) = jgd.v_jac_array[i]
 
 ### Vertex, Edge functions for update_coefficients
-
-function vertex_jacobian!(J::AbstractMatrix, v, p, t)
-    #J = internal_jacobian(J, v, p, t)
-    J[1, 1] = 1.0
-    J[1, 2] = 0.0
-    J[2, 1] = 1.0
-    J[2, 2] = 0.0
-end
-
-function edge_jacobian!(J_s::AbstractMatrix, J_d::AbstractMatrix, v_s, v_d, p, t)
-   #J_s = source_jacobian(v_s, v_d, p, t)
-   #J_d = dest_jacobian(v_s, v_d, p, t)
-   J_s[1, 1] = 1.0
-   J_s[1, 2] = 0.0
-   J_d[1, 1] = 1.0
-   J_d[1, 2] = 0.0
-end
 
 function update_coefficients!(Jac::NDJacVecOperator, x, p, t)
 

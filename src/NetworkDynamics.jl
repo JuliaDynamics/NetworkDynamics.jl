@@ -335,19 +335,21 @@ end
 
 
 @inline function reconstruct_edge(edge::StaticEdge, coupling::Symbol)
-    let f! = edge.f!, dim = edge.dim, sym = edge.sym
+    let f! = edge.f!, dim = edge.dim, sym = edge.sym, edge_jacobian! = edge.edge_jacobian!
         return StaticEdge(f! = f!,
                           dim = dim,
                           coupling = coupling,
-                          sym = sym)
+                          sym = sym,
+                          edge_jacobian! = edge.edge_jacobian!)
     end
 end
 @inline function reconstruct_edge(edge::StaticDelayEdge, coupling::Symbol)
-    let f! = edge.f!, dim = edge.dim, sym = edge.sym
+    let f! = edge.f!, dim = edge.dim, sym = edge.sym, edge_jacobian! = edge.edge_jacobian!
         return StaticDelayEdge(f! = f!,
                                dim = dim,
                                coupling = coupling,
-                               sym = sym)
+                               sym = sym,
+                               edge_jacobian! = edge.edge_jacobian!)
     end
 end
 @inline function reconstruct_edge(edge::ODEEdge, coupling::Symbol)
