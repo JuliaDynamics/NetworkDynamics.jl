@@ -66,7 +66,6 @@ sol = solve(ode_prob, Tsit5());
 
 graph_structure_ = nd.f.graph_structure
 graph_data_ = nd.f.graph_data
-#graph_ = nd.f.graph
 
 v_dims = nd.f.graph_structure.v_dims
 e_dims = nd.f.graph_structure.e_dims
@@ -85,16 +84,6 @@ end
     p
 end
 
-for i in 1:num_e
-      #edges![i].edge_jacobian!(
-      maybe_idx(vertices!, i).vertex_jacobian!
-end
-
-
-for i in 1:num_e
-      #edges![i].edge_jacobian!(
-      maybe_idx(edges!, i).edge_jacobian!
-end
 # build the jacobian graph data
 
 struct JacGraphData
@@ -105,7 +94,13 @@ end
 
 v_jac_array = [Array{Float64,2}(undef, dim, dim) for dim in v_dims]
 e_jac_array = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim) in zip(e_dims, v_dims, v_dims)] # homogene Netzwerke: v_src_dim = v_dst_dim = v_dim
-e_jac_product =  zeros(e_dims[1], num_e) # Annahme: homogene edges
+e_jac_product =  zeros(num_e, e_dims[1]) # Annahme: homogene edges
+
+e_jac_product_modified = zeros(num_e, e_dims[1])
+
+for i in 1:4
+    println(e_jac_product_modified[i, :])
+end
 
 jac_graph_data_object = JacGraphData(v_jac_array, e_jac_array, e_jac_product)
 
@@ -208,11 +203,69 @@ end
 
 # function call update_coefficients!
 
-x_test = randn(2*N)
+x_test = randn(2N)
 p_test = nothing
 t_test = 1.0
+dx_test = randn(2N)
 
-update_coefficients!(NDJacVecOperator_object, x_test, p_test, t_test)
+call_update_coefficients! = update_coefficients!(NDJacVecOperator_object, x_test, p_test, t_test)
+
+# final functions for NDJacVecOperator
+
+function jac_vec_prod(Jac::NDJacVecOperator, z)
+
+    gs = Jac.graph_structure
+    checkbounds_p(p, gs.num_v, gs.num_e)
+    gd = prep_gd(x, x, Jac.graph_data, Jac.graph_structure)
+    jgd = Jac.jac_graph_data
+
+    for i in 1:gs.num_e
+        #e_jac_product[i] .= get_src_edge_jacobian(gd, i) * view(z, get_src_indices(i)) + get_dst_edge_jacobian(gd, i) * view(z, get_dst_indices(i))
+        e_jac_product[i, :] .= get_src_edge_jacobian(jgd, i) * view(z, gs.s_e_idx[i]) + get_dst_edge_jacobian(jgd, i) * view(z, gs.d_e_idx[i])
+        println(e_jac_product[i, :])
+    end
+
+    ## neues array wird erstellt und returned
+    dx = zeros(gs.v_dims[1], gs.num_v)
+
+    for i in 1:gs.num_v
+        #view(dx, get_vertex_indices(i)) .= get_vertex_jacobian(gd, i) * view(z, get_vertex_indices(i))
+        view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i])
+        #dx .+= sum(e_jac_product[i])
+        dx .+= sum(e_jac_product[i, :])
+    end
+    return dx
+end
+
+function jac_vec_prod!(dx, Jac::NDJacVecOperator, z)
+
+    gs = Jac.graph_structure
+    checkbounds_p(p, gs.num_v, gs.num_e)
+    gd = prep_gd(x, x, Jac.graph_data, Jac.graph_structure)
+    jgd = Jac.jac_graph_data
+
+    for i in 1:gs.num_e
+        #e_jac_product[i] .= get_src_edge_jacobian(gd, i) * view(z, get_src_indices(i)) + get_dst_edge_jacobian(gd, i) * view(z, get_dst_indices(i))
+        e_jac_product[i, :] .= get_src_edge_jacobian(jgd, i) * view(z, gs.s_e_idx[i]) + get_dst_edge_jacobian(jgd, i) * view(z, gs.d_e_idx[i])
+        #println(e_jac_product[i, :])
+    end
+
+    for i in 1:gs.num_v
+        #view(dx, get_vertex_indices(i)) .= get_vertex_jacobian(gd, i) * view(z, get_vertex_indices(i))
+        view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i])
+        #dx .+= sum(e_jac_product[i])
+        dx .+= sum(e_jac_product[i, :])
+    end
+end
+
+
+# functions for callable structs
+
+Base.:*(Jac::NDJacVecOperator, z::AbstractVector) = jac_vec_prod(Jac, z)
+
+function LinearAlgebra.mul!(dx::AbstractVector, Jac::NDJacVecOperator, z::AbstractVector)
+    jac_vec_prod!(dx, Jac, z)
+end
 
 # callable structs
 
@@ -226,47 +279,6 @@ function (Jac::NDJacVecOperator)(dx, x, p, t::Number)
     mul!(dx, Jac, x)
 end
 
-Base.:*(Jac::NDJacVecOperator, z::AbstractVector) = jac_vec_prod(Jac, z)
+call_callable_struct_1 = NDJacVecOperator_object(x_test, p_test, t_test)
 
-function LinearAlgebra.mul!(dx::AbstractVector, Jac::NDJacVecOperator, z::AbstractVector)
-    jac_vec_prod!(dx, Jac, z)
-end
-
-# final functions for NDJacVecOperator
-
-function jac_vec_prod(Jac::NDJacVecOperator, z)
-
-    gs = Jac.graph_structure
-    checkbounds_p(p, gs.num_v, gs.num_e)
-    gd = prep_gd(x, x, Jac.graph_data, Jac.graph_structure)
-    jgd = Jac.jac_graph_data
-
-    for i in 1:gs.num_e
-        e_jac_product[i] .= get_src_edge_jacobian(jgd, i) * view(z, get_src_indices(i)) + get_dst_edge_jacobian(jgd, i) * view(z, get_dst_indices(i))
-    end
-    ## neues array wird erstellt und returned
-
-    dx = zeros(gs.v_dims, gs.num_v)
-
-    for i in 1:gs.num_v
-        view(dx, gs.v_idx[i]) .= get_vertex_jacobian(gd, i) * view(z, gs.v_idx[i])
-        dx .+= sum(e_jac_product[i])
-    end
-    return dx
-end
-
-function jac_vec_prod!(dx, Jac::NDJacVecOperator, z)
-
-    gs = Jac.graph_structure
-    checkbounds_p(p, gs.num_v, gs.num_e)
-    gd = prep_gd(x, x, Jac.graph_data, Jac.graph_structure)
-
-    for i in 1:gs.num_e
-        e_jac_product[i] .= get_src_edge_jacobian(gd, i) * view(z, get_src_indices(i)) + get_dst_edge_jacobian(gd, i) * view(z, get_dst_indices(i))
-    end
-
-    for i in 1:gs.num_v
-        view(dx, get_vertex_indices(i)) .= get_vertex_jacobian(gd, i) * view(z, get_vertex_indices(i))
-        dx .+= sum(e_jac_product[i])
-    end
-end
+call_callable_struct_2 = NDJacVecOperator_object(dx_test, x_test, p_test, t_test)
