@@ -86,10 +86,27 @@ end
 
 # build the jacobian graph data
 
-struct JacGraphData
+struct JacGraphData{JGDB}
+    jgdb::JGDB
     v_jac_array::Array{Array{Float64, 2}, 1}
     e_jac_array::Array{Array{Array{Float64, 2}, 1}, 1}
     e_jac_product::Array{Float64, 2}
+end
+
+mutable struct JacGraphDataBuffer{Tvj, Tej, Tep}
+    v_Jac_array::Tvj
+    e_Jac_array::Tej
+    e_Jac_product_array::Tep
+end
+
+function JacGraphData(v_Jac_array::Tvj, e_Jac_array::Tej, e_Jac_product_array::Tep, gs::GraphStruct) where {Tvj, Tej, Tep}
+    jgdb = JacGraphDataBuffer{Tvj, Tej, Tep}(v_Jac_array, e_Jac_array, e_Jac_product_array)
+
+    v_jac = [Array{Float64,2}(undef, dim, dim) for dim in gs.v_dims]
+    e_jac = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim) in zip(gs.e_dims, gs.v_dims, gs.v_dims)] # homogene Netzwerke: v_src_dim = v_dst_dim = v_dim
+    e_jac_product =  zeros(gs.e_dims[1], gs.num_e) # Annahme: homogene edges
+
+    JacGraphData{JGDB}(jgdb, v_jac, e_jac, e_jac_product)
 end
 
 v_jac_array = [Array{Float64,2}(undef, dim, dim) for dim in v_dims]
@@ -97,7 +114,8 @@ e_jac_array = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim
 e_jac_product =  zeros(num_e, e_dims[1]) # Annahme: homogene edges
 #e_jac_product = zeros(e_dims[1], num_e)
 
-jac_graph_data_object = JacGraphData(v_jac_array, e_jac_array, e_jac_product)
+#jac_graph_data_object = JacGraphData(v_jac_array, e_jac_array, e_jac_product)
+jac_graph_data_object = JacGraphData(v_jac_array, e_jac_array, e_jac_product,graph_structure_)
 
 x = similar(zeros(1), sum(v_dims))
 p = nothing
