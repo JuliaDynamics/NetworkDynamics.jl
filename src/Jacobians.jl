@@ -1,3 +1,19 @@
+
+
+module Jacobians
+
+using ..NetworkStructures
+using ..Utilities
+
+using DifferentialEquations
+using Reexport
+using LinearAlgebra
+using DiffEqBase
+import DiffEqBase.update_coefficients!
+export JacGraphData, NDJacVecOperator
+#export maybe_idx, p_v_idx, p_e_idx, @nd_threads, warn_parallel, checkbounds_p, prep_gd
+
+
 mutable struct JacGraphDataBuffer{Tvj, Tej, Tep}
     v_Jac_array::Tvj
     e_Jac_array::Tej
@@ -156,3 +172,6 @@ function (Jac::NDJacVecOperator)(dx, x, p, t::Number)
     update_coefficients!(Jac, x, p, t)
     mul!(dx, Jac, x)
 end
+
+
+end # module
