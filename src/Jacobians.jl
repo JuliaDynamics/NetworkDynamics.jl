@@ -11,7 +11,7 @@ using Reexport
 using LinearAlgebra
 using DiffEqBase
 import DiffEqBase.update_coefficients!
-export JacGraphData, NDJac]VecOperator
+export JacGraphData, NDJacVecOperator
 #export maybe_idx, p_v_idx, p_e_idx, @nd_threads, warn_parallel, checkbounds_p, prep_gd
 
 
