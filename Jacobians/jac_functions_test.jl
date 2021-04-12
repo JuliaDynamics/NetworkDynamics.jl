@@ -236,13 +236,11 @@ function jac_vec_prod(Jac::NDJacVecOperator, z)
     end
 
     ## neues array wird erstellt und returned
-    dx = zeros(gs.v_dims[1], gs.num_v)
+    dx = zeros(gs.v_dims[1]*gs.num_v)
 
     for i in 1:gs.num_v
-        #view(dx, get_vertex_indices(i)) .= get_vertex_jacobian(gd, i) * view(z, get_vertex_indices(i))
         view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i])
-        #dx .+= sum(e_jac_product[i])
-        dx .+= sum(e_jac_product[i, :])
+        view(dx, gs.v_idx[i]) .+= vec(sum(view(e_jac_product, gs.d_v[i], :), dims = 1))
     end
     return dx
 end
@@ -260,12 +258,9 @@ function jac_vec_prod!(dx, Jac::NDJacVecOperator, z)
 
     for i in 1:gs.num_v
         view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i])
-        dx .+= sum(e_jac_product[i, :])
-        #dx[i,:] .+= sum(e_jac_product[i, :])
-        #println(dx[i, :])
+        view(dx, gs.v_idx[i]) .+= vec(sum(view(e_jac_product, gs.d_v[i], :), dims = 1)) # display(@allocated)
+        #println(sum(view(e_jac_product, gs.d_v[i], :), dims = 1))
     end
-    #dx .+= sum(e_jac_product[1,:])
-    println(dx)
 end
 
 
