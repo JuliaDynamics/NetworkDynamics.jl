@@ -254,39 +254,18 @@ function jac_vec_prod!(dx, Jac::NDJacVecOperator, z)
     gd = prep_gd(x, x, Jac.graph_data, Jac.graph_structure)
     jgd = Jac.jac_graph_data
 
-    for i in 1#gs.num_e
-        #e_jac_product[i] .= get_src_edge_jacobian(gd, i) * view(z, get_src_indices(i)) + get_dst_edge_jacobian(gd, i) * view(z, get_dst_indices(i))
-        src_jac = get_src_edge_jacobian(jgd, i)
-        dst_jac = get_dst_edge_jacobian(jgd, i)
-        #println(src_jac)
-        #println(dst_jac)
-        #println(view(z, gs.s_e_idx[i]))
-        #println(view(z, gs.d_e_idx[i]))
-        l = get_src_edge_jacobian(jgd, i) * view(z, gs.s_e_idx[i])
-        #println(l)
-        m = get_dst_edge_jacobian(jgd, i) * view(z, gs.d_e_idx[i])
-        #println(m)
+    for i in 1:gs.num_e
         e_jac_product[i, :] .= get_src_edge_jacobian(jgd, i) * view(z, gs.s_e_idx[i]) + get_dst_edge_jacobian(jgd, i) * view(z, gs.d_e_idx[i])
-        println(e_jac_product[i, :])
     end
 
-    for i in 1#:gs.num_v
-        #view(dx, get_vertex_indices(i)) .= get_vertex_jacobian(gd, i) * view(z, get_vertex_indices(i))
-        vertex_jac = get_vertex_jacobian(jgd, i)
-        println(vertex_jac)
-        println(view(z, gs.v_idx[i]))
-        k = get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i])
-        println(k)
+    for i in 1:gs.num_v
         view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i])
-        s = sum(e_jac_product[i, :])
-        println(s)
-        #println()
-        #dx .+= sum(e_jac_product[i])
-        #dx[i, :] .+= sum(e_jac_product[i, :])
-        dx .+= sum(e_jac_product[i, :]) # warum ist das 1 dim?
-        println(dx[i, :])
-        println(dx)
+        dx .+= sum(e_jac_product[i, :])
+        #dx[i,:] .+= sum(e_jac_product[i, :])
+        #println(dx[i, :])
     end
+    #dx .+= sum(e_jac_product[1,:])
+    println(dx)
 end
 
 

@@ -38,7 +38,7 @@ end
 
 function jac_vertex!(J::AbstractMatrix, v, p, t)
     #J = internal_jacobian(J, v, p, t)
-    J[1, 1] = 1.0
+    J[1, 1] = 0.0
 end
 
 function jac_edge!(J_s::AbstractMatrix, J_d::AbstractMatrix, v_s, v_d, p, t)
@@ -56,12 +56,13 @@ nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1, edge_jacobian! = ja
 
 nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g, jac = true)
 nd2 = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g, jac = false)
+
 x0 = randn(N) # random initial conditions
 ode_prob = ODEProblem(nd, x0, (0., 4.))
-sol = solve(ode_prob, Tsit5());
+sol = solve(ode_prob, Rodas5());
 
 ode_prob2 = ODEProblem(nd2, x0, (0., 4.))
-sol2 = solve(ode_prob2, Tsit5());
+sol2 = solve(ode_prob2, Rodas5());
 
 plot(sol)
 plot(sol2)

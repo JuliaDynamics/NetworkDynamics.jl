@@ -4,13 +4,14 @@ module Jacobians
 
 using ..NetworkStructures
 using ..Utilities
+using ..nd_ODE_Static_mod
 
 using DifferentialEquations
 using Reexport
 using LinearAlgebra
 using DiffEqBase
 import DiffEqBase.update_coefficients!
-export JacGraphData, NDJacVecOperator
+export JacGraphData, NDJac]VecOperator
 #export maybe_idx, p_v_idx, p_e_idx, @nd_threads, warn_parallel, checkbounds_p, prep_gd
 
 
