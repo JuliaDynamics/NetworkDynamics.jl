@@ -66,3 +66,6 @@ sol2 = solve(ode_prob2, Rodas5());
 
 plot(sol)
 plot(sol2)
+
+@time solve(ode_prob, Rodas5())
+@time solve(ode_prob2, Rodas5())

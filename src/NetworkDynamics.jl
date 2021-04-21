@@ -122,7 +122,7 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T},
 
         t = 0.0 # any Float64
         # p später erstmal nothing
-        nd_jac_vec_operator = NDJacVecOperator(similar(v_array), nothing, t, graph, graph_stucture, graph_data, jac_graph_data, parallel) # x, p, t werden in update_coefficients geändert
+        nd_jac_vec_operator = NDJacVecOperator(vertices!, edges!, similar(v_array), nothing, t, graph, graph_stucture, graph_data, jac_graph_data, parallel) # x, p, t werden in update_coefficients geändert
 
         return ODEFunction(nd!; mass_matrix = mass_matrix, jac = nd_jac_vec_operator, syms = symbols)
     end

@@ -7,6 +7,7 @@ using ..Utilities
 
 export nd_ODE_Static
 export StaticEdgeFunction
+export prep_gd
 
 
 # If the type of dx and x match, we swap out v_array for x
