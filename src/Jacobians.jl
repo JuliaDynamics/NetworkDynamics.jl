@@ -21,13 +21,14 @@ mutable struct JacGraphDataBuffer{Tvj, Tej, Tep}
     e_Jac_product_array::Tep
 end
 
-struct JacGraphData{JGDB}
-    jgdb::JGDB
+struct JacGraphData{JGD}
+    jgd::JGD
     v_jac_array::Array{Array{Float64, 2}, 1}
     e_jac_array::Array{Array{Array{Float64, 2}, 1}, 1}
-    e_jac_product::Array{Float64, 2}
-    #e_jac_product::Matrix{Float64}
+    e_jac_product::Array{Array{Float64, 2}, 1}
+    #e_jac_product::Array{Float64, 2}
 end
+
 
 function JacGraphData(v_Jac_array::Tvj, e_Jac_array::Tej, e_Jac_product_array::Tep, gs::GraphStruct) where {Tvj, Tej, Tep}
     jgdb = JacGraphDataBuffer{Tvj, Tej, Tep}(v_Jac_array, e_Jac_array, e_Jac_product_array)
@@ -39,6 +40,7 @@ function JacGraphData(v_Jac_array::Tvj, e_Jac_array::Tej, e_Jac_product_array::T
 
     JacGraphData{JGDB}(jgdb, v_jac, e_jac, e_jac_product)
 end
+
 
 @inline get_src_edge_jacobian(jgd::JacGraphData, i::Int) = jgd.e_jac_array[i][1]
 
@@ -118,11 +120,9 @@ function jac_vec_prod(Jac::NDJacVecOperator, z)
     checkbounds_p(p, gs.num_v, gs.num_e)
     gd = prep_gd(x, x, Jac.graph_data, Jac.graph_structure)
     jgd = Jac.jac_graph_data
-    e_jac_p = zeros(gs.num_e, gs.e_dims[1])
 
     for i in 1:gs.num_e
-        #e_jac_product[i] .= get_src_edge_jacobian(gd, i) * view(z, get_src_indices(i)) + get_dst_edge_jacobian(gd, i) * view(z, get_dst_indices(i))
-        e_jac_p[i, :] .= get_src_edge_jacobian(jgd, i) * view(z, gs.s_e_idx[i]) + get_dst_edge_jacobian(jgd, i) * view(z, gs.d_e_idx[i])
+        jgd.e_jac_product[i, :] .= get_src_edge_jacobian(jgd, i) * view(z, gs.s_e_idx[i]) + get_dst_edge_jacobian(jgd, i) * view(z, gs.d_e_idx[i])
     end
 
     ## neues array wird erstellt und returned
@@ -131,8 +131,7 @@ function jac_vec_prod(Jac::NDJacVecOperator, z)
     for i in 1:gs.num_v
         #view(dx, get_vertex_indices(i)) .= get_vertex_jacobian(gd, i) * view(z, get_vertex_indices(i))
         view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i])
-        #dx .+= sum(e_jac_product[i])
-        dx .+= sum(e_jac_p[i, :])
+        dx .+= sum(jgd.e_jac_product[i, :])
     end
     return dx
 end
@@ -145,18 +144,17 @@ function jac_vec_prod!(dx, Jac::NDJacVecOperator, z)
     checkbounds_p(p, gs.num_v, gs.num_e)
     gd = prep_gd(x, x, Jac.graph_data, Jac.graph_structure)
     jgd = Jac.jac_graph_data
-    e_jac_p = zeros(gs.num_e, gs.e_dims[1])
 
     for i in 1:gs.num_e
         #e_jac_product[i] .= get_src_edge_jacobian(gd, i) * view(z, get_src_indices(i)) + get_dst_edge_jacobian(gd, i) * view(z, get_dst_indices(i))
-        e_jac_p[i, :] .= get_src_edge_jacobian(jgd, i) * view(z, gs.s_e_idx[i]) + get_dst_edge_jacobian(jgd, i) * view(z, gs.d_e_idx[i])
+        jgd.e_jac_product[i, :] .= get_src_edge_jacobian(jgd, i) * view(z, gs.s_e_idx[i]) + get_dst_edge_jacobian(jgd, i) * view(z, gs.d_e_idx[i])
     end
 
     for i in 1:gs.num_v
         #view(dx, get_vertex_indices(i)) .= get_vertex_jacobian(gd, i) * view(z, get_vertex_indices(i))
         view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i])
         #dx .+= sum(e_jac_product[i])
-        dx .+= sum(e_jac_p[i, :])
+        dx .+= sum(jgd.e_jac_product[i, :])
     end
 end
 

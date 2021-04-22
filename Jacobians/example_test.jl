@@ -67,5 +67,11 @@ sol2 = solve(ode_prob2, Rodas5());
 plot(sol)
 plot(sol2)
 
+plot_with_jac = plot(sol, color = [:black])
+plot!(plot_with_jac, sol2, color = [:red])
+
 @time solve(ode_prob, Rodas5())
 @time solve(ode_prob2, Rodas5())
+
+@allocated solve(ode_prob, Rodas5())
+@allocated solve(ode_prob2, Rodas5())
