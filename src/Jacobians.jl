@@ -15,30 +15,33 @@ export JacGraphData, NDJacVecOperator
 #export maybe_idx, p_v_idx, p_e_idx, @nd_threads, warn_parallel, checkbounds_p, prep_gd
 
 
-mutable struct JacGraphDataBuffer{Tvj, Tej, Tep}
-    v_Jac_array::Tvj
-    e_Jac_array::Tej
-    e_Jac_product_array::Tep
-end
+#mutable struct JacGraphDataBuffer{Tvj, Tej, Tep}
+#    v_Jac_array::Tvj
+#    e_Jac_array::Tej
+#    e_Jac_product_array::Tep
+#end
 
-struct JacGraphData{JGD}
-    jgd::JGD
+#struct JacGraphData{JGD}
+struct JacGraphData
+    #jgd::JGD
     v_jac_array::Array{Array{Float64, 2}, 1}
     e_jac_array::Array{Array{Array{Float64, 2}, 1}, 1}
-    e_jac_product::Array{Array{Float64, 2}, 1}
-    #e_jac_product::Array{Float64, 2}
+    #e_jac_product::Array{Array{Float64, 2}, 1}
+    e_jac_product::Array{Float64, 2}
 end
 
 
 function JacGraphData(v_Jac_array::Tvj, e_Jac_array::Tej, e_Jac_product_array::Tep, gs::GraphStruct) where {Tvj, Tej, Tep}
-    jgdb = JacGraphDataBuffer{Tvj, Tej, Tep}(v_Jac_array, e_Jac_array, e_Jac_product_array)
-    JGDB = typeof(jgdb)
+    #jgdb = JacGraphDataBuffer{Tvj, Tej, Tep}(v_Jac_array, e_Jac_array, e_Jac_product_array)
+    #JGDB = typeof(jgdb)
 
     v_jac = [Array{Float64,2}(undef, dim, dim) for dim in gs.v_dims]
     e_jac = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim) in zip(gs.e_dims, gs.v_dims, gs.v_dims)] # homogene Netzwerke: v_src_dim = v_dst_dim = v_dim
-    e_jac_product =  zeros(gs.e_dims[1], gs.num_e) # Annahme: homogene edges
+    #e_jac_product =  zeros(gs.e_dims[1], gs.num_e) # Annahme: homogene edges
+    e_jac_product =  zeros(gs.num_e, gs.e_dims[1])
 
-    JacGraphData{JGDB}(jgdb, v_jac, e_jac, e_jac_product)
+    #JacGraphData{JGD}(jgdb, v_jac, e_jac, e_jac_product)
+    JacGraphData(v_jac, e_jac, e_jac_product)
 end
 
 
@@ -55,24 +58,24 @@ end
 #e_jac_product =  zeros(num_e, e_dims[1]) # Annahme: homogene edges
 
 
-mutable struct NDJacVecOperator{T, T1, T2, uType, tType, G, GD, JGDB} <: DiffEqBase.AbstractDiffEqLinearOperator{T} # mutable da x, p, t geupdated werden
-    vertices!::T1
-    edges!::T2
+mutable struct NDJacVecOperator{T, uType, tType, T1, T2, G, GD, JGD} <: DiffEqBase.AbstractDiffEqLinearOperator{T} # mutable da x, p, t geupdated werden
     x::uType
     p
     t::tType
+    vertices!::T1
+    edges!::T2
     graph::G
     graph_structure::GraphStruct
     graph_data::GD
-    jac_graph_data::JGDB
+    jac_graph_data::JGD
     parallel::Bool
 
-    function NDJacVecOperator{T}(vertices!, edges!, x, p, t, graph, graph_structure, graph_data, jac_graph_data, parallel) where T
-        new{T, typeof(vertices!), typeof(edges!), typeof(x),typeof(t),typeof(graph),typeof(graph_data),typeof(jac_graph_data)}(vertices!, edges!, x, p, t, graph, graph_structure, graph_data, jac_graph_data, parallel)
+    function NDJacVecOperator{T}(x, p, t, vertices!, edges!, graph, graph_structure, graph_data, jac_graph_data, parallel) where T
+        new{T, typeof(x), typeof(t), typeof(vertices!), typeof(edges!),typeof(graph), typeof(graph_data), typeof(jac_graph_data)}(x, p, t, vertices!, edges!, graph, graph_structure, graph_data, jac_graph_data, parallel)
     end
 
-    function NDJacVecOperator(vertices!, edges!, x, p, t, graph, graph_structure, graph_data, jac_graph_data, parallel)
-        NDJacVecOperator{eltype(x)}(vertices!, edges!, x, p, t, graph, graph_structure, graph_data, jac_graph_data, parallel)
+    function NDJacVecOperator(x, p, t, vertices!, edges!, graph, graph_structure, graph_data, jac_graph_data, parallel)
+        NDJacVecOperator{eltype(x)}(x, p, t, vertices!, edges!, graph, graph_structure, graph_data, jac_graph_data, parallel)
     end
 end
 
