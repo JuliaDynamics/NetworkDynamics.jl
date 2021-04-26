@@ -233,12 +233,6 @@ mutable struct GraphDataBuffer{Tv, Te}
     e_array::Te
 end
 
-mutable struct JacGraphDataBuffer{Tvj, Tej, Tep}
-    v_Jac_array::Tvj
-    e_Jac_array::Tej
-    e_Jac_product_array::Tep
-end
-
 """
     GraphData{GDB, elV, elE}
 
@@ -263,13 +257,6 @@ struct GraphData{GDB, elV, elE}
     dst_edges::Array{Array{EdgeData{GDB, elE}, 1}, 1} # the half-edges that have v as destination
 end
 
-struct JacGraphData{JGDB}
-    jgdb::JGDB
-    v_jac_array::Array{Array{Float64, 2}, 1}
-    e_jac_array::Array{Array{Array{Float64, 2}, 1}, 1}
-    e_jac_product::Array{Float64, 2}
-end
-
 function GraphData(v_array::Tv, e_array::Te, gs::GraphStruct; global_offset = 0) where {Tv, Te}
     gdb = GraphDataBuffer{Tv, Te}(v_array, e_array)
     GDB = typeof(gdb)
@@ -282,22 +269,6 @@ function GraphData(v_array::Tv, e_array::Te, gs::GraphStruct; global_offset = 0)
     dst_edges = [[EdgeData{GDB, elE}(gdb, offset + global_offset, dim) for (offset,dim) in in_edge] for in_edge in gs.dst_edges_dat]
     GraphData{GDB, elV, elE}(gdb, v, e, v_s_e, v_d_e, dst_edges)
 end
-
-function JacGraphData(v_Jac_array::Tvj, e_Jac_array::Tej, e_Jac_product_array::Tep, gs::GraphStruct) where {Tvj, Tej, Tep}
-    jgdb = JacGraphDataBuffer{Tvj, Tej, Tep}(v_Jac_array, e_Jac_array, e_Jac_product_array)
-
-    v_jac = [Array{Float64,2}(undef, dim, dim) for dim in gs.v_dims]
-    e_jac = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim) in zip(gs.e_dims, gs.v_dims, gs.v_dims)] # homogene Netzwerke: v_src_dim = v_dst_dim = v_dim
-    e_jac_product =  zeros(gs.e_dims[1], gs.num_e) # Annahme: homogene edges
-
-    JacGraphData{JGDB}(jgdb, v_jac, e_jac, e_jac_product)
-end
-
-@inline get_src_edge_jacobian(gd::JacGraphData, i::Int) = gd.e_jac_array[i][1]
-
-@inline get_dst_edge_jacobian(gd::JacGraphData, i::Int) = gd.e_jac_array[i][2]
-
-@inline get_vertex_jacobian(gd::JacGraphData, i::Int) = gd.v_jac_array[i]
 
 
 #= In order to manipulate initial conditions using this view of the underlying

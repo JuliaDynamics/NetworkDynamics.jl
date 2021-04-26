@@ -8,12 +8,6 @@ import DiffEqBase.update_coefficients!
 using Plots
 
 
-#include("/Users/lalalulu/Desktop/PIK/github/NetworkDynamics.jl/Jacobians/jac_structs.jl")
-#@reexport using .jac_structs
-
-#include("/Users/lalalulu/Desktop/PIK/github/NetworkDynamics.jl/src/nd_ODE_Static.jl")
-#@reexport using .nd_ODE_Static_mod
-
 N = 4
 k = 2
 g = barabasi_albert(N, k)
@@ -28,8 +22,6 @@ end
 function diffusionvertex!(dv, v, edges, p, t)
     # usually dv, v, edges are arrays, hence we use the broadcasting operator .
     dv[1] = 0.
-    #dv .= 0.
-    #dv[2] = 1.
     for e in edges
         dv[1] += e[1]
     end
@@ -37,13 +29,10 @@ function diffusionvertex!(dv, v, edges, p, t)
 end
 
 function jac_vertex!(J::AbstractMatrix, v, p, t)
-    #J = internal_jacobian(J, v, p, t)
     J[1, 1] = 0.0
 end
 
 function jac_edge!(J_s::AbstractMatrix, J_d::AbstractMatrix, v_s, v_d, p, t)
-   #J_s = source_jacobian(v_s, v_d, p, t)
-   #J_d = dest_jacobian(v_s, v_d, p, t)
    J_s[1, 1] = 1.0
    #J_s[1, 2] = 0.0
    J_d[1, 1] = -1.0
@@ -63,9 +52,6 @@ sol = solve(ode_prob, Rodas5());
 
 ode_prob2 = ODEProblem(nd2, x0, (0., 4.))
 sol2 = solve(ode_prob2, Rodas5());
-
-plot(sol)
-plot(sol2)
 
 plot_with_jac = plot(sol, color = [:black])
 plot!(plot_with_jac, sol2, color = [:red])

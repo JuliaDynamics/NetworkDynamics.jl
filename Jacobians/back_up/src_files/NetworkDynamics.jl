@@ -4,6 +4,7 @@ using Reexport
 using DiffEqBase
 using LightGraphs
 
+
 include("Utilities.jl")
 @reexport using .Utilities
 
@@ -22,6 +23,8 @@ include("nd_ODE_Static.jl")
 include("nd_DDE_Static.jl")
 @reexport using .nd_DDE_Static_mod
 
+include("Jacobians.jl")
+@reexport using .Jacobians
 
 export network_dynamics
 
@@ -68,7 +71,7 @@ function collect_ve_info(vertices!, edges!, graph)
 end
 
 """
-    network_dynamics(vertices!, edges!, g; parallel = false)
+    network_dynamics(vertices!, edges!, g; parallel = false, jac = false)
 
 Assembles the the dynamical equations of the network problem into an `ODEFunction`
 compatible with the `DifferentialEquations.jl` solvers. Takes as arguments an array
@@ -97,37 +100,37 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T},
 
     symbols = symbols_v
 
-    if jac == true
-        # These additional arrays are used for initializing the GraphData and will be overwritten
-        v_Jac_array = similar(x_prototype, sum(v_dims))
-        e_Jac_array = similar(x_prototype, sum(e_dims))
-        e_Jac_product_array = similar(x_prototype, sum(num_e))
+    graph_stucture = GraphStruct(graph, v_dims, e_dims, symbols_v, symbols_e) # Funktion
 
-        graph_stucture = GraphStruct(graph, v_dims, e_dims, symbols_v, symbols_e) # Funktion
+    graph_data = GraphData(v_array, e_array, graph_stucture) # Funktion
 
-        graph_data = GraphData(v_array, e_array, graph_stucture) # Funktion
+    nd! = nd_ODE_Static(vertices!, edges!, graph, graph_stucture, graph_data, parallel) # Objekterstellung, nd_ODE_Static hier struct
 
-        jac_graph_data = JacGraphData(v_jac_array, e_jac_array, e_jac_product, graph_structure) # Funktion
-
-        nd! = nd_ODE_Static(vertices!, edges!, graph, graph_stucture, graph_data, parallel) # Objekterstellung, nd_ODE_Static hier struct
-
-        mass_matrix = construct_mass_matrix(mmv_array, graph_stucture)
-
-        nd_jac_vec_operator = NDJacVecOperator1(x, p, t, graph, graph_structure, graph_data, jac_graph_data, parallel) # Problem: x, p, t nicht da
-
-        ODEFunction(nd!; mass_matrix = mass_matrix, jac = nd_jac_vec_operator, syms = symbols)
-    end
-
-    graph_stucture = GraphStruct(graph, v_dims, e_dims, symbols_v, symbols_e)
-
-    graph_data = GraphData(v_array, e_array, graph_stucture)
-
-    nd! = nd_ODE_Static(vertices!, edges!, graph, graph_stucture, graph_data, parallel)
     mass_matrix = construct_mass_matrix(mmv_array, graph_stucture)
 
-    ODEFunction(nd!; mass_matrix = mass_matrix, syms=symbols)
-end
+    if jac == true
+        # These additional arrays are used for initializing the GraphData and will be overwritten
+        v_jac_array = [Array{Float64,2}(undef, dim, dim) for dim in v_dims]
+        e_jac_array = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim) in zip(e_dims, v_dims, v_dims)] # homogene Netzwerke: v_src_dim = v_dst_dim = v_dim
+    #    e_jac_product =  zeros(e_dims[1], graph_stucture.num_e) # Annahme: homogene edges
+    #    e_jac_product =  zeros(graph_stucture.num_e, e_dims[1]) # Annahme: homogene edges - with this it works
+        e_jac_product = [zeros(e_dims[1]) for i in 1:graph_stucture.num_e]
 
+        #v_jac_array = zeros(for i in vertices Array{Array{Float64, 2}, 1}) # benutze list comprehension
+        # initialisiere v_jac_array erstmal mit zeros, aber Dimension muss stimmen
+        # benutze v_dims, falls du num_v brauchst, kannst du dir das einfach mit graph_structure.num_v etc. holen
+
+        jac_graph_data = JacGraphData(v_jac_array, e_jac_array, e_jac_product, graph_stucture) # Funktion
+
+        t = 0.0 # any Float64
+        # p später erstmal nothing
+        nd_jac_vec_operator = NDJacVecOperator(similar(v_array), nothing, t, vertices!, edges!, graph, graph_stucture, graph_data, jac_graph_data, parallel) # x, p, t werden in update_coefficients geändert
+
+        return ODEFunction(nd!; mass_matrix = mass_matrix, jac = nd_jac_vec_operator, syms = symbols)
+    end
+
+    return ODEFunction(nd!; mass_matrix = mass_matrix, syms = symbols)
+end
 ## DDE
 
 function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; initial_history=nothing, x_prototype=zeros(1), parallel=false) where {T <: DDEVertex, U <: StaticDelayEdge}
@@ -357,19 +360,21 @@ end
 
 
 @inline function reconstruct_edge(edge::StaticEdge, coupling::Symbol)
-    let f! = edge.f!, dim = edge.dim, sym = edge.sym
+    let f! = edge.f!, dim = edge.dim, sym = edge.sym, edge_jacobian! = edge.edge_jacobian!
         return StaticEdge(f! = f!,
                           dim = dim,
                           coupling = coupling,
-                          sym = sym)
+                          sym = sym,
+                          edge_jacobian! = edge.edge_jacobian!)
     end
 end
 @inline function reconstruct_edge(edge::StaticDelayEdge, coupling::Symbol)
-    let f! = edge.f!, dim = edge.dim, sym = edge.sym
+    let f! = edge.f!, dim = edge.dim, sym = edge.sym, edge_jacobian! = edge.edge_jacobian!
         return StaticDelayEdge(f! = f!,
                                dim = dim,
                                coupling = coupling,
-                               sym = sym)
+                               sym = sym,
+                               edge_jacobian! = edge.edge_jacobian!)
     end
 end
 @inline function reconstruct_edge(edge::ODEEdge, coupling::Symbol)

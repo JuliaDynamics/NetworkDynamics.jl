@@ -55,7 +55,7 @@ For more details see the documentation.
     f!::T
     dim::Int
     sym=[:v for i in 1:dim]
-    vertex_jacobian! = :F
+    vertex_jacobian! = :undefined
 end
 
 """
@@ -86,13 +86,13 @@ For more details see the documentation.
     dim::Int # number of dimensions of e
     coupling = :undefined # :directed, :symmetric, :antisymmetric, :fiducial, :undirected
     sym=[:e for i in 1:dim] # Symbols for the dimensions
-    edge_jacobian! = :F
+    edge_jacobian! = :undefined  # edge_jacobian!::F
 
     function StaticEdge(user_f!::T,
                            dim::Int,
                            coupling::Symbol,
                            sym::Vector{Symbol},
-                           edge_jacobian!) where T
+                           user_edge_jac!) where T # edge_jacobian!::F) where T
 
         coupling_types = (:undefined, :directed, :fiducial, :undirected, :symmetric,
                           :antisymmetric)
@@ -105,13 +105,13 @@ For more details see the documentation.
         dim == length(sym) ? nothing : error("Please specify a symbol for every dimension.")
 
         if coupling ∈ [:undefined, :directed]
-            return new{T}(user_f!, dim, coupling, sym)
+            return new{T}(user_f!, dim, coupling, sym, user_edge_jac!)
 
         elseif coupling == :fiducial
             dim % 2 == 0 ? nothing : error("Fiducial edges are required to have even dim.
                                             The first dim args are used for src -> dst,
                                             the second for dst -> src coupling.")
-            return new{T}(user_f!, dim, coupling, sym)
+            return new{T}(user_f!, dim, coupling, sym, user_edge_jac!)
 
         elseif coupling == :undirected
             # This might cause unexpected behaviour if source and destination vertex don't
@@ -140,7 +140,7 @@ For more details see the documentation.
             end
         end
         # For edges with mass matrix this will be a little more complicated
-        return new{typeof(f!)}(f!, 2dim, coupling, repeat(sym, 2))
+        return new{typeof(f!)}(f!, 2dim, coupling, repeat(sym, 2), user_edge_jac!)
     end
 end
 
@@ -176,7 +176,7 @@ For more details see the documentation.
     dim::Int
     mass_matrix=I
     sym=[:v for i in 1:dim]
-    vertex_jacobian! = :F
+    vertex_jacobian! = :undefined  # vertex_jacobian!::F
 end
 
 """
@@ -211,7 +211,7 @@ For more details see the documentation.
     coupling = :undefined # :directed, :symmetric, :antisymmetric, :fiducial, :undirected
     mass_matrix=I # Mass matrix for the equation
     sym=[:e for i in 1:dim] # Symbols for the dimensions
-    edge_jacobian! = :F
+    edge_jacobian! = :undefined
 
 
     function ODEEdge(user_f!::T,
