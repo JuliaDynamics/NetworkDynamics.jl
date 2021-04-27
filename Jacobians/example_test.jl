@@ -43,21 +43,22 @@ nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 1, vertex_jacobian!
 
 nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1, edge_jacobian! = jac_edge!)
 
-nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g, jac = true)
-nd2 = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g, jac = false)
+nd_jac = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g, jac = true)
+nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g, jac = false)
 
 x0 = randn(N) # random initial conditions
+
+ode_prob_jac = ODEProblem(nd, x0, (0., 4.))
+sol_jac = solve(ode_prob_jac, Rodas5());
+
 ode_prob = ODEProblem(nd, x0, (0., 4.))
 sol = solve(ode_prob, Rodas5());
 
-ode_prob2 = ODEProblem(nd2, x0, (0., 4.))
-sol2 = solve(ode_prob2, Rodas5());
+plot_with_jac = plot(sol_jac, color = [:black])
+plot!(plot_with_jac, sol, color = [:red])
 
-plot_with_jac = plot(sol, color = [:black])
-plot!(plot_with_jac, sol2, color = [:red])
-
+@time solve(ode_prob_jac, Rodas5())
 @time solve(ode_prob, Rodas5())
-@time solve(ode_prob2, Rodas5())
 
+@allocated solve(ode_prob_jac, Rodas5())
 @allocated solve(ode_prob, Rodas5())
-@allocated solve(ode_prob2, Rodas5())

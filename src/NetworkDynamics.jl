@@ -79,6 +79,7 @@ of VertexFunctions **`vertices!`**, an array of EdgeFunctions **`edges!`** and a
 `LightGraph.jl` object **`g`**. The optional argument `parallel` is a boolean
 value that denotes if the central loop should be executed in parallel with the number of threads set by the environment variable `JULIA_NUM_THREADS`.
 """
+# Jacobians were first installed exclusively for the combination: ODEVertex and StaticEdge
 function network_dynamics(vertices!::Union{Array{T, 1}, T},
                           edges!::Union{Array{U, 1}, U},
                           graph;
@@ -100,16 +101,16 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T},
 
     symbols = symbols_v
 
-    graph_stucture = GraphStruct(graph, v_dims, e_dims, symbols_v, symbols_e) # Funktion
+    graph_stucture = GraphStruct(graph, v_dims, e_dims, symbols_v, symbols_e)
 
-    graph_data = GraphData(v_array, e_array, graph_stucture) # Funktion
+    graph_data = GraphData(v_array, e_array, graph_stucture)
 
-    nd! = nd_ODE_Static(vertices!, edges!, graph, graph_stucture, graph_data, parallel) # Objekterstellung, nd_ODE_Static hier struct
+    nd! = nd_ODE_Static(vertices!, edges!, graph, graph_stucture, graph_data, parallel) # Objekterstellung
 
     mass_matrix = construct_mass_matrix(mmv_array, graph_stucture)
 
     if jac == true
-        # These additional arrays are used for initializing the GraphData and will be overwritten
+        # These additional arrays are used for initializing the JacGraphData and will be overwritten
         v_jac_array = [Array{Float64,2}(undef, dim, dim) for dim in v_dims]
         e_jac_array = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim) in zip(e_dims, v_dims, v_dims)] # homogene Netzwerke: v_src_dim = v_dst_dim = v_dim
         e_jac_product = [zeros(e_dims[1]) for i in 1:graph_stucture.num_e]
@@ -117,8 +118,8 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T},
         jac_graph_data = JacGraphData(v_jac_array, e_jac_array, e_jac_product, graph_stucture) # Funktion
 
         t = 0.0 # any Float64
-        # p später erstmal nothing
-        nd_jac_vec_operator = NDJacVecOperator(similar(v_array), nothing, t, vertices!, edges!, graph, graph_stucture, graph_data, jac_graph_data, parallel) # x, p, t werden in update_coefficients geändert
+        # p is now "nothing", later we want to implement a union type
+        nd_jac_vec_operator = NDJacVecOperator(similar(v_array), nothing, t, vertices!, edges!, graph, graph_stucture, graph_data, jac_graph_data, parallel)
 
         return ODEFunction(nd!; mass_matrix = mass_matrix, jac = nd_jac_vec_operator, syms = symbols)
     end

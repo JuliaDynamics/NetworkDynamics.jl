@@ -14,20 +14,16 @@ import DiffEqBase.update_coefficients!
 export JacGraphData, NDJacVecOperator
 
 struct JacGraphData
-    v_jac_array::Array{Array{Float64, 2}, 1}
-    e_jac_array::Array{Array{Array{Float64, 2}, 1}, 1}
-    e_jac_product::Array{Array{Float64, 1}, 1}
+    v_jac_array::Array{Array{Float64, 2}, 1} # contains the jacobians for each vertex
+    e_jac_array::Array{Array{Array{Float64, 2}, 1}, 1} # contains the jacobians for each edge
+    e_jac_product::Array{Array{Float64, 1}, 1} # is needed later in jac_vec_prod(!) as a storage for the products of edge jacobians and vectors z
 end
 
 
-#function JacGraphData(v_Jac_array::Tvj, e_Jac_array::Tej, e_Jac_product_array::Tep, gs::GraphStruct) where {Tvj, Tej, Tep}
 function JacGraphData(v_jac_array, e_jac_array, e_jac_product_array, gs::GraphStruct)
-    #v_jac = [Array{Float64,2}(undef, dim, dim) for dim in gs.v_dims]
-    #e_jac = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim) in zip(gs.e_dims, gs.v_dims, gs.v_dims)] # homogene Netzwerke: v_src_dim = v_dst_dim = v_dim
     v_jac_array = [Array{Float64,2}(undef, dim, dim) for dim in gs.v_dims]
     e_jac_array = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim) in zip(gs.e_dims, gs.v_dims, gs.v_dims)] # homogene Netzwerke: v_src_dim = v_dst_dim = v_dim
     e_jac_product = [zeros(gs.e_dims[1]) for i in 1:gs.num_e]
-    #JacGraphData(v_jac, e_jac, e_jac_product)
     JacGraphData(v_jac_array, e_jac_array, e_jac_product)
 end
 
@@ -92,7 +88,7 @@ function update_coefficients!(Jac::NDJacVecOperator, x, p, t)
     Jac.t = t
 end
 
-# final functions for NDJacVecOperator
+# functions for NDJacVecOperator: both syntaxes must be taken into account: Jac, z and dx, Jac, z
 
 function jac_vec_prod(Jac::NDJacVecOperator, z)
 
@@ -103,13 +99,15 @@ function jac_vec_prod(Jac::NDJacVecOperator, z)
     gd = prep_gd(x, x, Jac.graph_data, Jac.graph_structure)
     jgd = Jac.jac_graph_data
 
+    # first for loop that considers the mutliplication of each edge jacobians with the corresponding component of z
     for i in 1:gs.num_e
         jgd.e_jac_product[i] .= get_src_edge_jacobian(jgd, i) * view(z, gs.s_e_idx[i]) + get_dst_edge_jacobian(jgd, i) * view(z, gs.d_e_idx[i])
     end
 
-    ## neues array wird erstellt und returned
+    # in this function there is no dx in which the Jacobian can be stored, so an extra array must be created and returned
     dx = zeros(gs.v_dims[1], gs.num_v)
 
+    # second for loop in which the multiplication of vertex jacobian and the corresponding component of z is done with addition of the e_jac_product to dx
     for i in 1:gs.num_v
         view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i])
         dx .+= sum(jgd.e_jac_product[i])
@@ -137,7 +135,7 @@ function jac_vec_prod!(dx, Jac::NDJacVecOperator, z)
 end
 
 
-# functions for callable structs
+# functions for callable structs at the end of this module
 
 Base.:*(Jac::NDJacVecOperator, z::AbstractVector) = jac_vec_prod(Jac, z)
 
