@@ -20,11 +20,15 @@ struct JacGraphData
 end
 
 
-function JacGraphData(v_Jac_array::Tvj, e_Jac_array::Tej, e_Jac_product_array::Tep, gs::GraphStruct) where {Tvj, Tej, Tep}
-    v_jac = [Array{Float64,2}(undef, dim, dim) for dim in gs.v_dims]
-    e_jac = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim) in zip(gs.e_dims, gs.v_dims, gs.v_dims)] # homogene Netzwerke: v_src_dim = v_dst_dim = v_dim
+#function JacGraphData(v_Jac_array::Tvj, e_Jac_array::Tej, e_Jac_product_array::Tep, gs::GraphStruct) where {Tvj, Tej, Tep}
+function JacGraphData(v_jac_array, e_jac_array, e_jac_product_array, gs::GraphStruct)
+    #v_jac = [Array{Float64,2}(undef, dim, dim) for dim in gs.v_dims]
+    #e_jac = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim) in zip(gs.e_dims, gs.v_dims, gs.v_dims)] # homogene Netzwerke: v_src_dim = v_dst_dim = v_dim
+    v_jac_array = [Array{Float64,2}(undef, dim, dim) for dim in gs.v_dims]
+    e_jac_array = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim) in zip(gs.e_dims, gs.v_dims, gs.v_dims)] # homogene Netzwerke: v_src_dim = v_dst_dim = v_dim
     e_jac_product = [zeros(gs.e_dims[1]) for i in 1:gs.num_e]
-    JacGraphData(v_jac, e_jac, e_jac_product)
+    #JacGraphData(v_jac, e_jac, e_jac_product)
+    JacGraphData(v_jac_array, e_jac_array, e_jac_product)
 end
 
 
