@@ -48,7 +48,7 @@ nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g, jac = false)
 
 x0 = randn(N) # random initial conditions
 
-ode_prob_jac = ODEProblem(nd, x0, (0., 4.))
+ode_prob_jac = ODEProblem(nd_jac, x0, (0., 4.))
 sol_jac = solve(ode_prob_jac, Rodas5());
 
 ode_prob = ODEProblem(nd, x0, (0., 4.))
