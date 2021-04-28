@@ -47,15 +47,31 @@ nd_jac = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g, jac = true)
 nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g, jac = false)
 
 x0 = randn(N) # random initial conditions
+#x0 = zeros(N)
+#ode_prob_jac = ODEProblem(nd_jac, x0, (0., 4.))
+ode_prob_jac = ODEProblem(nd_jac,[1.0,0.0,0.0, 0.0],(0.0,1e5),[0.04,3e7,1e4])
+ode_prob = ODEProblem(nd,[1.0,0.0,0.0, 0.0],(0.0,1e5),[0.04,3e7,1e4])
 
-ode_prob_jac = ODEProblem(nd_jac, x0, (0., 4.))
+sol = solve(ode_prob)
+sol_jac = solve(ode_prob_jac)
+#ode_prob = ODEProblem(nd, x0, (0., 4.))
+
+plot_with_jac = plot(sol_jac, color = [:black], tspan=(1e-2,1e5), xscale=:log10)
+plot!(plot_with_jac, sol, color = [:red], tspan=(1e-2,1e5), xscale=:log10)
+
+# more efficient
+sol = solve(ode_prob, Rodas5());
 sol_jac = solve(ode_prob_jac, Rodas5());
 
-ode_prob = ODEProblem(nd, x0, (0., 4.))
-sol = solve(ode_prob, Rodas5());
+plot_with_jac = plot(sol_jac, color = [:black], tspan=(1e-2,1e5), xscale=:log10)
+plot!(plot_with_jac, sol, color = [:red], tspan=(1e-2,1e5), xscale=:log10)
+# more reliable
+sol = solve(ode_prob, Rodas4P());
+sol_jac = solve(ode_prob_jac, Rodas4P());
 
-plot_with_jac = plot(sol_jac, color = [:black])
-plot!(plot_with_jac, sol, color = [:red])
+plot_with_jac = plot(sol_jac, color = [:black], tspan=(1e-2,1e5), xscale=:log10)
+plot!(plot_with_jac, sol, color = [:red], tspan=(1e-2,1e5), xscale=:log10)
+
 
 @time solve(ode_prob_jac, Rodas5())
 @time solve(ode_prob, Rodas5())

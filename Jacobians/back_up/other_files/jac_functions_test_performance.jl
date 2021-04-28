@@ -6,28 +6,17 @@ using LightGraphs
 using DiffEqBase
 import DiffEqBase.update_coefficients!
 
-
-#include("/Users/lalalulu/Desktop/PIK/github/NetworkDynamics.jl/Jacobians/jac_structs.jl")
-#@reexport using .jac_structs
-
-#include("/Users/lalalulu/Desktop/PIK/github/NetworkDynamics.jl/src/nd_ODE_Static.jl")
-#@reexport using .nd_ODE_Static_mod
-
 N = 4
 k = 2
 g = barabasi_albert(N, k)
 
 function diffusionedge!(e, v_s, v_d, p, t)
-    # usually e, v_s, v_d are arrays, hence we use the broadcasting operator .
-    #e .= v_s .- v_d
     e[1] = v_s[1] - v_d[1]
     nothing
 end
 
 function diffusionvertex!(dv, v, edges, p, t)
-    # usually dv, v, edges are arrays, hence we use the broadcasting operator .
     dv[1] = 0.
-    #dv .= 0.
     dv[2] = 1.
     for e in edges
         dv[1] += e[1]
@@ -51,6 +40,8 @@ function jac_edge!(J_s::AbstractMatrix, J_d::AbstractMatrix, v_s, v_d, p, t)
    J_d[1, 1] = 1.0
    J_d[1, 2] = 0.0
 end
+
+
 
 nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 2, vertex_jacobian! = jac_vertex!)
 
@@ -264,9 +255,8 @@ function jac_vec_prod!(dx, Jac::NDJacVecOperator, z)
     gd = prep_gd(x, x, Jac.graph_data, Jac.graph_structure)
     jgd = Jac.jac_graph_data
 
-    ejp = zeros(gs.num_e, gs.e_dims[1])
-    e_jac_prod!(z, ejp, gs, jgd)
-    v_jac_prod!(dx, z, ejp, gs, jgd)
+    e_jac_prod!(z, e_jac_product, gs, jgd)
+    v_jac_prod!(dx, z, e_jac_product, gs, jgd)
 
 end
 
@@ -276,12 +266,12 @@ function jac_vec_prod(Jac::NDJacVecOperator, z)
     checkbounds_p(p, gs.num_v, gs.num_e)
     gd = prep_gd(x, x, Jac.graph_data, Jac.graph_structure)
     jgd = Jac.jac_graph_data
+    #e_jac_product = Jac.
     #println(typeof(e_jac_product))
-    e_jac_p = zeros(gs.num_e, gs.e_dims[1])
 
     for i in 1:gs.num_e
         #e_jac_product[i] .= get_src_edge_jacobian(gd, i) * view(z, get_src_indices(i)) + get_dst_edge_jacobian(gd, i) * view(z, get_dst_indices(i))
-        e_jac_p[i, :] .= get_src_edge_jacobian(jgd, i) * view(z, gs.s_e_idx[i]) + get_dst_edge_jacobian(jgd, i) * view(z, gs.d_e_idx[i])
+        e_jac_product[i, :] .= get_src_edge_jacobian(jgd, i) * view(z, gs.s_e_idx[i]) + get_dst_edge_jacobian(jgd, i) * view(z, gs.d_e_idx[i])
     end
 
     ## neues array wird erstellt und returned
@@ -300,7 +290,7 @@ function jac_vec_prod!(dx, Jac::NDJacVecOperator, z)
     checkbounds_p(p, gs.num_v, gs.num_e)
     gd = prep_gd(x, x, Jac.graph_data, Jac.graph_structure)
     jgd = Jac.jac_graph_data
-    e_jac_p = zeros(gs.num_e, gs.e_dims[1])
+    display(@allocated e_jac_p = zeros(gs.num_e, gs.e_dims[1]))
 
     for i in 1:gs.num_e
         #e_jac_product[i, :] .= get_src_edge_jacobian(jgd, i) * view(z, gs.s_e_idx[i]) + get_dst_edge_jacobian(jgd, i) * view(z, gs.d_e_idx[i])

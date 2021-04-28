@@ -19,7 +19,6 @@ struct JacGraphData
     e_jac_product::Array{Array{Float64, 1}, 1} # is needed later in jac_vec_prod(!) as a storage for the products of edge jacobians and vectors z
 end
 
-
 function JacGraphData(v_jac_array, e_jac_array, e_jac_product_array, gs::GraphStruct)
     v_jac_array = [Array{Float64,2}(undef, dim, dim) for dim in gs.v_dims]
     e_jac_array = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim) in zip(gs.e_dims, gs.v_dims, gs.v_dims)] # homogene Netzwerke: v_src_dim = v_dst_dim = v_dim
@@ -27,6 +26,7 @@ function JacGraphData(v_jac_array, e_jac_array, e_jac_product_array, gs::GraphSt
     JacGraphData(v_jac_array, e_jac_array, e_jac_product)
 end
 
+# JacGraphData Accessors
 
 @inline get_src_edge_jacobian(jgd::JacGraphData, i::Int) = jgd.e_jac_array[i][1]
 
@@ -34,6 +34,7 @@ end
 
 @inline get_vertex_jacobian(jgd::JacGraphData, i::Int) = jgd.v_jac_array[i]
 
+#### NDJacVecOperator
 
 mutable struct NDJacVecOperator{T, uType, tType, T1, T2, G, GD, JGD} <: DiffEqBase.AbstractDiffEqLinearOperator{T} # mutable da x, p, t geupdated werden
     x::uType
@@ -56,8 +57,8 @@ mutable struct NDJacVecOperator{T, uType, tType, T1, T2, G, GD, JGD} <: DiffEqBa
     end
 end
 
-# for this we will need prep_gc and inbounds_p -> reexport all nd files (nd_DDE_static, nd_ODE_ODE, nd_ODE_Static)
-
+# updates vertex_jacobian, edge_jacobian, x, p, t
+# here we need prep_gd and inbounds_p -> reexport all nd files (nd_DDE_static, nd_ODE_ODE, nd_ODE_Static)
 function update_coefficients!(Jac::NDJacVecOperator, x, p, t)
 
     gs = Jac.graph_structure
@@ -90,6 +91,8 @@ end
 
 # functions for NDJacVecOperator: both syntaxes must be taken into account: Jac, z and dx, Jac, z
 
+# not mutating function used later in * operator
+
 function jac_vec_prod(Jac::NDJacVecOperator, z)
 
     gs = Jac.graph_structure
@@ -115,6 +118,8 @@ function jac_vec_prod(Jac::NDJacVecOperator, z)
     return dx
 end
 
+# mutating function used in mul!()
+
 function jac_vec_prod!(dx, Jac::NDJacVecOperator, z)
 
     gs = Jac.graph_structure
@@ -135,7 +140,7 @@ function jac_vec_prod!(dx, Jac::NDJacVecOperator, z)
 end
 
 
-# functions for callable structs at the end of this module
+# functions for NDJacVecOperator callable structs at the end of this module
 
 Base.:*(Jac::NDJacVecOperator, z::AbstractVector) = jac_vec_prod(Jac, z)
 
@@ -145,7 +150,7 @@ end
 
 # callable structs
 
-function (Jac::NDJacVecOperator)(x, p, t) # auch Number bei t?
+function (Jac::NDJacVecOperator)(x, p, t) # auch Number bei t? # weglassen?
     update_coefficients!(Jac, x, p, t)
     Jac*x
 end
