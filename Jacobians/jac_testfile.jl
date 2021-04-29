@@ -31,7 +31,9 @@ end
 
 function jac_edge!(J_s::AbstractMatrix, J_d::AbstractMatrix, v_s, v_d, p, t)
    J_s[1, 1] = 1.0
+   #J_s[1, 2] = 0.0
    J_d[1, 1] = -1.0
+   #J_d[1, 2] = 0.0
 end
 
 nd_jac_vertex = ODEVertex(f! = diffusionvertex!, dim = 1, vertex_jacobian! = jac_vertex!)
@@ -134,9 +136,9 @@ end
 
 ### get functions for update_coefficients
 
-@inline get_src_edge_jacobian(jgd::JacGraphData1, i::Int) = jgd1.e_jac_array[i][1]
-@inline get_dst_edge_jacobian(jgd::JacGraphData1, i::Int) = jgd1.e_jac_array[i][2]
-@inline get_vertex_jacobian(jgd::JacGraphData1, i::Int) = jgd1.v_jac_array[i]
+@inline get_src_edge_jacobian(jgd::JacGraphData1, i::Int) = jgd.e_jac_array[i][1]
+@inline get_dst_edge_jacobian(jgd::JacGraphData1, i::Int) = jgd.e_jac_array[i][2]
+@inline get_vertex_jacobian(jgd::JacGraphData1, i::Int) = jgd.v_jac_array[i]
 
 ### Vertex, Edge functions for update_coefficients
 ## Test Block update coefficients
@@ -171,7 +173,7 @@ test = Matrix{Float64}(undef, 2, 1)
 test[1, 1] = 1.0
 test[2, 1] = 0.0
 
-@test get_src_edge_jacobian(jgd1, i) == test 
+@test get_src_edge_jacobian(jgd1, i) == test
 
 @test get_src_edge_jacobian(jgd1, i) == jgd1.e_jac_array[i][1]
 @test get_dst_edge_jacobian(jgd1, i) == jgd1.e_jac_array[i][2]
