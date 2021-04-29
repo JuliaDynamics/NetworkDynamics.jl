@@ -167,6 +167,12 @@ maybe_idx(NDJacVecOp.edges!, i).edge_jacobian!(
 @test get_src_edge_jacobian(jgd1, i) == [1.0; 0.0]
 @test get_dst_edge_jacobian(jgd1, i) == [-1.0; 0.0]
 
+test = Matrix{Float64}(undef, 2, 1)
+test[1, 1] = 1.0
+test[2, 1] = 0.0
+
+@test get_src_edge_jacobian(jgd1, i) == test 
+
 @test get_src_edge_jacobian(jgd1, i) == jgd1.e_jac_array[i][1]
 @test get_dst_edge_jacobian(jgd1, i) == jgd1.e_jac_array[i][2]
 
