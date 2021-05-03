@@ -9,14 +9,14 @@ Diffusion processes are relevant for phenomena as diverse as heat conduction, el
 Let $g$ be a graph with $N$ nodes and adjacency matrix $A$. Let $v = (v_1, \dots, v_n)$ be a vector of (abstract) temperatures or concentrations at each node $i = 1, \dots, N$. Then the rate of change of state $v_i$ is described by its difference with its neighbors and we obtain the following ordinary differential equation
 
 ```math
-\dot v_i = - \sum_{i=1}^N A_{ij} (v_i - v_j).
+\dot v_i = \sum_{j=1}^N A_{ji} (v_j - v_i).
 ```
 
 The sum on the right hand side plays the role of a (discrete) gradient. If the temperature at node $i$ is higher than at its neighboring node $j$ it will decrease along that edge.
 
 ## Modeling diffusion in NetworkDynamics.jl
 
-From the above considerations we see that in this model the nodes do not have any internal dynamics - if a node was disconnected from the rest of the network its state would never change, since then $A_{ij} = 0 \; \forall j$ and hence $\dot v_i = 0$. This means that the evolution of a node depends only on the interaction with its neighbors. In NetworkDynamics.jl, interactions with neighbors are described by equations for the edges.
+From the above considerations we see that in this model the nodes do not have any internal dynamics - if a node was disconnected from the rest of the network its state would never change, since then $A_{ji} = 0 \; \forall j$ and hence $\dot v_i = 0$. This means that the evolution of a node depends only on the interaction with its neighbors. In NetworkDynamics.jl, interactions with neighbors are described by equations for the edges.
 
 
 ```@example diffusion
@@ -28,9 +28,9 @@ end
 nothing # hide
 ```
 
-The function `diffusionedge!` takes as inputs the current state of the edge `e`, its source vertex `v_s`, its destination vertex `v_d`, a vector of parameters `p` and the time `t`. In order to comply with the syntax of NetworkDynamics.jl we always have to define functions for static edges with exactly these arguments, eventhough we do not need `p` and `t` for the diffusion example.
+The function `diffusionedge!` takes as inputs the current state of the edge `e`, its source vertex `v_s`, its destination vertex `v_d`, a vector of parameters `p` and the time `t`. In order to comply with the syntax of NetworkDynamics.jl we always have to define functions for static edges with exactly these arguments, even though we do not need `p` and `t` for the diffusion example.
 
-`diffusionedge!` is called a **mutating** function, since it modifies (or *mutates*) one of its inputs, namely the edge state `e`. As a convention in julia names of mutating functions end with an `!`. The use of mutating functions reduces allocations and thereby speeds up computations. After the function call the edge's value `e` equals the difference between its source and its destination vertex (i.e. the discrete gradient along that edge).
+`diffusionedge!` is called a **mutating** function, since it modifies (or *mutates*) one of its inputs, namely the edge state `e`. As a convention in Julia names of mutating functions end with an `!`. The use of mutating functions reduces allocations and thereby speeds up computations. After the function call the edge's value `e` equals the difference between its source and its destination vertex (i.e. the discrete gradient along that edge).
 
 The contributions of the different edges are then summed up in each vertex.
 
@@ -136,19 +136,19 @@ plot(sol_2, vars = syms_containing(nd_2, "x"), fmt = :png)
 The diffusion equation on a network can be rewritten as
 
 ```math
-\dot v_i  = d_i v_i - \sum_{i=1}^N A_{ij} v_j = d_i v_i - e_i^T A v          
+\dot v_i  = \sum_{j=1}^N A_{ji} v_j - d_i v_i =  e_i^T A v - d_i v_i      
 ```
 
 where $d_i$ is the degree of node $i$ and $e_i^T$ is the $i$-th standard basis vector. Introducing the diagonal matrix $D$ that has the degree of node $i$ in its $i$-th row and the Laplacian matrix $L = D - A$ we arrive at
 
 ```math
-\dot v = e_i^T(D - A) v
+\dot v = e_i^T(A - D) v
 ```
 
 and finally
 
 ```math
-\dot v = L v
+\dot v = - L v
 ```
 
 This is a linear system of ODEs and its solution is a matrix exponential. To study the asymptotic behaviour of the system it suffices to analyze the eigenspectrum of $L$. For this reason $L$ is an important construction in network science.
