@@ -31,7 +31,9 @@ end
 
 function jac_edge!(J_s::AbstractMatrix, J_d::AbstractMatrix, v_s, v_d, p, t)
    J_s[1, 1] = 1.0
+   #J_s[1, 2] = 0.0
    J_d[1, 1] = -1.0
+   #J_d[1, 2] = 0.0
 end
 
 nd_jac_vertex = ODEVertex(f! = diffusionvertex!, dim = 1, vertex_jacobian! = jac_vertex!)
@@ -126,7 +128,7 @@ NDJacVecOp = NDJacVecOperator1(x, p, t, vertices!, edges!, g, graph_structure, g
 
 # fct that updates vertex_jacobian, edge_jacobian, x, p, t
 
-function update_coefficients!(Jac::NDJacVecOperator, x, p, t)
+function update_coefficients!(Jac::NDJacVecOperator1, x, p, t)
 
     gs = Jac.graph_structure
     checkbounds_p(p, gs.num_v, gs.num_e)

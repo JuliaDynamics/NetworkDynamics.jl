@@ -34,9 +34,10 @@ end
 
 function jac_edge!(J_s::AbstractMatrix, J_d::AbstractMatrix, v_s, v_d, p, t)
    J_s[1, 1] = 1.0
-   #J_s[1, 2] = 0.0
+   J_s[2, 1] = 0.0
+
    J_d[1, 1] = -1.0
-   #J_d[1, 2] = 0.0
+   J_d[2, 1] = 0.0
 end
 
 nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 1, vertex_jacobian! = jac_vertex!)
@@ -49,19 +50,27 @@ nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g, jac = false)
 x0 = randn(N) # random initial conditions
 #x0 = zeros(N)
 #ode_prob_jac = ODEProblem(nd_jac, x0, (0., 4.))
-ode_prob_jac = ODEProblem(nd_jac,[1.0,0.0,0.0, 0.0],(0.0,1e5))
-ode_prob = ODEProblem(nd,[1.0,0.0,0.0, 0.0],(0.0,1e5))
+ode_prob_jac = ODEProblem(nd_jac,[1.0, 0.0, 0.0, 0.0], (0.0, 4.0))
+ode_prob = ODEProblem(nd,[1.0, 0.0, 0.0, 0.0], (0.0, 4.0))
 
-sol = solve(ode_prob)
+sol_jac = solve(ode_prob_jac, Rodas5());
+sol = solve(ode_prob, Rodas5());
+
+plot_with_jac = plot(sol_jac, color = [:black])
+plot!(plot_with_jac, sol, color = [:red])
+
+
+### testing different solvers
+
 sol_jac = solve(ode_prob_jac)
-#ode_prob = ODEProblem(nd, x0, (0., 4.))
+sol = solve(ode_prob)
 
 plot_with_jac = plot(sol_jac, color = [:black], tspan=(1e-2,1e5), xscale=:log10)
 plot!(plot_with_jac, sol, color = [:red], tspan=(1e-2,1e5), xscale=:log10)
 
 # more efficient
-sol = solve(ode_prob, Rodas5());
 sol_jac = solve(ode_prob_jac, Rodas5());
+sol = solve(ode_prob, Rodas5());
 
 plot_with_jac = plot(sol_jac, color = [:black], tspan=(1e-2,1e5), xscale=:log10)
 plot!(plot_with_jac, sol, color = [:red], tspan=(1e-2,1e5), xscale=:log10)

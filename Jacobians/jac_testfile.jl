@@ -4,7 +4,7 @@ using LinearAlgebra
 using NetworkDynamics
 using LightGraphs
 using DiffEqBase
-import DiffEqBase.update_coefficients!
+#import DiffEqBase.update_coefficients!
 using Test
 
 N = 4
@@ -31,9 +31,10 @@ end
 
 function jac_edge!(J_s::AbstractMatrix, J_d::AbstractMatrix, v_s, v_d, p, t)
    J_s[1, 1] = 1.0
-   #J_s[1, 2] = 0.0
+   J_s[2, 1] = 0.0
+
    J_d[1, 1] = -1.0
-   #J_d[1, 2] = 0.0
+   J_d[2, 1] = 0.0
 end
 
 nd_jac_vertex = ODEVertex(f! = diffusionvertex!, dim = 1, vertex_jacobian! = jac_vertex!)
@@ -55,8 +56,6 @@ nd_jac = network_dynamics(nd_jac_vertex, nd_jac_edge, g, jac = true)
 
 nd_jac_vertex.vertex_jacobian!
 x0 = ones(N)
-#ode_prob = ODEProblem(nd, x0, (0., 4.))
-#sol = solve(ode_prob, Tsit5());
 
 # collecting the graph infos
 
@@ -107,7 +106,7 @@ p = nothing
 t = 0.0
 parallel = false
 
-#### NDJacVecOperator
+#### NDJacVecOperator1
 
 mutable struct NDJacVecOperator1{T, uType, tType, T1, T2, G, GD, JGD} <: DiffEqBase.AbstractDiffEqLinearOperator{T} # mutable da x, p, t geupdated werden
     x::uType
@@ -140,52 +139,15 @@ end
 @inline get_dst_edge_jacobian(jgd::JacGraphData1, i::Int) = jgd.e_jac_array[i][2]
 @inline get_vertex_jacobian(jgd::JacGraphData1, i::Int) = jgd.v_jac_array[i]
 
-### Vertex, Edge functions for update_coefficients
-## Test Block update coefficients
 
-jgd1 = NDJacVecOp.jac_graph_data
-i = 1
-maybe_idx(NDJacVecOp.vertices!, i).vertex_jacobian!(
-  get_vertex_jacobian(jgd1, i),
-  get_vertex(graph_data, i),
-  p_v_idx(p, i),
-  t)
+### Test Block update coefficients
 
-@time get_vertex_jacobian(jgd1, i)
-@test get_vertex_jacobian(jgd1, i) == jgd1.v_jac_array[i]
-# == 0 ?
-get_vertex_jacobian(jgd1, i)
-maybe_idx(NDJacVecOp.edges!, i).edge_jacobian!(
-    get_src_edge_jacobian(jgd1, i),
-    get_dst_edge_jacobian(jgd1, i),
-    get_src_vertex(graph_data, i),
-    get_dst_vertex(graph_data, i),
-    p_e_idx(p, i),
-    t)
-
-@time get_src_edge_jacobian(jgd1, i)
-@time get_dst_edge_jacobian(jgd1, i)
-
-@test get_src_edge_jacobian(jgd1, i) == [1.0; 0.0]
-@test get_dst_edge_jacobian(jgd1, i) == [-1.0; 0.0]
-
-test = Matrix{Float64}(undef, 2, 1)
-test[1, 1] = 1.0
-test[2, 1] = 0.0
-
-@test get_src_edge_jacobian(jgd1, i) == test
-
-@test get_src_edge_jacobian(jgd1, i) == jgd1.e_jac_array[i][1]
-@test get_dst_edge_jacobian(jgd1, i) == jgd1.e_jac_array[i][2]
-
-function update_coefficients!(Jac::NDJacVecOperator, x, p, t)
+function update_coefficients1!(Jac::NDJacVecOperator1, x, p, t)
 
     gs = Jac.graph_structure
     checkbounds_p(p, gs.num_v, gs.num_e)
     gd = prep_gd(x, x, Jac.graph_data, Jac.graph_structure)
     jgd = Jac.jac_graph_data
-
-    #@test get_src_edge_jacobian(jgd, 1) ==
 
     for i in 1:gs.num_v
         maybe_idx(Jac.vertices!, i).vertex_jacobian!(
@@ -231,7 +193,50 @@ end
    end
 end
 
-# final functions for NDJacVecOperator
+
+# start testing with i = 1
+
+jgd1 = NDJacVecOp.jac_graph_data
+
+maybe_idx(NDJacVecOp.vertices!, 1).vertex_jacobian!(
+  get_vertex_jacobian(jgd1, 1),
+  get_vertex(graph_data, 1),
+  p_v_idx(p, 1),
+  t) # 0.00 since J[1, 1] = 0.00
+
+test_vertex_jacobian = Matrix{Float64}(undef, 1, 1)
+test_vertex_jacobian[1, 1] = 0.0
+
+@test get_vertex_jacobian(jgd1, 1) == test_vertex_jacobian
+@test get_vertex_jacobian(jgd1, 1) == jgd1.v_jac_array[1]
+
+maybe_idx(NDJacVecOp.edges!, 1).edge_jacobian!(
+    get_src_edge_jacobian(jgd1, 1),
+    get_dst_edge_jacobian(jgd1, 1),
+    get_src_vertex(graph_data, 1),
+    get_dst_vertex(graph_data, 1),
+    p_e_idx(p, 1),
+    t) # 0.00 since J_d[2, 1] = 0.00
+
+@time get_src_edge_jacobian(jgd1, 1)
+@time get_dst_edge_jacobian(jgd1, 1)
+
+test_src_edge_jacobian = Matrix{Float64}(undef, 2, 1)
+test_src_edge_jacobian[1, 1] = 1.0
+test_src_edge_jacobian[2, 1] = 0.0
+
+test_dst_edge_jacobian = Matrix{Float64}(undef, 2, 1)
+test_dst_edge_jacobian[1, 1] = -1.0
+test_dst_edge_jacobian[2, 1] = 0.0
+
+@test get_src_edge_jacobian(jgd1, 1) == test_src_edge_jacobian
+@test get_dst_edge_jacobian(jgd1, 1) == test_dst_edge_jacobian
+
+@test get_src_edge_jacobian(jgd1, 1) == jgd1.e_jac_array[1][1]
+@test get_dst_edge_jacobian(jgd1, 1) == jgd1.e_jac_array[1][2]
+
+
+### Test Block jac_vec_prod
 
 function jac_vec_prod(Jac::NDJacVecOperator1, z)
 
@@ -242,12 +247,12 @@ function jac_vec_prod(Jac::NDJacVecOperator1, z)
     gd = prep_gd(x, x, Jac.graph_data, Jac.graph_structure)
     jgd = Jac.jac_graph_data
 
-    src_edge_jac= get_src_edge_jacobian(jgd, 2)
-    print(src_edge_jac)
-    dst_edge_jac= get_dst_edge_jacobian(jgd, 2)
-    print(src_edge_jac)
-    vertex_jac= get_vertex_jacobian(jgd, 2)
-    print(src_edge_jac)
+    #src_edge_jac= get_src_edge_jacobian(jgd, 2)
+    #print(src_edge_jac)
+    #dst_edge_jac= get_dst_edge_jacobian(jgd, 2)
+    #print(src_edge_jac)
+    #vertex_jac= get_vertex_jacobian(jgd, 2)
+    #print(src_edge_jac)
 
     for i in 1:gs.num_e
         jgd.e_jac_product[i] .= get_src_edge_jacobian(jgd, i) * view(z, gs.s_e_idx[i]) + get_dst_edge_jacobian(jgd, i) * view(z, gs.d_e_idx[i])
@@ -264,47 +269,99 @@ function jac_vec_prod(Jac::NDJacVecOperator1, z)
     return dx
 end
 
-### Test Block jac_vec_prod
+# everything needed for testing
+
 gs = NDJacVecOp.graph_structure
 p = NDJacVecOp.p
 x = NDJacVecOp.x
-# x = ones(N)
 checkbounds_p(p, gs.num_v, gs.num_e)
 gd = prep_gd(x, x, NDJacVecOp.graph_data, NDJacVecOp.graph_structure)
 jgd1 = NDJacVecOp.jac_graph_data
 z = x
 dx = zeros(N)
-#dx = [0.0,1.0,2.0,3.0]
-## for i = 1
-src_edge_jac = get_src_edge_jacobian(jgd1, 1)
-dst_edge_jac = get_dst_edge_jacobian(jgd1, 1)
-view(z, gs.v_idx[1])
+#dx = [0.0, 1.0, 2.0, 3.0]
 
-@test src_edge_jac == [1.0 ; 0.0]
-@test dst_edge_jac == [-1.0 ; 0.0]
+# start testing with i = 1
+
+# first for loop
+
+view(z, gs.v_idx[1])
 @test view(z, gs.v_idx[1]) == [1.0]
 
-@test get_src_edge_jacobian(jgd1, i) * view(z, gs.s_e_idx[i]) == [1.0 ; 0.0]
-@test get_dst_edge_jacobian(jgd1, i) * view(z, gs.s_e_idx[i]) == [-1.0 ; 0.0]
+@test get_src_edge_jacobian(jgd1, 1) * view(z, gs.s_e_idx[1]) == [1.0 ; 0.0]
+@test get_dst_edge_jacobian(jgd1, 1) * view(z, gs.s_e_idx[1]) == [-1.0 ; 0.0]
 # [1.0 ; 0.0] + [-1.0 ; 0.0] = [0.0 ; 0.0]
-@test get_src_edge_jacobian(jgd1, i) * view(z, gs.s_e_idx[i]) + get_dst_edge_jacobian(jgd1, i) * view(z, gs.s_e_idx[i]) == [0.0 ; 0.0]
+@test get_src_edge_jacobian(jgd1, 1) * view(z, gs.s_e_idx[1]) + get_dst_edge_jacobian(jgd1, 1) * view(z, gs.s_e_idx[1]) == [0.0 ; 0.0]
+# @test get_src_edge_jacobian(jgd1, 2) * view(z, gs.s_e_idx[2]) + get_dst_edge_jacobian(jgd1, 2) * view(z, gs.s_e_idx[2]) == [0.0 ; 0.0]
+# @test get_src_edge_jacobian(jgd1, 3) * view(z, gs.s_e_idx[3]) + get_dst_edge_jacobian(jgd1, 3) * view(z, gs.s_e_idx[3]) == [0.0 ; 0.0]
+# @test get_src_edge_jacobian(jgd1, 4) * view(z, gs.s_e_idx[4]) + get_dst_edge_jacobian(jgd1, 4) * view(z, gs.s_e_idx[4]) == [0.0 ; 0.0]
+get_src_edge_jacobian(jgd1, 1)
 
 jgd1.e_jac_product isa Vector
-jgd1.e_jac_product[i] .= get_src_edge_jacobian(jgd1, i) * view(z, gs.s_e_idx[i]) + get_dst_edge_jacobian(jgd1, i) * view(z, gs.d_e_idx[i])
-@test jgd1.e_jac_product[i] == [0.0 ; 0.0]
+jgd1.e_jac_product[1] .= get_src_edge_jacobian(jgd1, 1) * view(z, gs.s_e_idx[1]) + get_dst_edge_jacobian(jgd1, 1) * view(z, gs.d_e_idx[1])
+@test jgd1.e_jac_product[1] == [0.0 ; 0.0]
 
-view(dx, gs.v_idx[i])
-@test view(dx, gs.v_idx[i]) == [0.0]
+# second for loop
 
-vertex_jac = get_vertex_jacobian(jgd1, i)
-@test vertex_jac == [0.0]
-@test view(z, gs.v_idx[i]) == [1.0]
-@test get_vertex_jacobian(jgd1, i) * view(z, gs.v_idx[i]) == [0.0]
-view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd1, i) * view(z, gs.v_idx[i])
-@test view(dx, gs.v_idx[i]) == [0.0]
-dx .+= sum(jgd1.e_jac_product[i])
-@test dx .+= sum(jgd1.e_jac_product[i]) == [0.0, 0.0, 0.0, 0.0]
-#@test dx .+= sum(jgd1.e_jac_product[i]) == [0.0, 1.0, 2.0, 3.0]
+view(dx, gs.v_idx[1])
+@test view(dx, gs.v_idx[1]) == [0.0]
+# @test view(dx, gs.v_idx[2]) == [1.0]
+# @test view(dx, gs.v_idx[3]) == [2.0]
+# @test view(dx, gs.v_idx[4]) == [3.0]
+
+view(z, gs.v_idx[1])
+@test view(z, gs.v_idx[1]) == [1.0]
+@test get_vertex_jacobian(jgd1, 1) * view(z, gs.v_idx[1]) == [0.0]
+# @test get_vertex_jacobian(jgd1, 2) * view(z, gs.v_idx[2]) == [0.0]
+# @test get_vertex_jacobian(jgd1, 3) * view(z, gs.v_idx[3]) == [0.0]
+# @test get_vertex_jacobian(jgd1, 4) * view(z, gs.v_idx[4]) == [0.0]
+
+view(dx, gs.v_idx[1]) .= get_vertex_jacobian(jgd1, 1) * view(z, gs.v_idx[1])
+@test view(dx, gs.v_idx[1]) == [0.0]
+dx .+= sum(jgd1.e_jac_product[1])
+
+test_dx = Vector{Float64}(undef, 4)
+test_dx[1] = 0.0
+test_dx[2] = 0.0
+test_dx[3] = 0.0
+test_dx[4] = 0.0
+
+# test_dx = Vector{Float64}(undef, 4)
+# test_dx[1] = 0.0
+# test_dx[2] = 1.0
+# test_dx[3] = 2.0
+# test_dx[4] = 3.0
+
+@test dx == test_dx
+# @test dx == [0.0, 1.0, 2.0, 3.0]
+
+
+# start testing complete for loops
+
+update_coefficients1!( NDJacVecOp, x, p, t)
+
+# first complete for loop
+
+for i in 1:gs.num_e
+    jgd1.e_jac_product[i] .= get_src_edge_jacobian(jgd1, i) * view(z, gs.s_e_idx[i]) + get_dst_edge_jacobian(jgd1, i) * view(z, gs.d_e_idx[i])
+end
+
+print(jgd1.e_jac_product)
+
+# second complete for loop
+
+for i in 1:gs.num_v
+    #view(dx, get_vertex_indices(i)) .= get_vertex_jacobian(gd, i) * view(z, get_vertex_indices(i))
+    view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd1, i) * view(z, gs.v_idx[i])
+    dx .+= sum(jgd1.e_jac_product[i])
+end
+
+print(dx)
+
+@test dx == test_dx
+
+### Test Block jac_vec_prod!
+
 function jac_vec_prod!(dx, Jac::NDJacVecOperator1, z)
 
     gs = Jac.graph_structure
