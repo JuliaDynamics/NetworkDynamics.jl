@@ -6,11 +6,19 @@ using LightGraphs
 using DiffEqBase
 import DiffEqBase.update_coefficients!
 using Plots
+#using GraphPlot
 
 
 N = 4
-k = 2
-g = barabasi_albert(N, k)
+#k = 2
+#g = barabasi_albert(N, k)
+
+# building simple ring network consisting of 4 nodes
+g = SimpleGraph(N)
+add_edge!(g, 1, 2)
+add_edge!(g, 2, 3)
+add_edge!(g, 3, 4)
+add_edge!(g, 4, 1)
 
 function diffusionedge!(e, v_s, v_d, p, t)
     # usually e, v_s, v_d are arrays, hence we use the broadcasting operator .
@@ -47,11 +55,10 @@ nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1, edge_jacobian! = ja
 nd_jac = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g, jac = true)
 nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g, jac = false)
 
-x0 = randn(N) # random initial conditions
-#x0 = zeros(N)
-#ode_prob_jac = ODEProblem(nd_jac, x0, (0., 4.))
-ode_prob_jac = ODEProblem(nd_jac,[1.0, 0.0, 0.0, 0.0], (0.0, 4.0))
-ode_prob = ODEProblem(nd,[1.0, 0.0, 0.0, 0.0], (0.0, 4.0))
+#x0 = randn(N) # random initial conditions
+x0 = [1.0, 2.0, 3.0, 4.0]
+ode_prob_jac = ODEProblem(nd_jac, x0, (0.0, 5.0))
+ode_prob = ODEProblem(nd, x0, (0.0, 5.0))
 
 sol_jac = solve(ode_prob_jac, Rodas5());
 sol = solve(ode_prob, Rodas5());
