@@ -17,6 +17,7 @@ add_edge!(g, 2, 3)
 add_edge!(g, 3, 4)
 add_edge!(g, 4, 1)
 
+
 function diffusionedge!(e, v_s, v_d, p, t)
     e[1] = v_s[1] - v_d[1]
     nothing
@@ -337,13 +338,34 @@ end
 # second complete for loop
 
 for i in 1:gs.num_v
-    #view(dx, get_vertex_indices(i)) .= get_vertex_jacobian(gd, i) * view(z, get_vertex_indices(i))
+    ##view(dx, get_vertex_indices(i)) .= get_vertex_jacobian(gd, i) * view(z, get_vertex_indices(i))
+
     view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd1, i) * view(z, gs.v_idx[i])
-    view(dx, gs.v_idx[i]) .= sum(sum(view(jgd1.e_jac_product, gs.d_e_idx[i])))
-    #dx .+= sum(jgd.e_jac_product[i])
+    ##view(dx, gs.v_idx[i]) .+= sum(sum(view(jgd1.e_jac_product, gs.d_e_idx[i])))
+    println(view(dx, gs.v_idx[i]))
+    println(sum(sum(view(jgd1.e_jac_product, gs.d_e_idx[i]))))
+    println(sum!([0.0], view(jgd1.e_jac_product, gs.d_e_idx[i])[1]))
+    println("fin")
 end
 
 print(dx)
+
+
+println(jgd1.e_jac_product)
+
+println(view(dx, gs.v_idx[1]))
+println(sum(view(jgd1.e_jac_product, gs.d_e_idx[1])))
+println(sum(sum(view(jgd1.e_jac_product, gs.d_e_idx[1]))))
+println(sum!([0.0] ,view(jgd1.e_jac_product, gs.d_e_idx[1])[1]))
+
+print(view(jgd1.e_jac_product, gs.d_e_idx[1]))
+print(view(jgd1.e_jac_product, gs.d_e_idx[1])[1])
+
+
+println(jgd1.e_jac_product)
+println(view(jgd1.e_jac_product, gs.d_e_idx[3]))
+gs.v_idx
+gs.d_e_idx
 
 @test dx == test_dx
 
