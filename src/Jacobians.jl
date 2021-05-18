@@ -99,7 +99,6 @@ function jac_vec_prod(Jac::NDJacVecOperator, z)
     p = Jac.p
     x = Jac.x
     checkbounds_p(p, gs.num_v, gs.num_e)
-    #gd = prep_gd(x, x, Jac.graph_data, Jac.graph_structure)
     jgd = Jac.jac_graph_data
 
     # first for loop that considers the mutliplication of each edge jacobians with the corresponding component of z
@@ -127,7 +126,6 @@ function jac_vec_prod!(dx, Jac::NDJacVecOperator, z)
     p = Jac.p
     x = Jac.x
     checkbounds_p(p, gs.num_v, gs.num_e)
-    #gd = prep_gd(x, x, Jac.graph_data, Jac.graph_structure)
     jgd = Jac.jac_graph_data
 
     for i in 1:gs.num_e

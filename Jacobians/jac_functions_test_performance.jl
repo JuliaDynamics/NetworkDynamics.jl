@@ -4,8 +4,7 @@ using LinearAlgebra
 using NetworkDynamics
 using LightGraphs
 using DiffEqBase
-#import DiffEqBase.update_coefficients!
-using Test
+# import DiffEqBase.update_coefficients!
 
 N = 4
 #k = 2
@@ -50,13 +49,12 @@ nd_jac_edge = StaticEdge(f! = diffusionedge!, dim = 1, edge_jacobian! = jac_edge
 nd_jac = network_dynamics(nd_jac_vertex, nd_jac_edge, g, jac = true)
 
 
-graph_structure = nd_jac.f.graph_structure
-graph_data = nd_jac.f.graph_data
+@allocated graph_structure = nd_jac.f.graph_structure
+@allocated graph_data = nd_jac.f.graph_data
 
 v_dims = nd_jac.f.graph_structure.v_dims
 e_dims = nd_jac.f.graph_structure.e_dims
 num_e = nd_jac.f.graph_structure.num_e
-
 
 vertices! = nd_jac.f.vertices!
 edges! = nd_jac.f.edges!
@@ -87,7 +85,7 @@ v_jac_array = [Array{Float64,2}(undef, dim, dim) for dim in v_dims]
 e_jac_array = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim) in zip(e_dims, v_dims, v_dims)] # homogene Netzwerke: v_src_dim = v_dst_dim = v_dim
 e_jac_product =  [zeros(e_dims[1]) for i in 1:num_e]
 
-jac_graph_data_object = JacGraphData1(v_jac_array, e_jac_array, e_jac_product, graph_structure)
+@allocated jac_graph_data_object = JacGraphData1(v_jac_array, e_jac_array, e_jac_product, graph_structure)
 
 #### NDJacVecOperator1
 
@@ -125,8 +123,27 @@ NDJacVecOp = NDJacVecOperator1(x, p, t, vertices!, edges!, g, graph_structure, g
 @inline get_dst_edge_jacobian(jgd::JacGraphData1, i::Int) = jgd.e_jac_array[i][2]
 @inline get_vertex_jacobian(jgd::JacGraphData1, i::Int) = jgd.v_jac_array[i]
 
+# functions needed for update_coefficients1!
 
-### Test Block update coefficients
+@inline function prep_gd(dx::AbstractArray{T}, x::AbstractArray{T}, gd::GraphData{GDB, T, T}, gs) where {GDB, T}
+    if size(x) == (gs.dim_v,)
+         swap_v_array!(gd, x)
+         return gd
+    else
+         error("Size of x does not match the dimension of the system.")
+    end
+end
+
+@inline function prep_gd(dx, x, gd, gs)
+    # Type mismatch
+    if size(x) == (gs.dim_v,)
+        e_array = similar(dx, gs.dim_e)
+        return GraphData(x, e_array, gs)
+    else
+        error("Size of x does not match the dimension of the system.")
+   end
+end
+
 
 function update_coefficients1!(Jac::NDJacVecOperator1, x, p, t)
 
@@ -158,30 +175,7 @@ function update_coefficients1!(Jac::NDJacVecOperator1, x, p, t)
     Jac.t = t
 end
 
-# functions needed
-
-@inline function prep_gd(dx::AbstractArray{T}, x::AbstractArray{T}, gd::GraphData{GDB, T, T}, gs) where {GDB, T}
-    if size(x) == (gs.dim_v,)
-         swap_v_array!(gd, x)
-         return gd
-    else
-         error("Size of x does not match the dimension of the system.")
-    end
-end
-
-@inline function prep_gd(dx, x, gd, gs)
-    # Type mismatch
-    if size(x) == (gs.dim_v,)
-        e_array = similar(dx, gs.dim_e)
-        return GraphData(x, e_array, gs)
-    else
-        error("Size of x does not match the dimension of the system.")
-   end
-end
-
-### Test Block jac_vec_prod
-
-function jac_vec_prod(Jac::NDJacVecOperator, z)
+function jac_vec_prod(Jac::NDJacVecOperator1, z)
 
     gs = Jac.graph_structure
     p = Jac.p
@@ -191,7 +185,7 @@ function jac_vec_prod(Jac::NDJacVecOperator, z)
 
     # first for loop that considers the mutliplication of each edge jacobians with the corresponding component of z
     for i in 1:gs.num_e
-        jgd.e_jac_product[i] .= get_src_edge_jacobian(jgd, i) * view(z, gs.s_e_idx[i]) + get_dst_edge_jacobian(jgd, i) * view(z, gs.d_e_idx[i])
+        display(@allocated jgd.e_jac_product[i] .= get_src_edge_jacobian(jgd, i) * view(z, gs.s_e_idx[i]) + get_dst_edge_jacobian(jgd, i) * view(z, gs.d_e_idx[i]))
     end
 
     # in this function there is no dx in which the Jacobian can be stored, so an extra array must be created and returned
@@ -206,7 +200,7 @@ function jac_vec_prod(Jac::NDJacVecOperator, z)
     return dx
 end
 
-function jac_vec_prod!(dx, Jac::NDJacVecOperator, z)
+function jac_vec_prod!(dx, Jac::NDJacVecOperator1, z)
 
     gs = Jac.graph_structure
     p = Jac.p
@@ -215,7 +209,7 @@ function jac_vec_prod!(dx, Jac::NDJacVecOperator, z)
     jgd = Jac.jac_graph_data
 
     for i in 1:gs.num_e
-        jgd.e_jac_product[i] .= get_src_edge_jacobian(jgd, i) * view(z, gs.s_e_idx[i]) + get_dst_edge_jacobian(jgd, i) * view(z, gs.d_e_idx[i])
+        display(@allocated jgd.e_jac_product[i] .= get_src_edge_jacobian(jgd, i) * view(z, gs.s_e_idx[i]) + get_dst_edge_jacobian(jgd, i) * view(z, gs.d_e_idx[i]))
     end
 
     for i in 1:gs.num_v
@@ -240,10 +234,13 @@ function (Jac::NDJacVecOperator1)(x, p, t) # auch Number bei t?
     Jac*x
 end
 
-function (Jac::NDJacVecOperator1)(dx, x, p, t) # t::Number
+function (Jac::NDJacVecOperator1)(dx, x, p, t)
     update_coefficients!(Jac, x, p, t)
     mul!(dx, Jac, x)
 end
+
+
+## check computation time and allocations
 
 x_test = [1.0, 2.0, 3.0, 4.0]
 dx_test = similar(x_test)
@@ -253,8 +250,67 @@ t_test = 0.0
 parallel = false
 
 
-call_update_coefficients! = update_coefficients!(NDJacVecOp, x_test, p_test, t_test)
+@allocated call_update_coefficients! = update_coefficients!(NDJacVecOp, x_test, p_test, t_test)
 
-call_callable_struct_1 = NDJacVecOp(x_test, p_test, t_test)
+@allocated call_callable_struct_1 = NDJacVecOp(x_test, p_test, t_test)
 
-call_callable_struct_2 = NDJacVecOp(dx_test, x_test, p_test, t_test)
+@allocated call_callable_struct_2 = NDJacVecOp(dx_test, x_test, p_test, t_test)
+
+
+
+
+@time call_update_coefficients! = update_coefficients!(NDJacVecOp, x_test, p_test, t_test)
+
+@time call_callable_struct_1 = NDJacVecOp(x_test, p_test, t_test)
+
+@time call_callable_struct_2 = NDJacVecOp(dx_test, x_test, p_test, t_test)
+
+
+@allocated NDJacVecOp(x_test, p_test, t_test)
+@allocated NDJacVecOp(dx_test, x_test, p_test, t_test)
+
+
+# outsourced for loops + corresponding functions
+
+function e_jac_prod!(z, ejp, gs, jgd)
+    for i in 1:gs.num_e
+        ejp[i, :] .= get_src_edge_jacobian(jgd, i) * view(z, gs.s_e_idx[i]) + get_dst_edge_jacobian(jgd, i) * view(z, gs.d_e_idx[i])
+    end
+end;
+
+function v_jac_prod!(dx, z, ejp, gs, jgd)
+    for i in 1:gs.num_v
+        view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i])
+        view(dx, gs.v_idx[i]) .+= vec(sum(view(ejp, gs.d_v[i], :), dims = 1))
+    end
+end;
+
+
+function jac_vec_prod(Jac::NDJacVecOperator1, z)
+
+    gs = Jac.graph_structure
+    checkbounds_p(p, gs.num_v, gs.num_e)
+    gd = prep_gd(x, x, Jac.graph_data, Jac.graph_structure)
+    jgd = Jac.jac_graph_data
+
+    ejp = zeros(gs.num_e, gs.e_dims[1])
+    e_jac_prod!(z, ejp, gs, jgd)
+
+    dx = zeros(gs.v_dims[1]*gs.num_v)
+    v_jac_prod!(dx, z, ejp, gs, jgd)
+
+    return dx
+
+end
+
+function jac_vec_prod!(dx, Jac::NDJacVecOperator1, z)
+
+    gs = Jac.graph_structure
+    checkbounds_p(p, gs.num_v, gs.num_e)
+    gd = prep_gd(x, x, Jac.graph_data, Jac.graph_structure)
+    jgd = Jac.jac_graph_data
+
+    e_jac_prod!(z, e_jac_product, gs, jgd)
+    v_jac_prod!(dx, z, e_jac_product, gs, jgd)
+
+end

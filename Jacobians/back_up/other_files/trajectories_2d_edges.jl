@@ -24,6 +24,7 @@ function diffusionedge!(e, v_s, v_d, p, t)
     # usually e, v_s, v_d are arrays, hence we use the broadcasting operator .
     #e .= v_s .- v_d
     e[1] = v_s[1] - v_d[1]
+    e[2] = v_s[1] - v_d[1]
     nothing
 end
 
@@ -44,13 +45,19 @@ function jac_edge!(J_s::AbstractMatrix, J_d::AbstractMatrix, v_s, v_d, p, t)
    J_s[1, 1] = 1.0
    J_s[2, 1] = 0.0
 
+   J_s[3, 1] = 1.0
+   J_s[4, 1] = 0.0
+
    J_d[1, 1] = -1.0
    J_d[2, 1] = 0.0
+
+   J_d[3, 1] = -1.0
+   J_d[4, 1] = 0.0
 end
 
 nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 1, vertex_jacobian! = jac_vertex!)
 
-nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1, edge_jacobian! = jac_edge!)
+nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 2, edge_jacobian! = jac_edge!)
 
 nd_jac = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g, jac = true)
 nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g, jac = false)
@@ -66,20 +73,6 @@ sol = solve(ode_prob, Rodas5());
 
 plot_with_jac = plot(sol_jac, color = [:black])
 plot!(plot_with_jac, sol, color = [:red])
-
-# check allocations
-
-@allocated nd_jac.jac.jac_graph_data.v_jac_array
-@allocated nd_jac.f.graph_data.v
-
-@allocated nd_jac.jac.jac_graph_data.e_jac_array
-@allocated nd_jac.f.graph_data.e
-
-# both functions should correspond to the specified objects in module NetworkDynamics
-@allocated nd_jac.jac.jac_graph_data
-@allocated nd_jac.f.graph_data
-
-@allocated nd_jac_vec_operator_object = nd_jac.jac
 
 
 ### testing different solvers
