@@ -4,6 +4,7 @@ authors = ["Frank Hellmann <hellmann@pik-potsdam.de>, Michael Lindner <michaelli
 version = "0.5.1"
 
 [deps]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 DiffEqBase = "2b5f629d-d688-5b77-993f-72d75c75574e"
 DifferentialEquations = "0c46a032-eb83-5123-abaf-570d42b7fbaa"
 LightGraphs = "093fc24a-ae57-5d10-9952-331d41423f4d"
@@ -12,6 +13,7 @@ NLsolve = "2774e3e8-f4cf-5e23-947b-6d7e65073b56"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 
 [compat]
 DiffEqBase = "^6.9.4"

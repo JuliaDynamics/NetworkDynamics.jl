@@ -4,6 +4,7 @@ using LinearAlgebra
 using NetworkDynamics
 using LightGraphs
 using DiffEqBase
+using BenchmarkTools
 # import DiffEqBase.update_coefficients!
 
 N = 4
@@ -81,12 +82,13 @@ function JacGraphData1(v_jac_array, e_jac_array, e_jac_product_array, gs::GraphS
     JacGraphData1(v_jac_array, e_jac_array, e_jac_product)
 end
 
+## Idee: umschreiben in SArrays oder SVector
 v_jac_array = [Array{Float64,2}(undef, dim, dim) for dim in v_dims]
 e_jac_array = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim) in zip(e_dims, v_dims, v_dims)] # homogene Netzwerke: v_src_dim = v_dst_dim = v_dim
 e_jac_product =  [zeros(e_dims[1]) for i in 1:num_e]
 
 @allocated jac_graph_data_object = JacGraphData1(v_jac_array, e_jac_array, e_jac_product, graph_structure)
-
+@btime jac_graph_data_object = JacGraphData1(v_jac_array, e_jac_array, e_jac_product, graph_structure)
 #### NDJacVecOperator1
 
 mutable struct NDJacVecOperator1{T, uType, tType, T1, T2, G, GD, JGD} <: DiffEqBase.AbstractDiffEqLinearOperator{T} # mutable da x, p, t geupdated werden
@@ -116,7 +118,7 @@ t = 0.0
 parallel = false
 
 NDJacVecOp = NDJacVecOperator1(x, p, t, vertices!, edges!, g, graph_structure, graph_data, jac_graph_data_object, parallel) # 51 allocations
-
+@btime  NDJacVecOperator1(x, p, t, vertices!, edges!, g, graph_structure, graph_data, jac_graph_data_object, parallel)
 ### get functions for update_coefficients
 
 @inline get_src_edge_jacobian(jgd::JacGraphData1, i::Int) = jgd.e_jac_array[i][1]
@@ -249,11 +251,13 @@ p_test = nothing
 t_test = 0.0
 parallel = false
 
-
+@btime update_coefficients!(NDJacVecOp, x_test, p_test, t_test)
 @allocated call_update_coefficients! = update_coefficients!(NDJacVecOp, x_test, p_test, t_test)
 
+@btime NDJacVecOp(x_test, p_test, t_test)
 @allocated call_callable_struct_1 = NDJacVecOp(x_test, p_test, t_test)
 
+@btime NDJacVecOp(dx_test, x_test, p_test, t_test)
 @allocated call_callable_struct_2 = NDJacVecOp(dx_test, x_test, p_test, t_test)
 
 
