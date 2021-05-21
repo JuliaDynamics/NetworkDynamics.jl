@@ -6,6 +6,7 @@ using LightGraphs
 using DiffEqBase
 import DiffEqBase.update_coefficients!
 using Plots
+using BenchmarkTools
 #using GraphPlot
 
 
@@ -63,6 +64,9 @@ ode_prob = ODEProblem(nd, x0, (0.0, 5.0))
 
 sol_jac = solve(ode_prob_jac, Rodas5());
 sol = solve(ode_prob, Rodas5());
+
+@btime solve(ode_prob_jac, Rodas5()); # 5748 zu 5571
+@btime solve(ode_prob, Rodas5());
 
 plot_with_jac = plot(sol_jac, color = [:black])
 plot!(plot_with_jac, sol, color = [:red])

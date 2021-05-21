@@ -97,7 +97,7 @@ function jac_vec_prod(Jac::NDJacVecOperator, z)
 
     gs = Jac.graph_structure
     p = Jac.p
-    x = Jac.x
+    #x = Jac.x
     checkbounds_p(p, gs.num_v, gs.num_e)
     jgd = Jac.jac_graph_data
 
@@ -111,9 +111,9 @@ function jac_vec_prod(Jac::NDJacVecOperator, z)
 
     # second for loop in which the multiplication of vertex jacobian and the corresponding component of z is done with addition of the e_jac_product to dx
     for i in 1:gs.num_v
-        view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i])
-        view(dx, gs.v_idx[i]) .+= sum!([0.0], view(jgd.e_jac_product, gs.d_e_idx[i])[1])
-        # view(dx, gs.v_idx[i]) .+= sum(sum(view(jgd.e_jac_product, gs.d_e_idx[i])))
+        #view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i])
+        #view(dx, gs.v_idx[i]) .+= sum!([0.0], view(jgd.e_jac_product, gs.d_e_idx[i])[1])
+        view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i]) + sum!([0.0], view(jgd.e_jac_product, gs.d_e_idx[i])[1])
     end
     return dx
 end
@@ -124,7 +124,7 @@ function jac_vec_prod!(dx, Jac::NDJacVecOperator, z)
 
     gs = Jac.graph_structure
     p = Jac.p
-    x = Jac.x
+    #x = Jac.x
     checkbounds_p(p, gs.num_v, gs.num_e)
     jgd = Jac.jac_graph_data
 
@@ -133,9 +133,9 @@ function jac_vec_prod!(dx, Jac::NDJacVecOperator, z)
     end
 
     for i in 1:gs.num_v
-        view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i])
-        view(dx, gs.v_idx[i]) .+= sum!([0.0], view(jgd.e_jac_product, gs.d_e_idx[i])[1])
-        # view(dx, gs.v_idx[i]) .+= sum(sum(view(jgd.e_jac_product, gs.d_e_idx[i])))
+        #view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i])
+        #view(dx, gs.v_idx[i]) .+= sum!([0.0], view(jgd.e_jac_product, gs.d_e_idx[i])[1])
+        view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i]) + sum!([0.0], view(jgd.e_jac_product, gs.d_e_idx[i])[1])
     end
 end
 
