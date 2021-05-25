@@ -43,10 +43,10 @@ end
 
 function jac_edge!(J_s::AbstractMatrix, J_d::AbstractMatrix, v_s, v_d, p, t)
    J_s[1, 1] = 1.0
-   J_s[2, 1] = 0.0
+#   J_s[2, 1] = 0.0
 
    J_d[1, 1] = -1.0
-   J_d[2, 1] = 0.0
+#   J_d[2, 1] = 0.0
 end
 
 nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 1, vertex_jacobian! = jac_vertex!)
@@ -65,8 +65,8 @@ ode_prob = ODEProblem(nd, x0, (0.0, 5.0))
 sol_jac = solve(ode_prob_jac, Rodas5());
 sol = solve(ode_prob, Rodas5());
 
-@btime solve(ode_prob_jac, Rodas5()); # 5748 zu 5571
-@btime solve(ode_prob, Rodas5());
+@btime solve(ode_prob_jac, Rodas5()); # 5748 zu 5571 zu 5396, first: 1.065 ms
+@btime solve(ode_prob, Rodas5()); # 496.988 micro sec = 0.496 ms
 
 plot_with_jac = plot(sol_jac, color = [:black])
 plot!(plot_with_jac, sol, color = [:red])

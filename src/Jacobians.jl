@@ -21,8 +21,8 @@ end
 
 function JacGraphData(v_jac_array, e_jac_array, e_jac_product_array, gs::GraphStruct)
     v_jac_array = [Array{Float64,2}(undef, dim, dim) for dim in gs.v_dims]
-    e_jac_array = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim) in zip(gs.e_dims, gs.v_dims, gs.v_dims)] # homogene Netzwerke: v_src_dim = v_dst_dim = v_dim
-    e_jac_product = [zeros(gs.e_dims[1]) for i in 1:gs.num_e]
+    e_jac_array = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim) in zip(Vector{Int64}(gs.e_dims ./ 2), gs.v_dims, gs.v_dims)] # homogene Netzwerke: v_src_dim = v_dst_dim = v_dim
+    e_jac_product = [zeros(Vector{Int64}(gs.e_dims ./ 2)[1]) for i in 1:gs.num_e]
     JacGraphData(v_jac_array, e_jac_array, e_jac_product)
 end
 
@@ -36,24 +36,24 @@ end
 
 #### NDJacVecOperator
 
-mutable struct NDJacVecOperator{T, uType, tType, T1, T2, G, GD, JGD} <: DiffEqBase.AbstractDiffEqLinearOperator{T} # mutable da x, p, t geupdated werden
+mutable struct NDJacVecOperator{T, uType, tType, T1, T2, GD, JGD} <: DiffEqBase.AbstractDiffEqLinearOperator{T} # mutable da x, p, t geupdated werden
     x::uType
     p
     t::tType
     vertices!::T1
     edges!::T2
-    graph::G
+    #graph::G
     graph_structure::GraphStruct
     graph_data::GD
     jac_graph_data::JGD
     parallel::Bool
 
-    function NDJacVecOperator{T}(x, p, t, vertices!, edges!, graph, graph_structure, graph_data, jac_graph_data, parallel) where T
-        new{T, typeof(x), typeof(t), typeof(vertices!), typeof(edges!),typeof(graph), typeof(graph_data), typeof(jac_graph_data)}(x, p, t, vertices!, edges!, graph, graph_structure, graph_data, jac_graph_data, parallel)
+    function NDJacVecOperator{T}(x, p, t, vertices!, edges!, graph_structure, graph_data, jac_graph_data, parallel) where T
+        new{T, typeof(x), typeof(t), typeof(vertices!), typeof(edges!), typeof(graph_data), typeof(jac_graph_data)}(x, p, t, vertices!, edges!, graph_structure, graph_data, jac_graph_data, parallel)
     end
 
-    function NDJacVecOperator(x, p, t, vertices!, edges!, graph, graph_structure, graph_data, jac_graph_data, parallel)
-        NDJacVecOperator{eltype(x)}(x, p, t, vertices!, edges!, graph, graph_structure, graph_data, jac_graph_data, parallel)
+    function NDJacVecOperator(x, p, t, vertices!, edges!, graph_structure, graph_data, jac_graph_data, parallel)
+        NDJacVecOperator{eltype(x)}(x, p, t, vertices!, edges!, graph_structure, graph_data, jac_graph_data, parallel)
     end
 end
 
@@ -113,7 +113,8 @@ function jac_vec_prod(Jac::NDJacVecOperator, z)
     for i in 1:gs.num_v
         #view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i])
         #view(dx, gs.v_idx[i]) .+= sum!([0.0], view(jgd.e_jac_product, gs.d_e_idx[i])[1])
-        view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i]) + sum!([0.0], view(jgd.e_jac_product, gs.d_e_idx[i])[1])
+        #view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i]) + sum!([0.0], view(jgd.e_jac_product, gs.d_e_idx[i])[1])
+        view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i]) + sum(view(jgd.e_jac_product, gs.d_e_idx[i]))
     end
     return dx
 end
@@ -135,7 +136,8 @@ function jac_vec_prod!(dx, Jac::NDJacVecOperator, z)
     for i in 1:gs.num_v
         #view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i])
         #view(dx, gs.v_idx[i]) .+= sum!([0.0], view(jgd.e_jac_product, gs.d_e_idx[i])[1])
-        view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i]) + sum!([0.0], view(jgd.e_jac_product, gs.d_e_idx[i])[1])
+        #view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i]) + sum!([0.0], view(jgd.e_jac_product, gs.d_e_idx[i])[1])
+        view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i]) + sum(view(jgd.e_jac_product, gs.d_e_idx[i]))
     end
 end
 
