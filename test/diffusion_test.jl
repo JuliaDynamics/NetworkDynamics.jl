@@ -121,10 +121,10 @@ odeedge = ODEEdge(f! = real_ode_edge!, dim = 2, coupling = :fiducial, mass_matri
 
 ode_edge_list = [odeedge for e in edges(g)]
 
-diff_network_ode = network_dynamics(vertex_list,ode_edge_list,g)
+const diff_network_ode = network_dynamics(vertex_list,ode_edge_list,g)
 
-x0_ode = find_valid_ic(diff_network_ode, randn(nv(g) + 2*ne(g)))
-dx0_ode = similar(x0_ode)
+const x0_ode = find_valid_ic(diff_network_ode, randn(nv(g) + 2*ne(g)))
+const dx0_ode = similar(x0_ode)
 
 diff_network_ode(dx0_ode, x0_ode, nothing, 0.)
 @test @allocated(diff_network_ode(dx0_ode, x0_ode, nothing, 0.)) == 0
