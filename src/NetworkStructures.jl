@@ -80,11 +80,17 @@ function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
     num_v = nv(g)
     num_e = ne(g)
 
-    s_e = [src(e) for e in edges(g)]
-    d_e = [dst(e) for e in edges(g)]
+    s_e = src.(edges(g))
+    d_e = dst.(edges(g))
 
-    s_v = [findall(isequal(i), src.(edges(g))) for i = 1:nv(g)]
-    d_v = [findall(isequal(i), dst.(edges(g))) for i = 1:nv(g)]
+    # Initialize Vector of empty Vector{Int} for the edge indices per vertex
+    s_v = [Int[] for i=1:num_v]
+    d_v = [Int[] for i=1:num_v]
+    for i = 1:num_e
+        push!(s_v[s_e[i]], i)
+        push!(d_v[d_e[i]], i)
+    end
+
 
     v_offs = create_offsets(v_dims)
     e_offs = create_offsets(e_dims)
