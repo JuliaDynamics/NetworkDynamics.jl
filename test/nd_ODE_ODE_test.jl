@@ -30,8 +30,12 @@ using NetworkDynamics
     # first run to compile
     nd(dx, x, nothing, 0.)
 
+    # function barrier, otherwise there are still allocations
+    function alloc(nd, dx, x)
+        @allocated nd(dx, x, nothing, 0.)
+    end
     # test allocation free main loop
-    @test 0 == @allocated nd(dx, x, nothing, 0.)
+    @test 0 == alloc(nd, dx, x)
 
     # test prep_gd
     gd = nd(x, nothing, 0., GetGD)
