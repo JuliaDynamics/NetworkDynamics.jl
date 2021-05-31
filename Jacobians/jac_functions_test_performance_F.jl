@@ -19,33 +19,37 @@ add_edge!(g, 4, 1)
 
 function diffusionedge!(e, v_s, v_d, p, t)
     e[1] = v_s[1] - v_d[1]
+    e[2] = v_s[2] - v_d[2]
     nothing
 end
 
 function diffusionvertex!(dv, v, edges, p, t)
     dv[1] = 0.
+    dv[2] = 0.
     for e in edges
         dv[1] += e[1]
+        dv[2] += e[2]
     end
     nothing
 end
 
 function jac_vertex!(J::AbstractMatrix, v, p, t)
     #J = internal_jacobian(J, v, p, t)
-    J[1, 1] = 0.0
+    J[1, 1] = 1.0
+    J[2, 2] = 1.0
 end
 
 function jac_edge!(J_s::AbstractMatrix, J_d::AbstractMatrix, v_s, v_d, p, t)
    J_s[1, 1] = 1.0
-   J_s[2, 1] = 0.0
+   J_s[2, 1] = 1.0
 
    J_d[1, 1] = -1.0
-   J_d[2, 1] = 0.0
+   J_d[2, 1] = -1.0
 end
 
-nd_jac_vertex = ODEVertex(f! = diffusionvertex!, dim = 1, vertex_jacobian! = jac_vertex!)
+nd_jac_vertex = ODEVertex(f! = diffusionvertex!, dim = 2, vertex_jacobian! = jac_vertex!)
 
-nd_jac_edge = StaticEdge(f! = diffusionedge!, dim = 1, edge_jacobian! = jac_edge!)
+nd_jac_edge = StaticEdge(f! = diffusionedge!, dim = 2, edge_jacobian! = jac_edge!)
 
 nd_jac = network_dynamics(nd_jac_vertex, nd_jac_edge, g, jac = true)
 nd = network_dynamics(nd_jac_vertex, nd_jac_edge, g, jac = false)
@@ -72,6 +76,14 @@ nd = network_dynamics(nd_jac_vertex, nd_jac_edge, g, jac = false)
 @btime edges! = nd.f.edges!#3
 
 #3
+graph_structure = nd_jac.f.graph_structure # 3 allocations
+graph_data = nd_jac.f.graph_data #3
+
+v_dims = nd_jac.f.graph_structure.v_dims #4
+e_dims = nd_jac.f.graph_structure.e_dims #4
+num_e = nd_jac.f.graph_structure.num_e #4
+vertices! = nd_jac.f.vertices! #3
+edges! = nd_jac.f.edges!
 
 # for vertices! and edges! we need to get the index
 @inline Base.@propagate_inbounds function maybe_idx(p::T, i) where T <: AbstractArray
@@ -101,6 +113,7 @@ e_jac_array = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim
 e_jac_product =  [zeros(e_dims[1]) for i in 1:num_e]
 
 @btime jac_graph_data_object = JacGraphData1(v_jac_array, e_jac_array, e_jac_product, graph_structure) #24
+jac_graph_data_object = JacGraphData1(v_jac_array, e_jac_array, e_jac_product, graph_structure) #24
 #### NDJacVecOperator1
 
 mutable struct NDJacVecOperator1{T, uType, tType, T1, T2, G, GD, JGD} <: DiffEqBase.AbstractDiffEqLinearOperator{T} # mutable da x, p, t geupdated werden
@@ -219,6 +232,9 @@ function jac_vec_prod(Jac::NDJacVecOperator1, z)
     return dx
 end
 
+gs = NDJacVecOp.graph_structure
+gs.s_e_idx[2]
+
 @btime jac_vec_prod(NDJacVecOp,x_test) #37
 @btime jac_vec_prod(NDJacVecOp,x_test) # 33
 function e_jac_prod!(z, gs, jgd)
@@ -311,6 +327,7 @@ function jac_vec_prod!(dx, Jac::NDJacVecOperator1, z)
         # view(dx, gs.v_idx[i]) .+= sum(sum(view(jgd.e_jac_product, gs.d_e_idx[i])))
     end
 end
+gs.s_e_idx[i]
 
 # functions for callable structs
 
