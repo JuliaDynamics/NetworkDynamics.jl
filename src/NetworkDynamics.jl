@@ -112,8 +112,8 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T},
     if jac == true
         # These additional arrays are used for initializing the JacGraphData and will be overwritten
         v_jac_array = [Array{Float64,2}(undef, dim, dim) for dim in v_dims]
-        e_jac_array = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim) in zip(e_dims, v_dims, v_dims)] # homogene Netzwerke: v_src_dim = v_dst_dim = v_dim
-        e_jac_product = [zeros(e_dims[1]) for i in 1:graph_stucture.num_e]
+        e_jac_array = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim) in zip(v_dims, v_dims, v_dims)] # homogene Netzwerke: v_src_dim = v_dst_dim = v_dim
+        e_jac_product = [zeros(v_dims[1]) for i in 1:graph_stucture.num_e]
 
         jac_graph_data = JacGraphData(v_jac_array, e_jac_array, e_jac_product, graph_stucture) # Funktion
 

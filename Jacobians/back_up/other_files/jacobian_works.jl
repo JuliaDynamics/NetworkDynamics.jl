@@ -64,6 +64,8 @@ end
 
 ### put the z vectors into the parameters
 p = (z, edge_z')
+p_test = p[1]
+print(p[2])
 
 nd_jac = network_dynamics(nd_jac_vertex, nd_jac_edge, g)
 
