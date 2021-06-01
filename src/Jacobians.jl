@@ -138,13 +138,12 @@ function jac_vec_prod!(dx, Jac::NDJacVecOperator, z)
     end
 
     for i in 1:gs.num_v
-        #view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i]) + sum(view(jgd.e_jac_product, gs.d_e_idx[i]))
-        view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i])
-        view_e_jac_product = view(jgd.e_jac_product, gs.d_v[i])
-        if view_e_jac_product == []
-            view(dx, gs.v_idx[i]) .+= zeros(gs.v_dims[1])
-        else
-            view(dx, gs.v_idx[i]) .+= sum(view_e_jac_product)
+        # we can use something like
+        # v_cache = zeros(dim_v)
+        # mul!(v_cache,  jgd.v_jac_array[i], view(z, gs.v_idx[i]))
+        # however sum allocated when a vertex has multiple incoming edges
+        if !isempty(gs.d_v[i])
+            view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i]) .+ sum(view(jgd.e_jac_product, gs.d_v[i]))
         end
     end
 end
