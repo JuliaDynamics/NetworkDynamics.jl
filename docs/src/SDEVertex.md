@@ -1,6 +1,6 @@
 # SDE Tutorial
 
- An `IJulia` [notebook](https://github.com/pik-icon/NetworkDynamics.jl/tree/master/examples) corresponding to this tutorial will be available on GitHub soon.
+ An `IJulia` [notebook](https://github.com/pik-icone/NetworkDynamics.jl/tree/master/examples) corresponding to this tutorial will be available on GitHub soon.
 
 #### Topics covered in this tutorial include:
  * the swing equation

@@ -2,7 +2,7 @@
 
 A package for working with dynamical systems on complex networks. NetworkDynamics.jl provides an interface between [LightGraphs.jl](https://github.com/JuliaGraphs/LightGraphs.jl) and [DifferentialEquations.jl](https://github.com/SciML/DifferentialEquations.jl). It allows to define several types of dynamic and static nodes and edges and to link them up in order to create complex network dynamics.
 
-The behavior of a node or an edge can be described by algebraic equations, by differential algebraic equation (DAEs) in mass matrix form, by ordinary differential equations (ODE) or by delay differential equations(DDE). Stochastic ordinary differential equations (SDE) can e.g. be implemented as a [two-layer network](https://github.com/pik-icon/NetworkDynamics.jl/blob/master/examples/sde.jl). For detail see the tutorials section.
+The behavior of a node or an edge can be described by algebraic equations, by differential algebraic equation (DAEs) in mass matrix form, by ordinary differential equations (ODE) or by delay differential equations(DDE). Stochastic ordinary differential equations (SDE) can e.g. be implemented as a [two-layer network](https://github.com/pik-icone/NetworkDynamics.jl/blob/master/examples/sde.jl). For detail see the tutorials section.
 
 ## Installation
 

@@ -34,7 +34,7 @@ end
 
 `nd_wrapper!` should now work with `BacksolveAdjoint` and `InterpolatingAdjoint`. At the moment we recommend this way for combining NetworDynamics and DiffEqFlux.
 
-Forward mode (ForwardDiff.jl) and source-to-source (Zygote.jl)  automatic differentiation  is not fully-supported yet. For more detailed discussion see [this issue](https://github.com/pik-icon/NetworkDynamics.jl/issues/34).
+Forward mode (ForwardDiff.jl) and source-to-source (Zygote.jl)  automatic differentiation  is not fully-supported yet. For more detailed discussion see [this issue](https://github.com/pik-icone/NetworkDynamics.jl/issues/34).
 
 Further resources:
 

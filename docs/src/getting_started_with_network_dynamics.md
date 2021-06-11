@@ -1,6 +1,6 @@
 # [Network diffusion](@id getting_started)
 
-This introductory example explains the use of the basic types and constructors in NetworkDynamics.jl by modeling a simple diffusion on an undirected network. A corresponding `IJulia` [notebook](https://github.com/pik-icon/NetworkDynamics.jl/tree/master/examples) is available on GitHub.
+This introductory example explains the use of the basic types and constructors in NetworkDynamics.jl by modeling a simple diffusion on an undirected network. A corresponding `IJulia` [notebook](https://github.com/pik-icone/NetworkDynamics.jl/tree/master/examples) is available on GitHub.
 
 ## Theoretical background
 
