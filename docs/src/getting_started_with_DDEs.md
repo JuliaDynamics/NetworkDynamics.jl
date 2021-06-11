@@ -182,4 +182,4 @@ plot(sol, vars = syms_containing(nd, "v"), legend=false, fmt = :png)
 
 ## Delay differential equations with algebraic constraints
 
-The vertex dynamics may in principle contain algebraic equations in mass matrix form. For an experimental test case have a look at the last section of this [example on github](https://github.com/pik-icon/NetworkDynamics.jl/blob/master/examples/getting_started_with_DDEs.jl).
+The vertex dynamics may in principle contain algebraic equations in mass matrix form. For an experimental test case have a look at the last section of this [example on github](https://github.com/pik-icone/NetworkDynamics.jl/blob/master/examples/getting_started_with_DDEs.jl).

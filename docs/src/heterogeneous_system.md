@@ -151,7 +151,7 @@ nothing #hide
 
 This handles the second equations as `0 = M[2,2] * de[2] = g(e, v_s, v_d, p, t) - e[2]`.
 
-See the example kuramoto_plasticity.jl and the discussion on [github](https://github.com/pik-icon/NetworkDynamics.jl/issues/45#issuecomment-659491913) for more details.
+See the example kuramoto_plasticity.jl and the discussion on [github](https://github.com/pik-icone/NetworkDynamics.jl/issues/45#issuecomment-659491913) for more details.
 
 ---
 
