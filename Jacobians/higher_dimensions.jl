@@ -59,7 +59,7 @@ end
 
 nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 2, vertex_jacobian! = jac_vertex!)
 
-nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1, edge_jacobian! = jac_edge!)
+nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1, coupling = :undirected, edge_jacobian! = jac_edge!)
 
 nd_jac = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g, jac = true)
 nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g, jac = false)

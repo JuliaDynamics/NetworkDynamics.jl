@@ -211,15 +211,15 @@ For more details see the documentation.
     coupling = :undefined # :directed, :symmetric, :antisymmetric, :fiducial, :undirected
     mass_matrix=I # Mass matrix for the equation
     sym=[:e for i in 1:dim] # Symbols for the dimensions
-    edge_jacobian! = :undefined
+    #edge_jacobian! = :undefined
 
 
     function ODEEdge(user_f!::T,
                      dim::Int,
                      coupling::Symbol,
                      mass_matrix,
-                     sym::Vector{Symbol},
-                     edge_jacobian!) where T
+                     sym::Vector{Symbol}) where T
+                     #edge_jacobian!) where T
 
         coupling_types = (:directed, :fiducial, :undirected)
 
