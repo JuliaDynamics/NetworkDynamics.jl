@@ -142,6 +142,7 @@ NDJacVecOp = NDJacVecOperator1(x, p, t, vertices!, edges!, g, graph_structure, g
 @inline get_dst_edge_jacobian(jgd::JacGraphData1, i::Int) = jgd.e_jac_array[i][2]
 @inline get_vertex_jacobian(jgd::JacGraphData1, i::Int) = jgd.v_jac_array[i]
 
+viewlike = get_src_edge_jacobian(jac_graph_data_object, 1)
 
 # functions needed for update_coefficients1!
 

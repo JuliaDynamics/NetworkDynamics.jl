@@ -65,8 +65,8 @@ ode_prob = ODEProblem(nd, x0, (0.0, 5.0))
 sol_jac = solve(ode_prob_jac, Rodas5());
 sol = solve(ode_prob, Rodas5());
 
-@btime solve(ode_prob_jac, Rodas5()); # 5748 zu 5571 zu 5396, first: 1.065 ms
-@btime solve(ode_prob, Rodas5()); # 496.988 micro sec = 0.496 ms
+@btime solve(ode_prob_jac, Rodas5()); # 5933 allocations, 1.194 ms
+@btime solve(ode_prob, Rodas5()); # 1721 allocations, 574.314 micro sec = 0.574314 ms
 
 plot_with_jac = plot(sol_jac, color = [:black])
 plot!(plot_with_jac, sol, color = [:red])
