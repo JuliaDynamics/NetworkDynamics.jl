@@ -190,11 +190,9 @@ end
     staticvertex = StaticVertex(f! = diff_stat_vertex!, dim = 1)
     ddevertex = DDEVertex(f! = kuramoto_delay_vertex!, dim = 1)
 
-    #staticedge = StaticEdge(f! = diffusion_edge!, dim = 1)
     staticedge = StaticEdge(f! = diffusion_edge!, dim = 1, coupling = :antisymmetric)
     odeedge = ODEEdge(f! = diff_dyn_edge!, dim = 1, coupling = :undirected)
-    #sdedge = StaticDelayEdge(f! = kuramoto_delay_edge!, dim = 2)
-    sdedge = StaticDelayEdge(f! = kuramoto_delay_edge!, dim = 2, coupling = :antisymmetric)
+    sdedge = StaticDelayEdge(f! = kuramoto_delay_edge!, dim = 2, coupling = :undirected)
 
 
     vertex_list_1 = [odevertex for v in 1:10]
