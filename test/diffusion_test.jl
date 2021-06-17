@@ -63,7 +63,7 @@ end
 
 
 odevertex = ODEVertex(f! = diffusion_vertex!, dim = 1)
-staticedge = StaticEdge(f! = diffusion_edge!, dim = 1)
+staticedge = StaticEdge(f! = diffusion_edge!, dim = 1, coupling = :antisymmetric)
 
 vertex_list = [odevertex for v in vertices(g)]
 edge_list = [staticedge for e in edges(g)]
