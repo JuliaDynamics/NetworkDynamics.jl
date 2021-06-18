@@ -17,7 +17,7 @@ using NetworkDynamics
         nothing
     end
     nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 1)
-    nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1)
+    nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1, coupling = :antisymmetric)
 
     # set up networ_dynamics on graph
     N = 10

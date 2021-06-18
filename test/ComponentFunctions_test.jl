@@ -190,9 +190,9 @@ end
     staticvertex = StaticVertex(f! = diff_stat_vertex!, dim = 1)
     ddevertex = DDEVertex(f! = kuramoto_delay_vertex!, dim = 1)
 
-    staticedge = StaticEdge(f! = diffusion_edge!, dim = 1)
+    staticedge = StaticEdge(f! = diffusion_edge!, dim = 1, coupling = :antisymmetric)
     odeedge = ODEEdge(f! = diff_dyn_edge!, dim = 1, coupling = :undirected)
-    sdedge = StaticDelayEdge(f! = kuramoto_delay_edge!, dim = 2)
+    sdedge = StaticDelayEdge(f! = kuramoto_delay_edge!, dim = 2, coupling = :undirected)
 
 
     vertex_list_1 = [odevertex for v in 1:10]
@@ -219,13 +219,15 @@ end
 
 
     edge_list_1 = [staticedge for v in 1:25]
-    @test eltype(edge_list_1) == StaticEdge{typeof(diffusion_edge!)}
+    #@test eltype(edge_list_1) == StaticEdge{typeof(diffusion_edge!)}
+    @test eltype(edge_list_1) <: StaticEdge
 
     edge_list_2 = [odeedge for v in 1:25]
     @test eltype(edge_list_2) <: ODEEdge
 
     edge_list_3 = [sdedge for v in 1:25]
-    @test eltype(edge_list_3) == StaticDelayEdge{typeof(kuramoto_delay_edge!)}
+    #@test eltype(edge_list_3) == StaticDelayEdge{typeof(kuramoto_delay_edge!)}
+    @test eltype(edge_list_3) <: StaticDelayEdge
 
     edge_list_4 = [v % 2 == 0 ? odeedge : staticedge for v in 1:10]
 
