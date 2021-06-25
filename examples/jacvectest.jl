@@ -1,3 +1,5 @@
+using Pkg
+Pkg.activate(@__DIR__)
 using OrdinaryDiffEq
 using LinearAlgebra
 using NetworkDynamics
@@ -33,14 +35,14 @@ function diffusionvertex!(dv, v, edges, p, t)
     nothing
 end
 
-function jac_vertex!(J::AbstractMatrix, v, p, t)
+@Base.propagate_inbounds function jac_vertex!(J::AbstractMatrix, v, p, t)
     #J = internal_jacobian(J, v, p, t)
     J[1, 1] = 0.0
     J[2, 1] = 0.0
     nothing
 end
 
-function jac_edge!(J_s::AbstractMatrix, J_d::AbstractMatrix, v_s, v_d, p, t)
+@Base.propagate_inbounds function jac_edge!(J_s::AbstractMatrix, J_d::AbstractMatrix, v_s, v_d, p, t)
    J_s[1, 1] = 1.0
 #   J_s[2, 1] = 0.0
 
@@ -57,17 +59,35 @@ nd_jac = network_dynamics(nd_jac_vertex, nd_jac_edge, g, jac = true)
 
 nd = network_dynamics(nd_jac_vertex, nd_jac_edge, g, jac = false)
 
-#x0 = randn(N) # random initial conditions
 x0 = [1.0, 2.0, 3.0, 4.0, 1.0, 2.0, 3.0, 4.0]
 
 ode_prob_jac = ODEProblem(nd_jac, x0, (0.0, 5.0))
 ode_prob = ODEProblem(nd, x0, (0.0, 5.0))
 
-sol_jac = solve(ode_prob_jac, Rodas5());
-sol = solve(ode_prob, Rodas5());
+sol_jac = solve(ode_prob_jac,
+    TRBDF2(linsolve=LinSolveGMRES()));
+sol = solve(ode_prob, TRBDF2(linsolve=LinSolveGMRES()));
 
-@btime solve(ode_prob_jac, Rodas5()); # 5933 allocations, 1.194 ms
-@btime solve(ode_prob, Rodas5()); # 1721 allocations, 574.314 micro sec = 0.574314 ms
+print(sol.destats)
+print(sol_jac.destats)
+
+
+
+dx = randn(2N)
+z  = randn(2N)
+mul!(dx, nd_jac.jac_prototype, z)
+@allocated mul!(dx, nd_jac.jac_prototype, z)
+
+
+
+update_coefficients!(nd_jac.jac_prototype, x0, nothing, 0.)
+@allocated(update_coefficients!(nd_jac.jac_prototype, z, nothing, 0.))
+
+
+
 
 plot_with_jac = plot(sol_jac, color = :black)
-plot!(plot_with_jac, sol, color = :red, linestyle = :dash)
+plot!(plot_with_jac, sol, color = :red)#, linestyle = :dash)
+
+@btime solve(ode_prob_jac, TRBDF2(linsolve=LinSolveGMRES())); # 5933 allocations, 1.194 ms
+@btime solve(ode_prob, TRBDF2(linsolve=LinSolveGMRES())); # 1721 allocations, 574.314 micro sec = 0.574314 ms
