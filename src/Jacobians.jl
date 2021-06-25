@@ -194,7 +194,6 @@ Analogous to function jac_vec_prod, using the already existing `dx` array.
 """
 
 function jac_vec_prod!(dx, Jac::NDJacVecOperator, z)
-
     gs = Jac.graph_structure
     p = Jac.p
     #x = Jac.x
@@ -202,17 +201,27 @@ function jac_vec_prod!(dx, Jac::NDJacVecOperator, z)
     jgd = Jac.jac_graph_data
 
     for i in 1:gs.num_e
-        jgd.e_jac_product[i] .= get_src_edge_jacobian(jgd, i) * view(z, gs.s_e_idx[i]) + get_dst_edge_jacobian(jgd, i) * view(z, gs.d_e_idx[i])
+        # Store Edge_jac_src * v_src
+        mul!(jgd.e_jac_product[i], get_src_edge_jacobian(jgd, i), view(z, gs.s_e_idx[i]))
+        # in-place Add Edge_jac_dst * v_dst
+        # mul!(C,A,B,α,β) = A B α + C β
+        mul!(jgd.e_jac_product[i],
+             get_dst_edge_jacobian(jgd, i),
+             view(z, gs.d_e_idx[i]), 1, 1) # α = 1, β = 1
+
+
+        #jgd.e_jac_product[i] .= get_src_edge_jacobian(jgd, i) * view(z, gs.s_e_idx[i]) .+ get_dst_edge_jacobian(jgd, i) * view(z, gs.d_e_idx[i])
     end
 
     for i in 1:gs.num_v
-        # we can use something like
-        # v_cache = zeros(dim_v)
-        # mul!(v_cache,  jgd.v_jac_array[i], view(z, gs.v_idx[i]))
-        # however sum allocated when a vertex has multiple incoming edges
-        if !isempty(gs.d_v[i])
-            view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i]) .+ sum(view(jgd.e_jac_product, gs.d_v[i]))
+        # Vertex Jac * vertex Variables
+        mul!(view(dx, gs.v_idx[i]), get_vertex_jacobian(jgd, i), view(z, gs.v_idx[i]))
+
+        for j in gs.d_v[i]
+            # add pre-compute edge_product (if gs.d_v not empty)
+            view(dx, gs.v_idx[i]) .+= jgd.e_jac_product[j]
         end
+
     end
 end
 
