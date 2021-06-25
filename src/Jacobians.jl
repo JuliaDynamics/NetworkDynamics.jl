@@ -169,21 +169,29 @@ function jac_vec_prod(Jac::NDJacVecOperator, z)
 
     # first for loop that considers the mutliplication of each edge jacobians with the corresponding component of z
     for i in 1:gs.num_e
-        jgd.e_jac_product[i] .= get_src_edge_jacobian(jgd, i) * view(z, gs.s_e_idx[i]) + get_dst_edge_jacobian(jgd, i) * view(z, gs.d_e_idx[i])
+        # Store Edge_jac_src * v_src
+        mul!(jgd.e_jac_product[i], get_src_edge_jacobian(jgd, i), view(z, gs.s_e_idx[i]))
+        # in-place Add Edge_jac_dst * v_dst
+        # mul!(C,A,B,α,β) = A B α + C β
+        mul!(jgd.e_jac_product[i],
+             get_dst_edge_jacobian(jgd, i),
+             view(z, gs.d_e_idx[i]), 1, 1) # α = 1, β = 1
     end
 
+
     # in this function there is no dx in which the Jacobian can be stored, so an extra array must be created and returned
-    dx = zeros(gs.v_dims[1], gs.num_v)
+    dx = zeros(dim_v)
 
     # second for loop in which the multiplication of vertex jacobian and the corresponding component of z is done with addition of the e_jac_product to dx
     for i in 1:gs.num_v
-        # we can use something like
-        # v_cache = zeros(dim_v)
-        # mul!(v_cache,  jgd.v_jac_array[i], view(z, gs.v_idx[i]))
-        # however sum allocated when a vertex has multiple incoming edges
-        if !isempty(gs.d_v[i])
-            view(dx, gs.v_idx[i]) .= get_vertex_jacobian(jgd, i) * view(z, gs.v_idx[i]) .+ sum(view(jgd.e_jac_product, gs.d_v[i]))
+        # Vertex Jac * vertex Variables
+        mul!(view(dx, gs.v_idx[i]), get_vertex_jacobian(jgd, i), view(z, gs.v_idx[i]))
+
+        for j in gs.d_v[i]
+            # add pre-compute edge_product (if gs.d_v not empty)
+            view(dx, gs.v_idx[i]) .+= jgd.e_jac_product[j]
         end
+
     end
     return dx
 end
