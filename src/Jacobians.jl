@@ -220,7 +220,7 @@ end
 
 Base.:*(Jac::NDJacVecOperator, z::AbstractVector) = jac_vec_prod(Jac, z)
 
-function LinearAlgebra.mul!(dx::Matrix{Float64}, Jac::NDJacVecOperator, z::AbstractVector)
+function LinearAlgebra.mul!(dx::AbstractVector, Jac::NDJacVecOperator, z::AbstractVector)
     jac_vec_prod!(dx, Jac, z)
 end
 
@@ -243,5 +243,10 @@ function (Jac::NDJacVecOperator)(dx, x, p, t::Number)
     mul!(dx, Jac, x)
 end
 
+
+### More functions to fullfill specification
+
+Base.size(L::NDJacVecOperator) = (length(L.x),length(L.x))
+Base.size(L::NDJacVecOperator,i::Int) = length(L.x)
 
 end # module
