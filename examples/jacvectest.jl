@@ -2,7 +2,6 @@ using OrdinaryDiffEq
 using LinearAlgebra
 using NetworkDynamics
 using LightGraphs
-using DiffEqBase
 using Plots
 using BenchmarkTools
 
@@ -57,7 +56,7 @@ nd_jac = network_dynamics(nd_jac_vertex, nd_jac_edge, g, jac = true)
 nd = network_dynamics(nd_jac_vertex, nd_jac_edge, g, jac = false)
 
 #x0 = randn(N) # random initial conditions
-x0 = [1.0, 2.0, 3.0, 4.0]
+x0 = [1.0, 2.0, 3.0, 4.0, 1.0, 2.0, 3.0, 4.0]
 
 ode_prob_jac = ODEProblem(nd_jac, x0, (0.0, 5.0))
 ode_prob = ODEProblem(nd, x0, (0.0, 5.0))
@@ -68,5 +67,5 @@ sol = solve(ode_prob, Rodas5());
 @btime solve(ode_prob_jac, Rodas5()); # 5933 allocations, 1.194 ms
 @btime solve(ode_prob, Rodas5()); # 1721 allocations, 574.314 micro sec = 0.574314 ms
 
-plot_with_jac = plot(sol_jac, color = [:black])
-plot!(plot_with_jac, sol, color = [:red])
+plot_with_jac = plot(sol_jac, color = :black)
+plot!(plot_with_jac, sol, color = :red, linestyle = :dash)
