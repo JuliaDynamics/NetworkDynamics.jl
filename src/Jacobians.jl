@@ -61,9 +61,9 @@ end
     and to the src_edge_jacobian/dst_edge_jacobian of the jth edges, respectively.
 """
 
-@inline get_src_edge_jacobian(jgd::JacGraphData, i::Int) = @inbounds jgd.e_jac_array[i][1]
-@inline get_dst_edge_jacobian(jgd::JacGraphData, i::Int) = @inbounds jgd.e_jac_array[i][2]
-@inline get_vertex_jacobian(jgd::JacGraphData, i::Int) = @inbounds jgd.v_jac_array[i]
+@inline @Base.propagate_inbounds get_src_edge_jacobian(jgd::JacGraphData, i::Int) = jgd.e_jac_array[i][1]
+@inline @Base.propagate_inbounds get_dst_edge_jacobian(jgd::JacGraphData, i::Int) = jgd.e_jac_array[i][2]
+@inline @Base.propagate_inbounds get_vertex_jacobian(jgd::JacGraphData, i::Int) = jgd.v_jac_array[i]
 
 """
     NDJacVecOperator(x, p, t, vertices!, edges!, graph_structure, graph_data, jac_graph_data, parallel)
@@ -119,7 +119,7 @@ function update_coefficients!(Jac::NDJacVecOperator, x, p, t)
     gd = prep_gd(x, x, Jac.graph_data, Jac.graph_structure)
     jgd = Jac.jac_graph_data
 
-    for i in 1:gs.num_v
+    @inbounds for i in 1:gs.num_v
         maybe_idx(Jac.vertices!, i).vertex_jacobian!(
           get_vertex_jacobian(jgd, i),
           get_vertex(gd, i),
@@ -127,7 +127,7 @@ function update_coefficients!(Jac::NDJacVecOperator, x, p, t)
           t)
     end
 
-    for i in 1:gs.num_e
+    @inbounds for i in 1:gs.num_e
           maybe_idx(Jac.edges!, i).edge_jacobian!(
               get_src_edge_jacobian(jgd, i),
               get_dst_edge_jacobian(jgd, i),
@@ -200,7 +200,7 @@ function jac_vec_prod!(dx, Jac::NDJacVecOperator, z)
     checkbounds_p(p, gs.num_v, gs.num_e)
     jgd = Jac.jac_graph_data
 
-    for i in 1:gs.num_e
+    @inbounds for i in 1:gs.num_e
         # Store Edge_jac_src * v_src
         mul!(jgd.e_jac_product[i], get_src_edge_jacobian(jgd, i), view(z, gs.s_e_idx[i]))
         # in-place Add Edge_jac_dst * v_dst
@@ -213,16 +213,17 @@ function jac_vec_prod!(dx, Jac::NDJacVecOperator, z)
         #jgd.e_jac_product[i] .= get_src_edge_jacobian(jgd, i) * view(z, gs.s_e_idx[i]) .+ get_dst_edge_jacobian(jgd, i) * view(z, gs.d_e_idx[i])
     end
 
-    for i in 1:gs.num_v
+    @inbounds for i in 1:gs.num_v
         # Vertex Jac * vertex Variables
         mul!(view(dx, gs.v_idx[i]), get_vertex_jacobian(jgd, i), view(z, gs.v_idx[i]))
 
-        for j in gs.d_v[i]
+        @inbounds for j in gs.d_v[i]
             # add pre-compute edge_product (if gs.d_v not empty)
             view(dx, gs.v_idx[i]) .+= jgd.e_jac_product[j]
         end
 
     end
+    nothing
 end
 
 # functions for NDJacVecOperator callable structs at the end of this module
