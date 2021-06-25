@@ -51,11 +51,11 @@ described vertex the destination (in-edges for directed graphs).
 
 For more details see the documentation.
 """
-@Base.kwdef struct StaticVertex{T} <: VertexFunction
+@Base.kwdef struct StaticVertex{T, J} <: VertexFunction
     f!::T
     dim::Int
     sym=[:v for i in 1:dim]
-    vertex_jacobian! = :undefined
+    vertex_jacobian!::J# need better type signatures later
 end
 
 """
@@ -81,18 +81,18 @@ the source and destination of the described edge.
 
 For more details see the documentation.
 """
-@Base.kwdef struct StaticEdge{T} <: EdgeFunction
+@Base.kwdef struct StaticEdge{T, J} <: EdgeFunction
     f!::T # (e, v_s, v_t, p, t) -> nothing
     dim::Int # number of dimensions of e
     coupling = :undefined # :directed, :symmetric, :antisymmetric, :fiducial, :undirected
     sym=[:e for i in 1:dim] # Symbols for the dimensions
-    edge_jacobian! = :undefined  # edge_jacobian!::F
+    edge_jacobian!::J  # edge_jacobian!::F
 
     function StaticEdge(user_f!::T,
                            dim::Int,
                            coupling::Symbol,
                            sym::Vector{Symbol},
-                           user_edge_jac!) where T # edge_jacobian!::F) where T
+                           user_edge_jac!::F) where {T,F} # edge_jacobian!::F) where T
 
         coupling_types = (:undefined, :directed, :fiducial, :undirected, :symmetric,
                           :antisymmetric)
@@ -105,13 +105,13 @@ For more details see the documentation.
         dim == length(sym) ? nothing : error("Please specify a symbol for every dimension.")
 
         if coupling ∈ [:undefined, :directed]
-            return new{T}(user_f!, dim, coupling, sym, user_edge_jac!)
+            return new{T, F}(user_f!, dim, coupling, sym, user_edge_jac!)
 
         elseif coupling == :fiducial
             dim % 2 == 0 ? nothing : error("Fiducial edges are required to have even dim.
                                             The first dim args are used for src -> dst,
                                             the second for dst -> src coupling.")
-            return new{T}(user_f!, dim, coupling, sym, user_edge_jac!)
+            return new{T, F}(user_f!, dim, coupling, sym, user_edge_jac!)
 
         elseif coupling == :undirected
             # This might cause unexpected behaviour if source and destination vertex don't
@@ -140,7 +140,7 @@ For more details see the documentation.
             end
         end
         # For edges with mass matrix this will be a little more complicated
-        return new{typeof(f!)}(f!, 2dim, coupling, repeat(sym, 2), user_edge_jac!)
+        return new{typeof(f!), F}(f!, 2dim, coupling, repeat(sym, 2), user_edge_jac!)
     end
 end
 
@@ -171,12 +171,12 @@ solved.
 
 For more details see the documentation.
 """
-@Base.kwdef struct ODEVertex{T} <: VertexFunction
+@Base.kwdef struct ODEVertex{T, J} <: VertexFunction
     f!::T # signature (dx, x, edges, p, t) -> nothing
     dim::Int
     mass_matrix=I
     sym=[:v for i in 1:dim]
-    vertex_jacobian! = :undefined  # vertex_jacobian!::F
+    vertex_jacobian!::J # vertex_jacobian!::F
 end
 
 """
