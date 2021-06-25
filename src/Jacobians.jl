@@ -61,9 +61,9 @@ end
     and to the src_edge_jacobian/dst_edge_jacobian of the jth edges, respectively.
 """
 
-@inline get_src_edge_jacobian(jgd::JacGraphData, i::Int) = jgd.e_jac_array[i][1]
-@inline get_dst_edge_jacobian(jgd::JacGraphData, i::Int) = jgd.e_jac_array[i][2]
-@inline get_vertex_jacobian(jgd::JacGraphData, i::Int) = jgd.v_jac_array[i]
+@inline get_src_edge_jacobian(jgd::JacGraphData, i::Int) = @inbounds jgd.e_jac_array[i][1]
+@inline get_dst_edge_jacobian(jgd::JacGraphData, i::Int) = @inbounds jgd.e_jac_array[i][2]
+@inline get_vertex_jacobian(jgd::JacGraphData, i::Int) = @inbounds jgd.v_jac_array[i]
 
 """
     NDJacVecOperator(x, p, t, vertices!, edges!, graph_structure, graph_data, jac_graph_data, parallel)
