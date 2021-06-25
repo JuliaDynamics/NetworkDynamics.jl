@@ -4,6 +4,7 @@ using Reexport
 using DiffEqBase
 using LightGraphs
 
+
 include("Utilities.jl")
 @reexport using .Utilities
 
@@ -22,6 +23,8 @@ include("nd_ODE_Static.jl")
 include("nd_DDE_Static.jl")
 @reexport using .nd_DDE_Static_mod
 
+include("Jacobians.jl")
+@reexport using .Jacobians
 
 export network_dynamics
 
@@ -68,7 +71,7 @@ function collect_ve_info(vertices!, edges!, graph)
 end
 
 """
-    network_dynamics(vertices!, edges!, g; parallel = false)
+    network_dynamics(vertices!, edges!, g; parallel = false, jac = false)
 
 Assembles the the dynamical equations of the network problem into an `ODEFunction`
 compatible with the `DifferentialEquations.jl` solvers. Takes as arguments an array
@@ -76,11 +79,13 @@ of VertexFunctions **`vertices!`**, an array of EdgeFunctions **`edges!`** and a
 `LightGraph.jl` object **`g`**. The optional argument `parallel` is a boolean
 value that denotes if the central loop should be executed in parallel with the number of threads set by the environment variable `JULIA_NUM_THREADS`.
 """
+# Jacobians were first installed exclusively for the combination: ODEVertex and StaticEdge
 function network_dynamics(vertices!::Union{Array{T, 1}, T},
                           edges!::Union{Array{U, 1}, U},
                           graph;
                           x_prototype=zeros(1),
-                          parallel=false) where {T <: ODEVertex, U <: StaticEdge}
+                          parallel=false,
+                          jac = false) where {T <: ODEVertex, U <: StaticEdge}
 
     warn_parallel(parallel)
 
@@ -100,12 +105,27 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T},
 
     graph_data = GraphData(v_array, e_array, graph_stucture)
 
-    nd! = nd_ODE_Static(vertices!, edges!, graph, graph_stucture, graph_data, parallel)
+    nd! = nd_ODE_Static(vertices!, edges!, graph, graph_stucture, graph_data, parallel) # Objekterstellung
+
     mass_matrix = construct_mass_matrix(mmv_array, graph_stucture)
 
-    ODEFunction(nd!; mass_matrix = mass_matrix, syms=symbols)
-end
+    if jac == true
+        # These additional arrays are used for initializing the JacGraphData and will be overwritten
+        v_jac_array = [Array{Float64,2}(undef, dim, dim) for dim in v_dims]
+        e_jac_array = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim) in zip(v_dims, v_dims, v_dims)] # homogene Netzwerke: v_src_dim = v_dst_dim = v_dim
+        e_jac_product = [zeros(v_dims[1]) for i in 1:graph_stucture.num_e]
 
+        jac_graph_data = JacGraphData(v_jac_array, e_jac_array, e_jac_product, graph_stucture) # Funktion
+
+        t = 0.0 # any Float64
+        # p is now "nothing", later we want to implement a union type
+        nd_jac_vec_operator = NDJacVecOperator(similar(v_array), nothing, t, vertices!, edges!, graph_stucture, graph_data, jac_graph_data, parallel)
+
+        return ODEFunction(nd!; mass_matrix = mass_matrix, jac = nd_jac_vec_operator, syms = symbols)
+    end
+
+    return ODEFunction(nd!; mass_matrix = mass_matrix, syms = symbols)
+end
 ## DDE
 
 function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; initial_history=nothing, x_prototype=zeros(1), parallel=false) where {T <: DDEVertex, U <: StaticDelayEdge}
@@ -291,8 +311,8 @@ end
 
 """
 function prepare_edges(edges::Vector, g::SimpleGraph)
-    # Depending on the coupling we might get different eltypes
-    new_edges = Vector{EdgeFunction}(undef, length(edges))
+    # This is a bit hacky, gets the de-parametrized type
+    new_edges = Vector{Base.typename(eltype(edges)).wrapper}(undef, length(edges))
     infobool = true
     for (i, edge) in enumerate(edges)
         if edge.coupling == :directed
@@ -307,16 +327,13 @@ function prepare_edges(edges::Vector, g::SimpleGraph)
             new_edges[i] = edges[i]
         end
     end
-    # by recreating the array the eltype gets narrowed down as much as possible
-    narrowed_type = [e for e in new_edges]
-    return narrowed_type
+    return new_edges
 end
 
 """
 """
 function prepare_edges(edges::Vector, g::SimpleDiGraph)
-    # Depending on the coupling we might get different eltypes
-    new_edges = Vector{EdgeFunction}(undef, length(edges))
+    new_edges = Vector{Base.typename(eltype(edges)).wrapper}(undef, length(edges))
     infobool = true
     for (i, edge) in enumerate(edges)
         if edge.coupling ∈ (:symmetric, :antisymmetric, :undirected, :fiducial)
@@ -331,28 +348,28 @@ function prepare_edges(edges::Vector, g::SimpleDiGraph)
             new_edges[i] = edges[i]
         end
     end
-    # by recreating the array the eltype gets narrowed down as much as possible
-    narrowed_type = [e for e in new_edges]
-    return narrowed_type
+    return new_edges
 end
 
 
 
 
 @inline function reconstruct_edge(edge::StaticEdge, coupling::Symbol)
-    let f! = edge.f!, dim = edge.dim, sym = edge.sym
+    let f! = edge.f!, dim = edge.dim, sym = edge.sym, edge_jacobian! = edge.edge_jacobian!
         return StaticEdge(f! = f!,
                           dim = dim,
                           coupling = coupling,
-                          sym = sym)
+                          sym = sym,
+                          edge_jacobian! = edge.edge_jacobian!)
     end
 end
 @inline function reconstruct_edge(edge::StaticDelayEdge, coupling::Symbol)
-    let f! = edge.f!, dim = edge.dim, sym = edge.sym
+    let f! = edge.f!, dim = edge.dim, sym = edge.sym, edge_jacobian! = edge.edge_jacobian!
         return StaticDelayEdge(f! = f!,
                                dim = dim,
                                coupling = coupling,
-                               sym = sym)
+                               sym = sym,
+                               edge_jacobian! = edge.edge_jacobian!)
     end
 end
 @inline function reconstruct_edge(edge::ODEEdge, coupling::Symbol)
