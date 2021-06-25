@@ -116,23 +116,26 @@ function update_coefficients!(Jac::NDJacVecOperator, x, p, t)
 
     gs = Jac.graph_structure
     checkbounds_p(p, gs.num_v, gs.num_e)
-    gd = prep_gd(x, x, Jac.graph_data, Jac.graph_structure)
+    #gd = prep_gd(x, x, Jac.graph_data, Jac.graph_structure)
     jgd = Jac.jac_graph_data
 
-    @inbounds for i in 1:gs.num_v
-        maybe_idx(Jac.vertices!, i).vertex_jacobian!(
+    for i in 1:gs.num_v
+        @inbounds maybe_idx(Jac.vertices!, i).vertex_jacobian!(
           get_vertex_jacobian(jgd, i),
-          get_vertex(gd, i),
+          view(x, gs.v_idx[i]),
+          #get_vertex(gd, i),
           p_v_idx(p, i),
           t)
     end
 
-    @inbounds for i in 1:gs.num_e
-          maybe_idx(Jac.edges!, i).edge_jacobian!(
+    for i in 1:gs.num_e
+          @inbounds maybe_idx(Jac.edges!, i).edge_jacobian!(
               get_src_edge_jacobian(jgd, i),
               get_dst_edge_jacobian(jgd, i),
-              get_src_vertex(gd, i),
-              get_dst_vertex(gd, i),
+              view(x, gs.s_e_idx[i]),
+              #get_src_vertex(gd, i),
+              view(x, gs.d_e_idx[i]),
+              #get_dst_vertex(gd, i),
               p_e_idx(p, i),
               t)
       end
@@ -170,10 +173,10 @@ function jac_vec_prod(Jac::NDJacVecOperator, z)
     # first for loop that considers the mutliplication of each edge jacobians with the corresponding component of z
     for i in 1:gs.num_e
         # Store Edge_jac_src * v_src
-        mul!(jgd.e_jac_product[i], get_src_edge_jacobian(jgd, i), view(z, gs.s_e_idx[i]))
+        @inbounds mul!(jgd.e_jac_product[i], get_src_edge_jacobian(jgd, i), view(z, gs.s_e_idx[i]))
         # in-place Add Edge_jac_dst * v_dst
         # mul!(C,A,B,α,β) = A B α + C β
-        mul!(jgd.e_jac_product[i],
+        @inbounds mul!(jgd.e_jac_product[i],
              get_dst_edge_jacobian(jgd, i),
              view(z, gs.d_e_idx[i]), 1, 1) # α = 1, β = 1
     end
@@ -185,11 +188,11 @@ function jac_vec_prod(Jac::NDJacVecOperator, z)
     # second for loop in which the multiplication of vertex jacobian and the corresponding component of z is done with addition of the e_jac_product to dx
     for i in 1:gs.num_v
         # Vertex Jac * vertex Variables
-        mul!(view(dx, gs.v_idx[i]), get_vertex_jacobian(jgd, i), view(z, gs.v_idx[i]))
+        @inbounds mul!(view(dx, gs.v_idx[i]), get_vertex_jacobian(jgd, i), view(z, gs.v_idx[i]))
 
         for j in gs.d_v[i]
             # add pre-compute edge_product (if gs.d_v not empty)
-            view(dx, gs.v_idx[i]) .+= jgd.e_jac_product[j]
+            @inbounds view(dx, gs.v_idx[i]) .+= jgd.e_jac_product[j]
         end
 
     end
@@ -209,12 +212,12 @@ function jac_vec_prod!(dx, Jac::NDJacVecOperator, z)
     checkbounds_p(p, gs.num_v, gs.num_e)
     jgd = Jac.jac_graph_data
 
-    @inbounds for i in 1:gs.num_e
+    for i in 1:gs.num_e
         # Store Edge_jac_src * v_src
-        mul!(jgd.e_jac_product[i], get_src_edge_jacobian(jgd, i), view(z, gs.s_e_idx[i]))
+        @inbounds mul!(jgd.e_jac_product[i], get_src_edge_jacobian(jgd, i), view(z, gs.s_e_idx[i]))
         # in-place Add Edge_jac_dst * v_dst
         # mul!(C,A,B,α,β) = A B α + C β
-        mul!(jgd.e_jac_product[i],
+        @inbounds mul!(jgd.e_jac_product[i],
              get_dst_edge_jacobian(jgd, i),
              view(z, gs.d_e_idx[i]), 1, 1) # α = 1, β = 1
 
@@ -222,13 +225,13 @@ function jac_vec_prod!(dx, Jac::NDJacVecOperator, z)
         #jgd.e_jac_product[i] .= get_src_edge_jacobian(jgd, i) * view(z, gs.s_e_idx[i]) .+ get_dst_edge_jacobian(jgd, i) * view(z, gs.d_e_idx[i])
     end
 
-    @inbounds for i in 1:gs.num_v
+    for i in 1:gs.num_v
         # Vertex Jac * vertex Variables
-        mul!(view(dx, gs.v_idx[i]), get_vertex_jacobian(jgd, i), view(z, gs.v_idx[i]))
+        @inbounds mul!(view(dx, gs.v_idx[i]), get_vertex_jacobian(jgd, i), view(z, gs.v_idx[i]))
 
-        @inbounds for j in gs.d_v[i]
+        for j in gs.d_v[i]
             # add pre-compute edge_product (if gs.d_v not empty)
-            view(dx, gs.v_idx[i]) .+= jgd.e_jac_product[j]
+            @inbounds view(dx, gs.v_idx[i]) .+= jgd.e_jac_product[j]
         end
 
     end
