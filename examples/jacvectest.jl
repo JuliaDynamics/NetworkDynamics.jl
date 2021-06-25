@@ -99,33 +99,8 @@ plot!(plot_with_jac, solve(ode_prob,  Tsit5()), color = :green)
 
 ## Large
 
-M=1000
-g = erdos_renyi(M, 4)
-
-nd_jac = network_dynamics(nd_jac_vertex, nd_jac_edge, g, jac = true)
-
-nd = network_dynamics(nd_jac_vertex, nd_jac_edge, g, jac = false)
-
-x0 = rand(2M)
-
-ode_prob_jac = ODEProblem(nd_jac, x0, (0.0, 5.0))
-ode_prob = ODEProblem(nd, x0, (0.0, 5.0))
-
-@btime solve(ode_prob_jac,  KenCarp4(linsolve=LinSolveGMRES()));
-@btime solve(ode_prob, KenCarp4(linsolve=LinSolveGMRES()));
-@btime solve(ode_prob,Tsit5());
-
-sol_jac = solve(ode_prob_jac,
-     KenCarp4(linsolve=LinSolveGMRES()));
-sol = solve(ode_prob,  KenCarp4(linsolve=LinSolveGMRES()));
-
-print(sol.destats)
-print(sol_jac.destats)
-
-### HUGE
-
-M= 500000
-g = erdos_renyi(M, 4)
+M=501
+g = watts_strogatz(M, 2,0)
 
 nd_jac = network_dynamics(nd_jac_vertex, nd_jac_edge, g, jac = true)
 
@@ -137,7 +112,36 @@ ode_prob_jac = ODEProblem(nd_jac, x0, (0.0, 5.0))
 ode_prob = ODEProblem(nd, x0, (0.0, 5.0))
 
 @btime solve(ode_prob_jac,  TRBDF2(linsolve=LinSolveGMRES()));
-#@btime solve(ode_prob, KenCarp4(linsolve=LinSolveGMRES()));
+@btime solve(ode_prob, TRBDF2());
+
+@btime solve(ode_prob,Tsit5());
+
+sol_jac = solve(ode_prob_jac,
+     TRBDF2(linsolve=LinSolveGMRES()));
+sol = solve(ode_prob,  TRBDF2(linsolve=LinSolveGMRES()));
+plot_with_jac = plot(sol_jac, vars=[1,2,3,4],color = :black)
+plot!(plot_with_jac, sol,  vars=[1,2,3,4], color = :red)#, linestyle = :dash)
+
+
+print(sol.destats)
+print(sol_jac.destats)
+
+### HUGE
+
+M= 500000
+g = watts_strogatz(M, 2,0)
+
+nd_jac = network_dynamics(nd_jac_vertex, nd_jac_edge, g, jac = true)
+
+nd = network_dynamics(nd_jac_vertex, nd_jac_edge, g, jac = false)
+
+x0 = rand(2M)
+
+ode_prob_jac = ODEProblem(nd_jac, x0, (0.0, 5.0))
+ode_prob = ODEProblem(nd, x0, (0.0, 5.0))
+
+@btime solve(ode_prob_jac,  TRBDF2(linsolve=LinSolveGMRES()));
+@time solve(ode_prob, TRBDF2());
 @btime solve(ode_prob,Tsit5());
 
 sol_jac = solve(ode_prob_jac,
@@ -146,3 +150,4 @@ sol = solve(ode_prob,  KenCarp4(linsolve=LinSolveGMRES()));
 
 print(sol.destats)
 print(sol_jac.destats)
+plot_with_jac = plot(sol_jac, vars=[10, 20, 30, 40],color = :black)
