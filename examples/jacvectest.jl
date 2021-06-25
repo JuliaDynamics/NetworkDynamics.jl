@@ -37,6 +37,7 @@ function jac_vertex!(J::AbstractMatrix, v, p, t)
     #J = internal_jacobian(J, v, p, t)
     J[1, 1] = 0.0
     J[2, 1] = 0.0
+    nothing
 end
 
 function jac_edge!(J_s::AbstractMatrix, J_d::AbstractMatrix, v_s, v_d, p, t)
@@ -45,6 +46,7 @@ function jac_edge!(J_s::AbstractMatrix, J_d::AbstractMatrix, v_s, v_d, p, t)
 
    J_d[1, 1] = -1.0
 #   J_d[2, 1] = 0.0
+    nothing
 end
 
 nd_jac_vertex = ODEVertex(f! = diffusionvertex!, dim = 2, vertex_jacobian! = jac_vertex!)

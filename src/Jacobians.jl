@@ -140,6 +140,7 @@ function update_coefficients!(Jac::NDJacVecOperator, x, p, t)
     Jac.x = x
     Jac.p = p
     Jac.t = t
+    nothing
 end
 
 # functions for NDJacVecOperator: both syntaxes must be taken into account: Jac, z and dx, Jac, z
