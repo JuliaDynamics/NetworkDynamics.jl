@@ -335,42 +335,42 @@ export get_vertex, get_edge, get_src_vertex, get_dst_vertex, get_src_edges, get_
 
 Returns a view-like access to the underlying data of the i-th vertex.
 """
-@inline get_vertex(gd::GraphData, i::Int) = gd.v[i]
+@inline @Base.propagate_inbounds get_vertex(gd::GraphData, i::Int) = gd.v[i]
 
 """
     get_edge(gd::GraphData, idx::Int) -> View
 
 Returns a view-like access to the underlying data of the i-th edge.
 """
-@inline get_edge(gd::GraphData, i::Int) = gd.e[i]
+@inline @Base.propagate_inbounds get_edge(gd::GraphData, i::Int) = gd.e[i]
 
 """
     get_src_vertex(gd::GraphData, idx::Int) -> View
 
 Returns a view-like access to the underlying data of source vertex of the i-th edge.
 """
-@inline get_src_vertex(gd::GraphData, i::Int) = gd.v_s_e[i]
+@inline @Base.propagate_inbounds get_src_vertex(gd::GraphData, i::Int) = gd.v_s_e[i]
 
 """
     get_dst_vertex(gd::GraphData, idx::Int) -> View
 
 Returns a view-like access to the underlying data of destination vertex of the i-th edge.
 """
-@inline get_dst_vertex(gd::GraphData, i::Int) = gd.v_d_e[i]
+@inline @Base.propagate_inbounds get_dst_vertex(gd::GraphData, i::Int) = gd.v_d_e[i]
 
 """
     get_src_edges(gd::GraphData, i::Int)
 
 Returns a Vector of view-like accesses to all the (half-)edges that have the i-th vertex as source (for directed graphs these are the out-edges).
 """
-@inline get_src_edges(gd::GraphData, i::Int) = error("Not implemented.")
+@inline @Base.propagate_inbounds get_src_edges(gd::GraphData, i::Int) = error("Not implemented.")
 
 """
     get_dst_edges(gd::GraphData, i::Int)
 
 Returns a Vector of view-like accesses to all the (half-)edges that have the i-th vertex as destination (for directed graphs these are the in-edges).
 """
-@inline get_dst_edges(gd::GraphData, i) = gd.dst_edges[i]
+@inline @Base.propagate_inbounds get_dst_edges(gd::GraphData, i) = gd.dst_edges[i]
 
 
 
