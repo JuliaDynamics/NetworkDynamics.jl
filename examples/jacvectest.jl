@@ -65,8 +65,8 @@ ode_prob_jac = ODEProblem(nd_jac, x0, (0.0, 5.0))
 ode_prob = ODEProblem(nd, x0, (0.0, 5.0))
 
 sol_jac = solve(ode_prob_jac,
-    TRBDF2(linsolve=LinSolveGMRES()));
-sol = solve(ode_prob, TRBDF2(linsolve=LinSolveGMRES()));
+     KenCarp3(linsolve=LinSolveGMRES(abstol=1e-16, reltol=1e-16)));
+sol = solve(ode_prob,  KenCarp3(linsolve=LinSolveGMRES(abstol=1e-16, reltol=1e-16)));
 
 print(sol.destats)
 print(sol_jac.destats)
@@ -88,6 +88,61 @@ update_coefficients!(nd_jac.jac_prototype, x0, nothing, 0.)
 
 plot_with_jac = plot(sol_jac, color = :black)
 plot!(plot_with_jac, sol, color = :red)#, linestyle = :dash)
+plot!(plot_with_jac, solve(ode_prob,  KenCarp5(linsolve=LinSolveGMRES(abstol=1e-16, reltol=1e-16))), color = :blue)
+plot!(plot_with_jac, solve(ode_prob,  Tsit5()), color = :green)
 
-@btime solve(ode_prob_jac, TRBDF2(linsolve=LinSolveGMRES())); # 5933 allocations, 1.194 ms
-@btime solve(ode_prob, TRBDF2(linsolve=LinSolveGMRES())); # 1721 allocations, 574.314 micro sec = 0.574314 ms
+
+@btime solve(ode_prob_jac,  KenCarp4(linsolve=LinSolveGMRES(abstol=1e-16, reltol=1e-16)));
+@btime solve(ode_prob, KenCarp4(linsolve=LinSolveGMRES(abstol=1e-16, reltol=1e-16)));
+
+@btime solve(ode_prob, Tsit5());
+
+## Large
+
+M=1000
+g = erdos_renyi(M, 4)
+
+nd_jac = network_dynamics(nd_jac_vertex, nd_jac_edge, g, jac = true)
+
+nd = network_dynamics(nd_jac_vertex, nd_jac_edge, g, jac = false)
+
+x0 = rand(2M)
+
+ode_prob_jac = ODEProblem(nd_jac, x0, (0.0, 5.0))
+ode_prob = ODEProblem(nd, x0, (0.0, 5.0))
+
+@btime solve(ode_prob_jac,  KenCarp4(linsolve=LinSolveGMRES()));
+@btime solve(ode_prob, KenCarp4(linsolve=LinSolveGMRES()));
+@btime solve(ode_prob,Tsit5());
+
+sol_jac = solve(ode_prob_jac,
+     KenCarp4(linsolve=LinSolveGMRES()));
+sol = solve(ode_prob,  KenCarp4(linsolve=LinSolveGMRES()));
+
+print(sol.destats)
+print(sol_jac.destats)
+
+### HUGE
+
+M= 500000
+g = erdos_renyi(M, 4)
+
+nd_jac = network_dynamics(nd_jac_vertex, nd_jac_edge, g, jac = true)
+
+nd = network_dynamics(nd_jac_vertex, nd_jac_edge, g, jac = false)
+
+x0 = rand(2M)
+
+ode_prob_jac = ODEProblem(nd_jac, x0, (0.0, 5.0))
+ode_prob = ODEProblem(nd, x0, (0.0, 5.0))
+
+@btime solve(ode_prob_jac,  TRBDF2(linsolve=LinSolveGMRES()));
+#@btime solve(ode_prob, KenCarp4(linsolve=LinSolveGMRES()));
+@btime solve(ode_prob,Tsit5());
+
+sol_jac = solve(ode_prob_jac,
+     TRBDF2(linsolve=LinSolveGMRES()));
+sol = solve(ode_prob,  KenCarp4(linsolve=LinSolveGMRES()));
+
+print(sol.destats)
+print(sol_jac.destats)
