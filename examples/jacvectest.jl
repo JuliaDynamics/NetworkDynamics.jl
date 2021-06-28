@@ -18,6 +18,8 @@ add_edge!(g, 2, 3)
 add_edge!(g, 3, 4)
 add_edge!(g, 1, 3)
 
+g = watts_strogatz(N^2,N,0.)
+
 
 function diffusionedge!(e, v_s, v_d, p, t)
     e[1] = v_s[1] - v_d[1]
@@ -60,6 +62,7 @@ nd_jac = network_dynamics(nd_jac_vertex, nd_jac_edge, g, jac = true)
 nd = network_dynamics(nd_jac_vertex, nd_jac_edge, g, jac = false)
 
 x0 = [1.0, 2.0, 3.0, 4.0, 1.0, 2.0, 3.0, 4.0]
+x0 = randn(2N^2)
 
 ode_prob_jac = ODEProblem(nd_jac, x0, (0.0, 5.0))
 ode_prob = ODEProblem(nd, x0, (0.0, 5.0))
