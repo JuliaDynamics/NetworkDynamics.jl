@@ -51,8 +51,8 @@ end
 
 function JacGraphData(v_jac_array, e_jac_array, e_jac_product_array, gs::GraphStruct)
     v_jac_array = [Array{Float64,2}(undef, dim, dim) for dim in gs.v_dims]
-    e_jac_array = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim) in zip(gs.v_dims, gs.v_dims, gs.v_dims)] # homogene Netzwerke: v_src_dim = v_dst_dim = v_dim
-    e_jac_product = [zeros(gs.v_dims[1]) for i in 1:gs.num_e]
+    e_jac_array = [[zeros(edim, srcdim), zeros(edim, dstdim)] for (edim, srcdim, dstdim) in zip(gs.e_dims, gs.v_dims[gs.s_e], gs.v_dims[gs.d_e])] # homogene Netzwerke: v_src_dim = v_dst_dim = v_dim
+    e_jac_product = [zeros(dim) for dim in gs.v_dims[gs.d_e]]
     JacGraphData(v_jac_array, e_jac_array, e_jac_product)
 end
 
