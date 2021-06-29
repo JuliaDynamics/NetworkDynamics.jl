@@ -55,7 +55,7 @@ For more details see the documentation.
     f!::T
     dim::Int
     sym=[:v for i in 1:dim]
-    vertex_jacobian!::J# need better type signatures later
+    vertex_jacobian!::J # need better type signatures later
 end
 
 """

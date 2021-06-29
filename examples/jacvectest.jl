@@ -29,20 +29,22 @@ function diffusionvertex!(dv, v, edges, p, t)
     nothing
 end
 
-@Base.propagate_inbounds function jac_vertex!(J::AbstractMatrix, v, p, t)
-    #J = internal_jacobian(J, v, p, t)
-    J[1, 1] = 0.0
-    J[2, 1] = 0.0
+@Base.propagate_inbounds function jac_vertex!(J_v::AbstractMatrix, J_e::AbstractMatrix, v, p, t)
+    # J_v = internal_jacobian(J, v, p, t)
+    J_v[1, 1] = 0.0
+    J_v[2, 1] = 0.0
+
+    J_e[1, 1] = 1.
+    J_e[2, 1] = 1.
     nothing
 end
 
 @Base.propagate_inbounds function jac_edge!(J_s::AbstractMatrix, J_d::AbstractMatrix, v_s, v_d, p, t)
-    # Here we are mixing edge and vertex
    J_s[1, 1] = 1.0
-   J_s[2, 1] = 1.0
+   #J_s[1, 2] = 0.
 
    J_d[1, 1] = -1.0
-   J_d[2, 1] = -1.0
+   #J_d[1, 2] = 0.
     nothing
 end
 
@@ -52,6 +54,8 @@ nd_jac_edge = StaticEdge(f! = diffusionedge!, dim = 1, coupling = :undirected, e
 nd_jac = network_dynamics(nd_jac_vertex, nd_jac_edge, g, jac = true)
 
 nd = network_dynamics(nd_jac_vertex, nd_jac_edge, g, jac = false)
+
+nd_jac.jac_prototype.jac_graph_data
 
 x0 = randn(2N^2)
 

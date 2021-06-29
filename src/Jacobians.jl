@@ -44,15 +44,16 @@ export JacGraphData, NDJacVecOperator
 """
 
 struct JacGraphData
-    v_jac_array::Array{Array{Float64, 2}, 1} # contains the jacobians for each vertex
+    v_jac_array::Array{Array{Array{Float64, 2}, 1}, 1} # contains the jacobians for each vertex
     e_jac_array::Array{Array{Array{Float64, 2}, 1}, 1} # contains the jacobians for each edge
     e_jac_product::Array{Array{Float64, 1}, 1} # is needed later in jac_vec_prod(!) as a storage for the products of edge jacobians and vectors z
 end
 
-function JacGraphData(v_jac_array, e_jac_array, e_jac_product_array, gs::GraphStruct)
-    v_jac_array = [zeros(dim, dim) for dim in gs.v_dims]
-    e_jac_array = [[zeros(edim, srcdim), zeros(edim, dstdim)] for (edim, srcdim, dstdim) in zip(gs.e_dims, gs.v_dims[gs.s_e], gs.v_dims[gs.d_e])] # homogene Netzwerke: v_src_dim = v_dst_dim = v_dim
-    e_jac_product = [zeros(dim) for dim in gs.v_dims[gs.d_e]]
+function JacGraphData(gs::GraphStruct)
+    # For prototyping assume homogeneous edges and remove the interface dim doubling
+    v_jac_array = [[zeros(vdim, vdim), zeros(vdim, edim)] for (vdim, edim) in zip(gs.v_dims, Iterators.repeated(gs.e_dims[1] ÷ 2))]
+    e_jac_array = [[zeros(edim, srcdim), zeros(edim, dstdim)] for (edim, srcdim, dstdim) in zip( Iterators.repeated(gs.e_dims[1] ÷ 2), gs.v_dims[gs.s_e], gs.v_dims[gs.d_e])] # homogene Netzwerke: v_src_dim = v_dst_dim = v_dim
+    e_jac_product = [zeros(dim) for dim in Iterators.repeated(gs.e_dims[1] ÷ 2, gs.num_e)]
     JacGraphData(v_jac_array, e_jac_array, e_jac_product)
 end
 
@@ -63,10 +64,11 @@ end
 
 @inline @Base.propagate_inbounds get_src_edge_jacobian(jgd::JacGraphData, i::Int) = jgd.e_jac_array[i][1]
 @inline @Base.propagate_inbounds get_dst_edge_jacobian(jgd::JacGraphData, i::Int) = jgd.e_jac_array[i][2]
-@inline @Base.propagate_inbounds get_vertex_jacobian(jgd::JacGraphData, i::Int) = jgd.v_jac_array[i]
+@inline @Base.propagate_inbounds get_internal_vertex_jacobian(jgd::JacGraphData, i::Int) = jgd.v_jac_array[i][1]
+@inline @Base.propagate_inbounds get_aggregation_vertex_jacobian(jgd::JacGraphData, i::Int) = jgd.v_jac_array[i][2]
 
 """
-    NDJacVecOperator(x, p, t, vertices!, edges!, graph_structure, graph_data, jac_graph_data, parallel)
+    NDJacVecOperator(x, p, t, vertices!, edges!, graph_structure, jac_graph_data, parallel)
 
 The structure `NDJacVecOperator` is based on the JacVecOperator from DiffEqOperators.jl.
 The corresponding object forms the Jacobian of the differential equations with respect
@@ -78,30 +80,29 @@ Thus, the functions for the jacobians of vertices and edges must have the follow
 Note that the edge_jacobian is composed of the subarrays J_s and J_d as described above.
 
 Further fields are an array of VertexFunctions `vertices!`,
-an array of EdgeFunctions `edges!`, the structure `graph_structure` and the data `graph_data`
+an array of EdgeFunctions `edges!`, the structure `graph_structure`
 of the underlying graph `g` as well as the `jac_graph_data` which comprises the jacobians of
 edges and jacobians. The optional argument `parallel` is a boolean
 value that denotes if the central loop should be executed in parallel with the number of
 threads set by the environment variable `JULIA_NUM_THREADS`.
 """
 
-mutable struct NDJacVecOperator{T, uType, tType, T1, T2, GD, JGD} <: DiffEqBase.AbstractDiffEqLinearOperator{T} # mutable da x, p, t geupdated werden
+mutable struct NDJacVecOperator{T, uType, tType, T1, T2, JGD} <: DiffEqBase.AbstractDiffEqLinearOperator{T} # mutable da x, p, t geupdated werden
     x::uType
     p
     t::tType
     vertices!::T1
     edges!::T2
     graph_structure::GraphStruct
-    graph_data::GD
     jac_graph_data::JGD
     parallel::Bool
 
-    function NDJacVecOperator{T}(x, p, t, vertices!, edges!, graph_structure, graph_data, jac_graph_data, parallel) where T
-        new{T, typeof(x), typeof(t), typeof(vertices!), typeof(edges!), typeof(graph_data), typeof(jac_graph_data)}(x, p, t, vertices!, edges!, graph_structure, graph_data, jac_graph_data, parallel)
+    function NDJacVecOperator{T}(x, p, t, vertices!, edges!, graph_structure, jac_graph_data, parallel) where T
+        new{T, typeof(x), typeof(t), typeof(vertices!), typeof(edges!), typeof(jac_graph_data)}(x, p, t, vertices!, edges!, graph_structure, jac_graph_data, parallel)
     end
 
-    function NDJacVecOperator(x, p, t, vertices!, edges!, graph_structure, graph_data, jac_graph_data, parallel)
-        NDJacVecOperator{eltype(x)}(x, p, t, vertices!, edges!, graph_structure, graph_data, jac_graph_data, parallel)
+    function NDJacVecOperator(x, p, t, vertices!, edges!, graph_structure,  jac_graph_data, parallel)
+        NDJacVecOperator{eltype(x)}(x, p, t, vertices!, edges!, graph_structure, jac_graph_data, parallel)
     end
 end
 
@@ -120,9 +121,9 @@ function update_coefficients!(Jac::NDJacVecOperator, x, p, t)
 
     for i in 1:gs.num_v
         @inbounds maybe_idx(Jac.vertices!, i).vertex_jacobian!(
-          get_vertex_jacobian(jgd, i),
+          get_internal_vertex_jacobian(jgd, i),
+          get_aggregation_vertex_jacobian(jgd, i),
           view(x, gs.v_idx[i]),
-          #get_vertex(gd, i),
           p_v_idx(p, i),
           t)
     end
@@ -132,9 +133,7 @@ function update_coefficients!(Jac::NDJacVecOperator, x, p, t)
               get_src_edge_jacobian(jgd, i),
               get_dst_edge_jacobian(jgd, i),
               view(x, gs.s_e_idx[i]),
-              #get_src_vertex(gd, i),
               view(x, gs.d_e_idx[i]),
-              #get_dst_vertex(gd, i),
               p_e_idx(p, i),
               t)
       end
@@ -222,12 +221,12 @@ Analogous to function jac_vec_prod, using the already existing `dx` array.
 """
 
 function jac_vec_prod!(dx, Jac::NDJacVecOperator, z)
+
     gs = Jac.graph_structure
-    p = Jac.p
-    #x = Jac.x
-    checkbounds_p(p, gs.num_v, gs.num_e)
     jgd = Jac.jac_graph_data
-    dx .= 0
+
+    # fill dx with zeros
+    fill!(dx, zero(dx[1]))
 
     # first multiply each edge jacobians with the corresponding component of z
 
@@ -238,22 +237,26 @@ function jac_vec_prod!(dx, Jac::NDJacVecOperator, z)
         # Store Edge_jac_src * v_src
         @inbounds mul!(jgd.e_jac_product[i], get_src_edge_jacobian(jgd, i), view(z, gs.s_e_idx[i]))
         # in-place Add Edge_jac_dst * v_dst
-        # mul!(C,A,B,α,β) = A B α + C β
+        # mul!(C,A,B,α,β): C = A B α + C β
         @inbounds mul!(jgd.e_jac_product[i],
              get_dst_edge_jacobian(jgd, i),
              view(z, gs.d_e_idx[i]), 1, 1) # α = 1, β = 1
 
         # The following summation should be different depending on graph and coupling type
-
-        @inbounds view(dx, gs.d_e_idx[i]).+= jgd.e_jac_product[i] #*J_va
-        @inbounds view(dx, gs.s_e_idx[i]).-= jgd.e_jac_product[i] #*J_va
+        # To avoid matrix multiplications, the sum over all edges could be done first
+        @inbounds mul!(view(dx, gs.d_e_idx[i]),
+                       get_aggregation_vertex_jacobian(jgd, gs.d_e[i]),
+                       jgd.e_jac_product[i], 1, 1)
+        @inbounds mul!(view(dx, gs.s_e_idx[i]),
+                       get_aggregation_vertex_jacobian(jgd, gs.s_e[i]),
+                       jgd.e_jac_product[i], -1, 1) # note the -1
 
     end
 
     # Finally internal vertex  Jac * vertex Variables
     for i in 1:gs.num_v
         @inbounds mul!(view(dx, gs.v_idx[i]),
-                       get_vertex_jacobian(jgd, i), view(z, gs.v_idx[i]), 1, 1)
+                       get_internal_vertex_jacobian(jgd, i), view(z, gs.v_idx[i]), 1, 1)
     end
     nothing
 end

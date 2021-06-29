@@ -110,16 +110,14 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T},
     mass_matrix = construct_mass_matrix(mmv_array, graph_stucture)
 
     if jac == true
-        # These additional arrays are used for initializing the JacGraphData and will be overwritten
-        v_jac_array = [Array{Float64,2}(undef, dim, dim) for dim in v_dims]
-        e_jac_array = [[zeros(dim, srcdim), zeros(dim, dstdim)] for (dim, srcdim, dstdim) in zip(v_dims, v_dims, v_dims)] # homogene Netzwerke: v_src_dim = v_dst_dim = v_dim
-        e_jac_product = [zeros(v_dims[1]) for i in 1:graph_stucture.num_e]
 
-        jac_graph_data = JacGraphData(v_jac_array, e_jac_array, e_jac_product, graph_stucture) # Funktion
+
+        jac_graph_data = JacGraphData(graph_stucture)
 
         t = 0.0 # any Float64
         # p is now "nothing", later we want to implement a union type
-        nd_jac_vec_operator = NDJacVecOperator(similar(v_array), nothing, t, vertices!, edges!, graph_stucture, graph_data, jac_graph_data, parallel)
+        p = nothing
+        nd_jac_vec_operator = NDJacVecOperator(similar(v_array), p, t, vertices!, edges!, graph_stucture, jac_graph_data, parallel)
 
         return ODEFunction(nd!; mass_matrix = mass_matrix, jac_prototype = nd_jac_vec_operator, syms = symbols)
     end
