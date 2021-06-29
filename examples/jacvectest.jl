@@ -10,14 +10,6 @@ using BenchmarkTools
 
 N = 4
 
-
-g = SimpleGraph(N)
-
-add_edge!(g, 1, 2)
-add_edge!(g, 2, 3)
-add_edge!(g, 3, 4)
-add_edge!(g, 1, 3)
-
 g = watts_strogatz(N^2,N,0.)
 
 
@@ -45,58 +37,72 @@ end
 end
 
 @Base.propagate_inbounds function jac_edge!(J_s::AbstractMatrix, J_d::AbstractMatrix, v_s, v_d, p, t)
+    # Here we are mixing edge and vertex
    J_s[1, 1] = 1.0
-#   J_s[2, 1] = 0.0
+   J_s[2, 1] = 1.0
 
    J_d[1, 1] = -1.0
-#   J_d[2, 1] = 0.0
+   J_d[2, 1] = -1.0
     nothing
 end
 
 nd_jac_vertex = ODEVertex(f! = diffusionvertex!, dim = 2, vertex_jacobian! = jac_vertex!)
-
 nd_jac_edge = StaticEdge(f! = diffusionedge!, dim = 1, coupling = :undirected, edge_jacobian! = jac_edge!)
 
 nd_jac = network_dynamics(nd_jac_vertex, nd_jac_edge, g, jac = true)
 
 nd = network_dynamics(nd_jac_vertex, nd_jac_edge, g, jac = false)
 
-x0 = [1.0, 2.0, 3.0, 4.0, 1.0, 2.0, 3.0, 4.0]
 x0 = randn(2N^2)
 
 ode_prob_jac = ODEProblem(nd_jac, x0, (0.0, 5.0))
 ode_prob = ODEProblem(nd, x0, (0.0, 5.0))
 
-sol_jac = solve(ode_prob_jac,
-     KenCarp3(linsolve=LinSolveGMRES(abstol=1e-16, reltol=1e-16)));
-sol = solve(ode_prob,  KenCarp3(linsolve=LinSolveGMRES(abstol=1e-16, reltol=1e-16)));
+sol_jac = solve(ode_prob_jac, TRBDF2(linsolve=LinSolveGMRES()));
+sol = solve(ode_prob, TRBDF2(linsolve=LinSolveGMRES()));
 
 print(sol.destats)
 print(sol_jac.destats)
 
 
+M=N^2
+dx = ones(2M)
+J = zeros(2M,2M)
+z  = randn(2M)
 
-dx = randn(2N)
-z  = randn(2N)
-mul!(dx, nd_jac.jac_prototype, z)
-@allocated mul!(dx, nd_jac.jac_prototype, z)
+using ForwardDiff
 
+z = [1; zeros(2M-1)]
+
+ForwardDiff.jacobian((out, x) -> nd_jac(out, x, 0., 0.), dx, x0) #*  shuffle!(z)
+
+
+
+update_coefficients!(nd_jac.jac_prototype, x0, 0., 0.)
+begin
+    dx = zeros(2M, 2M)
+    for i = 1:2M
+        z = zeros(2M)
+        z[i] = 1
+        mul!(view(dx,:,i), nd_jac.jac_prototype, z)
+    end
+    dx
+end
 
 
 update_coefficients!(nd_jac.jac_prototype, x0, nothing, 0.)
 @allocated(update_coefficients!(nd_jac.jac_prototype, z, nothing, 0.))
 
+dx = ones(2M)
+@allocated mul!(dx, nd_jac.jac_prototype, z)
+
+@btime solve(ode_prob_jac, KenCarp4(linsolve=LinSolveGMRES()));
+@btime solve(ode_prob, KenCarp4(linsolve=LinSolveGMRES()));
 
 
+plot_with_jac = plot(sol_jac, color = :black, vars=1:8)
+plot!(plot_with_jac, sol, color = :red, linestyle = :dash, vars=1:8)
 
-plot_with_jac = plot(sol_jac, color = :black)
-plot!(plot_with_jac, sol, color = :red)#, linestyle = :dash)
-plot!(plot_with_jac, solve(ode_prob,  KenCarp5(linsolve=LinSolveGMRES(abstol=1e-16, reltol=1e-16))), color = :blue)
-plot!(plot_with_jac, solve(ode_prob,  Tsit5()), color = :green)
-
-
-@btime solve(ode_prob_jac,  KenCarp4(linsolve=LinSolveGMRES(abstol=1e-16, reltol=1e-16)));
-@btime solve(ode_prob, KenCarp4(linsolve=LinSolveGMRES(abstol=1e-16, reltol=1e-16)));
 
 @btime solve(ode_prob, Tsit5());
 
@@ -116,13 +122,13 @@ ode_prob = ODEProblem(nd, x0, (0.0, 5.0))
 
 @btime solve(ode_prob_jac,  TRBDF2(linsolve=LinSolveGMRES()));
 @btime solve(ode_prob, TRBDF2());
-
-@btime solve(ode_prob,Tsit5());
+@btime solve(ode_prob, Tsit5());
 
 sol_jac = solve(ode_prob_jac,
      TRBDF2(linsolve=LinSolveGMRES()));
 sol = solve(ode_prob,  TRBDF2(linsolve=LinSolveGMRES()));
-plot_with_jac = plot(sol_jac, vars=[1,2,3,4],color = :black)
+
+plot_with_jac = plot(sol_jac, vars=[1,2,3,4], color = :black)
 plot!(plot_with_jac, sol,  vars=[1,2,3,4], color = :red)#, linestyle = :dash)
 
 

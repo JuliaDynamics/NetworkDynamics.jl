@@ -50,7 +50,7 @@ struct JacGraphData
 end
 
 function JacGraphData(v_jac_array, e_jac_array, e_jac_product_array, gs::GraphStruct)
-    v_jac_array = [Array{Float64,2}(undef, dim, dim) for dim in gs.v_dims]
+    v_jac_array = [zeros(dim, dim) for dim in gs.v_dims]
     e_jac_array = [[zeros(edim, srcdim), zeros(edim, dstdim)] for (edim, srcdim, dstdim) in zip(gs.e_dims, gs.v_dims[gs.s_e], gs.v_dims[gs.d_e])] # homogene Netzwerke: v_src_dim = v_dst_dim = v_dim
     e_jac_product = [zeros(dim) for dim in gs.v_dims[gs.d_e]]
     JacGraphData(v_jac_array, e_jac_array, e_jac_product)
@@ -116,7 +116,6 @@ function update_coefficients!(Jac::NDJacVecOperator, x, p, t)
 
     gs = Jac.graph_structure
     checkbounds_p(p, gs.num_v, gs.num_e)
-    #gd = prep_gd(x, x, Jac.graph_data, Jac.graph_structure)
     jgd = Jac.jac_graph_data
 
     for i in 1:gs.num_v
@@ -154,6 +153,8 @@ end
     For the form (dx, x, p, t), the function jac_vec_prod! is used in the function mul!.
 """
 
+
+#= Out-of-Place version is not used atm
 """
     jac_vec_prod(J, z)
 
@@ -162,6 +163,7 @@ Since there is no `dx` array in this case, this needs to be prepared to store th
 product of vertex-jacobian and `z` and to sum up the corresponding entries
 of the `e_jac_product` on `dx`.
 """
+
 function jac_vec_prod(Jac::NDJacVecOperator, z)
 
     gs = Jac.graph_structure
@@ -170,16 +172,18 @@ function jac_vec_prod(Jac::NDJacVecOperator, z)
     checkbounds_p(p, gs.num_v, gs.num_e)
     jgd = Jac.jac_graph_data
 
-    # first for loop that considers the mutliplication of each edge jacobians with the corresponding component of z
+    # first multiply each edge jacobians with the corresponding component of z
     for i in 1:gs.num_e
         # Store Edge_jac_src * v_src
         @inbounds mul!(jgd.e_jac_product[i], get_src_edge_jacobian(jgd, i), view(z, gs.s_e_idx[i]))
         # in-place Add Edge_jac_dst * v_dst
-        # mul!(C,A,B,α,β) = A B α + C β
+        # mul!(C,A,B,α,β): C = A B α + C β
         @inbounds mul!(jgd.e_jac_product[i],
              get_dst_edge_jacobian(jgd, i),
              view(z, gs.d_e_idx[i]), 1, 1) # α = 1, β = 1
     end
+
+
 
 
     # in this function there is no dx in which the Jacobian can be stored, so an extra array must be created and returned
@@ -199,6 +203,18 @@ function jac_vec_prod(Jac::NDJacVecOperator, z)
     return dx
 end
 
+# functions for NDJacVecOperator callable structs at the end of this module
+
+Base.:*(Jac::NDJacVecOperator, z::AbstractVector) = jac_vec_prod(Jac, z)
+
+
+function (Jac::NDJacVecOperator)(x, p, t) # auch Number bei t? # weglassen?
+    update_coefficients!(Jac, x, p, t)
+    Jac*x
+end
+=#
+
+
 """
     jac_vec_prod!(dx, J, z)
 
@@ -211,6 +227,12 @@ function jac_vec_prod!(dx, Jac::NDJacVecOperator, z)
     #x = Jac.x
     checkbounds_p(p, gs.num_v, gs.num_e)
     jgd = Jac.jac_graph_data
+    dx .= 0
+
+    # first multiply each edge jacobians with the corresponding component of z
+
+    # Then add each edge to its destination vertex (multiplying with the Jacobian J_va
+    # of the vertex wrt. to the aggregated edges. For this prototype J_va == I)
 
     for i in 1:gs.num_e
         # Store Edge_jac_src * v_src
@@ -221,26 +243,22 @@ function jac_vec_prod!(dx, Jac::NDJacVecOperator, z)
              get_dst_edge_jacobian(jgd, i),
              view(z, gs.d_e_idx[i]), 1, 1) # α = 1, β = 1
 
+        # The following summation should be different depending on graph and coupling type
 
-        #jgd.e_jac_product[i] .= get_src_edge_jacobian(jgd, i) * view(z, gs.s_e_idx[i]) .+ get_dst_edge_jacobian(jgd, i) * view(z, gs.d_e_idx[i])
+        @inbounds view(dx, gs.d_e_idx[i]).+= jgd.e_jac_product[i] #*J_va
+        @inbounds view(dx, gs.s_e_idx[i]).-= jgd.e_jac_product[i] #*J_va
+
     end
 
+    # Finally internal vertex  Jac * vertex Variables
     for i in 1:gs.num_v
-        # Vertex Jac * vertex Variables
-        @inbounds mul!(view(dx, gs.v_idx[i]), get_vertex_jacobian(jgd, i), view(z, gs.v_idx[i]))
-
-        for j in gs.d_v[i]
-            # add pre-compute edge_product (if gs.d_v not empty)
-            @inbounds view(dx, gs.v_idx[i]) .+= jgd.e_jac_product[j]
-        end
-
+        @inbounds mul!(view(dx, gs.v_idx[i]),
+                       get_vertex_jacobian(jgd, i), view(z, gs.v_idx[i]), 1, 1)
     end
     nothing
 end
 
-# functions for NDJacVecOperator callable structs at the end of this module
 
-Base.:*(Jac::NDJacVecOperator, z::AbstractVector) = jac_vec_prod(Jac, z)
 
 function LinearAlgebra.mul!(dx::AbstractVector, Jac::NDJacVecOperator, z::AbstractVector)
     jac_vec_prod!(dx, Jac, z)
@@ -255,10 +273,7 @@ end
     mul!(dx, J, z), respectively.
 """
 
-function (Jac::NDJacVecOperator)(x, p, t) # auch Number bei t? # weglassen?
-    update_coefficients!(Jac, x, p, t)
-    Jac*x
-end
+
 
 function (Jac::NDJacVecOperator)(dx, x, p, t::Number)
     update_coefficients!(Jac, x, p, t)
