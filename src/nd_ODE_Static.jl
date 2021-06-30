@@ -37,8 +37,10 @@ end
 
 
 
-@Base.kwdef struct nd_ODE_Static{G, GD, T1, T2}
-    vertices!::T1
+@Base.kwdef struct nd_ODE_Static{G, GD, TV, T1, T2}
+    vertices!::TV
+    unique_vertices!::T1
+    unique_v_indices::Vector{Vector{Int}}
     edges!::T2
     graph::G #redundant?
     graph_structure::GraphStruct
@@ -46,6 +48,11 @@ end
     parallel::Bool # enables multithreading for the core loop
 end
 
+
+function call_v_function!(f!,dx,x,e,p,t)
+    f!(dx,x,e,p,t)
+    nothing
+end
 
 function (d::nd_ODE_Static)(dx, x, p, t)
     gs = d.graph_structure
@@ -63,13 +70,22 @@ function (d::nd_ODE_Static)(dx, x, p, t)
 
     @assert size(dx) == size(x) "Sizes of dx and x do not match"
 
-    @nd_threads d.parallel for i in 1:gs.num_v
-        maybe_idx(d.vertices!,i).f!(
-            view(dx,gs.v_idx[i]),
-            get_vertex(gd, i),
-            get_dst_edges(gd, i),
-            p_v_idx(p, i),
-            t)
+    @nd_threads d.parallel for i in d.unique_v_indices[1]
+        d.unique_vertices![1].f!(
+                        view(dx,gs.v_idx[i]),
+                        get_vertex(gd, i),
+                        get_dst_edges(gd, i),
+                        p_v_idx(p, i),
+                        t)
+    end
+    
+    @nd_threads d.parallel for i in d.unique_v_indices[2]
+        d.unique_vertices![2].f!(
+                        view(dx,gs.v_idx[i]),
+                        get_vertex(gd, i),
+                        get_dst_edges(gd, i),
+                        p_v_idx(p, i),
+                        t)
     end
 
     nothing
