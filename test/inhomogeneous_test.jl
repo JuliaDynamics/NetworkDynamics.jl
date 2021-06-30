@@ -46,3 +46,8 @@ sol_st_ver = solve(prob_st_ver, Rodas4())
 
 println("These dynamics should flow to π, at t=500. they are there up to $(maximum(abs.(sol_st_ver(500.) .- pi)))")
 @test maximum(abs.(sol_st_ver(500.) .- pi)) < 10^-7
+
+
+dx = similar(x0)
+diff_network_st_ver(dx,x0,nothing,0.)
+@test @allocated diff_network_st_ver(dx,x0,nothing,0.) == 0
