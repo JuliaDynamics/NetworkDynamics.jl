@@ -27,11 +27,17 @@ In our benchmark on the Kuramoto model NetworkDynamics.jl + DifferentialEquation
 If you use NetworkDynamics.jl in your research publications, please cite our [paper](https://arxiv.org/abs/2012.12696).
 
 ```latex
-@article{lindner2020networkdynamics,
-  title={NetworkDynamics. jl--Composing and simulating complex networks in Julia},
-  author={Lindner, Michael and Lincoln, Lucas and Drauschke, Fenja and Koulen, Julia Monika and W{\"u}rfel, Hans and Plietzsch, Anton and Hellmann, Frank},
-  journal={arXiv preprint arXiv:2012.12696},
-  year={2020}
+@article{NetworkDynamics.jl-2021,
+	author = {Lindner, Michael and Lincoln, Lucas and Drauschke, Fenja and Koulen, Julia M. and Würfel, Hans and Plietzsch, Anton and Hellmann, Frank},
+	doi = {10.1063/5.0051387},
+	eprint = { https://doi.org/10.1063/5.0051387 },
+	journal = {Chaos: An Interdisciplinary Journal of Nonlinear Science},
+	number = {6},
+	pages = {063133},
+	title = {NetworkDynamics.jl—Composing and simulating complex networks in Julia},
+	url = { https://doi.org/10.1063/5.0051387 },
+	volume = {31},
+	year = {2021}
 }
 ```
 
