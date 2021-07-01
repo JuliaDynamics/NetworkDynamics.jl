@@ -29,6 +29,12 @@ function diffusionvertex!(dv, v, edges, p, t)
     nothing
 end
 
+function pseudo_diffusionvertex!(dv, v, e, p, t)
+    dv[1] = e[1]
+    dv[2] = e[1]
+    nothing
+end
+
 @Base.propagate_inbounds function jac_vertex!(J_v::AbstractMatrix, J_e::AbstractMatrix, v, p, t)
     # J_v = internal_jacobian(J, v, p, t)
     J_v[1, 1] = 0.0
