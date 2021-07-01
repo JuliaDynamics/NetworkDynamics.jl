@@ -419,36 +419,36 @@ promote_rule(::Type{ODEEdge}, ::Type{StaticEdge}) = ODEEdge
 """
 Promotes a StaticVertex to an ODEVertex.
 """
-struct ODE_from_Static{T}
-    f!::T
-end
-function (ofs::ODE_from_Static)(dx,x,args...)
-    # If mass matrix = 0 the differential equation sets dx = 0.
-    # To set x to the value calculated by f! we first write the value calculated
-    # by f! into dx, then subtract x. This leads to the  constraint
-    # 0 = - x + f(...)
-    # where f(...) denotes the value that f!(a, ...) writes into a.
-    ofs.f!(dx, args...)
-    @inbounds for i in eachindex(dx)
-        dx[i] -= x[i]
-    end
-    nothing
-end
-
 function ODEVertex(sv::StaticVertex)
     let _f! = sv.f!, dim = sv.dim, sym = sv.sym
-        return ODEVertex(ODE_from_Static(_f!), dim, 0., sym)
+        f! = (dx, x, edges, p, t) -> begin
+             _f!(dx, edges, p, t)
+            @inbounds for i in eachindex(dx)
+                dx[i] = dx[i] - x[i]
+            end
+            return nothing
+        end
+        return ODEVertex(f!, dim, 0., sym)
     end
 end
 
 function ODEEdge(se::StaticEdge)
     let _f! = se.f!, dim = se.dim, coupling = se.coupling, sym = se.sym
+
+        f! = (dx, x, v_s, v_d, p, t) -> begin
+             _f!(dx, v_s, v_d, p, t)
+            @inbounds for i in eachindex(dx)
+                dx[i] = dx[i] - x[i]
+            end
+            return nothing
+        end
+
         if coupling == :undirected
             # undirected means the reconstruction has already happend and the edge may now
             # be considered fiducial
-            return ODEEdge(ODE_from_Static(_f!), dim, :fiducial, 0., sym)
+            return ODEEdge(f!, dim, :fiducial, 0., sym)
         else
-            return ODEEdge(ODE_from_Static(_f!), dim, coupling, 0., sym)
+            return ODEEdge(f!, dim, coupling, 0., sym)
         end
     end
 end
