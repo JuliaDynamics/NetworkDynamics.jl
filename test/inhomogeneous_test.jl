@@ -49,5 +49,7 @@ println("These dynamics should flow to π, at t=500. they are there up to $(maxi
 
 
 dx = similar(x0)
-diff_network_st_ver(dx,x0,nothing,0.)
-@test @allocated diff_network_st_ver(dx,x0,nothing,0.) == 0
+e = [[ones(N)],[ones(N)]]
+foo! = diff_network_st_ver.f
+foo!(dx,x0,nothing,0.)
+@test (@allocated foo!(dx,x0, nothing, 0.)) == 0
