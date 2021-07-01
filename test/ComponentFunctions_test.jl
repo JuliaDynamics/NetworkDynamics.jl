@@ -270,3 +270,33 @@ end
     @test nd_4 isa ODEFunction
     @test nd_5 isa ODEFunction
 end
+
+
+@testset "Allocations of promoted Vertices" begin
+    f! = (v,edges,p,t) -> v .= pi
+    sv = StaticVertex(f! = f!, dim = 1)
+    osv = ODEVertex(sv)
+    x = [1.]
+    dx = [0.]
+    foo! = osv.f!
+    foo!(dx,x,nothing, nothing, nothing)
+    @test (@allocated foo!(dx,x,nothing, nothing, nothing)) == 0
+
+
+    dsv = DDEVertex(sv)
+    x = [1.]
+    dx = [0.]
+    dfoo! = dsv.f!
+    dfoo!(dx,x,nothing, nothing, nothing, nothing)
+    @test (@allocated dfoo!(dx,x,nothing, nothing, nothing, nothing)) == 0
+
+    g! = (e, v_s, v_d,p,t) -> e .= pi
+    se = StaticEdge(f! = g!, dim = 1, coupling = :undirected)
+    ose = ODEEdge(se)
+    e = [1.,1.]
+    de = [0.,0.]
+    bar! = ose.f!
+    bar!(de,e,nothing, nothing, nothing, nothing)
+    @test (@allocated bar!(de,e,nothing, nothing, nothing, nothing)) == 0
+
+end
