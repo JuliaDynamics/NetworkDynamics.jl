@@ -416,10 +416,16 @@ promote_rule(::Type{ODEVertex{T}}, ::Type{ODEVertex{U}}) where {T, U} = ODEVerte
 
 convert(::Type{ODEEdge}, x::StaticEdge) = ODEEdge(x)
 promote_rule(::Type{ODEEdge}, ::Type{StaticEdge}) = ODEEdge
+
 """
-Promotes a StaticVertex to an ODEVertex.
+Promotes a StaticVertex to an ODEVertex with zero mass matrix.
 """
 function ODEVertex(sv::StaticVertex)
+    # If mass matrix = 0 the differential equation sets dx = 0.
+    # To set x to the value calculated by f! we first write the value calculated
+    # by f! into dx, then subtract x. This leads to the  constraint
+    # 0 = - x + f(...)
+    # where f(...) denotes the value that f!(a, ...) writes into a.
     let _f! = sv.f!, dim = sv.dim, sym = sv.sym
         f! = (dx, x, edges, p, t) -> begin
              _f!(dx, edges, p, t)
@@ -432,7 +438,15 @@ function ODEVertex(sv::StaticVertex)
     end
 end
 
+"""
+Promotes a StaticEdge to an ODEEdge with zero mass matrix.
+"""
 function ODEEdge(se::StaticEdge)
+    # If mass matrix = 0 the differential equation sets dx = 0.
+    # To set x to the value calculated by f! we first write the value calculated
+    # by f! into dx, then subtract x. This leads to the  constraint
+    # 0 = - x + f(...)
+    # where f(...) denotes the value that f!(a, ...) writes into a.
     let _f! = se.f!, dim = se.dim, coupling = se.coupling, sym = se.sym
 
         f! = (dx, x, v_s, v_d, p, t) -> begin
