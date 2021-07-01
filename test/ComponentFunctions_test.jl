@@ -297,6 +297,6 @@ end
     de = [0.,0.]
     bar! = ose.f!
     bar!(de,e,nothing, nothing, nothing, nothing)
-    @test (@allocated bar!(dx,x,nothing, nothing, nothing, nothing)) == 0
+    @test (@allocated bar!(de,e,nothing, nothing, nothing, nothing)) == 0
 
 end
