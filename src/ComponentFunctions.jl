@@ -310,8 +310,14 @@ end
 
 
 function DDEVertex(sv::StaticVertex)
-    let _f! = ODE_from_Static(sv.f!), dim = sv.dim, sym = sv.sym
-        f! = @inline (dv, v, dst_edges, h_v, p, t) -> _f!(dv, v, dst_edges, p, t)
+    let _f! = sv.f!, dim = sv.dim, sym = sv.sym
+        f! = @inline (dx, x, edges, h_v, p, t)  -> begin
+             _f!(dx, edges, p, t)
+            @inbounds for i in eachindex(dx)
+                dx[i] = dx[i] - x[i]
+            end
+            return nothing
+        end
         return DDEVertex(f!, dim, 0., sym)
     end
 end

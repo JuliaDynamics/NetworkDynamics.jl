@@ -282,6 +282,14 @@ end
     foo!(dx,x,nothing, nothing, nothing)
     @test (@allocated foo!(dx,x,nothing, nothing, nothing)) == 0
 
+
+    dsv = DDEVertex(sv)
+    x = [1.]
+    dx = [0.]
+    dfoo! = dsv.f!
+    dfoo!(dx,x,nothing, nothing, nothing, nothing)
+    @test (@allocated dfoo!(dx,x,nothing, nothing, nothing, nothing)) == 0
+
     g! = (e, v_s, v_d,p,t) -> e .= pi
     se = StaticEdge(f! = g!, dim = 1, coupling = :undirected)
     ose = ODEEdge(se)
