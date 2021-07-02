@@ -36,19 +36,25 @@ constructors.
 function collect_ve_info(vertices!, edges!, graph)
     if vertices! isa Array
         @assert length(vertices!) == nv(graph)
-        v_dims = [v.dim for v in vertices!]
-        symbols_v = [Symbol(vertices![i].sym[j],"_",i) for i in 1:length(vertices!) for j in 1:v_dims[i]]
+        v_dims = Int[v.dim for v in vertices!]
+        symbols_v = [Symbol(vertices![i].sym[j],"_",i)
+                           for i in 1:length(vertices!)
+                           for j in 1:v_dims[i]]
         mmv_array = [v.mass_matrix for v in vertices!]
     else
         v_dims = [vertices!.dim for v in vertices(graph)]
-        symbols_v = [Symbol(vertices!.sym[j],"_",i) for i in 1:nv(graph) for j in 1:v_dims[i]]
+        symbols_v = [Symbol(vertices!.sym[j],"_",i)
+                     for i in 1:nv(graph)
+                     for j in 1:v_dims[i]]
         mmv_array = [vertices!.mass_matrix for v in vertices(graph)]
     end
 
     if edges! isa Array
         @assert length(edges!) == ne(graph)
-        e_dims = [e.dim for e in edges!]
-        symbols_e = [Symbol(edges![i].sym[j],"_",i) for i in 1:length(edges!) for j in 1:e_dims[i]]
+        e_dims = Int[e.dim for e in edges!]
+        symbols_e = [Symbol(edges![i].sym[j],"_",i)
+                           for i in 1:length(edges!)
+                           for j in 1:e_dims[i]]
         if eltype(edges!)  <: Union{StaticEdge, StaticDelayEdge}  # improve type hierarchy
             mme_array = nothing
         else
@@ -56,7 +62,9 @@ function collect_ve_info(vertices!, edges!, graph)
         end
     else
         e_dims = [edges!.dim for e in edges(graph)]
-        symbols_e = [Symbol(edges!.sym[j],"_",i) for i in 1:ne(graph) for j in 1:e_dims[i]]
+        symbols_e = [Symbol(edges!.sym[j],"_",i)
+                     for i in 1:ne(graph)
+                     for j in 1:e_dims[i]]
         if typeof(edges!) <: Union{StaticEdge, StaticDelayEdge} # improve type hierarchy
             mme_array = nothing
         else
