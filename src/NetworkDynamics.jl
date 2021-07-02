@@ -36,8 +36,8 @@ constructors.
 function collect_ve_info(vertices!, edges!, graph)
     if vertices! isa Array
         @assert length(vertices!) == nv(graph)
-        v_dims = Int64[v.dim for v in vertices!]
-        symbols_v = Symbol[Symbol(vertices![i].sym[j],"_",i)
+        v_dims = Int[v.dim for v in vertices!]
+        symbols_v = [Symbol(vertices![i].sym[j],"_",i)
                            for i in 1:length(vertices!)
                            for j in 1:v_dims[i]]
         mmv_array = [v.mass_matrix for v in vertices!]
@@ -51,8 +51,8 @@ function collect_ve_info(vertices!, edges!, graph)
 
     if edges! isa Array
         @assert length(edges!) == ne(graph)
-        e_dims = Int64[e.dim for e in edges!]
-        symbols_e = Symbol[Symbol(edges![i].sym[j],"_",i)
+        e_dims = Int[e.dim for e in edges!]
+        symbols_e = [Symbol(edges![i].sym[j],"_",i)
                            for i in 1:length(edges!)
                            for j in 1:e_dims[i]]
         if eltype(edges!)  <: Union{StaticEdge, StaticDelayEdge}  # improve type hierarchy
