@@ -46,3 +46,43 @@ jobs:
       - uses: codecov/codecov-action@v1
         with:
           file: lcov.info
+
+  pd-test:
+    name: PowerDynamics.jl test - Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        version:
+          - '1'
+        os:
+          - ubuntu-latest
+        arch:
+          - x64
+    steps:
+      - uses: actions/checkout@v2
+      - uses: julia-actions/setup-julia@latest
+        with:
+          version: ${{ matrix.version }}
+          arch: ${{ matrix.arch }}
+      - uses: julia-actions/julia-buildpkg@latest
+      - uses: actions/checkout@v2
+        with:
+          repository: JuliaEnergy/PowerDynamics.jl
+      - name: Run PD tests
+        shell: julia --project=PowerDynamics.jl {0}
+        run: |
+            import Pkg
+            try
+              Pkg.develop(path=".")
+              Pkg.update()
+              Pkg.precompile()
+              Pkg.test()
+            catch e
+              if e isa Pkg.Resolve.ResolverError
+                @info "Resolve error! No need to test a breaking release..." e
+                exit(0)
+              else
+                rethrow(e)
+              end
+            end
