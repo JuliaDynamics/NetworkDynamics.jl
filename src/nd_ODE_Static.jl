@@ -4,6 +4,7 @@ using ..NetworkStructures
 using ..ComponentFunctions
 using ..Utilities
 
+using Unrolled
 
 export nd_ODE_Static
 export StaticEdgeFunction
@@ -35,7 +36,21 @@ end
    end
 end
 
-
+@unroll function vertex_loop!(dx, p, t, gd, gs,
+                              unique_vertices, unique_v_indices, parallel)
+    @unroll for j in 1:length(unique_vertices)
+        # @nd_threads d.parallel causes
+        # The function body AST defined by this @generated function is not pure. This likely means it contains a closure or comprehension.
+        for i in unique_v_indices[j]
+            unique_vertices[j].f!(
+                        view(dx,gs.v_idx[i]),
+                        get_vertex(gd, i),
+                        get_dst_edges(gd, i),
+                        p_v_idx(p, i),
+                        t)
+        end
+    end
+end
 
 @Base.kwdef struct nd_ODE_Static{G, GD, TV, T1, T2}
     vertices!::TV
@@ -70,24 +85,8 @@ function (d::nd_ODE_Static)(dx, x, p, t)
 
     @assert size(dx) == size(x) "Sizes of dx and x do not match"
 
-    @nd_threads d.parallel for i in d.unique_v_indices[1]
-        d.unique_vertices![1].f!(
-                        view(dx,gs.v_idx[i]),
-                        get_vertex(gd, i),
-                        get_dst_edges(gd, i),
-                        p_v_idx(p, i),
-                        t)
-    end
-    
-    @nd_threads d.parallel for i in d.unique_v_indices[2]
-        d.unique_vertices![2].f!(
-                        view(dx,gs.v_idx[i]),
-                        get_vertex(gd, i),
-                        get_dst_edges(gd, i),
-                        p_v_idx(p, i),
-                        t)
-    end
-
+    vertex_loop!(dx, p, t, gd, gs,
+                 d.unique_vertices!, d.unique_v_indices, d.parallel)
     nothing
 end
 
