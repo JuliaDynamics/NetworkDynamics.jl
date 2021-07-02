@@ -69,6 +69,7 @@ jobs:
       - uses: actions/checkout@v2
         with:
           repository: JuliaEnergy/PowerDynamics.jl
+          path: PowerDynamics.jl
       - name: Run PD tests
         shell: julia --project=PowerDynamics.jl {0}
         run: |
