@@ -26,6 +26,7 @@ bmconfig(id=nothing) = BenchmarkConfig(;id,
 
 # Run benchmarks for current version
 target = benchmarkpkg(ndpath, bmconfig())
+writeresults(joinpath(bmpath, "target.data"), target)
 export_markdown(joinpath(bmpath, "target.md"), target)
 
 # Run benchmarks defined in current directory for specific version
@@ -33,6 +34,7 @@ tmpdir = tempname()
 cp(bmpath, tmpdir)
 script = joinpath(tmpdir, "benchmarks.jl")
 baseline = benchmarkpkg(ndpath, bmconfig(baseline_id); script)
+writeresults(joinpath(bmpath, "baseline.data"), baseline)
 export_markdown(joinpath(bmpath, "baseline.md"), baseline)
 
 # compare the two
