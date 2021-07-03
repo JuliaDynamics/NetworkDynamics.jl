@@ -5,7 +5,7 @@ ndpath = begin
     abspath(path[begin:i]...)
 end
 bmpath = joinpath(ndpath, "benchmark")
-cd(bmpath)
+cd(ndpath)
 
 # import Pkg; Pkg.activate(bmpath)
 using PkgBenchmark
@@ -19,14 +19,17 @@ bmconfig(id=nothing) = BenchmarkConfig(;id,
 current = benchmarkpkg(ndpath, bmconfig())
 
 # Example 2 : run benchmarks for tagged version
-baseline = benchmarkpkg(ndpath, bmconfig("v0.5.0"))
+# baseline = benchmarkpkg(ndpath, bmconfig("v0.5.0"))
 
 # Example 3: run benchmakrs from HEAD for specific version
 tmpdir = tempname()
 cp(bmpath, tmpdir)
 script = joinpath(tmpdir, "benchmarks.jl")
-baseline = benchmarkpkg(ndpath, bmconfig("v0.5.0"); script, retune=true)
+baseline = benchmarkpkg(ndpath, bmconfig("v0.5.0"); script)
 
 judge(current, baseline)
+
+current
+baseline
 
 judge(ndpath, bmconfig(), bmconfig("v0.5.0"))

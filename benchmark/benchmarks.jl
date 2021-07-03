@@ -49,6 +49,7 @@ for k in ["static_edge", "ode_edge"]
     end
 end
 
+#=
 
 ####
 #### kuramoto benchmarks
@@ -112,3 +113,4 @@ for N ∈ [10, 100, 1_000, 10_000]  #, 100_000, 1_000_000]
         end
     end
 end
+=#

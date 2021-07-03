@@ -8,3 +8,4 @@ scratch.jl
 docs/build
 bugs
 design_experiments
+benchmark/tune.json
