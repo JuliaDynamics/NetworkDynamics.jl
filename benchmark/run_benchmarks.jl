@@ -1,3 +1,8 @@
+#!julia
+
+baseline_id = isempty(ARGS) ? "main" : ARGS[1]
+@info "Run benchmarks on current directory and compare to $baseline_id"
+
 # set root path of the ND repo
 ndpath = begin
     path = splitpath(abspath(@__DIR__))
@@ -6,30 +11,30 @@ ndpath = begin
 end
 bmpath = joinpath(ndpath, "benchmark")
 cd(ndpath)
+import Pkg; Pkg.activate(ndpath)
 
-# import Pkg; Pkg.activate(bmpath)
+# make sure PkgBenchamark is available in your standard environment
 using PkgBenchmark
+using PkgBenchmark.LibGit2
+isdirty = LibGit2.with(LibGit2.isdirty, LibGit2.GitRepo(ndpath))
+isdirty && throw(error("Git environment $ndpath is dirty! Please stash or commit changes."))
 
 # setup the base config for the benchmarks
 bmconfig(id=nothing) = BenchmarkConfig(;id,
                                        env = Dict("JULIA_NUM_THREADS" => 4),
                                        juliacmd = `julia`)
 
-# Example 1 : run benchmarks for current version
-current = benchmarkpkg(ndpath, bmconfig())
+# Run benchmarks for current version
+target = benchmarkpkg(ndpath, bmconfig())
+export_markdown(joinpath(bmpath, "target.md"), target)
 
-# Example 2 : run benchmarks for tagged version
-# baseline = benchmarkpkg(ndpath, bmconfig("v0.5.0"))
-
-# Example 3: run benchmakrs from HEAD for specific version
+# Run benchmarks defined in current directory for specific version
 tmpdir = tempname()
 cp(bmpath, tmpdir)
 script = joinpath(tmpdir, "benchmarks.jl")
-baseline = benchmarkpkg(ndpath, bmconfig("v0.5.0"); script)
+baseline = benchmarkpkg(ndpath, bmconfig(baseline_id); script)
+export_markdown(joinpath(bmpath, "baseline.md"), baseline)
 
-judge(current, baseline)
-
-current
-baseline
-
-judge(ndpath, bmconfig(), bmconfig("v0.5.0"))
+# compare the two
+judgment = judge(target, baseline)
+export_markdown(joinpath(bmpath, "judgment.md"), judgment)
