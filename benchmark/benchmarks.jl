@@ -16,6 +16,7 @@ edges = Dict("static_edge" => diffusion_edge(),
              "ode_edge" => diffusion_dedge())
 
 for k in ["static_edge", "ode_edge"]
+    SUITE["diffusion"][k] = BenchmarkGroup([k])
     SUITE["diffusion"][k]["assemble"] = BenchmarkGroup(["assemble"])
     SUITE["diffusion"][k]["call"] = BenchmarkGroup(["call"])
     SUITE["diffusion"][k]["call_mt"] = BenchmarkGroup(["call", "multithread"])
@@ -32,18 +33,18 @@ for k in ["static_edge", "ode_edge"]
             nd(dx, x0, nothing, 0.0)
         end setup = begin
             g = star_graph($N)
-            x0 = randn($N)
-            dx = similar(x0)
             nd = network_dynamics($vertex, $edge, g)
+            x0 = randn(length(nd.syms))
+            dx = similar(x0)
         end
 
         SUITE["diffusion"][k]["call_mt"][N] = @benchmarkable begin
             nd(dx, x0, nothing, 0.0)
         end setup = begin
             g = star_graph($N)
-            x0 = randn($N)
-            dx = similar(x0)
             nd = network_dynamics($vertex, $edge, g; parallel=true)
+            x0 = randn(length(nd.syms))
+            dx = similar(x0)
         end
     end
 end

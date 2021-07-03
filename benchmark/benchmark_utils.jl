@@ -11,7 +11,7 @@ Base.@propagate_inbounds function diffusion_dedge!(de, e, v_s, v_d, _, _)
     de[1] = 100. * (sin(v_s[1] - v_d[1]) - e[1])
     nothing
 end
-diffusion_dedge = ODEEdge(f! = diffusion_dedge!, dim = 1, coupling = :undirected)
+diffusion_dedge() = ODEEdge(f! = diffusion_dedge!, dim = 1, coupling = :undirected)
 
 Base.@propagate_inbounds function diffusionvertex!(dv, _, edges, _, _)
     dv[1] = 0.
