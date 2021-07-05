@@ -31,7 +31,8 @@ Arguments:
 - `--threads`: set thread number env variable, defaults to `4`
 - `-v, --verbose`: show the current benchmark during run
 - `-p, --prefix`: prefix for filenames, defaults to timestamp
-- `--retune`: Force [retuning](https://juliaci.github.io/BenchmarkTools.jl/dev/manual/#Caching-Parameters) before the benchmarks.
+- `--retune`: Force [retuning](https://juliaci.github.io/BenchmarkTools.jl/dev/manual/#Caching-Parameters) before the first benchmark (second benchmark will use the tune file).
+- `--exportraw`: export raw data of trials, i.e. to perform your own, additional analysis
 
 See the [`PkgBenchmark.jl` docs](https://juliaci.github.io/PkgBenchmark.jl/stable/) for more details.
 

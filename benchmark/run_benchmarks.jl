@@ -5,6 +5,8 @@ using PkgBenchmark
 using LibGit2
 using Dates
 
+tstart = time()
+
 function getarg(default, flags...)
     idx = findfirst(x -> x ∈ flags, ARGS)
     return idx===nothing ? default : ARGS[idx+1]
@@ -26,6 +28,8 @@ julia_cmd_baseline = getarg("", "--bcommand")
 verbose = "-v" ∈ ARGS || "--verbose" ∈ ARGS
 # force retune
 retune = "--retune" ∈ ARGS
+# export raw benchmark data
+exportraw = "--exportraw" ∈ ARGS
 # target defaults to nothing which means the current directory
 prefix = getarg(Dates.format(now(), "yyyy-mm-dd_HHMMSS"), "-p", "--prefix") * "_"
 
@@ -87,7 +91,7 @@ end
 directory even if dirty!
 - cmd if empty use default julia command
 """
-function benchmark(; name, id, cmd::AbstractString)
+function benchmark(; name, id, cmd::AbstractString, retune)
     # choose specific command only if given
     cmd = isempty(cmd) ? julia_cmd : cmd
     @info "Run $name benchmarks on $id with $cmd"
@@ -100,17 +104,27 @@ function benchmark(; name, id, cmd::AbstractString)
                            script=script_path,
                            retune,
                            verbose)
-    writeresults(joinpath(bmpath, prefix*name*".data"), results)
+    exportraw && writeresults(joinpath(bmpath, prefix*name*".data"), results)
     export_markdown(joinpath(bmpath, prefix*name*".md"), results)
     return results
 end
 
-target = benchmark(; name="target", id=target_id, cmd=julia_cmd_target)
+target = benchmark(; name="target", id=target_id, cmd=julia_cmd_target, retune)
 
 if baseline_id ∉ ["nothing", "none"]
-    baseline = benchmark(; name="baseline", id=baseline_id, cmd=julia_cmd_baseline)
+    baseline = benchmark(; name="baseline", id=baseline_id, cmd=julia_cmd_baseline, retune=false)
 
     # compare the two
     judgment = judge(target, baseline)
     export_markdown(joinpath(bmpath, prefix*"judgment.md"), judgment)
 end
+
+# copy tune file over to real repo if there is none yet or it was retuned
+if !isfile(joinpath(bmpath, "tune.json")) || retune
+    println("Update tune.json in $bmpath")
+    cp(joinpath(ndpath_tmp, "benchmark", "tune.json"), joinpath(bmpath, "tune.json"); force=retune)
+end
+
+s = round(Int, time()-tstart)
+m, s = s ÷ 60, s % 60
+@info "Benchmarking endet after $m min $s seconds"
