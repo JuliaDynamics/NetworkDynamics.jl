@@ -13,14 +13,22 @@ have to add this to the `NetworkDynamics.jl` deps...
 The easiest way to run the benchmarks is
 ```
 $ cd NetworkDynamics/benchmarks
-$ ./run_benchmarks.jl v0.5.0
+$ ./run_benchmarks.jl
 ```
 which will run the benchmark defined in the current directory
 
 - for the currently checked out version of ND
-- for a version specified by the first parameter (i.e. a commit ID, ab branch name, a tag name,... If you don't specify anything it will compare to `main`)
+- for main
 
 and export the results to `target.md`, `baseline.md` and `judgment.md`.
+
+Arguments:
+- `-t, --target`: Specify branch, commit id, tag, ... for target benchmark. If `directory` use the current state of the directory. Default: `directory`
+- `-b, --baseline`: Same for baseline benchmark. Default: `main`
+- `--command`: Julia command to use for benchmarks, defaults to `julia`
+- `--tcommand`: Julia command for target, if unset use `--command`
+- `--bcommand`: Julia command for baseline, if unset use `--command`
+- `--threads`: set thread number env variable, defaults to `4`
 
 See the [`PkgBenchmark.jl` docs](https://juliaci.github.io/PkgBenchmark.jl/stable/) for more details.
 
