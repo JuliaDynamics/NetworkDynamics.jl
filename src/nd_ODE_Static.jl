@@ -36,19 +36,31 @@ end
    end
 end
 
+
+"""
+    Unroll needs its own function and the loop to unroll needs to iterate
+    over one of its arguments (modulo `length`).
+"""
 @unroll function vertex_loop!(dx, p, t, gd, gs,
                               unique_vertices, unique_v_indices, parallel)
     @unroll for j in 1:length(unique_vertices)
-        # @nd_threads d.parallel causes
-        # The function body AST defined by this @generated function is not pure. This likely means it contains a closure or comprehension.
-        for i in unique_v_indices[j]
-            unique_vertices[j].f!(
-                        view(dx,gs.v_idx[i]),
-                        get_vertex(gd, i),
-                        get_dst_edges(gd, i),
-                        p_v_idx(p, i),
-                        t)
-        end
+        # @Threads.threads and @generated clash
+        # To make them uninvolved with each other we need another function
+        inner_vertex_loop!(dx, p, t, gd, gs,
+                           unique_vertices[j], unique_v_indices[j], parallel)
+    end
+end
+
+function inner_vertex_loop!(dx, p, t, gd, gs,
+                            vertex, indices, parallel)
+    # Having another loop is great, because we should be able to
+    # dispatch on the vertex type
+    @nd_threads parallel for i in indices
+        vertex.f!(view(dx,gs.v_idx[i]),
+                  get_vertex(gd, i),
+                  get_dst_edges(gd, i),
+                  p_v_idx(p, i),
+                  t)
     end
 end
 
@@ -64,10 +76,7 @@ end
 end
 
 
-function call_v_function!(f!,dx,x,e,p,t)
-    f!(dx,x,e,p,t)
-    nothing
-end
+
 
 function (d::nd_ODE_Static)(dx, x, p, t)
     gs = d.graph_structure
