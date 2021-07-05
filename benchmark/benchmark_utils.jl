@@ -39,7 +39,7 @@ kuramoto_vertex_1d() = ODEVertex(f! = kuramoto_vertex!, dim = 1, sym=[:θ])
 Base.@propagate_inbounds function kuramoto_inertia!(dv, v, edges, P, t)
     dv[1] = v[2]
     dv[2] = P - 1. * v[2]
-    for e in edges
+    @inbounds for e in edges
         dv[2] += e[1]
     end
 end
