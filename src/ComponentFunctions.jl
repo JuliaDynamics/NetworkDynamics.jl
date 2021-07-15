@@ -6,6 +6,7 @@ EdgeFunction which can be handled by network_dynamics.
 module ComponentFunctions
 
 using LinearAlgebra
+using ForwardDiff
 
 import Base.convert
 import Base.promote_rule
@@ -139,6 +140,20 @@ For more details see the documentation.
                 nothing
             end
         end
+
+        # jacobian function
+
+        if user_edge_jac! == true
+            f! = @inline (e, v_s, v_d, p, t) -> begin
+                J_s::AbstractMatrix
+                J_d::AbstractMatrix
+                e_array = Array{Float64,2}(undef, Int64(dim/2), 1)
+                ForwardDiff.jacobian!(J_s, (e_array, v_s) -> diffusionedge!(e_array, v_s, v_d, p, t), e_array, v_s)
+                ForwardDiff.jacobian!(J_d, (e_array, v_d) -> diffusionedge!(e_array, v_s, v_d, p, t), e_array, v_d)
+                return new{T, F}(J_s, J_d, v_s, v_d, p, t)
+            end
+        end
+
         # For edges with mass matrix this will be a little more complicated
         return new{typeof(f!), F}(f!, 2dim, coupling, repeat(sym, 2), user_edge_jac!)
     end

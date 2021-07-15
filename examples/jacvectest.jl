@@ -10,7 +10,12 @@ using BenchmarkTools
 
 N = 4
 
-g = watts_strogatz(N^2,N,0.)
+#g = watts_strogatz(N^2,N,0.)
+
+g = SimpleGraph(N)
+add_edge!(g, 1, 2)
+add_edge!(g, 2, 3)
+add_edge!(g, 3, 4)
 
 
 function diffusionedge!(e, v_s, v_d, p, t)
@@ -55,7 +60,9 @@ end
 end
 
 nd_jac_vertex = ODEVertex(f! = diffusionvertex!, dim = 2, vertex_jacobian! = jac_vertex!)
-nd_jac_edge = StaticEdge(f! = diffusionedge!, dim = 1, coupling = :undirected, edge_jacobian! = jac_edge!)
+#nd_jac_edge = StaticEdge(f! = diffusionedge!, dim = 1, coupling = :undirected, edge_jacobian! = jac_edge!)
+nd_jac_edge = StaticEdge(f! = diffusionedge!, dim = 1, coupling = :undirected, edge_jacobian! = true)
+
 
 nd_jac = network_dynamics(nd_jac_vertex, nd_jac_edge, g, jac = true)
 
