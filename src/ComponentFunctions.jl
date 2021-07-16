@@ -144,18 +144,16 @@ For more details see the documentation.
         # jacobian function
 
         if user_edge_jac! == true
-            f! = @inline (e, v_s, v_d, p, t) -> begin
-                J_s::AbstractMatrix
-                J_d::AbstractMatrix
-                e_array = Array{Float64,2}(undef, Int64(dim/2), 1)
+            edge_jac! = @inline (J_s::AbstractMatrix, J_d::AbstractMatrix, v_s, v_d, p, t) -> begin
+                e_array = Array{Float64,2}(undef, dim, 1)
                 ForwardDiff.jacobian!(J_s, (e_array, v_s) -> diffusionedge!(e_array, v_s, v_d, p, t), e_array, v_s)
                 ForwardDiff.jacobian!(J_d, (e_array, v_d) -> diffusionedge!(e_array, v_s, v_d, p, t), e_array, v_d)
-                return new{T, F}(J_s, J_d, v_s, v_d, p, t)
+                return nothing
             end
         end
 
         # For edges with mass matrix this will be a little more complicated
-        return new{typeof(f!), F}(f!, 2dim, coupling, repeat(sym, 2), user_edge_jac!)
+        return new{typeof(f!), F}(f!, 2dim, coupling, repeat(sym, 2), edge_jac!)
     end
 end
 

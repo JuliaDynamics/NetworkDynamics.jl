@@ -149,6 +149,7 @@ NDJacVecOp = NDJacVecOperator1(x, p, t, vertices!, edges!, graph_structure, grap
 NDJacVecOp.graph_data.dst_edges
 
 sum(get_dst_edges(NDJacVecOp.graph_data, 1))
+get_dst_edges(NDJacVecOp.graph_data, 4)
 
 view(x, NDJacVecOp.graph_structure.v_idx[1])
 get_vertex(NDJacVecOp.graph_data, 1)
