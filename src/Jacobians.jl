@@ -87,22 +87,23 @@ value that denotes if the central loop should be executed in parallel with the n
 threads set by the environment variable `JULIA_NUM_THREADS`.
 """
 
-mutable struct NDJacVecOperator{T, uType, tType, T1, T2, JGD} <: DiffEqBase.AbstractDiffEqLinearOperator{T} # mutable da x, p, t geupdated werden
+mutable struct NDJacVecOperator{T, uType, tType, T1, T2, GD, JGD} <: DiffEqBase.AbstractDiffEqLinearOperator{T} # mutable da x, p, t geupdated werden
     x::uType
     p
     t::tType
     vertices!::T1
     edges!::T2
     graph_structure::GraphStruct
+    graph_data::GD
     jac_graph_data::JGD
     parallel::Bool
 
-    function NDJacVecOperator{T}(x, p, t, vertices!, edges!, graph_structure, jac_graph_data, parallel) where T
-        new{T, typeof(x), typeof(t), typeof(vertices!), typeof(edges!), typeof(jac_graph_data)}(x, p, t, vertices!, edges!, graph_structure, jac_graph_data, parallel)
+    function NDJacVecOperator{T}(x, p, t, vertices!, edges!, graph_structure, graph_data, jac_graph_data, parallel) where T
+        new{T, typeof(x), typeof(t), typeof(vertices!), typeof(edges!), typeof(graph_data), typeof(jac_graph_data)}(x, p, t, vertices!, edges!, graph_structure, graph_data, jac_graph_data, parallel)
     end
 
-    function NDJacVecOperator(x, p, t, vertices!, edges!, graph_structure,  jac_graph_data, parallel)
-        NDJacVecOperator{eltype(x)}(x, p, t, vertices!, edges!, graph_structure, jac_graph_data, parallel)
+    function NDJacVecOperator(x, p, t, vertices!, edges!, graph_structure, graph_data, jac_graph_data, parallel)
+        NDJacVecOperator{eltype(x)}(x, p, t, vertices!, edges!, graph_structure, graph_data, jac_graph_data, parallel)
     end
 end
 
@@ -117,6 +118,7 @@ function update_coefficients!(Jac::NDJacVecOperator, x, p, t)
 
     gs = Jac.graph_structure
     checkbounds_p(p, gs.num_v, gs.num_e)
+    gd = prep_gd(x, x, Jac.graph_data, Jac.graph_structure)
     jgd = Jac.jac_graph_data
 
     for i in 1:gs.num_v

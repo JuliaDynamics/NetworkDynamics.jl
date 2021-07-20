@@ -6,6 +6,7 @@ EdgeFunction which can be handled by network_dynamics.
 module ComponentFunctions
 
 using LinearAlgebra
+using ForwardDiff
 
 import Base.convert
 import Base.promote_rule
@@ -86,13 +87,17 @@ For more details see the documentation.
     dim::Int # number of dimensions of e
     coupling = :undefined # :directed, :symmetric, :antisymmetric, :fiducial, :undirected
     sym=[:e for i in 1:dim] # Symbols for the dimensions
-    edge_jacobian!::J  # edge_jacobian!::F
+#    edge_jacobian!::J  # edge_jacobian!::F
+    edge_jacobian!::Union{Bool,J}  # edge_jacobian!::F
+
 
     function StaticEdge(user_f!::T,
                            dim::Int,
                            coupling::Symbol,
                            sym::Vector{Symbol},
-                           user_edge_jac!::F) where {T,F} # edge_jacobian!::F) where T
+#                           user_edge_jac!::F) where {T,F} # edge_jacobian!::F) where T
+                           user_edge_jac!::Union{Bool,F}) where {T,F} # edge_jacobian!::F) where T
+
 
         coupling_types = (:undefined, :directed, :fiducial, :undirected, :symmetric,
                           :antisymmetric)
@@ -107,11 +112,13 @@ For more details see the documentation.
         if coupling ∈ [:undefined, :directed]
             return new{T, F}(user_f!, dim, coupling, sym, user_edge_jac!)
 
+
         elseif coupling == :fiducial
             dim % 2 == 0 ? nothing : error("Fiducial edges are required to have even dim.
                                             The first dim args are used for src -> dst,
                                             the second for dst -> src coupling.")
             return new{T, F}(user_f!, dim, coupling, sym, user_edge_jac!)
+
 
         elseif coupling == :undirected
             # This might cause unexpected behaviour if source and destination vertex don't
@@ -139,8 +146,23 @@ For more details see the documentation.
                 nothing
             end
         end
+
+        # jacobian function
+
+        if user_edge_jac! == true
+            edge_jac! = @inline (J_s::AbstractMatrix, J_d::AbstractMatrix, v_s, v_d, p, t) -> begin
+                e_array = Array{Float64,2}(undef, dim, 1)
+                ForwardDiff.jacobian!(J_s, (e_array, v_s) -> user_f!(e_array, v_s, v_d, p, t), e_array, v_s)
+                ForwardDiff.jacobian!(J_d, (e_array, v_d) -> user_f!(e_array, v_s, v_d, p, t), e_array, v_d)
+                return nothing
+            end
+        end
+
         # For edges with mass matrix this will be a little more complicated
-        return new{typeof(f!), F}(f!, 2dim, coupling, repeat(sym, 2), user_edge_jac!)
+        return new{typeof(f!),typeof(edge_jac!)}(f!, 2dim, coupling, repeat(sym, 2), edge_jac!)
+#        return new{typeof(f!), F}(f!, 2dim, coupling, repeat(sym, 2), edge_jac!)
+
+
     end
 end
 

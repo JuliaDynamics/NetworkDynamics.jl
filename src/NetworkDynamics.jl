@@ -117,7 +117,7 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T},
         t = 0.0 # any Float64
         # p is now "nothing", later we want to implement a union type
         p = nothing
-        nd_jac_vec_operator = NDJacVecOperator(similar(v_array), p, t, vertices!, edges!, graph_stucture, jac_graph_data, parallel)
+        nd_jac_vec_operator = NDJacVecOperator(similar(v_array), p, t, vertices!, edges!, graph_stucture, graph_data, jac_graph_data, parallel)
 
         return ODEFunction(nd!; mass_matrix = mass_matrix, jac_prototype = nd_jac_vec_operator, syms = symbols)
     end
