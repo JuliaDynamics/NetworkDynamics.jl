@@ -15,7 +15,7 @@ end
     nothing
 end
 
-N = 10
+N = 1000
 g = SimpleGraph(watts_strogatz(N, 4, 0.5, seed=1))
 
 # g = complete_graph(2)

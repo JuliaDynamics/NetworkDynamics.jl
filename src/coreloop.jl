@@ -7,16 +7,19 @@ function (nw::NetworkDynamic)(du, u::T, p, t) where {T}
     fill!(_acc, zero(eltype(T)))
 
     # go through all colobatches separatly to avoid writing conflicts to accumulator
-    for colorbatch in layer.colorbatches
-        # inner loop can be parallel
-        process_colorbatch!(du, u, p, t, _acc, layer, colorbatch)
-    end
+    process_layer!(du, u, p, t, _acc, layer)
 
     # can be run parallel
     for vertexbatch in nw.vertexbatches
         process_vertexbatch!(du, u, p, t, _acc, layer, vertexbatch)
     end
 
+end
+
+@unroll function process_layer!(du, u, p, t, _acc, layer, cbs=layer.colorbatches)
+    @unroll for colorbatch in cbs
+        process_colorbatch!(du, u, p, t, _acc, layer, colorbatch)
+    end
 end
 
 function process_colorbatch!(du, u, p, t, _acc, layer, colorbatch::ColorBatch)

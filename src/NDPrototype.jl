@@ -1,6 +1,7 @@
 module NDPrototype
 using LightGraphs
 using OrderedCollections
+using Unrolled
 
 include("utils.jl")
 include("edge_coloring.jl")
