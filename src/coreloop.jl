@@ -1,4 +1,4 @@
-function (nw::DynamicNetwork)(du, u::T, p, t) where {T}
+function (nw::NetworkDynamic)(du, u::T, p, t) where {T}
     # for now just one layer
     layer = nw.nl
 
@@ -32,7 +32,7 @@ function process_colorbatch!(du, u, p, t, _acc, layer, colorbatch::ColorBatch)
     end
 end
 
-function process_edgebatch!(_, u::T, p, t, _acc, layer, batch::StaticEdgeBatch{F}) where {T,F}
+function process_edgebatch!(_, u::T, p, t, _acc, layer, batch::EdgeBatch{F}) where {T,F<:StaticEdge}
     # a cache of size dim per thread
     dim = batch.dim
     _cache =  getcache(layer.cachepool, T, Threads.nthreads() * dim)
@@ -43,7 +43,7 @@ function process_edgebatch!(_, u::T, p, t, _acc, layer, batch::StaticEdgeBatch{F
         _c = view(_cache, cidx:cidx+dim)
 
         # collect all the ranges to index into the data arrays
-        (src_r, dst_r, acc_r) = vertex_ranges(layer, batch, i)
+        (src_r, dst_r, src_acc_r, dst_acc_r) = src_dst_ranges(layer, batch, i)
         pe_r = parameter_range(batch, i)
 
         # create the views into the data & parameters
@@ -51,15 +51,20 @@ function process_edgebatch!(_, u::T, p, t, _acc, layer, batch::StaticEdgeBatch{F
         vd = view(u, dst_r)
         pe = view(p, pe_r)
 
+        # apply the edge function
         batch.fun(_c, vs, vd, pe, t)
 
-        _acc(acc_r) .= layer.accumulator(_acc(acc_r), _c)
+        # apply the accumulator
+        # XXX: move this to function and dispatch based on couplingtype of batch?
+        _c_part = dim == layer.accdim ? _c : view(_c, 1:layer.accdim)
+        _acc[dst_acc_r] .=   layer.accumulator.(_acc[dst_acc_r], _c_part)
+        _acc[src_acc_r] .= - layer.accumulator.(_acc[src_acc_r], _c_part)
     end
 end
 
-function process_vertexbatch!(du, u::T, p, t, _acc, layer, batch::VertexBatch{F}) where {T,F}
+function process_vertexbatch!(du, u, p, t, _acc, layer, batch::VertexBatch{F}) where {F}
     @inbounds for i in 1:length(batch)
-        (v_r, acc_r) = vertex_Ranges(layer, batch, i)
+        (v_r, acc_r) = vertex_ranges(layer, batch, i)
         pv_r = parameter_range(batch, i)
 
         vdu = view(du, v_r)

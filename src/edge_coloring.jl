@@ -13,6 +13,8 @@ OEdge(src::Int, dst::Int) = SimpleEdge(min(src, dst), max(src, dst))
 LightGraphs.neighbors(g::ColoredGraph, u) = neighbors(g.g, u)
 LightGraphs.nv(g::ColoredGraph) = nv(g.g)
 LightGraphs.edges(g::ColoredGraph) = edges(g.g)
+LightGraphs.edges(g::ColoredGraph, c) = Iterators.filter(e -> hascolor(g, e) && color(g, e) == c,
+                                                         edges(g))
 
 connected_edges(g::ColoredGraph, u) = (OEdge(u, v) for v in neighbors(g, u))
 
@@ -23,7 +25,8 @@ color(g::ColoredGraph, p::Pair) = color(g, OEdge(p))
 setcolor!(g::ColoredGraph, e::SimpleEdge, c::Int) = g.colors[e] = c
 setcolor!(g::ColoredGraph, p::Pair, c::Int) = setcolor!(g, OEdge(p), c)
 
-colors(g::ColoredGraph) = g.colors
+uniquecolors(g::ColoredGraph) = unique(values(g.colors))
+
 
 function isvalid(g::ColoredGraph)
     valid = true
@@ -37,6 +40,7 @@ function isvalid(g::ColoredGraph)
     end
     return valid
 end
+
 
 function isfree(g::ColoredGraph, u::Int, c::Int)
     for e in connected_edges(g, u)

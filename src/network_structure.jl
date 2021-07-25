@@ -1,11 +1,18 @@
 using LightGraphs
 
-struct DynamicNetwork{NL,VTup}
+export dim, pdim
+
+struct NetworkDynamic{NL,VTup}
     "vertex batches of same function"
     vertexbatches::VTup
     "network layer"
     nl::NL
+    "index manager"
+    im::IndexManager
 end
+
+dim(nw::NetworkDynamic) = full_data_range(nw.im)
+pdim(nw::NetworkDynamic) = full_para_range(nw.im)
 
 struct NetworkLayer{GT,CTup,AF}
     "graph/toplogy of layer"
@@ -29,63 +36,50 @@ struct ColorBatch{ETup}
     edgebatches::ETup
 end
 
-abstract type EdgeBatch end
-
-struct StaticEdgeBatch{F} <: EdgeBatch
+struct EdgeBatch{F}
     "edge indices (as in LG edge iterator) contained in batch"
     edges::Vector{Int}
     "edge function"
     fun::F
     "edge dimension"
     dim::Int
-    "parameter dimensions"
-    pdim::Int
-    "first index of first batch element in flat parameter Vector"
-    pfirstidx::Int
-    "first index of first batch element in acc cache"
-    accfirstidx::Int
-    "src idx in data, src dim, dst idx in data, dst dim, dst index in graph"
-    vertex_indices::Vector{Int}
-end
-
-struct ODEEdgeBatch{F} <: EdgeBatch
-    "edge indices (as in LG edge iterator) contained in batch"
-    edges::Vector{Int}
-    "edge function"
-    fun::F
-    "edge dimension"
-    dim::Int
-    "first index of first batch element in flat state Vector"
+    "first index of first batch element in flat state vector (-1 for static edge)"
     firstidx::Int
     "parameter dimensions"
     pdim::Int
     "first index of first batch element in flat parameter Vector"
     pfirstidx::Int
-    "first index of first batch element in acc cache"
-    accfirstidx::Int
-    "src idx in data, src dim, dst idx in data, dst dim, dst index in graph"
+    "src: idx in g, idx in data, dim ; dst: idx in g, idx in data, dim"
     vertex_indices::Vector{Int}
 end
 
 @inline function vertex_indices(batch::EdgeBatch, i)
     v = batch.vertex_indices
-    idx = (i-1) * 5
+    idx = 1 + (i-1)*6
     @inbounds begin
-        (v[idx + 1], v[idx + 2], v[idx + 3], v[idx + 4], v[idx + 5])
+        (v[idx + 1], v[idx + 2], v[idx + 3], v[idx + 4], v[idx + 5], v[idx + 6])
     end
 end
 
-@inline function vertex_ranges(layer::NetworkLayer, batch::StaticEdgeBatch, i)
-    (src_dat, src_dim, dst_dat, dst_dim, dst_idx) = vertex_indices(batch, i)
+@inline function src_dst_ranges(layer::NetworkLayer, batch::EdgeBatch, i)
+    (src, src_dat, src_dim, dst, dst_dat, dst_dim) = vertex_indices(batch, i)
     # ranges of src and data idx in data array
     src = src_dat : src_dat + src_dim - 1
-    dst = src_dat : src_dat + src_dim - 1
+    dst = dst_dat : dst_dat + dst_dim - 1
 
-    # range of dst vertex in accumolator array
-    astart = batch.accfirstidx + (dst_idx-1) * layer.accdim
-    acc = astart : astart + layer.accdim - 1
+    # range of src vertex in accumulator array
+    src_acc_first = 1 + (src-1) * layer.accdim
+    src_acc = src_acc_first : src_acc_first + layer.accdim - 1
 
-    return (src, dst, acc)
+    # range of dst vertex in accumulator array
+    dst_acc_first = 1 + (dst-1) * layer.accdim
+    dst_acc = dst_acc_first : dst_acc_first + layer.accdim - 1
+
+    # range of edge in flat state array
+    edge_first = batch.firstindex + (i-1) * batch.dim
+    edge = edge_first : edge_first + batch.dim - 1
+
+    return (src, dst, src_acc, dst_acc, edge)
 end
 
 struct VertexBatch{F}
@@ -125,8 +119,66 @@ Base.length(cb::ColorBatch) = length(cb.edges)
 Base.length(eb::EdgeBatch) = length(eb.edges)
 Base.length(vb::VertexBatch) = length(vb.vertices)
 
-LightGraphs.nv(nw::DynamicNetwork) = sum(nv.(nw.vertexbatches))
+LightGraphs.nv(nw::NetworkDynamic) = sum(nv.(nw.vertexbatches))
 LightGraphs.nv(vb::VertexBatch) = length(vb.vertices)
 
-LightGraphs.ne(nw::DynamicNetwork) = size(ne.(nl))
+LightGraphs.ne(nw::NetworkDynamic) = size(ne.(nl))
 LightGraphs.ne(nl::NetworkLayer) = ne(nl.g)
+
+
+struct IndexManager
+    v_data::OrderedDict{Int, UnitRange{Int}}
+    e_data::OrderedDict{Int, UnitRange{Int}}
+    v_para::OrderedDict{Int, UnitRange{Int}}
+    e_para::OrderedDict{Int, UnitRange{Int}}
+    function IndexManager()
+        d() = OrderedDict{Int, UnitRange{Int}}()
+        new((d() for i in 1:4)...)
+    end
+end
+
+_lastinrange(d::OrderedDict{Int, UnitRange{Int}}) = isempty(d) ? 0 : d[d.keys[end]][end]
+
+_lastindex_data(im::IndexManager) = max(_lastinrange(im.v_data), _lastinrange(im.e_data))
+_lastindex_para(im::IndexManager) = max(_lastinrange(im.v_para), _lastinrange(im.e_para))
+
+function _register_comp!(im::IndexManager, data, para, idxs, dim, pdim)
+    firstidx = datapos = _lastindex_data(im) + 1
+    pfirstidx = parapos = _lastindex_para(im) + 1
+    for i in idxs
+        if haskey(data, i) || haskey(para, i)
+            error("Index $i allready in $data or $para")
+        end
+        data[i] = datapos : datapos + dim - 1
+        para[i] = parapos : parapos + pdim - 1
+        datapos += dim
+        parapos += pdim
+    end
+    return firstidx, pfirstidx
+end
+
+register_edges!(im::IndexManager, idxs, dim, pdim) = _register_comp!(im, im.e_data, im.e_para, idxs, dim, pdim)
+register_vertices!(im::IndexManager, idxs, dim, pdim) = _register_comp!(im, im.v_data, im.v_para, idxs, dim, pdim)
+
+vertex_data_range(im::IndexManager, i) = im.v_data[i]
+vertex_para_range(im::IndexManager, i) = im.v_para[i]
+edge_data_range(im::IndexManager, i) = im.e_data[i]
+edge_para_range(im::IndexManager, i) = im.e_para[i]
+
+function _isdense(last, dicts...)
+    a = Vector{Int}(undef, last)
+    empty!(a)
+    for d in dicts
+        for v in values(d)
+            append!(a, v)
+        end
+    end
+    sort!(a)
+    return a == 1:last
+end
+
+isdense(im::IndexManager) = (_isdense(_lastindex_data(im), im.v_data, im.e_data) &&
+    _isdense(_lastindex_para(im), im.v_para, im.e_para))
+
+full_data_range(im::IndexManager) = 1:_lastindex_data(im)
+full_para_range(im::IndexManager) = 1:_lastindex_para(im)
