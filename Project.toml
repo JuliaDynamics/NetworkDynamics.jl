@@ -3,6 +3,9 @@ uuid = "d08cc098-a250-431b-9e17-1d795a6bcce3"
 authors = ["Hans Würfel <git@wuerfel.io> and contributors"]
 version = "0.1.0"
 
+[deps]
+LightGraphs = "093fc24a-ae57-5d10-9952-331d41423f4d"
+
 [compat]
 julia = "1"
 
