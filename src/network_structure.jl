@@ -2,6 +2,17 @@ using LightGraphs
 
 export dim, pdim
 
+struct IndexManager
+    v_data::OrderedDict{Int, UnitRange{Int}}
+    e_data::OrderedDict{Int, UnitRange{Int}}
+    v_para::OrderedDict{Int, UnitRange{Int}}
+    e_para::OrderedDict{Int, UnitRange{Int}}
+    function IndexManager()
+        dict() = OrderedDict{Int, UnitRange{Int}}()
+        new((dict() for i in 1:4)...)
+    end
+end
+
 struct NetworkDynamic{NL,VTup}
     "vertex batches of same function"
     vertexbatches::VTup
@@ -11,8 +22,8 @@ struct NetworkDynamic{NL,VTup}
     im::IndexManager
 end
 
-dim(nw::NetworkDynamic) = full_data_range(nw.im)
-pdim(nw::NetworkDynamic) = full_para_range(nw.im)
+dim(nw::NetworkDynamic) = full_data_range(nw.im)[end]
+pdim(nw::NetworkDynamic) = full_para_range(nw.im)[end]
 
 struct NetworkLayer{GT,CTup,AF}
     "graph/toplogy of layer"
@@ -27,7 +38,7 @@ struct NetworkLayer{GT,CTup,AF}
     cachepool::CachePool
 end
 
-accumulator_cache(nl::NetworkLayer, T) = getcache(nl.network.cachepool, T, nl.accdim, nv(nl))
+accumulator_cache(nl::NetworkLayer, T) = getcache(nl.cachepool, T, nl.accdim * nv(nl.g))
 
 struct ColorBatch{ETup}
     "edge indices (as in LG edge iterator) contained in batch"
@@ -55,7 +66,7 @@ end
 
 @inline function vertex_indices(batch::EdgeBatch, i)
     v = batch.vertex_indices
-    idx = 1 + (i-1)*6
+    idx = (i-1)*6
     @inbounds begin
         (v[idx + 1], v[idx + 2], v[idx + 3], v[idx + 4], v[idx + 5], v[idx + 6])
     end
@@ -64,8 +75,8 @@ end
 @inline function src_dst_ranges(layer::NetworkLayer, batch::EdgeBatch, i)
     (src, src_dat, src_dim, dst, dst_dat, dst_dim) = vertex_indices(batch, i)
     # ranges of src and data idx in data array
-    src = src_dat : src_dat + src_dim - 1
-    dst = dst_dat : dst_dat + dst_dim - 1
+    src_r = src_dat : src_dat + src_dim - 1
+    dst_r = dst_dat : dst_dat + dst_dim - 1
 
     # range of src vertex in accumulator array
     src_acc_first = 1 + (src-1) * layer.accdim
@@ -76,10 +87,10 @@ end
     dst_acc = dst_acc_first : dst_acc_first + layer.accdim - 1
 
     # range of edge in flat state array
-    edge_first = batch.firstindex + (i-1) * batch.dim
-    edge = edge_first : edge_first + batch.dim - 1
+    edge_first = batch.firstidx + (i-1) * batch.dim
+    edge_r = edge_first : edge_first + batch.dim - 1
 
-    return (src, dst, src_acc, dst_acc, edge)
+    return (src_r, dst_r, src_acc, dst_acc, edge_r)
 end
 
 struct VertexBatch{F}
@@ -99,12 +110,12 @@ end
 
 @inline function vertex_ranges(layer::NetworkLayer, batch::VertexBatch, i)
     # range of the vertex in data array
-    vstart = batch.firstidx + (i-1) * batch
+    vstart = batch.firstidx + (i-1) * batch.dim
     v = vstart : vstart + batch.dim - 1
 
     # range in accumulator array
     v_idx = batch.vertices[i]
-    astart = (v_idx-1) * layer.accdim
+    astart = 1 + (v_idx-1) * layer.accdim
     acc = astart : astart + layer.accdim - 1
 
     return (v, acc)
@@ -125,18 +136,6 @@ LightGraphs.nv(vb::VertexBatch) = length(vb.vertices)
 LightGraphs.ne(nw::NetworkDynamic) = size(ne.(nl))
 LightGraphs.ne(nl::NetworkLayer) = ne(nl.g)
 
-
-struct IndexManager
-    v_data::OrderedDict{Int, UnitRange{Int}}
-    e_data::OrderedDict{Int, UnitRange{Int}}
-    v_para::OrderedDict{Int, UnitRange{Int}}
-    e_para::OrderedDict{Int, UnitRange{Int}}
-    function IndexManager()
-        d() = OrderedDict{Int, UnitRange{Int}}()
-        new((d() for i in 1:4)...)
-    end
-end
-
 _lastinrange(d::OrderedDict{Int, UnitRange{Int}}) = isempty(d) ? 0 : d[d.keys[end]][end]
 
 _lastindex_data(im::IndexManager) = max(_lastinrange(im.v_data), _lastinrange(im.e_data))
@@ -149,10 +148,14 @@ function _register_comp!(im::IndexManager, data, para, idxs, dim, pdim)
         if haskey(data, i) || haskey(para, i)
             error("Index $i allready in $data or $para")
         end
-        data[i] = datapos : datapos + dim - 1
-        para[i] = parapos : parapos + pdim - 1
-        datapos += dim
-        parapos += pdim
+        if dim > 0
+            data[i] = datapos : datapos + dim - 1
+            datapos += dim
+        end
+        if pdim > 0
+            para[i] = parapos : parapos + pdim - 1
+            parapos += pdim
+        end
     end
     return firstidx, pfirstidx
 end

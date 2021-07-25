@@ -1,8 +1,8 @@
 export networkdynamic
 
 function networkdynamic(g::SimpleGraph,
-                        vertexf::Union{VertexFunction, Vector{VertexFunction}},
-                        edgef::Union{EdgeFunction, Vector{EdgeFunction}};
+                        vertexf::Union{VertexFunction, Vector{<:VertexFunction}},
+                        edgef::Union{EdgeFunction, Vector{<:EdgeFunction}};
                         accumulator=+, accdim=:auto,
                         verbose=true)
     verbose && println("Create dynamic network with $(nv(g)) vertices and $(ne(g)) edges:")
@@ -37,7 +37,7 @@ function VertexBatch(im::IndexManager,
 end
 
 function NetworkLayer(im::IndexManager, g::SimpleGraph,
-                      edgef::Union{EdgeFunction, Vector{EdgeFunction}},
+                      edgef::Union{EdgeFunction, Vector{<:EdgeFunction}},
                       accumulator, accdim;
                       verbose)
     @check hasmethod(accumulator, NTuple{2, AbstractFloat}) "Accumulator needs `acc(AbstractFloat, AbstractFloat) method`"
@@ -67,7 +67,7 @@ end
 
 function ColorBatch(im::IndexManager, g::SimpleGraph,
                     edge_idxs::Vector{Int},
-                    edgef::Union{EdgeFunction, Vector{EdgeFunction}};
+                    edgef::Union{EdgeFunction, Vector{<:EdgeFunction}};
                     verbose)
     verbose && println(" - ColorBatch $(edge_idxs)")
 
@@ -83,7 +83,12 @@ function EdgeBatch(im::IndexManager, g::SimpleGraph,
                    verbose)
     dim = edgef.dim
     pdim = edgef.pdim
-    (firstidx, pfirstidx) = register_edges!(im, edge_idxs, dim, pdim)
+
+    if edgef isa StaticEdge
+        (firstidx, pfirstidx) = register_edges!(im, edge_idxs, 0, pdim)
+    else
+        (firstidx, pfirstidx) = register_edges!(im, edge_idxs, dim, pdim)
+    end
 
     vidx_array = Array{Int}(undef, 6*length(edge_idxs))
     empty!(vidx_array)
