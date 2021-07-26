@@ -4,7 +4,7 @@ function Network(g::SimpleGraph,
                  vertexf::Union{VertexFunction, Vector{<:VertexFunction}},
                  edgef::Union{EdgeFunction, Vector{<:EdgeFunction}};
                  accumulator=+, accdim=:auto,
-                 verbose=true)
+                 verbose=false)
     verbose && println("Create dynamic network with $(nv(g)) vertices and $(ne(g)) edges:")
 
     im = IndexManager()
@@ -26,7 +26,7 @@ function VertexBatch(im::IndexManager,
     pdim = vertexf.pdim
     (firstidx, pfirstidx) = register_vertices!(im, vertex_idxs, dim, pdim)
 
-    verbose && println(" - VertexBatch $(vertex_idxs)")
+    verbose && println(" - VertexBatch: dim=$dim, pdim=$pdim, length=$(length(vertex_idxs))")
 
     VertexBatch(vertex_idxs,
                 vertexf,
@@ -69,7 +69,7 @@ function ColorBatch(im::IndexManager, g::SimpleGraph,
                     edge_idxs::Vector{Int},
                     edgef::Union{EdgeFunction, Vector{<:EdgeFunction}};
                     verbose)
-    verbose && println(" - ColorBatch $(edge_idxs)")
+    verbose && println(" - ColorBatch with $(length(edge_idxs)) edges")
 
     eftypes, idxs = batch_identical(edgef, edge_idxs)
     edgebatches = Tuple(EdgeBatch(im, g, i, ef; verbose) for (i, ef) in zip(idxs, eftypes))
@@ -105,7 +105,7 @@ function EdgeBatch(im::IndexManager, g::SimpleGraph,
     end
     @assert length(vidx_array) == 6*length(edge_idxs)
 
-    verbose && println("   - EdgeBatch $(edge_idxs)")
+    verbose && println("   - EdgeBatch: dim=$dim, pdim=$pdim, length=$(length(edge_idxs))")
 
     EdgeBatch(edge_idxs,
               edgef,

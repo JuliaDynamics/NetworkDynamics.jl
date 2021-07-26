@@ -3,10 +3,10 @@ struct CachePool
     CachePool() = new(Dict{Any, AbstractArray}())
 end
 
-function getcache(c::CachePool, T, size...)::T
-    key = (T, size)
+function getcache(c::CachePool, T, length)::T
+    key = (T, length)
     return get!(c.caches, key) do
-	   T(undef, size...)
+        T(undef, length)
     end::T
 end
 
