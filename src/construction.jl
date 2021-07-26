@@ -1,10 +1,10 @@
-export networkdynamic
+export Network
 
-function networkdynamic(g::SimpleGraph,
-                        vertexf::Union{VertexFunction, Vector{<:VertexFunction}},
-                        edgef::Union{EdgeFunction, Vector{<:EdgeFunction}};
-                        accumulator=+, accdim=:auto,
-                        verbose=true)
+function Network(g::SimpleGraph,
+                 vertexf::Union{VertexFunction, Vector{<:VertexFunction}},
+                 edgef::Union{EdgeFunction, Vector{<:EdgeFunction}};
+                 accumulator=+, accdim=:auto,
+                 verbose=true)
     verbose && println("Create dynamic network with $(nv(g)) vertices and $(ne(g)) edges:")
 
     im = IndexManager()
@@ -15,7 +15,7 @@ function networkdynamic(g::SimpleGraph,
     nl = NetworkLayer(im, g, edgef, accumulator, accdim; verbose)
 
     @assert isdense(im) "The index structure is not dense"
-    return NetworkDynamic(vertexbatches, nl, im)
+    return Network(vertexbatches, nl, im)
 end
 
 function VertexBatch(im::IndexManager,
@@ -117,10 +117,12 @@ function EdgeBatch(im::IndexManager, g::SimpleGraph,
 end
 
 batch_by_idxs(v, idxs::Vector{Vector{Int}}) = [v for batch in idxs]
-batch_by_idxs(v::AbstractVector, batches::Vector{Vector{Int}}) = [v[batch] for batch in batches]
+function batch_by_idxs(v::AbstractVector, batches::Vector{Vector{Int}})
+    @assert length(v) == sum(length.(batches))
+    [v[batch] for batch in batches]
+end
 
 batch_identical(el, idxs::Vector{Int}) = [el], [idxs]
-
 function batch_identical(v::Vector{T}, indices::Vector{Int}) where {T}
     @assert length(v) == length(indices)
     idxs_per_type = Vector{Int}[]

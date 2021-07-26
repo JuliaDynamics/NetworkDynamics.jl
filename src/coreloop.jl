@@ -1,4 +1,4 @@
-function (nw::NetworkDynamic)(du, u::T, p, t) where {T}
+function (nw::Network)(du, u::T, p, t) where {T}
     # for now just one layer
     layer = nw.nl
 
@@ -50,16 +50,46 @@ function process_edgebatch!(_, u::T, p, t, _acc, layer, batch::EdgeBatch{F}) whe
         # apply the edge function
         batch.fun.f(_c, vs, vd, pe, t)
 
-        # apply the accumulator
-        # XXX: move this to function and dispatch based on couplingtype of batch?
-        _c_part = dim == layer.accdim ? _c : view(_c, 1:layer.accdim)
-        _acc_src = view(_acc, src_acc_r)
-        _acc_dst = view(_acc, dst_acc_r)
+        apply_accumulation!(coupling(F), layer.accumulator, _acc, src_r, dst_r, _c)
+    end
+end
 
-        for i in 1:layer.accdim
-            _acc_dst[i] = layer.accumulator(_acc_src[i],  _c_part[i])
-            _acc_src[i] = layer.accumulator(_acc_src[i], -_c_part[i])
-        end
+Base.@propagate_inbounds function apply_accumulation!(::AntiSymmetric, f, _acc, src_r, dst_r, edge)
+    _acc_dst = view(_acc, dst_r)
+    _acc_src = view(_acc, src_r)
+
+    for i in 1:length(dst_r)
+        _acc_dst[i] = f(_acc_dst[i],  edge[i])
+        _acc_src[i] = f(_acc_src[i], -edge[i])
+    end
+end
+
+Base.@propagate_inbounds function apply_accumulation!(::Symmetric, f, _acc, src_r, dst_r, edge)
+    _acc_dst = view(_acc, dst_r)
+    _acc_src = view(_acc, src_r)
+
+    for i in 1:length(dst_r)
+        _acc_dst[i] = f(_acc_dst[i], edge[i])
+        _acc_src[i] = f(_acc_src[i], edge[i])
+    end
+end
+
+Base.@propagate_inbounds function apply_accumulation!(::Directed, f, _acc, _, dst_r, edge)
+    _acc_dst = view(_acc, dst_r)
+
+    for i in 1:length(dst_r)
+        _acc_dst[i] = f(_acc_dst[i], edge[i])
+    end
+end
+
+Base.@propagate_inbounds function apply_accumulation!(::Fiducial, f, _acc, src_r, dst_r, edge)
+    _acc_dst = view(_acc, dst_r)
+    _acc_src = view(_acc, src_r)
+    offset = Int(length(edge) / 2)
+
+    for i in 1:length(dst_r)
+        _acc_dst[i] = f(_acc_dst[i], edge[i])
+        _acc_src[i] = f(_acc_src[i], edge[offset + i])
     end
 end
 

@@ -13,7 +13,7 @@ struct IndexManager
     end
 end
 
-struct NetworkDynamic{NL,VTup}
+struct Network{NL,VTup}
     "vertex batches of same function"
     vertexbatches::VTup
     "network layer"
@@ -22,8 +22,8 @@ struct NetworkDynamic{NL,VTup}
     im::IndexManager
 end
 
-dim(nw::NetworkDynamic) = full_data_range(nw.im)[end]
-pdim(nw::NetworkDynamic) = full_para_range(nw.im)[end]
+dim(nw::Network) = full_data_range(nw.im)[end]
+pdim(nw::Network) = full_para_range(nw.im)[end]
 
 struct NetworkLayer{GT,CTup,AF}
     "graph/toplogy of layer"
@@ -130,10 +130,10 @@ Base.length(cb::ColorBatch) = length(cb.edges)
 Base.length(eb::EdgeBatch) = length(eb.edges)
 Base.length(vb::VertexBatch) = length(vb.vertices)
 
-LightGraphs.nv(nw::NetworkDynamic) = sum(nv.(nw.vertexbatches))
+LightGraphs.nv(nw::Network) = sum(nv.(nw.vertexbatches))
 LightGraphs.nv(vb::VertexBatch) = length(vb.vertices)
 
-LightGraphs.ne(nw::NetworkDynamic) = size(ne.(nl))
+LightGraphs.ne(nw::Network) = size(ne.(nl))
 LightGraphs.ne(nl::NetworkLayer) = ne(nl.g)
 
 _lastinrange(d::OrderedDict{Int, UnitRange{Int}}) = isempty(d) ? 0 : d[d.keys[end]][end]

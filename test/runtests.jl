@@ -10,7 +10,7 @@ using NDPrototype: VertexBatch, parameter_range
         vertexf = ODEVertex(; f=x->x^2, dim=1, pdim=2)
         edgef = StaticEdge(; f=x->x^2, dim=2, pdim=3)
 
-        nd = networkdynamic(g, vertexf, edgef; verbose=false);
+        nd = Network(g, vertexf, edgef; verbose=false);
 
         g = SimpleGraph(4)
         add_edge!(g, 1, 2)
@@ -30,6 +30,28 @@ using NDPrototype: VertexBatch, parameter_range
         @test parameter_range(vb, 3) == 8:9
         @test parameter_range(vb, 4) == 10:11
     end
+end
+
+@testset "apply accumulation" begin
+    using NDPrototype: apply_accumulation!
+    acc = zeros(4)
+    src_r, dst_r = 1:2, 3:4
+    edge = [-1.0, 1.0]
+    apply_accumulation!(Symmetric(), +, acc, src_r, dst_r, edge)
+    @test acc == [-1, 1, -1, 1]
+
+    acc = zeros(4)
+    apply_accumulation!(AntiSymmetric(), +, acc, src_r, dst_r, edge)
+    @test acc == [1, -1, -1, 1]
+
+    acc = zeros(4)
+    apply_accumulation!(Directed(), +, acc, src_r, dst_r, edge)
+    @test acc == [0, 0, -1, 1]
+
+    acc = zeros(4)
+    edge = [1,2,3,4,5,6]
+    apply_accumulation!(Fiducial(), +, acc, src_r, dst_r, edge)
+    @test acc == [4, 5, 1, 2]
 end
 
 @testset "batch_identical" begin
