@@ -8,46 +8,63 @@ function (nw::Network)(du, u::T, p, t) where {T}
     fill!(_acc, zero(eltype(T)))
 
     # go through all colobatches separatly to avoid writing conflicts to accumulator
-    unroll_colorbatches!(nw, layer, dupt, _acc)
+    unroll_colorbatches!(nw, layer, layer.colorbatches, dupt, _acc)
 
     # can be run parallel
     if nw.parallel
-        @sync async_unroll_vertexbatches!(nw, layer, dupt, _acc)
+        @sync async_unroll_batches!(nw, layer, nw.vertexbatches, dupt, _acc)
     else
-        unroll_vertexbatches!(nw, layer, dupt, _acc)
+        unroll_batches!(nw, layer, nw.vertexbatches, dupt, _acc)
     end
 end
 
-@unroll function unroll_colorbatches!(nw, layer, dupt, _acc, cbs=layer.colorbatches)
-    @unroll for colorbatch in cbs
+@unroll function unroll_colorbatches!(nw, layer, colorbatches, dupt, _acc)
+    @unroll for cbatch in colorbatches
         if nw.parallel
-            @sync async_unroll_edgebatches!(nw, layer, colorbatch, dupt, _acc)
+            @sync async_unroll_batches!(nw, layer, cbatch.edgebatches, dupt, _acc)
         else
-            unroll_edgebatches!(nw, layer, colorbatch, dupt, _acc)
+            unroll_batches!(nw, layer, cbatch.edgebatches, dupt, _acc)
         end
     end
 end
 
-@unroll function async_unroll_edgebatches!(nw, layer, cb::ColorBatch, dupt, _acc, ebs=cb.edgebatches)
-    @unroll for batch in ebs
-        spawn_process_edgebatch!(nw, layer, batch, dupt, _acc)
+@unroll function unroll_batches!(nw, layer, batches, dupt, _acc)
+    @unroll for batch in batches
+        process_batch!(nw, layer, batch, dupt, _acc)
     end
 end
 
-@unroll function unroll_edgebatches!(nw, layer, cb::ColorBatch, dupt, _acc, ebs=cb.edgebatches)
-    @unroll for batch in ebs
-        process_edgebatch!(nw, layer, batch, dupt, _acc)
+@unroll function async_unroll_batches!(nw, layer, batches, dupt, _acc)
+    @unroll for batch in batches
+        async_process_batch!(nw, layer, batch, dupt, _acc)
     end
 end
 
-spawn_process_edgebatch!(nw, layer, batch, dupt, _acc) = Threads.@spawn process_edgebatch!(nw, layer, batch, dupt, _acc)
+async_process_batch!(nw, layer, batch, dupt, _acc) = Threads.@spawn process_batch!(nw, layer, batch, dupt, _acc)
 
-function process_edgebatch!(nw, layer, batch::EdgeBatch{F}, dupt, _acc) where {F<:StaticEdge}
+function process_batch!(nw, layer, batch::VertexBatch{F}, dupt, _acc) where {F}
+    @cond_threads nw.parallel for i in 1:length(batch)
+        du, u, p, t = dupt
+        (v_r, acc_r) = vertex_ranges(layer, batch, i)
+        pv_r = parameter_range(batch, i)
+
+        vdu = view(du, v_r)
+        vu  = view(u, v_r)
+        acc = view(_acc, acc_r)
+        pv = p===nothing ? nothing : view(p, pv_r)
+
+        batch.fun.f(vdu, vu, acc, pv, t)
+    end
+end
+
+function process_batch!(nw, layer, batch::EdgeBatch{F}, dupt::T, _acc) where {F<:StaticEdge, T}
     # a cache of size dim per thread
     dim = batch.dim
     _, u, p, t = dupt
-    cachesize = nw.parallel ? Threads.ndthreads() * dim : dim
-    _cache =  getcache(layer.cachepool, typeof(u), cachesize)
+    cachesize = Threads.nthreads() * dim
+    # XXX: WTF why allocations for this line below?
+    # cachesize = nw.parallel ? Threads.nthreads() * dim : dim
+    _cache = getcache(layer.cachepool, typeof(u), cachesize)
 
     @cond_threads nw.parallel for i in 1:length(batch)
         # each thread should get it's portion of the cache
@@ -70,7 +87,7 @@ function process_edgebatch!(nw, layer, batch::EdgeBatch{F}, dupt, _acc) where {F
     end
 end
 
-function process_edgebatch!(nw, layer, batch::EdgeBatch{F}, dupt, _acc) where {F<:ODEEdge}
+function process_batch!(nw, layer, batch::EdgeBatch{F}, dupt, _acc) where {F<:ODEEdge}
     du, u, p, t = dupt
 
     @cond_threads nw.parallel for i in 1:length(batch)
@@ -131,31 +148,3 @@ Base.@propagate_inbounds function apply_accumulation!(::Fiducial, f, _acc, src_a
     end
 end
 
-@unroll function async_unroll_vertexbatches!(nw, layer, dupt, _acc, vbs=nw.vertexbatches)
-    @unroll for batch in vbs
-        spawn_process_vertexbatch!(nw, layer, batch, dupt, _acc)
-    end
-end
-
-@unroll function unroll_vertexbatches!(nw, layer, dupt, _acc, vbs=nw.vertexbatches)
-    @unroll for batch in vbs
-        process_vertexbatch!(nw, layer, batch, dupt, _acc)
-    end
-end
-
-spawn_process_vertexbatch!(nw, layer, batch, dupt, _acc) = Threads.@spawn vertexbatch!(nw, layer, batch, dupt, _acc)
-
-function process_vertexbatch!(nw, layer, batch::VertexBatch{F}, dupt, _acc) where {F}
-    @cond_threads nw.parallel for i in 1:length(batch)
-        du, u, p, t = dupt
-        (v_r, acc_r) = vertex_ranges(layer, batch, i)
-        pv_r = parameter_range(batch, i)
-
-        vdu = view(du, v_r)
-        vu  = view(u, v_r)
-        acc = view(_acc, acc_r)
-        pv = p===nothing ? nothing : view(p, pv_r)
-
-        batch.fun.f(vdu, vu, acc, pv, t)
-    end
-end

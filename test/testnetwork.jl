@@ -30,7 +30,6 @@ u = rand(dim(nw))
 du = zeros(size(u)...)
 p = Float64[]
 
-nw(du, u, p, 0.0)
 @btime $nw($du, $u, $p, 0.0)
 
 #############
@@ -95,7 +94,7 @@ end
 end setup = begin
     g = watts_strogatz($N, 3, 0.8, seed=1)
     edge = diffusion_dedge()
-    nd = Network(g, $vertex, edge, accdim=1, parallel=false)
+    nd = Network(g, $vertex, edge, accdim=1, parallel=true)
     x0 = randn(dim(nd))
     dx = similar(x0)
     nd(dx, x0, nothing, 0.0)
@@ -112,10 +111,7 @@ dx1 = zero(x0);
 dx2 = zero(x0);
 nd1(dx1, x0, nothing, 0.0)
 nd2(dx2, x0, nothing, 0.0)
-dx1
-dx2
-
-
+@test dx1 ≈ dx2
 
 # inhomgeneous network
 function heterogeneous(N)
@@ -151,28 +147,11 @@ end setup = begin
 end
 
 begin
-    N = 10000
+    N = 1000
     (p, v, e, g) = heterogeneous(N)
-    nd = Network(g, v, e, parallel=false)
+    nd = Network(g, v, e, parallel=true)
     x0 = randn(dim(nd))
     dx = similar(x0)
     nd(dx, x0, p, 0.0) # call to init caches, we don't want to benchmark this
     @btime $nd($dx, $x0, $p, 0.0) # call to init caches, we don't want to benchmark this
 end
-
-
-
-function entry()
-    @sync for i in 1:10
-        Threads.@spawn testfun(i)
-    end
-end
-
-function testfun(i)
-    for j in 'a':'c'
-        Threads.@spawn println("thread $(Threads.threadid()) val $i inner $j")
-        sleep(1)
-    end
-end
-
-entry()
