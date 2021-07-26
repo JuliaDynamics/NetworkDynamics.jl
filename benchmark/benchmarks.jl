@@ -12,14 +12,14 @@ const SUITE = BenchmarkGroup()
 ####
 SUITE["diffusion"] = BenchmarkGroup(["homogeneous"])
 vertex = diffusion_vertex()
-edges = Dict("static_edge" => diffusion_edge(),)
-             # "ode_edge" => diffusion_dedge())
+edges = Dict("static_edge" => diffusion_edge(),
+             "ode_edge" => diffusion_dedge())
 
-for k in ["static_edge"]#, "ode_edge"]
+for k in ["static_edge", "ode_edge"]
     SUITE["diffusion"][k] = BenchmarkGroup([k])
     SUITE["diffusion"][k]["assemble"] = BenchmarkGroup(["assemble"])
     SUITE["diffusion"][k]["call"] = BenchmarkGroup(["call"])
-    # SUITE["diffusion"][k]["call_mt"] = BenchmarkGroup(["call", "multithread"])
+    SUITE["diffusion"][k]["call_mt"] = BenchmarkGroup(["call", "multithread"])
     edge = edges[k]
 
     for N ∈ [10, 100, 1_000, 10_000]  #, 100_000, 1_000_000]
@@ -39,15 +39,15 @@ for k in ["static_edge"]#, "ode_edge"]
             nd(dx, x0, nothing, 0.0) # call to init caches, we don't want to benchmark this
         end
 
-        # SUITE["diffusion"][k]["call_mt"][N] = @benchmarkable begin
-        #     nd(dx, x0, nothing, 0.0)
-        # end setup = begin
-        #     g = watts_strogatz($N, 3, 0.8, seed=1)
-        #     nd = Network(g, $vertex, $edge; parallel=true)
-        #     x0 = randn(dim(nd))
-        #     dx = similar(x0)
-        #     nd(dx, x0, nothing, 0.0) # call to init caches, we don't want to benchmark this
-        # end
+        SUITE["diffusion"][k]["call_mt"][N] = @benchmarkable begin
+            nd(dx, x0, nothing, 0.0)
+        end setup = begin
+            g = watts_strogatz($N, 3, 0.8, seed=1)
+            nd = Network(g, $vertex, $edge; parallel=true)
+            x0 = randn(dim(nd))
+            dx = similar(x0)
+            nd(dx, x0, nothing, 0.0) # call to init caches, we don't want to benchmark this
+        end
     end
 end
 
@@ -62,7 +62,7 @@ SUITE["kuramoto"]["heterogeneous"] = BenchmarkGroup(["heterogeneous"])
 for k in ["homogeneous", "heterogeneous"]
     SUITE["kuramoto"][k]["assemble"] = BenchmarkGroup(["assemble"])
     SUITE["kuramoto"][k]["call"] = BenchmarkGroup(["call"])
-    # SUITE["kuramoto"][k]["call_mt"] = BenchmarkGroup(["call", "multithread"])
+    SUITE["kuramoto"][k]["call_mt"] = BenchmarkGroup(["call", "multithread"])
 end
 
 function homogeneous(N)
@@ -105,14 +105,14 @@ for N ∈ [10, 100, 1_000, 10_000]  #, 100_000, 1_000_000]
             nd(dx, x0, p, 0.0) # call to init caches, we don't want to benchmark this
         end
 
-        # SUITE["kuramoto"][name]["call_mt"][N] = @benchmarkable begin
-        #     nd(dx, x0, p, 0.0)
-        # end setup = begin
-        #     (p, v, e, g) = $f($N)
-        #     nd = Network(g, v, e, g; parallel=true)
-        #     x0 = randn(dim(nd))
-        #     dx = similar(x0)
-        #     nd(dx, x0, p, 0.0) # call to init caches, we don't want to benchmark this
-        # end
+        SUITE["kuramoto"][name]["call_mt"][N] = @benchmarkable begin
+            nd(dx, x0, p, 0.0)
+        end setup = begin
+            (p, v, e, g) = $f($N)
+            nd = Network(g, v, e, parallel=true)
+            x0 = randn(dim(nd))
+            dx = similar(x0)
+            nd(dx, x0, p, 0.0) # call to init caches, we don't want to benchmark this
+        end
     end
 end

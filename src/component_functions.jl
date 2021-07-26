@@ -44,5 +44,5 @@ struct ODEEdge{F,C} <: EdgeFunction{C}
 end
 function ODEEdge(; f, dim, pdim, coupling)
     # todo probably a method check?
-    StaticEdge{typeof(f), typeof(coupling)}(f, dim, pdim)
+    ODEEdge{typeof(f), typeof(coupling)}(f, dim, pdim)
 end

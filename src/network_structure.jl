@@ -20,6 +20,8 @@ struct Network{NL,VTup}
     nl::NL
     "index manager"
     im::IndexManager
+    "bool whther to use threads" #todo could be per layer?
+    parallel::Bool
 end
 
 dim(nw::Network) = full_data_range(nw.im)[end]

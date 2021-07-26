@@ -4,6 +4,7 @@ function Network(g::SimpleGraph,
                  vertexf::Union{VertexFunction, Vector{<:VertexFunction}},
                  edgef::Union{EdgeFunction, Vector{<:EdgeFunction}};
                  accumulator=+, accdim=:auto,
+                 parallel=false,
                  verbose=false)
     verbose && println("Create dynamic network with $(nv(g)) vertices and $(ne(g)) edges:")
 
@@ -15,7 +16,7 @@ function Network(g::SimpleGraph,
     nl = NetworkLayer(im, g, edgef, accumulator, accdim; verbose)
 
     @assert isdense(im) "The index structure is not dense"
-    return Network(vertexbatches, nl, im)
+    return Network(vertexbatches, nl, im, parallel)
 end
 
 function VertexBatch(im::IndexManager,
