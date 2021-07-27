@@ -41,22 +41,20 @@ end
     Unroll needs its own function and the loop to unroll needs to iterate
     over one of its arguments (modulo `length`).
 """
-@unroll function vertex_loop!(dx, p, t, gd, gs,
-                              unique_vertices, unique_v_indices, parallel)
-    @unroll for j in 1:length(unique_vertices)
+@unroll function component_loop!(dx, p, t, gd, gs,
+                              unique_components, unique_c_indices, parallel)
+    @unroll for j in 1:length(unique_components)
         # @Threads.threads and @generated clash
         # To make them uninvolved with each other we need another function
-        inner_vertex_loop!(dx, p, t, gd, gs,
-                           unique_vertices[j], unique_v_indices[j], parallel)
+        _inner_loop!(dx, p, t, gd, gs,
+                           unique_components[j], unique_c_indices[j], parallel)
     end
 end
 
-function inner_vertex_loop!(dx, p, t, gd, gs,
-                            vertex, indices, parallel)
-    # Having another loop is great, because we should be able to
-    # dispatch on the vertex type
+function _inner_loop!(dx, p, t, gd, gs,
+                         component::T, indices, parallel) where T <: ODEVertex
     @nd_threads parallel for i in indices
-        vertex.f!(view(dx,gs.v_idx[i]),
+        component.f!(view(dx,gs.v_idx[i]),
                   get_vertex(gd, i),
                   get_dst_edges(gd, i),
                   p_v_idx(p, i),
@@ -64,11 +62,24 @@ function inner_vertex_loop!(dx, p, t, gd, gs,
     end
 end
 
-@Base.kwdef struct nd_ODE_Static{G, GD, TV, T1, T2}
+function _inner_loop!(dx, p, t, gd, gs,
+                         component::T, indices, parallel) where T <: StaticEdge
+    @nd_threads parallel for i in indices
+        component.f!(get_edge(gd, i),
+                     get_src_vertex(gd, i),
+                     get_dst_vertex(gd, i),
+                     p_e_idx(p, i),
+                     t)
+    end
+end
+
+@Base.kwdef struct nd_ODE_Static{G, GD, TV, TUV, TE, TUE}
     vertices!::TV
-    unique_vertices!::T1
+    unique_vertices!::TUV
     unique_v_indices::Vector{Vector{Int}}
-    edges!::T2
+    edges!::TE
+    unique_edges!::TUE
+    unique_e_indices::Vector{Vector{Int}}
     graph::G #redundant?
     graph_structure::GraphStruct
     graph_data::GD
@@ -83,18 +94,13 @@ function (d::nd_ODE_Static)(dx, x, p, t)
     checkbounds_p(p, gs.num_v, gs.num_e)
     gd = prep_gd(dx, x, d.graph_data, d.graph_structure)
 
-    @nd_threads d.parallel for i in 1:gs.num_e
-        maybe_idx(d.edges!, i).f!(
-            get_edge(gd, i),
-            get_src_vertex(gd, i),
-            get_dst_vertex(gd, i),
-            p_e_idx(p, i),
-            t)
-    end
+    # Pass nothing, because here we have only Static Edges
+    component_loop!(nothing, p, t, gd, gs,
+                 d.unique_edges!, d.unique_e_indices, d.parallel)
 
     @assert size(dx) == size(x) "Sizes of dx and x do not match"
 
-    vertex_loop!(dx, p, t, gd, gs,
+    component_loop!(dx, p, t, gd, gs,
                  d.unique_vertices!, d.unique_v_indices, d.parallel)
     nothing
 end
@@ -105,14 +111,8 @@ function (d::nd_ODE_Static)(x, p, t, ::Type{GetGD})
     gs = d.graph_structure
     checkbounds_p(p, gs.num_v, gs.num_e)
 
-    @nd_threads d.parallel for i in 1:d.graph_structure.num_e
-        maybe_idx(d.edges!,i).f!(
-            get_edge(gd, i),
-            get_src_vertex(gd, i),
-            get_dst_vertex(gd, i),
-            p_e_idx(p, i),
-            t)
-    end
+    component_loop!(nothing, p, t, gd, gs,
+                 d.unique_edges!, d.unique_e_indices, d.parallel)
 
     gd
 end
