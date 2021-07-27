@@ -9,6 +9,7 @@ OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
 Unrolled = "9602ed7d-8fef-5bc8-8597-8f21381861e8"
 
 [compat]
+Unrolled = "0.1"
 julia = "1"
 
 [extras]
