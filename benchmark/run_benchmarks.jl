@@ -1,9 +1,9 @@
-#!julia
+#!/usr/bin/env julia
 
 # set root path of the ND repo
 NDPATH = begin
     path = splitpath(abspath(@__DIR__))
-    i = findlast(isequal("NetworkDynamics"), path)
+    i = findlast(contains("NetworkDynamics"), path)
     abspath(path[begin:i]...)
 end
 BMPATH = joinpath(NDPATH, "benchmark")
