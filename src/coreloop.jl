@@ -12,7 +12,7 @@ function (nw::Network)(du, u::T, p, t) where {T}
 
     # can be run parallel
     if nw.parallel
-        @sync async_unroll_batches!(nw, layer, nw.vertexbatches, dupt, _acc)
+        parallell_unroll_batches!(nw, layer, nw.vertexbatches, dupt, _acc)
     else
         unroll_batches!(nw, layer, nw.vertexbatches, dupt, _acc)
     end
@@ -21,7 +21,7 @@ end
 @unroll function unroll_colorbatches!(nw, layer, colorbatches, dupt, _acc)
     @unroll for cbatch in colorbatches
         if nw.parallel
-            @sync async_unroll_batches!(nw, layer, cbatch.edgebatches, dupt, _acc)
+            parallell_unroll_batches!(nw, layer, cbatch.edgebatches, dupt, _acc)
         else
             unroll_batches!(nw, layer, cbatch.edgebatches, dupt, _acc)
         end
@@ -34,10 +34,13 @@ end
     end
 end
 
-@unroll function async_unroll_batches!(nw, layer, batches, dupt, _acc)
+@unroll function parallell_unroll_batches!(nw, layer, batches, dupt, _acc)
+    ch = Channel(Inf)
     @unroll for batch in batches
-        async_process_batch!(nw, layer, batch, dupt, _acc)
+        t = async_process_batch!(nw, layer, batch, dupt, _acc)
+        put!(ch, t)
     end
+    Base.sync_end(ch)
 end
 
 async_process_batch!(nw, layer, batch, dupt, _acc) = Threads.@spawn process_batch!(nw, layer, batch, dupt, _acc)

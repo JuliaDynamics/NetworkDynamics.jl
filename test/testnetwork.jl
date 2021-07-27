@@ -147,11 +147,167 @@ end setup = begin
 end
 
 begin
-    N = 1000
+    N = 10000
     (p, v, e, g) = heterogeneous(N)
-    nd = Network(g, v, e, parallel=true)
-    x0 = randn(dim(nd))
-    dx = similar(x0)
-    nd(dx, x0, p, 0.0) # call to init caches, we don't want to benchmark this
-    @btime $nd($dx, $x0, $p, 0.0) # call to init caches, we don't want to benchmark this
+    nd1 = Network(g, v, e, parallel=false)
+    (p, v, e, g) = heterogeneous(N)
+    nd2 = Network(g, v, e, parallel=true)
+    x0 = randn(dim(nd1))
+    dx1 = zeros(dim(nd1))
+    dx2 = zeros(dim(nd1))
+    @time nd1(dx1, x0, p, 0.0) # call to init caches, we don't want to benchmark this
+    @time nd1(dx2, x0, p, 0.0) # call to init caches, we don't want to benchmark this
+    @test dx1 ≈ dx2
+
+    @time nd2(dx1, x0, p, 0.0) # call to init caches, we don't want to benchmark this
+    @time nd2(dx2, x0, p, 0.0) # call to init caches, we don't want to benchmark this
+    @test dx1 ≈ dx2
+    extrema(dx1 - dx2)
+
+    @benchmark $nd1($dx1, $x0, $p, 0.0) # call to init caches, we don't want to benchmark this
+    @benchmark $nd2($dx2, $x0, $p, 0.0) # call to init caches, we don't want to benchmark this
+end
+
+async_foo(i) = Threads.@spawn foo(i)
+
+function foo(i)
+    # @Threads.threads
+    for j in 'a':'c'
+        bar(i, j)
+    end
+end
+
+function bar(i, j)
+    sleep(.2)
+    println("Thread=", Threads.threadid(), " i=$i j=$j")
+end
+
+function entry()
+    async_foo(1)
+    async_foo(2)
+    async_foo(3)
+end
+
+async_foo(1)
+
+entry()
+bar(1 ,2)
+
+function test1()
+    @sync for i in 1:10
+        Threads.@spawn bar(i, 1)
+    end
+end
+function test2()
+    Threads.@threads for i in 1:10
+        bar(i, 1)
+    end
+end
+@time test1()
+@time test2()
+
+# just sync
+@sync begin end
+quote
+    let var"##sync#41" = Base.Channel(Base.Inf)
+        var"#862#v" = begin
+        end
+        Base.sync_end(var"##sync#41")
+        var"#862#v"
+    end
+end
+
+# just spawn
+Threads.@spawn bar(i, 1)
+quote
+    let
+        local _task = Base.Threads.Task((()->begin
+                                                      bar(i, 1)
+                                                  end))
+        (_task).sticky = false
+        if $(Expr(:islocal, Symbol("##sync#41")))
+            Base.Threads.put!(var"##sync#41", _task)
+        end
+        Base.Threads.schedule(_task)
+        _task
+    end
+end
+
+# sync spawn
+quote
+    begin
+        let var"##sync#41" = Base.Channel(Base.Inf)
+            _v = for i = 1:10
+                begin
+                    let
+                        local _task = Base.Threads.Task((()->begin
+                                                                      bar(i, 1)
+                                                                  end))
+                        (_task).sticky = false
+                        if $(Expr(:islocal, Symbol("##sync#41")))
+                            Base.Threads.put!(var"##sync#41", _task)
+                        end
+                        Base.Threads.schedule(_task)
+                        _task
+                    end
+                end
+            end
+            Base.sync_end(var"##sync#41")
+            _v
+        end
+    end
+end
+
+# thread for
+quote
+    begin
+        local _threadsfor_fun
+        let _range = 1:10
+            function _threadsfor_fun(_onethread = false)
+                _r = _range
+                _lenr = Base.Threads.length(_r)
+                if _onethread
+                    _tid = 1
+                    (_len, _rem) = (_lenr, 0)
+                else
+                    _tid = Base.Threads.threadid()
+                    (_len, _rem) = Base.Threads.divrem(_lenr, Base.Threads.nthreads())
+                end
+                if _len == 0
+                    if _tid > _rem
+                        return
+                    end
+                    (_len, _rem) = (1, 0)
+                end
+                _f = Base.Threads.firstindex(_r) + (_tid - 1) * _len
+                _l = (_f + _len) - 1
+                if _rem > 0
+                    if _tid <= _rem
+                        _f = _f + (_tid - 1)
+                        _l = _l + _tid
+                    else
+                        _f = _f + _rem
+                        _l = _l + _rem
+                    end
+                end
+                for _i = _f:_l
+                    local i = begin
+                        $(Expr(:inbounds, true))
+                        local _val = _r[_i]
+                        $(Expr(:inbounds, :pop))
+                        _val
+                    end
+                    begin
+                        bar(i, 1)
+                    end
+                end
+            end
+        end
+        if Base.Threads.threadid() != 1 || ccall(:jl_in_threaded_region, Base.Threads.Cint, ()) != 0
+            (Base.Threads.Base).invokelatest(_threadsfor_fun, true)
+        else
+            Base.Threads.threading_run(_threadsfor_fun)
+        end
+        Base.Threads.nothing
+    end
 end
