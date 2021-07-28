@@ -121,7 +121,7 @@ end
 
 target = benchmark(; name="target", id=target_id, cmd=julia_cmd_target, retune)
 
-baseline = readresults(joinpath(BMPATH, "nd_reference.data"))
+baseline = readresults(joinpath(BMPATH, "nd_reference_$(julia_cmd_target).data"))
 
 # compare the two
 judgment = judge(target, baseline)

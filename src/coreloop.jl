@@ -12,7 +12,8 @@ function (nw::Network)(du, u::T, p, t) where {T}
 
     # can be run parallel
     if nw.parallel
-        parallell_unroll_batches!(nw, layer, nw.vertexbatches, dupt, _acc)
+        # parallell_unroll_batches!(nw, layer, nw.vertexbatches, dupt, _acc)
+        unroll_batches!(nw, layer, nw.vertexbatches, dupt, _acc)
     else
         unroll_batches!(nw, layer, nw.vertexbatches, dupt, _acc)
     end
@@ -21,7 +22,8 @@ end
 @unroll function unroll_colorbatches!(nw, layer, colorbatches, dupt, _acc)
     @unroll for cbatch in colorbatches
         if nw.parallel
-            parallell_unroll_batches!(nw, layer, cbatch.edgebatches, dupt, _acc)
+            # parallell_unroll_batches!(nw, layer, cbatch.edgebatches, dupt, _acc)
+            unroll_batches!(nw, layer, cbatch.edgebatches, dupt, _acc)
         else
             unroll_batches!(nw, layer, cbatch.edgebatches, dupt, _acc)
         end
@@ -34,19 +36,30 @@ end
     end
 end
 
-@unroll function parallell_unroll_batches!(nw, layer, batches, dupt, _acc)
-    ch = Channel(Inf)
-    @unroll for batch in batches
-        t = async_process_batch!(nw, layer, batch, dupt, _acc)
-        put!(ch, t)
-    end
-    Base.sync_end(ch)
-end
+# @unroll function parallell_unroll_batches!(nw, layer, batches, dupt, _acc)
+#     ch = Channel(Inf)
+#     @unroll for batch in batches
+#         t = async_process_batch!(nw, layer, batch, dupt, _acc)
+#         put!(ch, t)
+#     end
+#     Base.sync_end(ch)
+# end
 
-async_process_batch!(nw, layer, batch, dupt, _acc) = Threads.@spawn process_batch!(nw, layer, batch, dupt, _acc)
+# function parallell_unroll_batches!(nw, layer, batches, dupt, _acc)
+#     ch = Channel(Inf)
+#     for batch in batches
+#         t = async_process_batch!(nw, layer, batch, dupt, _acc)
+#         put!(ch, t)
+#     end
+#     Base.sync_end(ch)
+# end
+
+# async_process_batch!(nw, layer, batch, dupt, _acc) = Threads.@spawn process_batch!(nw, layer, batch, dupt, _acc)
 
 function process_batch!(nw, layer, batch::VertexBatch{F}, dupt, _acc) where {F}
     @cond_threads nw.parallel for i in 1:length(batch)
+    # Threads.@threads for i in 1:length(batch)
+    # for i in 1:length(batch)
         du, u, p, t = dupt
         (v_r, acc_r) = vertex_ranges(layer, batch, i)
         pv_r = parameter_range(batch, i)
@@ -70,6 +83,8 @@ function process_batch!(nw, layer, batch::EdgeBatch{F}, dupt::T, _acc) where {F<
     _cache = getcache(layer.cachepool, typeof(u), cachesize)
 
     @cond_threads nw.parallel for i in 1:length(batch)
+    # Threads.@threads for i in 1:length(batch)
+    # for i in 1:length(batch)
         # each thread should get it's portion of the cache
         cidx = 1 + (Threads.threadid() - 1) * dim
         _c = view(_cache, cidx:cidx+dim-1)
@@ -94,6 +109,7 @@ function process_batch!(nw, layer, batch::EdgeBatch{F}, dupt, _acc) where {F<:OD
     du, u, p, t = dupt
 
     @cond_threads nw.parallel for i in 1:length(batch)
+    # for i in 1:length(batch)
         # collect all the ranges to index into the data arrays
         (src_r, dst_r, src_acc_r, dst_acc_r, e_r) = src_dst_ranges(layer, batch, i)
         pe_r = parameter_range(batch, i)
