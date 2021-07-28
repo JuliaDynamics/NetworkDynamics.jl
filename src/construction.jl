@@ -43,6 +43,13 @@ function NetworkLayer(im::IndexManager, g::SimpleGraph,
                       verbose)
     @check hasmethod(accumulator, NTuple{2, AbstractFloat}) "Accumulator needs `acc(AbstractFloat, AbstractFloat) method`"
 
+    accdim_max = maxaccdim(edgef)
+    if accdim === :auto
+        accdim = accdim_max
+        verbose && println(" - auto accumulation dimension = $accdim")
+    end
+    @check accdim<=accdim_max "For this system acc dim is limited to $accdim_max by the edgefunctions"
+
     gc = color_edges_greedy(g)
     verbose && println(" - found $(length(uniquecolors(gc))) edgecolors (optimum would be $(maximum(degree(g))))")
 
@@ -56,15 +63,11 @@ function NetworkLayer(im::IndexManager, g::SimpleGraph,
     colorbatches = Tuple(ColorBatch(im, g, idx, ef; verbose)
                          for (idx, ef) in zip(idx_per_color, edgef_per_color))
 
-    if accdim === :auto
-        if edgef isa Vector
-            accdim = minimum(getproperty.(edgef, :dim))
-        else
-            accdim = edgef.dim
-        end
-    end
     NetworkLayer(g, colorbatches, accumulator, accdim, CachePool())
 end
+
+maxaccdim(e::EdgeFunction) = accdim(e)
+maxaccdim(e::AbstractVector{<:EdgeFunction}) = minimum(accdim.(e))
 
 function ColorBatch(im::IndexManager, g::SimpleGraph,
                     edge_idxs::Vector{Int},

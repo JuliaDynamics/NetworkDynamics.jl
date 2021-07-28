@@ -46,3 +46,8 @@ function ODEEdge(; f, dim, pdim, coupling)
     # todo probably a method check?
     ODEEdge{typeof(f), typeof(coupling)}(f, dim, pdim)
 end
+
+dim(e::Union{EdgeFunction, VertexFunction}) = e.dim
+pdim(e::Union{EdgeFunction, VertexFunction}) = e.pdim
+accdim(e::EdgeFunction) = e.dim
+accdim(e::EdgeFunction{Fiducial}) = Int(e.dim/2)
