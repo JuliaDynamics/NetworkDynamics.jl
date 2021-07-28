@@ -151,7 +151,8 @@ For more details see the documentation.
 
         if user_edge_jac! == true
             edge_jac! = @inline (J_s::AbstractMatrix, J_d::AbstractMatrix, v_s, v_d, p, t) -> begin
-                e_array = Array{Float64,2}(undef, dim, 1)
+                #e_array = Array{Float64,2}(undef, dim, 1)
+                e_array = zeros(dim, 1) # left side of differential equation for the edges
                 ForwardDiff.jacobian!(J_s, (e_array, v_s) -> user_f!(e_array, v_s, v_d, p, t), e_array, v_s)
                 ForwardDiff.jacobian!(J_d, (e_array, v_d) -> user_f!(e_array, v_s, v_d, p, t), e_array, v_d)
                 return nothing

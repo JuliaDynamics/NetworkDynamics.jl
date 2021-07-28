@@ -51,12 +51,15 @@ end
 nd_jac_vertex = ODEVertex(f! = diffusionvertex!, dim = 2, vertex_jacobian! = jac_vertex!)
 nd_jac_edge = StaticEdge(f! = diffusionedge!, dim = 1, coupling = :undirected, edge_jacobian! = true)
 
+
+
 nd_jac = network_dynamics(nd_jac_vertex, nd_jac_edge, g, jac = true)
 
 
 nd = network_dynamics(nd_jac_vertex, nd_jac_edge, g, jac = false)
 
 nd_jac.jac_prototype.jac_graph_data
+
 
 x0 = randn(2N^2)
 
