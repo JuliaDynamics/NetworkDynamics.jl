@@ -90,10 +90,10 @@ https://github.com/JuliaCI/PkgBenchmark.jl/issues/136
 function string_to_command(cmd::AbstractString)
     @assert !contains(cmd, " ") "julia commands with arguments not allowed, got $cmd"
     out = IOBuffer()
-    capturecommand = `$cmd -e "println(Base.julia_cmd()[3])"`
+    capturecommand = `$cmd --startup-file=no -e "println(Base.julia_cmd()[3])"`
     run(pipeline(capturecommand; stdout=out))
     sysimg = String(take!(out))[1:end-1] # remove \n
-    @assert contains(sysimg, r"^-J.*dylib$") "Captured sysimg looks weird? $sysimg"
+    @assert contains(sysimg, r"^-J.*[dylib|so]$")  "Captured sysimg looks weird? $sysimg"
     return Cmd([cmd, sysimg])
 end
 
