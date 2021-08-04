@@ -8,7 +8,7 @@ include("benchmark_utils.jl")
 const SUITE = BenchmarkGroup()
 
 ####
-#### diffusion benchmarks
+#### diffusion benchmarks on a star graph
 ####
 SUITE["diffusion"] = BenchmarkGroup(["homogeneous"])
 vertex = diffusion_vertex()
@@ -50,7 +50,7 @@ for k in ["static_edge", "ode_edge"]
 end
 
 ####
-#### kuramoto benchmarks
+#### kuramoto benchmarks on a sparse graph
 ####
 SUITE["kuramoto"] = BenchmarkGroup()
 
