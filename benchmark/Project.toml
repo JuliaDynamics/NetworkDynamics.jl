@@ -1,0 +1,5 @@
+[deps]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+LightGraphs = "093fc24a-ae57-5d10-9952-331d41423f4d"
+NetworkDynamics = "22e9dc34-2a0d-11e9-0de0-8588d035468b"
+PkgBenchmark = "32113eaa-f34f-5b0d-bd6c-c81e245fc73d"
