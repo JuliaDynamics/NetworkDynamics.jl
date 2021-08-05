@@ -73,11 +73,9 @@ function _inner_loop!(dx, p, t, gd, gs,
     end
 end
 
-@Base.kwdef struct nd_ODE_Static{G, GD, TV, TUV, TE, TUE}
-    vertices!::TV
+@Base.kwdef struct nd_ODE_Static{G, GD, TUV, TUE}
     unique_vertices!::TUV
     unique_v_indices::Vector{Vector{Int}}
-    edges!::TE
     unique_edges!::TUE
     unique_e_indices::Vector{Vector{Int}}
     graph::G #redundant?

@@ -125,7 +125,7 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T},
 
     graph_data = GraphData(v_array, e_array, graph_stucture)
 
-    nd! = nd_ODE_Static(vertices!, unique_vertices!, unique_v_indices, edges!, unique_edges!, unique_e_indices, graph, graph_stucture, graph_data, parallel)
+    nd! = nd_ODE_Static(unique_vertices!, unique_v_indices, unique_edges!, unique_e_indices, graph, graph_stucture, graph_data, parallel)
     mass_matrix = construct_mass_matrix(mmv_array, graph_stucture)
 
     ODEFunction(nd!; mass_matrix = mass_matrix, syms=symbols)
