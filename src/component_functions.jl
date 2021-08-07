@@ -21,7 +21,7 @@ struct Fiducial <: Coupling end
 coupling(::EdgeFunction{C}) where C = C()
 coupling(::Type{<:EdgeFunction{C}}) where C = C()
 
-@Base.kwdef struct ODEVertex{F} <: VertexFunction
+Base.@kwdef struct ODEVertex{F} <: VertexFunction
     f::F
     dim::Int
     pdim::Int

@@ -12,7 +12,7 @@ function (nw::Network)(du, u::T, p, t) where {T}
 
     # can be run parallel
     if nw.parallel
-        # parallell_unroll_batches!(nw, layer, nw.vertexbatches, dupt, _acc)
+        # parallel_unroll_batches!(nw, layer, nw.vertexbatches, dupt, _acc)
         unroll_batches!(nw, layer, nw.vertexbatches, dupt, _acc)
     else
         unroll_batches!(nw, layer, nw.vertexbatches, dupt, _acc)
@@ -22,7 +22,7 @@ end
 @unroll function unroll_colorbatches!(nw, layer, colorbatches, dupt, _acc)
     @unroll for cbatch in colorbatches
         if nw.parallel
-            # parallell_unroll_batches!(nw, layer, cbatch.edgebatches, dupt, _acc)
+            # parallel_unroll_batches!(nw, layer, cbatch.edgebatches, dupt, _acc)
             unroll_batches!(nw, layer, cbatch.edgebatches, dupt, _acc)
         else
             unroll_batches!(nw, layer, cbatch.edgebatches, dupt, _acc)
@@ -36,25 +36,16 @@ end
     end
 end
 
-# @unroll function parallell_unroll_batches!(nw, layer, batches, dupt, _acc)
-#     ch = Channel(Inf)
-#     @unroll for batch in batches
-#         t = async_process_batch!(nw, layer, batch, dupt, _acc)
-#         put!(ch, t)
-#     end
-#     Base.sync_end(ch)
-# end
+@unroll function parallel_unroll_batches!(nw, layer, batches, dupt, _acc)
+    ch = Channel(Inf)
+    @unroll for batch in batches
+        t = async_process_batch!(nw, layer, batch, dupt, _acc)
+        put!(ch, t)
+    end
+    Base.sync_end(ch)
+end
 
-# function parallell_unroll_batches!(nw, layer, batches, dupt, _acc)
-#     ch = Channel(Inf)
-#     for batch in batches
-#         t = async_process_batch!(nw, layer, batch, dupt, _acc)
-#         put!(ch, t)
-#     end
-#     Base.sync_end(ch)
-# end
-
-# async_process_batch!(nw, layer, batch, dupt, _acc) = Threads.@spawn process_batch!(nw, layer, batch, dupt, _acc)
+async_process_batch!(nw, layer, batch, dupt, _acc) = Threads.@spawn process_batch!(nw, layer, batch, dupt, _acc)
 
 function process_batch!(nw, layer, batch::VertexBatch{F}, dupt, _acc) where {F}
     @cond_threads nw.parallel for i in 1:length(batch)
