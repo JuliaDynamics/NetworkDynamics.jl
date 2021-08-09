@@ -12,8 +12,7 @@ function (nw::Network)(du, u::T, p, t) where {T}
 
     # can be run parallel
     if nw.parallel
-        # parallel_unroll_batches!(nw, layer, nw.vertexbatches, dupt, _acc)
-        unroll_batches!(nw, layer, nw.vertexbatches, dupt, _acc)
+        parallel_unroll_batches!(nw, layer, nw.vertexbatches, dupt, _acc)
     else
         unroll_batches!(nw, layer, nw.vertexbatches, dupt, _acc)
     end
@@ -22,8 +21,7 @@ end
 @unroll function unroll_colorbatches!(nw, layer, colorbatches, dupt, _acc)
     @unroll for cbatch in colorbatches
         if nw.parallel
-            # parallel_unroll_batches!(nw, layer, cbatch.edgebatches, dupt, _acc)
-            unroll_batches!(nw, layer, cbatch.edgebatches, dupt, _acc)
+            parallel_unroll_batches!(nw, layer, cbatch.edgebatches, dupt, _acc)
         else
             unroll_batches!(nw, layer, cbatch.edgebatches, dupt, _acc)
         end
