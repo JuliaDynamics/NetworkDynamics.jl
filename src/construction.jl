@@ -11,7 +11,7 @@ function Network(g::SimpleGraph,
     im = IndexManager()
 
     vtypes, idxs = batch_identical(vertexf, collect(1:nv(g)))
-    vertexbatches = Tuple(VertexBatch(im, i, t; verbose) for (i, t) in zip(idxs, vtypes))
+    vertexbatches = collect(VertexBatch(im, i, t; verbose) for (i, t) in zip(idxs, vtypes))
 
     nl = NetworkLayer(im, g, edgef, accumulator, accdim; verbose)
 
@@ -60,7 +60,7 @@ function NetworkLayer(im::IndexManager, g::SimpleGraph,
 
     edgef_per_color = batch_by_idxs(edgef, idx_per_color)
 
-    colorbatches = Tuple(ColorBatch(im, g, idx, ef; verbose)
+    colorbatches = collect(ColorBatch(im, g, idx, ef; verbose)
                          for (idx, ef) in zip(idx_per_color, edgef_per_color))
 
     NetworkLayer(g, colorbatches, accumulator, accdim, CachePool())
@@ -76,7 +76,7 @@ function ColorBatch(im::IndexManager, g::SimpleGraph,
     verbose && println(" - ColorBatch with $(length(edge_idxs)) edges")
 
     eftypes, idxs = batch_identical(edgef, edge_idxs)
-    edgebatches = Tuple(EdgeBatch(im, g, i, ef; verbose) for (i, ef) in zip(idxs, eftypes))
+    edgebatches = collect(EdgeBatch(im, g, i, ef; verbose) for (i, ef) in zip(idxs, eftypes))
 
     return ColorBatch(edge_idxs, edgebatches)
 end
