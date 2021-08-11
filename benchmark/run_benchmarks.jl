@@ -14,6 +14,7 @@ import Pkg; Pkg.activate(BMPATH); Pkg.develop(path=NDPATH);
 using PkgBenchmark
 using LibGit2
 using Dates
+using Random
 
 tstart = time()
 
@@ -69,6 +70,7 @@ isdirty = with(LibGit2.isdirty, GitRepo(ndpath_tmp))
 if isdirty
     @info "Dirty directory, add everything to new commit!"
     @assert realpath(pwd()) == realpath(ndpath_tmp) "Julia is in $(pwd()) not it $ndpath_tmp"
+    run(`git checkout -b $(randstring(15))`)
     run(`git add -A`)
     run(`git commit -m "tmp commit for benchmarking"`)
     # assert that repo is clean now
