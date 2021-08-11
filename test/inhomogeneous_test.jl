@@ -70,16 +70,8 @@ dx = similar(x0)
 e = [[ones(N)],[ones(N)]]
 foo! = diff_network_st_ver.f
 foo!(dx, x0, nothing, 0.)
-@test (@allocated foo!(dx, x0, nothing, 0.)) == 0
-
-
-
-
-### Inspect unrolled loop
-# using Unrolled
-# using .nd_ODE_Static_mod
-# nd_ODE_Static_mod.vertex_loop!
-# d = prob_st_ver.f.f
-# @code_unrolled(vertex_loop!(x0, nothing, 0,
-#     d.graph_data, d.graph_structure,
-#     d.unique_vertices!, d.unique_v_indices, d.parallel))
+# We would like this to be zero, but at the moment the
+# simplest (and in some cases fastest)
+# solution produces some allocations
+# [Unrolled.jl and Tuples of unique components avoid allocations completly.]
+@test (@allocated foo!(dx, x0, nothing, 0.)) != 0
