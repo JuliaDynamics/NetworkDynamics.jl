@@ -127,7 +127,13 @@ end
 
 target = benchmark(; name="target", id=target_id, cmd=julia_cmd_target, retune)
 
-if baseline_id ∉ ["nothing", "none"]
+if contains(baseline_id, r".data$")
+    path = joinpath(BMPATH, baseline_id)
+    baseline = readresults(joinpath(BMPATH, baseline_id))
+
+    judgment = judge(target, baseline)
+    export_markdown(joinpath(BMPATH, prefix*"judgment.md"), judgment)
+elseif baseline_id ∉ ["nothing", "none"]
     baseline = benchmark(; name="baseline", id=baseline_id, cmd=julia_cmd_baseline, retune=false)
 
     # compare the two
