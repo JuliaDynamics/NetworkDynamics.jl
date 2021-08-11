@@ -49,6 +49,7 @@ end
         _inner_loop!(dx, p, t, gd, gs,
                            unique_components[j], unique_c_indices[j], parallel)
     end
+    return nothing
 end
 
 function _inner_loop!(dx, p, t, gd, gs,
@@ -60,6 +61,7 @@ function _inner_loop!(dx, p, t, gd, gs,
                   p_v_idx(p, i),
                   t)
     end
+    return nothing
 end
 
 function _inner_loop!(dx, p, t, gd, gs,
@@ -71,6 +73,7 @@ function _inner_loop!(dx, p, t, gd, gs,
                      p_e_idx(p, i),
                      t)
     end
+    return nothing
 end
 
 @Base.kwdef struct nd_ODE_Static{G, GD, TUV, TUE}
