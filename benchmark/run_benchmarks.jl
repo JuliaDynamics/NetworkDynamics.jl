@@ -119,11 +119,23 @@ directory even if dirty!
 - cmd if empty use default julia command
 """
 function benchmark(; name, id, cmd, retune)
+    # magic id string directory will benchmark dirty state
+    id = id=="directory" ? nothing : id
+
+    # PkgBenchmarks does not call Pkg.resolve after checking out a different
+    # state of ndpath_tmp! Therefore we need to check out the desired commit in
+    # the tmp directory and resolve the manifest of the currently activated
+    # environment (-> bmpath_tmp)
+    if !isnothing(id)
+        @assert realpath(pwd()) == realpath(ndpath_tmp) "Julia is in $(pwd()) not it $ndpath_tmp"
+        run(`git checkout $id`)
+        Pkg.resolve()
+    end
+
     # choose specific command only if given, elso the default command
     cmd = isnothing(cmd) ? args[:command] : cmd
     @info "Run $name benchmarks on $id with $cmd"
-    # magic id directory will benchmark dirty state
-    id = id=="directory" ? nothing : id
+
     config = BenchmarkConfig(;id,
                              env = Dict("JULIA_NUM_THREADS" => args[:threads]),
                              juliacmd = string_to_command(cmd))
@@ -131,6 +143,7 @@ function benchmark(; name, id, cmd, retune)
                            script=script_path,
                            retune,
                            verbose=args[:verbose])
+
     args[:exportraw] && writeresults(joinpath(BMPATH, args[:prefix]*name*".data"), results)
     export_markdown(joinpath(BMPATH, args[:prefix]*name*".md"), results)
     return results
