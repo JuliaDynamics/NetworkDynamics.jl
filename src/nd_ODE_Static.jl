@@ -4,8 +4,6 @@ using ..NetworkStructures
 using ..ComponentFunctions
 using ..Utilities
 
-using Unrolled
-
 export nd_ODE_Static
 export StaticEdgeFunction
 
