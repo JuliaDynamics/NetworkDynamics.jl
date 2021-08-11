@@ -69,7 +69,7 @@ end
 
 
 function collect_unique_components(comp::T, NV) where T <: AbstractArray
-    ucomp = Tuple(unique(comp))
+    ucomp = Vector(unique(comp))
     ind_ucomp = Vector{Int64}[]
     for v in ucomp
         ind_v = Int64[]
@@ -84,7 +84,7 @@ function collect_unique_components(comp::T, NV) where T <: AbstractArray
 end
 
 function collect_unique_components(comp, NV)
-    ucomp = (comp,)
+    ucomp = [comp]
     ind_ucomp = [collect(1:NV)]
     ucomp, ind_ucomp
 end

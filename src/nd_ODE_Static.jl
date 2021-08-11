@@ -37,15 +37,10 @@ end
 end
 
 
-"""
-    Unroll needs its own function and the loop to unroll needs to iterate
-    over one of its arguments (modulo `length`).
-"""
-@unroll function component_loop!(dx, p, t, gd, gs,
+function component_loop!(dx, p, t, gd, gs,
                               unique_components, unique_c_indices, parallel)
-    @unroll for j in 1:length(unique_components)
-        # @Threads.threads and @generated clash
-        # To make them uninvolved with each other we need another function
+    for j in 1:length(unique_components)
+        # Function barrier
         _inner_loop!(dx, p, t, gd, gs,
                            unique_components[j], unique_c_indices[j], parallel)
     end
@@ -95,11 +90,11 @@ function (d::nd_ODE_Static)(dx, x, p, t)
     checkbounds_p(p, gs.num_v, gs.num_e)
     gd = prep_gd(dx, x, d.graph_data, d.graph_structure)
 
+    @assert size(dx) == size(x) "Sizes of dx and x do not match"
+
     # Pass nothing, because here we have only Static Edges
     component_loop!(nothing, p, t, gd, gs,
                  d.unique_edges!, d.unique_e_indices, d.parallel)
-
-    @assert size(dx) == size(x) "Sizes of dx and x do not match"
 
     component_loop!(dx, p, t, gd, gs,
                  d.unique_vertices!, d.unique_v_indices, d.parallel)
