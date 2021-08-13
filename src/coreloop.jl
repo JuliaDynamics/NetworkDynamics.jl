@@ -41,7 +41,8 @@ function process_batch!(nw::Network{:threaded}, layer, batch, dupt, acc)
     end
 end
 
-function element_kernel!(layer, batch::VertexBatch{F}, dupt, acc, i) where {F}
+@inline function element_kernel!(layer, batch::VertexBatch{F}, dupt, acc, i) where {F}
+    @inbounds begin
     du, u, p, t = dupt
     (v_r, acc_r) = vertex_ranges(layer, batch, i)
     pv_r = parameter_range(batch, i)
@@ -52,9 +53,11 @@ function element_kernel!(layer, batch::VertexBatch{F}, dupt, acc, i) where {F}
     pv = p===nothing ? nothing : view(p, pv_r)
 
     batch.fun.f(vdu, vu, vacc, pv, t)
+    end
 end
 
-function element_kernel!(layer, batch::EdgeBatch{F}, dupt::T, acc, i) where {F<:StaticEdge, T}
+@inline function element_kernel!(layer, batch::EdgeBatch{F}, dupt::T, acc, i) where {F<:StaticEdge, T}
+    @inbounds begin
     # a cache of size dim per thread
     _, u, p, t = dupt
 
@@ -71,9 +74,11 @@ function element_kernel!(layer, batch::EdgeBatch{F}, dupt::T, acc, i) where {F<:
     e = batch.fun.f(vs, vd, pe, t)
 
     apply_accumulation!(coupling(F), layer.accumulator, acc, src_acc_r, dst_acc_r, e)
+    end
 end
 
-function element_kernel!(layer, batch::EdgeBatch{F}, dupt, acc, i) where {F<:ODEEdge}
+@inline function element_kernel!(layer, batch::EdgeBatch{F}, dupt, acc, i) where {F<:ODEEdge}
+    @inbounds begin
     du, u, p, t = dupt
     # for i in 1:length(batch)
     # collect all the ranges to index into the data arrays
@@ -91,6 +96,7 @@ function element_kernel!(layer, batch::EdgeBatch{F}, dupt, acc, i) where {F<:ODE
     batch.fun.f(de, e, vs, vd, pe, t)
 
     apply_accumulation!(coupling(F), layer.accumulator, acc, src_acc_r, dst_acc_r, e)
+    end
 end
 
 Base.@propagate_inbounds function apply_accumulation!(::AntiSymmetric, f, acc, src_acc_r, dst_acc_r, edge)

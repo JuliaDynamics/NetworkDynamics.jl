@@ -1,4 +1,5 @@
 [deps]
+ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 LightGraphs = "093fc24a-ae57-5d10-9952-331d41423f4d"
 NDPrototype = "d08cc098-a250-431b-9e17-1d795a6bcce3"

@@ -8,7 +8,7 @@ include("benchmark_utils.jl")
 const SUITE = BenchmarkGroup()
 
 ####
-#### diffusion benchmarks
+#### diffusion benchmarks on a dense watts strogatz graph
 ####
 SUITE["diffusion"] = BenchmarkGroup(["homogeneous"])
 vertex = diffusion_vertex()
@@ -22,17 +22,17 @@ for k in ["static_edge", "ode_edge"]
     SUITE["diffusion"][k]["call_mt"] = BenchmarkGroup(["call", "multithread"])
     edge = edges[k]
 
-    for N ∈ [10, 100, 1_000, 10_000]  #, 100_000, 1_000_000]
+    for N ∈ [10, 100, 1_000]  #, 100_000, 1_000_000]
         SUITE["diffusion"][k]["assemble"][N] = @benchmarkable begin
             Network(g, $vertex, $edge)
         end setup = begin
-            g = watts_strogatz($N, 3, 0.8, seed=1)
+            g = watts_strogatz($N, floor(Int, $N/2), 0.0, seed=1)
         end
 
         SUITE["diffusion"][k]["call"][N] = @benchmarkable begin
             nd(dx, x0, nothing, 0.0)
         end setup = begin
-            g = watts_strogatz($N, 3, 0.8, seed=1)
+            g = watts_strogatz($N, floor(Int, $N/2), 0.0, seed=1)
             nd = Network(g, $vertex, $edge)
             x0 = randn(dim(nd))
             dx = similar(x0)
@@ -43,7 +43,7 @@ for k in ["static_edge", "ode_edge"]
             nd(dx, x0, nothing, 0.0)
         end setup = begin
             g = watts_strogatz($N, 3, 0.8, seed=1)
-            nd = Network(g, $vertex, $edge; parallel=true)
+            nd = Network(g, $vertex, $edge; execution=:threaded)
             x0 = randn(dim(nd))
             dx = similar(x0)
             nd(dx, x0, nothing, 0.0) # call to init caches, we don't want to benchmark this
@@ -84,7 +84,7 @@ function heterogeneous(N)
     (p, vertices, edge, g)
 end
 
-for N ∈ [10, 100, 1_000, 10_000]  #, 100_000, 1_000_000]
+for N ∈ [100, 1_000, 10_000]  #, 100_000, 1_000_000]
     # do both, for homogeneous and inhomogeneous system
     for f in [homogeneous, heterogeneous]
         name = string(f)
@@ -109,7 +109,7 @@ for N ∈ [10, 100, 1_000, 10_000]  #, 100_000, 1_000_000]
             nd(dx, x0, p, 0.0)
         end setup = begin
             (p, v, e, g) = $f($N)
-            nd = Network(g, v, e, parallel=true)
+            nd = Network(g, v, e, execution=:threaded)
             x0 = randn(dim(nd))
             dx = similar(x0)
             nd(dx, x0, p, 0.0) # call to init caches, we don't want to benchmark this
