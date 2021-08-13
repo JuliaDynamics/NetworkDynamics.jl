@@ -22,7 +22,7 @@ for k in ["static_edge", "ode_edge"]
     SUITE["diffusion"][k]["call_mt"] = BenchmarkGroup(["call", "multithread"])
     edge = edges[k]
 
-    for N ∈ [10, 100, 1_000, 10_000]  #, 100_000, 1_000_000]
+    for N ∈ [100, 1_000, 10_000]  #, 100_000, 1_000_000]
         SUITE["diffusion"][k]["assemble"][N] = @benchmarkable begin
             network_dynamics($vertex, $edge, g)
         end setup = begin
@@ -82,7 +82,7 @@ function heterogeneous(N)
     (p, vertices, edge, g)
 end
 
-for N ∈ [10, 100, 1_000, 10_000]  #, 100_000, 1_000_000]
+for N ∈ [100, 1_000, 10_000]  #, 100_000, 1_000_000]
     # do both, for homogeneous and inhomogeneous system
     for f in [homogeneous, heterogeneous]
         name = string(f)
