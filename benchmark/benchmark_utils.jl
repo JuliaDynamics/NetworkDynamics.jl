@@ -1,9 +1,8 @@
 ####
 #### Diffusion system
 ####
-Base.@propagate_inbounds function diffusionedge!(e, v_s, v_d, _, _)
-    e[1] = v_s[1] - v_d[1]
-    nothing
+Base.@propagate_inbounds function diffusionedge!(v_s, v_d, _, _)
+    return v_s[1] - v_d[1]
 end
 diffusion_edge() = StaticEdge(f=diffusionedge!, dim=1, pdim=0, coupling=AntiSymmetric())
 

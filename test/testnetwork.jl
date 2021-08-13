@@ -62,6 +62,7 @@ p = Float64[]
 cb = nw.nl.colorbatches[1]
 
 #############
+include("../benchmark/benchmarks.jl")
 include("../benchmark/benchmark_utils.jl")
 
 # diffusion test
@@ -77,6 +78,13 @@ end setup = begin
     dx = similar(x0)
     nd(dx, x0, nothing, 0.0)
 end
+ # Memory estimate: 1.52 KiB, allocs estimate: 28.
+ # Time  (median):     21.167 μs              ┊ GC (median):    0.00%
+g = watts_strogatz(N, 3, 0.8, seed=1)
+nd = Network(g, vertex, edge);
+x0 = randn(dim(nd1)); dx = zero(x0);
+@btime $nd($dx,$x0,nothing,0.0)
+
 # parallel
 @benchmark begin
     nd(dx, x0, nothing, 0.0)
@@ -109,9 +117,12 @@ nd2 = Network(g, vertex, edge, accdim=1, parallel=false);
 x0 = randn(dim(nd1));
 dx1 = zero(x0);
 dx2 = zero(x0);
-nd1(dx1, x0, nothing, 0.0)
+
+@btime $nd1($dx1, $x0, nothing, 0.0)
+
 nd2(dx2, x0, nothing, 0.0)
 @test dx1 ≈ dx2
+dx1
 
 # inhomgeneous network
 function heterogeneous(N)
@@ -168,30 +179,56 @@ begin
     @benchmark $nd2($dx2, $x0, $p, 0.0) # call to init caches, we don't want to benchmark this
 end
 
+"""
+@generated function using Unrolled.jl, therefore i have to
+encapsulate the async calls. In this mwe i unroll manually
+"""
+function entry()
+    ch = Channel(Inf)
+    t = async_foo(Int(1))
+    put!(ch, t)
+    t = async_foo(Float64(2))
+    put!(ch, t)
+    t = async_foo(ComplexF64(3))
+    put!(ch, t)
+    Base.sync_end(ch) # implementation like @sync
+end
+
 async_foo(i) = Threads.@spawn foo(i)
 
 function foo(i)
-    # @Threads.threads
-    for j in 'a':'c'
+    @Threads.threads for j in 'a':'z'
         bar(i, j)
     end
 end
 
 function bar(i, j)
-    sleep(.2)
-    println("Thread=", Threads.threadid(), " i=$i j=$j")
+    # rand(10000000)
+    # sleep(.2)
+    # println("Thread=", Threads.threadid(), " i=$i j=$j")
 end
 
-function entry()
-    async_foo(1)
-    async_foo(2)
-    async_foo(3)
+function entry2()
+    ch = Channel(Inf)
+    t = async_foo(ch, Int(1))
+    t = async_foo(ch, Float64(2))
+    t = async_foo(ch, ComplexF64(3))
+    Base.sync_end(ch) # implementation like @sync
+    # return ch
 end
 
-async_foo(1)
+function async_foo(ch, i)
+    for j in 'a':'z'
+        t = Threads.@spawn bar($i,$j)
+        put!(ch, t)
+    end
+end
 
-entry()
-bar(1 ,2)
+@btime entry()
+@btime entry2()
+
+
+
 
 function test1()
     @sync for i in 1:10
@@ -311,3 +348,74 @@ quote
         Base.Threads.nothing
     end
 end
+
+quote
+    #= /Users/hw/.julia/packages/FLoops/yli1G/src/reduce.jl:614 =#
+    function var"__##oninit_function#495"()
+        $(Expr(:meta, :inline))
+        return tuple()
+    end
+    #= /Users/hw/.julia/packages/FLoops/yli1G/src/reduce.jl:618 =#
+    function var"__##reducing_function#496"((), (batch, element))
+        $(Expr(:meta, :inline))
+        begin
+            #= REPL[167]:2 =#
+            element_kernel!(layer, batch, dupt, acc, element)
+        end
+        #= /Users/hw/.julia/packages/FLoops/yli1G/src/reduce.jl:621 =#
+        return ()
+    end
+    #= /Users/hw/.julia/packages/FLoops/yli1G/src/reduce.jl:623 =#
+    var"__##combine_function#497"(_, b::Union{FLoops.Goto, FLoops.Return}) = begin
+        #= /Users/hw/.julia/packages/FLoops/yli1G/src/reduce.jl:623 =#
+        b
+    end
+    #= /Users/hw/.julia/packages/FLoops/yli1G/src/reduce.jl:624 =#
+    function var"__##combine_function#497"((), ())
+        #= /Users/hw/.julia/packages/FLoops/yli1G/src/reduce.jl:624 =#
+        #= /Users/hw/.julia/packages/FLoops/yli1G/src/reduce.jl:625 =#
+        #= /Users/hw/.julia/packages/FLoops/yli1G/src/reduce.jl:626 =#
+        #= /Users/hw/.julia/packages/FLoops/yli1G/src/reduce.jl:627 =#
+        #= /Users/hw/.julia/packages/FLoops/yli1G/src/reduce.jl:628 =#
+        return ()
+    end
+    #= /Users/hw/.julia/packages/FLoops/yli1G/src/reduce.jl:630 =#
+    (FLoops.verify_no_boxes)(var"__##reducing_function#496")
+    #= /Users/hw/.julia/packages/FLoops/yli1G/src/reduce.jl:631 =#
+    var"##result#498" = (FLoops._fold)((Transducers.wheninit)(var"__##oninit_function#495", (Transducers.whencombine)(var"__##combine_function#497", var"__##reducing_function#496")), batches, ThreadedEx(), Val{false}())
+    #= /Users/hw/.julia/packages/FLoops/yli1G/src/reduce.jl:640 =#
+    var"##result#498" isa FLoops.Return && return (var"##result#498").value
+    #= /Users/hw/.julia/packages/FLoops/yli1G/src/reduce.jl:641 =#
+    #= /Users/hw/.julia/packages/FLoops/yli1G/src/reduce.jl:642 =#
+    begin
+    end
+    #= /Users/hw/.julia/packages/FLoops/yli1G/src/reduce.jl:643 =#
+    nothing
+end
+
+
+using Pkg; Pkg.activate(temp=true)
+Pkg.add("Unrolled")
+using Unrolled
+
+@unroll function myloop(collection)
+    res = zero(ComplexF64)
+    @unroll for el in collection
+        res += el[1]
+    end
+    return res
+end
+
+# force a dynamic dispatch
+myf(i::Int) = i + 1
+myf(i::Float64) = i + 2.0
+myf(i::ComplexF64) = i + im
+
+randT = () -> rand(rand([Int, Float64, ComplexF64]), 1)
+
+N = 100
+vec = [randT() for i in 1:N];
+tup = Tuple(vec);
+
+@btime myloop($vec)
+@btime myloop($tup)

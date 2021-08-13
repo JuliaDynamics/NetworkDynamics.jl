@@ -1,3 +1,8 @@
+using FLoops
+using FLoops.Transducers
+using FLoops.Transducers: next, complete
+using Base.Threads: @threads
+
 function (nw::Network)(du, u::T, p, t) where {T}
     # for now just one layer
     layer = nw.nl
@@ -8,118 +13,128 @@ function (nw::Network)(du, u::T, p, t) where {T}
     fill!(_acc, zero(eltype(T)))
 
     # go through all colobatches separatly to avoid writing conflicts to accumulator
-    unroll_colorbatches!(nw, layer, layer.colorbatches, dupt, _acc)
+    # unroll_colorbatches!(nw, layer, layer.colorbatches, dupt, _acc)
 
     # can be run parallel
-    if nw.parallel
-        parallel_unroll_batches!(nw, layer, nw.vertexbatches, dupt, _acc)
-    else
-        unroll_batches!(nw, layer, nw.vertexbatches, dupt, _acc)
-    end
+    process_batches!(nw, layer, nw.vertexbatches, dupt, _acc)
+    return nothing
 end
 
 @unroll function unroll_colorbatches!(nw, layer, colorbatches, dupt, _acc)
     @unroll for cbatch in colorbatches
-        if nw.parallel
-            parallel_unroll_batches!(nw, layer, cbatch.edgebatches, dupt, _acc)
-        else
-            unroll_batches!(nw, layer, cbatch.edgebatches, dupt, _acc)
+        process_batches!(nw, layer, cbatch.edgebatches, dupt, _acc)
+    end
+end
+
+function process_batches!(nw, layer, batches, dupt, acc)
+    # @floop ThreadedEx() for (batch, element) in batches
+    #     element_kernel!(layer, batch, dupt, acc, element)
+    # end
+    # @floop for (batch, element) in batches
+    #     element_kernel!(layer, batch, dupt, acc, element)
+    # end
+
+    # state = (layer, dupt, acc)
+    (xf, reducible) = Transducers.extract_transducer(batches)
+    # foldl(element_step, xf, reducible; init=state)
+    # foldxl
+    # foreach
+    # eduction
+    foreach(xf, reducible) do input
+        @show input
+    end
+
+    @threads for batch in batches
+        @threads for idx in 1:length(batch)
+            element_kernel!(layer, batch, dupt, acc, idx)
         end
     end
+
+    # for batch in batches
+    #     for idx in 1:length(batch)
+    #         element_kernel!(layer, batch, dupt, acc, idx)
+    #     end
+    # end
 end
 
-@unroll function unroll_batches!(nw, layer, batches, dupt, _acc)
-    @unroll for batch in batches
-        process_batch!(nw, layer, batch, dupt, _acc)
+function Transducers.__foldl__(rf, val, batches::Vector{<:Union{EdgeBatch,VertexBatch}})
+    for batch in batches
+        for idx in 1:length(batch)
+            val = next(rf, val, (batch, idx))
+        end
     end
+    return complete(rf, val)
 end
 
-@unroll function parallel_unroll_batches!(nw, layer, batches, dupt, _acc)
-    ch = Channel(Inf)
-    @unroll for batch in batches
-        t = async_process_batch!(nw, layer, batch, dupt, _acc)
-        put!(ch, t)
+function Transducers.__foldl__(rf, val, batches::Union{EdgeBatch,VertexBatch})
+    for idx in 1:length(batch)
+        val = next(rf, val, (batch, idx))
     end
-    Base.sync_end(ch)
+    return complete(rf, val)
 end
 
-async_process_batch!(nw, layer, batch, dupt, _acc) = Threads.@spawn process_batch!(nw, layer, batch, dupt, _acc)
-
-function process_batch!(nw, layer, batch::VertexBatch{F}, dupt, _acc) where {F}
-    @cond_threads nw.parallel for i in 1:length(batch)
-    # Threads.@threads for i in 1:length(batch)
-    # for i in 1:length(batch)
-        du, u, p, t = dupt
-        (v_r, acc_r) = vertex_ranges(layer, batch, i)
-        pv_r = parameter_range(batch, i)
-
-        vdu = view(du, v_r)
-        vu  = view(u, v_r)
-        acc = view(_acc, acc_r)
-        pv = p===nothing ? nothing : view(p, pv_r)
-
-        batch.fun.f(vdu, vu, acc, pv, t)
-    end
+function element_step(state, element)
+    layer, dupt, acc = state
+    batch, i = element
+    # element_kernel!(layer, batch, dupt, acc, i)
+    return state
 end
 
-function process_batch!(nw, layer, batch::EdgeBatch{F}, dupt::T, _acc) where {F<:StaticEdge, T}
-    # a cache of size dim per thread
-    dim = batch.dim
-    _, u, p, t = dupt
-    cachesize = Threads.nthreads() * dim
-    # XXX: WTF why allocations for this line below?
-    # cachesize = nw.parallel ? Threads.nthreads() * dim : dim
-    _cache = getcache(layer.cachepool, typeof(u), cachesize)
-
-    @cond_threads nw.parallel for i in 1:length(batch)
-    # Threads.@threads for i in 1:length(batch)
-    # for i in 1:length(batch)
-        # each thread should get it's portion of the cache
-        cidx = 1 + (Threads.threadid() - 1) * dim
-        _c = view(_cache, cidx:cidx+dim-1)
-
-        # collect all the ranges to index into the data arrays
-        (src_r, dst_r, src_acc_r, dst_acc_r, e_r) = src_dst_ranges(layer, batch, i)
-        pe_r = parameter_range(batch, i)
-
-        # create the views into the data & parameters
-        vs = view(u, src_r)
-        vd = view(u, dst_r)
-        pe = p===nothing ? nothing : view(p, pe_r)
-
-        # apply the edge function
-        batch.fun.f(_c, vs, vd, pe, t)
-
-        apply_accumulation!(coupling(F), layer.accumulator, _acc, src_acc_r, dst_acc_r, _c)
-    end
-end
-
-function process_batch!(nw, layer, batch::EdgeBatch{F}, dupt, _acc) where {F<:ODEEdge}
+function element_kernel!(layer, batch::VertexBatch{F}, dupt, acc, i) where {F}
     du, u, p, t = dupt
+    (v_r, acc_r) = vertex_ranges(layer, batch, i)
+    pv_r = parameter_range(batch, i)
 
-    @cond_threads nw.parallel for i in 1:length(batch)
-    # for i in 1:length(batch)
-        # collect all the ranges to index into the data arrays
-        (src_r, dst_r, src_acc_r, dst_acc_r, e_r) = src_dst_ranges(layer, batch, i)
-        pe_r = parameter_range(batch, i)
+    vdu = view(du, v_r)
+    vu  = view(u, v_r)
+    vacc = view(acc, acc_r)
+    pv = p===nothing ? nothing : view(p, pv_r)
 
-        # create the views into the data & parameters
-        de = view(du, e_r)
-        e  = view(u, e_r)
-        vs = view(u, src_r)
-        vd = view(u, dst_r)
-        pe = p===nothing ? nothing : view(p, pe_r)
-
-        # apply the edge function
-        batch.fun.f(de, e, vs, vd, pe, t)
-
-        apply_accumulation!(coupling(F), layer.accumulator, _acc, src_acc_r, dst_acc_r, e)
-    end
+    batch.fun.f(vdu, vu, vacc, pv, t)
 end
 
-Base.@propagate_inbounds function apply_accumulation!(::AntiSymmetric, f, _acc, src_acc_r, dst_acc_r, edge)
-    _acc_dst = view(_acc, dst_acc_r)
-    _acc_src = view(_acc, src_acc_r)
+function element_kernel!(layer, batch::EdgeBatch{F}, dupt::T, acc, i) where {F<:StaticEdge, T}
+    # a cache of size dim per thread
+    _, u, p, t = dupt
+
+    # collect all the ranges to index into the data arrays
+    (src_r, dst_r, src_acc_r, dst_acc_r, _) = src_dst_ranges(layer, batch, i)
+    pe_r = parameter_range(batch, i)
+
+    # create the views into the data & parameters
+    vs = view(u, src_r)
+    vd = view(u, dst_r)
+    pe = p===nothing ? nothing : view(p, pe_r)
+
+    # apply the edge function
+    e = batch.fun.f(vs, vd, pe, t)
+
+    apply_accumulation!(coupling(F), layer.accumulator, acc, src_acc_r, dst_acc_r, e)
+end
+
+function element_kernel!(layer, batch::EdgeBatch{F}, dupt, acc, i) where {F<:ODEEdge}
+    du, u, p, t = dupt
+    # for i in 1:length(batch)
+    # collect all the ranges to index into the data arrays
+    (src_r, dst_r, src_acc_r, dst_acc_r, e_r) = src_dst_ranges(layer, batch, i)
+    pe_r = parameter_range(batch, i)
+
+    # create the views into the data & parameters
+    de = view(du, e_r)
+    e  = view(u, e_r)
+    vs = view(u, src_r)
+    vd = view(u, dst_r)
+    pe = p===nothing ? nothing : view(p, pe_r)
+
+    # apply the edge function
+    batch.fun.f(de, e, vs, vd, pe, t)
+
+    apply_accumulation!(coupling(F), layer.accumulator, acc, src_acc_r, dst_acc_r, e)
+end
+
+Base.@propagate_inbounds function apply_accumulation!(::AntiSymmetric, f, acc, src_acc_r, dst_acc_r, edge)
+    _acc_dst = view(acc, dst_acc_r)
+    _acc_src = view(acc, src_acc_r)
 
     for i in 1:length(dst_acc_r)
         _acc_dst[i] = f(_acc_dst[i],  edge[i])
@@ -155,4 +170,3 @@ Base.@propagate_inbounds function apply_accumulation!(::Fiducial, f, _acc, src_a
         _acc_src[i] = f(_acc_src[i], edge[offset + i])
     end
 end
-

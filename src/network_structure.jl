@@ -66,6 +66,8 @@ struct EdgeBatch{F}
     vertex_indices::Vector{Int}
 end
 
+component_idxs(eb::EdgeBatch) = eb.edges
+
 @inline function vertex_indices(batch::EdgeBatch, i)
     v = batch.vertex_indices
     idx = (i-1)*6
@@ -109,6 +111,8 @@ struct VertexBatch{F}
     "first index of first batch element in flat parameter Vector"
     pfirstidx::Int
 end
+
+component_idxs(vb::VertexBatch) = vb.vertices
 
 @inline function vertex_ranges(layer::NetworkLayer, batch::VertexBatch, i)
     # range of the vertex in data array
