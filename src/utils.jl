@@ -17,7 +17,7 @@ If `cond` evaluates false throw `ArgumentError` and print evaluation of `cond`.
 """
 macro check(cond::Expr, msg)
     head = lstrip(repr(cond), ':')
-    head = head * " == false"
+    head = head * " evaluated false"
     args = ()
     for (i,a) in enumerate(cond.args[2:end])
         lhs = lstrip(repr(a), ':')
@@ -25,7 +25,7 @@ macro check(cond::Expr, msg)
         args  = (args..., :("\n   " * $symbol * $lhs * " = " * repr($(esc(a)))))
     end
     return :($(esc(cond)) ||
-             throw(ArgumentError($msg * "\n  " * $head * $(args...))))
+             throw(ArgumentError($(esc(msg)) * "\n  " * $head * $(args...))))
 end
 
 """

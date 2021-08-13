@@ -13,15 +13,15 @@ struct IndexManager
     end
 end
 
-struct Network{NL,VTup}
+const EXECUTION_STYLES = (:seq, :threaded)
+
+struct Network{EX,NL,VTup}
     "vertex batches of same function"
     vertexbatches::VTup
     "network layer"
     nl::NL
     "index manager"
     im::IndexManager
-    "bool whther to use threads" #todo could be per layer?
-    parallel::Bool
 end
 
 dim(nw::Network) = full_data_range(nw.im)[end]

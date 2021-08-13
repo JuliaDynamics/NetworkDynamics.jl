@@ -22,8 +22,8 @@ diffusion_vertex() = ODEVertex(f=diffusionvertex!, dim=1, pdim=0)
 ####
 #### inhomogenious kuramoto system
 ####
-Base.@propagate_inbounds function kuramoto_edge!(e, θ_s, θ_d, (K,), t)
-    e[1] = K * sin(θ_s[1] - θ_d[1])
+Base.@propagate_inbounds function kuramoto_edge!(θ_s, θ_d, (K,), t)
+    return K * sin(θ_s[1] - θ_d[1])
 end
 static_kuramoto_edge() = StaticEdge(f=kuramoto_edge!, dim=1, pdim=1, coupling=AntiSymmetric())
 

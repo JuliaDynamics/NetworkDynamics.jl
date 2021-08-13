@@ -1,6 +1,3 @@
-using FLoops
-using FLoops.Transducers
-using FLoops.Transducers: next, complete
 using Base.Threads: @threads
 
 function (nw::Network)(du, u::T, p, t) where {T}
@@ -13,7 +10,7 @@ function (nw::Network)(du, u::T, p, t) where {T}
     fill!(_acc, zero(eltype(T)))
 
     # go through all colobatches separatly to avoid writing conflicts to accumulator
-    # unroll_colorbatches!(nw, layer, layer.colorbatches, dupt, _acc)
+    unroll_colorbatches!(nw, layer, layer.colorbatches, dupt, _acc)
 
     # can be run parallel
     process_batches!(nw, layer, nw.vertexbatches, dupt, _acc)
@@ -26,58 +23,22 @@ end
     end
 end
 
-function process_batches!(nw, layer, batches, dupt, acc)
-    # @floop ThreadedEx() for (batch, element) in batches
-    #     element_kernel!(layer, batch, dupt, acc, element)
-    # end
-    # @floop for (batch, element) in batches
-    #     element_kernel!(layer, batch, dupt, acc, element)
-    # end
-
-    # state = (layer, dupt, acc)
-    (xf, reducible) = Transducers.extract_transducer(batches)
-    # foldl(element_step, xf, reducible; init=state)
-    # foldxl
-    # foreach
-    # eduction
-    foreach(xf, reducible) do input
-        @show input
+@unroll function process_batches!(nw, layer, batches, dupt, acc)
+    @unroll for batch in batches
+        process_batch!(nw, layer, batch, dupt, acc)
     end
-
-    @threads for batch in batches
-        @threads for idx in 1:length(batch)
-            element_kernel!(layer, batch, dupt, acc, idx)
-        end
-    end
-
-    # for batch in batches
-    #     for idx in 1:length(batch)
-    #         element_kernel!(layer, batch, dupt, acc, idx)
-    #     end
-    # end
 end
 
-function Transducers.__foldl__(rf, val, batches::Vector{<:Union{EdgeBatch,VertexBatch}})
-    for batch in batches
-        for idx in 1:length(batch)
-            val = next(rf, val, (batch, idx))
-        end
-    end
-    return complete(rf, val)
-end
-
-function Transducers.__foldl__(rf, val, batches::Union{EdgeBatch,VertexBatch})
+function process_batch!(nw::Network{:seq}, layer, batch, dupt, acc)
     for idx in 1:length(batch)
-        val = next(rf, val, (batch, idx))
+        element_kernel!(layer, batch, dupt, acc, idx)
     end
-    return complete(rf, val)
 end
 
-function element_step(state, element)
-    layer, dupt, acc = state
-    batch, i = element
-    # element_kernel!(layer, batch, dupt, acc, i)
-    return state
+function process_batch!(nw::Network{:threaded}, layer, batch, dupt, acc)
+    @threads for idx in 1:length(batch)
+        element_kernel!(layer, batch, dupt, acc, idx)
+    end
 end
 
 function element_kernel!(layer, batch::VertexBatch{F}, dupt, acc, i) where {F}
