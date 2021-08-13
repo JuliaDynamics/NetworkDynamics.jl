@@ -8,7 +8,7 @@ include("benchmark_utils.jl")
 const SUITE = BenchmarkGroup()
 
 ####
-#### diffusion benchmarks on a star graph
+#### diffusion benchmarks on a dense watts strogatz graph
 ####
 SUITE["diffusion"] = BenchmarkGroup(["homogeneous"])
 vertex = diffusion_vertex()
@@ -26,13 +26,13 @@ for k in ["static_edge", "ode_edge"]
         SUITE["diffusion"][k]["assemble"][N] = @benchmarkable begin
             network_dynamics($vertex, $edge, g)
         end setup = begin
-            g = star_graph($N)
+            g = watts_strogatz($N, $N/2, 0.0, seed=1)
         end
 
         SUITE["diffusion"][k]["call"][N] = @benchmarkable begin
             nd(dx, x0, nothing, 0.0)
         end setup = begin
-            g = star_graph($N)
+            g = watts_strogatz($N, $N/2, 0.0, seed=1)
             nd = network_dynamics($vertex, $edge, g)
             x0 = randn(length(nd.syms))
             dx = similar(x0)
@@ -41,7 +41,7 @@ for k in ["static_edge", "ode_edge"]
         SUITE["diffusion"][k]["call_mt"][N] = @benchmarkable begin
             nd(dx, x0, nothing, 0.0)
         end setup = begin
-            g = star_graph($N)
+            g = watts_strogatz($N, $N/2, 0.0, seed=1)
             nd = network_dynamics($vertex, $edge, g; parallel=true)
             x0 = randn(length(nd.syms))
             dx = similar(x0)
