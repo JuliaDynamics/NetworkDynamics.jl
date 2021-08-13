@@ -4,7 +4,6 @@ using ..NetworkStructures
 using ..ComponentFunctions
 using ..Utilities
 
-
 export nd_ODE_Static
 export StaticEdgeFunction
 
@@ -36,10 +35,45 @@ end
 end
 
 
+function component_loop!(dx, p, t, gd, gs,
+                              unique_components, unique_c_indices, parallel)
+    for j in 1:length(unique_components)
+        # Function barrier
+        _inner_loop!(dx, p, t, gd, gs,
+                           unique_components[j], unique_c_indices[j], parallel)
+    end
+    return nothing
+end
 
-@Base.kwdef struct nd_ODE_Static{G, GD, T1, T2}
-    vertices!::T1
-    edges!::T2
+function _inner_loop!(dx, p, t, gd, gs,
+                         component::T, indices, parallel) where T <: ODEVertex
+    @nd_threads parallel for i in indices
+        component.f!(view(dx,gs.v_idx[i]),
+                  get_vertex(gd, i),
+                  get_dst_edges(gd, i),
+                  p_v_idx(p, i),
+                  t)
+    end
+    return nothing
+end
+
+function _inner_loop!(dx, p, t, gd, gs,
+                         component::T, indices, parallel) where T <: StaticEdge
+    @nd_threads parallel for i in indices
+        component.f!(get_edge(gd, i),
+                     get_src_vertex(gd, i),
+                     get_dst_vertex(gd, i),
+                     p_e_idx(p, i),
+                     t)
+    end
+    return nothing
+end
+
+@Base.kwdef struct nd_ODE_Static{G, GD, TUV, TUE}
+    unique_vertices!::TUV
+    unique_v_indices::Vector{Vector{Int}}
+    unique_edges!::TUE
+    unique_e_indices::Vector{Vector{Int}}
     graph::G #redundant?
     graph_structure::GraphStruct
     graph_data::GD
@@ -47,31 +81,21 @@ end
 end
 
 
+
+
 function (d::nd_ODE_Static)(dx, x, p, t)
     gs = d.graph_structure
     checkbounds_p(p, gs.num_v, gs.num_e)
     gd = prep_gd(dx, x, d.graph_data, d.graph_structure)
 
-    @nd_threads d.parallel for i in 1:gs.num_e
-        maybe_idx(d.edges!, i).f!(
-            get_edge(gd, i),
-            get_src_vertex(gd, i),
-            get_dst_vertex(gd, i),
-            p_e_idx(p, i),
-            t)
-    end
-
     @assert size(dx) == size(x) "Sizes of dx and x do not match"
 
-    @nd_threads d.parallel for i in 1:gs.num_v
-        maybe_idx(d.vertices!,i).f!(
-            view(dx,gs.v_idx[i]),
-            get_vertex(gd, i),
-            get_dst_edges(gd, i),
-            p_v_idx(p, i),
-            t)
-    end
+    # Pass nothing, because here we have only Static Edges
+    component_loop!(nothing, p, t, gd, gs,
+                 d.unique_edges!, d.unique_e_indices, d.parallel)
 
+    component_loop!(dx, p, t, gd, gs,
+                 d.unique_vertices!, d.unique_v_indices, d.parallel)
     nothing
 end
 
@@ -81,14 +105,8 @@ function (d::nd_ODE_Static)(x, p, t, ::Type{GetGD})
     gs = d.graph_structure
     checkbounds_p(p, gs.num_v, gs.num_e)
 
-    @nd_threads d.parallel for i in 1:d.graph_structure.num_e
-        maybe_idx(d.edges!,i).f!(
-            get_edge(gd, i),
-            get_src_vertex(gd, i),
-            get_dst_vertex(gd, i),
-            p_e_idx(p, i),
-            t)
-    end
+    component_loop!(nothing, p, t, gd, gs,
+                 d.unique_edges!, d.unique_e_indices, d.parallel)
 
     gd
 end
