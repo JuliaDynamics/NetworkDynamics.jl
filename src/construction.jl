@@ -51,10 +51,9 @@ function NetworkLayer(im::IndexManager, g::SimpleGraph,
     end
     @check accdim<=accdim_max "For this system acc dim is limited to $accdim_max by the edgefunctions"
 
-    gc = color_edges_greedy(g)
-    verbose && println(" - found $(length(uniquecolors(gc))) edgecolors (optimum would be $(maximum(degree(g))))")
+    edgecolors = color_edges_greedy(g)
+    verbose && println(" - found $(length(unique(edgecolors))) edgecolors (optimum would be $(maximum(degree(g))))")
 
-    edgecolors = [color(gc, e) for e in edges(g)]
     colors = unique(edgecolors)
 
     idx_per_color = [findall(isequal(c), edgecolors) for c in colors]

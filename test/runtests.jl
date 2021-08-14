@@ -5,10 +5,10 @@ using LightGraphs
 using NDPrototype: VertexBatch, parameter_range
 
 @testset "NDPrototype.jl" begin
-    @test "constructor" begin
+    @testset "constructor" begin
         g = complete_graph(10)
         vertexf = ODEVertex(; f=x->x^2, dim=1, pdim=2)
-        edgef = StaticEdge(; f=x->x^2, dim=2, pdim=3)
+        edgef = StaticEdge(; f=x->x^2, dim=2, pdim=3, coupling=AntiSymmetric())
 
         nd = Network(g, vertexf, edgef; verbose=false);
 
@@ -17,7 +17,7 @@ using NDPrototype: VertexBatch, parameter_range
         add_edge!(g, 1, 2)
     end
 
-    @test "Vertex batch" begin
+    @testset "Vertex batch" begin
         vb = VertexBatch([1,2,3,4], # vertices
                          sum, # function
                          3, # dimension
@@ -58,7 +58,7 @@ end
     using NDPrototype: batch_identical
     v = :foo
     idx = [1,7,2,5]
-    @test batch_identical(v, idx) == (:foo, idx)
+    @test batch_identical(v, idx) == ([:foo], [idx])
     v = [:foo, :foo, :bar, :baz, :foo]
     idx = [5,4,3,2,1]
     @test batch_identical(v, idx) == ([:foo, :bar, :baz], [[5,4,1], [3], [2]])
@@ -104,29 +104,7 @@ end
     using NDPrototype: color_edges_greedy, isvalid
     for i in 1:20
         g = complete_graph(i)
-        gc = color_edges_greedy(g)
-        @test isvalid(gc)
+        colors = color_edges_greedy(g)
+        @test isvalid(g, colors)
     end
-end
-
-@testset "invert cdpath!" begin
-    using NDPrototype: ColoredGraph, setcolor!, isvalid, invert_cdpath!, color
-    g = ColoredGraph(complete_graph(5))
-    setcolor!(g, 1=>2, 1)
-    @test isvalid(g)
-    invert_cdpath!(g, 1, 2, 1)
-    @test isvalid(g)
-    @test color(g, 1=>2) == 2
-    g = ColoredGraph(complete_graph(5))
-    setcolor!(g, 1=>2, 1)
-    setcolor!(g, 2=>3, 2)
-    setcolor!(g, 3=>4, 1)
-    setcolor!(g, 4=>5, 2)
-    @test isvalid(g)
-    invert_cdpath!(g, 1, 2, 1)
-    @test isvalid(g)
-    @test color(g, 1=>2) == 2
-    @test color(g, 2=>3) == 1
-    @test color(g, 3=>4) == 2
-    @test color(g, 4=>5) == 1
 end
