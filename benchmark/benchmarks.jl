@@ -23,11 +23,11 @@ for k in ["static_edge", "ode_edge"]
     edge = edges[k]
 
     for N ∈ [10, 100, 1_000]  #, 100_000, 1_000_000]
-        SUITE["diffusion"][k]["assemble"][N] = @benchmarkable begin
-            Network(g, $vertex, $edge)
-        end setup = begin
-            g = watts_strogatz($N, floor(Int, $N/2), 0.0, seed=1)
-        end
+        # SUITE["diffusion"][k]["assemble"][N] = @benchmarkable begin
+        #     Network(g, $vertex, $edge)
+        # end setup = begin
+        #     g = watts_strogatz($N, floor(Int, $N/2), 0.0, seed=1)
+        # end
 
         SUITE["diffusion"][k]["call"][N] = @benchmarkable begin
             nd(dx, x0, nothing, 0.0)
@@ -42,7 +42,7 @@ for k in ["static_edge", "ode_edge"]
         SUITE["diffusion"][k]["call_mt"][N] = @benchmarkable begin
             nd(dx, x0, nothing, 0.0)
         end setup = begin
-            g = watts_strogatz($N, 3, 0.8, seed=1)
+            g = watts_strogatz($N, floor(Int, $N/2), 0.0, seed=1)
             nd = Network(g, $vertex, $edge; execution=:threaded)
             x0 = randn(dim(nd))
             dx = similar(x0)
@@ -84,15 +84,15 @@ function heterogeneous(N)
     (p, vertices, edge, g)
 end
 
-for N ∈ [100, 1_000, 10_000]  #, 100_000, 1_000_000]
+for N ∈ [100, 1_000, 10_000, 100_000] #, 1_000_000]
     # do both, for homogeneous and inhomogeneous system
     for f in [homogeneous, heterogeneous]
         name = string(f)
-        SUITE["kuramoto"][name]["assemble"][N] = @benchmarkable begin
-            Network(g, v, e)
-        end setup = begin
-            (p, v, e, g) = $f($N)
-        end
+        # SUITE["kuramoto"][name]["assemble"][N] = @benchmarkable begin
+        #     Network(g, v, e)
+        # end setup = begin
+        #     (p, v, e, g) = $f($N)
+        # end
 
         SUITE["kuramoto"][name]["call"][N] = @benchmarkable begin
             nd(dx, x0, p, 0.0)
