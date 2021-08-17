@@ -24,8 +24,7 @@ makedocs(
 		"Stochastic differential equations" => "SDEVertex.md",
 		"Delay differential equations" => "getting_started_with_DDEs.md",
     	]
-    ],
-    push_preview = true)
+    ])
 
 # To trigger the Github pages build, one initally manual commit to gh-pages was
 # necessary
