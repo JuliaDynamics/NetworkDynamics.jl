@@ -1,8 +1,3 @@
-ENV["GKSwstype"] = "100" # suggestion by @Datseris
-
-using Pkg
-Pkg.activate(@__DIR__)
-push!(LOAD_PATH, Base.Filesystem.abspath("../"))
 using Documenter
 using NetworkDynamics
 
@@ -26,8 +21,7 @@ makedocs(
     	]
     ])
 
-# To trigger the Github pages build, one initally manual commit to gh-pages was
-# necessary
 deploydocs(
     repo = "github.com/PIK-ICoNe/NetworkDynamics.jl.git",
+    devbranch = "main"
 )
