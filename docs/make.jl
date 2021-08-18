@@ -1,3 +1,5 @@
+ENV["GKSwstype"] = "100" # needed for plotting with GitHub Actions and GR (?)
+
 using Documenter
 using NetworkDynamics
 
