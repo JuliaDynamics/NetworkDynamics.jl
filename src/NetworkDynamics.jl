@@ -159,11 +159,14 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
 
     symbols = symbols_v
 
+    unique_vertices!, unique_v_indices = collect_unique_components(vertices!, nv(graph))
+    unique_edges!, unique_e_indices = collect_unique_components(edges!, ne(graph))
+
     graph_stucture = GraphStruct(graph, v_dims, e_dims, symbols_v, symbols_e)
 
     graph_data = GraphData(v_array, e_array, graph_stucture)
 
-    nd! = nd_DDE_Static(vertices!, edges!, graph, graph_stucture, graph_data, initial_history, parallel)
+    nd! = nd_DDE_Static(unique_vertices!, unique_v_indices, unique_edges!, unique_e_indices, graph, graph_stucture, graph_data, initial_history, parallel)
     mass_matrix = construct_mass_matrix(mmv_array, graph_stucture)
 
     DDEFunction(nd!; mass_matrix = mass_matrix, syms=symbols)
@@ -211,11 +214,14 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
 
     symbols = vcat(symbols_v, symbols_e)
 
+    unique_vertices!, unique_v_indices = collect_unique_components(vertices!, nv(graph))
+    unique_edges!, unique_e_indices = collect_unique_components(edges!, ne(graph))
+
     graph_stucture = GraphStruct(graph, v_dims, e_dims, symbols_v, symbols_e)
 
     graph_data = GraphData(v_array, e_array, graph_stucture)
 
-    nd! = nd_ODE_ODE(vertices!, edges!, graph, graph_stucture, graph_data, parallel)
+    nd! = nd_ODE_ODE(unique_vertices!, unique_v_indices, unique_edges!, unique_e_indices, graph, graph_stucture, graph_data, parallel)
 
     mass_matrix = construct_mass_matrix(mmv_array, mme_array, graph_stucture)
 
