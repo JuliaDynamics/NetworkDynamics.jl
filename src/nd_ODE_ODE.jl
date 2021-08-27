@@ -92,8 +92,19 @@ function (d::nd_ODE_ODE)(dx, x, p, t)
 end
 
 
+#function (d::nd_ODE_ODE)(x, p, t, ::Type{GetGD})
+#    prep_gd(nothing, x, d.graph_data, d.graph_structure)
+#end
+
 function (d::nd_ODE_ODE)(x, p, t, ::Type{GetGD})
-    prep_gd(nothing, x, d.graph_data, d.graph_structure)
+    gd = prep_gd(nothing, x, d.graph_data, d.graph_structure)
+    gs = d.graph_structure
+    checkbounds_p(p, gs.num_v, gs.num_e)
+
+    component_loop!(x, p, t, gd, gs,
+                 d.unique_edges!, d.unique_e_indices, d.parallel)
+
+    gd
 end
 
 function (d::nd_ODE_ODE)(::Type{GetGS})
