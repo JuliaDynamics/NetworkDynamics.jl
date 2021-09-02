@@ -26,7 +26,19 @@ end
    end
 end
 
-# component_loop for ODE and DDE vertices
+# component_loop for ODE vertices
+function component_loop!(dx, p, t, gd, gs,
+                              unique_components, unique_c_indices, parallel)
+    for j in 1:length(unique_components)
+        # Function barrier
+        _inner_loop!(dx, p, t, gd, gs,
+                           unique_components[j], unique_c_indices[j], parallel)
+    end
+    return nothing
+end
+
+
+# component_loop for DDE vertices
 function component_loop!(dx, p, t, gd, gs,
                               unique_components, unique_c_indices, history, parallel)
     for j in 1:length(unique_components)
@@ -108,6 +120,25 @@ end
     parallel::Bool # enables multithreading for the core loop
 end
 
+# for ODE case
+function (d::nd_ODE_DDE_combined)(dx, x, p, t)
+    gs = d.graph_structure
+    checkbounds_p(p, gs.num_v, gs.num_e)
+    gd = prep_gd(dx, x, d.graph_data, d.graph_structure)
+
+    @assert size(dx) == size(x) "Sizes of dx and x do not match"
+
+    # Pass nothing, because here we have only Static Edges or Static Delay Edges (if we
+    # include the ODE ODE case than we have to pass dx)
+    component_loop!(nothing, p, t, gd, gs,
+                 d.unique_edges!, d.unique_e_indices, d.parallel)
+
+    component_loop!(dx, p, t, gd, gs,
+                 d.unique_vertices!, d.unique_v_indices, d.parallel)
+    nothing
+end
+
+# for DDE case
 function (d::nd_ODE_DDE_combined)(dx, x, h!, p, t)
     gs = d.graph_structure
     checkbounds_p(p, gs.num_v, gs.num_e)
