@@ -16,8 +16,12 @@ include("NetworkStructures.jl")
 include("nd_ODE_ODE.jl")
 @reexport using .nd_ODE_ODE_mod
 
-include("nd_ODE_DDE_combined.jl")
-@reexport using .nd_ODE_DDE_combined_mod
+include("nd_ODE_Static.jl")
+@reexport using .nd_ODE_Static_mod
+
+include("nd_DDE_Static.jl")
+@reexport using .nd_DDE_Static_mod
+
 
 export network_dynamics
 
@@ -102,16 +106,11 @@ of VertexFunctions **`vertices!`**, an array of EdgeFunctions **`edges!`** and a
 `LightGraph.jl` object **`g`**. The optional argument `parallel` is a boolean
 value that denotes if the central loop should be executed in parallel with the number of threads set by the environment variable `JULIA_NUM_THREADS`.
 """
-
-# combination of ODE + Static and DDE + StaticDelayEdge cases
 function network_dynamics(vertices!::Union{Array{T, 1}, T},
                           edges!::Union{Array{U, 1}, U},
                           graph;
-                          initial_history=nothing,
-                          #initial_history::Union{AbstractArray, nothing},
                           x_prototype=zeros(1),
-                          parallel=false) where {T <: Union{ODEVertex, DDEVertex}, U <: Union{StaticEdge, StaticDelayEdge}}
-#                          parallel=false) where {T <: DDEVertex, U <: StaticDelayEdge}
+                          parallel=false) where {T <: ODEVertex, U <: StaticEdge}
 
     warn_parallel(parallel)
 
@@ -125,11 +124,38 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T},
     v_array = similar(x_prototype, sum(v_dims))
     e_array = similar(x_prototype, sum(e_dims))
 
+    symbols = symbols_v
+
+    unique_vertices!, unique_v_indices = collect_unique_components(vertices!, nv(graph))
+    unique_edges!, unique_e_indices = collect_unique_components(edges!, ne(graph))
+
+    graph_stucture = GraphStruct(graph, v_dims, e_dims, symbols_v, symbols_e)
+
+    graph_data = GraphData(v_array, e_array, graph_stucture)
+
+    nd! = nd_ODE_Static(unique_vertices!, unique_v_indices, unique_edges!, unique_e_indices, graph, graph_stucture, graph_data, parallel)
+    mass_matrix = construct_mass_matrix(mmv_array, graph_stucture)
+
+    ODEFunction(nd!; mass_matrix = mass_matrix, syms=symbols)
+end
+
+## DDE
+
+function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; initial_history=nothing, x_prototype=zeros(1), parallel=false) where {T <: DDEVertex, U <: StaticDelayEdge}
+    warn_parallel(parallel)
+
+    edges! = prepare_edges(edges!, graph)
+
+    v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array = collect_ve_info(vertices!, edges!, graph)
+
+    # These arrays are used for initializing the GraphData and will be overwritten
+    v_array = similar(x_prototype, sum(v_dims))
+    e_array = similar(x_prototype, sum(e_dims))
+
     # default
     if initial_history === nothing
         initial_history = ones(sum(v_dims))
     end
-
 
     symbols = symbols_v
 
@@ -140,10 +166,10 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T},
 
     graph_data = GraphData(v_array, e_array, graph_stucture)
 
-    nd! = nd_ODE_DDE_combined(unique_vertices!, unique_v_indices, unique_edges!, unique_e_indices, graph, graph_stucture, graph_data, initial_history, parallel)
+    nd! = nd_DDE_Static(unique_vertices!, unique_v_indices, unique_edges!, unique_e_indices, graph, graph_stucture, graph_data, initial_history, parallel)
     mass_matrix = construct_mass_matrix(mmv_array, graph_stucture)
 
-    DDEFunction(nd!; mass_matrix = mass_matrix, syms=symbols) # not sure if ODE or DDE Function
+    DDEFunction(nd!; mass_matrix = mass_matrix, syms=symbols)
 end
 
 """
@@ -394,7 +420,7 @@ Allow initializing StaticEdgeFunction for Power Dynamics
 function StaticEdgeFunction(vertices!, edges!, graph; parallel = false)
     # For reasons I don't fully understand we have to qualify the call to
     # the constructor of StaticEdgeFunction here.
-    nd_ODE_DDE_combined_mod.StaticEdgeFunction(network_dynamics(vertices!, edges!, graph, parallel = parallel))
+    nd_ODE_Static_mod.StaticEdgeFunction(network_dynamics(vertices!, edges!, graph, parallel = parallel))
 end
 
 
