@@ -143,7 +143,13 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T},
     nd! = nd_ODE_DDE_combined(unique_vertices!, unique_v_indices, unique_edges!, unique_e_indices, graph, graph_stucture, graph_data, initial_history, parallel)
     mass_matrix = construct_mass_matrix(mmv_array, graph_stucture)
 
-    DDEFunction(nd!; mass_matrix = mass_matrix, syms=symbols) # not sure if ODE or DDE Function
+#    diff_eq_function    
+#    if T <: ODEVertex
+#        diff_eq_function =  ODEFunction(nd!; mass_matrix = mass_matrix, syms=symbols) # not sure if ODE or DDE Function
+#    elseif U <: DDEVertex
+#        diff_eq_function =  DDEFunction(nd!; mass_matrix = mass_matrix, syms=symbols) # not sure if ODE or DDE Function
+#    end
+    T <: ODEVertex ? ODEFunction(nd!; mass_matrix = mass_matrix, syms=symbols) : DDEFunction(nd!; mass_matrix = mass_matrix, syms=symbols)
 end
 
 """
