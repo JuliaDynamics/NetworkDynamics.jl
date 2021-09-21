@@ -40,8 +40,8 @@ end
 
 # inner loops for ODE + Static case
 
-function _inner_loop!(component::T, indices,
-                      dx, p, t, gd, gs, history, parallel) where T <: ODEVertex
+function _inner_loop!(component::ODEVertex, indices,
+                      dx, p, t, gd, gs, history, parallel)
     @nd_threads parallel for i in indices
         component.f!(view(dx,gs.v_idx[i]),
                   get_vertex(gd, i),
@@ -52,8 +52,8 @@ function _inner_loop!(component::T, indices,
     return nothing
 end
 
-function _inner_loop!(component::T, indices,
-                      dx, p, t, gd, gs, history, parallel) where T <: StaticEdge
+function _inner_loop!(component::StaticEdge, indices,
+                      dx, p, t, gd, gs, history, parallel)
     @nd_threads parallel for i in indices
         component.f!(get_edge(gd, i),
                      get_src_vertex(gd, i),
@@ -66,8 +66,8 @@ end
 
 # inner loops for DDE + Static Delay
 
-function _inner_loop!(component::T, indices,
-                      dx, p, t, gd, gs, history, parallel) where T <: DDEVertex
+function _inner_loop!(component::DDEVertex, indices,
+                      dx, p, t, gd, gs, history, parallel)
     @nd_threads parallel for i in indices
         component.f!(view(dx, gs.v_idx[i]),
                   get_vertex(gd, i),
@@ -79,8 +79,8 @@ function _inner_loop!(component::T, indices,
     return nothing
 end
 
-function _inner_loop!(component::T, indices,
-                      dx, p, t, gd, gs, history, parallel) where T <: StaticDelayEdge
+function _inner_loop!(component::StaticDelayEdge, indices,
+                      dx, p, t, gd, gs, history, parallel) 
     @nd_threads parallel for i in indices
         component.f!(get_edge(gd, i),
                      get_src_vertex(gd, i),
