@@ -26,33 +26,22 @@ end
    end
 end
 
-# component_loop for ODE vertices
-function component_loop!(dx, p, t, gd, gs,
-                              unique_components, unique_c_indices, parallel)
+
+function component_loop!(unique_components, unique_c_indices,
+                         dx, p, t, gd, gs, history, parallel)
     for j in 1:length(unique_components)
         # Function barrier
-        _inner_loop!(dx, p, t, gd, gs,
-                           unique_components[j], unique_c_indices[j], parallel)
+        _inner_loop!(unique_components[j], unique_c_indices[j],
+                     dx, p, t, gd, gs, history, parallel)
     end
     return nothing
 end
 
-
-# component_loop for DDE vertices
-function component_loop!(dx, p, t, gd, gs,
-                              unique_components, unique_c_indices, history, parallel)
-    for j in 1:length(unique_components)
-        # Function barrier
-        _inner_loop!(dx, p, t, gd, gs,
-                           unique_components[j], unique_c_indices[j], history, parallel)
-    end
-    return nothing
-end
 
 # inner loops for ODE + Static case
 
-function _inner_loop!(dx, p, t, gd, gs,
-                         component::T, indices, parallel) where T <: ODEVertex
+function _inner_loop!(component::T, indices,
+                      dx, p, t, gd, gs, history, parallel) where T <: ODEVertex
     @nd_threads parallel for i in indices
         component.f!(view(dx,gs.v_idx[i]),
                   get_vertex(gd, i),
@@ -63,8 +52,8 @@ function _inner_loop!(dx, p, t, gd, gs,
     return nothing
 end
 
-function _inner_loop!(dx, p, t, gd, gs,
-                         component::T, indices, parallel) where T <: StaticEdge
+function _inner_loop!(component::T, indices,
+                      dx, p, t, gd, gs, history, parallel) where T <: StaticEdge
     @nd_threads parallel for i in indices
         component.f!(get_edge(gd, i),
                      get_src_vertex(gd, i),
@@ -77,8 +66,8 @@ end
 
 # inner loops for DDE + Static Delay
 
-function _inner_loop!(dx, p, t, gd, gs,
-                         component::T, indices, history, parallel) where T <: DDEVertex
+function _inner_loop!(component::T, indices,
+                      dx, p, t, gd, gs, history, parallel) where T <: DDEVertex
     @nd_threads parallel for i in indices
         component.f!(view(dx, gs.v_idx[i]),
                   get_vertex(gd, i),
@@ -90,8 +79,8 @@ function _inner_loop!(dx, p, t, gd, gs,
     return nothing
 end
 
-function _inner_loop!(dx, p, t, gd, gs,
-                         component::T, indices, history, parallel) where T <: StaticDelayEdge
+function _inner_loop!(component::T, indices,
+                      dx, p, t, gd, gs, history, parallel) where T <: StaticDelayEdge
     @nd_threads parallel for i in indices
         component.f!(get_edge(gd, i),
                      get_src_vertex(gd, i),
@@ -106,8 +95,8 @@ end
 
 # struct for both cases
 
-@Base.kwdef struct nd_ODE_DDE_combined{G, GDB, elV, elE, TUV, TUE, Th<:AbstractArray{elV}}
-#@Base.kwdef struct nd_ODE_DDE_combined{G, GDB, elV, elE, TUV, TUE, Th<:Union{AbstractArray{elV}, nothing}}
+#@Base.kwdef struct nd_ODE_DDE_combined{G, GDB, elV, elE, TUV, TUE, Th<:AbstractArray{elV}}
+@Base.kwdef struct nd_ODE_DDE_combined{G, GDB, elV, elE, TUV, TUE, Th<:Union{AbstractArray, Nothing}}
     unique_vertices!::TUV
     unique_v_indices::Vector{Vector{Int}}
     unique_edges!::TUE
@@ -115,12 +104,12 @@ end
     graph::G #redundant?
     graph_structure::GraphStruct
     graph_data::GraphData{GDB, elV, elE}
-#    history::Union{Th, nothing} # for ODE + Static case: nothing, for DDE + Static Delay case: Th
     history::Th # for ODE + Static case: nothing, for DDE + Static Delay case: Th
     parallel::Bool # enables multithreading for the core loop
 end
 
 # for ODE case
+
 function (d::nd_ODE_DDE_combined)(dx, x, p, t)
     gs = d.graph_structure
     checkbounds_p(p, gs.num_v, gs.num_e)
@@ -130,31 +119,19 @@ function (d::nd_ODE_DDE_combined)(dx, x, p, t)
 
     # Pass nothing, because here we have only Static Edges or Static Delay Edges (if we
     # include the ODE ODE case than we have to pass dx)
-    component_loop!(nothing, p, t, gd, gs,
-                 d.unique_edges!, d.unique_e_indices, d.parallel)
+    component_loop!(d.unique_edges!, d.unique_e_indices,
+                    nothing, p, t, gd, gs, d.history, d.parallel)
 
-    component_loop!(dx, p, t, gd, gs,
-                 d.unique_vertices!, d.unique_v_indices, d.parallel)
-    nothing
+    component_loop!(d.unique_vertices!, d.unique_v_indices,
+                    dx, p, t, gd, gs, d.history, d.parallel)
+    return nothing
 end
-
 # for DDE case
 function (d::nd_ODE_DDE_combined)(dx, x, h!, p, t)
-    gs = d.graph_structure
-    checkbounds_p(p, gs.num_v, gs.num_e)
-    gd = prep_gd(dx, x, d.graph_data, d.graph_structure)
+    # History computation happens beforehand and is cached in d.history
     h!(d.history, p, t - p[end])
-
-    @assert size(dx) == size(x) "Sizes of dx and x do not match"
-
-    # Pass nothing, because here we have only Static Edges or Static Delay Edges (if we
-    # include the ODE ODE case than we have to pass dx)
-    component_loop!(nothing, p, t, gd, gs,
-                 d.unique_edges!, d.unique_e_indices, d.history, d.parallel)
-
-    component_loop!(dx, p, t, gd, gs,
-                 d.unique_vertices!, d.unique_v_indices, d.history, d.parallel)
-    nothing
+    d(dx, x, p, t)
+    return nothing
 end
 
 function (d::nd_ODE_DDE_combined)(x, p, t, ::Type{GetGD})
@@ -162,8 +139,8 @@ function (d::nd_ODE_DDE_combined)(x, p, t, ::Type{GetGD})
     gs = d.graph_structure
     checkbounds_p(p, gs.num_v, gs.num_e)
 
-    component_loop!(nothing, p, t, gd, gs,
-                    d.unique_edges!, d.unique_e_indices, d.history, d.parallel)
+    component_loop!(d.unique_edges!, d.unique_e_indices,
+                    nothing, p, t, gd, gs, d.history, d.parallel)
 
     gd
 end
