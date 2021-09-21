@@ -41,14 +41,14 @@ using NetworkDynamics
     gs = nd(GetGS)
     # first test array of same type
     a = rand(length(x))
-    gd_ret = nd_ODE_Static_mod.prep_gd(dx, a, gd, gs)
+    gd_ret = nd_ODE_DDE_combined_mod.prep_gd(dx, a, gd, gs)
     @test gd_ret === gd
     @test gd.gdb.v_array == a
 
     # check with type missmatch
     a = rand(Int, length(x))
     dx = similar(a)
-    gd_ret = nd_ODE_Static_mod.prep_gd(dx, a, gd, gs)
+    gd_ret = nd_ODE_DDE_combined_mod.prep_gd(dx, a, gd, gs)
     @test gd_ret !== gd
     @test gd_ret.gdb.v_array == a
 end
