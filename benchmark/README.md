@@ -22,17 +22,4 @@ which will run the benchmark defined in the current directory
 
 and export the results to `target.md`, `baseline.md` and `judgment.md`.
 
-Arguments:
-- `-t, --target`: Specify branch, commit id, tag, ... for target benchmark. If `directory` use the current state of the directory. Default: `directory`
-- `-b, --baseline`: Same for baseline benchmark. Default: `main`. If `none` or `nothing` skip the baseline benckmark and coparison step
-- `--command`: Julia command to use for benchmarks, defaults to `julia`
-- `--tcommand`: Julia command for target, if unset use `--command`
-- `--bcommand`: Julia command for baseline, if unset use `--command`
-- `--threads`: set thread number env variable, defaults to `4`
-- `-v, --verbose`: show the current benchmark during run
-- `-p, --prefix`: prefix for filenames, defaults to timestamp
-- `--retune`: Force [retuning](https://juliaci.github.io/BenchmarkTools.jl/dev/manual/#Caching-Parameters) before the first benchmark (second benchmark will use the tune file).
-- `--exportraw`: export raw data of trials, i.e. to perform your own, additional analysis
-
-See the [`PkgBenchmark.jl` docs](https://juliaci.github.io/PkgBenchmark.jl/stable/) for more details.
-
+See `$./run_benchmarks.jl --help` for list of arguments.

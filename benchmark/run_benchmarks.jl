@@ -1,5 +1,8 @@
 #!/usr/bin/env julia
 
+# record start time
+tstart = time()
+
 # set root path of the ND repo
 NDPATH = begin
     path = splitpath(abspath(@__DIR__))
@@ -9,42 +12,51 @@ end
 BMPATH = joinpath(NDPATH, "benchmark")
 
 # activate the benchmark folder as current environment
-import Pkg; Pkg.activate(BMPATH); Pkg.develop(path=NDPATH);
+io = IOBuffer() # hide output
+import Pkg; Pkg.activate(BMPATH; io); Pkg.develop(path=NDPATH; io);
 
 using PkgBenchmark
 using LibGit2
 using Dates
+using Random
+using ArgParse
 
-tstart = time()
-
-# rudimentary arg parse function
-function getarg(default, flags...)
-    idx = findfirst(x -> x ∈ flags, ARGS)
-    return idx===nothing ? default : ARGS[idx+1]
+s = ArgParseSettings()
+@add_arg_table! s begin
+    "--target", "-t"
+        help = "Specify branch, commit id, tag, … for target benchmark. If `directory` use the current state of the directory. If *.date file use prev. exporte raw results."
+        default = "directory"
+    "--baseline", "-b"
+        help = "Same for baseline benchmark. If `none` or `nothing` skip the baseline benckmark and coparison step."
+        default = "main"
+    "--command"
+        help = "Julia command for benchmarks"
+        default = "julia"
+    "--tcommand"
+        help = "Julia command for target benchmarks. If nothing use `--command`"
+    "--bcommand"
+        help = "Julia command for baseline benchmarks. If nothing use `--command`"
+    "--threads"
+        help = "Set number of threads."
+        arg_type = Int
+        default = 4
+    "--prefix", "-p"
+        help = "Prefix for filenames, defaults to timestamp"
+        default = Dates.format(now(), "yyyy-mm-dd_HHMMSS")
+    "--verbose", "-v"
+        help = "Print out the current benchmark."
+        action = :store_true
+    "--retune"
+        help = "Force retuneing of parameters befor the first benchmark. (Second benchmark will use the tune file)"
+        action = :store_true
+    "--exportraw"
+        help = "Export raw data of trials. I.e. to use benchmarks results again als baseline or target."
+        action = :store_true
 end
+args = parse_args(s; as_symbols=true)
+args[:prefix] *= '_'
 
-# target defaults to nothing which means the current directory
-target_id   = getarg("directory", "-t", "--target")
-# baseline defaults to "main" branach. if "nothing" or "none" don't run second benchmark
-baseline_id = getarg("main", "-b", "--baseline")
-# number of threads, defaults to 4
-num_threads = parse(Int, getarg("4", "--threads"))
-# chose julia executable (the default one)
-julia_cmd   = getarg("julia", "--command")
-# chose julia executable for target specificially
-julia_cmd_target = getarg("", "--tcommand")
-# chose julia executable for baseline specificially
-julia_cmd_baseline = getarg("", "--bcommand")
-# verbose flag, print current benchmark
-verbose = "-v" ∈ ARGS || "--verbose" ∈ ARGS
-# force retune
-retune = "--retune" ∈ ARGS
-# export raw benchmark data
-exportraw = "--exportraw" ∈ ARGS
-# target defaults to nothing which means the current directory
-prefix = getarg(Dates.format(now(), "yyyy-mm-dd_HHMMSS"), "-p", "--prefix") * "_"
-
-@info "Run benchmarks on $target_id and compare to $baseline_id"
+@info "Run benchmarks on $(args[:target]) and compare to $(args[:baseline])"
 
 #=
 PkgBenchmark will do stuff to the repo (i.e. check out the desired branch),
@@ -69,6 +81,7 @@ isdirty = with(LibGit2.isdirty, GitRepo(ndpath_tmp))
 if isdirty
     @info "Dirty directory, add everything to new commit!"
     @assert realpath(pwd()) == realpath(ndpath_tmp) "Julia is in $(pwd()) not it $ndpath_tmp"
+    run(`git checkout -b $(randstring(15))`)
     run(`git add -A`)
     run(`git commit -m "tmp commit for benchmarking"`)
     # assert that repo is clean now
@@ -105,38 +118,60 @@ end
 directory even if dirty!
 - cmd if empty use default julia command
 """
-function benchmark(; name, id, cmd::AbstractString, retune)
-    # choose specific command only if given
-    cmd = isempty(cmd) ? julia_cmd : cmd
-    @info "Run $name benchmarks on $id with $cmd"
-    # magic id directory will benchmark dirty state
+function benchmark(; name, id, cmd, retune)
+    # magic id string directory will benchmark dirty state
     id = id=="directory" ? nothing : id
+
+    # PkgBenchmarks does not call Pkg.resolve after checking out a different
+    # state of ndpath_tmp! Therefore we need to check out the desired commit in
+    # the tmp directory and resolve the manifest of the currently activated
+    # environment (-> bmpath_tmp)
+    if !isnothing(id)
+        @assert realpath(pwd()) == realpath(ndpath_tmp) "Julia is in $(pwd()) not it $ndpath_tmp"
+        run(`git checkout $id`)
+        Pkg.resolve()
+    end
+
+    # choose specific command only if given, elso the default command
+    cmd = isnothing(cmd) ? args[:command] : cmd
+    @info "Run $name benchmarks on $id with $cmd"
+
     config = BenchmarkConfig(;id,
-                             env = Dict("JULIA_NUM_THREADS" => num_threads),
+                             env = Dict("JULIA_NUM_THREADS" => args[:threads]),
                              juliacmd = string_to_command(cmd))
     results = benchmarkpkg(ndpath_tmp, config;
                            script=script_path,
                            retune,
-                           verbose)
-    exportraw && writeresults(joinpath(BMPATH, prefix*name*".data"), results)
-    export_markdown(joinpath(BMPATH, prefix*name*".md"), results)
+                           verbose=args[:verbose])
+
+    args[:exportraw] && writeresults(joinpath(BMPATH, args[:prefix]*name*".data"), results)
+    export_markdown(joinpath(BMPATH, args[:prefix]*name*".md"), results)
     return results
 end
 
-target = benchmark(; name="target", id=target_id, cmd=julia_cmd_target, retune)
+if contains(args[:target], r".data$")
+    path = joinpath(BMPATH, args[:target])
+    target = readresults(joinpath(BMPATH, args[:target]))
+else
+    target = benchmark(; name="target", id=args[:target], cmd=args[:tcommand], retune=args[:retune])
+end
 
-if baseline_id ∉ ["nothing", "none"]
-    baseline = benchmark(; name="baseline", id=baseline_id, cmd=julia_cmd_baseline, retune=false)
-
+if args[:baseline] ∉ ["nothing", "none"]
+    if contains(args[:baseline], r".data$")
+        path = joinpath(BMPATH, args[:baseline])
+        baseline = readresults(joinpath(BMPATH, args[:baseline]))
+    elseif args[:baseline] ∉ ["nothing", "none"]
+        baseline = benchmark(; name="baseline", id=args[:baseline], cmd=args[:bcommand], retune=false)
+    end
     # compare the two
     judgment = judge(target, baseline)
-    export_markdown(joinpath(BMPATH, prefix*"judgment.md"), judgment)
+    export_markdown(joinpath(BMPATH, args[:prefix]*"judgment.md"), judgment)
 end
 
 # copy tune file over to real repo if there is none yet or it was retuned
-if !isfile(joinpath(BMPATH, "tune.json")) || retune
+if !isfile(joinpath(BMPATH, "tune.json")) || args[:retune]
     println("Update tune.json in $BMPATH")
-    cp(joinpath(ndpath_tmp, "benchmark", "tune.json"), joinpath(BMPATH, "tune.json"); force=retune)
+    cp(joinpath(ndpath_tmp, "benchmark", "tune.json"), joinpath(BMPATH, "tune.json"); force=args[:retune])
 end
 
 s = round(Int, time()-tstart)
