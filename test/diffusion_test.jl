@@ -153,7 +153,7 @@ max_ode = [maximum(abs.(sol_ode(t)[1:N] .- sol_analytic(x0_ode[1:N], nothing, t)
 println("Maximum difference between analytic solution and...")
 println("\t * and solution with explicit Laplacian: $max_L")
 println("\t * and solution with static ND: $max_st")
-println("\t * and solution  solution with promoted static edges ND: $max_ode")
+println("\t * and solution with promoted static edges ND: $max_ode")
 
 # We test that these helper function extract the right symbols:
 syms_v = syms_containing(diff_network_ode, "v")
