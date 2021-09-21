@@ -199,7 +199,7 @@ end
     @test eltype(vertex_list_1) == ODEVertex{typeof(diffusion_vertex!)}
 
     vertex_list_2 = [staticvertex for v in 1:10]
-    @test eltype(vertex_list_2) == StaticVertex{typeof(diff_stat_vertex!)}
+    @test eltype(vertex_list_2) <: ODEVertex
 
     vertex_list_3 = [ddevertex for v in 1:10]
     @test eltype(vertex_list_3) == DDEVertex{typeof(kuramoto_delay_vertex!)}
@@ -215,7 +215,7 @@ end
     vertex_list_7 = Array{DDEVertex}(vertex_list_4)
     @test eltype(vertex_list_7) == DDEVertex
 
-    @test_throws MethodError Array{StaticVertex}(vertex_list_4) # this should error out
+    @test_throws TypeError Array{StaticVertex}(vertex_list_4) # this should error out since StaticVertex is not a type
 
 
     edge_list_1 = [staticedge for v in 1:25]
@@ -274,8 +274,7 @@ end
 
 @testset "Allocations of promoted Vertices" begin
     f! = (v,edges,p,t) -> v .= pi
-    sv = StaticVertex(f! = f!, dim = 1)
-    osv = ODEVertex(sv)
+    osv = StaticVertex(f! = f!, dim = 1)
     x = [1.]
     dx = [0.]
     foo! = osv.f!
@@ -283,7 +282,7 @@ end
     @test (@allocated foo!(dx,x,nothing, nothing, nothing)) == 0
 
 
-    dsv = DDEVertex(sv)
+    dsv = DDEVertex(osv)
     x = [1.]
     dx = [0.]
     dfoo! = dsv.f!

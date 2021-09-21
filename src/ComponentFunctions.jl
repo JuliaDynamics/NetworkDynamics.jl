@@ -29,33 +29,7 @@ Abstract supertype for all edge functions.
 """
 abstract type EdgeFunction end
 
-"""
-    StaticVertex(f!, dim, sym)
 
-Wrapper that ensures compatibility of a **mutating** function **`f!`** with
-the key constructor `network_dynamics`.
-
-**`f!`**  describes the local behaviour at a static node and has to respect
-the following calling syntax
-
-```julia
-f!(v, edges, p, t) -> nothing
-```
-
-Here  `v`, `p` and `t` are the usual arguments, while
-`edges` is an arrays containing the edges for which the
-described vertex the destination (in-edges for directed graphs).
-
-`dim` is the number of independent variables in the vertex equations and
-`sym` is an array of symbols for these variables.
-
-For more details see the documentation.
-"""
-@Base.kwdef struct StaticVertex{T} <: VertexFunction
-    f!::T
-    dim::Int
-    sym=[:v for i in 1:dim]
-end
 
 """
     StaticEdge(f!, dim, sym)
@@ -175,6 +149,45 @@ For more details see the documentation.
     mass_matrix=I
     sym=[:v for i in 1:dim]
 end
+
+"""
+    StaticVertex(f!, dim, sym)
+
+Wrapper for ODEVertex with 0 mass matrix, i.e. static behaviour / algebraic constraint in mass matrix form.
+
+**`f!`**  describes the local behaviour at a static node and has to respect
+the following calling syntax
+
+```julia
+f!(v, edges, p, t) -> nothing
+```
+
+Here  `v`, `p` and `t` are the usual arguments, while
+`edges` is an arrays containing the edges for which the
+described vertex is the destination (in-edges for directed graphs).
+
+`dim` is the number of independent variables in the vertex equations and
+`sym` is an array of symbols for these variables.
+
+For more details see the documentation.
+"""
+function StaticVertex(;f!, dim::Int, sym::Vector{Symbol}=[:v for i in 1:dim])
+    # If mass matrix = 0 the differential equation sets dx = 0.
+    # To set x to the value calculated by f! we first write the value calculated
+    # by f! into dx, then subtract x. This leads to the  constraint
+    # 0 = - x + f(...)
+    # where f(...) denotes the value that f!(a, ...) writes into a.
+
+    _f! = (dx, x, edges, p, t) -> begin
+         f!(dx, edges, p, t)
+        @inbounds for i in eachindex(dx)
+            dx[i] = dx[i] - x[i]
+        end
+        return nothing
+    end
+    return ODEVertex(_f!, dim, 0., sym)
+end
+
 
 """
     ODEEdge(f!, dim, mass_matrix, sym)
@@ -309,23 +322,8 @@ function DDEVertex(ov::ODEVertex)
 end
 
 
-function DDEVertex(sv::StaticVertex)
-    let _f! = sv.f!, dim = sv.dim, sym = sv.sym
-        f! = @inline (dx, x, edges, h_v, p, t)  -> begin
-             _f!(dx, edges, p, t)
-            @inbounds for i in eachindex(dx)
-                dx[i] = dx[i] - x[i]
-            end
-            return nothing
-        end
-        return DDEVertex(f!, dim, 0., sym)
-    end
-end
 
 # Promotion rules [eventually there might be too many types to hardcode everyhting]
-
-convert(::Type{DDEVertex}, x::StaticVertex) = DDEVertex(x)
-promote_rule(::Type{DDEVertex}, ::Type{StaticVertex}) = DDEVertex
 
 
 convert(::Type{DDEVertex}, x::ODEVertex) = DDEVertex(x)
@@ -414,35 +412,12 @@ promote_rule(::Type{StaticDelayEdge}, ::Type{StaticEdge}) = StaticDelayEdge
 
 
 
-convert(::Type{ODEVertex}, x::StaticVertex) = ODEVertex(x)
-promote_rule(::Type{ODEVertex}, ::Type{StaticVertex}) = ODEVertex
-
 # Not sure if the next line does something?
 promote_rule(::Type{ODEVertex{T}}, ::Type{ODEVertex{U}}) where {T, U} = ODEVertex
 
 convert(::Type{ODEEdge}, x::StaticEdge) = ODEEdge(x)
 promote_rule(::Type{ODEEdge}, ::Type{StaticEdge}) = ODEEdge
 
-"""
-Promotes a StaticVertex to an ODEVertex with zero mass matrix.
-"""
-function ODEVertex(sv::StaticVertex)
-    # If mass matrix = 0 the differential equation sets dx = 0.
-    # To set x to the value calculated by f! we first write the value calculated
-    # by f! into dx, then subtract x. This leads to the  constraint
-    # 0 = - x + f(...)
-    # where f(...) denotes the value that f!(a, ...) writes into a.
-    let _f! = sv.f!, dim = sv.dim, sym = sv.sym
-        f! = (dx, x, edges, p, t) -> begin
-             _f!(dx, edges, p, t)
-            @inbounds for i in eachindex(dx)
-                dx[i] = dx[i] - x[i]
-            end
-            return nothing
-        end
-        return ODEVertex(f!, dim, 0., sym)
-    end
-end
 
 """
 Promotes a StaticEdge to an ODEEdge with zero mass matrix.
