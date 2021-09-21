@@ -314,20 +314,6 @@ For more details see the documentation.
     sym=[:v for i in 1:dim] # Symbols for the dimensions
 end
 
-function DDEVertex(ov::ODEVertex)
-    let _f! = ov.f!, dim = ov.dim, sym = ov.sym, mass_matrix = ov.mass_matrix
-        f! = @inline (dv, v, dst_edges, h_v, p, t) -> _f!(dv, v, dst_edges, p, t)
-        return DDEVertex(f!, dim, mass_matrix, sym)
-    end
-end
-
-
-
-# Promotion rules [eventually there might be too many types to hardcode everyhting]
-
-
-convert(::Type{DDEVertex}, x::ODEVertex) = DDEVertex(x)
-promote_rule(::Type{DDEVertex}, ::Type{ODEVertex}) = DDEVertex
 
 
 """
@@ -407,13 +393,7 @@ end
 
 # Promotion rules
 
-convert(::Type{StaticDelayEdge}, x::StaticEdge) = StaticDelayEdge(x)
-promote_rule(::Type{StaticDelayEdge}, ::Type{StaticEdge}) = StaticDelayEdge
 
-
-
-# Not sure if the next line does something?
-promote_rule(::Type{ODEVertex{T}}, ::Type{ODEVertex{U}}) where {T, U} = ODEVertex
 
 convert(::Type{ODEEdge}, x::StaticEdge) = ODEEdge(x)
 promote_rule(::Type{ODEEdge}, ::Type{StaticEdge}) = ODEEdge
