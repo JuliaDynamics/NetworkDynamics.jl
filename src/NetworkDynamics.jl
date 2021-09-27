@@ -94,7 +94,7 @@ function collect_unique_components(comp, NV)
 end
 
 
-## This is the "startpage" version of ND that check for incompatibile combinations
+## This is the "startpage" version of ND that checks for incompatibile combinations
 
 """
     network_dynamics(vertices!, edges!, g; parallel = false)
@@ -105,7 +105,7 @@ of VertexFunctions **`vertices!`**, an array of EdgeFunctions **`edges!`** and a
 `LightGraph.jl` object **`g`**. The optional argument `parallel` is a boolean
 value that denotes if the central loop should be executed in parallel with the number of threads set by the environment variable `JULIA_NUM_THREADS`.
 """
-function network_dynamics(vertices!::Array{T}, edges!::Array{U}, graph; kwargs...) where {T <: VertexFunction, U <: EdgeFunction}
+function network_dynamics(vertices!::Vector{T}, edges!::Vector{U}, graph; kwargs...) where {T <: VertexFunction, U <: EdgeFunction}
     @assert length(vertices!) == nv(graph)
     @assert length(edges!) == ne(graph)
 
@@ -166,9 +166,7 @@ function _network_dynamics(vertices!::Union{Array{T, 1}, T},
 
     warn_parallel(parallel)
 
-    # user_edges! = copy(edges!)
     edges! = prepare_edges(edges!, graph)
-
 
     v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array = collect_ve_info(vertices!, edges!, graph)
 
@@ -200,7 +198,7 @@ end
 
 ## ODEEdge
 
-function _network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: ODEEdge}
+function _network_dynamics(vertices!::Union{Vector{T}, T}, edges!::Union{Vector{U}, U}, graph; x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: ODEEdge}
 
     warn_parallel(parallel)
 
@@ -314,7 +312,6 @@ end
 
 
 
-
 @inline function reconstruct_edge(edge::StaticEdge, coupling::Symbol)
     let f! = edge.f!, dim = edge.dim, sym = edge.sym
         return StaticEdge(f! = f!,
@@ -334,22 +331,6 @@ end
 @inline function reconstruct_edge(edge::ODEEdge, coupling::Symbol)
     error("Reconstruction of ODEEdges is not implemented at the moment.")
 end
-
-# Not used at the moment
-#
-# @inline function reconstruct_edge(edge::ODEEdge, coupling::Symbol)
-#     let f! = edge.f!, dim = edge.dim, sym = edge.sym, mass_matrix = edge.mass_matrix
-#         if coupling == :undirected
-#             @warn "Reconstructing an ODEEdge affects its internal dimension."
-#         return ODEEdge(f! = f!,
-#                        dim = dim,
-#                        coupling = coupling,
-#                        mass_matrix = mass_matrix,
-#                        sym = sym)
-#     end
-# end
-#
-#
 
 """
 Allow initializing StaticEdgeFunction for Power Dynamics
