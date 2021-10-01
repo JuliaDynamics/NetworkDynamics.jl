@@ -3,8 +3,7 @@ using Test
     # basic tests for individual modules
     include("NetworkStructures_test.jl")
     include("ComponentFunctions_test.jl")
-    include("nd_ODE_Static_test.jl")
-    include("nd_ODE_ODE_test.jl")
+    include("NetworkDE_test.jl")
     include("checkbounds_test.jl")
 
     # complex tests of networks

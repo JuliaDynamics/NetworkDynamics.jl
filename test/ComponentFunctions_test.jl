@@ -212,8 +212,7 @@ end
     vertex_list_6 = Array{ODEVertex}(vertex_list_4)
     @test eltype(vertex_list_6) == ODEVertex
 
-    vertex_list_7 = Array{DDEVertex}(vertex_list_4)
-    @test eltype(vertex_list_7) == DDEVertex
+    @test_throws MethodError Array{DDEVertex}(vertex_list_4) # Methods for conversion of ODEVertx to DDEVertex are deprecated
 
     @test_throws TypeError Array{StaticVertex}(vertex_list_4) # this should error out since StaticVertex is not a type
 
@@ -239,10 +238,7 @@ end
     @test_broken edge_list_6 = Array{ODEEdge}(edge_list_4)
     #@test eltype(edge_list_6) == ODEEdge
 
-    edgelist_7 = Array{StaticDelayEdge}(edge_list_1)
-    @test eltype(edgelist_7) == StaticDelayEdge
-
-    @test_throws MethodError Array{StaticDelayEdge}(edge_list_4) == StaticDelayEdge
+    @test_throws MethodError Array{StaticDelayEdge}(edge_list_4)
 
     @test_throws MethodError Array{StaticEdge}(edge_list_4) # this should error out
 
@@ -280,14 +276,6 @@ end
     foo! = osv.f!
     foo!(dx,x,nothing, nothing, nothing)
     @test (@allocated foo!(dx,x,nothing, nothing, nothing)) == 0
-
-
-    dsv = DDEVertex(osv)
-    x = [1.]
-    dx = [0.]
-    dfoo! = dsv.f!
-    dfoo!(dx,x,nothing, nothing, nothing, nothing)
-    @test (@allocated dfoo!(dx,x,nothing, nothing, nothing, nothing)) == 0
 
     g! = (e, v_s, v_d,p,t) -> e .= pi
     se = StaticEdge(f! = g!, dim = 1, coupling = :undirected)

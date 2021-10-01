@@ -13,15 +13,8 @@ include("ComponentFunctions.jl")
 include("NetworkStructures.jl")
 @reexport using .NetworkStructures
 
-include("nd_ODE_ODE.jl")
-@reexport using .nd_ODE_ODE_mod
-
-include("nd_ODE_Static.jl")
-@reexport using .nd_ODE_Static_mod
-
-include("nd_DDE_Static.jl")
-@reexport using .nd_DDE_Static_mod
-
+include("NetworkDE_mod.jl")
+@reexport using .NetworkDE_mod
 
 export network_dynamics
 
@@ -97,6 +90,9 @@ function collect_unique_components(comp, NV)
     ucomp, ind_ucomp
 end
 
+
+## This is the "startpage" version of ND that checks for incompatibile combinations
+
 """
     network_dynamics(vertices!, edges!, g; parallel = false)
 
@@ -106,17 +102,68 @@ of VertexFunctions **`vertices!`**, an array of EdgeFunctions **`edges!`** and a
 `LightGraph.jl` object **`g`**. The optional argument `parallel` is a boolean
 value that denotes if the central loop should be executed in parallel with the number of threads set by the environment variable `JULIA_NUM_THREADS`.
 """
-function network_dynamics(vertices!::Union{Array{T, 1}, T},
+function network_dynamics(vertices!::Vector{T}, edges!::Vector{U}, graph; kwargs...) where {T <: VertexFunction, U <: EdgeFunction}
+    @assert length(vertices!) == nv(graph)
+    @assert length(edges!) == ne(graph)
+
+
+    hasDelay = any(v -> v isa DDEVertex, vertices!) ||
+               any(e -> e isa StaticDelayEdge, edges!)
+    hasODEEdge = any(e -> e isa ODEEdge, edges!)
+
+
+    hasDelay && hasODEEdge ? error(
+        ArgumentError("ODEEdges with delay are not supported at the moment.")) : nothing
+
+    # If one edge is an ODEEdge all other edges will be promoted. Eventually we will get rid of promotions.
+    if hasODEEdge && any(e -> e isa StaticEdge, edges!)
+        edges! = Array{ODEEdge}(edges!)
+    end
+
+    return _network_dynamics(vertices!, edges!, graph; kwargs...)
+end
+
+
+function network_dynamics(vertices!,  edges!, graph; parallel=false)
+    # If vertices! and/or edges! are individual functions and no other dispatch was
+    # triggered, assume all vertices, respectively edges will be of that type
+    if typeof(vertices!) <: VertexFunction
+        vertices! = [vertices! for i in 1:nv(graph)]
+    end
+    if typeof(edges!) <: EdgeFunction
+        edges! = [edges! for i in 1:ne(graph)]
+    end
+
+    try
+        Array{VertexFunction}(vertices!)
+    catch err
+        throw(ArgumentError("Cannot convert the vertices to an Array{VertexFunction}!"))
+    end
+
+    try
+        Array{EdgeFunction}(edges!)
+    catch err
+        throw(ArgumentError("Cannot convert the edges to an Array{EdgeFunction}!"))
+    end
+
+    vertices! isa Array{Any} ? vertices! = Array{VertexFunction}(vertices!) : nothing
+    edges! isa Array{Any} ? edges! = Array{EdgeFunction}(edges!) : nothing
+    network_dynamics(vertices!, edges!, graph, parallel = parallel)
+end
+
+
+# catch all version (works only for ODEVertex, DDEVertex, StaticEdge, StaticDelayEdge)
+function _network_dynamics(vertices!::Union{Array{T, 1}, T},
                           edges!::Union{Array{U, 1}, U},
                           graph;
+                          initial_history=nothing,
                           x_prototype=zeros(1),
-                          parallel=false) where {T <: ODEVertex, U <: StaticEdge}
+                          parallel=false) where {T <: VertexFunction, U <: EdgeFunction}
+
 
     warn_parallel(parallel)
 
-    # user_edges! = copy(edges!)
     edges! = prepare_edges(edges!, graph)
-
 
     v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array = collect_ve_info(vertices!, edges!, graph)
 
@@ -124,75 +171,31 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T},
     v_array = similar(x_prototype, sum(v_dims))
     e_array = similar(x_prototype, sum(e_dims))
 
-    symbols = symbols_v
 
     unique_vertices!, unique_v_indices = collect_unique_components(vertices!, nv(graph))
     unique_edges!, unique_e_indices = collect_unique_components(edges!, ne(graph))
 
-    graph_stucture = GraphStruct(graph, v_dims, e_dims, symbols_v, symbols_e)
+    hasDelay = any(v -> v isa DDEVertex, unique_vertices!) ||
+               any(e -> e isa StaticDelayEdge, unique_edges!)
 
-    graph_data = GraphData(v_array, e_array, graph_stucture)
-
-    nd! = nd_ODE_Static(unique_vertices!, unique_v_indices, unique_edges!, unique_e_indices, graph, graph_stucture, graph_data, parallel)
-    mass_matrix = construct_mass_matrix(mmv_array, graph_stucture)
-
-    ODEFunction(nd!; mass_matrix = mass_matrix, syms=symbols)
-end
-
-## DDE
-
-function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; initial_history=nothing, x_prototype=zeros(1), parallel=false) where {T <: DDEVertex, U <: StaticDelayEdge}
-    warn_parallel(parallel)
-
-    edges! = prepare_edges(edges!, graph)
-
-    v_dims, e_dims, symbols_v, symbols_e, mmv_array, mme_array = collect_ve_info(vertices!, edges!, graph)
-
-    # These arrays are used for initializing the GraphData and will be overwritten
-    v_array = similar(x_prototype, sum(v_dims))
-    e_array = similar(x_prototype, sum(e_dims))
-
-    # default
-    if initial_history === nothing
-        initial_history = ones(sum(v_dims))
+    if initial_history === nothing && hasDelay
+      initial_history = ones(sum(v_dims))
     end
-
-    symbols = symbols_v
 
     graph_stucture = GraphStruct(graph, v_dims, e_dims, symbols_v, symbols_e)
 
     graph_data = GraphData(v_array, e_array, graph_stucture)
 
-    nd! = nd_DDE_Static(vertices!, edges!, graph, graph_stucture, graph_data, initial_history, parallel)
+    nd! = NetworkDE(unique_vertices!, unique_v_indices, unique_edges!, unique_e_indices, graph, graph_stucture, graph_data, initial_history, parallel)
     mass_matrix = construct_mass_matrix(mmv_array, graph_stucture)
 
-    DDEFunction(nd!; mass_matrix = mass_matrix, syms=symbols)
+    return hasDelay ? DDEFunction(nd!; mass_matrix = mass_matrix, syms=symbols_v) :
+                      ODEFunction(nd!; mass_matrix = mass_matrix, syms=symbols_v)
 end
 
-"""
-Promotes StaticEdge to StaticDelayEdge if there is a DDEVertex
-"""
-function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; initial_history=nothing, x_prototype=zeros(1), parallel=false) where {T <: DDEVertex, U <: StaticEdge}
-    if edges! isa Array
-        network_dynamics(vertices!, Array{StaticDelayEdge}(edges!), graph, initial_history = initial_history, x_prototype =  x_prototype, parallel = parallel)
-    else
-        network_dynamics(vertices!, StaticDelayEdge(edges!), graph, initial_history = initial_history, x_prototype =  x_prototype, parallel = parallel)
-    end
-end
-"""
-Promotes ODEVertex to DDEVertex if there is a StaticDelayEdge
-"""
-function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; initial_history=nothing, x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: StaticDelayEdge}
-    if vertices! isa Array
-        network_dynamics(Array{DDEVertex}(vertices!), edges!, graph, initial_history = initial_history, x_prototype =  x_prototype, parallel = parallel)
-    else
-        network_dynamics(DDEVertex(vertices!), edges!, graph, initial_history = initial_history, x_prototype =  x_prototype, parallel = parallel)
-    end
-end
+## ODEEdge
 
-## ODE
-
-function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{U, 1}, U}, graph; x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: ODEEdge}
+function _network_dynamics(vertices!::Union{Vector{T}, T}, edges!::Union{Vector{U}, U}, graph; initial_history=nothing, x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: ODEEdge}
 
     warn_parallel(parallel)
 
@@ -211,84 +214,19 @@ function network_dynamics(vertices!::Union{Array{T, 1}, T}, edges!::Union{Array{
 
     symbols = vcat(symbols_v, symbols_e)
 
+    unique_vertices!, unique_v_indices = collect_unique_components(vertices!, nv(graph))
+    unique_edges!, unique_e_indices = collect_unique_components(edges!, ne(graph))
+
     graph_stucture = GraphStruct(graph, v_dims, e_dims, symbols_v, symbols_e)
 
     graph_data = GraphData(v_array, e_array, graph_stucture)
 
-    nd! = nd_ODE_ODE(vertices!, edges!, graph, graph_stucture, graph_data, parallel)
+    nd! = NetworkDE(unique_vertices!, unique_v_indices, unique_edges!, unique_e_indices, graph, graph_stucture, graph_data, initial_history, parallel)
 
     mass_matrix = construct_mass_matrix(mmv_array, mme_array, graph_stucture)
 
     ODEFunction(nd!; mass_matrix = mass_matrix, syms=symbols)
 end
-
-function network_dynamics(vertices!,  edges!, graph; parallel=false)
-    # If vertices! and/or edges! are individual functions and no other dispatch was
-    # triggered, assume all vertices, respectively edges will be of that type
-    if typeof(vertices!) <: VertexFunction
-        vertices! = Array{VertexFunction}([vertices! for i in 1:nv(graph)])
-    end
-    if typeof(edges!) <: EdgeFunction
-        edges! = Array{EdgeFunction}([edges! for i in 1:ne(graph)])
-    end
-
-    try
-        Array{VertexFunction}(vertices!)
-    catch err
-        throw(ArgumentError("Cannot convert the vertices to an Array{VertexFunction}!"))
-    end
-
-    try
-        Array{EdgeFunction}(edges!)
-    catch err
-        throw(ArgumentError("Cannot convert the edges to an Array{EdgeFunction}!"))
-    end
-    va! = Array{VertexFunction}(vertices!)
-    ea! = Array{EdgeFunction}(edges!)
-    network_dynamics(va!, ea!, graph, parallel = parallel)
-end
-
-function network_dynamics(vertices!::Array{VertexFunction}, edges!::Array{EdgeFunction}, graph; kwargs...)
-    @assert length(vertices!) == nv(graph)
-    @assert length(edges!) == ne(graph)
-
-    contains_delay = false
-    contains_dyn_edge = false
-
-    for e in edges!
-        if isa(e, StaticDelayEdge)
-            contains_delay = true
-        end
-        if isa(e, ODEEdge)
-            contains_dyn_edge = true
-        end
-    end
-    for v in vertices!
-        if isa(v, DDEVertex)
-            contains_delay = true
-        end
-    end
-
-    contains_delay && contains_dyn_edge ? error(
-        ArgumentError("ODEEdges with delay are not supported at the moment.")) : nothing
-
-    # If one Edge or Vertex needs access to the history function, all network components are promoted to hisotry aware version -> lots more variables that are potentially not used are passed around. the multilayer structure should (partially) work around that need.
-    if contains_delay
-        return network_dynamics(Array{DDEVertex}(vertices!),Array{StaticDelayEdge}(edges!), graph; kwargs...)
-    end
-
-    # If one edge is an ODEEdge all other edges will be promoted. This should be
-    # solved more elegantly by the upcoming multilayer structure.
-
-    if contains_dyn_edge
-        return network_dynamics(Array{ODEVertex}(vertices!),Array{ODEEdge}(edges!), graph; kwargs...)
-    else
-        return network_dynamics(Array{ODEVertex}(vertices!),Array{StaticEdge}(edges!), graph; kwargs...)
-    end
-    nothing
-end
-
-
 
 # Here is not the best place for this error,
 # but requires the least changes before the next refactor.
@@ -371,7 +309,6 @@ end
 
 
 
-
 @inline function reconstruct_edge(edge::StaticEdge, coupling::Symbol)
     let f! = edge.f!, dim = edge.dim, sym = edge.sym
         return StaticEdge(f! = f!,
@@ -392,29 +329,13 @@ end
     error("Reconstruction of ODEEdges is not implemented at the moment.")
 end
 
-# Not used at the moment
-#
-# @inline function reconstruct_edge(edge::ODEEdge, coupling::Symbol)
-#     let f! = edge.f!, dim = edge.dim, sym = edge.sym, mass_matrix = edge.mass_matrix
-#         if coupling == :undirected
-#             @warn "Reconstructing an ODEEdge affects its internal dimension."
-#         return ODEEdge(f! = f!,
-#                        dim = dim,
-#                        coupling = coupling,
-#                        mass_matrix = mass_matrix,
-#                        sym = sym)
-#     end
-# end
-#
-#
-
 """
 Allow initializing StaticEdgeFunction for Power Dynamics
 """
 function StaticEdgeFunction(vertices!, edges!, graph; parallel = false)
     # For reasons I don't fully understand we have to qualify the call to
     # the constructor of StaticEdgeFunction here.
-    nd_ODE_Static_mod.StaticEdgeFunction(network_dynamics(vertices!, edges!, graph, parallel = parallel))
+    NetworkDE_mod.StaticEdgeFunction(network_dynamics(vertices!, edges!, graph, parallel = parallel))
 end
 
 
