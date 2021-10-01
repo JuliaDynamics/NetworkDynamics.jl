@@ -13,11 +13,8 @@ include("ComponentFunctions.jl")
 include("NetworkStructures.jl")
 @reexport using .NetworkStructures
 
-include("nd_ODE_ODE.jl")
-@reexport using .nd_ODE_ODE_mod
-
-include("nd_ODE_DDE_combined.jl")
-@reexport using .nd_ODE_DDE_combined_mod
+include("NetworkDE_mod.jl")
+@reexport using .NetworkDE_mod
 
 export network_dynamics
 
@@ -189,7 +186,7 @@ function _network_dynamics(vertices!::Union{Array{T, 1}, T},
 
     graph_data = GraphData(v_array, e_array, graph_stucture)
 
-    nd! = nd_ODE_DDE_combined(unique_vertices!, unique_v_indices, unique_edges!, unique_e_indices, graph, graph_stucture, graph_data, initial_history, parallel)
+    nd! = NetworkDE(unique_vertices!, unique_v_indices, unique_edges!, unique_e_indices, graph, graph_stucture, graph_data, initial_history, parallel)
     mass_matrix = construct_mass_matrix(mmv_array, graph_stucture)
 
     return hasDelay ? DDEFunction(nd!; mass_matrix = mass_matrix, syms=symbols_v) :
@@ -198,7 +195,7 @@ end
 
 ## ODEEdge
 
-function _network_dynamics(vertices!::Union{Vector{T}, T}, edges!::Union{Vector{U}, U}, graph; x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: ODEEdge}
+function _network_dynamics(vertices!::Union{Vector{T}, T}, edges!::Union{Vector{U}, U}, graph; initial_history=nothing, x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: ODEEdge}
 
     warn_parallel(parallel)
 
@@ -224,7 +221,7 @@ function _network_dynamics(vertices!::Union{Vector{T}, T}, edges!::Union{Vector{
 
     graph_data = GraphData(v_array, e_array, graph_stucture)
 
-    nd! = nd_ODE_ODE(unique_vertices!, unique_v_indices, unique_edges!, unique_e_indices, graph, graph_stucture, graph_data, parallel)
+    nd! = NetworkDE(unique_vertices!, unique_v_indices, unique_edges!, unique_e_indices, graph, graph_stucture, graph_data, initial_history, parallel)
 
     mass_matrix = construct_mass_matrix(mmv_array, mme_array, graph_stucture)
 
@@ -338,7 +335,7 @@ Allow initializing StaticEdgeFunction for Power Dynamics
 function StaticEdgeFunction(vertices!, edges!, graph; parallel = false)
     # For reasons I don't fully understand we have to qualify the call to
     # the constructor of StaticEdgeFunction here.
-    nd_ODE_DDE_combined_mod.StaticEdgeFunction(network_dynamics(vertices!, edges!, graph, parallel = parallel))
+    NetworkDE_mod.StaticEdgeFunction(network_dynamics(vertices!, edges!, graph, parallel = parallel))
 end
 
 
