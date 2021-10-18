@@ -1,20 +1,13 @@
 module NetworkDynamics
 
-using Reexport
 using DiffEqBase
 using LightGraphs
 
 include("Utilities.jl")
-@reexport using .Utilities
-
 include("ComponentFunctions.jl")
-@reexport using .ComponentFunctions
-
 include("NetworkStructures.jl")
-@reexport using .NetworkStructures
+include("NetworkDiffEq.jl")
 
-include("NetworkDE_mod.jl")
-@reexport using .NetworkDE_mod
 
 export network_dynamics
 
@@ -328,15 +321,5 @@ end
 @inline function reconstruct_edge(edge::ODEEdge, coupling::Symbol)
     error("Reconstruction of ODEEdges is not implemented at the moment.")
 end
-
-"""
-Allow initializing StaticEdgeFunction for Power Dynamics
-"""
-function StaticEdgeFunction(vertices!, edges!, graph; parallel = false)
-    # For reasons I don't fully understand we have to qualify the call to
-    # the constructor of StaticEdgeFunction here.
-    NetworkDE_mod.StaticEdgeFunction(network_dynamics(vertices!, edges!, graph, parallel = parallel))
-end
-
 
 end # module

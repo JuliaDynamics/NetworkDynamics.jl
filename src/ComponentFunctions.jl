@@ -1,9 +1,7 @@
-"""
-Together with Constructors this module forms the backbone of the core API.
-It provide the basic types to construct Arrays of VertexFunction and
-EdgeFunction which can be handled by network_dynamics.
-"""
-module ComponentFunctions
+# Together with Constructors this file forms the backbone of the core API.
+# It provide the basic types to construct Arrays of VertexFunction and
+# EdgeFunction which can be handled by network_dynamics.
+
 
 using LinearAlgebra
 
@@ -426,6 +424,4 @@ function ODEEdge(se::StaticEdge)
             return ODEEdge(f!, dim, coupling, 0., sym)
         end
     end
-end
-
 end

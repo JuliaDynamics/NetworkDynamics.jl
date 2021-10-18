@@ -1,11 +1,6 @@
-module Utilities
-
-using NLsolve
+import NLsolve: nlsolve, converged
 using LinearAlgebra
 using SparseArrays
-
-export maybe_idx, p_v_idx, p_e_idx, @nd_threads, construct_mass_matrix, warn_parallel, checkbounds_p
-
 
 function warn_parallel(b::Bool)
     if b
@@ -311,5 +306,3 @@ function construct_mass_matrix(mmv_array, mme_array, gs)
     end
     mass_matrix
 end
-
-end #module
