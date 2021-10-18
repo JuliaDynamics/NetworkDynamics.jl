@@ -1,18 +1,20 @@
-"""
-    This module contains the logic that calculate the index structures
-    and data access structs that Network Dynamics makes use of.
+#
+# This file contains the logic that calculate the index structures
+# and data access structs that Network Dynamics makes use of.
+#
+# The key structure is the GraphData structure that allows accessing data on
+# vertices and edges of the graph in an efficient manner. The neccessary indices
+# are precomputed in GraphStructure.
 
-    The key structure is the GraphData structure that allows accessing data on
-    vertices and edges of the graph in an efficient manner. The neccessary indices
-    are precomputed in GraphStructure.
-"""
-module NetworkStructures
 
 using LightGraphs
 using LinearAlgebra
-export GraphStruct, GraphData, EdgeData, VertexData
 
 const Idx = UnitRange{Int}
+
+export GraphStruct, GraphData, EdgeData, VertexData
+
+
 
 """
 Create offsets for stacked array of dimensions dims
@@ -401,5 +403,3 @@ end
 function (nds::ND_Solution)(t)
     nds.nd(nds.sol(t), nds.p, t, GetGD)
 end
-
-end # module

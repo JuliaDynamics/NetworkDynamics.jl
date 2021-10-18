@@ -1,20 +1,13 @@
 module NetworkDynamics
 
-using Reexport
 using DiffEqBase
 using LightGraphs
 
 include("Utilities.jl")
-@reexport using .Utilities
-
 include("ComponentFunctions.jl")
-@reexport using .ComponentFunctions
-
 include("NetworkStructures.jl")
-@reexport using .NetworkStructures
+include("NetworkDiffEq.jl")
 
-include("NetworkDE_mod.jl")
-@reexport using .NetworkDE_mod
 
 export network_dynamics
 

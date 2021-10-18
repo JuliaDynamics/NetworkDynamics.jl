@@ -1,9 +1,3 @@
-module NetworkDE_mod
-
-using ..NetworkStructures
-using ..ComponentFunctions
-using ..Utilities
-
 export NetworkDE
 
 
@@ -174,5 +168,3 @@ end
 function (d::NetworkDE)(::Type{GetGS})
     d.graph_structure
 end
-
-end # module

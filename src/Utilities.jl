@@ -1,6 +1,4 @@
-module Utilities
-
-using NLsolve
+import NLsolve: nlsolve, converged
 using LinearAlgebra
 using SparseArrays
 
@@ -311,5 +309,3 @@ function construct_mass_matrix(mmv_array, mme_array, gs)
     end
     mass_matrix
 end
-
-end #module
