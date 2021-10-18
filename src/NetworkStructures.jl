@@ -12,10 +12,6 @@ using LinearAlgebra
 
 const Idx = UnitRange{Int}
 
-export GraphStruct, GraphData, EdgeData, VertexData
-
-
-
 """
 Create offsets for stacked array of dimensions dims
 """
