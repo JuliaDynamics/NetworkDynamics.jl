@@ -322,14 +322,4 @@ end
     error("Reconstruction of ODEEdges is not implemented at the moment.")
 end
 
-"""
-Allow initializing StaticEdgeFunction for Power Dynamics
-"""
-function StaticEdgeFunction(vertices!, edges!, graph; parallel = false)
-    # For reasons I don't fully understand we have to qualify the call to
-    # the constructor of StaticEdgeFunction here.
-    NetworkDE_mod.StaticEdgeFunction(network_dynamics(vertices!, edges!, graph, parallel = parallel))
-end
-
-
 end # module
