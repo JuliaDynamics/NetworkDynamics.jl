@@ -352,9 +352,9 @@ Like a static edge but with extra arguments for the history of the source and de
             # This might cause unexpected behaviour if source and destination vertex don't
             # have the same internal arguments.
             # Make sure to explicitly define the edge is :fiducial in that case.
-            f! = @inline (e, v_s, v_d, h_v_s, h_v_d, p, t) -> begin
-                @inbounds user_f!(view(e,1:dim), v_s, v_d, h_v_s, h_v_d, p, t)
-                @inbounds user_f!(view(e,dim+1:2dim), v_d, v_s, h_v_d, h_v_s, p, t)
+            f! = @inline (e, v_s, v_d, h, v_s_idx, v_d_idx, p, t) -> begin
+                @inbounds user_f!(view(e,1:dim), v_s, v_d, h, v_s_idx, v_d_idx, p, t)
+                @inbounds user_f!(view(e,dim+1:2dim), v_d, v_s, h, v_d_idx, v_s_idx, p, t)
                 nothing
             end
         elseif coupling == :antisymmetric

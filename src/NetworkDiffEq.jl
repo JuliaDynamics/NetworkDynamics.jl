@@ -82,13 +82,14 @@ function _inner_loop!(component::DDEVertex, indices,
 end
 
 function _inner_loop!(component::StaticDelayEdge, indices,
-                      dx, p, t, gd, gs, history, parallel)
+                      dx, p, t, gd, gs, h, parallel)
     @nd_threads parallel for i in indices
         component.f!(get_edge(gd, i),
                      get_src_vertex(gd, i),
                      get_dst_vertex(gd, i),
-                     view(history, gs.s_e_idx[i]),
-                     view(history, gs.d_e_idx[i]),
+                     h, # history function
+                     gs.s_e_idx[i],
+                     gs.d_e_idx[i],
                      p_e_idx(p, i),
                      t)
     end
@@ -142,10 +143,18 @@ function (d::NetworkDE)(dx, x, p, t)
     return nothing
 end
 # for DDE case
-function (d::NetworkDE)(dx, x, h!, p, t)
-    # History computation happens beforehand and is cached in d.history
-    h!(d.history, p, t - p[end])
-    d(dx, x, p, t)
+function (d::NetworkDE)(dx, x, h, p, t)
+    gs = d.graph_structure
+    checkbounds_p(p, gs.num_v, gs.num_e)
+    gd = prep_gd(dx, x, d.graph_data, gs)
+
+    @assert size(dx) == size(x) "Sizes of dx and x do not match"
+
+    component_loop!(d.unique_edges!, d.unique_e_indices,
+                    dx, p, t, gd, gs, h, d.parallel)
+
+    component_loop!(d.unique_vertices!, d.unique_v_indices,
+                    dx, p, t, gd, gs, h, d.parallel)
     return nothing
 end
 
