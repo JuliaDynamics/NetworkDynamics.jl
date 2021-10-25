@@ -358,16 +358,16 @@ Like a static edge but with extra arguments for the history of the source and de
                 nothing
             end
         elseif coupling == :antisymmetric
-            f! = @inline (e, v_s, v_d, h_v_s, h_v_d, p, t) -> begin
-                @inbounds user_f!(view(e,1:dim), v_s, v_d, h_v_s, h_v_d, p, t)
+            f! = @inline (e, v_s, v_d, h, v_s_idx, v_d_idx, p, t) -> begin
+                @inbounds user_f!(view(e,1:dim), v_s, v_d, h, v_s_idx, v_d_idx, p, t)
                 @inbounds for i in 1:dim
                     e[dim + i] = -1.0 * e[i]
                 end
                 nothing
             end
         elseif coupling == :symmetric
-            f! = @inline (e, v_s, v_d, h_v_s, h_v_d, p, t) -> begin
-                @inbounds user_f!(view(e,1:dim), v_s, v_d, h_v_s, h_v_d, p, t)
+            f! = @inline (e, v_s, v_d, h, v_s_idx, v_d_idx, p, t) -> begin
+                @inbounds user_f!(view(e,1:dim), v_s, v_d, h, v_s_idx, v_d_idx, p, t)
                 @inbounds for i in 1:dim
                     e[dim + i] = e[i]
                 end

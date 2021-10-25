@@ -61,8 +61,8 @@ end
         nothing
     end
 
-    @inline function diffusionvertex!(dv, v, edges, h_v, p, t)
-        dv .= -h_v
+    @inline function diffusionvertex!(dv, v, edges, h, v_idx, p, t)
+        dv[1] = -h(p, t - 1., idxs=v_idx[1])
         sum_coupling!(dv, edges)
         nothing
     end
@@ -79,11 +79,11 @@ end
 
     x = rand(N)
     dx = similar(x)
-    p = (nothing, nothing, 1.0)
-    h(out, p, t) = (out .= x)
+    p = nothing
+    h(p, t; idxs=1) = x[idxs]
 
     # first run to compile
-    nd(dx, x, h, p, 0.0) # signature found in nd_DDE_Static.jl line 50
+    nd(dx, x, h, p, 0.0)
 
     # function barrier, otherwise there are still allocations
     function alloc(nd, dx, x, h)

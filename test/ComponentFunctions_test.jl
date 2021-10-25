@@ -52,8 +52,10 @@ using LinearAlgebra
 end
 
 @testset "StaticDelayEdge constructor" begin
-    f! = (e, v_s, v_d, h_v_s, h_v_d, p, t) -> begin
-        e .= h_v_s .- h_v_d
+    f! = (e, v_s, v_d, h, v_s_idx, v_d_idx, p, t) -> begin
+        h_v_s = h(p,t - 1., idxs = v_s_idx[1])
+        h_v_d = h(p,t - 1., idxs = v_d_idx[1])
+        e[1] = h_v_s - h_v_d
         nothing
     end
 
@@ -84,11 +86,11 @@ end
     edir   = zeros(2)
     efid   = zeros(2)
 
-    fundir.f!(eundir, nothing, nothing, x, y, nothing, nothing)
-    fanti.f!(eanti, nothing, nothing, x, y, nothing, nothing)
-    fsym.f!(esym, nothing, nothing, x, y, nothing, nothing)
-    fdir.f!(edir, nothing, nothing, x, y, nothing, nothing)
-    ffid.f!(efid, nothing, nothing, x, y, nothing, nothing)
+    fundir.f!(eundir, nothing, nothing, (p,t; idxs = nothing) -> 1., [1.], [1.], nothing, 0.)
+    fanti.f!(eanti, nothing, nothing, (p,t; idxs = nothing) -> 1., [1.], [1.], nothing, 0.)
+    fsym.f!(esym, nothing, nothing, (p,t; idxs = nothing) -> 1., [1.], [1.], nothing, 0.)
+    fdir.f!(edir, nothing, nothing, (p,t; idxs = nothing) -> 1., [1.], [1.], nothing, 0.)
+    ffid.f!(efid, nothing, nothing, (p,t; idxs = nothing) -> 1., [1.], [1.], nothing, 0.)
 
     @test eundir == eanti
     @test eanti[1:2] == -eanti[3:4]
