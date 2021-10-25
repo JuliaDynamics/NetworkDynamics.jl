@@ -378,17 +378,6 @@ Like a static edge but with extra arguments for the history of the source and de
     end
 end
 
-function StaticDelayEdge(se::StaticEdge)
-    let _f! = se.f!, dim = se.dim, coupling = se.coupling, sym = se.sym
-        f! = @inline (e, v_s, v_d, h_v_s, h_v_d, p, t) -> _f!(e, v_s, v_d, p, t)
-        if coupling ∈ (:undefined, :fiducial, :directed)
-            return StaticDelayEdge(f!, dim, coupling, sym)
-        else
-            return StaticDelayEdge(f!, dim, :fiducial, sym)
-        end
-    end
-end
-
 # Promotion rules
 
 
