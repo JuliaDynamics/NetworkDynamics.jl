@@ -13,12 +13,13 @@ function warn_parallel(b::Bool)
 end
 
 """
+    @nd_threads trigger expr
+
 nd_threads: Allows control over threading by the 1st argument,
 a boolean (likely from the network object).
 This allows you to control for multithreading at runtime without
 code duplication.
 """
-
 macro nd_threads(trigger,args...)
     na = length(args)
     if na != 1
@@ -59,6 +60,8 @@ end
 
 
 """
+    maybe_idx(p::T, i) where T <: AbstractArray
+
 Utility function that drops the indexing operation when the argument is not
 a subtype of AbstractArray. Used in the inner loop of Network Dynamics. Should
 eventually be replaced by a macro that writes out the dispatches.
@@ -155,8 +158,10 @@ end
 export sum_coupling!
 
 """
+    sum_coupling!(e_sum, dst_edges)
+
 A small utility function for writing diffusion dynamics. It provides the
- sum of all incoming edges.
+sum of all incoming edges.
 """
 @inline function sum_coupling!(e_sum, dst_edges)
     @inbounds for e in dst_edges
@@ -168,9 +173,10 @@ end
 export find_fixpoint
 
 """
+    find_fixpoint(nd, p, initial_guess)
+
 Utility function for finding fixpoints.
 """
-
 function find_fixpoint(nd, p, initial_guess)
     nl_res = nlsolve((dx, x) -> nd(dx, x, p, 0.), initial_guess)
     if converged(nl_res) == true
@@ -183,6 +189,9 @@ end
 export RootRhs
 
 """
+    struct RootRhs
+    RootRhs(of)
+
 A utility function that provides a root function, to find valid initial
 conditions. The operator ``M^\\dagger M - 1`` projects onto the kernel of ``M``.
 The differential equation is ``M dx/dt = f(x)``, and can thus only be satisfied
@@ -214,6 +223,8 @@ export find_valid_ic
 
 
 """
+    find_valid_ic(of, ic_guess)
+
 Try to find valid initial conditions for problems involving mass matrices.
 Uses RootRhs as residual function.
 """

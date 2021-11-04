@@ -14,6 +14,8 @@ export network_dynamics
 
 
 """
+    collect_ve_info(vertices!, edges!, graph)
+
 This function assembles the arrays that hold the structural information
 of the individual vertices and edges: Their dimensions, the symbols of their
 variables and their mass matrices. Used internally by the network_dynamics
@@ -227,9 +229,8 @@ function prepare_edges(edges, g)
     @assert typeof(edges) <: Union{EdgeFunction, Vector}
     throw(ArgumentError("Graph type not recognized. Currently only SimpleGraph and SimpleDiGraph are supported."))
 end
-"""
-If only a sinlge Function is given, not an Array of EdgeFunctions.
-"""
+
+# If only a sinlge Function is given, not an Array of EdgeFunctions.
 function prepare_edges(edge::EdgeFunction, g::SimpleGraph)
     if edge.coupling == :directed
         throw(ArgumentError("Coupling type of EdgeFunction not available for undirected Graphs"))
@@ -250,9 +251,8 @@ function prepare_edges(edge::EdgeFunction, g::SimpleDiGraph)
     return edge
 end
 
-""" prepare_edges(edges, g::SimpleGraph)
-
-
+"""
+    prepare_edges(edges, g::SimpleGraph)
 """
 function prepare_edges(edges::Vector, g::SimpleGraph)
     # Depending on the coupling we might get different eltypes

@@ -30,7 +30,7 @@ abstract type EdgeFunction end
 
 
 """
-    StaticEdge(f, dim, sym)
+    StaticEdge(; f, dim, coupling, sym)
 
 Wrapper that ensures compatibility of a **mutating** function `f` with
 the key constructor `network_dynamics`.
@@ -118,7 +118,7 @@ end
 
 
 """
-    ODEVertex(f, dim, mass_matrix, sym)
+    ODEVertex(; f, dim, mass_matrix, sym)
 
 Wrapper that ensures compatibility of a **mutating** function **`f`** with
 the key constructor `network_dynamics`.
@@ -149,7 +149,7 @@ For more details see the documentation.
 end
 
 """
-    StaticVertex(f, dim, sym)
+    StaticVertex(; f, dim, sym)
 
 Wrapper for ODEVertex with 0 mass matrix, i.e. static behaviour / algebraic constraint in mass matrix form.
 
@@ -188,7 +188,7 @@ end
 
 
 """
-    ODEEdge(f, dim, mass_matrix, sym)
+    ODEEdge(; f, dim, mass_matrix, sym)
 
 Wrapper that ensures compatibility of a **mutating** function **`f`** with
 the key constructor `network_dynamics`.
@@ -281,7 +281,7 @@ end
 
 
 """
-    DDEVertex(f, dim, mass_matrix, sym)
+    DDEVertex(; f, dim, mass_matrix, sym)
 
 Wrapper that ensures compatibility of a **mutating** function **`f`** with
 the key constructor `network_dynamics`.
@@ -315,6 +315,8 @@ end
 
 
 """
+    StaticDilayEdge(; f, dim, coupling, sym)
+
 Like a static edge but with extra arguments for the history of the source and destination vertices. This is NOT a DDEEdge.
 """
 @Base.kwdef struct StaticDelayEdge{T} <: EdgeFunction
@@ -398,6 +400,8 @@ promote_rule(::Type{ODEEdge}, ::Type{StaticEdge}) = ODEEdge
 
 
 """
+    ODEEdge(se::StaticEdge)
+
 Promotes a StaticEdge to an ODEEdge with zero mass matrix.
 """
 function ODEEdge(se::StaticEdge)

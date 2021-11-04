@@ -13,6 +13,8 @@ using LinearAlgebra
 const Idx = UnitRange{Int}
 
 """
+    create_offsets(dims; counter=0)
+
 Create offsets for stacked array of dimensions dims
 """
 function create_offsets(dims; counter=0)::Array{Int, 1}
@@ -25,6 +27,8 @@ function create_offsets(dims; counter=0)::Array{Int, 1}
 end
 
 """
+    create_idxs(offs, dims)
+
 Create indexes for stacked array of dimensions dims using the offsets offs
 """
 function create_idxs(offs, dims)::Array{Idx, 1}
@@ -32,6 +36,8 @@ function create_idxs(offs, dims)::Array{Idx, 1}
 end
 
 """
+    GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
+
 This struct holds the offsets and indices for all relevant aspects of the graph
 The assumption is that there will be two arrays, one for the vertex variables
 and one for the edge variables.
@@ -376,15 +382,21 @@ Returns a Vector of view-like accesses to all the (half-)edges that have the i-t
 export GetGD
 export GetGS
 
-"""This type is used to dispatch the network dynamics functions to provide
-access to the underlying GraphData object."""
-struct GetGD
-end
+"""
+    struct GetGD
 
-"""This type is used to dispatch the network dynamics functions to provide
-access to the underlying GraphStruct object."""
-struct GetGS
-end
+This type is used to dispatch the network dynamics functions to provide
+access to the underlying GraphData object.
+"""
+struct GetGD end
+
+"""
+    struct GetGS
+
+This type is used to dispatch the network dynamics functions to provide
+access to the underlying GraphStruct object.
+"""
+struct GetGS end
 
 
 #= Experimental and untested: Wrap a solution object so we get back a GraphData
