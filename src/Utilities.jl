@@ -232,22 +232,24 @@ end
 export syms_containing, idx_containing
 
 """
-Find all symbols present in a network_dynamics that contain the string or symbol
-`str`
+    syms_containing(nd, expr)
+
+Find all symbols present in a network_dynamics that contain the string, regex or symbol `expr`.
 """
-function syms_containing(nd, str)
-    [s for s in nd.syms if occursin(string(str), string(s))]
+function syms_containing(nd, expr)
+    [s for s in nd.syms if occursin(expr, string(s))]
 end
-
+syms_containing(nd, expr::Symbol) = syms_containing(nd, string(expr))
 
 """
-Find all indices of variables with symbols containing the string or symbol
-`str`
+    idx_containing(nd, expr)
+
+Find all indices of variables with symbols containing the string, regex or symbol `expr`
 """
-function idx_containing(nd, str)
-    [i for (i, s) in enumerate(nd.syms) if occursin(string(str), string(s))]
+function idx_containing(nd, expr)
+    [i for (i, s) in enumerate(nd.syms) if occursin(expr, string(s))]
 end
-
+idx_containing(nd, expr::Symbol) = idx_containing(nd, string(expr))
 
 function construct_mass_matrix(mmv_array, gs)
     if all([mm == I for mm in mmv_array])

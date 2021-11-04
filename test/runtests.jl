@@ -11,4 +11,7 @@ using Test
     include("inhomogeneous_test.jl")
     include("autodiff_test.jl")
     include("massmatrix_test.jl")
+
+    # utiliti testes
+    include("Utilities_test.jl")
 end
