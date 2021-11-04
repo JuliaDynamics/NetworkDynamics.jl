@@ -9,7 +9,7 @@ components can differ in their parameters as well as in their dynamics.
 We start by setting up a simple system of Kuramoto oscillators.
 
 ```@example heterogeneous_system
-using NetworkDynamics, OrdinaryDiffEq, Plots, LightGraphs
+using NetworkDynamics, OrdinaryDiffEq, Plots, Graphs
 
 
 N = 8

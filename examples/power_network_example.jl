@@ -3,7 +3,7 @@ Pkg.activate(@__DIR__)
 using Revise
 
 using NetworkDynamics
-using LightGraphs
+using Graphs
 using LinearAlgebra
 using OrdinaryDiffEq
 using Plots

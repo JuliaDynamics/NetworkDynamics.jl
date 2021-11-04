@@ -2,7 +2,7 @@
 # corresponding jupyter notebook on our github repository.
 
 using NetworkDynamics
-using LightGraphs
+using Graphs
 using OrdinaryDiffEq
 using Plots
 

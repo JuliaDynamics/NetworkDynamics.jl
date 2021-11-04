@@ -1,6 +1,6 @@
 # Chapter 1 - Pure Julia
 begin
-    using LightGraphs, OrdinaryDiffEq
+    using Graphs, OrdinaryDiffEq
 
     N = 10
     g = watts_strogatz(N, 2, 0.)

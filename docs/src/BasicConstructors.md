@@ -172,7 +172,7 @@ StaticDelayEdge(f! = edgefunction!, dim = n)
 ## Constructor
 
 The central constructor is the function [`network_dynamics`](@ref) that takes in
-two arrays of `EdgeFunctions` and `VertexFunctions` describing the local dynamics on the edges and nodes of a graph `g`, given as a [LightGraphs.jl](https://github.com/JuliaGraphs/LightGraphs.jl) object. It returns a composite function compatible with the [DifferentialEquations.jl](https://github.com/SciML/DifferentialEquations.jl) calling syntax.
+two arrays of `EdgeFunctions` and `VertexFunctions` describing the local dynamics on the edges and nodes of a graph `g`, given as a [Graphs.jl](https://github.com/JuliaGraphs/Graphs.jl) object. It returns a composite function compatible with the [DifferentialEquations.jl](https://github.com/SciML/DifferentialEquations.jl) calling syntax.
 
 ```julia
 nd = network_dynamics(vertices!::Array{VertexFunction},
@@ -201,7 +201,7 @@ nd = network_dynamics(vertexfunction!::VertexFunction,
  Let's look at an example. First, we define our graph as well as the differential systems connected to its vertices and edges:
 
 ```@example
-using NetworkDynamics, LightGraphs
+using NetworkDynamics, Graphs
 
 g = erdos_renyi(10, 25) # random graph with 10 vertices and 25 edges
 

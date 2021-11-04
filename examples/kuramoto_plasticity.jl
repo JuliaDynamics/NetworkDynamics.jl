@@ -1,4 +1,4 @@
-using LightGraphs
+using Graphs
 using OrdinaryDiffEq
 using NetworkDynamics
 using Plots

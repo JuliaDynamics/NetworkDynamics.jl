@@ -1,5 +1,5 @@
 using Test
-using LightGraphs
+using Graphs
 using NetworkDynamics
 import NetworkDynamics: GraphStruct, GraphData, get_vertex, get_edge, get_src_vertex, get_src_edges, get_dst_vertex, get_dst_edges, swap_v_array!, swap_e_array!
 

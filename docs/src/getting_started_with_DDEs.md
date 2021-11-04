@@ -43,7 +43,7 @@ nothing # hide
 The Watts-Strogatz algorithm constructs a regular ring network with $N$ nodes connected to $k$ neighbors and a probability $p$ of rewiring links.  Since $p=0$ no rewiring happens and `g` is a simple ring network.
 
 ```@example DDEVertex
-using LightGraphs
+using Graphs
 
 ### Defining a graph
 

@@ -3,7 +3,7 @@
 # https://pik-icone.github.io/NetworkDynamics.jl/dev/
 
 using NetworkDynamics
-using LightGraphs
+using Graphs
 using OrdinaryDiffEq
 using StochasticDiffEq
 using Plots

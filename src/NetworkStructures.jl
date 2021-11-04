@@ -7,7 +7,7 @@
 # are precomputed in GraphStructure.
 
 
-using LightGraphs
+using Graphs
 using LinearAlgebra
 
 const Idx = UnitRange{Int}

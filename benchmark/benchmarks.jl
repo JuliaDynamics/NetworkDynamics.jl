@@ -1,5 +1,5 @@
 using BenchmarkTools
-using LightGraphs
+using Graphs
 using NetworkDynamics
 using Random
 

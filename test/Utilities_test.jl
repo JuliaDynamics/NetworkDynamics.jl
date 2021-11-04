@@ -1,4 +1,4 @@
-using LightGraphs
+using Graphs
 
 @testset "test syms containing" begin
     vert = ODEVertex(f! = nothing, sym = [:a1, :b2], dim=2)

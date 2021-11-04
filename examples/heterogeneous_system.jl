@@ -7,7 +7,7 @@
 # ## Heterogenous parameters
 # We start by setting up a simple system of Kuramoto oscillators.
 
-using NetworkDynamics, OrdinaryDiffEq, Plots, LightGraphs
+using NetworkDynamics, OrdinaryDiffEq, Plots, Graphs
 
 N = 8
 g = watts_strogatz(N,2,0) # ring network

@@ -58,7 +58,7 @@ With the preliminaries out of the way, it only takes a few steps to assemble the
 
 
 ```@example diffusion
-using LightGraphs
+using Graphs
 
 N = 20 # number of nodes
 k = 4  # average degree

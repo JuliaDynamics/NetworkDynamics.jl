@@ -1,7 +1,7 @@
 using OrdinaryDiffEq
 using NetworkDynamics
 using NLsolve
-using LightGraphs
+using Graphs
 using Plots
 using GraphPlot
 

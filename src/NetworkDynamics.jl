@@ -1,7 +1,7 @@
 module NetworkDynamics
 
 using DiffEqBase
-using LightGraphs
+using Graphs
 
 include("Utilities.jl")
 include("ComponentFunctions.jl")
@@ -92,7 +92,7 @@ end
 Assembles the the dynamical equations of the network problem into an `ODEFunction`
 compatible with the `DifferentialEquations.jl` solvers. Takes as arguments an array
 of VertexFunctions **`vertices!`**, an array of EdgeFunctions **`edges!`** and a
-`LightGraph.jl` object **`g`**. The optional argument `parallel` is a boolean
+`Graphs.jl` object **`g`**. The optional argument `parallel` is a boolean
 value that denotes if the central loop should be executed in parallel with the number of threads set by the environment variable `JULIA_NUM_THREADS`.
 """
 function network_dynamics(vertices!::Vector{T}, edges!::Vector{U}, graph; kwargs...) where {T <: VertexFunction, U <: EdgeFunction}

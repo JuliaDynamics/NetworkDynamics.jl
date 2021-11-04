@@ -14,7 +14,7 @@ println("This script works with NetworkDynamics.jl 0.4 but is broken on 0.5 due 
 
 
 using NetworkDynamics
-using LightGraphs
+using Graphs
 using OrdinaryDiffEq
 using DiffEqCallbacks
 using Plots

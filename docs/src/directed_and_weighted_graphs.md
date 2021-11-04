@@ -49,11 +49,11 @@ G = readdlm(joinpath(@__DIR__, "../../examples/Norm_G_DTI.txt"), ',', Float64, '
 nothing # hide
 ```
 
-The data structure for directed, weighted graphs is provided by the package `SimpleWeightedGraphs.jl` which is based on `LightGraphs.jl`.
+The data structure for directed, weighted graphs is provided by the package `SimpleWeightedGraphs.jl` which is based on `Graphs.jl`.
 
 
 ```@example fhn
-using SimpleWeightedGraphs, LightGraphs
+using SimpleWeightedGraphs, Graphs
 
 # First we construct a weighted, directed graph
 g_weighted = SimpleWeightedDiGraph(G)

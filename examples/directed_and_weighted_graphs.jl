@@ -2,7 +2,7 @@
 # corresponding jupyter notebook on our github repository.
 
 using DelimitedFiles
-using SimpleWeightedGraphs, LightGraphs
+using SimpleWeightedGraphs, Graphs
 using NetworkDynamics
 using OrdinaryDiffEq
 using Plots

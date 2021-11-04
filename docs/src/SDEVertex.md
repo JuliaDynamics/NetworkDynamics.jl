@@ -62,7 +62,7 @@ nothing # hide
 For the graph structure we will use a simple 4 node ring network.
 
 ```@example SDEVertex
-using LightGraphs
+using Graphs
 g = watts_strogatz(4, 2, 0.)
 nothing # hide
 ```

@@ -1,6 +1,6 @@
 using Test
 using NetworkDynamics
-using LightGraphs
+using Graphs
 using LinearAlgebra
 using SparseArrays
 using OrdinaryDiffEq

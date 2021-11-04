@@ -1,7 +1,7 @@
 # Corresponds to the DDE tutorial in the docs
 
 using NetworkDynamics
-using LightGraphs
+using Graphs
 using OrdinaryDiffEq
 using DelayDiffEq
 using Plots

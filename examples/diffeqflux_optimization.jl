@@ -4,7 +4,7 @@ using Flux: ADAM
 #using Optim: BFGS
 using DiffEqSensitivity
 using NetworkDynamics
-using LightGraphs
+using Graphs
 using OrdinaryDiffEq
 using Plots
 

@@ -1,7 +1,7 @@
 using ForwardDiff
 using ReverseDiff
 using NetworkDynamics
-using LightGraphs
+using Graphs
 using Test
 
 N = 10 # number of nodes

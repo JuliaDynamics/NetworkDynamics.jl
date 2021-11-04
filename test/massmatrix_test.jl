@@ -1,5 +1,5 @@
 using NetworkDynamics
-using LightGraphs
+using Graphs
 using Test
 using LinearAlgebra
 
