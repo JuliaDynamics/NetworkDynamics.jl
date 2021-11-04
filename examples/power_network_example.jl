@@ -68,33 +68,33 @@ function (pq::PQVertex)(dv, v, edges, p, t)
 end
 
 # Example PQ node:
-ODEVertex(f! = PQVertex(randn() + randn()*im),
+ODEVertex(f = PQVertex(randn() + randn()*im),
                      dim = 2,
                      mass_matrix = 0.,
                      sym = [:v_r, :v_i])
 # using GraphPlot
 # gplot(g)
 
-pq_list = [ODEVertex(f! = PQVertex(randn() + randn()*im),
+pq_list = [ODEVertex(f = PQVertex(randn() + randn()*im),
                      dim = 2,
                      mass_matrix = 0.,
                      sym = [:v_r, :v_i])
            for i in 1:5]
 
-swing_list = [ODEVertex(f! = SwingVertex(randn(), 1.),
+swing_list = [ODEVertex(f = SwingVertex(randn(), 1.),
                         dim = 3,
                         sym = [:v_r, :v_i, :ω])
               for i in 1:5]
 
 vertex_list = vcat(swing_list, pq_list)
 
-all_swing_list = [ODEVertex(f! = SwingVertex(randn(), 1.),
+all_swing_list = [ODEVertex(f = SwingVertex(randn(), 1.),
                         dim = 3,
                         sym = [:v_r, :v_i, :ω])
               for i in 1:10]
 
 
-edge_list = [StaticEdge(f! = complex_admittance_edge!(0.0 - 5.0im),
+edge_list = [StaticEdge(f = complex_admittance_edge!(0.0 - 5.0im),
                         dim = 2)
              for e in edges(g)]
 

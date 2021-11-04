@@ -36,8 +36,8 @@ end
 
 ### Constructing the network dynamics
 
-nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 1)
-nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1)
+nd_diffusion_vertex = ODEVertex(f = diffusionvertex!, dim = 1)
+nd_diffusion_edge = StaticEdge(f = diffusionedge!, dim = 1)
 
 nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g)
 
@@ -63,7 +63,7 @@ function noisevertex!(dv, v, edges, p, t)
     dv[1] = round(Int,cos(t*.5*pi)) * p
 end
 
-nd_noisevertex = ODEVertex(f! = noisevertex!, dim = 1)
+nd_noisevertex = ODEVertex(f = noisevertex!, dim = 1)
 nd_noise = network_dynamics(nd_noisevertex, nd_diffusion_edge, h)
 
 

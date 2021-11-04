@@ -38,8 +38,8 @@ begin
 
     using NetworkDynamics
 
-    f_node! = ODEVertex(f! = kuramoto_vertex!, dim = 1, sym=[:θ])
-    f_edge! = StaticEdge(f! = kuramoto_edge!, dim = 1)
+    f_node! = ODEVertex(f = kuramoto_vertex!, dim = 1, sym=[:θ])
+    f_edge! = StaticEdge(f = kuramoto_edge!, dim = 1)
     nd! = network_dynamics(f_node!, f_edge!, g)
 
 
@@ -80,10 +80,10 @@ begin
         return nothing
     end
 
-    inertia! = ODEVertex(f! = kuramoto_inertia!, dim = 2, sym= [:θ, :ω])
+    inertia! = ODEVertex(f = kuramoto_inertia!, dim = 2, sym= [:θ, :ω])
 
     static! = StaticVertex(
-              f! = (θ, edges, c, t) -> θ .= c,
+              f = (θ, edges, c, t) -> θ .= c,
               dim = 1, sym = [:θ])
 
     function kuramoto_edge!(edge, v_s, v_d, σ, t)
@@ -117,7 +117,7 @@ begin
         edge[1] = p * sin(v_s[1] - h_v_d[1])
         return nothing
     end
-    dedge! = StaticDelayEdge(f! = kuramoto_delay_edge!, dim = 1)
+    dedge! = StaticDelayEdge(f = kuramoto_delay_edge!, dim = 1)
 
     using DelayDiffEq
 

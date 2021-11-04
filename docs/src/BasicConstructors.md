@@ -78,7 +78,7 @@ As above, **dim** is the number of independent variables in the vertex equations
 One may also call ODEVertex with keyword arguments, omitting optional arguments:
 
 ```julia
-ODEVertex(f! = vertexfunction!, dim = dim)
+ODEVertex(f = vertexfunction!, dim = dim)
 ```
 
 The function then defaults to using the identity as mass matrix and `[:v for i in 1:dimension]` as symbols.
@@ -95,7 +95,7 @@ As before, **dim** is the number of independent variables in the vertex function
 As above, the DDEVertex function can also be called without the optional arguments:
 
 ```julia
-DDEVertex(f! = vertexfunction!, dim = dim)
+DDEVertex(f = vertexfunction!, dim = dim)
 ```
 
 ## EdgeFunctions
@@ -145,7 +145,7 @@ ODEEdge(edgefunction!, dim, coupling, mass_matrix, sym)
 The keywords are the same as above for the `StaticEdge`. For `ODEEdge` the same simplified construction rules apply when keyword arguments are used, except that the coupling type has to be specified explicitly to avoid ambiguities. The available coupling tyes are only `:directed, :undirected, :fiducial`. For `:undirected` coupling the internal dimension of the EdgeFunction is doubled in order to resolve both directions in an undirected network. Remember to specify 2 initial conditiosn for every edge in that case.
 
 ```julia
-ODEEdge(f! = edgefunction!, dim = n, coupling = :undirected)
+ODEEdge(f = edgefunction!, dim = n, coupling = :undirected)
 ```
 
 In this case the function defaults to using the identity matrix as mass matrix and `[:e for in 1:dimension]` as symbols.
@@ -166,7 +166,7 @@ StaticDelayEdge(edgefunction!, dim, coupling, mass_matrix, sym)
 Like for a StaticEdge, we can also leave out the optional keywords **coupling**, **sym** and **mass_matrix**. Available coupling types are `:unspecified, :directed, :undirected, :fiducial`.
 
 ```julia
-StaticDelayEdge(f! = edgefunction!, dim = n)
+StaticDelayEdge(f = edgefunction!, dim = n)
 ```
 
 ## Constructor
@@ -217,10 +217,10 @@ function edgefunction!(de, e, v_s, v_d, p, t)
      nothing
 end
 
-vertex = ODEVertex(f! = vertexfunction!, dim = 1)
+vertex = ODEVertex(f = vertexfunction!, dim = 1)
 vertexarr = [vertex for v in vertices(g)]
 
-edge = ODEEdge(f! = edgefunction!, dim = 1, coupling = :undirected)
+edge = ODEEdge(f = edgefunction!, dim = 1, coupling = :undirected)
 edgearr = [edge for e in edges(g)]
 
 nd = network_dynamics(vertexarr, edgearr, g)

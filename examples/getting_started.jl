@@ -32,11 +32,11 @@ end
 
 ### Constructing the network dynamics
 
-# signature of ODEVertex: (f!, dim, mass_matrix, sym)
-nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 1)
+# signature of ODEVertex: (f, dim, mass_matrix, sym)
+nd_diffusion_vertex = ODEVertex(f = diffusionvertex!, dim = 1)
 
-# signature of StaticEdge: (f!, dim, sym)
-nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1)
+# signature of StaticEdge: (f, dim, sym)
+nd_diffusion_edge = StaticEdge(f = diffusionedge!, dim = 1)
 
 # setting up the key constructor network_dynamics
 # signature of network_dynamics: (vertices!, edges!, g; parallel = false)
@@ -58,8 +58,8 @@ plot(sol, vars = syms_containing(nd, "v"))
 ### Bonus: Two independent diffusions with fancy symbols
 
 # we will have two independent diffusions on the network, hence dim = 2 (x,ϕ)
-nd_diffusion_vertex_2 = ODEVertex(f! = diffusionvertex!, dim = 2, sym = [:x, :ϕ])
-nd_diffusion_edge_2 = StaticEdge(f! = diffusionedge!, dim = 2)
+nd_diffusion_vertex_2 = ODEVertex(f = diffusionvertex!, dim = 2, sym = [:x, :ϕ])
+nd_diffusion_edge_2 = StaticEdge(f = diffusionedge!, dim = 2)
 nd_2 = network_dynamics(nd_diffusion_vertex_2, nd_diffusion_edge_2, g)
 
 x0_2 = vec(transpose([randn(N) randn(N).^2])) # x ~ normal distribution, ϕ ~ squared normal distribution

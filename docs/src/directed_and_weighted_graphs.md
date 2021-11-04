@@ -90,8 +90,8 @@ end
     nothing
 end
 
-odeelevertex = ODEVertex(f! = fhn_electrical_vertex!, dim = 2, sym=[:u, :v]);
-electricaledge = StaticEdge(f! = electrical_edge!, dim = 1, coupling = :directed)
+odeelevertex = ODEVertex(f = fhn_electrical_vertex!, dim = 2, sym=[:u, :v]);
+electricaledge = StaticEdge(f = electrical_edge!, dim = 1, coupling = :directed)
 
 fhn_network! = network_dynamics(odeelevertex, electricaledge, g_directed)
 

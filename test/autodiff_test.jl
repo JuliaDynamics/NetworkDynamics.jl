@@ -23,8 +23,8 @@ g = barabasi_albert(N, k) # a little more exciting than a bare random graph
     end
     ### Constructing the network dynamics
 
-    nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 1)
-    nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1, coupling = :antisymmetric)
+    nd_diffusion_vertex = ODEVertex(f = diffusionvertex!, dim = 1)
+    nd_diffusion_edge = StaticEdge(f = diffusionedge!, dim = 1, coupling = :antisymmetric)
 
     p_v = collect(1:nv(g))./nv(g) .- 0.5
     p_e = .5 .* ones(ne(g))
@@ -66,8 +66,8 @@ g = barabasi_albert(N, k) # a little more exciting than a bare random graph
 
         nothing
     end
-    nd_diffusion_vertex2 = ODEVertex(f! = diffusionvertex2!, dim = 1)
-    nd_diffusion_edge2 = StaticEdge(f! = diffusionedge2!, dim = 1, coupling=:antisymmetric)
+    nd_diffusion_vertex2 = ODEVertex(f = diffusionvertex2!, dim = 1)
+    nd_diffusion_edge2 = StaticEdge(f = diffusionedge2!, dim = 1, coupling=:antisymmetric)
 
     p = [1., 2.]
 

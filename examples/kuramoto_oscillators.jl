@@ -24,8 +24,8 @@ end
 
 ### Constructing the network dynamics
 
-odevertex = ODEVertex(f! = kuramoto_vertex!, dim = 1)
-staticedge = StaticEdge(f! = kuramoto_edge!, dim = 1)
+odevertex = ODEVertex(f = kuramoto_vertex!, dim = 1)
+staticedge = StaticEdge(f = kuramoto_edge!, dim = 1)
 
 # generating random values for the parameter value ω_0 of the vertices
 v_pars = [1. * randn() for v in vertices(g)]

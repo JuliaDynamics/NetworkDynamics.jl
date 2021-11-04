@@ -76,10 +76,10 @@ end
 ### Constructing the network dynamics
 
 # StaticEdge case
-odevertex = ODEVertex(f! = kuramoto_vertex!, dim = 2, sym=[:ω, :ϕ])
-staticedge = StaticEdge(f! = kuramoto_edge!, dim = 1)
-ode_static_edge = ODEEdge(f! = promotable_kuramoto_edge!, dim = 2, coupling = :fiducial)
-#odeedge = ODEEdge(f! = real_kuramoto_dedge!, dim = 2, coupling = :fiducial, mass_matrix = 0.)
+odevertex = ODEVertex(f = kuramoto_vertex!, dim = 2, sym=[:ω, :ϕ])
+staticedge = StaticEdge(f = kuramoto_edge!, dim = 1)
+ode_static_edge = ODEEdge(f = promotable_kuramoto_edge!, dim = 2, coupling = :fiducial)
+#odeedge = ODEEdge(f = real_kuramoto_dedge!, dim = 2, coupling = :fiducial, mass_matrix = 0.)
 # we can also create lists of the vertices/edges, helpful if vertices/edges have different DE's
 vertex_list = [odevertex for v in vertices(g)]
 edge_list = [staticedge for e in edges(g)]
@@ -88,7 +88,7 @@ edge_list = [staticedge for e in edges(g)]
 ode_sd_edge_list = [ode_static_edge for se in edge_list]
 #ode_sd_edge_list = [ODEEdge(se) for se in edge_list]
 # ODEEdges with ODEEdgefct
-ode_edge_list = [ODEEdge(f! = kuramoto_dedge!, dim = 2, coupling = :fiducial) for e in edges(g)]
+ode_edge_list = [ODEEdge(f = kuramoto_dedge!, dim = 2, coupling = :fiducial) for e in edges(g)]
 p = (ω, nothing)
 
 # now we create the NetworkDynamics objects

@@ -28,11 +28,11 @@ end
     nothing
 end
 
-statvertex = StaticVertex(f! = (v, edges, p, t) -> v .= pi, dim = 1)
+statvertex = StaticVertex(f = (v, edges, p, t) -> v .= pi, dim = 1)
 
-odevertex = ODEVertex(f! = diffusion_vertex!, dim = 1)
-staticedge = StaticEdge(f! = diffusion_edge!, dim = 1, coupling = :antisymmetric)
-staticedge2 = StaticEdge(f! = diffusion_edge2!, dim = 1, coupling = :antisymmetric)
+odevertex = ODEVertex(f = diffusion_vertex!, dim = 1)
+staticedge = StaticEdge(f = diffusion_edge!, dim = 1, coupling = :antisymmetric)
+staticedge2 = StaticEdge(f = diffusion_edge2!, dim = 1, coupling = :antisymmetric)
 
 vertex_list = [statvertex, odevertex]
 append!(vertex_list, [odevertex for i in 1:N-2])

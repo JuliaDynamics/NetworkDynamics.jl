@@ -303,16 +303,16 @@ end
 
 
 @inline function reconstruct_edge(edge::StaticEdge, coupling::Symbol)
-    let f! = edge.f!, dim = edge.dim, sym = edge.sym
-        return StaticEdge(f! = f!,
+    let f = edge.f, dim = edge.dim, sym = edge.sym
+        return StaticEdge(f = f,
                           dim = dim,
                           coupling = coupling,
                           sym = sym)
     end
 end
 @inline function reconstruct_edge(edge::StaticDelayEdge, coupling::Symbol)
-    let f! = edge.f!, dim = edge.dim, sym = edge.sym
-        return StaticDelayEdge(f! = f!,
+    let f = edge.f, dim = edge.dim, sym = edge.sym
+        return StaticDelayEdge(f = f,
                                dim = dim,
                                coupling = coupling,
                                sym = sym)

@@ -7,26 +7,26 @@ N = 5
 g = star_digraph(N)
 add_edge!(g, 2, 3)
 
-static_vertex = StaticVertex(f! = (x, e_s, e_d, p, t) -> nothing, dim = 1)
-no_mm_vertex  = ODEVertex(f! = (dx, x, e_s, e_d, p, t) -> nothing, dim = 1)
-num_mm_vertex = ODEVertex(f! = (dx, x, e_s, e_d, p, t) -> nothing, dim = 1,
+static_vertex = StaticVertex(f = (x, e_s, e_d, p, t) -> nothing, dim = 1)
+no_mm_vertex  = ODEVertex(f = (dx, x, e_s, e_d, p, t) -> nothing, dim = 1)
+num_mm_vertex = ODEVertex(f = (dx, x, e_s, e_d, p, t) -> nothing, dim = 1,
                           mass_matrix = 0)
-vec_mm_vertex = ODEVertex(f! = (dx, x, e_s, e_d, p, t) -> nothing, dim = 2,
+vec_mm_vertex = ODEVertex(f = (dx, x, e_s, e_d, p, t) -> nothing, dim = 2,
                           mass_matrix = [1, 0])
-mat_mm_vertex = ODEVertex(f! = (dx, x, e_s, e_d, p, t) -> nothing, dim = 2,
+mat_mm_vertex = ODEVertex(f = (dx, x, e_s, e_d, p, t) -> nothing, dim = 2,
                           mass_matrix = [[1,1] [0,0]])
 
 vertex_list = [static_vertex, no_mm_vertex, num_mm_vertex, vec_mm_vertex, mat_mm_vertex]
 
-static_edge = StaticEdge(f! = (e, v_s, v_d, p, t) -> nothing, dim = 1, coupling = :directed)
-no_mm_edge  = ODEEdge(f! = (de, e, v_s, v_d, p, t) -> nothing, dim = 1, coupling= :directed)
-num_mm_edge = ODEEdge(f! = (de, e, v_s, v_d, p, t) -> nothing, dim = 1,
+static_edge = StaticEdge(f = (e, v_s, v_d, p, t) -> nothing, dim = 1, coupling = :directed)
+no_mm_edge  = ODEEdge(f = (de, e, v_s, v_d, p, t) -> nothing, dim = 1, coupling= :directed)
+num_mm_edge = ODEEdge(f = (de, e, v_s, v_d, p, t) -> nothing, dim = 1,
                       mass_matrix = 0, coupling= :directed)
-vec_mm_edge = ODEEdge(f! = (de, e, v_s, v_d, p, t) -> nothing, dim = 2,
+vec_mm_edge = ODEEdge(f = (de, e, v_s, v_d, p, t) -> nothing, dim = 2,
                       mass_matrix = [1, 0], coupling= :directed)
-mat_mm_edge = ODEEdge(f! = (de, e, v_s, v_d, p, t) -> nothing, dim = 2,
+mat_mm_edge = ODEEdge(f = (de, e, v_s, v_d, p, t) -> nothing, dim = 2,
                       mass_matrix = [[1,1] [0,0]], coupling= :directed)
-zero_mm_edge  = ODEEdge(f! = (de, e, v_s, v_d, p, t) -> nothing, dim = 1, coupling= :directed, mass_matrix = 0)
+zero_mm_edge  = ODEEdge(f = (de, e, v_s, v_d, p, t) -> nothing, dim = 1, coupling= :directed, mass_matrix = 0)
 
 edge_list = [static_edge, no_mm_edge, num_mm_edge, vec_mm_edge, mat_mm_edge]
 ode_edge_list = [zero_mm_edge, no_mm_edge, num_mm_edge, vec_mm_edge, mat_mm_edge]

@@ -39,11 +39,11 @@ const α = .2π
 const β = -.95π
 
 # NetworkDynamics Setup
-plasticvertex = ODEVertex(f! = kuramoto_plastic_vertex!, dim =1)
+plasticvertex = ODEVertex(f = kuramoto_plastic_vertex!, dim =1)
 mass_matrix_plasticedge = zeros(2,2)
 mass_matrix_plasticedge[2,2] = 1. # First variables is set to 0
 
-plasticedge = ODEEdge(f! = kuramoto_plastic_edge!, dim=2, sym=[:e, :de], coupling=:undirected,mass_matrix = mass_matrix_plasticedge);
+plasticedge = ODEEdge(f = kuramoto_plastic_edge!, dim=2, sym=[:e, :de], coupling=:undirected,mass_matrix = mass_matrix_plasticedge);
 kuramoto_plastic! = network_dynamics(plasticvertex, plasticedge, g)
 
 # ODE Setup & Solution

@@ -16,8 +16,8 @@ using NetworkDynamics
         end
         nothing
     end
-    nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 1)
-    nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1, coupling = :antisymmetric)
+    nd_diffusion_vertex = ODEVertex(f = diffusionvertex!, dim = 1)
+    nd_diffusion_edge = StaticEdge(f = diffusionedge!, dim = 1, coupling = :antisymmetric)
 
     # set up networ_dynamics on graph
     N = 10
@@ -67,8 +67,8 @@ end
         nothing
     end
 
-    nd_diffusion_vertex = DDEVertex(f! = diffusionvertex!, dim = 1)
-    nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1, coupling = :antisymmetric)
+    nd_diffusion_vertex = DDEVertex(f = diffusionvertex!, dim = 1)
+    nd_diffusion_edge = StaticEdge(f = diffusionedge!, dim = 1, coupling = :antisymmetric)
 
     # set up network_dynamics on graph
     N = 20
@@ -126,8 +126,8 @@ end
         end
         nothing
     end
-    nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 1)
-    nd_edge = ODEEdge(f! = edge!, dim = 2, coupling = :fiducial)
+    nd_diffusion_vertex = ODEVertex(f = diffusionvertex!, dim = 1)
+    nd_edge = ODEEdge(f = edge!, dim = 2, coupling = :fiducial)
 
     # set up networ_dynamics on graph
     N = 10

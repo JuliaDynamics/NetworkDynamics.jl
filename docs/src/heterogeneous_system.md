@@ -24,8 +24,8 @@ function kuramoto_vertex!(dθ, θ, edges, ω, t)
     sum_coupling!(dθ, edges)
 end
 
-vertex! = ODEVertex(f! = kuramoto_vertex!, dim = 1, sym=[:θ])
-edge!   = StaticEdge(f! = kuramoto_edge!, dim = 1)
+vertex! = ODEVertex(f = kuramoto_vertex!, dim = 1, sym=[:θ])
+edge!   = StaticEdge(f = kuramoto_edge!, dim = 1)
 nd! = network_dynamics(vertex!, edge!, g);
 nothing #hide
 ```
@@ -61,7 +61,7 @@ constant value. A Kuramoto model with inertia consists of two internal variables
 more complicated (and for many applications more realistic) local dynamics.
 
 ```@example heterogeneous_system
-static! = StaticVertex(f! = (θ, edges, c, t) -> θ .= c, dim = 1, sym = [:θ])
+static! = StaticVertex(f = (θ, edges, c, t) -> θ .= c, dim = 1, sym = [:θ])
 
 
 function kuramoto_inertia!(dv, v, edges, P, t)
@@ -72,7 +72,7 @@ function kuramoto_inertia!(dv, v, edges, P, t)
     end
 end
 
-inertia! = ODEVertex(f! = kuramoto_inertia!, dim = 2, sym= [:θ, :ω]);
+inertia! = ODEVertex(f = kuramoto_inertia!, dim = 2, sym= [:θ, :ω]);
 nothing #hide
 ```
 
@@ -145,7 +145,7 @@ end
 M = zeros(2,2)
 M[1,1] = 1
 
-nd_edgeA! = ODEEdge(f! = edgeA!, dim = 2, coupling=:undirected, mass_matrix = M);
+nd_edgeA! = ODEEdge(f = edgeA!, dim = 2, coupling=:undirected, mass_matrix = M);
 nothing #hide
 ```
 

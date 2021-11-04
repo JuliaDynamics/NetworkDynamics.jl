@@ -43,9 +43,9 @@ end
     nothing
 end
 
-electricaledge = StaticEdge(f! = electrical_edge!, dim = 1, coupling = :directed)
+electricaledge = StaticEdge(f = electrical_edge!, dim = 1, coupling = :directed)
 # since the vertex is two dimensional, we specify both symbols u,v
-odeelevertex = ODEVertex(f! = fhn_electrical_vertex!, dim = 2, sym=[:u, :v])
+odeelevertex = ODEVertex(f = fhn_electrical_vertex!, dim = 2, sym=[:u, :v])
 
 fhn_network! = network_dynamics(odeelevertex, electricaledge, g_directed)
 

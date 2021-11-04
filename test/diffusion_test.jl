@@ -62,8 +62,8 @@ end
 end
 
 
-odevertex = ODEVertex(f! = diffusion_vertex!, dim = 1)
-staticedge = StaticEdge(f! = diffusion_edge!, dim = 1, coupling = :antisymmetric)
+odevertex = ODEVertex(f = diffusion_vertex!, dim = 1)
+staticedge = StaticEdge(f = diffusion_edge!, dim = 1, coupling = :antisymmetric)
 
 vertex_list = [odevertex for v in vertices(g)]
 edge_list = [staticedge for e in edges(g)]
@@ -98,7 +98,7 @@ println("Building Static Network Dynamics with artifical ODE Edges...")
         nothing
     end
 
-    promotable_staticedge = StaticEdge(f! = promotable_diffusion_edge!,
+    promotable_staticedge = StaticEdge(f = promotable_diffusion_edge!,
                                        dim = 1, coupling = :undirected)
     odeedge = ODEEdge(promotable_staticedge)
 
@@ -117,7 +117,7 @@ end
     de[2] = v_d[1] - v_s[1] - e[2]
     nothing
 end
-odeedge = ODEEdge(f! = real_ode_edge!, dim = 2, coupling = :fiducial, mass_matrix = 0.)
+odeedge = ODEEdge(f = real_ode_edge!, dim = 2, coupling = :fiducial, mass_matrix = 0.)
 
 ode_edge_list = [odeedge for e in edges(g)]
 

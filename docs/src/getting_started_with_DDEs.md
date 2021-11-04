@@ -57,8 +57,8 @@ While the `EdgeFunction` is constructed via `StaticEdge` just as before, the ver
 ```@example DDEVertex
 using NetworkDynamics
 
-nd_diffusion_vertex = DDEVertex(f! = delaydiffusionvertex!, dim = 1)
-nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1)
+nd_diffusion_vertex = DDEVertex(f = delaydiffusionvertex!, dim = 1)
+nd_diffusion_edge = StaticEdge(f = diffusionedge!, dim = 1)
 
 nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g)
 nothing # hide
@@ -99,8 +99,8 @@ plot(sol, vars = syms_containing(nd, "v"), fmt = :png)
 In this extension of the first example, there are two independent diffusions on the same network with variables $x$ and $\phi$ - hence the dimension is set to `dim=2`.
 
 ```@example DDEVertex
-nd_diffusion_vertex_2 = DDEVertex(f! = delaydiffusionvertex!, dim = 2, sym = [:x, :ϕ])
-nd_diffusion_edge_2 = StaticEdge(f! = diffusionedge!, dim = 2)
+nd_diffusion_vertex_2 = DDEVertex(f = delaydiffusionvertex!, dim = 2, sym = [:x, :ϕ])
+nd_diffusion_edge_2 = StaticEdge(f = diffusionedge!, dim = 2)
 nd_2 = network_dynamics(nd_diffusion_vertex_2, nd_diffusion_edge_2, g)
 nothing # hide
 ```
@@ -152,8 +152,8 @@ nothing # hide
 In this case the vertex function does not depend on any past values and is simply constructed as an `ODEVertex`. Since the edges depend on the history of the vertex variables their calling signature has changed and they are handed to the delay-aware constructor `StaticDelayEdge`. They are called *Static* since don't have internal dynamical variables.
 
 ```@example DDEVertex
-kdedge! = StaticDelayEdge(f! = kuramoto_delay_edge!, dim = 1)
-kdvertex! = ODEVertex(f! = kuramoto_vertex!, dim = 1)
+kdedge! = StaticDelayEdge(f = kuramoto_delay_edge!, dim = 1)
+kdvertex! = ODEVertex(f = kuramoto_vertex!, dim = 1)
 
 nd! = network_dynamics(kdvertex!, kdedge!, g)
 nothing # hide

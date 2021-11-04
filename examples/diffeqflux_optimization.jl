@@ -36,8 +36,8 @@ end
 
 ### Constructing the network dynamics
 
-nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 1)
-nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1)
+nd_diffusion_vertex = ODEVertex(f = diffusionvertex!, dim = 1)
+nd_diffusion_edge = StaticEdge(f = diffusionedge!, dim = 1)
 nd! = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g)
 
 ### Simulation

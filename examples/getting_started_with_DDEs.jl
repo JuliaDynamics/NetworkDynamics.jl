@@ -30,8 +30,8 @@ end
 # DDEVertex is expected to have call signature (dv, v, edges, h_v, p, t)
 # StaticDelayEdge is expected to have  signature (e, v_s, v_d, h_v_s, h_v_d, p, t)
 # StaticEdges get promoted to StaticDelayEdges [then their signature changes]
-nd_diffusion_vertex = DDEVertex(f! = diffusionvertex!, dim = 1)
-nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1)
+nd_diffusion_vertex = DDEVertex(f = diffusionvertex!, dim = 1)
+nd_diffusion_edge = StaticEdge(f = diffusionedge!, dim = 1)
 
 nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g)
 
@@ -61,8 +61,8 @@ plot(sol, vars = syms_containing(nd, "v"), legend=false)
 
 
 # We will have two independent diffusions on the network, hence dim = 2
-nd_diffusion_vertex_2 = DDEVertex(f! = diffusionvertex!, dim = 2, sym = [:x, :ϕ])
-nd_diffusion_edge_2 = StaticEdge(f! = diffusionedge!, dim = 2)
+nd_diffusion_vertex_2 = DDEVertex(f = diffusionvertex!, dim = 2, sym = [:x, :ϕ])
+nd_diffusion_edge_2 = StaticEdge(f = diffusionedge!, dim = 2)
 nd_2 = network_dynamics(nd_diffusion_vertex_2, nd_diffusion_edge_2, g)
 
 # at the moment there are issues with higher dimensional arrays in the DDE solve
@@ -97,8 +97,8 @@ function kuramoto_vertex!(dv, v, edges, p, t)
     nothing
 end
 
-kdedge! = StaticDelayEdge(f! = kuramoto_delay_edge!, dim=1)
-kdvertex! = ODEVertex(f! = kuramoto_vertex!, dim = 1)
+kdedge! = StaticDelayEdge(f = kuramoto_delay_edge!, dim=1)
+kdvertex! = ODEVertex(f = kuramoto_vertex!, dim = 1)
 
 nd! = network_dynamics(kdvertex!, kdedge!, g)
 
@@ -121,7 +121,7 @@ plot(sol, vars = syms_containing(nd, "v"), legend=false)
 ## Add in a static Vertex
 
 
-svertex! = StaticVertex(f! = (x, edges, p ,t) -> x .= 1, dim=1)
+svertex! = StaticVertex(f = (x, edges, p ,t) -> x .= 1, dim=1)
 
 # convert to list of VertexFunctions, that may contain different types of vertices
 vlist = Array{VertexFunction}([ kdvertex! for i in 1:nv(g)])

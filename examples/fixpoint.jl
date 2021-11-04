@@ -16,7 +16,7 @@ function swing_eq!(dv, v, edges, P, t)
     end
 end
 
-swing_vertex = ODEVertex(f! = swing_eq!, dim = 2, sym=[:θ, :ω])
+swing_vertex = ODEVertex(f = swing_eq!, dim = 2, sym=[:θ, :ω])
 
 function load_eq!(dv, v, edges, P, t)
     dv[1] = P
@@ -24,13 +24,13 @@ function load_eq!(dv, v, edges, P, t)
     nothing
 end
 
-load_vertex    = ODEVertex(f! = load_eq!, dim = 1, mass_matrix = 0, sym=[:θ])
+load_vertex    = ODEVertex(f = load_eq!, dim = 1, mass_matrix = 0, sym=[:θ])
 
 function powerflow_eq!(e, v_s, v_d, K, t)
     e[1] = K * sin(v_s[1] - v_d[1])
 end
 
-powerflow_edge = StaticEdge(f! = powerflow_eq!, dim = 1)
+powerflow_edge = StaticEdge(f = powerflow_eq!, dim = 1)
 
 vertex_array = [swing_vertex, swing_vertex, load_vertex, load_vertex]
 edge_array = [powerflow_edge for e in edges(g)]

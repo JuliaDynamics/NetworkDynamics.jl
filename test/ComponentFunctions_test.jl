@@ -6,28 +6,28 @@ using DelayDiffEq
 using LinearAlgebra
 
 @testset "StaticEdge constructor" begin
-    f! = (e, v_s, v_d, p, t) -> begin
+    f = (e, v_s, v_d, p, t) -> begin
         e .= v_s .- v_d
         nothing
     end
 
-    @test_throws ErrorException StaticEdge(f!,  1, :unspecified, [:e])
+    @test_throws ErrorException StaticEdge(f,  1, :unspecified, [:e])
 
-    @test_throws ErrorException StaticEdge(f!,  0, :undefined, [:e])
-    @test StaticEdge(f!,  1, :undefined, [:e]) isa StaticEdge
+    @test_throws ErrorException StaticEdge(f,  0, :undefined, [:e])
+    @test StaticEdge(f,  1, :undefined, [:e]) isa StaticEdge
 
 
-    @test_throws ErrorException StaticEdge(f!,  3, :fiducial, [:e,:e,:e])
-    @test_throws ErrorException StaticEdge(f!,  2, :fiducial, [:e])
-    @test StaticEdge(f!,  2, :fiducial, [:e,:e]) isa StaticEdge
+    @test_throws ErrorException StaticEdge(f,  3, :fiducial, [:e,:e,:e])
+    @test_throws ErrorException StaticEdge(f,  2, :fiducial, [:e])
+    @test StaticEdge(f,  2, :fiducial, [:e,:e]) isa StaticEdge
 
-    @test StaticEdge(f!,  1, :undirected, [:e]) isa StaticEdge
+    @test StaticEdge(f,  1, :undirected, [:e]) isa StaticEdge
 
-    fundir = StaticEdge(f! = f!,  dim = 2, coupling = :undirected)
-    fanti = StaticEdge(f! = f!,  dim = 2, coupling = :antisymmetric)
-    fdir = StaticEdge(f! = f!,  dim = 2, coupling = :directed)
-    fsym = StaticEdge(f! = f!,  dim = 2, coupling = :symmetric)
-    ffid = StaticEdge(f! = f!,  dim = 2, coupling = :fiducial)
+    fundir = StaticEdge(f = f,  dim = 2, coupling = :undirected)
+    fanti = StaticEdge(f = f,  dim = 2, coupling = :antisymmetric)
+    fdir = StaticEdge(f = f,  dim = 2, coupling = :directed)
+    fsym = StaticEdge(f = f,  dim = 2, coupling = :symmetric)
+    ffid = StaticEdge(f = f,  dim = 2, coupling = :fiducial)
 
     x = rand(2)
     y = rand(2)
@@ -38,11 +38,11 @@ using LinearAlgebra
     edir   = zeros(2)
     efid   = zeros(2)
 
-    fundir.f!(eundir, x, y, nothing, nothing)
-    fanti.f!(eanti, x, y, nothing, nothing)
-    fsym.f!(esym, x, y, nothing, nothing)
-    fdir.f!(edir, x, y, nothing, nothing)
-    ffid.f!(efid, x, y, nothing, nothing)
+    fundir.f(eundir, x, y, nothing, nothing)
+    fanti.f(eanti, x, y, nothing, nothing)
+    fsym.f(esym, x, y, nothing, nothing)
+    fdir.f(edir, x, y, nothing, nothing)
+    ffid.f(efid, x, y, nothing, nothing)
 
     @test eundir == eanti
     @test eanti[1:2] == -eanti[3:4]
@@ -52,28 +52,28 @@ using LinearAlgebra
 end
 
 @testset "StaticDelayEdge constructor" begin
-    f! = (e, v_s, v_d, h_v_s, h_v_d, p, t) -> begin
+    f = (e, v_s, v_d, h_v_s, h_v_d, p, t) -> begin
         e .= h_v_s .- h_v_d
         nothing
     end
 
-    @test_throws ErrorException StaticDelayEdge(f!,  1, :unspecified, [:e])
+    @test_throws ErrorException StaticDelayEdge(f,  1, :unspecified, [:e])
 
-    @test_throws ErrorException StaticDelayEdge(f!,  0, :undefined, [:e])
-    @test StaticDelayEdge(f!,  1, :undefined, [:e]) isa StaticDelayEdge
+    @test_throws ErrorException StaticDelayEdge(f,  0, :undefined, [:e])
+    @test StaticDelayEdge(f,  1, :undefined, [:e]) isa StaticDelayEdge
 
 
-    @test_throws ErrorException StaticDelayEdge(f!,  3, :fiducial, [:e,:e,:e])
-    @test_throws ErrorException StaticDelayEdge(f!,  2, :fiducial, [:e])
-    @test StaticDelayEdge(f!,  2, :fiducial, [:e,:e]) isa StaticDelayEdge
+    @test_throws ErrorException StaticDelayEdge(f,  3, :fiducial, [:e,:e,:e])
+    @test_throws ErrorException StaticDelayEdge(f,  2, :fiducial, [:e])
+    @test StaticDelayEdge(f,  2, :fiducial, [:e,:e]) isa StaticDelayEdge
 
-    @test StaticDelayEdge(f!,  1, :undirected, [:e]) isa StaticDelayEdge
+    @test StaticDelayEdge(f,  1, :undirected, [:e]) isa StaticDelayEdge
 
-    fundir = StaticDelayEdge(f! = f!,  dim = 2, coupling = :undirected)
-    fanti = StaticDelayEdge(f! = f!,  dim = 2, coupling = :antisymmetric)
-    fdir = StaticDelayEdge(f! = f!,  dim = 2, coupling = :directed)
-    fsym = StaticDelayEdge(f! = f!,  dim = 2, coupling = :symmetric)
-    ffid = StaticDelayEdge(f! = f!,  dim = 2, coupling = :fiducial)
+    fundir = StaticDelayEdge(f = f,  dim = 2, coupling = :undirected)
+    fanti = StaticDelayEdge(f = f,  dim = 2, coupling = :antisymmetric)
+    fdir = StaticDelayEdge(f = f,  dim = 2, coupling = :directed)
+    fsym = StaticDelayEdge(f = f,  dim = 2, coupling = :symmetric)
+    ffid = StaticDelayEdge(f = f,  dim = 2, coupling = :fiducial)
 
     x = rand(2)
     y = rand(2)
@@ -84,11 +84,11 @@ end
     edir   = zeros(2)
     efid   = zeros(2)
 
-    fundir.f!(eundir, nothing, nothing, x, y, nothing, nothing)
-    fanti.f!(eanti, nothing, nothing, x, y, nothing, nothing)
-    fsym.f!(esym, nothing, nothing, x, y, nothing, nothing)
-    fdir.f!(edir, nothing, nothing, x, y, nothing, nothing)
-    ffid.f!(efid, nothing, nothing, x, y, nothing, nothing)
+    fundir.f(eundir, nothing, nothing, x, y, nothing, nothing)
+    fanti.f(eanti, nothing, nothing, x, y, nothing, nothing)
+    fsym.f(esym, nothing, nothing, x, y, nothing, nothing)
+    fdir.f(edir, nothing, nothing, x, y, nothing, nothing)
+    ffid.f(efid, nothing, nothing, x, y, nothing, nothing)
 
     @test eundir == eanti
     @test eanti[1:2] == -eanti[3:4]
@@ -99,36 +99,36 @@ end
 
 
 @testset "ODEEdge constructor" begin
-    f! = (de, e, v_s, v_d, p, t) -> begin
+    f = (de, e, v_s, v_d, p, t) -> begin
         de .= v_s .- v_d
         nothing
     end
     MM = 1
 
-    @test_throws ErrorException ODEEdge(f!,  1, :unspecified, MM, [:e])
-    @test_throws ErrorException ODEEdge(f!,  1, :symmetric, MM, [:e])
-    @test_throws ErrorException ODEEdge(f!,  1, :antisymmetric, MM, [:e])
-    @test_throws ErrorException ODEEdge(f!,  1, :undefined, MM, [:e])
+    @test_throws ErrorException ODEEdge(f,  1, :unspecified, MM, [:e])
+    @test_throws ErrorException ODEEdge(f,  1, :symmetric, MM, [:e])
+    @test_throws ErrorException ODEEdge(f,  1, :antisymmetric, MM, [:e])
+    @test_throws ErrorException ODEEdge(f,  1, :undefined, MM, [:e])
 
-    @test ODEEdge(f!,  1, :undirected, MM, [:e]) isa ODEEdge
-    @test_throws ErrorException ODEEdge(f!,  0, :undirected, MM, [:e])
+    @test ODEEdge(f,  1, :undirected, MM, [:e]) isa ODEEdge
+    @test_throws ErrorException ODEEdge(f,  0, :undirected, MM, [:e])
 
     # MM test
 
-    @test ODEEdge(f!,  1, :undirected, 1, [:e]).mass_matrix == 1
-    @test ODEEdge(f!,  1, :undirected, I, [:e]).mass_matrix == I
-    @test ODEEdge(f!,  1, :undirected, [0.], [:e]).mass_matrix == [0.,0.]
-    @test ODEEdge(f!,  1, :undirected, zeros(1,1), [:e]).mass_matrix == zeros(2,2)
+    @test ODEEdge(f,  1, :undirected, 1, [:e]).mass_matrix == 1
+    @test ODEEdge(f,  1, :undirected, I, [:e]).mass_matrix == I
+    @test ODEEdge(f,  1, :undirected, [0.], [:e]).mass_matrix == [0.,0.]
+    @test ODEEdge(f,  1, :undirected, zeros(1,1), [:e]).mass_matrix == zeros(2,2)
 
-    @test_throws ErrorException ODEEdge(f!,  3, :fiducial, MM, [:e,:e,:e])
-    @test_throws ErrorException ODEEdge(f!,  2, :fiducial, MM, [:e])
-    @test ODEEdge(f!,  2, :fiducial, MM, [:e,:e]) isa ODEEdge
+    @test_throws ErrorException ODEEdge(f,  3, :fiducial, MM, [:e,:e,:e])
+    @test_throws ErrorException ODEEdge(f,  2, :fiducial, MM, [:e])
+    @test ODEEdge(f,  2, :fiducial, MM, [:e,:e]) isa ODEEdge
 
-    @test ODEEdge(f!,  1, :undirected, MM, [:e]) isa ODEEdge
+    @test ODEEdge(f,  1, :undirected, MM, [:e]) isa ODEEdge
 
-    fundir = ODEEdge(f! = f!,  dim = 2, coupling = :undirected)
-    fdir = ODEEdge(f! = f!,  dim = 2, coupling = :directed)
-    ffid = ODEEdge(f! = f!,  dim = 2, coupling = :fiducial)
+    fundir = ODEEdge(f = f,  dim = 2, coupling = :undirected)
+    fdir = ODEEdge(f = f,  dim = 2, coupling = :directed)
+    ffid = ODEEdge(f = f,  dim = 2, coupling = :fiducial)
 
     x = rand(2)
     y = rand(2)
@@ -141,9 +141,9 @@ end
     dedir   = zeros(2)
     defid   = zeros(2)
 
-    fundir.f!(deundir, eundir, x, y, nothing, nothing)
-    fdir.f!(dedir, edir, x, y, nothing, nothing)
-    ffid.f!(defid, efid, x, y, nothing, nothing)
+    fundir.f(deundir, eundir, x, y, nothing, nothing)
+    fdir.f(dedir, edir, x, y, nothing, nothing)
+    ffid.f(defid, efid, x, y, nothing, nothing)
 
     @test deundir[1:2] == -deundir[3:4]
     @test eundir[1:2] == edir
@@ -186,13 +186,13 @@ end
     end
 
 
-    odevertex = ODEVertex(f! = diffusion_vertex!, dim = 1)
-    staticvertex = StaticVertex(f! = diff_stat_vertex!, dim = 1)
-    ddevertex = DDEVertex(f! = kuramoto_delay_vertex!, dim = 1)
+    odevertex = ODEVertex(f = diffusion_vertex!, dim = 1)
+    staticvertex = StaticVertex(f = diff_stat_vertex!, dim = 1)
+    ddevertex = DDEVertex(f = kuramoto_delay_vertex!, dim = 1)
 
-    staticedge = StaticEdge(f! = diffusion_edge!, dim = 1, coupling = :antisymmetric)
-    odeedge = ODEEdge(f! = diff_dyn_edge!, dim = 1, coupling = :undirected)
-    sdedge = StaticDelayEdge(f! = kuramoto_delay_edge!, dim = 2, coupling = :undirected)
+    staticedge = StaticEdge(f = diffusion_edge!, dim = 1, coupling = :antisymmetric)
+    odeedge = ODEEdge(f = diff_dyn_edge!, dim = 1, coupling = :undirected)
+    sdedge = StaticDelayEdge(f = kuramoto_delay_edge!, dim = 2, coupling = :undirected)
 
 
     vertex_list_1 = [odevertex for v in 1:10]
@@ -269,20 +269,20 @@ end
 
 
 @testset "Allocations of promoted Vertices" begin
-    f! = (v,edges,p,t) -> v .= pi
-    osv = StaticVertex(f! = f!, dim = 1)
+    f = (v,edges,p,t) -> v .= pi
+    osv = StaticVertex(f = f, dim = 1)
     x = [1.]
     dx = [0.]
-    foo! = osv.f!
+    foo! = osv.f
     foo!(dx,x,nothing, nothing, nothing)
     @test (@allocated foo!(dx,x,nothing, nothing, nothing)) == 0
 
     g! = (e, v_s, v_d,p,t) -> e .= pi
-    se = StaticEdge(f! = g!, dim = 1, coupling = :undirected)
+    se = StaticEdge(f = g!, dim = 1, coupling = :undirected)
     ose = ODEEdge(se)
     e = [1.,1.]
     de = [0.,0.]
-    bar! = ose.f!
+    bar! = ose.f
     bar!(de,e,nothing, nothing, nothing, nothing)
     @test (@allocated bar!(de,e,nothing, nothing, nothing, nothing)) == 0
 

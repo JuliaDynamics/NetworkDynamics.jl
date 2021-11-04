@@ -74,8 +74,8 @@ The [Barabási–Albert model](https://en.wikipedia.org/wiki/Barab%C3%A1si%E2%80
 ```@example diffusion
 using NetworkDynamics
 
-nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 1)
-nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1)
+nd_diffusion_vertex = ODEVertex(f = diffusionvertex!, dim = 1)
+nd_diffusion_edge = StaticEdge(f = diffusionedge!, dim = 1)
 
 nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g)
 
@@ -118,8 +118,8 @@ k = 4  # average degree
 g = barabasi_albert(N, k) # a little more exciting than a bare random graph
 
 # We will have two independent diffusions on the network, hence dim = 2
-nd_diffusion_vertex_2 = ODEVertex(f! = diffusionvertex!, dim = 2, sym = [:x, :ϕ])
-nd_diffusion_edge_2 = StaticEdge(f! = diffusionedge!, dim = 2)
+nd_diffusion_vertex_2 = ODEVertex(f = diffusionvertex!, dim = 2, sym = [:x, :ϕ])
+nd_diffusion_edge_2 = StaticEdge(f = diffusionedge!, dim = 2)
 nd_2 = network_dynamics(nd_diffusion_vertex_2, nd_diffusion_edge_2, g)
 
 x0_2 = vec(transpose([randn(N).^2 randn(N)])) # x ~ N(0,1)^2; ϕ ~ N(0,1)

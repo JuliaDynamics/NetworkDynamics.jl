@@ -59,7 +59,7 @@ callback. The affect! will set the coupling of edge idx to zero.
 function kill_line_affect(idx)
     function affect!(integrator)
         @info "Line $idx killed at t=$(integrator.t)."
-        integrator.f.f.edges![idx].f!.K = 0
+        integrator.f.f.edges![idx].f.K = 0
         u_modified!(integrator, false)
     end
     return affect!
@@ -94,7 +94,7 @@ function watch_line_limit_callback(network)
         graph_data = integrator.f.f(u, integrator.p, integrator.t, GetGD)
         edge_values = graph_data.gdb.e_array
         for i in 1:num_e
-            out[i] = edges[i].f!.max_flow - abs(edge_values[i])
+            out[i] = edges[i].f.max_flow - abs(edge_values[i])
         end
     end
 
@@ -152,8 +152,8 @@ for e in swingedges
 end
 
 # Define nodes/edges and network
-odeverts = [ODEVertex(f! = vert, dim=2, sym=[:d, :w]) for vert in verticies]
-staticedges = [StaticEdge(f! = edge, dim=1, sym=[:F]) for edge in swingedges]
+odeverts = [ODEVertex(f = vert, dim=2, sym=[:d, :w]) for vert in verticies]
+staticedges = [StaticEdge(f = edge, dim=1, sym=[:F]) for edge in swingedges]
 swing_network! = network_dynamics(odeverts, staticedges, g)
 
 # x0 determined from static solution

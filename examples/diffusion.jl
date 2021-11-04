@@ -70,8 +70,8 @@ end
 ### Constructing the network dynamics
 
 # constructors of NetworkDynamics
-odevertex = ODEVertex(f! = diffusion_vertex!,dim = 1)
-staticedge = StaticEdge(f! = diffusion_edge!, dim = 1)
+odevertex = ODEVertex(f = diffusion_vertex!,dim = 1)
+staticedge = StaticEdge(f = diffusion_edge!, dim = 1)
 
 
 # setting up the key constructor network_dynamics with static edges
@@ -108,7 +108,7 @@ isapprox(dx_L, dx_st)
     nothing
 end
 
-promotable_staticedge = StaticEdge(f! = promotable_diffusion_edge!,
+promotable_staticedge = StaticEdge(f = promotable_diffusion_edge!,
                                    dim = 2, coupling = :fiducial)
 odeedge = ODEEdge(promotable_staticedge)
 

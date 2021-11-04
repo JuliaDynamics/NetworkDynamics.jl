@@ -72,8 +72,8 @@ Then we can construct the `ODEFunction` of the deterministic system by using `ne
 ```@example SDEVertex
 using NetworkDynamics
 
-swing_vertex = ODEVertex(f! = swing_equation!, dim = 2, sym=[:θ, :ω])
-powerflow_edge = StaticEdge(f! = powerflow!, dim = 1)
+swing_vertex = ODEVertex(f = swing_equation!, dim = 2, sym=[:θ, :ω])
+powerflow_edge = StaticEdge(f = powerflow!, dim = 1)
 
 nd = network_dynamics(swing_vertex, powerflow_edge, g)
 nothing # hide
@@ -126,7 +126,7 @@ nothing # hide
 Now we can construct the dynamics of the second layer by using `network_dynamics()`. Since the graph structure of the stochastic layer has no edges we can take the edge function of the deterministic case as a placeholder.
 
 ```@example SDEVertex
-fluctuation_vertex = ODEVertex(f! = fluctuation!, dim = 2)
+fluctuation_vertex = ODEVertex(f = fluctuation!, dim = 2)
 nd_noise = network_dynamics(fluctuation_vertex, powerflow_edge, h)
 nothing # hide
 ```

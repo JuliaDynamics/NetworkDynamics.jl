@@ -45,7 +45,7 @@ end
 function _inner_loop!(component::ODEVertex, indices,
                       dx, p, t, gd, gs, history, parallel)
     @nd_threads parallel for i in indices
-        component.f!(view(dx,gs.v_idx[i]),
+        component.f(view(dx,gs.v_idx[i]),
                   get_vertex(gd, i),
                   get_dst_edges(gd, i),
                   p_v_idx(p, i),
@@ -57,7 +57,7 @@ end
 function _inner_loop!(component::StaticEdge, indices,
                       dx, p, t, gd, gs, history, parallel)
     @nd_threads parallel for i in indices
-        component.f!(get_edge(gd, i),
+        component.f(get_edge(gd, i),
                      get_src_vertex(gd, i),
                      get_dst_vertex(gd, i),
                      p_e_idx(p, i),
@@ -71,7 +71,7 @@ end
 function _inner_loop!(component::DDEVertex, indices,
                       dx, p, t, gd, gs, history, parallel)
     @nd_threads parallel for i in indices
-        component.f!(view(dx, gs.v_idx[i]),
+        component.f(view(dx, gs.v_idx[i]),
                   get_vertex(gd, i),
                   get_dst_edges(gd, i),
                   view(history, gs.v_idx[i]),
@@ -84,7 +84,7 @@ end
 function _inner_loop!(component::StaticDelayEdge, indices,
                       dx, p, t, gd, gs, history, parallel)
     @nd_threads parallel for i in indices
-        component.f!(get_edge(gd, i),
+        component.f(get_edge(gd, i),
                      get_src_vertex(gd, i),
                      get_dst_vertex(gd, i),
                      view(history, gs.s_e_idx[i]),
@@ -98,7 +98,7 @@ end
 function _inner_loop!(component::ODEEdge, indices,
                       dx, p, t, gd, gs, history, parallel)
     @nd_threads parallel for i in indices
-        component.f!(view(dx, gs.e_idx[i] .+ gs.dim_v),
+        component.f(view(dx, gs.e_idx[i] .+ gs.dim_v),
                      get_edge(gd, i),
                      get_src_vertex(gd, i),
                      get_dst_vertex(gd, i),
