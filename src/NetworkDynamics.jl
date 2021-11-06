@@ -147,8 +147,8 @@ end
 
 
 # catch all version (works only for ODEVertex, DDEVertex, StaticEdge, StaticDelayEdge)
-function _network_dynamics(vertices!::Union{Array{T, 1}, T},
-                          edges!::Union{Array{U, 1}, U},
+function _network_dynamics(vertices!::Union{Vector{T}, T},
+                          edges!::Union{Vector{U}, U},
                           graph;
                           initial_history=nothing,
                           x_prototype=zeros(1),

@@ -166,7 +166,7 @@ function save_edges(u, t, integrator)
     return copy(graph_data.gdb.e_array)
 end
 
-saved_edgevalues = SavedValues(Float64, Array{Float64, 1})
+saved_edgevalues = SavedValues(Float64, Vector{Float64})
 save_callback = SavingCallback(save_edges, saved_edgevalues)
 
 # define problem

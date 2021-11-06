@@ -70,7 +70,7 @@ nd_2 = network_dynamics(nd_diffusion_vertex_2, nd_diffusion_edge_2, g)
 # for now we have to use flat arrays that contain the initial conditions in the right order
 # x_0_2 = (x₀_1, ϕ₀_1, x₀_2, ϕ₀_2, x₀_3, ϕ₀_3  ...)
 
-const x0_2 = Array{Float64,1}(vec([randn(N).-10 randn(N).^2]')) # x ~ N(0,1); ϕ ~ N(0,1)^2
+const x0_2 = Vector{Float64}(vec([randn(N).-10 randn(N).^2]')) # x ~ N(0,1); ϕ ~ N(0,1)^2
 h(out, p, t) = (out .= x0_2)
 p = (nothing, nothing, 1.) # p = (vertexparameters, edgeparameters, delaytime)
 dde_prob_2 = DDEProblem(nd_2, x0_2, h, tspan, p)

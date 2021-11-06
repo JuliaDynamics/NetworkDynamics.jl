@@ -107,7 +107,7 @@ nothing # hide
 The initial conditions are sampled from (squared) normal distributinos such that the first $N$ values correspond to variable `x` and the values with indices from $N+1$ to $2N$ belong to variable `ϕ`, where $x \sim \mathcal{N}(0,1)$; $ϕ \sim \mathcal{N}(0,1)^2$.
 
 ```@example DDEVertex
-const x0_2 = Array{Float64,1}(vec([randn(N).-10 randn(N).^2]')) # x ~ \mathcal{N}(0,1); ϕ ~ \mathcal{N}(0,1)^2
+const x0_2 = Vector{Float64}(vec([randn(N).-10 randn(N).^2]')) # x ~ \mathcal{N}(0,1); ϕ ~ \mathcal{N}(0,1)^2
 
 h_2(out, p, t) = (out .= x0_2)
 

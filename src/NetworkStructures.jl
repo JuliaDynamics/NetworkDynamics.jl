@@ -17,7 +17,7 @@ const Idx = UnitRange{Int}
 
 Create offsets for stacked array of dimensions dims
 """
-function create_offsets(dims; counter=0)::Array{Int, 1}
+function create_offsets(dims; counter=0)::Vector{Int}
     offs = [1 for dim in dims]
     for (i, dim) in enumerate(dims)
         offs[i] = counter
@@ -31,7 +31,7 @@ end
 
 Create indexes for stacked array of dimensions dims using the offsets offs
 """
-function create_idxs(offs, dims)::Array{Idx, 1}
+function create_idxs(offs, dims)::Vector{Idx}
     idxs = [1+off:off+dim for (off, dim) in zip(offs, dims)]
 end
 
@@ -51,32 +51,32 @@ struct GraphStruct
     num_v::Int                                 # number of vertices
     num_e::Int                                 # number of edges
 
-    v_dims::Array{Int, 1}                      # dimensions per vertex
-    e_dims::Array{Int, 1}                      # dimensions per edge
+    v_dims::Vector{Int}                        # dimensions per vertex
+    e_dims::Vector{Int}                        # dimensions per edge
 
-    v_syms::Array{Symbol, 1}                   # symbol per vertex
-    e_syms::Array{Symbol, 1}                   # symbol per edge
+    v_syms::Vector{Symbol}                     # symbol per vertex
+    e_syms::Vector{Symbol}                     # symbol per edge
 
     dim_v::Int                                 # total vertex dimensions
     dim_e::Int                                 # total edge dimensions
 
-    s_e::Array{Int, 1}                         # src-vertex idx per edge
-    d_e::Array{Int, 1}                         # dst-vertex idx per edge
+    s_e::Vector{Int}                           # src-vertex idx per edge
+    d_e::Vector{Int}                           # dst-vertex idx per edge
 
-    s_v::Array{Array{Int,1}}                   # indices of source edges per vertex
-    d_v::Array{Array{Int,1}}                   # indices of destination edges per vertex
+    s_v::Array{Vector{Int}}                    # indices of source edges per vertex
+    d_v::Array{Vector{Int}}                    # indices of destination edges per vertex
 
-    v_offs::Array{Int, 1}                      # linear offset per vertex
-    e_offs::Array{Int, 1}                      # linear offset per edge
+    v_offs::Vector{Int}                        # linear offset per vertex
+    e_offs::Vector{Int}                        # linear offset per edge
 
-    v_idx::Array{Idx, 1}                       # lin. idx-range per vertex
-    e_idx::Array{Idx, 1}                       # lin. idx-range per edge
+    v_idx::Vector{Idx}                         # lin. idx-range per vertex
+    e_idx::Vector{Idx}                         # lin. idx-range per edge
 
-    s_e_offs::Array{Int, 1}                    # offset of src-vertex per edge
-    d_e_offs::Array{Int, 1}                    # offset of dst-vertex per edge
+    s_e_offs::Vector{Int}                      # offset of src-vertex per edge
+    d_e_offs::Vector{Int}                      # offset of dst-vertex per edge
 
-    s_e_idx::Array{Idx, 1}                     # idx-range of src-vertex per edge
-    d_e_idx::Array{Idx, 1}                     # idx-range of dst-vertex per edge
+    s_e_idx::Vector{Idx}                       # idx-range of src-vertex per edge
+    d_e_idx::Vector{Idx}                       # idx-range of dst-vertex per edge
 
     dst_edges_dat::Vector{Vector{Tuple{Int,Int}}}
 end
@@ -156,13 +156,13 @@ end
 import Base.getindex, Base.setindex!, Base.length, Base.IndexStyle, Base.size, Base.eltype, Base.dataids
 
 """
-    struct EdgeData{GDB, elE} <: AbsstractArray{elE, 1}
+    struct EdgeData{GDB, elE} <: AbsstractVector{elE}
 
 The EdgeData object behaves like an array and allows access to the underlying
 data of a specific edge (like a View). Unlike a View, the parent array is stored
 in a mutable GraphDataBuffer object and can be swapped.
 """
-struct EdgeData{GDB, elE} <: AbstractArray{elE, 1}
+struct EdgeData{GDB, elE} <: AbstractVector{elE}
     gdb::GDB
     idx_offset::Int
     len::Int
@@ -194,13 +194,13 @@ Base.IndexStyle(::Type{<:EdgeData}) = IndexLinear()
 @inline Base.dataids(e_dat::EdgeData) = dataids(e_dat.gdb.e_array)
 
 """
-    struct VertexData{GDB, elV} <: AbsstractArray{elV, 1}
+    struct VertexData{GDB, elV} <: AbsstractVector{elV}
 
 The VertexData object behaves like an array and allows access to the underlying
 data of a specific vertex (like a View). Unlike a View, the parent array is stored
 in a mutable GraphDataBuffer object and can be swapped.
 """
-struct VertexData{GDB, elV} <: AbstractArray{elV, 1}
+struct VertexData{GDB, elV} <: AbstractVector{elV}
     gdb::GDB
     idx_offset::Int
     len::Int
@@ -260,11 +260,11 @@ methods.
 """
 struct GraphData{GDB, elV, elE}
     gdb::GDB
-    v::Array{VertexData{GDB, elV}, 1}
-    e::Array{EdgeData{GDB, elE}, 1}
-    v_s_e::Array{VertexData{GDB, elV}, 1} # the vertex that is the source of e
-    v_d_e::Array{VertexData{GDB, elV}, 1} # the vertex that is the destination of e
-    dst_edges::Array{Array{EdgeData{GDB, elE}, 1}, 1} # the half-edges that have v as destination
+    v::Vector{VertexData{GDB, elV}}
+    e::Vector{EdgeData{GDB, elE}}
+    v_s_e::Vector{VertexData{GDB, elV}} # the vertex that is the source of e
+    v_d_e::Vector{VertexData{GDB, elV}} # the vertex that is the destination of e
+    dst_edges::Vector{Vector{EdgeData{GDB, elE}}} # the half-edges that have v as destination
 end
 
 function GraphData(v_array::Tv, e_array::Te, gs::GraphStruct; global_offset = 0) where {Tv, Te}

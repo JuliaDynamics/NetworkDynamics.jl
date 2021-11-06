@@ -87,7 +87,7 @@ end
     @view p[1][:, i]
 end
 
-@inline Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2,T3}, i) where {T1 <: AbstractArray{T4, 1} where T4, T3, T2}
+@inline Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2,T3}, i) where {T1 <: AbstractVector{T4} where T4, T3, T2}
     p[1][i]
 end
 
@@ -99,7 +99,7 @@ end
     @view p[1][:, i]
 end
 
-@inline Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2}, i) where {T1 <: AbstractArray{T3, 1} where T3, T2}
+@inline Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2}, i) where {T1 <: AbstractVector{T3} where T3, T2}
     p[1][i]
 end
 
@@ -120,7 +120,7 @@ end
     @view p[2][:, i]
 end
 
-@inline Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2,T3}, i) where {T1 <: AbstractArray{T4, 1} where T4, T3, T2}
+@inline Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2,T3}, i) where {T1 <: AbstractVector{T4} where T4, T3, T2}
     p[2][i]
 end
 
@@ -132,7 +132,7 @@ end
     @view p[2][:, i]
 end
 
-@inline Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2}, i) where {T1, T2 <: AbstractArray{T3, 1} where T3}
+@inline Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2}, i) where {T1, T2 <: AbstractVector{T3} where T3}
     p[2][i]
 end
 
