@@ -46,9 +46,9 @@ Here  `e`, `p` and `t` are the usual arguments, while
 `v_s` and `v_d` are arrays containing the vertices which are
 the source and destination of the described edge.
 
-- `dim` is the number of independent variables in the edge equations and
-- `sym` is an array of symbols for these variables.
-- `coupling` is a Symbol describing if the EdgeFunction is intended for a directed graph (`:directed`) or for an undirected graph (`{:undirected, :symmetric, :antisymmetric, :fiducial}`). `:directed` is intended for directed graphs. `:undirected` is the default option and is only compatible with SimpleGraph. in this case f! should specify the coupling from a source vertex to a destination vertex. `:symmetric` and `:antisymmetric` trigger performance optimizations, if `f!` has that symmetry property. `:fiducial` lets the user specify both the coupling from src to dst, as well as the coupling from dst to src and is intended for advanced users.
+  - `dim` is the number of independent variables in the edge equations and
+  - `sym` is an array of symbols for these variables.
+  - `coupling` is a Symbol describing if the EdgeFunction is intended for a directed graph (`:directed`) or for an undirected graph (`{:undirected, :symmetric, :antisymmetric, :fiducial}`). `:directed` is intended for directed graphs. `:undirected` is the default option and is only compatible with SimpleGraph. in this case f! should specify the coupling from a source vertex to a destination vertex. `:symmetric` and `:antisymmetric` trigger performance optimizations, if `f!` has that symmetry property. `:fiducial` lets the user specify both the coupling from src to dst, as well as the coupling from dst to src and is intended for advanced users.
 
 For more details see the documentation.
 """
@@ -283,12 +283,12 @@ f(dv, v, edges, h, p, t) -> nothing
 Here `dv`, `v`, `p` and `t` are the usual ODE arguments, while
 `edges` is an Arry of incoming edges. `h` is the history array for `v`.
 
-- `dim` is the number of independent variables in the edge equations and
-- `sym` is an array of symbols for these variables.
-- `coupling` is a Symbol describing if the EdgeFunction is intended for a directed graph (`:directed`) or for an undirected graph (`{:undirected, :fiducial}`). `:directed` is intended for directed graphs. `:undirected` is the default option and is only compatible with SimpleGraph. in this case f! should specify the coupling from a source vertex to a destination vertex.  `:fiducial` lets the user specify both the coupling from src to dst, as well as the coupling from dst to src and is intended for advanced users.
-- `mass_matrix` is an optional argument that defaults to the identity
-matrix `I`. If a mass matrix M is given the system `M * de = f` will be
-solved.
+  - `dim` is the number of independent variables in the edge equations and
+  - `sym` is an array of symbols for these variables.
+  - `coupling` is a Symbol describing if the EdgeFunction is intended for a directed graph (`:directed`) or for an undirected graph (`{:undirected, :fiducial}`). `:directed` is intended for directed graphs. `:undirected` is the default option and is only compatible with SimpleGraph. in this case f! should specify the coupling from a source vertex to a destination vertex.  `:fiducial` lets the user specify both the coupling from src to dst, as well as the coupling from dst to src and is intended for advanced users.
+  - `mass_matrix` is an optional argument that defaults to the identity
+    matrix `I`. If a mass matrix M is given the system `M * de = f` will be
+    solved.
 
 For more details see the documentation.
 """

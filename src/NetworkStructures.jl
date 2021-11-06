@@ -248,13 +248,17 @@ end
 The GraphData object contains a reference to the GraphDataBuffer object and to all the
 view-like EdgeData/VertexData objects. It is used to access the underlying linear data
 of a graph in terms of edges and vertices. The underlying data kann be swapped using the
+
     swap_v_array
     swap_e_array
+
 methods.
 The data for specific edges/vertices can be accessed using the
+
     get_vertex, get_edge
     get_src_vertex, get_dst_vertex
     get_src_edges, get_dst_edges
+
 methods.
 """
 struct GraphData{GDB,elV,elE}

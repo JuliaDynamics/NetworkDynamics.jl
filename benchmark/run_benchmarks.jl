@@ -117,10 +117,10 @@ end
 """
     benchmark(; name, id, cmd)
 
-- name determines the filenames
-- id determines the git id, i.e. branch name. If id=="directory" use currend
-directory even if dirty!
-- cmd if empty use default julia command
+  - name determines the filenames
+  - id determines the git id, i.e. branch name. If id=="directory" use currend
+    directory even if dirty!
+  - cmd if empty use default julia command
 """
 function benchmark(; name, id, cmd, retune)
     # magic id string directory will benchmark dirty state
