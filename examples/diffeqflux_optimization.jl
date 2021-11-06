@@ -24,7 +24,7 @@ function diffusionedge!(e, v_s, v_d, σ, t)
 end
 
 function diffusionvertex!(dv, v, e_s, e_d, p, t)
-    dv .= 0.
+    dv .= 0.0
     for e in e_s
         dv .-= e
     end
@@ -36,17 +36,17 @@ end
 
 ### Constructing the network dynamics
 
-nd_diffusion_vertex = ODEVertex(f = diffusionvertex!, dim = 1)
-nd_diffusion_edge = StaticEdge(f = diffusionedge!, dim = 1)
+nd_diffusion_vertex = ODEVertex(; f=diffusionvertex!, dim=1)
+nd_diffusion_edge = StaticEdge(; f=diffusionedge!, dim=1)
 nd! = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g)
 
 ### Simulation
 
 x0 = randn(N) # random initial conditions
 # These are the parameters for the edges, i.e. the heterogeneous diffusion constants
-σ =  rand(ne(g))
-tspan = (0.,4.)
-ode_prob = ODEProblem(nd, x0,  tspan, (nothing,σ))
+σ = rand(ne(g))
+tspan = (0.0, 4.0)
+ode_prob = ODEProblem(nd, x0, tspan, (nothing, σ))
 sol = solve(ode_prob, Tsit5())
 
 plot(sol)
@@ -60,11 +60,11 @@ plot(sol)
 # tuple syntax. At the moment the workaround is to use a wrapper function.
 
 function nd_wrapper!(dx, x, σ, t)
-  nd!(dx, x, (nothing, σ), t)
+    nd!(dx, x, (nothing, σ), t)
 end
 
 
-probflux   = ODEProblem(nd_wrapper!, x0, tspan, σ)
+probflux = ODEProblem(nd_wrapper!, x0, tspan, σ)
 
 
 # #### The prediction function
@@ -80,23 +80,23 @@ probflux   = ODEProblem(nd_wrapper!, x0, tspan, σ)
 
 
 function predict(p)
-  ## default sensealg is InterpolatingAdjoint
-  solve(probflux, Tsit5(),p=p, saveat=tspan[1]:.01:tspan[end], sensealg=ForwardDiffSensitivity())
+    ## default sensealg is InterpolatingAdjoint
+    solve(probflux, Tsit5(); p=p, saveat=tspan[1]:0.01:tspan[end], sensealg=ForwardDiffSensitivity())
 
 end
 
 
 function loss(p)
-  pred = predict(p)
-  # converge to 0 as fast as possible
-  loss = sqrt(sum(abs2, pred))# + sqrt(sum(abs2,p))
-  loss, pred
+    pred = predict(p)
+    # converge to 0 as fast as possible
+    loss = sqrt(sum(abs2, pred))# + sqrt(sum(abs2,p))
+    loss, pred
 end
 
-cb = function (p,l, pred) # callback function to observe training
-  println(" loss = ", l)
-  display(plot(pred))
-  return false
+cb = function (p, l, pred) # callback function to observe training
+    println(" loss = ", l)
+    display(plot(pred))
+    return false
 end
 
 cb(σ, loss(σ)...)
@@ -104,6 +104,6 @@ cb(σ, loss(σ)...)
 # A crucial thing to realize is that sciml_train works best with Arrays of parameters
 
 # We optimize for optimal local diffusion constants
-res = DiffEqFlux.sciml_train(loss, σ, ADAM(.5), cb = cb, maxiters=20)
+res = DiffEqFlux.sciml_train(loss, σ, ADAM(0.5); cb=cb, maxiters=20)
 
 # res = DiffEqFlux.sciml_train(loss, σ, BFGS(), cb = cb)

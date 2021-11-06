@@ -25,7 +25,7 @@ end
 
 function diffusionvertex!(dv, v, edges, p, t)
     # usually v, e_s, e_d are arrays, hence we use the broadcasting operator .
-    dv .= 0.
+    dv .= 0.0
     # edges for which v is the source
     for e in edges
         dv .+= e
@@ -36,34 +36,34 @@ end
 
 ### Constructing the network dynamics
 
-nd_diffusion_vertex = ODEVertex(f = diffusionvertex!, dim = 1)
-nd_diffusion_edge = StaticEdge(f = diffusionedge!, dim = 1)
+nd_diffusion_vertex = ODEVertex(; f=diffusionvertex!, dim=1)
+nd_diffusion_edge = StaticEdge(; f=diffusionedge!, dim=1)
 
 nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g)
 
 ### Simulation & Plotting
 
 x0 = randn(N) # random initial conditions
-tspan = (0., 4.)
+tspan = (0.0, 4.0)
 ode_prob = ODEProblem(nd, x0, tspan)
 sol = solve(ode_prob, Tsit5());
 
-plot(sol, vars = syms_containing(nd, "v"))
+plot(sol; vars=syms_containing(nd, "v"))
 
 ### The noise can be thought of as an extra layer to the network
 # In this case we have independent additive noise at the nodes
 # Therefor the extra layer doesn't need any edges
 # More complicated noise structures are possible but have to be implemented with care
 
-h =  SimpleGraph(N, 0)
+h = SimpleGraph(N, 0)
 
 function noisevertex!(dv, v, edges, p, t)
     # the noise is written as an ODE, here dv_noise is a square wave
     # when added in the SDE it seems to affect v directly and not dv
-    dv[1] = round(Int,cos(t*.5*pi)) * p
+    dv[1] = round(Int, cos(t * 0.5 * pi)) * p
 end
 
-nd_noisevertex = ODEVertex(f = noisevertex!, dim = 1)
+nd_noisevertex = ODEVertex(; f=noisevertex!, dim=1)
 nd_noise = network_dynamics(nd_noisevertex, nd_diffusion_edge, h)
 
 
@@ -71,12 +71,12 @@ nd_noise = network_dynamics(nd_noisevertex, nd_diffusion_edge, h)
 
 # we are using the tuple parameter syntax, i.e. p[i] is passed to the corresponing node
 p = (randn(N), nothing)
-tspan = (0., 15.)
+tspan = (0.0, 15.0)
 noise_prob = ODEProblem(nd_noise, x0, tspan, p)
 sol_noise = solve(noise_prob, Tsit5())
 
 # The plot may be a bit misleading, since we are seeing v and not dv
-plot(sol_noise, vars = syms_containing(nd, "v"))
+plot(sol_noise; vars=syms_containing(nd, "v"))
 
 
 ### Setting up the SDEProblem is straightforward
@@ -87,4 +87,4 @@ sde_prob = SDEProblem(nd, nd_noise, x0, tspan, p)
 # SOSRA is recommended for additive noise
 sde_sol = solve(sde_prob, SOSRA())
 
-plot(sde_sol, vars = syms_containing(nd, "v"), legend = false)
+plot(sde_sol; vars=syms_containing(nd, "v"), legend=false)

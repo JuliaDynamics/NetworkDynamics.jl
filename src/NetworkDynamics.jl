@@ -25,13 +25,13 @@ function collect_ve_info(vertices!, edges!, graph)
     if vertices! isa Array
         @assert length(vertices!) == nv(graph)
         v_dims = Int[v.dim for v in vertices!]
-        symbols_v = [Symbol(vertices![i].sym[j],"_",i)
-                           for i in 1:length(vertices!)
-                           for j in 1:v_dims[i]]
+        symbols_v = [Symbol(vertices![i].sym[j], "_", i)
+                     for i in 1:length(vertices!)
+                     for j in 1:v_dims[i]]
         mmv_array = [v.mass_matrix for v in vertices!]
     else
         v_dims = [vertices!.dim for v in vertices(graph)]
-        symbols_v = [Symbol(vertices!.sym[j],"_",i)
+        symbols_v = [Symbol(vertices!.sym[j], "_", i)
                      for i in 1:nv(graph)
                      for j in 1:v_dims[i]]
         mmv_array = [vertices!.mass_matrix for v in vertices(graph)]
@@ -40,20 +40,20 @@ function collect_ve_info(vertices!, edges!, graph)
     if edges! isa Array
         @assert length(edges!) == ne(graph)
         e_dims = Int[e.dim for e in edges!]
-        symbols_e = [Symbol(edges![i].sym[j],"_",i)
-                           for i in 1:length(edges!)
-                           for j in 1:e_dims[i]]
-        if eltype(edges!)  <: Union{StaticEdge, StaticDelayEdge}  # improve type hierarchy
+        symbols_e = [Symbol(edges![i].sym[j], "_", i)
+                     for i in 1:length(edges!)
+                     for j in 1:e_dims[i]]
+        if eltype(edges!) <: Union{StaticEdge,StaticDelayEdge}  # improve type hierarchy
             mme_array = nothing
         else
             mme_array = [e.mass_matrix for e in edges!]
         end
     else
         e_dims = [edges!.dim for e in edges(graph)]
-        symbols_e = [Symbol(edges!.sym[j],"_",i)
+        symbols_e = [Symbol(edges!.sym[j], "_", i)
                      for i in 1:ne(graph)
                      for j in 1:e_dims[i]]
-        if typeof(edges!) <: Union{StaticEdge, StaticDelayEdge} # improve type hierarchy
+        if typeof(edges!) <: Union{StaticEdge,StaticDelayEdge} # improve type hierarchy
             mme_array = nothing
         else
             mme_array = [edges!.mass_matrix for e in edges(graph)]
@@ -64,7 +64,7 @@ function collect_ve_info(vertices!, edges!, graph)
 end
 
 
-function collect_unique_components(comp::T, NV) where T <: AbstractArray
+function collect_unique_components(comp::T, NV) where {T<:AbstractArray}
     ucomp = Vector(unique(comp))
     ind_ucomp = Vector{Int64}[]
     for v in ucomp
@@ -97,7 +97,8 @@ of VertexFunctions **`vertices!`**, an array of EdgeFunctions **`edges!`** and a
 `Graphs.jl` object **`g`**. The optional argument `parallel` is a boolean
 value that denotes if the central loop should be executed in parallel with the number of threads set by the environment variable `JULIA_NUM_THREADS`.
 """
-function network_dynamics(vertices!::Vector{T}, edges!::Vector{U}, graph; kwargs...) where {T <: VertexFunction, U <: EdgeFunction}
+function network_dynamics(vertices!::Vector{T}, edges!::Vector{U}, graph;
+                          kwargs...) where {T<:VertexFunction,U<:EdgeFunction}
     @assert length(vertices!) == nv(graph)
     @assert length(edges!) == ne(graph)
 
@@ -118,7 +119,7 @@ function network_dynamics(vertices!::Vector{T}, edges!::Vector{U}, graph; kwargs
 end
 
 
-function network_dynamics(vertices!,  edges!, graph; parallel=false)
+function network_dynamics(vertices!, edges!, graph; parallel=false)
     # If vertices! and/or edges! are individual functions and no other dispatch was
     # triggered, assume all vertices, respectively edges will be of that type
     if typeof(vertices!) <: VertexFunction
@@ -142,17 +143,17 @@ function network_dynamics(vertices!,  edges!, graph; parallel=false)
 
     vertices! isa Array{Any} ? vertices! = Array{VertexFunction}(vertices!) : nothing
     edges! isa Array{Any} ? edges! = Array{EdgeFunction}(edges!) : nothing
-    network_dynamics(vertices!, edges!, graph, parallel = parallel)
+    network_dynamics(vertices!, edges!, graph; parallel=parallel)
 end
 
 
 # catch all version (works only for ODEVertex, DDEVertex, StaticEdge, StaticDelayEdge)
-function _network_dynamics(vertices!::Union{Vector{T}, T},
-                          edges!::Union{Vector{U}, U},
-                          graph;
-                          initial_history=nothing,
-                          x_prototype=zeros(1),
-                          parallel=false) where {T <: VertexFunction, U <: EdgeFunction}
+function _network_dynamics(vertices!::Union{Vector{T},T},
+                           edges!::Union{Vector{U},U},
+                           graph;
+                           initial_history=nothing,
+                           x_prototype=zeros(1),
+                           parallel=false) where {T<:VertexFunction,U<:EdgeFunction}
 
 
     warn_parallel(parallel)
@@ -173,23 +174,28 @@ function _network_dynamics(vertices!::Union{Vector{T}, T},
                any(e -> e isa StaticDelayEdge, unique_edges!)
 
     if initial_history === nothing && hasDelay
-      initial_history = ones(sum(v_dims))
+        initial_history = ones(sum(v_dims))
     end
 
     graph_stucture = GraphStruct(graph, v_dims, e_dims, symbols_v, symbols_e)
 
     graph_data = GraphData(v_array, e_array, graph_stucture)
 
-    nd! = NetworkDE(unique_vertices!, unique_v_indices, unique_edges!, unique_e_indices, graph, graph_stucture, graph_data, initial_history, parallel)
+    nd! = NetworkDE(unique_vertices!, unique_v_indices, unique_edges!, unique_e_indices, graph, graph_stucture,
+                    graph_data, initial_history, parallel)
     mass_matrix = construct_mass_matrix(mmv_array, graph_stucture)
 
-    return hasDelay ? DDEFunction(nd!; mass_matrix = mass_matrix, syms=symbols_v) :
-                      ODEFunction(nd!; mass_matrix = mass_matrix, syms=symbols_v)
+    return if hasDelay
+        DDEFunction(nd!; mass_matrix=mass_matrix, syms=symbols_v)
+    else
+        ODEFunction(nd!; mass_matrix=mass_matrix, syms=symbols_v)
+    end
 end
 
 ## ODEEdge
 
-function _network_dynamics(vertices!::Union{Vector{T}, T}, edges!::Union{Vector{U}, U}, graph; initial_history=nothing, x_prototype=zeros(1), parallel=false) where {T <: ODEVertex, U <: ODEEdge}
+function _network_dynamics(vertices!::Union{Vector{T},T}, edges!::Union{Vector{U},U}, graph; initial_history=nothing,
+                           x_prototype=zeros(1), parallel=false) where {T<:ODEVertex,U<:ODEEdge}
 
     warn_parallel(parallel)
 
@@ -215,17 +221,18 @@ function _network_dynamics(vertices!::Union{Vector{T}, T}, edges!::Union{Vector{
 
     graph_data = GraphData(v_array, e_array, graph_stucture)
 
-    nd! = NetworkDE(unique_vertices!, unique_v_indices, unique_edges!, unique_e_indices, graph, graph_stucture, graph_data, initial_history, parallel)
+    nd! = NetworkDE(unique_vertices!, unique_v_indices, unique_edges!, unique_e_indices, graph, graph_stucture,
+                    graph_data, initial_history, parallel)
 
     mass_matrix = construct_mass_matrix(mmv_array, mme_array, graph_stucture)
 
-    ODEFunction(nd!; mass_matrix = mass_matrix, syms=symbols)
+    ODEFunction(nd!; mass_matrix=mass_matrix, syms=symbols)
 end
 
 # Here is not the best place for this error,
 # but requires the least changes before the next refactor.
 function prepare_edges(edges, g)
-    @assert typeof(edges) <: Union{EdgeFunction, Vector}
+    @assert typeof(edges) <: Union{EdgeFunction,Vector}
     throw(ArgumentError("Graph type not recognized. Currently only SimpleGraph and SimpleDiGraph are supported."))
 end
 
@@ -303,18 +310,18 @@ end
 
 @inline function reconstruct_edge(edge::StaticEdge, coupling::Symbol)
     let f = edge.f, dim = edge.dim, sym = edge.sym
-        return StaticEdge(f = f,
-                          dim = dim,
-                          coupling = coupling,
-                          sym = sym)
+        return StaticEdge(; f=f,
+                          dim=dim,
+                          coupling=coupling,
+                          sym=sym)
     end
 end
 @inline function reconstruct_edge(edge::StaticDelayEdge, coupling::Symbol)
     let f = edge.f, dim = edge.dim, sym = edge.sym
-        return StaticDelayEdge(f = f,
-                               dim = dim,
-                               coupling = coupling,
-                               sym = sym)
+        return StaticDelayEdge(; f=f,
+                               dim=dim,
+                               coupling=coupling,
+                               sym=sym)
     end
 end
 @inline function reconstruct_edge(edge::ODEEdge, coupling::Symbol)

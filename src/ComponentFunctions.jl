@@ -52,17 +52,17 @@ the source and destination of the described edge.
 
 For more details see the documentation.
 """
-@Base.kwdef struct StaticEdge{T} <: EdgeFunction
+Base.@kwdef struct StaticEdge{T} <: EdgeFunction
     f::T # (e, v_s, v_t, p, t) -> nothing
     dim::Int # number of dimensions of e
     coupling = :undefined # :directed, :symmetric, :antisymmetric, :fiducial, :undirected
-    sym=[:e for i in 1:dim] # Symbols for the dimensions
+    sym = [:e for i in 1:dim] # Symbols for the dimensions
 
 
     function StaticEdge(user_f::T,
-                           dim::Int,
-                           coupling::Symbol,
-                           sym::Vector{Symbol}) where T
+                        dim::Int,
+                        coupling::Symbol,
+                        sym::Vector{Symbol}) where {T}
 
         coupling_types = (:undefined, :directed, :fiducial, :undirected, :symmetric,
                           :antisymmetric)
@@ -85,23 +85,23 @@ For more details see the documentation.
             # have the same internal arguments.
             # Make sure to explicitly define the edge is :fiducial in that case.
             f = @inline (e, v_s, v_d, p, t) -> begin
-                @inbounds user_f(view(e,1:dim), v_s, v_d, p, t)
-                @inbounds user_f(view(e,dim+1:2dim), v_d, v_s, p, t)
+                @inbounds user_f(view(e, 1:dim), v_s, v_d, p, t)
+                @inbounds user_f(view(e, dim+1:2dim), v_d, v_s, p, t)
                 nothing
             end
         elseif coupling == :antisymmetric
             f = @inline (e, v_s, v_d, p, t) -> begin
-                @inbounds user_f(view(e,1:dim), v_s, v_d, p, t)
+                @inbounds user_f(view(e, 1:dim), v_s, v_d, p, t)
                 @inbounds for i in 1:dim
-                    e[dim + i] = -1.0 * e[i]
+                    e[dim+i] = -1.0 * e[i]
                 end
                 nothing
             end
         elseif coupling == :symmetric
             f = @inline (e, v_s, v_d, p, t) -> begin
-                @inbounds user_f(view(e,1:dim), v_s, v_d, p, t)
+                @inbounds user_f(view(e, 1:dim), v_s, v_d, p, t)
                 @inbounds for i in 1:dim
-                    e[dim + i] = e[i]
+                    e[dim+i] = e[i]
                 end
                 nothing
             end
@@ -138,11 +138,11 @@ solved.
 
 For more details see the documentation.
 """
-@Base.kwdef struct ODEVertex{T} <: VertexFunction
+Base.@kwdef struct ODEVertex{T} <: VertexFunction
     f::T # signature (dx, x, edges, p, t) -> nothing
     dim::Int
-    mass_matrix=I
-    sym=[:v for i in 1:dim]
+    mass_matrix = I
+    sym = [:v for i in 1:dim]
 end
 
 """
@@ -166,7 +166,7 @@ described vertex is the destination (in-edges for directed graphs).
 
 For more details see the documentation.
 """
-function StaticVertex(;f, dim::Int, sym::Vector{Symbol}=[:v for i in 1:dim])
+function StaticVertex(; f, dim::Int, sym::Vector{Symbol}=[:v for i in 1:dim])
     # If mass matrix = 0 the differential equation sets dx = 0.
     # To set x to the value calculated by f we first write the value calculated
     # by f into dx, then subtract x. This leads to the  constraint
@@ -174,13 +174,13 @@ function StaticVertex(;f, dim::Int, sym::Vector{Symbol}=[:v for i in 1:dim])
     # where f(...) denotes the value that f(a, ...) writes into a.
 
     _f = (dx, x, edges, p, t) -> begin
-         f(dx, edges, p, t)
+        f(dx, edges, p, t)
         @inbounds for i in eachindex(dx)
             dx[i] = dx[i] - x[i]
         end
         return nothing
     end
-    return ODEVertex(_f, dim, 0., sym)
+    return ODEVertex(_f, dim, 0.0, sym)
 end
 
 
@@ -210,24 +210,24 @@ solved.
 
 For more details see the documentation.
 """
-@Base.kwdef struct ODEEdge{T} <: EdgeFunction
+Base.@kwdef struct ODEEdge{T} <: EdgeFunction
     f::T # (de, e, v_s, v_t, p, t) -> nothing
     dim::Int # number of dimensions of e
     coupling = :undefined # :directed, :symmetric, :antisymmetric, :fiducial, :undirected
-    mass_matrix=I # Mass matrix for the equation
-    sym=[:e for i in 1:dim] # Symbols for the dimensions
+    mass_matrix = I # Mass matrix for the equation
+    sym = [:e for i in 1:dim] # Symbols for the dimensions
 
 
     function ODEEdge(user_f::T,
                      dim::Int,
                      coupling::Symbol,
                      mass_matrix,
-                     sym::Vector{Symbol}) where T
+                     sym::Vector{Symbol}) where {T}
 
         coupling_types = (:directed, :fiducial, :undirected)
 
-        coupling == :undefined && error("ODEEdges with undefined coupling type are not implemented at the "*
-            "moment. Choose `coupling` from $coupling_types.")
+        coupling == :undefined && error("ODEEdges with undefined coupling type are not implemented at the " *
+                                        "moment. Choose `coupling` from $coupling_types.")
         coupling ∈ (:symmetric, :antisymmetric) && error("Coupling type $coupling is not available for ODEEdges.")
         coupling ∉ coupling_types && error("Coupling type not recognized. Choose from $coupling_types.")
         dim ≤ 0 && error("dim has to be a positive number.")
@@ -246,8 +246,8 @@ For more details see the documentation.
             # have the same internal arguments.
             # Make sure to explicitly define the edge is :fiducial in that case.
             f = @inline (de, e, v_s, v_d, p, t) -> begin
-                @inbounds user_f(view(de,1:dim), view(e,1:dim), v_s, v_d, p, t)
-                @inbounds user_f(view(de,dim+1:2dim), view(e,dim+1:2dim), v_d, v_s, p, t)
+                @inbounds user_f(view(de, 1:dim), view(e, 1:dim), v_s, v_d, p, t)
+                @inbounds user_f(view(de, dim+1:2dim), view(e, dim+1:2dim), v_d, v_s, p, t)
                 nothing
             end
             let M = mass_matrix
@@ -256,7 +256,7 @@ For more details see the documentation.
                 elseif M isa Number
                     newM = M
                 elseif M isa Vector
-                    newM = repeat(M,2)
+                    newM = repeat(M, 2)
                 elseif M isa Matrix
                     newM = [M zeros(size(M)); zeros(size(M)) M]
                 end
@@ -292,11 +292,11 @@ solved.
 
 For more details see the documentation.
 """
-@Base.kwdef struct DDEVertex{T} <: VertexFunction
+Base.@kwdef struct DDEVertex{T} <: VertexFunction
     f::T # The function with signature (dx, x, edges, h, p, t) -> nothing
     dim::Int # number of dimensions of x
-    mass_matrix=I # Mass matrix for the equation
-    sym=[:v for i in 1:dim] # Symbols for the dimensions
+    mass_matrix = I # Mass matrix for the equation
+    sym = [:v for i in 1:dim] # Symbols for the dimensions
 end
 
 
@@ -306,17 +306,17 @@ end
 
 Like a static edge but with extra arguments for the history of the source and destination vertices. This is NOT a DDEEdge.
 """
-@Base.kwdef struct StaticDelayEdge{T} <: EdgeFunction
+Base.@kwdef struct StaticDelayEdge{T} <: EdgeFunction
     f::T # (e, v_s, v_t, h_v_s, h_v_d, p, t) -> nothing
     dim::Int # number of dimensions of e
     coupling = :undefined # :directed, :symmetric, :antisymmetric, :fiducial, :undirected
-    sym=[:e for i in 1:dim] # Symbols for the dimensions
+    sym = [:e for i in 1:dim] # Symbols for the dimensions
 
 
     function StaticDelayEdge(user_f::T,
-                           dim::Int,
-                           coupling::Symbol,
-                           sym::Vector{Symbol}) where T
+                             dim::Int,
+                             coupling::Symbol,
+                             sym::Vector{Symbol}) where {T}
 
         coupling_types = (:undefined, :directed, :fiducial, :undirected, :symmetric,
                           :antisymmetric)
@@ -339,23 +339,23 @@ Like a static edge but with extra arguments for the history of the source and de
             # have the same internal arguments.
             # Make sure to explicitly define the edge is :fiducial in that case.
             f = @inline (e, v_s, v_d, h_v_s, h_v_d, p, t) -> begin
-                @inbounds user_f(view(e,1:dim), v_s, v_d, h_v_s, h_v_d, p, t)
-                @inbounds user_f(view(e,dim+1:2dim), v_d, v_s, h_v_d, h_v_s, p, t)
+                @inbounds user_f(view(e, 1:dim), v_s, v_d, h_v_s, h_v_d, p, t)
+                @inbounds user_f(view(e, dim+1:2dim), v_d, v_s, h_v_d, h_v_s, p, t)
                 nothing
             end
         elseif coupling == :antisymmetric
             f = @inline (e, v_s, v_d, h_v_s, h_v_d, p, t) -> begin
-                @inbounds user_f(view(e,1:dim), v_s, v_d, h_v_s, h_v_d, p, t)
+                @inbounds user_f(view(e, 1:dim), v_s, v_d, h_v_s, h_v_d, p, t)
                 @inbounds for i in 1:dim
-                    e[dim + i] = -1.0 * e[i]
+                    e[dim+i] = -1.0 * e[i]
                 end
                 nothing
             end
         elseif coupling == :symmetric
             f = @inline (e, v_s, v_d, h_v_s, h_v_d, p, t) -> begin
-                @inbounds user_f(view(e,1:dim), v_s, v_d, h_v_s, h_v_d, p, t)
+                @inbounds user_f(view(e, 1:dim), v_s, v_d, h_v_s, h_v_d, p, t)
                 @inbounds for i in 1:dim
-                    e[dim + i] = e[i]
+                    e[dim+i] = e[i]
                 end
                 nothing
             end
@@ -397,7 +397,7 @@ function ODEEdge(se::StaticEdge)
     let _f = se.f, dim = se.dim, coupling = se.coupling, sym = se.sym
 
         f = (dx, x, v_s, v_d, p, t) -> begin
-             _f(dx, v_s, v_d, p, t)
+            _f(dx, v_s, v_d, p, t)
             @inbounds for i in eachindex(dx)
                 dx[i] = dx[i] - x[i]
             end
@@ -407,9 +407,9 @@ function ODEEdge(se::StaticEdge)
         if coupling == :undirected
             # undirected means the reconstruction has already happend and the edge may now
             # be considered fiducial
-            return ODEEdge(f, dim, :fiducial, 0., sym)
+            return ODEEdge(f, dim, :fiducial, 0.0, sym)
         else
-            return ODEEdge(f, dim, coupling, 0., sym)
+            return ODEEdge(f, dim, coupling, 0.0, sym)
         end
     end
 end

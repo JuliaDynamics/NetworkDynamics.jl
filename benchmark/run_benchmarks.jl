@@ -13,7 +13,9 @@ BMPATH = joinpath(NDPATH, "benchmark")
 
 # activate the benchmark folder as current environment
 io = IOBuffer() # hide output
-import Pkg; Pkg.activate(BMPATH; io); Pkg.develop(path=NDPATH; io);
+import Pkg;
+Pkg.activate(BMPATH; io);
+Pkg.develop(; path=NDPATH, io);
 
 using PkgBenchmark
 using LibGit2
@@ -22,6 +24,7 @@ using Random
 using ArgParse
 
 s = ArgParseSettings()
+#! format: off
 @add_arg_table! s begin
     "--target", "-t"
         help = "Specify branch, commit id, tag, … for target benchmark. If `directory` use the current state of the directory. If *.date file use prev. exporte raw results."
@@ -53,6 +56,7 @@ s = ArgParseSettings()
         help = "Export raw data of trials. I.e. to use benchmarks results again als baseline or target."
         action = :store_true
 end
+#! format: on
 args = parse_args(s; as_symbols=true)
 args[:prefix] *= '_'
 
@@ -65,7 +69,7 @@ We want to have the same benchmarks for target and base therefore we copy
 NetworkDynamics/benchmark to tmp/benchmark so it won't change if the repo
 state changes.
 =#
-tmp = tempname(); mkpath(tmp)
+tmp = mkpath(tempname());
 ndpath_tmp = joinpath(tmp, "NetworkDynamics")
 @info "Copy repo to $ndpath_tmp"
 cp(NDPATH, ndpath_tmp)
@@ -91,7 +95,7 @@ end
 # activate the environment in the tmp copy of the scripts
 # env will be used for the julia processes which do the benchmarking
 Pkg.activate(bmpath_tmp)
-Pkg.develop(path=ndpath_tmp)
+Pkg.develop(; path=ndpath_tmp)
 
 """
 Create a runnable `Cmd` object from a string like "juila-1.5".
@@ -106,7 +110,7 @@ function string_to_command(cmd::AbstractString)
     capturecommand = `$cmd --startup-file=no -e "println(Base.julia_cmd()[3])"`
     run(pipeline(capturecommand; stdout=out))
     sysimg = String(take!(out))[1:end-1] # remove \n
-    @assert contains(sysimg, r"^-J.*[dylib|so]$")  "Captured sysimg looks weird? $sysimg"
+    @assert contains(sysimg, r"^-J.*[dylib|so]$") "Captured sysimg looks weird? $sysimg"
     return Cmd([cmd, sysimg])
 end
 
@@ -120,7 +124,7 @@ directory even if dirty!
 """
 function benchmark(; name, id, cmd, retune)
     # magic id string directory will benchmark dirty state
-    id = id=="directory" ? nothing : id
+    id = id == "directory" ? nothing : id
 
     # PkgBenchmarks does not call Pkg.resolve after checking out a different
     # state of ndpath_tmp! Therefore we need to check out the desired commit in
@@ -136,16 +140,16 @@ function benchmark(; name, id, cmd, retune)
     cmd = isnothing(cmd) ? args[:command] : cmd
     @info "Run $name benchmarks on $id with $cmd"
 
-    config = BenchmarkConfig(;id,
-                             env = Dict("JULIA_NUM_THREADS" => args[:threads]),
-                             juliacmd = string_to_command(cmd))
+    config = BenchmarkConfig(; id,
+                             env=Dict("JULIA_NUM_THREADS" => args[:threads]),
+                             juliacmd=string_to_command(cmd))
     results = benchmarkpkg(ndpath_tmp, config;
                            script=script_path,
                            retune,
                            verbose=args[:verbose])
 
-    args[:exportraw] && writeresults(joinpath(BMPATH, args[:prefix]*name*".data"), results)
-    export_markdown(joinpath(BMPATH, args[:prefix]*name*".md"), results)
+    args[:exportraw] && writeresults(joinpath(BMPATH, args[:prefix] * name * ".data"), results)
+    export_markdown(joinpath(BMPATH, args[:prefix] * name * ".md"), results)
     return results
 end
 
@@ -165,7 +169,7 @@ if args[:baseline] ∉ ["nothing", "none"]
     end
     # compare the two
     judgment = judge(target, baseline)
-    export_markdown(joinpath(BMPATH, args[:prefix]*"judgment.md"), judgment)
+    export_markdown(joinpath(BMPATH, args[:prefix] * "judgment.md"), judgment)
 end
 
 # copy tune file over to real repo if there is none yet or it was retuned
@@ -174,6 +178,6 @@ if !isfile(joinpath(BMPATH, "tune.json")) || args[:retune]
     cp(joinpath(ndpath_tmp, "benchmark", "tune.json"), joinpath(BMPATH, "tune.json"); force=args[:retune])
 end
 
-s = round(Int, time()-tstart)
+s = round(Int, time() - tstart)
 m, s = s ÷ 60, s % 60
 @info "Benchmarking endet after $m min $s seconds"

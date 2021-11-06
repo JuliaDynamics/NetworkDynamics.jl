@@ -5,16 +5,16 @@ using Plots
 N = 10
 g = barabasi_albert(N, 5)
 
-B = incidence_matrix(g, oriented=true)
+B = incidence_matrix(g; oriented=true)
 L = laplacian_matrix(g)
 
 P = randn(N)
 
-P .-= sum(P)/N
+P .-= sum(P) / N
 
 # Kuramoto Dynamics, read up on incidence matrices to understand the code below.
 
-struct kur_dyn{T, T2}
+struct kur_dyn{T,T2}
     B::T
     B_trans::T2
 end
@@ -24,7 +24,7 @@ function (dd::kur_dyn)(dx, x, p, t)
 end
 
 kn = kur_dyn(B, transpose(B))
-kur_prob = ODEProblem(kn, randn(N), (0., 10.), P)
+kur_prob = ODEProblem(kn, randn(N), (0.0, 10.0), P)
 
 kur_sol = solve(kur_prob, Tsit5())
 
@@ -41,7 +41,7 @@ function (dd::diff_dyn)(dx, x, p, t)
 end
 
 dd = diff_dyn(L)
-dd_prob = ODEProblem(dd, randn(N), (0., 10.), P)
+dd_prob = ODEProblem(dd, randn(N), (0.0, 10.0), P)
 
 dd_sol = solve(dd_prob, Tsit5())
 
@@ -62,7 +62,7 @@ end
 x_0(t) = sin(t)# + 0.4 * sin(2t + 0.1) - 0.7 * sin(3t + 0.2)
 
 ddx0 = diff_dyn_x0(L)
-ddx0_prob = ODEProblem(ddx0, randn(N), (0., 50), (P, x_0))
+ddx0_prob = ODEProblem(ddx0, randn(N), (0.0, 50), (P, x_0))
 
 
 ddx0_sol = solve(ddx0_prob, Tsit5())

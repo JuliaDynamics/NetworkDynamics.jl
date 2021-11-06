@@ -28,8 +28,8 @@ function (sv::SwingVertex)(dv, v, edges, p, t)
     # v[1] -> δ, dv[1] = dγ = ω = v[2]
     # v[2] -> ω, dv[2] -> dω
     dv[1] = v[2]
-    dv[2] = sv.P - sv.γ*v[2] + flow_sum(edges)
-    dv[2] = dv[2]/sv.I
+    dv[2] = sv.P - sv.γ * v[2] + flow_sum(edges)
+    dv[2] = dv[2] / sv.I
     nothing
 end
 
@@ -73,8 +73,8 @@ in network to zero.
 """
 function kill_line_affect(network, source, destination)
     gs = network.f.graph_structure
-    s_ind = findall(x->x==source, gs.s_e)
-    d_ind = findall(x->x==destination, gs.d_e)
+    s_ind = findall(x -> x == source, gs.s_e)
+    d_ind = findall(x -> x == destination, gs.d_e)
     ind = intersect(s_ind, d_ind)
     @assert length(ind) == 1
     return kill_line_affect(ind[1])
@@ -111,38 +111,34 @@ function plot_flow(saved_edge_data, network)
     data = zeros(length(t), length(vals[1]))
     for i in 1:length(vals)
         # devide by 1.63 to normalize
-        data[i, :] = abs.(vals[i])/1.63
+        data[i, :] = abs.(vals[i]) / 1.63
     end
 
     gs = network.f.graph_structure
-    sym = Array{String}(undef, (1,gs.num_e))
+    sym = Array{String}(undef, (1, gs.num_e))
     for i in 1:gs.num_e
-        sym[1,i] = string(gs.s_e[i]) * "->" * string(gs.d_e[i])
+        sym[1, i] = string(gs.s_e[i]) * "->" * string(gs.d_e[i])
     end
 
-    plot(t, data, label=sym, size=(800,600))
+    plot(t, data; label=sym, size=(800, 600))
 end
 
 # Definition of nodes and edges according to schäfer18
 I = 1.0
 γ = 0.1
-verticies = [
-    SwingVertex(-1.0, I, γ), #1
-    SwingVertex( 1.5, I, γ), #2
-    SwingVertex(-1.0, I, γ), #3
-    SwingVertex(-1.0, I, γ), #4
-    SwingVertex( 1.5, I, γ), #5
-]
+verticies = [SwingVertex(-1.0, I, γ), #1
+             SwingVertex(1.5, I, γ), #2
+             SwingVertex(-1.0, I, γ), #3
+             SwingVertex(-1.0, I, γ), #4
+             SwingVertex(1.5, I, γ)]
 
-swingedges = [
-    SwingEdge(1, 2, 1.63, 0.6*1.63), #1
-    SwingEdge(1, 3, 1.63, 0.6*1.63), #2
-    SwingEdge(1, 5, 1.63, 0.6*1.63), #3
-    SwingEdge(2, 3, 1.63, 0.6*1.63), #4
-    SwingEdge(2, 4, 1.63, 0.6*1.63), #5
-    SwingEdge(3, 4, 1.63, 0.6*1.63), #6
-    SwingEdge(4, 5, 1.63, 0.6*1.63)  #7
-]
+swingedges = [SwingEdge(1, 2, 1.63, 0.6 * 1.63), #1
+              SwingEdge(1, 3, 1.63, 0.6 * 1.63), #2
+              SwingEdge(1, 5, 1.63, 0.6 * 1.63), #3
+              SwingEdge(2, 3, 1.63, 0.6 * 1.63), #4
+              SwingEdge(2, 4, 1.63, 0.6 * 1.63), #5
+              SwingEdge(3, 4, 1.63, 0.6 * 1.63), #6
+              SwingEdge(4, 5, 1.63, 0.6 * 1.63)]
 
 # BEWARE: ordering of edges ≠ ordering of add_edge calls!
 # In this case I've ordered them manualy for this to match.
@@ -152,13 +148,14 @@ for e in swingedges
 end
 
 # Define nodes/edges and network
-odeverts = [ODEVertex(f = vert, dim=2, sym=[:d, :w]) for vert in verticies]
-staticedges = [StaticEdge(f = edge, dim=1, sym=[:F]) for edge in swingedges]
+odeverts = [ODEVertex(; f=vert, dim=2, sym=[:d, :w]) for vert in verticies]
+staticedges = [StaticEdge(; f=edge, dim=1, sym=[:F]) for edge in swingedges]
 swing_network! = network_dynamics(odeverts, staticedges, g)
 
 # x0 determined from static solution
 # x0 = [0.0 for i in 1:2*nv(g)]
-x0 = [-0.12692637482862684, -1.3649456633810975e-6, 0.14641121510104085, 4.2191082676726005e-7, -0.24376507587890778, 1.567589744768255e-6, -0.12692637482862684, -1.3649456633810975e-6, 0.35120661043511864, 7.403907552948938e-7]
+x0 = [-0.12692637482862684, -1.3649456633810975e-6, 0.14641121510104085, 4.2191082676726005e-7, -0.24376507587890778,
+      1.567589744768255e-6, -0.12692637482862684, -1.3649456633810975e-6, 0.35120661043511864, 7.403907552948938e-7]
 
 # define callback to save edge values (for plotting)
 function save_edges(u, t, integrator)
@@ -170,15 +167,15 @@ saved_edgevalues = SavedValues(Float64, Vector{Float64})
 save_callback = SavingCallback(save_edges, saved_edgevalues)
 
 # define problem
-prob = ODEProblem(swing_network!, x0, (0., 6))
+prob = ODEProblem(swing_network!, x0, (0.0, 6))
 
 # define kill_first callback, at t=1.0s remove edge(2,4)
-kill_first = PresetTimeCallback( 1.0, kill_line_affect(swing_network!, 2, 4))
+kill_first = PresetTimeCallback(1.0, kill_line_affect(swing_network!, 2, 4))
 
 # define load_watch_callback
 load_watch_callback = watch_line_limit_callback(swing_network!)
 
-sol = solve(prob, Tsit5(), callback=CallbackSet(save_callback, kill_first, load_watch_callback), dtmax=0.01)
+sol = solve(prob, Tsit5(); callback=CallbackSet(save_callback, kill_first, load_watch_callback), dtmax=0.01)
 
 # plot(sol, vars = idx_containing(swing_network!, :w))
 # plot(sol, vars = idx_containing(swing_network!, :d))

@@ -23,28 +23,28 @@ g = barabasi_albert(N, k) # a little more exciting than a bare random graph
     end
     ### Constructing the network dynamics
 
-    nd_diffusion_vertex = ODEVertex(f = diffusionvertex!, dim = 1)
-    nd_diffusion_edge = StaticEdge(f = diffusionedge!, dim = 1, coupling = :antisymmetric)
+    nd_diffusion_vertex = ODEVertex(; f=diffusionvertex!, dim=1)
+    nd_diffusion_edge = StaticEdge(; f=diffusionedge!, dim=1, coupling=:antisymmetric)
 
-    p_v = collect(1:nv(g))./nv(g) .- 0.5
-    p_e = .5 .* ones(ne(g))
-    p  = (p_v, p_e)
+    p_v = collect(1:nv(g)) ./ nv(g) .- 0.5
+    p_e = 0.5 .* ones(ne(g))
+    p = (p_v, p_e)
 
-    nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g, parallel=false)
+    nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g; parallel=false)
     x0 = randn(N)
 
 
     ## Jacobians
 
-    @test ForwardDiff.jacobian((out, x) -> nd(out, x, p, 0.), ones(N), ones(N)) isa Matrix
-    @test ReverseDiff.jacobian((out, x) -> nd(out, x, p, 0.), ones(N), ones(N)) isa Matrix
+    @test ForwardDiff.jacobian((out, x) -> nd(out, x, p, 0.0), ones(N), ones(N)) isa Matrix
+    @test ReverseDiff.jacobian((out, x) -> nd(out, x, p, 0.0), ones(N), ones(N)) isa Matrix
 
     ## Gradient wrt. vertex parameters
 
     function gradpnd(p)
         # initializing the output array with the correct type is crucial
         out = similar(p, N)
-        nd.f(out, zeros(N), (p, p_e), 0.)
+        nd.f(out, zeros(N), (p, p_e), 0.0)
         sum(out)
     end
 
@@ -66,18 +66,18 @@ g = barabasi_albert(N, k) # a little more exciting than a bare random graph
 
         nothing
     end
-    nd_diffusion_vertex2 = ODEVertex(f = diffusionvertex2!, dim = 1)
-    nd_diffusion_edge2 = StaticEdge(f = diffusionedge2!, dim = 1, coupling=:antisymmetric)
+    nd_diffusion_vertex2 = ODEVertex(; f=diffusionvertex2!, dim=1)
+    nd_diffusion_edge2 = StaticEdge(; f=diffusionedge2!, dim=1, coupling=:antisymmetric)
 
-    p = [1., 2.]
+    p = [1.0, 2.0]
 
-    nd2 = network_dynamics(nd_diffusion_vertex2, nd_diffusion_edge2, g, parallel=false)
-    nd2.f(x0, zeros(N), p, 0.)
+    nd2 = network_dynamics(nd_diffusion_vertex2, nd_diffusion_edge2, g; parallel=false)
+    nd2.f(x0, zeros(N), p, 0.0)
 
     function gradpnd2(p)
         # initializing the output array with the correct type is crucial
         out = similar(p, N)
-        nd2.f(out, zeros(N), p, 0.)
+        nd2.f(out, zeros(N), p, 0.0)
         sum(out)
     end
 

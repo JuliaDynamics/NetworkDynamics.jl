@@ -18,7 +18,7 @@ function diffusionedge!(e, v_s, v_d, p, t)
 end
 
 function diffusionvertex!(dv, v, edges, p, t)
-    dv .= 0.
+    dv .= 0.0
     for e in edges
         dv .+= e
     end
@@ -27,21 +27,21 @@ end
 
 ### Constructing the network dynamics
 
-nd_diffusion_vertex = ODEVertex(f = diffusionvertex!, dim = 1)
+nd_diffusion_vertex = ODEVertex(; f=diffusionvertex!, dim=1)
 
-nd_diffusion_edge = StaticEdge(f = diffusionedge!, dim = 1)
+nd_diffusion_edge = StaticEdge(; f=diffusionedge!, dim=1)
 
 nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g)
 
 ### Simulation
 
 x0 = randn(N)
-ode_prob = ODEProblem(nd, x0, (0., 4.))
+ode_prob = ODEProblem(nd, x0, (0.0, 4.0))
 sol = solve(ode_prob, Tsit5());
 
 ### Plotting
 
-plot(sol, vars = syms_containing(nd, "v"))
+plot(sol; vars=syms_containing(nd, "v"))
 
 # accessing edge values via helper function GetGD
 gd_nd = nd(sol(1.0), 1.0, nothing, GetGD) # exposes underlying graph data struct
@@ -62,6 +62,6 @@ function saving_func(u, t, integrator)
 end
 
 cb = SavingCallback(saving_func, saved_values)
-sol = solve(ode_prob,Tsit5(),callback=cb)
+sol = solve(ode_prob, Tsit5(); callback=cb)
 
 saved_values # stores e_values

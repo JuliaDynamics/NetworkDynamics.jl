@@ -88,9 +88,9 @@ function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
     d_e = dst.(edges(g))
 
     # Initialize Vector of empty Vector{Int} for the edge indices per vertex
-    s_v = [Int[] for i=1:num_v]
-    d_v = [Int[] for i=1:num_v]
-    for i = 1:num_e
+    s_v = [Int[] for i in 1:num_v]
+    d_v = [Int[] for i in 1:num_v]
+    for i in 1:num_e
         push!(s_v[s_e[i]], i)
         push!(d_v[d_e[i]], i)
     end
@@ -122,34 +122,33 @@ function GraphStruct(g, v_dims, e_dims, v_syms, e_syms)
         end
         for i_e in s_v[i_v]
             if !is_directed(g)
-                push!(offsdim_arr, (e_offs[i_e] +  e_dims[i_e] / 2, e_dims[i_e] / 2))
+                push!(offsdim_arr, (e_offs[i_e] + e_dims[i_e] / 2, e_dims[i_e] / 2))
             end
         end
         dst_edges_dat[i_v] = offsdim_arr
     end
 
-    GraphStruct(
-    num_v,
-    num_e,
-    v_dims,
-    e_dims,
-    v_syms,
-    e_syms,
-    sum(v_dims),
-    sum(e_dims),
-    s_e,
-    d_e,
-    s_v,
-    d_v,
-    v_offs,
-    e_offs,
-    v_idx,
-    e_idx,
-    s_e_offs,
-    d_e_offs,
-    s_e_idx,
-    d_e_idx,
-    dst_edges_dat)
+    GraphStruct(num_v,
+                num_e,
+                v_dims,
+                e_dims,
+                v_syms,
+                e_syms,
+                sum(v_dims),
+                sum(e_dims),
+                s_e,
+                d_e,
+                s_v,
+                d_v,
+                v_offs,
+                e_offs,
+                v_idx,
+                e_idx,
+                s_e_offs,
+                d_e_offs,
+                s_e_idx,
+                d_e_idx,
+                dst_edges_dat)
 end
 
 
@@ -162,18 +161,18 @@ The EdgeData object behaves like an array and allows access to the underlying
 data of a specific edge (like a View). Unlike a View, the parent array is stored
 in a mutable GraphDataBuffer object and can be swapped.
 """
-struct EdgeData{GDB, elE} <: AbstractVector{elE}
+struct EdgeData{GDB,elE} <: AbstractVector{elE}
     gdb::GDB
     idx_offset::Int
     len::Int
 end
 
 Base.@propagate_inbounds function getindex(e_dat::EdgeData, idx)
-    e_dat.gdb.e_array[idx + e_dat.idx_offset]
+    e_dat.gdb.e_array[idx+e_dat.idx_offset]
 end
 
 Base.@propagate_inbounds function setindex!(e_dat::EdgeData, x, idx)
-    e_dat.gdb.e_array[idx + e_dat.idx_offset] = x
+    e_dat.gdb.e_array[idx+e_dat.idx_offset] = x
     nothing
 end
 
@@ -182,10 +181,10 @@ end
 end
 
 @inline function Base.size(e_dat::EdgeData)
-    (e_dat.len, )
+    (e_dat.len,)
 end
 
-@inline function Base.eltype(e_dat::EdgeData{GDB, elE}) where {GDB, elE}
+@inline function Base.eltype(e_dat::EdgeData{GDB,elE}) where {GDB,elE}
     elE
 end
 
@@ -200,18 +199,18 @@ The VertexData object behaves like an array and allows access to the underlying
 data of a specific vertex (like a View). Unlike a View, the parent array is stored
 in a mutable GraphDataBuffer object and can be swapped.
 """
-struct VertexData{GDB, elV} <: AbstractVector{elV}
+struct VertexData{GDB,elV} <: AbstractVector{elV}
     gdb::GDB
     idx_offset::Int
     len::Int
 end
 
 Base.@propagate_inbounds function getindex(v_dat::VertexData, idx)
-    v_dat.gdb.v_array[idx + v_dat.idx_offset]
+    v_dat.gdb.v_array[idx+v_dat.idx_offset]
 end
 
 Base.@propagate_inbounds function setindex!(v_dat::VertexData, x, idx)
-    v_dat.gdb.v_array[idx + v_dat.idx_offset] = x
+    v_dat.gdb.v_array[idx+v_dat.idx_offset] = x
     nothing
 end
 
@@ -220,10 +219,10 @@ end
 end
 
 @inline function Base.size(e_dat::VertexData)
-    (e_dat.len, )
+    (e_dat.len,)
 end
 
-@inline function Base.eltype(e_dat::VertexData{G, elV}) where {G, elV}
+@inline function Base.eltype(e_dat::VertexData{G,elV}) where {G,elV}
     elV
 end
 
@@ -238,7 +237,7 @@ Base.IndexStyle(::Type{<:VertexData}) = IndexLinear()
 Is a composite type which holds two Arrays for the underlying data of a graph.
 The type is mutable, therfore the v_array and e_array can be changed.
 """
-mutable struct GraphDataBuffer{Tv, Te}
+mutable struct GraphDataBuffer{Tv,Te}
     v_array::Tv
     e_array::Te
 end
@@ -258,26 +257,29 @@ The data for specific edges/vertices can be accessed using the
     get_src_edges, get_dst_edges
 methods.
 """
-struct GraphData{GDB, elV, elE}
+struct GraphData{GDB,elV,elE}
     gdb::GDB
-    v::Vector{VertexData{GDB, elV}}
-    e::Vector{EdgeData{GDB, elE}}
-    v_s_e::Vector{VertexData{GDB, elV}} # the vertex that is the source of e
-    v_d_e::Vector{VertexData{GDB, elV}} # the vertex that is the destination of e
-    dst_edges::Vector{Vector{EdgeData{GDB, elE}}} # the half-edges that have v as destination
+    v::Vector{VertexData{GDB,elV}}
+    e::Vector{EdgeData{GDB,elE}}
+    v_s_e::Vector{VertexData{GDB,elV}} # the vertex that is the source of e
+    v_d_e::Vector{VertexData{GDB,elV}} # the vertex that is the destination of e
+    dst_edges::Vector{Vector{EdgeData{GDB,elE}}} # the half-edges that have v as destination
 end
 
-function GraphData(v_array::Tv, e_array::Te, gs::GraphStruct; global_offset = 0) where {Tv, Te}
-    gdb = GraphDataBuffer{Tv, Te}(v_array, e_array)
+function GraphData(v_array::Tv, e_array::Te, gs::GraphStruct; global_offset=0) where {Tv,Te}
+    gdb = GraphDataBuffer{Tv,Te}(v_array, e_array)
     GDB = typeof(gdb)
     elV = eltype(v_array)
     elE = eltype(e_array)
-    v = [VertexData{GDB, elV}(gdb, offset + global_offset, dim) for (offset,dim) in zip(gs.v_offs, gs.v_dims)]
-    e = [EdgeData{GDB, elE}(gdb, offset + global_offset, dim) for (offset,dim) in zip(gs.e_offs, gs.e_dims)]
-    v_s_e = [VertexData{GDB, elV}(gdb, offset + global_offset, dim) for (offset,dim) in zip(gs.s_e_offs, gs.v_dims[gs.s_e])]
-    v_d_e = [VertexData{GDB, elV}(gdb, offset + global_offset, dim) for (offset,dim) in zip(gs.d_e_offs, gs.v_dims[gs.d_e])]
-    dst_edges = [[EdgeData{GDB, elE}(gdb, offset + global_offset, dim) for (offset,dim) in in_edge] for in_edge in gs.dst_edges_dat]
-    GraphData{GDB, elV, elE}(gdb, v, e, v_s_e, v_d_e, dst_edges)
+    v = [VertexData{GDB,elV}(gdb, offset + global_offset, dim) for (offset, dim) in zip(gs.v_offs, gs.v_dims)]
+    e = [EdgeData{GDB,elE}(gdb, offset + global_offset, dim) for (offset, dim) in zip(gs.e_offs, gs.e_dims)]
+    v_s_e = [VertexData{GDB,elV}(gdb, offset + global_offset, dim)
+             for (offset, dim) in zip(gs.s_e_offs, gs.v_dims[gs.s_e])]
+    v_d_e = [VertexData{GDB,elV}(gdb, offset + global_offset, dim)
+             for (offset, dim) in zip(gs.d_e_offs, gs.v_dims[gs.d_e])]
+    dst_edges = [[EdgeData{GDB,elE}(gdb, offset + global_offset, dim) for (offset, dim) in in_edge]
+                 for in_edge in gs.dst_edges_dat]
+    GraphData{GDB,elV,elE}(gdb, v, e, v_s_e, v_d_e, dst_edges)
 end
 
 
@@ -319,7 +321,7 @@ export swap_v_array!, swap_e_array!
 
 Swaps the underlying vertex data array of an GraphData type with a new one.
 """
-@inline function swap_v_array!(gd::GraphData{GDB, elV, elE}, array::AbstractArray{elV}) where {GDB, elV, elE}
+@inline function swap_v_array!(gd::GraphData{GDB,elV,elE}, array::AbstractArray{elV}) where {GDB,elV,elE}
     gd.gdb.v_array = array
 end
 
@@ -328,7 +330,7 @@ end
 
 Swaps the underlying edge data array of an GraphData type with a new one.
 """
-@inline function swap_e_array!(gd::GraphData{GDB, elV, elE}, array::AbstractArray{elE}) where {GDB, elV, elE}
+@inline function swap_e_array!(gd::GraphData{GDB,elV,elE}, array::AbstractArray{elE}) where {GDB,elV,elE}
     gd.gdb.e_array = array
 end
 
