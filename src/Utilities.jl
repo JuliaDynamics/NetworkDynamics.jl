@@ -2,13 +2,20 @@ import NLsolve: nlsolve, converged
 using LinearAlgebra
 using SparseArrays
 
+"""
+    warn_parallel(b::Bool)
+
+If `b=true` (run in parallel mode) give a warning if either
+- `ENV["JULIA_NUM_THREADS"]` not found in ENV
+- `ENV["JULIA_NUM_THREADS"] ≤ 1`, i.e. there is just a single thread
+"""
 function warn_parallel(b::Bool)
     if b
-        haskey(ENV, "JULIA_NUM_THREADS") &&
-        parse(Int, ENV["JULIA_NUM_THREADS"]) > 1 ? nothing :
-        print("Warning: You are using multi-threading with only one thread ",
-        "available to Julia. Consider re-starting Julia with the environment ",
-        "variable JULIA_NUM_THREADS set to the number of physical cores of your CPU.")
+        if !haskey(ENV, "JULIA_NUM_THREADS") || parse(Int, ENV["JULIA_NUM_THREADS"]) ≤ 1
+            print("Warning: You are using multi-threading with only one thread ",
+                  "available to Julia. Consider re-starting Julia with the environment ",
+                  "variable JULIA_NUM_THREADS set to the number of physical cores of your CPU.")
+        end
     end
 end
 
@@ -145,10 +152,10 @@ end
 
 @inline function checkbounds_p(p::T, nv, ne) where T <: Tuple
     if p[1] isa AbstractArray
-        size(p[1])[end] == nv ? nothing : error("Error: The size of the parameter array does not match the number of nodes. Make sure the correct number of parameters is given when using the tuple syntax.")
+        size(p[1])[end] != nv && error("Error: The size of the parameter array does not match the number of nodes. Make sure the correct number of parameters is given when using the tuple syntax.")
     end
     if p[2] isa AbstractArray
-        size(p[2])[end] == ne ? nothing : error("Error: The size of the parameter array does not match the number of edges. Make sure the correct number of parameters is given when using the tuple syntax.")
+        size(p[2])[end] != ne && error("Error: The size of the parameter array does not match the number of edges. Make sure the correct number of parameters is given when using the tuple syntax.")
     end
     nothing
 end

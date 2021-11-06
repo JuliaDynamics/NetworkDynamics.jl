@@ -67,20 +67,17 @@ For more details see the documentation.
         coupling_types = (:undefined, :directed, :fiducial, :undirected, :symmetric,
                           :antisymmetric)
 
-        coupling ∈ coupling_types ? nothing :
-            error("Coupling type not recognized. Choose from $coupling_types.")
-
-        dim > 0 ? nothing : error("dim has to be a positive number.")
-
-        dim == length(sym) ? nothing : error("Please specify a symbol for every dimension.")
+        coupling ∉ coupling_types && error("Coupling type not recognized. Choose from $coupling_types.")
+        dim ≤ 0 && error("dim has to be a positive number.")
+        dim != length(sym) && error("Please specify a symbol for every dimension.")
 
         if coupling ∈ [:undefined, :directed]
             return new{T}(user_f, dim, coupling, sym)
 
         elseif coupling == :fiducial
-            dim % 2 == 0 ? nothing : error("Fiducial edges are required to have even dim.
-                                            The first dim args are used for src -> dst,
-                                            the second for dst -> src coupling.")
+            dim % 2 != 0 && error("Fiducial edges are required to have even dim. ",
+                                  "The first dim args are used for src -> dst ",
+                                  "the second for dst -> src coupling.")
             return new{T}(user_f, dim, coupling, sym)
 
         elseif coupling == :undirected
@@ -229,29 +226,19 @@ For more details see the documentation.
 
         coupling_types = (:directed, :fiducial, :undirected)
 
-        coupling == :undefined ?
-            error("ODEEdges with undefined coupling type are not implemented at the "*
-            "moment. Choose `coupling` from $coupling_types.") : nothing
-
-        coupling ∈ (:symmetric, :antisymmetric) ?
-             error("Coupling type $coupling is not available for ODEEdges.") : nothing
-
-
-
-        coupling ∈ coupling_types ? nothing :
-            error("Coupling type not recognized. Choose from $coupling_types.")
-
-
-        dim > 0 ? nothing : error("dim has to be a positive number.")
-
-        dim == length(sym) ? nothing : error("Please specify a symbol for every dimension.")
+        coupling == :undefined && error("ODEEdges with undefined coupling type are not implemented at the "*
+            "moment. Choose `coupling` from $coupling_types.")
+        coupling ∈ (:symmetric, :antisymmetric) && error("Coupling type $coupling is not available for ODEEdges.")
+        coupling ∉ coupling_types && error("Coupling type not recognized. Choose from $coupling_types.")
+        dim ≤ 0 && error("dim has to be a positive number.")
+        dim != length(sym) && error("Please specify a symbol for every dimension.")
 
         if coupling == :directed
             return new{T}(user_f, dim, coupling, mass_matrix, sym)
         elseif coupling == :fiducial
-            dim % 2 == 0 ? nothing : error("Fiducial edges are required to have even dim.
-                                            The first dim args are used for src -> dst,
-                                            the second for dst -> src coupling.")
+            dim % 2 != 0 && error("Fiducial edges are required to have even dim. ",
+                                  "The first dim args are used for src -> dst ",
+                                  "the second for dst -> src coupling.")
             return new{T}(user_f, dim, coupling, mass_matrix, sym)
 
         elseif coupling == :undirected
@@ -334,20 +321,17 @@ Like a static edge but with extra arguments for the history of the source and de
         coupling_types = (:undefined, :directed, :fiducial, :undirected, :symmetric,
                           :antisymmetric)
 
-        coupling ∈ coupling_types ? nothing :
-            error("Coupling type not recognized. Choose from $coupling_types.")
-
-        dim > 0 ? nothing : error("dim has to be a positive number.")
-
-        dim == length(sym) ? nothing : error("Please specify a symbol for every dimension.")
+        coupling ∉ coupling_types && error("Coupling type not recognized. Choose from $coupling_types.")
+        dim ≤ 0 && error("dim has to be a positive number.")
+        dim != length(sym) && error("Please specify a symbol for every dimension.")
 
         if coupling ∈ [:undefined, :directed]
             return new{T}(user_f, dim, coupling, sym)
 
         elseif coupling == :fiducial
-            dim % 2 == 0 ? nothing : error("Fiducial edges are required to have even dim.
-                                            The first dim args are used for src -> dst,
-                                            the second for dst -> src coupling.")
+            dim % 2 != 0 && error("Fiducial edges are required to have even dim. ",
+                                  "The first dim args are used for src -> dst ",
+                                  "the second for dst -> src coupling.")
             return new{T}(user_f, dim, coupling, sym)
 
         elseif coupling == :undirected

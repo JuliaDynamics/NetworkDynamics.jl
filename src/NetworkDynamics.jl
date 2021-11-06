@@ -107,8 +107,7 @@ function network_dynamics(vertices!::Vector{T}, edges!::Vector{U}, graph; kwargs
     hasODEEdge = any(e -> e isa ODEEdge, edges!)
 
 
-    hasDelay && hasODEEdge ? error(
-        ArgumentError("ODEEdges with delay are not supported at the moment.")) : nothing
+    hasDelay && hasODEEdge && error(ArgumentError("ODEEdges with delay are not supported at the moment."))
 
     # If one edge is an ODEEdge all other edges will be promoted. Eventually we will get rid of promotions.
     if hasODEEdge && any(e -> e isa StaticEdge, edges!)
