@@ -29,7 +29,7 @@ g_directed = SimpleDiGraph(g_weighted)
 ```
 Fitz-Hugh Nagumo vertex with electrical gap junctions
 ```
-@inline Base.@propagate_inbounds function fhn_electrical_vertex!(dv, v, edges, p, t)
+Base.@propagate_inbounds function fhn_electrical_vertex!(dv, v, edges, p, t)
     dv[1] = v[1] - v[1]^3 / 3 - v[2]
     dv[2] = (v[1] - a) * ϵ # x=(u,v)^T
     for e in edges
@@ -38,7 +38,7 @@ Fitz-Hugh Nagumo vertex with electrical gap junctions
     nothing
 end
 
-@inline Base.@propagate_inbounds function electrical_edge!(e, v_s, v_d, p, t)
+Base.@propagate_inbounds function electrical_edge!(e, v_s, v_d, p, t)
     e[1] =  p * (v_s[1] - v_d[1]) # p is the coupling strength
     nothing
 end

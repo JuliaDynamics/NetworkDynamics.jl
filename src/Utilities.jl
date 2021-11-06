@@ -73,7 +73,7 @@ Utility function that drops the indexing operation when the argument is not
 a subtype of AbstractArray. Used in the inner loop of Network Dynamics. Should
 eventually be replaced by a macro that writes out the dispatches.
 """
-@inline Base.@propagate_inbounds function maybe_idx(p::T, i) where T <: AbstractArray
+Base.@propagate_inbounds function maybe_idx(p::T, i) where T <: AbstractArray
     p[i]
 end
 
@@ -83,27 +83,27 @@ end
 
 ## non-allocating but code duplication
 
-@inline Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2,T3}, i) where {T1 <: AbstractArray, T2, T3}
+Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2,T3}, i) where {T1 <: AbstractArray, T2, T3}
     @view p[1][:, i]
 end
 
-@inline Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2,T3}, i) where {T1 <: AbstractVector{T4} where T4, T3, T2}
+Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2,T3}, i) where {T1 <: AbstractVector{T4} where T4, T3, T2}
     p[1][i]
 end
 
-@inline Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2, T3}, i) where {T1, T2, T3}
+Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2, T3}, i) where {T1, T2, T3}
     p[1]
 end
 
-@inline Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2}, i) where {T1 <: AbstractArray, T2}
+Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2}, i) where {T1 <: AbstractArray, T2}
     @view p[1][:, i]
 end
 
-@inline Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2}, i) where {T1 <: AbstractVector{T3} where T3, T2}
+Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2}, i) where {T1 <: AbstractVector{T3} where T3, T2}
     p[1][i]
 end
 
-@inline Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2}, i) where {T1, T2}
+Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2}, i) where {T1, T2}
     p[1]
 end
 
@@ -116,27 +116,27 @@ end
 
 ## non-allocating but code duplication
 
-@inline Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2,T3}, i) where {T1 <: AbstractArray, T2, T3}
+Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2,T3}, i) where {T1 <: AbstractArray, T2, T3}
     @view p[2][:, i]
 end
 
-@inline Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2,T3}, i) where {T1 <: AbstractVector{T4} where T4, T3, T2}
+Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2,T3}, i) where {T1 <: AbstractVector{T4} where T4, T3, T2}
     p[2][i]
 end
 
-@inline Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2, T3}, i) where {T1, T2, T3}
+Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2, T3}, i) where {T1, T2, T3}
     p[2]
 end
 
-@inline Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2}, i) where {T1, T2 <: AbstractArray}
+Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2}, i) where {T1, T2 <: AbstractArray}
     @view p[2][:, i]
 end
 
-@inline Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2}, i) where {T1, T2 <: AbstractVector{T3} where T3}
+Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2}, i) where {T1, T2 <: AbstractVector{T3} where T3}
     p[2][i]
 end
 
-@inline Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2}, i) where {T1, T2}
+Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2}, i) where {T1, T2}
     p[2]
 end
 

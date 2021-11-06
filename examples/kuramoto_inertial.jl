@@ -40,14 +40,14 @@ kur_network_L = ODEFunction(kn) #, jac_prototype=Jv)
 ### Now for NetworkDynamics
 
 # StaticEdge fct
-@inline Base.@propagate_inbounds function kuramoto_edge!(e,v_s,v_d,p,t)
+Base.@propagate_inbounds function kuramoto_edge!(e,v_s,v_d,p,t)
     # coupling strength K=5
     e[1] = 5. * sin(v_s[2] - v_d[2])
     nothing
 end
 
 # StaticEdge fct
-@inline Base.@propagate_inbounds function promotable_kuramoto_edge!(e,v_s,v_d,p,t)
+Base.@propagate_inbounds function promotable_kuramoto_edge!(e,v_s,v_d,p,t)
     # coupling strength K=5
     e[1] = 5. * sin(v_s[2] - v_d[2])
     e[2] = 5. * sin(v_d[2] - v_s[2])
@@ -55,7 +55,7 @@ end
 end
 
 # ODEdedge fct
-@inline Base.@propagate_inbounds function kuramoto_dedge!(de, e, v_s, v_d, p, t)
+Base.@propagate_inbounds function kuramoto_dedge!(de, e, v_s, v_d, p, t)
     de[1] = 100. * (5. * sin(v_s[2] - v_d[2]) - e[1])
     de[2] = 100. * (5. * sin(v_d[2] - v_s[2]) - e[2])
     nothing
@@ -63,8 +63,7 @@ end
 
 
 # ODEVertex function
-# @inline Base.@propagate_inbounds
-@inline Base.@propagate_inbounds function kuramoto_vertex!(dv, v, edges, p, t)
+Base.@propagate_inbounds function kuramoto_vertex!(dv, v, edges, p, t)
     dv[1] = p - v[1]
     for e in edges
         dv[1] += e[1]

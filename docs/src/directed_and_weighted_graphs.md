@@ -70,13 +70,13 @@ nothing # hide
 
 ## Setting up the ODEProblem
 
-Defining `VertexFunction` and `EdgeFunction` is similar to the example before. The macros `@inline` and `Base.@propagate_inbounds` give the compiler more freedom to compile efficient code. For more details see the julia [documentation](https://docs.julialang.org/en/v1/devdocs/boundscheck/).
+Defining `VertexFunction` and `EdgeFunction` is similar to the example before. The macro `Base.@propagate_inbounds` tells the compiler to inline the function and propagate the inbounds context. For more details see the julia [documentation](https://docs.julialang.org/en/v1/devdocs/boundscheck/).
 
 
 ```@example fhn
 using NetworkDynamics
 
-@inline Base.@propagate_inbounds function fhn_electrical_vertex!(dv, v, edges, p, t)
+Base.@propagate_inbounds function fhn_electrical_vertex!(dv, v, edges, p, t)
     dv[1] = v[1] - v[1]^3 / 3 - v[2]
     dv[2] = (v[1] - a) * ϵ
     for e in edges
@@ -85,7 +85,7 @@ using NetworkDynamics
     nothing
 end
 
-@inline Base.@propagate_inbounds function electrical_edge!(e, v_s, v_d, p, t)
+Base.@propagate_inbounds function electrical_edge!(e, v_s, v_d, p, t)
     e[1] =  p * (v_s[1] - v_d[1]) # * σ
     nothing
 end

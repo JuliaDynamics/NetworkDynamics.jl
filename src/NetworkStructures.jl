@@ -168,11 +168,11 @@ struct EdgeData{GDB, elE} <: AbstractVector{elE}
     len::Int
 end
 
-@inline Base.@propagate_inbounds function getindex(e_dat::EdgeData, idx)
+Base.@propagate_inbounds function getindex(e_dat::EdgeData, idx)
     e_dat.gdb.e_array[idx + e_dat.idx_offset]
 end
 
-@inline Base.@propagate_inbounds function setindex!(e_dat::EdgeData, x, idx)
+Base.@propagate_inbounds function setindex!(e_dat::EdgeData, x, idx)
     e_dat.gdb.e_array[idx + e_dat.idx_offset] = x
     nothing
 end
@@ -206,11 +206,11 @@ struct VertexData{GDB, elV} <: AbstractVector{elV}
     len::Int
 end
 
-@inline Base.@propagate_inbounds function getindex(v_dat::VertexData, idx)
+Base.@propagate_inbounds function getindex(v_dat::VertexData, idx)
     v_dat.gdb.v_array[idx + v_dat.idx_offset]
 end
 
-@inline Base.@propagate_inbounds function setindex!(v_dat::VertexData, x, idx)
+Base.@propagate_inbounds function setindex!(v_dat::VertexData, x, idx)
     v_dat.gdb.v_array[idx + v_dat.idx_offset] = x
     nothing
 end
