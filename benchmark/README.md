@@ -11,14 +11,16 @@ have this pkg in your global environment so it is loadable! Otherwise we'd
 have to add this to the `NetworkDynamics.jl` deps...
 
 The easiest way to run the benchmarks is
+
 ```
 $ cd NetworkDynamics/benchmarks
 $ ./run_benchmarks.jl
 ```
+
 which will run the benchmark defined in the current directory
 
-- for the currently checked out version of ND
-- for main
+  - for the currently checked out version of ND
+  - for main
 
 and export the results to `target.md`, `baseline.md` and `judgment.md`.
 

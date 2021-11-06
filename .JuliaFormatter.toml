@@ -64,7 +64,7 @@ indent_submodule = false
 verbose = true
 
 # also format markdown files?
-format_markdown = false
+format_markdown = true
 
 # alignment rules
 # foo     = 1

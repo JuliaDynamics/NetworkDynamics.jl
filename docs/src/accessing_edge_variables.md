@@ -1,6 +1,6 @@
 # Accessing internal edge values
 
- In the following, we will present two different ways how the edge values of an `ODEFunction` with `StaticEdge`s  can be retrieved. A more extensive demonstration is available in the examples folder.
+In the following, we will present two different ways how the edge values of an `ODEFunction` with `StaticEdge`s  can be retrieved. A more extensive demonstration is available in the examples folder.
 
 ## Accessing edge values via GetGD
 
@@ -30,7 +30,7 @@ function saving_func(u, t, integrator)
     edgevals
 end
 cb = SavingCallback(saving_func, saved_values)
-sol = solve(prob, Tsit5(), callback=cb)
+sol = solve(prob, Tsit5(); callback=cb)
 ```
 
 The variables `saved_values` will contain the stored edge values. At the moment this method requires detailed knowledge of the internal data structures. Our plan is to simplify this in a future release.

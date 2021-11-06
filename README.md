@@ -1,12 +1,11 @@
 # NetworkDynamics
 
 [![](https://img.shields.io/badge/docs-dev-blue.svg)](https://pik-icone.github.io/NetworkDynamics.jl/dev)
-<!-- [![](https://img.shields.io/badge/docs-stable-blue.svg)](https://pik-icone.github.io/NetworkDynamics.jl/stable) -->
 
+<!-- [![](https://img.shields.io/badge/docs-stable-blue.svg)](https://pik-icone.github.io/NetworkDynamics.jl/stable) -->
 A package for working with dynamical systems on complex networks. NetworkDynamics.jl provides an interface between [Graphs.jl](https://github.com/JuliaGraphs/Graphs.jl) and [DifferentialEquations.jl](https://github.com/JuliaDiffEq/DifferentialEquations.jl). It allows to define several types of dynamic and static nodes and edges and to link them up in order to create complex network dynamics.
 
 The behavior of a node or an edge can be described by algebraic equations, by differential algebraic equation (DAEs) in mass matrix form, by ordinary differential equations (ODE) or by delay differential equations (DDE). Stochastic ordinary differential equations (SDE) can be implemented as a [two-layer network](https://github.com/pik-icone/NetworkDynamics.jl/blob/master/examples/sde.jl). For details see the [docs](https://pik-icone.github.io/NetworkDynamics.jl/dev).
-
 
 ## Getting started
 
@@ -20,7 +19,7 @@ In our benchmark on the Kuramoto model NetworkDynamics.jl + DifferentialEquation
 
 ## PowerDynamics
 
-[PowerDynamics.jl](https://juliaenergy.github.io/PowerDynamics.jl/stable/) is an open-source framework for dynamic power grid modeling and analysis build on top of NetworkDynamics.jl. 
+[PowerDynamics.jl](https://juliaenergy.github.io/PowerDynamics.jl/stable/) is an open-source framework for dynamic power grid modeling and analysis build on top of NetworkDynamics.jl.
 
 ## Citations
 
