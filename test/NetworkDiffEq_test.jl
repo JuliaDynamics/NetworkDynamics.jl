@@ -1,5 +1,5 @@
 using Test
-using LightGraphs
+using Graphs
 using NetworkDynamics
 
 @testset "Test ODE_Static" begin
@@ -10,14 +10,14 @@ using NetworkDynamics
     end
 
     @inline function diffusionvertex!(dv, v, edges, p, t)
-        dv[1] = 0.
+        dv[1] = 0.0
         for e in edges
             dv[1] += e[1]
         end
         nothing
     end
-    nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 1)
-    nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1, coupling = :antisymmetric)
+    nd_diffusion_vertex = ODEVertex(; f=diffusionvertex!, dim=1)
+    nd_diffusion_edge = StaticEdge(; f=diffusionedge!, dim=1, coupling=:antisymmetric)
 
     # set up networ_dynamics on graph
     N = 10
@@ -27,17 +27,17 @@ using NetworkDynamics
     x = rand(N)
     dx = similar(x)
     # first run to compile
-    nd(dx, x, nothing, 0.)
+    nd(dx, x, nothing, 0.0)
 
     # function barrier, otherwise there are still allocations
     function alloc(nd, dx, x)
-        @allocated nd(dx, x, nothing, 0.)
+        @allocated nd(dx, x, nothing, 0.0)
     end
     # test allocation free main loop
     @test 0 == alloc(nd, dx, x)
 
     # test prep_gd
-    gd = nd(x, nothing, 0., GetGD)
+    gd = nd(x, nothing, 0.0, GetGD)
     gs = nd(GetGS)
     # first test array of same type
     a = rand(length(x))
@@ -57,7 +57,7 @@ end
 @testset "Test DDE_Static" begin
     # create a simple DDE_Static model
     @inline function diffusionedge!(e, v_s, v_d, p, t)
-        e .= .1 * (v_s - v_d)
+        e .= 0.1 * (v_s - v_d)
         nothing
     end
 
@@ -67,13 +67,13 @@ end
         nothing
     end
 
-    nd_diffusion_vertex = DDEVertex(f! = diffusionvertex!, dim = 1)
-    nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1, coupling = :antisymmetric)
+    nd_diffusion_vertex = DDEVertex(; f=diffusionvertex!, dim=1)
+    nd_diffusion_edge = StaticEdge(; f=diffusionedge!, dim=1, coupling=:antisymmetric)
 
     # set up network_dynamics on graph
     N = 20
     k = 8
-    g = watts_strogatz(N, k, 0.)
+    g = watts_strogatz(N, k, 0.0)
 
     nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g)
 
@@ -94,7 +94,7 @@ end
     alloc(nd, dx, x, h)
 
     # test prep_gd
-    gd = nd(x, p, 0., GetGD)
+    gd = nd(x, p, 0.0, GetGD)
 
     gs = nd(GetGS)
     # first test array of same type
@@ -120,34 +120,34 @@ end
     end
 
     @inline function diffusionvertex!(dv, v, edges, p, t)
-        dv[1] = 0.
+        dv[1] = 0.0
         for e in edges
             dv[1] += e[1]
         end
         nothing
     end
-    nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 1)
-    nd_edge = ODEEdge(f! = edge!, dim = 2, coupling = :fiducial)
+    nd_diffusion_vertex = ODEVertex(; f=diffusionvertex!, dim=1)
+    nd_edge = ODEEdge(; f=edge!, dim=2, coupling=:fiducial)
 
     # set up networ_dynamics on graph
     N = 10
     g = barabasi_albert(N, 3, 2)
     nd = network_dynamics(nd_diffusion_vertex, nd_edge, g)
 
-    x = rand(nv(g)+2ne(g))
+    x = rand(nv(g) + 2ne(g))
     dx = similar(x)
     # first run to compile
-    nd(dx, x, nothing, 0.)
+    nd(dx, x, nothing, 0.0)
 
     # function barrier, otherwise there are still allocations
     function alloc(nd, dx, x)
-        @allocated nd(dx, x, nothing, 0.)
+        @allocated nd(dx, x, nothing, 0.0)
     end
     # test allocation free main loop
     @test 0 == alloc(nd, dx, x)
 
     # test prep_gd
-    gd = nd(x, nothing, 0., GetGD)
+    gd = nd(x, nothing, 0.0, GetGD)
     gs = nd(GetGS)
     # first test array of same type
     a = rand(length(x))

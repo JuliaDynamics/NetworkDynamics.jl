@@ -2,24 +2,33 @@ import NLsolve: nlsolve, converged
 using LinearAlgebra
 using SparseArrays
 
+"""
+    warn_parallel(b::Bool)
+
+If `b=true` (run in parallel mode) give a warning if either
+
+  - `ENV["JULIA_NUM_THREADS"]` not found in ENV
+  - `ENV["JULIA_NUM_THREADS"] ≤ 1`, i.e. there is just a single thread
+"""
 function warn_parallel(b::Bool)
     if b
-        haskey(ENV, "JULIA_NUM_THREADS") &&
-        parse(Int, ENV["JULIA_NUM_THREADS"]) > 1 ? nothing :
-        print("Warning: You are using multi-threading with only one thread ",
-        "available to Julia. Consider re-starting Julia with the environment ",
-        "variable JULIA_NUM_THREADS set to the number of physical cores of your CPU.")
+        if !haskey(ENV, "JULIA_NUM_THREADS") || parse(Int, ENV["JULIA_NUM_THREADS"]) ≤ 1
+            print("Warning: You are using multi-threading with only one thread ",
+                  "available to Julia. Consider re-starting Julia with the environment ",
+                  "variable JULIA_NUM_THREADS set to the number of physical cores of your CPU.")
+        end
     end
 end
 
 """
+    @nd_threads trigger expr
+
 nd_threads: Allows control over threading by the 1st argument,
 a boolean (likely from the network object).
 This allows you to control for multithreading at runtime without
 code duplication.
 """
-
-macro nd_threads(trigger,args...)
+macro nd_threads(trigger, args...)
     na = length(args)
     if na != 1
         throw(ArgumentError("wrong number of arguments in @nd_threads"))
@@ -59,11 +68,13 @@ end
 
 
 """
+    maybe_idx(p::T, i) where T <: AbstractArray
+
 Utility function that drops the indexing operation when the argument is not
 a subtype of AbstractArray. Used in the inner loop of Network Dynamics. Should
 eventually be replaced by a macro that writes out the dispatches.
 """
-@inline Base.@propagate_inbounds function maybe_idx(p::T, i) where T <: AbstractArray
+Base.@propagate_inbounds function maybe_idx(p::T, i) where {T<:AbstractArray}
     p[i]
 end
 
@@ -73,27 +84,27 @@ end
 
 ## non-allocating but code duplication
 
-@inline Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2,T3}, i) where {T1 <: AbstractArray, T2, T3}
+Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2,T3}, i) where {T1<:AbstractArray,T2,T3}
     @view p[1][:, i]
 end
 
-@inline Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2,T3}, i) where {T1 <: AbstractArray{T4, 1} where T4, T3, T2}
+Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2,T3}, i) where {T1<:AbstractVector{T4} where {T4},T3,T2}
     p[1][i]
 end
 
-@inline Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2, T3}, i) where {T1, T2, T3}
+Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2,T3}, i) where {T1,T2,T3}
     p[1]
 end
 
-@inline Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2}, i) where {T1 <: AbstractArray, T2}
+Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2}, i) where {T1<:AbstractArray,T2}
     @view p[1][:, i]
 end
 
-@inline Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2}, i) where {T1 <: AbstractArray{T3, 1} where T3, T2}
+Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2}, i) where {T1<:AbstractVector{T3} where {T3},T2}
     p[1][i]
 end
 
-@inline Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2}, i) where {T1, T2}
+Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2}, i) where {T1,T2}
     p[1]
 end
 
@@ -106,27 +117,27 @@ end
 
 ## non-allocating but code duplication
 
-@inline Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2,T3}, i) where {T1 <: AbstractArray, T2, T3}
+Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2,T3}, i) where {T1<:AbstractArray,T2,T3}
     @view p[2][:, i]
 end
 
-@inline Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2,T3}, i) where {T1 <: AbstractArray{T4, 1} where T4, T3, T2}
+Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2,T3}, i) where {T1<:AbstractVector{T4} where {T4},T3,T2}
     p[2][i]
 end
 
-@inline Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2, T3}, i) where {T1, T2, T3}
+Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2,T3}, i) where {T1,T2,T3}
     p[2]
 end
 
-@inline Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2}, i) where {T1, T2 <: AbstractArray}
+Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2}, i) where {T1,T2<:AbstractArray}
     @view p[2][:, i]
 end
 
-@inline Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2}, i) where {T1, T2 <: AbstractArray{T3, 1} where T3}
+Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2}, i) where {T1,T2<:AbstractVector{T3} where {T3}}
     p[2][i]
 end
 
-@inline Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2}, i) where {T1, T2}
+Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2}, i) where {T1,T2}
     p[2]
 end
 
@@ -140,12 +151,14 @@ end
     nothing
 end
 
-@inline function checkbounds_p(p::T, nv, ne) where T <: Tuple
+@inline function checkbounds_p(p::T, nv, ne) where {T<:Tuple}
     if p[1] isa AbstractArray
-        size(p[1])[end] == nv ? nothing : error("Error: The size of the parameter array does not match the number of nodes. Make sure the correct number of parameters is given when using the tuple syntax.")
+        size(p[1])[end] != nv &&
+            error("Error: The size of the parameter array does not match the number of nodes. Make sure the correct number of parameters is given when using the tuple syntax.")
     end
     if p[2] isa AbstractArray
-        size(p[2])[end] == ne ? nothing : error("Error: The size of the parameter array does not match the number of edges. Make sure the correct number of parameters is given when using the tuple syntax.")
+        size(p[2])[end] != ne &&
+            error("Error: The size of the parameter array does not match the number of edges. Make sure the correct number of parameters is given when using the tuple syntax.")
     end
     nothing
 end
@@ -155,8 +168,10 @@ end
 export sum_coupling!
 
 """
+    sum_coupling!(e_sum, dst_edges)
+
 A small utility function for writing diffusion dynamics. It provides the
- sum of all incoming edges.
+sum of all incoming edges.
 """
 @inline function sum_coupling!(e_sum, dst_edges)
     @inbounds for e in dst_edges
@@ -168,11 +183,12 @@ end
 export find_fixpoint
 
 """
+    find_fixpoint(nd, p, initial_guess)
+
 Utility function for finding fixpoints.
 """
-
 function find_fixpoint(nd, p, initial_guess)
-    nl_res = nlsolve((dx, x) -> nd(dx, x, p, 0.), initial_guess)
+    nl_res = nlsolve((dx, x) -> nd(dx, x, p, 0.0), initial_guess)
     if converged(nl_res) == true
         return nl_res.zero
     else
@@ -183,6 +199,9 @@ end
 export RootRhs
 
 """
+    struct RootRhs
+    RootRhs(of)
+
 A utility function that provides a root function, to find valid initial
 conditions. The operator ``M^\\dagger M - 1`` projects onto the kernel of ``M``.
 The differential equation is ``M dx/dt = f(x)``, and can thus only be satisfied
@@ -198,7 +217,7 @@ struct RootRhs
 end
 function (rr::RootRhs)(x)
     f_x = similar(x)
-    rr.rhs(f_x, x, nothing, 0.)
+    rr.rhs(f_x, x, nothing, 0.0)
     rr.mpm * f_x .- f_x
 end
 
@@ -214,6 +233,8 @@ export find_valid_ic
 
 
 """
+    find_valid_ic(of, ic_guess)
+
 Try to find valid initial conditions for problems involving mass matrices.
 Uses RootRhs as residual function.
 """
@@ -255,11 +276,11 @@ function construct_mass_matrix(mmv_array, gs)
     if all([mm == I for mm in mmv_array])
         mass_matrix = I
     else
-        mass_matrix = sparse(1.0I,gs.dim_v, gs.dim_v)
+        mass_matrix = sparse(1.0I, gs.dim_v, gs.dim_v)
         for (i, mm) in enumerate(mmv_array)
             ind = gs.v_idx[i]
             if ndims(mm) == 0
-                copyto!(@view(mass_matrix[ind, ind]), mm*I)
+                copyto!(@view(mass_matrix[ind, ind]), mm * I)
             elseif ndims(mm) == 1
                 copyto!(@view(mass_matrix[ind, ind]), Diagonal(mm))
             elseif ndims(mm) == 2 # ndims(I) = 2
@@ -278,11 +299,11 @@ function construct_mass_matrix(mmv_array, mme_array, gs)
         mass_matrix = I
     else
         dim_nd = gs.dim_v + gs.dim_e
-        mass_matrix = sparse(1.0I,dim_nd,dim_nd)
+        mass_matrix = sparse(1.0I, dim_nd, dim_nd)
         for (i, mm) in enumerate(mmv_array)
             ind = gs.v_idx[i]
             if ndims(mm) == 0
-                copyto!(@view(mass_matrix[ind, ind]), mm*I)
+                copyto!(@view(mass_matrix[ind, ind]), mm * I)
             elseif ndims(mm) == 1
                 copyto!(@view(mass_matrix[ind, ind]), Diagonal(mm))
             elseif ndims(mm) == 2 # ndims(I) = 2
@@ -295,7 +316,7 @@ function construct_mass_matrix(mmv_array, mme_array, gs)
         for (i, mm) in enumerate(mme_array)
             ind = gs.dim_v .+ (gs.e_idx[i])
             if ndims(mm) == 0
-                copyto!(@view(mass_matrix[ind, ind]), mm*I)
+                copyto!(@view(mass_matrix[ind, ind]), mm * I)
             elseif ndims(mm) == 1
                 copyto!(@view(mass_matrix[ind, ind]), Diagonal(mm))
             elseif ndims(mm) == 2 # ndims(I) = 2

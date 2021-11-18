@@ -1,10 +1,11 @@
 # Neurodynamic model of synchronization in the human brain
 
 #### Topics covered in this tutorial include:
- * constructing a directed, weighted graph from data
- * some useful macros
- * parameter handling
- * stiff equations
+
+  - constructing a directed, weighted graph from data
+  - some useful macros
+  - parameter handling
+  - stiff equations
 
 ## The FitzHugh-Nagumo model
 
@@ -16,7 +17,6 @@ Dynamics of spiking neurons have been described in a simplified manner by the [F
 \dot v & =  u + a
 \end{aligned}
 ```
-
 
 Here $u$ is a fast, excitatory variable corresponding to the membrane potential and $v$ is a slower, inhibitory varibale. $\varepsilon$ is a parameter separating these time-scales, and $a$ is a control parameter.
 
@@ -41,7 +41,6 @@ In the following we will use a directed and weigthed network encoding the streng
 
 The network weight matrix is given as a text file containing 90 lines with 90 numbers representing the coupling strength and separated by commas `,`. The data can be conveniently read into a matrix with the `DelimitedFiles` module.
 
-
 ```@example fhn
 using DelimitedFiles
 # adjust the load path for your filesystem!
@@ -49,11 +48,10 @@ G = readdlm(joinpath(@__DIR__, "../../examples/Norm_G_DTI.txt"), ',', Float64, '
 nothing # hide
 ```
 
-The data structure for directed, weighted graphs is provided by the package `SimpleWeightedGraphs.jl` which is based on `LightGraphs.jl`.
-
+The data structure for directed, weighted graphs is provided by the package `SimpleWeightedGraphs.jl` which is based on `Graphs.jl`.
 
 ```@example fhn
-using SimpleWeightedGraphs, LightGraphs
+using SimpleWeightedGraphs, Graphs
 
 # First we construct a weighted, directed graph
 g_weighted = SimpleWeightedDiGraph(G)
@@ -70,13 +68,12 @@ nothing # hide
 
 ## Setting up the ODEProblem
 
-Defining `VertexFunction` and `EdgeFunction` is similar to the example before. The macros `@inline` and `Base.@propagate_inbounds` give the compiler more freedom to compile efficient code. For more details see the julia [documentation](https://docs.julialang.org/en/v1/devdocs/boundscheck/).
-
+Defining `VertexFunction` and `EdgeFunction` is similar to the example before. The macro `Base.@propagate_inbounds` tells the compiler to inline the function and propagate the inbounds context. For more details see the julia [documentation](https://docs.julialang.org/en/v1/devdocs/boundscheck/).
 
 ```@example fhn
 using NetworkDynamics
 
-@inline Base.@propagate_inbounds function fhn_electrical_vertex!(dv, v, edges, p, t)
+Base.@propagate_inbounds function fhn_electrical_vertex!(dv, v, edges, p, t)
     dv[1] = v[1] - v[1]^3 / 3 - v[2]
     dv[2] = (v[1] - a) * ϵ
     for e in edges
@@ -85,13 +82,13 @@ using NetworkDynamics
     nothing
 end
 
-@inline Base.@propagate_inbounds function electrical_edge!(e, v_s, v_d, p, t)
-    e[1] =  p * (v_s[1] - v_d[1]) # * σ
+Base.@propagate_inbounds function electrical_edge!(e, v_s, v_d, p, t)
+    e[1] = p * (v_s[1] - v_d[1]) # * σ
     nothing
 end
 
-odeelevertex = ODEVertex(f! = fhn_electrical_vertex!, dim = 2, sym=[:u, :v]);
-electricaledge = StaticEdge(f! = electrical_edge!, dim = 1, coupling = :directed)
+odeelevertex = ODEVertex(; f=fhn_electrical_vertex!, dim=2, sym=[:u, :v]);
+electricaledge = StaticEdge(; f=electrical_edge!, dim=1, coupling=:directed)
 
 fhn_network! = network_dynamics(odeelevertex, electricaledge, g_directed)
 
@@ -109,8 +106,8 @@ Note that the multiplication with the coupling strength $\sigma$ has been commen
 
 N = 90         # number of nodes
 const ϵ = 0.05 # global variables that are accessed several times should be declared `const`
-const a = .5
-const σ = .5
+const a = 0.5
+const σ = 0.5
 
 # Tuple of parameters for nodes and edges
 
@@ -129,13 +126,12 @@ The behaviour of `network_dynamics` changes with the type of parameters `p` bein
 
 Now we are ready to create an `ODEProblem`. Since for some choices of parameters the FitzHugh-Nagumo model is *stiff* (i.e. numerically unstable), we use a solver with automated stiffness detection. Such a solver switches to a more stable solver only when the solution enters a region of phase space where the problem is numerically unstable. In this case we use `Tsit5` and switch to `TRBDF2` when necessary. `AutoTsit5` is the switching version of the `Tsit5` algorithm.
 
-
 ```@example fhn
 using OrdinaryDiffEq
 
-tspan = (0., 200.)
+tspan = (0.0, 200.0)
 prob  = ODEProblem(fhn_network!, x0, tspan, p)
-sol   = solve(prob, AutoTsit5(TRBDF2()));
+sol = solve(prob, AutoTsit5(TRBDF2()));
 nothing # hide
 ```
 
@@ -143,9 +139,8 @@ nothing # hide
 
 The plot of the excitatory variables shows that they synchronize for this choice of parameters.
 
-
 ```@example fhn
 using Plots
 
-plot(sol, vars = idx_containing(fhn_network!, :u), legend = false, ylim=(-5, 5), fmt = :png)
+plot(sol; vars=idx_containing(fhn_network!, :u), legend=false, ylim=(-5, 5), fmt=:png)
 ```

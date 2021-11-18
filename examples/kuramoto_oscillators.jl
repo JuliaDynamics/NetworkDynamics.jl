@@ -1,5 +1,5 @@
 using NetworkDynamics
-using LightGraphs
+using Graphs
 using OrdinaryDiffEq
 using Plots
 
@@ -17,20 +17,20 @@ g = barabasi_albert(N, k) # graph
     nothing
 end
 
-@inline function kuramoto_edge!(e,v_s,v_d,p,t)
+@inline function kuramoto_edge!(e, v_s, v_d, p, t)
     e .= p * sin.(v_s .- v_d)
     nothing
 end
 
 ### Constructing the network dynamics
 
-odevertex = ODEVertex(f! = kuramoto_vertex!, dim = 1)
-staticedge = StaticEdge(f! = kuramoto_edge!, dim = 1)
+odevertex = ODEVertex(; f=kuramoto_vertex!, dim=1)
+staticedge = StaticEdge(; f=kuramoto_edge!, dim=1)
 
 # generating random values for the parameter value ω_0 of the vertices
-v_pars = [1. * randn() for v in vertices(g)]
+v_pars = [1.0 * randn() for v in vertices(g)]
 # coupling stength of edges are set to 1/3
-e_pars = [1. /3. for e in edges(g)]
+e_pars = [1.0 / 3.0 for e in edges(g)]
 
 parameters = (v_pars, e_pars)
 
@@ -43,8 +43,8 @@ kuramoto_network! = network_dynamics(odevertex, staticedge, g)
 x0 = randn(nv(g)) # nv(g) - number of vertices in g
 dx = similar(x0)
 
-prob = ODEProblem(kuramoto_network!, x0, (0.,200), parameters)
-sol = solve(prob, Tsit5(), reltol = 1e-6)
+prob = ODEProblem(kuramoto_network!, x0, (0.0, 200), parameters)
+sol = solve(prob, Tsit5(); reltol=1e-6)
 
 plot(sol)
 
@@ -52,7 +52,7 @@ plot(sol)
 
 # s is a solution array
 function order_parameter(s)
-    θ  = 0.
+    θ = 0.0
     for i in s
         θ += exp(im * i)
     end
@@ -66,4 +66,4 @@ u_idx = idx_containing(kuramoto_network!, :v)
 
 # Then we compute the order parameter at each time step:
 # sol[u_idx,:] is the multidimensional solution array
-plot(abs.(mapslices(order_parameter, sol[u_idx, :], dims = 1))[1:200])
+plot(abs.(mapslices(order_parameter, sol[u_idx, :]; dims=1))[1:200])

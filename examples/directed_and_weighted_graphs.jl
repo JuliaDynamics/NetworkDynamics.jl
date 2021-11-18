@@ -2,7 +2,7 @@
 # corresponding jupyter notebook on our github repository.
 
 using DelimitedFiles
-using SimpleWeightedGraphs, LightGraphs
+using SimpleWeightedGraphs, Graphs
 using NetworkDynamics
 using OrdinaryDiffEq
 using Plots
@@ -29,7 +29,7 @@ g_directed = SimpleDiGraph(g_weighted)
 ```
 Fitz-Hugh Nagumo vertex with electrical gap junctions
 ```
-@inline Base.@propagate_inbounds function fhn_electrical_vertex!(dv, v, edges, p, t)
+Base.@propagate_inbounds function fhn_electrical_vertex!(dv, v, edges, p, t)
     dv[1] = v[1] - v[1]^3 / 3 - v[2]
     dv[2] = (v[1] - a) * ϵ # x=(u,v)^T
     for e in edges
@@ -38,14 +38,14 @@ Fitz-Hugh Nagumo vertex with electrical gap junctions
     nothing
 end
 
-@inline Base.@propagate_inbounds function electrical_edge!(e, v_s, v_d, p, t)
-    e[1] =  p * (v_s[1] - v_d[1]) # p is the coupling strength
+Base.@propagate_inbounds function electrical_edge!(e, v_s, v_d, p, t)
+    e[1] = p * (v_s[1] - v_d[1]) # p is the coupling strength
     nothing
 end
 
-electricaledge = StaticEdge(f! = electrical_edge!, dim = 1, coupling = :directed)
+electricaledge = StaticEdge(; f=electrical_edge!, dim=1, coupling=:directed)
 # since the vertex is two dimensional, we specify both symbols u,v
-odeelevertex = ODEVertex(f! = fhn_electrical_vertex!, dim = 2, sym=[:u, :v])
+odeelevertex = ODEVertex(; f=fhn_electrical_vertex!, dim=2, sym=[:u, :v])
 
 fhn_network! = network_dynamics(odeelevertex, electricaledge, g_directed)
 
@@ -53,25 +53,25 @@ fhn_network! = network_dynamics(odeelevertex, electricaledge, g_directed)
 
 N = 90 # number of nodes in the brain atlas
 const ϵ = 0.05 # time separation parameter
-const a = .5 # threshold parameter for an oscillatory regime
-const σ = .5 # coupling strength
+const a = 0.5 # threshold parameter for an oscillatory regime
+const σ = 0.5 # coupling strength
 
 # when passing a tuple of parameters for nodes and edges, then p is passed indi-
 # vidually to every edge. For details see the docs on this example
 
 p = (nothing, σ * edge_weights)
 
-x0 = randn(2N) * 5
-tspan = (0., 200.)
+x0    = randn(2N) * 5
+tspan = (0.0, 200.0)
 prob  = ODEProblem(fhn_network!, x0, tspan, p)
 sol   = solve(prob, AutoTsit5(TRBDF2()))
 
 ### Benchmarking of the simulation
 
 using BenchmarkTools
-display(@benchmark sol   = solve(prob, AutoTsit5(TRBDF2())))
-display(@benchmark fhn_network!($x0,$x0,$p,0.))
+display(@benchmark sol = solve(prob, AutoTsit5(TRBDF2())))
+display(@benchmark fhn_network!($x0, $x0, $p, 0.0))
 
 ### Plotting
 
-plot(sol, vars = idx_containing(fhn_network!, :u), legend = false, ylim=(-5, 5))
+plot(sol; vars=idx_containing(fhn_network!, :u), legend=false, ylim=(-5, 5))

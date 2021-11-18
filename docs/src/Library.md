@@ -3,6 +3,7 @@
 ## Public Interface
 
 The following functions are designed for public use
+
 ```@index
 ```
 
