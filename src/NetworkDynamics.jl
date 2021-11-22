@@ -2,6 +2,7 @@ module NetworkDynamics
 
 using DiffEqBase
 using Graphs
+import Graphs: AbstractSimpleGraph
 
 include("Utilities.jl")
 include("ComponentFunctions.jl")
@@ -97,55 +98,39 @@ of VertexFunctions **`vertices!`**, an array of EdgeFunctions **`edges!`** and a
 `Graphs.jl` object **`g`**. The optional argument `parallel` is a boolean
 value that denotes if the central loop should be executed in parallel with the number of threads set by the environment variable `JULIA_NUM_THREADS`.
 """
-function network_dynamics(vertices!::Vector{T}, edges!::Vector{U}, graph;
+function network_dynamics(vertices!::Union{T,Vector{T}},
+                          edges!::Union{U,Vector{U}},
+                          graph::AbstractSimpleGraph;
                           kwargs...) where {T<:VertexFunction,U<:EdgeFunction}
-    @assert length(vertices!) == nv(graph)
-    @assert length(edges!) == ne(graph)
+    if vertices! isa Vector
+        @assert length(vertices!) == nv(graph)
+        hasDelayVertex = any(v -> v isa DDEVertex, vertices!)
+    else
+        hasDelayVertex = vertices! isa DDEVertex
+    end
 
+    if edges! isa Vector
+        @assert length(edges!) == ne(graph)
+        hasDelayEdge = any(e -> e isa StaticDelayEdge, edges!)
+        hasODEEdge = any(e -> e isa ODEEdge, edges!)
+        hasStaticEdge = any(e -> e isa StaticEdge, edges!)
+    else
+        hasDelayEdge = edges! isa StaticDelayEdge
+        hasODEEdge = edges! isa ODEEdge
+        hasStaticEdge = edges! isa StaticEdge
+    end
 
-    hasDelay = any(v -> v isa DDEVertex, vertices!) ||
-               any(e -> e isa StaticDelayEdge, edges!)
-    hasODEEdge = any(e -> e isa ODEEdge, edges!)
-
+    hasDelay = hasDelayVertex || hasDelayEdge
 
     hasDelay && hasODEEdge && error(ArgumentError("ODEEdges with delay are not supported at the moment."))
 
     # If one edge is an ODEEdge all other edges will be promoted. Eventually we will get rid of promotions.
-    if hasODEEdge && any(e -> e isa StaticEdge, edges!)
+    if hasODEEdge && hasStaticEdge
         edges! = Array{ODEEdge}(edges!)
     end
 
     return _network_dynamics(vertices!, edges!, graph; kwargs...)
 end
-
-
-function network_dynamics(vertices!, edges!, graph; parallel=false)
-    # If vertices! and/or edges! are individual functions and no other dispatch was
-    # triggered, assume all vertices, respectively edges will be of that type
-    if typeof(vertices!) <: VertexFunction
-        vertices! = [vertices! for i in 1:nv(graph)]
-    end
-    if typeof(edges!) <: EdgeFunction
-        edges! = [edges! for i in 1:ne(graph)]
-    end
-
-    try
-        Array{VertexFunction}(vertices!)
-    catch err
-        throw(ArgumentError("Cannot convert the vertices to an Array{VertexFunction}!"))
-    end
-
-    try
-        Array{EdgeFunction}(edges!)
-    catch err
-        throw(ArgumentError("Cannot convert the edges to an Array{EdgeFunction}!"))
-    end
-
-    vertices! isa Array{Any} ? vertices! = Array{VertexFunction}(vertices!) : nothing
-    edges! isa Array{Any} ? edges! = Array{EdgeFunction}(edges!) : nothing
-    network_dynamics(vertices!, edges!, graph; parallel=parallel)
-end
-
 
 # catch all version (works only for ODEVertex, DDEVertex, StaticEdge, StaticDelayEdge)
 function _network_dynamics(vertices!::Union{Vector{T},T},
