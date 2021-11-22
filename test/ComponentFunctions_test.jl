@@ -52,10 +52,10 @@ using LinearAlgebra
 end
 
 @testset "StaticDelayEdge constructor" begin
-    f! = (e, v_s, v_d, h, v_s_idx, v_d_idx, p, t) -> begin
-        h_v_s = h(p,t - 1., idxs = v_s_idx[1])
-        h_v_d = h(p,t - 1., idxs = v_d_idx[1])
-        e[1] = h_v_s - h_v_d
+    f! = (e, v_s, v_d, h_v_s, h_v_d, p, t) -> begin
+        hist_v_s = h_v_s(t - 1., idxs = 1)
+        hist_v_d = h_v_d(t - 1., idxs = 1)
+        e[1] = hist_v_s - hist_v_d
         nothing
     end
 
@@ -72,29 +72,29 @@ end
     @test StaticDelayEdge(f!,  1, :undirected, [:e]) isa StaticDelayEdge
 
     fundir = StaticDelayEdge(f! = f!,  dim = 2, coupling = :undirected)
-    fanti = StaticDelayEdge(f! = f!,  dim = 2, coupling = :antisymmetric)
+    #fanti = StaticDelayEdge(f! = f!,  dim = 2, coupling = :antisymmetric)
     fdir = StaticDelayEdge(f! = f!,  dim = 2, coupling = :directed)
-    fsym = StaticDelayEdge(f! = f!,  dim = 2, coupling = :symmetric)
+    #fsym = StaticDelayEdge(f! = f!,  dim = 2, coupling = :symmetric)
     ffid = StaticDelayEdge(f! = f!,  dim = 2, coupling = :fiducial)
 
     x = rand(2)
     y = rand(2)
 
     eundir = zeros(4)
-    eanti  = zeros(4)
-    esym   = zeros(4)
+    #eanti  = zeros(4)
+    #esym   = zeros(4)
     edir   = zeros(2)
     efid   = zeros(2)
 
-    fundir.f!(eundir, nothing, nothing, (p,t; idxs = nothing) -> 1., [1.], [1.], nothing, 0.)
-    fanti.f!(eanti, nothing, nothing, (p,t; idxs = nothing) -> 1., [1.], [1.], nothing, 0.)
-    fsym.f!(esym, nothing, nothing, (p,t; idxs = nothing) -> 1., [1.], [1.], nothing, 0.)
-    fdir.f!(edir, nothing, nothing, (p,t; idxs = nothing) -> 1., [1.], [1.], nothing, 0.)
-    ffid.f!(efid, nothing, nothing, (p,t; idxs = nothing) -> 1., [1.], [1.], nothing, 0.)
+    fundir.f!(eundir, nothing, nothing, (t; idxs) -> 1., (t; idxs) -> 1., nothing, 0.)
+    #fanti.f!(eanti, nothing, nothing, (p,t; idxs = nothing) -> 1., [1.], [1.], nothing, 0.)
+    #fsym.f!(esym, nothing, nothing, (p,t; idxs = nothing) -> 1., [1.], [1.], nothing, 0.)
+    fdir.f!(edir, nothing, nothing, (t; idxs) -> 1., (t; idxs) -> 1., nothing, 0.)
+    ffid.f!(efid, nothing, nothing, (t; idxs) -> 1., (t; idxs) -> 1., nothing, 0.)
 
-    @test eundir == eanti
-    @test eanti[1:2] == -eanti[3:4]
-    @test esym[1:2] == esym[3:4]
+    #@test eundir == eanti
+    #@test eanti[1:2] == -eanti[3:4]
+    #@test esym[1:2] == esym[3:4]
     @test eundir[1:2] == edir
     @test edir == efid
 end

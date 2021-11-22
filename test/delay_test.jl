@@ -72,8 +72,8 @@ end
 
 
 @testset "Homogeneous DDE diffusion" begin
-    @inline function delayedge!(e, v_s, v_d, h, v_s_idx, v_d_idx, p, t)
-        hist1 = h(p, t - 1., idxs=v_s_idx[1])
+    @inline function delayedge!(e, v_s, v_d, h_v_s, h_v_d, p, t)
+        hist1 = h_v_s(t - 1., idxs=1)
         e[1] = hist1 - v_d[1]
         nothing
     end
@@ -99,8 +99,8 @@ end
 end
 
 @testset "Heterogeneous DDE diffusion" begin
-    @inline function delayedge!(e, v_s, v_d, h, v_s_idx, v_d_idx, p, t)
-        hist1 = h(p, t - p, idxs=v_s_idx[1])
+    @inline function delayedge!(e, v_s, v_d, h_v_s, h_v_d, p, t)
+        hist1 = h_v_s(t - p, idxs=1)
         e[1] = hist1 - v_d[1]
         nothing
     end
