@@ -4,14 +4,13 @@ authors = ["Frank Hellmann <hellmann@pik-potsdam.de>, Michael Lindner <michaelli
 version = "0.7.0"
 
 [deps]
-DiffEqBase = "2b5f629d-d688-5b77-993f-72d75c75574e"
 Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 NLsolve = "2774e3e8-f4cf-5e23-947b-6d7e65073b56"
+SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [compat]
-DiffEqBase = "^6.9.4"
 Graphs = "^1.4.0"
 NLsolve = "^4.2.0"
 julia = "1.5"
