@@ -1,9 +1,9 @@
 using Test
 using Graphs
 using NetworkDynamics
-# using OrdinaryDiffEq
-# using DelayDiffEq
-# using LinearAlgebra
+using OrdinaryDiffEq
+using DelayDiffEq
+using LinearAlgebra
 
 @testset "Unique edges" begin
     N=3
