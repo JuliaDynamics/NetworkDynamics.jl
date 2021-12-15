@@ -44,20 +44,20 @@ function collect_ve_info(vertices!, edges!, graph)
         symbols_e = [Symbol(edges![i].sym[j], "_", i)
                      for i in 1:length(edges!)
                      for j in 1:e_dims[i]]
-        if eltype(edges!) <: Union{StaticEdge,StaticDelayEdge}  # improve type hierarchy
-            mme_array = nothing
-        else
+        if eltype(edges!)<:ODEEdge #at the moment 1 ODEEdge should imply all e are ODEEdge
             mme_array = [e.mass_matrix for e in edges!]
+        else
+            mme_array = nothing
         end
     else
         e_dims = [edges!.dim for e in edges(graph)]
         symbols_e = [Symbol(edges!.sym[j], "_", i)
                      for i in 1:ne(graph)
                      for j in 1:e_dims[i]]
-        if typeof(edges!) <: Union{StaticEdge,StaticDelayEdge} # improve type hierarchy
-            mme_array = nothing
-        else
+        if typeof(edges!)<:ODEEdge
             mme_array = [edges!.mass_matrix for e in edges(graph)]
+        else
+            mme_array = nothing
         end
     end
 
@@ -226,7 +226,7 @@ function prepare_edges(edge::EdgeFunction, g::SimpleGraph)
     if edge.coupling == :directed
         throw(ArgumentError("Coupling type of EdgeFunction not available for undirected Graphs"))
     elseif edge.coupling == :undefined
-        @info("Reconstructing EdgeFunction with :undefined coupling type...")
+        @info("Reconstructing EdgeFunction with :undefined coupling type..")
         return reconstruct_edge(edge, :undirected)
     end
     return edge
@@ -236,7 +236,7 @@ function prepare_edges(edge::EdgeFunction, g::SimpleDiGraph)
     if edge.coupling ∈ (:symmetric, :antisymmetric, :undirected, :fiducial)
         throw(ArgumentError("Coupling type of EdgeFunction not available for directed Graphs"))
     elseif edge.coupling == :undefined
-        @info("Reconstructing EdgeFunction with :undefined coupling type...")
+        @info("Reconstructing EdgeFunction with :undefined coupling type..")
         return reconstruct_edge(edge, :directed)
     end
     return edge
@@ -254,7 +254,7 @@ function prepare_edges(edges::Vector, g::SimpleGraph)
             throw(ArgumentError("Coupling type of edge $i not available for undirected Graphs"))
         elseif edge.coupling == :undefined
             if infobool
-                @info("Reconstructing EdgeFuntions with :undefined coupling type.")
+                @info("Reconstructing EdgeFuntions with :undefined coupling to have :undirected coupling. For optimal performance specify the coupling type during initialization of the edge function.")
                 infobool = false
             end
             new_edges[i] = reconstruct_edge(edge, :undirected)
@@ -278,7 +278,7 @@ function prepare_edges(edges::Vector, g::SimpleDiGraph)
             throw(ArgumentError("Coupling type of edge $i not available for directed Graphs"))
         elseif edge.coupling == :undefined
             if infobool
-                @info("Reconstructing EdgeFuntions with :undefined coupling type.")
+                @info("Reconstructing EdgeFuntions with :undefined coupling type..")
                 infobool = false
             end
             new_edges[i] = reconstruct_edge(edge, :directed)
