@@ -1,6 +1,6 @@
 module NetworkDynamics
 
-using DiffEqBase
+using SciMLBase
 using Graphs
 
 include("Utilities.jl")
