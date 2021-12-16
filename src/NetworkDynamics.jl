@@ -105,6 +105,10 @@ function network_dynamics(vertices!::Union{T,Vector{T}},
                           kwargs...) where {T,U}
     if vertices! isa Vector
         @assert length(vertices!) == nv(graph)
+        if length(vertices!) == 0
+            # empty graph
+            vertices! == VertexFunction[]
+        end
         if !(eltype(vertices!)<:VertexFunction)
             # narrow type
             vertices! = [v for v in vertices!]
@@ -116,9 +120,13 @@ function network_dynamics(vertices!::Union{T,Vector{T}},
 
     if edges! isa Vector
         @assert length(edges!) == ne(graph)
+        if length(edges!) == 0
+            # graph without lines
+            edges! == EdgeFunction[]
+        end
         if !(eltype(edges!)<:EdgeFunction)
             # narrow type
-            edges! = [v for v in edges!]
+            edges! = [e for e in edges!]
         end
         hasDelayEdge = any(e -> e isa StaticDelayEdge, edges!)
         hasODEEdge = any(e -> e isa ODEEdge, edges!)
@@ -135,7 +143,7 @@ function network_dynamics(vertices!::Union{T,Vector{T}},
 
     # If one edge is an ODEEdge all other edges will be promoted. Eventually we will get rid of promotions.
     if hasODEEdge && hasStaticEdge
-        edges! = Array{ODEEdge}(edges!)
+        edges! = Vector{ODEEdge}(edges!)
     end
 
     return _network_dynamics(vertices!, edges!, graph; kwargs...)
