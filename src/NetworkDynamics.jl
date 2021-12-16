@@ -44,8 +44,8 @@ function collect_ve_info(vertices!, edges!, graph)
         symbols_e = [Symbol(edges![i].sym[j], "_", i)
                      for i in 1:length(edges!)
                      for j in 1:e_dims[i]]
-        hasODEEdge = any(e -> e isa ODEEdge, edges!) #those are the only ones with MM atm
-        if hasODEEdge # at the moment 1 ODEEdge should imply all e are ODEEdge
+        hasMM = any(e -> hasproperty(e, :mass_matrix), edges!) # ODEEdges are the only ones with MM atm
+        if hasMM # 1 ODEEdge should imply all e are ODEEdge
             mme_array = [e.mass_matrix for e in edges!]
         else
             mme_array = nothing
@@ -55,7 +55,7 @@ function collect_ve_info(vertices!, edges!, graph)
         symbols_e = [Symbol(edges!.sym[j], "_", i)
                      for i in 1:ne(graph)
                      for j in 1:e_dims[i]]
-        if typeof(edges!)<:ODEEdge
+        if hasproperty(edges!, :mass_matrix)
             mme_array = [edges!.mass_matrix for e in edges(graph)]
         else
             mme_array = nothing
