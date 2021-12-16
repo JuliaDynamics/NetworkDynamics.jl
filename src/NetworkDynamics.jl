@@ -44,7 +44,8 @@ function collect_ve_info(vertices!, edges!, graph)
         symbols_e = [Symbol(edges![i].sym[j], "_", i)
                      for i in 1:length(edges!)
                      for j in 1:e_dims[i]]
-        if eltype(edges!)<:ODEEdge #at the moment 1 ODEEdge should imply all e are ODEEdge
+        hasODEEdge = any(e -> e isa ODEEdge, edges!) #those are the only ones with MM atm
+        if hasODEEdge # at the moment 1 ODEEdge should imply all e are ODEEdge
             mme_array = [e.mass_matrix for e in edges!]
         else
             mme_array = nothing
@@ -101,9 +102,13 @@ value that denotes if the central loop should be executed in parallel with the n
 function network_dynamics(vertices!::Union{T,Vector{T}},
                           edges!::Union{U,Vector{U}},
                           graph::AbstractSimpleGraph;
-                          kwargs...) where {T<:VertexFunction,U<:EdgeFunction}
+                          kwargs...) where {T,U}
     if vertices! isa Vector
         @assert length(vertices!) == nv(graph)
+        if !(eltype(vertices!)<:VertexFunction)
+            # narrow type
+            vertices! = [v for v in vertices!]
+        end
         hasDelayVertex = any(v -> v isa DDEVertex, vertices!)
     else
         hasDelayVertex = vertices! isa DDEVertex
@@ -111,6 +116,10 @@ function network_dynamics(vertices!::Union{T,Vector{T}},
 
     if edges! isa Vector
         @assert length(edges!) == ne(graph)
+        if !(eltype(edges!)<:EdgeFunction)
+            # narrow type
+            edges! = [v for v in edges!]
+        end
         hasDelayEdge = any(e -> e isa StaticDelayEdge, edges!)
         hasODEEdge = any(e -> e isa ODEEdge, edges!)
         hasStaticEdge = any(e -> e isa StaticEdge, edges!)
