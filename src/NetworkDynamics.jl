@@ -2,6 +2,7 @@ module NetworkDynamics
 
 using SciMLBase
 using Graphs
+import Graphs: AbstractSimpleGraph
 
 include("Utilities.jl")
 include("ComponentFunctions.jl")
@@ -43,20 +44,21 @@ function collect_ve_info(vertices!, edges!, graph)
         symbols_e = [Symbol(edges![i].sym[j], "_", i)
                      for i in 1:length(edges!)
                      for j in 1:e_dims[i]]
-        if eltype(edges!) <: Union{StaticEdge,StaticDelayEdge}  # improve type hierarchy
-            mme_array = nothing
-        else
+        hasMM = any(e -> hasproperty(e, :mass_matrix), edges!) # ODEEdges are the only ones with MM atm
+        if hasMM # 1 ODEEdge should imply all e are ODEEdge
             mme_array = [e.mass_matrix for e in edges!]
+        else
+            mme_array = nothing
         end
     else
         e_dims = [edges!.dim for e in edges(graph)]
         symbols_e = [Symbol(edges!.sym[j], "_", i)
                      for i in 1:ne(graph)
                      for j in 1:e_dims[i]]
-        if typeof(edges!) <: Union{StaticEdge,StaticDelayEdge} # improve type hierarchy
-            mme_array = nothing
-        else
+        if hasproperty(edges!, :mass_matrix)
             mme_array = [edges!.mass_matrix for e in edges(graph)]
+        else
+            mme_array = nothing
         end
     end
 
@@ -97,55 +99,55 @@ of VertexFunctions **`vertices!`**, an array of EdgeFunctions **`edges!`** and a
 `Graphs.jl` object **`g`**. The optional argument `parallel` is a boolean
 value that denotes if the central loop should be executed in parallel with the number of threads set by the environment variable `JULIA_NUM_THREADS`.
 """
-function network_dynamics(vertices!::Vector{T}, edges!::Vector{U}, graph;
-                          kwargs...) where {T<:VertexFunction,U<:EdgeFunction}
-    @assert length(vertices!) == nv(graph)
-    @assert length(edges!) == ne(graph)
+function network_dynamics(vertices!::Union{T,Vector{T}},
+                          edges!::Union{U,Vector{U}},
+                          graph::AbstractSimpleGraph;
+                          kwargs...) where {T,U}
+    if vertices! isa Vector
+        @assert length(vertices!) == nv(graph)
+        if length(vertices!) == 0
+            # empty graph
+            vertices! = VertexFunction[]
+        end
+        if !(eltype(vertices!)<:VertexFunction)
+            # narrow type
+            vertices! = [v for v in vertices!]
+        end
+        hasDelayVertex = any(v -> v isa DDEVertex, vertices!)
+    else
+        hasDelayVertex = vertices! isa DDEVertex
+    end
 
+    if edges! isa Vector
+        @assert length(edges!) == ne(graph)
+        if length(edges!) == 0
+            # graph without lines
+            edges! = EdgeFunction[]
+        end
+        if !(eltype(edges!)<:EdgeFunction)
+            # narrow type
+            edges! = [e for e in edges!]
+        end
+        hasDelayEdge = any(e -> e isa StaticDelayEdge, edges!)
+        hasODEEdge = any(e -> e isa ODEEdge, edges!)
+        hasStaticEdge = any(e -> e isa StaticEdge, edges!)
+    else
+        hasDelayEdge = edges! isa StaticDelayEdge
+        hasODEEdge = edges! isa ODEEdge
+        hasStaticEdge = edges! isa StaticEdge
+    end
 
-    hasDelay = any(v -> v isa DDEVertex, vertices!) ||
-               any(e -> e isa StaticDelayEdge, edges!)
-    hasODEEdge = any(e -> e isa ODEEdge, edges!)
-
+    hasDelay = hasDelayVertex || hasDelayEdge
 
     hasDelay && hasODEEdge && error(ArgumentError("ODEEdges with delay are not supported at the moment."))
 
     # If one edge is an ODEEdge all other edges will be promoted. Eventually we will get rid of promotions.
-    if hasODEEdge && any(e -> e isa StaticEdge, edges!)
-        edges! = Array{ODEEdge}(edges!)
+    if hasODEEdge && hasStaticEdge
+        edges! = Vector{ODEEdge}(edges!)
     end
 
     return _network_dynamics(vertices!, edges!, graph; kwargs...)
 end
-
-
-function network_dynamics(vertices!, edges!, graph; parallel=false)
-    # If vertices! and/or edges! are individual functions and no other dispatch was
-    # triggered, assume all vertices, respectively edges will be of that type
-    if typeof(vertices!) <: VertexFunction
-        vertices! = [vertices! for i in 1:nv(graph)]
-    end
-    if typeof(edges!) <: EdgeFunction
-        edges! = [edges! for i in 1:ne(graph)]
-    end
-
-    try
-        Array{VertexFunction}(vertices!)
-    catch err
-        throw(ArgumentError("Cannot convert the vertices to an Array{VertexFunction}!"))
-    end
-
-    try
-        Array{EdgeFunction}(edges!)
-    catch err
-        throw(ArgumentError("Cannot convert the edges to an Array{EdgeFunction}!"))
-    end
-
-    vertices! isa Array{Any} ? vertices! = Array{VertexFunction}(vertices!) : nothing
-    edges! isa Array{Any} ? edges! = Array{EdgeFunction}(edges!) : nothing
-    network_dynamics(vertices!, edges!, graph; parallel=parallel)
-end
-
 
 # catch all version (works only for ODEVertex, DDEVertex, StaticEdge, StaticDelayEdge)
 function _network_dynamics(vertices!::Union{Vector{T},T},
@@ -241,7 +243,7 @@ function prepare_edges(edge::EdgeFunction, g::SimpleGraph)
     if edge.coupling == :directed
         throw(ArgumentError("Coupling type of EdgeFunction not available for undirected Graphs"))
     elseif edge.coupling == :undefined
-        @info("Reconstructing EdgeFunction with :undefined coupling type...")
+        @info("Reconstructing EdgeFunction with :undefined coupling type..")
         return reconstruct_edge(edge, :undirected)
     end
     return edge
@@ -251,7 +253,7 @@ function prepare_edges(edge::EdgeFunction, g::SimpleDiGraph)
     if edge.coupling ∈ (:symmetric, :antisymmetric, :undirected, :fiducial)
         throw(ArgumentError("Coupling type of EdgeFunction not available for directed Graphs"))
     elseif edge.coupling == :undefined
-        @info("Reconstructing EdgeFunction with :undefined coupling type...")
+        @info("Reconstructing EdgeFunction with :undefined coupling type..")
         return reconstruct_edge(edge, :directed)
     end
     return edge
@@ -269,7 +271,7 @@ function prepare_edges(edges::Vector, g::SimpleGraph)
             throw(ArgumentError("Coupling type of edge $i not available for undirected Graphs"))
         elseif edge.coupling == :undefined
             if infobool
-                @info("Reconstructing EdgeFuntions with :undefined coupling type.")
+                @info("Reconstructing EdgeFuntions with :undefined coupling to have :undirected coupling. For optimal performance specify the coupling type during initialization of the edge function.")
                 infobool = false
             end
             new_edges[i] = reconstruct_edge(edge, :undirected)
@@ -293,7 +295,7 @@ function prepare_edges(edges::Vector, g::SimpleDiGraph)
             throw(ArgumentError("Coupling type of edge $i not available for directed Graphs"))
         elseif edge.coupling == :undefined
             if infobool
-                @info("Reconstructing EdgeFuntions with :undefined coupling type.")
+                @info("Reconstructing EdgeFuntions with :undefined coupling type..")
                 infobool = false
             end
             new_edges[i] = reconstruct_edge(edge, :directed)

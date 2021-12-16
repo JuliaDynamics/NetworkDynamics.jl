@@ -5,6 +5,48 @@ using OrdinaryDiffEq
 using DelayDiffEq
 using LinearAlgebra
 
+@testset "Unique edges" begin
+    N=3
+    g=complete_graph(N)
+
+    f = (e, v_s, v_d, p, t) -> begin
+        e .= v_s .- v_d
+        nothing
+    end
+
+    v = (dv,v,edges,p,t) -> begin
+        for e in edges
+            dv .+= e
+        end
+    end
+
+    eundir = StaticEdge(; f=f, dim=2, coupling = :undirected)
+    eundef = StaticEdge(; f=f, dim=2)
+    deundef = StaticDelayEdge(;f=f, dim=2)
+
+    mixed_edges = [eundef, eundef, deundef]
+
+    vertex = ODEVertex(; f=v, dim=1)
+
+    ndundir = network_dynamics(vertex,eundir, g)
+    @test length(ndundir.f.unique_edges!) == 1
+
+    ndundef = network_dynamics(vertex,eundef, g)
+    @test length(ndundef.f.unique_edges!) == 1
+
+    nddirundef = network_dynamics(vertex,eundef, SimpleDiGraph(g))
+    @test length(nddirundef.f.unique_edges!) == 1
+
+    # The wrapper created for :undefined -> :undirected reconstruction interfers with
+    # uniqueness of edge functions
+    ndmix = network_dynamics(vertex, mixed_edges, g)
+    @test_broken length(ndmix.f.unique_edges!) == 2
+
+    nddirmix = network_dynamics(vertex, repeat(mixed_edges,2), SimpleDiGraph(g))
+    @test length(nddirmix.f.unique_edges!) == 2
+end
+
+
 @testset "StaticEdge constructor" begin
     f = (e, v_s, v_d, p, t) -> begin
         e .= v_s .- v_d
