@@ -107,7 +107,7 @@ function network_dynamics(vertices!::Union{T,Vector{T}},
         @assert length(vertices!) == nv(graph)
         if length(vertices!) == 0
             # empty graph
-            vertices! == VertexFunction[]
+            vertices! = VertexFunction[]
         end
         if !(eltype(vertices!)<:VertexFunction)
             # narrow type
@@ -122,7 +122,7 @@ function network_dynamics(vertices!::Union{T,Vector{T}},
         @assert length(edges!) == ne(graph)
         if length(edges!) == 0
             # graph without lines
-            edges! == EdgeFunction[]
+            edges! = EdgeFunction[]
         end
         if !(eltype(edges!)<:EdgeFunction)
             # narrow type
