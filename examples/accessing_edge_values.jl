@@ -5,8 +5,8 @@ using Plots
 
 ### Defining a graph
 
-N = 20 # number of nodes
-k = 4  # average degree
+N = 5 # number of nodes
+k = 1  # average degree
 g = barabasi_albert(N, k)
 
 
@@ -32,13 +32,22 @@ nd_diffusion_vertex = ODEVertex(; f=diffusionvertex!, dim=1)
 nd_diffusion_edge = StaticEdge(; f=diffusionedge!, dim=1)
 
 nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g)
+nd.observed
+
+nd.f.unique_edges![1]
+
+# trying things out for accessing edge values
+observed = x -> x*x
+ODEFunction((du, u, p, t) -> nd; observed)
+
 
 ### Simulation
 
 x0 = randn(N)
-ode_prob = ODEProblem(nd, x0, (0.0, 4.0))
-sol = solve(ode_prob, Tsit5());
-
+ode_prob = ODEProblem(nd, x0, (0.0, 1.0))
+sol = solve(ode_prob, Tsit5(), saveat = 0.1);
+sol[:u]
+sol[1]
 ### Plotting
 
 plot(sol; vars=syms_containing(nd, "v"))

@@ -87,6 +87,36 @@ function collect_unique_components(comp, NV)
     ucomp, ind_ucomp
 end
 
+# function needed for get_observed
+function find_edge(g, x, y)
+    a = 0
+    edge_arr = collect(edges(g))
+    for i in 1:ne(g)
+        if src(edge_arr[i]) == x && dst(edge_arr[i]) == y
+            a = i
+        end
+    end
+    if a != 0
+        return a;
+    else
+        print("There is no edge connecting vertex ", string(x), " and ", string(y))
+    end
+end
+
+function get_observed_variables(nd, edge_sym, u, p, t)
+    sym_arr = split(string(edge_sym), "_")
+    e_idx = find_edge(nd.f.graph, parse(Int64, sym_arr[2]), parse(Int64, sym_arr[3]))
+    e = view(nd.f.graph_data.e, e_idx)
+    vs = view(nd.f.graph_data.v, parse(Int64, sym_arr[2]))
+    vd = view(nd.f.graph_data.v, parse(Int64, sym_arr[3]))
+    nd.f.unique_edges![1].f(e, vs, vd, p[2][e_idx], t)
+end
+
+# function to get the edge solution via edge symbols
+function get_observed(nd::NetworkDE)
+    observed = (sym, u, p, t) ->  get_observed_variables(nd, sym, u, p, t) 
+    ODEFunction((du, u, p, t) -> nd; observed)                                      
+end
 
 ## This is the "startpage" version of ND that checks for incompatibile combinations
 
@@ -190,7 +220,7 @@ function _network_dynamics(vertices!::Union{Vector{T},T},
     return if hasDelay
         DDEFunction(nd!; mass_matrix=mass_matrix, syms=symbols_v)
     else
-        ODEFunction(nd!; mass_matrix=mass_matrix, syms=symbols_v)
+        ODEFunction(nd!; mass_matrix=mass_matrix, syms=symbols_v, observed = get_observed(nd!)) # observed function should be here
     end
 end
 
