@@ -75,7 +75,7 @@ function _inner_loop!(component::DDEVertex, indices,
         # Wrappers for the history function correct for global p and global idx
         h_v = @inline((t; idxs) -> h(p,t;idxs=gs.v_idx[i][idxs]))
         
-        component.f!(view(dx, gs.v_idx[i]),
+        component.f(view(dx, gs.v_idx[i]),
                   get_vertex(gd, i),
                   get_dst_edges(gd, i),
                   h::H,
@@ -93,7 +93,7 @@ function _inner_loop!(component::StaticDelayEdge, indices,
         h_v_s = @inline((t; idxs) -> h(p,t;idxs=gs.s_e_idx[i][idxs]))
         h_v_d = @inline((t; idxs) -> h(p,t;idxs=gs.d_e_idx[i][idxs]))
 
-        component.f!(get_edge(gd, i),
+        component.f(get_edge(gd, i),
                      get_src_vertex(gd, i),
                      get_dst_vertex(gd, i),
                      h_v_s,

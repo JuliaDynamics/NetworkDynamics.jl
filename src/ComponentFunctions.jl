@@ -48,7 +48,7 @@ the source and destination of the described edge.
 
   - `dim` is the number of independent variables in the edge equations and
   - `sym` is an array of symbols for these variables.
-  - `coupling` is a Symbol describing if the EdgeFunction is intended for a directed graph (`:directed`) or for an undirected graph (`{:undirected, :symmetric, :antisymmetric, :fiducial}`). `:directed` is intended for directed graphs. `:undirected` is the default option and is only compatible with SimpleGraph. in this case f! should specify the coupling from a source vertex to a destination vertex. `:symmetric` and `:antisymmetric` trigger performance optimizations, if `f!` has that symmetry property. `:fiducial` lets the user specify both the coupling from src to dst, as well as the coupling from dst to src and is intended for advanced users.
+  - `coupling` is a Symbol describing if the EdgeFunction is intended for a directed graph (`:directed`) or for an undirected graph (`{:undirected, :symmetric, :antisymmetric, :fiducial}`). `:directed` is intended for directed graphs. `:undirected` is the default option and is only compatible with SimpleGraph. in this case f should specify the coupling from a source vertex to a destination vertex. `:symmetric` and `:antisymmetric` trigger performance optimizations, if `f` has that symmetry property. `:fiducial` lets the user specify both the coupling from src to dst, as well as the coupling from dst to src and is intended for advanced users.
 
 For more details see the documentation.
 """
@@ -285,7 +285,7 @@ Here `dv`, `v`, `p` and `t` are the usual ODE arguments, while
 
   - `dim` is the number of independent variables in the edge equations and
   - `sym` is an array of symbols for these variables.
-  - `coupling` is a Symbol describing if the EdgeFunction is intended for a directed graph (`:directed`) or for an undirected graph (`{:undirected, :fiducial}`). `:directed` is intended for directed graphs. `:undirected` is the default option and is only compatible with SimpleGraph. in this case f! should specify the coupling from a source vertex to a destination vertex.  `:fiducial` lets the user specify both the coupling from src to dst, as well as the coupling from dst to src and is intended for advanced users.
+  - `coupling` is a Symbol describing if the EdgeFunction is intended for a directed graph (`:directed`) or for an undirected graph (`{:undirected, :fiducial}`). `:directed` is intended for directed graphs. `:undirected` is the default option and is only compatible with SimpleGraph. in this case f should specify the coupling from a source vertex to a destination vertex.  `:fiducial` lets the user specify both the coupling from src to dst, as well as the coupling from dst to src and is intended for advanced users.
   - `mass_matrix` is an optional argument that defaults to the identity
     matrix `I`. If a mass matrix M is given the system `M * de = f` will be
     solved.
@@ -332,16 +332,16 @@ Base.@kwdef struct StaticDelayEdge{T} <: EdgeFunction
             dim % 2 == 0 ? nothing : error("Fiducial edges are required to have even dim.
                                             The first dim args are used for src -> dst,
                                             the second for dst -> src coupling.")
-            return new{T}(user_f!, dim, coupling, sym)
+            return new{T}(user_f, dim, coupling, sym)
         elseif coupling ∈ (:antisymmetric, :symmetric)
             error("$coupling coupling not implemented for edges with delay. If you need it please open an issue on GitHub.")
         elseif coupling == :undirected
         # This might cause unexpected behaviour if source and destination vertex don't
         # have the same internal arguments.
         # Make sure to explicitly define the edge is :fiducial in that case.
-            f! = @inline (e, v_s, v_d, h_v_s, h_v_d, p, t) -> begin
-                @inbounds user_f!(view(e,1:dim), v_s, v_d, h_v_s, h_v_d, p, t)
-                @inbounds user_f!(view(e,dim+1:2dim), v_d, v_s, h_v_d, h_v_s, p, t)
+            f = @inline (e, v_s, v_d, h_v_s, h_v_d, p, t) -> begin
+                @inbounds user_f(view(e,1:dim), v_s, v_d, h_v_s, h_v_d, p, t)
+                @inbounds user_f(view(e,dim+1:2dim), v_d, v_s, h_v_d, h_v_s, p, t)
                 nothing
             end
         end

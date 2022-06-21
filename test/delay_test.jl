@@ -1,6 +1,6 @@
 using Test
 using NetworkDynamics
-using LightGraphs
+using Graphs
 using OrdinaryDiffEq
 using DelayDiffEq
 #using BenchmarkTools
@@ -23,8 +23,8 @@ end
     nothing
 end
 
-nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 1)
-nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1, coupling = :undirected)
+nd_diffusion_vertex = ODEVertex(f = diffusionvertex!, dim = 1)
+nd_diffusion_edge = StaticEdge(f = diffusionedge!, dim = 1, coupling = :undirected)
 nd! = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g)
 
 
@@ -48,7 +48,7 @@ end
 #         e[1] = h_v_s[1] - v_d[1]
 #         nothing
 #     end
-#     nd_delay_edge = StaticDelayEdge(f! = delayedge!, dim = 1)
+#     nd_delay_edge = StaticDelayEdge(f = delayedge!, dim = 1)
 #
 #     dnd! = network_dynamics(nd_diffusion_vertex, nd_delay_edge, g)
 #
@@ -78,7 +78,7 @@ end
         nothing
     end
 
-    nd_delay_edge = StaticDelayEdge(f! = delayedge!, dim = 1, coupling = :undirected)
+    nd_delay_edge = StaticDelayEdge(f = delayedge!, dim = 1, coupling = :undirected)
 
     dnd! = network_dynamics(nd_diffusion_vertex, nd_delay_edge, g)
     dnd! = ODEFunction(dnd!.f)
@@ -95,7 +95,7 @@ end
     sol = solve(prob, MethodOfSteps(Tsit5()))
     #@btime solve($prob, MethodOfSteps(Tsit5()))
 
-    @test isapprox(sol[end], zeros(N), atol=1e-6)
+    @test isapprox(sol[end], zeros(N), atol=1e-5)
 end
 
 @testset "Heterogeneous DDE diffusion" begin
@@ -105,7 +105,7 @@ end
         nothing
     end
 
-    nd_delay_edge = StaticDelayEdge(f! = delayedge!, dim = 1, coupling = :undirected)
+    nd_delay_edge = StaticDelayEdge(f = delayedge!, dim = 1, coupling = :undirected)
 
     dnd! = network_dynamics(nd_diffusion_vertex, nd_delay_edge, g)
 
@@ -127,7 +127,6 @@ end
     #prob = DDEProblem(dnd!, x0, h, tspan, p)
     #@btime solve($prob, MethodOfSteps(Tsit5()),save_everystep=false)
 
-    # With inhomogenities we lose a lot of precision
-    # increase reltol?
+    # Not sure if the failure to reach 0 is due to loss of precision or due to the problem formulation
     @test isapprox(sol[end], zeros(N), atol=1e-2)
 end
