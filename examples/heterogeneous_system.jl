@@ -7,10 +7,10 @@
 # ## Heterogenous parameters
 # We start by setting up a simple system of Kuramoto oscillators.
 
-using NetworkDynamics, OrdinaryDiffEq, Plots, LightGraphs
+using NetworkDynamics, OrdinaryDiffEq, Plots, Graphs
 
 N = 8
-g = watts_strogatz(N,2,0) # ring network
+g = watts_strogatz(N, 2, 0) # ring network
 
 function kuramoto_edge!(e, θ_s, θ_d, K, t)
     e[1] = K * sin(θ_s[1] - θ_d[1])
@@ -21,25 +21,25 @@ function kuramoto_vertex!(dθ, θ, edges, ω, t)
     sum_coupling!(dθ, edges)
 end
 
-vertex! = ODEVertex(f! = kuramoto_vertex!, dim = 1, sym=[:θ])
-edge!   = StaticEdge(f! = kuramoto_edge!, dim = 1)
+vertex! = ODEVertex(; f=kuramoto_vertex!, dim=1, sym=[:θ])
+edge!   = StaticEdge(; f=kuramoto_edge!, dim=1)
 nd! = network_dynamics(vertex!, edge!, g);
 
 # Introducing heterogeneous parameters is as easy as defining an array.
 # Here the vertex parameters are hetereogeneous, while the edges share the same coupling
 # parameter K.
 
-ω = (collect(1:N) .- sum(1:N) / N ) / N
-K  = 3.
-p  = (ω, K); # p[1] vertex parameters, p[2] edge parameters
+ω = (collect(1:N) .- sum(1:N) / N) / N
+K = 3.0
+p = (ω, K); # p[1] vertex parameters, p[2] edge parameters
 
 # Integrate and plot
 
-x0 = (collect(1:N) .- sum(1:N) / N ) / N
-tspan = (0., 10.)
+x0 = (collect(1:N) .- sum(1:N) / N) / N
+tspan = (0.0, 10.0)
 prob = ODEProblem(nd!, x0, tspan, p)
 sol = solve(prob, Tsit5())
-plot(sol, ylabel="θ")
+plot(sol; ylabel="θ")
 
 # ## Heterogenous dynamics
 
@@ -48,28 +48,28 @@ plot(sol, ylabel="θ")
 # constant value. A Kuramoto model with inertia consits of two interal variables leading to
 # more complicated (and for many applications more realistic) local dynamics.
 
-static! = StaticVertex(f! = (θ, edges, c, t) -> θ .= c, dim = 1, sym = [:θ])
+static! = StaticVertex(; f=(θ, edges, c, t) -> θ .= c, dim=1, sym=[:θ])
 
 
 function kuramoto_inertia!(dv, v, edges, P, t)
     dv[1] = v[2]
-    dv[2] = P - 1. * v[2]
+    dv[2] = P - 1.0 * v[2]
     for e in edges
         dv[2] += e[1]
     end
 end
 
-inertia! = ODEVertex(f! = kuramoto_inertia!, dim = 2, sym= [:θ, :ω]);
+inertia! = ODEVertex(; f=kuramoto_inertia!, dim=2, sym=[:θ, :ω]);
 
 
 # Since now we model a system with hetereogeneous node dynamics we can no longer
 # straightforwardly pass a single VertexFunction to `network_dynamics` but instead have to
 # hand over an Array.
 
-vertex_array    = Array{VertexFunction}([vertex! for i = 1:N])
+vertex_array    = Array{VertexFunction}([vertex! for i in 1:N])
 vertex_array[1] = static!
 vertex_array[5] = inertia! # index should correspond to the node's index in the graph
-nd_hetero!   = network_dynamics(vertex_array, edge!, g);
+nd_hetero! = network_dynamics(vertex_array, edge!, g);
 
 
 # Now we have to take a bit more care with defining initial conditions and parameters.
@@ -102,7 +102,7 @@ nodecolor = [colorant"lightseagreen", colorant"orange", colorant"darkred"];
 nodefillc = reshape(nodecolor[membership], 1, N);
 
 vars = syms_containing(nd_hetero!, :θ);
-plot(sol_hetero, ylabel="θ", vars=vars, lc = nodefillc)
+plot(sol_hetero; ylabel="θ", vars=vars, lc=nodefillc)
 
 
 
@@ -117,10 +117,10 @@ function edgeA!(de, e, v_s, v_d, p, t)
     e[2]  = g(e, v_s, v_d, p, t) # static varibale
 end
 
-M = zeros(2,2)
-M[1,1] = 1
+M = zeros(2, 2)
+M[1, 1] = 1
 
-nd_edgeA! = ODEEdge(f! = edgeA!, dim = 2, coupling=:undirected, mass_matrix = M);
+nd_edgeA! = ODEEdge(; f=edgeA!, dim=2, coupling=:undirected, mass_matrix=M);
 
 
 # This handles the second equations as `0 = M[2,2] * de[2] = g(e, v_s, v_d, p, t) - e[2]`.

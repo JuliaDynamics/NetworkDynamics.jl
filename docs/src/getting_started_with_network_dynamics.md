@@ -18,7 +18,6 @@ The sum on the right hand side plays the role of a (discrete) gradient. If the t
 
 From the above considerations we see that in this model the nodes do not have any internal dynamics - if a node was disconnected from the rest of the network its state would never change, since then $A_{ji} = 0 \; \forall j$ and hence $\dot v_i = 0$. This means that the evolution of a node depends only on the interaction with its neighbors. In NetworkDynamics.jl, interactions with neighbors are described by equations for the edges.
 
-
 ```@example diffusion
 function diffusionedge!(e, v_s, v_d, p, t)
     # usually e, v_s, v_d are arrays, hence we use the broadcasting operator .
@@ -34,11 +33,10 @@ The function `diffusionedge!` takes as inputs the current state of the edge `e`,
 
 The contributions of the different edges are then summed up in each vertex.
 
-
 ```@example diffusion
 function diffusionvertex!(dv, v, edges, p, t)
     # usually v, edges are arrays, hence we use the broadcasting operator .
-    dv .= 0.
+    dv .= 0.0
     for e in edges
         dv .+= e
     end
@@ -46,7 +44,6 @@ function diffusionvertex!(dv, v, edges, p, t)
 end
 nothing # hide
 ```
-
 
 Just like above the input arguments `v, edges, p, t` are mandatory for the syntax of vertex functions. The additional input `dv` corresponding to the derivative of the vertex' state is mandatory for vertices described by ordinary differential equations.
 
@@ -56,9 +53,8 @@ For undirected graphs, the `edgefunction!` specifies the coupling from a source-
 
 With the preliminaries out of the way, it only takes a few steps to assemble the network dynamics.
 
-
 ```@example diffusion
-using LightGraphs
+using Graphs
 
 N = 20 # number of nodes
 k = 4  # average degree
@@ -67,40 +63,35 @@ g = barabasi_albert(N, k) # a little more exciting than a bare random graph
 nothing # hide
 ```
 
-
 The [Barabási–Albert model](https://en.wikipedia.org/wiki/Barab%C3%A1si%E2%80%93Albert_model) generates a scale-free random graph.
-
 
 ```@example diffusion
 using NetworkDynamics
 
-nd_diffusion_vertex = ODEVertex(f! = diffusionvertex!, dim = 1)
-nd_diffusion_edge = StaticEdge(f! = diffusionedge!, dim = 1)
+nd_diffusion_vertex = ODEVertex(; f=diffusionvertex!, dim=1)
+nd_diffusion_edge = StaticEdge(; f=diffusionedge!, dim=1)
 
 nd = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g)
 
 nothing # hide
 ```
 
-
 `ODEVertex` and `StaticEdge` are functions wrappers that equip the functions we defined above with additional information like **`dim`** and return objects of type `VertexFunction` and `EdgeFunction`. Then the key constructor `network_dynamics` combines them with the topological information contained in the graph **`g`** and returns an `ODEFunction` compatible with the solvers of `DifferentialEquations.jl`. The keyword **`dim`** specifies the number of variables at each edge or node.
-
 
 ```@example diffusion
 using OrdinaryDiffEq
 
 x0 = randn(N) # random initial conditions
-ode_prob = ODEProblem(nd, x0, (0., 4.))
+ode_prob = ODEProblem(nd, x0, (0.0, 4.0))
 sol = solve(ode_prob, Tsit5());
 nothing # hide
 ```
 
 We are solving the diffusion problem on the time interval $[0, 4]$ with the `Tsit5()` algorithm, which is recommended  by the authors of `DifferentialEquations.jl` for most non-stiff problems.
 
-
 ```@example diffusion
 using Plots
-plot(sol, vars = syms_containing(nd, "v"), fmt = :png)
+plot(sol; vars=syms_containing(nd, "v"), fmt=:png)
 ```
 
 The plotting is straightforward. The **`vars`** keyword allows us to pass a list of indices or *symbols* specifiying the variables we want to plot. *Symbols* can be thought of as names given to the interal variables of an `ODEFunction`, much like the variables $x$ or $\phi$ in mathematical notation. The default symbol for vertex variables is `v`, however we are free to specify other symbols by passing them to the `ODEVertex` constructor.
@@ -111,24 +102,23 @@ To illustrate a very simple multi-dimensional case, in the following we simulate
 
 The symbols have to be passed with the keyword **`sym`** to `ODEVertex`.
 
-
 ```@example diffusion
 N = 10 # number of nodes
 k = 4  # average degree
 g = barabasi_albert(N, k) # a little more exciting than a bare random graph
 
 # We will have two independent diffusions on the network, hence dim = 2
-nd_diffusion_vertex_2 = ODEVertex(f! = diffusionvertex!, dim = 2, sym = [:x, :ϕ])
-nd_diffusion_edge_2 = StaticEdge(f! = diffusionedge!, dim = 2)
+nd_diffusion_vertex_2 = ODEVertex(; f=diffusionvertex!, dim=2, sym=[:x, :ϕ])
+nd_diffusion_edge_2 = StaticEdge(; f=diffusionedge!, dim=2)
 nd_2 = network_dynamics(nd_diffusion_vertex_2, nd_diffusion_edge_2, g)
 
-x0_2 = vec(transpose([randn(N).^2 randn(N)])) # x ~ N(0,1)^2; ϕ ~ N(0,1)
-ode_prob_2 = ODEProblem(nd_2, x0_2, (0., 3.))
+x0_2 = vec(transpose([randn(N) .^ 2 randn(N)])) # x ~ N(0,1)^2; ϕ ~ N(0,1)
+ode_prob_2 = ODEProblem(nd_2, x0_2, (0.0, 3.0))
 sol_2 = solve(ode_prob_2, Tsit5());
 
 
 # Try plotting the variables ϕ_i yourself. [To write ϕ type \phi and press TAB]
-plot(sol_2, vars = syms_containing(nd_2, "x"), fmt = :png)
+plot(sol_2; vars=syms_containing(nd_2, "x"), fmt=:png)
 ```
 
 ## Appendix: The network Laplacian $L$

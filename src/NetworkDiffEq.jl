@@ -1,16 +1,16 @@
 # In order to match the type, we need to pass both, a view that matches the type
 # to be constructed, and the original array we want to construct a GD on top of.
-@inline function prep_gd(dx::AbstractArray{T}, x::AbstractArray{T}, gd::GraphData{GDB, T, T}, gs) where {GDB, T}
+@inline function prep_gd(dx::AbstractArray{T}, x::AbstractArray{T}, gd::GraphData{GDB,T,T}, gs) where {GDB,T}
     # Type matching
     if size(x) == (gs.dim_v,)
-         swap_v_array!(gd, x)
-         return gd
+        swap_v_array!(gd, x)
+        return gd
     elseif size(x) == (gs.dim_v + gs.dim_e,)
         swap_v_array!(gd, view(x, 1:gs.dim_v))
         swap_e_array!(gd, view(x, gs.dim_v+1:gs.dim_v+gs.dim_e))
         return gd
     else
-         error("Size of x does not match the dimension of the system.")
+        error("Size of x does not match the dimension of the system.")
     end
 end
 
@@ -25,7 +25,7 @@ end
         return GraphData(v_array, e_array, gs)
     else
         error("Size of x does not match the dimension of the system.")
-   end
+    end
 end
 
 
@@ -45,11 +45,11 @@ end
 function _inner_loop!(component::ODEVertex, indices,
                       dx, p, t, gd, gs, h, parallel)
     @nd_threads parallel for i in indices
-        component.f!(view(dx,gs.v_idx[i]),
-                  get_vertex(gd, i),
-                  get_dst_edges(gd, i),
-                  p_v_idx(p, i),
-                  t)
+        component.f(view(dx, gs.v_idx[i]),
+                    get_vertex(gd, i),
+                    get_dst_edges(gd, i),
+                    p_v_idx(p, i),
+                    t)
     end
     return nothing
 end
@@ -57,11 +57,11 @@ end
 function _inner_loop!(component::StaticEdge, indices,
                       dx, p, t, gd, gs, h, parallel)
     @nd_threads parallel for i in indices
-        component.f!(get_edge(gd, i),
-                     get_src_vertex(gd, i),
-                     get_dst_vertex(gd, i),
-                     p_e_idx(p, i),
-                     t)
+        component.f(get_edge(gd, i),
+                    get_src_vertex(gd, i),
+                    get_dst_vertex(gd, i),
+                    p_e_idx(p, i),
+                    t)
     end
     return nothing
 end
@@ -107,12 +107,12 @@ end
 function _inner_loop!(component::ODEEdge, indices,
                       dx, p, t, gd, gs, h, parallel)
     @nd_threads parallel for i in indices
-        component.f!(view(dx, gs.e_idx[i] .+ gs.dim_v),
-                     get_edge(gd, i),
-                     get_src_vertex(gd, i),
-                     get_dst_vertex(gd, i),
-                     p_e_idx(p, i),
-                     t)
+        component.f(view(dx, gs.e_idx[i] .+ gs.dim_v),
+                    get_edge(gd, i),
+                    get_src_vertex(gd, i),
+                    get_dst_vertex(gd, i),
+                    p_e_idx(p, i),
+                    t)
     end
     return nothing
 end

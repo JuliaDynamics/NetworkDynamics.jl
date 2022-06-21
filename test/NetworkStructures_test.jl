@@ -1,19 +1,20 @@
 using Test
-using LightGraphs
+using Graphs
 using NetworkDynamics
-import NetworkDynamics: GraphStruct, GraphData, get_vertex, get_edge, get_src_vertex, get_src_edges, get_dst_vertex, get_dst_edges, swap_v_array!, swap_e_array!
+import NetworkDynamics: GraphStruct, GraphData, get_vertex, get_edge, get_src_vertex, get_src_edges, get_dst_vertex,
+                        get_dst_edges, swap_v_array!, swap_e_array!
 
 
 @testset "Test GraphData Accessors" begin
     g = SimpleGraph(5)
-    add_edge!(g, (1,2))
-    add_edge!(g, (1,4))
-    add_edge!(g, (1,5))
-    add_edge!(g, (2,3))
-    add_edge!(g, (2,4))
-    add_edge!(g, (2,5))
-    add_edge!(g, (3,4))
-    add_edge!(g, (3,5))
+    add_edge!(g, (1, 2))
+    add_edge!(g, (1, 4))
+    add_edge!(g, (1, 5))
+    add_edge!(g, (2, 3))
+    add_edge!(g, (2, 4))
+    add_edge!(g, (2, 5))
+    add_edge!(g, (3, 4))
+    add_edge!(g, (3, 5))
     v_dims = [2 for i in vertices(g)]
     e_dims = [2 for i in edges(g)]
     gs = GraphStruct(g, v_dims, e_dims, [:t], [:t])
@@ -41,12 +42,12 @@ import NetworkDynamics: GraphStruct, GraphData, get_vertex, get_edge, get_src_ve
     @test get_src_vertex(gd, 8) == v_array[5:6]
     @test get_dst_vertex(gd, 8) == v_array[9:10]
 
-    @test_throws ErrorException get_src_edges(gd, 1) == [e_array[1:2],e_array[3:4],e_array[5:6]]
-    @test_throws ErrorException get_src_edges(gd, 3) == [e_array[13:14],e_array[15:16]]
+    @test_throws ErrorException get_src_edges(gd, 1) == [e_array[1:2], e_array[3:4], e_array[5:6]]
+    @test_throws ErrorException get_src_edges(gd, 3) == [e_array[13:14], e_array[15:16]]
 
-    @test get_dst_edges(gd, 1) == [e_array[2:2],e_array[4:4],e_array[6:6]]
-    @test get_dst_edges(gd, 3) == [e_array[7:7],e_array[14:14],e_array[16:16]]
-    @test get_dst_edges(gd, 5) == [e_array[5:5],e_array[11:11],e_array[15:15]]
+    @test get_dst_edges(gd, 1) == [e_array[2:2], e_array[4:4], e_array[6:6]]
+    @test get_dst_edges(gd, 3) == [e_array[7:7], e_array[14:14], e_array[16:16]]
+    @test get_dst_edges(gd, 5) == [e_array[5:5], e_array[11:11], e_array[15:15]]
 
     # Test the swaping of the underlying data
     v_array2 = rand(sum(v_dims))

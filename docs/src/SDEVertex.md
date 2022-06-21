@@ -1,11 +1,12 @@
 # SDE Tutorial
 
- An `IJulia` [notebook](https://github.com/pik-icone/NetworkDynamics.jl/tree/master/examples) corresponding to this tutorial will be available on GitHub soon.
+An `IJulia` [notebook](https://github.com/pik-icone/NetworkDynamics.jl/tree/master/examples) corresponding to this tutorial will be available on GitHub soon.
 
 #### Topics covered in this tutorial include:
- * the swing equation
- * fixpoint search of ODE systems
- * constructing an SDE problem with NetworkDynamics.jl
+
+  - the swing equation
+  - fixpoint search of ODE systems
+  - constructing an SDE problem with NetworkDynamics.jl
 
 ## Example: Fluctuations in Power Grids
 
@@ -62,8 +63,8 @@ nothing # hide
 For the graph structure we will use a simple 4 node ring network.
 
 ```@example SDEVertex
-using LightGraphs
-g = watts_strogatz(4, 2, 0.)
+using Graphs
+g = watts_strogatz(4, 2, 0.0)
 nothing # hide
 ```
 
@@ -72,8 +73,8 @@ Then we can construct the `ODEFunction` of the deterministic system by using `ne
 ```@example SDEVertex
 using NetworkDynamics
 
-swing_vertex = ODEVertex(f! = swing_equation!, dim = 2, sym=[:θ, :ω])
-powerflow_edge = StaticEdge(f! = powerflow!, dim = 1)
+swing_vertex = ODEVertex(; f=swing_equation!, dim=2, sym=[:θ, :ω])
+powerflow_edge = StaticEdge(; f=powerflow!, dim=1)
 
 nd = network_dynamics(swing_vertex, powerflow_edge, g)
 nothing # hide
@@ -85,8 +86,8 @@ Now we need to define the dynamic parameters of vertices and edges. For simplici
 
 ```@example SDEVertex
 K = 6.0
-P = [1.,-1.,1.,-1.]
-p = (P,K)
+P = [1.0, -1.0, 1.0, -1.0]
+p = (P, K)
 nothing # hide
 ```
 
@@ -96,11 +97,11 @@ We want to simulate fluctuations around an equilibrium state of our model system
 u0 = find_fixpoint(nd, p, zeros(8))
 
 using StochasticDiffEq, OrdinaryDiffEq
-ode_prob = ODEProblem(nd, u0, (0.,500.), p)
+ode_prob = ODEProblem(nd, u0, (0.0, 500.0), p)
 ode_sol = solve(ode_prob, Tsit5())
 
 using Plots, LaTeXStrings
-plot(ode_sol, vars = syms_containing(nd, "ω"), ylims = (-1.0, 1.0), ylabel = L"\omega", legend = false, fmt = :png)
+plot(ode_sol; vars=syms_containing(nd, "ω"), ylims=(-1.0, 1.0), ylabel=L"\omega", legend=false, fmt=:png)
 ```
 
 We see that this is in fact a fixpoint solution. We will later use this as an initial condition for the numerical integration of the SDE system.
@@ -110,9 +111,10 @@ We see that this is in fact a fixpoint solution. We will later use this as an in
 For adding the stochastic part of the dynamics we have to define a second graph layer. In our example, the fluctuations at different nodes are independent of each other. Therefore, we define a second graph with the same number of vertices but without any edges.
 
 ```@example SDEVertex
-h =  SimpleGraph(4, 0)
+h = SimpleGraph(4, 0)
 nothing # hide
 ```
+
 The dynamics at the nodes has to have the same dimension as in the deterministic case. In our example we only have fluctuations in the second variable.
 
 ```@example SDEVertex
@@ -126,7 +128,7 @@ nothing # hide
 Now we can construct the dynamics of the second layer by using `network_dynamics()`. Since the graph structure of the stochastic layer has no edges we can take the edge function of the deterministic case as a placeholder.
 
 ```@example SDEVertex
-fluctuation_vertex = ODEVertex(f! = fluctuation!, dim = 2)
+fluctuation_vertex = ODEVertex(; f=fluctuation!, dim=2)
 nd_noise = network_dynamics(fluctuation_vertex, powerflow_edge, h)
 nothing # hide
 ```
@@ -136,9 +138,9 @@ nothing # hide
 Finally, we can create an `SDEProblem` and solve it with `DifferentialEquations`.
 
 ```@example SDEVertex
-sde_prob = SDEProblem(nd, nd_noise, u0, (0., 500.), p)
+sde_prob = SDEProblem(nd, nd_noise, u0, (0.0, 500.0), p)
 sde_sol = solve(sde_prob, SOSRA())
-plot(sde_sol, vars = syms_containing(nd, "ω"), ylims = (-1.0, 1.0), ylabel = L"\omega", legend = false, fmt = :png)
+plot(sde_sol; vars=syms_containing(nd, "ω"), ylims=(-1.0, 1.0), ylabel=L"\omega", legend=false, fmt=:png)
 ```
 
 More details on SDE problems, e.g. how to include correlations or how to define an `EnsembleProblem`, can be found in the [documentation](https://diffeq.sciml.ai/stable/types/sde_types/) of `DifferentialEquations`.
