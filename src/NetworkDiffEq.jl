@@ -119,8 +119,7 @@ end
 
 # struct for both cases
 
-#@Base.kwdef struct NetworkDE{G, GDB, elV, elE, TUV, TUE, Th<:AbstractArray{elV}}
-@Base.kwdef struct NetworkDE{G, GDB, elV, elE, TUV, TUE}
+@Base.kwdef struct NetworkDE{G,GDB,elV,elE,TUV,TUE}
     unique_vertices!::TUV
     unique_v_indices::Vector{Vector{Int}}
     unique_edges!::TUE
