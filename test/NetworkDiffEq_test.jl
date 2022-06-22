@@ -61,8 +61,8 @@ end
         nothing
     end
 
-    @inline function diffusionvertex!(dv, v, edges, h, v_idx, p, t)
-        dv[1] = -h(p, t - 1., idxs=v_idx[1])
+    @inline function diffusionvertex!(dv, v, edges, h_v, p, t)
+        dv[1] = -h_v(t - 1., idxs=1)
         sum_coupling!(dv, edges)
         nothing
     end
