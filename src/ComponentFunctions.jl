@@ -48,7 +48,7 @@ the source and destination of the described edge.
 
   - `dim` is the number of independent variables in the edge equations and
   - `sym` is an array of symbols for these variables.
-  - `coupling` is a Symbol describing if the EdgeFunction is intended for a directed graph (`:directed`) or for an undirected graph (`{:undirected, :symmetric, :antisymmetric, :fiducial}`). `:directed` is intended for directed graphs. `:undirected` is the default option and is only compatible with SimpleGraph. in this case f should specify the coupling from a source vertex to a destination vertex. `:symmetric` and `:antisymmetric` trigger performance optimizations, if `f` has that symmetry property. `:fiducial` lets the user specify both the coupling from src to dst, as well as the coupling from dst to src and is intended for advanced users.
+  - `coupling` is a Symbol describing if the EdgeFunction is intended for a directed graph (`:directed`) or for an undirected graph (`{:undirected, :symmetric, :antisymmetric, :fiducial}`). `:directed` is intended for directed graphs. `:undirected` is the default option and is only compatible with SimpleGraph.  In this case f should specify the coupling from a source vertex to a destination vertex. `:symmetric` and `:antisymmetric` trigger performance optimizations, if `f` has that symmetry property. `:fiducial` lets the user specify both the coupling from src to dst, as well as the coupling from dst to src and is intended for advanced users, i.e. the edge gets passed a vector of `2dim` edge states, where the first `dim` elements will be presented to the dst and the second `dim` elements will be presented to src,
 
 For more details see the documentation.
 """
@@ -285,7 +285,6 @@ Here `dv`, `v`, `p` and `t` are the usual ODE arguments, while
 
   - `dim` is the number of independent variables in the edge equations and
   - `sym` is an array of symbols for these variables.
-  - `coupling` is a Symbol describing if the EdgeFunction is intended for a directed graph (`:directed`) or for an undirected graph (`{:undirected, :fiducial}`). `:directed` is intended for directed graphs. `:undirected` is the default option and is only compatible with SimpleGraph. in this case f should specify the coupling from a source vertex to a destination vertex.  `:fiducial` lets the user specify both the coupling from src to dst, as well as the coupling from dst to src and is intended for advanced users.
   - `mass_matrix` is an optional argument that defaults to the identity
     matrix `I`. If a mass matrix M is given the system `M * de = f` will be
     solved.
@@ -302,7 +301,7 @@ end
 
 
 """
-    StaticDilayEdge(; f, dim, coupling, sym)
+    StaticDelayEdge(; f, dim, coupling, sym)
 
 Like a static edge but with extra arguments for the history of the source and destination vertices. This is NOT a DDEEdge.
 """
@@ -329,9 +328,9 @@ Base.@kwdef struct StaticDelayEdge{T} <: EdgeFunction
             return new{T}(user_f, dim, coupling, sym)
 
         elseif coupling == :fiducial
-            dim % 2 == 0 ? nothing : error("Fiducial edges are required to have even dim.
-                                            The first dim args are used for src -> dst,
-                                            the second for dst -> src coupling.")
+            dim % 2 != 0 && error("Fiducial edges are required to have even dim. ",
+                                  "The first dim args are used for src -> dst ",
+                                  "the second for dst -> src coupling.")
             return new{T}(user_f, dim, coupling, sym)
         elseif coupling ∈ (:antisymmetric, :symmetric)
             error("$coupling coupling not implemented for edges with delay. If you need it please open an issue on GitHub.")
