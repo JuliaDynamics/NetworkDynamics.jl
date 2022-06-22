@@ -73,13 +73,13 @@ function _inner_loop!(component::DDEVertex, indices,
 
     @nd_threads parallel for i in indices
         # Wrappers for the history function correct for global p and global idx
+        # should the default argument be idxs=eachindex(gs.v_idx[i]) and should we use views?
         h_v = @inline((t; idxs) -> h(p,t;idxs=gs.v_idx[i][idxs]))
         
         component.f(view(dx, gs.v_idx[i]),
                   get_vertex(gd, i),
                   get_dst_edges(gd, i),
-                  h::H,
-                  gs.v_idx[i],
+                  h_v,
                   p_v_idx(p, i),
                   t)
     end
