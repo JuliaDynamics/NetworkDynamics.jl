@@ -45,22 +45,9 @@ x0 = rand(nv(g))
 x0[1] = pi
 
 
-prob_st_ver = ODEProblem(diff_network_st_ver, x0, (0.0, 500.0))
-@time sol_st_ver = solve(prob_st_ver, Rodas4())
+prob_st_ver = ODEProblem(diff_network_st_ver, x0, (0.,500.))
+sol_st_ver = solve(prob_st_ver, Rodas4())
 
-
-function test(vertex_list, edge_list, g)
-    nd = network_dynamics(vertex_list, edge_list, g)
-
-    x0 = rand(nv(g))
-    x0[1] = pi
-
-
-    prob_st_ver = ODEProblem(nd, x0, (0.0, 500.0))
-    @time sol_st_ver = solve(prob_st_ver, Rodas4())
-    @time sol_st_ver = solve(prob_st_ver, Rodas4(); saveat=[250, 500])
-end
-test(vertex_list, edge_list, barabasi_albert(10, 5))
 
 println("These dynamics should flow to π, at t=500. they are there up to $(maximum(abs.(sol_st_ver(500.) .- pi)))")
 @test maximum(abs.(sol_st_ver(500.0) .- pi)) < 10^-7

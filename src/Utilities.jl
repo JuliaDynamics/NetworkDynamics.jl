@@ -84,18 +84,6 @@ end
 
 ## non-allocating but code duplication
 
-Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2,T3}, i) where {T1<:AbstractArray,T2,T3}
-    @view p[1][:, i]
-end
-
-Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2,T3}, i) where {T1<:AbstractVector{T4} where {T4},T3,T2}
-    p[1][i]
-end
-
-Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2,T3}, i) where {T1,T2,T3}
-    p[1]
-end
-
 Base.@propagate_inbounds function p_v_idx(p::Tuple{T1,T2}, i) where {T1<:AbstractArray,T2}
     @view p[1][:, i]
 end
@@ -116,18 +104,6 @@ end
 
 
 ## non-allocating but code duplication
-
-Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2,T3}, i) where {T1<:AbstractArray,T2,T3}
-    @view p[2][:, i]
-end
-
-Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2,T3}, i) where {T1<:AbstractVector{T4} where {T4},T3,T2}
-    p[2][i]
-end
-
-Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2,T3}, i) where {T1,T2,T3}
-    p[2]
-end
 
 Base.@propagate_inbounds function p_e_idx(p::Tuple{T1,T2}, i) where {T1,T2<:AbstractArray}
     @view p[2][:, i]

@@ -3,7 +3,6 @@ julia localmake.jl
 python3 -m http.server --bind localhost
 =#
 
-
 using Pkg
 Pkg.activate(@__DIR__)
 Pkg.develop(PackageSpec(; path=dirname(@__DIR__))) # adds the package this script is called from
@@ -22,6 +21,7 @@ makedocs(; sitename="NetworkDynamics",
                 "accessing_edge_variables.md",
                 "Tutorials" => ["Getting started" => "getting_started_with_network_dynamics.md",
                                 "Directed and weighted graphs" => "directed_and_weighted_graphs.md",
-                                "Delay differential equations" => "getting_started_with_DDEs.md",
+                                "Delay differential equations" => "kura_delay.md",
                                 "Heterogeneous systems" => "heterogeneous_system.md",
-                                "Stochastic differential equations" => "SDEVertex.md"]])
+                                "Stochastic differential equations" => "SDEVertex.md"
+                                ]])

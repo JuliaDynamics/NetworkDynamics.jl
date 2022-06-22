@@ -30,11 +30,11 @@ end
 
 
 @inline function component_loop!(unique_components, unique_c_indices,
-                                 dx, p, t, gd, gs, history, parallel)
+    dx, p, t, gd, gs, h::H, parallel) where H
     for j in 1:length(unique_components)
         # Function barrier
         _inner_loop!(unique_components[j], unique_c_indices[j],
-                     dx, p, t, gd, gs, history, parallel)
+                     dx, p, t, gd, gs, h, parallel)
     end
     return nothing
 end
@@ -43,7 +43,7 @@ end
 # inner loops for ODE + Static case
 
 function _inner_loop!(component::ODEVertex, indices,
-                      dx, p, t, gd, gs, history, parallel)
+                      dx, p, t, gd, gs, h, parallel)
     @nd_threads parallel for i in indices
         component.f(view(dx, gs.v_idx[i]),
                     get_vertex(gd, i),
@@ -55,7 +55,7 @@ function _inner_loop!(component::ODEVertex, indices,
 end
 
 function _inner_loop!(component::StaticEdge, indices,
-                      dx, p, t, gd, gs, history, parallel)
+                      dx, p, t, gd, gs, h, parallel)
     @nd_threads parallel for i in indices
         component.f(get_edge(gd, i),
                     get_src_vertex(gd, i),
@@ -69,34 +69,43 @@ end
 # inner loops for DDE + Static Delay
 
 function _inner_loop!(component::DDEVertex, indices,
-                      dx, p, t, gd, gs, history, parallel)
+                      dx, p, t, gd, gs, h::H, parallel) where H
+
     @nd_threads parallel for i in indices
+        # Wrappers for the history function correct for global p and global idx
+        # should the default argument be idxs=eachindex(gs.v_idx[i]) and should we use views?
+        h_v = @inline((t; idxs) -> h(p,t;idxs=gs.v_idx[i][idxs]))
+        
         component.f(view(dx, gs.v_idx[i]),
-                    get_vertex(gd, i),
-                    get_dst_edges(gd, i),
-                    view(history, gs.v_idx[i]),
-                    p_v_idx(p, i),
-                    t)
+                  get_vertex(gd, i),
+                  get_dst_edges(gd, i),
+                  h_v,
+                  p_v_idx(p, i),
+                  t)
     end
     return nothing
 end
 
 function _inner_loop!(component::StaticDelayEdge, indices,
-                      dx, p, t, gd, gs, history, parallel)
+                      dx, p, t, gd, gs, h::H, parallel) where H
     @nd_threads parallel for i in indices
+        # Wrappers for the history function correct for global p and global idx
+        h_v_s = @inline((t; idxs) -> h(p,t;idxs=gs.s_e_idx[i][idxs]))
+        h_v_d = @inline((t; idxs) -> h(p,t;idxs=gs.d_e_idx[i][idxs]))
+
         component.f(get_edge(gd, i),
-                    get_src_vertex(gd, i),
-                    get_dst_vertex(gd, i),
-                    view(history, gs.s_e_idx[i]),
-                    view(history, gs.d_e_idx[i]),
-                    p_e_idx(p, i),
-                    t)
+                     get_src_vertex(gd, i),
+                     get_dst_vertex(gd, i),
+                     h_v_s,
+                     h_v_d,
+                     p_e_idx(p, i),
+                     t)
     end
     return nothing
 end
 
 function _inner_loop!(component::ODEEdge, indices,
-                      dx, p, t, gd, gs, history, parallel)
+                      dx, p, t, gd, gs, h, parallel)
     @nd_threads parallel for i in indices
         component.f(view(dx, gs.e_idx[i] .+ gs.dim_v),
                     get_edge(gd, i),
@@ -110,16 +119,14 @@ end
 
 # struct for both cases
 
-#@Base.kwdef struct NetworkDE{G, GDB, elV, elE, TUV, TUE, Th<:AbstractArray{elV}}
-Base.@kwdef struct NetworkDE{G,GDB,elV,elE,TUV,TUE,Th<:Union{AbstractArray,Nothing}}
+@Base.kwdef struct NetworkDE{G,GDB,elV,elE,TUV,TUE}
     unique_vertices!::TUV
     unique_v_indices::Vector{Vector{Int}}
     unique_edges!::TUE
     unique_e_indices::Vector{Vector{Int}}
     graph::G #redundant?
     graph_structure::GraphStruct
-    graph_data::GraphData{GDB,elV,elE}
-    history::Th # for ODE + Static case: nothing, for DDE + Static Delay case: Th
+    graph_data::GraphData{GDB, elV, elE}
     parallel::Bool # enables multithreading for the core loop
 end
 
@@ -132,20 +139,27 @@ function (d::NetworkDE)(dx, x, p, t)
 
     @assert size(dx) == size(x) "Sizes of dx and x do not match"
 
-    # Pass nothing, because here we have only Static Edges or Static Delay Edges (if we
-    # include the ODE ODE case than we have to pass dx)
+    # Pass nothing instead of the history function
     component_loop!(d.unique_edges!, d.unique_e_indices,
-                    dx, p, t, gd, gs, d.history, d.parallel)
+                    dx, p, t, gd, gs, nothing, d.parallel)
 
     component_loop!(d.unique_vertices!, d.unique_v_indices,
-                    dx, p, t, gd, gs, d.history, d.parallel)
+                    dx, p, t, gd, gs, nothing, d.parallel)
     return nothing
 end
 # for DDE case
-function (d::NetworkDE)(dx, x, h!, p, t)
-    # History computation happens beforehand and is cached in d.history
-    h!(d.history, p, t - p[end])
-    d(dx, x, p, t)
+function (d::NetworkDE)(dx, x, h::H, p, t) where H
+    gs = d.graph_structure
+    checkbounds_p(p, gs.num_v, gs.num_e)
+    gd = prep_gd(dx, x, d.graph_data, gs)
+
+    @assert size(dx) == size(x) "Sizes of dx and x do not match"
+
+    component_loop!(d.unique_edges!, d.unique_e_indices,
+                    dx, p, t, gd, gs, h::H, d.parallel)
+
+    component_loop!(d.unique_vertices!, d.unique_v_indices,
+                    dx, p, t, gd, gs, h::H, d.parallel)
     return nothing
 end
 
@@ -157,7 +171,7 @@ function (d::NetworkDE)(x, p, t, ::Type{GetGD})
     if size(x) == (gs.dim_v,)
         checkbounds_p(p, gs.num_v, gs.num_e)
         component_loop!(d.unique_edges!, d.unique_e_indices,
-                        nothing, p, t, gd, gs, d.history, d.parallel)
+                        nothing, p, t, gd, gs, nothing, d.parallel)
     end
     gd
 end

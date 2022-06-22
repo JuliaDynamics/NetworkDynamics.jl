@@ -80,7 +80,7 @@ The function then defaults to using the identity as mass matrix and `[:v for i i
 
 ### [`DDEVertex`](@ref)
 
-If a vertex has local dynamics described by a delay differential equation (DDE) the local dynamics need to have the signature `vertexfunction!(dv, v, edges, h_v, p, t)`, where `h_v` are the history values of `v`. Then the `VertexFunction` is constructed as
+If a vertex has local dynamics described by a delay differential equation (DDE) the local dynamics need to have the signature `vertexfunction!(dv, v, edges, h_v, p, t)`, where `h_v` is an automatically generated wrapper of the global history function, providing history values for`v`. Then the `VertexFunction` is constructed as
 
 ```julia
 DDEVertex(vertexfunction!, dim, mass_matrix, sym)
@@ -150,12 +150,12 @@ In this case the function defaults to using the identity matrix as mass matrix a
 
 ### [`StaticDelayEdge`](@ref)
 
-This constructor is used when edge variables depend on past values of the vertex variables. In this case the `edgefunction!` has to accept two additional arguments `h_v_s` and `h_v_d` that hold the history of `v_s` and `v_d`. *Static* means that the edge depends only on the dynamics of the vertices the edge is connected to and not on an internal derivative of the edge variables itself.
+This constructor is used when edge variables depend on past values of the vertex variables. In this case the `edgefunction!` has to accept two additional arguments `h_v_s` and `h_v_d` that hold the (automatically generated) localised history functions of `v_s` and `v_d`. *Static* means that the edge depends only on the dynamics of the vertices the edge is connected to and not on an internal derivative of the edge variables itself.
 
 As an example for such system, we show a diffusive coupling with delay:
 
 ```julia
-edgefunction! = (e, v_s, v_d, h_v_s, h_v_d, p, t) -> e .= 0.1 * (h_v_s .- v_d)
+edgefunction! = (e, v_s, v_d, h_v_s, h_v_d, p, t) -> e .= 0.1 * (h_v_s(t - p) .- v_d)
 ```
 
 The `EdgeFunction` object is constructed as

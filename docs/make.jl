@@ -16,7 +16,7 @@ makedocs(; sitename  = "NetworkDynamics",
          "Directed and weighted graphs" => "directed_and_weighted_graphs.md",
          "Heterogeneous systems" => "heterogeneous_system.md",
          "Stochastic differential equations" => "SDEVertex.md",
-         "Delay differential equations" => "getting_started_with_DDEs.md"]])
+         "Delay differential equations" => "kuramoto_delay.md"]])
 
 deploydocs(; repo="github.com/PIK-ICoNe/NetworkDynamics.jl.git",
            devbranch="main")

@@ -175,16 +175,11 @@ function _network_dynamics(vertices!::Union{Vector{T},T},
     hasDelay = any(v -> v isa DDEVertex, unique_vertices!) ||
                any(e -> e isa StaticDelayEdge, unique_edges!)
 
-    if initial_history === nothing && hasDelay
-        initial_history = ones(sum(v_dims))
-    end
-
     graph_stucture = GraphStruct(graph, v_dims, e_dims, symbols_v, symbols_e)
 
     graph_data = GraphData(v_array, e_array, graph_stucture)
 
-    nd! = NetworkDE(unique_vertices!, unique_v_indices, unique_edges!, unique_e_indices, graph, graph_stucture,
-                    graph_data, initial_history, parallel)
+    nd! = NetworkDE(unique_vertices!, unique_v_indices, unique_edges!, unique_e_indices, graph, graph_stucture, graph_data, parallel)
     mass_matrix = construct_mass_matrix(mmv_array, graph_stucture)
 
     return if hasDelay
@@ -196,8 +191,7 @@ end
 
 ## ODEEdge
 
-function _network_dynamics(vertices!::Union{Vector{T},T}, edges!::Union{Vector{U},U}, graph; initial_history=nothing,
-                           x_prototype=zeros(1), parallel=false) where {T<:ODEVertex,U<:ODEEdge}
+function _network_dynamics(vertices!::Union{Vector{T},T}, edges!::Union{Vector{U},U}, graph; x_prototype=zeros(1), parallel=false) where {T<:ODEVertex, U<:ODEEdge}
 
     warn_parallel(parallel)
 
@@ -223,8 +217,7 @@ function _network_dynamics(vertices!::Union{Vector{T},T}, edges!::Union{Vector{U
 
     graph_data = GraphData(v_array, e_array, graph_stucture)
 
-    nd! = NetworkDE(unique_vertices!, unique_v_indices, unique_edges!, unique_e_indices, graph, graph_stucture,
-                    graph_data, initial_history, parallel)
+    nd! = NetworkDE(unique_vertices!, unique_v_indices, unique_edges!, unique_e_indices, graph, graph_stucture, graph_data, parallel)
 
     mass_matrix = construct_mass_matrix(mmv_array, mme_array, graph_stucture)
 

@@ -48,7 +48,7 @@ the source and destination of the described edge.
 
   - `dim` is the number of independent variables in the edge equations and
   - `sym` is an array of symbols for these variables.
-  - `coupling` is a Symbol describing if the EdgeFunction is intended for a directed graph (`:directed`) or for an undirected graph (`{:undirected, :symmetric, :antisymmetric, :fiducial}`). `:directed` is intended for directed graphs. `:undirected` is the default option and is only compatible with SimpleGraph. in this case f! should specify the coupling from a source vertex to a destination vertex. `:symmetric` and `:antisymmetric` trigger performance optimizations, if `f!` has that symmetry property. `:fiducial` lets the user specify both the coupling from src to dst, as well as the coupling from dst to src and is intended for advanced users.
+  - `coupling` is a Symbol describing if the EdgeFunction is intended for a directed graph (`:directed`) or for an undirected graph (`{:undirected, :symmetric, :antisymmetric, :fiducial}`). `:directed` is intended for directed graphs. `:undirected` is the default option and is only compatible with SimpleGraph.  In this case f should specify the coupling from a source vertex to a destination vertex. `:symmetric` and `:antisymmetric` trigger performance optimizations, if `f` has that symmetry property. `:fiducial` lets the user specify both the coupling from src to dst, as well as the coupling from dst to src and is intended for advanced users, i.e. the edge gets passed a vector of `2dim` edge states, where the first `dim` elements will be presented to the dst and the second `dim` elements will be presented to src,
 
 For more details see the documentation.
 """
@@ -285,7 +285,6 @@ Here `dv`, `v`, `p` and `t` are the usual ODE arguments, while
 
   - `dim` is the number of independent variables in the edge equations and
   - `sym` is an array of symbols for these variables.
-  - `coupling` is a Symbol describing if the EdgeFunction is intended for a directed graph (`:directed`) or for an undirected graph (`{:undirected, :fiducial}`). `:directed` is intended for directed graphs. `:undirected` is the default option and is only compatible with SimpleGraph. in this case f! should specify the coupling from a source vertex to a destination vertex.  `:fiducial` lets the user specify both the coupling from src to dst, as well as the coupling from dst to src and is intended for advanced users.
   - `mass_matrix` is an optional argument that defaults to the identity
     matrix `I`. If a mass matrix M is given the system `M * de = f` will be
     solved.
@@ -302,7 +301,7 @@ end
 
 
 """
-    StaticDilayEdge(; f, dim, coupling, sym)
+    StaticDelayEdge(; f, dim, coupling, sym)
 
 Like a static edge but with extra arguments for the history of the source and destination vertices. This is NOT a DDEEdge.
 """
@@ -333,45 +332,19 @@ Base.@kwdef struct StaticDelayEdge{T} <: EdgeFunction
                                   "The first dim args are used for src -> dst ",
                                   "the second for dst -> src coupling.")
             return new{T}(user_f, dim, coupling, sym)
-
+        elseif coupling ∈ (:antisymmetric, :symmetric)
+            error("$coupling coupling not implemented for edges with delay. If you need it please open an issue on GitHub.")
         elseif coupling == :undirected
-            # This might cause unexpected behaviour if source and destination vertex don't
-            # have the same internal arguments.
-            # Make sure to explicitly define the edge is :fiducial in that case.
+        # This might cause unexpected behaviour if source and destination vertex don't
+        # have the same internal arguments.
+        # Make sure to explicitly define the edge is :fiducial in that case.
             f = @inline (e, v_s, v_d, h_v_s, h_v_d, p, t) -> begin
-                @inbounds user_f(view(e, 1:dim), v_s, v_d, h_v_s, h_v_d, p, t)
-                @inbounds user_f(view(e, dim+1:2dim), v_d, v_s, h_v_d, h_v_s, p, t)
-                nothing
-            end
-        elseif coupling == :antisymmetric
-            f = @inline (e, v_s, v_d, h_v_s, h_v_d, p, t) -> begin
-                @inbounds user_f(view(e, 1:dim), v_s, v_d, h_v_s, h_v_d, p, t)
-                @inbounds for i in 1:dim
-                    e[dim+i] = -1.0 * e[i]
-                end
-                nothing
-            end
-        elseif coupling == :symmetric
-            f = @inline (e, v_s, v_d, h_v_s, h_v_d, p, t) -> begin
-                @inbounds user_f(view(e, 1:dim), v_s, v_d, h_v_s, h_v_d, p, t)
-                @inbounds for i in 1:dim
-                    e[dim+i] = e[i]
-                end
+                @inbounds user_f(view(e,1:dim), v_s, v_d, h_v_s, h_v_d, p, t)
+                @inbounds user_f(view(e,dim+1:2dim), v_d, v_s, h_v_d, h_v_s, p, t)
                 nothing
             end
         end
         return new{typeof(f)}(f, 2dim, coupling, repeat(sym, 2))
-    end
-end
-
-function StaticDelayEdge(se::StaticEdge)
-    let _f = se.f, dim = se.dim, coupling = se.coupling, sym = se.sym
-        f = @inline (e, v_s, v_d, h_v_s, h_v_d, p, t) -> _f(e, v_s, v_d, p, t)
-        if coupling ∈ (:undefined, :fiducial, :directed)
-            return StaticDelayEdge(f, dim, coupling, sym)
-        else
-            return StaticDelayEdge(f, dim, :fiducial, sym)
-        end
     end
 end
 
