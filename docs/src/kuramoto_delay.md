@@ -6,7 +6,6 @@ using Random
 using Graphs
 using NetworkDynamics
 using Distributions
-using BenchmarkTools
 ````
 
 A common modification of the [Kuramoto model](https://en.wikipedia.org/wiki/Kuramoto_model) is to include time-lags in the coupling function. In neuroscience this may be used to account for transmission delays along synapses connecting different neurons.
@@ -58,7 +57,7 @@ nothing #hide
 For this example we use a complete graph. Bear in mind however that the data structures of Network Dynamics are best suited for sparse problems and might introduce some additional overhead for dense graphs.
 
 ````@example kuramoto_delay
-N = 10
+N = 6
 g = SimpleDiGraph(complete_graph(N))
 nd = network_dynamics(vertex, edge, g)
 
@@ -89,7 +88,8 @@ discontinuity, this may be slow if many different lags are specified.
 
 ````@example kuramoto_delay
 prob = DDEProblem(nd, θ₀, h, (0.0, 1.0), p; constant_lags=τ)
-@btime solve(prob, MethodOfSteps(Tsit5()); abstol=1e-10, reltol=1e-5); # ~50000 steps because of discontinuities
+@time solve(prob, MethodOfSteps(BS3()); abstol=1e-10, reltol=1e-5); # ~50000 steps because of discontinuities
+@time solve(prob, MethodOfSteps(BS3()); abstol=1e-10, reltol=1e-5);
 nothing #hide
 ````
 
@@ -100,14 +100,16 @@ The discontinuities arise from the initial history function and quickly get smoo
 
 ````@example kuramoto_delay
 fast_prob = DDEProblem(nd, θ₀, h, (0.0, 1.0), p)
-@btime solve(fast_prob, MethodOfSteps(BS3()); abstol=1e-10, reltol=1e-5); # ~200 steps
+@time solve(fast_prob, MethodOfSteps(BS3()); abstol=1e-10, reltol=1e-5); # ~200 steps
+@time solve(fast_prob, MethodOfSteps(BS3()); abstol=1e-10, reltol=1e-5);
 nothing #hide
 ````
 
 The `MethodOfSteps` algortihm extends an ODE solver to DDEs. For an overview of available solvers consult the manual of DifferentialEquations.jl. For example, for stiff systems, such as this one, it might be beneficial to use a stiff solver such as `TRBDF2`.
 
 ````@example kuramoto_delay
-@btime solve(fast_prob, MethodOfSteps(TRBDF2()); abstol=1e-10, reltol=1e-5);
+@time solve(fast_prob, MethodOfSteps(TRBDF2()); abstol=1e-10, reltol=1e-5);
+@time solve(fast_prob, MethodOfSteps(TRBDF2()); abstol=1e-10, reltol=1e-5);
 nothing #hide
 ````
 

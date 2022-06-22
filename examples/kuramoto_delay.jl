@@ -5,7 +5,6 @@ using Random
 using Graphs
 using NetworkDynamics
 using Distributions
-using BenchmarkTools
 
 # A common modification of the [Kuramoto model](https://en.wikipedia.org/wiki/Kuramoto_model) is to include time-lags in the coupling function. In neuroscience this may be used to account for transmission delays along synapses connecting different neurons.
 #
@@ -49,7 +48,7 @@ vertex = ODEVertex(; f=kuramoto_vertex, dim=1);
 
 # For this example we use a complete graph. Bear in mind however that the data structures of Network Dynamics are best suited for sparse problems and might introduce some additional overhead for dense graphs.
 
-N = 10
+N = 6
 g = SimpleDiGraph(complete_graph(N))
 nd = network_dynamics(vertex, edge, g)
 
@@ -73,7 +72,8 @@ h(p, t; idxs=nothing) = typeof(idxs) <: Number ? past[idxs] : past;
 # Since each multiplication combination of the lags may be connected to a
 # discontinuity, this may be slow if many different lags are specified.
 prob = DDEProblem(nd, θ₀, h, (0.0, 1.0), p; constant_lags=τ)
-@btime solve(prob, MethodOfSteps(BS3()); abstol=1e-10, reltol=1e-5); # ~50000 steps because of discontinuities
+@time solve(prob, MethodOfSteps(BS3()); abstol=1e-10, reltol=1e-5); # ~50000 steps because of discontinuities
+@time solve(prob, MethodOfSteps(BS3()); abstol=1e-10, reltol=1e-5);
 
 # We recommend to solve with lowered absolute and relative error tolerances, since the Kuramoto system is highly multistable and the simulations may else produce very different results.
 #
@@ -81,11 +81,13 @@ prob = DDEProblem(nd, θ₀, h, (0.0, 1.0), p; constant_lags=τ)
 # The discontinuities arise from the initial history function and quickly get smoothed out (i.e. reduced in order) when the integration time is larger than the maximum lag. If the asymptotic behaviour is more interesting than the correct solution for a specific initial condition, it is possible to trade accuracy for computational speed by leaving the `constant_lags` undeclared.
 
 fast_prob = DDEProblem(nd, θ₀, h, (0.0, 1.0), p)
-@btime solve(fast_prob, MethodOfSteps(BS3()); abstol=1e-10, reltol=1e-5); # ~200 steps
+@time solve(fast_prob, MethodOfSteps(BS3()); abstol=1e-10, reltol=1e-5); # ~200 steps
+@time solve(fast_prob, MethodOfSteps(BS3()); abstol=1e-10, reltol=1e-5); 
 
 # The `MethodOfSteps` algortihm extends an ODE solver to DDEs. For an overview of available solvers consult the manual of DifferentialEquations.jl. For example, for stiff systems, such as this one, it might be beneficial to use a stiff solver such as `TRBDF2`.
 
-@btime solve(fast_prob, MethodOfSteps(TRBDF2()); abstol=1e-10, reltol=1e-5);
+@time solve(fast_prob, MethodOfSteps(TRBDF2()); abstol=1e-10, reltol=1e-5);
+@time solve(fast_prob, MethodOfSteps(TRBDF2()); abstol=1e-10, reltol=1e-5);
 
 # Some further helpful comments for dealing within initial discontinuities in DDEs may be found in the [manual](https://jitcdde.readthedocs.io/en/stable/#dealing-with-initial-discontinuities) of the Python software JiTCDDE
 
