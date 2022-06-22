@@ -34,7 +34,7 @@ end
     for j in 1:length(unique_components)
         # Function barrier
         _inner_loop!(unique_components[j], unique_c_indices[j],
-                     dx, p, t, gd, gs, h::H, parallel)
+                     dx, p, t, gd, gs, h, parallel)
     end
     return nothing
 end
