@@ -1,7 +1,7 @@
 name = "NetworkDynamics"
 uuid = "22e9dc34-2a0d-11e9-0de0-8588d035468b"
 authors = ["Frank Hellmann <hellmann@pik-potsdam.de>, Michael Lindner <michaellindner@pik-potsdam.de>"]
-version = "0.8"
+version = "0.8.1"
 
 [deps]
 Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
