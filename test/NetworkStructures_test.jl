@@ -75,3 +75,41 @@ import NetworkDynamics: GraphStruct, GraphData, get_vertex, get_edge, get_src_ve
     @test_throws MethodError swap_v_array!(gd, v_array3)
     @test_throws MethodError swap_e_array!(gd, e_array3)
 end
+
+@testset "test edgedata and vertex data indexing" begin
+    using NetworkDynamics: GraphDataBuffer, VertexData, EdgeData
+    gdb = GraphDataBuffer(collect(1:15), collect(1:15))
+    vd = VertexData{typeof(gdb), Integer}(gdb, 5, 5)
+    ed = EdgeData{typeof(gdb), Integer}(gdb, 10, 4)
+
+    @test vd[begin] == 6
+    @test vd[end] == 10
+    @test ed[begin] == 11
+    @test ed[end] == 14
+
+    ed[1:2] = [1,2]
+    @test ed[1] == 1
+    @test ed[2] == 2
+    ed[1:2] .= [4,5]
+    @test ed[1] == 4
+    @test ed[2] == 5
+    ed[1:2] = 9:10
+    @test ed[1] == 9
+    @test ed[2] == 10
+
+    ed[1:2] = [1,2,3,4][[2,3]]
+    @test ed[1:2] == [2,3]
+
+    vd[1:2] = [1,2]
+    @test vd[1] == 1
+    @test vd[2] == 2
+    vd[1:2] .= [4,5]
+    @test vd[1] == 4
+    @test vd[2] == 5
+    vd[1:2] = 9:10
+    @test vd[1] == 9
+    @test vd[2] == 10
+
+    vd[1:2] = [1,2,3,4][[2,3]]
+    @test vd[1:2] == [2,3]
+end
