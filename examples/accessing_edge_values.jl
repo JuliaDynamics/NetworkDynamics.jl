@@ -44,7 +44,7 @@ sol = solve(ode_prob, Tsit5());
 plot(sol; vars=syms_containing(nd, "v"))
 
 # accessing edge values via helper function GetGD
-gd_nd = nd(sol(1.0), 1.0, nothing, GetGD) # exposes underlying graph data struct
+gd_nd = nd(sol(1.0), nothing, 1.0, GetGD) # exposes underlying graph data struct with p=nothing and t=1.0
 e_values = gd_nd.gdb.e_array
 
 
