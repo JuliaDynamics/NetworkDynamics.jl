@@ -169,6 +169,7 @@ function find_fixpoint(nd, p, initial_guess)
         return nl_res.zero
     else
         println("Failed to find fixpoint. Algorithm did not converge.")
+        println("Try running nlsolve with other options.")
     end
 end
 
@@ -176,7 +177,7 @@ export RootRhs
 
 """
     struct RootRhs
-    RootRhs(of)
+    RootRhs(nd)
 
 A utility function that provides a root function, to find valid initial
 conditions. The operator ``M^\\dagger M - 1`` projects onto the kernel of ``M``.
@@ -191,17 +192,17 @@ struct RootRhs
     rhs
     mpm
 end
-function (rr::RootRhs)(x)
+function (rr::RootRhs)(x,p)
     f_x = similar(x)
-    rr.rhs(f_x, x, nothing, 0.0)
-    rr.mpm * f_x .- f_x
+    rr.rhs(f_x, x, p, 0.0)
+    return rr.mpm * f_x .- f_x
 end
 
-function RootRhs(of)
-    mm = of.mass_matrix
+function RootRhs(nd)
+    mm = nd.mass_matrix
     @assert mm !== nothing
     mpm = pinv(mm) * mm
-    RootRhs(of.f, mpm)
+    return RootRhs(nd.f, mpm)
 end
 
 
@@ -209,14 +210,14 @@ export find_valid_ic
 
 
 """
-    find_valid_ic(of, ic_guess)
+    find_valid_ic(nd, ic_guess)
 
 Try to find valid initial conditions for problems involving mass matrices.
 Uses RootRhs as residual function.
 """
-function find_valid_ic(of, ic_guess)
-    rr = RootRhs(of)
-    nl_res = nlsolve(rr, ic_guess)
+function find_valid_ic(nd, initial_guess; p=nothing)
+    rr = RootRhs(nd)
+    nl_res = nlsolve(x -> rr(x,p), initial_guess)
     if converged(nl_res) == true
         return nl_res.zero
     else
