@@ -21,7 +21,7 @@ function kuramoto_inertia!(dv, v, edges, P, t)
     return nothing
 end
 
-
+# A load constraint on the active power
 function load_vertex(dv, v, edges, P, t)
     dv[1] = P
     for edge in edges
@@ -47,32 +47,13 @@ P     = map(x -> typeof(x) == typeof(inertia) ? 1.0 : -1.0, v_arr)
 p     = (P, nothing)
 tspan = (0.0, 150.0)
 
-# Find an inital condition
-
-# ic_guess = rand(N * 3 ÷ 2)
-# idx_ω = idx_containing(nd, :ω)
-# ic_guess[idx_ω] .= 0.0
-# x0 = find_valid_ic(nd, rand(N * 3 ÷ 2); p=p)
-
-#fp = find_fixpoint(ndfp, p, rand(2N))
-
-ndfp = network_dynamics(inertia, f_edge, g)
-probfp = ODEProblem(ndfp, zeros(2N), tspan, p)
-solfp = solve(probfp, Tsit5())
-plot(solfp; vars=syms_containing(ndfp, :ω))
-ic = find_fixpoint(ndfp, p, zeros(2N))
-x0 = zeros(12)
-x0[idx_containg]
-
-
-
-# or try random
+# Project the initial condition on the constraints 
 x0 = find_valid_ic(nd, randn(N * 3 ÷ 2); p=p)
+#... or try random ic
+# x0 = rand((N * 3 ÷ 2)
 
 prob = ODEProblem(nd, x0, tspan, p)
 sol = solve(prob, Rodas4())
-
-
 
 # Define node colors
 begin
@@ -85,3 +66,14 @@ plot(sol; vars=vars_θ, lc=nodefillc)
 vars_ω = syms_containing(nd, :ω)
 plot!(sol; vars=vars_ω, lc=colorant"darkred")
 
+
+# Another way to construct the fixed point 
+# ndfp = network_dynamics(inertia, f_edge, g)
+# probfp = ODEProblem(ndfp, zeros(2N), tspan, p)
+# solfp = solve(probfp, Tsit5(); reltol=1e-6, abstol=0.0)
+# plot(solfp; vars=syms_containing(ndfp, :ω))
+# fp = zeros(N * 3 ÷ 2)
+# fp[idx_containing(nd, :θ)] .= solfp[end,idx_containing(ndfp, :θ)]
+# prob0 = ODEProblem(nd, fp, tspan, p)
+# sol0 = solve(prob0, Rodas4(); reltol=1e-6, abstol=0.0)
+# plot(sol0)
