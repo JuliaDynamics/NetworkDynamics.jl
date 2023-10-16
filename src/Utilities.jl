@@ -215,9 +215,9 @@ export find_valid_ic
 Try to find valid initial conditions for problems involving mass matrices.
 Uses RootRhs as residual function.
 """
-function find_valid_ic(nd, initial_guess; p=nothing, t=nothing)
+function find_valid_ic(nd, initial_guess; p=nothing)
     rr = RootRhs(nd)
-    nl_res = nlsolve(x -> rr(x, p=p, t=t), initial_guess)
+    nl_res = nlsolve(x -> rr(x, p), initial_guess)
     if converged(nl_res) == true
         return nl_res.zero
     else
