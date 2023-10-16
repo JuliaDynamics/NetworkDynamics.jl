@@ -7,13 +7,13 @@ N = 5
 g = star_digraph(N)
 add_edge!(g, 2, 3)
 
-static_vertex = StaticVertex(; f=(x, e_s, e_d, p, t) -> nothing, dim=1)
-no_mm_vertex  = ODEVertex(; f=(dx, x, e_s, e_d, p, t) -> nothing, dim=1)
-num_mm_vertex = ODEVertex(; f=(dx, x, e_s, e_d, p, t) -> nothing, dim=1,
+static_vertex = StaticVertex(; f=(x, edges, p, t) -> nothing, dim=1)
+no_mm_vertex  = ODEVertex(; f=(dx, x, edges, p, t) -> nothing, dim=1)
+num_mm_vertex = ODEVertex(; f=(dx, x, edges, p, t) -> nothing, dim=1,
 mass_matrix=0)
-vec_mm_vertex = ODEVertex(; f=(dx, x, e_s, e_d, p, t) -> nothing, dim=2,
+vec_mm_vertex = ODEVertex(; f=(dx, x, edges, p, t) -> nothing, dim=2,
 mass_matrix=[1, 0])
-mat_mm_vertex = ODEVertex(; f=(dx, x, e_s, e_d, p, t) -> nothing, dim=2,
+mat_mm_vertex = ODEVertex(; f=(dx, x, edges, p, t) -> nothing, dim=2,
 mass_matrix=[[1, 1] [0, 0]])
 
 vertex_list = [static_vertex, no_mm_vertex, num_mm_vertex, vec_mm_vertex, mat_mm_vertex]
