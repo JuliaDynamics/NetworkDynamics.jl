@@ -188,13 +188,13 @@ by returning the projection of ``f(x)`` onto the kernel as residue.
 The use of the pseudoinverse here means this does not play nice with sparse
 matrices. Beware when using for large systems.
 """
-struct RootRhs
-    rhs
-    mpm
+struct RootRhs{T,S}
+    rhs::T
+    mpm::S
 end
-function (rr::RootRhs)(x,p)
+function (rr::RootRhs)(x, p=nothing, t=nothing)
     f_x = similar(x)
-    rr.rhs(f_x, x, p, 0.0)
+    rr.rhs(f_x, x, p, t)
     return rr.mpm * f_x .- f_x
 end
 
@@ -215,9 +215,9 @@ export find_valid_ic
 Try to find valid initial conditions for problems involving mass matrices.
 Uses RootRhs as residual function.
 """
-function find_valid_ic(nd, initial_guess; p=nothing)
+function find_valid_ic(nd, initial_guess; p=nothing, t=nothing)
     rr = RootRhs(nd)
-    nl_res = nlsolve(x -> rr(x,p), initial_guess)
+    nl_res = nlsolve(x -> rr(x, p=p, t=t), initial_guess)
     if converged(nl_res) == true
         return nl_res.zero
     else
