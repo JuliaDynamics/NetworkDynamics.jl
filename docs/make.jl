@@ -4,8 +4,7 @@ using Documenter
 using NetworkDynamics
 
 makedocs(; sitename  = "NetworkDynamics",
-         linkcheck = true, # not sure if we need that
-         modules   = [NetworkDynamics], # creates a warning if a ND.jl docstring is missing
+         linkcheck = true, # checks if external links resolve
          pages     = ["General" => "index.md",
          "BasicConstructors.md",
          "parameters.md",
