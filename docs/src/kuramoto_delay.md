@@ -19,7 +19,7 @@ In this tutorial we solve the system
 ```
 where $\kappa_{ji}$ denotes the coupling strength of the edge from $j$ to $i$, $\tau_{ji}$ its time delay and $\theta_j(t - \tau_{ji})$ the past state of its source vertex
 
-For a general introduction to solving delay differential equations in Julia see this [tutorial]( https://diffeq.sciml.ai/stable/tutorials/dde_example/).
+For a general introduction to solving delay differential equations in Julia see this [tutorial](https://docs.sciml.ai/DiffEqDocs/stable/tutorials/dde_example/#Delay-Differential-Equations).
 
 To implement this in NetworkDynamics.jl a `StaticDelayEdge` has to be defined. Such a coupling function receives two additional arguments `h_v_s` and `h_v_d`.
 These are wrappers of the global history function that directly compute the history values of the local variables at the
