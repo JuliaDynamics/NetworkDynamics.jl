@@ -28,6 +28,23 @@ Abstract supertype for all edge functions.
 abstract type EdgeFunction end
 
 
+"""
+    Helper function to check correct input args for ComponentFunctions
+"""
+@inline function _dimcheck(dim, sym)
+    dim ≤ 0 && error("dim has to be a positive number.")
+    dim != length(sym) && error("Please specify a symbol for every dimension.")
+    return nothing
+end
+
+"""
+    Helper function to check correct input args for ComponentFunctions
+"""
+@inline function _argcheck(f,n)
+    !((n+1) in getproperty.(methods(f), :nargs)) && error("f does not take the right number of arguments ($n args)")
+    return nothing
+end
+
 
 """
     StaticEdge(; f, dim, coupling, sym)
@@ -68,8 +85,9 @@ Base.@kwdef struct StaticEdge{T} <: EdgeFunction
                           :antisymmetric)
 
         coupling ∉ coupling_types && error("Coupling type not recognized. Choose from $coupling_types.")
-        dim ≤ 0 && error("dim has to be a positive number.")
-        dim != length(sym) && error("Please specify a symbol for every dimension.")
+
+        _dimcheck(dim, sym)
+        _argcheck(user_f, 5)
 
         if coupling ∈ [:undefined, :directed]
             return new{T}(user_f, dim, coupling, sym)
@@ -143,6 +161,12 @@ Base.@kwdef struct ODEVertex{T} <: VertexFunction
     dim::Int
     mass_matrix = I
     sym = [:v for i in 1:dim]
+
+    function ODEVertex(f::T, dim::Int, mass_matrix = I, sym = [:v for i in 1:dim]) where T
+        _dimcheck(dim, sym)
+        _argcheck(f, 5)
+        return new{typeof(f)}(f, dim, mass_matrix, sym)
+    end
 end
 
 """
@@ -172,7 +196,7 @@ function StaticVertex(; f, dim::Int, sym::Vector{Symbol}=[:v for i in 1:dim])
     # by f into dx, then subtract x. This leads to the  constraint
     # 0 = - x + f(...)
     # where f(...) denotes the value that f(a, ...) writes into a.
-
+    _argcheck(f, 4)
     _f = (dx, x, edges, p, t) -> begin
         f(dx, edges, p, t)
         @inbounds for i in eachindex(dx)
@@ -230,8 +254,9 @@ Base.@kwdef struct ODEEdge{T} <: EdgeFunction
                                         "moment. Choose `coupling` from $coupling_types.")
         coupling ∈ (:symmetric, :antisymmetric) && error("Coupling type $coupling is not available for ODEEdges.")
         coupling ∉ coupling_types && error("Coupling type not recognized. Choose from $coupling_types.")
-        dim ≤ 0 && error("dim has to be a positive number.")
-        dim != length(sym) && error("Please specify a symbol for every dimension.")
+
+        _argcheck(user_f, 6)
+        _dimcheck(dim, sym)
 
         if coupling == :directed
             return new{T}(user_f, dim, coupling, mass_matrix, sym)
@@ -296,6 +321,11 @@ Base.@kwdef struct DDEVertex{T} <: VertexFunction
     dim::Int # number of dimensions of x
     mass_matrix = I # Mass matrix for the equation
     sym = [:v for i in 1:dim] # Symbols for the dimensions
+    function DDEVertex(f::T, dim::Int, mass_matrix=I, sym=[:v for i in 1:dim]) where {T}
+        _dimcheck(dim, sym)
+        _argcheck(f, 6)
+        return new{typeof(f)}(f, dim, mass_matrix, sym)
+    end
 end
 
 
@@ -321,8 +351,8 @@ Base.@kwdef struct StaticDelayEdge{T} <: EdgeFunction
                           :antisymmetric)
 
         coupling ∉ coupling_types && error("Coupling type not recognized. Choose from $coupling_types.")
-        dim ≤ 0 && error("dim has to be a positive number.")
-        dim != length(sym) && error("Please specify a symbol for every dimension.")
+        _argcheck(user_f, 7)
+        _dimcheck(dim, sym)
 
         if coupling ∈ [:undefined, :directed]
             return new{T}(user_f, dim, coupling, sym)

@@ -323,3 +323,57 @@ end
     @test (@allocated bar!(de, e, nothing, nothing, nothing, nothing)) == 0
 
 end
+
+
+@testset begin "DimWarn"
+    f = (v, edges, p, t) -> v .= pi
+    g = (e, v_s, v_d, p, t) -> e .= pi
+    h = (a,b,c,d,e,f) -> nothing
+    j = (a, b, c, d, e, f, g) -> nothing
+
+    @test_throws ErrorException StaticVertex(; f=g, dim=3, sym=[:θ, :ω, :u])
+    @test StaticVertex(; f=f, dim=3, sym=[:θ, :ω, :u]) isa VertexFunction
+
+    @test_throws ErrorException StaticVertex(; f=f, dim=5, sym=[:θ, :ω, :u])
+    @test_throws ErrorException StaticVertex(; f=f, dim=1, sym=[:θ, :ω, :u])
+    @test_throws ErrorException StaticVertex(; f=f, dim=-1)
+
+    @test_throws ErrorException ODEVertex(; f=f, dim=3, sym=[:θ, :ω, :u])
+    @test ODEVertex(; f=g, dim=3, sym=[:θ, :ω, :u]) isa VertexFunction
+
+
+    @test_throws ErrorException ODEVertex(; f=g, dim=5, sym=[:θ, :ω, :u])
+    @test_throws ErrorException ODEVertex(; f=g, dim=1, sym=[:θ, :ω, :u])
+    @test_throws ErrorException ODEVertex(; f=g, dim=-1)
+
+    @test_throws ErrorException DDEVertex(; f=g, dim=3, sym=[:θ, :ω, :u])
+    @test DDEVertex(; f=h, dim=3, sym=[:θ, :ω, :u]) isa VertexFunction
+
+
+    @test_throws ErrorException DDEVertex(; f=h, dim=5, sym=[:θ, :ω, :u])
+    @test_throws ErrorException DDEVertex(; f=h, dim=1, sym=[:θ, :ω, :u])
+    @test_throws ErrorException DDEVertex(; f=h, dim=-1)
+
+
+    @test_throws ErrorException StaticEdge(; f=f, dim=3, sym=[:θ, :ω, :u])
+    @test StaticEdge(; f=g, dim=3, sym=[:θ, :ω, :v], coupling=:undirected) isa EdgeFunction
+
+    @test_throws ErrorException StaticEdge(; f=g, dim=5, sym=[:θ, :ω, :u])
+    @test_throws ErrorException StaticEdge(; f=g, dim=1, sym=[:θ, :ω, :u])
+    @test_throws ErrorException StaticEdge(; f=g, dim=-1)
+
+
+    @test_throws ErrorException ODEEdge(; f=f, dim=3, sym=[:θ, :ω, :u])
+    @test ODEEdge(; f=h, dim=3, sym=[:θ, :ω, :v], coupling=:undirected) isa EdgeFunction
+
+    @test_throws ErrorException ODEEdge(; f=h, dim=5, sym=[:θ, :ω, :u])
+    @test_throws ErrorException ODEEdge(; f=h, dim=1, sym=[:θ, :ω, :u])
+    @test_throws ErrorException ODEEdge(; f=h, dim=-1)
+
+    @test_throws ErrorException StaticDelayEdge(; f=h, dim=3, sym=[:θ, :ω, :u])
+    @test StaticDelayEdge(; f=j, dim=3, sym=[:θ, :ω, :u]) isa EdgeFunction
+
+    @test_throws ErrorException ODEEdge(; f=j, dim=5, sym=[:θ, :ω, :u])
+    @test_throws ErrorException ODEEdge(; f=j, dim=1, sym=[:θ, :ω, :u])
+    @test_throws ErrorException ODEEdge(; f=j, dim=-1)
+end
