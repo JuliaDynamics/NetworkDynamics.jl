@@ -20,9 +20,11 @@ using LinearAlgebra
         end
     end
 
+    j = (a,b,c,d,e,f,g) -> nothing
+
     eundir = StaticEdge(; f=f, dim=2, coupling = :undirected)
     eundef = StaticEdge(; f=f, dim=2)
-    deundef = StaticDelayEdge(;f=f, dim=2)
+    deundef = StaticDelayEdge(;f=j, dim=2)
 
     mixed_edges = [eundef, eundef, deundef]
 
