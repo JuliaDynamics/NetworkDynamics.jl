@@ -1,8 +1,8 @@
 using Graphs
 
 @testset "test syms containing" begin
-    vert = ODEVertex(; f=nothing, sym=[:a1, :b2], dim=2)
-    edge = StaticEdge(; f=nothing, dim=2)
+    vert = ODEVertex(; f=(a,b,c,d,e) -> nothing, sym=[:a1, :b2], dim=2)
+    edge = StaticEdge(; f=(a, b, c, d, e) -> nothing, dim=2)
     g = complete_graph(3)
     nd = network_dynamics(vert, edge, g)
 
