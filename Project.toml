@@ -1,7 +1,7 @@
 name = "NetworkDynamics"
 uuid = "22e9dc34-2a0d-11e9-0de0-8588d035468b"
 authors = ["Frank Hellmann <hellmann@pik-potsdam.de>, Michael Lindner <michaellindner@pik-potsdam.de>"]
-version = "0.8.2"
+version = "0.8.3"
 
 [deps]
 Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
@@ -13,5 +13,5 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 [compat]
 Graphs = "^1.4.0"
 NLsolve = "^4.2.0"
-SciMLBase = "1, 2"
+SciMLBase = "2.0 - 2.10"
 julia = "1.5"
