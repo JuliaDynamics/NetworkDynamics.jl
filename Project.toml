@@ -13,5 +13,5 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 [compat]
 Graphs = "^1.4.0"
 NLsolve = "^4.2.0"
-SciMLBase = "2.0 - 2.10"
+SciMLBase = "2.0 - 2.10, 2"
 julia = "1.5"
