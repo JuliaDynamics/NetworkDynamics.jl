@@ -10,7 +10,7 @@ include("NetworkStructures.jl")
 include("NetworkDiffEq.jl")
 
 
-export network_dynamics
+export network_dynamics, allocation_report
 
 
 

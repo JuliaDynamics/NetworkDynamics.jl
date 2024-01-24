@@ -306,3 +306,74 @@ function construct_mass_matrix(mmv_array, mme_array, gs)
     end
     mass_matrix
 end
+
+
+"""
+    allocation_report(nd, p; verbose=true)
+
+Tests the given `network_dynamics` object with parameters `p` for allocations.
+Returns the overall allocations of the call to the rhs as well as the individual
+allocations for all node and edge functions.
+
+Returns `(a_nd, [a_vert..], [a_edge..])` where `a_nd` are the total allocations of the
+nd call, `a_vert` are the allocations of the unique vertex functions and `a_edge` are the
+allocations of the unique edge functions.
+"""
+function allocation_report(nd, p; verbose=true)
+    ndf = nd.f;
+
+    u  = rand(length(nd.syms));
+    du = zeros(length(u));
+    nd(du, u, p, 0.0) # warmup
+
+    allocations_nd = @allocated nd(du, u, p, 0.0)
+    verbose && @info "Execution of Network" allocations_nd
+
+    # get minimum dimension of edges and vertices to create "fake" data
+    gd = nd(u,p,0.0,GetGD)
+    min_e_dim = mapreduce(min, get_dst_edges(gd, vertices(ndf.graph))) do edgelist
+        minimum(length.(edgelist))
+    end
+    min_v_dim = mapreduce(v->v.dim, min, ndf.unique_vertices!)
+
+    allocations_unique_verts = Int[]
+    for (ui, vert) in enumerate(ndf.unique_vertices!)
+        vert isa ODEVertex || error("Allocation report not supported for $(typeof(vert))")
+        # get p for specific indices
+        pv = NetworkDynamics.p_v_idx(p, first(ndf.unique_v_indices[ui]))
+        u  = rand(vert.dim)
+        du = zeros(vert.dim)
+        edges = [rand(min_e_dim) for i in 1:5]
+
+        vert.f(du, u, edges, pv, 0.0) # warmup
+        allocations = @allocated vert.f(du, u, edges, pv, 0.0)
+        verbose && @info "Execution of vertex model for $(ndf.unique_v_indices[ui])" allocations
+        push!(allocations_unique_verts, allocations)
+    end
+
+    allocations_unique_edges = Int[]
+    for (ui, edg) in enumerate(ndf.unique_edges!)
+        # get p for specific indices
+        pe = NetworkDynamics.p_e_idx(p, first(ndf.unique_e_indices[ui]))
+        u  = rand(edg.dim)
+        src = rand(min_v_dim)
+        dst = rand(min_v_dim)
+
+        if edg isa ODEEdge
+            du = zeros(edg.dim)
+            edg.f(du, u, src, dst, pe, 0.0) # warmup
+            allocations = @allocated edg.f(du, u, src, dst, pe, 0.0)
+            verbose && @info "Execution of edge model for $(ndf.unique_e_indices[ui])" allocations
+        elseif edg isa StaticEdge
+            edg.f(u, src, dst, pe, 0.0) # warmup
+            allocations = @allocated edg.f(u, src, dst, pe, 0.0)
+            verbose && @info "Execution of edge model for $(ndf.unique_e_indices[ui])" allocations
+        else
+            error("Allocation report not supportet for $(typeof(edg)).")
+        end
+        push!(allocations_unique_edges, allocations)
+    end
+    (allocations_nd, allocations_unique_verts, allocations_unique_edges)
+end
+
+allocations(nd, p) = allocation_report(nd, p; verbose=false)[1]
