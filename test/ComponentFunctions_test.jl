@@ -234,7 +234,7 @@ end
 
 
     vertex_list_1 = [odevertex for v in 1:10]
-    @test eltype(vertex_list_1) == ODEVertex{typeof(diffusion_vertex!)}
+    @test eltype(vertex_list_1) == ODEVertex{typeof(diffusion_vertex!), typeof(nothing)}
 
     vertex_list_2 = [staticvertex for v in 1:10]
     @test eltype(vertex_list_2) <: ODEVertex
