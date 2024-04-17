@@ -1,4 +1,4 @@
-using LightGraphs
+using Graphs
 
 export dim, pdim
 
@@ -136,11 +136,11 @@ Base.length(cb::ColorBatch) = length(cb.edges)
 Base.length(eb::EdgeBatch) = length(eb.edges)
 Base.length(vb::VertexBatch) = length(vb.vertices)
 
-LightGraphs.nv(nw::Network) = sum(nv.(nw.vertexbatches))
-LightGraphs.nv(vb::VertexBatch) = length(vb.vertices)
+Graphs.nv(nw::Network) = sum(nv.(nw.vertexbatches))
+Graphs.nv(vb::VertexBatch) = length(vb.vertices)
 
-LightGraphs.ne(nw::Network) = size(ne.(nl))
-LightGraphs.ne(nl::NetworkLayer) = ne(nl.g)
+Graphs.ne(nw::Network) = size(ne.(nl))
+Graphs.ne(nl::NetworkLayer) = ne(nl.g)
 
 _lastinrange(d::OrderedDict{Int, UnitRange{Int}}) = isempty(d) ? 0 : d[d.keys[end]][end]
 

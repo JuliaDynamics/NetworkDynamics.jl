@@ -1,6 +1,6 @@
 using NDPrototype
 using Test
-using LightGraphs
+using Graphs
 
 using NDPrototype: VertexBatch, parameter_range
 

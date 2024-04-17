@@ -1,4 +1,4 @@
-using LightGraphs.SimpleGraphs
+using Graphs.SimpleGraphs
 
 function isvalid(g::SimpleGraph, colors)
     degrees = degree(g)

@@ -1,5 +1,5 @@
 module NDPrototype
-using LightGraphs
+using Graphs
 using OrderedCollections
 using Unrolled
 

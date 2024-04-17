@@ -1,5 +1,5 @@
 using NDPrototype
-using LightGraphs
+using Graphs
 using Random
 using OrdinaryDiffEq
 
@@ -59,7 +59,7 @@ begin
     N = 1000
     g = watts_strogatz(N, Int(N/2), 0.0, seed=1)
     gc = NDPrototype.ColoredGraph(g)
-    for e in LightGraphs.edges(gc)
+    for e in Graphs.edges(gc)
         c = NDPrototype.pickfree(gc, e.src, e.dst)
         NDPrototype.setcolor!(gc, e, c)
         println(e)
