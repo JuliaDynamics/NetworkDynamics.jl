@@ -1,17 +1,18 @@
 export ODEVertex, StaticEdge, ODEEdge
 export Symmetric, AntiSymmetric, Directed, Fiducial
 
+abstract type ComponentFunction end
 """
 Abstract supertype for all vertex functions.
 """
-abstract type VertexFunction end
+abstract type VertexFunction <: ComponentFunction end
 
 abstract type Coupling end
 
 """
 Abstract supertype for all edge functions.
 """
-abstract type EdgeFunction{C<:Coupling} end
+abstract type EdgeFunction{C<:Coupling} <: ComponentFunction end
 
 struct AntiSymmetric <: Coupling end
 struct Symmetric <: Coupling end
@@ -49,5 +50,10 @@ end
 
 dim(e::Union{EdgeFunction, VertexFunction}) = e.dim
 pdim(e::Union{EdgeFunction, VertexFunction}) = e.pdim
-accdim(e::EdgeFunction) = e.dim
-accdim(e::EdgeFunction{Fiducial}) = Int(e.dim/2)
+accdepth(e::EdgeFunction) = e.dim
+accdepth(e::EdgeFunction{Fiducial}) = Int(e.dim/2)
+
+statetype(::T) where {T <: ComponentFunction} = statetype(T)
+statetype(::Type{<:ODEVertex}) = StateType.dynamic
+statetype(::Type{<:StaticEdge}) = StateType.static
+statetype(::Type{<:ODEEdge}) = StateType.dynamic

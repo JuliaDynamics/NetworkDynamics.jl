@@ -3,121 +3,94 @@ export Network
 function Network(g::SimpleGraph,
                  vertexf::Union{VertexFunction, Vector{<:VertexFunction}},
                  edgef::Union{EdgeFunction, Vector{<:EdgeFunction}};
-                 accumulator=+, accdim=:auto,
-                 execution=:seq,
+                 accumulator=+,
+                 edepth=:auto,
+                 vdepth=:auto,
+                 execution=SequentialExecution(),
                  verbose=false)
     verbose && println("Create dynamic network with $(nv(g)) vertices and $(ne(g)) edges:")
-    @argcheck execution ∈ EXECUTION_STYLES "Exectuion type $execution not supportet (choose from $(EXECUTION_STYLES))"
+    @argcheck execution isa ExecutionStyle "Exectuion type $execution not supportet (choose from $(subtypes(ExecutionStyle)))"
 
     im = IndexManager()
 
-    vtypes, idxs = batch_identical(vertexf, collect(1:nv(g)))
+    vtypes, idxs = _batch_identical(vertexf, collect(1:nv(g)))
     vertexbatches = collect(VertexBatch(im, i, t; verbose) for (i, t) in zip(idxs, vtypes))
 
-    nl = NetworkLayer(im, g, edgef, accumulator, accdim; verbose)
+    nl = NetworkLayer(im, g, vertexf, edgef, accumulator, edepth, vdepth; verbose)
 
-    @assert isdense(im) "The index structure is not dense"
-    return Network{execution, typeof(nl), typeof(vertexbatches)}(vertexbatches, nl, im)
+    @assert isdense(im)
+    return Network{typeof(execution), typeof(nl), typeof(vertexbatches)}(vertexbatches, nl, im, LazyBufferCache())
 end
 
 function VertexBatch(im::IndexManager,
                      vertex_idxs::Vector{Int},
                      vertexf::VertexFunction;
                      verbose)
+    (firstidx, pfirstidx) = register_components!(im, vertex_idxs, vertexf)
+
     dim = vertexf.dim
     pdim = vertexf.pdim
-    (firstidx, pfirstidx) = register_vertices!(im, vertex_idxs, dim, pdim)
+    verbose && println(" - VertexBatch: dim=$(dim), pdim=$(pdim), length=$(length(vertex_idxs))")
 
-    verbose && println(" - VertexBatch: dim=$dim, pdim=$pdim, length=$(length(vertex_idxs))")
-
-    VertexBatch(vertex_idxs,
-                vertexf,
-                dim,
-                firstidx,
-                pdim,
-                pfirstidx)
+    VertexBatch(vertex_idxs, vertexf, dim, firstidx, pdim, pfirstidx)
 end
 
 function NetworkLayer(im::IndexManager, g::SimpleGraph,
+                      vertexf::Union{VertexFunction, Vector{<:VertexFunction}},
                       edgef::Union{EdgeFunction, Vector{<:EdgeFunction}},
-                      accumulator, accdim;
+                      accumulator, edepth, vdepth;
                       verbose)
     @argcheck hasmethod(accumulator, NTuple{2, AbstractFloat}) "Accumulator needs `acc(AbstractFloat, AbstractFloat) method`"
 
-    accdim_max = maxaccdim(edgef)
-    if accdim === :auto
-        accdim = accdim_max
-        verbose && println(" - auto accumulation dimension = $accdim")
+    _maxedepth = maxedepth(edgef)
+    if edepth === :auto
+        edepth = _maxedepth
+        verbose && println(" - auto accumulation depth = $edepth")
     end
-    @argcheck accdim<=accdim_max "For this system acc dim is limited to $accdim_max by the edgefunctions"
+    @argcheck edepth<=_maxedepth "For this system accumulation depth is limited to $edepth by the edgefunctions"
 
-    edgecolors = color_edges_greedy(g)
-    verbose && println(" - found $(length(unique(edgecolors))) edgecolors (optimum would be $(maximum(degree(g))))")
+    _maxvdepth = maxvdepth(vertexf)
+    if vdepth === :auto
+        vdepth = _maxvdepth
+        verbose && println(" - auto edge input depth = $vdepth")
+    end
+    @argcheck vdepth<=_maxvdepth "For this system edge input depth is limited to $edepth by the vertex dimensions"
 
-    colors = unique(edgecolors)
+    etypes, idxs = _batch_identical(edgef, collect(1:ne(g)))
+    edgebatches = collect(EdgeBatch(im, i, t; verbose) for (i, t) in zip(idxs, etypes))
 
-    idx_per_color = [findall(isequal(c), edgecolors) for c in colors]
 
-    edgef_per_color = batch_by_idxs(edgef, idx_per_color)
+    # edgecolors = color_edges_greedy(g)
+    # verbose && println(" - found $(length(unique(edgecolors))) edgecolors (optimum would be $(maximum(degree(g))))")
 
-    colorbatches = collect(ColorBatch(im, g, idx, ef; verbose)
-                         for (idx, ef) in zip(idx_per_color, edgef_per_color))
+    # colors = unique(edgecolors)
 
-    NetworkLayer(g, colorbatches, accumulator, accdim, LazyBufferCache())
+    # idx_per_color = [findall(isequal(c), edgecolors) for c in colors]
+
+    # edgef_per_color = batch_by_idxs(edgef, idx_per_color)
+
+    # colorbatches = collect(ColorBatch(im, g, idx, ef; verbose)
+    #                      for (idx, ef) in zip(idx_per_color, edgef_per_color))
+
+    NetworkLayer(g, edgebatches, accumulator, edepth, vdepth)
 end
 
-maxaccdim(e::EdgeFunction) = accdim(e)
-maxaccdim(e::AbstractVector{<:EdgeFunction}) = minimum(accdim.(e))
+maxedepth(e::EdgeFunction) = accdepth(e)
+maxedepth(e::AbstractVector{<:EdgeFunction}) = minimum(accdepth.(e))
+maxvdepth(v::VertexFunction) = dim(v)
+maxvdepth(v::AbstractVector{<:EdgeFunction}) = minimum(dim.(v))
 
-function ColorBatch(im::IndexManager, g::SimpleGraph,
-                    edge_idxs::Vector{Int},
-                    edgef::Union{EdgeFunction, Vector{<:EdgeFunction}};
-                    verbose)
-    verbose && println(" - ColorBatch with $(length(edge_idxs)) edges")
-
-    eftypes, idxs = batch_identical(edgef, edge_idxs)
-    edgebatches = collect(EdgeBatch(im, g, i, ef; verbose) for (i, ef) in zip(idxs, eftypes))
-
-    return ColorBatch(edge_idxs, edgebatches)
-end
-
-function EdgeBatch(im::IndexManager, g::SimpleGraph,
+function EdgeBatch(im::IndexManager,
                    edge_idxs::Vector{Int},
                    edgef::EdgeFunction;
                    verbose)
+    (firstidx, pfirstidx) = register_components!(im, edge_idxs, edgef)
+
     dim = edgef.dim
     pdim = edgef.pdim
+    verbose && println(" - EdgeBatch: dim=$(dim), pdim=$(pdim), length=$(length(edge_idxs))")
 
-    if edgef isa StaticEdge
-        (firstidx, pfirstidx) = register_edges!(im, edge_idxs, 0, pdim)
-    else
-        (firstidx, pfirstidx) = register_edges!(im, edge_idxs, dim, pdim)
-    end
-
-    vidx_array = Array{Int}(undef, 6*length(edge_idxs))
-    empty!(vidx_array)
-    alledges = collect(edges(g))
-    for (i, eidx) in enumerate(edge_idxs)
-        edge = alledges[eidx]
-        src, dst = edge.src, edge.dst
-        src_r = vertex_data_range(im, src)
-        dst_r = vertex_data_range(im, dst)
-        src_idx, dst_idx = src_r[begin], dst_r[begin]
-        src_dim, dst_dim = length(src_r), length(dst_r)
-
-        append!(vidx_array, src, src_idx, src_dim, dst, dst_idx, dst_dim)
-    end
-    @assert length(vidx_array) == 6*length(edge_idxs)
-
-    verbose && println("   - EdgeBatch: dim=$dim, pdim=$pdim, length=$(length(edge_idxs))")
-
-    EdgeBatch(edge_idxs,
-              edgef,
-              dim,
-              firstidx,
-              pdim,
-              pfirstidx,
-              vidx_array)
+    EdgeBatch(edge_idxs, edgef, dim, firstidx, pdim, pfirstidx)
 end
 
 batch_by_idxs(v, idxs::Vector{Vector{Int}}) = [v for batch in idxs]
@@ -126,8 +99,8 @@ function batch_by_idxs(v::AbstractVector, batches::Vector{Vector{Int}})
     [v[batch] for batch in batches]
 end
 
-batch_identical(el, idxs::Vector{Int}) = [el], [idxs]
-function batch_identical(v::Vector{T}, indices::Vector{Int}) where {T}
+_batch_identical(el, idxs::Vector{Int}) = [el], [idxs]
+function _batch_identical(v::Vector{T}, indices::Vector{Int}) where {T}
     @assert length(v) == length(indices)
     idxs_per_type = Vector{Int}[]
     types = T[]

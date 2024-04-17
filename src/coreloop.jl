@@ -29,13 +29,13 @@ end
     end
 end
 
-function process_batch!(nw::Network{:seq}, layer, batch, dupt, acc)
+function process_batch!(nw::Network{SequentialExecution}, layer, batch, dupt, acc)
     for idx in 1:length(batch)
         element_kernel!(layer, batch, dupt, acc, idx)
     end
 end
 
-function process_batch!(nw::Network{:threaded}, layer, batch, dupt, acc)
+function process_batch!(nw::Network{ThreadedExecution}, layer, batch, dupt, acc)
     @threads for idx in 1:length(batch)
         element_kernel!(layer, batch, dupt, acc, idx)
     end

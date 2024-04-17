@@ -5,6 +5,7 @@ using Unrolled
 
 using ArgCheck: @argcheck
 using PreallocationTools: LazyBufferCache
+using EnumX: @enumx
 
 include("utils.jl")
 include("edge_coloring.jl")
