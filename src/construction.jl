@@ -7,7 +7,7 @@ function Network(g::SimpleGraph,
                  execution=:seq,
                  verbose=false)
     verbose && println("Create dynamic network with $(nv(g)) vertices and $(ne(g)) edges:")
-    @check execution ∈ EXECUTION_STYLES "Exectuion type $execution not supportet (choose from $(EXECUTION_STYLES))"
+    @argcheck execution ∈ EXECUTION_STYLES "Exectuion type $execution not supportet (choose from $(EXECUTION_STYLES))"
 
     im = IndexManager()
 
@@ -42,14 +42,14 @@ function NetworkLayer(im::IndexManager, g::SimpleGraph,
                       edgef::Union{EdgeFunction, Vector{<:EdgeFunction}},
                       accumulator, accdim;
                       verbose)
-    @check hasmethod(accumulator, NTuple{2, AbstractFloat}) "Accumulator needs `acc(AbstractFloat, AbstractFloat) method`"
+    @argcheck hasmethod(accumulator, NTuple{2, AbstractFloat}) "Accumulator needs `acc(AbstractFloat, AbstractFloat) method`"
 
     accdim_max = maxaccdim(edgef)
     if accdim === :auto
         accdim = accdim_max
         verbose && println(" - auto accumulation dimension = $accdim")
     end
-    @check accdim<=accdim_max "For this system acc dim is limited to $accdim_max by the edgefunctions"
+    @argcheck accdim<=accdim_max "For this system acc dim is limited to $accdim_max by the edgefunctions"
 
     edgecolors = color_edges_greedy(g)
     verbose && println(" - found $(length(unique(edgecolors))) edgecolors (optimum would be $(maximum(degree(g))))")
@@ -63,7 +63,7 @@ function NetworkLayer(im::IndexManager, g::SimpleGraph,
     colorbatches = collect(ColorBatch(im, g, idx, ef; verbose)
                          for (idx, ef) in zip(idx_per_color, edgef_per_color))
 
-    NetworkLayer(g, colorbatches, accumulator, accdim, CachePool())
+    NetworkLayer(g, colorbatches, accumulator, accdim, LazyBufferCache())
 end
 
 maxaccdim(e::EdgeFunction) = accdim(e)

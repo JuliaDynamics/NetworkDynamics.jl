@@ -3,6 +3,9 @@ using Graphs
 using OrderedCollections
 using Unrolled
 
+using ArgCheck: @argcheck
+using PreallocationTools: LazyBufferCache
+
 include("utils.jl")
 include("edge_coloring.jl")
 include("component_functions.jl")

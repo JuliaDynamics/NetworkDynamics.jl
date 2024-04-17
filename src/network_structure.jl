@@ -37,7 +37,7 @@ struct NetworkLayer{GT,CTup,AF}
     "depth/dim of accumulation"
     accdim::Int
     "lazy cache pool"
-    cachepool::CachePool
+    cachepool::LazyBufferCache
 end
 
 accumulator_cache(nl::NetworkLayer, T) = getcache(nl.cachepool, T, nl.accdim * nv(nl.g))
