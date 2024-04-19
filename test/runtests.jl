@@ -8,35 +8,47 @@ using NDPrototype: VertexBatch, parameter_range
     @testset "constructor" begin
         using NDPrototype: StateType, statetype
         g = complete_graph(10)
-        vertexf = ODEVertex(; f=x->x^2, dim=1, pdim=2)
+        vertexf = ODEVertex(; f=x -> x^2, dim=1, pdim=2)
         @test statetype(vertexf) == StateType.dynamic
 
-        edgef = StaticEdge(; f=x->x^2, dim=2, pdim=3, coupling=AntiSymmetric())
+        edgef = StaticEdge(; f=x -> x^2, dim=2, pdim=3, coupling=AntiSymmetric())
         statetype(edgef) == StateType.static
 
-        nd = Network(g, vertexf, edgef; verbose=true);
+        nd = Network(g, vertexf, edgef; verbose=true)
 
         @test statetype(only(nd.vertexbatches)) == StateType.dynamic
         @test statetype(only(nd.nl.edgebatches)) == StateType.static
         @test isdense(nd.im)
         @test nd.im.size_dynamic == nv(g)
-        @test nd.im.size_static == ne(g)*2
+        @test nd.im.size_static == ne(g) * 2
         nd.cachepool
         lbc = LazyBufferCache()
         buff = lbc[zeros(3)]
         buff[1] = 4
         buff = lbc[ones(3), 10]
-        buff = lbc[ones(3)]
+
+        @btime $buff = $lbc[$(ones(11))]
+    end
+
+    @testset "constructor" begin
+        using NDPrototype: StateType, statetype
+        g = complete_graph(10)
+        vertexf = ODEVertex(; f=x -> x^2, dim=1, pdim=2)
+        edgef = StaticEdge(; f=x -> x^2, dim=2, pdim=3, coupling=AntiSymmetric())
+
+        using NDPrototype: SequentialExecution
+        nd = Network(g, vertexf, edgef; verbose=true, execution=SequentialExecution{true}())
+
+        nd = Network(g, vertexf, edgef; verbose=true, execution=SequentialExecution{false}())
     end
 
     @testset "Vertex batch" begin
-        vb = VertexBatch([1,2,3,4], # vertices
+        vb = VertexBatch([1, 2, 3, 4], # vertices
                          sum, # function
                          3, # dimension
                          1, # first index in state vector
                          2, # p dim
-                         4 # first index of p
-                         )
+                         4)
         @test parameter_range(vb, 1) == 4:5
         @test parameter_range(vb, 2) == 6:7
         @test parameter_range(vb, 3) == 8:9
@@ -47,11 +59,11 @@ end
 @testset "batch_identical" begin
     using NDPrototype: _batch_identical
     v = :foo
-    idx = [1,7,2,5]
+    idx = [1, 7, 2, 5]
     @test _batch_identical(v, idx) == ([:foo], [idx])
     v = [:foo, :foo, :bar, :baz, :foo]
-    idx = [5,4,3,2,1]
-    @test _batch_identical(v, idx) == ([:foo, :bar, :baz], [[5,4,1], [3], [2]])
+    idx = [5, 4, 3, 2, 1]
+    @test _batch_identical(v, idx) == ([:foo, :bar, :baz], [[5, 4, 1], [3], [2]])
 end
 
 @testset "greedy edge coloring" begin
@@ -61,4 +73,13 @@ end
         colors = color_edges_greedy(g)
         @test isvalid(g, colors)
     end
+end
+
+@testset "edgebyidx" begin
+    using Graphs
+    g = complete_graph(5)
+    @test [edgebyidx(g, i) for i in 1:ne(g)] == collect(edges(g))
+    g = complete_digraph(5)
+    @test [edgebyidx(g, i) for i in 1:ne(g)] == collect(edges(g))
+    @test_throws BoundsError edgebyidx(g, 100)
 end

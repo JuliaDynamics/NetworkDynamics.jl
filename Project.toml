@@ -10,6 +10,7 @@ Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
 NNlib = "872c559c-99b0-510c-b3b7-b6c96a88d5cd"
 OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
 PreallocationTools = "d236fae5-4411-538c-8e31-a6e3d9e00b46"
+SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
 Unrolled = "9602ed7d-8fef-5bc8-8597-8f21381861e8"
 
 [compat]
@@ -17,7 +18,8 @@ ArgCheck = "2.3.0"
 EnumX = "1.0.4"
 Graphs = "1"
 NNlib = "0.9.13"
-PreallocationTools = "0.4.20"
+PreallocationTools = "0.4.21"
+SciMLBase = "2.33.1"
 Unrolled = "0.1"
 julia = "1"
 

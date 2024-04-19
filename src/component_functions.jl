@@ -49,6 +49,7 @@ function ODEEdge(; f, dim, pdim, coupling)
 end
 
 dim(e::Union{EdgeFunction, VertexFunction}) = e.dim
+
 pdim(e::Union{EdgeFunction, VertexFunction}) = e.pdim
 accdepth(e::EdgeFunction) = e.dim
 accdepth(e::EdgeFunction{Fiducial}) = Int(e.dim/2)
