@@ -5,14 +5,11 @@ using SparseArrays
 """
     warn_parallel(b::Bool)
 
-If `b=true` (run in parallel mode) give a warning if either
-
-  - `ENV["JULIA_NUM_THREADS"]` not found in ENV
-  - `ENV["JULIA_NUM_THREADS"] ≤ 1`, i.e. there is just a single thread
+If `b=true` (run in parallel mode) give a warning if julia has access to only one thread.
 """
 function warn_parallel(b::Bool)
     if b
-        if !haskey(ENV, "JULIA_NUM_THREADS") || parse(Int, ENV["JULIA_NUM_THREADS"]) ≤ 1
+        if Threads.nthreads() ≤ 1
             print("Warning: You are using multi-threading with only one thread ",
                   "available to Julia. Consider re-starting Julia with the environment ",
                   "variable JULIA_NUM_THREADS set to the number of physical cores of your CPU.")
