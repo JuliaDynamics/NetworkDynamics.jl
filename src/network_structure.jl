@@ -123,7 +123,7 @@ end
 
 @inline function aggbuf_range(batch::VertexBatch, i)
     start = batch.aggrfirstidx + (i - 1) * batch.edepth
-    start:start+batch.depth-1
+    start:start+batch.edepth-1
 end
 
 @inline function gbuf_range(batch::EdgeBatch, i)

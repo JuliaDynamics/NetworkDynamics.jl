@@ -2,7 +2,7 @@ using NDPrototype
 using Graphs
 using Random
 using OrdinaryDiffEq
-    using TimerOutputs
+using TimerOutputs
 
 #############
 include("../benchmark/benchmarks.jl")
@@ -36,7 +36,7 @@ begin
 end
 
 begin
-    N = 1_000_000
+    N = 10_000_000
     (p, v, e, g) = heterogeneous(N)
     nd1 = Network(g, v, e; execution=ThreadedExecution{true}());
     x0 = randn(dim(nd1))
@@ -56,12 +56,12 @@ begin
     @time nd2(dx2, x0, p, 0.0) # call to init caches, we don't want to benchmark this
 
     TimerOutputs.enable_debug_timings(NDPrototype)
-    nd2(dx2, x0, p, 0.0)
+    nd2(dx2, x0, p, 0.0);
     reset_timer!()
     nd2(dx2, x0, p, 0.0)
     print_timer()
     TimerOutputs.disable_debug_timings(NDPrototype)
     @b $nd2($dx2, $x0, $p, 0.0)
 
-
+    @test dx1 ≈ dx2
 end
