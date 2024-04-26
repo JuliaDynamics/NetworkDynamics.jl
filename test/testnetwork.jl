@@ -2,6 +2,7 @@ using NDPrototype
 using Graphs
 using Random
 using OrdinaryDiffEq
+    using TimerOutputs
 
 #############
 include("../benchmark/benchmarks.jl")
@@ -35,34 +36,32 @@ begin
 end
 
 begin
-    N = 100_000
+    N = 1_000_000
     (p, v, e, g) = heterogeneous(N)
-    nd1 = Network(g, v, e, execution=:seq)
-    (p, v, e, g) = heterogeneous(N)
-    nd2 = Network(g, v, e, execution=:threaded)
+    nd1 = Network(g, v, e; execution=ThreadedExecution{true}());
     x0 = randn(dim(nd1))
     dx1 = zeros(dim(nd1))
-    dx2 = zeros(dim(nd1))
     @time nd1(dx1, x0, p, 0.0) # call to init caches, we don't want to benchmark this
-    @time nd1(dx2, x0, p, 0.0) # call to init caches, we don't want to benchmark this
-    @test dx1 ≈ dx2
 
-    @time nd2(dx1, x0, p, 0.0) # call to init caches, we don't want to benchmark this
+    TimerOutputs.enable_debug_timings(NDPrototype)
+    nd1(dx1, x0, p, 0.0)
+    reset_timer!()
+    nd1(dx1, x0, p, 0.0)
+    print_timer()
+    TimerOutputs.disable_debug_timings(NDPrototype)
+    @b $nd1($dx1, $x0, $p, 0.0)
+
+    nd2 = Network(g, v, e; execution=ThreadedExecution{false}());
+    dx2 = zeros(dim(nd2))
     @time nd2(dx2, x0, p, 0.0) # call to init caches, we don't want to benchmark this
-    @test dx1 ≈ dx2
 
-    @btime $nd1($dx1, $x0, $p, 0.0)
-  # 509.375 μs (6 allocations: 320 bytes)
-    @btime $nd2($dx2, $x0, $p, 0.0)
-  # 211.208 μs (222 allocations: 17.84 KiB)
+    TimerOutputs.enable_debug_timings(NDPrototype)
+    nd2(dx2, x0, p, 0.0)
+    reset_timer!()
+    nd2(dx2, x0, p, 0.0)
+    print_timer()
+    TimerOutputs.disable_debug_timings(NDPrototype)
+    @b $nd2($dx2, $x0, $p, 0.0)
 
-    N = 1000
-    g = watts_strogatz(N, Int(N/2), 0.0, seed=1)
-    gc = NDPrototype.ColoredGraph(g)
-    for e in Graphs.edges(gc)
-        c = NDPrototype.pickfree(gc, e.src, e.dst)
-        NDPrototype.setcolor!(gc, e, c)
-        println(e)
-    end
-    gc
+
 end

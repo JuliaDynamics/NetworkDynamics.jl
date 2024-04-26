@@ -8,25 +8,27 @@ struct Static <: StateType end
 
 mutable struct IndexManager{G}
     g::G
-    v_data::Vector{UnitRange{Int}} # v data in flat states
-    v_para::Vector{UnitRange{Int}} # v para in flat para
-    v_aggr::Vector{UnitRange{Int}} # v input in aggbuf
-    e_data::Vector{UnitRange{Int}} # e data in flat states
-    e_para::Vector{UnitRange{Int}} # e para in flat para
-    e_src::Vector{UnitRange{Int}}  # e input 1 in flat states
-    e_dst::Vector{UnitRange{Int}}  # e input 2 in flat states
+    v_data::Vector{UnitRange{Int}}  # v data in flat states
+    v_para::Vector{UnitRange{Int}}  # v para in flat para
+    v_aggr::Vector{UnitRange{Int}}  # v input in aggbuf
+    e_data::Vector{UnitRange{Int}}  # e data in flat states
+    e_para::Vector{UnitRange{Int}}  # e para in flat para
+    e_src::Vector{UnitRange{Int}}   # e input 1 in flat states
+    e_dst::Vector{UnitRange{Int}}   # e input 2 in flat states
+    e_gbufr::Vector{UnitRange{Int}} # e input range in gather buffer
     edepth::Int
     vdepth::Int
     lastidx_dynamic::Int
     lastidx_static::Int
     lastidx_p::Int
     lastidx_aggr::Int
+    lastidx_gbuf::Int
     function IndexManager(g, dyn_states, edepth, vdepth)
         new{typeof(g)}(g,
                        (Vector{UnitRange{Int}}(undef, nv(g)) for i in 1:3)...,
-                       (Vector{UnitRange{Int}}(undef, ne(g)) for i in 1:4)...,
+                       (Vector{UnitRange{Int}}(undef, ne(g)) for i in 1:5)...,
                        edepth, vdepth,
-                       0, dyn_states, 0, 0)
+                       0, dyn_states, 0, 0, 0)
     end
 end
 
@@ -34,21 +36,22 @@ abstract type ExecutionStyle{buffered} end
 struct SequentialExecution{buffered} <: ExecutionStyle{buffered} end
 struct ThreadedExecution{buffered} <: ExecutionStyle{buffered} end
 usebuffer(::ExecutionStyle{buffered}) where {buffered} = buffered
+usebuffer(::Type{<:ExecutionStyle{buffered}}) where {buffered} = buffered
 
-struct Network{EX<:ExecutionStyle,NL,VTup}
+struct Network{EX<:ExecutionStyle,G,NL,VTup}
     "vertex batches of same function"
     vertexbatches::VTup
     "network layer"
     layer::NL
     "index manager"
-    im::IndexManager
+    im::IndexManager{G}
     "lazy cache pool"
     cachepool::LazyBufferCache
 end
 executionstyle(::Network{ex}) where {ex} = ex
-
-dim(nw::Network) = full_data_range(nw.im)[end]
-pdim(nw::Network) = full_para_range(nw.im)[end]
+@inline nvbatches(::Network) = length(vertexbatches)
+dim(nw::Network) = nw.im.lastidx_dynamic
+pdim(nw::Network) = nw.im.lastidx_p
 
 struct NetworkLayer{GT,ETup,AF,MT}
     "graph/toplogy of layer"
@@ -64,6 +67,7 @@ struct NetworkLayer{GT,ETup,AF,MT}
     "mapping e_idx -> [v_src_idx_in_fullflat; v_dst_idx_in_fullflat]"
     gather_map::MT # input_map[:, e_idx] = [v_src_idx, v_dst_idx]
 end
+@inline nebatches(::NetworkLayer) = length(edgebatches)
 
 
 abstract type ComponentBatch{F} end
@@ -95,6 +99,9 @@ struct EdgeBatch{F} <: ComponentBatch{F}
     "parameter: dimension and first index"
     pdim::Int
     pfirstidx::Int
+    "gathered vector: dimension and first index"
+    vdepth::Int
+    gfirstidx::Int
 end
 
 @inline Base.length(cb::ComponentBatch) = Base.length(cb.indices)
@@ -114,24 +121,39 @@ end
     start:start+batch.pdim-1
 end
 
+@inline function aggbuf_range(batch::VertexBatch, i)
+    start = batch.aggrfirstidx + (i - 1) * batch.edepth
+    start:start+batch.depth-1
+end
+
+@inline function gbuf_range(batch::EdgeBatch, i)
+    start = batch.gfirstidx + (i - 1) * batch.vdepth
+    start:start+batch.vdepth-1
+end
+
 function register_vertices!(im::IndexManager, idxs, fun)
     for i in idxs
         im.v_data[i] = _nextdatarange!(im, statetype(fun), dim(fun))
         im.v_para[i] = _nextprange!(im, pdim(fun))
         im.v_aggr[i] = _nextaggrrange!(im, im.edepth)
     end
-    first(im.v_data[first(idxs)]), first(im.v_para[first(idxs)]),
-    first(im.v_aggr[first(idxs)])
+    (first(im.v_data[first(idxs)]),
+     first(im.v_para[first(idxs)]),
+     first(im.v_aggr[first(idxs)]))
 end
 function register_edges!(im::IndexManager, idxs, fun)
+    edgevec = collect(edges(im.g))
     for i in idxs
-        e = edgebyidx(im.g, i)
+        e = edgevec[i]
         im.e_data[i] = _nextdatarange!(im, statetype(fun), dim(fun))
         im.e_para[i] = _nextprange!(im, pdim(fun))
         im.e_src[i] = im.v_data[e.src][1:im.vdepth]
         im.e_dst[i] = im.v_data[e.dst][1:im.vdepth]
+        im.e_gbufr[i] = _nextgbufrange!(im, im.vdepth)
     end
-    first(im.e_data[first(idxs)]), first(im.e_para[first(idxs)])
+    (first(im.e_data[first(idxs)]),
+     first(im.e_para[first(idxs)]),
+     first(im.e_gbufr[first(idxs)]))
 end
 function _nextdatarange!(im::IndexManager, ::Dynamic, N)
     newlast, range = _nextrange(im.lastidx_dynamic, N)
@@ -151,6 +173,11 @@ end
 function _nextaggrrange!(im::IndexManager, N)
     newlast, range = _nextrange(im.lastidx_aggr, N)
     im.lastidx_aggr = newlast
+    return range
+end
+function _nextgbufrange!(im::IndexManager, N)
+    newlast, range = _nextrange(im.lastidx_gbuf, N)
+    im.lastidx_gbuf = newlast
     return range
 end
 _nextrange(last, N) = last + N, last+1:last+N

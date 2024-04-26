@@ -1,144 +1,112 @@
 function (nw::Network)(du, u::T, p, t) where {T}
-    # resize!(u, length(u) + im.size_static)
-    # s = nw.cachepool[u, im.size_dynamic + im.size_static]
-    # s[1:im.size_dynamic] .= u
-    s = nw.cachepool[u, im.size_static]
+    # @timeit_debug "coreloop" begin
+        # @timeit_debug "fill zeros" begin
+            fill!(du, zero(eltype(du)))
+        # end
+        # @timeit_debug "create _u" begin
+            _u = nw.cachepool[u, nw.im.lastidx_static]
+            _u[1:nw.im.lastidx_dynamic] .= u
+        # end
 
-    dupt = (du, u, s, p, t)
+        dupt = (du, _u, p, t)
 
 
-    # NOTE: first all static batches, than all dynamic batches
-    # maybe disallow static vertices entierly, otherwise the order gets complicated
+        # NOTE: first all static vertices, than all edges (regarless) then dyn vertices
+        # maybe disallow static vertices entierly, otherwise the order gets complicated
 
-    # execute all edgebatches
-    # for now just one layer
-    layer = nw.nl
-    process_layer!(nw, layer)
+        # @timeit_debug "process layer" process_layer!(nw, nw.layer, dupt)
+        process_layer!(nw, nw.layer, dupt)
 
-    # can be run parallel
-    process_batches!(nw, layer, nw.vertexbatches, dupt)
+        # @timeit_debug "aggregate" begin
+            aggbuf = nw.cachepool[u, nw.im.lastidx_aggr]
+            aggregate!(nw.layer.aggregator, aggbuf, _u)
+        # end
+
+        # process_batches!(nw, nw.layer, nw.vertexbatches, dupt)
+        process_vertices!(nw, dupt)
+
+    # end
     return nothing
 end
 
-function process_layer!(nw::Network{}, layer, dupt)
-    process_batches!(nw, layer, layer.edgebatchesbatch, dupt)
+function process_layer!(nw::Network{<:ThreadedExecution{false}}, layer, dupt)
+    # @timeit_debug "launch kernels" begin
+        (du, u, p, t) = dupt
+        _backend = get_backend(du)
+        unrolled_foreach(layer.edgebatches) do batch
+            kernel = ekernel!(_backend)
+            kernel(batch, du, u, nw.im.e_src, nw.im.e_dst, p, t; ndrange=length(batch))
+        end
+        KernelAbstractions.synchronize(_backend)
+    # end
+end
+@kernel function ekernel!(@Const(batch::EdgeBatch{<:StaticEdge}),
+                          @Const(du), u,
+                          @Const(srcrange), @Const(dstrange), @Const(p), @Const(t))
+    I = @index(Global)
+    @views begin
+        _u   = u[state_range(batch, I)]
+        _p   = p[parameter_range(batch, I)]
+        eidx = batch.indices[I]
+        _src = u[srcrange[eidx]]
+        _dst = u[dstrange[eidx]]
+    end
+    batch.fun.f(_u, _src, _dst, _p, t)
+end
+@kernel function ekernel!(@Const(batch::EdgeBatch{<:ODEEdge}),
+                          du, @Const(u),
+                          @Const(srcrange), @Const(dstrange), @Const(p), @Const(t))
+    I = @index(Global)
+    @views begin
+        _du  = du[state_range(batch, I)]
+        _u   = u[state_range(batch, I)]
+        _p   = p[parameter_range(batch, I)]
+        eidx = batch.indices[I]
+        _src = u[srcrange[eidx]]
+        _dst = u[dstrange[eidx]]
+    end
+    batch.fun.f(_du, _u, _src, _dst, _p, t)
 end
 
-@unroll function process_batches!(nw, layer, batches, dupt)
-    @unroll for batch in batches
-        process_batch!(nw, layer, batch, dupt)
-    end
+function process_layer!(nw::Network{<:ThreadedExecution{true}}, layer, dupt)
+    # buffered/gathered
+    (du, u, p, t) = dupt
+    # @timeit_debug "gather" begin
+        gbuf = nw.cachepool[u, size(layer.gather_map)]
+        NNlib.gather!(gbuf, u, layer.gather_map)
+    # end
+
+    # @timeit_debug "launch kernels" begin
+        _backend = get_backend(du)
+        unrolled_foreach(layer.edgebatches) do batch
+            kernel = ekernel_buffered!(_backend)
+            kernel(batch, du, u, gbuf, p, t; ndrange=length(batch))
+        end
+        KernelAbstractions.synchronize(_backend)
+    # end
 end
-
-function process_batch!(nw::Network{SequentialExecution}, layer, batch, dupt)
-    for idx in 1:length(batch)
-        element_kernel!(layer, batch, dupt, idx)
+@kernel function ekernel_buffered!(@Const(batch::EdgeBatch{<:StaticEdge}), @Const(du), u,
+                                   @Const(gbuf), @Const(p), @Const(t))
+    I = @index(Global)
+    @views begin
+        _u   = u[state_range(batch, I)]
+        _p   = p[parameter_range(batch, I)]
+        bufr = gbuf_range(batch, I)
+        _src = gbuf[bufr, 1]
+        _dst = gbuf[bufr, 2]
     end
+    batch.fun.f(_u, _src, _dst, _p, t)
 end
-
-function process_batch!(nw::Network{ThreadedExecution}, layer, batch, dupt)
-    @threads for idx in 1:length(batch)
-        element_kernel!(layer, batch, dupt, idx)
+@kernel function ekernel_buffered!(@Const(batch::EdgeBatch{<:ODEEdge}), du, @Const(u),
+                                   @Const(gbuf), @Const(p), @Const(t))
+    I = @index(Global)
+    @views begin
+        _du  = du[state_range(batch, I)]
+        _u   = u[state_range(batch, I)]
+        _p   = p[parameter_range(batch, I)]
+        bufr = gbuf_range(batch, I)
+        _src = gbuf[bufr, 1]
+        _dst = gbuf[bufr, 2]
     end
-end
-
-
-@inline function element_kernel!(layer, batch::EdgeBatch{F}, dupt::T, acc, i) where {F<:StaticEdge, T}
-    @inbounds begin
-    # a cache of size dim per thread
-    _, u, s, p, t = dupt
-
-    # collect all the ranges to index into the data arrays
-    (src_r, dst_r, src_acc_r, dst_acc_r, _) = src_dst_ranges(layer, batch, i)
-    pe_r = parameter_range(batch, i)
-
-    # create the views into the data & parameters
-    vs = view(u, src_r)
-    vd = view(u, dst_r)
-    pe = p==SciMLBase.NullParameters() ? p : view(p, pe_r)
-
-    # apply the edge function
-    e = batch.fun.f(vs, vd, pe, t)
-
-    apply_accumulation!(coupling(F), layer.accumulator, acc, src_acc_r, dst_acc_r, e)
-    end
-end
-
-@inline function element_kernel!(layer, batch::EdgeBatch{F}, dupt, acc, i) where {F<:ODEEdge}
-    @inbounds begin
-    du, u, s, p, t = dupt
-    # for i in 1:length(batch)
-    # collect all the ranges to index into the data arrays
-    (src_r, dst_r, src_acc_r, dst_acc_r, e_r) = src_dst_ranges(layer, batch, i)
-    pe_r = parameter_range(batch, i)
-
-    # create the views into the data & parameters
-    de = view(du, e_r)
-    e  = view(u, e_r)
-    vs = view(u, src_r)
-    vd = view(u, dst_r)
-    pe = p==SciMLBase.NullParameters() ? p : view(p, pe_r)
-
-    # apply the edge function
-    batch.fun.f(de, e, vs, vd, pe, t)
-
-    apply_accumulation!(coupling(F), layer.accumulator, acc, src_acc_r, dst_acc_r, e)
-    end
-end
-
-@inline function element_kernel!(layer, batch::VertexBatch{F}, dupt, acc, i) where {F}
-    @inbounds begin
-    du, u, s, p, t = dupt
-
-    s_r = state_range(batch, i)
-    p_r = parameter_range(batch, i)
-
-    vdu = view(du, s_r)
-    vu  = view(u, s_r)
-
-    vacc = view(acc, acc_r)
-
-    pv = p==SciMLBase.NullParameters() ? p : view(p, pv_r)
-
-    batch.fun.f(vdu, vu, vacc, pv, t)
-    end
-end
-
-Base.@propagate_inbounds function apply_accumulation!(::AntiSymmetric, f, acc, src_acc_r, dst_acc_r, edge)
-    _acc_dst = view(acc, dst_acc_r)
-    _acc_src = view(acc, src_acc_r)
-
-    for i in 1:length(dst_acc_r)
-        _acc_dst[i] = f(_acc_dst[i],  edge[i])
-        _acc_src[i] = f(_acc_src[i], -edge[i])
-    end
-end
-
-Base.@propagate_inbounds function apply_accumulation!(::Symmetric, f, _acc, src_acc_r, dst_acc_r, edge)
-    _acc_dst = view(_acc, dst_acc_r)
-    _acc_src = view(_acc, src_acc_r)
-
-    for i in 1:length(dst_acc_r)
-        _acc_dst[i] = f(_acc_dst[i], edge[i])
-        _acc_src[i] = f(_acc_src[i], edge[i])
-    end
-end
-
-Base.@propagate_inbounds function apply_accumulation!(::Directed, f, _acc, _, dst_acc_r, edge)
-    _acc_dst = view(_acc, dst_acc_r)
-
-    for i in 1:length(dst_acc_r)
-        _acc_dst[i] = f(_acc_dst[i], edge[i])
-    end
-end
-
-Base.@propagate_inbounds function apply_accumulation!(::Fiducial, f, _acc, src_acc_r, dst_acc_r, edge)
-    _acc_dst = view(_acc, dst_acc_r)
-    _acc_src = view(_acc, src_acc_r)
-    offset = Int(length(edge) / 2)
-
-    for i in 1:length(dst_acc_r)
-        _acc_dst[i] = f(_acc_dst[i], edge[i])
-        _acc_src[i] = f(_acc_src[i], edge[offset + i])
-    end
+    batch.fun.f(_du, _u, _src, _dst, _p, t)
 end

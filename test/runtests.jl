@@ -1,6 +1,7 @@
 using NDPrototype
 using Test
 using Graphs
+using SafeTestsets
 
 using NDPrototype: VertexBatch, parameter_range
 
@@ -71,15 +72,4 @@ end
     end
 end
 
-@testset "edgebyidx" begin
-    using Graphs
-    using NDPrototype: edgebyidx
-    g = complete_graph(5)
-    @test [edgebyidx(g, i) for i in 1:ne(g)] == collect(edges(g))
-    g = complete_digraph(5)
-    @test [edgebyidx(g, i) for i in 1:ne(g)] == collect(edges(g))
-    @test_throws BoundsError edgebyidx(g, 100)
-end
-
-using SafeTestsets
 @safetestset "Aggregation Tests" begin include("aggregators_test.jl") end

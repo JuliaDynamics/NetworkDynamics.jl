@@ -1,64 +1,78 @@
-export Network
-
 function Network(g::AbstractGraph,
                  vertexf::Union{VertexFunction,Vector{<:VertexFunction}},
                  edgef::Union{EdgeFunction,Vector{<:EdgeFunction}};
-                 accumulator=NaiveAggregator(+),
+                 accumulator=NNlibScatter(+),
                  edepth=:auto,
                  vdepth=:auto,
                  execution=SequentialExecution{true}(),
                  verbose=false)
-    verbose && println("Create dynamic network with $(nv(g)) vertices and $(ne(g)) edges:")
-    @argcheck execution isa ExecutionStyle "Exectuion type $execution not supportet (choose from $(subtypes(ExecutionStyle)))"
+    reset_timer!()
+    @timeit "Construct Network" begin
+        verbose &&
+            println("Create dynamic network with $(nv(g)) vertices and $(ne(g)) edges:")
+        @argcheck execution isa ExecutionStyle "Exectuion type $execution not supportet (choose from $(subtypes(ExecutionStyle)))"
 
-    _maxedepth = maxedepth(edgef)
-    if edepth === :auto
-        edepth = _maxedepth
-        verbose && println(" - auto accumulation depth = $edepth")
-    end
-    @argcheck edepth<=_maxedepth "For this system accumulation depth is limited to $edepth by the edgefunctions"
-
-    _maxvdepth = maxvdepth(vertexf)
-    if vdepth === :auto
-        vdepth = _maxvdepth
-        verbose && println(" - auto edge input depth = $vdepth")
-    end
-    @argcheck vdepth<=_maxvdepth "For this system edge input depth is limited to $edepth by the vertex dimensions"
-
-    # batch identical edge and vertex functions
-    vtypes, vidxs = _batch_identical(vertexf, collect(1:nv(g)))
-    etypes, eidxs = _batch_identical(edgef, collect(1:ne(g)))
-
-    # count dynamic states
-    dynstates = 0
-    for (t, idxs) in zip(vtypes, vidxs)
-        if statetype(t) == Dynamic()
-            dynstates += length(idxs) * dim(t)
+        _maxedepth = maxedepth(edgef)
+        if edepth === :auto
+            edepth = _maxedepth
+            verbose && println(" - auto accumulation depth = $edepth")
         end
-    end
-    for (t, idxs) in zip(etypes, eidxs)
-        if statetype(t) == Dynamic()
-            dynstates += length(idxs) * dim(t)
+        @argcheck edepth<=_maxedepth "For this system accumulation depth is limited to $edepth by the edgefunctions"
+
+        _maxvdepth = maxvdepth(vertexf)
+        if vdepth === :auto
+            vdepth = _maxvdepth
+            verbose && println(" - auto edge input depth = $vdepth")
         end
+        @argcheck vdepth<=_maxvdepth "For this system edge input depth is limited to $edepth by the vertex dimensions"
+
+        # batch identical edge and vertex functions
+        @timeit "batch identical functions" begin
+            vtypes, vidxs = _batch_identical(vertexf, collect(1:nv(g)))
+            etypes, eidxs = _batch_identical(edgef, collect(1:ne(g)))
+        end
+
+        # count dynamic states
+        dynstates = 0
+        for (t, idxs) in zip(vtypes, vidxs)
+            if statetype(t) == Dynamic()
+                dynstates += length(idxs) * dim(t)
+            end
+        end
+        for (t, idxs) in zip(etypes, eidxs)
+            if statetype(t) == Dynamic()
+                dynstates += length(idxs) * dim(t)
+            end
+        end
+
+        # create index manager
+        im = IndexManager(g, dynstates, edepth, vdepth)
+
+        # create vertex batches and initialize with index manager
+        @timeit "create vertex batches" begin
+            vertexbatches = collect(VertexBatch(im, i, t; verbose)
+                                    for (i, t) in zip(vidxs, vtypes))
+        end
+
+        # create edge batches and initialize with index manager
+        @timeit "create edge batches" begin
+            edgebatches = collect(EdgeBatch(im, i, t; verbose)
+                                  for (i, t) in zip(eidxs, etypes))
+        end
+
+        @timeit "initialize aggregator" begin
+            aggregator = accumulator(im, edgebatches)
+        end
+
+        nl = NetworkLayer(im, edgebatches, aggregator)
+
+        @assert isdense(im)
+        nw = Network{typeof(execution),typeof(g),typeof(nl),typeof(vertexbatches)}(vertexbatches,
+                                                                                   nl, im,
+                                                                                   LazyBufferCache())
+
     end
-
-    # create index manager
-    im = IndexManager(g, dynstates, edepth, vdepth)
-
-    # create vertex batches and initialize with index manager
-    vertexbatches = collect(VertexBatch(im, i, t; verbose) for (i, t) in zip(vidxs, vtypes))
-
-    # create edge batches and initialize with index manager
-    edgebatches = collect(EdgeBatch(im, i, t; verbose) for (i, t) in zip(eidxs, etypes))
-
-    aggregator = accumulator(im, edgebatches)
-
-    nl = NetworkLayer(im, edgebatches, aggregator)
-
-    @assert isdense(im)
-    nw = Network{typeof(execution),typeof(nl),typeof(vertexbatches)}(vertexbatches, nl, im,
-                                                                     LazyBufferCache())
-
+    print_timer()
     return nw
 end
 
@@ -81,14 +95,15 @@ function EdgeBatch(im::IndexManager,
                    idxs::Vector{Int},
                    edgef::EdgeFunction;
                    verbose)
-    (firstidx, pfirstidx) = register_edges!(im, idxs, edgef)
+    (firstidx, pfirstidx, gfirstidx) = register_edges!(im, idxs, edgef)
 
     verbose &&
         println(" - EdgeBatch: dim=$(edgef.dim), pdim=$(edgef.pdim), length=$(length(idxs))")
 
     EdgeBatch(idxs, edgef,
               edgef.dim, firstidx,
-              edgef.pdim, pfirstidx)
+              edgef.pdim, pfirstidx,
+              im.vdepth, gfirstidx)
 end
 
 function NetworkLayer(im::IndexManager, eb, agg)

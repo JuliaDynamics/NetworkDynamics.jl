@@ -12,7 +12,7 @@ const SUITE = BenchmarkGroup()
 ####
 SUITE["diffusion"] = BenchmarkGroup(["homogeneous"])
 vertex = diffusion_vertex()
-edges = Dict("static_edge" => diffusion_edge(),
+_edges = Dict("static_edge" => diffusion_edge(),
              "ode_edge" => diffusion_dedge())
 
 for k in ["static_edge", "ode_edge"]
@@ -20,7 +20,7 @@ for k in ["static_edge", "ode_edge"]
     SUITE["diffusion"][k]["assemble"] = BenchmarkGroup(["assemble"])
     SUITE["diffusion"][k]["call"] = BenchmarkGroup(["call"])
     SUITE["diffusion"][k]["call_mt"] = BenchmarkGroup(["call", "multithread"])
-    edge = edges[k]
+    edge = _edges[k]
 
     for N ∈ [10, 100, 1_000]  #, 100_000, 1_000_000]
         # SUITE["diffusion"][k]["assemble"][N] = @benchmarkable begin

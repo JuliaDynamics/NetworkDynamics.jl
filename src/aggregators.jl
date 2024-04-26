@@ -16,6 +16,7 @@ function NNlibScatter(im, batches, f)
     srcmaps     = Vector{Vector{Int}}(undef, length(batches))
     couplings   = Vector{CouplingUnion}(undef, length(batches))
     maxaggindex = 0
+    _edgevec = collect(edges(im.g))
     for (batchi, batch) in enumerate(batches)
         cplng = coupling(batch.fun)
         # generate scatter map
@@ -26,7 +27,7 @@ function NNlibScatter(im, batches, f)
 
         for i in batch.indices
             datarange = im.e_data[i] .- (batch.firstidx - 1) # range in batch slice
-            e = edgebyidx(im.g, i)
+            e = _edgevec[i]
             dst[datarange[1:im.edepth]] .= im.v_aggr[e.dst]
             if cplng == Symmetric() || cplng == AntiSymmetric()
                 src[datarange[1:im.edepth]] .= im.v_aggr[e.src]
