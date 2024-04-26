@@ -39,7 +39,7 @@ struct Network{EX<:ExecutionStyle,NL,VTup}
     "vertex batches of same function"
     vertexbatches::VTup
     "network layer"
-    nl::NL
+    layer::NL
     "index manager"
     im::IndexManager
     "lazy cache pool"

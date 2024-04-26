@@ -19,7 +19,7 @@ using NDPrototype: VertexBatch, parameter_range
         nd = Network(g, vertexf, edgef; verbose=true)
 
         @test statetype(only(nd.vertexbatches)) == NDPrototype.Dynamic()
-        @test statetype(only(nd.nl.edgebatches)) == NDPrototype.Static()
+        @test statetype(only(nd.layer.edgebatches)) == NDPrototype.Static()
         @test isdense(nd.im)
         @test nd.im.lastidx_dynamic == nv(g)
         @test nd.im.lastidx_static == nd.im.lastidx_dynamic + ne(g) * 2
