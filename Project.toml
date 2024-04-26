@@ -10,21 +10,27 @@ Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
 NNlib = "872c559c-99b0-510c-b3b7-b6c96a88d5cd"
 OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
 PreallocationTools = "d236fae5-4411-538c-8e31-a6e3d9e00b46"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
 Unrolled = "9602ed7d-8fef-5bc8-8597-8f21381861e8"
 
 [compat]
 ArgCheck = "2.3.0"
+Chairmarks = "1.2.1"
 EnumX = "1.0.4"
 Graphs = "1"
 NNlib = "0.9.13"
 PreallocationTools = "0.4.21"
+Random = "1.11.0"
+SafeTestsets = "0.1.0"
 SciMLBase = "2.33.1"
 Unrolled = "0.1"
 julia = "1"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+Chairmarks = "0ca39b1e-fe0b-4e98-acfc-b1656634c4de"
+SafeTestsets = "1bc83da4-3b8d-516f-aca4-4fe02f6d838f"
 
 [targets]
-test = ["Test"]
+test = ["Test", "SafeTestsets", "Chairmarks"]

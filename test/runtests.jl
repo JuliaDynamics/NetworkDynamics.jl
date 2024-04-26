@@ -6,32 +6,27 @@ using NDPrototype: VertexBatch, parameter_range
 
 @testset "NDPrototype.jl" begin
     @testset "constructor" begin
-        using NDPrototype: StateType, statetype
+        using NDPrototype: StateType, statetype, isdense
         g = complete_graph(10)
         vertexf = ODEVertex(; f=x -> x^2, dim=1, pdim=2)
-        @test statetype(vertexf) == StateType.dynamic
+        @test statetype(vertexf) == NDPrototype.Dynamic()
 
-        edgef = StaticEdge(; f=x -> x^2, dim=2, pdim=3, coupling=AntiSymmetric())
-        statetype(edgef) == StateType.static
+        edgef = StaticEdge(; f=x -> x^2,
+                           dim=2, pdim=3,
+                           coupling=AntiSymmetric())
+        statetype(edgef) == NDPrototype.Static()
 
         nd = Network(g, vertexf, edgef; verbose=true)
 
-        @test statetype(only(nd.vertexbatches)) == StateType.dynamic
-        @test statetype(only(nd.nl.edgebatches)) == StateType.static
+        @test statetype(only(nd.vertexbatches)) == NDPrototype.Dynamic()
+        @test statetype(only(nd.nl.edgebatches)) == NDPrototype.Static()
         @test isdense(nd.im)
-        @test nd.im.size_dynamic == nv(g)
-        @test nd.im.size_static == ne(g) * 2
-        nd.cachepool
-        lbc = LazyBufferCache()
-        buff = lbc[zeros(3)]
-        buff[1] = 4
-        buff = lbc[ones(3), 10]
-
-        @btime $buff = $lbc[$(ones(11))]
+        @test nd.im.lastidx_dynamic == nv(g)
+        @test nd.im.lastidx_static == nd.im.lastidx_dynamic + ne(g) * 2
     end
 
     @testset "constructor" begin
-        using NDPrototype: StateType, statetype
+        using NDPrototype: statetype
         g = complete_graph(10)
         vertexf = ODEVertex(; f=x -> x^2, dim=1, pdim=2)
         edgef = StaticEdge(; f=x -> x^2, dim=2, pdim=3, coupling=AntiSymmetric())
@@ -39,7 +34,8 @@ using NDPrototype: VertexBatch, parameter_range
         using NDPrototype: SequentialExecution
         nd = Network(g, vertexf, edgef; verbose=true, execution=SequentialExecution{true}())
 
-        nd = Network(g, vertexf, edgef; verbose=true, execution=SequentialExecution{false}())
+        nd = Network(g, vertexf, edgef; verbose=true,
+                     execution=SequentialExecution{false}())
     end
 
     @testset "Vertex batch" begin
@@ -48,7 +44,7 @@ using NDPrototype: VertexBatch, parameter_range
                          3, # dimension
                          1, # first index in state vector
                          2, # p dim
-                         4)
+                         4, 0, 0)
         @test parameter_range(vb, 1) == 4:5
         @test parameter_range(vb, 2) == 6:7
         @test parameter_range(vb, 3) == 8:9
@@ -77,9 +73,13 @@ end
 
 @testset "edgebyidx" begin
     using Graphs
+    using NDPrototype: edgebyidx
     g = complete_graph(5)
     @test [edgebyidx(g, i) for i in 1:ne(g)] == collect(edges(g))
     g = complete_digraph(5)
     @test [edgebyidx(g, i) for i in 1:ne(g)] == collect(edges(g))
     @test_throws BoundsError edgebyidx(g, 100)
 end
+
+using SafeTestsets
+@safetestset "Aggregation Tests" begin include("aggregators_test.jl") end

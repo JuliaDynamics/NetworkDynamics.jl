@@ -1,57 +1,15 @@
 export Network
 
-function Network(g::SimpleGraph,
+function Network(g::AbstractGraph,
                  vertexf::Union{VertexFunction,Vector{<:VertexFunction}},
                  edgef::Union{EdgeFunction,Vector{<:EdgeFunction}};
-                 accumulator=+,
+                 accumulator=NaiveAggregator(+),
                  edepth=:auto,
                  vdepth=:auto,
                  execution=SequentialExecution{true}(),
                  verbose=false)
     verbose && println("Create dynamic network with $(nv(g)) vertices and $(ne(g)) edges:")
     @argcheck execution isa ExecutionStyle "Exectuion type $execution not supportet (choose from $(subtypes(ExecutionStyle)))"
-
-    im = IndexManager()
-
-    vtypes, idxs = _batch_identical(vertexf, collect(1:nv(g)))
-    vertexbatches = collect(VertexBatch(im, i, t; verbose) for (i, t) in zip(idxs, vtypes))
-
-    nl = NetworkLayer(im, g, vertexf, edgef, accumulator, edepth, vdepth, execution;
-                      verbose)
-
-    @assert isdense(im)
-    nw = Network{typeof(execution),typeof(nl),typeof(vertexbatches)}(vertexbatches, nl, im,
-                                                                     LazyBufferCache())
-
-    init_gathermap!(nw)
-    init_scattermap!(nw)
-
-    return nw
-end
-
-function VertexBatch(im::IndexManager,
-                     vertex_idxs::Vector{Int},
-                     vertexf::VertexFunction;
-                     verbose)
-    (firstidx, pfirstidx) = register_components!(im, vertex_idxs, vertexf)
-
-    dim = vertexf.dim
-    pdim = vertexf.pdim
-    verbose &&
-        println(" - VertexBatch: dim=$(dim), pdim=$(pdim), length=$(length(vertex_idxs))")
-
-    VertexBatch(vertex_idxs, vertexf, dim, firstidx, pdim, pfirstidx)
-end
-
-function NetworkLayer(im::IndexManager,
-                      g::SimpleGraph,
-                      vertexf::Union{VertexFunction,Vector{<:VertexFunction}},
-                      edgef::Union{EdgeFunction,Vector{<:EdgeFunction}},
-                      accumulator,
-                      edepth, vdepth,
-                      execution;
-                      verbose)
-    @argcheck hasmethod(accumulator, NTuple{2,AbstractFloat}) "Accumulator needs `acc(AbstractFloat, AbstractFloat) method`"
 
     _maxedepth = maxedepth(edgef)
     if edepth === :auto
@@ -67,42 +25,89 @@ function NetworkLayer(im::IndexManager,
     end
     @argcheck vdepth<=_maxvdepth "For this system edge input depth is limited to $edepth by the vertex dimensions"
 
-    etypes, idxs = _batch_identical(edgef, collect(1:ne(g)))
-    edgebatches = collect(EdgeBatch(im, i, t; verbose) for (i, t) in zip(idxs, etypes))
+    # batch identical edge and vertex functions
+    vtypes, vidxs = _batch_identical(vertexf, collect(1:nv(g)))
+    etypes, eidxs = _batch_identical(edgef, collect(1:ne(g)))
 
-    # edgecolors = color_edges_greedy(g)
-    # verbose && println(" - found $(length(unique(edgecolors))) edgecolors (optimum would be $(maximum(degree(g))))")
+    # count dynamic states
+    dynstates = 0
+    for (t, idxs) in zip(vtypes, vidxs)
+        if statetype(t) == Dynamic()
+            dynstates += length(idxs) * dim(t)
+        end
+    end
+    for (t, idxs) in zip(etypes, eidxs)
+        if statetype(t) == Dynamic()
+            dynstates += length(idxs) * dim(t)
+        end
+    end
 
-    # colors = unique(edgecolors)
+    # create index manager
+    im = IndexManager(g, dynstates, edepth, vdepth)
 
-    # idx_per_color = [findall(isequal(c), edgecolors) for c in colors]
+    # create vertex batches and initialize with index manager
+    vertexbatches = collect(VertexBatch(im, i, t; verbose) for (i, t) in zip(vidxs, vtypes))
 
-    # edgef_per_color = batch_by_idxs(edgef, idx_per_color)
+    # create edge batches and initialize with index manager
+    edgebatches = collect(EdgeBatch(im, i, t; verbose) for (i, t) in zip(eidxs, etypes))
 
-    # colorbatches = collect(ColorBatch(im, g, idx, ef; verbose)
-    #                      for (idx, ef) in zip(idx_per_color, edgef_per_color))
+    aggregator = accumulator(im, edgebatches)
 
-    NetworkLayer(g, edgebatches, accumulator, edepth, vdepth, execution)
+    nl = NetworkLayer(im, edgebatches, aggregator)
+
+    @assert isdense(im)
+    nw = Network{typeof(execution),typeof(nl),typeof(vertexbatches)}(vertexbatches, nl, im,
+                                                                     LazyBufferCache())
+
+    return nw
 end
 
-maxedepth(e::EdgeFunction) = accdepth(e)
-maxedepth(e::AbstractVector{<:EdgeFunction}) = minimum(accdepth.(e))
-maxvdepth(v::VertexFunction) = dim(v)
-maxvdepth(v::AbstractVector{<:EdgeFunction}) = minimum(dim.(v))
+function VertexBatch(im::IndexManager,
+                     idxs::Vector{Int},
+                     vertexf::VertexFunction;
+                     verbose)
+    (firstidx, pfirstidx, aggrfirstidx) = register_vertices!(im, idxs, vertexf)
+
+    verbose &&
+        println(" - VertexBatch: dim=$(vertexf.dim), pdim=$(vertexf.pdim), length=$(length(idxs))")
+
+    VertexBatch(idxs, vertexf,
+                vertexf.dim, firstidx,
+                vertexf.pdim, pfirstidx,
+                im.edepth, aggrfirstidx)
+end
 
 function EdgeBatch(im::IndexManager,
-                   edge_idxs::Vector{Int},
+                   idxs::Vector{Int},
                    edgef::EdgeFunction;
                    verbose)
-    (firstidx, pfirstidx) = register_components!(im, edge_idxs, edgef)
+    (firstidx, pfirstidx) = register_edges!(im, idxs, edgef)
 
-    dim = edgef.dim
-    pdim = edgef.pdim
     verbose &&
-        println(" - EdgeBatch: dim=$(dim), pdim=$(pdim), length=$(length(edge_idxs))")
+        println(" - EdgeBatch: dim=$(edgef.dim), pdim=$(edgef.pdim), length=$(length(idxs))")
 
-    EdgeBatch(edge_idxs, edgef, dim, firstidx, pdim, pfirstidx)
+    EdgeBatch(idxs, edgef,
+              edgef.dim, firstidx,
+              edgef.pdim, pfirstidx)
 end
+
+function NetworkLayer(im::IndexManager, eb, agg)
+    map = zeros(Int, ne(im.g) * im.vdepth, 2)
+    for (i, e) in enumerate(edges(im.g))
+        startidx = (i - 1) * im.vdepth + 1
+        range = startidx:(startidx+im.vdepth-1)
+        dst_range = im.v_data[e.src][1:im.vdepth]
+        src_range = im.v_data[e.dst][1:im.vdepth]
+        map[range, 1] .= dst_range
+        map[range, 2] .= src_range
+    end
+    NetworkLayer(im.g, eb, agg, im.edepth, im.vdepth, map)
+end
+
+maxedepth(e::EdgeFunction) = aggrdepth(e)
+maxedepth(e::AbstractVector{<:EdgeFunction}) = minimum(aggrdepth.(e))
+maxvdepth(v::VertexFunction) = dim(v)
+maxvdepth(v::AbstractVector{<:VertexFunction}) = minimum(dim.(v))
 
 batch_by_idxs(v, idxs::Vector{Vector{Int}}) = [v for batch in idxs]
 function batch_by_idxs(v::AbstractVector, batches::Vector{Vector{Int}})
@@ -131,90 +136,4 @@ function _batch_identical(v::Vector{T}, indices::Vector{Int}) where {T}
     end
     @assert length(types) == length(idxs_per_type)
     return types, idxs_per_type
-end
-
-function init_scattermap!(nw::Network)
-    # just one layer currently
-    for batch in nw.nl.edgebatches
-        init_scattermap!(coupling(batch), nw, nw.nl, batch)
-    end
-end
-
-function init_scattermap!(::Union{AntiSymmetric,Symmetric}, nw, layer, batch)
-    edepth = layer.edepth
-    nullelement = nv(layer.g) * edepth + 1
-    resize!(batch.scatter_map[1], length(batch.indices) * dim(batch.fun))
-    resize!(batch.scatter_map[2], length(batch.indices) * dim(batch.fun))
-    fill!(batch.scatter_map[1], nullelement)
-    fill!(batch.scatter_map[2], nullelement)
-    for (i, eidx) in enumerate(batch.indices)
-        (; src, dst) = edgebyidx(layer.g, eidx)
-
-        src_start = (src - 1) * edepth + 1
-        dst_start = (src - 1) * edepth + 1
-        src_range = src_start:(src_start+edepth-1)
-        dst_range = dst_start:(dst_start+edepth-1)
-
-        startidx = (i - 1) * dim(batch.fun) + 1
-        idxrange = startidx:(startidx+edepth-1)
-        batch.scatter_map[1][idxrange] .= dst_range
-        batch.scatter_map[2][idxrange] .= src_range
-    end
-end
-function init_scattermap!(::Fiducial, nw, layer, batch)
-    edepth = layer.edepth
-    nullelement = nv(layer.g) * edepth + 1
-    resize!(batch.scatter_map, length(batch.indices) * dim(batch.fun))
-    fill!(batch.scatter_map, nullelement)
-    for (i, eidx) in enumerate(batch.indices)
-        (; src, dst) = edgebyidx(layer.g, eidx)
-
-        src_start = (src - 1) * edepth + 1
-        dst_start = (src - 1) * edepth + 1
-        src_range = src_start:(src_start+edepth-1)
-        dst_range = dst_start:(dst_start+edepth-1)
-
-        startidx = (i - 1) * dim(batch.fun) + 1
-        idxrange = startidx:(startidx+2*edepth-1)
-        batch.scatter_map[idxrange] .= vcat(dst_range, src_range)
-    end
-end
-function init_scattermap!(::Directed, nw, layer, batch)
-    edepth = layer.edepth
-    nullelement = nv(layer.g) * edepth + 1
-    resize!(batch.scatter_map, length(batch.indices) * dim(batch.fun))
-    fill!(batch.scatter_map, nullelement)
-    for (i, eidx) in enumerate(batch.indices)
-        (; dst) = edgebyidx(layer.g, eidx)
-
-        dst_start = (src - 1) * edepth + 1
-        dst_range = dst_start:(dst_start+edepth-1)
-
-        startidx = (i - 1) * dim(batch.fun) + 1
-        idxrange = startidx:(startidx+edepth-1)
-        batch.scatter_map[idxrange] .= dst_range
-    end
-end
-
-# buffered version
-function init_gathermap!(nw::Network{<:ExecutionStyle{false}})
-    layer = nw.nl
-    for (i, e) in enumerate(edges(layer.g))
-        layer.gather_map[1][i] = nw.im.v_data[e.dst][2]
-        layer.gather_map[2][i] = nw.im.v_data[e.src][2]
-    end
-end
-
-# unbuffered version
-function init_gathermap!(nw::Network{<:ExecutionStyle{true}})
-    layer = nw.nl
-    vdepth = layer.vdepth
-    for (i, e) in enumerate(edges(layer.g))
-        startidx = (i - 1) * vdepth + 1
-        range = startidx:(startidx+vdepth-1)
-        dst_range = nw.im.v_data[e.src][2][1:vdepth]
-        src_range = nw.im.v_data[e.dst][2][1:vdepth]
-        layer.gather_map[range, 1] .= dst_range
-        layer.gather_map[range, 2] .= src_range
-    end
 end
