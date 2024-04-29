@@ -52,12 +52,22 @@ function Network(g::AbstractGraph,
         @timeit "create vertex batches" begin
             vertexbatches = collect(VertexBatch(im, i, t; verbose)
                                     for (i, t) in zip(vidxs, vtypes))
+            if length(vertexbatches) ≤ 50
+                vertexbatches = Tuple(vertexbatches)
+            else
+                verbose && println(" $(length(vertexbatches)) > 50 unique indices: don't unroll!")
+            end
         end
 
         # create edge batches and initialize with index manager
         @timeit "create edge batches" begin
             edgebatches = collect(EdgeBatch(im, i, t; verbose)
                                   for (i, t) in zip(eidxs, etypes))
+            if length(edgebatches) ≤ 50
+                edgebatches = Tuple(edgebatches)
+            else
+                verbose && println("$(length(edgebatches)) > 50 unique edges: don't unroll!")
+            end
         end
 
         @timeit "initialize aggregator" begin

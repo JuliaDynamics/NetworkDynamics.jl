@@ -10,8 +10,7 @@ using EnumX: @enumx
 using SciMLBase: SciMLBase
 using Base.Threads: @threads
 using NNlib: NNlib
-using KernelAbstractions: KernelAbstractions
-using KernelAbstractions: @kernel, @index, @Const, get_backend
+using KernelAbstractions: KernelAbstractions, @kernel, @index, @Const, get_backend
 
 include("utils.jl")
 include("edge_coloring.jl")

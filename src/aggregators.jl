@@ -80,6 +80,7 @@ function aggregate!(a::NNlibScatter, aggbuf, data)
     nothing
 end
 
+
 struct NaiveAggregator{F,ETup,G} <: Aggregator
     im::IndexManager{G}
     batches::ETup
@@ -96,11 +97,11 @@ function aggregate!(a::NaiveAggregator, aggbuf, data)
     fill!(aggbuf, zero(eltype(aggbuf)))
     _aggregate!(a, a.batches, aggbuf, data)
 end
-@unroll function _aggregate!(a::NaiveAggregator, batches, aggbuf, data)
-    im = a.im
-    @unroll for batch in batches
+function _aggregate!(a::NaiveAggregator, batches, aggbuf, data)
+    unrolled_foreach(batches) do batch
+        im = a.im
         for eidx in batch.indices
-            edge = edgebyidx(im.g, eidx)
+            edge = im.edgevec[eidx]
             # dst mapping
             target = @views aggbuf[im.v_aggr[edge.dst]]
             source = @views data[im.e_data[eidx][1:im.edepth]]

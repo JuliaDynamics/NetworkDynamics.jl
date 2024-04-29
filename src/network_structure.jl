@@ -8,6 +8,7 @@ struct Static <: StateType end
 
 mutable struct IndexManager{G}
     g::G
+    edgevec::Vector{SimpleEdge{Int64}}
     v_data::Vector{UnitRange{Int}}  # v data in flat states
     v_para::Vector{UnitRange{Int}}  # v para in flat para
     v_aggr::Vector{UnitRange{Int}}  # v input in aggbuf
@@ -24,7 +25,7 @@ mutable struct IndexManager{G}
     lastidx_aggr::Int
     lastidx_gbuf::Int
     function IndexManager(g, dyn_states, edepth, vdepth)
-        new{typeof(g)}(g,
+        new{typeof(g)}(g, collect(edges(g)),
                        (Vector{UnitRange{Int}}(undef, nv(g)) for i in 1:3)...,
                        (Vector{UnitRange{Int}}(undef, ne(g)) for i in 1:5)...,
                        edepth, vdepth,

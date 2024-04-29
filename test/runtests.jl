@@ -24,6 +24,8 @@ using NDPrototype: VertexBatch, parameter_range
         @test isdense(nd.im)
         @test nd.im.lastidx_dynamic == nv(g)
         @test nd.im.lastidx_static == nd.im.lastidx_dynamic + ne(g) * 2
+        @test nd.vertexbatches isa Tuple
+        @test nd.layer.edgebatches isa Tuple
     end
 
     @testset "constructor" begin

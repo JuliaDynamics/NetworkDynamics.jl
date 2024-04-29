@@ -36,6 +36,7 @@ aggbuf2 = copy(aggbuf1)
 
 b1 = @b aggregate!($nw1.layer.aggregator, $aggbuf1, $states)
 b2 = @b aggregate!($nw2.layer.aggregator, $aggbuf2, $states)
+
 @test b1.allocs==0
 @test b2.allocs==0
-@test isapprox(aggbuf1, aggbuf2)
+@test aggbuf1 ≈ aggbuf2
