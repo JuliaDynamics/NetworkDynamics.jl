@@ -58,6 +58,7 @@ begin
     nd2 = Network(g, v, e; execution=ThreadedExecution{false}());
     dx2 = zeros(dim(nd2));
     @time nd2(dx2, x0, p, 0.0) # call to init caches, we don't want to benchmark this
+    @test dx1 ≈ dx2
 
     TimerOutputs.enable_debug_timings(NDPrototype)
     nd2(dx2, x0, p, 0.0);
@@ -67,12 +68,12 @@ begin
     TimerOutputs.disable_debug_timings(NDPrototype)
     @b $nd2($dx2, $x0, $p, 0.0)
 
-    @test dx1 ≈ dx2
 
     ####
     nd3 = Network(g, v, e; execution=SequentialExecution{false}());
     dx3 = zeros(dim(nd3));
     @time nd3(dx3, x0, p, 0.0) # call to init caches, we don't want to benchmark this
+    @test dx3 ≈ dx2 ≈ dx1
 
     TimerOutputs.enable_debug_timings(NDPrototype)
     nd3(dx3, x0, p, 0.0);
@@ -82,22 +83,20 @@ begin
     TimerOutputs.disable_debug_timings(NDPrototype)
     @b $nd3($dx3, $x0, $p, 0.0)
 
-    @test dx3 ≈ dx2 ≈ dx1
 
     ####
     nd4 = Network(g, v, e;
         execution=ThreadedExecution{true}(),
-        accumulator=NaiveAggregator(+));
-    x0 = randn(dim(nd4));
-    dx1 = zeros(dim(nd4));
-    @time nd4(dx1, x0, p, 0.0) # call to init caches, we don't want to benchmark this
+        accumulator=KAAggregator(+));
+    dx4 = zeros(dim(nd4));
+    @time nd4(dx4, x0, p, 0.0) # call to init caches, we don't want to benchmark this
+    @test dx4 ≈ dx3 ≈ dx2 ≈ dx1
 
     TimerOutputs.enable_debug_timings(NDPrototype)
-    nd4(dx1, x0, p, 0.0)
+    nd4(dx4, x0, p, 0.0)
     reset_timer!()
-    nd4(dx1, x0, p, 0.0)
+    nd4(dx4, x0, p, 0.0)
     print_timer()
     TimerOutputs.disable_debug_timings(NDPrototype)
-    @b $nd4($dx1, $x0, $p, 0.0)
-
+    @b $nd4($dx4, $x0, $p, 0.0)
 end

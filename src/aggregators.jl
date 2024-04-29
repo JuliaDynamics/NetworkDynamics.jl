@@ -57,10 +57,10 @@ function NNlibScatter(im, batches, f)
 end
 
 function aggregate!(a::NNlibScatter, aggbuf, data)
+    fill!(aggbuf, zero(eltype(aggbuf)))
     originallength = length(aggbuf)
     resize!(aggbuf, a.aggrsize)
     @assert length(aggbuf) == a.aggrsize
-    fill!(aggbuf, zero(eltype(aggbuf)))
     for (range, dstmap, srcmap, coupling) in zip(a.batchranges, a.dstmaps, a.srcmaps,
                                                  a.couplings)
         batchdata = view(data, range)
@@ -124,4 +124,99 @@ function _aggregate!(a::NaiveAggregator, batches, aggbuf, data)
             end
         end
     end
+end
+
+
+struct KAAggregator{F} <: Aggregator
+    f::F
+    range::UnitRange{Int} # range in data where aggregation is necessary
+    map::Vector{Int}      # maps data idx to destination, if zero skip
+    symrange::UnitRange{Int}     # same for symmetric/antisymmetric coupling
+    symmap::Vector{Int}
+end
+KAAggregator(f) = (im, batches) -> KAAggregator(im, batches, f)
+function KAAggregator(im, batches, f)
+    _map       = zeros(Int, im.lastidx_static)
+    _symmap    = zeros(Int, im.lastidx_static)
+    for batch in batches
+        for eidx in batch.indices
+            edge = im.edgevec[eidx]
+
+            target = im.v_aggr[edge.dst]
+            source = im.e_data[eidx][1:im.edepth]
+            _map[source] .= target
+
+            # src mapping
+            cplng = coupling(batch.fun)
+            if cplng == Symmetric()
+                target = im.v_aggr[edge.src]
+                source = im.e_data[eidx][1:im.edepth]
+                _symmap[source] .= target
+            elseif cplng == AntiSymmetric()
+                target = -1 .* im.v_aggr[edge.src]
+                source = im.e_data[eidx][1:im.edepth]
+                _symmap[source] .= target
+            elseif cplng == Fiducial()
+                target = im.v_aggr[edge.src]
+                source = im.e_data[eidx][im.edepth+1:2*im.edepth]
+                _symmap[source] .= target
+            end
+        end
+    end
+    range, map       = _tighten_idxrange(_map)
+    symrange, symmap = _tighten_idxrange(_symmap)
+    KAAggregator(f, range, map, symrange, symmap)
+end
+function _tighten_idxrange(v)
+    first = findfirst(!iszero, v)
+    isnothing(first) && return (1:0, similar(v, 0))
+    last = findlast(!iszero, v)
+    range = first:last
+    return range, v[range]
+end
+
+function aggregate!(a::KAAggregator, aggbuf, data)
+    fill!(aggbuf, zero(eltype(aggbuf)))
+    _backend = get_backend(data)
+
+    # kernel = agg_kernel!(_backend, 1024, length(a.map))
+    # kernel(a.f, aggbuf, view(data, a.range), a.map)
+    kernel = agg_kernel!(_backend)
+    kernel(a.f, aggbuf, view(data, a.range), a.map; ndrange=length(a.map))
+    KernelAbstractions.synchronize(_backend)
+
+    if !isempty(a.symrange)
+        # symkernel = agg_kernel_sym!(_backend, 1024, length(a.map))
+        # symkernel(a.f, aggbuf, view(data, a.symrange), a.symmap)
+        symkernel = agg_kernel_sym!(_backend)
+        symkernel(a.f, aggbuf, view(data, a.symrange), a.symmap; ndrange=length(a.symmap))
+        KernelAbstractions.synchronize(_backend)
+    end
+    nothing
+end
+
+@kernel function agg_kernel!(f::F, aggbuf, data, idxs) where {F}
+    I = @index(Global)
+    @inbounds if I ≤ length(idxs)
+        _dst_i = idxs[I]
+        if _dst_i != 0
+            _dat = data[I]
+            ref = Atomix.IndexableRef(aggbuf, (_dst_i,));
+            Atomix.modify!(ref, f, _dat)
+        end
+    end
+    nothing
+end
+@kernel function agg_kernel_sym!(f::F, aggbuf, data, idxs) where {F}
+    I = @index(Global)
+    @inbounds if I ≤ length(idxs)
+        dst_idx = idxs[I] # might be < 1 for antisymmetric coupling
+        _dst_i = abs(idxs[I])
+        if _dst_i != 0
+            _dat = sign(dst_idx) * data[I]
+            ref = Atomix.IndexableRef(aggbuf, (_dst_i,));
+            Atomix.modify!(ref, f, _dat)
+        end
+    end
+    nothing
 end
