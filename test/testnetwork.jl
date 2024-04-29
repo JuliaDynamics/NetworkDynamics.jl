@@ -5,8 +5,7 @@ using OrdinaryDiffEq
 using TimerOutputs
 
 #############
-include("../benchmark/benchmarks.jl")
-include("../benchmark/benchmark_utils.jl")
+include("testnetwork_constructor.jl")
 
 # diffusion test
 begin
@@ -99,4 +98,9 @@ begin
     print_timer()
     TimerOutputs.disable_debug_timings(NDPrototype)
     @b $nd4($dx4, $x0, $p, 0.0)
+
+    prob1 = ODEProblem(nd1, x0, (0.0, 1.0), p)
+    @time sol1a = solve(prob1, Tsit5());
+    @time sol1b = solve(prob1, Rodas5P());
+    @time sol1c = solve(prob1, Rosenbrock23());
 end

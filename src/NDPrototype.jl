@@ -19,7 +19,7 @@ include("component_functions.jl")
 export Network, SequentialExecution, ThreadedExecution
 include("network_structure.jl")
 
-export NaiveAggregator, NNlibScatter, KAAggregator
+export NaiveAggregator, NNlibScatter, KAAggregator, SequentialAggregator
 include("aggregators.jl")
 include("construction.jl")
 include("coreloop.jl")

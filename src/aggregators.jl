@@ -16,7 +16,7 @@ function NNlibScatter(im, batches, f)
     srcmaps     = Vector{Vector{Int}}(undef, length(batches))
     couplings   = Vector{CouplingUnion}(undef, length(batches))
     maxaggindex = 0
-    _edgevec = collect(edges(im.g))
+    _edgevec    = collect(edges(im.g))
     for (batchi, batch) in enumerate(batches)
         cplng = coupling(batch.fun)
         # generate scatter map
@@ -136,8 +136,8 @@ struct KAAggregator{F} <: Aggregator
 end
 KAAggregator(f) = (im, batches) -> KAAggregator(im, batches, f)
 function KAAggregator(im, batches, f)
-    _map       = zeros(Int, im.lastidx_static)
-    _symmap    = zeros(Int, im.lastidx_static)
+    _map    = zeros(Int, im.lastidx_static)
+    _symmap = zeros(Int, im.lastidx_static)
     for batch in batches
         for eidx in batch.indices
             edge = im.edgevec[eidx]
@@ -201,7 +201,7 @@ end
         _dst_i = idxs[I]
         if _dst_i != 0
             _dat = data[I]
-            ref = Atomix.IndexableRef(aggbuf, (_dst_i,));
+            ref = Atomix.IndexableRef(aggbuf, (_dst_i,))
             Atomix.modify!(ref, f, _dat)
         end
     end
@@ -214,9 +214,35 @@ end
         _dst_i = abs(idxs[I])
         if _dst_i != 0
             _dat = sign(dst_idx) * data[I]
-            ref = Atomix.IndexableRef(aggbuf, (_dst_i,));
+            ref = Atomix.IndexableRef(aggbuf, (_dst_i,))
             Atomix.modify!(ref, f, _dat)
         end
     end
+    nothing
+end
+
+
+struct SequentialAggregator{F} <: Aggregator
+    kaagg::KAAggregator{F}
+end
+function SequentialAggregator(f)
+    (im, batches) -> SequentialAggregator(KAAggregator(im, batches, f))
+end
+
+function aggregate!(sa::SequentialAggregator, aggbuf, data)
+    fill!(aggbuf, zero(eltype(aggbuf)))
+
+    @inbounds begin
+        a = sa.kaagg
+        for (dat, dst_idx) in zip(view(data, a.range), a.map)
+            aggbuf[dst_idx] = a.f(aggbuf[dst_idx], dat)
+        end
+
+        for (dat, dst_idx) in zip(view(data, a.symrange), a.symmap)
+            _dst_idx = abs(dst_idx)
+            aggbuf[_dst_idx] = a.f(aggbuf[_dst_idx], sign(dst_idx) * dat)
+        end
+    end
+
     nothing
 end

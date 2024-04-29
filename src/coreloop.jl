@@ -29,7 +29,7 @@ end
 ####
 #### Vertex Execution
 ####
-function process_vertices!(nw::Network{<:SequentialExecution}, aggbuf, dupt)
+@inline function process_vertices!(nw::Network{<:SequentialExecution}, aggbuf, dupt)
     @timeit_debug "execute vertex batches" begin
         unrolled_foreach(nw.vertexbatches) do batch
             (du, u, p, t) = dupt
@@ -40,7 +40,7 @@ function process_vertices!(nw::Network{<:SequentialExecution}, aggbuf, dupt)
     end
 end
 
-function process_vertices!(nw::Network{<:ThreadedExecution}, aggbuf, dupt)
+@inline function process_vertices!(nw::Network{<:ThreadedExecution}, aggbuf, dupt)
     @timeit_debug "launch vertex kernels" begin
         _backend = get_backend(dupt[2])
         unrolled_foreach(nw.vertexbatches) do batch
@@ -60,11 +60,13 @@ end
 end
 
 @inline function apply_vertex!(batch::VertexBatch{<:ODEVertex}, i, du, u, aggbuf, p, t)
-    _du  = @views du[state_range(batch, i)]
-    _u   = @views u[state_range(batch, i)]
-    _p   = @views p[parameter_range(batch, i)]
-    _agg = @views aggbuf[aggbuf_range(batch, i)]
-    batch.fun.f(_du, _u, _agg, _p, t)
+    @inbounds begin
+        _du  = @views du[state_range(batch, i)]
+        _u   = @views u[state_range(batch, i)]
+        _p   = isnothing(p) ? p : @views p[parameter_range(batch, i)]
+        _agg = @views aggbuf[aggbuf_range(batch, i)]
+        batch.fun.f(_du, _u, _agg, _p, t)
+    end
     nothing
 end
 
@@ -72,7 +74,7 @@ end
 ####
 #### Edge Layer Execution unbuffered
 ####
-function process_layer!(nw::Network{<:SequentialExecution{false}}, layer, dupt)
+@inline function process_layer!(nw::Network{<:SequentialExecution{false}}, layer, dupt)
     @timeit_debug "execute edge batches" begin
         unrolled_foreach(layer.edgebatches) do batch
             (du, u, p, t) = dupt
@@ -83,7 +85,7 @@ function process_layer!(nw::Network{<:SequentialExecution{false}}, layer, dupt)
     end
 end
 
-function process_layer!(nw::Network{<:ThreadedExecution{false}}, layer, dupt)
+@inline function process_layer!(nw::Network{<:ThreadedExecution{false}}, layer, dupt)
     @timeit_debug "launch kernels" begin
         _backend = get_backend(dupt[2])
         unrolled_foreach(layer.edgebatches) do batch
@@ -111,29 +113,35 @@ end
 
 @inline function apply_edge_unbuffered!(batch::EdgeBatch{<:StaticEdge}, i,
                                         du, u, srcrange, dstrange, p, t)
-    _u   = @views u[state_range(batch, i)]
-    _p   = @views p[parameter_range(batch, i)]
-    eidx = @views batch.indices[i]
-    _src = @views u[srcrange[eidx]]
-    _dst = @views u[dstrange[eidx]]
-    batch.fun.f(_u, _src, _dst, _p, t)
+    @inbounds begin
+        _u   = @views u[state_range(batch, i)]
+        _p   = isnothing(p) ? p : @views p[parameter_range(batch, i)]
+        eidx = @views batch.indices[i]
+        _src = @views u[srcrange[eidx]]
+        _dst = @views u[dstrange[eidx]]
+        batch.fun.f(_u, _src, _dst, _p, t)
+    end
+    nothing
 end
 
 @inline function apply_edge_unbuffered!(batch::EdgeBatch{<:ODEEdge}, i,
                                         du, u, srcrange, dstrange, p, t)
-    _du  = @views du[state_range(batch, i)]
-    _u   = @views u[state_range(batch, i)]
-    _p   = @views p[parameter_range(batch, i)]
-    eidx = @views batch.indices[i]
-    _src = @views u[srcrange[eidx]]
-    _dst = @views u[dstrange[eidx]]
-    batch.fun.f(_du, _u, _src, _dst, _p, t)
+    @inbounds begin
+        _du  = @views du[state_range(batch, i)]
+        _u   = @views u[state_range(batch, i)]
+        _p   = isnothing(p) ? p : @views p[parameter_range(batch, i)]
+        eidx = @views batch.indices[i]
+        _src = @views u[srcrange[eidx]]
+        _dst = @views u[dstrange[eidx]]
+        batch.fun.f(_du, _u, _src, _dst, _p, t)
+    end
+    nothing
 end
 
 ####
 #### Edge Layer Execution buffered
 ####
-function process_layer!(nw::Network{<:ThreadedExecution{true}}, layer, dupt)
+@inline function process_layer!(nw::Network{<:ThreadedExecution{true}}, layer, dupt)
     # buffered/gathered
     u = dupt[2]
     @timeit_debug "gather" begin
@@ -166,23 +174,27 @@ end
 
 @inline function apply_edge_buffered!(batch::EdgeBatch{<:StaticEdge}, i,
                                       du, u, gbuf, p, t)
-    _u   = @views u[state_range(batch, i)]
-    _p   = @views p[parameter_range(batch, i)]
-    bufr = @views gbuf_range(batch, i)
-    _src = @views gbuf[bufr, 1]
-    _dst = @views gbuf[bufr, 2]
-    batch.fun.f(_u, _src, _dst, _p, t)
+    @inbounds begin
+        _u   = @views u[state_range(batch, i)]
+        _p   = isnothing(p) ? p : @views p[parameter_range(batch, i)]
+        bufr = @views gbuf_range(batch, i)
+        _src = @views gbuf[bufr, 1]
+        _dst = @views gbuf[bufr, 2]
+        batch.fun.f(_u, _src, _dst, _p, t)
+    end
     nothing
 end
 
 @inline function apply_edge_buffered!(batch::EdgeBatch{<:ODEEdge}, i,
                                       du, u, gbuf, p, t)
-    _du  = @views du[state_range(batch, i)]
-    _u   = @views u[state_range(batch, i)]
-    _p   = @views p[parameter_range(batch, i)]
-    bufr = @views gbuf_range(batch, i)
-    _src = @views gbuf[bufr, 1]
-    _dst = @views gbuf[bufr, 2]
-    batch.fun.f(_du, _u, _src, _dst, _p, t)
+    @inbounds begin
+        _du  = @views du[state_range(batch, i)]
+        _u   = @views u[state_range(batch, i)]
+        _p   = isnothing(p) ? p : @views p[parameter_range(batch, i)]
+        bufr = @views gbuf_range(batch, i)
+        _src = @views gbuf[bufr, 1]
+        _dst = @views gbuf[bufr, 2]
+        batch.fun.f(_du, _u, _src, _dst, _p, t)
+    end
     nothing
 end

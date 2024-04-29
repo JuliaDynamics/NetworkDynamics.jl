@@ -7,7 +7,7 @@ function Network(g::AbstractGraph,
                  execution=SequentialExecution{true}(),
                  verbose=false)
     reset_timer!()
-    @timeit "Construct Network" begin
+    @timeit_debug "Construct Network" begin
         verbose &&
             println("Create dynamic network with $(nv(g)) vertices and $(ne(g)) edges:")
         @argcheck execution isa ExecutionStyle "Exectuion type $execution not supportet (choose from $(subtypes(ExecutionStyle)))"
@@ -27,7 +27,7 @@ function Network(g::AbstractGraph,
         @argcheck vdepth<=_maxvdepth "For this system edge input depth is limited to $edepth by the vertex dimensions"
 
         # batch identical edge and vertex functions
-        @timeit "batch identical functions" begin
+        @timeit_debug "batch identical functions" begin
             vtypes, vidxs = _batch_identical(vertexf, collect(1:nv(g)))
             etypes, eidxs = _batch_identical(edgef, collect(1:ne(g)))
         end
@@ -49,7 +49,7 @@ function Network(g::AbstractGraph,
         im = IndexManager(g, dynstates, edepth, vdepth)
 
         # create vertex batches and initialize with index manager
-        @timeit "create vertex batches" begin
+        @timeit_debug "create vertex batches" begin
             vertexbatches = collect(VertexBatch(im, i, t; verbose)
                                     for (i, t) in zip(vidxs, vtypes))
             if length(vertexbatches) ≤ 50
@@ -60,7 +60,7 @@ function Network(g::AbstractGraph,
         end
 
         # create edge batches and initialize with index manager
-        @timeit "create edge batches" begin
+        @timeit_debug "create edge batches" begin
             edgebatches = collect(EdgeBatch(im, i, t; verbose)
                                   for (i, t) in zip(eidxs, etypes))
             if length(edgebatches) ≤ 50
@@ -70,7 +70,7 @@ function Network(g::AbstractGraph,
             end
         end
 
-        @timeit "initialize aggregator" begin
+        @timeit_debug "initialize aggregator" begin
             aggregator = accumulator(im, edgebatches)
         end
 
@@ -82,7 +82,7 @@ function Network(g::AbstractGraph,
                                                                                    LazyBufferCache())
 
     end
-    print_timer()
+    # print_timer()
     return nw
 end
 
