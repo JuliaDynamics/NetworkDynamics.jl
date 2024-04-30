@@ -14,7 +14,7 @@ to1s = Float64[]
 to2s = Float64[]
 
 
-for N in Int[1e1,1e2,1e3,1e4,1e5,1e6,1e7]
+for N in Int[1e1,1e2,1e3,1e4,1e5,1e6]
     p, v, e, g = heterogeneous(N)
     at1 = @elapsed nd1 = Network(g, v, e;
         execution=SequentialExecution{false}(),
@@ -48,7 +48,7 @@ for N in Int[1e1,1e2,1e3,1e4,1e5,1e6,1e7]
         end
     end
 
-    at2 = @elapsed nd2 = Network(g, v, e; execution=ThreadedExecution{true}(), accumulator=KAAggregator(+))
+    at2 = @elapsed nd2 = Network(g, v, e; execution=ThreadedExecution{true}(), accumulator=PolyesterAggregator(+))
     ato2 = @elapsed old_nd2 = OldND.network_dynamics(vold, eold, g; parallel=true)
 
     b1 = @b $nd1($dx, $x0, $p, NaN)
@@ -67,22 +67,6 @@ for N in Int[1e1,1e2,1e3,1e4,1e5,1e6,1e7]
     push!(to1s, bo1.time)
     push!(to2s, bo2.time)
 end
-
-using GLMakie
-fig = Figure()
-ax = Axis(fig[1,1]; xscale=log10, yscale=log10, ylabel="construction time",xticks=Ns,
-title="Benchmark: coreloop for inhomogenious kuramoto network")
-scatterlines!(ax, Ns, at1s, label="new, sequential")
-scatterlines!(ax, Ns, at2s, label="new, multithreaded")
-scatterlines!(ax, Ns, ato1s, label="old, sequential", linestyle=:dash)
-scatterlines!(ax, Ns, ato2s, label="old, multithreaded", linestyle=:dash)
-axislegend(ax; position=:lt)
-
-ax = Axis(fig[2,1]; xscale=log10, yscale=log10, ylabel="coreloop time",xticks=Ns,xlabel="network size")
-scatterlines!(ax, Ns, t1s, label="new, sequential")
-scatterlines!(ax, Ns, t2s, label="new, multithreaded")
-scatterlines!(ax, Ns, to1s, label="old, sequential", linestyle=:dash)
-scatterlines!(ax, Ns, to2s, label="old, multithreaded", linestyle=:dash)
 
 using GLMakie
 fig = Figure()

@@ -12,6 +12,7 @@ using Base.Threads: @threads
 using NNlib: NNlib
 using KernelAbstractions: KernelAbstractions, @kernel, @index, @Const, get_backend
 using Atomix: Atomix
+using Polyester: Polyester
 
 include("utils.jl")
 include("edge_coloring.jl")
@@ -19,7 +20,7 @@ include("component_functions.jl")
 export Network, SequentialExecution, ThreadedExecution
 include("network_structure.jl")
 
-export NaiveAggregator, NNlibScatter, KAAggregator, SequentialAggregator
+export NaiveAggregator, NNlibScatter, KAAggregator, SequentialAggregator, PolyesterAggregator
 include("aggregators.jl")
 include("construction.jl")
 include("coreloop.jl")

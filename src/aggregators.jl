@@ -255,3 +255,43 @@ function aggregate!(a::SequentialAggregator, aggbuf, data)
 
     nothing
 end
+
+struct PolyesterAggregator{F} <: Aggregator
+    f::F
+    m::AggregationMap
+end
+PolyesterAggregator(f) = (im, batches) -> PolyesterAggregator(im, batches, f)
+PolyesterAggregator(im, batches, f) = PolyesterAggregator(f, AggregationMap(im, batches))
+
+function aggregate!(a::PolyesterAggregator, aggbuf, data)
+    fill!(aggbuf, zero(eltype(aggbuf)))
+
+    let _data=view(data, a.m.range), idxs=a.m.map, f=a.f
+        Polyester.@batch for I in 1:length(idxs)
+            @inbounds begin
+                _dst_i = idxs[I]
+                if _dst_i != 0
+                    _dat = _data[I]
+                    ref = Atomix.IndexableRef(aggbuf, (_dst_i,))
+                    Atomix.modify!(ref, f, _dat)
+                end
+            end
+        end
+    end
+
+    let _data=view(data, a.m.symrange), idxs=a.m.symmap, f=a.f
+        Polyester.@batch for I in 1:length(idxs)
+            @inbounds begin
+                dst_idx = idxs[I] # might be < 1 for antisymmetric coupling
+                _dst_i = abs(idxs[I])
+                if _dst_i != 0
+                    _dat = sign(dst_idx) * _data[I]
+                    ref = Atomix.IndexableRef(aggbuf, (_dst_i,))
+                    Atomix.modify!(ref, f, _dat)
+                end
+            end
+        end
+    end
+
+    nothing
+end

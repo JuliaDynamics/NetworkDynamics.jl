@@ -31,6 +31,7 @@ using InteractiveUtils
     @time nw2 = Network(g, nvec, evec; accumulator=NNlibScatter(+));
     @time nw3 = Network(g, nvec, evec; accumulator=KAAggregator(+));
     @time nw4 = Network(g, nvec, evec; accumulator=SequentialAggregator(+));
+    @time nw5 = Network(g, nvec, evec; accumulator=PolyesterAggregator(+));
 
     nstates = nw1.im.lastidx_static
     nagg = nw1.im.lastidx_aggr
@@ -41,15 +42,18 @@ using InteractiveUtils
     aggbuf2 = rand(nagg);
     aggbuf3 = rand(nagg);
     aggbuf4 = rand(nagg);
+    aggbuf5 = rand(nagg);
     b1 = @b aggregate!($nw1.layer.aggregator, $aggbuf1, $states)
     b2 = @b aggregate!($nw2.layer.aggregator, $aggbuf2, $states)
     b3 = @b aggregate!($nw3.layer.aggregator, $aggbuf3, $states)
     b4 = @b aggregate!($nw4.layer.aggregator, $aggbuf4, $states)
+    b5 = @b aggregate!($nw5.layer.aggregator, $aggbuf5, $states)
 
     @test b1.allocs==0
     @test b2.allocs==0
     @test b4.allocs==0
-    @test aggbuf1 ≈ aggbuf2 ≈ aggbuf3 ≈ aggbuf4
+    @test b5.allocs==0
+    @test aggbuf1 ≈ aggbuf2 ≈ aggbuf3 ≈ aggbuf4 ≈ aggbuf5
 end
 
 
