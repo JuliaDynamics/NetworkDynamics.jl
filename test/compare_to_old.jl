@@ -52,7 +52,9 @@ for N in Int[1e1,1e2,1e3,1e4,1e5,1e6,1e7]
     ato2 = @elapsed old_nd2 = OldND.network_dynamics(vold, eold, g; parallel=true)
 
     b1 = @b $nd1($dx, $x0, $p, NaN)
+
     b2 = @b $nd2($dx, $x0, $p, NaN)
+
     bo1 = @b $old_nd1($dxold, $x0old, $pold, NaN)
     bo2 = @b $old_nd2($dxold, $x0old, $pold, NaN)
     push!(Ns, N)

@@ -30,26 +30,24 @@ end
 #### Vertex Execution
 ####
 @inline function process_vertices!(nw::Network{<:SequentialExecution}, aggbuf, dupt)
-    @timeit_debug "execute vertex batches" begin
-        unrolled_foreach(nw.vertexbatches) do batch
-            (du, u, p, t) = dupt
-            for i in 1:length(batch)
-                apply_vertex!(batch, i, du, u, aggbuf, p, t)
-            end
+    unrolled_foreach(nw.vertexbatches) do batch
+        (du, u, p, t) = dupt
+        for i in 1:length(batch)
+            apply_vertex!(batch, i, du, u, aggbuf, p, t)
         end
     end
 end
 
 @inline function process_vertices!(nw::Network{<:ThreadedExecution}, aggbuf, dupt)
-    @timeit_debug "launch vertex kernels" begin
-        _backend = get_backend(dupt[2])
-        unrolled_foreach(nw.vertexbatches) do batch
-            (du, u, p, t) = dupt
-            kernel = vkernel!(_backend)
-            kernel(batch, du, u, aggbuf, p, t; ndrange=length(batch))
-        end
-        KernelAbstractions.synchronize(_backend)
+    _backend = get_backend(dupt[2])
+    unrolled_foreach(nw.vertexbatches) do batch
+        (du, u, p, t) = dupt
+        kernel = vkernel!(_backend)
+        kernel(batch, du, u, aggbuf, p, t; ndrange=length(batch))
+        # kernel = vkernel!(_backend, 32, length(batch))
+        # kernel(batch, du, u, aggbuf, p, t)
     end
+    KernelAbstractions.synchronize(_backend)
 end
 @kernel function vkernel!(@Const(batch::VertexBatch{<:ODEVertex}),
                           du, @Const(u),
@@ -75,26 +73,24 @@ end
 #### Edge Layer Execution unbuffered
 ####
 @inline function process_layer!(nw::Network{<:SequentialExecution{false}}, layer, dupt)
-    @timeit_debug "execute edge batches" begin
-        unrolled_foreach(layer.edgebatches) do batch
-            (du, u, p, t) = dupt
-            for i in 1:length(batch)
-                apply_edge_unbuffered!(batch, i, du, u, nw.im.e_src, nw.im.e_dst, p, t)
-            end
+    unrolled_foreach(layer.edgebatches) do batch
+        (du, u, p, t) = dupt
+        for i in 1:length(batch)
+            apply_edge_unbuffered!(batch, i, du, u, nw.im.e_src, nw.im.e_dst, p, t)
         end
     end
 end
 
 @inline function process_layer!(nw::Network{<:ThreadedExecution{false}}, layer, dupt)
-    @timeit_debug "launch kernels" begin
-        _backend = get_backend(dupt[2])
-        unrolled_foreach(layer.edgebatches) do batch
-            (du, u, p, t) = dupt
-            kernel = ekernel!(_backend)
-            kernel(batch, du, u, nw.im.e_src, nw.im.e_dst, p, t; ndrange=length(batch))
-        end
-        KernelAbstractions.synchronize(_backend)
+    _backend = get_backend(dupt[2])
+    unrolled_foreach(layer.edgebatches) do batch
+        (du, u, p, t) = dupt
+        kernel = ekernel!(_backend)
+        kernel(batch, du, u, nw.im.e_src, nw.im.e_dst, p, t; ndrange=length(batch))
+        # kernel = ekernel!(_backend, 32, length(batch))
+        # kernel(batch, du, u, nw.im.e_src, nw.im.e_dst, p, t)
     end
+    KernelAbstractions.synchronize(_backend)
 end
 @kernel function ekernel!(@Const(batch::EdgeBatch{<:StaticEdge}),
                           @Const(du), u,
@@ -141,23 +137,32 @@ end
 ####
 #### Edge Layer Execution buffered
 ####
+@inline function process_layer!(nw::Network{<:SequentialExecution{true}}, layer, dupt)
+    u = dupt[2]
+    gbuf = nw.cachepool[u, size(layer.gather_map)]
+    NNlib.gather!(gbuf, u, layer.gather_map)
+
+    unrolled_foreach(layer.edgebatches) do batch
+        (_du, _u, _p, _t) = dupt
+        for i in 1:length(batch)
+            apply_edge_buffered!(batch, i, _du, _u, gbuf, _p, _t)
+        end
+    end
+end
+
 @inline function process_layer!(nw::Network{<:ThreadedExecution{true}}, layer, dupt)
     # buffered/gathered
     u = dupt[2]
-    @timeit_debug "gather" begin
-        gbuf = nw.cachepool[u, size(layer.gather_map)]
-        NNlib.gather!(gbuf, u, layer.gather_map)
-    end
+    gbuf = nw.cachepool[u, size(layer.gather_map)]
+    NNlib.gather!(gbuf, u, layer.gather_map)
 
-    @timeit_debug "launch kernels" begin
-        _backend = get_backend(u)
-        unrolled_foreach(layer.edgebatches) do batch
-            (du, u, p, t) = dupt
-            kernel = ekernel_buffered!(_backend)
-            kernel(batch, du, u, gbuf, p, t; ndrange=length(batch))
-        end
-        KernelAbstractions.synchronize(_backend)
+    backend=get_backend(u)
+    unrolled_foreach(layer.edgebatches) do batch
+        (_du, _u, _p, _t) = dupt
+        kernel = ekernel_buffered!(backend)
+        kernel(batch, _du, _u, gbuf, _p, _t; ndrange=length(batch))
     end
+    KernelAbstractions.synchronize(backend)
 end
 @kernel function ekernel_buffered!(@Const(batch::EdgeBatch{<:StaticEdge}),
                                    @Const(du), u,
