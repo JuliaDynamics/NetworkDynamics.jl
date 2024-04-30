@@ -2,7 +2,7 @@ module NDPrototype
 using Graphs
 using OrderedCollections
 using Unrolled: unrolled_foreach, @unroll
-using TimerOutputs: @timeit_debug
+using TimerOutputs: @timeit_debug, reset_timer!, print_timer
 
 using ArgCheck: @argcheck
 using PreallocationTools: LazyBufferCache

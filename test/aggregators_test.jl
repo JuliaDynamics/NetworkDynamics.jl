@@ -3,6 +3,7 @@ using NDPrototype: aggregate!
 using Graphs
 using Random
 using Chairmarks
+using InteractiveUtils
 
 @testset "compare different aggregators" begin
     vtypes = [ODEVertex(sum, 2, 0),
@@ -52,7 +53,7 @@ using Chairmarks
 end
 
 
-@testset "KAAggregator" begin
+@testset "AggregationMap" begin
     g = path_graph(5)
     n = ODEVertex(sum, 1, 0)
     e = [StaticEdge(; f=sum, dim=2, pdim=0, coupling=Symmetric()),
@@ -61,19 +62,19 @@ end
         StaticEdge(; f=sum, dim=2, pdim=0, coupling=Directed())]
 
     nw = Network(g, n, e; accumulator=KAAggregator(+));
-    aggr = nw.layer.aggregator
+    aggrmap = nw.layer.aggregator.m
 
-    @test aggr.range == nv(g)+1 : nv(g) + 10
-    @test aggr.symrange == nv(g)+1 : nv(g) + 10 - 2
+    @test aggrmap.range == nv(g)+1 : nv(g) + 10
+    @test aggrmap.symrange == nv(g)+1 : nv(g) + 10 - 2
 
-    @test aggr.map    == [3, 4,  5,  6, 7, 8, 0, 0, 9, 10]
-    @test aggr.symmap == [1, 2, -3, -4, 0, 0, 5, 6]
+    @test aggrmap.map    == [3, 4,  5,  6, 7, 8, 0, 0, 9, 10]
+    @test aggrmap.symmap == [1, 2, -3, -4, 0, 0, 5, 6]
 
     buf = zeros(10)
-    aggregate!(aggr, buf, collect(1:nw.im.lastidx_static))
+    NDPrototype.aggregate!(nw.layer.aggregator, buf, collect(1:nw.im.lastidx_static))
 
     nw2 = Network(g, n, e; accumulator=NaiveAggregator(+));
     buf2 = zeros(10)
-    aggregate!(nw2.layer.aggregator, buf2, collect(1:nw.im.lastidx_static))
+    NDPrototype.aggregate!(nw2.layer.aggregator, buf2, collect(1:nw.im.lastidx_static))
     @test maximum(abs.(buf2 .- buf)) == 0
 end

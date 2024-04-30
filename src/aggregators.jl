@@ -126,16 +126,13 @@ function _aggregate!(a::NaiveAggregator, batches, aggbuf, data)
     end
 end
 
-
-struct KAAggregator{F} <: Aggregator
-    f::F
+struct AggregationMap
     range::UnitRange{Int} # range in data where aggregation is necessary
     map::Vector{Int}      # maps data idx to destination, if zero skip
     symrange::UnitRange{Int}     # same for symmetric/antisymmetric coupling
     symmap::Vector{Int}
 end
-KAAggregator(f) = (im, batches) -> KAAggregator(im, batches, f)
-function KAAggregator(im, batches, f)
+function AggregationMap(im, batches)
     _map    = zeros(Int, im.lastidx_static)
     _symmap = zeros(Int, im.lastidx_static)
     for batch in batches
@@ -165,7 +162,7 @@ function KAAggregator(im, batches, f)
     end
     range, map       = _tighten_idxrange(_map)
     symrange, symmap = _tighten_idxrange(_symmap)
-    KAAggregator(f, range, map, symrange, symmap)
+    AggregationMap(range, map, symrange, symmap)
 end
 function _tighten_idxrange(v)
     first = findfirst(!iszero, v)
@@ -175,21 +172,29 @@ function _tighten_idxrange(v)
     return range, v[range]
 end
 
+struct KAAggregator{F} <: Aggregator
+    f::F
+    m::AggregationMap
+end
+KAAggregator(f) = (im, batches) -> KAAggregator(im, batches, f)
+KAAggregator(im, batches, f) = KAAggregator(f, AggregationMap(im, batches))
+
 function aggregate!(a::KAAggregator, aggbuf, data)
+    am = a.m
     fill!(aggbuf, zero(eltype(aggbuf)))
     _backend = get_backend(data)
 
-    # kernel = agg_kernel!(_backend, 1024, length(a.map))
-    # kernel(a.f, aggbuf, view(data, a.range), a.map)
+    # kernel = agg_kernel!(_backend, 1024, length(am.map))
+    # kernel(a.f, aggbuf, view(data, am.range), am.map)
     kernel = agg_kernel!(_backend)
-    kernel(a.f, aggbuf, view(data, a.range), a.map; ndrange=length(a.map))
+    kernel(a.f, aggbuf, view(data, am.range), am.map; ndrange=length(am.map))
     KernelAbstractions.synchronize(_backend)
 
-    if !isempty(a.symrange)
-        # symkernel = agg_kernel_sym!(_backend, 1024, length(a.map))
-        # symkernel(a.f, aggbuf, view(data, a.symrange), a.symmap)
+    if !isempty(am.symrange)
+        # symkernel = agg_kernel_sym!(_backend, 1024, length(am.map))
+        # symkernel(a.f, aggbuf, view(data, am.symrange), am.symmap)
         symkernel = agg_kernel_sym!(_backend)
-        symkernel(a.f, aggbuf, view(data, a.symrange), a.symmap; ndrange=length(a.symmap))
+        symkernel(a.f, aggbuf, view(data, am.symrange), am.symmap; ndrange=length(am.symmap))
         KernelAbstractions.synchronize(_backend)
     end
     nothing
@@ -223,24 +228,28 @@ end
 
 
 struct SequentialAggregator{F} <: Aggregator
-    kaagg::KAAggregator{F}
+    f::F
+    m::AggregationMap
 end
-function SequentialAggregator(f)
-    (im, batches) -> SequentialAggregator(KAAggregator(im, batches, f))
-end
+SequentialAggregator(f) = (im, batches) -> SequentialAggregator(im, batches, f)
+SequentialAggregator(im, batches, f) = SequentialAggregator(f, AggregationMap(im, batches))
 
-function aggregate!(sa::SequentialAggregator, aggbuf, data)
+function aggregate!(a::SequentialAggregator, aggbuf, data)
     fill!(aggbuf, zero(eltype(aggbuf)))
 
     @inbounds begin
-        a = sa.kaagg
-        for (dat, dst_idx) in zip(view(data, a.range), a.map)
-            aggbuf[dst_idx] = a.f(aggbuf[dst_idx], dat)
+        am = a.m
+        for (dat, dst_idx) in zip(view(data, am.range), am.map)
+            if dst_idx != 0
+                aggbuf[dst_idx] = a.f(aggbuf[dst_idx], dat)
+            end
         end
 
-        for (dat, dst_idx) in zip(view(data, a.symrange), a.symmap)
-            _dst_idx = abs(dst_idx)
-            aggbuf[_dst_idx] = a.f(aggbuf[_dst_idx], sign(dst_idx) * dat)
+        for (dat, dst_idx) in zip(view(data, am.symrange), am.symmap)
+            if dst_idx != 0
+                _dst_idx = abs(dst_idx)
+                aggbuf[_dst_idx] = a.f(aggbuf[_dst_idx], sign(dst_idx) * dat)
+            end
         end
     end
 
