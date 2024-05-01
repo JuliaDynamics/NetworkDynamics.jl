@@ -43,27 +43,26 @@ end
     unrolled_foreach(nw.vertexbatches) do batch
         (du, u, p, t) = dupt
         kernel = vkernel!(_backend)
-        kernel(batch, du, u, aggbuf, p, t; ndrange=length(batch))
-        # kernel = vkernel!(_backend, 32, length(batch))
-        # kernel(batch, du, u, aggbuf, p, t)
+        kernel(comptype(batch), essence(batch),
+               du, u, aggbuf, p, t; ndrange=length(batch))
     end
     KernelAbstractions.synchronize(_backend)
 end
-@kernel function vkernel!(@Const(batch::VertexBatch{<:ODEVertex}),
+@kernel function vkernel!(@Const(type),@Const(batch),
                           du, @Const(u),
                           @Const(aggbuf), @Const(p), @Const(t))
     I = @index(Global)
-    @inline apply_vertex!(batch, I, du, u, aggbuf, p, t)
+    @inline apply_vertex!(type, batch, I, du, u, aggbuf, p, t)
     nothing
 end
 
-@inline function apply_vertex!(batch::VertexBatch{<:ODEVertex}, i, du, u, aggbuf, p, t)
+@inline function apply_vertex!(::Type{<:ODEVertex}, batch, i, du, u, aggbuf, p, t)
     @inbounds begin
         _du  = @views du[state_range(batch, i)]
         _u   = @views u[state_range(batch, i)]
         _p   = isnothing(p) ? p : @views p[parameter_range(batch, i)]
         _agg = @views aggbuf[aggbuf_range(batch, i)]
-        batch.fun.f(_du, _u, _agg, _p, t)
+        compf(batch)(_du, _u, _agg, _p, t)
     end
     nothing
 end
@@ -86,28 +85,27 @@ end
     unrolled_foreach(layer.edgebatches) do batch
         (du, u, p, t) = dupt
         kernel = ekernel!(_backend)
-        kernel(batch, du, u, nw.im.e_src, nw.im.e_dst, p, t; ndrange=length(batch))
-        # kernel = ekernel!(_backend, 32, length(batch))
-        # kernel(batch, du, u, nw.im.e_src, nw.im.e_dst, p, t)
+        kernel(comptype(batch), essence(batch),
+               du, u, nw.im.e_src, nw.im.e_dst, p, t; ndrange=length(batch))
     end
     KernelAbstractions.synchronize(_backend)
 end
-@kernel function ekernel!(@Const(batch::EdgeBatch{<:StaticEdge}),
+@kernel function ekernel!(@Const(type::Type{<:StaticEdge}), @Const(batch),
                           @Const(du), u,
                           @Const(srcrange), @Const(dstrange),
                           @Const(p), @Const(t))
     I = @index(Global)
-    @inline apply_edge_unbuffered!(batch, I, du, u, srcrange, dstrange, p, t)
+    @inline apply_edge_unbuffered!(type, batch, I, du, u, srcrange, dstrange, p, t)
 end
-@kernel function ekernel!(@Const(batch::EdgeBatch{<:ODEEdge}),
+@kernel function ekernel!(@Const(type::Type{<:ODEEdge}), @Const(batch),
                           du, @Const(u),
                           @Const(srcrange), @Const(dstrange),
                           @Const(p), @Const(t))
     I = @index(Global)
-    @inline apply_edge_unbuffered!(batch, I, du, u, srcrange, dstrange, p, t)
+    @inline apply_edge_unbuffered!(type, batch, I, du, u, srcrange, dstrange, p, t)
 end
 
-@inline function apply_edge_unbuffered!(batch::EdgeBatch{<:StaticEdge}, i,
+@inline function apply_edge_unbuffered!(::Type{<:StaticEdge}, batch, i,
                                         du, u, srcrange, dstrange, p, t)
     @inbounds begin
         _u   = @views u[state_range(batch, i)]
@@ -115,12 +113,12 @@ end
         eidx = @views batch.indices[i]
         _src = @views u[srcrange[eidx]]
         _dst = @views u[dstrange[eidx]]
-        batch.comp.f(_u, _src, _dst, _p, t)
+        compf(batch)(_u, _src, _dst, _p, t)
     end
     nothing
 end
 
-@inline function apply_edge_unbuffered!(batch::EdgeBatch{<:ODEEdge}, i,
+@inline function apply_edge_unbuffered!(::Type{<:ODEEdge}, batch, i,
                                         du, u, srcrange, dstrange, p, t)
     @inbounds begin
         _du  = @views du[state_range(batch, i)]
@@ -129,7 +127,7 @@ end
         eidx = @views batch.indices[i]
         _src = @views u[srcrange[eidx]]
         _dst = @views u[dstrange[eidx]]
-        batch.comp.f(_du, _u, _src, _dst, _p, t)
+        compf(batch)(_du, _u, _src, _dst, _p, t)
     end
     nothing
 end
@@ -160,24 +158,25 @@ end
     unrolled_foreach(layer.edgebatches) do batch
         (_du, _u, _p, _t) = dupt
         kernel = ekernel_buffered!(backend)
-        kernel(batch, _du, _u, gbuf, _p, _t; ndrange=length(batch))
+        kernel(comptype(batch), essence(batch),
+               _du, _u, gbuf, _p, _t; ndrange=length(batch))
     end
     KernelAbstractions.synchronize(backend)
 end
-@kernel function ekernel_buffered!(@Const(batch::EdgeBatch{<:StaticEdge}),
+@kernel function ekernel_buffered!(@Const(type::Type{<:StaticEdge}), @Const(batch),
                                    @Const(du), u,
                                    @Const(gbuf), @Const(p), @Const(t))
     I = @index(Global)
-    apply_edge_buffered!(batch, I, du, u, gbuf, p, t)
+    apply_edge_buffered!(type, batch, I, du, u, gbuf, p, t)
 end
-@kernel function ekernel_buffered!(@Const(batch::EdgeBatch{<:ODEEdge}),
+@kernel function ekernel_buffered!(@Const(type::Type{<:ODEEdge}), @Const(batch),
                                    du, @Const(u),
                                    @Const(gbuf), @Const(p), @Const(t))
     I = @index(Global)
-    apply_edge_buffered!(batch, I, du, u, gbuf, p, t)
+    apply_edge_buffered!(type, batch, I, du, u, gbuf, p, t)
 end
 
-@inline function apply_edge_buffered!(batch::EdgeBatch{<:StaticEdge}, i,
+@inline function apply_edge_buffered!(::Type{<:StaticEdge}, batch, i,
                                       du, u, gbuf, p, t)
     @inbounds begin
         _u   = @views u[state_range(batch, i)]
@@ -185,12 +184,12 @@ end
         bufr = @views gbuf_range(batch, i)
         _src = @views gbuf[bufr, 1]
         _dst = @views gbuf[bufr, 2]
-        batch.comp.f(_u, _src, _dst, _p, t)
+        compf(batch)(_u, _src, _dst, _p, t)
     end
     nothing
 end
 
-@inline function apply_edge_buffered!(batch::EdgeBatch{<:ODEEdge}, i,
+@inline function apply_edge_buffered!(::Type{<:ODEEdge}, batch, i,
                                       du, u, gbuf, p, t)
     @inbounds begin
         _du  = @views du[state_range(batch, i)]
@@ -199,7 +198,7 @@ end
         bufr = @views gbuf_range(batch, i)
         _src = @views gbuf[bufr, 1]
         _dst = @views gbuf[bufr, 2]
-        batch.comp.f(_du, _u, _src, _dst, _p, t)
+        compf(batch)(_du, _u, _src, _dst, _p, t)
     end
     nothing
 end

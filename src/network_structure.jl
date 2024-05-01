@@ -103,13 +103,15 @@ end
 @inline statetype(::ComponentBatch{F}) where {F} = statetype(F)
 @inline coupling(::EdgeBatch{F}) where {F} = coupling(F)
 @inline comptype(::ComponentBatch{F}) where {F} = F
+@inline compf(b::ComponentBatch) = b.comp.f
+@inline compf(b::NamedTuple) = b.f
 
 @inline state_range(batch) = _fullrange(batch.statestride, length(batch))
 
 @inline state_range(batch, i)     = _range(batch.statestride, i)
 @inline parameter_range(batch, i) = _range(batch.pstride, i)
 @inline aggbuf_range(batch, i)    = _range(batch.aggbufstride, i)
-@inline gbuf_range(batch, i)      = _range(batch.gbuftride, i)
+@inline gbuf_range(batch, i)      = _range(batch.gbufstride, i)
 
 function register_vertices!(im::IndexManager, idxs, comp)
     for i in idxs

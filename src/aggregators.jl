@@ -1,11 +1,11 @@
 abstract type Aggregator end
 
-struct NNlibScatter{T} <: Aggregator
+struct NNlibScatter{T, V} <: Aggregator
     f::T
     batchranges::Vector{UnitRange{Int}}
     couplings::Vector{CouplingUnion}
-    dstmaps::Vector{Vector{Int}}
-    srcmaps::Vector{Vector{Int}}
+    dstmaps::Vector{V}
+    srcmaps::Vector{V}
     aggrsize::Int
 end
 
@@ -65,6 +65,7 @@ function aggregate!(a::NNlibScatter, aggbuf, data)
                                                  a.couplings)
         batchdata = view(data, range)
         # scatter the dst
+        @assert get_backend(aggbuf) == get_backend(dstmap)
         NNlib.scatter!(a.f, aggbuf, batchdata, dstmap)
 
         # scatter to source depending on
@@ -126,11 +127,11 @@ function _aggregate!(a::NaiveAggregator, batches, aggbuf, data)
     end
 end
 
-struct AggregationMap
+struct AggregationMap{V}
     range::UnitRange{Int} # range in data where aggregation is necessary
-    map::Vector{Int}      # maps data idx to destination, if zero skip
+    map::V                # maps data idx to destination, if zero skip
     symrange::UnitRange{Int}     # same for symmetric/antisymmetric coupling
-    symmap::Vector{Int}
+    symmap::V
 end
 function AggregationMap(im, batches)
     _map    = zeros(Int, im.lastidx_static)
@@ -172,9 +173,9 @@ function _tighten_idxrange(v)
     return range, v[range]
 end
 
-struct KAAggregator{F} <: Aggregator
+struct KAAggregator{F,V} <: Aggregator
     f::F
-    m::AggregationMap
+    m::AggregationMap{V}
 end
 KAAggregator(f) = (im, batches) -> KAAggregator(im, batches, f)
 KAAggregator(im, batches, f) = KAAggregator(f, AggregationMap(im, batches))
@@ -229,7 +230,7 @@ end
 
 struct SequentialAggregator{F} <: Aggregator
     f::F
-    m::AggregationMap
+    m::AggregationMap{Vector{Int}}
 end
 SequentialAggregator(f) = (im, batches) -> SequentialAggregator(im, batches, f)
 SequentialAggregator(im, batches, f) = SequentialAggregator(f, AggregationMap(im, batches))
@@ -258,7 +259,7 @@ end
 
 struct PolyesterAggregator{F} <: Aggregator
     f::F
-    m::AggregationMap
+    m::AggregationMap{Vector{Int}}
 end
 PolyesterAggregator(f) = (im, batches) -> PolyesterAggregator(im, batches, f)
 PolyesterAggregator(im, batches, f) = PolyesterAggregator(f, AggregationMap(im, batches))

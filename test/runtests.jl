@@ -42,7 +42,7 @@ using NDPrototype: VertexBatch, parameter_range
     end
 
     @testset "Vertex batch" begin
-        using NDPrototype: BatchStride
+        using NDPrototype: BatchStride, VertexBatch, parameter_range
         vb = VertexBatch([1, 2, 3, 4], # vertices
                          sum, # function
                          BatchStride(1, 3),

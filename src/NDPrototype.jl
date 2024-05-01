@@ -14,15 +14,21 @@ using KernelAbstractions: KernelAbstractions, @kernel, @index, @Const, get_backe
 using Atomix: Atomix
 using Polyester: Polyester
 
+
+using Adapt: Adapt, adapt
+
 include("utils.jl")
 include("edge_coloring.jl")
 include("component_functions.jl")
 export Network, SequentialExecution, ThreadedExecution
 include("network_structure.jl")
 
-export NaiveAggregator, NNlibScatter, KAAggregator, SequentialAggregator, PolyesterAggregator
+export NaiveAggregator, NNlibScatter, KAAggregator, SequentialAggregator,
+       PolyesterAggregator
 include("aggregators.jl")
 include("construction.jl")
 include("coreloop.jl")
+
+include("adapt.jl")
 
 end
