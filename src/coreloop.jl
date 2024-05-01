@@ -156,7 +156,7 @@ end
     gbuf = nw.cachepool[u, size(layer.gather_map)]
     NNlib.gather!(gbuf, u, layer.gather_map)
 
-    backend=get_backend(u)
+    backend = get_backend(u)
     unrolled_foreach(layer.edgebatches) do batch
         (_du, _u, _p, _t) = dupt
         kernel = ekernel_buffered!(backend)

@@ -44,8 +44,8 @@ function color_edges_greedy(g::SimpleGraph)
             @assert c == length(cstat) + 1
             resize!(cstat, c)
             cstat[c] = 0
-            resize!(corder, c+1)
-            corder[c+1] = c+1
+            resize!(corder, c + 1)
+            corder[c+1] = c + 1
         end
         cstat[c] += 1
         sortperm!(view(corder, 1:length(cstat)), cstat)

@@ -104,7 +104,7 @@ end
 @inline coupling(::EdgeBatch{F}) where {F} = coupling(F)
 @inline comptype(::ComponentBatch{F}) where {F} = F
 
-@inline state_range(batch)     = _fullrange(batch.statestride, length(batch))
+@inline state_range(batch) = _fullrange(batch.statestride, length(batch))
 
 @inline state_range(batch, i)     = _range(batch.statestride, i)
 @inline parameter_range(batch, i) = _range(batch.pstride, i)

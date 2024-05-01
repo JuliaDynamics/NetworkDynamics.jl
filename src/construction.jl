@@ -55,7 +55,8 @@ function Network(g::AbstractGraph,
             if length(vertexbatches) ≤ 50
                 vertexbatches = Tuple(vertexbatches)
             else
-                verbose && println(" $(length(vertexbatches)) > 50 unique indices: don't unroll!")
+                verbose &&
+                    println(" $(length(vertexbatches)) > 50 unique indices: don't unroll!")
             end
         end
 
@@ -66,7 +67,8 @@ function Network(g::AbstractGraph,
             if length(edgebatches) ≤ 50
                 edgebatches = Tuple(edgebatches)
             else
-                verbose && println("$(length(edgebatches)) > 50 unique edges: don't unroll!")
+                verbose &&
+                    println("$(length(edgebatches)) > 50 unique edges: don't unroll!")
             end
         end
 
