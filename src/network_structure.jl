@@ -77,84 +77,63 @@ struct VertexBatch{F} <: ComponentBatch{F}
     "vertex indices contained in batch"
     indices::Vector{Int}
     "vertex function"
-    fun::F
+    comp::F
     "state: dimension and first index"
-    dim::Int
-    firstidx::Int
+    statestride::BatchStride
     "parameter: dimension and first index"
-    pdim::Int
-    pfirstidx::Int
+    pstride::BatchStride
     "aggregation: dimension and first index"
-    edepth::Int
-    aggrfirstidx::Int
+    aggbufstride::BatchStride
 end
 
 struct EdgeBatch{F} <: ComponentBatch{F}
     "edge indices (as in edge iterator) contained in batch"
     indices::Vector{Int}
     "edge function"
-    fun::F
+    comp::F
     "state: dimension and first index"
-    dim::Int
-    firstidx::Int
+    statestride::BatchStride
     "parameter: dimension and first index"
-    pdim::Int
-    pfirstidx::Int
+    pstride::BatchStride
     "gathered vector: dimension and first index"
-    vdepth::Int
-    gfirstidx::Int
+    gbufstride::BatchStride
 end
 
 @inline Base.length(cb::ComponentBatch) = Base.length(cb.indices)
 @inline statetype(::ComponentBatch{F}) where {F} = statetype(F)
-coupling(::EdgeBatch{F}) where {F} = coupling(F)
+@inline coupling(::EdgeBatch{F}) where {F} = coupling(F)
+@inline comptype(::ComponentBatch{F}) where {F} = F
 
-@inline function state_range(batch::ComponentBatch)
-    batch.firstidx:batch.firstidx+length(batch)*batch.dim-1
-end
-@inline function state_range(batch::ComponentBatch, i)
-    start = batch.firstidx + (i - 1) * batch.dim
-    start:start+batch.dim-1
-end
+@inline state_range(batch)     = _fullrange(batch.statestride, length(batch))
 
-@inline function parameter_range(batch::ComponentBatch, i)
-    start = batch.pfirstidx + (i - 1) * batch.pdim
-    start:start+batch.pdim-1
-end
+@inline state_range(batch, i)     = _range(batch.statestride, i)
+@inline parameter_range(batch, i) = _range(batch.pstride, i)
+@inline aggbuf_range(batch, i)    = _range(batch.aggbufstride, i)
+@inline gbuf_range(batch, i)      = _range(batch.gbuftride, i)
 
-@inline function aggbuf_range(batch::VertexBatch, i)
-    start = batch.aggrfirstidx + (i - 1) * batch.edepth
-    start:start+batch.edepth-1
-end
-
-@inline function gbuf_range(batch::EdgeBatch, i)
-    start = batch.gfirstidx + (i - 1) * batch.vdepth
-    start:start+batch.vdepth-1
-end
-
-function register_vertices!(im::IndexManager, idxs, fun)
+function register_vertices!(im::IndexManager, idxs, comp)
     for i in idxs
-        im.v_data[i] = _nextdatarange!(im, statetype(fun), dim(fun))
-        im.v_para[i] = _nextprange!(im, pdim(fun))
+        im.v_data[i] = _nextdatarange!(im, statetype(comp), dim(comp))
+        im.v_para[i] = _nextprange!(im, pdim(comp))
         im.v_aggr[i] = _nextaggrrange!(im, im.edepth)
     end
-    (first(im.v_data[first(idxs)]),
-     first(im.v_para[first(idxs)]),
-     first(im.v_aggr[first(idxs)]))
+    (BatchStride(first(im.v_data[first(idxs)]), dim(comp)),
+     BatchStride(first(im.v_para[first(idxs)]), pdim(comp)),
+     BatchStride(first(im.v_aggr[first(idxs)]), im.edepth))
 end
-function register_edges!(im::IndexManager, idxs, fun)
+function register_edges!(im::IndexManager, idxs, comp)
     edgevec = collect(edges(im.g))
     for i in idxs
         e = edgevec[i]
-        im.e_data[i] = _nextdatarange!(im, statetype(fun), dim(fun))
-        im.e_para[i] = _nextprange!(im, pdim(fun))
+        im.e_data[i] = _nextdatarange!(im, statetype(comp), dim(comp))
+        im.e_para[i] = _nextprange!(im, pdim(comp))
         im.e_src[i] = im.v_data[e.src][1:im.vdepth]
         im.e_dst[i] = im.v_data[e.dst][1:im.vdepth]
         im.e_gbufr[i] = _nextgbufrange!(im, im.vdepth)
     end
-    (first(im.e_data[first(idxs)]),
-     first(im.e_para[first(idxs)]),
-     first(im.e_gbufr[first(idxs)]))
+    (BatchStride(first(im.e_data[first(idxs)]), dim(comp)),
+     BatchStride(first(im.e_para[first(idxs)]), pdim(comp)),
+     BatchStride(first(im.e_gbufr[first(idxs)]), im.vdepth))
 end
 function _nextdatarange!(im::IndexManager, ::Dynamic, N)
     newlast, range = _nextrange(im.lastidx_dynamic, N)

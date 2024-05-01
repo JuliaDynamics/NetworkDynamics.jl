@@ -42,12 +42,12 @@ using NDPrototype: VertexBatch, parameter_range
     end
 
     @testset "Vertex batch" begin
+        using NDPrototype: BatchStride
         vb = VertexBatch([1, 2, 3, 4], # vertices
                          sum, # function
-                         3, # dimension
-                         1, # first index in state vector
-                         2, # p dim
-                         4, 0, 0)
+                         BatchStride(1, 3),
+                         BatchStride(4, 2),
+                         BatchStride(0, 0))
         @test parameter_range(vb, 1) == 4:5
         @test parameter_range(vb, 2) == 6:7
         @test parameter_range(vb, 3) == 8:9

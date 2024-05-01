@@ -115,7 +115,7 @@ end
         eidx = @views batch.indices[i]
         _src = @views u[srcrange[eidx]]
         _dst = @views u[dstrange[eidx]]
-        batch.fun.f(_u, _src, _dst, _p, t)
+        batch.comp.f(_u, _src, _dst, _p, t)
     end
     nothing
 end
@@ -129,7 +129,7 @@ end
         eidx = @views batch.indices[i]
         _src = @views u[srcrange[eidx]]
         _dst = @views u[dstrange[eidx]]
-        batch.fun.f(_du, _u, _src, _dst, _p, t)
+        batch.comp.f(_du, _u, _src, _dst, _p, t)
     end
     nothing
 end
@@ -185,7 +185,7 @@ end
         bufr = @views gbuf_range(batch, i)
         _src = @views gbuf[bufr, 1]
         _dst = @views gbuf[bufr, 2]
-        batch.fun.f(_u, _src, _dst, _p, t)
+        batch.comp.f(_u, _src, _dst, _p, t)
     end
     nothing
 end
@@ -199,7 +199,7 @@ end
         bufr = @views gbuf_range(batch, i)
         _src = @views gbuf[bufr, 1]
         _dst = @views gbuf[bufr, 2]
-        batch.fun.f(_du, _u, _src, _dst, _p, t)
+        batch.comp.f(_du, _u, _src, _dst, _p, t)
     end
     nothing
 end

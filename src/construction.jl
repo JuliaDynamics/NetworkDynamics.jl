@@ -90,30 +90,24 @@ function VertexBatch(im::IndexManager,
                      idxs::Vector{Int},
                      vertexf::VertexFunction;
                      verbose)
-    (firstidx, pfirstidx, aggrfirstidx) = register_vertices!(im, idxs, vertexf)
+    (statestride, pstride, aggbufstride) = register_vertices!(im, idxs, vertexf)
 
     verbose &&
         println(" - VertexBatch: dim=$(vertexf.dim), pdim=$(vertexf.pdim), length=$(length(idxs))")
 
-    VertexBatch(idxs, vertexf,
-                vertexf.dim, firstidx,
-                vertexf.pdim, pfirstidx,
-                im.edepth, aggrfirstidx)
+    VertexBatch(idxs, vertexf, statestride, pstride, aggbufstride)
 end
 
 function EdgeBatch(im::IndexManager,
                    idxs::Vector{Int},
                    edgef::EdgeFunction;
                    verbose)
-    (firstidx, pfirstidx, gfirstidx) = register_edges!(im, idxs, edgef)
+    (statestride, pstride, gbufstride) = register_edges!(im, idxs, edgef)
 
     verbose &&
         println(" - EdgeBatch: dim=$(edgef.dim), pdim=$(edgef.pdim), length=$(length(idxs))")
 
-    EdgeBatch(idxs, edgef,
-              edgef.dim, firstidx,
-              edgef.pdim, pfirstidx,
-              im.vdepth, gfirstidx)
+    EdgeBatch(idxs, edgef, statestride, pstride, gbufstride)
 end
 
 function NetworkLayer(im::IndexManager, eb, agg)

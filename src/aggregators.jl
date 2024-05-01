@@ -18,15 +18,15 @@ function NNlibScatter(im, batches, f)
     maxaggindex = 0
     _edgevec    = collect(edges(im.g))
     for (batchi, batch) in enumerate(batches)
-        cplng = coupling(batch.fun)
+        cplng = coupling(batch.comp)
         # generate scatter map
-        dst = Vector{Int}(undef, length(batch.indices) * dim(batch.fun))
+        dst = Vector{Int}(undef, length(batch.indices) * dim(batch.comp))
         fill!(dst, -1)
-        src = Vector{Int}(undef, length(batch.indices) * dim(batch.fun))
+        src = Vector{Int}(undef, length(batch.indices) * dim(batch.comp))
         fill!(src, -1)
 
         for i in batch.indices
-            datarange = im.e_data[i] .- (batch.firstidx - 1) # range in batch slice
+            datarange = im.e_data[i] .- (batch.statestride.first - 1) # range in batch slice
             e = _edgevec[i]
             dst[datarange[1:im.edepth]] .= im.v_aggr[e.dst]
             if cplng == Symmetric() || cplng == AntiSymmetric()
@@ -108,7 +108,7 @@ function _aggregate!(a::NaiveAggregator, batches, aggbuf, data)
             target .= a.f.(target, source)
 
             # src mapping
-            cplng = coupling(batch.fun)
+            cplng = coupling(batch.comp)
             if cplng == Symmetric()
                 target = @views aggbuf[im.v_aggr[edge.src]]
                 source = @views data[im.e_data[eidx][1:im.edepth]]
@@ -144,7 +144,7 @@ function AggregationMap(im, batches)
             _map[source] .= target
 
             # src mapping
-            cplng = coupling(batch.fun)
+            cplng = coupling(batch)
             if cplng == Symmetric()
                 target = im.v_aggr[edge.src]
                 source = im.e_data[eidx][1:im.edepth]
