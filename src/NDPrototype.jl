@@ -13,6 +13,10 @@ using NNlib: NNlib
 using KernelAbstractions: KernelAbstractions, @kernel, @index, @Const, get_backend
 using Atomix: Atomix
 using Polyester: Polyester
+using Mixers: Mixers
+using Parameters: @with_kw_noshow
+using LinearAlgebra: LinearAlgebra
+using DocStringExtensions
 
 
 using Adapt: Adapt, adapt
@@ -20,7 +24,7 @@ using Adapt: Adapt, adapt
 include("utils.jl")
 include("edge_coloring.jl")
 include("component_functions.jl")
-export Network, SequentialExecution, ThreadedExecution
+export Network, SequentialExecution, KAExecution
 include("network_structure.jl")
 
 export NaiveAggregator, NNlibScatter, KAAggregator, SequentialAggregator,

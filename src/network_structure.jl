@@ -24,18 +24,21 @@ mutable struct IndexManager{G}
     lastidx_p::Int
     lastidx_aggr::Int
     lastidx_gbuf::Int
-    function IndexManager(g, dyn_states, edepth, vdepth)
+    vertexf::Vector{VertexFunction}
+    edgef::Vector{EdgeFunction}
+    function IndexManager(g, dyn_states, edepth, vdepth, vertexf, edgef)
         new{typeof(g)}(g, collect(edges(g)),
                        (Vector{UnitRange{Int}}(undef, nv(g)) for i in 1:3)...,
                        (Vector{UnitRange{Int}}(undef, ne(g)) for i in 1:5)...,
                        edepth, vdepth,
-                       0, dyn_states, 0, 0, 0)
+                       0, dyn_states, 0, 0, 0,
+                       vertexf, edgef)
     end
 end
 
 abstract type ExecutionStyle{buffered} end
 struct SequentialExecution{buffered} <: ExecutionStyle{buffered} end
-struct ThreadedExecution{buffered} <: ExecutionStyle{buffered} end
+struct KAExecution{buffered} <: ExecutionStyle{buffered} end
 usebuffer(::ExecutionStyle{buffered}) where {buffered} = buffered
 usebuffer(::Type{<:ExecutionStyle{buffered}}) where {buffered} = buffered
 
@@ -73,6 +76,11 @@ end
 
 abstract type ComponentBatch{F} end
 
+# XXX: It is not nice to have comp in here.
+# - we need it for dispatch reasons (type would do)
+# - we need acces to f to call it (potentiall jacobians in the future)
+# - however batch identical does not mean that all fields are the same!
+# - so do we need core types? liek ODEVertexCore?
 struct VertexBatch{F} <: ComponentBatch{F}
     "vertex indices contained in batch"
     indices::Vector{Int}

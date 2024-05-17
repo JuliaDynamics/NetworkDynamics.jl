@@ -33,12 +33,14 @@ end
     unrolled_foreach(nw.vertexbatches) do batch
         (du, u, p, t) = dupt
         for i in 1:length(batch)
-            apply_vertex!(batch, i, du, u, aggbuf, p, t)
+            _type = comptype(batch)
+            _batch = essence(batch)
+            apply_vertex!(_type, _batch, i, du, u, aggbuf, p, t)
         end
     end
 end
 
-@inline function process_vertices!(nw::Network{<:ThreadedExecution}, aggbuf, dupt)
+@inline function process_vertices!(nw::Network{<:KAExecution}, aggbuf, dupt)
     _backend = get_backend(dupt[2])
     unrolled_foreach(nw.vertexbatches) do batch
         (du, u, p, t) = dupt
@@ -75,12 +77,14 @@ end
     unrolled_foreach(layer.edgebatches) do batch
         (du, u, p, t) = dupt
         for i in 1:length(batch)
-            apply_edge_unbuffered!(batch, i, du, u, nw.im.e_src, nw.im.e_dst, p, t)
+            _type = comptype(batch)
+            _batch = essence(batch)
+            apply_edge_unbuffered!(_type, _batch, i, du, u, nw.im.e_src, nw.im.e_dst, p, t)
         end
     end
 end
 
-@inline function process_layer!(nw::Network{<:ThreadedExecution{false}}, layer, dupt)
+@inline function process_layer!(nw::Network{<:KAExecution{false}}, layer, dupt)
     _backend = get_backend(dupt[2])
     unrolled_foreach(layer.edgebatches) do batch
         (du, u, p, t) = dupt
@@ -143,12 +147,14 @@ end
     unrolled_foreach(layer.edgebatches) do batch
         (_du, _u, _p, _t) = dupt
         for i in 1:length(batch)
-            apply_edge_buffered!(batch, i, _du, _u, gbuf, _p, _t)
+            _type = comptype(batch)
+            _batch = essence(batch)
+            apply_edge_buffered!(_type, _batch, i, _du, _u, gbuf, _p, _t)
         end
     end
 end
 
-@inline function process_layer!(nw::Network{<:ThreadedExecution{true}}, layer, dupt)
+@inline function process_layer!(nw::Network{<:KAExecution{true}}, layer, dupt)
     # buffered/gathered
     u = dupt[2]
     gbuf = nw.cachepool[u, size(layer.gather_map)]

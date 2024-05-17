@@ -45,8 +45,11 @@ function Network(g::AbstractGraph,
             end
         end
 
+        # collect all vertex/edgf to vector
+        _vertexf = vertexf isa Vector ? vertexf : [vertexf for _ in vertices(g)]
+        _edgef = edgef isa Vector ? edgef : [edgef for _ in edges(g)]
         # create index manager
-        im = IndexManager(g, dynstates, edepth, vdepth)
+        im = IndexManager(g, dynstates, edepth, vdepth, _vertexf, _edgef)
 
         # create vertex batches and initialize with index manager
         @timeit_debug "create vertex batches" begin
@@ -140,21 +143,21 @@ _batch_identical(el, idxs::Vector{Int}) = [el], [idxs]
 function _batch_identical(v::Vector{T}, indices::Vector{Int}) where {T}
     @assert length(v) == length(indices)
     idxs_per_type = Vector{Int}[]
-    types = T[]
+    unique_comp = T[]
     for i in eachindex(v)
         found = false
-        for j in eachindex(types)
-            if v[i] === types[j]
+        for j in eachindex(unique_comp)
+            if batchequal(v[i],unique_comp[j])
                 found = true
                 push!(idxs_per_type[j], indices[i])
                 break
             end
         end
         if !found
-            push!(types, v[i])
+            push!(unique_comp, v[i])
             push!(idxs_per_type, [indices[i]])
         end
     end
-    @assert length(types) == length(idxs_per_type)
-    return types, idxs_per_type
+    @assert length(unique_comp) == length(idxs_per_type)
+    return unique_comp, idxs_per_type
 end
