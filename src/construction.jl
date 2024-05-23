@@ -8,53 +8,47 @@ function Network(g::AbstractGraph,
                  verbose=false)
     reset_timer!()
     @timeit_debug "Construct Network" begin
+        # collect all vertex/edgf to vector
+        _vertexf = vertexf isa Vector ? vertexf : [vertexf for _ in vertices(g)]
+        _edgef = edgef isa Vector ? edgef : [edgef for _ in edges(g)]
+        @assert _vertexf isa Vector{<:VertexFunction}
+        @assert _edgef isa Vector{<:EdgeFunction}
+
         verbose &&
             println("Create dynamic network with $(nv(g)) vertices and $(ne(g)) edges:")
         @argcheck execution isa ExecutionStyle "Exectuion type $execution not supportet (choose from $(subtypes(ExecutionStyle)))"
 
-        _maxedepth = maxedepth(edgef)
+        _maxedepth = mapreduce(aggrdepth, min, _edgef)
         if edepth === :auto
             edepth = _maxedepth
             verbose && println(" - auto accumulation depth = $edepth")
         end
         @argcheck edepth<=_maxedepth "For this system accumulation depth is limited to $edepth by the edgefunctions"
 
-        _maxvdepth = maxvdepth(vertexf)
+        _maxvdepth = mapreduce(dim, min, _vertexf)
         if vdepth === :auto
             vdepth = _maxvdepth
             verbose && println(" - auto edge input depth = $vdepth")
         end
         @argcheck vdepth<=_maxvdepth "For this system edge input depth is limited to $edepth by the vertex dimensions"
 
-        # batch identical edge and vertex functions
-        @timeit_debug "batch identical functions" begin
-            vtypes, vidxs = _batch_identical(vertexf, collect(1:nv(g)))
-            etypes, eidxs = _batch_identical(edgef, collect(1:ne(g)))
+        dynstates = mapreduce(+, Iterators.flatten((_vertexf,_edgef))) do t
+            statetype(t) == Dynamic() ? dim(t) : 0
         end
 
-        # count dynamic states
-        dynstates = 0
-        for (t, idxs) in zip(vtypes, vidxs)
-            if statetype(t) == Dynamic()
-                dynstates += length(idxs) * dim(t)
-            end
-        end
-        for (t, idxs) in zip(etypes, eidxs)
-            if statetype(t) == Dynamic()
-                dynstates += length(idxs) * dim(t)
-            end
-        end
-
-        # collect all vertex/edgf to vector
-        _vertexf = vertexf isa Vector ? vertexf : [vertexf for _ in vertices(g)]
-        _edgef = edgef isa Vector ? edgef : [edgef for _ in edges(g)]
         # create index manager
         im = IndexManager(g, dynstates, edepth, vdepth, _vertexf, _edgef)
 
+        # batch identical edge and vertex functions
+        vidxs = _find_identical(_vertexf)
+        eidxs = _find_identical(_edgef)
+
         # create vertex batches and initialize with index manager
         @timeit_debug "create vertex batches" begin
-            vertexbatches = collect(VertexBatch(im, i, t; verbose)
-                                    for (i, t) in zip(vidxs, vtypes))
+            vertexbatches = map(vidxs) do idxs
+                VertexBatch(im, idxs; verbose)
+            end
+
             if length(vertexbatches) ≤ 50
                 vertexbatches = Tuple(vertexbatches)
             else
@@ -65,8 +59,9 @@ function Network(g::AbstractGraph,
 
         # create edge batches and initialize with index manager
         @timeit_debug "create edge batches" begin
-            edgebatches = collect(EdgeBatch(im, i, t; verbose)
-                                  for (i, t) in zip(eidxs, etypes))
+            edgebatches = map(eidxs) do idxs
+                EdgeBatch(im, idxs; verbose)
+            end
             if length(edgebatches) ≤ 50
                 edgebatches = Tuple(edgebatches)
             else
@@ -91,28 +86,38 @@ function Network(g::AbstractGraph,
     return nw
 end
 
-function VertexBatch(im::IndexManager,
-                     idxs::Vector{Int},
-                     vertexf::VertexFunction;
-                     verbose)
-    (statestride, pstride, aggbufstride) = register_vertices!(im, idxs, vertexf)
+function VertexBatch(im::IndexManager, idxs::Vector{Int}; verbose)
+    components = @view im.vertexf[idxs]
+
+    _compT = compT(only(unique(compT, components)))
+    _compf = compf(only(unique(compf, components)))
+    _statetype = statetype(only(unique(statetype, components)))
+    _dim = dim(only(unique(dim, components)))
+    _pdim = pdim(only(unique(pdim, components)))
+
+    (statestride, pstride, aggbufstride) = register_vertices!(im, _statetype, _dim, _pdim, idxs)
 
     verbose &&
-        println(" - VertexBatch: dim=$(vertexf.dim), pdim=$(vertexf.pdim), length=$(length(idxs))")
+        println(" - VertexBatch: dim=$(_dim), pdim=$(_pdim), length=$(length(idxs))")
 
-    VertexBatch(idxs, vertexf, statestride, pstride, aggbufstride)
+    VertexBatch{_compT, typeof(_compf)}(idxs, _compf, statestride, pstride, aggbufstride)
 end
 
-function EdgeBatch(im::IndexManager,
-                   idxs::Vector{Int},
-                   edgef::EdgeFunction;
-                   verbose)
-    (statestride, pstride, gbufstride) = register_edges!(im, idxs, edgef)
+function EdgeBatch(im::IndexManager, idxs::Vector{Int}; verbose)
+    components = @view im.edgef[idxs]
+
+    _compT = compT(only(unique(compT, components)))
+    _compf = compf(only(unique(compf, components)))
+    _statetype = statetype(only(unique(statetype, components)))
+    _dim = dim(only(unique(dim, components)))
+    _pdim = pdim(only(unique(pdim, components)))
+
+    (statestride, pstride, gbufstride) = register_edges!(im, _statetype, _dim, _pdim, idxs)
 
     verbose &&
-        println(" - EdgeBatch: dim=$(edgef.dim), pdim=$(edgef.pdim), length=$(length(idxs))")
+        println(" - EdgeBatch: dim=$(_dim), pdim=$(_pdim), length=$(length(idxs))")
 
-    EdgeBatch(idxs, edgef, statestride, pstride, gbufstride)
+    EdgeBatch{_compT, typeof(_compf)}(idxs, _compf, statestride, pstride, gbufstride)
 end
 
 function NetworkLayer(im::IndexManager, eb, agg)
@@ -139,25 +144,24 @@ function batch_by_idxs(v::AbstractVector, batches::Vector{Vector{Int}})
     [v[batch] for batch in batches]
 end
 
-_batch_identical(el, idxs::Vector{Int}) = [el], [idxs]
-function _batch_identical(v::Vector{T}, indices::Vector{Int}) where {T}
-    @assert length(v) == length(indices)
+function _find_identical(v::Vector)
+    indices = eachindex(v)
     idxs_per_type = Vector{Int}[]
-    unique_comp = T[]
+    unique_compf = []
     for i in eachindex(v)
         found = false
-        for j in eachindex(unique_comp)
-            if batchequal(v[i],unique_comp[j])
+        for j in eachindex(unique_compf)
+            if compf(v[i]) == unique_compf[j]
                 found = true
                 push!(idxs_per_type[j], indices[i])
                 break
             end
         end
         if !found
-            push!(unique_comp, v[i])
+            push!(unique_compf, compf(v[i]))
             push!(idxs_per_type, [indices[i]])
         end
     end
-    @assert length(unique_comp) == length(idxs_per_type)
-    return unique_comp, idxs_per_type
+    @assert length(unique_compf) == length(idxs_per_type)
+    return idxs_per_type
 end

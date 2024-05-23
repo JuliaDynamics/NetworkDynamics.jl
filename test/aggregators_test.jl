@@ -5,6 +5,8 @@ using Random
 using Chairmarks
 using InteractiveUtils
 
+(isinteractive() ? includet : include)("ComponentLibrary.jl")
+
 @testset "compare different aggregators" begin
     vtypes = [ODEVertex(sum, 2, 0),
               ODEVertex(sum, 3, 0),

@@ -10,21 +10,17 @@ const CouplingUnion = Union{AntiSymmetric,Symmetric,Directed,Fiducial}
 
 abstract type ComponentFunction end
 
-Mixers.@premix struct Component{F, OF}
-    """Component function"""
+# Mixers.@premix @with_kw_noshow struct Component{F,OF}
+Mixers.@pour CommonFields begin
     f::F
-    "bax"
     dim::Int
-    "fbaxobar"
-    sym::Vector{Symbol} = [Symbol("s$i") for i in 1:dim]
+    sym::Vector{Symbol} = [Symbol("s", subscript(i)) for i in 1:dim]
     def::Vector{Union{Nothing,Float64}} = [nothing for _ in 1:dim]
-    pdim::Int;
-    psym::Vector{Symbol} = [Symbol("p$i") for i in 1:pdim];
-    pdef::Vector{Union{Nothing,Float64}} =[nothing for _ in 1:dim]
-    obsf::OF = nothing;
-    obssym::Vector{Symbol} = Symbol[];
-    @assert dim == length(sym) "dim ≠ length(sym)"
-    @assert pdim == length(psym) "pdim ≠ length(psym)"
+    pdim::Int
+    psym::Vector{Symbol} = [Symbol("p", subscript(i)) for i in 1:pdim]
+    pdef::Vector{Union{Nothing,Float64}} = [nothing for _ in 1:dim]
+    obsf::OF = nothing
+    obssym::Vector{Symbol} = Symbol[]
 end
 
 """
@@ -47,36 +43,55 @@ $(TYPEDEF)
 # Fields
 $(FIELDS)
 """
-@Component @with_kw_noshow struct ODEVertex{MM} <: VertexFunction
+@with_kw_noshow struct ODEVertex{F,OF,MM} <: VertexFunction
+    @CommonFields
     name::Symbol = :ODEVertex
     mass_matrix::MM = LinearAlgebra.I
     # dfdp dfdv dfde
+    depth::Int = dim
 end
+ODEVertex(f, dim, pdim) = ODEVertex(;f, dim, pdim)
+ODEVertex(f; kwargs...) = ODEVertex(;f, kwargs...)
 
-@Component @with_kw_noshow struct StaticEdge{C} <: EdgeFunction{C}
+@with_kw_noshow struct StaticEdge{C,F,OF} <: EdgeFunction{C}
+    @CommonFields
     name::Symbol = :StaticEdge
     coupling::C
+    depth::Int = coupling==Fiducial() ? floor(Int, dim/2) : dim
 end
+StaticEdge(f, dim, pdim, coupling) = StaticEdge(;f, dim, pdim, coupling)
+StaticEdge(f; kwargs...) = StaticEdge(;f, kwargs...)
 
-@Component @with_kw_noshow struct ODEEdge{C,MM} <: EdgeFunction{C}
+@with_kw_noshow struct ODEEdge{C,F,OF,MM} <: EdgeFunction{C}
+    @CommonFields
     name::Symbol = :ODEEdge
     coupling::C
     mass_matrix::MM = LinearAlgebra.I
+    depth::Int = coupling==Fiducial() ? floor(Int, dim/2) : dim
 end
+ODEEdge(f, dim, pdim, coupling) = ODEEdge(;f, dim, pdim, coupling)
+ODEEdge(f; kwargs...) = ODEEdge(;f, kwargs...)
 
 compf(c::ComponentFunction) = c.f
 dim(c::ComponentFunction) = c.dim
 pdim(c::ComponentFunction) = c.pdim
 
-
-aggrdepth(e::EdgeFunction) = e.dim
-aggrdepth(e::EdgeFunction{Fiducial}) = floor(Int, e.dim / 2)
+aggrdepth(e::EdgeFunction) = e.depth
 
 statetype(::T) where {T<:ComponentFunction} = statetype(T)
 statetype(::Type{<:ODEVertex}) = Dynamic()
 statetype(::Type{<:StaticEdge}) = Static()
 statetype(::Type{<:ODEEdge}) = Dynamic()
 
+"""
+    comptT(<:ComponentFunction) :: Type{<:ComponentFunction}
+
+Returns the dispatch type of the component. Does not include unecessary type parameters.
+"""
+compT(::T) where {T<:ComponentFunction} = compT(T)
+compT(::Type{<:ODEVertex}) = ODEVertex
+compT(T::Type{<:StaticEdge}) = StaticEdge{typeof(coupling(T))}
+compT(T::Type{<:ODEEdge}) = ODEEdge{typeof(coupling(T))}
 
 batchequal(a, b) = false
 function batchequal(a::EdgeFunction, b::EdgeFunction)
@@ -91,3 +106,4 @@ function batchequal(a::VertexFunction, b::VertexFunction)
     end
     return true
 end
+

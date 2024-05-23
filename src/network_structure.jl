@@ -71,8 +71,6 @@ struct NetworkLayer{GT,ETup,AF,MT}
     "mapping e_idx -> [v_src_idx_in_fullflat; v_dst_idx_in_fullflat]"
     gather_map::MT # input_map[:, e_idx] = [v_src_idx, v_dst_idx]
 end
-@inline nebatches(::NetworkLayer) = length(edgebatches)
-
 
 abstract type ComponentBatch{F} end
 
@@ -81,11 +79,11 @@ abstract type ComponentBatch{F} end
 # - we need acces to f to call it (potentiall jacobians in the future)
 # - however batch identical does not mean that all fields are the same!
 # - so do we need core types? liek ODEVertexCore?
-struct VertexBatch{F} <: ComponentBatch{F}
+struct VertexBatch{T,F} <: ComponentBatch{T}
     "vertex indices contained in batch"
     indices::Vector{Int}
     "vertex function"
-    comp::F
+    compf::F
     "state: dimension and first index"
     statestride::BatchStride
     "parameter: dimension and first index"
@@ -94,11 +92,11 @@ struct VertexBatch{F} <: ComponentBatch{F}
     aggbufstride::BatchStride
 end
 
-struct EdgeBatch{F} <: ComponentBatch{F}
+struct EdgeBatch{T,F} <: ComponentBatch{T}
     "edge indices (as in edge iterator) contained in batch"
     indices::Vector{Int}
     "edge function"
-    comp::F
+    compf::F
     "state: dimension and first index"
     statestride::BatchStride
     "parameter: dimension and first index"
@@ -111,7 +109,7 @@ end
 @inline statetype(::ComponentBatch{F}) where {F} = statetype(F)
 @inline coupling(::EdgeBatch{F}) where {F} = coupling(F)
 @inline comptype(::ComponentBatch{F}) where {F} = F
-@inline compf(b::ComponentBatch) = b.comp.f
+@inline compf(b::ComponentBatch) = b.compf
 @inline compf(b::NamedTuple) = b.f
 
 @inline state_range(batch) = _fullrange(batch.statestride, length(batch))
@@ -121,28 +119,27 @@ end
 @inline aggbuf_range(batch, i)    = _range(batch.aggbufstride, i)
 @inline gbuf_range(batch, i)      = _range(batch.gbufstride, i)
 
-function register_vertices!(im::IndexManager, idxs, comp)
+function register_vertices!(im::IndexManager, statetype, dim, pdim, idxs)
     for i in idxs
-        im.v_data[i] = _nextdatarange!(im, statetype(comp), dim(comp))
-        im.v_para[i] = _nextprange!(im, pdim(comp))
+        im.v_data[i] = _nextdatarange!(im, statetype, dim)
+        im.v_para[i] = _nextprange!(im, pdim)
         im.v_aggr[i] = _nextaggrrange!(im, im.edepth)
     end
-    (BatchStride(first(im.v_data[first(idxs)]), dim(comp)),
-     BatchStride(first(im.v_para[first(idxs)]), pdim(comp)),
+    (BatchStride(first(im.v_data[first(idxs)]), dim),
+     BatchStride(first(im.v_para[first(idxs)]), pdim),
      BatchStride(first(im.v_aggr[first(idxs)]), im.edepth))
 end
-function register_edges!(im::IndexManager, idxs, comp)
-    edgevec = collect(edges(im.g))
+function register_edges!(im::IndexManager, statetype, dim, pdim, idxs)
     for i in idxs
-        e = edgevec[i]
-        im.e_data[i] = _nextdatarange!(im, statetype(comp), dim(comp))
-        im.e_para[i] = _nextprange!(im, pdim(comp))
+        e = im.edgevec[i]
+        im.e_data[i] = _nextdatarange!(im, statetype, dim)
+        im.e_para[i] = _nextprange!(im, pdim)
         im.e_src[i] = im.v_data[e.src][1:im.vdepth]
         im.e_dst[i] = im.v_data[e.dst][1:im.vdepth]
         im.e_gbufr[i] = _nextgbufrange!(im, im.vdepth)
     end
-    (BatchStride(first(im.e_data[first(idxs)]), dim(comp)),
-     BatchStride(first(im.e_para[first(idxs)]), pdim(comp)),
+    (BatchStride(first(im.e_data[first(idxs)]), dim),
+     BatchStride(first(im.e_para[first(idxs)]), pdim),
      BatchStride(first(im.e_gbufr[first(idxs)]), im.vdepth))
 end
 function _nextdatarange!(im::IndexManager, ::Dynamic, N)

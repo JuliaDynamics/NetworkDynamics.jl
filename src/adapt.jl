@@ -25,13 +25,13 @@ function Adapt.adapt_structure(to, m::AggregationMap)
 end
 
 function essence(b::VertexBatch)
-    (;f=b.comp.f,
+    (;f=compf(b),
      statestride=b.statestride,
      pstride=b.pstride,
      aggbufstride=b.aggbufstride)
 end
 function essence(b::EdgeBatch)
-    (;f=b.comp.f,
+    (;f=compf(b),
      statestride=b.statestride,
      pstride=b.pstride,
      gbufstride=b.gbufstride)

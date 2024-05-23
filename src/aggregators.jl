@@ -18,11 +18,11 @@ function NNlibScatter(im, batches, f)
     maxaggindex = 0
     _edgevec    = collect(edges(im.g))
     for (batchi, batch) in enumerate(batches)
-        cplng = coupling(batch.comp)
+        cplng = coupling(batch)
         # generate scatter map
-        dst = Vector{Int}(undef, length(batch.indices) * dim(batch.comp))
+        dst = Vector{Int}(undef, length(state_range(batch)))
         fill!(dst, -1)
-        src = Vector{Int}(undef, length(batch.indices) * dim(batch.comp))
+        src = Vector{Int}(undef, length(state_range(batch)))
         fill!(src, -1)
 
         for i in batch.indices

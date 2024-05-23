@@ -17,6 +17,7 @@ using Mixers: Mixers
 using Parameters: @with_kw_noshow
 using LinearAlgebra: LinearAlgebra
 using DocStringExtensions
+using StyledStrings: StyledStrings, @styled_str
 
 
 using Adapt: Adapt, adapt
@@ -34,5 +35,6 @@ include("construction.jl")
 include("coreloop.jl")
 
 include("adapt.jl")
+include("show.jl")
 
 end

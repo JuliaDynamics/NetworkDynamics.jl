@@ -5,6 +5,31 @@ using SafeTestsets
 
 using NDPrototype: VertexBatch, parameter_range
 
+(isinteractive() ? includet : include)("ComponentLibrary.jl")
+
+@testset "Test Component Library" begin
+    using NDPrototype: compf
+    a = Lib.diffusion_edge()
+    b = Lib.diffusion_edge()
+    @test compf(a) == compf(b)
+    a = Lib.diffusion_edge_closure()
+    b = Lib.diffusion_edge_closure()
+    @test compf(a) != compf(b)
+    Lib.diffusion_edge_fid()
+end
+
+@testset "subscript" begin
+    using NDPrototype: subscript
+    @test subscript(10) == "₁₀"
+    @test subscript(5) == "₅"
+end
+
+using NDPrototype: stylesymbolarray
+syms = [:a,:b,:c]
+defaults = [1, 2, nothing]
+stylesymbolarray(syms,defaults, Dict(1=>:red,2=>:orange))
+stylesymbolarray(syms,defaults, Dict(1=>:red,2=>:red))
+
 @testset "NDPrototype.jl" begin
     @testset "constructor" begin
         using NDPrototype: StateType, statetype, isdense
@@ -15,7 +40,7 @@ using NDPrototype: VertexBatch, parameter_range
         edgef = StaticEdge(; f=x -> x^2,
                            dim=2, pdim=3,
                            coupling=AntiSymmetric())
-        statetype(edgef) == NDPrototype.Static()
+        @test statetype(edgef) == NDPrototype.Static()
 
         nd = Network(g, vertexf, edgef; verbose=true)
 
@@ -43,11 +68,11 @@ using NDPrototype: VertexBatch, parameter_range
 
     @testset "Vertex batch" begin
         using NDPrototype: BatchStride, VertexBatch, parameter_range
-        vb = VertexBatch([1, 2, 3, 4], # vertices
-                         sum, # function
-                         BatchStride(1, 3),
-                         BatchStride(4, 2),
-                         BatchStride(0, 0))
+        vb = VertexBatch{nothing, typeof(sum)}([1, 2, 3, 4], # vertices
+            sum, # function
+            BatchStride(1, 3),
+            BatchStride(4, 2),
+            BatchStride(0, 0))
         @test parameter_range(vb, 1) == 4:5
         @test parameter_range(vb, 2) == 6:7
         @test parameter_range(vb, 3) == 8:9
@@ -59,10 +84,10 @@ end
     using NDPrototype: _batch_identical
     v = :foo
     idx = [1, 7, 2, 5]
-    @test _batch_identical(v, idx) == ([:foo], [idx])
+    @test _batch_identical(v, idx) == [idx]
     v = [:foo, :foo, :bar, :baz, :foo]
     idx = [5, 4, 3, 2, 1]
-    @test _batch_identical(v, idx) == ([:foo, :bar, :baz], [[5, 4, 1], [3], [2]])
+    @test _batch_identical(v, idx) == [[5, 4, 1], [3], [2]]
 end
 
 @testset "greedy edge coloring" begin
