@@ -36,10 +36,11 @@ end
 
 begin
     N = 1_000_000
+    N = 100
     (p, v, e, g) = heterogeneous(N)
 
     ####
-    nd1 = Network(g, v, e; execution=ThreadedExecution{true}());
+    nd1 = Network(g, v, e; execution=KAExecution{true}());
     x0 = randn(dim(nd1));
     dx1 = zeros(dim(nd1));
     @time nd1(dx1, x0, p, 0.0) # call to init caches, we don't want to benchmark this
@@ -53,9 +54,8 @@ begin
     @b $nd1($dx1, $x0, $p, 0.0)
     # @descend nd1(dx1, x0, p, 0.0)
 
-
     ####
-    nd2 = Network(g, v, e; execution=ThreadedExecution{false}());
+    nd2 = Network(g, v, e; execution=KAExecution{false}());
     dx2 = zeros(dim(nd2));
     @time nd2(dx2, x0, p, 0.0) # call to init caches, we don't want to benchmark this
     @test dx1 ≈ dx2
@@ -101,7 +101,7 @@ begin
 
     ####
     nd5= Network(g, v, e;
-        execution=ThreadedExecution{true}(),
+        execution=KAExecution{true}(),
         accumulator=KAAggregator(+));
     dx5 = zeros(dim(nd5));
     @time nd5(dx5, x0, p, 0.0) # call to init caches, we don't want to benchmark this

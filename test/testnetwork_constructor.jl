@@ -1,4 +1,7 @@
 using NDPrototype
+using Random
+using Graphs
+
 import NetworkDynamics as OldND
 ####
 #### Diffusion system
