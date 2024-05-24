@@ -15,7 +15,7 @@ using Atomix: Atomix
 using Polyester: Polyester
 using Mixers: Mixers
 using Parameters: @with_kw_noshow
-using LinearAlgebra: LinearAlgebra
+using LinearAlgebra: LinearAlgebra, UniformScaling
 using DocStringExtensions
 using StyledStrings: StyledStrings, @styled_str
 

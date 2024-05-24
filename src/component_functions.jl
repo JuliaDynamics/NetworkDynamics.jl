@@ -49,7 +49,7 @@ $(FIELDS)
     # dfdp dfdv dfde
     depth::Int = dim
 end
-ODEVertex(f, dim, pdim) = ODEVertex(;f, dim, pdim)
+ODEVertex(f, dim, pdim; kwargs...) = ODEVertex(;f, dim, pdim, kwargs...)
 ODEVertex(f; kwargs...) = ODEVertex(;f, kwargs...)
 
 @with_kw_noshow struct StaticEdge{C,F,OF} <: EdgeFunction{C}
@@ -58,7 +58,7 @@ ODEVertex(f; kwargs...) = ODEVertex(;f, kwargs...)
     coupling::C
     depth::Int = coupling==Fiducial() ? floor(Int, dim/2) : dim
 end
-StaticEdge(f, dim, pdim, coupling) = StaticEdge(;f, dim, pdim, coupling)
+StaticEdge(f, dim, pdim, coupling; kwargs...) = StaticEdge(;f, dim, pdim, coupling, kwargs...)
 StaticEdge(f; kwargs...) = StaticEdge(;f, kwargs...)
 
 @with_kw_noshow struct ODEEdge{C,F,OF,MM} <: EdgeFunction{C}
@@ -68,7 +68,7 @@ StaticEdge(f; kwargs...) = StaticEdge(;f, kwargs...)
     mass_matrix::MM = LinearAlgebra.I
     depth::Int = coupling==Fiducial() ? floor(Int, dim/2) : dim
 end
-ODEEdge(f, dim, pdim, coupling) = ODEEdge(;f, dim, pdim, coupling)
+ODEEdge(f, dim, pdim, coupling; kwargs...) = ODEEdge(;f, dim, pdim, coupling, kwargs...)
 ODEEdge(f; kwargs...) = ODEEdge(;f, kwargs...)
 
 compf(c::ComponentFunction) = c.f

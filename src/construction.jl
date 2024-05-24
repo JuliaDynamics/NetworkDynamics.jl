@@ -77,9 +77,13 @@ function Network(g::AbstractGraph,
         nl = NetworkLayer(im, edgebatches, _aggregator)
 
         @assert isdense(im)
-        nw = Network{typeof(execution),typeof(g),typeof(nl),typeof(vertexbatches)}(vertexbatches,
-                                                                                   nl, im,
-                                                                                   LazyBufferCache())
+        mass_matrix = construct_mass_matrix(im)
+        nw = Network{typeof(execution),typeof(g),typeof(nl),typeof(vertexbatches),typeof(mass_matrix)}(
+            vertexbatches,
+            nl, im,
+            LazyBufferCache(),
+            mass_matrix
+        )
 
     end
     # print_timer()
@@ -175,4 +179,50 @@ function _find_identical(v::Vector, indices)
     end
     @assert length(unique_compf) == length(idxs_per_type)
     return idxs_per_type
+end
+
+function construct_mass_matrix(im; type=nothing)
+    vertexd = filter(pairs(im.vertexf)) do (_, c)
+        hasproperty(c,:mass_matrix) && c.mass_matrix != LinearAlgebra.I
+    end
+    edged = filter(pairs(im.edgef)) do (_, c)
+        hasproperty(c,:mass_matrix) && c.mass_matrix != LinearAlgebra.I
+    end
+    if isempty(vertexd) && isempty(edged)
+        return LinearAlgebra.I
+    end
+
+
+    # go through all mass matrices, find type and diagonal structure of massmatrix
+    all_diag = true
+    _type = Bool
+    for comp in Iterators.flatten((values(vertexd), values(edged)))
+        _type = promote_type(_type, eltype(comp.mass_matrix))
+        all_diag = all_diag && LinearAlgebra.isdiag(comp.mass_matrix)
+    end
+    if type != nothing
+        _type = type
+    end
+
+    mass_matrix = if all_diag
+        UniformScaling{_type}(1)(im.lastidx_dynamic)
+    else
+        Matrix(UniformScaling{_type}(1)(im.lastidx_dynamic))
+    end
+    _fill_mass_matrix!(mass_matrix, im, vertexd, edged)
+end
+
+function _fill_mass_matrix!(mass_matrix, im, vertexd, edged)
+    for (i, c) in vertexd
+        range = im.v_data[i]
+        # cannot broadcast uniform scaling, collect to diagonal in that case
+        mm = c.mass_matrix isa UniformScaling ? c.mass_matrix(length(range)) : c.mass_matrix
+        mass_matrix[range, range] .= mm
+    end
+    for (i, c) in edged
+        range = im.e_data[i]
+        mm = c.mass_matrix isa UniformScaling ? c.mass_matrix(length(range)) : c.mass_matrix
+        mass_matrix[range, range] .= mm
+    end
+    mass_matrix
 end

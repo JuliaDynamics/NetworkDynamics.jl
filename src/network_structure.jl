@@ -42,7 +42,7 @@ struct KAExecution{buffered} <: ExecutionStyle{buffered} end
 usebuffer(::ExecutionStyle{buffered}) where {buffered} = buffered
 usebuffer(::Type{<:ExecutionStyle{buffered}}) where {buffered} = buffered
 
-struct Network{EX<:ExecutionStyle,G,NL,VTup}
+struct Network{EX<:ExecutionStyle,G,NL,VTup,MM}
     "vertex batches of same function"
     vertexbatches::VTup
     "network layer"
@@ -51,6 +51,8 @@ struct Network{EX<:ExecutionStyle,G,NL,VTup}
     im::IndexManager{G}
     "lazy cache pool"
     cachepool::LazyBufferCache
+    "mass matrix"
+    mass_matrix::MM
 end
 executionstyle(::Network{ex}) where {ex} = ex
 @inline nvbatches(::Network) = length(vertexbatches)
