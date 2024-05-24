@@ -102,7 +102,7 @@ begin
     ####
     nd5= Network(g, v, e;
         execution=KAExecution{true}(),
-        accumulator=KAAggregator(+));
+        aggregator=KAAggregator(+));
     dx5 = zeros(dim(nd5));
     @time nd5(dx5, x0, p, 0.0) # call to init caches, we don't want to benchmark this
     @test dx5 ≈ dx5 ≈ dx2 ≈ dx1

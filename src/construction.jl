@@ -1,7 +1,7 @@
 function Network(g::AbstractGraph,
                  vertexf::Union{VertexFunction,Vector{<:VertexFunction}},
                  edgef::Union{EdgeFunction,Vector{<:EdgeFunction}};
-                 accumulator=NNlibScatter(+),
+                 aggregator=NNlibScatter(+),
                  edepth=:auto,
                  vdepth=:auto,
                  execution=SequentialExecution{true}(),
@@ -18,14 +18,14 @@ function Network(g::AbstractGraph,
             println("Create dynamic network with $(nv(g)) vertices and $(ne(g)) edges:")
         @argcheck execution isa ExecutionStyle "Exectuion type $execution not supportet (choose from $(subtypes(ExecutionStyle)))"
 
-        _maxedepth = mapreduce(aggrdepth, min, _edgef)
+        _maxedepth = mapreduce(depth, min, _edgef)
         if edepth === :auto
             edepth = _maxedepth
             verbose && println(" - auto accumulation depth = $edepth")
         end
         @argcheck edepth<=_maxedepth "For this system accumulation depth is limited to $edepth by the edgefunctions"
 
-        _maxvdepth = mapreduce(dim, min, _vertexf)
+        _maxvdepth = mapreduce(depth, min, _vertexf)
         if vdepth === :auto
             vdepth = _maxvdepth
             verbose && println(" - auto edge input depth = $vdepth")
@@ -40,8 +40,8 @@ function Network(g::AbstractGraph,
         im = IndexManager(g, dynstates, edepth, vdepth, _vertexf, _edgef)
 
         # batch identical edge and vertex functions
-        vidxs = _find_identical(_vertexf)
-        eidxs = _find_identical(_edgef)
+        vidxs = _find_identical(vertexf, 1:nv(g))
+        eidxs = _find_identical(edgef, 1:ne(g))
 
         # create vertex batches and initialize with index manager
         @timeit_debug "create vertex batches" begin
@@ -71,10 +71,10 @@ function Network(g::AbstractGraph,
         end
 
         @timeit_debug "initialize aggregator" begin
-            aggregator = accumulator(im, edgebatches)
+            _aggregator = aggregator(im, edgebatches)
         end
 
-        nl = NetworkLayer(im, edgebatches, aggregator)
+        nl = NetworkLayer(im, edgebatches, _aggregator)
 
         @assert isdense(im)
         nw = Network{typeof(execution),typeof(g),typeof(nl),typeof(vertexbatches)}(vertexbatches,
@@ -89,35 +89,51 @@ end
 function VertexBatch(im::IndexManager, idxs::Vector{Int}; verbose)
     components = @view im.vertexf[idxs]
 
-    _compT = compT(only(unique(compT, components)))
-    _compf = compf(only(unique(compf, components)))
-    _statetype = statetype(only(unique(statetype, components)))
-    _dim = dim(only(unique(dim, components)))
-    _pdim = pdim(only(unique(pdim, components)))
+    try
+        _compT = compT(only(unique(compT, components)))
+        _compf = compf(only(unique(compf, components)))
+        _statetype = statetype(only(unique(statetype, components)))
+        _dim = dim(only(unique(dim, components)))
+        _pdim = pdim(only(unique(pdim, components)))
 
-    (statestride, pstride, aggbufstride) = register_vertices!(im, _statetype, _dim, _pdim, idxs)
+        (statestride, pstride, aggbufstride) = register_vertices!(im, _statetype, _dim, _pdim, idxs)
 
-    verbose &&
+        verbose &&
         println(" - VertexBatch: dim=$(_dim), pdim=$(_pdim), length=$(length(idxs))")
 
-    VertexBatch{_compT, typeof(_compf)}(idxs, _compf, statestride, pstride, aggbufstride)
+        VertexBatch{_compT, typeof(_compf)}(idxs, _compf, statestride, pstride, aggbufstride)
+    catch e
+        if e isa ArgumentError && startswith(e.msg, "Collection has multiple elements")
+            throw(ArgumentError("Provided vertex functions $idxs use the same function but have different metadata (dim, pdim,type,...)"))
+        else
+            rerthrow(e)
+        end
+    end
 end
 
 function EdgeBatch(im::IndexManager, idxs::Vector{Int}; verbose)
     components = @view im.edgef[idxs]
 
-    _compT = compT(only(unique(compT, components)))
-    _compf = compf(only(unique(compf, components)))
-    _statetype = statetype(only(unique(statetype, components)))
-    _dim = dim(only(unique(dim, components)))
-    _pdim = pdim(only(unique(pdim, components)))
+    try
+        _compT = compT(only(unique(compT, components)))
+        _compf = compf(only(unique(compf, components)))
+        _statetype = statetype(only(unique(statetype, components)))
+        _dim = dim(only(unique(dim, components)))
+        _pdim = pdim(only(unique(pdim, components)))
 
-    (statestride, pstride, gbufstride) = register_edges!(im, _statetype, _dim, _pdim, idxs)
+        (statestride, pstride, gbufstride) = register_edges!(im, _statetype, _dim, _pdim, idxs)
 
-    verbose &&
+        verbose &&
         println(" - EdgeBatch: dim=$(_dim), pdim=$(_pdim), length=$(length(idxs))")
 
-    EdgeBatch{_compT, typeof(_compf)}(idxs, _compf, statestride, pstride, gbufstride)
+        EdgeBatch{_compT, typeof(_compf)}(idxs, _compf, statestride, pstride, gbufstride)
+    catch e
+        if e isa ArgumentError && startswith(e.msg, "Collection has multiple elements")
+            throw(ArgumentError("Provided edge functions $idxs use the same function but have different metadata (dim, pdim,type,...)"))
+        else
+            rerthrow(e)
+        end
+    end
 end
 
 function NetworkLayer(im::IndexManager, eb, agg)
@@ -133,19 +149,14 @@ function NetworkLayer(im::IndexManager, eb, agg)
     NetworkLayer(im.g, eb, agg, im.edepth, im.vdepth, map)
 end
 
-maxedepth(e::EdgeFunction) = aggrdepth(e)
-maxedepth(e::AbstractVector{<:EdgeFunction}) = minimum(aggrdepth.(e))
-maxvdepth(v::VertexFunction) = dim(v)
-maxvdepth(v::AbstractVector{<:VertexFunction}) = minimum(dim.(v))
-
 batch_by_idxs(v, idxs::Vector{Vector{Int}}) = [v for batch in idxs]
 function batch_by_idxs(v::AbstractVector, batches::Vector{Vector{Int}})
     @assert length(v) == sum(length.(batches))
     [v[batch] for batch in batches]
 end
 
-function _find_identical(v::Vector)
-    indices = eachindex(v)
+_find_identical(v::ComponentFunction, indices) = [collect(indices)]
+function _find_identical(v::Vector, indices)
     idxs_per_type = Vector{Int}[]
     unique_compf = []
     for i in eachindex(v)

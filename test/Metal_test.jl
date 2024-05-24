@@ -16,9 +16,9 @@ N = 10_000_000
 
 nd1 = Network(g, v, e;
     execution=KAExecution{true}(),
-    accumulator=NNlibScatter(+));
+    aggregator=NNlibScatter(+));
 nd2 = Network(g, v, e; execution=KAExecution{true}(),
-    accumulator=KAAggregator(+));
+    aggregator=KAAggregator(+));
 
 backend = MetalBackend()
 

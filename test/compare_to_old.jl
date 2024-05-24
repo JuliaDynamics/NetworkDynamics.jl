@@ -30,10 +30,10 @@ for N in Int[1e1,1e2,1e3,1e4,1e5,1e6]
     at1 = @elapsed nd1 = Network(g, v, e;
         execution=SequentialExecution{true}(),
         # execution=KAExecution{true}(),
-        # accumulator=NNlibScatter(+)
-        accumulator=SequentialAggregator(+)
-        # accumulator=KAAggregator(+)
-        # accumulator=NaiveAggregator(+)
+        # aggregator=NNlibScatter(+)
+        aggregator=SequentialAggregator(+)
+        # aggregator=KAAggregator(+)
+        # aggregator=NaiveAggregator(+)
     );
     x0old = rand(dim(nd1))
 
@@ -59,13 +59,13 @@ for N in Int[1e1,1e2,1e3,1e4,1e5,1e6]
         end
     end
 
-    at2 = @elapsed nd2 = Network(g, v, e; execution=KAExecution{true}(), accumulator=PolyesterAggregator(+))
-    # at2 = @elapsed nd2 = Network(g, v, e; execution=KAExecution{true}(), accumulator=KAAggregator(+))
+    at2 = @elapsed nd2 = Network(g, v, e; execution=KAExecution{true}(), aggregator=PolyesterAggregator(+))
+    # at2 = @elapsed nd2 = Network(g, v, e; execution=KAExecution{true}(), aggregator=KAAggregator(+))
     ato2 = @elapsed old_nd2 = OldND.network_dynamics(vold, eold, g; parallel=true)
 
     backend = MetalBackend()
     at3 = @elapsed nd3 = let
-        _nd = Network(g, v, e; execution=KAExecution{true}(), accumulator=KAAggregator(+))
+        _nd = Network(g, v, e; execution=KAExecution{true}(), aggregator=KAAggregator(+))
         adapt(backend, _nd)
     end
     dx_d = adapt(backend, convert.(Float32, dx))

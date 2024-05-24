@@ -64,7 +64,7 @@ struct NetworkLayer{GT,ETup,AF,MT}
     edgebatches::ETup
     "aggregator object"
     aggregator::AF
-    "depth of edge accumulation"
+    "depth of edge aggregation"
     edepth::Int # potential becomes range for multilayer
     "vertex dimensions visible to edges"
     vdepth::Int # potential becomes range for multilayer

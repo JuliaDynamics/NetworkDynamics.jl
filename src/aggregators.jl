@@ -109,7 +109,7 @@ function _aggregate!(a::NaiveAggregator, batches, aggbuf, data)
             target .= a.f.(target, source)
 
             # src mapping
-            cplng = coupling(batch.comp)
+            cplng = coupling(batch)
             if cplng == Symmetric()
                 target = @views aggbuf[im.v_aggr[edge.src]]
                 source = @views data[im.e_data[eidx][1:im.edepth]]

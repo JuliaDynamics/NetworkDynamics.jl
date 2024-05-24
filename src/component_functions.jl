@@ -10,7 +10,6 @@ const CouplingUnion = Union{AntiSymmetric,Symmetric,Directed,Fiducial}
 
 abstract type ComponentFunction end
 
-# Mixers.@premix @with_kw_noshow struct Component{F,OF}
 Mixers.@pour CommonFields begin
     f::F
     dim::Int
@@ -18,7 +17,7 @@ Mixers.@pour CommonFields begin
     def::Vector{Union{Nothing,Float64}} = [nothing for _ in 1:dim]
     pdim::Int
     psym::Vector{Symbol} = [Symbol("p", subscript(i)) for i in 1:pdim]
-    pdef::Vector{Union{Nothing,Float64}} = [nothing for _ in 1:dim]
+    pdef::Vector{Union{Nothing,Float64}} = [nothing for _ in 1:pdim]
     obsf::OF = nothing
     obssym::Vector{Symbol} = Symbol[]
 end
@@ -75,8 +74,7 @@ ODEEdge(f; kwargs...) = ODEEdge(;f, kwargs...)
 compf(c::ComponentFunction) = c.f
 dim(c::ComponentFunction) = c.dim
 pdim(c::ComponentFunction) = c.pdim
-
-aggrdepth(e::EdgeFunction) = e.depth
+depth(c::ComponentFunction) = c.depth
 
 statetype(::T) where {T<:ComponentFunction} = statetype(T)
 statetype(::Type{<:ODEVertex}) = Dynamic()
