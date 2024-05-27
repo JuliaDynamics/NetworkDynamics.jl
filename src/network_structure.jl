@@ -76,12 +76,7 @@ end
 
 abstract type ComponentBatch{F} end
 
-# XXX: It is not nice to have comp in here.
-# - we need it for dispatch reasons (type would do)
-# - we need acces to f to call it (potentiall jacobians in the future)
-# - however batch identical does not mean that all fields are the same!
-# - so do we need core types? liek ODEVertexCore?
-struct VertexBatch{T,F} <: ComponentBatch{T}
+struct VertexBatch{T<:VertexFunction,F} <: ComponentBatch{T}
     "vertex indices contained in batch"
     indices::Vector{Int}
     "vertex function"
@@ -94,7 +89,7 @@ struct VertexBatch{T,F} <: ComponentBatch{T}
     aggbufstride::BatchStride
 end
 
-struct EdgeBatch{T,F} <: ComponentBatch{T}
+struct EdgeBatch{T<:EdgeFunction,F} <: ComponentBatch{T}
     "edge indices (as in edge iterator) contained in batch"
     indices::Vector{Int}
     "edge function"
