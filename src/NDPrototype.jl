@@ -19,6 +19,9 @@ using LinearAlgebra: LinearAlgebra, UniformScaling
 using DocStringExtensions
 using StyledStrings: StyledStrings, @styled_str
 
+import SymbolicIndexingInterface as SII
+
+
 
 using Adapt: Adapt, adapt
 
@@ -36,6 +39,7 @@ include("coreloop.jl")
 
 include("adapt.jl")
 include("show.jl")
+
 include("symbolicindexing.jl")
 
 #=

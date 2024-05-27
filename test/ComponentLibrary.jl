@@ -71,7 +71,7 @@ end
 function kuramoto_second()
     ODEVertex(f=kuramoto_inertia!,
               dim=2, sym=[:δ, :ω], def=[0, 0],
-              pdim=1, psym=[:M, :D, :Pm], pdef=[1, 0.1, 1])
+              pdim=3, psym=[:M, :D, :Pm], pdef=[1, 0.1, 1])
 end
 
 end #module

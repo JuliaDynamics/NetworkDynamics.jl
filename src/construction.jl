@@ -33,7 +33,7 @@ function Network(g::AbstractGraph,
         @argcheck vdepth<=_maxvdepth "For this system edge input depth is limited to $edepth by the vertex dimensions"
 
         dynstates = mapreduce(+, Iterators.flatten((_vertexf,_edgef))) do t
-            statetype(t) == Dynamic() ? dim(t) : 0
+            isdynamic(t) ? dim(t) : 0
         end
 
         # create index manager

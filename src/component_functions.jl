@@ -21,6 +21,7 @@ Mixers.@pour CommonFields begin
     obsf::OF = nothing
     obssym::Vector{Symbol} = Symbol[]
 end
+# XXX: Mixers Issue argument ordering + asserts for pdim, psymlength
 
 """
 Abstract supertype for all vertex functions.
@@ -80,6 +81,7 @@ statetype(::T) where {T<:ComponentFunction} = statetype(T)
 statetype(::Type{<:ODEVertex}) = Dynamic()
 statetype(::Type{<:StaticEdge}) = Static()
 statetype(::Type{<:ODEEdge}) = Dynamic()
+isdynamic(x::ComponentFunction) = statetype(x) == Dynamic()
 
 """
     comptT(<:ComponentFunction) :: Type{<:ComponentFunction}
