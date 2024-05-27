@@ -33,7 +33,7 @@ end
 
 @testset "Vertex batch" begin
     using NDPrototype: BatchStride, VertexBatch, parameter_range
-    vb = VertexBatch{nothing, typeof(sum)}([1, 2, 3, 4], # vertices
+    vb = VertexBatch{ODEVertex, typeof(sum)}([1, 2, 3, 4], # vertices
         sum, # function
         BatchStride(1, 3),
         BatchStride(4, 2),
@@ -42,11 +42,10 @@ end
     @test parameter_range(vb, 2) == 6:7
     @test parameter_range(vb, 3) == 8:9
     @test parameter_range(vb, 4) == 10:11
-    @test false
 end
 
 @testset "massmatrix construction test" begin
-    using LinearAlgebra: I, UniformScaling
+    using LinearAlgebra: I, UniformScaling, Diagonal
     v1 = ODEVertex(x->x^1, 2, 0; mass_matrix=I)
     v2 = ODEVertex(x->x^2, 2, 0; mass_matrix=Diagonal([2,0]))
     v3 = ODEVertex(x->x^3, 2, 0; mass_matrix=[1 2;3 4])
@@ -63,7 +62,6 @@ end
     mm[6,5] = 3
     mm[15,16] = 2
     mm[16,15] = 3
-    [1 0; 0 1] == I
 
     @test nd.mass_matrix == mm
 
