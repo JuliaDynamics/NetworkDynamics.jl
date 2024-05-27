@@ -2,6 +2,7 @@ using NDPrototype
 using Graphs
 using OrdinaryDiffEq
 import SymbolicIndexingInterface as SII
+using NDPrototype: VIndex, EIndex, VPIndex, EPIndex
 
 (isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
 
@@ -13,10 +14,10 @@ u0 = rand(dim(nw))
 p = rand(pdim(nw))
 
 odef = ODEFunction(nw; sys=nw)
+SII.default_values(odef)
 prob = ODEProblem(odef, u0, (0,10), p)
 sol = solve(prob, Tsit5())
 
-using NDPrototype: VIndex
 @test SII.is_variable(nw, VIndex(1,:δ))
 @test !SII.is_variable(nw, VIndex(1,:F))
 @test_throws BoundsError !SII.is_variable(nw, VIndex(10,:F))
@@ -24,7 +25,6 @@ using NDPrototype: VIndex
 @test sol[VIndex(1,:δ)] == sol[1,:]
 @test sol[VIndex(1,:ω)] == sol[2,:]
 @test sol[VIndex(3,:ω)] == sol[6,:]
-
 
 @test !SII.is_variable(nw, VIndex(1:3,:ω))
 @test collect(VIndex(1, [:δ,:ω])) == [VIndex(1,:δ), VIndex(1,:ω)]
@@ -41,6 +41,29 @@ using NDPrototype: VIndex
 @test sol[VIndex(3,[1,:ω]),1] == u0[[5,6]]
 
 SII.variable_symbols(sol)
-SII.parameter_symbols(sol)
-
 SII.default_values(sol)
+
+@test NDPrototype.observed_symbols(nw) == [EIndex(1, :P), EIndex(2, :P), EIndex(3, :P)]
+
+@test SII.parameter_symbols(nw) == [VPIndex{Int64, Symbol}(1, :M),
+                                    VPIndex{Int64, Symbol}(1, :D),
+                                    VPIndex{Int64, Symbol}(1, :Pm),
+                                    VPIndex{Int64, Symbol}(2, :M),
+                                    VPIndex{Int64, Symbol}(2, :D),
+                                    VPIndex{Int64, Symbol}(2, :Pm),
+                                    VPIndex{Int64, Symbol}(3, :M),
+                                    VPIndex{Int64, Symbol}(3, :D),
+                                    VPIndex{Int64, Symbol}(3, :Pm),
+                                    EPIndex{Int64, Symbol}(1, :K),
+                                    EPIndex{Int64, Symbol}(2, :K),
+                                    EPIndex{Int64, Symbol}(3, :K)]
+SII.all_variable_symbols(nw)
+
+@test filter(s->SII.is_observed(nw,s), SII.all_symbols(nw)) == NDPrototype.observed_symbols(nw)
+@test filter(s->SII.is_parameter(nw,s), SII.all_symbols(nw)) == SII.parameter_symbols(nw)
+@test filter(s->SII.is_variable(nw,s), SII.all_symbols(nw)) == SII.variable_symbols(nw)
+
+sol[EIndex(1,:P)]
+sol[EIndex(2,:P)]
+sol[EIndex(3,:P)]
+@test sol[EIndex(1:3,:P)] == sol[[EIndex(1,:P),EIndex(2,:P),EIndex(3,:P)]]

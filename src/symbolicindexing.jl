@@ -52,8 +52,23 @@ subsym_has_idx(idx::Int, syms) = 1 ≤ idx ≤ length(syms)
 subsym_to_idx(sym::Symbol, syms) = findfirst(isequal(sym), syms)
 subsym_to_idx(idx::Int, _) = idx
 
-SII.symbolic_container(nw::Network) = nw
 
+#### Implmentation of index provider interface
+####
+#### Structural things
+####
+SII.symbolic_container(nw::Network) = nw
+SII.is_independent_variable(nw::Network, _) = false
+SII.independent_variable_symbols(nw::Network) = []
+SII.is_time_dependent(nw::Network) = true
+SII.constant_structure(::Network) = true
+SII.all_variable_symbols(nw::Network) = vcat(SII.variable_symbols(nw), observed_symbols(nw))
+SII.all_symbols(nw::Network) = vcat(SII.all_variable_symbols(nw), SII.parameter_symbols(nw))
+
+
+####
+#### variable indexing
+####
 SII.is_variable(nw::Network, sni) = false
 function SII.is_variable(nw::Network,
                          sni::SymbolicStateIndex{Int,<:Union{Int,Symbol}})
@@ -88,6 +103,10 @@ function SII.variable_symbols(nw::Network)
     return syms
 end
 
+
+####
+#### parameter indexing
+####
 SII.is_parameter(nw::Network, sni) = false
 function SII.is_parameter(nw::Network,
                           sni::SymbolicParameterIndex{Int,<:Union{Int,Symbol}})
@@ -103,48 +122,115 @@ function SII.parameter_index(nw::Network,
 end
 
 function SII.parameter_symbols(nw::Network)
-    syms = Vector{SymbolicStateIndex{Int,Symbol}}(undef, pdim(nw))
+    syms = Vector{SymbolicParameterIndex{Int,Symbol}}(undef, pdim(nw))
     i = 1
     for (ci, cf) in pairs(nw.im.vertexf)
         for s in cf.psym
-            syms[i] = VIndex(ci, s)
+            syms[i] = VPIndex(ci, s)
             i = i + 1
         end
     end
     for (ci, cf) in pairs(nw.im.edgef)
         for s in cf.psym
-            syms[i] = EIndex(ci, s)
+            syms[i] = EPIndex(ci, s)
             i = i + 1
         end
     end
     return syms
 end
 
-SII.is_independent_variable(nw::Network, _) = false
-
-SII.independent_variable_symbols(nw::Network) = []
-
-SII.is_time_dependent(nw::Network) = true
-
-SII.constant_structure(::Network) = true
-
+####
+#### Observed indexing
+####
 SII.is_observed(nw::Network, _) = false
+function SII.is_observed(nw::Network, sni::SymbolicStateIndex{Int,<:Union{Int,Symbol}})
+    cf = getcomp(nw, sni)
 
-# function SII.all_solvable_symbols(nw::Network)
-#   return vcat(
-#     collect(keys(sys.state_index)),
-#     collect(keys(sys.observed)),
-#   )
-# end
+    if isdynamic(cf)
+        return sni.subidx ∈ cf.obssym # only works if symbol is given
+    else
+        return sni.subidx ∈ cf.obssym || subsym_has_idx(sni.subidx, cf.sym)
+    end
+    error("Could not handle $sni. Should never be reached.")
+end
 
-# function SII.all_symbols(nw::Network)
-#   return vcat(
-#     all_solvable_symbols(sys),
-#     collect(keys(sys.parameter_index)),
-#     sys.independent_variable === nothing ? Symbol[] : sys.independent_variable
-#   )
-# end
+function observed_symbols(nw::Network)
+    syms = SymbolicStateIndex{Int,Symbol}[]
+    for (ci, cf) in pairs(nw.im.vertexf)
+        if !isdynamic(cf)
+            for s in cf.sym
+                push!(syms, VIndex(ci, s))
+            end
+        end
+        for s in cf.obssym
+            push!(syms, VIndex(ci, s))
+        end
+    end
+    for (ci, cf) in pairs(nw.im.edgef)
+        if !isdynamic(cf)
+            for s in cf.sym
+                push!(syms, EIndex(ci, s))
+            end
+        end
+        for s in cf.obssym
+            push!(syms, EIndex(ci, s))
+        end
+    end
+    return syms
+end
 
+#=
+Types of observable calls:
+- observable of ODEVertex
+  - recalculate incident static edges
+  - aggregate locally
+  - execut observable
+- State of StaticVertex
+  - aggregate locally
+  - execute vertex
+- observable of StaticVertex
+  - aggregate locallay
+  - execute vertex
+  - execute observable
+
+- observable of ODEEdge
+  - if incident vertex is static: locally aggregate & execute vertex function
+  - execute observable
+- State of StaticEdge
+  - execute edge (cannot depend on static vertices)
+- Observable of static edge
+  - execute edge
+  - execute observable
+=#
+
+SII.observed(nw::Network, sni) = error("Cant do for $sni")
+function SII.observed(nw::Network, sni::SymbolicStateIndex{Int,<:Union{Int,Symbol}})
+    SII.observed(nw, StaticArrays.SA[sni], true)
+end
+function SII.observed(nw::Network, snis::AbstractVector{<:SymbolicStateIndex}, singlevalue=false)
+    flatidxs = map(snis) do sni
+        cf = getcomp(nw, sni)
+        if isdynamic(cf) || !(subsym_has_idx(sni.subidx, cf.sym))
+            error("Currently the Observable mecahnism only supports the retrivel of static states.")
+        end
+        _range = getcomprange(nw, sni)
+        _range[subsym_to_idx(sni.subidx, cf.sym)]
+    end
+    _flatidxs = singlevalue ? only(flatidxs) : flatidxs
+
+    function(u, p, t)
+        du = nw.cachepool[u]
+        nw(du, u, p, t)
+        # XXX: split coreloop in static/dynamic parts and don't rely on the same buffer
+        _u = nw.cachepool[u, nw.im.lastidx_static]
+        _u[_flatidxs]
+    end
+end
+
+
+####
+#### Default values
+####
 function SII.default_values(nw::Network)
     defs = Dict{SymbolicStateIndex{Int,Symbol},Float64}()
     for (ci, cf) in pairs(nw.im.vertexf)

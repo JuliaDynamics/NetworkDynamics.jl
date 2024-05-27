@@ -20,6 +20,7 @@ using DocStringExtensions
 using StyledStrings: StyledStrings, @styled_str
 
 import SymbolicIndexingInterface as SII
+import StaticArrays
 
 
 
