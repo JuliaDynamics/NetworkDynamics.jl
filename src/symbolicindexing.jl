@@ -1,29 +1,27 @@
-abstract type SymbolicNetworkIndex{C,S} end
-abstract type SymbolicNetworkStateIndex{C,S} <: SymbolicNetworkIndex{C,S} end
-abstract type SymbolicNetworkParaIndex{C,S} <: SymbolicNetworkIndex{C,S} end
-struct VIndex{C,S} <: SymbolicNetworkStateIndex{C,S}
+abstract type SymbolicIndex{C,S} end
+abstract type SymbolicStateIndex{C,S} <: SymbolicIndex{C,S} end
+abstract type SymbolicParameterIndex{C,S} <: SymbolicIndex{C,S} end
+struct VIndex{C,S} <: SymbolicStateIndex{C,S}
     compidx::C
     subidx::S
 end
-struct EIndex{C,S} <: SymbolicNetworkStateIndex{C,S}
+struct EIndex{C,S} <: SymbolicStateIndex{C,S}
     compidx::C
     subidx::S
 end
-struct VPIndex{C,S} <: SymbolicNetworkParaIndex{C,S}
+struct VPIndex{C,S} <: SymbolicParameterIndex{C,S}
     compidx::C
     subidx::S
 end
-struct EPIndex{C,S} <: SymbolicNetworkParaIndex{C,S}
+struct EPIndex{C,S} <: SymbolicParameterIndex{C,S}
     compidx::C
     subidx::S
 end
 
-function SII.symbolic_type(::Type{<:SymbolicNetworkIndex{Int,<:Union{Symbol,Int}}})
-    SII.ScalarSymbolic()
-end
-SII.symbolic_type(::Type{<:SymbolicNetworkIndex}) = SII.ArraySymbolic()
+SII.symbolic_type(::Type{<:SymbolicIndex{Int,<:Union{Symbol,Int}}}) = SII.ScalarSymbolic()
+SII.symbolic_type(::Type{<:SymbolicIndex}) = SII.ArraySymbolic()
 
-function Base.collect(sni::SymbolicNetworkIndex)
+function Base.collect(sni::SymbolicIndex)
     multiple_comp = sni.compidx isa Union{AbstractVector,Tuple}
     multiple_sym = sni.subidx isa Union{AbstractVector,Tuple}
     if multiple_comp && multiple_sym
@@ -42,12 +40,8 @@ _similar(::EIndex, c, s)  = EIndex(c,s)
 _similar(::VPIndex, c, s) = VPIndex(c,s)
 _similar(::EPIndex, c, s) = EPIndex(c,s)
 
-function getcomp(nw::Network, sni::Union{EIndex{Int},EPIndex{Int}})
-    nw.im.edgef[sni.compidx]
-end
-function getcomp(nw::Network, sni::Union{VIndex{Int},VPIndex{Int}})
-    nw.im.vertexf[sni.compidx]
-end
+getcomp(nw::Network, sni::Union{EIndex{Int},EPIndex{Int}}) = nw.im.edgef[sni.compidx]
+getcomp(nw::Network, sni::Union{VIndex{Int},VPIndex{Int}}) = nw.im.vertexf[sni.compidx]
 getcomprange(nw::Network, sni::VIndex{Int}) = nw.im.v_data[sni.compidx]
 getcomprange(nw::Network, sni::EIndex{Int}) = nw.im.e_data[sni.compidx]
 getcomprange(nw::Network, sni::VPIndex{Int}) = nw.im.v_para[sni.compidx]
@@ -62,20 +56,20 @@ SII.symbolic_container(nw::Network) = nw
 
 SII.is_variable(nw::Network, sni) = false
 function SII.is_variable(nw::Network,
-                         sni::SymbolicNetworkStateIndex{Int,<:Union{Int,Symbol}})
+                         sni::SymbolicStateIndex{Int,<:Union{Int,Symbol}})
     cf = getcomp(nw, sni)
     return isdynamic(cf) && subsym_has_idx(sni.subidx, cf.sym)
 end
 
 function SII.variable_index(nw::Network,
-                            sni::SymbolicNetworkStateIndex{Int,<:Union{Int,Symbol}})
+                            sni::SymbolicStateIndex{Int,<:Union{Int,Symbol}})
     cf = getcomp(nw, sni)
     range = getcomprange(nw, sni)
     range[subsym_to_idx(sni.subidx, cf.sym)]
 end
 
 function SII.variable_symbols(nw::Network)
-    syms = Vector{SymbolicNetworkStateIndex{Int,Symbol}}(undef, dim(nw))
+    syms = Vector{SymbolicStateIndex{Int,Symbol}}(undef, dim(nw))
     i = 1
     for (ci, cf) in pairs(nw.im.vertexf)
         isdynamic(cf) || continue
@@ -96,20 +90,20 @@ end
 
 SII.is_parameter(nw::Network, sni) = false
 function SII.is_parameter(nw::Network,
-                          sni::SymbolicNetworkParaIndex{Int,<:Union{Int,Symbol}})
+                          sni::SymbolicParameterIndex{Int,<:Union{Int,Symbol}})
     cf = getcomp(nw, sni)
     return subsym_has_idx(sni.subidx, cf.psym)
 end
 
 function SII.parameter_index(nw::Network,
-                             sni::SymbolicNetworkParaIndex{Int,<:Union{Int,Symbol}})
+                             sni::SymbolicParameterIndex{Int,<:Union{Int,Symbol}})
     cf = getcomp(nw, sni)
     range = getcompprange(nw, sni)
     range[subsym_to_idx(sni.subidx, cf.psym)]
 end
 
 function SII.parameter_symbols(nw::Network)
-    syms = Vector{SymbolicNetworkStateIndex{Int,Symbol}}(undef, pdim(nw))
+    syms = Vector{SymbolicStateIndex{Int,Symbol}}(undef, pdim(nw))
     i = 1
     for (ci, cf) in pairs(nw.im.vertexf)
         for s in cf.psym
@@ -152,7 +146,7 @@ SII.is_observed(nw::Network, _) = false
 # end
 
 function SII.default_values(nw::Network)
-    defs = Dict{SymbolicNetworkStateIndex{Int,Symbol},Float64}()
+    defs = Dict{SymbolicStateIndex{Int,Symbol},Float64}()
     for (ci, cf) in pairs(nw.im.vertexf)
         for (s, def) in zip(cf.psym, cf.pdef)
             isnothing(def) && continue

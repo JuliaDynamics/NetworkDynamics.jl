@@ -33,5 +33,6 @@ include("utils_test.jl")
 include("construction_test.jl")
 
 @safetestset "Aggregation Tests" begin include("aggregators_test.jl") end
+@safetestset "Symbolic Indexing Tests" begin include("symbolicindexing_test.jl") end
 
 end
