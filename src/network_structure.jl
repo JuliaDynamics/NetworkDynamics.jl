@@ -58,9 +58,12 @@ struct Network{EX<:ExecutionStyle,G,NL,VTup,MM}
     mass_matrix::MM
 end
 executionstyle(::Network{ex}) where {ex} = ex
-@inline nvbatches(::Network) = length(vertexbatches)
+nvbatches(::Network) = length(vertexbatches)
 dim(nw::Network) = dim(nw.im)
 pdim(nw::Network) = pdim(nw.im)
+Graphs.nv(nw::Network) = nv(nw.im.g)
+Graphs.ne(nw::Network) = ne(nw.im.g)
+Base.broadcastable(nw::Network) = Ref(nw)
 
 struct NetworkLayer{GT,ETup,AF,MT}
     "graph/toplogy of layer"

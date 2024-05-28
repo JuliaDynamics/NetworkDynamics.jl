@@ -3,7 +3,7 @@ using Graphs
 using OrdinaryDiffEq
 using Test
 import SymbolicIndexingInterface as SII
-using NDPrototype: VIndex, EIndex, VPIndex, EPIndex
+using NDPrototype: VIndex, EIndex, VPIndex, EPIndex, _resolve_colon
 
 (isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
 
@@ -26,14 +26,15 @@ sol = solve(prob, Tsit5())
 @test sol[VIndex(1,:ω)] == sol[2,:]
 @test sol[VIndex(3,:ω)] == sol[6,:]
 
-@test !SII.is_variable(nw, VIndex(1:3,:ω))
+@test SII.is_variable(nw, VIndex(1:3,:ω))
 @test collect(VIndex(1, [:δ,:ω])) == [VIndex(1,:δ), VIndex(1,:ω)]
 @test collect(VIndex(1, [:δ,2])) == [VIndex(1,:δ), VIndex(1,2)]
 @test collect(VIndex(1, 1:2)) == [VIndex(1,1), VIndex(1,2)]
 @test collect(VIndex(1:5, 2)) == [VIndex(i,2) for i in 1:5]
 @test collect(VIndex([1,3], :δ)) == [VIndex(1,:δ), VIndex(3,:δ)]
-@test_throws ErrorException collect(VIndex(1:2, 1:5))
-@test !SII.is_variable(nw, VIndex(3,[1,:ω]))
+@test_throws MethodError collect(VIndex(1:2, 1:5))
+@test SII.is_variable(nw, VIndex(3,[1,:ω]))
+@test !SII.is_variable(nw, VIndex(3,[1,:ω,:foobar]))
 
 @test sol[VIndex(1:3,:ω),1] == u0[[2,4,6]]
 @test sol[VIndex(3,[:δ,:ω]),1] == u0[[5,6]]
@@ -92,6 +93,9 @@ s = State(nw, uflat, pflat, t)
 SII.getu(s, EIndex(1,:e_dst))(s)
 SII.getp(s, VPIndex(1,:M))(s)
 
+SII.is_variable(nw, EIndex(1,:e_dst))
+SII.variable_index(nw, EIndex(1,:e_dst))
+
 @test map(idx->s[idx], SII.variable_symbols(nw)) == uflat
 @test map(idx->s[idx], SII.parameter_symbols(nw)) == pflat
 NDPrototype.observed_symbols(nw) .=> map(idx->s[idx], NDPrototype.observed_symbols(nw))
@@ -119,3 +123,38 @@ s.pv[1,1] = 10
 @test s.pe[1,1] == s[EPIndex(1,1)]
 s.pe[1,1] = 10
 @test s.pe[1,1] == s[EPIndex(1,1)] == 10
+
+@test NDPrototype._resolve_colon(nw, VIndex(:, :δ)) == VIndex(1:nv(g), :δ)
+@test NDPrototype._resolve_colon(nw, EIndex(:, :δ)) == EIndex(1:ne(g), :δ)
+@test NDPrototype._resolve_colon(nw, VPIndex(:, :δ)) == VPIndex(1:nv(g), :δ)
+@test NDPrototype._resolve_colon(nw, EPIndex(:, :δ)) == EPIndex(1:ne(g), :δ)
+
+@test NDPrototype._resolve_colon(nw, VIndex(3, :)) == VIndex(3, 1:2)
+@test NDPrototype._resolve_colon(nw, VPIndex(3, :)) == VPIndex(3, 1:3)
+@test NDPrototype._resolve_colon(nw, EIndex(4, :)) == EIndex(4, 1:2)
+@test NDPrototype._resolve_colon(nw, EPIndex(4, :)) == EPIndex(4, 1:1)
+
+for et in [VIndex, EIndex, VPIndex, EPIndex]
+    collect(et(1:2,:δ))
+    collect(et(1,1:5))
+    collect(et(1,[:foo, :bar]))
+    repr.(et(1:2,:δ))
+    repr.(et(1,:δ))
+end
+
+s.v[1,:]
+
+s.v[:,1]
+s.e[1,:]
+s.e[:,1]
+
+s[VIndex(:,1)]
+s[EIndex(1:6,1)]
+
+sol[collect(EIndex(1:6,1))]
+sol[EIndex(1,1)]
+
+
+NDPrototype._resolve_colon(nw, EIndex(:,1))
+
+sol(1, idxs=VIndex(1,1))

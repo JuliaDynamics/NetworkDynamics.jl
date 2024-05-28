@@ -21,6 +21,7 @@ end
 #=
 XXX: SciMLBase Issue regarding f.sys
 SciMLBase gets the index provider from ODEFunction.sys which defaults to f.sys so I provide it...
+# SII.symbolic_container(odef::SciMLBase.ODEFunction{<:Any,<:Any,<:Network}) = odef.f
 =#
 SciMLBase.__has_sys(nw::Network) = true
 Base.getproperty(nw::Network, s::Symbol) = s===:sys ? nw : getfield(nw, s)
@@ -28,24 +29,6 @@ Base.getproperty(nw::Network, s::Symbol) = s===:sys ? nw : getfield(nw, s)
 SII.symbolic_type(::Type{<:SymbolicIndex{Int,<:Union{Symbol,Int}}}) = SII.ScalarSymbolic()
 SII.symbolic_type(::Type{<:SymbolicIndex}) = SII.ArraySymbolic()
 
-function Base.collect(sni::SymbolicIndex)
-    multiple_comp = sni.compidx isa Union{AbstractVector,Tuple}
-    multiple_sym = sni.subidx isa Union{AbstractVector,Tuple}
-    if multiple_comp && multiple_sym
-        error("Symbolic network indexing with multiple indices and multiple symbols not implemented!")
-    end
-    if multiple_comp
-        return [_similar(sni, i, sni.subidx) for i in sni.compidx]
-    end
-    if multiple_sym
-        return [_similar(sni, sni.compidx, i) for i in sni.subidx]
-    end
-    error("Shouldn't be reached, $sni does not seam to be a ArraySymbolic.")
-end
-_similar(::VIndex, c, s)  = VIndex(c,s)
-_similar(::EIndex, c, s)  = EIndex(c,s)
-_similar(::VPIndex, c, s) = VPIndex(c,s)
-_similar(::EPIndex, c, s) = EPIndex(c,s)
 
 getcomp(nw::Network, sni::Union{EIndex{Int},EPIndex{Int}}) = nw.im.edgef[sni.compidx]
 getcomp(nw::Network, sni::Union{VIndex{Int},VPIndex{Int}}) = nw.im.vertexf[sni.compidx]
@@ -58,6 +41,52 @@ subsym_has_idx(sym::Symbol, syms) = sym ∈ syms
 subsym_has_idx(idx::Int, syms) = 1 ≤ idx ≤ length(syms)
 subsym_to_idx(sym::Symbol, syms) = findfirst(isequal(sym), syms)
 subsym_to_idx(idx::Int, _) = idx
+
+#
+Base.broadcastable(si::SymbolicIndex{<:Union{Int,Colon},<:Union{Int,Symbol,Colon}}) = Ref(si)
+
+Base.length(si::SymbolicIndex{<:Union{AbstractVector,Tuple},<:Union{Int,Symbol}}) = length(si.compidx)
+function Base.eltype(si::SymbolicIndex{<:Union{AbstractVector,Tuple},<:Union{Int,Symbol}})
+    if isconcretetype(eltype(si.compidx))
+        _baseT(si){eltype(si.compidx),typeof(si.subidx)}
+    else
+        Any
+    end
+end
+function Base.iterate(si::SymbolicIndex{<:Union{AbstractVector,Tuple},<:Union{Int,Symbol}}, state=nothing)
+    it = isnothing(state) ? iterate(si.compidx) : iterate(si.compidx, state)
+    isnothing(it) && return nothing
+    _similar(si, it[1], si.subidx), it[2]
+end
+
+Base.length(si::SymbolicIndex{Int,<:Union{AbstractVector,Tuple}}) = length(si.subidx)
+function Base.eltype(si::SymbolicIndex{Int,<:Union{AbstractVector,Tuple}})
+    if isconcretetype(eltype(si.subidx))
+        _baseT(si){eltype(si.compidx),eltype(si.subidx)}
+    else
+        Any
+    end
+end
+function Base.iterate(si::SymbolicIndex{Int,<:Union{AbstractVector,Tuple}}, state=nothing)
+    it = isnothing(state) ? iterate(si.subidx) : iterate(si.subidx, state)
+    isnothing(it) && return nothing
+    _similar(si, si.compidx, it[1]), it[2]
+end
+_similar(si::SymbolicIndex, c, s) = _baseT(si)(c,s)
+_baseT(::VIndex)  = VIndex
+_baseT(::EIndex)  = EIndex
+_baseT(::VPIndex) = VPIndex
+_baseT(::EPIndex) = EPIndex
+
+_resolve_colon(nw::Network, sni::SymbolicIndex) = sni
+_resolve_colon(nw::Network, sni::VIndex{Colon}) = VIndex(1:nv(nw), sni.subidx)
+_resolve_colon(nw::Network, sni::EIndex{Colon}) = EIndex(1:ne(nw), sni.subidx)
+_resolve_colon(nw::Network, sni::VPIndex{Colon}) = VPIndex(1:nv(nw), sni.subidx)
+_resolve_colon(nw::Network, sni::EPIndex{Colon}) = EPIndex(1:ne(nw), sni.subidx)
+_resolve_colon(nw::Network, sni::VIndex{Int,Colon}) = VIndex(sni.compidx, 1:dim(getcomp(nw,sni)))
+_resolve_colon(nw::Network, sni::EIndex{Int,Colon}) = EIndex(sni.compidx, 1:dim(getcomp(nw,sni)))
+_resolve_colon(nw::Network, sni::VPIndex{Int,Colon}) = VPIndex(sni.compidx, 1:pdim(getcomp(nw,sni)))
+_resolve_colon(nw::Network, sni::EPIndex{Int,Colon}) = EPIndex(sni.compidx, 1:pdim(getcomp(nw,sni)))
 
 
 #### Implmentation of index provider interface
@@ -76,15 +105,15 @@ SII.all_symbols(nw::Network) = vcat(SII.all_variable_symbols(nw), SII.parameter_
 ####
 #### variable indexing
 ####
-SII.is_variable(nw::Network, sni) = false
-function SII.is_variable(nw::Network,
-                         sni::SymbolicStateIndex{Int,<:Union{Int,Symbol}})
+SII.is_variable(nw::Network, sni) = all(_is_variable.(nw, _resolve_colon.(nw, sni)))
+_is_variable(nw::Network, sni) = false
+function _is_variable(nw::Network, sni::SymbolicStateIndex{Int,<:Union{Int,Symbol}})
     cf = getcomp(nw, sni)
     return isdynamic(cf) && subsym_has_idx(sni.subidx, cf.sym)
 end
 
-function SII.variable_index(nw::Network,
-                            sni::SymbolicStateIndex{Int,<:Union{Int,Symbol}})
+SII.variable_index(nw::Network, sni) = _variable_index.(nw, _resolve_colon.(nw, sni))
+function _variable_index(nw::Network, sni::SymbolicStateIndex{Int,<:Union{Int,Symbol}})
     cf = getcomp(nw, sni)
     range = getcomprange(nw, sni)
     range[subsym_to_idx(sni.subidx, cf.sym)]
@@ -107,14 +136,16 @@ end
 ####
 #### parameter indexing
 ####
-SII.is_parameter(nw::Network, sni) = false
-function SII.is_parameter(nw::Network,
+SII.is_parameter(nw::Network, sni) = all(_is_parameter.(nw, _resolve_colon.(nw, sni)))
+_is_parameter(nw::Network, sni) = false
+function _is_parameter(nw::Network,
                           sni::SymbolicParameterIndex{Int,<:Union{Int,Symbol}})
     cf = getcomp(nw, sni)
     return subsym_has_idx(sni.subidx, cf.psym)
 end
 
-function SII.parameter_index(nw::Network,
+SII.parameter_index(nw::Network, sni) = _parameter_index.(nw, _resolve_colon.(nw, sni))
+function _parameter_index(nw::Network,
                              sni::SymbolicParameterIndex{Int,<:Union{Int,Symbol}})
     cf = getcomp(nw, sni)
     range = getcompprange(nw, sni)
