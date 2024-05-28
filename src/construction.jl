@@ -11,8 +11,10 @@ function Network(g::AbstractGraph,
         # collect all vertex/edgf to vector
         _vertexf = vertexf isa Vector ? vertexf : [vertexf for _ in vertices(g)]
         _edgef = edgef isa Vector ? edgef : [edgef for _ in edges(g)]
-        @assert _vertexf isa Vector{<:VertexFunction}
-        @assert _edgef isa Vector{<:EdgeFunction}
+        @argcheck _vertexf isa Vector{<:VertexFunction} "Expected VertexFuncions, got $(eltype(_vertexf))"
+        @argcheck _edgef isa Vector{<:EdgeFunction} "Expected EdgeFuncions, got $(eltype(_vertexf))"
+        @argcheck length(_vertexf) == nv(g)
+        @argcheck length(_edgef) == ne(g)
 
         verbose &&
             println("Create dynamic network with $(nv(g)) vertices and $(ne(g)) edges:")

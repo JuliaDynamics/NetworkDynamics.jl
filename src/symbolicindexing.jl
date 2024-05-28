@@ -44,8 +44,8 @@ getcomp(nw::Network, sni::Union{EIndex{Int},EPIndex{Int}}) = nw.im.edgef[sni.com
 getcomp(nw::Network, sni::Union{VIndex{Int},VPIndex{Int}}) = nw.im.vertexf[sni.compidx]
 getcomprange(nw::Network, sni::VIndex{Int}) = nw.im.v_data[sni.compidx]
 getcomprange(nw::Network, sni::EIndex{Int}) = nw.im.e_data[sni.compidx]
-getcomprange(nw::Network, sni::VPIndex{Int}) = nw.im.v_para[sni.compidx]
-getcomprange(nw::Network, sni::EPIndex{Int}) = nw.im.e_para[sni.compidx]
+getcompprange(nw::Network, sni::VPIndex{Int}) = nw.im.v_para[sni.compidx]
+getcompprange(nw::Network, sni::EPIndex{Int}) = nw.im.e_para[sni.compidx]
 
 subsym_has_idx(sym::Symbol, syms) = sym ∈ syms
 subsym_has_idx(idx::Int, syms) = 1 ≤ idx ≤ length(syms)
@@ -85,20 +85,13 @@ end
 
 function SII.variable_symbols(nw::Network)
     syms = Vector{SymbolicStateIndex{Int,Symbol}}(undef, dim(nw))
-    i = 1
     for (ci, cf) in pairs(nw.im.vertexf)
         isdynamic(cf) || continue
-        for s in cf.sym
-            syms[i] = VIndex(ci, s)
-            i = i + 1
-        end
+        syms[nw.im.v_data[ci]] .= VIndex.(ci, cf.sym)
     end
     for (ci, cf) in pairs(nw.im.edgef)
         isdynamic(cf) || continue
-        for s in cf.sym
-            syms[i] = EIndex(ci, s)
-            i = i + 1
-        end
+        syms[nw.im.e_data[ci]] .= EIndex.(ci, cf.sym)
     end
     return syms
 end
@@ -125,16 +118,10 @@ function SII.parameter_symbols(nw::Network)
     syms = Vector{SymbolicParameterIndex{Int,Symbol}}(undef, pdim(nw))
     i = 1
     for (ci, cf) in pairs(nw.im.vertexf)
-        for s in cf.psym
-            syms[i] = VPIndex(ci, s)
-            i = i + 1
-        end
+        syms[nw.im.v_para[ci]] .= VPIndex.(ci, cf.psym)
     end
     for (ci, cf) in pairs(nw.im.edgef)
-        for s in cf.psym
-            syms[i] = EPIndex(ci, s)
-            i = i + 1
-        end
+        syms[nw.im.e_para[ci]] .= EPIndex.(ci, cf.psym)
     end
     return syms
 end
