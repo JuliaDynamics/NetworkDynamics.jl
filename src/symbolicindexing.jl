@@ -226,11 +226,11 @@ end
 #### Default values
 ####
 function SII.default_values(nw::Network)
-    defs = Dict{SymbolicStateIndex{Int,Symbol},Float64}()
+    defs = Dict{SymbolicIndex{Int,Symbol},Float64}()
     for (ci, cf) in pairs(nw.im.vertexf)
         for (s, def) in zip(cf.psym, cf.pdef)
             isnothing(def) && continue
-            defs[VIndex(ci, s)] = def
+            defs[VPIndex(ci, s)] = def
         end
         for (s, def) in zip(cf.sym, cf.def)
             isnothing(def) && continue
@@ -240,7 +240,7 @@ function SII.default_values(nw::Network)
     for (ci, cf) in pairs(nw.im.edgef)
         for (s, def) in zip(cf.psym, cf.pdef)
             isnothing(def) && continue
-            defs[EIndex(ci, s)] = def
+            defs[EPIndex(ci, s)] = def
         end
         for (s, def) in zip(cf.sym, cf.def)
             isnothing(def) && continue
@@ -259,6 +259,17 @@ struct State{U,P,NW,T}
     uflat::U
     pflat::P
     t::T
+end
+
+function State(nw::Network)
+    t = nothing
+    uflat = Union{Nothing, Float64}[nothing for _ in 1:dim(nw)]
+    pflat = Union{Nothing, Float64}[nothing for _ in 1:pdim(nw)]
+    s = State(nw,uflat,pflat,t)
+    for (k, v) in SII.default_values(nw)
+        s[k] = v
+    end
+    s
 end
 
 SII.symbolic_container(s::State) = s.nw

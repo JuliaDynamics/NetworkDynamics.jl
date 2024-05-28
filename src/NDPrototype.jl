@@ -37,9 +37,9 @@ include("construction.jl")
 include("coreloop.jl")
 
 include("adapt.jl")
-include("show.jl")
-
 include("symbolicindexing.jl")
+
+include("show.jl")
 
 #=
 styled"{bright_red:red} {bright_green:green} {bright_yellow:yellow} {bright_blue:blue} {bright_magenta:magenta} {bright_cyan:cyan}"

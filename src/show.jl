@@ -1,18 +1,23 @@
 # AbstractTrees.TreeCharSet("├", "└", "│", "─", "⋮", " ⇒ ")
 
 function Base.show(io::IO, ::MIME"text/plain", nw::Network)
-    println(io, "Dynamic network with:")
-    num, word = maybe_plural(length(nw.vertexbatches), "type")
-    println(io, " ├─ $(nv(nw.im.g)) vertices ($num unique $word)")
-    num, word = maybe_plural(length(nw.layer.edgebatches), "type")
-    println(io, " └─ $(ne(nw.im.g)) edges ($num unique $word)")
-    print(io, "Aggregation using ")
-    print(io, nw.layer.aggregator)
-    println(io, " along")
-    num, word = maybe_plural(nw.layer.edepth, "dimension")
-    println(io, " ├─ $(num) edge $(word)")
-    num, word = maybe_plural(nw.layer.vdepth, "dimension")
-    println(io, " └─ $(num) vertex $(word)")
+    compact = get(io, :compact, false)::Bool
+    if compact
+        print(io, "Dynamic network ($(nv(nw.im.g)) vertices, $(ne(nw.im.g)) edges)")
+    else
+        println(io, "Dynamic network with:")
+        num, word = maybe_plural(length(nw.vertexbatches), "type")
+        println(io, " ├─ $(nv(nw.im.g)) vertices ($num unique $word)")
+        num, word = maybe_plural(length(nw.layer.edgebatches), "type")
+        println(io, " └─ $(ne(nw.im.g)) edges ($num unique $word)")
+        print(io, "Aggregation using ")
+        print(io, nw.layer.aggregator)
+        println(io, " along")
+        num, word = maybe_plural(nw.layer.edepth, "dimension")
+        println(io, " ├─ $(num) edge $(word)")
+        num, word = maybe_plural(nw.layer.vdepth, "dimension")
+        println(io, " └─ $(num) vertex $(word)")
+    end
 end
 
 Base.show(io::IO, s::NNlibScatter) = print(io, "NNlibScatter($(repr(s.f)))")
@@ -95,6 +100,19 @@ function stylesymbolarray(syms, defaults, symstyles=Dict{Int,Symbol}())
         end
     end
     ret = ret*"]"
+end
+
+Base.show(io::IO, idx::VIndex) = print(io, "VIndex(", repr(idx.compidx), ", ", repr(idx.subidx), ")")
+Base.show(io::IO, idx::EIndex) = print(io, "EIndex(", repr(idx.compidx), ", ", repr(idx.subidx), ")")
+Base.show(io::IO, idx::VPIndex) = print(io, "VPIndex(", repr(idx.compidx), ", ", repr(idx.subidx), ")")
+Base.show(io::IO, idx::EPIndex) = print(io, "EPIndex(", repr(idx.compidx), ", ", repr(idx.subidx), ")")
+
+function Base.show(io::IO, mime::MIME"text/plain", s::State)
+    ioc = IOContext(io, :compact => true)
+    print(io, "State for "); show(ioc, mime, s.nw)
+    print(io, "\n t = "); show(ioc, s.t)
+    print(io, "\n uflat = "); show(ioc, s.uflat)
+    print(io, "\n pflat = "); show(ioc, s.pflat)
 end
 
 function print_treelike(io, vec, prefix=" ", infix=" ")
