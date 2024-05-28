@@ -251,6 +251,53 @@ function SII.default_values(nw::Network)
 end
 
 
+####
+#### State as value provider
+####
+struct State{U,P,NW,T}
+    nw::NW
+    uflat::U
+    pflat::P
+    t::T
+end
+
+SII.symbolic_container(s::State) = s.nw
+SII.state_values(s::State) = s.uflat
+SII.parameter_values(s::State) = s.pflat
+SII.current_time(s::State) = s.t
+
+Base.getindex(s::State, idx::SymbolicParameterIndex) = SII.getp(s, idx)(s)
+Base.setindex!(s::State, val, idx::SymbolicParameterIndex) = SII.setp(s, idx)(s, val)
+Base.getindex(s::State, idx::SymbolicStateIndex) = SII.getu(s, idx)(s)
+Base.setindex!(s::State, val, idx::SymbolicStateIndex) = SII.setu(s, idx)(s, val)
+
+struct VStateProxy{S} s::S end
+Base.getindex(p::VStateProxy, comp, state) = getindex(p.s, VIndex(comp, state))
+Base.setindex!(p::VStateProxy, val, comp, state) = setindex!(p.s, val, VIndex(comp, state))
+struct EStateProxy{S} s::S end
+Base.getindex(p::EStateProxy, comp, state) = getindex(p.s, EIndex(comp, state))
+Base.setindex!(p::EStateProxy, val, comp, state) = setindex!(p.s, val, EIndex(comp, state))
+struct VParameterProxy{S} s::S end
+Base.getindex(p::VParameterProxy, comp, state) = getindex(p.s, VPIndex(comp, state))
+Base.setindex!(p::VParameterProxy, val, comp, state) = setindex!(p.s, val, VPIndex(comp, state))
+struct EParameterProxy{S} s::S end
+Base.getindex(p::EParameterProxy, comp, state) = getindex(p.s, EPIndex(comp, state))
+Base.setindex!(p::EParameterProxy, val, comp, state) = setindex!(p.s, val, EPIndex(comp, state))
+
+function Base.getproperty(s::State, sym::Symbol)
+    if sym === :v
+        return VStateProxy(s)
+    elseif sym === :e
+        return EStateProxy(s)
+    elseif sym === :pv
+        return VParameterProxy(s)
+    elseif sym === :pe
+        return EParameterProxy(s)
+    else
+        return getfield(s, sym)
+    end
+end
+
 #=
 nds = wrap(nd, u, [p]) -> NWState (contains nw para, optional für observables/static)
 ndp = wrap(nd, p) -> NWPara

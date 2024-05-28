@@ -77,6 +77,45 @@ ef = [Lib.diffusion_odeedge(),
       Lib.diffusion_odeedge(),
       Lib.diffusion_edge_fid()]
 nw = Network(g, vf, ef)
+prob = ODEProblem(nw, rand(dim(nw)), (0,1), rand(pdim(nw)))
+sol = solve(prob, Tsit5())
 
 @test SII.variable_index.(Ref(nw), SII.variable_symbols(nw)) == 1:dim(nw)
 @test SII.parameter_index.(Ref(nw), SII.parameter_symbols(nw)) == 1:pdim(nw)
+
+using NDPrototype: State
+t = 1.0
+uflat = copy(sol(t))
+pflat = copy(sol.prob.p)
+s = State(nw, uflat, pflat, t)
+
+SII.getu(s, EIndex(1,:e_dst))(s)
+SII.getp(s, VPIndex(1,:M))(s)
+
+@test map(idx->s[idx], SII.variable_symbols(nw)) == uflat
+@test map(idx->s[idx], SII.parameter_symbols(nw)) == pflat
+NDPrototype.observed_symbols(nw) .=> map(idx->s[idx], NDPrototype.observed_symbols(nw))
+
+@test s[VPIndex(1,:M)] != 1.0
+s[VPIndex(1,:M)] = 1
+@test s[VPIndex(1,:M)] == 1.0
+
+@test s[VIndex(1,2)] != 1.0
+s[VIndex(1,2)] = 1.0
+@test s[VIndex(1,2)] == 1.0
+
+@test s.v[1,1] == s[VIndex(1,1)]
+s.v[1,1] = 15
+@test s.v[1,1] == s[VIndex(1,1)] == 15
+
+@test s.e[5,:e_src] == s[EIndex(5,:e_src)]
+s.v[1,1] = 15
+@test s.v[1,1] == s[VIndex(1,1)] == 15
+
+@test s.pv[1,1] == s[VPIndex(1,1)]
+s.pv[1,1] = 10
+@test s.pv[1,1] == s[VPIndex(1,1)] == 10
+
+@test s.pe[1,1] == s[EPIndex(1,1)]
+s.pe[1,1] = 10
+@test s.pe[1,1] == s[EPIndex(1,1)] == 10
