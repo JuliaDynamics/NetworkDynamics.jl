@@ -14,9 +14,8 @@ nw = Network(g, vf, ef)
 u0 = rand(dim(nw))
 p = rand(pdim(nw))
 
-odef = ODEFunction(nw; sys=nw)
-SII.default_values(odef)
-prob = ODEProblem(odef, u0, (0,10), p)
+SII.default_values(nw)
+prob = ODEProblem(nw, u0, (0,10), p)
 sol = solve(prob, Tsit5())
 
 @test SII.is_variable(nw, VIndex(1,:δ))
@@ -68,7 +67,6 @@ sol[EIndex(1,:P)]
 sol[EIndex(2,:P)]
 sol[EIndex(3,:P)]
 @test sol[EIndex(1:3,:P)] == sol[[EIndex(1,:P),EIndex(2,:P),EIndex(3,:P)]]
-
 
 g = complete_graph(4)
 vf = [Lib.kuramoto_second(), Lib.diffusion_vertex(), Lib.kuramoto_second(), Lib.diffusion_vertex()]

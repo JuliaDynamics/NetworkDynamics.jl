@@ -35,6 +35,9 @@ mutable struct IndexManager{G}
                        vertexf, edgef)
     end
 end
+dim(im::IndexManager) = im.lastidx_dynamic
+pdim(im::IndexManager) = im.lastidx_p
+
 
 abstract type ExecutionStyle{buffered} end
 struct SequentialExecution{buffered} <: ExecutionStyle{buffered} end
@@ -56,8 +59,8 @@ struct Network{EX<:ExecutionStyle,G,NL,VTup,MM}
 end
 executionstyle(::Network{ex}) where {ex} = ex
 @inline nvbatches(::Network) = length(vertexbatches)
-dim(nw::Network) = nw.im.lastidx_dynamic
-pdim(nw::Network) = nw.im.lastidx_p
+dim(nw::Network) = dim(nw.im)
+pdim(nw::Network) = pdim(nw.im)
 
 struct NetworkLayer{GT,ETup,AF,MT}
     "graph/toplogy of layer"

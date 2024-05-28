@@ -18,6 +18,13 @@ struct EPIndex{C,S} <: SymbolicParameterIndex{C,S}
     subidx::S
 end
 
+#=
+XXX: SciMLBase Issue regarding f.sys
+SciMLBase gets the index provider from ODEFunction.sys which defaults to f.sys so I provide it...
+=#
+SciMLBase.__has_sys(nw::Network) = true
+Base.getproperty(nw::Network, s::Symbol) = s===:sys ? nw : getfield(nw, s)
+
 SII.symbolic_type(::Type{<:SymbolicIndex{Int,<:Union{Symbol,Int}}}) = SII.ScalarSymbolic()
 SII.symbolic_type(::Type{<:SymbolicIndex}) = SII.ArraySymbolic()
 
