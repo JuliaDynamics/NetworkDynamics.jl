@@ -36,13 +36,11 @@ sol = solve(prob, Tsit5())
 @test SII.is_variable(nw, VIndex(3,[1,:ω]))
 @test !SII.is_variable(nw, VIndex(3,[1,:ω,:foobar]))
 
+# test indexing of multipe variables
 @test sol[VIndex(1:3,:ω),1] == u0[[2,4,6]]
 @test sol[VIndex(3,[:δ,:ω]),1] == u0[[5,6]]
 @test sol[VIndex(3,[:ω,:δ]),1] == u0[[6,5]]
 @test sol[VIndex(3,[1,:ω]),1] == u0[[5,6]]
-
-SII.variable_symbols(sol)
-SII.default_values(sol)
 
 @test NDPrototype.observed_symbols(nw) == [EIndex(1, :P), EIndex(2, :P), EIndex(3, :P)]
 
@@ -69,6 +67,9 @@ sol[EIndex(2,:P)]
 sol[EIndex(3,:P)]
 @test sol[EIndex(1:3,:P)] == sol[[EIndex(1,:P),EIndex(2,:P),EIndex(3,:P)]]
 
+####
+#### more complex prolbme
+####
 g = complete_graph(4)
 vf = [Lib.kuramoto_second(), Lib.diffusion_vertex(), Lib.kuramoto_second(), Lib.diffusion_vertex()]
 ef = [Lib.diffusion_odeedge(),
@@ -84,6 +85,9 @@ sol = solve(prob, Tsit5())
 @test SII.variable_index.(Ref(nw), SII.variable_symbols(nw)) == 1:dim(nw)
 @test SII.parameter_index.(Ref(nw), SII.parameter_symbols(nw)) == 1:pdim(nw)
 
+####
+#### State tests
+####
 using NDPrototype: State
 t = 1.0
 uflat = copy(sol(t))
@@ -124,11 +128,13 @@ s.pv[1,1] = 10
 s.pe[1,1] = 10
 @test s.pe[1,1] == s[EPIndex(1,1)] == 10
 
+####
+#### Tests for index with colon
+####
 @test NDPrototype._resolve_colon(nw, VIndex(:, :δ)) == VIndex(1:nv(g), :δ)
 @test NDPrototype._resolve_colon(nw, EIndex(:, :δ)) == EIndex(1:ne(g), :δ)
 @test NDPrototype._resolve_colon(nw, VPIndex(:, :δ)) == VPIndex(1:nv(g), :δ)
 @test NDPrototype._resolve_colon(nw, EPIndex(:, :δ)) == EPIndex(1:ne(g), :δ)
-
 @test NDPrototype._resolve_colon(nw, VIndex(3, :)) == VIndex(3, 1:2)
 @test NDPrototype._resolve_colon(nw, VPIndex(3, :)) == VPIndex(3, 1:3)
 @test NDPrototype._resolve_colon(nw, EIndex(4, :)) == EIndex(4, 1:2)
@@ -142,19 +148,26 @@ for et in [VIndex, EIndex, VPIndex, EPIndex]
     repr.(et(1,:δ))
 end
 
-s.v[1,:]
+@test s[[VIndex(1,1), VPIndex(1,2)]] == [s[VIndex(1,1)], s[VPIndex(1,2)]]
+@test s[(VIndex(1,1), VPIndex(1,2))] == (s[VIndex(1,1)], s[VPIndex(1,2)])
+@test s[[VIndex(1,1), VIndex(1,2)]] == [s[VIndex(1,1)], s[VIndex(1,2)]]
+@test s[(VIndex(1,1), VIndex(1,2))] == (s[VIndex(1,1)], s[VIndex(1,2)])
 
-s.v[:,1]
-s.e[1,:]
-s.e[:,1]
+@test s[VIndex(:,1)] == s[VIndex(1:4,1)]
+@test s[EIndex(:,1)] == s[EIndex(1:6,1)]
 
-s[VIndex(:,1)]
-s[EIndex(1:6,1)]
+          # variable     variable     observed     observed
+mixedidx = [VIndex(1,1), EIndex(1,1), EIndex(2,1), EIndex(3,1)]
+@test SII.is_observed.(s, mixedidx) == [0,0,1,1]
+@test SII.is_variable.(s, mixedidx) == [1,1,0,0]
+s[mixedidx] # -> calls observed for all indices
 
-sol[collect(EIndex(1:6,1))]
-sol[EIndex(1,1)]
+mixedidx = [VIndex(1,1), EIndex(1,1), EIndex(2,1)]
+@test SII.is_observed.(s, mixedidx) == [0,0,1]
+@test SII.is_variable.(s, mixedidx) == [1,1,0]
+s[mixedidx] # -> calls observed for all indices
 
+s[EIndex(:,1)]
+idx = EIndex(:,1)
 
-NDPrototype._resolve_colon(nw, EIndex(:,1))
-
-sol(1, idxs=VIndex(1,1))
+@test !SII.is_variable(s, EIndex(:,1))

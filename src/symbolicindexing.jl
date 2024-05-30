@@ -78,7 +78,9 @@ _baseT(::EIndex)  = EIndex
 _baseT(::VPIndex) = VPIndex
 _baseT(::EPIndex) = EPIndex
 
-_resolve_colon(nw::Network, sni::SymbolicIndex) = sni
+_hascolon(i) = false
+_hascolon(::SymbolicIndex{C,S}) where {C,S} = C === Colon || S === Colon
+_resolve_colon(nw::Network, idx) = idx
 _resolve_colon(nw::Network, sni::VIndex{Colon}) = VIndex(1:nv(nw), sni.subidx)
 _resolve_colon(nw::Network, sni::EIndex{Colon}) = EIndex(1:ne(nw), sni.subidx)
 _resolve_colon(nw::Network, sni::VPIndex{Colon}) = VPIndex(1:nv(nw), sni.subidx)
@@ -105,14 +107,20 @@ SII.all_symbols(nw::Network) = vcat(SII.all_variable_symbols(nw), SII.parameter_
 ####
 #### variable indexing
 ####
-SII.is_variable(nw::Network, sni) = all(_is_variable.(nw, _resolve_colon.(nw, sni)))
+function SII.is_variable(nw::Network, sni)
+    _sni = _resolve_colon.(nw,sni)
+    all(_is_variable.(nw, _sni))
+end
 _is_variable(nw::Network, sni) = false
 function _is_variable(nw::Network, sni::SymbolicStateIndex{Int,<:Union{Int,Symbol}})
     cf = getcomp(nw, sni)
     return isdynamic(cf) && subsym_has_idx(sni.subidx, cf.sym)
 end
 
-SII.variable_index(nw::Network, sni) = _variable_index.(nw, _resolve_colon.(nw, sni))
+function SII.variable_index(nw::Network, sni)
+    _sni = _resolve_colon.(nw, sni)
+     _variable_index.(nw, _sni)
+end
 function _variable_index(nw::Network, sni::SymbolicStateIndex{Int,<:Union{Int,Symbol}})
     cf = getcomp(nw, sni)
     range = getcomprange(nw, sni)
@@ -136,7 +144,10 @@ end
 ####
 #### parameter indexing
 ####
-SII.is_parameter(nw::Network, sni) = all(_is_parameter.(nw, _resolve_colon.(nw, sni)))
+function SII.is_parameter(nw::Network, sni)
+    _sni = _resolve_colon.(nw,sni)
+    all(_is_parameter.(nw, _sni))
+end
 _is_parameter(nw::Network, sni) = false
 function _is_parameter(nw::Network,
                           sni::SymbolicParameterIndex{Int,<:Union{Int,Symbol}})
@@ -144,7 +155,10 @@ function _is_parameter(nw::Network,
     return subsym_has_idx(sni.subidx, cf.psym)
 end
 
-SII.parameter_index(nw::Network, sni) = _parameter_index.(nw, _resolve_colon.(nw, sni))
+function SII.parameter_index(nw::Network, sni)
+    _sni = _resolve_colon.(nw, sni)
+     _parameter_index.(nw, _sni)
+end
 function _parameter_index(nw::Network,
                              sni::SymbolicParameterIndex{Int,<:Union{Int,Symbol}})
     cf = getcomp(nw, sni)
@@ -166,9 +180,18 @@ end
 
 ####
 #### Observed indexing
-####
-SII.is_observed(nw::Network, _) = false
-function SII.is_observed(nw::Network, sni::SymbolicStateIndex{Int,<:Union{Int,Symbol}})
+function SII.is_observed(nw::Network, sni)
+    if !_hascolon(sni)
+        all(_is_observed.(nw, sni))
+    else
+        # if has colon check if all are observed OR variables and return true
+        # the observed function will handle the whole thing then
+        _sni = _resolve_colon.(nw,sni)
+        all(s -> _is_observed(nw,s) || _is_variable(nw,s), _sni)
+    end
+end
+_is_observed(nw::Network, _) = false
+function _is_observed(nw::Network, sni::SymbolicStateIndex{Int,<:Union{Int,Symbol}})
     cf = getcomp(nw, sni)
 
     if isdynamic(cf)
@@ -228,27 +251,30 @@ Types of observable calls:
   - execute observable
 =#
 
-SII.observed(nw::Network, sni) = error("Cant do for $sni")
-function SII.observed(nw::Network, sni::SymbolicStateIndex{Int,<:Union{Int,Symbol}})
-    SII.observed(nw, StaticArrays.SA[sni], true)
-end
-function SII.observed(nw::Network, snis::AbstractVector{<:SymbolicStateIndex}, singlevalue=false)
-    flatidxs = map(snis) do sni
-        cf = getcomp(nw, sni)
-        if isdynamic(cf) || !(subsym_has_idx(sni.subidx, cf.sym))
-            error("Currently the Observable mecahnism only supports the retrivel of static states.")
+function SII.observed(nw::Network, snis)
+    _snis = _resolve_colon.(nw, snis)
+
+    # First: resolve everything in fullstate (static and dynamic states)
+    flatidxs = broadcast(_snis) do sni
+        if SII.is_variable(nw, sni)
+            SII.variable_index(nw, sni)
+        else
+            cf = getcomp(nw, sni)
+            if !isdynamic(cf) && subsym_has_idx(sni.subidx, cf.sym)
+                _range = getcomprange(nw, sni)
+                _range[subsym_to_idx(sni.subidx, cf.sym)]
+            else
+                error("Observalbe mechanism cannot handle $sni yet.")
+            end
         end
-        _range = getcomprange(nw, sni)
-        _range[subsym_to_idx(sni.subidx, cf.sym)]
     end
-    _flatidxs = singlevalue ? only(flatidxs) : flatidxs
 
     function(u, p, t)
         du = nw.cachepool[u]
         nw(du, u, p, t)
         # XXX: split coreloop in static/dynamic parts and don't rely on the same buffer
         _u = nw.cachepool[u, nw.im.lastidx_static]
-        _u[_flatidxs]
+        _u[flatidxs]
     end
 end
 
@@ -303,6 +329,8 @@ function State(nw::Network)
     s
 end
 
+Base.broadcastable(s::State) = Ref(s)
+
 SII.symbolic_container(s::State) = s.nw
 SII.state_values(s::State) = s.uflat
 SII.parameter_values(s::State) = s.pflat
@@ -312,6 +340,16 @@ Base.getindex(s::State, idx::SymbolicParameterIndex) = SII.getp(s, idx)(s)
 Base.setindex!(s::State, val, idx::SymbolicParameterIndex) = SII.setp(s, idx)(s, val)
 Base.getindex(s::State, idx::SymbolicStateIndex) = SII.getu(s, idx)(s)
 Base.setindex!(s::State, val, idx::SymbolicStateIndex) = SII.setu(s, idx)(s, val)
+function Base.getindex(s::State, idxs)
+    et = eltype(idxs)
+    if et <: SymbolicStateIndex
+        SII.getu(s, idxs)(s)
+    elseif et <: SymbolicParameterIndex
+        SII.getp(s, idxs)(s)
+    else
+        getindex.(Ref(s), idxs)
+    end
+end
 
 struct VStateProxy{S} s::S end
 Base.getindex(p::VStateProxy, comp, state) = getindex(p.s, VIndex(comp, state))
