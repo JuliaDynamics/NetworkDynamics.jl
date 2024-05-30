@@ -1,6 +1,7 @@
 using NDPrototype
 using Graphs
 using OrdinaryDiffEq
+using Chairmarks
 using Test
 import SymbolicIndexingInterface as SII
 using NDPrototype: VIndex, EIndex, VPIndex, EPIndex, _resolve_colon

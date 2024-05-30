@@ -112,8 +112,8 @@ _resolve_colon(nw::Network, sni::EPIndex{Int,Colon}) = EPIndex{Int, UnitRange{In
 #### Structural things
 ####
 SII.symbolic_container(nw::Network) = nw
-SII.is_independent_variable(nw::Network, _) = false
-SII.independent_variable_symbols(nw::Network) = []
+SII.is_independent_variable(nw::Network, sym) = sym == :t
+SII.independent_variable_symbols(nw::Network) = [:t]
 SII.is_time_dependent(nw::Network) = true
 SII.constant_structure(::Network) = true
 SII.all_variable_symbols(nw::Network) = vcat(SII.variable_symbols(nw), observed_symbols(nw))
