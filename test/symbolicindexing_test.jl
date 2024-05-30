@@ -171,3 +171,111 @@ s[EIndex(:,1)]
 idx = EIndex(:,1)
 
 @test !SII.is_variable(s, EIndex(:,1))
+
+####
+#### check on performance
+####
+
+idxtypes = [
+    VIndex(1,1), # variable
+    EIndex(1,1), # observed
+    EIndex(2,1), # variable
+    VPIndex(1,1), # parameter
+    EPIndex(1,1), # parameter
+    VIndex(1,1:1), # variable bc
+    EIndex(1,1:1), # observed bc
+    EIndex(2,1:1), # variable bc
+    VPIndex(1,1:1), # parameter bc
+    EPIndex(1,1:1), # parameter bc
+    VIndex(1,:), # variable bc
+    EIndex(1,:), # observed bc
+    EIndex(2,:), # variable bc
+    VPIndex(1,:), # parameter bc
+    EPIndex(1,:), # parameter bc
+    VIndex(:,1), # variable bc first
+    EIndex(:,1), # observed bc first
+    EIndex(:,1), # variable bc first
+    # VPIndex(:,1), # parameter bc first
+    EPIndex(:,1), # parameter bc first
+    VIndex([1:3],1), # variable bc first
+    EIndex([1:3],1), # observed bc first
+    EIndex([1:3],1), # variable bc first
+    VPIndex([1,3],1), # parameter bc first
+    EPIndex([1:3],1), # parameter bc first
+]
+
+using NDPrototype: _is_variable
+for idx in idxtypes
+    println("Test $idx")
+    s[idx]
+    # @inferred SII.is_variable(s, idx)
+end
+
+@inferred SII.is_variable(s, SII.is_variable(s, idxtypes[1]));
+
+idx = EIndex(2,1)
+@inferred SII.is_variable(s, SII.is_variable(s, idx));
+@descend s[idx]
+
+@allocations SII.is_variable(s, idx)
+
+@code_warntype SII.is_variable(s, idx)
+@descend SII.is_variable(s, idx);
+
+@code_warntype broadcast(_is_variable, nw, idx)
+
+@code_warntype _is_variable.(nw, idx)
+@code_warntype _is_variable(nw, VIndex(1,1))
+
+@b $broadcast($(x->x), $(1:5))
+@b $broadcast($(x->x), $(VIndex(1:1,1)))
+@b $broadcast($(x->x), $(VIndex(1,1:1)))
+@b $Base.broadcasted($id, $(1:5))
+@b $Base.broadcasted($id, $(VIndex(1:2,1)))
+@b $Base.broadcasted($id, $(VIndex(1,1:2)))
+
+idx = VIndex(1:1,2)
+
+id = x->x
+idx = VIndex(1,1:1)
+Base.broadcasted(id, idx)
+
+
+collect(idx)
+
+Base.broadcastable(idx)
+Base.broadcastable(1:4)
+idx
+
+for idx in idxtypes
+    b = @b SII.is_variable($s,$idx)
+    if b.allocs != 0
+        println(idx, " => ", b.allocs, " allocations")
+    end
+end
+for idx in idxtypes
+    b = @b SII.is_parameter($s,$idx)
+    if b.allocs != 0
+        println(idx, " => ", b.allocs, " allocations")
+    end
+end
+for idx in idxtypes
+    b = @b SII.is_observed($s,$idx)
+    if b.allocs != 0
+        println(idx, " => ", b.allocs, " allocations")
+    end
+end
+
+for idx in idxtypes
+    b = @b $s[$idx]
+    if b.allocs != 0
+        println(idx, " => ", b.allocs, " allocations")
+    end
+end
+
+@descend SII.is_variable(s, idxtypes[1])
+
+ SII.is_variable(s, idxtypes[1])
+
+
+@descend _is_variable(nw, idxtypes[1])

@@ -129,7 +129,7 @@ end
 _is_variable(nw::Network, sni) = false
 function _is_variable(nw::Network, sni::SymbolicStateIndex{Int,<:Union{Int,Symbol}})
     cf = getcomp(nw, sni)
-    return isdynamic(cf) && subsym_has_idx(sni.subidx, cf.sym)
+    return isdynamic(cf) && subsym_has_idx(sni.subidx, sym(cf))
 end
 
 function SII.variable_index(nw::Network, sni)
@@ -139,18 +139,18 @@ end
 function _variable_index(nw::Network, sni::SymbolicStateIndex{Int,<:Union{Int,Symbol}})
     cf = getcomp(nw, sni)
     range = getcomprange(nw, sni)
-    range[subsym_to_idx(sni.subidx, cf.sym)]
+    range[subsym_to_idx(sni.subidx, sym(cf))]
 end
 
 function SII.variable_symbols(nw::Network)
     syms = Vector{SymbolicStateIndex{Int,Symbol}}(undef, dim(nw))
     for (ci, cf) in pairs(nw.im.vertexf)
         isdynamic(cf) || continue
-        syms[nw.im.v_data[ci]] .= VIndex.(ci, cf.sym)
+        syms[nw.im.v_data[ci]] .= VIndex.(ci, sym(cf))
     end
     for (ci, cf) in pairs(nw.im.edgef)
         isdynamic(cf) || continue
-        syms[nw.im.e_data[ci]] .= EIndex.(ci, cf.sym)
+        syms[nw.im.e_data[ci]] .= EIndex.(ci, sym(cf))
     end
     return syms
 end
@@ -167,7 +167,7 @@ _is_parameter(nw::Network, sni) = false
 function _is_parameter(nw::Network,
                           sni::SymbolicParameterIndex{Int,<:Union{Int,Symbol}})
     cf = getcomp(nw, sni)
-    return subsym_has_idx(sni.subidx, cf.psym)
+    return subsym_has_idx(sni.subidx, psym(cf))
 end
 
 function SII.parameter_index(nw::Network, sni)
@@ -178,17 +178,17 @@ function _parameter_index(nw::Network,
                              sni::SymbolicParameterIndex{Int,<:Union{Int,Symbol}})
     cf = getcomp(nw, sni)
     range = getcompprange(nw, sni)
-    range[subsym_to_idx(sni.subidx, cf.psym)]
+    range[subsym_to_idx(sni.subidx, psym(cf))]
 end
 
 function SII.parameter_symbols(nw::Network)
     syms = Vector{SymbolicParameterIndex{Int,Symbol}}(undef, pdim(nw))
     i = 1
     for (ci, cf) in pairs(nw.im.vertexf)
-        syms[nw.im.v_para[ci]] .= VPIndex.(ci, cf.psym)
+        syms[nw.im.v_para[ci]] .= VPIndex.(ci, psym(cf))
     end
     for (ci, cf) in pairs(nw.im.edgef)
-        syms[nw.im.e_para[ci]] .= EPIndex.(ci, cf.psym)
+        syms[nw.im.e_para[ci]] .= EPIndex.(ci, psym(cf))
     end
     return syms
 end
@@ -210,9 +210,9 @@ function _is_observed(nw::Network, sni::SymbolicStateIndex{Int,<:Union{Int,Symbo
     cf = getcomp(nw, sni)
 
     if isdynamic(cf)
-        return sni.subidx ∈ cf.obssym # only works if symbol is given
+        return sni.subidx ∈ obssym(cf) # only works if symbol is given
     else
-        return sni.subidx ∈ cf.obssym || subsym_has_idx(sni.subidx, cf.sym)
+        return sni.subidx ∈ obssym(cf) || subsym_has_idx(sni.subidx, sym(cf))
     end
     error("Could not handle $sni. Should never be reached.")
 end
@@ -221,21 +221,21 @@ function observed_symbols(nw::Network)
     syms = SymbolicStateIndex{Int,Symbol}[]
     for (ci, cf) in pairs(nw.im.vertexf)
         if !isdynamic(cf)
-            for s in cf.sym
+            for s in sym(cf)
                 push!(syms, VIndex(ci, s))
             end
         end
-        for s in cf.obssym
+        for s in obssym(cf)
             push!(syms, VIndex(ci, s))
         end
     end
     for (ci, cf) in pairs(nw.im.edgef)
         if !isdynamic(cf)
-            for s in cf.sym
+            for s in sym(cf)
                 push!(syms, EIndex(ci, s))
             end
         end
-        for s in cf.obssym
+        for s in obssym(cf)
             push!(syms, EIndex(ci, s))
         end
     end
@@ -275,9 +275,9 @@ function SII.observed(nw::Network, snis)
             SII.variable_index(nw, sni)
         else
             cf = getcomp(nw, sni)
-            if !isdynamic(cf) && subsym_has_idx(sni.subidx, cf.sym)
+            if !isdynamic(cf) && subsym_has_idx(sni.subidx, sym(cf))
                 _range = getcomprange(nw, sni)
-                _range[subsym_to_idx(sni.subidx, cf.sym)]
+                _range[subsym_to_idx(sni.subidx, sym(cf))]
             else
                 error("Observalbe mechanism cannot handle $sni yet.")
             end
@@ -300,21 +300,21 @@ end
 function SII.default_values(nw::Network)
     defs = Dict{SymbolicIndex{Int,Symbol},Float64}()
     for (ci, cf) in pairs(nw.im.vertexf)
-        for (s, def) in zip(cf.psym, cf.pdef)
+        for (s, def) in zip(psym(cf), pdef(cf))
             isnothing(def) && continue
             defs[VPIndex(ci, s)] = def
         end
-        for (s, def) in zip(cf.sym, cf.def)
+        for (s, def) in zip(sym(cf), def(cf))
             isnothing(def) && continue
             defs[VIndex(ci, s)] = def
         end
     end
     for (ci, cf) in pairs(nw.im.edgef)
-        for (s, def) in zip(cf.psym, cf.pdef)
+        for (s, def) in zip(psym(cf), pdef(cf))
             isnothing(def) && continue
             defs[EPIndex(ci, s)] = def
         end
-        for (s, def) in zip(cf.sym, cf.def)
+        for (s, def) in zip(sym(cf), def(cf))
             isnothing(def) && continue
             defs[EIndex(ci, s)] = def
         end

@@ -22,6 +22,14 @@ Mixers.@pour CommonFields begin
     obssym::Vector{Symbol} = Symbol[]
 end
 # XXX: Mixers Issue argument ordering + asserts for pdim, psymlength
+dim(c::ComponentFunction)::Int = c.dim
+sym(c::ComponentFunction)::Vector{Symbol} = c.sym
+def(c::ComponentFunction)::Vector{Union{Nothing,Float64}} = c.def
+pdim(c::ComponentFunction)::Int = c.pdim
+psym(c::ComponentFunction)::Vector{Symbol} = c.psym
+pdef(c::ComponentFunction)::Vector{Union{Nothing,Float64}} = c.pdef
+obsf(c::ComponentFunction) = c.obsf
+obssym(c::ComponentFunction)::Vector{Symbol} = c.obssym
 
 """
 Abstract supertype for all vertex functions.
