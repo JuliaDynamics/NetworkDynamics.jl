@@ -1,12 +1,10 @@
 module NDPrototype
-using Graphs
-using OrderedCollections
+using Graphs: Graphs, AbstractGraph, SimpleEdge, edges, vertices, ne, nv
 using Unrolled: unrolled_foreach, @unroll
 using TimerOutputs: @timeit_debug, reset_timer!, print_timer
 
 using ArgCheck: @argcheck
 using PreallocationTools: LazyBufferCache
-using EnumX: @enumx
 using SciMLBase: SciMLBase
 using Base.Threads: @threads
 using NNlib: NNlib
@@ -18,15 +16,16 @@ using Parameters: @with_kw_noshow
 using LinearAlgebra: LinearAlgebra, UniformScaling
 using DocStringExtensions
 using StyledStrings: StyledStrings, @styled_str
+using Adapt: Adapt, adapt
 
 import SymbolicIndexingInterface as SII
 import StaticArrays
 
-using Adapt: Adapt, adapt
-
 include("utils.jl")
-include("edge_coloring.jl")
+
+export dim, pdim
 include("component_functions.jl")
+
 export Network, SequentialExecution, KAExecution
 include("network_structure.jl")
 

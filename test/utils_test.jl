@@ -40,13 +40,4 @@
               Lib.diffusion_edge_fid()]
         @test _find_identical(es, eachindex(es)) == [[1], [2], [3], [4]]
     end
-
-    @testset "greedy edge coloring" begin
-        using NDPrototype: color_edges_greedy, isvalid
-        for i in 1:20
-            g = complete_graph(i)
-            colors = color_edges_greedy(g)
-            @test isvalid(g, colors)
-        end
-    end
 end

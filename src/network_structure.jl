@@ -1,7 +1,3 @@
-using Graphs
-
-export dim, pdim
-
 abstract type StateType end
 struct Dynamic <: StateType end
 struct Static <: StateType end
