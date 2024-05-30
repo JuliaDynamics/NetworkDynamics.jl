@@ -42,7 +42,9 @@ subsym_has_idx(idx::Int, syms) = 1 ≤ idx ≤ length(syms)
 subsym_to_idx(sym::Symbol, syms) = findfirst(isequal(sym), syms)
 subsym_to_idx(idx::Int, _) = idx
 
-#
+####
+#### Iterator/Broadcast interface for ArraySymbolic types
+####
 Base.broadcastable(si::SymbolicIndex{<:Union{Int,Colon},<:Union{Int,Symbol,Colon}}) = Ref(si)
 
 const _IterableComponent = SymbolicIndex{<:Union{AbstractVector,Tuple},<:Union{Int,Symbol}}
@@ -65,7 +67,6 @@ function Base.iterate(si::_IterableComponent, state=nothing)
     isnothing(it) && return nothing
     _similar(si, it[1], si.subidx), it[2]
 end
-
 
 const _IterableSubcomponent = SymbolicIndex{Int,<:Union{AbstractVector,Tuple}}
 Base.length(si::_IterableSubcomponent) = length(si.subidx)
@@ -100,10 +101,10 @@ _resolve_colon(nw::Network, sni::VIndex{Colon}) = VIndex(1:nv(nw), sni.subidx)
 _resolve_colon(nw::Network, sni::EIndex{Colon}) = EIndex(1:ne(nw), sni.subidx)
 _resolve_colon(nw::Network, sni::VPIndex{Colon}) = VPIndex(1:nv(nw), sni.subidx)
 _resolve_colon(nw::Network, sni::EPIndex{Colon}) = EPIndex(1:ne(nw), sni.subidx)
-_resolve_colon(nw::Network, sni::VIndex{Int,Colon}) = VIndex(sni.compidx, 1:dim(getcomp(nw,sni)))
-_resolve_colon(nw::Network, sni::EIndex{Int,Colon}) = EIndex(sni.compidx, 1:dim(getcomp(nw,sni)))
-_resolve_colon(nw::Network, sni::VPIndex{Int,Colon}) = VPIndex(sni.compidx, 1:pdim(getcomp(nw,sni)))
-_resolve_colon(nw::Network, sni::EPIndex{Int,Colon}) = EPIndex(sni.compidx, 1:pdim(getcomp(nw,sni)))
+_resolve_colon(nw::Network, sni::VIndex{Int,Colon}) = VIndex{Int, UnitRange{Int}}(sni.compidx, 1:dim(getcomp(nw,sni)))
+_resolve_colon(nw::Network, sni::EIndex{Int,Colon}) = EIndex{Int, UnitRange{Int}}(sni.compidx, 1:dim(getcomp(nw,sni)))
+_resolve_colon(nw::Network, sni::VPIndex{Int,Colon}) = VPIndex{Int, UnitRange{Int}}(sni.compidx, 1:pdim(getcomp(nw,sni)))
+_resolve_colon(nw::Network, sni::EPIndex{Int,Colon}) = EPIndex{Int, UnitRange{Int}}(sni.compidx, 1:pdim(getcomp(nw,sni)))
 
 
 #### Implmentation of index provider interface
@@ -123,8 +124,13 @@ SII.all_symbols(nw::Network) = vcat(SII.all_variable_symbols(nw), SII.parameter_
 #### variable indexing
 ####
 function SII.is_variable(nw::Network, sni)
-    _sni = _resolve_colon.(nw,sni)
-    all(_is_variable.(nw, _sni))
+    if _hascolon(sni)
+        SII.is_variable(nw, _resolve_colon(nw,sni))
+    elseif SII.symbolic_type(sni) === SII.ArraySymbolic()
+        all(s -> SII.is_variable(nw, s), sni)
+    else
+        _is_variable(nw, sni)
+    end
 end
 _is_variable(nw::Network, sni) = false
 function _is_variable(nw::Network, sni::SymbolicStateIndex{Int,<:Union{Int,Symbol}})
@@ -133,8 +139,13 @@ function _is_variable(nw::Network, sni::SymbolicStateIndex{Int,<:Union{Int,Symbo
 end
 
 function SII.variable_index(nw::Network, sni)
-    _sni = _resolve_colon.(nw, sni)
-     _variable_index.(nw, _sni)
+    if _hascolon(sni)
+        SII.variable_index(nw, _resolve_colon(nw,sni))
+    elseif SII.symbolic_type(sni) === SII.ArraySymbolic()
+        SII.variable_index.(nw, sni)
+    else
+        _variable_index(nw, sni)
+    end
 end
 function _variable_index(nw::Network, sni::SymbolicStateIndex{Int,<:Union{Int,Symbol}})
     cf = getcomp(nw, sni)
@@ -160,8 +171,13 @@ end
 #### parameter indexing
 ####
 function SII.is_parameter(nw::Network, sni)
-    _sni = _resolve_colon.(nw,sni)
-    all(_is_parameter.(nw, _sni))
+    if _hascolon(sni)
+        SII.is_parameter(nw, _resolve_colon(nw,sni))
+    elseif SII.symbolic_type(sni) === SII.ArraySymbolic()
+        all(s -> SII.is_parameter(nw, s), sni)
+    else
+        _is_parameter(nw, sni)
+    end
 end
 _is_parameter(nw::Network, sni) = false
 function _is_parameter(nw::Network,
@@ -171,8 +187,13 @@ function _is_parameter(nw::Network,
 end
 
 function SII.parameter_index(nw::Network, sni)
-    _sni = _resolve_colon.(nw, sni)
-     _parameter_index.(nw, _sni)
+    if _hascolon(sni)
+        SII.parameter_index(nw, _resolve_colon(nw,sni))
+    elseif SII.symbolic_type(sni) === SII.ArraySymbolic()
+        SII.parameter_index.(nw, sni)
+    else
+        _parameter_index(nw, sni)
+    end
 end
 function _parameter_index(nw::Network,
                              sni::SymbolicParameterIndex{Int,<:Union{Int,Symbol}})
@@ -196,13 +217,14 @@ end
 ####
 #### Observed indexing
 function SII.is_observed(nw::Network, sni)
-    if !_hascolon(sni)
-        all(_is_observed.(nw, sni))
-    else
+    if _hascolon(sni)
+        SII.is_observed(nw, _resolve_colon(nw,sni))
+    elseif SII.symbolic_type(sni) === SII.ArraySymbolic()
         # if has colon check if all are observed OR variables and return true
         # the observed function will handle the whole thing then
-        _sni = _resolve_colon.(nw,sni)
-        all(s -> _is_observed(nw,s) || _is_variable(nw,s), _sni)
+        all(s -> SII.is_variable(nw, s) || SII.is_observed(nw, s), sni)
+    else
+        _is_observed(nw, sni)
     end
 end
 _is_observed(nw::Network, _) = false
@@ -267,7 +289,7 @@ Types of observable calls:
 =#
 
 function SII.observed(nw::Network, snis)
-    _snis = _resolve_colon.(nw, snis)
+    _snis = _expand_and_collect(nw, snis)
 
     # First: resolve everything in fullstate (static and dynamic states)
     flatidxs = broadcast(_snis) do sni
@@ -284,12 +306,28 @@ function SII.observed(nw::Network, snis)
         end
     end
 
-    function(u, p, t)
-        du = nw.cachepool[u]
-        nw(du, u, p, t)
-        # XXX: split coreloop in static/dynamic parts and don't rely on the same buffer
-        _u = nw.cachepool[u, nw.im.lastidx_static]
-        _u[flatidxs]
+    let _nw=nw, _flatidxs=flatidxs
+        function(u, p, t)
+            du = _nw.cachepool[u]
+            _nw(du, u, p, t)
+            # XXX: split coreloop in static/dynamic parts and don't rely on the same buffer
+            _u = _nw.cachepool[u, _nw.im.lastidx_static]
+            _u[_flatidxs]
+        end
+    end
+end
+function _expand_and_collect(nw::Network, sni::SymbolicIndex)
+    if _hascolon(sni)
+        collect(_resolve_colon(nw, sni))
+    elseif SII.symbolic_type(sni) === SII.ArraySymbolic()
+        collect(sni)
+    else
+        sni
+    end
+end
+function _expand_and_collect(nw::Network, snis)
+    mapreduce(vcat, snis) do sni
+        _expand_and_collect(nw, sni)
     end
 end
 

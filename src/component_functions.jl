@@ -22,6 +22,7 @@ Mixers.@pour CommonFields begin
     obssym::Vector{Symbol} = Symbol[]
 end
 # XXX: Mixers Issue argument ordering + asserts for pdim, psymlength
+compf(c::ComponentFunction) = c.f
 dim(c::ComponentFunction)::Int = c.dim
 sym(c::ComponentFunction)::Vector{Symbol} = c.sym
 def(c::ComponentFunction)::Vector{Union{Nothing,Float64}} = c.def
@@ -30,6 +31,7 @@ psym(c::ComponentFunction)::Vector{Symbol} = c.psym
 pdef(c::ComponentFunction)::Vector{Union{Nothing,Float64}} = c.pdef
 obsf(c::ComponentFunction) = c.obsf
 obssym(c::ComponentFunction)::Vector{Symbol} = c.obssym
+depth(c::ComponentFunction)::Int = c.depth
 
 """
 Abstract supertype for all vertex functions.
@@ -79,11 +81,6 @@ StaticEdge(f; kwargs...) = StaticEdge(;f, kwargs...)
 end
 ODEEdge(f, dim, pdim, coupling; kwargs...) = ODEEdge(;f, dim, pdim, coupling, kwargs...)
 ODEEdge(f; kwargs...) = ODEEdge(;f, kwargs...)
-
-compf(c::ComponentFunction) = c.f
-dim(c::ComponentFunction) = c.dim
-pdim(c::ComponentFunction) = c.pdim
-depth(c::ComponentFunction) = c.depth
 
 statetype(::T) where {T<:ComponentFunction} = statetype(T)
 statetype(::Type{<:ODEVertex}) = Dynamic()

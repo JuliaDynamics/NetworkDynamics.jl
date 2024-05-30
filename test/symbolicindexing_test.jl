@@ -140,6 +140,15 @@ s.pe[1,1] = 10
 @test NDPrototype._resolve_colon(nw, EIndex(4, :)) == EIndex(4, 1:2)
 @test NDPrototype._resolve_colon(nw, EPIndex(4, :)) == EPIndex(4, 1:1)
 
+@inferred NDPrototype._resolve_colon(nw, VIndex(:, :δ))
+@inferred NDPrototype._resolve_colon(nw, EIndex(:, :δ))
+@inferred NDPrototype._resolve_colon(nw, VPIndex(:, :δ))
+@inferred NDPrototype._resolve_colon(nw, EPIndex(:, :δ))
+@inferred NDPrototype._resolve_colon(nw, VIndex(3, :))
+@inferred NDPrototype._resolve_colon(nw, VPIndex(3, :))
+@inferred NDPrototype._resolve_colon(nw, EIndex(4, :))
+@inferred NDPrototype._resolve_colon(nw, EPIndex(4, :))
+
 for et in [VIndex, EIndex, VPIndex, EPIndex]
     collect(et(1:2,:δ))
     collect(et(1,1:5))
@@ -172,6 +181,13 @@ idx = EIndex(:,1)
 
 @test !SII.is_variable(s, EIndex(:,1))
 
+using NDPrototype: _expand_and_collect
+@test _expand_and_collect(nw, VIndex(1,1)) == VIndex(1,1)
+@test _expand_and_collect(nw, VIndex(:,1)) == collect(VIndex(1:nv(g),1))
+@test _expand_and_collect(nw, [VIndex(:,1)]) == collect(VIndex(1:nv(g),1))
+@test _expand_and_collect(nw, [EIndex(4,5), VIndex(:,1)]) == vcat(EIndex(4,5), collect(VIndex(1:nv(g),1)))
+@test _expand_and_collect(nw, [EIndex(1:2,5), VIndex(:,1)]) == vcat(collect(EIndex(1:2,5)), collect(VIndex(1:nv(g),1)))
+
 ####
 #### check on performance
 ####
@@ -197,11 +213,11 @@ idxtypes = [
     EIndex(:,1), # variable bc first
     # VPIndex(:,1), # parameter bc first
     EPIndex(:,1), # parameter bc first
-    VIndex([1:3],1), # variable bc first
-    EIndex([1:3],1), # observed bc first
-    EIndex([1:3],1), # variable bc first
+    VIndex(1:3,1), # variable bc first
+    EIndex(1:3,1), # observed bc first
+    EIndex(1:3,1), # variable bc first
     VPIndex([1,3],1), # parameter bc first
-    EPIndex([1:3],1), # parameter bc first
+    EPIndex(1:3,1), # parameter bc first
 ]
 
 using NDPrototype: _is_variable
@@ -211,71 +227,66 @@ for idx in idxtypes
     # @inferred SII.is_variable(s, idx)
 end
 
-@inferred SII.is_variable(s, SII.is_variable(s, idxtypes[1]));
-
-idx = EIndex(2,1)
-@inferred SII.is_variable(s, SII.is_variable(s, idx));
-@descend s[idx]
-
-@allocations SII.is_variable(s, idx)
-
-@code_warntype SII.is_variable(s, idx)
-@descend SII.is_variable(s, idx);
-
-@code_warntype broadcast(_is_variable, nw, idx)
-
-@code_warntype _is_variable.(nw, idx)
-@code_warntype _is_variable(nw, VIndex(1,1))
-
-@b $broadcast($(x->x), $(1:5))
-@b $broadcast($(x->x), $(VIndex(1:1,1)))
-@b $broadcast($(x->x), $(VIndex(1,1:1)))
-@b $Base.broadcasted($id, $(1:5))
-@b $Base.broadcasted($id, $(VIndex(1:2,1)))
-@b $Base.broadcasted($id, $(VIndex(1,1:2)))
-
-idx = VIndex(1:1,2)
-
-id = x->x
-idx = VIndex(1,1:1)
-Base.broadcasted(id, idx)
-
-
-collect(idx)
-
-Base.broadcastable(idx)
-Base.broadcastable(1:4)
-idx
-
+# is_xxx methods
+@info "Test is_variable"
 for idx in idxtypes
     b = @b SII.is_variable($s,$idx)
     if b.allocs != 0
         println(idx, " => ", b.allocs, " allocations")
     end
+    @test b.allocs==0
 end
+@info "Test is_parameter"
 for idx in idxtypes
     b = @b SII.is_parameter($s,$idx)
     if b.allocs != 0
         println(idx, " => ", b.allocs, " allocations")
     end
+    @test b.allocs==0
 end
+@info "Test is_observed"
 for idx in idxtypes
     b = @b SII.is_observed($s,$idx)
     if b.allocs != 0
         println(idx, " => ", b.allocs, " allocations")
     end
+    @test b.allocs==0
 end
 
+# index methods
+@info "Test variable_index"
+for idx in idxtypes
+    SII.is_variable(s, idx) || continue
+    b = @b SII.variable_index($s,$idx)
+    if b.allocs != 0
+        println(idx, " => ", b.allocs, " allocations")
+    end
+    @test b.allocs <= 2 # 2 are used to create an array
+end
+@info "Test parameter_index"
+for idx in idxtypes
+    SII.is_parameter(s, idx) || continue
+    b = @b SII.parameter_index($s,$idx)
+    if b.allocs != 0
+        println(idx, " => ", b.allocs, " allocations")
+    end
+    @test b.allocs <= 2 # 2 are used to create an array
+end
+@info "Test observed"
+for idx in idxtypes
+    SII.is_observed(s, idx) || continue
+    b = @b SII.observed($s,$idx)
+    if b.allocs != 0
+        println(idx, " => ", b.allocs, " allocations")
+    end
+    @test b.allocs <= 4
+end
+
+@info "Test full call"
 for idx in idxtypes
     b = @b $s[$idx]
     if b.allocs != 0
         println(idx, " => ", b.allocs, " allocations")
     end
+    @test b.allocs <= 11
 end
-
-@descend SII.is_variable(s, idxtypes[1])
-
- SII.is_variable(s, idxtypes[1])
-
-
-@descend _is_variable(nw, idxtypes[1])
