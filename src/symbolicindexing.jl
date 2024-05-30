@@ -45,29 +45,44 @@ subsym_to_idx(idx::Int, _) = idx
 #
 Base.broadcastable(si::SymbolicIndex{<:Union{Int,Colon},<:Union{Int,Symbol,Colon}}) = Ref(si)
 
-Base.length(si::SymbolicIndex{<:Union{AbstractVector,Tuple},<:Union{Int,Symbol}}) = length(si.compidx)
-function Base.eltype(si::SymbolicIndex{<:Union{AbstractVector,Tuple},<:Union{Int,Symbol}})
+const _IterableComponent = SymbolicIndex{<:Union{AbstractVector,Tuple},<:Union{Int,Symbol}}
+Base.length(si::_IterableComponent) = length(si.compidx)
+Base.size(si::_IterableComponent) = (length(si),)
+Base.IteratorSize(si::_IterableComponent) = Base.HasShape{1}()
+Base.broadcastable(si::_IterableComponent) = si
+Base.ndims(::Type{<:_IterableComponent}) = 1
+Base.axes(si::_IterableComponent) = axes(si.compidx)
+Base.getindex(si::_IterableComponent, i) = _baseT(si)(si.compidx[i], si.subidx)
+function Base.eltype(si::_IterableComponent)
     if isconcretetype(eltype(si.compidx))
         _baseT(si){eltype(si.compidx),typeof(si.subidx)}
     else
         Any
     end
 end
-function Base.iterate(si::SymbolicIndex{<:Union{AbstractVector,Tuple},<:Union{Int,Symbol}}, state=nothing)
+function Base.iterate(si::_IterableComponent, state=nothing)
     it = isnothing(state) ? iterate(si.compidx) : iterate(si.compidx, state)
     isnothing(it) && return nothing
     _similar(si, it[1], si.subidx), it[2]
 end
 
-Base.length(si::SymbolicIndex{Int,<:Union{AbstractVector,Tuple}}) = length(si.subidx)
-function Base.eltype(si::SymbolicIndex{Int,<:Union{AbstractVector,Tuple}})
+
+const _IterableSubcomponent = SymbolicIndex{Int,<:Union{AbstractVector,Tuple}}
+Base.length(si::_IterableSubcomponent) = length(si.subidx)
+Base.size(si::_IterableSubcomponent) = (length(si),)
+Base.IteratorSize(si::_IterableSubcomponent) = Base.HasShape{1}()
+Base.broadcastable(si::_IterableSubcomponent) = si
+Base.ndims(::Type{<:_IterableSubcomponent}) = 1
+Base.axes(si::_IterableSubcomponent) = axes(si.subidx)
+Base.getindex(si::_IterableSubcomponent, i) = _baseT(si)(si.compidx, si.subidx[i])
+function Base.eltype(si::_IterableSubcomponent)
     if isconcretetype(eltype(si.subidx))
         _baseT(si){eltype(si.compidx),eltype(si.subidx)}
     else
         Any
     end
 end
-function Base.iterate(si::SymbolicIndex{Int,<:Union{AbstractVector,Tuple}}, state=nothing)
+function Base.iterate(si::_IterableSubcomponent, state=nothing)
     it = isnothing(state) ? iterate(si.subidx) : iterate(si.subidx, state)
     isnothing(it) && return nothing
     _similar(si, si.compidx, it[1]), it[2]
