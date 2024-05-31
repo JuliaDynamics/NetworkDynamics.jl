@@ -1,3 +1,6 @@
+using NetworkDynamics
+using Graphs
+
 @testset "nd construction tests" begin
     using NetworkDynamics: StateType, statetype, isdense
     g = complete_graph(10)

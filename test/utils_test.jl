@@ -1,3 +1,7 @@
+using NetworkDynamics
+
+(isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
+
 @testset "test utils" begin
     @testset begin
         using InteractiveUtils
@@ -19,6 +23,25 @@
         stylesymbolarray(syms, defaults, Dict(1 => :red, 2 => :orange))
         stylesymbolarray(syms, defaults, Dict(1 => :red, 2 => :red))
         NetworkDynamics.ND_FACES
+    end
+
+    @testset "Test Component Library" begin
+        using NetworkDynamics: compf
+        a = Lib.diffusion_edge()
+        b = Lib.diffusion_edge()
+        @test compf(a) == compf(b)
+        a = Lib.diffusion_edge_closure()
+        b = Lib.diffusion_edge_closure()
+        @test compf(a) != compf(b)
+
+        fid = Lib.diffusion_edge_fid()
+        ode = Lib.diffusion_odeedge()
+
+        odevert = Lib.diffusion_vertex()
+        odevert_const = Lib.diffusion_vertex_constraint()
+
+        kura_edge   = Lib.kuramoto_edge()
+        kura_second = Lib.kuramoto_second()
     end
 
     @testset "find_identical" begin
