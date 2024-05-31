@@ -1,18 +1,38 @@
+using NetworkDynamics
 using Test
-@testset "NetworkDynamics Tests" begin
-    # basic tests for individual modules
-    include("NetworkStructures_test.jl")
-    include("ComponentFunctions_test.jl")
-    include("NetworkDiffEq_test.jl")
-    include("checkbounds_test.jl")
+using Graphs
+using SafeTestsets
 
-    # complex tests of networks
-    include("diffusion_test.jl")
-    include("inhomogeneous_test.jl")
-    include("autodiff_test.jl")
-    include("massmatrix_test.jl")
-    include("delay_test.jl")
+using NetworkDynamics: VertexBatch, parameter_range
 
-    # utiliti testes
-    include("Utilities_test.jl")
+(isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
+
+
+@testset "ND Prototype Tests" begin
+
+@testset "Test Component Library" begin
+    using NetworkDynamics: compf
+    a = Lib.diffusion_edge()
+    b = Lib.diffusion_edge()
+    @test compf(a) == compf(b)
+    a = Lib.diffusion_edge_closure()
+    b = Lib.diffusion_edge_closure()
+    @test compf(a) != compf(b)
+
+    fid = Lib.diffusion_edge_fid()
+    ode = Lib.diffusion_odeedge()
+
+    odevert = Lib.diffusion_vertex()
+    odevert_const = Lib.diffusion_vertex_constraint()
+
+    kura_edge   = Lib.kuramoto_edge()
+    kura_second = Lib.kuramoto_second()
+end
+
+include("utils_test.jl")
+include("construction_test.jl")
+
+@safetestset "Aggregation Tests" begin include("aggregators_test.jl") end
+@safetestset "Symbolic Indexing Tests" begin include("symbolicindexing_test.jl") end
+
 end

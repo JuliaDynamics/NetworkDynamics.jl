@@ -1,12 +1,11 @@
 name = "NetworkDynamics-Tests"
 
 [deps]
-DelayDiffEq = "bcd4f6db-9728-5f36-b5f7-82caef46ccdb"
-ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+Chairmarks = "0ca39b1e-fe0b-4e98-acfc-b1656634c4de"
 Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
-LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+InteractiveUtils = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
+NetworkDynamics = "22e9dc34-2a0d-11e9-0de0-8588d035468b"
 OrdinaryDiffEq = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed"
-ReverseDiff = "37e2e3b7-166d-5795-8a7a-e32c996b4267"
-SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
-SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+SafeTestsets = "1bc83da4-3b8d-516f-aca4-4fe02f6d838f"
+SymbolicIndexingInterface = "2efcf032-c050-4f8e-a9bb-153293bab1f5"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
