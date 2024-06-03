@@ -36,6 +36,8 @@ include("construction.jl")
 include("coreloop.jl")
 
 include("adapt.jl")
+
+export VIndex, EIndex, VPIndex, EPIndex, NWState, NWParameter
 include("symbolicindexing.jl")
 
 include("show.jl")
@@ -45,6 +47,7 @@ styled"{bright_red:red} {bright_green:green} {bright_yellow:yellow} {bright_blue
 styled"{red:red} {green:green} {yellow:yellow} {blue:blue} {magenta:magenta} {cyan:cyan}"
 =#
 const ND_FACES = [
+    :NetworkDynamics_inactive => StyledStrings.Face(foreground=:bright_black),
     :NetworkDynamics_defaultval => StyledStrings.Face(foreground=:bright_black),
     :NetworkDynamics_fordstsrc => StyledStrings.Face(foreground=:bright_blue),
     :NetworkDynamics_fordst => StyledStrings.Face(foreground=:bright_yellow),
@@ -61,5 +64,6 @@ function reloadfaces!()
     end
     foreach(StyledStrings.addface!, NetworkDynamics.ND_FACES)
 end
+# NetworkDynamics.reloadfaces!()
 
 end

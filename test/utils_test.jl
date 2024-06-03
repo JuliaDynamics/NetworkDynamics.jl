@@ -63,4 +63,20 @@ using NetworkDynamics
               Lib.diffusion_edge_fid()]
         @test _find_identical(es, eachindex(es)) == [[1], [2], [3], [4]]
     end
+
+    @testset "algin strings" begin
+        using NetworkDynamics: align_strings
+
+        align_strings(["1 &=> 2", ":foobar &=> 8"])
+
+        align_strings(["1 &=> 2 & k->4",
+                       ":foobar &=> 8"])
+
+        align_strings(["1 &=> 2 & k &-> 4",
+                       ":foobar &=> 8 & :a &-> 4"])
+
+        align_strings([":a &=> 2 & k &-> 4",
+                       ":foobar &=> 8 & :a &-> 4"])
+
+    end
 end

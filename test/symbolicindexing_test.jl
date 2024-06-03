@@ -89,11 +89,11 @@ sol = solve(prob, Tsit5())
 ####
 #### State tests
 ####
-using NetworkDynamics: State
+using NetworkDynamics: NWState
 t = 1.0
 uflat = copy(sol(t))
 pflat = copy(sol.prob.p)
-s = State(nw, uflat, pflat, t)
+s = NWState(nw, uflat, pflat)
 
 SII.getu(s, EIndex(1,:e_dst))(s)
 SII.getp(s, VPIndex(1,:M))(s)
@@ -121,13 +121,13 @@ s.v[1,1] = 15
 s.v[1,1] = 15
 @test s.v[1,1] == s[VIndex(1,1)] == 15
 
-@test s.pv[1,1] == s[VPIndex(1,1)]
-s.pv[1,1] = 10
-@test s.pv[1,1] == s[VPIndex(1,1)] == 10
+@test s.p.v[1,1] == s[VPIndex(1,1)]
+s.p.v[1,1] = 10
+@test s.p.v[1,1] == s[VPIndex(1,1)] == 10
 
-@test s.pe[1,1] == s[EPIndex(1,1)]
-s.pe[1,1] = 10
-@test s.pe[1,1] == s[EPIndex(1,1)] == 10
+@test s.p.e[1,1] == s[EPIndex(1,1)]
+s.p.e[1,1] = 10
+@test s.p.e[1,1] == s[EPIndex(1,1)] == 10
 
 ####
 #### Tests for index with colon

@@ -30,7 +30,7 @@ function Base.show(io::IO, ::MIME"text/plain", c::EdgeFunction)
     type = match(r"^(.*?)\{", string(typeof(c)))[1]
     println(io, type, styled" :$(c.name) with $(_styled_coupling(coupling(c))) coupling")
 
-    styling = Dict{Int, Symbol}()
+    styling = Dict{Int,Symbol}()
     if coupling(c) == Fiducial()
         for i in 1:depth(c)
             styling[i] = :NetworkDynamics_fordst
@@ -59,7 +59,7 @@ function Base.show(io::IO, ::MIME"text/plain", c::VertexFunction)
     type = match(r"^(.*?)\{", string(typeof(c)))[1]
     println(io, type, styled" :$(c.name)")
 
-    styling = Dict{Int, Symbol}()
+    styling = Dict{Int,Symbol}()
     for i in 1:depth(c)
         styling[i] = :NetworkDynamics_forlayer
     end
@@ -85,60 +85,148 @@ end
 function stylesymbolarray(syms, defaults, symstyles=Dict{Int,Symbol}())
     @assert length(syms) == length(defaults)
     ret = "["
-    for (i, sym, default) in zip(1:length(syms), syms,defaults)
+    for (i, sym, default) in zip(1:length(syms), syms, defaults)
         style = get(symstyles, i, nothing)
         if isnothing(style)
-            ret = ret*string(sym)
+            ret = ret * string(sym)
         else
-            ret = ret*styled"{$style:$(string(sym))}"
+            ret = ret * styled"{$style:$(string(sym))}"
         end
         if !isnothing(default)
-            ret = ret*styled"{NetworkDynamics_defaultval:=$default}"
+            ret = ret * styled"{NetworkDynamics_defaultval:=$default}"
         end
         if i < length(syms)
-            ret = ret*", "
+            ret = ret * ", "
         end
     end
-    ret = ret*"]"
+    ret = ret * "]"
 end
 
-Base.show(io::IO, idx::VIndex) = print(io, "VIndex(", repr(idx.compidx), ", ", repr(idx.subidx), ")")
-Base.show(io::IO, idx::EIndex) = print(io, "EIndex(", repr(idx.compidx), ", ", repr(idx.subidx), ")")
-Base.show(io::IO, idx::VPIndex) = print(io, "VPIndex(", repr(idx.compidx), ", ", repr(idx.subidx), ")")
-Base.show(io::IO, idx::EPIndex) = print(io, "EPIndex(", repr(idx.compidx), ", ", repr(idx.subidx), ")")
+function Base.show(io::IO, idx::VIndex)
+    print(io, "VIndex(", repr(idx.compidx), ", ", repr(idx.subidx), ")")
+end
+function Base.show(io::IO, idx::EIndex)
+    print(io, "EIndex(", repr(idx.compidx), ", ", repr(idx.subidx), ")")
+end
+function Base.show(io::IO, idx::VPIndex)
+    print(io, "VPIndex(", repr(idx.compidx), ", ", repr(idx.subidx), ")")
+end
+function Base.show(io::IO, idx::EPIndex)
+    print(io, "EPIndex(", repr(idx.compidx), ", ", repr(idx.subidx), ")")
+end
 
-function Base.show(io::IO, mime::MIME"text/plain", s::State)
+function Base.show(io::IO, mime::MIME"text/plain", s::NWState; dim=nothing)
     ioc = IOContext(io, :compact => true)
-    print(io, "State for "); show(ioc, mime, s.nw)
-    print(io, "\n t = "); show(ioc, s.t)
-    print(io, "\n uflat = "); show(ioc, s.uflat)
-    print(io, "\n pflat = "); show(ioc, s.pflat)
+    print(io, "State of ")
+    show(ioc, mime, s.nw)
+    println(io)
+    strvec = map(SII.variable_symbols(s.nw), s.uflat) do sym, val
+        buf =  Base.AnnotatedIOBuffer()
+        print(buf, "&")
+        show(buf, mime, sym)
+        print(buf, " &&=> ")
+        show(buf, mime, val)
+        str = read(seekstart(buf), Base.AnnotatedString)
+        if !isnothing(dim) && dim(sym)
+            str = styled"{NetworkDynamics_inactive:$str}"
+        end
+        str
+    end
+    print_treelike(io, align_strings(strvec), prefix="  ")
+
+    buf = IOContext(Base.AnnotatedIOBuffer(), :compact=>true)
+    print(buf, " t = ")
+    show(buf, mime, s.t)
+    print(buf, "\n p = ")
+    show(buf, mime, s.p)
+    str = read(seekstart(buf.io), Base.AnnotatedString)
+    if !isnothing(dim)
+        print(io, styled"{NetworkDynamics_inactive:$str}")
+    else
+        print(io, str)
+    end
 end
 
-function print_treelike(io, vec, prefix=" ", infix=" ")
+function Base.show(io::IO, mime::MIME"text/plain", p::NWParameter; dim=nothing)
+    compact = get(io, :compact, false)::Bool
+    if compact
+        print(io, "Parameter(")
+        show(io, p.pflat)
+        print(io, ")")
+    else
+        ioc = IOContext(io, :compact => true)
+        print(io, "Parameter of ")
+        show(ioc, mime, p.nw)
+        println(io)
+
+        strvec = map(SII.parameter_symbols(p.nw), p.pflat) do sym, val
+            buf =  Base.AnnotatedIOBuffer()
+            print(buf, "&")
+            show(buf, mime, sym)
+            print(buf, " &&=> ")
+            show(buf, mime, val)
+            str = read(seekstart(buf), Base.AnnotatedString)
+            if !isnothing(dim) && dim(sym)
+                str = styled"{NetworkDynamics_inactive:$str}"
+            end
+            str
+        end
+        print_treelike(io, align_strings(strvec), prefix="  ")
+    end
+end
+
+function Base.show(io::IO, mime::MIME"text/plain", p::Union{VProxy,EProxy})
+    name = _proxyname(p)
+    print(io, styled"{bright_blue:$name} for ")
+    show(io, mime, p.s; dim = _dimcondition(p))
+end
+_proxyname(::VProxy) = "Vertex indexer"
+_proxyname(::EProxy) = "Edge indexer"
+_dimcondition(::VProxy) = sym -> sym isa EIndex || sym isa EPIndex
+_dimcondition(::EProxy) = sym -> sym isa VIndex || sym isa VPIndex
+
+function print_treelike(io, vec; prefix=" ", infix=" ")
     for s in @views vec[begin:end-1]
-        sublines = split(s,"\n")
+        sublines = split(s, "\n")
         println(io, prefix, "├─", infix, sublines[begin])
         for sub in sublines[begin+1:end]
             println(io, prefix, "│ ", infix, sub)
         end
     end
-    sublines = split(vec[end],"\n")
+    sublines = split(vec[end], "\n")
     println(io, prefix, "└─", infix, sublines[begin])
     for sub in sublines[begin+1:end]
         println(io, prefix, "  ", infix, sub)
     end
 end
 
+function align_strings(vecofstr::AbstractVector{<:AbstractString})
+    splitted = map(vecofstr) do str
+        split(str, '&')
+    end
+    align_strings(splitted)
+end
+function align_strings(vecofvec::AbstractVector{<:AbstractVector})
+    depth = maximum(length.(vecofvec))
+    maxlength = zeros(Int,depth)
+
+    for i in eachindex(vecofvec)
+        for j in 1:depth
+            j > length(vecofvec[i]) && continue
+            maxlength[j] = max(maxlength[j], length(vecofvec[i][j]))
+        end
+    end
+    map(vecofvec) do strvec
+        mapreduce(*,zip(1:depth, strvec,maxlength)) do (d, str, l)
+            pad = isodd(d) ? lpad : rpad
+            pad(str, l)
+        end
+    end
+end
+
 function maybe_plural(num, word, substitution=s"\1s")
     if num > 1
-        word = replace(word, r"^(.*)$"=>substitution)
+        word = replace(word, r"^(.*)$" => substitution)
     end
     num, word
 end
-
-# function Base.show(io::IO, ::MIME"text/plain", m::MyType)
-#     print(io, "Examplary instance of MyType\n", m.x, " ± ", m.y)
-# end
-
-# Base.show(io::IO, m::MyType) = print(io, m.x, '(', m.y, ')')

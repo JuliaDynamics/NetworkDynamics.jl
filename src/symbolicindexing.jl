@@ -364,36 +364,71 @@ end
 ####
 #### State as value provider
 ####
-struct State{U,P,NW,T}
+
+struct NWParameter{P,NW}
     nw::NW
-    uflat::U
     pflat::P
-    t::T
 end
 
-function State(nw::Network)
+function NWParameter(nw::Network; ptype=Union{Nothing,Float64}, default=true)
+    pflat = _flat(ptype, pdim(nw))
+    p = NWParameter(nw,pflat)
+    default || return p
+    for (k, v) in SII.default_values(nw)
+        haskey(p, k) || continue
+        p[k] = v
+    end
+    return p
+end
+
+_flat(T, N) = Nothing <: T ? T[nothing  for _ in 1:N] : zeros(T, N)
+
+struct NWState{U,P,T,NW}
+    nw::NW
+    uflat::U
+    p::P
+    t::T
+    function NWState(nw, uflat, p, t=nothing)
+        _p = p isa Vector ? NWParameter(nw,p) : p
+        new{typeof(uflat),typeof(_p),typeof(t),typeof(nw)}(nw,uflat,_p,t)
+    end
+end
+
+function NWState(nw::Network; utype=Union{Nothing,Float64}, ptype=Union{Nothing,Float64}, default=true)
     t = nothing
-    uflat = Union{Nothing, Float64}[nothing for _ in 1:dim(nw)]
-    pflat = Union{Nothing, Float64}[nothing for _ in 1:pdim(nw)]
-    s = State(nw,uflat,pflat,t)
+    uflat = _flat(utype, dim(nw))
+    p = NWParameter(nw; ptype, default=false)
+    s = NWState(nw,uflat,p,t)
+    default || return s
     for (k, v) in SII.default_values(nw)
         s[k] = v
     end
-    s
+    return s
 end
 
-Base.broadcastable(s::State) = Ref(s)
+Base.broadcastable(s::NWState) = Ref(s)
 
-SII.symbolic_container(s::State) = s.nw
-SII.state_values(s::State) = s.uflat
-SII.parameter_values(s::State) = s.pflat
-SII.current_time(s::State) = s.t
+SII.symbolic_container(s::NWState) = s.nw
+SII.symbolic_container(s::NWParameter) = s.nw
+SII.state_values(s::NWState) = s.uflat
+SII.state_values(s::NWParameter) = error("Parameter type does not hold State values.")
+SII.parameter_values(s::NWState) = SII.parameter_values(s.p)
+SII.parameter_values(p::NWParameter) = p.pflat
+SII.current_time(s::NWState) = s.t
+SII.current_time(s::NWParameter) = error("Parameter type does not holde time value.")
 
-Base.getindex(s::State, idx::SymbolicParameterIndex) = SII.getp(s, idx)(s)
-Base.setindex!(s::State, val, idx::SymbolicParameterIndex) = SII.setp(s, idx)(s, val)
-Base.getindex(s::State, idx::SymbolicStateIndex) = SII.getu(s, idx)(s)
-Base.setindex!(s::State, val, idx::SymbolicStateIndex) = SII.setu(s, idx)(s, val)
-function Base.getindex(s::State, idxs)
+Base.getindex(p::NWParameter, idx::SymbolicStateIndex) = getindex(p, _paraindex(idx))
+Base.setindex!(p::NWParameter, val, idx::SymbolicStateIndex) = setindex!(p, val, _paraindex(idx))
+Base.getindex(p::NWParameter, idx::SymbolicParameterIndex) = SII.getp(p, idx)(p)
+Base.setindex!(p::NWParameter, val, idx::SymbolicParameterIndex) = SII.setp(p, idx)(p, val)
+_paraindex(idx::VIndex) = VPIndex(idx.compidx, idx.subidx)
+_paraindex(idx::EIndex) = EPIndex(idx.compidx, idx.subidx)
+
+Base.getindex(s::NWState, idx::SymbolicParameterIndex) = SII.getp(s, idx)(s)
+Base.setindex!(s::NWState, val, idx::SymbolicParameterIndex) = SII.setp(s, idx)(s, val)
+Base.getindex(s::NWState, idx::SymbolicStateIndex) = SII.getu(s, idx)(s)
+Base.setindex!(s::NWState, val, idx::SymbolicStateIndex) = SII.setu(s, idx)(s, val)
+function Base.getindex(s::NWState, idxs)
     et = eltype(idxs)
     if et <: SymbolicStateIndex
         SII.getu(s, idxs)(s)
@@ -404,28 +439,18 @@ function Base.getindex(s::State, idxs)
     end
 end
 
-struct VStateProxy{S} s::S end
-Base.getindex(p::VStateProxy, comp, state) = getindex(p.s, VIndex(comp, state))
-Base.setindex!(p::VStateProxy, val, comp, state) = setindex!(p.s, val, VIndex(comp, state))
-struct EStateProxy{S} s::S end
-Base.getindex(p::EStateProxy, comp, state) = getindex(p.s, EIndex(comp, state))
-Base.setindex!(p::EStateProxy, val, comp, state) = setindex!(p.s, val, EIndex(comp, state))
-struct VParameterProxy{S} s::S end
-Base.getindex(p::VParameterProxy, comp, state) = getindex(p.s, VPIndex(comp, state))
-Base.setindex!(p::VParameterProxy, val, comp, state) = setindex!(p.s, val, VPIndex(comp, state))
-struct EParameterProxy{S} s::S end
-Base.getindex(p::EParameterProxy, comp, state) = getindex(p.s, EPIndex(comp, state))
-Base.setindex!(p::EParameterProxy, val, comp, state) = setindex!(p.s, val, EPIndex(comp, state))
+struct VProxy{S} s::S end
+Base.getindex(p::VProxy, comp, state) = getindex(p.s, VIndex(comp, state))
+Base.setindex!(p::VProxy, val, comp, state) = setindex!(p.s, val, VIndex(comp, state))
+struct EProxy{S} s::S end
+Base.getindex(p::EProxy, comp, state) = getindex(p.s, EIndex(comp, state))
+Base.setindex!(p::EProxy, val, comp, state) = setindex!(p.s, val, EIndex(comp, state))
 
-function Base.getproperty(s::State, sym::Symbol)
+function Base.getproperty(s::Union{NWParameter, NWState}, sym::Symbol)
     if sym === :v
-        return VStateProxy(s)
+        return VProxy(s)
     elseif sym === :e
-        return EStateProxy(s)
-    elseif sym === :pv
-        return VParameterProxy(s)
-    elseif sym === :pe
-        return EParameterProxy(s)
+        return EProxy(s)
     else
         return getfield(s, sym)
     end
