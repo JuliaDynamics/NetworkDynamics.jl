@@ -393,10 +393,10 @@ struct NWState{U,P,T,NW}
     uflat::U
     p::P
     t::T
-    function NWState(nw, uflat, p, t=nothing)
-        _p = p isa NWParameter ? p : NWParameter(nw,p)
+    function NWState(nw, uflat, p=nothing, t=nothing)
+        _p = (!indexable(p) || p isa NWParameter) ? p : NWParameter(nw,p)
         s = new{typeof(uflat),typeof(_p),typeof(t),typeof(nw)}(nw,uflat,_p,t)
-        @assert s.nw === s.p.nw
+        @argcheck !indexable(p) || s.nw === s.p.nw
         return s
     end
 end
@@ -452,7 +452,7 @@ SII.symbolic_container(s::NWState) = s.nw
 SII.symbolic_container(s::NWParameter) = s.nw
 SII.state_values(s::NWState) = s.uflat
 SII.state_values(s::NWParameter) = error("Parameter type does not hold State values.")
-SII.parameter_values(s::NWState) = SII.parameter_values(s.p)
+SII.parameter_values(s::NWState) = s.p isa NWParameter ? SII.parameter_values(s.p) : s.p
 SII.parameter_values(p::NWParameter) = p.pflat
 SII.current_time(s::NWState) = s.t
 SII.current_time(s::NWParameter) = error("Parameter type does not holde time value.")

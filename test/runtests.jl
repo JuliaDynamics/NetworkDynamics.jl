@@ -9,5 +9,6 @@ using SafeTestsets
 @safetestset "Symbolic Indexing Tests" begin include("symbolicindexing_test.jl") end
 
 @safetestset "Diffusion test" begin include("diffusion_test.jl") end
+@safetestset "inhomogeneous test" begin include("inhomogeneous_test.jl") end
 
 end

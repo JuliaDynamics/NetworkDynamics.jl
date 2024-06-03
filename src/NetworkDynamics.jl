@@ -23,6 +23,8 @@ import StaticArrays
 
 include("utils.jl")
 
+export ODEVertex, StaticVertex, StaticEdge, ODEEdge
+export Symmetric, AntiSymmetric, Directed, Fiducial
 export dim, pdim
 include("component_functions.jl")
 

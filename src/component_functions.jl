@@ -1,6 +1,3 @@
-export ODEVertex, StaticEdge, ODEEdge
-export Symmetric, AntiSymmetric, Directed, Fiducial
-
 abstract type Coupling end
 struct AntiSymmetric <: Coupling end
 struct Symmetric <: Coupling end
@@ -63,6 +60,31 @@ $(FIELDS)
 end
 ODEVertex(f, dim, pdim; kwargs...) = ODEVertex(;f, dim, pdim, kwargs...)
 ODEVertex(f; kwargs...) = ODEVertex(;f, kwargs...)
+
+@with_kw_noshow struct StaticVertex{F,OF} <: VertexFunction
+    @CommonFields
+    name::Symbol = :StaticVertex
+    depth::Int = dim
+end
+StaticVertex(f, dim, pdim; kwargs...) = StaticVertex(;f, dim, pdim, kwargs...)
+StaticVertex(f; kwargs...) = StaticVertex(;f, kwargs...)
+function ODEVertex(sv::StaticVertex)
+    d = Dict{Symbol,Any}()
+    for prop in propertynames(sv)
+        d[prop] = getproperty(sv, prop)
+    end
+    d[:f]  = let _f = sv.f
+        (dx, x, esum, p, t) -> begin
+            _f(dx, esum, p, t)
+            @inbounds for i in eachindex(dx)
+                dx[i] = dx[i] - x[i]
+            end
+            return nothing
+        end
+    end
+    d[:mass_matrix] = 0.0
+    ODEVertex(; d...)
+end
 
 @with_kw_noshow struct StaticEdge{C,F,OF} <: EdgeFunction{C}
     @CommonFields

@@ -142,17 +142,20 @@ function EdgeBatch(im::IndexManager, idxs::Vector{Int}; verbose)
     end
 end
 
-function NetworkLayer(im::IndexManager, eb, agg)
+function NetworkLayer(im::IndexManager, batches, agg)
     map = zeros(Int, ne(im.g) * im.vdepth, 2)
-    for (i, e) in enumerate(edges(im.g))
-        startidx = (i - 1) * im.vdepth + 1
-        range = startidx:(startidx+im.vdepth-1)
-        dst_range = im.v_data[e.src][1:im.vdepth]
-        src_range = im.v_data[e.dst][1:im.vdepth]
-        map[range, 1] .= dst_range
-        map[range, 2] .= src_range
+    for batch in batches
+        for i in 1:length(batch)
+            eidx = batch.indices[i]
+            e = im.edgevec[eidx]
+            dst_range = im.v_data[e.src][1:im.vdepth]
+            src_range = im.v_data[e.dst][1:im.vdepth]
+            range = gbuf_range(batch, i)
+            map[range, 1] .= dst_range
+            map[range, 2] .= src_range
+        end
     end
-    NetworkLayer(im.g, eb, agg, im.edepth, im.vdepth, map)
+    NetworkLayer(im.g, batches, agg, im.edepth, im.vdepth, map)
 end
 
 batch_by_idxs(v, idxs::Vector{Vector{Int}}) = [v for batch in idxs]

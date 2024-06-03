@@ -4,6 +4,8 @@ using Graphs
 using LinearAlgebra
 using SparseArrays
 using OrdinaryDiffEq
+using Random
+Random.seed!(42)
 
 printstyled("--- Diffusion dynamics --- \n"; bold=true, color=:white)
 
