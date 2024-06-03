@@ -10,6 +10,7 @@ const CouplingUnion = Union{AntiSymmetric,Symmetric,Directed,Fiducial}
 
 abstract type ComponentFunction end
 
+# TODO: change nothing to missing for default values?
 Mixers.@pour CommonFields begin
     f::F
     dim::Int

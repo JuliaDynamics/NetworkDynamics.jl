@@ -370,18 +370,23 @@ struct NWParameter{P,NW}
     pflat::P
 end
 
-function NWParameter(nw::Network; ptype=Union{Nothing,Float64}, default=true)
+Base.eltype(p::NWParameter) = eltype(p.pflat)
+Base.length(s::NWParameter) = length(s.pflat)
+
+function NWParameter(nw::Network; ptype=Vector{Union{Float64,Nothing}}, default=true)
     pflat = _flat(ptype, pdim(nw))
     p = NWParameter(nw,pflat)
     default || return p
     for (k, v) in SII.default_values(nw)
-        haskey(p, k) || continue
+        k isa Union{VPIndex, EPIndex} || continue
         p[k] = v
     end
     return p
 end
 
-_flat(T, N) = Nothing <: T ? T[nothing  for _ in 1:N] : zeros(T, N)
+function NWParameter(p::NWParameter; ptype=typeof(p.pflat))
+    NWParameter(p.nw, _convertorcopy(ptype,pflat(p)))
+end
 
 struct NWState{U,P,T,NW}
     nw::NW
@@ -389,12 +394,17 @@ struct NWState{U,P,T,NW}
     p::P
     t::T
     function NWState(nw, uflat, p, t=nothing)
-        _p = p isa Vector ? NWParameter(nw,p) : p
-        new{typeof(uflat),typeof(_p),typeof(t),typeof(nw)}(nw,uflat,_p,t)
+        _p = p isa NWParameter ? p : NWParameter(nw,p)
+        s = new{typeof(uflat),typeof(_p),typeof(t),typeof(nw)}(nw,uflat,_p,t)
+        @assert s.nw === s.p.nw
+        return s
     end
 end
 
-function NWState(nw::Network; utype=Union{Nothing,Float64}, ptype=Union{Nothing,Float64}, default=true)
+function NWState(nw::Network;
+                 utype=Vector{Union{Float64,Nothing}},
+                 ptype=Vector{Union{Float64,Nothing}},
+                 default=true)
     t = nothing
     uflat = _flat(utype, dim(nw))
     p = NWParameter(nw; ptype, default=false)
@@ -405,6 +415,36 @@ function NWState(nw::Network; utype=Union{Nothing,Float64}, ptype=Union{Nothing,
     end
     return s
 end
+
+function NWState(s::NWState;
+                 utype=typeof(utype(s)),
+                 ptype=typeof(pflat(s)))
+    p = NWParameter(s.p; ptype)
+    NWState(s.nw, _convertorcopy(utype,uflat(s)), p, s.t)
+end
+
+function _flat(T, N)
+    if Nothing <: eltype(T)
+        vec = T(undef, N)
+        fill!(vec, nothing)
+    else
+        zeros(eltype(T), N)
+    end
+end
+
+_convertorcopy(::Type{T}, x::T) where {T} = copy(x)
+function _convertorcopy(T, x)
+    # _x = similar(T, length(x))
+    # _x .= x
+    # T(undef, length(x)) .= x
+    convert(T, x)
+end
+
+Base.eltype(s::NWState) = eltype(s.uflat)
+Base.length(s::NWState) = length(s.uflat)
+uflat(s::NWState) = s.uflat
+pflat(s::NWState) = pflat(s.p)
+pflat(p::NWParameter) = p.pflat
 
 Base.broadcastable(s::NWState) = Ref(s)
 
@@ -439,6 +479,11 @@ function Base.getindex(s::NWState, idxs)
     end
 end
 
+Base.getindex(s::NWState, ::Colon) = uflat(s)
+Base.getindex(p::NWParameter, ::Colon) = pflat(p)
+Base.setindex!(s::NWState, val, ::Colon) = uflat(s) .= val
+Base.setindex!(p::NWParameter, val, ::Colon) = pflat(p) .= val
+
 struct VProxy{S} s::S end
 Base.getindex(p::VProxy, comp, state) = getindex(p.s, VIndex(comp, state))
 Base.setindex!(p::VProxy, val, comp, state) = setindex!(p.s, val, VIndex(comp, state))
@@ -455,6 +500,17 @@ function Base.getproperty(s::Union{NWParameter, NWState}, sym::Symbol)
         return getfield(s, sym)
     end
 end
+
+#=
+https://discourse.julialang.org/t/broadcasting-setindex-is-a-noobtrap/94700
+its hard to overload .= braodcasting so lets error if somebody tries
+=#
+Base.dotview(s::Union{NWParameter, NWState, VProxy, EProxy}, idxs...) = view(s, idxs...)
+function Base.view(s::Union{NWParameter, NWState, VProxy, EProxy}, idxs...)
+    error("Cannot create view into for indice $idxs")
+end
+Base.view(s::NWState, ::Colon) = s.uflat
+Base.view(s::NWParameter, ::Colon) = s.pflat
 
 #=
 nds = wrap(nd, u, [p]) -> NWState (contains nw para, optional für observables/static)

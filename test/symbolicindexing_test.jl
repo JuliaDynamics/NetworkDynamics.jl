@@ -291,3 +291,38 @@ for idx in idxtypes
     end
     @test b.allocs <= 11
 end
+
+# tests for state/parameter constructing/conversion
+using NetworkDynamics: _flat
+@test _flat(Vector{Float64}, 10) == zeros(10)
+@test _flat(Vector{Int64}, 10) == zeros(10)
+@test _flat(Vector{Union{Int64, Nothing}}, 10) == [nothing for _ in 1:10]
+@test NWState(nw).p.pflat == NWParameter(nw).pflat
+
+p = NWParameter(nw)
+p.e[2:3,:K] = 0
+@test_broken p.e[2:3,:K] == [0,0]
+p.e[2:3,:K] = [0,0]
+@test p.e[2:3,:K] == [0,0]
+@test_throws ErrorException p.e[2:3,:K] .= 0
+
+@test eltype(p) == Union{Nothing,Float64}
+p2 = NWParameter(p; ptype=Vector{Float64})
+@test eltype(p2) == Float64
+
+p3 = NWParameter(p)
+p.v[1,:M] = 42
+@test p3.v[1,:M] != 42
+
+
+s = NWState(nw)
+@test_throws MethodError NWState(s, utype=Vector{Float64})
+s[:] .= 1
+s2 = NWState(s, utype=Vector{Float64})
+@test eltype(s2) == Float64
+
+
+s.p[:] .= 0
+s3 = NWState(s, utype=Vector{Int}, ptype=Vector{Int})
+@test eltype(NetworkDynamics.uflat(s3)) == Int
+@test eltype(NetworkDynamics.uflat(s3)) == Int

@@ -117,15 +117,19 @@ end
 
 function Base.show(io::IO, mime::MIME"text/plain", s::NWState; dim=nothing)
     ioc = IOContext(io, :compact => true)
-    print(io, "State of ")
+    print(io, "State{$(typeof(uflat(s)))} of ")
     show(ioc, mime, s.nw)
     println(io)
-    strvec = map(SII.variable_symbols(s.nw), s.uflat) do sym, val
+    strvec = map(SII.variable_symbols(s.nw), eachindex(s.uflat)) do sym, i
         buf =  Base.AnnotatedIOBuffer()
         print(buf, "&")
         show(buf, mime, sym)
         print(buf, " &&=> ")
-        show(buf, mime, val)
+        if isassigned(s.uflat, i)
+            show(buf, mime, s.uflat[i])
+        else
+            print(buf, "#undef")
+        end
         str = read(seekstart(buf), Base.AnnotatedString)
         if !isnothing(dim) && dim(sym)
             str = styled"{NetworkDynamics_inactive:$str}"
@@ -135,10 +139,10 @@ function Base.show(io::IO, mime::MIME"text/plain", s::NWState; dim=nothing)
     print_treelike(io, align_strings(strvec), prefix="  ")
 
     buf = IOContext(Base.AnnotatedIOBuffer(), :compact=>true)
-    print(buf, " t = ")
-    show(buf, mime, s.t)
-    print(buf, "\n p = ")
+    print(buf, " p = ")
     show(buf, mime, s.p)
+    print(buf, "\n t = ")
+    show(buf, mime, s.t)
     str = read(seekstart(buf.io), Base.AnnotatedString)
     if !isnothing(dim)
         print(io, styled"{NetworkDynamics_inactive:$str}")
@@ -155,16 +159,20 @@ function Base.show(io::IO, mime::MIME"text/plain", p::NWParameter; dim=nothing)
         print(io, ")")
     else
         ioc = IOContext(io, :compact => true)
-        print(io, "Parameter of ")
+        print(io, "Parameter{$(typeof(pflat(p)))} of ")
         show(ioc, mime, p.nw)
         println(io)
 
-        strvec = map(SII.parameter_symbols(p.nw), p.pflat) do sym, val
+        strvec = map(SII.parameter_symbols(p.nw), eachindex(p.pflat)) do sym, i
             buf =  Base.AnnotatedIOBuffer()
             print(buf, "&")
             show(buf, mime, sym)
             print(buf, " &&=> ")
-            show(buf, mime, val)
+            if isassigned(p.pflat, i)
+                show(buf, mime, p.pflat[i])
+            else
+                print(buf, "#undef")
+            end
             str = read(seekstart(buf), Base.AnnotatedString)
             if !isnothing(dim) && dim(sym)
                 str = styled"{NetworkDynamics_inactive:$str}"

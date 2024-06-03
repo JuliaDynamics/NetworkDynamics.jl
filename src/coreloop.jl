@@ -4,7 +4,7 @@ function (nw::Network)(du, u::T, p, t) where {T}
             fill!(du, zero(eltype(du)))
         end
         @timeit_debug "create _u" begin
-            _u = nw.cachepool[u, nw.im.lastidx_static]
+            _u = nw.cachepool[du, nw.im.lastidx_static]
             _u[1:nw.im.lastidx_dynamic] .= u
         end
 

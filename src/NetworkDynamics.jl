@@ -37,7 +37,8 @@ include("coreloop.jl")
 
 include("adapt.jl")
 
-export VIndex, EIndex, VPIndex, EPIndex, NWState, NWParameter
+# XXX: have both, s[:] and uflat(s) ?
+export VIndex, EIndex, VPIndex, EPIndex, NWState, NWParameter, uflat, pflat
 include("symbolicindexing.jl")
 
 include("show.jl")
