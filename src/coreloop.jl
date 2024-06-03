@@ -1,4 +1,10 @@
 function (nw::Network)(du, u::T, p, t) where {T}
+    if !(eachindex(du) == eachindex(u) == 1:nw.im.lastidx_dynamic)
+        throw(ArgumentError("du or u does not have expected size $(nw.im.lastidx_dynamic)"))
+    end
+    if nw.im.lastidx_p > 0 && !(eachindex(p) == 1:nw.im.lastidx_p)
+        throw(ArgumentError("p does not has expecte size $(nw.im.lastidx_p)"))
+    end
     @timeit_debug "coreloop" begin
         @timeit_debug "fill zeros" begin
             fill!(du, zero(eltype(du)))
@@ -62,7 +68,7 @@ end
     @inbounds begin
         _du  = @views du[state_range(batch, i)]
         _u   = @views u[state_range(batch, i)]
-        _p   = isnothing(p) ? p : @views p[parameter_range(batch, i)]
+        _p   = indexable(p) ? view(p, parameter_range(batch, i)) : p
         _agg = @views aggbuf[aggbuf_range(batch, i)]
         compf(batch)(_du, _u, _agg, _p, t)
     end
@@ -113,7 +119,7 @@ end
                                         du, u, srcrange, dstrange, p, t)
     @inbounds begin
         _u   = @views u[state_range(batch, i)]
-        _p   = isnothing(p) ? p : @views p[parameter_range(batch, i)]
+        _p   = indexable(p) ? view(p, parameter_range(batch, i)) : p
         eidx = @views batch.indices[i]
         _src = @views u[srcrange[eidx]]
         _dst = @views u[dstrange[eidx]]
@@ -127,7 +133,7 @@ end
     @inbounds begin
         _du  = @views du[state_range(batch, i)]
         _u   = @views u[state_range(batch, i)]
-        _p   = isnothing(p) ? p : @views p[parameter_range(batch, i)]
+        _p   = indexable(p) ? view(p, parameter_range(batch, i)) : p
         eidx = @views batch.indices[i]
         _src = @views u[srcrange[eidx]]
         _dst = @views u[dstrange[eidx]]
@@ -186,7 +192,7 @@ end
                                       du, u, gbuf, p, t)
     @inbounds begin
         _u   = @views u[state_range(batch, i)]
-        _p   = isnothing(p) ? p : @views p[parameter_range(batch, i)]
+        _p   = indexable(p) ? view(p, parameter_range(batch, i)) : p
         bufr = @views gbuf_range(batch, i)
         _src = @views gbuf[bufr, 1]
         _dst = @views gbuf[bufr, 2]
@@ -200,7 +206,7 @@ end
     @inbounds begin
         _du  = @views du[state_range(batch, i)]
         _u   = @views u[state_range(batch, i)]
-        _p   = isnothing(p) ? p : @views p[parameter_range(batch, i)]
+        _p   = indexable(p) ? view(p, parameter_range(batch, i)) : p
         bufr = @views gbuf_range(batch, i)
         _src = @views gbuf[bufr, 1]
         _dst = @views gbuf[bufr, 2]
@@ -208,3 +214,7 @@ end
     end
     nothing
 end
+
+indexable(::Nothing) = false
+indexable(::SciMLBase.NullParameters) = false
+indexable(_) = true

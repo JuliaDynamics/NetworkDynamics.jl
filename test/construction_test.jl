@@ -32,6 +32,13 @@ using Graphs
 
     nd = Network(g, vertexf, edgef; verbose=false,
         execution=SequentialExecution{false}())
+
+    _du = rand(dim(nd))
+    _u = rand(dim(nd))
+    _p = rand(pdim(nd))
+    @test_throws ArgumentError nd(rand(dim(nd)+1), _u, _p, 0.0)
+    @test_throws ArgumentError nd(_du, rand(dim(nd)+1), _p, 0.0)
+    @test_throws ArgumentError nd(_du, _u, rand(pdim(nd)+1), 0.0)
 end
 
 @testset "Vertex batch" begin

@@ -8,4 +8,6 @@ using SafeTestsets
 @safetestset "Aggregation Tests" begin include("aggregators_test.jl") end
 @safetestset "Symbolic Indexing Tests" begin include("symbolicindexing_test.jl") end
 
+@safetestset "Diffusion test" begin include("diffusion_test.jl") end
+
 end
