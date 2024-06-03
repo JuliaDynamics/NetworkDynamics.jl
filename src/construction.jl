@@ -202,6 +202,7 @@ function construct_mass_matrix(im; type=nothing)
     all_diag = true
     _type = Bool
     for comp in Iterators.flatten((values(vertexd), values(edged)))
+        _check_massmatrix(comp)
         _type = promote_type(_type, eltype(comp.mass_matrix))
         all_diag = all_diag && LinearAlgebra.isdiag(comp.mass_matrix)
     end
@@ -230,4 +231,18 @@ function _fill_mass_matrix!(mass_matrix, im, vertexd, edged)
         mass_matrix[range, range] .= mm
     end
     mass_matrix
+end
+
+# XXX: move massmatrix check to component_functions.jl
+function _check_massmatrix(c)
+    if c.mass_matrix isa UniformScaling || c.mass_matrix isa Number
+        return
+    end
+    if length(size(c.mass_matrix)) == 2
+        @argcheck size(c.mass_matrix) == (dim(c), dim(c))
+        return
+    end
+    throw(ArgumentError("Mass matrix must be a square matrix,\
+                         a uniform scaling, or scalar. Got $(c.mass_matrix) \
+                         in component :$(c.name)."))
 end
