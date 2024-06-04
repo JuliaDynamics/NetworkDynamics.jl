@@ -53,7 +53,7 @@ struct Network{EX<:ExecutionStyle,G,NL,VTup,MM}
     "mass matrix"
     mass_matrix::MM
 end
-executionstyle(::Network{ex}) where {ex} = ex
+executionstyle(::Network{ex}) where {ex} = ex()
 nvbatches(::Network) = length(vertexbatches)
 dim(nw::Network) = dim(nw.im)
 pdim(nw::Network) = pdim(nw.im)

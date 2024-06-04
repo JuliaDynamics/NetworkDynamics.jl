@@ -5,6 +5,7 @@ function (nw::Network)(du, u::T, p, t) where {T}
     if nw.im.lastidx_p > 0 && !(eachindex(p) == 1:nw.im.lastidx_p)
         throw(ArgumentError("p does not has expecte size $(nw.im.lastidx_p)"))
     end
+    ex = executionstyle(nw)
     @timeit_debug "coreloop" begin
         @timeit_debug "fill zeros" begin
             fill!(du, zero(eltype(du)))
@@ -19,14 +20,17 @@ function (nw::Network)(du, u::T, p, t) where {T}
         # NOTE: first all static vertices, than all edges (regarless) then dyn vertices
         # maybe disallow static vertices entierly, otherwise the order gets complicated
 
-        @timeit_debug "process layer" process_layer!(nw, nw.layer, dupt)
+        @timeit_debug "process layer" process_layer!(ex, nw, nw.layer, dupt)
 
         @timeit_debug "aggregate" begin
+            if nw.im.lastidx_aggr == nw.im.lastidx_static
+                error("Aggbuf and _u buf cannot be the same size! This is a known bug.")
+            end
             aggbuf = nw.cachepool[_u, nw.im.lastidx_aggr]
             aggregate!(nw.layer.aggregator, aggbuf, _u)
         end
 
-        @timeit_debug "process vertices" process_vertices!(nw, aggbuf, dupt)
+        @timeit_debug "process vertices" process_vertices!(ex, nw, aggbuf, dupt)
     end
     return nothing
 end
@@ -35,7 +39,7 @@ end
 ####
 #### Vertex Execution
 ####
-@inline function process_vertices!(nw::Network{<:SequentialExecution}, aggbuf, dupt)
+@inline function process_vertices!(::SequentialExecution, nw, aggbuf, dupt)
     unrolled_foreach(nw.vertexbatches) do batch
         (du, u, p, t) = dupt
         for i in 1:length(batch)
@@ -46,7 +50,7 @@ end
     end
 end
 
-@inline function process_vertices!(nw::Network{<:KAExecution}, aggbuf, dupt)
+@inline function process_vertices!(::KAExecution, nw, aggbuf, dupt)
     _backend = get_backend(dupt[2])
     unrolled_foreach(nw.vertexbatches) do batch
         (du, u, p, t) = dupt
@@ -64,7 +68,7 @@ end
     nothing
 end
 
-@inline function apply_vertex!(::Type{<:ODEVertex}, batch, i, du, u, aggbuf, p, t)
+@inline function apply_vertex!(::Type{<:ODEVertex}, batch, i, du, u, aggbuf, p, t, _)
     @inbounds begin
         _du  = @views du[state_range(batch, i)]
         _u   = @views u[state_range(batch, i)]
@@ -79,7 +83,7 @@ end
 ####
 #### Edge Layer Execution unbuffered
 ####
-@inline function process_layer!(nw::Network{<:SequentialExecution{false}}, layer, dupt)
+@inline function process_layer!(::SequentialExecution{false}, nw, layer, dupt)
     unrolled_foreach(layer.edgebatches) do batch
         (du, u, p, t) = dupt
         for i in 1:length(batch)
@@ -90,7 +94,7 @@ end
     end
 end
 
-@inline function process_layer!(nw::Network{<:KAExecution{false}}, layer, dupt)
+@inline function process_layer!(::KAExecution{false}, nw, layer, dupt)
     _backend = get_backend(dupt[2])
     unrolled_foreach(layer.edgebatches) do batch
         (du, u, p, t) = dupt
@@ -145,7 +149,7 @@ end
 ####
 #### Edge Layer Execution buffered
 ####
-@inline function process_layer!(nw::Network{<:SequentialExecution{true}}, layer, dupt)
+@inline function process_layer!(::SequentialExecution{true}, nw, layer, dupt)
     u = dupt[2]
     gbuf = nw.cachepool[u, size(layer.gather_map)]
     NNlib.gather!(gbuf, u, layer.gather_map)
