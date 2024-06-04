@@ -68,7 +68,7 @@ end
     nothing
 end
 
-@inline function apply_vertex!(::Type{<:ODEVertex}, batch, i, du, u, aggbuf, p, t, _)
+@inline function apply_vertex!(::Type{<:ODEVertex}, batch, i, du, u, aggbuf, p, t)
     @inbounds begin
         _du  = @views du[state_range(batch, i)]
         _u   = @views u[state_range(batch, i)]
