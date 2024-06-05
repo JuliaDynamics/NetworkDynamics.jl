@@ -1,4 +1,6 @@
-#!/usr/bin/env julia
+#!julia --startup-file=no
+
+original_path = pwd()
 
 # record start time
 tstart = time()
@@ -22,6 +24,10 @@ using LibGit2
 using Dates
 using Random
 using ArgParse
+using Serialization
+using StyledStrings
+
+(isinteractive() ? includet : include)("benchmark_utils.jl")
 
 s = ArgParseSettings()
 #! format: off
@@ -39,10 +45,6 @@ s = ArgParseSettings()
         help = "Julia command for target benchmarks. If nothing use `--command`"
     "--bcommand"
         help = "Julia command for baseline benchmarks. If nothing use `--command`"
-    "--threads"
-        help = "Set number of threads."
-        arg_type = Int
-        default = 4
     "--prefix", "-p"
         help = "Prefix for filenames, defaults to timestamp"
         default = Dates.format(now(), "yyyy-mm-dd_HHMMSS")
@@ -52,7 +54,7 @@ s = ArgParseSettings()
     "--retune"
         help = "Force retuneing of parameters befor the first benchmark. (Second benchmark will use the tune file)"
         action = :store_true
-    "--exportraw"
+    "--export-raw"
         help = "Export raw data of trials. I.e. to use benchmarks results again als baseline or target."
         action = :store_true
 end
@@ -73,7 +75,7 @@ tmp = mkpath(tempname());
 ndpath_tmp = joinpath(tmp, "NetworkDynamics")
 @info "Copy repo to $ndpath_tmp"
 cp(NDPATH, ndpath_tmp)
-cd(ndpath_tmp) # the tmp repo is a good place to chill
+cd(ndpath_tmp)
 
 # copy bm scripts to separate folder (so it won't change if the state of the nd_temp repo chagnes)
 bmpath_tmp = joinpath(tmp, "benchmark")
@@ -92,92 +94,95 @@ if isdirty
     with(LibGit2.isdirty, GitRepo(ndpath_tmp)) && throw(error("Repository is still dirty!"))
 end
 
-# activate the environment in the tmp copy of the scripts
-# env will be used for the julia processes which do the benchmarking
-Pkg.activate(bmpath_tmp)
-Pkg.develop(; path=ndpath_tmp)
+# # activate the environment in the tmp copy of the scripts
+# # env will be used for the julia processes which do the benchmarking
+# Pkg.activate(bmpath_tmp)
+# Pkg.develop(; path=ndpath_tmp)
+
 
 """
-Create a runnable `Cmd` object from a string like "juila-1.5".
-Due to a bug in PkgBenchmark this also adds the default sysimge
-to the command. See
-
-https://github.com/JuliaCI/PkgBenchmark.jl/issues/136
-"""
-function string_to_command(cmd::AbstractString)
-    @assert !contains(cmd, " ") "julia commands with arguments not allowed, got $cmd"
-    out = IOBuffer()
-    capturecommand = `$cmd --startup-file=no -e "println(Base.julia_cmd()[3])"`
-    run(pipeline(capturecommand; stdout=out))
-    sysimg = String(take!(out))[1:end-1] # remove \n
-    @assert contains(sysimg, r"^-J.*[dylib|so]$") "Captured sysimg looks weird? $sysimg"
-    return Cmd([cmd, sysimg])
-end
-
-"""
-    benchmark(; name, id, cmd)
+    benchmark(; name, rev, cmd)
 
   - name determines the filenames
-  - id determines the git id, i.e. branch name. If id=="directory" use currend
+  - rev determines the git rev, i.e. branch name. If rev=="directory" use currend
     directory even if dirty!
   - cmd if empty use default julia command
 """
-function benchmark(; name, id, cmd, retune)
-    # magic id string directory will benchmark dirty state
-    id = id == "directory" ? nothing : id
-
-    # PkgBenchmarks does not call Pkg.resolve after checking out a different
-    # state of ndpath_tmp! Therefore we need to check out the desired commit in
-    # the tmp directory and resolve the manifest of the currently activated
-    # environment (-> bmpath_tmp)
-    if !isnothing(id)
+function benchmark(; name, rev, cmd)
+    # magic rev string directory will benchmark dirty state
+    if rev != "directory"
         @assert realpath(pwd()) == realpath(ndpath_tmp) "Julia is in $(pwd()) not it $ndpath_tmp"
-        run(`git checkout $id`)
-        Pkg.resolve()
+        run(`git checkout $rev`)
     end
 
     # choose specific command only if given, elso the default command
-    cmd = isnothing(cmd) ? args[:command] : cmd
-    @info "Run $name benchmarks on $id with $cmd"
+    cmd_str = isnothing(cmd) ? args[:command] : cmd
+    @assert !contains(cmd_str, r"--startup-file") "--startup-file is not implemeted"
+    @assert !contains(cmd_str, r"--project") "--project is not implemeted"
 
-    config = BenchmarkConfig(; id,
-                             env=Dict("JULIA_NUM_THREADS" => args[:threads]),
-                             juliacmd=string_to_command(cmd))
-    results = benchmarkpkg(ndpath_tmp, config;
-                           script=script_path,
-                           retune,
-                           verbose=args[:verbose])
+    @info "Prepare environment"
+    prepare_cmd = "import Pkg; Pkg.develop(path=\"$ndpath_tmp\"); Pkg.update()"
+    run(`$cmd_str --startup-file=no --project=$bmpath_tmp -e $prepare_cmd`)
 
-    args[:exportraw] && writeresults(joinpath(BMPATH, args[:prefix] * name * ".data"), results)
-    export_markdown(joinpath(BMPATH, args[:prefix] * name * ".md"), results)
-    return results
+    exp_tmp = tempname(bmpath_tmp)
+    cmd = `$cmd_str --startup-file=no --project=$bmpath_tmp $script_path $exp_tmp`
+    @info "Run $name benchmarks on \"$rev\" with $cmd"
+    println()
+    println("------------ spwan benchmark process --------------")
+    println()
+
+    run(cmd)
+
+    println()
+    println("------------ benchmark process ended --------------")
+    println()
+
+    args[Symbol("export-raw")] && cp(exp_tmp, joinpath(BMPATH, args[:prefix] * name * ".data"))
+    result = deserialize(exp_tmp)
 end
 
-if contains(args[:target], r".data$")
-    path = joinpath(BMPATH, args[:target])
-    target = readresults(joinpath(BMPATH, args[:target]))
+target = if contains(args[:target], r".data$")
+    path = joinpath(original_path, args[:target])
+    deserialize(path)
 else
-    target = benchmark(; name="target", id=args[:target], cmd=args[:tcommand], retune=args[:retune])
+    benchmark(; name="target", rev=args[:target], cmd=args[:tcommand])
 end
 
-if args[:baseline] ∉ ["nothing", "none"]
+baseline = if args[:baseline] ∉ ["nothing", "none"]
     if contains(args[:baseline], r".data$")
-        path = joinpath(BMPATH, args[:baseline])
-        baseline = readresults(joinpath(BMPATH, args[:baseline]))
+        path = joinpath(original_path, args[:baseline])
+        deserialize(path)
     elseif args[:baseline] ∉ ["nothing", "none"]
-        baseline = benchmark(; name="baseline", id=args[:baseline], cmd=args[:bcommand], retune=false)
+        benchmark(; name="baseline", rev=args[:baseline], cmd=args[:bcommand])
     end
-    # compare the two
-    judgment = judge(target, baseline)
-    export_markdown(joinpath(BMPATH, args[:prefix] * "judgment.md"), judgment)
+else
+    nothing
 end
 
-# copy tune file over to real repo if there is none yet or it was retuned
-if !isfile(joinpath(BMPATH, "tune.json")) || args[:retune]
-    println("Update tune.json in $BMPATH")
-    cp(joinpath(ndpath_tmp, "benchmark", "tune.json"), joinpath(BMPATH, "tune.json"); force=args[:retune])
+#=
+if !isnothing(baseline)
+    println()
+    println(styled"{bright_red:Baseline benchmark}")
+    println()
+    display(baseline)
 end
+println()
+println(styled"{bright_red:Target benchmark}")
+println()
+display(target)
+=#
 
-s = round(Int, time() - tstart)
-m, s = s ÷ 60, s % 60
-@info "Benchmarking endet after $m min $s seconds"
+println()
+println(styled"{bright_red:Comparison}")
+println()
+display(compare(target, baseline))
+
+# # copy tune file over to real repo if there is none yet or it was retuned
+# if !isfile(joinpath(BMPATH, "tune.json")) || args[:retune]
+#     println("Update tune.json in $BMPATH")
+#     cp(joinpath(ndpath_tmp, "benchmark", "tune.json"), joinpath(BMPATH, "tune.json"); force=args[:retune])
+# end
+
+# s = round(Int, time() - tstart)
+# m, s = s ÷ 60, s % 60
+# @info "Benchmarking endet after $m min $s seconds"

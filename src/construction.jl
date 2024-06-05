@@ -1,10 +1,10 @@
 function Network(g::AbstractGraph,
                  vertexf::Union{VertexFunction,Vector{<:VertexFunction}},
                  edgef::Union{EdgeFunction,Vector{<:EdgeFunction}};
-                 aggregator=NNlibScatter(+),
+                 execution=SequentialExecution{true}(),
                  edepth=:auto,
                  vdepth=:auto,
-                 execution=SequentialExecution{true}(),
+                 aggregator=execution isa SequentialExecution ? SequentialAggregator(+) : PolyesterAggregator(+),
                  verbose=false)
     reset_timer!()
     @timeit_debug "Construct Network" begin
@@ -42,8 +42,12 @@ function Network(g::AbstractGraph,
         im = IndexManager(g, dynstates, edepth, vdepth, _vertexf, _edgef)
 
         # batch identical edge and vertex functions
-        vidxs = _find_identical(vertexf, 1:nv(g))
-        eidxs = _find_identical(edgef, 1:ne(g))
+        @timeit_debug "batch identical vertexes" begin
+            vidxs = _find_identical(vertexf, 1:nv(g))
+        end
+        @timeit_debug "batch identical edges" begin
+            eidxs = _find_identical(edgef, 1:ne(g))
+        end
 
         # create vertex batches and initialize with index manager
         @timeit_debug "create vertex batches" begin

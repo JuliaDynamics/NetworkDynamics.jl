@@ -164,7 +164,7 @@ end
     end
 end
 
-@inline function process_layer!(nw::Network{<:KAExecution{true}}, layer, dupt)
+@inline function process_layer!(::KAExecution{true}, nw, layer, dupt)
     # buffered/gathered
     u = dupt[2]
     gbuf = nw.cachepool[u, size(layer.gather_map)]
