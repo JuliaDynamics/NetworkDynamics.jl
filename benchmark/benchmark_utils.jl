@@ -24,12 +24,14 @@ BenchmarkDict() = BenchmarkDict(OrderedDict())
 BenchmarkDict(args...) = BenchmarkDict(OrderedDict(args...))
 
 Base.isempty(bd::BenchmarkDict) = isempty(bd.d)
-Base.keys(bd::BenchmarkDict) = keys(bd.d)
-Base.values(bd::BenchmarkDict, k) = values(bd.d)
+Base.keys(bd::BenchmarkDict) = Base.keys(bd.d)
+Base.values(bd::BenchmarkDict) = Base.values(bd.d)
 Base.getindex(bd::BenchmarkDict, k) = get!(bd.d, k, BenchmarkDict())
 Base.getindex(bd::BenchmarkDict, k...) = bd[k[1:(end - 1)]...][k[end]]
 Base.setindex!(bd::BenchmarkDict, v, k) = setindex!(bd.d, v, k)
 Base.setindex!(bd::BenchmarkDict, v, k...) = setindex!(bd[k[1:(end - 1)]...], v, k[end])
+Base.haskey(bd::BenchmarkDict, k) = haskey(bd.d, k)
+Base.haskey(bd::BenchmarkDict, k...) = haskey(bd.d, k[1]) && haskey(bd[k[1]], k[2:end]...)
 
 AbstractTrees.children(bd::BenchmarkDict) = pairs(bd.d)
 AbstractTrees.printnode(io::IO, bd::BenchmarkDict) = print(io, "BenchmarkDict()")
@@ -43,7 +45,7 @@ function PrettyTables.pretty_table(io::IO, bd::BenchmarkDict; kwargs...)
         return
     end
 
-    keycols = [[x[i] for x in flatk] for i in eachindex(flatk[1])]
+    keycols = [[i∈eachindex(x) ? x[i] : "" for x in flatk] for i in 1:maximum(length.(flatk))]
     for col in keycols
         for i in length(col):-1:2
             if col[i] == col[i-1]
@@ -96,8 +98,12 @@ function PrettyTables.pretty_table(io::IO, bd::BenchmarkDict; kwargs...)
         data = hcat(keycols..., ttime, btime, ctime, tallocs, ballocs, callocs)
         header = (vcat("Key", ["" for i in 1:length(keycols)-1]..., "Time", "", "","Allocs","",""),
                   vcat(["" for i in 1:length(keycols)]..., "target", "baseline", "","target","baseline",""))
-        hl_bad = Highlighter((data, i, j) -> (j ∈ length(keycols) .+ [3,6]) && (data[i, j] > 0), crayon"red bold");
-        hl_good = Highlighter((data, i, j) -> (j ∈ length(keycols) .+ [3,6]) && (data[i, j] < 0), crayon"green bold");
+        hl_bad = Highlighter(crayon"red bold") do data, i, j
+            (j ∈ length(keycols) .+ [3,6]) && data[i, j] isa Number && data[i,j] > 0
+        end
+        hl_good = Highlighter(crayon"green bold") do data, i, j
+            (j ∈ length(keycols) .+ [3,6]) && data[i, j] isa Number && (data[i, j] < 0)
+        end
         kwargs = (kwargs..., highlighters=(hl_bad, hl_good), formatters    = ft_printf("%+5.1f %%", length(keycols) .+ [3,6]))
     end
 
@@ -116,16 +122,88 @@ function _flatten(bd::BenchmarkDict, prekey=[], _flatk=[], _flatv=[])
     _flatk, _flatv
 end
 
-function compare(target, baseline)
+function compare(target, baseline; alltarget=false)
     tkeys, _ = _flatten(target)
-    bkeys, _ = _flatten(baseline)
-
-    inters = tkeys ∩ bkeys
     bd = BenchmarkDict()
-    for k in inters
-        bd[k...] = SampleComparison(target[k...], baseline[k...])
+
+    for k in tkeys
+        if haskey(baseline, k...)
+            bd[k...] = SampleComparison(target[k...], baseline[k...])
+        elseif alltarget
+            bd[k...] = target[k...]
+        end
     end
     bd
+end
+
+function plot_over_N(target, baseline)
+    exs = ["seq_buf", "ka_buf"]
+    aggrs = #=["nnlib",=#["KA","seq","poly"]
+
+    comp = compare(target, baseline; alltarget=true)
+
+    fig = Makie.Figure(size=(2000,1000))
+    ax = Makie.Axis(fig[1,1]; xscale=log10, yscale=log10, ylabel="coreloop time", title="Diffusion - static_edge")
+
+    for ex in exs
+        for aggr in aggrs
+            dat = comp["diffusion", "static_edge", ex, aggr]
+            N = collect(keys(dat))
+            ttime = getproperty.(gettarget.(values(dat)), :time)
+            sc = Makie.scatterlines!(ax, N, ttime, label="$ex $aggr")
+            if all(hasbaseline.(values(dat)))
+                btime = getproperty.(getbaseline.(values(dat)), :time)
+                Makie.scatterlines!(ax, N, btime; linestyle=:dash, color=sc.color)
+            end
+        end
+    end
+    Makie.axislegend(ax; position=:lt)
+
+    ax = Makie.Axis(fig[1,2]; xscale=log10, yscale=log10, ylabel="coreloop time", title="Diffusion - ode_edge")
+    for ex in exs
+        for aggr in aggrs
+            dat = comp["diffusion", "ode_edge", ex, aggr]
+            N = collect(keys(dat))
+            ttime = getproperty.(gettarget.(values(dat)), :time)
+            sc = Makie.scatterlines!(ax, N, ttime, label="$ex $aggr ")
+            if all(hasbaseline.(values(dat)))
+                btime = getproperty.(getbaseline.(values(dat)), :time)
+                Makie.scatterlines!(ax, N, btime; linestyle=:dash, color=sc.color)
+            end
+        end
+    end
+    Makie.axislegend(ax; position=:lt)
+
+    ax = Makie.Axis(fig[2,1]; xscale=log10, yscale=log10, ylabel="coreloop time", title="kuramoto - homogeneous")
+    for ex in exs
+        for aggr in aggrs
+            dat = comp["kuramoto", "homogeneous", ex, aggr]
+            N = collect(keys(dat))
+            ttime = getproperty.(gettarget.(values(dat)), :time)
+            sc = Makie.scatterlines!(ax, N, ttime, label="$ex $aggr ")
+            if all(hasbaseline.(values(dat)))
+                btime = getproperty.(getbaseline.(values(dat)), :time)
+                Makie.scatterlines!(ax, N, btime; linestyle=:dash, color=sc.color)
+            end
+        end
+    end
+    Makie.axislegend(ax; position=:lt)
+
+    ax = Makie.Axis(fig[2,2]; xscale=log10, yscale=log10, ylabel="coreloop time", title="kuramoto - heterogeneous")
+    for ex in exs
+        for aggr in aggrs
+            dat = comp["kuramoto", "heterogeneous", ex, aggr]
+            N = collect(keys(dat))
+            ttime = getproperty.(gettarget.(values(dat)), :time)
+            sc = Makie.scatterlines!(ax, N, ttime, label="$ex $aggr ")
+            if all(hasbaseline.(values(dat)))
+                btime = getproperty.(getbaseline.(values(dat)), :time)
+                Makie.scatterlines!(ax, N, btime; linestyle=:dash, color=sc.color)
+            end
+        end
+    end
+    Makie.axislegend(ax; position=:lt)
+    fig
 end
 
 # code for interactive testing
@@ -140,9 +218,10 @@ bd["Group 2", "Subgroup 1", "Benchmark 2"] = BenchmarkResult(6.0, 100)
 bd["Group 2", "Subgroup 2", "Benchmark 1"] = BenchmarkResult(7.0, 100)
 bd["Group 2", "Subgroup 2", "Benchmark 2"] = BenchmarkResult(9.0, 100)
 
-target = deserialize("./2024-06-05_124146_target.data")
-baseline = deserialize("./2024-06-05_124146_baseline.data")
-compare(target, baseline)
-
+target = deserialize(sort(filter(contains("target.data"), readdir()))[end])
+baseline = deserialize(sort(filter(contains("baseline.data"), readdir()))[end])
+import GLMakie
+GLMakie.activate!()
+plot_over_N(target,baseline)
 
 end

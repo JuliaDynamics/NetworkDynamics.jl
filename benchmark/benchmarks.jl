@@ -6,16 +6,22 @@ using NetworkDynamics
 using Random
 using Serialization
 using SciMLBase
+using Test
+using ProgressMeter
 (isinteractive() ? includet : include)("benchmark_utils.jl")
 
 if pkgversion(NetworkDynamics) < v"0.9.0"
     @info "Define compatibility functions"
     struct SequentialExecution{P} end
     struct KAExecution{P} end
-    function Network(g, v, e; execution = SequentialExecution())
-        if execution isa KAExecution
+    struct NNlibScatter; f; end
+    struct KAAggregator; f; end
+    struct SequentialAggregator; f; end
+    struct PolyesterAggregator; f; end
+    function Network(g, v, e; execution = SequentialExecution{true}(), aggregator=SequentialAggregator(+))
+        if execution isa KAExecution{true} && aggregator isa KAAggregator
             network_dynamics(v, e, g; parallel=true)
-        elseif execution isa SequentialExecution
+        elseif execution isa SequentialExecution && aggregator isa SequentialAggregator
             network_dynamics(v, e, g)
         else
             error("execution type not supported")
@@ -31,6 +37,9 @@ end
 
 bd = BenchmarkDict()
 
+executions = Dict("seq_buf" => SequentialExecution{true}(), "ka_buf"=>KAExecution{true}())
+aggregations = Dict("nnlib" => NNlibScatter(+), "KA" => KAAggregator(+), "seq" => SequentialAggregator(+), "poly" => PolyesterAggregator(+))
+
 ####
 #### diffusion benchmarks on a dense watts strogatz graph
 ####
@@ -41,19 +50,39 @@ edges = Dict("static_edge" => diffusion_edge(),
 for k in ["static_edge", "ode_edge"]
     edge = edges[k]
 
-    for N in [100, 1_000]#, 5_000]  #, 100_000, 1_000_000]
+    for N in [100, 300, 1000, 3000]  #, 100_000, 1_000_000]
         @info "Benchmark diffusion network with $k on size $N"
         g = watts_strogatz(N, N ÷ 2, 0.0; seed=1)
-        b = @b Network($g, $vertex, $edge)
+        b = @b Network($g, $vertex, $edge) evals=1 samples=50 seconds=10
         bd["diffusion", k, "assemble", N] = b
 
-        nd1 = Network(g, vertex, edge; execution=SequentialExecution{true}())
-        nd2 = Network(g, vertex, edge; execution=KAExecution{true}())
-        x0 = randn(dim(nd1))
-        dx = similar(x0)
+        _nd = Network(g, vertex, edge)
+        _x0 = rand(dim(_nd))
+        _dx = similar(_x0)
+        _nd(_dx,_x0,nothing,NaN)
 
-        bd["diffusion", k, "call", N]    = @b $nd1($dx, $x0, nothing, 0.0)
-        bd["diffusion", k, "call_mt", N] = @b $nd2($dx, $x0, nothing, 0.0)
+        progress = Progress(length(executions)*length(aggregations))
+        for (exname, execution) in executions
+            for (aggname, aggregator) in aggregations
+                next!(progress)
+                nd = try
+                    Network(g, vertex, edge; execution, aggregator)
+                catch e
+                    if e.msg == "execution type not supported"
+                        continue
+                    else
+                        rethrow(e)
+                    end
+                end
+                dx = similar(_x0)
+                nd(dx, _x0, nothing, NaN)
+                @test dx ≈ _dx
+
+                b = @b $nd($dx, $_x0, nothing, 0.0) seconds=5
+                bd["diffusion", k, exname, aggname, N] = b
+            end
+        end
+        finish!(progress)
     end
 end
 
@@ -90,17 +119,38 @@ end
 
 for f in [homogeneous, heterogeneous]
     name = string(f)
-    for N in [100, 1_000, 10_000]#, 100_000, 1_000_000]
+    for N in [100, 1_000, 10_000, 100_000]#, 1_000_000]
         @info "Benchmark kuramoto $name on size $N"
-        (p, v, e, g) = f(N)
-        bd["kuramoto", name, "assemble", N] = @b Network($g, $v, $e)
+        (p, vert, edg, g) = f(N)
+        bd["kuramoto", name, "assemble", N] = @b Network($g, $vert, $edg) evals=1 samples=50 seconds=10
 
-        nd1 = Network(g, v, e; execution=SequentialExecution{true}())
-        nd2 = Network(g, v, e; execution=KAExecution{true}())
-        x0 = randn(dim(nd1))
-        dx = similar(x0)
-        bd["kuramoto", name, "call", N]    = @b $nd1($dx, $x0, $p, 0.0)
-        bd["kuramoto", name, "call_mt", N] = @b $nd2($dx, $x0, $p, 0.0)
+        _nd = Network(g, vert, edg)
+        _x0 = rand(dim(_nd))
+        _dx = similar(_x0)
+        _nd(_dx,_x0,p,NaN)
+
+        progress = Progress(length(executions)*length(aggregations))
+        for (exname, execution) in executions
+            for (aggname, aggregator) in aggregations
+                next!(progress)
+                nd = try
+                    Network(g, vert, edg; execution, aggregator)
+                catch e
+                    if e.msg == "execution type not supported"
+                        continue
+                    else
+                        rethrow(e)
+                    end
+                end
+                dx = similar(_x0)
+                nd(dx, _x0, p, NaN)
+                @test dx ≈ _dx
+
+                b = @b $nd($dx, $_x0, $p, 0.0) seconds=5
+                bd["kuramoto", name, exname, aggname, N] = b
+            end
+        end
+        finish!(progress)
     end
 end
 

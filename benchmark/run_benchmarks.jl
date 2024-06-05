@@ -26,6 +26,7 @@ using Random
 using ArgParse
 using Serialization
 using StyledStrings
+using CairoMakie
 
 (isinteractive() ? includet : include)("benchmark_utils.jl")
 
@@ -54,7 +55,7 @@ s = ArgParseSettings()
     "--retune"
         help = "Force retuneing of parameters befor the first benchmark. (Second benchmark will use the tune file)"
         action = :store_true
-    "--export-raw"
+    "--no-export-raw"
         help = "Export raw data of trials. I.e. to use benchmarks results again als baseline or target."
         action = :store_true
 end
@@ -137,19 +138,27 @@ function benchmark(; name, rev, cmd)
     println("------------ benchmark process ended --------------")
     println()
 
-    args[Symbol("export-raw")] && cp(exp_tmp, joinpath(BMPATH, args[:prefix] * name * ".data"))
+    args[Symbol("no-export-raw")] || cp(exp_tmp, joinpath(BMPATH, args[:prefix] * name * ".data"))
     result = deserialize(exp_tmp)
 end
 
 target = if contains(args[:target], r".data$")
     path = joinpath(original_path, args[:target])
     deserialize(path)
+elseif args[:target] == "latest"
+    file = sort(filter(contains("target.data"), readdir(original_path)))[end]
+    @info "Use file $file as target"
+    deserialize(joinpath(original_path, file))
 else
     benchmark(; name="target", rev=args[:target], cmd=args[:tcommand])
 end
 
 baseline = if args[:baseline] ∉ ["nothing", "none"]
-    if contains(args[:baseline], r".data$")
+    if args[:baseline] == "latest"
+        file = sort(filter(contains("baseline.data"), readdir(original_path)))[end]
+        @info "Use file $file as baseline"
+        deserialize(joinpath(original_path, file))
+    elseif contains(args[:baseline], r".data$")
         path = joinpath(original_path, args[:baseline])
         deserialize(path)
     elseif args[:baseline] ∉ ["nothing", "none"]
@@ -159,30 +168,14 @@ else
     nothing
 end
 
-#=
-if !isnothing(baseline)
-    println()
-    println(styled"{bright_red:Baseline benchmark}")
-    println()
-    display(baseline)
-end
-println()
-println(styled"{bright_red:Target benchmark}")
-println()
-display(target)
-=#
-
 println()
 println(styled"{bright_red:Comparison}")
 println()
 display(compare(target, baseline))
 
-# # copy tune file over to real repo if there is none yet or it was retuned
-# if !isfile(joinpath(BMPATH, "tune.json")) || args[:retune]
-#     println("Update tune.json in $BMPATH")
-#     cp(joinpath(ndpath_tmp, "benchmark", "tune.json"), joinpath(BMPATH, "tune.json"); force=args[:retune])
-# end
+fig = plot_over_N(target, baseline)
+save(joinpath(original_path, args[:prefix] * "comparison.pdf"), fig)
 
-# s = round(Int, time() - tstart)
-# m, s = s ÷ 60, s % 60
-# @info "Benchmarking endet after $m min $s seconds"
+s = round(Int, time() - tstart)
+m, s = s ÷ 60, s % 60
+@info "Benchmarking endet after $m min $s seconds"

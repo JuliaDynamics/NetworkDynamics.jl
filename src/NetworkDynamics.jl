@@ -46,8 +46,8 @@ include("symbolicindexing.jl")
 include("show.jl")
 
 #=
-styled"{bright_red:red} {bright_green:green} {bright_yellow:yellow} {bright_blue:blue} {bright_magenta:magenta} {bright_cyan:cyan}"
-styled"{red:red} {green:green} {yellow:yellow} {blue:blue} {magenta:magenta} {cyan:cyan}"
+styled"{bright_red:red} {bright_green:green} {bright_yellow:yellow} {bright_blue:blue} {bright_magenta:magenta} {bright_cyan:cyan} {bright_black:black} {bright_white:white}"
+styled"{red:red} {green:green} {yellow:yellow} {blue:blue} {magenta:magenta} {cyan:cyan} {black:black} {white:white}"
 =#
 const ND_FACES = [
     :NetworkDynamics_inactive => StyledStrings.Face(foreground=:bright_black),
