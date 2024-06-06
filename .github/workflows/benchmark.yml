@@ -29,6 +29,7 @@ jobs:
                 echo '' >> body.md
                 echo '' >> body.md
                 cat comparison.md >> body.md
+            - uses: int128/hide-comment-action@v1 # hide all previous comments
             - name: Comment on PR
               uses: peter-evans/create-or-update-comment@v3
               with:

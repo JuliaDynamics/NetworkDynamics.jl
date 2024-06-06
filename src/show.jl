@@ -214,7 +214,7 @@ function align_strings(vecofstr::AbstractVector{<:AbstractString})
     end
     align_strings(splitted)
 end
-function align_strings(vecofvec::AbstractVector{<:AbstractVector})
+function align_strings(vecofvec::AbstractVector{<:AbstractVector}; padding=:alternating)
     depth = maximum(length.(vecofvec))
     maxlength = zeros(Int,depth)
 
@@ -226,7 +226,13 @@ function align_strings(vecofvec::AbstractVector{<:AbstractVector})
     end
     map(vecofvec) do strvec
         mapreduce(*,zip(1:depth, strvec,maxlength)) do (d, str, l)
-            pad = isodd(d) ? lpad : rpad
+            if padding == :alternating
+                pad = isodd(d) ? lpad : rpad
+            elseif padding == :left
+                pad = lpad
+            else
+                pad = rpad
+            end
             pad(str, l)
         end
     end

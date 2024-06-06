@@ -57,7 +57,23 @@ function PrettyTables.pretty_table(io::IO, bd::BenchmarkDict; kwargs...)
         return
     end
 
-    keycols = [[i∈eachindex(x) ? x[i] : "" for x in flatk] for i in 1:maximum(length.(flatk))]
+    numbers = map(flatk) do line
+        line[end]
+    end
+
+    keycols = if numbers isa AbstractVector{<:Number}
+        basekey = map(flatk) do line
+            ret = ""
+            for kp in line[1:end-2]
+                ret *= kp*" → "
+            end
+            ret *= line[end-1]
+        end
+        basekey, numbers
+    else
+        [[i∈eachindex(x) ? x[i] : "" for x in flatk] for i in 1:maximum(length.(flatk))]
+    end
+
     for col in keycols
         for i in length(col):-1:2
             if col[i] == col[i-1]
@@ -115,12 +131,6 @@ function PrettyTables.pretty_table(io::IO, bd::BenchmarkDict; kwargs...)
 
         _kwdict = Dict(kwargs)
         if haskey(_kwdict, :backend) && _kwdict[:backend] == Val(:markdown)
-            # hl_bad = MarkdownHighlighter(MarkdownDecoration(bold=true)) do data, i, j
-            #     (j ∈ length(keycols) .+ [3,6]) && data[i, j] isa Number && data[i,j] > 0
-            # end
-            # hl_good = MarkdownHighlighter(MarkdownDecoration(bold=false)) do data, i, j
-            #     (j ∈ length(keycols) .+ [3,6]) && data[i, j] isa Number && (data[i, j] < 0)
-            # end
             ctime = map(ctime) do num
                 sym = if num ≤ 0
                     "✅"
@@ -157,7 +167,8 @@ function PrettyTables.pretty_table(io::IO, bd::BenchmarkDict; kwargs...)
                   vcat(["" for i in 1:length(keycols)]..., "target", "baseline", "","target","baseline",""))
     end
 
-    pretty_table(io, data; header, header_alignment=:l, kwargs...)
+    alignment = vcat([:l for _ in 1:length(keycols)-1]..., [:r for _ in 1:size(data,2)-length(keycols)+1]...)
+    pretty_table(io, data; header, header_alignment=:l, alignment, kwargs...)
 
 end
 
@@ -302,10 +313,10 @@ entry.baseline.value[1]
 entry.target.value[2]
 entry.baseline.value[2]
 
-k = "ode_edge"
-N = 6
-import GLMakie
-GLMakie.activate!()
-plot_over_N(target,baseline)
+target = deserialize(sort(filter(contains("target.data"), readdir()))[end])
+baseline = deserialize(sort(filter(contains("baseline.data"), readdir()))[end])
+comp = compare(target,baseline)
+
+pretty_table(comp["diffusion","static_edge"]; backend=Val(:markdown))
 
 end
