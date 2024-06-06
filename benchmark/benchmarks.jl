@@ -3,31 +3,16 @@ using Pkg
 using BenchmarkTools
 using Graphs
 using NetworkDynamics
-using Random
 using Serialization
+using StableRNGs
 using SciMLBase
 using Test
 using ProgressMeter
+using Random
 (isinteractive() ? includet : include)("benchmark_utils.jl")
+(isinteractive() ? includet : include)("benchmark_compat.jl")
 
 if pkgversion(NetworkDynamics) < v"0.9.0"
-    @info "Define compatibility functions"
-    struct SequentialExecution{P} end
-    struct KAExecution{P} end
-    struct NNlibScatter; f; end
-    struct KAAggregator; f; end
-    struct SequentialAggregator; f; end
-    struct PolyesterAggregator; f; end
-    function Network(g, v, e; execution = SequentialExecution{true}(), aggregator=SequentialAggregator(+))
-        if execution isa KAExecution{true} && aggregator isa KAAggregator
-            network_dynamics(v, e, g; parallel=true)
-        elseif execution isa SequentialExecution && aggregator isa SequentialAggregator
-            network_dynamics(v, e, g)
-        else
-            error("execution type not supported")
-        end
-    end
-    dim(nd::ODEFunction) = length(nd.syms)
     (isinteractive() ? includet : include)("benchmark_models_v0.8.jl")
 else
     (isinteractive() ? includet : include)("benchmark_models.jl")
@@ -37,8 +22,12 @@ end
 
 bd = BenchmarkDict()
 
-executions = Dict("seq_buf" => SequentialExecution{true}(), "ka_buf"=>KAExecution{true}())
-aggregations = Dict("nnlib" => NNlibScatter(+), "KA" => KAAggregator(+), "seq" => SequentialAggregator(+), "poly" => PolyesterAggregator(+))
+executions = Dict("seq_buf" => SequentialExecution{true}(),
+                  "ka_buf" => KAExecution{true}())
+aggregations = Dict("nnlib" => NNlibScatter(+),
+                    "KA" => KAAggregator(+),
+                    "seq" => SequentialAggregator(+),
+                    "poly" => PolyesterAggregator(+))
 
 ####
 #### diffusion benchmarks on a dense watts strogatz graph
@@ -52,16 +41,16 @@ for k in ["static_edge", "ode_edge"]
 
     for N in [100, 300, 1000, 3000]  #, 100_000, 1_000_000]
         @info "Benchmark diffusion network with $k on size $N"
-        g = watts_strogatz(N, N ÷ 2, 0.0; seed=1)
-        b = @b Network($g, $vertex, $edge) evals=1 samples=50 seconds=10
-        bd["diffusion", k, "assemble", N] = b
+        g = watts_strogatz(N, N ÷ 2, 0.0; rng=StableRNG(1))
+        b = @be Network($g, $vertex, $edge) evals=1 samples=50 seconds=10
+        bd["diffusion", k, "assemble", N] = BenchmarkResult(b)
 
         _nd = Network(g, vertex, edge)
-        _x0 = rand(dim(_nd))
+        _x0 = randx0(_nd)
         _dx = similar(_x0)
-        _nd(_dx,_x0,nothing,NaN)
+        _nd(_dx, _x0, nothing, NaN)
 
-        progress = Progress(length(executions)*length(aggregations))
+        progress = Progress(length(executions) * length(aggregations))
         for (exname, execution) in executions
             for (aggname, aggregator) in aggregations
                 next!(progress)
@@ -78,8 +67,9 @@ for k in ["static_edge", "ode_edge"]
                 nd(dx, _x0, nothing, NaN)
                 @test dx ≈ _dx
 
-                b = @b $nd($dx, $_x0, nothing, 0.0) seconds=5
-                bd["diffusion", k, exname, aggname, N] = b
+                b = @be $nd($dx, $_x0, nothing, 0.0) seconds=1
+                br = BenchmarkResult(b, legacy_order(nd, dx))
+                bd["diffusion", k, exname, aggname, N] = br
             end
         end
         finish!(progress)
@@ -91,45 +81,36 @@ end
 ####
 
 function homogeneous(N)
-    rng = MersenneTwister(1)
-    g = watts_strogatz(N, 3, 0.8; seed=1)
+    g = watts_strogatz(N, 3, 0.8; rng=StableRNG(1))
     edge = static_kuramoto_edge()
     vertex = kuramoto_vertex_2d()
-    if pkgversion(NetworkDynamics) < v"0.9.0"
-        p = (randn(rng, nv(g)), randn(rng, ne(g)))
-    else
-        p = rand(rng, nv(g) + ne(g))
-    end
-    (p, vertex, edge, g)
+    (vertex, edge, g)
 end
 
 function heterogeneous(N)
-    rng = MersenneTwister(1)
-    g = watts_strogatz(N, 3, 0.8; seed=1)
+    rng = StableRNG(1)
+    g = watts_strogatz(N, 3, 0.8; rng=StableRNG(1))
     edge = static_kuramoto_edge()
     vertex = [kuramoto_vertex_1d(), kuramoto_vertex_2d()]
     vertices = vertex[shuffle(rng, vcat([1 for _ in 1:N÷2], [2 for _ in 1:N÷2]))]
-    if pkgversion(NetworkDynamics) < v"0.9.0"
-        p = (randn(rng, nv(g)), randn(rng, ne(g)))
-    else
-        p = rand(rng, nv(g) + ne(g))
-    end
-    (p, vertices, edge, g)
+    (vertices, edge, g)
 end
 
 for f in [homogeneous, heterogeneous]
     name = string(f)
     for N in [100, 1_000, 10_000, 100_000]#, 1_000_000]
         @info "Benchmark kuramoto $name on size $N"
-        (p, vert, edg, g) = f(N)
-        bd["kuramoto", name, "assemble", N] = @b Network($g, $vert, $edg) evals=1 samples=50 seconds=10
+        (vert, edg, g) = f(N)
+        b = @be Network($g, $vert, $edg) evals=1 samples=50 seconds=10
+        bd["kuramoto", name, "assemble", N] = BenchmarkResult(b)
 
         _nd = Network(g, vert, edg)
-        _x0 = rand(dim(_nd))
+        _x0 = randx0(_nd)
         _dx = similar(_x0)
-        _nd(_dx,_x0,p,NaN)
+        p = randp(_nd)
+        _nd(_dx, _x0, p, NaN)
 
-        progress = Progress(length(executions)*length(aggregations))
+        progress = Progress(length(executions) * length(aggregations))
         for (exname, execution) in executions
             for (aggname, aggregator) in aggregations
                 next!(progress)
@@ -146,8 +127,9 @@ for f in [homogeneous, heterogeneous]
                 nd(dx, _x0, p, NaN)
                 @test dx ≈ _dx
 
-                b = @b $nd($dx, $_x0, $p, 0.0) seconds=5
-                bd["kuramoto", name, exname, aggname, N] = b
+                b = @be $nd($dx, $_x0, $p, 0.0) seconds=1
+                br = BenchmarkResult(b, legacy_order(nd, dx))
+                bd["kuramoto", name, exname, aggname, N] = br
             end
         end
         finish!(progress)

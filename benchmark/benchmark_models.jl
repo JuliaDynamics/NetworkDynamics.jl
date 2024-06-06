@@ -9,9 +9,10 @@ diffusion_edge() = StaticEdge(; f=diffusionedge!, dim=1, pdim=0, coupling=AntiSy
 
 Base.@propagate_inbounds function diffusion_dedge!(de, e, v_s, v_d, _, _)
     de[1] = 100.0 * (sin(v_s[1] - v_d[1]) - e[1])
+    de[2] = 100.0 * (sin(v_d[1] - v_s[1]) - e[2])
     nothing
 end
-diffusion_dedge() = ODEEdge(; f=diffusion_dedge!, dim=1, pdim=0, coupling=AntiSymmetric())
+diffusion_dedge() = ODEEdge(; f=diffusion_dedge!, dim=2, pdim=0, coupling=Fiducial())
 
 Base.@propagate_inbounds function diffusionvertex!(dv, _, esum, _, _)
     dv[1] = esum[1]

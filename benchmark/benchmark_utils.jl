@@ -2,23 +2,35 @@ using OrderedCollections
 using AbstractTrees
 using Chairmarks
 using PrettyTables
+using Test
 
 struct BenchmarkDict{D}
     d::D
 end
 
+struct BenchmarkResult
+    time::Float64
+    allocs::Int
+    samples::Int
+    value::Any
+end
+function BenchmarkResult(be::Chairmarks.Benchmark, value=nothing)
+    res = minimum(be)
+    BenchmarkResult(res.time, res.allocs, length(be.samples), value)
+end
+
 struct SampleComparison
-    target::Chairmarks.Sample
-    baseline::Chairmarks.Sample
+    target::BenchmarkResult
+    baseline::BenchmarkResult
 end
 
 hastarget(::SampleComparison) = true
 hasbaseline(::SampleComparison) = true
-hastarget(::Chairmarks.Sample) = true
-hasbaseline(::Chairmarks.Sample) = false
+hastarget(::BenchmarkResult) = true
+hasbaseline(::BenchmarkResult) = false
 gettarget(sc::SampleComparison) = sc.target
 getbaseline(sc::SampleComparison) = sc.baseline
-gettarget(s::Chairmarks.Sample) = s
+gettarget(s::BenchmarkResult) = s
 
 BenchmarkDict() = BenchmarkDict(OrderedDict())
 BenchmarkDict(args...) = BenchmarkDict(OrderedDict(args...))
@@ -55,25 +67,30 @@ function PrettyTables.pretty_table(io::IO, bd::BenchmarkDict; kwargs...)
     end
     ttime = map(flatv) do _v
         v = gettarget(_v)
-        @assert v isa Chairmarks.Sample
+        @assert v isa BenchmarkResult
         buf = IOBuffer()
         Chairmarks.print_time(buf, v.time)
         String(take!(buf))
     end
     tallocs = map(flatv) do _v
         v = gettarget(_v)
-        @assert v isa Chairmarks.Sample
+        @assert v isa BenchmarkResult
         v.allocs > 0 ? repr(v.allocs) : ""
     end
+    samples = map(flatv) do _v
+        v = gettarget(_v)
+        @assert v isa BenchmarkResult
+        v.samples
+    end
 
-    data = hcat(keycols..., ttime, tallocs)
-    header = vcat("Key", ["" for i in 1:length(keycols)-1]..., "Time", "Allocs")
+    data = hcat(keycols..., ttime, tallocs, samples)
+    header = vcat("Key", ["" for i in 1:length(keycols)-1]..., "Time", "Allocs", "Samples")
 
     if any(hasbaseline, flatv)
         btime = map(flatv) do _v
             hasbaseline(_v) || return ""
             v = getbaseline(_v)
-            @assert v isa Chairmarks.Sample
+            @assert v isa BenchmarkResult
             buf = IOBuffer()
             Chairmarks.print_time(buf, v.time)
             String(take!(buf))
@@ -86,7 +103,7 @@ function PrettyTables.pretty_table(io::IO, bd::BenchmarkDict; kwargs...)
         ballocs = map(flatv) do _v
             hasbaseline(_v) || return ""
             v = getbaseline(_v)
-            @assert v isa Chairmarks.Sample
+            @assert v isa BenchmarkResult
             v.allocs > 0 ? repr(v.allocs) : ""
         end
         callocs = map(flatv) do v
@@ -108,6 +125,22 @@ function PrettyTables.pretty_table(io::IO, bd::BenchmarkDict; kwargs...)
     end
 
     pretty_table(io, data; header, header_alignment=:l, kwargs...)
+
+end
+
+function test_return_values(bd)
+    @testset "Compare Results" begin
+        flatk, flatv = _flatten(bd)
+        for (k,b) in zip(flatk, flatv)
+            b isa BenchmarkResult && continue
+            bsv = getbaseline(b).value
+            tgv = gettarget(b).value
+            @test bsv == tgv || isapprox(bsv, tgv)
+            if !(bsv == tgv || isapprox(bsv, tgv))
+                @warn "Values differ for $(k)! $(extrema(bsv-tgv))"
+            end
+        end
+    end
 end
 
 function _flatten(bd::BenchmarkDict, prekey=[], _flatk=[], _flatv=[])
@@ -220,6 +253,24 @@ bd["Group 2", "Subgroup 2", "Benchmark 2"] = BenchmarkResult(9.0, 100)
 
 target = deserialize(sort(filter(contains("target.data"), readdir()))[end])
 baseline = deserialize(sort(filter(contains("baseline.data"), readdir()))[end])
+comp = compare(target, baseline)
+test_return_values(comp)
+
+entry =  comp["diffusion","ode_edge","ka_buf","KA",6]
+entry =  comp["diffusion","ode_edge","seq_buf","seq",6]
+entry.target.value[1] - entry.baseline.value[1]
+entry.target.value[2]
+entry.baseline.value[2]
+
+entry =  comp["kuramoto","heterogeneous","ka_buf","KA",6]
+# entry =  comp["kuramoto","heterogeneous","seq_buf","seq",6]
+entry.target.value[1]
+entry.baseline.value[1]
+entry.target.value[2]
+entry.baseline.value[2]
+
+k = "ode_edge"
+N = 6
 import GLMakie
 GLMakie.activate!()
 plot_over_N(target,baseline)

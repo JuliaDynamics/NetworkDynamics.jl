@@ -168,14 +168,37 @@ else
     nothing
 end
 
-println()
-println(styled"{bright_red:Comparison}")
-println()
-display(compare(target, baseline))
+if !isnothing(baseline)
+    println(styled"{bright_red:Baseline}")
+    println()
+    display(baseline)
+end
 
-fig = plot_over_N(target, baseline)
-save(joinpath(original_path, args[:prefix] * "comparison.pdf"), fig)
+println()
+println(styled"{bright_red:Target}")
+println()
+display(target)
+println()
+
+if !isnothing(baseline)
+    println()
+    println(styled"{bright_red:Comparison}")
+    println()
+    comp = compare(target, baseline)
+    display(comp)
+
+    res = test_return_values(comp)
+    failed = res.anynonpass
+
+    @info "Save plot..."
+    fig = plot_over_N(target, baseline)
+    save(joinpath(original_path, args[:prefix] * "comparison.pdf"), fig)
+else
+    failed=false
+end
 
 s = round(Int, time() - tstart)
 m, s = s ÷ 60, s % 60
 @info "Benchmarking endet after $m min $s seconds"
+
+exit(failed)
