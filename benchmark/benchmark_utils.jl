@@ -112,16 +112,49 @@ function PrettyTables.pretty_table(io::IO, bd::BenchmarkDict; kwargs...)
             Δ = (gettarget(v).allocs - getbaseline(v).allocs) / getbaseline(v).allocs * 100
             # round(Δ,digits=1)
         end
+
+        _kwdict = Dict(kwargs)
+        if haskey(_kwdict, :backend) && _kwdict[:backend] == Val(:markdown)
+            # hl_bad = MarkdownHighlighter(MarkdownDecoration(bold=true)) do data, i, j
+            #     (j ∈ length(keycols) .+ [3,6]) && data[i, j] isa Number && data[i,j] > 0
+            # end
+            # hl_good = MarkdownHighlighter(MarkdownDecoration(bold=false)) do data, i, j
+            #     (j ∈ length(keycols) .+ [3,6]) && data[i, j] isa Number && (data[i, j] < 0)
+            # end
+            ctime = map(ctime) do num
+                sym = if num ≤ 0
+                    "✅"
+                elseif num > 5
+                    "❌"
+                else
+                    "✔"
+                end
+                repr(round(num, digits=2)) * " % " * sym
+            end
+            callocs = map(callocs) do num
+                sym = if num ≤ 0
+                    "✅"
+                elseif num > 5
+                    "❌"
+                else
+                    "✔"
+                end
+                repr(round(num, digits=2)) * " % " * sym
+            end
+        else
+            hl_bad = Highlighter(crayon"red bold") do data, i, j
+                (j ∈ length(keycols) .+ [3,6]) && data[i, j] isa Number && data[i,j] > 0
+            end
+            hl_good = Highlighter(crayon"green bold") do data, i, j
+                (j ∈ length(keycols) .+ [3,6]) && data[i, j] isa Number && (data[i, j] < 0)
+            end
+            formatters = ft_printf("%+5.1f %%", length(keycols) .+ [3,6])
+            kwargs = (; kwargs..., highlighters=(hl_bad, hl_good), formatters)
+        end
+
         data = hcat(keycols..., ttime, btime, ctime, tallocs, ballocs, callocs)
         header = (vcat("Key", ["" for i in 1:length(keycols)-1]..., "Time", "", "","Allocs","",""),
                   vcat(["" for i in 1:length(keycols)]..., "target", "baseline", "","target","baseline",""))
-        hl_bad = Highlighter(crayon"red bold") do data, i, j
-            (j ∈ length(keycols) .+ [3,6]) && data[i, j] isa Number && data[i,j] > 0
-        end
-        hl_good = Highlighter(crayon"green bold") do data, i, j
-            (j ∈ length(keycols) .+ [3,6]) && data[i, j] isa Number && (data[i, j] < 0)
-        end
-        kwargs = (kwargs..., highlighters=(hl_bad, hl_good), formatters    = ft_printf("%+5.1f %%", length(keycols) .+ [3,6]))
     end
 
     pretty_table(io, data; header, header_alignment=:l, kwargs...)

@@ -1,4 +1,5 @@
 #!julia --startup-file=no
+@info "Start Benchmarking..."
 
 original_path = pwd()
 
@@ -52,16 +53,21 @@ s = ArgParseSettings()
     "--verbose", "-v"
         help = "Print out the current benchmark."
         action = :store_true
-    "--retune"
-        help = "Force retuneing of parameters befor the first benchmark. (Second benchmark will use the tune file)"
+    "--no-data-export"
+        help = "Don't copy the .data files to working directory."
         action = :store_true
-    "--no-export-raw"
-        help = "Export raw data of trials. I.e. to use benchmarks results again als baseline or target."
+    "--no-plot"
+        help = "Don't copy plot to the working directory."
+        action = :store_true
+    "--export-md"
+        help = "Export Comparison table as markdown file.q"
         action = :store_true
 end
 #! format: on
 args = parse_args(s; as_symbols=true)
-args[:prefix] *= '_'
+if args[:prefix] != ""
+    args[:prefix] *= '_'
+end
 
 @info "Run benchmarks on $(args[:target]) and compare to $(args[:baseline])"
 
@@ -138,7 +144,7 @@ function benchmark(; name, rev, cmd)
     println("------------ benchmark process ended --------------")
     println()
 
-    args[Symbol("no-export-raw")] || cp(exp_tmp, joinpath(BMPATH, args[:prefix] * name * ".data"))
+    args[Symbol("no-data-export")] || cp(exp_tmp, joinpath(BMPATH, args[:prefix] * name * ".data"))
     result = deserialize(exp_tmp)
 end
 
@@ -190,9 +196,19 @@ if !isnothing(baseline)
     res = test_return_values(comp)
     failed = res.anynonpass
 
-    @info "Save plot..."
-    fig = plot_over_N(target, baseline)
-    save(joinpath(original_path, args[:prefix] * "comparison.pdf"), fig)
+    if !args[Symbol("no-plot")]
+        @info "Save plot..."
+        fig = plot_over_N(target, baseline)
+        save(joinpath(original_path, args[:prefix] * "comparison.pdf"), fig)
+
+    end
+    if args[Symbol("export-md")]
+        path = joinpath(original_path, args[:prefix] * "comparison.md")
+        @info "Save markdown table to $path"
+        open(path, "w") do io
+            pretty_table(io, comp; backend=Val(:markdown))
+        end
+    end
 else
     failed=false
 end
