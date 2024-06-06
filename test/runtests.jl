@@ -1,18 +1,15 @@
 using Test
+using SafeTestsets
+
 @testset "NetworkDynamics Tests" begin
-    # basic tests for individual modules
-    include("NetworkStructures_test.jl")
-    include("ComponentFunctions_test.jl")
-    include("NetworkDiffEq_test.jl")
-    include("checkbounds_test.jl")
 
-    # complex tests of networks
-    include("diffusion_test.jl")
-    include("inhomogeneous_test.jl")
-    include("autodiff_test.jl")
-    include("massmatrix_test.jl")
-    include("delay_test.jl")
+@safetestset "utils test" begin include("utils_test.jl") end
+@safetestset "construction test" begin include("construction_test.jl") end
+@safetestset "Aggregation Tests" begin include("aggregators_test.jl") end
+@safetestset "Symbolic Indexing Tests" begin include("symbolicindexing_test.jl") end
 
-    # utiliti testes
-    include("Utilities_test.jl")
+@safetestset "Diffusion test" begin include("diffusion_test.jl") end
+@safetestset "inhomogeneous test" begin include("inhomogeneous_test.jl") end
+@safetestset "massmatrix test" begin include("massmatrix_test.jl") end
+
 end

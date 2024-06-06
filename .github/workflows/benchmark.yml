@@ -1,0 +1,37 @@
+name: Benchmark a pull request
+
+on:
+  pull_request:
+
+permissions:
+  pull-requests: write
+  actions: write
+  contents: read
+
+jobs:
+    run_benchmarks:
+        runs-on: ubuntu-latest
+
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                fetch-depth: 0 # fetch all history
+            - uses: julia-actions/setup-julia@v2
+            - uses: julia-actions/cache@v2
+            - uses: julia-actions/julia-buildpkg@v1
+            - name: Run benchmarks
+              env:
+                JULIA_NUM_THREADS: auto
+              working-directory: benchmark
+              run: |
+                julia --color=yes ./run_benchmarks.jl -t ${{github.event.pull_request.head.sha}} -b ${{github.event.repository.default_branch}} --no-data-export --no-plot --export-md --prefix ""
+                echo '### Benchmark Results' > body.md
+                echo '' >> body.md
+                echo '' >> body.md
+                cat comparison.md >> body.md
+            - uses: int128/hide-comment-action@v1 # hide all previous comments
+            - name: Comment on PR
+              uses: peter-evans/create-or-update-comment@v3
+              with:
+                issue-number: ${{ github.event.pull_request.number }}
+                body-path: benchmark/body.md
