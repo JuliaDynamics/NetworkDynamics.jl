@@ -29,6 +29,9 @@ Base.getproperty(nw::Network, s::Symbol) = s===:sys ? nw : getfield(nw, s)
 SII.symbolic_type(::Type{<:SymbolicIndex{Int,<:Union{Symbol,Int}}}) = SII.ScalarSymbolic()
 SII.symbolic_type(::Type{<:SymbolicIndex}) = SII.ArraySymbolic()
 
+SII.hasname(::SymbolicIndex) = false
+SII.hasname(::SymbolicIndex{Int,<:Union{Symbol,Int}}) = true
+SII.getname(x::Union{VIndex,VPIndex}) = Symbol("v$(x.compidx)₊$(x.subidx)")
 
 getcomp(nw::Network, sni::Union{EIndex{Int},EPIndex{Int}}) = nw.im.edgef[sni.compidx]
 getcomp(nw::Network, sni::Union{VIndex{Int},VPIndex{Int}}) = nw.im.vertexf[sni.compidx]

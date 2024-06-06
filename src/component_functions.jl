@@ -11,10 +11,10 @@ abstract type ComponentFunction end
 Mixers.@pour CommonFields begin
     f::F
     dim::Int
-    sym::Vector{Symbol} = [Symbol("s", subscript(i)) for i in 1:dim]
+    sym::Vector{Symbol} = [dim>1 ? Symbol("s", subscript(i)) : :s for i in 1:dim]
     def::Vector{Union{Nothing,Float64}} = [nothing for _ in 1:dim]
     pdim::Int
-    psym::Vector{Symbol} = [Symbol("p", subscript(i)) for i in 1:pdim]
+    psym::Vector{Symbol} = [pdim>1 ? Symbol("p", subscript(i)) : :p for i in 1:pdim]
     pdef::Vector{Union{Nothing,Float64}} = [nothing for _ in 1:pdim]
     obsf::OF = nothing
     obssym::Vector{Symbol} = Symbol[]

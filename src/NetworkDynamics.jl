@@ -21,6 +21,7 @@ using Adapt: Adapt, adapt
 import SymbolicIndexingInterface as SII
 import StaticArrays
 
+export vertex_idxs, edge_idxs
 include("utils.jl")
 
 export ODEVertex, StaticVertex, StaticEdge, ODEEdge
