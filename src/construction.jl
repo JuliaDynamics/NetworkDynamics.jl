@@ -237,9 +237,8 @@ function _fill_mass_matrix!(mass_matrix, im, vertexd, edged)
     mass_matrix
 end
 
-# XXX: move massmatrix check to component_functions.jl
 function _check_massmatrix(c)
-    if c.mass_matrix isa UniformScaling || c.mass_matrix isa Number
+    if c.mass_matrix isa UniformScaling
         return
     end
     if length(size(c.mass_matrix)) == 2

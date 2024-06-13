@@ -100,3 +100,37 @@ end
         end
     end
 end
+
+@testset "test componen function constructors" begin
+    using LinearAlgebra
+    v = ODEVertex(identity; dim=2, pdim=3)
+    @test v.name == :ODEVertex
+    @test v.obsf == nothing
+    @test length(v.sym) == 2
+    @test v.mass_matrix == LinearAlgebra.I
+
+    v = ODEVertex(identity; sym=[:foo,:bar], pdim=3)
+    @test v.dim == 2
+    @test length(v.psym) == 3
+
+    v = ODEVertex(identity; sym=[:foo,:bar], psym=[:a])
+    @test v.pdim==1
+    @test v.dim==2
+
+    @test_throws ArgumentError ODEVertex(identity; dim=1, pdim=1, mass_matrix=[1 2;3 4])
+
+    @test_throws ArgumentError ODEVertex(identity, 1, 0; obsf=identity)
+    v = ODEVertex(identity, 1, 0; obsf=identity, obssym=[:foo])
+    @test_throws ArgumentError ODEVertex(identity, 1, 0; obsf=nothing, obssym=[:foo])
+
+    @test_throws ArgumentError ODEVertex(identity, 1, 0; depth=2)
+
+    StaticEdge(identity, 5, 0, Fiducial(); depth=2)
+    StaticEdge(identity, 5, 0, Fiducial(); depth=1)
+    @test_throws ArgumentError StaticEdge(identity, 5, 0, Fiducial(); depth=3)
+
+    e = StaticEdge(identity, 5, 0, Directed())
+    @test e.name == :StaticEdge
+    e = ODEEdge(identity, 5, 0, Directed())
+    StaticVertex(identity, 5, 0)
+end
