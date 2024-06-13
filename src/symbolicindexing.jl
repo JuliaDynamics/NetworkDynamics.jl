@@ -515,6 +515,46 @@ end
 Base.view(s::NWState, ::Colon) = s.uflat
 Base.view(s::NWParameter, ::Colon) = s.pflat
 
+####
+#### Convenience functions to extract indices
+####
+function _extract_nw(inpr)
+    sc = SII.symbolic_container(inpr)
+    if sc isa SciMLBase.ODEFunction
+        sc.sys
+    else
+        sc
+    end
+end
+function vertex_idxs(inpr; static=true, filter=nothing)
+    nw = _extract_nw(inpr)
+    syms = []
+    for (i,cf) in enumerate(nw.im.vertexf)
+        static || NetworkDynamics.isdynamic(cf) || continue
+        append!(syms, collect(VIndex(i, sym(cf))))
+    end
+    if isnothing(filter)
+        syms
+    else
+        Base.filter(filter, syms)
+    end
+end
+function edge_idxs(inpr; static=true, filter=nothing)
+    nw = _extract_nw(inpr)
+    syms = []
+    for (i,cf) in enumerate(nw.im.edgef)
+        static || NetworkDynamics.isdynamic(cf) || continue
+        append!(syms, collect(EIndex(i, sym(cf))))
+    end
+    if isnothing(filter)
+        syms
+    else
+        Base.filter(filter, syms)
+    end
+end
+Base.contains(s::SymbolicIndex, ex) = contains(string(s.subidx), ex)
+Base.contains(s::SymbolicIndex, ex::Symbol) = contains(string(s.subidx), string(ex))
+
 #=
 nds = wrap(nd, u, [p]) -> NWState (contains nw para, optional für observables/static)
 ndp = wrap(nd, p) -> NWPara
