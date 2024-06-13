@@ -58,14 +58,14 @@ struct ODEVertex{F,OF,MM} <: VertexFunction
 end
 ODEVertex(; kwargs...) = _construct_comp(ODEVertex, kwargs)
 ODEVertex(f; kwargs...) = ODEVertex(;f, kwargs...)
-ODEVertex(f, dim, pdim; kwargs...) = ODEVertex(;f, dim, pdim, kwargs...)
+ODEVertex(f, dim, pdim; kwargs...) = ODEVertex(;f, _dimsym(dim, pdim)..., kwargs...)
 
 struct StaticVertex{F,OF} <: VertexFunction
     @CommonFields
 end
 StaticVertex(; kwargs...) = _construct_comp(StaticVertex, kwargs)
 StaticVertex(f; kwargs...) = StaticVertex(;f, kwargs...)
-StaticVertex(f, dim, pdim; kwargs...) = StaticVertex(;f, dim, pdim, kwargs...)
+StaticVertex(f, dim, pdim; kwargs...) = StaticVertex(;f, _dimsym(dim, pdim)..., kwargs...)
 function ODEVertex(sv::StaticVertex)
     d = Dict{Symbol,Any}()
     for prop in propertynames(sv)
@@ -90,7 +90,7 @@ struct StaticEdge{C,F,OF} <: EdgeFunction{C}
 end
 StaticEdge(; kwargs...) = _construct_comp(StaticEdge, kwargs)
 StaticEdge(f; kwargs...) = StaticEdge(;f, kwargs...)
-StaticEdge(f, dim, pdim, coupling; kwargs...) = StaticEdge(;f, dim, pdim, coupling, kwargs...)
+StaticEdge(f, dim, pdim, coupling; kwargs...) = StaticEdge(;f, _dimsym(dim, pdim)..., coupling, kwargs...)
 
 struct ODEEdge{C,F,OF,MM} <: EdgeFunction{C}
     @CommonFields
@@ -99,7 +99,7 @@ struct ODEEdge{C,F,OF,MM} <: EdgeFunction{C}
 end
 ODEEdge(; kwargs...) = _construct_comp(ODEEdge, kwargs)
 ODEEdge(f; kwargs...) = ODEEdge(;f, kwargs...)
-ODEEdge(f, dim, pdim, coupling; kwargs...) = ODEEdge(;f, dim, pdim, coupling, kwargs...)
+ODEEdge(f, dim, pdim, coupling; kwargs...) = ODEEdge(;f, _dimsym(dim, pdim)..., coupling, kwargs...)
 
 statetype(::T) where {T<:ComponentFunction} = statetype(T)
 statetype(::Type{<:ODEVertex}) = Dynamic()
@@ -132,6 +132,11 @@ function batchequal(a::VertexFunction, b::VertexFunction)
     end
     return true
 end
+
+_dimsym(dim::Number, pdim::Number) = (; dim, pdim)
+_dimsym(dim::Number, psym::Vector) = (; dim, psym)
+_dimsym(sym::Vector, pdim::Number) = (; sym, pdim)
+_dimsym(sym::Vector, psym::Vector) = (; sym, psym)
 
 """
     _construct_comp(::Type{T}, kwargs) where {T}

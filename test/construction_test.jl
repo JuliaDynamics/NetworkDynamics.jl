@@ -133,4 +133,17 @@ end
     @test e.name == :StaticEdge
     e = ODEEdge(identity, 5, 0, Directed())
     StaticVertex(identity, 5, 0)
+
+    v = ODEVertex(identity, 2, 3)
+    @test v.dim == 2
+    @test v.pdim == 3
+    v = ODEVertex(identity, [:foo, :bar], 3)
+    @test v.dim == 2
+    @test v.pdim == 3
+    v = ODEVertex(identity, 2, [:a, :b, :c])
+    @test v.dim == 2
+    @test v.pdim == 3
+    v = ODEVertex(identity, [:foo, :bar], [:a, :b, :c])
+    @test v.dim == 2
+    @test v.pdim == 3
 end
