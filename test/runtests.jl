@@ -11,5 +11,6 @@ using SafeTestsets
 @safetestset "Diffusion test" begin include("diffusion_test.jl") end
 @safetestset "inhomogeneous test" begin include("inhomogeneous_test.jl") end
 @safetestset "massmatrix test" begin include("massmatrix_test.jl") end
+@safetestset "doctor test" begin include("doctor_test.jl") end
 
 end

@@ -58,6 +58,7 @@ struct ODEVertex{F,OF,MM} <: VertexFunction
 end
 ODEVertex(; kwargs...) = _construct_comp(ODEVertex, kwargs)
 ODEVertex(f; kwargs...) = ODEVertex(;f, kwargs...)
+ODEVertex(f, dim; kwargs...) = ODEVertex(;f, _dimsym(dim)..., kwargs...)
 ODEVertex(f, dim, pdim; kwargs...) = ODEVertex(;f, _dimsym(dim, pdim)..., kwargs...)
 
 struct StaticVertex{F,OF} <: VertexFunction
@@ -65,6 +66,7 @@ struct StaticVertex{F,OF} <: VertexFunction
 end
 StaticVertex(; kwargs...) = _construct_comp(StaticVertex, kwargs)
 StaticVertex(f; kwargs...) = StaticVertex(;f, kwargs...)
+StaticVertex(f, dim; kwargs...) = StaticVertex(;f, _dimsym(dim)..., kwargs...)
 StaticVertex(f, dim, pdim; kwargs...) = StaticVertex(;f, _dimsym(dim, pdim)..., kwargs...)
 function ODEVertex(sv::StaticVertex)
     d = Dict{Symbol,Any}()
@@ -90,6 +92,7 @@ struct StaticEdge{C,F,OF} <: EdgeFunction{C}
 end
 StaticEdge(; kwargs...) = _construct_comp(StaticEdge, kwargs)
 StaticEdge(f; kwargs...) = StaticEdge(;f, kwargs...)
+StaticEdge(f, dim, coupling; kwargs...) = StaticEdge(;f, _dimsym(dim)..., coupling, kwargs...)
 StaticEdge(f, dim, pdim, coupling; kwargs...) = StaticEdge(;f, _dimsym(dim, pdim)..., coupling, kwargs...)
 
 struct ODEEdge{C,F,OF,MM} <: EdgeFunction{C}
@@ -99,6 +102,7 @@ struct ODEEdge{C,F,OF,MM} <: EdgeFunction{C}
 end
 ODEEdge(; kwargs...) = _construct_comp(ODEEdge, kwargs)
 ODEEdge(f; kwargs...) = ODEEdge(;f, kwargs...)
+ODEEdge(f, dim, coupling; kwargs...) = ODEEdge(;f, _dimsym(dim)..., coupling, kwargs...)
 ODEEdge(f, dim, pdim, coupling; kwargs...) = ODEEdge(;f, _dimsym(dim, pdim)..., coupling, kwargs...)
 
 statetype(::T) where {T<:ComponentFunction} = statetype(T)
@@ -133,6 +137,8 @@ function batchequal(a::VertexFunction, b::VertexFunction)
     return true
 end
 
+_dimsym(dim::Number) = (; dim)
+_dimsym(sym::Vector) = (; sym)
 _dimsym(dim::Number, pdim::Number) = (; dim, pdim)
 _dimsym(dim::Number, psym::Vector) = (; dim, psym)
 _dimsym(sym::Vector, pdim::Number) = (; sym, pdim)
@@ -146,6 +152,10 @@ Fills up kw arguments with default values and performs sanity checks.
 """
 function _construct_comp(::Type{T}, kwargs) where {T}
     dict = _fill_defaults(T, kwargs)
+
+    # pop check keyword
+    check = pop!(dict, :check, true)
+
     if !all(in(keys(dict)), fieldnames(T))
         throw(ArgumentError("Cannot construct $T: arguments $(setdiff(fieldnames(T), keys(dict))) missing."))
     end
@@ -156,7 +166,10 @@ function _construct_comp(::Type{T}, kwargs) where {T}
     args = map(fieldtypes(T), fieldnames(T)) do FT, name
         convert(FT, dict[name])
     end
-    T(args...)
+
+    c = T(args...)
+    check && chk_component(c)
+    return c
 end
 
 """
@@ -178,7 +191,11 @@ function _fill_defaults(T, kwargs)
     if !haskey(dict, :sym)
         if haskey(dict, :dim)
             dim = dict[:dim]
-            dict[:sym] = [dim>1 ? Symbol("s", subscript(i)) : :s for i in 1:dict[:dim]]
+            if T <: VertexFunction
+                dict[:sym] = [dim>1 ? Symbol("v", subscript(i)) : :s for i in 1:dict[:dim]]
+            else
+                dict[:sym] = [dim>1 ? Symbol("e", subscript(i)) : :e for i in 1:dict[:dim]]
+            end
         else
             throw(ArgumentError("Either `dim` or `sym` must be provided to construct $T."))
         end
@@ -186,26 +203,24 @@ function _fill_defaults(T, kwargs)
     if !haskey(dict,:def)
         dict[:def] = Union{Float64,Nothing}[nothing for _ in 1:dict[:dim]]
     end
+    @argcheck length(dict[:sym]) == length(dict[:def]) == dict[:dim] "Length of sym & def must match dim."
 
     # psym & pdim
     if !haskey(dict, :pdim)
         if haskey(dict, :psym)
             dict[:pdim] = length(dict[:psym])
         else
-            throw(ArgumentError("Either `pdim` or `psym` must be provided to construct $T."))
+            dict[:pdim] = 0
         end
     end
     if !haskey(dict, :psym)
-        if haskey(dict, :pdim)
-            pdim = dict[:pdim]
-            dict[:psym] = [pdim>1 ? Symbol("p", subscript(i)) : :p for i in 1:dict[:pdim]]
-        else
-            throw(ArgumentError("Either `pdim` or `psym` must be provided to construct $T."))
-        end
+        pdim = dict[:pdim]
+        dict[:psym] = [pdim>1 ? Symbol("p", subscript(i)) : :p for i in 1:dict[:pdim]]
     end
     if !haskey(dict,:pdef)
         dict[:pdef] = Union{Float64,Nothing}[nothing for _ in 1:dict[:pdim]]
     end
+    @argcheck length(dict[:psym]) == length(dict[:pdef]) == dict[:pdim] "Length of psym & pdef must match pdim."
 
     # obsf & obssym
     if !haskey(dict, :obsf)
