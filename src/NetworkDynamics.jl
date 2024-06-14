@@ -41,6 +41,7 @@ include("adapt.jl")
 
 # XXX: have both, s[:] and uflat(s) ?
 export VIndex, EIndex, VPIndex, EPIndex, NWState, NWParameter, uflat, pflat
+export vidxs, eidxs, vpidxs, epidxs
 include("symbolicindexing.jl")
 
 include("show.jl")

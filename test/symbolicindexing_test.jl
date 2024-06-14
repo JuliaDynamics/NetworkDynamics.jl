@@ -326,3 +326,43 @@ s.p[:] .= 0
 s3 = NWState(s, utype=Vector{Int}, ptype=Vector{Int})
 @test eltype(NetworkDynamics.uflat(s3)) == Int
 @test eltype(NetworkDynamics.uflat(s3)) == Int
+
+# test new index generator methods
+using NetworkDynamics: vidxs, eidxs, vpidxs, epidxs
+n1 = ODEVertex(x->x, [:u, :v], [:p1, :p2])
+n2 = ODEVertex(x->x, [:x1, :x2], [:p1, :p2], obsf=identity, obssym=[:o1, :o2])
+n3 = ODEVertex(x->x, 3; name=:Vertex3)
+e1 = StaticEdge(x->x, [:e1], AntiSymmetric())
+e2 = StaticEdge(x->x, [:esrc,:edst], Fiducial())
+g = path_graph(3)
+nw = Network(g, [n1, n2, n3], [e1, e2])
+
+@test vidxs(nw) == [VIndex(1, :u),
+                    VIndex(1, :v),
+                    VIndex(2, :x1),
+                    VIndex(2, :x2),
+                    VIndex(3, :v₁),
+                    VIndex(3, :v₂),
+                    VIndex(3, :v₃)]
+@test eidxs(nw) == [EIndex(1, :e1),
+                    EIndex(2, :esrc),
+                    EIndex(2, :edst)]
+
+@test vidxs(nw, 1) == [VIndex(1, :u), VIndex(1, :v)]
+@test vidxs(nw, :ODEVertex) == [VIndex(1, :u),
+                                VIndex(1, :v),
+                                VIndex(2, :x1),
+                                VIndex(2, :x2)]
+@test vidxs(nw, "3") == [VIndex(3, :v₁),
+                         VIndex(3, :v₂),
+                         VIndex(3, :v₃)]
+@test vidxs(nw, :, "v") == [VIndex(1, :v),
+                            VIndex(3, :v₁),
+                            VIndex(3, :v₂),
+                            VIndex(3, :v₃)]
+@test vidxs(nw, 2, "v") == VIndex[]
+@test vpidxs(nw,:,"p") == vpidxs(nw,:,:) == [VPIndex(1, :p1),
+                                             VPIndex(1, :p2),
+                                             VPIndex(2, :p1),
+                                             VPIndex(2, :p2)]
+@test epidxs(nw,:,:) == EPIndex[]

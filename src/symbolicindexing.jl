@@ -17,6 +17,8 @@ struct EPIndex{C,S} <: SymbolicParameterIndex{C,S}
     compidx::C
     subidx::S
 end
+const SymbolicEdgeIndex = Union{EIndex, EPIndex}
+const SymbolicVertexIndex = Union{VIndex, VPIndex}
 
 #=
 XXX: SciMLBase Issue regarding f.sys
@@ -519,6 +521,9 @@ Base.view(s::NWParameter, ::Colon) = s.pflat
 #### Convenience functions to extract indices
 ####
 function _extract_nw(inpr)
+    if isnothing(inpr)
+        throw(ArgumentError("Needs system context to generate matching indices. Pass Network, sol, prob, ..."))
+    end
     sc = SII.symbolic_container(inpr)
     if sc isa SciMLBase.ODEFunction
         sc.sys
@@ -554,6 +559,99 @@ function edge_idxs(inpr; static=true, filter=nothing)
 end
 Base.contains(s::SymbolicIndex, ex) = contains(string(s.subidx), ex)
 Base.contains(s::SymbolicIndex, ex::Symbol) = contains(string(s.subidx), string(ex))
+
+"""
+    vidxs([inpr], components=:, variables=:) :: Vector{VIndex}
+
+Generate vector of symbolic indexes for vertices.
+
+- `inpr`: Only needed for name matching or `:` access. Can be Network, sol, prob, ...
+- `components`: Number/Vector, `:`, `Symbol` (name matches), `String`/`Regex` (name contains)
+- `variables`: Symbol/Number/Vector, `:`, `String`/`Regex` (all sym containing)
+
+Examples:
+
+    vidxs(nw)                 # all vertex state indices
+    vidxs(1:2, :u)            # [VIndex(1, :u), VIndex(2, :u)]
+    vidxs(nw, :, [:u, :v])    # [VIndex(i, :u), VIndex(i, :v) for i in 1:nv(nw)]
+    vidxs(nw, "ODEVertex", :) # all symbols of all vertices with name containing "ODEVertex"
+"""
+vidxs(args...) = _idxs(VIndex, args...)
+"""
+    vpidxs([inpr], components=:, variables=:) :: Vector{VPIndex}
+
+Generate vector of symbolic indexes for parameters. See [`vidxs`](@ref) for more information.
+"""
+vpidxs(args...) = _idxs(VPIndex, args...)
+"""
+    vidxs([inpr], components=:, variables=:) :: Vector{EIndex}
+
+Generate vector of symbolic indexes for edges.
+
+- `inpr`: Only needed for name matching or `:` access. Can be Network, sol, prob, ...
+- `components`: Number/Vector, `:`, `Symbol` (name matches), `String`/`Regex` (name contains)
+- `variables`: Symbol/Number/Vector, `:`, `String`/`Regex` (all sym containing)
+
+Examples:
+
+    eidxs(nw)                # all edge state indices
+    eidxs(1:2, :u)           # [EIndex(1, :u), EIndex(2, :u)]
+    eidxs(nw, :, [:u, :v])   # [EIndex(i, :u), EIndex(i, :v) for i in 1:ne(nw)]
+    eidxs(nw, "FlowEdge", :) # all symbols of all edges with name containing "FlowEdge"
+"""
+eidxs(args...) = _idxs(EIndex, args...)
+"""
+    epidxs([inpr], components=:, variables=:) :: Vector{EPIndex}
+
+Generate vector of symbolic indexes for parameters. See [`eidxs`](@ref) for more information.
+"""
+epidxs(args...) = _idxs(EPIndex, args...)
+
+_idxs(IT, cidxs::Union{Number, AbstractVector}, sidxs) = _idxs(IT, nothing, cidxs, sidxs)
+function _idxs(IT, inpr, cidxs=Colon(), sidxs=Colon())
+    res = IT[]
+    for ci in _make_cidx_iterable(IT, inpr, cidxs)
+        for si in _make_sidx_iterable(IT, inpr, ci, sidxs)
+            push!(res, IT(ci, si))
+        end
+    end
+    res
+end
+
+_make_iterabel(idxs) = idxs
+_make_iterabel(idx::Symbol) = Ref(idx)
+
+_make_cidx_iterable(_, _, idx) = _make_iterabel(idx)
+_make_cidx_iterable(::Type{<:SymbolicVertexIndex}, inpr, ::Colon) = 1:nv(_extract_nw(inpr))
+_make_cidx_iterable(::Type{<:SymbolicEdgeIndex}, inpr, ::Colon) = 1:ne(_extract_nw(inpr))
+function _make_cidx_iterable(IT, inpr, s::Symbol)
+    names = getproperty.(_get_components(IT, inpr), :name)
+    findall(isequal(s), names)
+end
+function _make_cidx_iterable(IT, inpr, s::Union{AbstractString,AbstractPattern})
+    names = getproperty.(_get_components(IT, inpr), :name)
+    findall(sym -> contains(string(sym), s), names)
+end
+
+_make_sidx_iterable(IT, inpr, cidx, idx) = _make_iterabel(idx)
+function _make_sidx_iterable(IT::Type{<:SymbolicStateIndex}, inpr, cidx, ::Colon)
+    _get_components(IT, inpr)[cidx].sym
+end
+function _make_sidx_iterable(IT::Type{<:SymbolicParameterIndex}, inpr, cidx, ::Colon)
+    _get_components(IT, inpr)[cidx].psym
+end
+function _make_sidx_iterable(IT::Type{<:SymbolicStateIndex}, inpr, cidx, s::Union{AbstractString,AbstractPattern})
+    comp = _get_components(IT, inpr)[cidx]
+    syms = vcat(comp.sym, comp.obssym)
+    filter(sym -> contains(string(sym), s), syms)
+end
+function _make_sidx_iterable(IT::Type{<:SymbolicParameterIndex}, inpr, cidx, s::Union{AbstractString,AbstractPattern})
+    syms = _get_components(IT, inpr)[cidx].psym
+    filter(sym -> contains(string(sym), s), syms)
+end
+
+_get_components(::Type{<:SymbolicVertexIndex}, inpr) = _extract_nw(inpr).im.vertexf
+_get_components(::Type{<:SymbolicEdgeIndex}, inpr) = _extract_nw(inpr).im.edgef
 
 #=
 nds = wrap(nd, u, [p]) -> NWState (contains nw para, optional für observables/static)
