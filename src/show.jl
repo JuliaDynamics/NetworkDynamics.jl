@@ -70,16 +70,16 @@ end
 function print_states_params(io, c::ComponentFunction, styling)
     info = Base.AnnotatedString{String}[]
     num, word = maybe_plural(dim(c), "state")
-    push!(info, styled"$num $word:\t$(stylesymbolarray(c.sym, c.def, styling))")
+    push!(info, styled"$num &$word: &&$(stylesymbolarray(c.sym, c.def, styling))")
 
     if hasproperty(c, :mass_matrix) && c.mass_matrix != LinearAlgebra.I
-        info[end] *= "\nmass m:\t$(c.mass_matrix)"
+        info[end] *= "\n&with mass matrix $(c.mass_matrix)"
     end
 
     num, word = maybe_plural(pdim(c), "param")
-    pdim(c) > 0 && push!(info, styled"$num $word:\t$(stylesymbolarray(c.psym, c.pdef))")
+    pdim(c) > 0 && push!(info, styled"$num &$word: &&$(stylesymbolarray(c.psym, c.pdef))")
 
-    print_treelike(io, info)
+    print_treelike(io, align_strings(info))
 end
 
 function stylesymbolarray(syms, defaults, symstyles=Dict{Int,Symbol}())
@@ -146,7 +146,7 @@ function Base.show(io::IO, mime::MIME"text/plain", s::NWState; dim=nothing)
     print_treelike(io, align_strings(strvec); prefix="  ", rowmax)
 
     buf = IOContext(Base.AnnotatedIOBuffer(), :compact=>true, :limit=>true)
-    print(buf, " p = ")
+    print(buf, "\n p = ")
     show(buf, mime, s.p)
     print(buf, "\n t = ")
     show(buf, mime, s.t)
@@ -212,33 +212,50 @@ function print_treelike(io, vec; prefix=" ", infix=" ", rowmax=typemax(Int))
         upper = ceil(Int, rowmax / 2)
         lower = floor(Int, rowmax / 2) - 1
         for s in @views vec[1:upper]
-            _print_tree_element(io, "├─", s, prefix, infix)
+            _print_tree_element(io, "├─", "| ", s, prefix, infix)
         end
         print(io, "\n", prefix, "⋮")
         for s in @views vec[end-lower:end-1]
-            _print_tree_element(io, "├─", s, prefix, infix)
+            _print_tree_element(io, "├─", "| ", s, prefix, infix)
         end
     else
         for s in @views vec[begin:end-1]
-            _print_tree_element(io, "├─", s, prefix, infix)
+            _print_tree_element(io, "├─", "| ", s, prefix, infix)
         end
     end
-    _print_tree_element(io, "└─", vec[end], prefix, infix)
+    _print_tree_element(io, "└─", "  ", vec[end], prefix, infix)
 end
 
-function _print_tree_element(io, treesym, s, prefix, infix)
+function _print_tree_element(io, treesym, sublinesym, s, prefix, infix)
     sublines = split(s, "\n")
     print(io, "\n", prefix, treesym, infix, sublines[begin])
     for sub in sublines[begin+1:end]
-        print(io, "\n", prefix, "│ ", infix, sub)
+        print(io, "\n", prefix, sublinesym, infix, sub)
     end
 end
 
-function align_strings(vecofstr::AbstractVector{<:AbstractString})
-    splitted = map(vecofstr) do str
-        split(str, '&')
+function align_strings(vecofstr::AbstractVector{<:AbstractString}; padding=:alternating)
+    splitted = Vector{AbstractString}[]
+    sizehint!(splitted, length(vecofstr))
+    i = 1
+    newlines = Int[]
+    for str in vecofstr
+        for (ln, linesplit) in enumerate(eachsplit(str, '\n'))
+            push!(splitted, split(linesplit, '&'))
+            if ln > 1
+                push!(newlines, i-1)
+            end
+            i += 1
+        end
     end
-    align_strings(splitted)
+    alig = align_strings(splitted; padding)
+    if !isempty(newlines)
+        for i in newlines
+            alig[i] = alig[i] * "\n" * alig[i+1]
+        end
+        deleteat!(alig, newlines .+1 )
+    end
+    alig
 end
 function align_strings(vecofvec::AbstractVector{<:AbstractVector}; padding=:alternating)
     depth = maximum(length.(vecofvec))
@@ -246,7 +263,7 @@ function align_strings(vecofvec::AbstractVector{<:AbstractVector}; padding=:alte
 
     for i in eachindex(vecofvec)
         for j in 1:depth
-            j > length(vecofvec[i]) && continue
+            j ≥ length(vecofvec[i]) && continue
             maxlength[j] = max(maxlength[j], length(vecofvec[i][j]))
         end
     end
