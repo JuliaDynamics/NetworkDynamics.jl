@@ -380,7 +380,7 @@ end
 Base.eltype(p::NWParameter) = eltype(p.pflat)
 Base.length(s::NWParameter) = length(s.pflat)
 
-function NWParameter(nw::Network; ptype=Vector{Union{Float64,Nothing}}, default=true)
+function NWParameter(nw::Network; ptype=Vector{Float64}, default=true)
     pflat = _init_flat(ptype, pdim(nw))
     p = NWParameter(nw,pflat)
     default || return p
@@ -409,8 +409,8 @@ struct NWState{U,P,T,NW}
 end
 
 function NWState(nw::Network;
-                 utype=Vector{Union{Float64,Nothing}},
-                 ptype=Vector{Union{Float64,Nothing}},
+                 utype=Vector{Float64},
+                 ptype=Vector{Float64},
                  default=true)
     t = nothing
     uflat = _init_flat(utype, dim(nw))
@@ -432,12 +432,18 @@ end
 
 # init flat array of type T with length N. Init with nothing if possible, else with zeros
 function _init_flat(T, N)
-    if Nothing <: eltype(T)
-        vec = T(undef, N)
+    eT = eltype(T)
+    vec = T(undef, N)
+    if Nothing <: eT
         fill!(vec, nothing)
+    elseif Missing <: eT
+        fill!(vec, missing)
+    elseif eT <: AbstractFloat
+        fill!(vec, NaN)
     else
-        zeros(eltype(T), N)
+        fill!(vec, zero(eT))
     end
+    return vec
 end
 
 _convertorcopy(::Type{T}, x::T) where {T} = copy(x)

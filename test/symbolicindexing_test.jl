@@ -91,9 +91,9 @@ sol = solve(prob, Tsit5())
 ####
 using NetworkDynamics: NWState, NWParameter
 t = 1.0
-uflat = copy(sol(t))
-pflat = copy(sol.prob.p)
-s = NWState(nw, uflat, pflat)
+_uflat = copy(sol(t))
+_pflat = copy(sol.prob.p)
+s = NWState(nw, _uflat, _pflat)
 
 SII.getu(s, EIndex(1,:e_dst))(s)
 SII.getp(s, VPIndex(1,:M))(s)
@@ -101,8 +101,8 @@ SII.getp(s, VPIndex(1,:M))(s)
 SII.is_variable(nw, EIndex(1,:e_dst))
 SII.variable_index(nw, EIndex(1,:e_dst))
 
-@test map(idx->s[idx], SII.variable_symbols(nw)) == uflat
-@test map(idx->s[idx], SII.parameter_symbols(nw)) == pflat
+@test map(idx->s[idx], SII.variable_symbols(nw)) == _uflat
+@test map(idx->s[idx], SII.parameter_symbols(nw)) == _pflat
 NetworkDynamics.observed_symbols(nw) .=> map(idx->s[idx], NetworkDynamics.observed_symbols(nw))
 
 @test s[VPIndex(1,:M)] != 1.0
@@ -313,10 +313,11 @@ end
 
 # tests for state/parameter constructing/conversion
 using NetworkDynamics: _init_flat
-@test _init_flat(Vector{Float64}, 10) == zeros(10)
+@test isequal(_init_flat(Vector{Float64}, 10), [NaN for _ in 1:10])
 @test _init_flat(Vector{Int64}, 10) == zeros(10)
 @test _init_flat(Vector{Union{Int64, Nothing}}, 10) == [nothing for _ in 1:10]
-@test NWState(nw).p.pflat == NWParameter(nw).pflat
+@test isequal(_init_flat(Vector{Union{Int64, Missing}}, 10), [missing for _ in 1:10])
+@test NWState(nw).p._pflat == NWParameter(nw)._pflat
 
 p = NWParameter(nw)
 p.e[2:3,:K] .= 0
