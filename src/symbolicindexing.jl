@@ -21,9 +21,8 @@ const SymbolicEdgeIndex = Union{EIndex, EPIndex}
 const SymbolicVertexIndex = Union{VIndex, VPIndex}
 
 #=
-XXX: SciMLBase Issue regarding f.sys
-SciMLBase gets the index provider from ODEFunction.sys which defaults to f.sys so I provide it...
-# SII.symbolic_container(odef::SciMLBase.ODEFunction{<:Any,<:Any,<:Network}) = odef.f
+SciMLBase gets the index provider from ODEFunction.sys which defaults to f.sys so we provide it...
+SSI Maintainer assured that f.sys is really only used for symbolic indexig so method seems legit
 =#
 SciMLBase.__has_sys(nw::Network) = true
 Base.getproperty(nw::Network, s::Symbol) = s===:sys ? nw : getfield(nw, s)
