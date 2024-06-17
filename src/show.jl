@@ -10,13 +10,12 @@ function Base.show(io::IO, ::MIME"text/plain", nw::Network)
         print(io, "\n ├─ $(nv(nw.im.g)) vertices ($num unique $word)")
         num, word = maybe_plural(length(nw.layer.edgebatches), "type")
         print(io, "\n └─ $(ne(nw.im.g)) edges ($num unique $word)")
-        print(io, "\nAggregation using ")
+        print(io, "\nEdge-Aggregation using ")
         print(io, nw.layer.aggregator)
-        print(io, " along")
-        num, word = maybe_plural(nw.layer.edepth, "dimension")
-        print(io, "\n ├─ $(num) edge $(word)")
-        num, word = maybe_plural(nw.layer.vdepth, "dimension")
-        print(io, "\n └─ $(num) vertex $(word)")
+        num, word = maybe_plural(nw.layer.edepth, "state")
+        print(io, "\n ├─ vertices receive edge states 1:$(num) (edge depth = $num)")
+        num, word = maybe_plural(nw.layer.vdepth, "state")
+        print(io, "\n └─ edges receive vertex states  1:$(num) (vertex depth = $num)")
     end
 end
 
