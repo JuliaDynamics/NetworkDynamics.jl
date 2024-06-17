@@ -91,20 +91,26 @@ function chk_component(c::ComponentFunction)
     vdst = AccessTracker(Float64[])
     t = NaN
 
+    args = if c isa ODEVertex
+        (du, u, esum, p, t)
+    elseif c isa StaticVertex
+        (u, esum, p, t)
+    elseif c isa StaticEdge
+        (u, vsrc, vdst, p, t)
+    elseif c isa ODEEdge
+        (du, u, vsrc, vdst, p, t)
+    else
+        error("chk_component not implemented for $(typeof(c))")
+    end
     try
-        if c isa ODEVertex
-            compf(c)(du, u, esum, p, t)
-        elseif c isa StaticVertex
-            compf(c)(u, esum, p, t)
-        elseif c isa StaticEdge
-            compf(c)(u, vsrc, vdst, p, t)
-        elseif c isa ODEEdge
-            compf(c)(du, u, vsrc, vdst, p, t)
-        else
-            error("chk_component not implemented for $(typeof(c))")
-        end
+        compf(c)(args...)
     catch e
         if e isa MethodError
+            if isequal(e.args, args)
+                # @warn "Your component function signature seems to be wrong. Check the arguments!"
+            else
+                @warn "Encountered MethodError. All arguments are AbstractArrays, make sure to allways index into them: $e"
+            end
         elseif e isa BoundsError
             @warn "Call of component functions lead to out of bounds access! Check `dim` and `pdim` fields!"
         else
@@ -113,9 +119,9 @@ function chk_component(c::ComponentFunction)
         return nothing
     end
 
-    has_oob(du) && @warn "There is out of bound acces to du: reads $(oob_reads(du)) and writes $(oob_writes(du))!"
-    has_oob(u) && @warn "There is out of bound acces to u: reads $(oob_reads(u)) and writes $(oob_writes(u))!"
-    has_oob(p) && @warn "There is out of bound acces to p: reads $(oob_reads(p)) and writes $(oob_writes(p))!"
+    has_oob(du) && @warn "There is out of bound acces to du: reads $(oob_reads(du)) and writes $(oob_writes(du))! Check dim/sym!"
+    has_oob(u) && @warn "There is out of bound acces to u: reads $(oob_reads(u)) and writes $(oob_writes(u))! Check dim/sym!"
+    has_oob(p) && @warn "There is out of bound acces to p: reads $(oob_reads(p)) and writes $(oob_writes(p))! Check pdim/psim!"
 
     if isdynamic(c)
         has_uninit_reads(du) && @warn "There is uninitialized read access to du: $(reads(du))!"

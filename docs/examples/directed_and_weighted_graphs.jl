@@ -42,7 +42,6 @@ In the following we will use a directed and weighted network encoding the streng
 
 The network weight matrix is given as a text file containing 90 lines with 90 numbers representing the coupling strength and separated by commas `,`. The data can be conveniently read into a matrix with the `DelimitedFiles` module.
 =#
-
 using DelimitedFiles
 ## adjust the load path for your filesystem!
 G = readdlm(joinpath(@__DIR__, "Norm_G_DTI.txt"), ',', Float64, '\n')
@@ -75,24 +74,23 @@ Defining `VertexFunction` and `EdgeFunction` is similar to the example before. T
 
 using NetworkDynamics
 
-Base.@propagate_inbounds function fhn_electrical_vertex!(dv, v, edges, p, t)
-    dv[1] = v[1] - v[1]^3 / 3 - v[2]
+Base.@propagate_inbounds function fhn_electrical_vertex!(dv, v, esum, p, t)
+    (a, ϵ) = p
+    dv[1] = v[1] - v[1]^3 / 3 - v[2] + esum[1]
     dv[2] = (v[1] - a) * ϵ
-    for e in edges
-        dv[1] += e[1]
-    end
     nothing
 end
 
 Base.@propagate_inbounds function electrical_edge!(e, v_s, v_d, p, t)
-    e[1] = p * (v_s[1] - v_d[1]) # * σ
+    e[1] = p[1] * (v_s[1] - v_d[1]) # * σ
     nothing
 end
 
-odeelevertex = ODEVertex(; f=fhn_electrical_vertex!, dim=2, sym=[:u, :v]);
-electricaledge = StaticEdge(; f=electrical_edge!, dim=1, coupling=:directed)
+odeelevertex = ODEVertex(fhn_electrical_vertex!; sym=[:u, :v], psym=[:a, :ϵ], depth=1)
 
-fhn_network! = network_dynamics(odeelevertex, electricaledge, g_directed)
+electricaledge = StaticEdge(electrical_edge!; dim=1, psym=[:weight], coupling=Directed())
+
+fhn_network! = Network(g_directed, odeelevertex, electricaledge)
 
 nothing # hide
 
@@ -111,9 +109,18 @@ const ϵ = 0.05 # global variables that are accessed several times should be dec
 const a = 0.5
 const σ = 0.5
 
-# Tuple of parameters for nodes and edges
+# Construct `NWParameter` object and fill edge parameters
 
-p = (nothing, σ * edge_weights)
+p = NWParameter(fhn_network!)
+
+
+p.e[:, :weight] = σ * edge_weights
+p.e[:, :weight] .= σ
+p.e[:, :weight]
+view(p.e, :, :weight)
+
+typeof(p.e)
+SII.is_timeseries_parameter
 
 # Initial conditions
 
@@ -132,7 +139,7 @@ Now we are ready to create an `ODEProblem`. Since for some choices of parameters
 using OrdinaryDiffEq
 
 tspan = (0.0, 200.0)
-prob  = ODEProblem(fhn_network!, x0, tspan, p)
+prob  = ODEProblem(fhn_network!, x0, tspan, p[:])
 sol = solve(prob, AutoTsit5(TRBDF2()));
 nothing # hide
 
@@ -144,4 +151,6 @@ The plot of the excitatory variables shows that they synchronize for this choice
 
 using Plots
 
-plot(sol; vars=idx_containing(fhn_network!, :u), legend=false, ylim=(-5, 5), fmt=:png)
+plot(sol; vars=vertex_idxs(fhn_network!, contains(:u)), legend=false, ylim=(-5, 5), fmt=:png)
+plot(sol; vars=vertex_idxs(fhn_network!, contains(:u)), legend=false, ylim=(-5, 5), fmt=:png)
+plot(sol; idxs=vidxs(sol, :, :u))
