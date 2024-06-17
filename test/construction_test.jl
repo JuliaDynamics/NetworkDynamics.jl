@@ -146,4 +146,17 @@ end
     v = ODEVertex(identity, [:foo, :bar], [:a, :b, :c])
     @test v.dim == 2
     @test v.pdim == 3
+
+    using NetworkDynamics: _has_defaults
+    @test _has_defaults([:a,:b,:c]) == false
+    @test _has_defaults([:a=>1,:b,:c]) == true
+    @test _has_defaults([:a=>1,:b=>2,:c=>3]) == true
+
+    v = ODEVertex(identity, [:foo=>1, :bar], [:a=>2, :b, :c=>7])
+    @test v.def == [1,nothing]
+    @test v.pdef == [2,nothing,7]
+
+    @test_throws ArgumentError ODEVertex(identity, [:foo=>1]; def=[1])
+    @test_throws ArgumentError ODEVertex(identity, 1, [:foo=>1]; pdef=[1])
+    coalesce
 end

@@ -188,7 +188,14 @@ function _fill_defaults(T, kwargs)
             throw(ArgumentError("Either `dim` or `sym` must be provided to construct $T."))
         end
     end
-    if !haskey(dict, :sym)
+    if haskey(dict, :sym)
+        if _has_defaults(dict[:sym])
+            if haskey(dict, :def)
+                throw(ArgumentError("Provide defaults either as pairs in syms or as values in def!"))
+            end
+            dict[:sym], dict[:def] = _split_defaults(dict[:sym])
+        end
+    else
         if haskey(dict, :dim)
             dim = dict[:dim]
             if T <: VertexFunction
@@ -213,7 +220,14 @@ function _fill_defaults(T, kwargs)
             dict[:pdim] = 0
         end
     end
-    if !haskey(dict, :psym)
+    if haskey(dict, :psym)
+        if _has_defaults(dict[:psym])
+            if haskey(dict, :pdef)
+                throw(ArgumentError("Provide defaults either as pairs in psyms or as values in pdef!"))
+            end
+            dict[:psym], dict[:pdef] = _split_defaults(dict[:psym])
+        end
+    else
         pdim = dict[:pdim]
         dict[:psym] = [pdim>1 ? Symbol("p", subscript(i)) : :p for i in 1:dict[:pdim]]
     end
@@ -295,3 +309,22 @@ _default_name(::Type{StaticVertex}) = :StaticVertex
 _default_name(::Type{ODEVertex}) = :ODEVertex
 _default_name(::Type{StaticEdge}) = :StaticEdge
 _default_name(::Type{ODEEdge}) = :ODEEdge
+
+_has_defaults(vec::AbstractVector{<:Symbol}) = false
+_has_defaults(vec::AbstractVector{<:Pair}) = true
+_has_defaults(vec::AbstractVector) = any(el -> el isa Pair, vec)
+function _split_defaults(input)
+    Base.require_one_based_indexing(input)
+    syms = Vector{Symbol}(undef, length(input))
+    defs = Vector{Union{Nothing,Float64}}(undef, length(input))
+    for i in eachindex(input)
+        if input[i] isa Pair
+            syms[i] = first(input[i])
+            defs[i] = last(input[i])
+        else
+            syms[i] = input[i]
+            defs[i] = nothing
+        end
+    end
+    syms, defs
+end
