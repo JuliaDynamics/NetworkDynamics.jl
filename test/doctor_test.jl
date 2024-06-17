@@ -60,3 +60,16 @@ using NetworkDynamics
     @test has_similars(v_s)
     @test !has_similars(v_d)
 end
+
+@testset "chk_component" begin
+    using Logging
+    @test_logs min_level=Logging.Warn ODEVertex(3,2) do du, u, edges, p, t
+        du[1:2] .= p
+        du[3] = 4
+    end
+    # don't warn on faulty broadcast (DimensionMismatch)
+    @test_logs min_level=Logging.Warn ODEVertex(3,2) do du, u, edges, p, t
+        du[1:2] .= edges
+        du[3] = 4
+    end
+end

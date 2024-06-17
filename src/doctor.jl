@@ -86,9 +86,9 @@ function chk_component(c::ComponentFunction)
     du = AccessTracker(rand(c.dim))
     u = AccessTracker(rand(c.dim))
     p = AccessTracker(rand(c.pdim))
-    esum = AccessTracker(Float64[]) # bit weird, we don't know the size of esum
-    vsrc = AccessTracker(Float64[])
-    vdst = AccessTracker(Float64[])
+    esum = AccessTracker(rand(depth(c))) # bit weird, we don't know the size of esum
+    vsrc = AccessTracker(rand(depth(c)))
+    vdst = AccessTracker(rand(depth(c)))
     t = NaN
 
     args = if c isa ODEVertex
@@ -113,6 +113,8 @@ function chk_component(c::ComponentFunction)
             end
         elseif e isa BoundsError
             @warn "Call of component functions lead to out of bounds access! Check `dim` and `pdim` fields!"
+        elseif e isa DimensionMismatch
+            # ignore, its probably because we don't know the sizes of esum, vsrc and vdst
         else
             @warn "Error while calling component function: $e"
         end
