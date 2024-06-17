@@ -190,6 +190,8 @@ function _is_parameter(nw::Network,
     return subsym_has_idx(sni.subidx, psym(cf))
 end
 
+SII.is_timeseries_parameter(nw::Network, sym) = false
+
 function SII.parameter_index(nw::Network, sni)
     if _hascolon(sni)
         SII.parameter_index(nw, _resolve_colon(nw,sni))
@@ -220,6 +222,7 @@ end
 
 ####
 #### Observed indexing
+####
 function SII.is_observed(nw::Network, sni)
     if _hascolon(sni)
         SII.is_observed(nw, _resolve_colon(nw,sni))
@@ -366,7 +369,7 @@ end
 
 
 ####
-#### State as value provider
+#### NWParameter and NWState objects as value provider
 ####
 
 struct NWParameter{P,NW}
@@ -378,7 +381,7 @@ Base.eltype(p::NWParameter) = eltype(p.pflat)
 Base.length(s::NWParameter) = length(s.pflat)
 
 function NWParameter(nw::Network; ptype=Vector{Union{Float64,Nothing}}, default=true)
-    pflat = _flat(ptype, pdim(nw))
+    pflat = _init_flat(ptype, pdim(nw))
     p = NWParameter(nw,pflat)
     default || return p
     for (k, v) in SII.default_values(nw)
@@ -410,7 +413,7 @@ function NWState(nw::Network;
                  ptype=Vector{Union{Float64,Nothing}},
                  default=true)
     t = nothing
-    uflat = _flat(utype, dim(nw))
+    uflat = _init_flat(utype, dim(nw))
     p = NWParameter(nw; ptype, default=false)
     s = NWState(nw,uflat,p,t)
     default || return s
@@ -427,7 +430,8 @@ function NWState(s::NWState;
     NWState(s.nw, _convertorcopy(utype,uflat(s)), p, s.t)
 end
 
-function _flat(T, N)
+# init flat array of type T with length N. Init with nothing if possible, else with zeros
+function _init_flat(T, N)
     if Nothing <: eltype(T)
         vec = T(undef, N)
         fill!(vec, nothing)
@@ -437,12 +441,7 @@ function _flat(T, N)
 end
 
 _convertorcopy(::Type{T}, x::T) where {T} = copy(x)
-function _convertorcopy(T, x)
-    # _x = similar(T, length(x))
-    # _x .= x
-    # T(undef, length(x)) .= x
-    convert(T, x)
-end
+_convertorcopy(T, x) = convert(T, x)
 
 Base.eltype(s::NWState) = eltype(s.uflat)
 Base.length(s::NWState) = length(s.uflat)
@@ -461,33 +460,69 @@ SII.parameter_values(p::NWParameter) = p.pflat
 SII.current_time(s::NWState) = s.t
 SII.current_time(s::NWParameter) = error("Parameter type does not holde time value.")
 
-Base.getindex(p::NWParameter, idx::SymbolicStateIndex) = getindex(p, _paraindex(idx))
-Base.setindex!(p::NWParameter, val, idx::SymbolicStateIndex) = setindex!(p, val, _paraindex(idx))
-Base.getindex(p::NWParameter, idx::SymbolicParameterIndex) = SII.getp(p, idx)(p)
-Base.setindex!(p::NWParameter, val, idx::SymbolicParameterIndex) = SII.setp(p, idx)(p, val)
+# NWParameter: getindex
+Base.getindex(p::NWParameter, ::Colon) = pflat(p)
+Base.getindex(p::NWParameter, idx) = SII.getp(p, _paraindex(idx))(p)
+
+# NWParameter: setindex!
+function Base.setindex!(p::NWParameter, val, idx)
+    setter = SII.setp(p, _paraindex(idx))
+    _chk_dimensions(setter, val)
+    setter(p, val)
+end
+
+# Converts a given index (collection) to a (collection) of parameter index if it is a state index.
+_paraindex(idxs) = all(i -> i isa SymbolicParameterIndex, idxs) ? idxs : _paraindex.(idxs)
 _paraindex(idx::VIndex) = VPIndex(idx.compidx, idx.subidx)
 _paraindex(idx::EIndex) = EPIndex(idx.compidx, idx.subidx)
+_paraindex(idx::SymbolicParameterIndex) = idx
 
+# NWState: getindex
+Base.getindex(s::NWState, ::Colon) = uflat(s)
 Base.getindex(s::NWState, idx::SymbolicParameterIndex) = SII.getp(s, idx)(s)
-Base.setindex!(s::NWState, val, idx::SymbolicParameterIndex) = SII.setp(s, idx)(s, val)
 Base.getindex(s::NWState, idx::SymbolicStateIndex) = SII.getu(s, idx)(s)
-Base.setindex!(s::NWState, val, idx::SymbolicStateIndex) = SII.setu(s, idx)(s, val)
 function Base.getindex(s::NWState, idxs)
-    et = eltype(idxs)
-    if et <: SymbolicStateIndex
-        SII.getu(s, idxs)(s)
-    elseif et <: SymbolicParameterIndex
+    if all(i -> i isa SymbolicParameterIndex, idxs)
         SII.getp(s, idxs)(s)
     else
-        getindex.(Ref(s), idxs)
+        SII.getu(s, idxs)(s)
     end
 end
 
-Base.getindex(s::NWState, ::Colon) = uflat(s)
-Base.getindex(p::NWParameter, ::Colon) = pflat(p)
-Base.setindex!(s::NWState, val, ::Colon) = uflat(s) .= val
-Base.setindex!(p::NWParameter, val, ::Colon) = pflat(p) .= val
+# NWState: setindex!
+function Base.setindex!(s::NWState, val, idx::SymbolicIndex)
+    setter = if idx isa SymbolicParameterIndex
+        SII.setp(s, idx)
+    else
+        SII.setu(s, idx)
+    end
+    _chk_dimensions(setter, val)
+    setter(s, val)
+end
+function Base.setindex!(s::NWState, val, idxs)
+    setter = if all(i -> i isa SymbolicParameterIndex, idxs)
+        SII.setp(s, idxs)
+    else
+        SII.setu(s, idxs)
+    end
+    _chk_dimensions(setter, val)
+    setter(s, val)
+end
 
+function _chk_dimensions(::Union{SII.SetParameterIndex,SII.SetStateIndex}, val)
+    length(val) == 1 || throw(DimensionMismatch("Cannot set multiple values to single index."))
+end
+_chk_dimensions(s::SII.ParameterHookWrapper, val) = _chk_dimensions(s.setter, val)
+function _chk_dimensions(ms::SII.MultipleSetters, val)
+    if size(ms.setters) != size(val)
+        throw(DimensionMismatch("Cannot set variables of size $(size(ms.setters)) to values of size $(size(val))."))
+    end
+end
+
+
+####
+#### Indexing proxys
+####
 struct VProxy{S} s::S end
 Base.getindex(p::VProxy, comp, state) = getindex(p.s, VIndex(comp, state))
 Base.setindex!(p::VProxy, val, comp, state) = setindex!(p.s, val, VIndex(comp, state))
@@ -505,16 +540,53 @@ function Base.getproperty(s::Union{NWParameter, NWState}, sym::Symbol)
     end
 end
 
-#=
-https://discourse.julialang.org/t/broadcasting-setindex-is-a-noobtrap/94700
-its hard to overload .= braodcasting so lets error if somebody tries
-=#
+
+####
+#### enable broadcasted setindex
+#### https://discourse.julialang.org/t/broadcasting-setindex-is-a-noobtrap/94700
+####
 Base.dotview(s::Union{NWParameter, NWState, VProxy, EProxy}, idxs...) = view(s, idxs...)
-function Base.view(s::Union{NWParameter, NWState, VProxy, EProxy}, idxs...)
-    error("Cannot create view into for indice $idxs")
-end
-Base.view(s::NWState, ::Colon) = s.uflat
+Base.view(p::VProxy, comp, state) = view(p.s, VIndex(comp, state))
+Base.view(p::EProxy, comp, state) = view(p.s, EIndex(comp, state))
+
+# NWParameter: view
 Base.view(s::NWParameter, ::Colon) = s.pflat
+function Base.view(p::NWParameter, idx::SymbolicIndex)
+    _idx = _paraindex(idx)
+    if !SII.is_parameter(p, _idx)
+        throw(ArgumentError("Index $idx is not a valid parameter index."))
+    end
+    view(p.pflat, SII.parameter_index(p, _idx))
+end
+function Base.view(p::NWParameter, idxs)
+    _idxs = _paraindex(idxs)
+    if !(all(i -> SII.is_parameter(p, i), _idxs))
+        throw(ArgumentError("Index $idxs is not a valid parameter index collection."))
+    end
+    view(p.pflat, map(i -> SII.parameter_index(p, i), _idxs))
+end
+
+# NWState: view
+Base.view(s::NWState, ::Colon) = s.uflat
+Base.view(s::NWState, idx::SymbolicParameterIndex) = view(s.p, idx)
+function Base.view(s::NWState, idx::SymbolicStateIndex)
+    if !SII.is_variable(s, idx)
+        throw(ArgumentError("Index $idx is not a valid state index."))
+    end
+    view(uflat(s), SII.variable_index(s, idx))
+end
+function Base.view(s::NWState, idxs)
+    if all(i -> SII.is_parameter(s, i), idxs)
+        _viewidx =  map(i -> SII.parameter_index(s, i), idxs)
+        return view(pflat(s), _viewidx)
+    elseif all(i -> SII.is_variable(s, i), idxs)
+        _viewidx =  map(i -> SII.variable_index(s, i), idxs)
+        return view(uflat(s), _viewidx)
+    else
+        throw(ArgumentError("Index $idx is neither a valid parameter nor state index collection."))
+    end
+end
+
 
 ####
 #### Convenience functions to extract indices

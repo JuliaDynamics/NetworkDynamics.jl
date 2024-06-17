@@ -15,6 +15,9 @@ for example in filter(contains(r".jl$"), readdir(example_dir, join=true))
     Literate.script(example, outdir)
 end
 
+# TODO: doc on steady state solve https://docs.sciml.ai/NonlinearSolve/stable/native/steadystatediffeq/#SteadyStateDiffEq.SSRootfind
+# TODO: doc on parameter & state handling? -> symbolic indexing
+
 makedocs(; sitename="NetworkDynamics",
          linkcheck=true, # checks if external links resolve
          pages=["General" => "index.md",
