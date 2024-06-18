@@ -380,9 +380,9 @@ end
 Base.eltype(p::NWParameter) = eltype(p.pflat)
 Base.length(s::NWParameter) = length(s.pflat)
 
-function NWParameter(nw::Network; ptype=Vector{Float64}, default=true)
-    pflat = _init_flat(ptype, pdim(nw))
-    p = NWParameter(nw,pflat)
+function NWParameter(nw::Network; ptype=Vector{Float64}, default=true, pfill=filltype(ptype))
+    pflat = _init_flat(ptype, pdim(nw), pfill)
+    p = NWParameter(nw, pflat)
     default || return p
     for (k, v) in SII.default_values(nw)
         k isa Union{VPIndex, EPIndex} || continue
@@ -401,7 +401,7 @@ struct NWState{U,P,T,NW}
     p::P
     t::T
     function NWState(nw, uflat, p=nothing, t=nothing)
-        _p = (!indexable(p) || p isa NWParameter) ? p : NWParameter(nw,p)
+        _p = (!indexable(p) || p isa NWParameter) ? p : NWParameter(nw, p)
         s = new{typeof(uflat),typeof(_p),typeof(t),typeof(nw)}(nw,uflat,_p,t)
         @argcheck !indexable(p) || s.nw === s.p.nw
         return s
@@ -411,10 +411,12 @@ end
 function NWState(nw::Network;
                  utype=Vector{Float64},
                  ptype=Vector{Float64},
+                 ufill=filltype(utype),
+                 pfill=filltype(ptype),
                  default=true)
     t = nothing
-    uflat = _init_flat(utype, dim(nw))
-    p = NWParameter(nw; ptype, default=false)
+    uflat = _init_flat(utype, dim(nw), ufill)
+    p = NWParameter(nw; ptype, pfill, default=false)
     s = NWState(nw,uflat,p,t)
     default || return s
     for (k, v) in SII.default_values(nw)
@@ -430,20 +432,45 @@ function NWState(s::NWState;
     NWState(s.nw, _convertorcopy(utype,uflat(s)), p, s.t)
 end
 
-# init flat array of type T with length N. Init with nothing if possible, else with zeros
-function _init_flat(T, N)
-    eT = eltype(T)
-    vec = T(undef, N)
-    if Nothing <: eT
-        fill!(vec, nothing)
-    elseif Missing <: eT
-        fill!(vec, missing)
-    elseif eT <: AbstractFloat
-        fill!(vec, NaN)
-    else
-        fill!(vec, zero(eT))
+function NWState(p::NWParameter; utype=Vector{Float64}, ufill=filltype(utype), default=true)
+    t = nothing
+    nw = p.nw
+    uflat = _init_flat(utype, dim(nw), ufill)
+    s = NWState(nw,uflat,p,t)
+    default || return s
+    for (k, v) in SII.default_values(nw)
+        k isa SymbolicParameterIndex && continue
+        s[k] = v
     end
-    return vec
+    return s
+end
+
+# init flat array of type T with length N. Init with nothing if possible, else with zeros
+function _init_flat(T, N, fill)
+    vec = T(undef, N)
+    fill!(vec, fill)
+end
+
+"""
+    filltype(T)
+
+Return a value which will be used to fill an abstract array of type `T`.
+
+- `nothing` if eltype(T) allows nothing
+- `missing` if eltype(T) allows missing
+- `NaN` if eltype(T) is a `AbstractFloat
+- `zero(eltype(T))` else.
+"""
+function filltype(::Type{<:AbstractVector{<:elT}}) where {elT}
+    if Nothing <: elT
+        nothing
+    elseif Missing <: elT
+        missing
+    elseif elT <: AbstractFloat
+        NaN
+    else
+        zero(elT)
+    end
 end
 
 _convertorcopy(::Type{T}, x::T) where {T} = copy(x)

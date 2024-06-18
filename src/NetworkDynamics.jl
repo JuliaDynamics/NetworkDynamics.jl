@@ -44,6 +44,11 @@ export VIndex, EIndex, VPIndex, EPIndex, NWState, NWParameter, uflat, pflat
 export vidxs, eidxs, vpidxs, epidxs
 include("symbolicindexing.jl")
 
+using NonlinearSolve: NonlinearProblem, AbstractNonlinearSolveAlgorithm
+using SteadyStateDiffEq: SteadyStateProblem, SteadyStateDiffEqAlgorithm, SSRootfind
+export find_fixpoint
+include("initialization.jl")
+
 include("show.jl")
 
 export chk_component
