@@ -312,12 +312,17 @@ for idx in idxtypes
 end
 
 # tests for state/parameter constructing/conversion
-using NetworkDynamics: _init_flat
-@test isequal(_init_flat(Vector{Float64}, 10), [NaN for _ in 1:10])
-@test _init_flat(Vector{Int64}, 10) == zeros(10)
-@test _init_flat(Vector{Union{Int64, Nothing}}, 10) == [nothing for _ in 1:10]
-@test isequal(_init_flat(Vector{Union{Int64, Missing}}, 10), [missing for _ in 1:10])
-@test NWState(nw).p._pflat == NWParameter(nw)._pflat
+using NetworkDynamics: _init_flat, filltype
+T = Vector{Float64}
+@test isequal(_init_flat(T, 10, filltype(T)), [NaN for _ in 1:10])
+T = Vector{Int64}
+@test _init_flat(T, 10, filltype(T)) == zeros(10)
+T = Vector{Union{Int64, Nothing}}
+@test _init_flat(T, 10, filltype(T)) == [nothing for _ in 1:10]
+T = Vector{Union{Int64, Missing}}
+@test isequal(_init_flat(T, 10, filltype(T)), [missing for _ in 1:10])
+@test isequal(pflat(NWState(nw)), pflat(NWParameter(nw)))
+@test isequal(pflat(NWState(p; ufill=0)), pflat(p))
 
 p = NWParameter(nw)
 p.e[2:3,:K] .= 0
@@ -325,9 +330,9 @@ p.e[2:3,:K] .= 0
 p.e[2:3,:K] = [0,0]
 @test p.e[2:3,:K] == [0,0]
 
-@test eltype(p) == Union{Nothing,Float64}
-p2 = NWParameter(p; ptype=Vector{Float64})
-@test eltype(p2) == Float64
+@test eltype(p) == Float64
+p2 = NWParameter(p; ptype=Vector{Union{Float64,Nothing}})
+@test eltype(p2) == Union{Float64,Nothing}
 
 p3 = NWParameter(p)
 p.v[1,:M] = 42
@@ -335,7 +340,6 @@ p.v[1,:M] = 42
 
 
 s = NWState(nw)
-@test_throws MethodError NWState(s, utype=Vector{Float64})
 s[:] .= 1
 s2 = NWState(s, utype=Vector{Float64})
 @test eltype(s2) == Float64

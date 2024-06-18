@@ -1,6 +1,5 @@
 using NetworkDynamics, Graphs
-using StochasticDiffEq, OrdinaryDiffEq using Plots, LaTeXStrings
-using NonlinearSolve, SteadyStateDiffEq
+using SteadyStateDiffEq, OrdinaryDiffEq
 
 
 @testset "test find_fixpoint" begin
@@ -24,4 +23,7 @@ using NonlinearSolve, SteadyStateDiffEq
 
     s0 = find_fixpoint(nd, p)
     @test pflat(s0) == pflat(p)
+
+    s1 = find_fixpoint(nd, p; alg=DynamicSS(Rodas5P()))
+    @test diff(s0.v[1:nv(g),:θ]) ≈ diff(s1.v[1:nv(g),:θ])
 end

@@ -20,7 +20,7 @@ function Network(g::AbstractGraph,
             println("Create dynamic network with $(nv(g)) vertices and $(ne(g)) edges:")
         @argcheck execution isa ExecutionStyle "Exectuion type $execution not supportet (choose from $(subtypes(ExecutionStyle)))"
 
-        _maxedepth = mapreduce(depth, min, _edgef, init=0)
+        _maxedepth = isempty(_edgef) ? 0 : mapreduce(depth, min, _edgef)
         if edepth === :auto
             edepth = _maxedepth
             verbose && println(" - auto accumulation depth = $edepth")

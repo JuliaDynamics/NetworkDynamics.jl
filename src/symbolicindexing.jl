@@ -380,7 +380,7 @@ end
 Base.eltype(p::NWParameter) = eltype(p.pflat)
 Base.length(s::NWParameter) = length(s.pflat)
 
-function NWParameter(nw::Network; ptype=Vector{Float64}, default=true, pfill=filltype(ptype))
+function NWParameter(nw::Network; ptype=Vector{Float64}, pfill=filltype(ptype), default=true)
     pflat = _init_flat(ptype, pdim(nw), pfill)
     p = NWParameter(nw, pflat)
     default || return p
@@ -461,7 +461,8 @@ Return a value which will be used to fill an abstract array of type `T`.
 - `NaN` if eltype(T) is a `AbstractFloat
 - `zero(eltype(T))` else.
 """
-function filltype(::Type{<:AbstractVector{<:elT}}) where {elT}
+function filltype(T::Type{<:AbstractVector})
+    elT = eltype(T)
     if Nothing <: elT
         nothing
     elseif Missing <: elT

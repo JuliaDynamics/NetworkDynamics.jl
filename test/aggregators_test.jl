@@ -58,7 +58,7 @@ end
         StaticEdge(; f=x->3x, dim=4, pdim=0, coupling=Fiducial()),
         StaticEdge(; f=x->4x, dim=2, pdim=0, coupling=Directed())]
 
-    nw = Network(g, n, e; aggregator=KAAggregator(+));
+    nw = Network(g, n, e; aggregator=KAAggregator(+))
     aggrmap = nw.layer.aggregator.m
 
     @test aggrmap.range == nv(g)+1 : nv(g) + 10
