@@ -3,6 +3,7 @@
 
 This introductory example explains the use of the basic types and constructors in NetworkDynamics.jl by modeling a simple diffusion on an undirected network. A corresponding `IJulia` [notebook](https://github.com/pik-icone/NetworkDynamics.jl/tree/master/examples) is available on GitHub. #md
 
+TODO: fix link in getting startet #hide
 The source of this example can be found [here](@__REPO_ROOT_URL__/examples/@__NAME__).
 
 ## Theoretical background
@@ -24,7 +25,7 @@ From the above considerations we see that in this model the nodes do not have an
 
 function diffusionedge!(e, v_s, v_d, p, t)
     # usually e, v_s, v_d are arrays, hence we use the broadcasting operator .
-    e .= v_s - v_d
+    e .= v_s .- v_d
     nothing
 end
 nothing #hide #md
@@ -45,9 +46,9 @@ end
 nothing #hide #md
 
 #=
-Just like above the input arguments `v, edges, p, t` are mandatory for the syntax of vertex functions. The additional input `dv` corresponding to the derivative of the vertex' state is mandatory for vertices described by ordinary differential equations.
+Just like above the input arguments `v, esum, p, t` are mandatory for the syntax of vertex functions. The additional input `dv` corresponding to the derivative of the vertex' state is mandatory for vertices described by ordinary differential equations.
 
-For undirected graphs, the `edgefunction!` specifies the coupling from a source- to a destination vertex. The contributions of the connected edges are added to the destination of each edge, as defined in the `diffusionvertex!` function in the for loop.
+For undirected graphs, the `edgefunction!` specifies the coupling from a source- to a destination vertex. The contributions of the connected edges to a single vertex are "aggregated". Default aggregation is the summation of all incident edge states. The aggregated edge state is made available via the `esum` argument of the vertex function.
 
 ## Constructing the network
 
@@ -66,12 +67,10 @@ nothing #hide #md
 
 using NetworkDynamics
 
-nd_diffusion_vertex = ODEVertex(; f=diffusionvertex!, dim=1, pdim=0)
-nd_diffusion_edge = StaticEdge(; f=diffusionedge!, dim=1, pdim=0, coupling=AntiSymmetric())
+nd_diffusion_vertex = ODEVertex(; f=diffusionvertex!, dim=1)
+nd_diffusion_edge = StaticEdge(; f=diffusionedge!, dim=1, coupling=AntiSymmetric())
 
 nd = Network(g, nd_diffusion_vertex, nd_diffusion_edge)
-
-nothing #hide #md
 
 #=
 `ODEVertex` and `StaticEdge` are functions wrappers that equip the functions we defined above with additional information like **`dim`** and return objects of type `VertexFunction` and `EdgeFunction`. Then the key constructor `Network` combines them with the topological information contained in the graph **`g`** and returns an `ODEFunction` compatible with the solvers of `DifferentialEquations.jl`. The keyword **`dim`** specifies the number of variables at each edge or node.
@@ -89,12 +88,12 @@ We are solving the diffusion problem on the time interval $[0, 4]$ with the `Tsi
 =#
 
 using Plots
-plot(sol; idxs=vertex_idxs(nd), fmt=:png)
+plot(sol; idxs=vidxs(nd, :, :), fmt=:png)
 
 #=
-The plotting is straightforward. The **`vars`** keyword allows us to pass a list of indices or *symbols* specifiying the variables we want to plot. *Symbols* can be thought of as names given to the interal variables of an `ODEFunction`, much like the variables $x$ or $\phi$ in mathematical notation. The default symbol for vertex variables is `v`, however we are free to specify other symbols by passing them to the `ODEVertex` constructor.
+The plotting is straightforward. The **`idxs`** keyword allows us to pass a list of indices. Indeces can be also "symbolic" indices which specify components and their symbols directly. For example `idxs = VIndex(1, :v)` acesses state `:v` of vertex 1.
 
-`syms_containing` is a helper function that returns all symbols of an `ODEProblem` containg a specific string (or symbol).
+In oder to collect multiple indices we can use the helper function `vidxs` and `eidxs`, which help to collect all symbolic indices matching a certain criteria.
 
 To illustrate a very simple multi-dimensional case, in the following we simulate two independent diffusions on an identical network. The first uses the symbol `x` and is started with initial conditions drawn from the standard normal distribution $N(0,1)$, the second uses the symbol `ϕ` with squared standard normal inital conditions.
 
@@ -106,8 +105,8 @@ k = 4  # average degree
 g = barabasi_albert(N, k) # a little more exciting than a bare random graph
 
 ## We will have two independent diffusions on the network, hence dim = 2
-nd_diffusion_vertex_2 = ODEVertex(; f=diffusionvertex!, dim=2, sym=[:x, :ϕ], pdim=0)
-nd_diffusion_edge_2 = StaticEdge(; f=diffusionedge!, dim=2, pdim=0, coupling=AntiSymmetric())
+nd_diffusion_vertex_2 = ODEVertex(; f=diffusionvertex!, dim=2, sym=[:x, :ϕ])
+nd_diffusion_edge_2 = StaticEdge(; f=diffusionedge!, dim=2, sym=[:flow_x, :flow_ϕ], coupling=AntiSymmetric())
 nd_2 = Network(g, nd_diffusion_vertex_2, nd_diffusion_edge_2)
 
 x0_2 = vec(transpose([randn(N) .^ 2 randn(N)])) # x ~ N(0,1)^2; ϕ ~ N(0,1)
@@ -115,7 +114,10 @@ ode_prob_2 = ODEProblem(nd_2, x0_2, (0.0, 3.0))
 sol_2 = solve(ode_prob_2, Tsit5());
 
 # Try plotting the variables ϕ_i yourself. [To write ϕ type \phi and press TAB]
-plot(sol_2; idxs=vertex_idxs(nd_2; filter=contains("x")), fmt=:png)
+plot(sol_2; idxs=vidxs(nd_2, :, :x), fmt=:png)
+
+# Using the `eidxs` helper function we can also plot the flow variables
+plot(sol_2; idxs=eidxs(nd_2, :, :flow_x), fmt=:png)
 
 #=
 ## Appendix: The network Laplacian $L$

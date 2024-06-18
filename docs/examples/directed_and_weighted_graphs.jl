@@ -81,65 +81,50 @@ Base.@propagate_inbounds function fhn_electrical_vertex!(dv, v, esum, p, t)
     nothing
 end
 
-Base.@propagate_inbounds function electrical_edge!(e, v_s, v_d, p, t)
-    e[1] = p[1] * (v_s[1] - v_d[1]) # * σ
+Base.@propagate_inbounds function electrical_edge!(e, v_s, v_d, (w, σ), t)
+    e[1] = w * (v_s[1] - v_d[1]) * σ
     nothing
 end
 
-odeelevertex = ODEVertex(fhn_electrical_vertex!; sym=[:u, :v], psym=[:a, :ϵ], depth=1)
+odeelevertex = ODEVertex(fhn_electrical_vertex!; sym=[:u, :v], psym=[:a=>0.5, :ϵ=>0.05])
 
-electricaledge = StaticEdge(electrical_edge!; dim=1, psym=[:weight], coupling=Directed())
+electricaledge = StaticEdge(electrical_edge!; dim=1, psym=[:weight, :σ=>0.5], coupling=Directed())
 
 fhn_network! = Network(g_directed, odeelevertex, electricaledge)
 
-nothing # hide
-
 #=
-Since this system is a directed one with thus directed edges, the keyword argument `coupling` is used to set the coupling of the edges to `:directed`.
-
-Note that the multiplication with the coupling strength $\sigma$ has been commented out. Since $\sigma$ is the same for every edge we can absorb this multiplication into the edge weight parameter `p`. Since our network has almost 8000 edges, this saves 8000 multiplications at every function call and leads to an 8-fold increase in performance.
+Since this system is a directed one with thus directed edges, the keyword argument `coupling` is used to set the coupling of the edges to `Directed()`.
 
 ## Parameter handling
+
+Some of the parameters have been declared with default values.
+Those default values will be used when creating the `NWParameter` object.
+We can use getindex on the parameter objects to set the missing weight values.
+=#
+p = NWParameter(fhn_network!)
+p.e[1:ne(g_directed), :weight] = edge_weights
+
+#=
+The initial conditions could be created similarly to the parameters as an indexable `NWState` obejct.
+Since we chose a random initial condition we initialize the flat array directly:
 =#
 
-# Defining global parameters
-
-N = 90         # number of nodes
-const ϵ = 0.05 # global variables that are accessed several times should be declared `const`
-const a = 0.5
-const σ = 0.5
-
-# Construct `NWParameter` object and fill edge parameters
-
-p = NWParameter(fhn_network!)
-
-
-p.e[:, :weight] = σ * edge_weights
-p.e[:, :weight] .= σ
-p.e[:, :weight]
-view(p.e, :, :weight)
-
-typeof(p.e)
-SII.is_timeseries_parameter
-
-# Initial conditions
-
-x0 = randn(2N) * 5
+x0 = randn(dim(fhn_network!)) * 5
 
 nothing # hide
 
 #=
-The behaviour of `network_dynamics` changes with the type of parameters `p` being passed. When `p` is an `Array`, the entire Array will be passed to each `VertexFunction` and `EdgeFunction`. When `p` is a tuple of two Arrays with lengths corresponding to the number of nodes and number of edges respectively, then `network_dynamics` passes only the edge or node parameters with the index of the edge or node. When there are no parameters for either edges or nodes the value `nothing` may be used.
-
 ## Solving the system
 
 Now we are ready to create an `ODEProblem`. Since for some choices of parameters the FitzHugh-Nagumo model is *stiff* (i.e. numerically unstable), we use a solver with automated stiffness detection. Such a solver switches to a more stable solver only when the solution enters a region of phase space where the problem is numerically unstable. In this case we use `Tsit5` and switch to `TRBDF2` when necessary. `AutoTsit5` is the switching version of the `Tsit5` algorithm.
+
+Not that we call `pflat` on the `NWParameter` object to get the flat array of parameters.
 =#
 
 using OrdinaryDiffEq
 
 tspan = (0.0, 200.0)
-prob  = ODEProblem(fhn_network!, x0, tspan, p[:])
+prob  = ODEProblem(fhn_network!, x0, tspan, pflat(p))
 sol = solve(prob, AutoTsit5(TRBDF2()));
 nothing # hide
 
@@ -151,6 +136,4 @@ The plot of the excitatory variables shows that they synchronize for this choice
 
 using Plots
 
-plot(sol; vars=vertex_idxs(fhn_network!, contains(:u)), legend=false, ylim=(-5, 5), fmt=:png)
-plot(sol; vars=vertex_idxs(fhn_network!, contains(:u)), legend=false, ylim=(-5, 5), fmt=:png)
-plot(sol; idxs=vidxs(sol, :, :u))
+plot(sol; idxs=vidxs(fhn_network!, :, :u), legend=false, ylim=(-5, 5), fmt=:png)

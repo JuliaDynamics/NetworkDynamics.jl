@@ -32,7 +32,8 @@ SII.symbolic_type(::Type{<:SymbolicIndex}) = SII.ArraySymbolic()
 
 SII.hasname(::SymbolicIndex) = false
 SII.hasname(::SymbolicIndex{Int,<:Union{Symbol,Int}}) = true
-SII.getname(x::Union{VIndex,VPIndex}) = Symbol("v$(x.compidx)₊$(x.subidx)")
+SII.getname(x::SymbolicVertexIndex) = Symbol("v$(x.compidx)₊$(x.subidx)")
+SII.getname(x::SymbolicEdgeIndex) = Symbol("e$(x.compidx)₊$(x.subidx)")
 
 getcomp(nw::Network, sni::Union{EIndex{Int},EPIndex{Int}}) = nw.im.edgef[sni.compidx]
 getcomp(nw::Network, sni::Union{VIndex{Int},VPIndex{Int}}) = nw.im.vertexf[sni.compidx]
@@ -636,34 +637,6 @@ function _extract_nw(inpr)
         sc
     end
 end
-function vertex_idxs(inpr; static=true, filter=nothing)
-    nw = _extract_nw(inpr)
-    syms = []
-    for (i,cf) in enumerate(nw.im.vertexf)
-        static || NetworkDynamics.isdynamic(cf) || continue
-        append!(syms, collect(VIndex(i, sym(cf))))
-    end
-    if isnothing(filter)
-        syms
-    else
-        Base.filter(filter, syms)
-    end
-end
-function edge_idxs(inpr; static=true, filter=nothing)
-    nw = _extract_nw(inpr)
-    syms = []
-    for (i,cf) in enumerate(nw.im.edgef)
-        static || NetworkDynamics.isdynamic(cf) || continue
-        append!(syms, collect(EIndex(i, sym(cf))))
-    end
-    if isnothing(filter)
-        syms
-    else
-        Base.filter(filter, syms)
-    end
-end
-Base.contains(s::SymbolicIndex, ex) = contains(string(s.subidx), ex)
-Base.contains(s::SymbolicIndex, ex::Symbol) = contains(string(s.subidx), string(ex))
 
 """
     vidxs([inpr], components=:, variables=:) :: Vector{VIndex}
