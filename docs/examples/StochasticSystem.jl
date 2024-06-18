@@ -43,67 +43,71 @@ Here, $dW_i = \xi_i dt$ is the infinitesimal increment of the Wiener process. Pr
 
 ## Implementing the Swing Equation
 
-First we will implement the node and edge functions for the deterministic case without the fluctuations. We assume the inertia and damping parameters to be $M_i = 1.0$ and $D_i = 0.1$.
+First we will implement the node and edge functions for the deterministic case
+without the fluctuations. We set the defaults for the inertia and damping
+parameters to be $M_i = 1.0$ and $D_i = 0.1$. The default coupling strength is $K=6$.
 =#
+using NetworkDynamics, Graphs
+using StochasticDiffEq, OrdinaryDiffEq
+using Plots, LaTeXStrings
 
-function swing_equation!(dv, v, edges, P, t)
+function swing_equation!(dv, v, esum, (M, P, D), t)
     dv[1] = v[2]
-    dv[2] = P - 0.1 * v[2]
-    for e in edges
-        dv[2] += e[1]
-    end
+    dv[2] = 1/M *(P - D * v[2] + esum[1])
+    nothing
 end
+swing_vertex = ODEVertex(swing_equation!; sym=[:θ, :ω], psym=[:M=>1, :P, :D=>0.1])
 
-function powerflow!(e, v_s, v_d, K, t)
+function powerflow!(e, v_s, v_d, (K,), t)
     e[1] = K * sin(v_s[1] - v_d[1])
 end
+powerflow_edge = StaticEdge(powerflow!; dim=1, psym=[:K=>6], coupling=AntiSymmetric())
 nothing # hide
 
 #=
 ## Contructing the Deterministic Dynamics
 
 For the graph structure we will use a simple 4 node ring network.
-
-```@example SDEVertex
-using Graphs
-g = watts_strogatz(4, 2, 0.0)
-nothing # hide
-```
-
-Then we can construct the `ODEFunction` of the deterministic system by using `network_dynamics()`.
 =#
 
-using NetworkDynamics
-
-swing_vertex = ODEVertex(; f=swing_equation!, dim=2, sym=[:θ, :ω])
-powerflow_edge = StaticEdge(; f=powerflow!, dim=1)
-
-nd = network_dynamics(swing_vertex, powerflow_edge, g)
+g = watts_strogatz(4, 2, 0.0)
 nothing # hide
+
+#=
+Then we can construct the `Network` of the deterministic system.
+=#
+
+nd = Network(g, swing_vertex, powerflow_edge)
 
 #=
 ## Fixpoint Search
 
-Now we need to define the dynamic parameters of vertices and edges. For simplicity we assume homogeneous capacities on the lines. For the nodes we assume half of them to be net producers ($P = 1.0$) and half of them to be net consumers ($P = -1.0$) of power.
-
-```@example SDEVertex
-K = 6.0
-P = [1.0, -1.0, 1.0, -1.0]
-p = (P, K)
-nothing # hide
-```
-
-We want to simulate fluctuations around an equilibrium state of our model system. Therefore, we need to find a fixpoint of the determinitic system which can be done by using the utility function `find_fixpoint()`. As an initial guess we take all variables equal to zero.
+Now we need to define the dynamic parameters of vertices and edges.
+For that, we start by creating the `NWParameter` object, pre filling it with the default values:
 =#
 
-u0 = find_fixpoint(nd, p, zeros(8))
+p = NWParameter(nd)
 
-using StochasticDiffEq, OrdinaryDiffEq
-ode_prob = ODEProblem(nd, u0, (0.0, 500.0), p)
+#=
+Most of the parameters are allready set
+For the nodes we assume half of them to be net producers ($P = 1.0$) and half of them to be net consumers ($P = -1.0$) of power.
+=#
+p.v[1:4, :P] = [1, -1, 1, -1]
+nothing # hide
+
+#=
+We want to simulate fluctuations around an equilibrium state of our model
+system. Therefore, we need to find a fixpoint of the determinitic system which
+can be done by using the utility function `find_fixpoint()`. As an initial guess
+we take all variables equal to zero.
+=#
+
+u0 = find_fixpoint(nd, p)
+
+ode_prob = ODEProblem(nd, uflat(u0), (0.0, 500.0), pflat(p))
 ode_sol = solve(ode_prob, Tsit5())
 
-using Plots, LaTeXStrings
-plot(ode_sol; vars=syms_containing(nd, "ω"), ylims=(-1.0, 1.0), ylabel=L"\omega", legend=false, fmt=:png)
+plot(ode_sol; idxs=vidxs(nd,:,:ω), ylims=(-1.0, 1.0), ylabel=L"\omega", legend=false, fmt=:png)
 
 #=
 We see that this is in fact a fixpoint solution. We will later use this as an initial condition for the numerical integration of the SDE system.
@@ -130,8 +134,8 @@ nothing # hide
 Now we can construct the dynamics of the second layer by using `network_dynamics()`. Since the graph structure of the stochastic layer has no edges we can take the edge function of the deterministic case as a placeholder.
 =#
 
-fluctuation_vertex = ODEVertex(; f=fluctuation!, dim=2)
-nd_noise = network_dynamics(fluctuation_vertex, powerflow_edge, h)
+fluctuation_vertex = ODEVertex(fluctuation!; dim=2)
+nd_noise = Network(h, fluctuation_vertex, NetworkDynamics.EdgeFunction[])
 nothing # hide
 
 #=
@@ -140,9 +144,9 @@ nothing # hide
 Finally, we can create an `SDEProblem` and solve it with `DifferentialEquations`.
 =#
 
-sde_prob = SDEProblem(nd, nd_noise, u0, (0.0, 500.0), p)
+sde_prob = SDEProblem(nd, nd_noise, uflat(u0), (0.0, 500.0), pflat(p))
 sde_sol = solve(sde_prob, SOSRA())
-plot(sde_sol; vars=syms_containing(nd, "ω"), ylims=(-1.0, 1.0), ylabel=L"\omega", legend=false, fmt=:png)
+plot(sde_sol; idxs=vidxs(nd,:,:ω), ylims=(-1.0, 1.0), ylabel=L"\omega", legend=false, fmt=:png)
 
 #=
 More details on SDE problems, e.g. how to include correlations or how to define an `EnsembleProblem`, can be found in the [documentation](https://diffeq.sciml.ai/stable/types/sde_types/) of `DifferentialEquations`.

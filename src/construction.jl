@@ -20,7 +20,7 @@ function Network(g::AbstractGraph,
             println("Create dynamic network with $(nv(g)) vertices and $(ne(g)) edges:")
         @argcheck execution isa ExecutionStyle "Exectuion type $execution not supportet (choose from $(subtypes(ExecutionStyle)))"
 
-        _maxedepth = mapreduce(depth, min, _edgef)
+        _maxedepth = mapreduce(depth, min, _edgef, init=0)
         if edepth === :auto
             edepth = _maxedepth
             verbose && println(" - auto accumulation depth = $edepth")
@@ -116,7 +116,7 @@ function VertexBatch(im::IndexManager, idxs::Vector{Int}; verbose)
         if e isa ArgumentError && startswith(e.msg, "Collection has multiple elements")
             throw(ArgumentError("Provided vertex functions $idxs use the same function but have different metadata (dim, pdim,type,...)"))
         else
-            rerthrow(e)
+            rethrow(e)
         end
     end
 end
@@ -141,7 +141,7 @@ function EdgeBatch(im::IndexManager, idxs::Vector{Int}; verbose)
         if e isa ArgumentError && startswith(e.msg, "Collection has multiple elements")
             throw(ArgumentError("Provided edge functions $idxs use the same function but have different metadata (dim, pdim,type,...)"))
         else
-            rerthrow(e)
+            rethrow(e)
         end
     end
 end
