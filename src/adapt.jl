@@ -24,6 +24,8 @@ function Adapt.adapt_structure(to, m::AggregationMap)
                    m.symrange, adapt(to, m.symmap))
 end
 
+
+# XXX: get rid of essence() hack in favor for adapt, since Metal is not an important backand for now
 function essence(b::VertexBatch)
     (;f=compf(b),
      statestride=b.statestride,
@@ -34,5 +36,6 @@ function essence(b::EdgeBatch)
     (;f=compf(b),
      statestride=b.statestride,
      pstride=b.pstride,
-     gbufstride=b.gbufstride)
+     gbufstride=b.gbufstride,
+     indices=b.indices)
 end

@@ -2,6 +2,60 @@ using Test
 using SafeTestsets
 using Pkg
 using NetworkDynamics
+using SciMLBase
+using InteractiveUtils
+
+"""
+Test utility, which rebuilds the Network with all different execution styles and compares the
+results of the coreloop.
+"""
+function test_execution_styles(prob)
+    styles = [KAExecution{true}(), KAExecution{false}(), SequentialExecution{true}(), SequentialExecution{false}()]
+    # styles = [KAExecution{false}(), SequentialExecution{true}()]
+    unmatchedstyles = filter(subtypes(NetworkDynamics.ExecutionStyle)) do abstractstyle
+        !any(s -> s isa abstractstyle, styles)
+    end
+    @assert isempty(unmatchedstyles) "Some ExecutionStyle won't be tested: $unmatchedstyles"
+
+    aggregators = [NaiveAggregator, NNlibScatter, KAAggregator, SequentialAggregator, PolyesterAggregator]
+    unmatchedaggregators = filter(subtypes(NetworkDynamics.Aggregator)) do abstractaggregator
+        !any(s -> s <: abstractaggregator, aggregators)
+    end
+    @assert isempty(unmatchedaggregators) "Some AggrgationStyle won't be tested: $unmatchedaggregators"
+
+    @assert prob isa ODEProblem "test_execution_styles only works for ODEProblems"
+
+    u = copy(prob.u0)
+    du = zeros(eltype(u), length(u))
+    t = 0.0
+    p = copy(prob.p)
+    nw = prob.f.f
+    nw(du, u, p, t)
+    @test u==prob.u0
+    @test p==prob.p
+
+    @testset "Test Execution Styles and Aggregators" begin
+        for execution in styles
+            for aggregator in aggregators
+                _nw = Network(nw; execution, aggregator=aggregator(nw.layer.aggregator.f))
+                _du = zeros(eltype(u), length(u))
+                try
+                    _nw(_du, u, p, t)
+                catch e
+                    println("Error in $execution with $aggregator: $e")
+                    @test false
+                    continue
+                end
+                issame = _du ≈ du
+
+                if !issame
+                    println("$execution with $aggregator lead to different results: extrema(Δ) = $(extrema(_du - u))")
+                end
+                @test issame
+            end
+        end
+    end
+end
 
 @testset "NetworkDynamics Tests" begin
     @safetestset "utils test" begin include("utils_test.jl") end

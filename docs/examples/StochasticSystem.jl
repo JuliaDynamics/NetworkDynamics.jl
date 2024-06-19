@@ -105,6 +105,7 @@ we take all variables equal to zero.
 u0 = find_fixpoint(nd, p)
 
 ode_prob = ODEProblem(nd, uflat(u0), (0.0, 500.0), pflat(p))
+Main.test_execution_styles(ode_prob) #src only for testing all ex styles
 ode_sol = solve(ode_prob, Tsit5())
 
 plot(ode_sol; idxs=vidxs(nd,:,:ω), ylims=(-1.0, 1.0), ylabel=L"\omega", legend=false, fmt=:png)

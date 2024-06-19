@@ -69,7 +69,7 @@ sol[EIndex(3,:P)]
 @test sol[EIndex(1:3,:P)] == sol[[EIndex(1,:P),EIndex(2,:P),EIndex(3,:P)]]
 
 ####
-#### more complex prolbme
+#### more complex problem
 ####
 g = complete_graph(4)
 vf = [Lib.kuramoto_second(), Lib.diffusion_vertex(), Lib.kuramoto_second(), Lib.diffusion_vertex()]
@@ -81,6 +81,7 @@ ef = [Lib.diffusion_odeedge(),
       Lib.diffusion_edge_fid()]
 nw = Network(g, vf, ef)
 prob = ODEProblem(nw, rand(dim(nw)), (0,1), rand(pdim(nw)))
+Main.test_execution_styles(prob) #src only for testing all ex styles
 sol = solve(prob, Tsit5())
 
 @test SII.variable_index.(Ref(nw), SII.variable_symbols(nw)) == 1:dim(nw)

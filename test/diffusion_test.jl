@@ -111,6 +111,8 @@ diff_network_ode(dx0_ode, x0_ode, nothing, 0.0)
 prob_L = ODEProblem(diff_network_L, x0_ode[1:N], (0.0, 5.0))
 prob_st = ODEProblem(diff_network_st, x0_ode[1:N], (0.0, 5.0))
 prob_ode = ODEProblem(diff_network_ode, x0_ode, (0.0, 5.0))
+Main.test_execution_styles(prob_st) #src only for testing all ex styles
+Main.test_execution_styles(prob_ode) #src only for testing all ex styles
 
 sol_L = solve(prob_L, Tsit5(); reltol=1e-5)
 sol_st = solve(prob_st, Tsit5(); reltol=1e-5)

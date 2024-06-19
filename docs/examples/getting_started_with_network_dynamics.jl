@@ -80,6 +80,7 @@ using OrdinaryDiffEq
 
 x0 = randn(N) # random initial conditions
 ode_prob = ODEProblem(nd, x0, (0.0, 4.0))
+Main.test_execution_styles(ode_prob) #src only for testing all ex styles
 sol = solve(ode_prob, Tsit5());
 nothing #hide #md
 
@@ -111,6 +112,7 @@ nd_2 = Network(g, nd_diffusion_vertex_2, nd_diffusion_edge_2)
 
 x0_2 = vec(transpose([randn(N) .^ 2 randn(N)])) # x ~ N(0,1)^2; ϕ ~ N(0,1)
 ode_prob_2 = ODEProblem(nd_2, x0_2, (0.0, 3.0))
+Main.test_execution_styles(ode_prob_2) #src only for testing all ex styles
 sol_2 = solve(ode_prob_2, Tsit5());
 
 # Try plotting the variables ϕ_i yourself. [To write ϕ type \phi and press TAB]

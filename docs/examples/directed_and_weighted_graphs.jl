@@ -125,6 +125,7 @@ using OrdinaryDiffEq
 
 tspan = (0.0, 200.0)
 prob  = ODEProblem(fhn_network!, x0, tspan, pflat(p))
+Main.test_execution_styles(prob) #src only for testing all ex styles
 sol = solve(prob, AutoTsit5(TRBDF2()));
 nothing # hide
 

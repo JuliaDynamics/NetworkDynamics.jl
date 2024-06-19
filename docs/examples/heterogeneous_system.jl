@@ -60,6 +60,7 @@ x0 = collect(1:N) ./ N
 x0 .-= sum(x0) ./ N
 tspan = (0.0, 10.0)
 prob = ODEProblem(nw, x0, tspan, pflat(p))
+Main.test_execution_styles(prob) #src only for testing all ex styles
 sol = solve(prob, Tsit5())
 plot(sol; ylabel="θ", fmt=:png)
 
@@ -145,6 +146,7 @@ nothing #hide
 For the problem construction, we need to convert the nested stuctures to flat arrays using the [`uflat`](@ref) and [`pflat`](@ref) methods.
 =#
 prob_hetero = ODEProblem(nw_hetero!, uflat(state), tspan, pflat(state))
+Main.test_execution_styles(prob_hetero) #src only for testing all ex styles
 sol_hetero = solve(prob_hetero, Tsit5());
 nothing #hide
 plot(sol_hetero)

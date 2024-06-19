@@ -46,6 +46,7 @@ x0 = rand(nv(g))
 NWState(diff_network_st_ver, x0).v[1,1] = pi
 
 prob_st_ver = ODEProblem(diff_network_st_ver, x0, (0.,500.))
+Main.test_execution_styles(prob_st_ver) #src only for testing all ex styles
 sol_st_ver = solve(prob_st_ver, Rodas4());
 
 println("These dynamics should flow to π, at t=500. they are there up to $(maximum(abs.(sol_st_ver(500.) .- pi)))")

@@ -249,3 +249,12 @@ function _check_massmatrix(c)
                          a uniform scaling, or scalar. Got $(c.mass_matrix) \
                          in component :$(c.name)."))
 end
+
+"""
+    Network(nw::Network; kwargs...)
+
+Rebuild the Network with same graph and vertex/edge functions but possibly different kwargs.
+"""
+function Network(nw::Network; kwargs...)
+    Network(nw.im.g, nw.im.vertexf, nw.im.edgef; kwargs...)
+end
