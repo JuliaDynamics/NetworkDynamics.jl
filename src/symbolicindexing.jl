@@ -373,15 +373,20 @@ end
 #### NWParameter and NWState objects as value provider
 ####
 
-struct NWParameter{P,NW}
+struct NWParameter{P,NW<:Network}
     nw::NW
     pflat::P
+    function NWParameter(thing, pflat)
+        nw = extract_nw(thing)
+        new{typeof(pflat),typeof(nw)}(nw, pflat)
+    end
 end
 
 Base.eltype(p::NWParameter) = eltype(p.pflat)
 Base.length(s::NWParameter) = length(s.pflat)
 
-function NWParameter(nw::Network; ptype=Vector{Float64}, pfill=filltype(ptype), default=true)
+function NWParameter(thing; ptype=Vector{Float64}, pfill=filltype(ptype), default=true)
+    nw = extract_nw(thing)
     pflat = _init_flat(ptype, pdim(nw), pfill)
     p = NWParameter(nw, pflat)
     default || return p
@@ -396,25 +401,27 @@ function NWParameter(p::NWParameter; ptype=typeof(p.pflat))
     NWParameter(p.nw, _convertorcopy(ptype,pflat(p)))
 end
 
-struct NWState{U,P,T,NW}
+NWParameter(int::SciMLBase.DEIntegrator) = NWParameter(int, int.p)
+
+struct NWState{U,P,T,NW<:Network}
     nw::NW
     uflat::U
     p::P
     t::T
-    function NWState(nw, uflat, p=nothing, t=nothing)
-        _p = (!indexable(p) || p isa NWParameter) ? p : NWParameter(nw, p)
+    function NWState(thing, uflat, p=nothing, t=nothing)
+        nw = extract_nw(thing)
+        _p = p isa Union{NWParameter,Nothing} ? p : NWParameter(nw, p)
         s = new{typeof(uflat),typeof(_p),typeof(t),typeof(nw)}(nw,uflat,_p,t)
-        @argcheck !indexable(p) || s.nw === s.p.nw
+        @argcheck isnothing(p) || s.nw === s.p.nw
         return s
     end
 end
 
-function NWState(nw::Network;
-                 utype=Vector{Float64},
-                 ptype=Vector{Float64},
-                 ufill=filltype(utype),
-                 pfill=filltype(ptype),
+function NWState(thing;
+                 utype=Vector{Float64}, ufill=filltype(utype),
+                 ptype=Vector{Float64}, pfill=filltype(ptype),
                  default=true)
+    nw = extract_nw(thing)
     t = nothing
     uflat = _init_flat(utype, dim(nw), ufill)
     p = NWParameter(nw; ptype, pfill, default=false)
@@ -445,6 +452,8 @@ function NWState(p::NWParameter; utype=Vector{Float64}, ufill=filltype(utype), d
     end
     return s
 end
+
+NWState(int::SciMLBase.DEIntegrator) = NWState(int, int.u, int.p, int.t)
 
 # init flat array of type T with length N. Init with nothing if possible, else with zeros
 function _init_flat(T, N, fill)
@@ -558,11 +567,19 @@ end
 ####
 #### Indexing proxys
 ####
-struct VProxy{S} s::S end
+abstract type IndexingProxy end
+struct VProxy{S} <: IndexingProxy
+    s::S
+end
 Base.getindex(p::VProxy, comp, state) = getindex(p.s, VIndex(comp, state))
+Base.getindex(p::VProxy, ::Colon, state) = getindex(p, 1:nv(extract_nw(p)), state)
 Base.setindex!(p::VProxy, val, comp, state) = setindex!(p.s, val, VIndex(comp, state))
-struct EProxy{S} s::S end
+
+struct EProxy{S} <: IndexingProxy
+    s::S
+end
 Base.getindex(p::EProxy, comp, state) = getindex(p.s, EIndex(comp, state))
+Base.getindex(p::EProxy, ::Colon, state) = getindex(p, 1:ne(extract_nw(p)), state)
 Base.setindex!(p::EProxy, val, comp, state) = setindex!(p.s, val, EIndex(comp, state))
 
 function Base.getproperty(s::Union{NWParameter, NWState}, sym::Symbol)
@@ -623,21 +640,7 @@ function Base.view(s::NWState, idxs)
 end
 
 
-####
-#### Convenience functions to extract indices
-####
-function _extract_nw(inpr)
-    if isnothing(inpr)
-        throw(ArgumentError("Needs system context to generate matching indices. Pass Network, sol, prob, ..."))
-    end
-    sc = SII.symbolic_container(inpr)
-    if sc isa SciMLBase.ODEFunction
-        sc.sys
-    else
-        sc
-    end
-end
-
+# TODO: vidx(nw, :, :u) has different semantics from s.v[:, :u] (one searches?)
 """
     vidxs([inpr], components=:, variables=:) :: Vector{VIndex}
 
@@ -700,8 +703,8 @@ _make_iterabel(idxs) = idxs
 _make_iterabel(idx::Symbol) = Ref(idx)
 
 _make_cidx_iterable(_, _, idx) = _make_iterabel(idx)
-_make_cidx_iterable(::Type{<:SymbolicVertexIndex}, inpr, ::Colon) = 1:nv(_extract_nw(inpr))
-_make_cidx_iterable(::Type{<:SymbolicEdgeIndex}, inpr, ::Colon) = 1:ne(_extract_nw(inpr))
+_make_cidx_iterable(::Type{<:SymbolicVertexIndex}, inpr, ::Colon) = 1:nv(extract_nw(inpr))
+_make_cidx_iterable(::Type{<:SymbolicEdgeIndex}, inpr, ::Colon) = 1:ne(extract_nw(inpr))
 function _make_cidx_iterable(IT, inpr, s::Symbol)
     names = getproperty.(_get_components(IT, inpr), :name)
     findall(isequal(s), names)
@@ -728,8 +731,33 @@ function _make_sidx_iterable(IT::Type{<:SymbolicParameterIndex}, inpr, cidx, s::
     filter(sym -> contains(string(sym), s), syms)
 end
 
-_get_components(::Type{<:SymbolicVertexIndex}, inpr) = _extract_nw(inpr).im.vertexf
-_get_components(::Type{<:SymbolicEdgeIndex}, inpr) = _extract_nw(inpr).im.edgef
+_get_components(::Type{<:SymbolicVertexIndex}, inpr) = extract_nw(inpr).im.vertexf
+_get_components(::Type{<:SymbolicEdgeIndex}, inpr) = extract_nw(inpr).im.edgef
+
+
+"""
+    extract_nw(thing)
+
+Try to extract the `Network` object from thing.
+"""
+function extract_nw(inpr)
+    sc = SII.symbolic_container(inpr)
+    if sc === inpr
+       throw(ArgumentError("Cannot extract Network from $(typeof(sc))"))
+    end
+    extract_nw(sc)
+end
+extract_nw(nw::Network) = nw
+extract_nw(sol::SciMLBase.AbstractSolution) = extract_nw(sol.prob)
+extract_nw(prob::SciMLBase.ODEProblem) = extract_nw(prob.f)
+extract_nw(f::SciMLBase.ODEFunction) = extract_nw(f.sys)
+extract_nw(int::SciMLBase.DEIntegrator) = extract_nw(int.f)
+extract_nw(s::NWState) = s.nw
+extract_nw(p::NWParameter) = p.nw
+extract_nw(p::IndexingProxy) = extract_nw(p.s)
+function extract_nw(::Nothing)
+    throw(ArgumentError("Needs system context to generate matching indices. Pass Network, sol, prob, ..."))
+end
 
 #=
 nds = wrap(nd, u, [p]) -> NWState (contains nw para, optional für observables/static)
