@@ -191,7 +191,7 @@ function _is_parameter(nw::Network,
     return subsym_has_idx(sni.subidx, psym(cf))
 end
 
-SII.is_timeseries_parameter(nw::Network, sym) = false
+# SII.is_timeseries_parameter(nw::Network, sym) = false
 
 function SII.parameter_index(nw::Network, sni)
     if _hascolon(sni)

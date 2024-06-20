@@ -1,5 +1,6 @@
 [deps]
 DelayDiffEq = "bcd4f6db-9728-5f36-b5f7-82caef46ccdb"
+DiffEqCallbacks = "459566f4-90b8-5000-8ac3-15dfb0a30def"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
