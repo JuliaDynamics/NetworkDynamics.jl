@@ -19,147 +19,139 @@ using Graphs
 using OrdinaryDiffEq
 using DiffEqCallbacks
 using Plots
+import SymbolicIndexingInterface as SII
 
 #=
 For the nodes we define the swing equation. State `v[1] = δ`, `v[2] = ω`.
 The swing equation has three parameters: `p = (P_ref, I, γ)` where `P_ref`
 is the power setpopint, `I` is the inertia and `γ` is the droop or damping coeficcient.
 =#
-function swing_equation(dv, v, edges, p,t)
+function swing_equation(dv, v, esum, p,t)
     P, I, γ = p
     dv[1] = v[2]
-    dv[2] = P - γ * v[2] + flow_sum(edges)
+    dv[2] = P - γ * v[2] .+ esum[1]
     dv[2] = dv[2] / I
     nothing
 end
-
-#=
-As an auxilliary function we need to define the flowsum, which adds up all incomming active
-power flows to the nodes.
-=#
-function flow_sum(edges)
-    sum = 0.0
-    for e in edges
-        sum -= e[1]
-    end
-    return sum
-end
+odevertex  = ODEVertex(swing_equation; sym=[:δ, :ω], psym=[:P_ref, :I=>1, :γ=>0.1], depth=1)
 
 #=
 Lets define a simple purely active power line whose active power flow is
 completlye determined by the connected voltage angles and the coupling constant
 `K`.
+We give an additonal parameter, the line limit, which we'll use later in the callback.
 =#
-function simple_edge(e, v_s, v_d, K, t)
-    e[1] = K * sin(v_d[1] - v_s[1])
+function simple_edge(e, v_s, v_d, (K,), t)
+    e[1] = K * sin(v_s[1] - v_d[1])
 end
+staticedge = StaticEdge(simple_edge; sym=:P, psym=[:K=>1.63, :limit=>1], coupling=AntiSymmetric())
 
 #=
-The following function returns a `VectorContinoursCallback` which compares the `max_flow` of all
-edges in the network an shuts them down once the flow is to high.
-=#
-function watch_line_limit_callback(max_flow)
-    num_e = length(max_flow)
-
-    condition = function(out, u, t, integrator)
-        ## get current edge values from integrator
-        gd = integrator.f.f(u, integrator.p, integrator.t, GetGD)
-        ## collect edge values (the power on each line)
-        edge_values = [get_edge(gd, i)[1] for i in 1:ne(g)]
-        for i in 1:num_e
-            out[i] = max_flow[i] - abs(edge_values[i])
-        end
-    end
-
-    return VectorContinuousCallback(condition, trip_line_affect!, num_e)
-end
-
-#=
-This affect will set the coupling strength `K` of a given line to zero. This is equivalent to
-removing the edge from the network.
-=#
-function trip_line_affect!(integrator, idx)
-    integrator.p[2][idx] = 0
-    auto_dt_reset!(integrator)
-end
-
-#=
-Axilliary function to plot the line loads at the end.
-=#
-function plot_flow(nd, saved_edge_data)
-    t = saved_edge_data.t
-    vals = saved_edge_data.saveval
-
-    data = zeros(length(t), length(vals[1]))
-    for i in 1:length(vals)
-        # devide by 1.63 to normalize
-        data[i, :] = abs.(vals[i]) / 1.63
-    end
-
-    g = nd.f.graph
-    sym = Array{String}(undef, (1, ne(g)))
-    for (i, e) in enumerate(edges(g))
-        sym[1, i] = string(e.src) * "->" * string(e.dst)
-    end
-
-    plot(t, data; label=sym, size=(800, 600))
-end
-
-#=
-We can now define the graph topology as in the paper of Schäfter.
+With the definition of the graph topology we can build the `Network` object:
 =#
 g = SimpleGraph([0 1 1 0 1;
                  1 0 1 1 0;
                  1 1 0 1 0;
                  0 1 1 0 1;
                  1 0 0 1 0])
+swing_network = Network(g, odevertex, staticedge)
 
-# Definition of nodes and edges according to schäfer18
-I = 1.0
-γ = 0.1
+#=
+For the parameters, we create the `NWParameter` object prefilled with default p values
+=#
+p = NWParameter(swing_network)
+## vertices 1, 3 and 4 act as loads
+p.v[(1,3,4), :P_ref] .= -1
+## vertices 2 and 5 act as generators
+p.v[(2,5), :P_ref] .= 1.5
+nothing #hide #md
 
-node_p = [(-1.0, I, γ),
-          ( 1.5, I, γ),
-          (-1.0, I, γ),
-          (-1.0, I, γ),
-          ( 1.5, I, γ)]
+#=
+We can use `find_fixpoint` to find a valid initial condition of the network
+=#
+u0 = find_fixpoint(swing_network, p)
+nothing #hide #md
 
-edge_p = [1.63 for i in 1:ne(g)]
+#=
+In order to implement the line failures, we need to create a `VectorContinousCallback`.
+In the callback, we compare the current flow on the line with the limit. If the limit is reached,
+the coupling `K` is set to 0.
 
-p = (node_p, edge_p)
-
-limits = [0.6*1.63 for i in 1:ne(g)]
-
-# Define nodes/edges and network
-odevertex  = ODEVertex(; f=swing_equation, dim=2, sym=[:δ, :ω])
-staticedge = StaticEdge(; f=simple_edge, dim=1, sym=[:P], coupling=:antisymmetric)
-swing_network = network_dynamics(odevertex, staticedge, g)
-
-# u0 determined from static solution
-u0 = [-0.12692637482862684, -1.3649456633810975e-6, 0.14641121510104085, 4.2191082676726005e-7, -0.24376507587890778,
-      1.567589744768255e-6, -0.12692637482862684, -1.3649456633810975e-6, 0.35120661043511864, 7.403907552948938e-7]
-
-# define callback to save edge values (for plotting)
-function save_edges(u, t, integrator)
-    gd = integrator.f.f(u, integrator.p, integrator.t, GetGD)
-    return [get_edge(gd, i)[1] for i in 1:ne(g)]
+First we can define the affect function:
+=#
+function affect!(integrator, idx)
+    println("Line $idx tripped at t=$(integrator.t)")
+    p = NWParameter(integrator) # get indexable parameter object
+    p.e[idx, :K] = 0
+    auto_dt_reset!(integrator)
+    nothing
 end
+nothing #hide #md
 
-saved_edgevalues = SavedValues(Float64, Vector{Float64})
-save_callback = SavingCallback(save_edges, saved_edgevalues)
+#=
+The callback trigger condition is a bit more complicated. The straight forward version looks like this:
+=#
+function naive_condition(out, u, t, integrator)
+    ## careful,  u != integrator.u
+    ## therefore construct nwstate with Network info from integrator but u
+    s = NWState(integrator, u, integrator.p, t)
+    for i in eachindex(out)
+        out[i] = abs(s.e[i,:P]) - s.p.e[1,:limit] # compare flow with limit for line
+    end
+    nothing
+end
+nothing #hide #md
 
-# define problem
-prob = ODEProblem(swing_network, u0, (0.0, 6), p)
+#=
+However, from a performacne perspectiv there are problems with this solution: on
+every call, we need to perform symbolic indexing into the `NWState` object.
+Symbolic indexing is not cheap, as it requires to gather meta data about the network.
+Luckily, the `SymbolicIndexingInterface` package which powers the symbolic indexing
+provids the lower level functions `getp` and `getu` which can be used to create and
+cache accessors to the internal states.
+=#
+condition = let getlim = SII.getp(swing_network, EPIndex(1:ne(g), :limit)),
+                getflow = SII.getu(swing_network, EIndex(1:ne(g), :P))
+    function (out, u, t, integrator)
+        ## careful,  u != integrator.u
+        ## therefore construct nwstate with Network info from integrator but u
+        s = NWState(integrator, u, integrator.p, t)
+        out .= getlim(s) .- abs.(getflow(s))
+        nothing
+    end
+end
+nothing #hide #md
 
-# define trip_first callback, at t=1.0s remove edge(2,4)
-first_trip_idx = findfirst(e->e.src==2 && e.dst==4, collect(edges(g)))
-trip_first = PresetTimeCallback(1.0, integrator -> trip_line_affect!(integrator, first_trip_idx))
+#=
+We can combine affect and condition to form the callback.
+=#
+trip_cb = VectorContinuousCallback(condition, affect!, ne(g));
 
-# define load_watch_callback which will trip lines which exceed the limit
-load_watch_callback = watch_line_limit_callback(limits)
+#=
+However, there is another component missing. If we look at the powerflow on the
+lines in the initial steady state
+=#
+u0.e[:, :P]
+#=
+We see that every flow is below the trip value 1.0. Therefor we need to add a distrubance
+to the network. We do this by manually disabeling line 5 at time 1.
+=#
+trip_first_cb = PresetTimeCallback(1.0, integrator->affect!(integrator, 5));
 
-# solve the system
-sol = solve(prob, Tsit5(); callback=CallbackSet(save_callback, trip_first, load_watch_callback), dtmax=0.001);
+#=
+With those components, we can create the problem and solve it.
+=#
 
-# plot solution
-plot_flow(swing_network, saved_edgevalues)
+prob = ODEProblem(swing_network, uflat(u0), (0,6), copy(pflat(p));
+                  callback=CallbackSet(trip_cb, trip_first_cb))
+sol = solve(prob, Tsit5());
+
+plot(sol; idxs=eidxs(sol,:,:P))
+
+#=
+Currently, plotting of "observed" states such as static edge states does not work,
+because they depend on `e(t) = f(u(t), p(t), t)`, and currently the ODESolution
+does not track `p` over time.
+
+TODO: eventually SII will allow for "parameter timeseries" which track the parameters
+=#
