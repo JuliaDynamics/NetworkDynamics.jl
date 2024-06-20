@@ -1,8 +1,8 @@
 #=
 # Cascading Failure
-This script was written by Hans Würfel. It reimplements the minimal
-example of a dynamic cascading failure described in Schäfer et al. (2018) [1].
-It is an example how to use callback functions on single nodes or edges.
+This script reimplements the minimal example of a dynamic cascading failure
+described in Schäfer et al. (2018) [1]. It is an example how to use callback
+functions to change network parameters. In this case to disable certain lines.
 
 [1] Schäfer, B., Witthaut, D., Timme, M., & Latora, V. (2018).
 Dynamically induced cascading failures in power grids.
