@@ -158,5 +158,18 @@ end
 
     @test_throws ArgumentError ODEVertex(identity, [:foo=>1]; def=[1])
     @test_throws ArgumentError ODEVertex(identity, 1, [:foo=>1]; pdef=[1])
-    coalesce
+
+    v = ODEVertex(identity, :foo, :bar)
+    @test v.sym == [:foo]
+    @test v.psym == [:bar]
+
+    v = ODEVertex(identity, :foo=>1, :bar)
+    @test v.sym == [:foo]
+    @test v.def == [1]
+    @test v.psym == [:bar]
+
+    v = ODEVertex(identity, :foo, :bar=>1)
+    @test v.sym == [:foo]
+    @test v.psym == [:bar]
+    @test v.pdef == [1]
 end

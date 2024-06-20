@@ -137,12 +137,14 @@ function batchequal(a::VertexFunction, b::VertexFunction)
     return true
 end
 
+# helper functions to dispatch on correct dim/sym keywords based on type
+const _sym_T = Union{Vector, Pair, Symbol}
 _dimsym(dim::Number) = (; dim)
-_dimsym(sym::Vector) = (; sym)
+_dimsym(sym::_sym_T) = (; sym)
 _dimsym(dim::Number, pdim::Number) = (; dim, pdim)
-_dimsym(dim::Number, psym::Vector) = (; dim, psym)
-_dimsym(sym::Vector, pdim::Number) = (; sym, pdim)
-_dimsym(sym::Vector, psym::Vector) = (; sym, psym)
+_dimsym(dim::Number, psym::_sym_T) = (; dim, psym)
+_dimsym(sym::_sym_T, pdim::Number) = (; sym, pdim)
+_dimsym(sym::_sym_T, psym::_sym_T) = (; sym, psym)
 
 """
     _construct_comp(::Type{T}, kwargs) where {T}
@@ -180,6 +182,12 @@ Also perfoms sanity check some properties like mass matrix, depth, ...
 """
 function _fill_defaults(T, kwargs)
     dict = Dict{Symbol, Any}(kwargs)
+
+    # syms might be provided as single pairs or symbols, wrap in vector
+    _maybewrap!(dict, :sym, Union{Symbol, Pair})
+    _maybewrap!(dict, :psym, Union{Symbol, Pair})
+    _maybewrap!(dict, :obssym, Symbol)
+
     # sym & dim
     if !haskey(dict, :dim)
         if haskey(dict, :sym)
@@ -327,4 +335,14 @@ function _split_defaults(input)
         end
     end
     syms, defs
+end
+
+"If index `s` in `d` exists and isa `T` wrap in vector."
+function _maybewrap!(d, s, T)
+    if haskey(d, s)
+        v = d[s]
+        if v isa T
+            d[s] = [v]
+        end
+    end
 end
