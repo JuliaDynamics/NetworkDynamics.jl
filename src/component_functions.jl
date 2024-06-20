@@ -1,7 +1,47 @@
 abstract type Coupling end
+"""
+    struct AntiSymmetric <: Coupling end
+
+AntiSymmetric coupling type. The edge function f is evaluated once:
+
+ - the dst vertex receives the first `d` values of the edge state,
+ - the src vertex receives (-1) of that.
+
+Here, `d` is the edge depth of the Network.
+"""
 struct AntiSymmetric <: Coupling end
+"""
+    struct Symmetric <: Coupling end
+
+Symmetric coupling type. The edge function f is evaluated once:
+
+ - the dst vertex receives the first `d` values of the edge state,
+ - the src vertex receives the same.
+
+Here, `d` is the edge depth of the Network.
+"""
 struct Symmetric <: Coupling end
+"""
+    struct Directed <: Coupling end
+
+Directed coupling type. The edge function f is evaluated once:
+
+ - the dst vertex receives the first `d` values of the edge state,
+ - the src vertex receives nothing.
+
+Here, `d` is the edge depth of the Network.
+"""
 struct Directed <: Coupling end
+"""
+    struct Fiducial <: Coupling end
+
+Fiducial coupling type. The edge function f is evaluated once:
+
+ - the dst vertex receives the `1:d` values of the edge state,
+ - the src vertex receives the `d+1:2d` values of the edge state.
+
+Here, `d` is the edge depth of the Network.
+"""
 struct Fiducial <: Coupling end
 const CouplingUnion = Union{AntiSymmetric,Symmetric,Directed,Fiducial}
 

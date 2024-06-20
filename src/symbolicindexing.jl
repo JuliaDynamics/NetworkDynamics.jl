@@ -1,18 +1,82 @@
 abstract type SymbolicIndex{C,S} end
 abstract type SymbolicStateIndex{C,S} <: SymbolicIndex{C,S} end
 abstract type SymbolicParameterIndex{C,S} <: SymbolicIndex{C,S} end
+"""
+    VIndex{C,S} <: SymbolicStateIndex{C,S}
+    idx = VIndex(comp, sub)
+
+A symbolic index for a vertex state variable.
+- `comp`: the component index, either int or a collection of ints
+- `sub`: the subindex, either int, symbol or a collection of those.
+
+```
+VIndex(1, :P)      # vertex 1, variable :P
+VIndex(1:5, 1)     # first state of vertices 1 to 5
+VIndex(7, (:x,:y)) # states :x and :y of vertex 7
+```
+
+Can be used to index into objects supporting the `SymbolicIndexingInterface`,
+e.g. [`NWState`](@ref), [`NWParameter`](@ref) or `ODESolution`.
+
+See also: [`EIndex`](@ref), [`VPIndex`](@ref), [`EPIndex`](@ref)
+"""
 struct VIndex{C,S} <: SymbolicStateIndex{C,S}
     compidx::C
     subidx::S
 end
+"""
+    EIndex{C,S} <: SymbolicStateIndex{C,S}
+    idx = EIndex(comp, sub)
+
+A symbolic index for an edge state variable.
+- `comp`: the component index, either int or a collection of ints
+- `sub`: the subindex, either int, symbol or a collection of those.
+
+```
+EIndex(1, :P)      # edge 1, variable :P
+EIndex(1:5, 1)     # first state of edges 1 to 5
+EIndex(7, (:x,:y)) # states :x and :y of edge 7
+```
+
+Can be used to index into objects supporting the `SymbolicIndexingInterface`,
+e.g. [`NWState`](@ref), [`NWParameter`](@ref) or `ODESolution`.
+
+See also: [`VIndex`](@ref), [`VPIndex`](@ref), [`EPIndex`](@ref)
+"""
 struct EIndex{C,S} <: SymbolicStateIndex{C,S}
     compidx::C
     subidx::S
 end
+"""
+    VPIndex{C,S} <: SymbolicStateIndex{C,S}
+    idx = VPIndex(comp, sub)
+
+A symbolic index into the parameter a vertex:
+- `comp`: the component index, either int or a collection of ints
+- `sub`: the subindex, either int, symbol or a collection of those.
+
+Can be used to index into objects supporting the `SymbolicIndexingInterface`,
+e.g. [`NWParameter`](@ref) or `ODEProblem`.
+
+See also: [`EPIndex`](@ref), [`VIndex`](@ref), [`EIndex`](@ref)
+"""
 struct VPIndex{C,S} <: SymbolicParameterIndex{C,S}
     compidx::C
     subidx::S
 end
+"""
+    VEIndex{C,S} <: SymbolicStateIndex{C,S}
+    idx = VEIndex(comp, sub)
+
+A symbolic index into the parameter a vertex:
+- `comp`: the component index, either int or a collection of ints
+- `sub`: the subindex, either int, symbol or a collection of those.
+
+Can be used to index into objects supporting the `SymbolicIndexingInterface`,
+e.g. [`NWParameter`](@ref) or `ODEProblem`.
+
+See also: [`VPIndex`](@ref), [`VIndex`](@ref), [`EIndex`](@ref)
+"""
 struct EPIndex{C,S} <: SymbolicParameterIndex{C,S}
     compidx::C
     subidx::S
@@ -373,6 +437,21 @@ end
 #### NWParameter and NWState objects as value provider
 ####
 
+"""
+    NWParameter(nw_or_nw_wraper, pflat)
+
+Indexable wrapper for flat parameter array `pflat`. Needs Network or wrapper of
+Network, e.g. `ODEProblem`.
+
+```
+p = NWParameter(nw)
+p.v[idx, :sym] # get parameter :sym of vertex idx
+p.e[idx, :sym] # get parameter :sym of edge idx
+p[s::Union{VPIndex, EPIndex}] # get parameter for specific index
+```
+
+Get flat array representation using `pflat(p)`.
+"""
 struct NWParameter{P,NW<:Network}
     nw::NW
     pflat::P
@@ -385,6 +464,15 @@ end
 Base.eltype(p::NWParameter) = eltype(p.pflat)
 Base.length(s::NWParameter) = length(s.pflat)
 
+"""
+    NWParameter(nw_or_nw_wraper;
+                ptype=Vector{Float64}, pfill=filltype(ptype), default=true)
+
+Creates "empty" `NWParameter` object for the Network/Wrapper `nw` with flat type `ptype`.
+The array will be prefilled with `pfill` (defaults to NaN).
+
+If `default=true` the default parameter values attached to the network components will be loaded.
+"""
 function NWParameter(thing; ptype=Vector{Float64}, pfill=filltype(ptype), default=true)
     nw = extract_nw(thing)
     pflat = _init_flat(ptype, pdim(nw), pfill)
@@ -397,12 +485,40 @@ function NWParameter(thing; ptype=Vector{Float64}, pfill=filltype(ptype), defaul
     return p
 end
 
+"""
+    NWParameter(p::NWParameter; ptype=typeof(p.pflat))
+
+Create `NWParameter` based on other parameter object, just convert type.
+"""
 function NWParameter(p::NWParameter; ptype=typeof(p.pflat))
     NWParameter(p.nw, _convertorcopy(ptype,pflat(p)))
 end
 
+"""
+    NWParameter(int::SciMLBase.DEIntegrator)
+
+Create `NWParameter` object from `integrator`.
+"""
 NWParameter(int::SciMLBase.DEIntegrator) = NWParameter(int, int.p)
 
+
+"""
+    NWState(nw_or_nw_wrapper, uflat, [pflat], [t])
+
+Indexable wrapper for flat state & parameter array. Needs Network or wrapper of
+Network, e.g. `ODEProblem`.
+
+```
+s = NWState(nw)
+s.v[idx, :sym] # get state :sym of vertex idx
+s.e[idx, :sym] # get state :sym of edge idx
+s.p.v[idx, :sym] # get parameter :sym of vertex idx
+s.p.e[idx, :sym] # get parameter :sym of edge idx
+s[s::Union{VIndex, EIndex, EPIndex, VPIndex}] # get parameter for specific index
+```
+
+Get flat array representation using `uflat(s)` and `pflat(s)`.
+"""
 struct NWState{U,P,T,NW<:Network}
     nw::NW
     uflat::U
@@ -417,6 +533,19 @@ struct NWState{U,P,T,NW<:Network}
     end
 end
 
+
+"""
+    NWState(nw_or_nw_wrapper;
+            utype=Vector{Float64}, ufill=filltype(utype),
+            ptype=Vector{Float64}, pfill=filltype(ptype), default=true)
+
+Creates "empty" `NWState` object for the Network/Wrapper `nw` with flat types
+`utype` & `ptype`. The arrays will be prefilled with `ufill` and `pfill`
+respectively (defaults to NaN).
+
+If `default=true` the default state & parameter values attached to the network
+components will be loaded.
+"""
 function NWState(thing;
                  utype=Vector{Float64}, ufill=filltype(utype),
                  ptype=Vector{Float64}, pfill=filltype(ptype),
@@ -433,13 +562,23 @@ function NWState(thing;
     return s
 end
 
+"""
+    NWState(p::NWState; utype=typeof(uflat(s)), ptype=typeof(pflat(s)))
+
+Create `NWState` based on other state object, just convert types.
+"""
 function NWState(s::NWState;
-                 utype=typeof(utype(s)),
+                 utype=typeof(uflat(s)),
                  ptype=typeof(pflat(s)))
     p = NWParameter(s.p; ptype)
     NWState(s.nw, _convertorcopy(utype,uflat(s)), p, s.t)
 end
 
+"""
+    NWState(p::NWParameter; utype=Vector{Float64}, ufill=filltype(utype), default=true)
+
+Create `NWState` based on existing `NWParameter` object.
+"""
 function NWState(p::NWParameter; utype=Vector{Float64}, ufill=filltype(utype), default=true)
     t = nothing
     nw = p.nw
@@ -453,6 +592,11 @@ function NWState(p::NWParameter; utype=Vector{Float64}, ufill=filltype(utype), d
     return s
 end
 
+"""
+    NWState(int::SciMLBase.DEIntegrator)
+
+Create `NWState` object from `integrator`.
+"""
 NWState(int::SciMLBase.DEIntegrator) = NWState(int, int.u, int.p, int.t)
 
 # init flat array of type T with length N. Init with nothing if possible, else with zeros

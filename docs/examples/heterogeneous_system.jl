@@ -29,7 +29,7 @@ vertex! = ODEVertex(kuramoto_vertex!; sym=[:θ], psym=[:ω], name=:kuramoto)
 
 edge! = StaticEdge(kuramoto_edge!; dim=1, psym=[:K=>3], coupling=AntiSymmetric())
 nw = Network(g, vertex!, edge!);
-nothing #hide
+nothing #hide #md
 
 #=
 To assign parameters, we can create a `NWParameter` object based on the `nw` definition.
@@ -43,7 +43,7 @@ To set the node parameters, we can use indexing of the `p.v` field:
 ω = collect(1:N) ./ N
 ω .-= sum(ω) / N
 p.v[:, :ω] = ω
-nothing #hide
+nothing #hide #md
 
 #=
 Here, the index pairing `:, :ω` is used to index state ω for all node indices.
@@ -60,7 +60,7 @@ x0 = collect(1:N) ./ N
 x0 .-= sum(x0) ./ N
 tspan = (0.0, 10.0)
 prob = ODEProblem(nw, x0, tspan, pflat(p))
-Main.test_execution_styles(prob) #src only for testing all ex styles
+Main.test_execution_styles(prob) # testing all ex styles #src
 sol = solve(prob, Tsit5())
 plot(sol; ylabel="θ", fmt=:png)
 
@@ -96,7 +96,7 @@ function kuramoto_inertia!(dv, v, esum, (ω,), t)
 end
 
 inertia! = ODEVertex(kuramoto_inertia!; sym=[:θ, :ω], psym=[:ω], name=:inertia)
-nothing #hide
+nothing #hide #md
 
 #=
 Since now we model a system with heterogeneous node dynamics we can no longer
@@ -126,13 +126,13 @@ the correct index.
 For the θ states we will use the same initial conditins as before:
 =#
 state.v[2:8,:θ] = x0[2:8]
-nothing #hide
+nothing #hide #md
 
 #=
 We're still missing one initial condition: the second variable ω of the 5th vertex.
 =#
 state.v[5,:ω] = 5
-nothing #hide
+nothing #hide #md
 
 #=
 The `NWState` object also contains a parameter object accessible via `state.p`.
@@ -140,15 +140,15 @@ The edge parameters are already filled with default values.
 The vertex parameters can be copied from our old parmeter object `p`.
 =#
 state.p.v[2:8, :ω] = p.v[2:8, :ω]
-nothing #hide
+nothing #hide #md
 
 #=
 For the problem construction, we need to convert the nested stuctures to flat arrays using the [`uflat`](@ref) and [`pflat`](@ref) methods.
 =#
 prob_hetero = ODEProblem(nw_hetero!, uflat(state), tspan, pflat(state))
-Main.test_execution_styles(prob_hetero) #src only for testing all ex styles
+Main.test_execution_styles(prob_hetero) # testing all ex styles #src
 sol_hetero = solve(prob_hetero, Tsit5());
-nothing #hide
+nothing #hide #md
 plot(sol_hetero)
 
 #=
@@ -185,7 +185,7 @@ M = zeros(2, 2)
 M[1, 1] = 1
 
 nd_edgeA! = ODEEdge(; f=edgeA!, dim=2, coupling=:undirected, mass_matrix=M);
-nothing #hide
+nothing #hide #md
 
 #=
 This handles the second equations as `0 = M[2,2] * de[2] = g(e, v_s, v_d, p, t) - e[2]`.

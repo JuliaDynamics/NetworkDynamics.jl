@@ -144,6 +144,7 @@ With those components, we can create the problem and solve it.
 
 prob = ODEProblem(swing_network, uflat(u0), (0,6), copy(pflat(p));
                   callback=CallbackSet(trip_cb, trip_first_cb))
+Main.test_execution_styles(prob) # testing all ex styles #src
 sol = solve(prob, Tsit5());
 
 plot(sol; idxs=eidxs(sol,:,:P))

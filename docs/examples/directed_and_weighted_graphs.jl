@@ -45,7 +45,7 @@ The network weight matrix is given as a text file containing 90 lines with 90 nu
 using DelimitedFiles
 ## adjust the load path for your filesystem!
 G = readdlm(joinpath(@__DIR__, "Norm_G_DTI.txt"), ',', Float64, '\n')
-nothing # hide
+nothing #hide #md
 
 #=
 The data structure for directed, weighted graphs is provided by the package `SimpleWeightedGraphs.jl` which is based on `Graphs.jl`.
@@ -63,7 +63,7 @@ edge_weights = getfield.(collect(edges(g_weighted)), :weight)
 ## we promote the g_weighted graph as a directed graph (weights of the edges are included in parameters)
 g_directed = SimpleDiGraph(g_weighted)
 
-nothing # hide
+nothing #hide #md
 
 #=
 ## Setting up the ODEProblem
@@ -111,7 +111,7 @@ Since we chose a random initial condition we initialize the flat array directly:
 
 x0 = randn(dim(fhn_network!)) * 5
 
-nothing # hide
+nothing #hide #md
 
 #=
 ## Solving the system
@@ -125,9 +125,9 @@ using OrdinaryDiffEq
 
 tspan = (0.0, 200.0)
 prob  = ODEProblem(fhn_network!, x0, tspan, pflat(p))
-Main.test_execution_styles(prob) #src only for testing all ex styles
+Main.test_execution_styles(prob) # testing all ex styles #src
 sol = solve(prob, AutoTsit5(TRBDF2()));
-nothing # hide
+nothing #hide #md
 
 #=
 ## Plotting

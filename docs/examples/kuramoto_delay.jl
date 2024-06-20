@@ -37,7 +37,7 @@ function delay_coupling(e, θ_s, θ_d, h_θ_s, h_θ_d, p, t)
 end
 
 edge = StaticDelayEdge(; f=delay_coupling, dim=1, coupling=:directed);
-nothing #hide
+nothing #hide #md
 
 #=
 The vertex dynamics are simple ODE vertices.
@@ -53,7 +53,7 @@ function kuramoto_vertex(dθ, θ, edges, p, t)
 end
 
 vertex = ODEVertex(; f=kuramoto_vertex, dim=1);
-nothing #hide
+nothing #hide #md
 
 #=
 For this example we use a complete graph. Bear in mind however that the data structures of Network Dynamics are best suited for sparse problems and might introduce some additional overhead for dense graphs.
@@ -71,7 +71,7 @@ Random.seed!(1)
 p = (ω, [τ'; κ'])
 
 θ₀ = rand(Uniform(0, 2π), N); # initial conditions
-nothing #hide
+nothing #hide #md
 
 #=
 Define random initial history function
@@ -79,7 +79,7 @@ Define random initial history function
 
 const past = rand(Uniform(0, 2π), N)
 h(p, t; idxs=nothing) = typeof(idxs) <: Number ? past[idxs] : past;
-nothing #hide
+nothing #hide #md
 
 #=
 When constructing the DDEProblem lags may be specified.
@@ -92,7 +92,7 @@ discontinuity, this may be slow if many different lags are specified.
 prob = DDEProblem(nd, θ₀, h, (0.0, 1.0), p; constant_lags=τ)
 @time solve(prob, MethodOfSteps(BS3()); abstol=1e-10, reltol=1e-5); # ~50000 steps because of discontinuities
 @time solve(prob, MethodOfSteps(BS3()); abstol=1e-10, reltol=1e-5);
-nothing #hide
+nothing #hide #md
 
 #=
 We recommend to solve with lowered absolute and relative error tolerances, since the Kuramoto system is highly multistable and the simulations may else produce very different results.
@@ -104,7 +104,7 @@ The discontinuities arise from the initial history function and quickly get smoo
 fast_prob = DDEProblem(nd, θ₀, h, (0.0, 1.0), p)
 @time solve(fast_prob, MethodOfSteps(BS3()); abstol=1e-10, reltol=1e-5); # ~200 steps
 @time solve(fast_prob, MethodOfSteps(BS3()); abstol=1e-10, reltol=1e-5);
-nothing #hide
+nothing #hide #md
 
 #=
 The `MethodOfSteps` algortihm extends an ODE solver to DDEs. For an overview of available solvers consult the manual of DifferentialEquations.jl. For example, for stiff systems, such as this one, it might be beneficial to use a stiff solver such as `TRBDF2`.
@@ -112,7 +112,7 @@ The `MethodOfSteps` algortihm extends an ODE solver to DDEs. For an overview of 
 
 @time solve(fast_prob, MethodOfSteps(TRBDF2()); abstol=1e-10, reltol=1e-5);
 @time solve(fast_prob, MethodOfSteps(TRBDF2()); abstol=1e-10, reltol=1e-5);
-nothing #hide
+nothing #hide #md
 
 #=
 Some further helpful comments for dealing within initial discontinuities in DDEs may be found in the [manual](https://jitcdde.readthedocs.io/en/stable/#dealing-with-initial-discontinuities) of the Python software JiTCDDE

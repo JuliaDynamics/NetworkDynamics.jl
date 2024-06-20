@@ -12,3 +12,4 @@ benchmark/tune.json
 benchmark/*.md
 benchmark/*.data
 /benchmark/*.pdf
+/docs/src/generated/

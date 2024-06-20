@@ -81,7 +81,7 @@ ef = [Lib.diffusion_odeedge(),
       Lib.diffusion_edge_fid()]
 nw = Network(g, vf, ef)
 prob = ODEProblem(nw, rand(dim(nw)), (0,1), rand(pdim(nw)))
-Main.test_execution_styles(prob) #src only for testing all ex styles
+Main.test_execution_styles(prob) # testing all ex styles #src
 sol = solve(prob, Tsit5())
 
 @test SII.variable_index.(Ref(nw), SII.variable_symbols(nw)) == 1:dim(nw)
