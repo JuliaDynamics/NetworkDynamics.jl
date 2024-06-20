@@ -24,7 +24,7 @@ From the above considerations we see that in this model the nodes do not have an
 =#
 
 function diffusionedge!(e, v_s, v_d, p, t)
-    # usually e, v_s, v_d are arrays, hence we use the broadcasting operator .
+    ## usually e, v_s, v_d are arrays, hence we use the broadcasting operator .
     e .= v_s .- v_d
     nothing
 end
@@ -39,7 +39,7 @@ The contributions of the different edges are then summed up in each vertex.
 =#
 
 function diffusionvertex!(dv, v, esum, p, t)
-    # usually v, edges are arrays, hence we use the broadcasting operator .
+    ## usually v, edges are arrays, hence we use the broadcasting operator .
     dv .= esum
     nothing
 end

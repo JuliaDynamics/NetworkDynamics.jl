@@ -30,14 +30,16 @@ makedocs(; root=joinpath(pkgdir(NetworkDynamics), "docs"),
              # "Multithreading.md",
              "Library.md",
              # "accessing_edge_variables.md",
-             # "Tutorials" => [
-             #     "Getting started" => "generated/getting_started_with_network_dynamics.md",
-             #     "Directed and weighted graphs" => "generated/directed_and_weighted_graphs.md",
-             #     "Heterogeneous systems" => "generated/heterogeneous_system.md",
-             #     "Stochastic differential equations" => "generated/StochasticSystem.md",
-             #     "Delay differential equations" => "generated/kuramoto_delay.md"]
+             "Tutorials" => [
+                 "Getting started" => "generated/getting_started_with_network_dynamics.md",
+                 "Directed and weighted graphs" => "generated/directed_and_weighted_graphs.md",
+                 "Heterogeneous systems" => "generated/heterogeneous_system.md",
+                 "Stochastic differential equations" => "generated/StochasticSystem.md",
+                 # "Delay differential equations" => "generated/kuramoto_delay.md",
+                 "Cascading failure" => "generated/cascading_failure.md",]
          ],
-         draft=true,
+         draft=false,
+         format = Documenter.HTML(ansicolor = true),
          warnonly=true)
 
 deploydocs(; repo="github.com/PIK-ICoNe/NetworkDynamics.jl.git",
