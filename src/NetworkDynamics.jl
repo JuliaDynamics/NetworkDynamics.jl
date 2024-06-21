@@ -12,7 +12,6 @@ using KernelAbstractions: KernelAbstractions, @kernel, @index, @Const, get_backe
 using Atomix: Atomix
 using Polyester: Polyester
 using Mixers: Mixers
-using Parameters: @with_kw_noshow
 using LinearAlgebra: LinearAlgebra, UniformScaling
 using DocStringExtensions
 using StyledStrings: StyledStrings, @styled_str
@@ -41,9 +40,18 @@ include("adapt.jl")
 
 # XXX: have both, s[:] and uflat(s) ?
 export VIndex, EIndex, VPIndex, EPIndex, NWState, NWParameter, uflat, pflat
+export vidxs, eidxs, vpidxs, epidxs
 include("symbolicindexing.jl")
 
+using NonlinearSolve: NonlinearProblem, AbstractNonlinearSolveAlgorithm
+using SteadyStateDiffEq: SteadyStateProblem, SteadyStateDiffEqAlgorithm, SSRootfind
+export find_fixpoint
+include("initialization.jl")
+
 include("show.jl")
+
+export chk_component
+include("doctor.jl")
 
 #=
 styled"{bright_red:red} {bright_green:green} {bright_yellow:yellow} {bright_blue:blue} {bright_magenta:magenta} {bright_cyan:cyan} {bright_black:black} {bright_white:white}"

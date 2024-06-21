@@ -29,11 +29,11 @@ end
     nothing
 end
 
-statvertex = StaticVertex((v, edges, p, t) -> v .= pi; dim=1, pdim=0) |> ODEVertex
-odevertex = ODEVertex(; f=diffusion_vertex!, dim=1, pdim=0)
+statvertex = StaticVertex((v, edges, p, t) -> v .= pi; dim=1) |> ODEVertex
+odevertex = ODEVertex(; f=diffusion_vertex!, dim=1)
 
-staticedge = StaticEdge(; f=diffusion_edge!, dim=1, pdim=0, coupling=AntiSymmetric())
-staticedge2 = StaticEdge(; f=diffusion_edge2!, dim=1, pdim=0, coupling=AntiSymmetric())
+staticedge = StaticEdge(; f=diffusion_edge!, dim=1, coupling=AntiSymmetric())
+staticedge2 = StaticEdge(; f=diffusion_edge2!, dim=1, coupling=AntiSymmetric())
 
 vertex_list = [statvertex, odevertex]
 append!(vertex_list, [odevertex for i in 1:N-2])
@@ -46,6 +46,7 @@ x0 = rand(nv(g))
 NWState(diff_network_st_ver, x0).v[1,1] = pi
 
 prob_st_ver = ODEProblem(diff_network_st_ver, x0, (0.,500.))
+Main.test_execution_styles(prob_st_ver) # testing all ex styles #src
 sol_st_ver = solve(prob_st_ver, Rodas4());
 
 println("These dynamics should flow to π, at t=500. they are there up to $(maximum(abs.(sol_st_ver(500.) .- pi)))")
@@ -56,7 +57,8 @@ f = diff_network_st_ver
 f(dx, x0, nothing, 0.0)
 @test (@allocations f(dx, x0, nothing, 0.0)) == 0
 
-estates1 = sol_st_ver(sol_st_ver.t[end], idxs=EIndex(:,1))
-estates2 = NWState(diff_network_st_ver, sol_st_ver[end]).e[:,1]
-estates3 = NWState(sol_st_ver, sol_st_ver[end]).e[:,1]
+
+estates1 = sol_st_ver(sol_st_ver.t[end], idxs=EIndex(1:ne(g),1))
+estates2 = NWState(diff_network_st_ver, sol_st_ver[end]).e[1:ne(g),1]
+estates3 = NWState(sol_st_ver, sol_st_ver[end]).e[1:ne(g),1]
 @test estates1 == estates2 == estates3

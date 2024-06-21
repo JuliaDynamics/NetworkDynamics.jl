@@ -1,27 +1,92 @@
 abstract type SymbolicIndex{C,S} end
 abstract type SymbolicStateIndex{C,S} <: SymbolicIndex{C,S} end
 abstract type SymbolicParameterIndex{C,S} <: SymbolicIndex{C,S} end
+"""
+    VIndex{C,S} <: SymbolicStateIndex{C,S}
+    idx = VIndex(comp, sub)
+
+A symbolic index for a vertex state variable.
+- `comp`: the component index, either int or a collection of ints
+- `sub`: the subindex, either int, symbol or a collection of those.
+
+```
+VIndex(1, :P)      # vertex 1, variable :P
+VIndex(1:5, 1)     # first state of vertices 1 to 5
+VIndex(7, (:x,:y)) # states :x and :y of vertex 7
+```
+
+Can be used to index into objects supporting the `SymbolicIndexingInterface`,
+e.g. [`NWState`](@ref), [`NWParameter`](@ref) or `ODESolution`.
+
+See also: [`EIndex`](@ref), [`VPIndex`](@ref), [`EPIndex`](@ref)
+"""
 struct VIndex{C,S} <: SymbolicStateIndex{C,S}
     compidx::C
     subidx::S
 end
+"""
+    EIndex{C,S} <: SymbolicStateIndex{C,S}
+    idx = EIndex(comp, sub)
+
+A symbolic index for an edge state variable.
+- `comp`: the component index, either int or a collection of ints
+- `sub`: the subindex, either int, symbol or a collection of those.
+
+```
+EIndex(1, :P)      # edge 1, variable :P
+EIndex(1:5, 1)     # first state of edges 1 to 5
+EIndex(7, (:x,:y)) # states :x and :y of edge 7
+```
+
+Can be used to index into objects supporting the `SymbolicIndexingInterface`,
+e.g. [`NWState`](@ref), [`NWParameter`](@ref) or `ODESolution`.
+
+See also: [`VIndex`](@ref), [`VPIndex`](@ref), [`EPIndex`](@ref)
+"""
 struct EIndex{C,S} <: SymbolicStateIndex{C,S}
     compidx::C
     subidx::S
 end
+"""
+    VPIndex{C,S} <: SymbolicStateIndex{C,S}
+    idx = VPIndex(comp, sub)
+
+A symbolic index into the parameter a vertex:
+- `comp`: the component index, either int or a collection of ints
+- `sub`: the subindex, either int, symbol or a collection of those.
+
+Can be used to index into objects supporting the `SymbolicIndexingInterface`,
+e.g. [`NWParameter`](@ref) or `ODEProblem`.
+
+See also: [`EPIndex`](@ref), [`VIndex`](@ref), [`EIndex`](@ref)
+"""
 struct VPIndex{C,S} <: SymbolicParameterIndex{C,S}
     compidx::C
     subidx::S
 end
+"""
+    VEIndex{C,S} <: SymbolicStateIndex{C,S}
+    idx = VEIndex(comp, sub)
+
+A symbolic index into the parameter a vertex:
+- `comp`: the component index, either int or a collection of ints
+- `sub`: the subindex, either int, symbol or a collection of those.
+
+Can be used to index into objects supporting the `SymbolicIndexingInterface`,
+e.g. [`NWParameter`](@ref) or `ODEProblem`.
+
+See also: [`VPIndex`](@ref), [`VIndex`](@ref), [`EIndex`](@ref)
+"""
 struct EPIndex{C,S} <: SymbolicParameterIndex{C,S}
     compidx::C
     subidx::S
 end
+const SymbolicEdgeIndex = Union{EIndex, EPIndex}
+const SymbolicVertexIndex = Union{VIndex, VPIndex}
 
 #=
-XXX: SciMLBase Issue regarding f.sys
-SciMLBase gets the index provider from ODEFunction.sys which defaults to f.sys so I provide it...
-# SII.symbolic_container(odef::SciMLBase.ODEFunction{<:Any,<:Any,<:Network}) = odef.f
+SciMLBase gets the index provider from ODEFunction.sys which defaults to f.sys so we provide it...
+SSI Maintainer assured that f.sys is really only used for symbolic indexig so method seems legit
 =#
 SciMLBase.__has_sys(nw::Network) = true
 Base.getproperty(nw::Network, s::Symbol) = s===:sys ? nw : getfield(nw, s)
@@ -29,6 +94,10 @@ Base.getproperty(nw::Network, s::Symbol) = s===:sys ? nw : getfield(nw, s)
 SII.symbolic_type(::Type{<:SymbolicIndex{Int,<:Union{Symbol,Int}}}) = SII.ScalarSymbolic()
 SII.symbolic_type(::Type{<:SymbolicIndex}) = SII.ArraySymbolic()
 
+SII.hasname(::SymbolicIndex) = false
+SII.hasname(::SymbolicIndex{Int,<:Union{Symbol,Int}}) = true
+SII.getname(x::SymbolicVertexIndex) = Symbol("v$(x.compidx)₊$(x.subidx)")
+SII.getname(x::SymbolicEdgeIndex) = Symbol("e$(x.compidx)₊$(x.subidx)")
 
 getcomp(nw::Network, sni::Union{EIndex{Int},EPIndex{Int}}) = nw.im.edgef[sni.compidx]
 getcomp(nw::Network, sni::Union{VIndex{Int},VPIndex{Int}}) = nw.im.vertexf[sni.compidx]
@@ -186,6 +255,8 @@ function _is_parameter(nw::Network,
     return subsym_has_idx(sni.subidx, psym(cf))
 end
 
+# SII.is_timeseries_parameter(nw::Network, sym) = false
+
 function SII.parameter_index(nw::Network, sni)
     if _hascolon(sni)
         SII.parameter_index(nw, _resolve_colon(nw,sni))
@@ -216,6 +287,7 @@ end
 
 ####
 #### Observed indexing
+####
 function SII.is_observed(nw::Network, sni)
     if _hascolon(sni)
         SII.is_observed(nw, _resolve_colon(nw,sni))
@@ -362,20 +434,49 @@ end
 
 
 ####
-#### State as value provider
+#### NWParameter and NWState objects as value provider
 ####
 
-struct NWParameter{P,NW}
+"""
+    NWParameter(nw_or_nw_wraper, pflat)
+
+Indexable wrapper for flat parameter array `pflat`. Needs Network or wrapper of
+Network, e.g. `ODEProblem`.
+
+```
+p = NWParameter(nw)
+p.v[idx, :sym] # get parameter :sym of vertex idx
+p.e[idx, :sym] # get parameter :sym of edge idx
+p[s::Union{VPIndex, EPIndex}] # get parameter for specific index
+```
+
+Get flat array representation using `pflat(p)`.
+"""
+struct NWParameter{P,NW<:Network}
     nw::NW
     pflat::P
+    function NWParameter(thing, pflat)
+        nw = extract_nw(thing)
+        new{typeof(pflat),typeof(nw)}(nw, pflat)
+    end
 end
 
 Base.eltype(p::NWParameter) = eltype(p.pflat)
 Base.length(s::NWParameter) = length(s.pflat)
 
-function NWParameter(nw::Network; ptype=Vector{Union{Float64,Nothing}}, default=true)
-    pflat = _flat(ptype, pdim(nw))
-    p = NWParameter(nw,pflat)
+"""
+    NWParameter(nw_or_nw_wraper;
+                ptype=Vector{Float64}, pfill=filltype(ptype), default=true)
+
+Creates "empty" `NWParameter` object for the Network/Wrapper `nw` with flat type `ptype`.
+The array will be prefilled with `pfill` (defaults to NaN).
+
+If `default=true` the default parameter values attached to the network components will be loaded.
+"""
+function NWParameter(thing; ptype=Vector{Float64}, pfill=filltype(ptype), default=true)
+    nw = extract_nw(thing)
+    pflat = _init_flat(ptype, pdim(nw), pfill)
+    p = NWParameter(nw, pflat)
     default || return p
     for (k, v) in SII.default_values(nw)
         k isa Union{VPIndex, EPIndex} || continue
@@ -384,30 +485,75 @@ function NWParameter(nw::Network; ptype=Vector{Union{Float64,Nothing}}, default=
     return p
 end
 
+"""
+    NWParameter(p::NWParameter; ptype=typeof(p.pflat))
+
+Create `NWParameter` based on other parameter object, just convert type.
+"""
 function NWParameter(p::NWParameter; ptype=typeof(p.pflat))
     NWParameter(p.nw, _convertorcopy(ptype,pflat(p)))
 end
 
-struct NWState{U,P,T,NW}
+"""
+    NWParameter(int::SciMLBase.DEIntegrator)
+
+Create `NWParameter` object from `integrator`.
+"""
+NWParameter(int::SciMLBase.DEIntegrator) = NWParameter(int, int.p)
+
+
+"""
+    NWState(nw_or_nw_wrapper, uflat, [pflat], [t])
+
+Indexable wrapper for flat state & parameter array. Needs Network or wrapper of
+Network, e.g. `ODEProblem`.
+
+```
+s = NWState(nw)
+s.v[idx, :sym] # get state :sym of vertex idx
+s.e[idx, :sym] # get state :sym of edge idx
+s.p.v[idx, :sym] # get parameter :sym of vertex idx
+s.p.e[idx, :sym] # get parameter :sym of edge idx
+s[s::Union{VIndex, EIndex, EPIndex, VPIndex}] # get parameter for specific index
+```
+
+Get flat array representation using `uflat(s)` and `pflat(s)`.
+"""
+struct NWState{U,P,T,NW<:Network}
     nw::NW
     uflat::U
     p::P
     t::T
-    function NWState(nw, uflat, p=nothing, t=nothing)
-        _p = (!indexable(p) || p isa NWParameter) ? p : NWParameter(nw,p)
+    function NWState(thing, uflat, p=nothing, t=nothing)
+        nw = extract_nw(thing)
+        _p = p isa Union{NWParameter,Nothing} ? p : NWParameter(nw, p)
         s = new{typeof(uflat),typeof(_p),typeof(t),typeof(nw)}(nw,uflat,_p,t)
-        @argcheck !indexable(p) || s.nw === s.p.nw
+        @argcheck isnothing(p) || s.nw === s.p.nw
         return s
     end
 end
 
-function NWState(nw::Network;
-                 utype=Vector{Union{Float64,Nothing}},
-                 ptype=Vector{Union{Float64,Nothing}},
+
+"""
+    NWState(nw_or_nw_wrapper;
+            utype=Vector{Float64}, ufill=filltype(utype),
+            ptype=Vector{Float64}, pfill=filltype(ptype), default=true)
+
+Creates "empty" `NWState` object for the Network/Wrapper `nw` with flat types
+`utype` & `ptype`. The arrays will be prefilled with `ufill` and `pfill`
+respectively (defaults to NaN).
+
+If `default=true` the default state & parameter values attached to the network
+components will be loaded.
+"""
+function NWState(thing;
+                 utype=Vector{Float64}, ufill=filltype(utype),
+                 ptype=Vector{Float64}, pfill=filltype(ptype),
                  default=true)
+    nw = extract_nw(thing)
     t = nothing
-    uflat = _flat(utype, dim(nw))
-    p = NWParameter(nw; ptype, default=false)
+    uflat = _init_flat(utype, dim(nw), ufill)
+    p = NWParameter(nw; ptype, pfill, default=false)
     s = NWState(nw,uflat,p,t)
     default || return s
     for (k, v) in SII.default_values(nw)
@@ -416,29 +562,74 @@ function NWState(nw::Network;
     return s
 end
 
+"""
+    NWState(p::NWState; utype=typeof(uflat(s)), ptype=typeof(pflat(s)))
+
+Create `NWState` based on other state object, just convert types.
+"""
 function NWState(s::NWState;
-                 utype=typeof(utype(s)),
+                 utype=typeof(uflat(s)),
                  ptype=typeof(pflat(s)))
     p = NWParameter(s.p; ptype)
     NWState(s.nw, _convertorcopy(utype,uflat(s)), p, s.t)
 end
 
-function _flat(T, N)
-    if Nothing <: eltype(T)
-        vec = T(undef, N)
-        fill!(vec, nothing)
+"""
+    NWState(p::NWParameter; utype=Vector{Float64}, ufill=filltype(utype), default=true)
+
+Create `NWState` based on existing `NWParameter` object.
+"""
+function NWState(p::NWParameter; utype=Vector{Float64}, ufill=filltype(utype), default=true)
+    t = nothing
+    nw = p.nw
+    uflat = _init_flat(utype, dim(nw), ufill)
+    s = NWState(nw,uflat,p,t)
+    default || return s
+    for (k, v) in SII.default_values(nw)
+        k isa SymbolicParameterIndex && continue
+        s[k] = v
+    end
+    return s
+end
+
+"""
+    NWState(int::SciMLBase.DEIntegrator)
+
+Create `NWState` object from `integrator`.
+"""
+NWState(int::SciMLBase.DEIntegrator) = NWState(int, int.u, int.p, int.t)
+
+# init flat array of type T with length N. Init with nothing if possible, else with zeros
+function _init_flat(T, N, fill)
+    vec = T(undef, N)
+    fill!(vec, fill)
+end
+
+"""
+    filltype(T)
+
+Return a value which will be used to fill an abstract array of type `T`.
+
+- `nothing` if eltype(T) allows nothing
+- `missing` if eltype(T) allows missing
+- `NaN` if eltype(T) is a `AbstractFloat
+- `zero(eltype(T))` else.
+"""
+function filltype(T::Type{<:AbstractVector})
+    elT = eltype(T)
+    if Nothing <: elT
+        nothing
+    elseif Missing <: elT
+        missing
+    elseif elT <: AbstractFloat
+        NaN
     else
-        zeros(eltype(T), N)
+        zero(elT)
     end
 end
 
 _convertorcopy(::Type{T}, x::T) where {T} = copy(x)
-function _convertorcopy(T, x)
-    # _x = similar(T, length(x))
-    # _x .= x
-    # T(undef, length(x)) .= x
-    convert(T, x)
-end
+_convertorcopy(T, x) = convert(T, x)
 
 Base.eltype(s::NWState) = eltype(s.uflat)
 Base.length(s::NWState) = length(s.uflat)
@@ -457,38 +648,82 @@ SII.parameter_values(p::NWParameter) = p.pflat
 SII.current_time(s::NWState) = s.t
 SII.current_time(s::NWParameter) = error("Parameter type does not holde time value.")
 
-Base.getindex(p::NWParameter, idx::SymbolicStateIndex) = getindex(p, _paraindex(idx))
-Base.setindex!(p::NWParameter, val, idx::SymbolicStateIndex) = setindex!(p, val, _paraindex(idx))
-Base.getindex(p::NWParameter, idx::SymbolicParameterIndex) = SII.getp(p, idx)(p)
-Base.setindex!(p::NWParameter, val, idx::SymbolicParameterIndex) = SII.setp(p, idx)(p, val)
+# NWParameter: getindex
+Base.getindex(p::NWParameter, ::Colon) = pflat(p)
+Base.getindex(p::NWParameter, idx) = SII.getp(p, _paraindex(idx))(p)
+
+# NWParameter: setindex!
+function Base.setindex!(p::NWParameter, val, idx)
+    setter = SII.setp(p, _paraindex(idx))
+    _chk_dimensions(setter, val)
+    setter(p, val)
+end
+
+# Converts a given index (collection) to a (collection) of parameter index if it is a state index.
+_paraindex(idxs) = all(i -> i isa SymbolicParameterIndex, idxs) ? idxs : _paraindex.(idxs)
 _paraindex(idx::VIndex) = VPIndex(idx.compidx, idx.subidx)
 _paraindex(idx::EIndex) = EPIndex(idx.compidx, idx.subidx)
+_paraindex(idx::SymbolicParameterIndex) = idx
 
+# NWState: getindex
+Base.getindex(s::NWState, ::Colon) = uflat(s)
 Base.getindex(s::NWState, idx::SymbolicParameterIndex) = SII.getp(s, idx)(s)
-Base.setindex!(s::NWState, val, idx::SymbolicParameterIndex) = SII.setp(s, idx)(s, val)
 Base.getindex(s::NWState, idx::SymbolicStateIndex) = SII.getu(s, idx)(s)
-Base.setindex!(s::NWState, val, idx::SymbolicStateIndex) = SII.setu(s, idx)(s, val)
 function Base.getindex(s::NWState, idxs)
-    et = eltype(idxs)
-    if et <: SymbolicStateIndex
-        SII.getu(s, idxs)(s)
-    elseif et <: SymbolicParameterIndex
+    if all(i -> i isa SymbolicParameterIndex, idxs)
         SII.getp(s, idxs)(s)
     else
-        getindex.(Ref(s), idxs)
+        SII.getu(s, idxs)(s)
     end
 end
 
-Base.getindex(s::NWState, ::Colon) = uflat(s)
-Base.getindex(p::NWParameter, ::Colon) = pflat(p)
-Base.setindex!(s::NWState, val, ::Colon) = uflat(s) .= val
-Base.setindex!(p::NWParameter, val, ::Colon) = pflat(p) .= val
+# NWState: setindex!
+function Base.setindex!(s::NWState, val, idx::SymbolicIndex)
+    setter = if idx isa SymbolicParameterIndex
+        SII.setp(s, idx)
+    else
+        SII.setu(s, idx)
+    end
+    _chk_dimensions(setter, val)
+    setter(s, val)
+end
+function Base.setindex!(s::NWState, val, idxs)
+    setter = if all(i -> i isa SymbolicParameterIndex, idxs)
+        SII.setp(s, idxs)
+    else
+        SII.setu(s, idxs)
+    end
+    _chk_dimensions(setter, val)
+    setter(s, val)
+end
 
-struct VProxy{S} s::S end
+function _chk_dimensions(::Union{SII.SetParameterIndex,SII.SetStateIndex}, val)
+    length(val) == 1 || throw(DimensionMismatch("Cannot set multiple values to single index."))
+end
+_chk_dimensions(s::SII.ParameterHookWrapper, val) = _chk_dimensions(s.setter, val)
+function _chk_dimensions(ms::SII.MultipleSetters, val)
+    if size(ms.setters) != size(val)
+        throw(DimensionMismatch("Cannot set variables of size $(size(ms.setters)) to values of size $(size(val))."))
+    end
+end
+
+
+####
+#### Indexing proxys
+####
+abstract type IndexingProxy end
+struct VProxy{S} <: IndexingProxy
+    s::S
+end
 Base.getindex(p::VProxy, comp, state) = getindex(p.s, VIndex(comp, state))
+Base.getindex(p::VProxy, ::Colon, state) = getindex(p, 1:nv(extract_nw(p)), state)
 Base.setindex!(p::VProxy, val, comp, state) = setindex!(p.s, val, VIndex(comp, state))
-struct EProxy{S} s::S end
+
+struct EProxy{S} <: IndexingProxy
+    s::S
+end
 Base.getindex(p::EProxy, comp, state) = getindex(p.s, EIndex(comp, state))
+Base.getindex(p::EProxy, ::Colon, state) = getindex(p, 1:ne(extract_nw(p)), state)
 Base.setindex!(p::EProxy, val, comp, state) = setindex!(p.s, val, EIndex(comp, state))
 
 function Base.getproperty(s::Union{NWParameter, NWState}, sym::Symbol)
@@ -501,16 +736,172 @@ function Base.getproperty(s::Union{NWParameter, NWState}, sym::Symbol)
     end
 end
 
-#=
-https://discourse.julialang.org/t/broadcasting-setindex-is-a-noobtrap/94700
-its hard to overload .= braodcasting so lets error if somebody tries
-=#
+
+####
+#### enable broadcasted setindex
+#### https://discourse.julialang.org/t/broadcasting-setindex-is-a-noobtrap/94700
+####
 Base.dotview(s::Union{NWParameter, NWState, VProxy, EProxy}, idxs...) = view(s, idxs...)
-function Base.view(s::Union{NWParameter, NWState, VProxy, EProxy}, idxs...)
-    error("Cannot create view into for indice $idxs")
-end
-Base.view(s::NWState, ::Colon) = s.uflat
+Base.view(p::VProxy, comp, state) = view(p.s, VIndex(comp, state))
+Base.view(p::EProxy, comp, state) = view(p.s, EIndex(comp, state))
+
+# NWParameter: view
 Base.view(s::NWParameter, ::Colon) = s.pflat
+function Base.view(p::NWParameter, idx::SymbolicIndex)
+    _idx = _paraindex(idx)
+    if !SII.is_parameter(p, _idx)
+        throw(ArgumentError("Index $idx is not a valid parameter index."))
+    end
+    view(p.pflat, SII.parameter_index(p, _idx))
+end
+function Base.view(p::NWParameter, idxs)
+    _idxs = _paraindex(idxs)
+    if !(all(i -> SII.is_parameter(p, i), _idxs))
+        throw(ArgumentError("Index $idxs is not a valid parameter index collection."))
+    end
+    view(p.pflat, map(i -> SII.parameter_index(p, i), _idxs))
+end
+
+# NWState: view
+Base.view(s::NWState, ::Colon) = s.uflat
+Base.view(s::NWState, idx::SymbolicParameterIndex) = view(s.p, idx)
+function Base.view(s::NWState, idx::SymbolicStateIndex)
+    if !SII.is_variable(s, idx)
+        throw(ArgumentError("Index $idx is not a valid state index."))
+    end
+    view(uflat(s), SII.variable_index(s, idx))
+end
+function Base.view(s::NWState, idxs)
+    if all(i -> SII.is_parameter(s, i), idxs)
+        _viewidx =  map(i -> SII.parameter_index(s, i), idxs)
+        return view(pflat(s), _viewidx)
+    elseif all(i -> SII.is_variable(s, i), idxs)
+        _viewidx =  map(i -> SII.variable_index(s, i), idxs)
+        return view(uflat(s), _viewidx)
+    else
+        throw(ArgumentError("Index $idx is neither a valid parameter nor state index collection."))
+    end
+end
+
+
+# TODO: vidx(nw, :, :u) has different semantics from s.v[:, :u] (one searches?)
+"""
+    vidxs([inpr], components=:, variables=:) :: Vector{VIndex}
+
+Generate vector of symbolic indexes for vertices.
+
+- `inpr`: Only needed for name matching or `:` access. Can be Network, sol, prob, ...
+- `components`: Number/Vector, `:`, `Symbol` (name matches), `String`/`Regex` (name contains)
+- `variables`: Symbol/Number/Vector, `:`, `String`/`Regex` (all sym containing)
+
+Examples:
+
+    vidxs(nw)                 # all vertex state indices
+    vidxs(1:2, :u)            # [VIndex(1, :u), VIndex(2, :u)]
+    vidxs(nw, :, [:u, :v])    # [VIndex(i, :u), VIndex(i, :v) for i in 1:nv(nw)]
+    vidxs(nw, "ODEVertex", :) # all symbols of all vertices with name containing "ODEVertex"
+"""
+vidxs(args...) = _idxs(VIndex, args...)
+"""
+    vpidxs([inpr], components=:, variables=:) :: Vector{VPIndex}
+
+Generate vector of symbolic indexes for parameters. See [`vidxs`](@ref) for more information.
+"""
+vpidxs(args...) = _idxs(VPIndex, args...)
+"""
+    vidxs([inpr], components=:, variables=:) :: Vector{EIndex}
+
+Generate vector of symbolic indexes for edges.
+
+- `inpr`: Only needed for name matching or `:` access. Can be Network, sol, prob, ...
+- `components`: Number/Vector, `:`, `Symbol` (name matches), `String`/`Regex` (name contains)
+- `variables`: Symbol/Number/Vector, `:`, `String`/`Regex` (all sym containing)
+
+Examples:
+
+    eidxs(nw)                # all edge state indices
+    eidxs(1:2, :u)           # [EIndex(1, :u), EIndex(2, :u)]
+    eidxs(nw, :, [:u, :v])   # [EIndex(i, :u), EIndex(i, :v) for i in 1:ne(nw)]
+    eidxs(nw, "FlowEdge", :) # all symbols of all edges with name containing "FlowEdge"
+"""
+eidxs(args...) = _idxs(EIndex, args...)
+"""
+    epidxs([inpr], components=:, variables=:) :: Vector{EPIndex}
+
+Generate vector of symbolic indexes for parameters. See [`eidxs`](@ref) for more information.
+"""
+epidxs(args...) = _idxs(EPIndex, args...)
+
+_idxs(IT, cidxs::Union{Number, AbstractVector}, sidxs) = _idxs(IT, nothing, cidxs, sidxs)
+function _idxs(IT, inpr, cidxs=Colon(), sidxs=Colon())
+    res = IT[]
+    for ci in _make_cidx_iterable(IT, inpr, cidxs)
+        for si in _make_sidx_iterable(IT, inpr, ci, sidxs)
+            push!(res, IT(ci, si))
+        end
+    end
+    res
+end
+
+_make_iterabel(idxs) = idxs
+_make_iterabel(idx::Symbol) = Ref(idx)
+
+_make_cidx_iterable(_, _, idx) = _make_iterabel(idx)
+_make_cidx_iterable(::Type{<:SymbolicVertexIndex}, inpr, ::Colon) = 1:nv(extract_nw(inpr))
+_make_cidx_iterable(::Type{<:SymbolicEdgeIndex}, inpr, ::Colon) = 1:ne(extract_nw(inpr))
+function _make_cidx_iterable(IT, inpr, s::Symbol)
+    names = getproperty.(_get_components(IT, inpr), :name)
+    findall(isequal(s), names)
+end
+function _make_cidx_iterable(IT, inpr, s::Union{AbstractString,AbstractPattern})
+    names = getproperty.(_get_components(IT, inpr), :name)
+    findall(sym -> contains(string(sym), s), names)
+end
+
+_make_sidx_iterable(IT, inpr, cidx, idx) = _make_iterabel(idx)
+function _make_sidx_iterable(IT::Type{<:SymbolicStateIndex}, inpr, cidx, ::Colon)
+    _get_components(IT, inpr)[cidx].sym
+end
+function _make_sidx_iterable(IT::Type{<:SymbolicParameterIndex}, inpr, cidx, ::Colon)
+    _get_components(IT, inpr)[cidx].psym
+end
+function _make_sidx_iterable(IT::Type{<:SymbolicStateIndex}, inpr, cidx, s::Union{AbstractString,AbstractPattern})
+    comp = _get_components(IT, inpr)[cidx]
+    syms = vcat(comp.sym, comp.obssym)
+    filter(sym -> contains(string(sym), s), syms)
+end
+function _make_sidx_iterable(IT::Type{<:SymbolicParameterIndex}, inpr, cidx, s::Union{AbstractString,AbstractPattern})
+    syms = _get_components(IT, inpr)[cidx].psym
+    filter(sym -> contains(string(sym), s), syms)
+end
+
+_get_components(::Type{<:SymbolicVertexIndex}, inpr) = extract_nw(inpr).im.vertexf
+_get_components(::Type{<:SymbolicEdgeIndex}, inpr) = extract_nw(inpr).im.edgef
+
+
+"""
+    extract_nw(thing)
+
+Try to extract the `Network` object from thing.
+"""
+function extract_nw(inpr)
+    sc = SII.symbolic_container(inpr)
+    if sc === inpr
+       throw(ArgumentError("Cannot extract Network from $(typeof(sc))"))
+    end
+    extract_nw(sc)
+end
+extract_nw(nw::Network) = nw
+extract_nw(sol::SciMLBase.AbstractSolution) = extract_nw(sol.prob)
+extract_nw(prob::SciMLBase.ODEProblem) = extract_nw(prob.f)
+extract_nw(f::SciMLBase.ODEFunction) = extract_nw(f.sys)
+extract_nw(int::SciMLBase.DEIntegrator) = extract_nw(int.f)
+extract_nw(s::NWState) = s.nw
+extract_nw(p::NWParameter) = p.nw
+extract_nw(p::IndexingProxy) = extract_nw(p.s)
+function extract_nw(::Nothing)
+    throw(ArgumentError("Needs system context to generate matching indices. Pass Network, sol, prob, ..."))
+end
 
 #=
 nds = wrap(nd, u, [p]) -> NWState (contains nw para, optional für observables/static)

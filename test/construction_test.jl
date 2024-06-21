@@ -100,3 +100,76 @@ end
         end
     end
 end
+
+@testset "test componen function constructors" begin
+    using LinearAlgebra
+    v = ODEVertex(identity; dim=2, pdim=3)
+    @test v.name == :ODEVertex
+    @test v.obsf == nothing
+    @test length(v.sym) == 2
+    @test v.mass_matrix == LinearAlgebra.I
+
+    v = ODEVertex(identity; sym=[:foo,:bar], pdim=3)
+    @test v.dim == 2
+    @test length(v.psym) == 3
+
+    v = ODEVertex(identity; sym=[:foo,:bar], psym=[:a])
+    @test v.pdim==1
+    @test v.dim==2
+
+    @test_throws ArgumentError ODEVertex(identity; dim=1, pdim=1, mass_matrix=[1 2;3 4])
+
+    @test_throws ArgumentError ODEVertex(identity, 1, 0; obsf=identity)
+    v = ODEVertex(identity, 1, 0; obsf=identity, obssym=[:foo])
+    @test_throws ArgumentError ODEVertex(identity, 1, 0; obsf=nothing, obssym=[:foo])
+
+    @test_throws ArgumentError ODEVertex(identity, 1, 0; depth=2)
+
+    StaticEdge(identity, 5, 0, Fiducial(); depth=2)
+    StaticEdge(identity, 5, 0, Fiducial(); depth=1)
+    @test_throws ArgumentError StaticEdge(identity, 5, 0, Fiducial(); depth=3)
+
+    e = StaticEdge(identity, 5, 0, Directed())
+    @test e.name == :StaticEdge
+    e = ODEEdge(identity, 5, 0, Directed())
+    StaticVertex(identity, 5, 0)
+
+    v = ODEVertex(identity, 2, 3)
+    @test v.dim == 2
+    @test v.pdim == 3
+    v = ODEVertex(identity, [:foo, :bar], 3)
+    @test v.dim == 2
+    @test v.pdim == 3
+    v = ODEVertex(identity, 2, [:a, :b, :c])
+    @test v.dim == 2
+    @test v.pdim == 3
+    v = ODEVertex(identity, [:foo, :bar], [:a, :b, :c])
+    @test v.dim == 2
+    @test v.pdim == 3
+
+    using NetworkDynamics: _has_defaults
+    @test _has_defaults([:a,:b,:c]) == false
+    @test _has_defaults([:a=>1,:b,:c]) == true
+    @test _has_defaults([:a=>1,:b=>2,:c=>3]) == true
+
+    v = ODEVertex(identity, [:foo=>1, :bar], [:a=>2, :b, :c=>7])
+    @test v.def == [1,nothing]
+    @test v.pdef == [2,nothing,7]
+
+    @test_throws ArgumentError ODEVertex(identity, [:foo=>1]; def=[1])
+    @test_throws ArgumentError ODEVertex(identity, 1, [:foo=>1]; pdef=[1])
+
+    v = ODEVertex(identity, :foo, :bar)
+    @test v.sym == [:foo]
+    @test v.psym == [:bar]
+
+    v = ODEVertex(identity, :foo=>1, :bar)
+    @test v.sym == [:foo]
+    @test v.def == [1]
+    @test v.psym == [:bar]
+
+    v = ODEVertex(identity, :foo, :bar=>1)
+    @test v.sym == [:foo]
+    @test v.psym == [:bar]
+    @test v.pdef == [1]
+end

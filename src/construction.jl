@@ -20,7 +20,7 @@ function Network(g::AbstractGraph,
             println("Create dynamic network with $(nv(g)) vertices and $(ne(g)) edges:")
         @argcheck execution isa ExecutionStyle "Exectuion type $execution not supportet (choose from $(subtypes(ExecutionStyle)))"
 
-        _maxedepth = mapreduce(depth, min, _edgef)
+        _maxedepth = isempty(_edgef) ? 0 : mapreduce(depth, min, _edgef)
         if edepth === :auto
             edepth = _maxedepth
             verbose && println(" - auto accumulation depth = $edepth")
@@ -116,7 +116,7 @@ function VertexBatch(im::IndexManager, idxs::Vector{Int}; verbose)
         if e isa ArgumentError && startswith(e.msg, "Collection has multiple elements")
             throw(ArgumentError("Provided vertex functions $idxs use the same function but have different metadata (dim, pdim,type,...)"))
         else
-            rerthrow(e)
+            rethrow(e)
         end
     end
 end
@@ -141,7 +141,7 @@ function EdgeBatch(im::IndexManager, idxs::Vector{Int}; verbose)
         if e isa ArgumentError && startswith(e.msg, "Collection has multiple elements")
             throw(ArgumentError("Provided edge functions $idxs use the same function but have different metadata (dim, pdim,type,...)"))
         else
-            rerthrow(e)
+            rethrow(e)
         end
     end
 end
@@ -237,9 +237,8 @@ function _fill_mass_matrix!(mass_matrix, im, vertexd, edged)
     mass_matrix
 end
 
-# XXX: move massmatrix check to component_functions.jl
 function _check_massmatrix(c)
-    if c.mass_matrix isa UniformScaling || c.mass_matrix isa Number
+    if c.mass_matrix isa UniformScaling
         return
     end
     if length(size(c.mass_matrix)) == 2
@@ -249,4 +248,13 @@ function _check_massmatrix(c)
     throw(ArgumentError("Mass matrix must be a square matrix,\
                          a uniform scaling, or scalar. Got $(c.mass_matrix) \
                          in component :$(c.name)."))
+end
+
+"""
+    Network(nw::Network; kwargs...)
+
+Rebuild the Network with same graph and vertex/edge functions but possibly different kwargs.
+"""
+function Network(nw::Network; kwargs...)
+    Network(nw.im.g, nw.im.vertexf, nw.im.edgef; kwargs...)
 end

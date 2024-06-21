@@ -78,5 +78,6 @@ using NetworkDynamics
         align_strings([":a &=> 2 & k &-> 4",
                        ":foobar &=> 8 & :a &-> 4"])
 
+        align_strings(["row &with\n&line break", "second &row"])
     end
 end

@@ -5,18 +5,17 @@ function Base.show(io::IO, ::MIME"text/plain", nw::Network)
     if compact
         print(io, "Dynamic network ($(nv(nw.im.g)) vertices, $(ne(nw.im.g)) edges)")
     else
-        println(io, "Dynamic network with:")
+        print(io, "Dynamic network with:")
         num, word = maybe_plural(length(nw.vertexbatches), "type")
-        println(io, " ├─ $(nv(nw.im.g)) vertices ($num unique $word)")
+        print(io, "\n ├─ $(nv(nw.im.g)) vertices ($num unique $word)")
         num, word = maybe_plural(length(nw.layer.edgebatches), "type")
-        println(io, " └─ $(ne(nw.im.g)) edges ($num unique $word)")
-        print(io, "Aggregation using ")
+        print(io, "\n └─ $(ne(nw.im.g)) edges ($num unique $word)")
+        print(io, "\nEdge-Aggregation using ")
         print(io, nw.layer.aggregator)
-        println(io, " along")
-        num, word = maybe_plural(nw.layer.edepth, "dimension")
-        println(io, " ├─ $(num) edge $(word)")
-        num, word = maybe_plural(nw.layer.vdepth, "dimension")
-        println(io, " └─ $(num) vertex $(word)")
+        num, word = maybe_plural(nw.layer.edepth, "state")
+        print(io, "\n ├─ vertices receive edge states 1:$(num) (edge depth = $num)")
+        num, word = maybe_plural(nw.layer.vdepth, "state")
+        print(io, "\n └─ edges receive vertex states  1:$(num) (vertex depth = $num)")
     end
 end
 
@@ -28,7 +27,7 @@ Base.show(io::IO, s::PolyesterAggregator) = print(io, "PolyesterAggregator($(rep
 
 function Base.show(io::IO, ::MIME"text/plain", c::EdgeFunction)
     type = match(r"^(.*?)\{", string(typeof(c)))[1]
-    println(io, type, styled" :$(c.name) with $(_styled_coupling(coupling(c))) coupling")
+    print(io, type, styled" :$(c.name) with $(_styled_coupling(coupling(c))) coupling of depth {NetworkDynamics_fordst:$(depth(c))}")
 
     styling = Dict{Int,Symbol}()
     if coupling(c) == Fiducial()
@@ -57,7 +56,7 @@ _styled_coupling(::Symmetric) = styled"{NetworkDynamics_fordstsrc:Symmetric}"
 
 function Base.show(io::IO, ::MIME"text/plain", c::VertexFunction)
     type = match(r"^(.*?)\{", string(typeof(c)))[1]
-    println(io, type, styled" :$(c.name)")
+    print(io, type, styled" :$(c.name) with depth {NetworkDynamics_forlayer:$(depth(c))}")
 
     styling = Dict{Int,Symbol}()
     for i in 1:depth(c)
@@ -70,16 +69,16 @@ end
 function print_states_params(io, c::ComponentFunction, styling)
     info = Base.AnnotatedString{String}[]
     num, word = maybe_plural(dim(c), "state")
-    push!(info, styled"$num $word:\t$(stylesymbolarray(c.sym, c.def, styling))")
+    push!(info, styled"$num &$word: &&$(stylesymbolarray(c.sym, c.def, styling))")
 
     if hasproperty(c, :mass_matrix) && c.mass_matrix != LinearAlgebra.I
-        info[end] *= "\nmass m:\t$(c.mass_matrix)"
+        info[end] *= "\n&with mass matrix $(c.mass_matrix)"
     end
 
     num, word = maybe_plural(pdim(c), "param")
-    pdim(c) > 0 && push!(info, styled"$num $word:\t$(stylesymbolarray(c.psym, c.pdef))")
+    pdim(c) > 0 && push!(info, styled"$num &$word: &&$(stylesymbolarray(c.psym, c.pdef))")
 
-    print_treelike(io, info)
+    print_treelike(io, align_strings(info))
 end
 
 function stylesymbolarray(syms, defaults, symstyles=Dict{Int,Symbol}())
@@ -117,9 +116,16 @@ end
 
 function Base.show(io::IO, mime::MIME"text/plain", s::NWState; dim=nothing)
     ioc = IOContext(io, :compact => true)
+    if get(io, :limit, true)::Bool
+        dsize = get(io, :displaysize, displaysize(io))::Tuple{Int,Int}
+        rowmax = dsize[1] - 8
+    else
+        rowmax = typemax(Int)
+    end
+
     print(io, "State{$(typeof(uflat(s)))} of ")
     show(ioc, mime, s.nw)
-    println(io)
+
     strvec = map(SII.variable_symbols(s.nw), eachindex(s.uflat)) do sym, i
         buf =  Base.AnnotatedIOBuffer()
         print(buf, "&")
@@ -136,10 +142,10 @@ function Base.show(io::IO, mime::MIME"text/plain", s::NWState; dim=nothing)
         end
         str
     end
-    print_treelike(io, align_strings(strvec), prefix="  ")
+    print_treelike(io, align_strings(strvec); prefix="  ", rowmax)
 
-    buf = IOContext(Base.AnnotatedIOBuffer(), :compact=>true)
-    print(buf, " p = ")
+    buf = IOContext(Base.AnnotatedIOBuffer(), :compact=>true, :limit=>true)
+    print(buf, "\n p = ")
     show(buf, mime, s.p)
     print(buf, "\n t = ")
     show(buf, mime, s.t)
@@ -153,6 +159,13 @@ end
 
 function Base.show(io::IO, mime::MIME"text/plain", p::NWParameter; dim=nothing)
     compact = get(io, :compact, false)::Bool
+    if get(io, :limit, true)::Bool
+        dsize = get(io, :displaysize, displaysize(io))::Tuple{Int,Int}
+        rowmax = dsize[1] - 5
+    else
+        rowmax = typemax(Int)
+    end
+
     if compact
         print(io, "Parameter(")
         show(io, p.pflat)
@@ -161,7 +174,6 @@ function Base.show(io::IO, mime::MIME"text/plain", p::NWParameter; dim=nothing)
         ioc = IOContext(io, :compact => true)
         print(io, "Parameter{$(typeof(pflat(p)))} of ")
         show(ioc, mime, p.nw)
-        println(io)
 
         strvec = map(SII.parameter_symbols(p.nw), eachindex(p.pflat)) do sym, i
             buf =  Base.AnnotatedIOBuffer()
@@ -179,7 +191,7 @@ function Base.show(io::IO, mime::MIME"text/plain", p::NWParameter; dim=nothing)
             end
             str
         end
-        print_treelike(io, align_strings(strvec), prefix="  ")
+        print_treelike(io, align_strings(strvec); prefix="  ", rowmax)
     end
 end
 
@@ -193,26 +205,56 @@ _proxyname(::EProxy) = "Edge indexer"
 _dimcondition(::VProxy) = sym -> sym isa EIndex || sym isa EPIndex
 _dimcondition(::EProxy) = sym -> sym isa VIndex || sym isa VPIndex
 
-function print_treelike(io, vec; prefix=" ", infix=" ")
-    for s in @views vec[begin:end-1]
-        sublines = split(s, "\n")
-        println(io, prefix, "├─", infix, sublines[begin])
-        for sub in sublines[begin+1:end]
-            println(io, prefix, "│ ", infix, sub)
+function print_treelike(io, vec; prefix=" ", infix=" ", rowmax=typemax(Int))
+    Base.require_one_based_indexing(vec)
+    if length(vec) > rowmax
+        upper = ceil(Int, rowmax / 2)
+        lower = floor(Int, rowmax / 2) - 1
+        for s in @views vec[1:upper]
+            _print_tree_element(io, "├─", "| ", s, prefix, infix)
+        end
+        print(io, "\n", prefix, "⋮")
+        for s in @views vec[end-lower:end-1]
+            _print_tree_element(io, "├─", "| ", s, prefix, infix)
+        end
+    else
+        for s in @views vec[begin:end-1]
+            _print_tree_element(io, "├─", "| ", s, prefix, infix)
         end
     end
-    sublines = split(vec[end], "\n")
-    println(io, prefix, "└─", infix, sublines[begin])
+    _print_tree_element(io, "└─", "  ", vec[end], prefix, infix)
+end
+
+function _print_tree_element(io, treesym, sublinesym, s, prefix, infix)
+    sublines = split(s, "\n")
+    print(io, "\n", prefix, treesym, infix, sublines[begin])
     for sub in sublines[begin+1:end]
-        println(io, prefix, "  ", infix, sub)
+        print(io, "\n", prefix, sublinesym, infix, sub)
     end
 end
 
-function align_strings(vecofstr::AbstractVector{<:AbstractString})
-    splitted = map(vecofstr) do str
-        split(str, '&')
+function align_strings(vecofstr::AbstractVector{<:AbstractString}; padding=:alternating)
+    splitted = Vector{AbstractString}[]
+    sizehint!(splitted, length(vecofstr))
+    i = 1
+    newlines = Int[]
+    for str in vecofstr
+        for (ln, linesplit) in enumerate(eachsplit(str, '\n'))
+            push!(splitted, split(linesplit, '&'))
+            if ln > 1
+                push!(newlines, i-1)
+            end
+            i += 1
+        end
     end
-    align_strings(splitted)
+    alig = align_strings(splitted; padding)
+    if !isempty(newlines)
+        for i in newlines
+            alig[i] = alig[i] * "\n" * alig[i+1]
+        end
+        deleteat!(alig, newlines .+1 )
+    end
+    alig
 end
 function align_strings(vecofvec::AbstractVector{<:AbstractVector}; padding=:alternating)
     depth = maximum(length.(vecofvec))
@@ -220,7 +262,7 @@ function align_strings(vecofvec::AbstractVector{<:AbstractVector}; padding=:alte
 
     for i in eachindex(vecofvec)
         for j in 1:depth
-            j > length(vecofvec[i]) && continue
+            j ≥ length(vecofvec[i]) && continue
             maxlength[j] = max(maxlength[j], length(vecofvec[i][j]))
         end
     end

@@ -55,7 +55,21 @@ struct Network{EX<:ExecutionStyle,G,NL,VTup,MM}
 end
 executionstyle(::Network{ex}) where {ex} = ex()
 nvbatches(::Network) = length(vertexbatches)
+
+"""
+    dim(nw::Network)
+
+Returns the number of dynamic states in the network,
+corresponts to the length of the flat state vector.
+"""
 dim(nw::Network) = dim(nw.im)
+
+"""
+    pdim(nw::Network)
+
+Returns the number of parameters in the network,
+corresponts to the length of the flat parameter vector.
+"""
 pdim(nw::Network) = pdim(nw.im)
 Graphs.nv(nw::Network) = nv(nw.im.g)
 Graphs.ne(nw::Network) = ne(nw.im.g)
