@@ -46,10 +46,9 @@ function test_execution_styles(prob)
                     @test false
                     continue
                 end
-                issame = _du ≈ du
-
+                issame = isapprox(_du, du; atol=1e-10)
                 if !issame
-                    println("$execution with $aggregator lead to different results: extrema(Δ) = $(extrema(_du - u))")
+                    println("$execution with $aggregator lead to different results: extrema(Δ) = $(extrema(_du - du))")
                 end
                 @test issame
             end
