@@ -1,6 +1,8 @@
 #=
 # Modeling a heterogeneous system
 
+This example can be dowloaded as a normal Julia script [here](@__NAME__.jl). #md
+
 One of the main purposes of NetworkDynamics.jl is to facilitate
 modeling coupled systems with heterogenities. This means that
 components can differ in their parameters as well as in their dynamics.

@@ -1,6 +1,8 @@
 #=
 # Neurodynamic model of synchronization in the human brain
 
+This example can be dowloaded as a normal Julia script [here](@__NAME__.jl). #md
+
 #### Topics covered in this tutorial include:
 
   - constructing a directed, weighted graph from data
@@ -43,15 +45,19 @@ In the following we will use a directed and weighted network encoding the streng
 The network weight matrix is given as a text file containing 90 lines with 90 numbers representing the coupling strength and separated by commas `,`. The data can be conveniently read into a matrix with the `DelimitedFiles` module.
 =#
 using DelimitedFiles
+using SimpleWeightedGraphs, Graphs
+using NetworkDynamics
+using OrdinaryDiffEq
+using Plots
+
 ## adjust the load path for your filesystem!
-G = readdlm(joinpath(@__DIR__, "Norm_G_DTI.txt"), ',', Float64, '\n')
+file = joinpath(pkgdir(NetworkDynamics), "docs", "examples", "Norm_G_DTI.txt")
+G = readdlm(file, ',', Float64, '\n')
 nothing #hide #md
 
 #=
 The data structure for directed, weighted graphs is provided by the package `SimpleWeightedGraphs.jl` which is based on `Graphs.jl`.
 =#
-
-using SimpleWeightedGraphs, Graphs
 
 ## First we construct a weighted, directed graph
 g_weighted = SimpleWeightedDiGraph(G)
@@ -72,23 +78,21 @@ Defining `VertexFunction` and `EdgeFunction` is similar to the example before. T
 
 =#
 
-using NetworkDynamics
-
 Base.@propagate_inbounds function fhn_electrical_vertex!(dv, v, esum, p, t)
     (a, ϵ) = p
     dv[1] = v[1] - v[1]^3 / 3 - v[2] + esum[1]
     dv[2] = (v[1] - a) * ϵ
     nothing
 end
+odeelevertex = ODEVertex(fhn_electrical_vertex!; sym=[:u, :v], psym=[:a=>0.5, :ϵ=>0.05])
+#-
 
 Base.@propagate_inbounds function electrical_edge!(e, v_s, v_d, (w, σ), t)
     e[1] = w * (v_s[1] - v_d[1]) * σ
     nothing
 end
-
-odeelevertex = ODEVertex(fhn_electrical_vertex!; sym=[:u, :v], psym=[:a=>0.5, :ϵ=>0.05])
-
 electricaledge = StaticEdge(electrical_edge!; dim=1, psym=[:weight, :σ=>0.5], coupling=Directed())
+#-
 
 fhn_network! = Network(g_directed, odeelevertex, electricaledge)
 
@@ -103,6 +107,7 @@ We can use getindex on the parameter objects to set the missing weight values.
 =#
 p = NWParameter(fhn_network!)
 p.e[1:ne(g_directed), :weight] = edge_weights
+nothing #hide #md
 
 #=
 The initial conditions could be created similarly to the parameters as an indexable `NWState` obejct.
@@ -121,8 +126,6 @@ Now we are ready to create an `ODEProblem`. Since for some choices of parameters
 Not that we call `pflat` on the `NWParameter` object to get the flat array of parameters.
 =#
 
-using OrdinaryDiffEq
-
 tspan = (0.0, 200.0)
 prob  = ODEProblem(fhn_network!, x0, tspan, pflat(p))
 Main.test_execution_styles(prob) # testing all ex styles #src
@@ -134,7 +137,5 @@ nothing #hide #md
 
 The plot of the excitatory variables shows that they synchronize for this choice of parameters.
 =#
-
-using Plots
 
 plot(sol; idxs=vidxs(fhn_network!, :, :u), legend=false, ylim=(-5, 5), fmt=:png)

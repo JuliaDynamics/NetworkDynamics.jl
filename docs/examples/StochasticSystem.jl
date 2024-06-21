@@ -1,8 +1,7 @@
 #=
 # SDE Tutorial
 
-# TODO: SDE Tutorial: add link to script #hide
-An `IJulia` [notebook](https://github.com/pik-icone/NetworkDynamics.jl/tree/master/examples) corresponding to this tutorial will be available on GitHub soon.
+This example can be dowloaded as a normal Julia script [here](@__NAME__.jl). #md
 
 #### Topics covered in this tutorial include:
 
@@ -57,12 +56,12 @@ function swing_equation!(dv, v, esum, (M, P, D), t)
     nothing
 end
 swing_vertex = ODEVertex(swing_equation!; sym=[:θ, :ω], psym=[:M=>1, :P, :D=>0.1])
+#-
 
 function powerflow!(e, v_s, v_d, (K,), t)
     e[1] = K * sin(v_s[1] - v_d[1])
 end
 powerflow_edge = StaticEdge(powerflow!; dim=1, psym=[:K=>6], coupling=AntiSymmetric())
-nothing #hide #md
 
 #=
 ## Contructing the Deterministic Dynamics

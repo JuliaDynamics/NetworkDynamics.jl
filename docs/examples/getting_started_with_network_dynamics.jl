@@ -1,10 +1,10 @@
 #=
 # [Network diffusion](@id getting_started)
 
-This introductory example explains the use of the basic types and constructors in NetworkDynamics.jl by modeling a simple diffusion on an undirected network. A corresponding `IJulia` [notebook](https://github.com/pik-icone/NetworkDynamics.jl/tree/master/examples) is available on GitHub. #md
+This introductory example explains the use of the basic types and constructors
+in NetworkDynamics.jl by modeling a simple diffusion on an undirected network.
 
-TODO: fix link in getting startet #hide
-The source of this example can be found [here](@__REPO_ROOT_URL__/examples/@__NAME__).
+This example can be dowloaded as a normal Julia script [here](@__NAME__.jl). #md
 
 ## Theoretical background
 
@@ -22,6 +22,10 @@ The sum on the right hand side plays the role of a (discrete) gradient. If the t
 
 From the above considerations we see that in this model the nodes do not have any internal dynamics - if a node was disconnected from the rest of the network its state would never change, since then $A_{ji} = 0 \; \forall j$ and hence $\dot v_i = 0$. This means that the evolution of a node depends only on the interaction with its neighbors. In NetworkDynamics.jl, interactions with neighbors are described by equations for the edges.
 =#
+using Graphs
+using NetworkDynamics
+using OrdinaryDiffEq
+using Plots
 
 function diffusionedge!(e, v_s, v_d, p, t)
     ## usually e, v_s, v_d are arrays, hence we use the broadcasting operator .
@@ -55,8 +59,6 @@ For undirected graphs, the `edgefunction!` specifies the coupling from a source-
 With the preliminaries out of the way, it only takes a few steps to assemble the network dynamics.
 =#
 
-using Graphs
-
 N = 20 # number of nodes
 k = 4  # average degree
 g = barabasi_albert(N, k) # a little more exciting than a bare random graph
@@ -64,8 +66,6 @@ g = barabasi_albert(N, k) # a little more exciting than a bare random graph
 nothing #hide #md
 
 # The [Barabási–Albert model](https://en.wikipedia.org/wiki/Barab%C3%A1si%E2%80%93Albert_model) generates a scale-free random graph.
-
-using NetworkDynamics
 
 nd_diffusion_vertex = ODEVertex(; f=diffusionvertex!, dim=1)
 nd_diffusion_edge = StaticEdge(; f=diffusionedge!, dim=1, coupling=AntiSymmetric())
@@ -75,8 +75,6 @@ nd = Network(g, nd_diffusion_vertex, nd_diffusion_edge)
 #=
 `ODEVertex` and `StaticEdge` are functions wrappers that equip the functions we defined above with additional information like **`dim`** and return objects of type `VertexFunction` and `EdgeFunction`. Then the key constructor `Network` combines them with the topological information contained in the graph **`g`** and returns an `ODEFunction` compatible with the solvers of `DifferentialEquations.jl`. The keyword **`dim`** specifies the number of variables at each edge or node.
 =#
-
-using OrdinaryDiffEq
 
 x0 = randn(N) # random initial conditions
 ode_prob = ODEProblem(nd, x0, (0.0, 4.0))
@@ -88,7 +86,6 @@ nothing #hide #md
 We are solving the diffusion problem on the time interval $[0, 4]$ with the `Tsit5()` algorithm, which is recommended  by the authors of `DifferentialEquations.jl` for most non-stiff problems.
 =#
 
-using Plots
 plot(sol; idxs=vidxs(nd, :, :), fmt=:png)
 
 #=

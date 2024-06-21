@@ -13,7 +13,7 @@ mkpath(outdir)
 
 for example in filter(contains(r".jl$"), readdir(example_dir, join=true))
     Literate.markdown(example, outdir)
-    Literate.script(example, outdir)
+    Literate.script(example, outdir; keep_comments=true)
 end
 
 # TODO: doc on steady state solve https://docs.sciml.ai/NonlinearSolve/stable/native/steadystatediffeq/#SteadyStateDiffEq.SSRootfind
