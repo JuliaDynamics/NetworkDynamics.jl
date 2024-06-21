@@ -43,4 +43,4 @@ makedocs(; root=joinpath(pkgdir(NetworkDynamics), "docs"),
          warnonly=true)
 
 deploydocs(; repo="github.com/PIK-ICoNe/NetworkDynamics.jl.git",
-           devbranch="main")
+           devbranch="main", push_preview=true)
