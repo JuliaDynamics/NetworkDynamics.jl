@@ -49,7 +49,7 @@ static_range(batch, i) = state_range(batch, i)
         for i in 1:length(batch)
             _type = comptype(batch)
             _batch = essence(batch)
-            @inline apply_vertex!(_type, _batch, i, du, u, s, aggbuf, p, t)
+            apply_vertex!(_type, _batch, i, du, u, s, aggbuf, p, t)
         end
     end
 end
@@ -68,7 +68,7 @@ end
                           du, @Const(u), s,
                           @Const(aggbuf), @Const(p), @Const(t))
     I = @index(Global)
-    @inline apply_vertex!(type, batch, I, du, u, s, aggbuf, p, t)
+    apply_vertex!(type, batch, I, du, u, s, aggbuf, p, t)
     nothing
 end
 
@@ -79,7 +79,7 @@ end
         _s   = _has_static(T)  ? view(s,  static_range(batch, i))    : nothing
         _p   = _indexable(p)   ? view(p,  parameter_range(batch, i)) : p
         _agg = view(aggbuf, aggbuf_range(batch, i))
-        @inline apply_compf(T, compf(batch), _du, _u, _s, _agg, _p, t)
+        apply_compf(T, compf(batch), _du, _u, _s, _agg, _p, t)
     end
     nothing
 end
@@ -100,7 +100,7 @@ end
         for i in 1:length(batch)
             _type = comptype(batch)
             _batch = essence(batch)
-            @inline apply_edge_unbuffered!(_type, _batch, i, du, u, s, nw.im.e_src, nw.im.e_dst, p, t)
+            apply_edge_unbuffered!(_type, _batch, i, du, u, s, nw.im.e_src, nw.im.e_dst, p, t)
         end
     end
 end
@@ -120,7 +120,7 @@ end
                           @Const(srcrange), @Const(dstrange),
                           @Const(p), @Const(t))
     I = @index(Global)
-    @inline apply_edge_unbuffered!(type, batch, I, du, u, s, srcrange, dstrange, p, t)
+    apply_edge_unbuffered!(type, batch, I, du, u, s, srcrange, dstrange, p, t)
 end
 
 @inline function apply_edge_unbuffered!(::Type{T}, batch, i,
@@ -133,7 +133,7 @@ end
         eidx = @views batch.indices[i]
         _src = @views u[srcrange[eidx]]
         _dst = @views u[dstrange[eidx]]
-        @inline apply_compf(T, compf(batch), _du, _u, _s, _src, _dst, _p, t)
+        apply_compf(T, compf(batch), _du, _u, _s, _src, _dst, _p, t)
     end
     nothing
 end
@@ -151,7 +151,7 @@ end
         for i in 1:length(batch)
             _type = comptype(batch)
             _batch = essence(batch)
-            @inline apply_edge_buffered!(_type, _batch, i, _du, _u, _s, gbuf, _p, _t)
+            apply_edge_buffered!(_type, _batch, i, _du, _u, _s, gbuf, _p, _t)
         end
     end
 end
@@ -176,7 +176,7 @@ end
                                    du, @Const(u), s,
                                    @Const(gbuf), @Const(p), @Const(t))
     I = @index(Global)
-    @inline apply_edge_buffered!(type, batch, I, du, u, s, gbuf, p, t)
+    apply_edge_buffered!(type, batch, I, du, u, s, gbuf, p, t)
 end
 
 @inline function apply_edge_buffered!(::Type{T}, batch, i,
@@ -189,7 +189,7 @@ end
         bufr = @views gbuf_range(batch, i)
         _src = @views gbuf[bufr, 1]
         _dst = @views gbuf[bufr, 2]
-        @inline apply_compf(T, compf(batch), _du, _u, _s, _src, _dst, _p, t)
+        apply_compf(T, compf(batch), _du, _u, _s, _src, _dst, _p, t)
     end
     nothing
 end
