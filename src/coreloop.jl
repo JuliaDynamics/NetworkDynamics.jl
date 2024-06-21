@@ -64,11 +64,11 @@ end
     end
     KernelAbstractions.synchronize(_backend)
 end
-@kernel function vkernel!(@Const(type),@Const(batch),
+@kernel function vkernel!(::Type{T}, @Const(batch),
                           du, @Const(u), s,
-                          @Const(aggbuf), @Const(p), @Const(t))
+                          @Const(aggbuf), @Const(p), @Const(t)) where {T}
     I = @index(Global)
-    apply_vertex!(type, batch, I, du, u, s, aggbuf, p, t)
+    apply_vertex!(T, batch, I, du, u, s, aggbuf, p, t)
     nothing
 end
 
@@ -115,12 +115,12 @@ end
     end
     KernelAbstractions.synchronize(_backend)
 end
-@kernel function ekernel!(@Const(type), @Const(batch),
+@kernel function ekernel!(::Type{T}, @Const(batch),
                           du, @Const(u), s,
                           @Const(srcrange), @Const(dstrange),
-                          @Const(p), @Const(t))
+                          @Const(p), @Const(t)) where {T}
     I = @index(Global)
-    apply_edge_unbuffered!(type, batch, I, du, u, s, srcrange, dstrange, p, t)
+    apply_edge_unbuffered!(T, batch, I, du, u, s, srcrange, dstrange, p, t)
 end
 
 @inline function apply_edge_unbuffered!(::Type{T}, batch, i,
@@ -172,11 +172,11 @@ end
     KernelAbstractions.synchronize(backend)
 end
 
-@kernel function ekernel_buffered!(@Const(type), @Const(batch),
+@kernel function ekernel_buffered!(::Type{T}, @Const(batch),
                                    du, @Const(u), s,
-                                   @Const(gbuf), @Const(p), @Const(t))
+                                   @Const(gbuf), @Const(p), @Const(t)) where {T}
     I = @index(Global)
-    apply_edge_buffered!(type, batch, I, du, u, s, gbuf, p, t)
+    apply_edge_buffered!(T, batch, I, du, u, s, gbuf, p, t)
 end
 
 @inline function apply_edge_buffered!(::Type{T}, batch, i,

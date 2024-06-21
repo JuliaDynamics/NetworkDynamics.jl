@@ -201,7 +201,7 @@ function aggregate!(a::KAAggregator, aggbuf, data)
     nothing
 end
 
-@kernel function agg_kernel!(f::F, aggbuf, data, idxs) where {F}
+@kernel function agg_kernel!(f::F, aggbuf, @Const(data), @Const(idxs)) where {F}
     I = @index(Global)
     @inbounds if I ≤ length(idxs)
         _dst_i = idxs[I]
@@ -213,7 +213,7 @@ end
     end
     nothing
 end
-@kernel function agg_kernel_sym!(f::F, aggbuf, data, idxs) where {F}
+@kernel function agg_kernel_sym!(f::F, aggbuf, @Const(data), @Const(idxs)) where {F}
     I = @index(Global)
     @inbounds if I ≤ length(idxs)
         dst_idx = idxs[I] # might be < 1 for antisymmetric coupling
