@@ -49,7 +49,7 @@ static_range(batch, i) = state_range(batch, i)
         for i in 1:length(batch)
             _type = comptype(batch)
             _batch = essence(batch)
-            apply_vertex!(_type, _batch, i, du, u, s, aggbuf, p, t)
+            @inline apply_vertex!(_type, _batch, i, du, u, s, aggbuf, p, t)
         end
     end
 end
@@ -79,13 +79,17 @@ end
         _s   = _has_static(T)  ? view(s,  static_range(batch, i))    : nothing
         _p   = _indexable(p)   ? view(p,  parameter_range(batch, i)) : p
         _agg = view(aggbuf, aggbuf_range(batch, i))
-        apply_compf(T, compf(batch), _du, _u, _s, _agg, _p, t)
+        @inline apply_compf(T, compf(batch), _du, _u, _s, _agg, _p, t)
     end
     nothing
 end
 
-apply_compf(::Type{<:ODEVertex}, f, du, u, s, agg, p, t) = f(du, u, agg, p, t)
-apply_compf(::Type{<:StaticVertex}, f, du, u, s, agg, p, t) = f(s, agg, p, t)
+@propagate_inbounds function apply_compf(::Type{<:ODEVertex}, f::F, du, u, s, agg, p, t) where {F}
+    f(du, u, agg, p, t)
+end
+@propagate_inbounds function apply_compf(::Type{<:StaticVertex}, f::F, du, u, s, agg, p, t) where {F}
+    f(s, agg, p, t)
+end
 
 ####
 #### Edge Layer Execution unbuffered
@@ -96,7 +100,7 @@ apply_compf(::Type{<:StaticVertex}, f, du, u, s, agg, p, t) = f(s, agg, p, t)
         for i in 1:length(batch)
             _type = comptype(batch)
             _batch = essence(batch)
-            apply_edge_unbuffered!(_type, _batch, i, du, u, s, nw.im.e_src, nw.im.e_dst, p, t)
+            @inline apply_edge_unbuffered!(_type, _batch, i, du, u, s, nw.im.e_src, nw.im.e_dst, p, t)
         end
     end
 end
@@ -129,7 +133,7 @@ end
         eidx = @views batch.indices[i]
         _src = @views u[srcrange[eidx]]
         _dst = @views u[dstrange[eidx]]
-        apply_compf(T, compf(batch), _du, _u, _s, _src, _dst, _p, t)
+        @inline apply_compf(T, compf(batch), _du, _u, _s, _src, _dst, _p, t)
     end
     nothing
 end
@@ -147,7 +151,7 @@ end
         for i in 1:length(batch)
             _type = comptype(batch)
             _batch = essence(batch)
-            apply_edge_buffered!(_type, _batch, i, _du, _u, _s, gbuf, _p, _t)
+            @inline apply_edge_buffered!(_type, _batch, i, _du, _u, _s, gbuf, _p, _t)
         end
     end
 end
@@ -172,7 +176,7 @@ end
                                    du, @Const(u), s,
                                    @Const(gbuf), @Const(p), @Const(t))
     I = @index(Global)
-    apply_edge_buffered!(type, batch, I, du, u, s, gbuf, p, t)
+    @inline apply_edge_buffered!(type, batch, I, du, u, s, gbuf, p, t)
 end
 
 @inline function apply_edge_buffered!(::Type{T}, batch, i,
@@ -185,13 +189,17 @@ end
         bufr = @views gbuf_range(batch, i)
         _src = @views gbuf[bufr, 1]
         _dst = @views gbuf[bufr, 2]
-        apply_compf(T, compf(batch), _du, _u, _s, _src, _dst, _p, t)
+        @inline apply_compf(T, compf(batch), _du, _u, _s, _src, _dst, _p, t)
     end
     nothing
 end
 
-apply_compf(::Type{<:ODEEdge}, f, du, u, s, src, dst, p, t) = f(du, u, src, dst, p, t)
-apply_compf(::Type{<:StaticEdge}, f, du, u, s, src, dst, p, t) = f(s, src, dst, p, t)
+@propagate_inbounds function apply_compf(::Type{<:ODEEdge}, f::F, du, u, s, src, dst, p, t) where {F}
+    f(du, u, src, dst, p, t)
+end
+@propagate_inbounds function apply_compf(::Type{<:StaticEdge}, f::F, du, u, s, src, dst, p, t) where {F}
+    f(s, src, dst, p, t)
+end
 
 _has_dynamic(T) = _has_dynamic(statetype(T))
 _has_static(T) = _has_static(statetype(T))
