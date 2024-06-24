@@ -14,7 +14,14 @@ using Polyester: Polyester
 using Mixers: Mixers
 using LinearAlgebra: LinearAlgebra, UniformScaling
 using DocStringExtensions
-using StyledStrings: StyledStrings, @styled_str
+using StyledStrings: StyledStrings, @styled_str, AnnotatedString
+
+@static if VERSION >= v"1.11-beta"
+    using Base: AnnotatedIOBuffer
+else
+    using StyledStrings: AnnotatedIOBuffer
+end
+
 using Adapt: Adapt, adapt
 
 import SymbolicIndexingInterface as SII

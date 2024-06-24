@@ -67,7 +67,7 @@ function Base.show(io::IO, ::MIME"text/plain", c::VertexFunction)
 end
 
 function print_states_params(io, c::ComponentFunction, styling)
-    info = Base.AnnotatedString{String}[]
+    info = AnnotatedString{String}[]
     num, word = maybe_plural(dim(c), "state")
     push!(info, styled"$num &$word: &&$(stylesymbolarray(c.sym, c.def, styling))")
 
@@ -127,7 +127,7 @@ function Base.show(io::IO, mime::MIME"text/plain", s::NWState; dim=nothing)
     show(ioc, mime, s.nw)
 
     strvec = map(SII.variable_symbols(s.nw), eachindex(s.uflat)) do sym, i
-        buf =  Base.AnnotatedIOBuffer()
+        buf = AnnotatedIOBuffer()
         print(buf, "&")
         show(buf, mime, sym)
         print(buf, " &&=> ")
@@ -136,7 +136,7 @@ function Base.show(io::IO, mime::MIME"text/plain", s::NWState; dim=nothing)
         else
             print(buf, "#undef")
         end
-        str = read(seekstart(buf), Base.AnnotatedString)
+        str = read(seekstart(buf), AnnotatedString)
         if !isnothing(dim) && dim(sym)
             str = styled"{NetworkDynamics_inactive:$str}"
         end
@@ -144,12 +144,12 @@ function Base.show(io::IO, mime::MIME"text/plain", s::NWState; dim=nothing)
     end
     print_treelike(io, align_strings(strvec); prefix="  ", rowmax)
 
-    buf = IOContext(Base.AnnotatedIOBuffer(), :compact=>true, :limit=>true)
+    buf = IOContext(AnnotatedIOBuffer(), :compact=>true, :limit=>true)
     print(buf, "\n p = ")
     show(buf, mime, s.p)
     print(buf, "\n t = ")
     show(buf, mime, s.t)
-    str = read(seekstart(buf.io), Base.AnnotatedString)
+    str = read(seekstart(buf.io), AnnotatedString)
     if !isnothing(dim)
         print(io, styled"{NetworkDynamics_inactive:$str}")
     else
@@ -176,7 +176,7 @@ function Base.show(io::IO, mime::MIME"text/plain", p::NWParameter; dim=nothing)
         show(ioc, mime, p.nw)
 
         strvec = map(SII.parameter_symbols(p.nw), eachindex(p.pflat)) do sym, i
-            buf =  Base.AnnotatedIOBuffer()
+            buf = AnnotatedIOBuffer()
             print(buf, "&")
             show(buf, mime, sym)
             print(buf, " &&=> ")
@@ -185,7 +185,7 @@ function Base.show(io::IO, mime::MIME"text/plain", p::NWParameter; dim=nothing)
             else
                 print(buf, "#undef")
             end
-            str = read(seekstart(buf), Base.AnnotatedString)
+            str = read(seekstart(buf), AnnotatedString)
             if !isnothing(dim) && dim(sym)
                 str = styled"{NetworkDynamics_inactive:$str}"
             end
