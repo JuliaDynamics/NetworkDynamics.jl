@@ -233,7 +233,13 @@ function _print_tree_element(io, treesym, sublinesym, s, prefix, infix)
     end
 end
 
-function align_strings(vecofstr::AbstractVector{<:AbstractString}; padding=:alternating)
+function align_strings(_vecofstr::AbstractVector{<:AbstractString}; padding=:alternating)
+    # FIXME: workaround for github.com/JuliaLang/StyledStrings.jl/issues/64
+    @static if VERSION < v"1.11"
+        vecofstr = String.(_vecofstr)
+    else
+        vecofstr = _vecofstr
+    end
     splitted = Vector{AbstractString}[]
     sizehint!(splitted, length(vecofstr))
     i = 1
