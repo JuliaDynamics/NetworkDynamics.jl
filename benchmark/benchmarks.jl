@@ -51,7 +51,8 @@ edges = Dict("static_edge" => diffusion_edge(),
 Ns =  [300, 1000, 3000]  #, 100_000, 1_000_000]
 
 @info "Benchmark diffusion network"
-progress = Progress(length(keys(edges)) * length(Ns) * length(executions) * length(aggregations))
+progress = Progress(length(keys(edges)) * length(Ns) * length(executions) * length(aggregations),
+                    enabled=!haskey(ENV,"GITHUB_ACTIONS"))
 for k in keys(edges)
     edge = edges[k]
 
@@ -97,7 +98,8 @@ finish!(progress)
 Ns = [100, 1_000]#, 10_000, 100_000]#, 1_000_000]
 
 @info "Benchmark kuramoto"
-progress = Progress(2 * length(Ns) * length(executions) * length(aggregations))
+progress = Progress(2 * length(Ns) * length(executions) * length(aggregations),
+                    enabled=!haskey(ENV,"GITHUB_ACTIONS"))
 for f in [homogeneous, heterogeneous]
     name = string(f)
     for N in Ns

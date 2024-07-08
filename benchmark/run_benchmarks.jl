@@ -204,9 +204,10 @@ if !isnothing(baseline)
     failed = res.anynonpass
 
     if !args[Symbol("no-plot")]
-        @info "Save plot..."
+        figpath = joinpath(original_path, args[:prefix] * "comparison.pdf")
+        @info "Save plot to $figpath"
         fig = plot_over_N(target, baseline)
-        save(joinpath(original_path, args[:prefix] * "comparison.pdf"), fig)
+        save(figpath, fig)
     end
 
     if args[Symbol("export-txt")]

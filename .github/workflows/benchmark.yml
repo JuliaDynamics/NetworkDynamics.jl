@@ -36,7 +36,7 @@ jobs:
               id: artifact-upload-step
               with:
                 name: comparison.pdf
-                path: comparison.pdf
+                path: benchmark/comparison.pdf
             - name: Link to graphic
               run: |
                 echo '${{ steps.artifact-upload-step.outputs.artifact-url }}' >> body.md
