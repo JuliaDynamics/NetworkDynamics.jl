@@ -48,7 +48,7 @@ try aggregations["thrd"] = ThreadedAggregator(+) catch end
 vertex = diffusion_vertex()
 edges = Dict("static_edge" => diffusion_edge(),
              "ode_edge" => diffusion_dedge())
-Ns =  [300, 1000, 3000, 10000]  #, 100_000, 1_000_000]
+Ns =  [100, 300, 1000, 3000]#, 10000]  #, 100_000, 1_000_000]
 
 @info "Benchmark diffusion network"
 progress = Progress(length(keys(edges)) * length(Ns) * length(executions) * length(aggregations),
