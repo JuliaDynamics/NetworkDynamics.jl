@@ -26,20 +26,20 @@ end
 bd = BenchmarkDict()
 
 executions = Dict()
-# try executions["seq_buf"] = SequentialExecution{true}() catch end
-# try executions["ka_buf"] = KAExecution{true}() catch end
-# try executions["poly_buf"] = PolyesterExecution{true}() catch end
-# try executions["threaded_buf"] = ThreadedExecution{true}() catch end
+try executions["seq_buf"] = SequentialExecution{true}() catch end
+try executions["ka_buf"] = KAExecution{true}() catch end
+try executions["poly_buf"] = PolyesterExecution{true}() catch end
+try executions["threaded_buf"] = ThreadedExecution{true}() catch end
 try executions["seq"] = SequentialExecution{false}() catch end
-# try executions["ka"] = KAExecution{false}() catch end
-# try executions["poly"] = PolyesterExecution{false}() catch end
+try executions["ka"] = KAExecution{false}() catch end
+try executions["poly"] = PolyesterExecution{false}() catch end
 try executions["threaded"] = ThreadedExecution{false}() catch end
 
 aggregations = Dict()
-# try aggregations["nnlib"] = NNlibScatter(+) catch end
-# try aggregations["KA"] = KAAggregator(+) catch end
+try aggregations["nnlib"] = NNlibScatter(+) catch end
+try aggregations["KA"] = KAAggregator(+) catch end
 try aggregations["seq"] = SequentialAggregator(+) catch end
-# try aggregations["poly"] = PolyesterAggregator(+) catch end
+try aggregations["poly"] = PolyesterAggregator(+) catch end
 try aggregations["thrd"] = ThreadedAggregator(+) catch end
 
 ####
@@ -48,7 +48,7 @@ try aggregations["thrd"] = ThreadedAggregator(+) catch end
 vertex = diffusion_vertex()
 edges = Dict("static_edge" => diffusion_edge(),
              "ode_edge" => diffusion_dedge())
-Ns =  [300, 1000, 3000]  #, 100_000, 1_000_000]
+Ns =  [300, 1000, 3000, 10000]  #, 100_000, 1_000_000]
 
 @info "Benchmark diffusion network"
 progress = Progress(length(keys(edges)) * length(Ns) * length(executions) * length(aggregations),
@@ -95,7 +95,7 @@ finish!(progress)
 ####
 #### kuramoto benchmarks on a sparse graph
 ####
-Ns = [100, 1_000]#, 10_000, 100_000]#, 1_000_000]
+Ns = [100, 1_000, 10_000, 100_000]#, 1_000_000]
 
 @info "Benchmark kuramoto"
 progress = Progress(2 * length(Ns) * length(executions) * length(aggregations),
