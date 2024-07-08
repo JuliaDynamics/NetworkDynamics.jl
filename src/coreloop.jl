@@ -1,8 +1,8 @@
-function (nw::Network)(du, u::T, p, t) where {T}
+function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t) where {A,B,C,D,E,dT,T}
     if !(eachindex(du) == eachindex(u) == 1:nw.im.lastidx_dynamic)
         throw(ArgumentError("du or u does not have expected size $(nw.im.lastidx_dynamic)"))
     end
-    if nw.im.lastidx_p > 0 && !(eachindex(p) == 1:nw.im.lastidx_p)
+    if nw.im.lastidx_p > 0 && _indexable(p) && !(eachindex(p) == 1:nw.im.lastidx_p)
         throw(ArgumentError("p does not has expecte size $(nw.im.lastidx_p)"))
     end
     ex = executionstyle(nw)
@@ -11,7 +11,7 @@ function (nw::Network)(du, u::T, p, t) where {T}
             fill!(du, zero(eltype(du)))
         end
         @timeit_debug "create _u" begin
-            _u = nw.cachepool[du, nw.im.lastidx_static]
+            _u = nw.cachepool[du, nw.im.lastidx_static]::dT
             _u[1:nw.im.lastidx_dynamic] .= u
         end
 
@@ -27,7 +27,7 @@ function (nw::Network)(du, u::T, p, t) where {T}
             if nw.im.lastidx_aggr == nw.im.lastidx_static
                 error("Aggbuf and _u buf cannot be the same size! This is a known bug.")
             end
-            aggbuf = nw.cachepool[_u, nw.im.lastidx_aggr]
+            aggbuf = nw.cachepool[_u, nw.im.lastidx_aggr]::T
             aggregate!(nw.layer.aggregator, aggbuf, _u)
         end
 
@@ -47,6 +47,28 @@ static_range(batch, i) = state_range(batch, i)
     unrolled_foreach(nw.vertexbatches) do batch
         (du, u, s, p, t) = dupt
         for i in 1:length(batch)
+            _type = comptype(batch)
+            _batch = essence(batch)
+            apply_vertex!(_type, _batch, i, du, u, s, aggbuf, p, t)
+        end
+    end
+end
+
+@inline function process_vertices!(::ThreadedExecution, nw, aggbuf, dupt)
+    unrolled_foreach(nw.vertexbatches) do batch
+        (du, u, s, p, t) = dupt
+        Threads.@threads for i in 1:length(batch)
+            _type = comptype(batch)
+            _batch = essence(batch)
+            apply_vertex!(_type, _batch, i, du, u, s, aggbuf, p, t)
+        end
+    end
+end
+
+@inline function process_vertices!(::PolyesterExecution, nw, aggbuf, dupt)
+    unrolled_foreach(nw.vertexbatches) do batch
+        (du, u, s, p, t) = dupt
+        Polyester.@batch for i in 1:length(batch)
             _type = comptype(batch)
             _batch = essence(batch)
             apply_vertex!(_type, _batch, i, du, u, s, aggbuf, p, t)
@@ -105,6 +127,28 @@ end
     end
 end
 
+@inline function process_layer!(::ThreadedExecution{false}, nw, layer, dupt)
+    unrolled_foreach(layer.edgebatches) do batch
+        (du, u, s, p, t) = dupt
+        Threads.@threads for i in 1:length(batch)
+            _type = comptype(batch)
+            _batch = essence(batch)
+            apply_edge_unbuffered!(_type, _batch, i, du, u, s, nw.im.e_src, nw.im.e_dst, p, t)
+        end
+    end
+end
+
+@inline function process_layer!(::PolyesterExecution{false}, nw, layer, dupt)
+    unrolled_foreach(layer.edgebatches) do batch
+        (du, u, s, p, t) = dupt
+        Polyester.@batch for i in 1:length(batch)
+            _type = comptype(batch)
+            _batch = essence(batch)
+            apply_edge_unbuffered!(_type, _batch, i, du, u, s, nw.im.e_src, nw.im.e_dst, p, t)
+        end
+    end
+end
+
 @inline function process_layer!(::KAExecution{false}, nw, layer, dupt)
     _backend = get_backend(dupt[2])
     unrolled_foreach(layer.edgebatches) do batch
@@ -149,6 +193,36 @@ end
     unrolled_foreach(layer.edgebatches) do batch
         (_du, _u, _s, _p, _t) = dupt
         for i in 1:length(batch)
+            _type = comptype(batch)
+            _batch = essence(batch)
+            apply_edge_buffered!(_type, _batch, i, _du, _u, _s, gbuf, _p, _t)
+        end
+    end
+end
+
+@inline function process_layer!(::ThreadedExecution{true}, nw, layer, dupt)
+    u = dupt[2]
+    gbuf = nw.cachepool[u, size(layer.gather_map)]
+    NNlib.gather!(gbuf, u, layer.gather_map)
+
+    unrolled_foreach(layer.edgebatches) do batch
+        (_du, _u, _s, _p, _t) = dupt
+        Threads.@threads for i in 1:length(batch)
+            _type = comptype(batch)
+            _batch = essence(batch)
+            apply_edge_buffered!(_type, _batch, i, _du, _u, _s, gbuf, _p, _t)
+        end
+    end
+end
+
+@inline function process_layer!(::PolyesterExecution{true}, nw, layer, dupt)
+    u = dupt[2]
+    gbuf = nw.cachepool[u, size(layer.gather_map)]
+    NNlib.gather!(gbuf, u, layer.gather_map)
+
+    unrolled_foreach(layer.edgebatches) do batch
+        (_du, _u, _s, _p, _t) = dupt
+        Polyester.@batch for i in 1:length(batch)
             _type = comptype(batch)
             _batch = essence(batch)
             apply_edge_buffered!(_type, _batch, i, _du, _u, _s, gbuf, _p, _t)

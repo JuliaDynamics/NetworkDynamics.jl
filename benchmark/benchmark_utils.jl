@@ -2,6 +2,7 @@ using OrderedCollections
 using AbstractTrees
 using Chairmarks
 using PrettyTables
+using NetworkDynamics
 using Test
 
 struct BenchmarkDict{D}
@@ -213,73 +214,71 @@ function compare(target, baseline; alltarget=false)
     bd
 end
 
-function plot_over_N(target, baseline)
-    exs = ["seq_buf", "ka_buf"]
-    aggrs = #=["nnlib",=#["KA","seq","poly"]
+function plot_over_N(target, baseline=nothing)
+    # exs = ["seq_buf", "ka_buf, poly_buf, threaded_buf", "seq", "ka", "poly", "threaded"]
+    # exs = ["seq_buf", "poly_buf", "threaded_buf", "ka_buf"]
+    # exs = ["seq", "seq_buf"]
+    # exs = ["ka", "ka_buf"]
+    # exs = ["poly", "poly_buf"]
+    # exs = ["threaded", "threaded_buf"]
+    # exs = ["seq"]
+    # aggrs = ["nnlib","KA","seq","poly","thrd"]
+    # aggrs = ["seq"]
 
-    comp = compare(target, baseline; alltarget=true)
+    if baseline != nothing
+        comp = compare(target, baseline; alltarget=true)
+    else
+        comp = target
+    end
 
-    fig = Makie.Figure(size=(2000,1000))
-    ax = Makie.Axis(fig[1,1]; xscale=log10, yscale=log10, ylabel="coreloop time", title="Diffusion - static_edge")
+    defex = "seq"
 
-    for ex in exs
-        for aggr in aggrs
-            dat = comp["diffusion", "static_edge", ex, aggr]
-            N = collect(keys(dat))
-            ttime = getproperty.(gettarget.(values(dat)), :time)
-            sc = Makie.scatterlines!(ax, N, ttime, label="$ex $aggr")
-            if all(hasbaseline.(values(dat)))
-                btime = getproperty.(getbaseline.(values(dat)), :time)
+    fig = Makie.Figure(size=(2000,2000))
+
+    bmkeys = [
+        ("diffusion", "static_edge"),
+        ("diffusion", "ode_edge"),
+        ("kuramoto", "homogeneous"),
+        ("kuramoto", "heterogeneous"),
+    ]
+
+    for (row, key) in pairs(bmkeys)
+        dat = comp[key...]
+
+        allex = sort(collect(filter(!isequal("assemble"), keys(dat))))
+        defex = "seq" ∈ allex ? "seq" : allex[1]
+        allagg = sort(collect(keys(dat["seq"])))
+        defagg = "seq" ∈ allagg ? "seq" : allagg[1]
+
+        ax = Makie.Axis(fig[row,1]; xscale=log10, yscale=log10, ylabel="coreloop time", title="$key executions agg=$defagg")
+        for ex in allex
+            datagg = dat[ex, defagg]
+            isempty(datagg) && continue
+            N = collect(keys(datagg))
+            ttime = getproperty.(gettarget.(values(datagg)), :time)
+            sc = Makie.scatterlines!(ax, N, ttime, label="$ex")
+            if all(hasbaseline.(values(datagg)))
+                btime = getproperty.(getbaseline.(values(datagg)), :time)
                 Makie.scatterlines!(ax, N, btime; linestyle=:dash, color=sc.color)
             end
         end
-    end
-    Makie.axislegend(ax; position=:lt)
+        Makie.axislegend(ax; position=:lt)
 
-    ax = Makie.Axis(fig[1,2]; xscale=log10, yscale=log10, ylabel="coreloop time", title="Diffusion - ode_edge")
-    for ex in exs
-        for aggr in aggrs
-            dat = comp["diffusion", "ode_edge", ex, aggr]
-            N = collect(keys(dat))
-            ttime = getproperty.(gettarget.(values(dat)), :time)
-            sc = Makie.scatterlines!(ax, N, ttime, label="$ex $aggr ")
-            if all(hasbaseline.(values(dat)))
-                btime = getproperty.(getbaseline.(values(dat)), :time)
+        ax = Makie.Axis(fig[row,2]; xscale=log10, yscale=log10, ylabel="coreloop time", title="$key aggregations ex=$defex")
+        for agg in allagg
+            datagg = dat[defex, agg]
+            isempty(datagg) && continue
+            N = collect(keys(datagg))
+            ttime = getproperty.(gettarget.(values(datagg)), :time)
+            sc = Makie.scatterlines!(ax, N, ttime, label="$agg")
+            if all(hasbaseline.(values(datagg)))
+                btime = getproperty.(getbaseline.(values(datagg)), :time)
                 Makie.scatterlines!(ax, N, btime; linestyle=:dash, color=sc.color)
             end
         end
+        Makie.axislegend(ax; position=:lt)
     end
-    Makie.axislegend(ax; position=:lt)
 
-    ax = Makie.Axis(fig[2,1]; xscale=log10, yscale=log10, ylabel="coreloop time", title="kuramoto - homogeneous")
-    for ex in exs
-        for aggr in aggrs
-            dat = comp["kuramoto", "homogeneous", ex, aggr]
-            N = collect(keys(dat))
-            ttime = getproperty.(gettarget.(values(dat)), :time)
-            sc = Makie.scatterlines!(ax, N, ttime, label="$ex $aggr ")
-            if all(hasbaseline.(values(dat)))
-                btime = getproperty.(getbaseline.(values(dat)), :time)
-                Makie.scatterlines!(ax, N, btime; linestyle=:dash, color=sc.color)
-            end
-        end
-    end
-    Makie.axislegend(ax; position=:lt)
-
-    ax = Makie.Axis(fig[2,2]; xscale=log10, yscale=log10, ylabel="coreloop time", title="kuramoto - heterogeneous")
-    for ex in exs
-        for aggr in aggrs
-            dat = comp["kuramoto", "heterogeneous", ex, aggr]
-            N = collect(keys(dat))
-            ttime = getproperty.(gettarget.(values(dat)), :time)
-            sc = Makie.scatterlines!(ax, N, ttime, label="$ex $aggr ")
-            if all(hasbaseline.(values(dat)))
-                btime = getproperty.(getbaseline.(values(dat)), :time)
-                Makie.scatterlines!(ax, N, btime; linestyle=:dash, color=sc.color)
-            end
-        end
-    end
-    Makie.axislegend(ax; position=:lt)
     fig
 end
 

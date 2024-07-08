@@ -7,12 +7,15 @@ if pkgversion(NetworkDynamics) < v"0.9.0"
     struct Network end
     struct SequentialExecution{P} end
     struct KAExecution{P} end
+    struct PolyesterExecution{P} end
+    struct ThreadedExecution{P} end
     struct NNlibScatter; f; end
     struct KAAggregator; f; end
     struct SequentialAggregator; f; end
     struct PolyesterAggregator; f; end
+    struct ThreadedAggregator; f; end
     function Network(g, v, e; execution = SequentialExecution{true}(), aggregator=SequentialAggregator(+))
-        if execution isa KAExecution{true} && aggregator isa KAAggregator
+        if execution isa ThreadedExecution{true} && aggregator isa ThreadedAggregator
             network_dynamics(v, e, g; parallel=true)
         elseif execution isa SequentialExecution && aggregator isa SequentialAggregator
             network_dynamics(v, e, g)
