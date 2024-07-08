@@ -11,7 +11,7 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t) where {A,B,C,D,E,dT,T}
             fill!(du, zero(eltype(du)))
         end
         @timeit_debug "create _u" begin
-            _u = nw.cachepool[du, nw.im.lastidx_static]::dT
+            _u = nw.cachepool[du, nw.im.lastidx_static]
             _u[1:nw.im.lastidx_dynamic] .= u
         end
 
@@ -27,7 +27,7 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t) where {A,B,C,D,E,dT,T}
             if nw.im.lastidx_aggr == nw.im.lastidx_static
                 error("Aggbuf and _u buf cannot be the same size! This is a known bug.")
             end
-            aggbuf = nw.cachepool[_u, nw.im.lastidx_aggr]::T
+            aggbuf = nw.cachepool[_u, nw.im.lastidx_aggr]
             aggregate!(nw.layer.aggregator, aggbuf, _u)
         end
 

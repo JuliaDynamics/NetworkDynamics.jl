@@ -10,14 +10,26 @@ Test utility, which rebuilds the Network with all different execution styles and
 results of the coreloop.
 """
 function test_execution_styles(prob)
-    styles = [KAExecution{true}(), KAExecution{false}(), SequentialExecution{true}(), SequentialExecution{false}()]
+    styles = [KAExecution{true}(),
+              KAExecution{false}(),
+              SequentialExecution{true}(),
+              SequentialExecution{false}(),
+              PolyesterExecution{true}(),
+              PolyesterExecution{false}(),
+              ThreadedExecution{true}(),
+              ThreadedExecution{false}()]
     # styles = [KAExecution{false}(), SequentialExecution{true}()]
     unmatchedstyles = filter(subtypes(NetworkDynamics.ExecutionStyle)) do abstractstyle
         !any(s -> s isa abstractstyle, styles)
     end
     @assert isempty(unmatchedstyles) "Some ExecutionStyle won't be tested: $unmatchedstyles"
 
-    aggregators = [NaiveAggregator, NNlibScatter, KAAggregator, SequentialAggregator, PolyesterAggregator]
+    aggregators = [NaiveAggregator,
+                   NNlibScatter,
+                   KAAggregator,
+                   SequentialAggregator,
+                   PolyesterAggregator,
+                   ThreadedAggregator]
     unmatchedaggregators = filter(subtypes(NetworkDynamics.Aggregator)) do abstractaggregator
         !any(s -> s <: abstractaggregator, aggregators)
     end
@@ -42,6 +54,11 @@ function test_execution_styles(prob)
                 try
                     _nw(_du, u, p, t)
                 catch e
+                    # XXX: fix for https://github.com/JuliaLang/julia/issues/55075
+                    if e isa MethodError && e.f == Base.elsize
+                        @test_broken false
+                        continue
+                    end
                     println("Error in $execution with $aggregator: $e")
                     @test false
                     continue

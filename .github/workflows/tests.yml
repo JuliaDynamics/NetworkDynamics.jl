@@ -18,6 +18,7 @@ jobs:
         version:
           # - '1.6' TODO: replace with new LTS (1.10 probably)
           - '1'
+          - 'pre'
         os:
           - ubuntu-latest
           - macos-latest

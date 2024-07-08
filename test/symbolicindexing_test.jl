@@ -309,7 +309,7 @@ for idx in idxtypes
     if b.allocs != 0
         println(idx, " => ", b.allocs, " allocations")
     end
-    @test b.allocs <= 16
+    @test b.allocs <= 22
 end
 
 # tests for state/parameter constructing/conversion

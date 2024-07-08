@@ -255,7 +255,9 @@ function _is_parameter(nw::Network,
     return subsym_has_idx(sni.subidx, psym(cf))
 end
 
-# SII.is_timeseries_parameter(nw::Network, sym) = false
+# workaround for https://github.com/SciML/SymbolicIndexingInterface.jl/issues/85
+SII.is_timeseries_parameter(nw::Network, sym) = false
+SII.get_all_timeseries_indexes(nw::Network, sym) = Set([SII.ContinuousTimeseries()])
 
 function SII.parameter_index(nw::Network, sni)
     if _hascolon(sni)

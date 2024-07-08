@@ -40,7 +40,7 @@ using InteractiveUtils
         aggbuf = rand(nw.im.lastidx_aggr);
         b = @b aggregate!($nw.layer.aggregator, $aggbuf, $states)
         @info "Execute $accT" b
-        if accT != KAAggregator
+        if accT ∉ [KAAggregator, ThreadedAggregator]
             @test b.allocs==0
         end
         push!(results, aggbuf)
