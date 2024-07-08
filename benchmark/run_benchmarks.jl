@@ -59,7 +59,7 @@ s = ArgParseSettings()
     "--no-plot"
         help = "Don't copy plot to the working directory."
         action = :store_true
-    "--export-md"
+    "--export-txt"
         help = "Export Comparison table as markdown file.q"
         action = :store_true
 end
@@ -173,6 +173,13 @@ baseline = if args[:baseline] ∉ ["nothing", "none"]
 else
     nothing
 end
+#=
+original_path = pwd()
+file = sort(filter(contains("target.data"), readdir(original_path)))[end]
+target = deserialize(joinpath(original_path, file))
+file = sort(filter(contains("baseline.data"), readdir(original_path)))[end]
+baseline = deserialize(joinpath(original_path, file))
+=#
 
 if !isnothing(baseline)
     println(styled"{bright_red:Baseline}")
@@ -200,13 +207,13 @@ if !isnothing(baseline)
         @info "Save plot..."
         fig = plot_over_N(target, baseline)
         save(joinpath(original_path, args[:prefix] * "comparison.pdf"), fig)
-
     end
-    if args[Symbol("export-md")]
-        path = joinpath(original_path, args[:prefix] * "comparison.md")
-        @info "Save markdown table to $path"
+
+    if args[Symbol("export-txt")]
+        path = joinpath(original_path, args[:prefix] * "comparison.txt")
+        @info "Save table to $path"
         open(path, "w") do io
-            pretty_table(io, comp; backend=Val(:markdown))
+            pretty_table(io, comp; backend=Val(:text))
         end
     end
 else

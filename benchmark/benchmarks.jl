@@ -26,20 +26,20 @@ end
 bd = BenchmarkDict()
 
 executions = Dict()
-try executions["seq_buf"] = SequentialExecution{true}() catch end
-try executions["ka_buf"] = KAExecution{true}() catch end
-try executions["poly_buf"] = PolyesterExecution{true}() catch end
-try executions["threaded_buf"] = ThreadedExecution{true}() catch end
-# try executions["seq"] = SequentialExecution{false}() catch end
+# try executions["seq_buf"] = SequentialExecution{true}() catch end
+# try executions["ka_buf"] = KAExecution{true}() catch end
+# try executions["poly_buf"] = PolyesterExecution{true}() catch end
+# try executions["threaded_buf"] = ThreadedExecution{true}() catch end
+try executions["seq"] = SequentialExecution{false}() catch end
 # try executions["ka"] = KAExecution{false}() catch end
 # try executions["poly"] = PolyesterExecution{false}() catch end
-# try executions["threaded"] = ThreadedExecution{false}() catch end
+try executions["threaded"] = ThreadedExecution{false}() catch end
 
 aggregations = Dict()
 # try aggregations["nnlib"] = NNlibScatter(+) catch end
-try aggregations["KA"] = KAAggregator(+) catch end
+# try aggregations["KA"] = KAAggregator(+) catch end
 try aggregations["seq"] = SequentialAggregator(+) catch end
-try aggregations["poly"] = PolyesterAggregator(+) catch end
+# try aggregations["poly"] = PolyesterAggregator(+) catch end
 try aggregations["thrd"] = ThreadedAggregator(+) catch end
 
 ####

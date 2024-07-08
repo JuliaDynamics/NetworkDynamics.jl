@@ -4,6 +4,7 @@ using Chairmarks
 using PrettyTables
 using NetworkDynamics
 using Test
+using Printf
 
 struct BenchmarkDict{D}
     d::D
@@ -159,7 +160,19 @@ function PrettyTables.pretty_table(io::IO, bd::BenchmarkDict; kwargs...)
             hl_good = Highlighter(crayon"green bold") do data, i, j
                 (j ∈ length(keycols) .+ [3,6]) && data[i, j] isa Number && (data[i, j] < 0)
             end
-            formatters = ft_printf("%+5.1f %%", length(keycols) .+ [3,6])
+            formatters = (v, _, col) -> begin
+                if col in length(keycols) .+ [3,6]
+                    if v < -5
+                        @sprintf "%+5.1f %% ✅" v
+                    elseif v < 5
+                        @sprintf "%+5.1f %% ➖" v
+                    else
+                        @sprintf "%+5.1f %% ❌" v
+                    end
+                else
+                    v
+                end
+            end
             kwargs = (; kwargs..., highlighters=(hl_bad, hl_good), formatters)
         end
 
@@ -231,8 +244,6 @@ function plot_over_N(target, baseline=nothing)
         comp = target
     end
 
-    defex = "seq"
-
     fig = Makie.Figure(size=(2000,2000))
 
     bmkeys = [
@@ -247,7 +258,7 @@ function plot_over_N(target, baseline=nothing)
 
         allex = sort(collect(filter(!isequal("assemble"), keys(dat))))
         defex = "seq" ∈ allex ? "seq" : allex[1]
-        allagg = sort(collect(keys(dat["seq"])))
+        allagg = sort(collect(keys(dat[defex])))
         defagg = "seq" ∈ allagg ? "seq" : allagg[1]
 
         ax = Makie.Axis(fig[row,1]; xscale=log10, yscale=log10, ylabel="coreloop time", title="$key executions agg=$defagg")
