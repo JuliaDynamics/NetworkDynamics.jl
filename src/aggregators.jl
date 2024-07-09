@@ -201,7 +201,7 @@ function aggregate!(a::KAAggregator, aggbuf, data)
     nothing
 end
 
-@kernel function agg_kernel!(f::F, aggbuf, data, idxs) where {F}
+@kernel function agg_kernel!(f::F, aggbuf, @Const(data), @Const(idxs)) where {F}
     I = @index(Global)
     @inbounds if I ≤ length(idxs)
         _dst_i = idxs[I]
@@ -213,7 +213,7 @@ end
     end
     nothing
 end
-@kernel function agg_kernel_sym!(f::F, aggbuf, data, idxs) where {F}
+@kernel function agg_kernel_sym!(f::F, aggbuf, @Const(data), @Const(idxs)) where {F}
     I = @index(Global)
     @inbounds if I ≤ length(idxs)
         dst_idx = idxs[I] # might be < 1 for antisymmetric coupling
@@ -282,6 +282,46 @@ function aggregate!(a::PolyesterAggregator, aggbuf, data)
 
     let _data=view(data, a.m.symrange), idxs=a.m.symmap, f=a.f
         Polyester.@batch for I in 1:length(idxs)
+            @inbounds begin
+                dst_idx = idxs[I] # might be < 1 for antisymmetric coupling
+                _dst_i = abs(idxs[I])
+                if _dst_i != 0
+                    _dat = sign(dst_idx) * _data[I]
+                    ref = Atomix.IndexableRef(aggbuf, (_dst_i,))
+                    Atomix.modify!(ref, f, _dat)
+                end
+            end
+        end
+    end
+
+    nothing
+end
+
+struct ThreadedAggregator{F} <: Aggregator
+    f::F
+    m::AggregationMap{Vector{Int}}
+end
+ThreadedAggregator(f) = (im, batches) -> ThreadedAggregator(im, batches, f)
+ThreadedAggregator(im, batches, f) = ThreadedAggregator(f, AggregationMap(im, batches))
+
+function aggregate!(a::ThreadedAggregator, aggbuf, data)
+    fill!(aggbuf, zero(eltype(aggbuf)))
+
+    let _data=view(data, a.m.range), idxs=a.m.map, f=a.f
+        Threads.@threads for I in 1:length(idxs)
+            @inbounds begin
+                _dst_i = idxs[I]
+                if _dst_i != 0
+                    _dat = _data[I]
+                    ref = Atomix.IndexableRef(aggbuf, (_dst_i,))
+                    Atomix.modify!(ref, f, _dat)
+                end
+            end
+        end
+    end
+
+    let _data=view(data, a.m.symrange), idxs=a.m.symmap, f=a.f
+        Threads.@threads for I in 1:length(idxs)
             @inbounds begin
                 dst_idx = idxs[I] # might be < 1 for antisymmetric coupling
                 _dst_i = abs(idxs[I])

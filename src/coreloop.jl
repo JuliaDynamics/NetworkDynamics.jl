@@ -1,8 +1,8 @@
-function (nw::Network)(du, u::T, p, t) where {T}
+function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t) where {A,B,C,D,E,dT,T}
     if !(eachindex(du) == eachindex(u) == 1:nw.im.lastidx_dynamic)
         throw(ArgumentError("du or u does not have expected size $(nw.im.lastidx_dynamic)"))
     end
-    if nw.im.lastidx_p > 0 && !(eachindex(p) == 1:nw.im.lastidx_p)
+    if nw.im.lastidx_p > 0 && _indexable(p) && !(eachindex(p) == 1:nw.im.lastidx_p)
         throw(ArgumentError("p does not has expecte size $(nw.im.lastidx_p)"))
     end
     ex = executionstyle(nw)
@@ -15,6 +15,9 @@ function (nw::Network)(du, u::T, p, t) where {T}
             _u[1:nw.im.lastidx_dynamic] .= u
         end
 
+        # We thought about splitting u and s instead of stacking
+        # but this leads to problems with unbuffered execution (additional lookup necessary)
+        # and possible gathering for buffered execution
         dupt = (du, _u, p, t)
 
         # NOTE: first all static vertices, than all edges (regarless) then dyn vertices
@@ -35,7 +38,6 @@ function (nw::Network)(du, u::T, p, t) where {T}
     return nothing
 end
 
-
 ####
 #### Vertex Execution
 ####
@@ -43,6 +45,28 @@ end
     unrolled_foreach(nw.vertexbatches) do batch
         (du, u, p, t) = dupt
         for i in 1:length(batch)
+            _type = comptype(batch)
+            _batch = essence(batch)
+            apply_vertex!(_type, _batch, i, du, u, aggbuf, p, t)
+        end
+    end
+end
+
+@inline function process_vertices!(::ThreadedExecution, nw, aggbuf, dupt)
+    unrolled_foreach(nw.vertexbatches) do batch
+        (du, u, p, t) = dupt
+        Threads.@threads for i in 1:length(batch)
+            _type = comptype(batch)
+            _batch = essence(batch)
+            apply_vertex!(_type, _batch, i, du, u, aggbuf, p, t)
+        end
+    end
+end
+
+@inline function process_vertices!(::PolyesterExecution, nw, aggbuf, dupt)
+    unrolled_foreach(nw.vertexbatches) do batch
+        (du, u, p, t) = dupt
+        Polyester.@batch for i in 1:length(batch)
             _type = comptype(batch)
             _batch = essence(batch)
             apply_vertex!(_type, _batch, i, du, u, aggbuf, p, t)
@@ -60,25 +84,39 @@ end
     end
     KernelAbstractions.synchronize(_backend)
 end
-@kernel function vkernel!(@Const(type),@Const(batch),
+@kernel function vkernel!(::Type{T}, @Const(batch),
                           du, @Const(u),
-                          @Const(aggbuf), @Const(p), @Const(t))
+                          @Const(aggbuf), @Const(p), @Const(t)) where {T<:ODEVertex}
     I = @index(Global)
-    @inline apply_vertex!(type, batch, I, du, u, aggbuf, p, t)
+    apply_vertex!(T, batch, I, du, u, aggbuf, p, t)
+    nothing
+end
+@kernel function vkernel!(::Type{T}, @Const(batch),
+                          @Const(du), u,
+                          @Const(aggbuf), @Const(p), @Const(t)) where {T<:StaticVertex}
+    I = @index(Global)
+    apply_vertex!(T, batch, I, du, u, aggbuf, p, t)
     nothing
 end
 
-@inline function apply_vertex!(::Type{<:ODEVertex}, batch, i, du, u, aggbuf, p, t)
+@inline function apply_vertex!(::Type{T}, batch, i, du, u, aggbuf, p, t) where {T}
     @inbounds begin
-        _du  = @views du[state_range(batch, i)]
-        _u   = @views u[state_range(batch, i)]
-        _p   = _indexable(p) ? view(p, parameter_range(batch, i)) : p
-        _agg = @views aggbuf[aggbuf_range(batch, i)]
-        compf(batch)(_du, _u, _agg, _p, t)
+        _du  = _has_dynamic(T) ? view(du, state_range(batch, i))   : nothing
+        _u   = _has_dynamic(T) ? view(u,  state_range(batch, i))   : nothing
+        _s   = _has_static(T)  ? view(u,  state_range(batch, i))    : nothing
+        _p   = _indexable(p)   ? view(p,  parameter_range(batch, i)) : p
+        _agg = view(aggbuf, aggbuf_range(batch, i))
+        apply_compf(T, compf(batch), _du, _u, _s, _agg, _p, t)
     end
     nothing
 end
 
+@propagate_inbounds function apply_compf(::Type{<:ODEVertex}, f::F, du, u, s, agg, p, t) where {F}
+    f(du, u, agg, p, t)
+end
+@propagate_inbounds function apply_compf(::Type{<:StaticVertex}, f::F, du, u, s, agg, p, t) where {F}
+    f(s, agg, p, t)
+end
 
 ####
 #### Edge Layer Execution unbuffered
@@ -87,6 +125,28 @@ end
     unrolled_foreach(layer.edgebatches) do batch
         (du, u, p, t) = dupt
         for i in 1:length(batch)
+            _type = comptype(batch)
+            _batch = essence(batch)
+            apply_edge_unbuffered!(_type, _batch, i, du, u, nw.im.e_src, nw.im.e_dst, p, t)
+        end
+    end
+end
+
+@inline function process_layer!(::ThreadedExecution{false}, nw, layer, dupt)
+    unrolled_foreach(layer.edgebatches) do batch
+        (du, u, p, t) = dupt
+        Threads.@threads for i in 1:length(batch)
+            _type = comptype(batch)
+            _batch = essence(batch)
+            apply_edge_unbuffered!(_type, _batch, i, du, u, nw.im.e_src, nw.im.e_dst, p, t)
+        end
+    end
+end
+
+@inline function process_layer!(::PolyesterExecution{false}, nw, layer, dupt)
+    unrolled_foreach(layer.edgebatches) do batch
+        (du, u, p, t) = dupt
+        Polyester.@batch for i in 1:length(batch)
             _type = comptype(batch)
             _batch = essence(batch)
             apply_edge_unbuffered!(_type, _batch, i, du, u, nw.im.e_src, nw.im.e_dst, p, t)
@@ -104,44 +164,32 @@ end
     end
     KernelAbstractions.synchronize(_backend)
 end
-@kernel function ekernel!(@Const(type::Type{<:StaticEdge}), @Const(batch),
-                          @Const(du), u,
-                          @Const(srcrange), @Const(dstrange),
-                          @Const(p), @Const(t))
-    I = @index(Global)
-    @inline apply_edge_unbuffered!(type, batch, I, du, u, srcrange, dstrange, p, t)
-end
-@kernel function ekernel!(@Const(type::Type{<:ODEEdge}), @Const(batch),
+@kernel function ekernel!(::Type{T}, @Const(batch),
                           du, @Const(u),
                           @Const(srcrange), @Const(dstrange),
-                          @Const(p), @Const(t))
+                          @Const(p), @Const(t)) where {T<:ODEEdge}
     I = @index(Global)
-    @inline apply_edge_unbuffered!(type, batch, I, du, u, srcrange, dstrange, p, t)
+    apply_edge_unbuffered!(T, batch, I, du, u, srcrange, dstrange, p, t)
+end
+@kernel function ekernel!(::Type{T}, @Const(batch),
+                          @Const(du), u,
+                          @Const(srcrange), @Const(dstrange),
+                          @Const(p), @Const(t)) where {T<:StaticEdge}
+    I = @index(Global)
+    apply_edge_unbuffered!(T, batch, I, du, u, srcrange, dstrange, p, t)
 end
 
-@inline function apply_edge_unbuffered!(::Type{<:StaticEdge}, batch, i,
-                                        du, u, srcrange, dstrange, p, t)
+@inline function apply_edge_unbuffered!(::Type{T}, batch, i,
+                                        du, u, srcrange, dstrange, p, t) where {T}
     @inbounds begin
-        _u   = @views u[state_range(batch, i)]
-        _p   = _indexable(p) ? view(p, parameter_range(batch, i)) : p
+        _du  = _has_dynamic(T) ? view(du, state_range(batch, i))   : nothing
+        _u   = _has_dynamic(T) ? view(u,  state_range(batch, i))   : nothing
+        _s   = _has_static(T)  ? view(u,  state_range(batch, i))    : nothing
+        _p   = _indexable(p)   ? view(p,  parameter_range(batch, i)) : p
         eidx = @views batch.indices[i]
         _src = @views u[srcrange[eidx]]
         _dst = @views u[dstrange[eidx]]
-        compf(batch)(_u, _src, _dst, _p, t)
-    end
-    nothing
-end
-
-@inline function apply_edge_unbuffered!(::Type{<:ODEEdge}, batch, i,
-                                        du, u, srcrange, dstrange, p, t)
-    @inbounds begin
-        _du  = @views du[state_range(batch, i)]
-        _u   = @views u[state_range(batch, i)]
-        _p   = _indexable(p) ? view(p, parameter_range(batch, i)) : p
-        eidx = @views batch.indices[i]
-        _src = @views u[srcrange[eidx]]
-        _dst = @views u[dstrange[eidx]]
-        compf(batch)(_du, _u, _src, _dst, _p, t)
+        apply_compf(T, compf(batch), _du, _u, _s, _src, _dst, _p, t)
     end
     nothing
 end
@@ -164,6 +212,36 @@ end
     end
 end
 
+@inline function process_layer!(::ThreadedExecution{true}, nw, layer, dupt)
+    u = dupt[2]
+    gbuf = nw.cachepool[u, size(layer.gather_map)]
+    NNlib.gather!(gbuf, u, layer.gather_map)
+
+    unrolled_foreach(layer.edgebatches) do batch
+        (_du, _u, _p, _t) = dupt
+        Threads.@threads for i in 1:length(batch)
+            _type = comptype(batch)
+            _batch = essence(batch)
+            apply_edge_buffered!(_type, _batch, i, _du, _u, gbuf, _p, _t)
+        end
+    end
+end
+
+@inline function process_layer!(::PolyesterExecution{true}, nw, layer, dupt)
+    u = dupt[2]
+    gbuf = nw.cachepool[u, size(layer.gather_map)]
+    NNlib.gather!(gbuf, u, layer.gather_map)
+
+    unrolled_foreach(layer.edgebatches) do batch
+        (_du, _u, _p, _t) = dupt
+        Polyester.@batch for i in 1:length(batch)
+            _type = comptype(batch)
+            _batch = essence(batch)
+            apply_edge_buffered!(_type, _batch, i, _du, _u, gbuf, _p, _t)
+        end
+    end
+end
+
 @inline function process_layer!(::KAExecution{true}, nw, layer, dupt)
     # buffered/gathered
     u = dupt[2]
@@ -179,46 +257,49 @@ end
     end
     KernelAbstractions.synchronize(backend)
 end
-@kernel function ekernel_buffered!(@Const(type::Type{<:StaticEdge}), @Const(batch),
-                                   @Const(du), u,
-                                   @Const(gbuf), @Const(p), @Const(t))
-    I = @index(Global)
-    apply_edge_buffered!(type, batch, I, du, u, gbuf, p, t)
-end
-@kernel function ekernel_buffered!(@Const(type::Type{<:ODEEdge}), @Const(batch),
+
+@kernel function ekernel_buffered!(::Type{T}, @Const(batch),
                                    du, @Const(u),
-                                   @Const(gbuf), @Const(p), @Const(t))
+                                   @Const(gbuf), @Const(p), @Const(t)) where {T<:ODEEdge}
     I = @index(Global)
-    apply_edge_buffered!(type, batch, I, du, u, gbuf, p, t)
+    apply_edge_buffered!(T, batch, I, du, u, gbuf, p, t)
+end
+@kernel function ekernel_buffered!(::Type{T}, @Const(batch),
+                                   @Const(du), u,
+                                   @Const(gbuf), @Const(p), @Const(t)) where {T<:StaticEdge}
+    I = @index(Global)
+    apply_edge_buffered!(T, batch, I, du, u, gbuf, p, t)
 end
 
-@inline function apply_edge_buffered!(::Type{<:StaticEdge}, batch, i,
-                                      du, u, gbuf, p, t)
+@inline function apply_edge_buffered!(::Type{T}, batch, i,
+                                      du, u, gbuf, p, t) where {T}
     @inbounds begin
-        _u   = @views u[state_range(batch, i)]
-        _p   = _indexable(p) ? view(p, parameter_range(batch, i)) : p
+        _du  = _has_dynamic(T) ? view(du, state_range(batch, i))   : nothing
+        _u   = _has_dynamic(T) ? view(u,  state_range(batch, i))   : nothing
+        _s   = _has_static(T)  ? view(u,  state_range(batch, i))    : nothing
+        _p   = _indexable(p)   ? view(p,  parameter_range(batch, i)) : p
         bufr = @views gbuf_range(batch, i)
         _src = @views gbuf[bufr, 1]
         _dst = @views gbuf[bufr, 2]
-        compf(batch)(_u, _src, _dst, _p, t)
+        apply_compf(T, compf(batch), _du, _u, _s, _src, _dst, _p, t)
     end
     nothing
 end
 
-@inline function apply_edge_buffered!(::Type{<:ODEEdge}, batch, i,
-                                      du, u, gbuf, p, t)
-    @inbounds begin
-        _du  = @views du[state_range(batch, i)]
-        _u   = @views u[state_range(batch, i)]
-        _p   = _indexable(p) ? view(p, parameter_range(batch, i)) : p
-        bufr = @views gbuf_range(batch, i)
-        _src = @views gbuf[bufr, 1]
-        _dst = @views gbuf[bufr, 2]
-        compf(batch)(_du, _u, _src, _dst, _p, t)
-    end
-    nothing
+@propagate_inbounds function apply_compf(::Type{<:ODEEdge}, f::F, du, u, s, src, dst, p, t) where {F}
+    f(du, u, src, dst, p, t)
+end
+@propagate_inbounds function apply_compf(::Type{<:StaticEdge}, f::F, du, u, s, src, dst, p, t) where {F}
+    f(s, src, dst, p, t)
 end
 
+_has_dynamic(T) = _has_dynamic(statetype(T))
+_has_static(T) = _has_static(statetype(T))
+_has_dynamic(::Dynamic) = true
+_has_dynamic(::Static) = false
+_has_static(::Dynamic) = false
+_has_static(::Static) = true
+# check if indexing into p is necessary
 _indexable(::Nothing) = false
 _indexable(::SciMLBase.NullParameters) = false
 _indexable(::AbstractVector) = true

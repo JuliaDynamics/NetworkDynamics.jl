@@ -3,7 +3,7 @@
 *.jl.mem
 deps/deps.jl
 .idea
-Manifest.toml
+Manifest*.toml
 scratch.jl
 docs/build
 bugs

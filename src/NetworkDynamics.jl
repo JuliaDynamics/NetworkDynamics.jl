@@ -1,10 +1,9 @@
 module NetworkDynamics
 using Graphs: Graphs, AbstractGraph, SimpleEdge, edges, vertices, ne, nv
-using Unrolled: unrolled_foreach, @unroll
 using TimerOutputs: @timeit_debug, reset_timer!, print_timer
 
 using ArgCheck: @argcheck
-using PreallocationTools: LazyBufferCache
+using PreallocationTools: PreallocationTools, LazyBufferCache
 using SciMLBase: SciMLBase
 using Base.Threads: @threads
 using NNlib: NNlib
@@ -24,6 +23,9 @@ end
 
 using Adapt: Adapt, adapt
 
+using Base: @propagate_inbounds
+using InteractiveUtils: subtypes
+
 import SymbolicIndexingInterface as SII
 import StaticArrays
 
@@ -34,11 +36,12 @@ export Symmetric, AntiSymmetric, Directed, Fiducial
 export dim, pdim
 include("component_functions.jl")
 
-export Network, SequentialExecution, KAExecution
+export Network
+export SequentialExecution, KAExecution, ThreadedExecution, PolyesterExecution
 include("network_structure.jl")
 
 export NaiveAggregator, NNlibScatter, KAAggregator, SequentialAggregator,
-       PolyesterAggregator
+       PolyesterAggregator, ThreadedAggregator
 include("aggregators.jl")
 include("construction.jl")
 include("coreloop.jl")
