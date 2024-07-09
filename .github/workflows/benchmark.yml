@@ -39,7 +39,7 @@ jobs:
                 path: benchmark/comparison.pdf
             - name: Link to graphic
               run: |
-                echo '${{ steps.artifact-upload-step.outputs.artifact-url }}' >> body.md
+                echo '${{ steps.artifact-upload-step.outputs.artifact-url }}' >> benchmark/body.md
             - uses: int128/hide-comment-action@v1 # hide all previous comments
             - name: Comment on PR
               uses: peter-evans/create-or-update-comment@v3
