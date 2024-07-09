@@ -24,7 +24,7 @@ jobs:
                 JULIA_NUM_THREADS: auto
               working-directory: benchmark
               run: |
-                julia --color=yes ./run_benchmarks.jl -t ${{github.event.pull_request.head.ref}} -b ${{github.event.repository.base.ref}} --no-data-export --export-txt --prefix ""
+                julia --color=yes ./run_benchmarks.jl -t ${{github.event.pull_request.head.ref}} -b ${{github.event.pull_request.base.ref}} --no-data-export --export-txt --prefix ""
                 echo '### Benchmark Results' > body.md
                 echo '' >> body.md
                 echo '```' >> body.md
