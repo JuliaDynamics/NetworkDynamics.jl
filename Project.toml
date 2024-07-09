@@ -24,7 +24,6 @@ SteadyStateDiffEq = "9672c7b4-1e72-59bd-8a11-6ac3964bc41f"
 StyledStrings = "f489334b-da3d-4c2e-b8f0-e476e12c162b"
 SymbolicIndexingInterface = "2efcf032-c050-4f8e-a9bb-153293bab1f5"
 TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
-Unrolled = "9602ed7d-8fef-5bc8-8597-8f21381861e8"
 
 [compat]
 Adapt = "4.0.4"
@@ -46,5 +45,4 @@ SteadyStateDiffEq = "2.2.0"
 StyledStrings = "1"
 SymbolicIndexingInterface = "0.3.22"
 TimerOutputs = "0.5.23"
-Unrolled = "0.1"
 julia = "1.10"

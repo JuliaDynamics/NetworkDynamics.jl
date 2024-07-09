@@ -1,6 +1,5 @@
 module NetworkDynamics
 using Graphs: Graphs, AbstractGraph, SimpleEdge, edges, vertices, ne, nv
-using Unrolled: unrolled_foreach, @unroll
 using TimerOutputs: @timeit_debug, reset_timer!, print_timer
 
 using ArgCheck: @argcheck
