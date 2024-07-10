@@ -95,6 +95,23 @@ finish!(progress)
 ####
 #### kuramoto benchmarks on a sparse graph
 ####
+
+function homogeneous(N)
+    g = watts_strogatz(N, 3, 0.8; rng=StableRNG(1))
+    edge = static_kuramoto_edge()
+    vertex = kuramoto_vertex_2d()
+    (vertex, edge, g)
+end
+
+function heterogeneous(N)
+    rng = StableRNG(1)
+    g = watts_strogatz(N, 3, 0.8; rng=StableRNG(1))
+    edge = static_kuramoto_edge()
+    vertex = [kuramoto_vertex_1d(), kuramoto_vertex_2d()]
+    vertices = vertex[shuffle(rng, vcat([1 for _ in 1:N÷2], [2 for _ in 1:N÷2]))]
+    (vertices, edge, g)
+end
+
 Ns = [100, 1_000, 10_000, 100_000]#, 1_000_000]
 
 @info "Benchmark kuramoto"
