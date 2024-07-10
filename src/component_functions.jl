@@ -159,9 +159,10 @@ isdynamic(x::Type{<:ComponentFunction}) = statetype(x) == Dynamic()
 Returns the dispatch type of the component. Does not include unecessary type parameters.
 """
 compT(::T) where {T<:ComponentFunction} = compT(T)
-compT(::Type{<:ODEVertex}) = ODEVertex
-compT(T::Type{<:StaticEdge}) = StaticEdge{typeof(coupling(T))}
-compT(T::Type{<:ODEEdge}) = ODEEdge{typeof(coupling(T))}
+compT(::Type{<:StaticVertex}) = StaticVertex{nothing,nothing}
+compT(::Type{<:ODEVertex}) = ODEVertex{nothing,nothing,nothing}
+compT(T::Type{<:StaticEdge}) = StaticEdge{typeof(coupling(T)),nothing,nothing}
+compT(T::Type{<:ODEEdge}) = ODEEdge{typeof(coupling(T)),nothing,nothing,nothing}
 
 batchequal(a, b) = false
 function batchequal(a::EdgeFunction, b::EdgeFunction)

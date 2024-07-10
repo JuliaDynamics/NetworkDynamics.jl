@@ -1,41 +1,24 @@
-function Adapt.adapt_structure(to, l::NetworkLayer)
-    # ebatches = (adapt(to, eb) for eb in l.edgebatches)
-    aggr = adapt(to, l.aggregator)
-    gmap = adapt(to, l.gather_map)
-    NetworkLayer(l.g, l.edgebatches, aggr, l.edepth, l.vdepth, gmap)
-end
-
 function Adapt.adapt_structure(to, n::Network)
+    vb = adapt(to, n.vertexbatches)
     layer = adapt(to, n.layer)
-    Network{executionstyle(n),typeof(n.im.g),typeof(layer),typeof(n.vertexbatches)}(n.vertexbatches, layer, n.im, n.cachepool)
+    mm = adapt(to, n.mass_matrix)
+    exT = typeof(executionstyle(n))
+    gT = typeof(n.im.g)
+    Network{exT,gT,typeof(layer),typeof(vb),typeof(mm)}(
+        vb, layer, n.im, n.cachepool, mm)
 end
 
-function Adapt.adapt_structure(to, a::NNlibScatter)
-    dstmaps = [adapt(to, map) for map in a.dstmaps]
-    srcmaps = [adapt(to, map) for map in a.srcmaps]
-    NNlibScatter(a.f, a.batchranges, a.couplings, dstmaps, srcmaps, a.aggrsize)
-end
+Adapt.@adapt_structure NetworkLayer
+Adapt.@adapt_structure KAAggregator
+Adapt.@adapt_structure AggregationMap
 
-function Adapt.adapt_structure(to, a::KAAggregator)
-    KAAggregator(a.f, adapt(to, a.m))
+function Adapt.adapt_structure(to, b::VertexBatch)
+    idxs = adapt(to, b.indices)
+    VertexBatch{comptype(b), typeof(b.compf), typeof(idxs)}(
+        idxs, b.compf, b.statestride, b.pstride, b.aggbufstride)
 end
-function Adapt.adapt_structure(to, m::AggregationMap)
-    AggregationMap(m.range, adapt(to, m.map),
-                   m.symrange, adapt(to, m.symmap))
-end
-
-
-# XXX: get rid of essence() hack in favor for adapt, since Metal is not an important backand for now
-function essence(b::VertexBatch)
-    (;f=compf(b),
-     statestride=b.statestride,
-     pstride=b.pstride,
-     aggbufstride=b.aggbufstride)
-end
-function essence(b::EdgeBatch)
-    (;f=compf(b),
-     statestride=b.statestride,
-     pstride=b.pstride,
-     gbufstride=b.gbufstride,
-     indices=b.indices)
+function Adapt.adapt_structure(to, b::EdgeBatch)
+    idxs = adapt(to, b.indices)
+    EdgeBatch{comptype(b), typeof(b.compf), typeof(idxs)}(
+        idxs, b.compf, b.statestride, b.pstride, b.gbufstride)
 end

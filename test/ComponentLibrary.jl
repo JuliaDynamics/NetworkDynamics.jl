@@ -74,4 +74,9 @@ function kuramoto_second()
               pdim=3, psym=[:M, :D, :Pm], pdef=[1, 0.1, 1])
 end
 
+Base.@propagate_inbounds function kuramoto_vertex!(dθ, θ, esum, (ω,), t)
+    dθ[1] = ω + esum[1]
+end
+kuramoto_first() = ODEVertex(; f=kuramoto_vertex!, sym=[:θ], psym=[:ω])
+
 end #module

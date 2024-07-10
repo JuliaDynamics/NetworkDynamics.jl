@@ -173,3 +173,18 @@ end
     @test v.psym == [:bar]
     @test v.pdef == [1]
 end
+
+@testeset "test compT isbitstype" begin
+    using InteractiveUtils
+    using NetworkDynamics: EdgeFunction, VertexFunction, compT
+
+    for st in subtypes(EdgeFunction)
+        st = st{Symmetric}
+        dispatchT = Type{compT(st)}
+        @test Core.Compiler.isconstType(dispatchT)
+    end
+    for st in subtypes(VertexFunction)
+        dispatchT = Type{compT(st)}
+        @test Core.Compiler.isconstType(dispatchT)
+    end
+end
