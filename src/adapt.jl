@@ -14,11 +14,11 @@ Adapt.@adapt_structure AggregationMap
 
 function Adapt.adapt_structure(to, b::VertexBatch)
     idxs = adapt(to, b.indices)
-    VertexBatch{comptype(b), typeof(b.compf), typeof(idxs)}(
+    VertexBatch{compT(b), typeof(b.compf), typeof(idxs)}(
         idxs, b.compf, b.statestride, b.pstride, b.aggbufstride)
 end
 function Adapt.adapt_structure(to, b::EdgeBatch)
     idxs = adapt(to, b.indices)
-    EdgeBatch{comptype(b), typeof(b.compf), typeof(idxs)}(
+    EdgeBatch{compT(b), typeof(b.compf), typeof(idxs)}(
         idxs, b.compf, b.statestride, b.pstride, b.gbufstride)
 end

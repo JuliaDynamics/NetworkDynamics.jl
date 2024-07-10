@@ -45,7 +45,7 @@ end
     unrolled_foreach(nw.vertexbatches) do batch
         (du, u, p, t) = dupt
         for i in 1:length(batch)
-            _type = comptype(batch)
+            _type = compT(batch)
             apply_vertex!(_type, batch, i, du, u, aggbuf, p, t)
         end
     end
@@ -55,7 +55,7 @@ end
     unrolled_foreach(nw.vertexbatches) do batch
         (du, u, p, t) = dupt
         Threads.@threads for i in 1:length(batch)
-            _type = comptype(batch)
+            _type = compT(batch)
             apply_vertex!(_type, batch, i, du, u, aggbuf, p, t)
         end
     end
@@ -65,7 +65,7 @@ end
     unrolled_foreach(nw.vertexbatches) do batch
         (du, u, p, t) = dupt
         Polyester.@batch for i in 1:length(batch)
-            _type = comptype(batch)
+            _type = compT(batch)
             apply_vertex!(_type, batch, i, du, u, aggbuf, p, t)
         end
     end
@@ -76,7 +76,7 @@ end
     unrolled_foreach(nw.vertexbatches) do batch
         (du, u, p, t) = dupt
         kernel = vkernel!(_backend)
-        kernel(comptype(batch), batch,
+        kernel(compT(batch), batch,
                du, u, aggbuf, p, t; ndrange=length(batch))
     end
     KernelAbstractions.synchronize(_backend)
@@ -122,7 +122,7 @@ end
     unrolled_foreach(layer.edgebatches) do batch
         (du, u, p, t) = dupt
         for i in 1:length(batch)
-            _type = comptype(batch)
+            _type = compT(batch)
             apply_edge_unbuffered!(_type, batch, i, du, u, nw.im.e_src, nw.im.e_dst, p, t)
         end
     end
@@ -132,7 +132,7 @@ end
     unrolled_foreach(layer.edgebatches) do batch
         (du, u, p, t) = dupt
         Threads.@threads for i in 1:length(batch)
-            _type = comptype(batch)
+            _type = compT(batch)
             apply_edge_unbuffered!(_type, batch, i, du, u, nw.im.e_src, nw.im.e_dst, p, t)
         end
     end
@@ -142,7 +142,7 @@ end
     unrolled_foreach(layer.edgebatches) do batch
         (du, u, p, t) = dupt
         Polyester.@batch for i in 1:length(batch)
-            _type = comptype(batch)
+            _type = compT(batch)
             apply_edge_unbuffered!(_type, batch, i, du, u, nw.im.e_src, nw.im.e_dst, p, t)
         end
     end
@@ -153,7 +153,7 @@ end
     unrolled_foreach(layer.edgebatches) do batch
         (du, u, p, t) = dupt
         kernel = ekernel!(_backend)
-        kernel(comptype(batch), batch,
+        kernel(compT(batch), batch,
                du, u, nw.im.e_src, nw.im.e_dst, p, t; ndrange=length(batch))
     end
     KernelAbstractions.synchronize(_backend)
@@ -199,7 +199,7 @@ end
     unrolled_foreach(layer.edgebatches) do batch
         (_du, _u, _p, _t) = dupt
         for i in 1:length(batch)
-            _type = comptype(batch)
+            _type = compT(batch)
             apply_edge_buffered!(_type, batch, i, _du, _u, gbuf, _p, _t)
         end
     end
@@ -213,7 +213,7 @@ end
     unrolled_foreach(layer.edgebatches) do batch
         (_du, _u, _p, _t) = dupt
         Threads.@threads for i in 1:length(batch)
-            _type = comptype(batch)
+            _type = compT(batch)
             apply_edge_buffered!(_type, batch, i, _du, _u, gbuf, _p, _t)
         end
     end
@@ -227,7 +227,7 @@ end
     unrolled_foreach(layer.edgebatches) do batch
         (_du, _u, _p, _t) = dupt
         Polyester.@batch for i in 1:length(batch)
-            _type = comptype(batch)
+            _type = compT(batch)
             apply_edge_buffered!(_type, batch, i, _du, _u, gbuf, _p, _t)
         end
     end
@@ -243,7 +243,7 @@ end
     unrolled_foreach(layer.edgebatches) do batch
         (_du, _u, _p, _t) = dupt
         kernel = ekernel_buffered!(backend)
-        kernel(comptype(batch), batch,
+        kernel(compT(batch), batch,
                _du, _u, gbuf, _p, _t; ndrange=length(batch))
     end
     KernelAbstractions.synchronize(backend)
