@@ -100,7 +100,7 @@ function VertexBatch(im::IndexManager, idxs::Vector{Int}; verbose)
     components = @view im.vertexf[idxs]
 
     try
-        _compT = compT(only(unique(compT, components)))
+        _compT = dispatchT(only(unique(dispatchT, components)))
         _compf = compf(only(unique(compf, components)))
         _statetype = statetype(only(unique(statetype, components)))
         _dim = dim(only(unique(dim, components)))
@@ -125,7 +125,7 @@ function EdgeBatch(im::IndexManager, idxs::Vector{Int}; verbose)
     components = @view im.edgef[idxs]
 
     try
-        _compT = compT(only(unique(compT, components)))
+        _compT = dispatchT(only(unique(dispatchT, components)))
         _compf = compf(only(unique(compf, components)))
         _statetype = statetype(only(unique(statetype, components)))
         _dim = dim(only(unique(dim, components)))

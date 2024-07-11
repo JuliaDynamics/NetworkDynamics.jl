@@ -43,7 +43,7 @@ end
 
 @testset "Vertex batch" begin
     using NetworkDynamics: BatchStride, VertexBatch, parameter_range
-    vb = VertexBatch{ODEVertex, typeof(sum)}([1, 2, 3, 4], # vertices
+    vb = VertexBatch{ODEVertex, typeof(sum), Vector{Int}}([1, 2, 3, 4], # vertices
         sum, # function
         BatchStride(1, 3),
         BatchStride(4, 2),
@@ -174,17 +174,17 @@ end
     @test v.pdef == [1]
 end
 
-@testeset "test compT isbitstype" begin
+@testset "test dispatchT isbitstype" begin
     using InteractiveUtils
-    using NetworkDynamics: EdgeFunction, VertexFunction, compT
+    using NetworkDynamics: EdgeFunction, VertexFunction, dispatchT, Symmetric
 
     for st in subtypes(EdgeFunction)
         st = st{Symmetric}
-        dispatchT = Type{compT(st)}
-        @test Core.Compiler.isconstType(dispatchT)
+        T = Type{dispatchT(st)}
+        @test Core.Compiler.isconstType(T)
     end
     for st in subtypes(VertexFunction)
-        dispatchT = Type{compT(st)}
-        @test Core.Compiler.isconstType(dispatchT)
+        T = Type{dispatchT(st)}
+        @test Core.Compiler.isconstType(T)
     end
 end

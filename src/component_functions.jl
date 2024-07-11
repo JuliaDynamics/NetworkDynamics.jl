@@ -154,15 +154,17 @@ isdynamic(::T) where {T<:ComponentFunction} = isdynamic(T)
 isdynamic(x::Type{<:ComponentFunction}) = statetype(x) == Dynamic()
 
 """
-    comptT(<:ComponentFunction) :: Type{<:ComponentFunction}
+    dispatchT(<:ComponentFunction) :: Type{<:ComponentFunction}
 
-Returns the dispatch type of the component. Does not include unecessary type parameters.
+Returns the type "essence" of the component used for dispatch.
+Fills up type parameters with `nothing` to ensure `Core.compiler.isconstType`
+for GPU compatibility.
 """
-compT(::T) where {T<:ComponentFunction} = compT(T)
-compT(::Type{<:StaticVertex}) = StaticVertex{nothing,nothing}
-compT(::Type{<:ODEVertex}) = ODEVertex{nothing,nothing,nothing}
-compT(T::Type{<:StaticEdge}) = StaticEdge{typeof(coupling(T)),nothing,nothing}
-compT(T::Type{<:ODEEdge}) = ODEEdge{typeof(coupling(T)),nothing,nothing,nothing}
+dispatchT(::T) where {T<:ComponentFunction} = dispatchT(T)
+dispatchT(::Type{<:StaticVertex}) = StaticVertex{nothing,nothing}
+dispatchT(::Type{<:ODEVertex}) = ODEVertex{nothing,nothing,nothing}
+dispatchT(T::Type{<:StaticEdge}) = StaticEdge{typeof(coupling(T)),nothing,nothing}
+dispatchT(T::Type{<:ODEEdge}) = ODEEdge{typeof(coupling(T)),nothing,nothing,nothing}
 
 batchequal(a, b) = false
 function batchequal(a::EdgeFunction, b::EdgeFunction)

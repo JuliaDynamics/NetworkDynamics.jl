@@ -123,7 +123,7 @@ end
 @inline Base.length(cb::ComponentBatch) = Base.length(cb.indices)
 @inline statetype(::ComponentBatch{F}) where {F} = statetype(F)
 @inline coupling(::EdgeBatch{F}) where {F} = coupling(F)
-@inline compT(::ComponentBatch{F}) where {F} = F
+@inline dispatchT(::ComponentBatch{F}) where {F} = F
 @inline compf(b::ComponentBatch) = b.compf
 
 @inline state_range(batch) = _fullrange(batch.statestride, length(batch))
