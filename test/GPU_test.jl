@@ -38,6 +38,7 @@ nw_d(dx_d, x0_d, p_d, NaN)
 
 # mini benchmark
 
+#=
 Ns = Int[1e3, 1e4, 1e5, 1e6, 1e7]
 cput = Float64[]
 gput = Float64[]
@@ -82,3 +83,4 @@ ax = Axis(fig[1,1]; xscale=log10, yscale=log10)
 Makie.scatterlines!(ax, Ns, cput)
 Makie.scatterlines!(ax, Ns, gput)
 Makie.scatterlines!(ax, Ns, gput32)
+=#

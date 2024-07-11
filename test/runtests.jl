@@ -4,6 +4,9 @@ using Pkg
 using NetworkDynamics
 using SciMLBase
 using InteractiveUtils
+using CUDA
+using KernelAbstractions
+using Adapt
 
 """
 Test utility, which rebuilds the Network with all different execution styles and compares the
@@ -70,6 +73,21 @@ function test_execution_styles(prob)
                 @test issame
             end
         end
+
+        if CUDA.functional()
+            _nw = Network(nw; execution=KAExecution{true}(), aggregator=KAAggregator(nw.layer.aggregator.f))
+            to = CUDABackend()
+            _nw_d = adapt(to, _nw)
+            _du_d = adapt(to, zeros(eltype(u), length(u)))
+            u_d = adapt(to, u)
+            p_d = adapt(to, p)
+            _nw_d(_du_d, u_d, p_d, t)
+            issame = isapprox(Vector(_du_d), du; atol=1e-10)
+            if !issame
+                println("CUDA execution lead to different results: extrema(Δ) = $(extrema(_du - du))")
+            end
+            @test issame
+        end
     end
 end
 
@@ -84,6 +102,10 @@ end
     @safetestset "massmatrix test" begin include("massmatrix_test.jl") end
     @safetestset "doctor test" begin include("doctor_test.jl") end
     @safetestset "initialization test" begin include("initialization_test.jl") end
+
+    if CUDA.functional()
+        @safetestset "GPU test" begin include("GPU_test.jl") end
+    end
 end
 
 @testset "Test Doc Examples" begin
