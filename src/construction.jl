@@ -18,7 +18,7 @@ function Network(g::AbstractGraph,
 
         verbose &&
             println("Create dynamic network with $(nv(g)) vertices and $(ne(g)) edges:")
-        @argcheck execution isa ExecutionStyle "Exectuion type $execution not supportet (choose from $(subtypes(ExecutionStyle)))"
+        @argcheck execution isa ExecutionStyle "Execution type $execution not supported (choose from $(subtypes(ExecutionStyle)))"
 
         _maxedepth = isempty(_edgef) ? 0 : mapreduce(depth, min, _edgef)
         if edepth === :auto
@@ -100,7 +100,7 @@ function VertexBatch(im::IndexManager, idxs::Vector{Int}; verbose)
     components = @view im.vertexf[idxs]
 
     try
-        _compT = compT(only(unique(compT, components)))
+        _compT = dispatchT(only(unique(dispatchT, components)))
         _compf = compf(only(unique(compf, components)))
         _statetype = statetype(only(unique(statetype, components)))
         _dim = dim(only(unique(dim, components)))
@@ -111,7 +111,7 @@ function VertexBatch(im::IndexManager, idxs::Vector{Int}; verbose)
         verbose &&
         println(" - VertexBatch: dim=$(_dim), pdim=$(_pdim), length=$(length(idxs))")
 
-        VertexBatch{_compT, typeof(_compf)}(idxs, _compf, statestride, pstride, aggbufstride)
+        VertexBatch{_compT, typeof(_compf), typeof(idxs)}(idxs, _compf, statestride, pstride, aggbufstride)
     catch e
         if e isa ArgumentError && startswith(e.msg, "Collection has multiple elements")
             throw(ArgumentError("Provided vertex functions $idxs use the same function but have different metadata (dim, pdim,type,...)"))
@@ -125,7 +125,7 @@ function EdgeBatch(im::IndexManager, idxs::Vector{Int}; verbose)
     components = @view im.edgef[idxs]
 
     try
-        _compT = compT(only(unique(compT, components)))
+        _compT = dispatchT(only(unique(dispatchT, components)))
         _compf = compf(only(unique(compf, components)))
         _statetype = statetype(only(unique(statetype, components)))
         _dim = dim(only(unique(dim, components)))
@@ -136,7 +136,7 @@ function EdgeBatch(im::IndexManager, idxs::Vector{Int}; verbose)
         verbose &&
         println(" - EdgeBatch: dim=$(_dim), pdim=$(_pdim), length=$(length(idxs))")
 
-        EdgeBatch{_compT, typeof(_compf)}(idxs, _compf, statestride, pstride, gbufstride)
+        EdgeBatch{_compT, typeof(_compf), typeof(idxs)}(idxs, _compf, statestride, pstride, gbufstride)
     catch e
         if e isa ArgumentError && startswith(e.msg, "Collection has multiple elements")
             throw(ArgumentError("Provided edge functions $idxs use the same function but have different metadata (dim, pdim,type,...)"))

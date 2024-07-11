@@ -94,9 +94,9 @@ end
 
 abstract type ComponentBatch{F} end
 
-struct VertexBatch{T<:VertexFunction,F} <: ComponentBatch{T}
+struct VertexBatch{T<:VertexFunction,F,IV<:AbstractVector{<:Int}} <: ComponentBatch{T}
     "vertex indices contained in batch"
-    indices::Vector{Int}
+    indices::IV
     "vertex function"
     compf::F
     "state: dimension and first index"
@@ -107,9 +107,9 @@ struct VertexBatch{T<:VertexFunction,F} <: ComponentBatch{T}
     aggbufstride::BatchStride
 end
 
-struct EdgeBatch{T<:EdgeFunction,F} <: ComponentBatch{T}
+struct EdgeBatch{T<:EdgeFunction,F,IV<:AbstractVector{<:Int}} <: ComponentBatch{T}
     "edge indices (as in edge iterator) contained in batch"
-    indices::Vector{Int}
+    indices::IV
     "edge function"
     compf::F
     "state: dimension and first index"
@@ -123,9 +123,8 @@ end
 @inline Base.length(cb::ComponentBatch) = Base.length(cb.indices)
 @inline statetype(::ComponentBatch{F}) where {F} = statetype(F)
 @inline coupling(::EdgeBatch{F}) where {F} = coupling(F)
-@inline comptype(::ComponentBatch{F}) where {F} = F
+@inline dispatchT(::ComponentBatch{F}) where {F} = F
 @inline compf(b::ComponentBatch) = b.compf
-@inline compf(b::NamedTuple) = b.f
 
 @inline state_range(batch) = _fullrange(batch.statestride, length(batch))
 
