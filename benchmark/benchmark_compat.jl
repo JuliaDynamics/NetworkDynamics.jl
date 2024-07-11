@@ -15,10 +15,10 @@ if pkgversion(NetworkDynamics) < v"0.9.0"
     struct PolyesterAggregator; f; end
     struct ThreadedAggregator; f; end
     function Network(g, v, e; execution = SequentialExecution{true}(), aggregator=SequentialAggregator(+))
-        if execution isa ThreadedExecution{true} && aggregator isa ThreadedAggregator
+        if execution isa ThreadedExecution{true} && aggregator isa SequentialAggregator
             network_dynamics(v, e, g; parallel=true)
-        elseif execution isa SequentialExecution && aggregator isa SequentialAggregator
-            network_dynamics(v, e, g)
+        elseif execution isa SequentialExecution{true} && aggregator isa SequentialAggregator
+            network_dynamics(v, e, g; parallel=false)
         else
             error("execution type not supported")
         end
