@@ -382,10 +382,7 @@ function SII.observed(nw::Network, snis)
 
     let _nw=nw, _flatidxs=flatidxs
         function(u, p, t)
-            du = _nw.cachepool[u]
-            _nw(du, u, p, t)
-            # XXX: split coreloop in static/dynamic parts and don't rely on the same buffer
-            _u = _nw.cachepool[u, _nw.im.lastidx_static]
+            _u = get_ustacked_buf(_nw, u, p, t)
             _u[_flatidxs]
         end
     end

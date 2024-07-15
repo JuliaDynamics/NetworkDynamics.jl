@@ -38,11 +38,23 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t) where {A,B,C,D,E,dT,T}
     return nothing
 end
 
+function get_ustacked_buf(nw, u, p, t)
+    _u = nw.cachepool[u, nw.im.lastidx_static]
+    _u[1:nw.im.lastidx_dynamic] .= u
+    dupt = (nothing, _u, p, t)
+    ex = executionstyle(nw)
+    process_layer!(ex, nw, nw.layer, dupt; filt=isstatic)
+    aggbuf = nw.cachepool[_u, nw.im.lastidx_aggr]
+    aggregate!(nw.layer.aggregator, aggbuf, _u)
+    process_vertices!(ex, nw, aggbuf, dupt; filt=isstatic)
+    _u
+end
+
 ####
 #### Vertex Execution
 ####
-@inline function process_vertices!(::SequentialExecution, nw, aggbuf, dupt)
-    unrolled_foreach(nw.vertexbatches) do batch
+@inline function process_vertices!(::SequentialExecution, nw, aggbuf, dupt; filt=nofilt)
+    unrolled_foreach(filt, nw.vertexbatches) do batch
         (du, u, p, t) = dupt
         for i in 1:length(batch)
             _type = dispatchT(batch)
@@ -51,8 +63,8 @@ end
     end
 end
 
-@inline function process_vertices!(::ThreadedExecution, nw, aggbuf, dupt)
-    unrolled_foreach(nw.vertexbatches) do batch
+@inline function process_vertices!(::ThreadedExecution, nw, aggbuf, dupt; filt=nofilt)
+    unrolled_foreach(filt, nw.vertexbatches) do batch
         (du, u, p, t) = dupt
         Threads.@threads for i in 1:length(batch)
             _type = dispatchT(batch)
@@ -61,8 +73,8 @@ end
     end
 end
 
-@inline function process_vertices!(::PolyesterExecution, nw, aggbuf, dupt)
-    unrolled_foreach(nw.vertexbatches) do batch
+@inline function process_vertices!(::PolyesterExecution, nw, aggbuf, dupt; filt=nofilt)
+    unrolled_foreach(filt, nw.vertexbatches) do batch
         (du, u, p, t) = dupt
         Polyester.@batch for i in 1:length(batch)
             _type = dispatchT(batch)
@@ -71,9 +83,9 @@ end
     end
 end
 
-@inline function process_vertices!(::KAExecution, nw, aggbuf, dupt)
+@inline function process_vertices!(::KAExecution, nw, aggbuf, dupt; filt=nofilt)
     _backend = get_backend(dupt[2])
-    unrolled_foreach(nw.vertexbatches) do batch
+    unrolled_foreach(filt, nw.vertexbatches) do batch
         (du, u, p, t) = dupt
         kernel = vkernel!(_backend)
         kernel(dispatchT(batch), batch,
@@ -118,8 +130,8 @@ end
 ####
 #### Edge Layer Execution unbuffered
 ####
-@inline function process_layer!(::SequentialExecution{false}, nw, layer, dupt)
-    unrolled_foreach(layer.edgebatches) do batch
+@inline function process_layer!(::SequentialExecution{false}, nw, layer, dupt; filt=nofilt)
+    unrolled_foreach(filt, layer.edgebatches) do batch
         (du, u, p, t) = dupt
         for i in 1:length(batch)
             _type = dispatchT(batch)
@@ -128,8 +140,8 @@ end
     end
 end
 
-@inline function process_layer!(::ThreadedExecution{false}, nw, layer, dupt)
-    unrolled_foreach(layer.edgebatches) do batch
+@inline function process_layer!(::ThreadedExecution{false}, nw, layer, dupt; filt=nofilt)
+    unrolled_foreach(filt, layer.edgebatches) do batch
         (du, u, p, t) = dupt
         Threads.@threads for i in 1:length(batch)
             _type = dispatchT(batch)
@@ -138,8 +150,8 @@ end
     end
 end
 
-@inline function process_layer!(::PolyesterExecution{false}, nw, layer, dupt)
-    unrolled_foreach(layer.edgebatches) do batch
+@inline function process_layer!(::PolyesterExecution{false}, nw, layer, dupt; filt=nofilt)
+    unrolled_foreach(filt, layer.edgebatches) do batch
         (du, u, p, t) = dupt
         Polyester.@batch for i in 1:length(batch)
             _type = dispatchT(batch)
@@ -148,9 +160,9 @@ end
     end
 end
 
-@inline function process_layer!(::KAExecution{false}, nw, layer, dupt)
+@inline function process_layer!(::KAExecution{false}, nw, layer, dupt; filt=nofilt)
     _backend = get_backend(dupt[2])
-    unrolled_foreach(layer.edgebatches) do batch
+    unrolled_foreach(filt, layer.edgebatches) do batch
         (du, u, p, t) = dupt
         kernel = ekernel!(_backend)
         kernel(dispatchT(batch), batch,
@@ -191,12 +203,12 @@ end
 ####
 #### Edge Layer Execution buffered
 ####
-@inline function process_layer!(::SequentialExecution{true}, nw, layer, dupt)
+@inline function process_layer!(::SequentialExecution{true}, nw, layer, dupt; filt=nofilt)
     u = dupt[2]
     gbuf = nw.cachepool[u, size(layer.gather_map)]
     NNlib.gather!(gbuf, u, layer.gather_map)
 
-    unrolled_foreach(layer.edgebatches) do batch
+    unrolled_foreach(filt, layer.edgebatches) do batch
         (_du, _u, _p, _t) = dupt
         for i in 1:length(batch)
             _type = dispatchT(batch)
@@ -205,12 +217,12 @@ end
     end
 end
 
-@inline function process_layer!(::ThreadedExecution{true}, nw, layer, dupt)
+@inline function process_layer!(::ThreadedExecution{true}, nw, layer, dupt; filt=nofilt)
     u = dupt[2]
     gbuf = nw.cachepool[u, size(layer.gather_map)]
     NNlib.gather!(gbuf, u, layer.gather_map)
 
-    unrolled_foreach(layer.edgebatches) do batch
+    unrolled_foreach(filt, layer.edgebatches) do batch
         (_du, _u, _p, _t) = dupt
         Threads.@threads for i in 1:length(batch)
             _type = dispatchT(batch)
@@ -219,12 +231,12 @@ end
     end
 end
 
-@inline function process_layer!(::PolyesterExecution{true}, nw, layer, dupt)
+@inline function process_layer!(::PolyesterExecution{true}, nw, layer, dupt; filt=nofilt)
     u = dupt[2]
     gbuf = nw.cachepool[u, size(layer.gather_map)]
     NNlib.gather!(gbuf, u, layer.gather_map)
 
-    unrolled_foreach(layer.edgebatches) do batch
+    unrolled_foreach(filt, layer.edgebatches) do batch
         (_du, _u, _p, _t) = dupt
         Polyester.@batch for i in 1:length(batch)
             _type = dispatchT(batch)
@@ -233,14 +245,14 @@ end
     end
 end
 
-@inline function process_layer!(::KAExecution{true}, nw, layer, dupt)
+@inline function process_layer!(::KAExecution{true}, nw, layer, dupt; filt=nofilt)
     # buffered/gathered
     u = dupt[2]
     gbuf = nw.cachepool[u, size(layer.gather_map)]
     NNlib.gather!(gbuf, u, layer.gather_map)
 
     backend = get_backend(u)
-    unrolled_foreach(layer.edgebatches) do batch
+    unrolled_foreach(filt, layer.edgebatches) do batch
         (_du, _u, _p, _t) = dupt
         kernel = ekernel_buffered!(backend)
         kernel(dispatchT(batch), batch,

@@ -13,9 +13,16 @@ end
 subscript(N) = String(_subscript.(reverse(digits(N))))
 _subscript(i) = Char(0x02080 + i)
 
-@inline function unrolled_foreach(f::F, t::Tuple) where {F}
-    f(first(t))
-    @inline unrolled_foreach(f, Base.tail(t))
+@inline function unrolled_foreach(f::F1, filter::F2, t::Tuple) where {F1,F2}
+    filter(first(t)) && f(first(t))
+    @inline unrolled_foreach(f, filter, Base.tail(t))
 end
-@inline unrolled_foreach(f::F, t::Tuple{}) where {F} = nothing
-@inline unrolled_foreach(f::F, t::AbstractVector) where {F} = @inline foreach(f, t)
+@inline unrolled_foreach(f::F1, filter::F2, t::Tuple{}) where {F1,F2} = nothing
+# Abstract Vector, no unrolling
+@inline function unrolled_foreach(f::F1, filter::F2, t::AbstractVector) where {F1,F2}
+    @inline foreach(f, Iterators.filter(filter, t))
+end
+# no filter
+@inline unrolled_foreach(f, t) = unrolled_foreach(f, nofilt, t)
+
+nofilt(_) = true

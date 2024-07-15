@@ -33,7 +33,7 @@ include("utils.jl")
 
 export ODEVertex, StaticVertex, StaticEdge, ODEEdge
 export Symmetric, AntiSymmetric, Directed, Fiducial
-export dim, pdim
+export dim, pdim, sdim
 include("component_functions.jl")
 
 export Network
