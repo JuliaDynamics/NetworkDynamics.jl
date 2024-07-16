@@ -36,7 +36,6 @@ try executions["poly"] = PolyesterExecution{false}() catch end
 try executions["threaded"] = ThreadedExecution{false}() catch end
 
 aggregations = Dict()
-try aggregations["nnlib"] = NNlibScatter(+) catch end
 try aggregations["KA"] = KAAggregator(+) catch end
 try aggregations["seq"] = SequentialAggregator(+) catch end
 try aggregations["poly"] = PolyesterAggregator(+) catch end

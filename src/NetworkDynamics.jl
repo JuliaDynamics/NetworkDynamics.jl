@@ -40,7 +40,7 @@ export Network
 export SequentialExecution, KAExecution, ThreadedExecution, PolyesterExecution
 include("network_structure.jl")
 
-export NaiveAggregator, NNlibScatter, KAAggregator, SequentialAggregator,
+export NaiveAggregator, KAAggregator, SequentialAggregator,
        PolyesterAggregator, ThreadedAggregator
 include("aggregators.jl")
 include("construction.jl")

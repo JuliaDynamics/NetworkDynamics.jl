@@ -28,7 +28,6 @@ function test_execution_styles(prob)
     @assert isempty(unmatchedstyles) "Some ExecutionStyle won't be tested: $unmatchedstyles"
 
     aggregators = [NaiveAggregator,
-                   NNlibScatter,
                    KAAggregator,
                    SequentialAggregator,
                    PolyesterAggregator,
