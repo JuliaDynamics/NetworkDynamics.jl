@@ -17,5 +17,5 @@ makedocs(; sitename  = "NetworkDynamics",
          "Stochastic differential equations" => "SDEVertex.md",
          "Delay differential equations" => "kuramoto_delay.md"]])
 
-deploydocs(; repo="github.com/PIK-ICoNe/NetworkDynamics.jl.git",
+deploydocs(; repo="github.com/JuliaDynamics/NetworkDynamics.jl.git",
            devbranch="main")
