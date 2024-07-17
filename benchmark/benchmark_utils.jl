@@ -257,7 +257,7 @@ function plot_over_N(target, baseline=nothing)
         dat = comp[key...]
 
         allex = sort(collect(filter(!isequal("assemble"), keys(dat))))
-        defex = "seq" ∈ allex ? "seq" : allex[1]
+        defex = "seq_buf" ∈ allex ? "seq_buf" : allex[1]
         allagg = sort(collect(keys(dat[defex])))
         defagg = "seq" ∈ allagg ? "seq" : allagg[1]
 

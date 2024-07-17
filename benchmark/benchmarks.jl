@@ -26,20 +26,35 @@ end
 bd = BenchmarkDict()
 
 executions = Dict()
-try executions["seq_buf"] = SequentialExecution{true}() catch end
-try executions["ka_buf"] = KAExecution{true}() catch end
-try executions["poly_buf"] = PolyesterExecution{true}() catch end
-try executions["threaded_buf"] = ThreadedExecution{true}() catch end
-try executions["seq"] = SequentialExecution{false}() catch end
-try executions["ka"] = KAExecution{false}() catch end
-try executions["poly"] = PolyesterExecution{false}() catch end
-try executions["threaded"] = ThreadedExecution{false}() catch end
+executions["seq_buf"] = SequentialExecution{true}()
+executions["ka_buf"] = KAExecution{true}()
+executions["poly_buf"] = PolyesterExecution{true}()
+executions["thrd_buf"] = ThreadedExecution{true}()
+executions["seq"] = SequentialExecution{false}()
+executions["ka"] = KAExecution{false}()
+executions["poly"] = PolyesterExecution{false}()
+executions["thrd"] = ThreadedExecution{false}()
 
 aggregations = Dict()
-try aggregations["KA"] = KAAggregator(+) catch end
-try aggregations["seq"] = SequentialAggregator(+) catch end
-try aggregations["poly"] = PolyesterAggregator(+) catch end
-try aggregations["thrd"] = ThreadedAggregator(+) catch end
+aggregations["ka"] = KAAggregator(+)
+aggregations["seq"] = SequentialAggregator(+)
+aggregations["poly"] = PolyesterAggregator(+)
+aggregations["thrd"] = ThreadedAggregator(+)
+
+configurations = [
+    ("seq", "seq"), # default seq
+    ("ka", "seq"),
+    ("poly", "seq"),
+    ("thrd", "seq"),
+    ("seq_buf", "seq"),
+    ("ka_buf", "seq"),
+    ("poly_buf", "seq"),
+    ("thrd_buf", "seq"),
+    ("seq_buf", "ka"),
+    ("seq_buf", "poly"),
+    ("seq_buf", "thrd"),
+    ("thrd_buf", "poly"), # default thrd
+]
 
 ####
 #### diffusion benchmarks on a dense watts strogatz graph
@@ -50,14 +65,14 @@ edges = Dict("static_edge" => diffusion_edge(),
 Ns =  [100, 300, 1000, 3000]#, 10000]  #, 100_000, 1_000_000]
 
 @info "Benchmark diffusion network"
-progress = Progress(length(keys(edges)) * length(Ns) * length(executions) * length(aggregations),
+progress = Progress(length(keys(edges)) * length(Ns) * length(configurations),
                     enabled=!haskey(ENV,"GITHUB_ACTIONS"))
 for k in keys(edges)
     edge = edges[k]
 
     for N in Ns
         g = watts_strogatz(N, N ÷ 2, 0.0; rng=StableRNG(1))
-        b = @be Network($g, $vertex, $edge) evals=1 samples=50 seconds=1
+        b = @be Network($g, $vertex, $edge) evals=1 samples=10 seconds=1
         bd["diffusion", k, "assemble", N] = BenchmarkResult(b)
 
         _nd = Network(g, vertex, edge)
@@ -65,27 +80,27 @@ for k in keys(edges)
         _dx = similar(_x0)
         _nd(_dx, _x0, nothing, NaN)
 
-        for (exname, execution) in executions
-            for (aggname, aggregator) in aggregations
-                next!(progress; showvalues = [(:edge, k), (:N, N), (:ex, exname), (:agg, aggname)])
-                nd = try
-                    Network(g, vertex, edge; execution, aggregator)
-                catch e
-                    if e.msg == "execution type not supported"
-                        continue
-                    else
-                        rethrow(e)
-                    end
+        for (exname, aggname) in configurations
+            execution = executions[exname]
+            aggregator = aggregations[aggname]
+            next!(progress; showvalues = [(:edge, k), (:N, N), (:ex, exname), (:agg, aggname)])
+            nd = try
+                Network(g, vertex, edge; execution, aggregator)
+            catch e
+                if e.msg == "execution type not supported"
+                    continue
+                else
+                    rethrow(e)
                 end
-                dx = similar(_x0)
-                nd(dx, _x0, nothing, NaN)
-                @test dx ≈ _dx
-
-                b = @be $nd($dx, $_x0, nothing, 0.0) seconds=1
-                br = BenchmarkResult(b, legacy_order(nd, dx))
-                bd["diffusion", k, exname, aggname, N] = br
-                GC.gc()
             end
+            dx = similar(_x0)
+            nd(dx, _x0, nothing, NaN)
+            @test dx ≈ _dx
+
+            b = @be $nd($dx, $_x0, nothing, 0.0) seconds=1
+            br = BenchmarkResult(b, legacy_order(nd, dx))
+            bd["diffusion", k, exname, aggname, N] = br
+            GC.gc()
         end
     end
 end
@@ -114,13 +129,13 @@ end
 Ns = [100, 1_000, 10_000, 100_000]#, 1_000_000]
 
 @info "Benchmark kuramoto"
-progress = Progress(2 * length(Ns) * length(executions) * length(aggregations),
+progress = Progress(2 * length(Ns) * length(configurations),
                     enabled=!haskey(ENV,"GITHUB_ACTIONS"))
 for f in [homogeneous, heterogeneous]
     name = string(f)
     for N in Ns
         (vert, edg, g) = f(N)
-        b = @be Network($g, $vert, $edg) evals=1 samples=50 seconds=1
+        b = @be Network($g, $vert, $edg) evals=1 samples=10 seconds=1
         bd["kuramoto", name, "assemble", N] = BenchmarkResult(b)
 
         _nd = Network(g, vert, edg)
@@ -129,27 +144,27 @@ for f in [homogeneous, heterogeneous]
         p = randp(_nd)
         _nd(_dx, _x0, p, NaN)
 
-        for (exname, execution) in executions
-            for (aggname, aggregator) in aggregations
-                next!(progress; showvalues = [(:type, name), (:N, N), (:ex, exname), (:agg, aggname)])
-                nd = try
-                    Network(g, vert, edg; execution, aggregator)
-                catch e
-                    if e.msg == "execution type not supported"
-                        continue
-                    else
-                        rethrow(e)
-                    end
+        for (exname, aggname) in configurations
+            execution = executions[exname]
+            aggregator = aggregations[aggname]
+            next!(progress; showvalues = [(:type, name), (:N, N), (:ex, exname), (:agg, aggname)])
+            nd = try
+                Network(g, vert, edg; execution, aggregator)
+            catch e
+                if e.msg == "execution type not supported"
+                    continue
+                else
+                    rethrow(e)
                 end
-                dx = similar(_x0)
-                nd(dx, _x0, p, NaN)
-                @test dx ≈ _dx
-
-                b = @be $nd($dx, $_x0, $p, 0.0) seconds=1
-                br = BenchmarkResult(b, legacy_order(nd, dx))
-                bd["kuramoto", name, exname, aggname, N] = br
-                GC.gc()
             end
+            dx = similar(_x0)
+            nd(dx, _x0, p, NaN)
+            @test dx ≈ _dx
+
+            b = @be $nd($dx, $_x0, $p, 0.0) seconds=1
+            br = BenchmarkResult(b, legacy_order(nd, dx))
+            bd["kuramoto", name, exname, aggname, N] = br
+            GC.gc()
         end
     end
 end

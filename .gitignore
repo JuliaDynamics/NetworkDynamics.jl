@@ -11,5 +11,6 @@ design_experiments
 benchmark/tune.json
 benchmark/*.md
 benchmark/*.data
+benchmark/*.txt
 /benchmark/*.pdf
 /docs/src/generated/
