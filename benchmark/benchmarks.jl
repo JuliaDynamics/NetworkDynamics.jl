@@ -43,19 +43,19 @@ try aggregations["thrd"] = ThreadedAggregator(+) catch e end
 try aggregations["sprs"] = SparseAggregator catch e end
 
 configurations = [
-    ("seq", "seq"), # default seq
+    ("seq", "seq"),
     ("ka", "seq"),
     ("poly", "seq"),
     ("thrd", "seq"),
-    ("seq_buf", "seq"),
+    ("seq_buf", "seq"), # default seq
     ("ka_buf", "seq"),
     ("poly_buf", "seq"),
     ("thrd_buf", "seq"),
-    ("seq_buf", "ka"),
-    ("seq_buf", "poly"),
-    ("seq_buf", "thrd"),
-    ("seq_buf", "sprs"),
-    ("thrd_buf", "poly"), # default thrd
+    ("poly_buf", "ka"),
+    ("poly_buf", "poly"),
+    ("poly_buf", "thrd"),
+    ("poly_buf", "sprs"),
+    ("poly_buf", "poly"), # default thrd
 ]
 
 ####

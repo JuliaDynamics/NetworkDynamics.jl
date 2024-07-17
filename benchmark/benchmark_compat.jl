@@ -14,7 +14,7 @@ if pkgversion(NetworkDynamics) < v"0.9.0"
     struct PolyesterAggregator; f; end
     struct ThreadedAggregator; f; end
     function Network(g, v, e; execution = SequentialExecution{true}(), aggregator=SequentialAggregator(+))
-        if execution isa ThreadedExecution{true} && aggregator isa PolyesterAggregator
+        if execution isa PolyesterExecution{true} && aggregator isa PolyesterAggregator
             network_dynamics(v, e, g; parallel=true)
         elseif execution isa SequentialExecution{true} && aggregator isa SequentialAggregator
             network_dynamics(v, e, g; parallel=false)
