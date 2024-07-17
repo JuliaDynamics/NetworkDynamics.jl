@@ -210,34 +210,42 @@ end
 
 
 function _inv_aggregation_map(im, batches)
-    srcidxs = map(im.v_aggr) do dst
-        zeros(Int, length(dst), 0)
+    srcidxs = map(im.v_aggr, Graphs.degree(im.g)) do dst, ndegr
+        [empty!(Vector{Int}(undef, ndegr)) for _ in 1:length(dst)]
     end
-    for batch in batches
+    unrolled_foreach(batches) do batch
         for eidx in batch.indices
             edge = im.edgevec[eidx]
 
             # dst mapping
             edat_idx = im.e_data[eidx][1:im.edepth]
-            srcidxs[edge.dst] = hcat(srcidxs[edge.dst], edat_idx)
+            _pusheach!(srcidxs[edge.dst], edat_idx)
 
             # src mapping
             cplng = coupling(batch)
             if cplng == Symmetric()
                 edat_idx = im.e_data[eidx][1:im.edepth]
-                srcidxs[edge.src] = hcat(srcidxs[edge.src], edat_idx)
+                _pusheach!(srcidxs[edge.src], edat_idx)
             elseif cplng == AntiSymmetric()
                 edat_idx = -1 .* im.e_data[eidx][1:im.edepth]
-                srcidxs[edge.src] = hcat(srcidxs[edge.src], edat_idx)
+                _pusheach!(srcidxs[edge.src], edat_idx)
             elseif cplng == Fiducial()
                 edat_idx = im.e_data[eidx][im.edepth+1:2*im.edepth]
-                srcidxs[edge.src] = hcat(srcidxs[edge.src], edat_idx)
+                _pusheach!(srcidxs[edge.src], edat_idx)
             end
         end
     end
-    dstidx = reduce(vcat, im.v_aggr)
-    srcidxs = convert(Vector{Vector{Int}}, mapreduce(vcat, srcidxs) do srcs
-        collect(eachrow(srcs))
-    end)
-    collect(zip(dstidx, srcidxs))
+    ret = Vector{Tuple{Int,Vector{Int}}}(undef, im.lastidx_aggr)
+    empty!(ret)
+    for (dstr, srcs) in zip(im.v_aggr, srcidxs)
+        for (dst, src) in zip(dstr, srcs)
+            push!(ret, (dst, src))
+        end
+    end
+    ret
+end
+function _pusheach!(target, src)
+    for i in eachindex(src)
+        push!(target[i], src[i])
+    end
 end

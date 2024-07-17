@@ -32,7 +32,6 @@ using StableRNGs
     nvec = rand(rng, vtypes, nv(g))
     evec = rand(rng, etypes, ne(g))
 
-
     basenw = Network(g, nvec, evec);
     states = rand(rng, basenw.im.lastidx_static)
     results = Vector{Float64}[]
