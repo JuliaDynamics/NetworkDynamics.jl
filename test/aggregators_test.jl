@@ -36,6 +36,9 @@ using StableRNGs
     states = rand(rng, basenw.im.lastidx_static)
     results = Vector{Float64}[]
 
+    # @b AggregationMap($(basenw.im), $(basenw.layer.edgebatches))
+    # @b SparseAggregator($(basenw.im), $(basenw.layer.edgebatches))
+
     for accT in subtypes(NetworkDynamics.Aggregator)
         aggregator = accT(+)
         nw = Network(g, nvec, evec; aggregator);

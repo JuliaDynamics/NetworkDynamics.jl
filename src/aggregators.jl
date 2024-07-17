@@ -249,3 +249,56 @@ function _pusheach!(target, src)
         push!(target[i], src[i])
     end
 end
+
+struct SparseAggregator{M} <: Aggregator
+    m::M
+    SparseAggregator(m::AbstractMatrix) = new{typeof(m)}(m)
+end
+function SparseAggregator(f)
+    @argcheck f===(+) ArgumentError("Sparse Aggregator only works with + as reducer.")
+    SparseAggregator
+end
+function SparseAggregator(im, batches)
+    I, J, V = Float64[], Float64[], Float64[]
+    unrolled_foreach(batches) do batch
+        for eidx in batch.indices
+            edge = im.edgevec[eidx]
+
+            # dst mapping
+            edat_idx = im.e_data[eidx][1:im.edepth]
+            dst_idx = im.v_aggr[edge.dst]
+            append!(I, dst_idx)
+            append!(J, edat_idx)
+            append!(V, Iterators.repeated(1, length(dst_idx)))
+
+            # src mapping
+            cplng = coupling(batch)
+            if cplng == Symmetric()
+                edat_idx = im.e_data[eidx][1:im.edepth]
+                dst_idx = im.v_aggr[edge.src]
+                append!(I, dst_idx)
+                append!(J, edat_idx)
+                append!(V, Iterators.repeated(1, length(dst_idx)))
+            elseif cplng == AntiSymmetric()
+                edat_idx = im.e_data[eidx][1:im.edepth]
+                dst_idx = im.v_aggr[edge.src]
+                append!(I, dst_idx)
+                append!(J, edat_idx)
+                append!(V, Iterators.repeated(-1, length(dst_idx)))
+            elseif cplng == Fiducial()
+                edat_idx = im.e_data[eidx][im.edepth+1:2*im.edepth]
+                dst_idx = im.v_aggr[edge.src]
+                append!(I, dst_idx)
+                append!(J, edat_idx)
+                append!(V, Iterators.repeated(1, length(dst_idx)))
+            end
+        end
+    end
+
+    SparseAggregator(sparse(I,J,V, im.lastidx_aggr, im.lastidx_static))
+end
+
+function aggregate!(a::SparseAggregator, aggbuf, data)
+   LinearAlgebra.mul!(aggbuf, a.m, data)
+   nothing
+end

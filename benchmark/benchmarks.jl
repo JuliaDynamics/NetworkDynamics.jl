@@ -26,20 +26,21 @@ end
 bd = BenchmarkDict()
 
 executions = Dict()
-executions["seq_buf"] = SequentialExecution{true}()
-executions["ka_buf"] = KAExecution{true}()
-executions["poly_buf"] = PolyesterExecution{true}()
-executions["thrd_buf"] = ThreadedExecution{true}()
-executions["seq"] = SequentialExecution{false}()
-executions["ka"] = KAExecution{false}()
-executions["poly"] = PolyesterExecution{false}()
-executions["thrd"] = ThreadedExecution{false}()
+try executions["seq_buf"] = SequentialExecution{true}() catch e end
+try executions["ka_buf"] = KAExecution{true}() catch e end
+try executions["poly_buf"] = PolyesterExecution{true}() catch e end
+try executions["thrd_buf"] = ThreadedExecution{true}() catch e end
+try executions["seq"] = SequentialExecution{false}() catch e end
+try executions["ka"] = KAExecution{false}() catch e end
+try executions["poly"] = PolyesterExecution{false}() catch e end
+try executions["thrd"] = ThreadedExecution{false}() catch e end
 
 aggregations = Dict()
-aggregations["ka"] = KAAggregator(+)
-aggregations["seq"] = SequentialAggregator(+)
-aggregations["poly"] = PolyesterAggregator(+)
-aggregations["thrd"] = ThreadedAggregator(+)
+try aggregations["ka"] = KAAggregator(+) catch e end
+try aggregations["seq"] = SequentialAggregator(+) catch e end
+try aggregations["poly"] = PolyesterAggregator(+) catch e end
+try aggregations["thrd"] = ThreadedAggregator(+) catch e end
+try aggregations["sprs"] = SparseAggregator catch e end
 
 configurations = [
     ("seq", "seq"), # default seq
@@ -53,6 +54,7 @@ configurations = [
     ("seq_buf", "ka"),
     ("seq_buf", "poly"),
     ("seq_buf", "thrd"),
+    ("seq_buf", "sprs"),
     ("thrd_buf", "poly"), # default thrd
 ]
 
@@ -72,7 +74,7 @@ for k in keys(edges)
 
     for N in Ns
         g = watts_strogatz(N, N ÷ 2, 0.0; rng=StableRNG(1))
-        b = @be Network($g, $vertex, $edge) evals=1 samples=10 seconds=1
+        b = @be Network($g, $vertex, $edge) evals=1 samples=10 seconds=2
         bd["diffusion", k, "assemble", N] = BenchmarkResult(b)
 
         _nd = Network(g, vertex, edge)
@@ -81,6 +83,9 @@ for k in keys(edges)
         _nd(_dx, _x0, nothing, NaN)
 
         for (exname, aggname) in configurations
+            GC.gc()
+            haskey(executions, exname) || continue
+            haskey(aggregations, aggname) || continue
             execution = executions[exname]
             aggregator = aggregations[aggname]
             next!(progress; showvalues = [(:edge, k), (:N, N), (:ex, exname), (:agg, aggname)])
@@ -97,10 +102,9 @@ for k in keys(edges)
             nd(dx, _x0, nothing, NaN)
             @test dx ≈ _dx
 
-            b = @be $nd($dx, $_x0, nothing, 0.0) seconds=1
+            b = @be $nd($dx, $_x0, nothing, 0.0) seconds=2
             br = BenchmarkResult(b, legacy_order(nd, dx))
             bd["diffusion", k, exname, aggname, N] = br
-            GC.gc()
         end
     end
 end
@@ -135,7 +139,7 @@ for f in [homogeneous, heterogeneous]
     name = string(f)
     for N in Ns
         (vert, edg, g) = f(N)
-        b = @be Network($g, $vert, $edg) evals=1 samples=10 seconds=1
+        b = @be Network($g, $vert, $edg) evals=1 samples=10 seconds=2
         bd["kuramoto", name, "assemble", N] = BenchmarkResult(b)
 
         _nd = Network(g, vert, edg)
@@ -145,6 +149,9 @@ for f in [homogeneous, heterogeneous]
         _nd(_dx, _x0, p, NaN)
 
         for (exname, aggname) in configurations
+            GC.gc()
+            haskey(executions, exname) || continue
+            haskey(aggregations, aggname) || continue
             execution = executions[exname]
             aggregator = aggregations[aggname]
             next!(progress; showvalues = [(:type, name), (:N, N), (:ex, exname), (:agg, aggname)])
@@ -161,10 +168,9 @@ for f in [homogeneous, heterogeneous]
             nd(dx, _x0, p, NaN)
             @test dx ≈ _dx
 
-            b = @be $nd($dx, $_x0, $p, 0.0) seconds=1
+            b = @be $nd($dx, $_x0, $p, 0.0) seconds=2
             br = BenchmarkResult(b, legacy_order(nd, dx))
             bd["kuramoto", name, exname, aggname, N] = br
-            GC.gc()
         end
     end
 end

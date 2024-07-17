@@ -11,6 +11,7 @@ end
 Adapt.@adapt_structure NetworkLayer
 Adapt.@adapt_structure KAAggregator
 Adapt.@adapt_structure AggregationMap
+Adapt.@adapt_structure SparseAggregator
 
 function Adapt.adapt_structure(to, b::VertexBatch)
     idxs = adapt(to, b.indices)

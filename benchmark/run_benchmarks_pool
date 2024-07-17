@@ -25,7 +25,7 @@ rsync -az --recursive --exclude="*.data" \
                       --exclude "*.md" \
                       --exclude "*.pdf" --delete . ${username}@${machine}.physik.hu-berlin.de:${dir}
 
-ssh ${username}@${machine}.physik.hu-berlin.de -t "export JULIA_NUM_THREADS=auto; cd ${dir}/benchmark; julia --startup-file=no run_benchmarks.jl --no-data-export $@"
+ssh ${username}@${machine}.physik.hu-berlin.de -t "export JULIA_NUM_THREADS=4; cd ${dir}/benchmark; julia --startup-file=no run_benchmarks.jl --no-data-export $@"
 
 # echo "Fetch resulting txt and pdf files"
 rsync -a ${username}@${machine}.physik.hu-berlin.de:${dir}/benchmark/*.txt benchmark/

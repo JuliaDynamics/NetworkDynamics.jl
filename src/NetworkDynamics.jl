@@ -12,6 +12,7 @@ using Atomix: Atomix
 using Polyester: Polyester
 using Mixers: Mixers
 using LinearAlgebra: LinearAlgebra, UniformScaling
+using SparseArrays: sparse
 using DocStringExtensions
 using StyledStrings: StyledStrings, @styled_str, AnnotatedString
 
@@ -37,7 +38,7 @@ export dim, pdim, sdim
 include("component_functions.jl")
 
 export Network
-export SequentialExecution, KAExecution, ThreadedExecution, PolyesterExecution
+export SequentialExecution, KAExecution, ThreadedExecution, PolyesterExecution, SparseAggregator
 include("network_structure.jl")
 
 export NaiveAggregator, KAAggregator, SequentialAggregator,
