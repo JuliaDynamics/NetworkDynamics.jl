@@ -31,7 +31,8 @@ function test_execution_styles(prob)
                    KAAggregator,
                    SequentialAggregator,
                    PolyesterAggregator,
-                   ThreadedAggregator]
+                   ThreadedAggregator,
+                   SparseAggregator]
     unmatchedaggregators = filter(subtypes(NetworkDynamics.Aggregator)) do abstractaggregator
         !any(s -> s <: abstractaggregator, aggregators)
     end
