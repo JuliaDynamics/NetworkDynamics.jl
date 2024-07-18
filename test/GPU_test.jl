@@ -1,4 +1,5 @@
 using CUDA
+using CUDA.CUSPARSE
 using Adapt
 using NetworkDynamics
 using StableRNGs
@@ -39,8 +40,6 @@ nw_d(dx_d, x0_d, p_d, NaN)
 # try SparseAggregator
 nw2 = Network(g, vf, ef; execution=KAExecution{true}(), aggregator=SparseAggregator(+))
 nw2_d = adapt(CuArray, nw2)
-@which Adapt.adapt_storage(CUDABackend(), rand(3))
-@which CUDABackend
 
 @test nw2_d.layer.aggregator.m isa CuSparseMatrixCSC
 fill!(dx_d, 0)
