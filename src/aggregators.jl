@@ -148,21 +148,30 @@ end
 
 struct SequentialAggregator{F} <: Aggregator
     f::F
-    m::Vector{Tuple{Int64,Vector{Int64}}}
+    m::AggregationMap{Vector{Int}}
 end
 SequentialAggregator(f) = (im, batches) -> SequentialAggregator(im, batches, f)
-SequentialAggregator(im, batches, f) = SequentialAggregator(f, _inv_aggregation_map(im, batches))
+SequentialAggregator(im, batches, f) = SequentialAggregator(f, AggregationMap(im, batches))
 
 function aggregate!(a::SequentialAggregator, aggbuf, data)
-    length(a.m) == length(aggbuf) || throw(DimensionMismatch("length of aggbuf and a.m must be equal"))
     fill!(aggbuf, zero(eltype(aggbuf)))
 
-    @inbounds for (dstidx, srcidxs) in a.m
-       for srcidx in srcidxs
-           dat = sign(srcidx) * data[abs(srcidx)]
-           aggbuf[dstidx] = a.f(aggbuf[dstidx], dat)
-       end
+    @inbounds begin
+        am = a.m
+        for (dat, dst_idx) in zip(view(data, am.range), am.map)
+            if dst_idx != 0
+                aggbuf[dst_idx] = a.f(aggbuf[dst_idx], dat)
+            end
+        end
+
+        for (dat, dst_idx) in zip(view(data, am.symrange), am.symmap)
+            if dst_idx != 0
+                _dst_idx = abs(dst_idx)
+                aggbuf[_dst_idx] = a.f(aggbuf[_dst_idx], sign(dst_idx) * dat)
+            end
+        end
     end
+
     nothing
 end
 

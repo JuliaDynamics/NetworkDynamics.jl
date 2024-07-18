@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # change to directory of the script
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")"
 
 username="wuerfelh"
 all_nodes=$(seq -f pool%g 1 46)
@@ -9,7 +9,24 @@ used_nodes=$(ssh ${username}@pool.physik.hu-berlin.de "squeue | awk '/pool/ {pri
 free_nodes=$(echo "$all_nodes" | grep -Fxv -f <(echo "$used_nodes"))
 echo "According to squeue, the follwing nodes are free"
 echo $free_nodes
-read -p "Where to Benchmark? "  machine
+
+while true; do
+    read -p "Where to Benchmark? (type 'check name' to run deep check) " machine
+
+    # Check if the input starts with 'check'
+    if [[ $machine == check* ]]; then
+        # Extract the name after 'check'
+        name=$(echo $machine | awk '{print $2}')
+
+        # Call the checkusage script with the extracted name
+        ./pool_checkusage.sh $name
+    else
+        break
+    fi
+done
+
+# goto ND root
+cd ".."
 
 # set workdir
 # create direcoty with current timestamp
