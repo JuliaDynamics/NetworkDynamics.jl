@@ -99,6 +99,38 @@ _p = rand(pdim(_nd));
 @time _nd(_dx, _x0, _p, NaN)
 @b $_nd($_dx,$_x0, $_p, NaN)
 
+### cuda
+using NetworkDynamics
+using CUDA
+using NetworkDynamics.Adapt
+N = 10
+vert, edg, g = heterogeneous(N)
+execution = KAExecution{true}()
+aggregator = KAAggregator(+)
+_nd = Network(g, vert, edg; execution, aggregator)
+_x0 = rand(dim(_nd));
+_dx = similar(_x0);
+_p = rand(pdim(_nd));
+_nd(_dx, _x0, _p, NaN)
+
+_x0_d = CuArray(_x0)
+_dx_d  = CuArray(_dx)
+_p_d = CuArray(_p)
+
+_nd_d = adapt(_x0_d, _nd)
+
+_nd(_dx_d, _x0_d, _p_d, NaN)
+
+
+Vector(_dx_d) ≈ _dx
+
+isbits(Type{Float64})
+isbits(Float64)
+isbits(1.0)
+
+@b $_nd($_dx,$_x0, $_p, NaN)
+
+
 
 ####
 function evalnd(nd::T, dx, x0) where {T}

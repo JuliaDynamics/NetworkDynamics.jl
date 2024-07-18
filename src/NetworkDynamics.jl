@@ -12,6 +12,7 @@ using Atomix: Atomix
 using Polyester: Polyester
 using Mixers: Mixers
 using LinearAlgebra: LinearAlgebra, UniformScaling
+using SparseArrays: sparse
 using DocStringExtensions
 using StyledStrings: StyledStrings, @styled_str, AnnotatedString
 
@@ -33,14 +34,14 @@ include("utils.jl")
 
 export ODEVertex, StaticVertex, StaticEdge, ODEEdge
 export Symmetric, AntiSymmetric, Directed, Fiducial
-export dim, pdim
+export dim, pdim, sdim
 include("component_functions.jl")
 
 export Network
-export SequentialExecution, KAExecution, ThreadedExecution, PolyesterExecution
+export SequentialExecution, KAExecution, ThreadedExecution, PolyesterExecution, SparseAggregator
 include("network_structure.jl")
 
-export NaiveAggregator, NNlibScatter, KAAggregator, SequentialAggregator,
+export NaiveAggregator, KAAggregator, SequentialAggregator,
        PolyesterAggregator, ThreadedAggregator
 include("aggregators.jl")
 include("construction.jl")

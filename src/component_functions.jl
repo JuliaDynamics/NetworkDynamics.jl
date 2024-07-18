@@ -150,8 +150,9 @@ statetype(::Type{<:ODEVertex}) = Dynamic()
 statetype(::Type{<:StaticVertex}) = Static()
 statetype(::Type{<:StaticEdge}) = Static()
 statetype(::Type{<:ODEEdge}) = Dynamic()
-isdynamic(::T) where {T<:ComponentFunction} = isdynamic(T)
-isdynamic(x::Type{<:ComponentFunction}) = statetype(x) == Dynamic()
+
+isdynamic(x) = statetype(x) == Dynamic()
+isstatic(x)  = statetype(x) == Static()
 
 """
     dispatchT(<:ComponentFunction) :: Type{<:ComponentFunction}

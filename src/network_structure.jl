@@ -33,6 +33,7 @@ mutable struct IndexManager{G}
 end
 dim(im::IndexManager) = im.lastidx_dynamic
 pdim(im::IndexManager) = im.lastidx_p
+sdim(im::IndexManager) = im.lastidx_static - im.lastidx_dynamic
 
 
 abstract type ExecutionStyle{buffered} end

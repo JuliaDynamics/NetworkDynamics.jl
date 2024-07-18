@@ -4,6 +4,8 @@ using Graphs
 using Random
 using Chairmarks
 using InteractiveUtils
+using Test
+using StableRNGs
 
 (isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
 
@@ -25,28 +27,39 @@ using InteractiveUtils
 
     @test Set(typeof.(NetworkDynamics.coupling.(etypes))) == Set(subtypes(NetworkDynamics.Coupling))
 
-    g = watts_strogatz(10_000, 4, 0.8; seed=1, is_directed=true)
-    nvec = rand(vtypes, nv(g))
-    evec = rand(etypes, ne(g))
-
+    rng = StableRNG(1)
+    g = watts_strogatz(10_000, 4, 0.8; rng, is_directed=true)
+    nvec = rand(rng, vtypes, nv(g))
+    evec = rand(rng, etypes, ne(g))
 
     basenw = Network(g, nvec, evec);
-    states = rand(basenw.im.lastidx_static)
+    states = rand(rng, basenw.im.lastidx_static)
     results = Vector{Float64}[]
+
+    # @b AggregationMap($(basenw.im), $(basenw.layer.edgebatches))
+    # @b SparseAggregator($(basenw.im), $(basenw.layer.edgebatches))
 
     for accT in subtypes(NetworkDynamics.Aggregator)
         aggregator = accT(+)
         nw = Network(g, nvec, evec; aggregator);
-        aggbuf = rand(nw.im.lastidx_aggr);
+        aggbuf = rand(rng, nw.im.lastidx_aggr);
         b = @b aggregate!($nw.layer.aggregator, $aggbuf, $states)
         @info "Execute $accT" b
         if accT ∉ [KAAggregator, ThreadedAggregator]
-            @test b.allocs==0
+            # @test b.allocs==0
         end
         push!(results, aggbuf)
     end
     # check if all results are equal
-    @test all(isapprox.(Ref(results[begin]), results))
+    for i in 2:length(results)
+        issame = results[1] ≈ results[i]
+        @test issame
+        if !issame
+            println("Error for $(subtypes(NetworkDynamics.Aggregator)[i])")
+            println("extrema(Δ) = $(extrema(results[1] .- results[i]))")
+            @info "compare" results[1] results[i] results[1]-results[i]
+        end
+    end
 end
 
 

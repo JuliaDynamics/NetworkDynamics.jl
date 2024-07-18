@@ -36,6 +36,17 @@ dx_d = adapt(to, zeros(length(x0)))
 nw_d(dx_d, x0_d, p_d, NaN)
 @test Vector(dx_d) ≈ dx
 
+# try SparseAggregator
+nw2 = Network(g, vf, ef; execution=KAExecution{true}(), aggregator=SparseAggregator(+))
+nw2_d = adapt(CuArray, nw2)
+@which Adapt.adapt_storage(CUDABackend(), rand(3))
+@which CUDABackend
+
+@test nw2_d.layer.aggregator.m isa CuSparseMatrixCSC
+fill!(dx_d, 0)
+nw2_d(dx_d, x0_d, p_d, NaN)
+@test Vector(dx_d) ≈ dx
+
 # mini benchmark
 
 #=

@@ -1,5 +1,5 @@
 #!julia --startup-file=no
-@info "Start Benchmarking..."
+@info "Start Benchmark Script with $ARGS"
 
 original_path = pwd()
 
@@ -15,10 +15,11 @@ end
 BMPATH = joinpath(NDPATH, "benchmark")
 
 # activate the benchmark folder as current environment
-io = IOBuffer() # hide output
+@info "Activate Benchmark environment"
 import Pkg;
-Pkg.activate(BMPATH; io);
-Pkg.develop(; path=NDPATH, io);
+Pkg.activate(BMPATH);
+Pkg.develop(; path=NDPATH);
+Pkg.precompile();
 
 using PkgBenchmark
 using LibGit2
@@ -59,8 +60,8 @@ s = ArgParseSettings()
     "--no-plot"
         help = "Don't copy plot to the working directory."
         action = :store_true
-    "--export-txt"
-        help = "Export Comparison table as markdown file.q"
+    "--no-txt-export"
+        help = "Don't export comparison.txt table"
         action = :store_true
 end
 #! format: on
@@ -81,7 +82,8 @@ state changes.
 tmp = mkpath(tempname());
 ndpath_tmp = joinpath(tmp, "NetworkDynamics")
 @info "Copy repo to $ndpath_tmp"
-cp(NDPATH, ndpath_tmp)
+# copy but don't copy benchmark data
+run(`rsync -a --exclude='*.data' $NDPATH/ $ndpath_tmp/`)
 cd(ndpath_tmp)
 
 # copy bm scripts to separate folder (so it won't change if the state of the nd_temp repo chagnes)
@@ -128,7 +130,7 @@ function benchmark(; name, rev, cmd)
     @assert !contains(cmd_str, r"--project") "--project is not implemeted"
 
     @info "Prepare environment"
-    prepare_cmd = "import Pkg; Pkg.develop(path=\"$ndpath_tmp\"); Pkg.update()"
+    prepare_cmd = "import Pkg; Pkg.develop(path=\"$ndpath_tmp\"); Pkg.update(; preserve=Pkg.PRESERVE_ALL)"
     run(`$cmd_str --startup-file=no --project=$bmpath_tmp -e $prepare_cmd`)
 
     exp_tmp = tempname(bmpath_tmp)
@@ -152,23 +154,23 @@ target = if contains(args[:target], r".data$")
     path = joinpath(original_path, args[:target])
     deserialize(path)
 elseif args[:target] == "latest"
-    file = sort(filter(contains("target.data"), readdir(original_path)))[end]
+    file = sort(filter(contains(r"target*.data$"), readdir(original_path)))[end]
     @info "Use file $file as target"
     deserialize(joinpath(original_path, file))
 else
-    benchmark(; name="target", rev=args[:target], cmd=args[:tcommand])
+    benchmark(; name="target_$(args[:target])", rev=args[:target], cmd=args[:tcommand])
 end
 
 baseline = if args[:baseline] ∉ ["nothing", "none"]
     if args[:baseline] == "latest"
-        file = sort(filter(contains("baseline.data"), readdir(original_path)))[end]
+        file = sort(filter(contains(r"baseline*.data$"), readdir(original_path)))[end]
         @info "Use file $file as baseline"
         deserialize(joinpath(original_path, file))
     elseif contains(args[:baseline], r".data$")
         path = joinpath(original_path, args[:baseline])
         deserialize(path)
     elseif args[:baseline] ∉ ["nothing", "none"]
-        benchmark(; name="baseline", rev=args[:baseline], cmd=args[:bcommand])
+        benchmark(; name="baseline_$(args[:baseline])", rev=args[:baseline], cmd=args[:bcommand])
     end
 else
     nothing
@@ -210,7 +212,7 @@ if !isnothing(baseline)
         save(figpath, fig)
     end
 
-    if args[Symbol("export-txt")]
+    if !args[Symbol("no-txt-export")]
         path = joinpath(original_path, args[:prefix] * "comparison.txt")
         @info "Save table to $path"
         open(path, "w") do io

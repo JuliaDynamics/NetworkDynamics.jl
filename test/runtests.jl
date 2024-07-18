@@ -28,11 +28,11 @@ function test_execution_styles(prob)
     @assert isempty(unmatchedstyles) "Some ExecutionStyle won't be tested: $unmatchedstyles"
 
     aggregators = [NaiveAggregator,
-                   NNlibScatter,
                    KAAggregator,
                    SequentialAggregator,
                    PolyesterAggregator,
-                   ThreadedAggregator]
+                   ThreadedAggregator,
+                   SparseAggregator]
     unmatchedaggregators = filter(subtypes(NetworkDynamics.Aggregator)) do abstractaggregator
         !any(s -> s <: abstractaggregator, aggregators)
     end

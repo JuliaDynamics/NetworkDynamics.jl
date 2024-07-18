@@ -1,87 +1,5 @@
 abstract type Aggregator end
 
-struct NNlibScatter{T, V} <: Aggregator
-    f::T
-    batchranges::Vector{UnitRange{Int}}
-    couplings::Vector{CouplingUnion}
-    dstmaps::Vector{V}
-    srcmaps::Vector{V}
-    aggrsize::Int
-end
-
-NNlibScatter(f) = (im, batches) -> NNlibScatter(im, batches, f)
-function NNlibScatter(im, batches, f)
-    batchranges = Vector{UnitRange{Int}}(undef, length(batches))
-    dstmaps     = Vector{Vector{Int}}(undef, length(batches))
-    srcmaps     = Vector{Vector{Int}}(undef, length(batches))
-    couplings   = Vector{CouplingUnion}(undef, length(batches))
-    maxaggindex = 0
-    _edgevec    = collect(edges(im.g))
-    for (batchi, batch) in enumerate(batches)
-        cplng = coupling(batch)
-        # generate scatter map
-        dst = Vector{Int}(undef, length(state_range(batch)))
-        fill!(dst, -1)
-        src = Vector{Int}(undef, length(state_range(batch)))
-        fill!(src, -1)
-
-        for i in batch.indices
-            datarange = im.e_data[i] .- (batch.statestride.first - 1) # range in batch slice
-            e = _edgevec[i]
-            dst[datarange[1:im.edepth]] .= im.v_aggr[e.dst]
-            if cplng == Symmetric() || cplng == AntiSymmetric()
-                src[datarange[1:im.edepth]] .= im.v_aggr[e.src]
-            elseif cplng == Fiducial()
-                src[datarange[im.edepth+1:2*im.edepth]] .= im.v_aggr[e.src]
-            end
-        end
-
-        # unasigned fields will have a -1, number them up to copy to "ghost elements" without access conflict
-        unassigned = findall(isequal(-1), dst)
-        _maxaggindex = im.lastidx_aggr + length(unassigned)
-        dst[unassigned] .= im.lastidx_aggr+1:_maxaggindex
-        maxaggindex = max(maxaggindex, _maxaggindex)
-        if cplng != Directed()
-            unassigned = findall(isequal(-1), src)
-            _maxaggindex = im.lastidx_aggr + length(unassigned)
-            src[unassigned] .= im.lastidx_aggr+1:_maxaggindex
-            maxaggindex = max(maxaggindex, _maxaggindex)
-        end
-
-        batchranges[batchi] = state_range(batch)
-        couplings[batchi]   = cplng
-        dstmaps[batchi]     = dst
-        srcmaps[batchi]     = src
-    end
-    NNlibScatter(f, batchranges, couplings, dstmaps, srcmaps, maxaggindex)
-end
-
-function aggregate!(a::NNlibScatter, aggbuf, data)
-    fill!(aggbuf, zero(eltype(aggbuf)))
-    originallength = length(aggbuf)
-    resize!(aggbuf, a.aggrsize)
-    @assert length(aggbuf) == a.aggrsize
-    for (range, dstmap, srcmap, coupling) in zip(a.batchranges, a.dstmaps, a.srcmaps,
-                                                 a.couplings)
-        batchdata = view(data, range)
-        # scatter the dst
-        @assert get_backend(aggbuf) == get_backend(dstmap)
-        NNlib.scatter!(a.f, aggbuf, batchdata, dstmap)
-
-        # scatter to source depending on
-        if coupling ∈ (Symmetric(), Fiducial())
-            NNlib.scatter!(a.f, aggbuf, batchdata, srcmap)
-        elseif coupling == AntiSymmetric()
-            batchdata .= -1 .* batchdata
-            NNlib.scatter!(a.f, aggbuf, batchdata, srcmap)
-            batchdata .= -1 .* batchdata
-        end
-    end
-    resize!(aggbuf, originallength)
-    nothing
-end
-
-
 struct NaiveAggregator{F,ETup,G} <: Aggregator
     im::IndexManager{G}
     batches::ETup
@@ -91,7 +9,6 @@ struct NaiveAggregator{F,ETup,G} <: Aggregator
         new{typeof(f),typeof(tup),typeof(im.g)}(im, tup, f)
     end
 end
-
 NaiveAggregator(f) = (im, batches) -> NaiveAggregator(im, batches, f)
 
 function aggregate!(a::NaiveAggregator, aggbuf, data)
@@ -126,6 +43,7 @@ function _aggregate!(a::NaiveAggregator, batches, aggbuf, data)
         end
     end
 end
+
 
 struct AggregationMap{V}
     range::UnitRange{Int} # range in data where aggregation is necessary
@@ -257,82 +175,139 @@ function aggregate!(a::SequentialAggregator, aggbuf, data)
     nothing
 end
 
+
 struct PolyesterAggregator{F} <: Aggregator
     f::F
-    m::AggregationMap{Vector{Int}}
+    m::Vector{Tuple{Int64,Vector{Int64}}}
 end
 PolyesterAggregator(f) = (im, batches) -> PolyesterAggregator(im, batches, f)
-PolyesterAggregator(im, batches, f) = PolyesterAggregator(f, AggregationMap(im, batches))
+PolyesterAggregator(im, batches, f) = PolyesterAggregator(f, _inv_aggregation_map(im, batches))
 
 function aggregate!(a::PolyesterAggregator, aggbuf, data)
+    length(a.m) == length(aggbuf) || throw(DimensionMismatch("length of aggbuf and a.m must be equal"))
     fill!(aggbuf, zero(eltype(aggbuf)))
 
-    let _data=view(data, a.m.range), idxs=a.m.map, f=a.f
-        Polyester.@batch for I in 1:length(idxs)
-            @inbounds begin
-                _dst_i = idxs[I]
-                if _dst_i != 0
-                    _dat = _data[I]
-                    ref = Atomix.IndexableRef(aggbuf, (_dst_i,))
-                    Atomix.modify!(ref, f, _dat)
-                end
-            end
-        end
+    Polyester.@batch for (dstidx, srcidxs) in a.m
+       @inbounds for srcidx in srcidxs
+           dat = sign(srcidx) * data[abs(srcidx)]
+           aggbuf[dstidx] = a.f(aggbuf[dstidx], dat)
+       end
     end
-
-    let _data=view(data, a.m.symrange), idxs=a.m.symmap, f=a.f
-        Polyester.@batch for I in 1:length(idxs)
-            @inbounds begin
-                dst_idx = idxs[I] # might be < 1 for antisymmetric coupling
-                _dst_i = abs(idxs[I])
-                if _dst_i != 0
-                    _dat = sign(dst_idx) * _data[I]
-                    ref = Atomix.IndexableRef(aggbuf, (_dst_i,))
-                    Atomix.modify!(ref, f, _dat)
-                end
-            end
-        end
-    end
-
     nothing
 end
+
 
 struct ThreadedAggregator{F} <: Aggregator
     f::F
-    m::AggregationMap{Vector{Int}}
+    m::Vector{Tuple{Int64,Vector{Int64}}}
 end
 ThreadedAggregator(f) = (im, batches) -> ThreadedAggregator(im, batches, f)
-ThreadedAggregator(im, batches, f) = ThreadedAggregator(f, AggregationMap(im, batches))
+ThreadedAggregator(im, batches, f) = ThreadedAggregator(f, _inv_aggregation_map(im, batches))
 
 function aggregate!(a::ThreadedAggregator, aggbuf, data)
+    length(a.m) == length(aggbuf) || throw(DimensionMismatch("length of aggbuf and a.m must be equal"))
     fill!(aggbuf, zero(eltype(aggbuf)))
 
-    let _data=view(data, a.m.range), idxs=a.m.map, f=a.f
-        Threads.@threads for I in 1:length(idxs)
-            @inbounds begin
-                _dst_i = idxs[I]
-                if _dst_i != 0
-                    _dat = _data[I]
-                    ref = Atomix.IndexableRef(aggbuf, (_dst_i,))
-                    Atomix.modify!(ref, f, _dat)
-                end
-            end
-        end
+    Threads.@threads for (dstidx, srcidxs) in a.m
+       @inbounds for srcidx in srcidxs
+           dat = sign(srcidx) * data[abs(srcidx)]
+           aggbuf[dstidx] = a.f(aggbuf[dstidx], dat)
+       end
     end
-
-    let _data=view(data, a.m.symrange), idxs=a.m.symmap, f=a.f
-        Threads.@threads for I in 1:length(idxs)
-            @inbounds begin
-                dst_idx = idxs[I] # might be < 1 for antisymmetric coupling
-                _dst_i = abs(idxs[I])
-                if _dst_i != 0
-                    _dat = sign(dst_idx) * _data[I]
-                    ref = Atomix.IndexableRef(aggbuf, (_dst_i,))
-                    Atomix.modify!(ref, f, _dat)
-                end
-            end
-        end
-    end
-
     nothing
+end
+
+
+function _inv_aggregation_map(im, batches)
+    srcidxs = map(im.v_aggr, Graphs.degree(im.g)) do dst, ndegr
+        [empty!(Vector{Int}(undef, ndegr)) for _ in 1:length(dst)]
+    end
+    unrolled_foreach(batches) do batch
+        for eidx in batch.indices
+            edge = im.edgevec[eidx]
+
+            # dst mapping
+            edat_idx = im.e_data[eidx][1:im.edepth]
+            _pusheach!(srcidxs[edge.dst], edat_idx)
+
+            # src mapping
+            cplng = coupling(batch)
+            if cplng == Symmetric()
+                edat_idx = im.e_data[eidx][1:im.edepth]
+                _pusheach!(srcidxs[edge.src], edat_idx)
+            elseif cplng == AntiSymmetric()
+                edat_idx = -1 .* im.e_data[eidx][1:im.edepth]
+                _pusheach!(srcidxs[edge.src], edat_idx)
+            elseif cplng == Fiducial()
+                edat_idx = im.e_data[eidx][im.edepth+1:2*im.edepth]
+                _pusheach!(srcidxs[edge.src], edat_idx)
+            end
+        end
+    end
+    ret = Vector{Tuple{Int,Vector{Int}}}(undef, im.lastidx_aggr)
+    empty!(ret)
+    for (dstr, srcs) in zip(im.v_aggr, srcidxs)
+        for (dst, src) in zip(dstr, srcs)
+            push!(ret, (dst, src))
+        end
+    end
+    ret
+end
+function _pusheach!(target, src)
+    for i in eachindex(src)
+        push!(target[i], src[i])
+    end
+end
+
+struct SparseAggregator{M} <: Aggregator
+    m::M
+    SparseAggregator(m::AbstractMatrix) = new{typeof(m)}(m)
+end
+function SparseAggregator(f)
+    @argcheck f===(+) ArgumentError("Sparse Aggregator only works with + as reducer.")
+    SparseAggregator
+end
+function SparseAggregator(im, batches)
+    I, J, V = Float64[], Float64[], Float64[]
+    unrolled_foreach(batches) do batch
+        for eidx in batch.indices
+            edge = im.edgevec[eidx]
+
+            # dst mapping
+            edat_idx = im.e_data[eidx][1:im.edepth]
+            dst_idx = im.v_aggr[edge.dst]
+            append!(I, dst_idx)
+            append!(J, edat_idx)
+            append!(V, Iterators.repeated(1, length(dst_idx)))
+
+            # src mapping
+            cplng = coupling(batch)
+            if cplng == Symmetric()
+                edat_idx = im.e_data[eidx][1:im.edepth]
+                dst_idx = im.v_aggr[edge.src]
+                append!(I, dst_idx)
+                append!(J, edat_idx)
+                append!(V, Iterators.repeated(1, length(dst_idx)))
+            elseif cplng == AntiSymmetric()
+                edat_idx = im.e_data[eidx][1:im.edepth]
+                dst_idx = im.v_aggr[edge.src]
+                append!(I, dst_idx)
+                append!(J, edat_idx)
+                append!(V, Iterators.repeated(-1, length(dst_idx)))
+            elseif cplng == Fiducial()
+                edat_idx = im.e_data[eidx][im.edepth+1:2*im.edepth]
+                dst_idx = im.v_aggr[edge.src]
+                append!(I, dst_idx)
+                append!(J, edat_idx)
+                append!(V, Iterators.repeated(1, length(dst_idx)))
+            end
+        end
+    end
+
+    SparseAggregator(sparse(I,J,V, im.lastidx_aggr, im.lastidx_static))
+end
+
+function aggregate!(a::SparseAggregator, aggbuf, data)
+   LinearAlgebra.mul!(aggbuf, a.m, data)
+   nothing
 end
