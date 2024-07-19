@@ -1,6 +1,6 @@
 # NetworkDynamics
 
-[![](https://img.shields.io/badge/docs-dev-blue.svg)](https://pik-icone.github.io/NetworkDynamics.jl/dev)
+[![](https://img.shields.io/badge/docs-dev-blue.svg)](https://juliadynamics.github.io/NetworkDynamics.jl/dev/)
 
 <!-- [![](https://img.shields.io/badge/docs-stable-blue.svg)](https://pik-icone.github.io/NetworkDynamics.jl/stable) -->
 A package for working with dynamical systems on complex networks. NetworkDynamics.jl provides an interface between [Graphs.jl](https://github.com/JuliaGraphs/Graphs.jl) and [DifferentialEquations.jl](https://github.com/JuliaDiffEq/DifferentialEquations.jl). It allows to define several types of dynamic and static nodes and edges and to link them up in order to create complex network dynamics.
@@ -39,7 +39,3 @@ If you use NetworkDynamics.jl in your research publications, please cite our [pa
 	year = {2021}
 }
 ```
-
-## Old Documentation
-
-Documentation for relases prior to version 0.5.3 can be found [here](https://pik-icone.github.io/NetworkDynamicsDocumentationHistory/). Current docs are [here](https://pik-icone.github.io/NetworkDynamics.jl/).
