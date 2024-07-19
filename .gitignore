@@ -3,7 +3,7 @@
 *.jl.mem
 deps/deps.jl
 .idea
-Manifest.toml
+Manifest*.toml
 scratch.jl
 docs/build
 bugs
@@ -11,3 +11,6 @@ design_experiments
 benchmark/tune.json
 benchmark/*.md
 benchmark/*.data
+benchmark/*.txt
+/benchmark/*.pdf
+/docs/src/generated/

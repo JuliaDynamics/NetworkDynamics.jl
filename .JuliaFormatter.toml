@@ -1,74 +1,49 @@
-# base style
-style = "yas"
-
-# number of spaces
-indent = 4
-
-# maximum lenght of line
-margin = 120
-
-# replace for i = [1:2] or i ∈ [1:2] with for i in [1:2]
+# full list: https://domluna.github.io/JuliaFormatter.jl/dev/#Formatting-Options
+style = "sciml"
+yas_style_nesting = true # special for this style
+margin = 92
 always_for_in = true
-
-# if true, add whitespace to typedef between , and <:
+normalize_line_endings = "unix"
+whitespace_in_kwargs = false
 whitespace_typedefs = false
-
-# f true, whitespace is added for binary operations in indices. Make this true
-# if you prefer arr[a + b] to arr[a+b]. Additionally, if there's a colon :
-# involved, parenthesis will be added to the LHS and RHS.
 whitespace_ops_in_indices = false
-
-# If true, superflous newlines will be removed. For example:
+format_markdown = true
+format_docstrings = true
+join_lines_based_on_source = true
 remove_extra_newlines = false
 
-# import A, B, C -> using A:A, Using B:B ...
-import_to_using = false
-
-# transform pipes |> to function calls
-pipe_to_function_call = false
-
-# transform f(x) = x definitons do full function... end blocks if line limit is exeded
-short_to_long_function_def = true
-
-# allways put return keyword at the end of functions
-always_use_return = false
-
-# (; a = 1) -> (; a=1)
-whitespace_in_kwargs = false
-
-# add ::Any to untyped fields
-annotate_untyped_fields_with_any = false
-
-# format docstrings with the same rules as the codebase
-format_docstrings = true
-
-# f the conditional E ? A : B exceeds the maximum margin converts it into the
-# equivalent if block:
-conditional_to_if = true
-
-# One of "unix" (normalize all \r\n to \n), "windows" (normalize all \n to
-# \r\n), "auto" (automatically choose based on which line ending is more common
-# in the file).
-normalize_line_endings = "auto"
-
-# comma after last element in multi line list?
-# trailing_comma = "nothing"
-
-# if there are linebreaks in argument lists in the source keep them like this
-join_lines_based_on_source = true
-
-# When set to true, submodule(s) appearing in the same file will be indented.
-indent_submodule = false
-
-# shot detials related to formatting
-verbose = true
-
-# also format markdown files?
-format_markdown = true
-
-# alignment rules
-# foo     = 1
-# foobar  = 2
-# stays like this
 align_assignment = true
+align_struct_field = true
+align_conditional = true
 align_pair_arrow = true
+align_matrix = true
+
+# indent = 4,
+# margin = 92,
+# always_for_in = false,
+# for_in_replacement = "in",
+# whitespace_typedefs = false,
+# whitespace_ops_in_indices = false,
+# remove_extra_newlines = false,
+# import_to_using = false,
+# pipe_to_function_call = false,
+# short_to_long_function_def = false,
+# long_to_short_function_def = false,
+# always_use_return = false,
+# whitespace_in_kwargs = true,
+# annotate_untyped_fields_with_any = true,
+# format_docstrings = false,
+# align_struct_field = false,
+# align_conditional = false,
+# align_assignment = false,
+# align_pair_arrow = false,
+# conditional_to_if = false,
+# normalize_line_endings = "auto",
+# align_matrix = false,
+# trailing_comma = false,
+# trailing_zero = true,
+# indent_submodule = false,
+# separate_kwargs_with_semicolon = false,
+# surround_whereop_typeparameters = true,
+# variable_call_indent = []
+# short_circuit_to_if = false,

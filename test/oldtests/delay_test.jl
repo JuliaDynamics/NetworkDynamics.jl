@@ -12,23 +12,18 @@ g = complete_graph(N) # more edges than vertices!
     nothing
 end
 
-
-
-@inline function diffusionvertex!(dv, v, edges, p, t)
-    dv[1] = 0.0
-    for e in edges
-        dv[1] += e[1]
-    end
+@inline function diffusionvertex!(dv, v, esum, p, t)
+    dv[1] = esum[1]
     nothing
 end
 
-nd_diffusion_vertex = ODEVertex(; f=diffusionvertex!, dim=1)
-nd_diffusion_edge = StaticEdge(; f=diffusionedge!, dim=1, coupling=:undirected)
-nd! = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g)
+nd_diffusion_vertex = ODEVertex(; f=diffusionvertex!, dim=1, pdim=0)
+nd_diffusion_edge = StaticEdge(; f=diffusionedge!, dim=1, pdim=0, coupling=AntiSymmetric())
+nd! = Network(g, nd_diffusion_vertex, nd_diffusion_edge)
 
 
 @testset "ODE diffusion" begin
-    nd! = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g)
+    nd! = Network(g, nd_diffusion_vertex, nd_diffusion_edge)
 
     x0 = [ones(N ÷ 2); -ones(N ÷ 2)]
     tspan = (0.0, 100.0)
@@ -40,6 +35,19 @@ nd! = network_dynamics(nd_diffusion_vertex, nd_diffusion_edge, g)
     #@btime solve($prob, Tsit5(), abstol=1e-6)
     @test isapprox(sol[end], zeros(N); atol=1e-6)
 end
+
+using NetworkDynamics.KernelAbstractions
+
+@kernel function ekernel!(@Const(batch), du, @Const(u), @Const(srcrange), @Const(dstrange), @Const(p), @Const(t))
+    I = @index(Global)
+    @inline apply_edge_unbuffered!(type, batch, I, du, u, srcrange, dstrange, p, t)
+end
+@kernel function ekernel!(@Const(batch), (du, @Const(u), @Const(srcrange), @Const(dstrange), @Const(p)), @Const(t))
+    I = @index(Global)
+    @inline apply_edge_unbuffered!(type, batch, I, du, u, srcrange, dstrange, p, t)
+end
+
+NetworkDynamics.executionstyle(nd!)
 
 
 
