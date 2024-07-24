@@ -234,10 +234,10 @@ end
 
 function align_strings(_vecofstr::AbstractVector{<:AbstractString}; padding=:alternating)
     # FIXME: workaround for github.com/JuliaLang/StyledStrings.jl/issues/64
-    @static if VERSION < v"1.11"
-        vecofstr = String.(_vecofstr)
-    else
+    @static if VERSION > v"1.10"
         vecofstr = _vecofstr
+    else
+        vecofstr = String.(_vecofstr)
     end
     splitted = Vector{AbstractString}[]
     sizehint!(splitted, length(vecofstr))

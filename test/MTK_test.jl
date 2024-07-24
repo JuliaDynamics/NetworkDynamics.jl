@@ -48,89 +48,88 @@ end
     @parameters begin
         K = 100.0, [description = "Line conductance"]
     end
+    @variables begin
+       Δθ(t)
+    end
     @equations begin
-        srcP ~ -K*sin(dstθ - srcθ)
+        Δθ ~ dstθ - srcθ
+        srcP ~ -K*sin(Δθ)
         dstP ~ -srcP
     end
 end
 @named line = StaticPowerLine()
-
 @named swing = SwingNode(Pmech=1)
 
 v = ODEVertex(swing, [:P], [:θ])
-e = StaticEdge(line, [:dstθ, :srcθ], [:dstP, :srcP])
+v = ODEVertex(swing, :P, :θ)
+e = StaticEdge(line, [:dstθ], [:srcθ], [:dstP, :srcP], Fiducial())
 
-unknowns(line)
+####
+#### dq model
+####
+@mtkmodel DQBus begin
+    @variables begin
+        u_r(t), [description = "d-voltage", output=true]
+        u_i(t), [description = "q-voltage", output=true]
+        i_r(t), [description = "d-current", input=true]
+        i_i(t), [description = "d-current", input=true]
+    end
+end
 
+rotm(θ) = [cos(θ) -sin(θ); sin(θ) cos(θ)]
+@mtkmodel DQSwing begin
+    @extend DQBus()
+    @variables begin
+        ω(t) = 0.0, [description = "Rotor frequency"]
+        θ(t) = 0.0, [description = "Rotor angle"]
+        Pel(t), [description = "Electrical Power"]
+    end
+    @parameters begin
+        M = 1, [description = "Inertia"]
+        D = 0.1, [description = "Damping"]
+        Pmech, [description = "Mechanical Power"]
+        V = 1.0, [description = "Voltage magnitude"]
+    end
+    @equations begin
+        Dt(θ) ~ ω
+        Dt(ω) ~ 1/M * (Pmech - D*ω + Pel)
+        Pel ~ real(Complex(u_r, u_i) * conj(Complex(i_r, i_i)))
+        [u_r, u_i] ~ rotm(θ) * [V; 0]
+    end
+end
 
+@named dqswing = DQSwing()
+v = ODEVertex(dqswing, [:i_r, :i_i], [:u_r, :u_i])
+v.mass_matrix
 
+@mtkmodel DQLine begin
+    @variables begin
+        src_u_r(t), [description = "src d-voltage", input=false]
+        src_u_i(t), [description = "src q-voltage", input=false]
+        dst_u_r(t), [description = "dst d-voltage", input=false]
+        dst_u_i(t), [description = "dst q-voltage", input=false]
+        src_i_r(t), [description = "src d-current", output=true]
+        src_i_i(t), [description = "src d-current", output=true]
+        dst_i_r(t), [description = "dst d-current", output=true]
+        dst_i_i(t), [description = "dst d-current", output=true]
+    end
+end
 
+@mtkmodel DQPiLine begin
+    @extend DQLine()
+    @parameters begin
+        R = 1.0, [description = "Resistance"]
+        X = 1.0, [description = "Reactance"]
+        src_B = 0.0, [description = "Shunt susceptance at src end"]
+        dst_B = 0.0, [description = "Shunt susceptance at dst end"]
+    end
+    @equations begin
+        src_i_r ~ -real(-(src_u_r + im*src_u_i - dst_u_r - im*dst_u_i)/(R + im*X) - (im*src_B)*(src_u_r + im*src_u_i))
+        src_i_i ~ -imag(-(src_u_r + im*src_u_i - dst_u_r - im*dst_u_i)/(R + im*X) - (im*src_B)*(src_u_r + im*src_u_i))
+        dst_i_r ~ -real(+(src_u_r + im*src_u_i - dst_u_r - im*dst_u_i)/(R + im*X) - (im*dst_B)*(dst_u_r + im*dst_u_i))
+        dst_i_i ~ -imag(+(src_u_r + im*src_u_i - dst_u_r - im*dst_u_i)/(R + im*X) - (im*dst_B)*(dst_u_r + im*dst_u_i))
+    end
+end
 
-
-hasmethod
-
-full_equations(swing)
-equations(swing)
-_sys = swing
-inputs = MTK.unbound_inputs(swing)
-outputs = MTK.unbound_outputs(swing)
-
-swing_simp,inidx = structural_simplify(swing, (MTK.unbound_inputs(swing), MTK.unbound_outputs(swing)))
-sys = swing
-sys.P
-MTK.getvar
-
-inidx
-inidx[1]
-
-swing_simp[inidx]
-
-full_equations(swing)
-full_equations(swing_simp)
-MTK.unbound_inputs(swing_simp)
-
-
-
-MTK.calculate_massmatrix(swing)
-
-@which show(swing_simp
-
-state = MTK.get_tearing_state(swing_simp)
-state.fullvars
-state.structure.graph
-
-
-full_equations(swing)
-equation_dependencies(swing)
-variable_dependencies(swing)
-unknowns(swing)
-
-@which SystemStructure
-ODESystem
-
-collect(edges(variable_dependencies(swing)))
-unknowns(swing)
-
-
-full_equations(line)
-equation_dependencies(line)
-
-
-
-
-MTK.generate_control_function(swing)
-
-swing_simp,inidx = structural_simplify(swing, (MTK.unbound_inputs(swing), []))
-equations(swing_simp)
-full_equations(swing_simp)
-observed(swing_simp)
-
-MTK.inputs(swing)
-MTK.generate_control_function(swing, MTK.inputs(swing))
-
-MTK.is_bound
-
-#=
-- XXX: input cannot be declared on subsystem level as it leads to isbound_true on the system level
-- works with extend though
-=#
+@named piline = DQPiLine()
+StaticEdge(piline, [:src_u_r, :src_u_i], [:dst_u_r, :dst_u_i], [:dst_i_r, :dst_i_i, :src_i_r, :src_i_i], Fiducial())

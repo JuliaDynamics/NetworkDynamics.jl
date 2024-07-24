@@ -102,3 +102,11 @@ function generate_massmatrix(eqs::AbstractVector{Equation})
     M = Diagonal(V)
     return M==I ? I : M
 end
+
+function warn_events(sys)
+    cev = ModelingToolkit.get_continuous_events(sys)
+    dev = ModelingToolkit.get_discrete_events(sys)
+    if !isempty(cev) || !isempty(dev)
+        @warn "Model has attached events, which is not supportet."
+    end
+end
