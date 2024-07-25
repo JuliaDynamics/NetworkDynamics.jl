@@ -34,7 +34,8 @@ function ODEVertex(sys::ODESystem, inputs, outputs; verbose=false)
     obsf = gen.g_ip
     obssym = getname.(gen.params)
     mass_matrix = gen.mass_matrix
-    ODEVertex(;f, sym, def, psym, pdef, depth, obssym, obsf, mass_matrix)
+    name = getname(sys)
+    ODEVertex(;f, sym, def, psym, pdef, depth, obssym, obsf, mass_matrix, name)
 end
 
 function StaticEdge(sys::ODESystem, srcin, dstin, outputs, coupling; verbose=false)
@@ -57,7 +58,8 @@ function StaticEdge(sys::ODESystem, srcin, dstin, outputs, coupling; verbose=fal
     obsf = gen.g_ip
     obssym = getname.(gen.params)
     depth = coupling isa Fiducial ? Int(length(outputs)/2) : length(outputs)
-    StaticEdge(;f, sym, def, psym, pdef, depth, obssym, obsf, coupling)
+    name = getname(sys)
+    StaticEdge(;f, sym, def, psym, pdef, depth, obssym, obsf, coupling, name)
 end
 
 function generate_io_function(_sys, inputss::Tuple, outputs;
