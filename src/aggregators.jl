@@ -311,3 +311,7 @@ function aggregate!(a::SparseAggregator, aggbuf, data)
    LinearAlgebra.mul!(aggbuf, a.m, data)
    nothing
 end
+
+iscudacompatible(::Type{<:Aggregator}) = false
+iscudacompatible(::Type{<:KAAggregator}) = true
+iscudacompatible(::Type{<:SparseAggregator}) = true

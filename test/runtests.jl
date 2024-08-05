@@ -7,6 +7,7 @@ using InteractiveUtils
 using CUDA
 using KernelAbstractions
 using Adapt
+using NetworkDynamics: iscudacompatible
 
 """
 Test utility, which rebuilds the Network with all different execution styles and compares the
@@ -21,7 +22,6 @@ function test_execution_styles(prob)
               PolyesterExecution{false}(),
               ThreadedExecution{true}(),
               ThreadedExecution{false}()]
-    # styles = [KAExecution{false}(), SequentialExecution{true}()]
     unmatchedstyles = filter(subtypes(NetworkDynamics.ExecutionStyle)) do abstractstyle
         !any(s -> s isa abstractstyle, styles)
     end
@@ -49,44 +49,50 @@ function test_execution_styles(prob)
     @test u==prob.u0
     @test p==prob.p
 
+    exsaggs = [(ex, agg) for ex in styles for agg in aggregators]
+
     @testset "Test Execution Styles and Aggregators" begin
-        for execution in styles
-            for aggregator in aggregators
-                _nw = Network(nw; execution, aggregator=aggregator(nw.layer.aggregator.f))
-                _du = zeros(eltype(u), length(u))
-                try
-                    _nw(_du, u, p, t)
-                catch e
-                    # XXX: fix for https://github.com/JuliaLang/julia/issues/55075
-                    if e isa MethodError && e.f == Base.elsize
-                        @test_broken false
-                        continue
-                    end
-                    println("Error in $execution with $aggregator: $e")
-                    @test false
+        for (execution, aggregator) in exsaggs
+            _nw = Network(nw; execution, aggregator=aggregator(nw.layer.aggregator.f))
+            _du = zeros(eltype(u), length(u))
+            try
+                _nw(_du, u, p, t)
+            catch e
+                # XXX: fix for https://github.com/JuliaLang/julia/issues/55075
+                if e isa MethodError && e.f == Base.elsize
+                    @test_broken false
                     continue
                 end
-                issame = isapprox(_du, du; atol=1e-10)
-                if !issame
-                    println("$execution with $aggregator lead to different results: extrema(Δ) = $(extrema(_du - du))")
-                end
-                @test issame
+                println("Error in $execution with $aggregator: $e")
+                @test false
+                continue
             end
+            issame = isapprox(_du, du; atol=1e-10)
+            if !issame
+                println("$execution with $aggregator lead to different results: extrema(Δ) = $(extrema(_du - du))")
+            end
+            @test issame
         end
 
         if CUDA.functional()
-            _nw = Network(nw; execution=KAExecution{true}(), aggregator=KAAggregator(nw.layer.aggregator.f))
-            to = CUDABackend()
-            _nw_d = adapt(to, _nw)
-            _du_d = adapt(to, zeros(eltype(u), length(u)))
+            to = CuArray
             u_d = adapt(to, u)
             p_d = adapt(to, p)
-            _nw_d(_du_d, u_d, p_d, t)
-            issame = isapprox(Vector(_du_d), du; atol=1e-10)
-            if !issame
-                println("CUDA execution lead to different results: extrema(Δ) = $(extrema(_du - du))")
+
+            for (execution, aggregator) in exsaggs
+                (iscudacompatible(execution) && iscudacompatible(aggregator)) || continue
+
+                _nw = Network(nw; execution, aggregator=aggregator(nw.layer.aggregator.f))
+                _nw_d = adapt(to, _nw)
+                _du_d = adapt(to, zeros(eltype(u), length(u)))
+
+                _nw_d(_du_d, u_d, p_d, t)
+                issame = isapprox(Vector(_du_d), du; atol=1e-10)
+                if !issame
+                    println("CUDA execution lead to different results: extrema(Δ) = $(extrema(_du - du))")
+                end
+                @test issame
             end
-            @test issame
         end
     end
 end
