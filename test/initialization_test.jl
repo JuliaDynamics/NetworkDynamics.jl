@@ -25,5 +25,5 @@ using SteadyStateDiffEq, OrdinaryDiffEq
     @test pflat(s0) == pflat(p)
 
     s1 = find_fixpoint(nd, p; alg=DynamicSS(Rodas5P()))
-    @test diff(s0.v[1:nv(g),:θ]) ≈ diff(s1.v[1:nv(g),:θ])
+    @test isapprox(diff(s0.v[1:nv(g),:θ]), diff(s1.v[1:nv(g),:θ]); atol=1e-8)
 end
