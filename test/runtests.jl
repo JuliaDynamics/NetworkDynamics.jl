@@ -8,6 +8,8 @@ using CUDA
 using KernelAbstractions
 using Adapt
 using NetworkDynamics: iscudacompatible
+using Aqua
+using ExplicitImports
 
 """
 Test utility, which rebuilds the Network with all different execution styles and compares the
@@ -98,6 +100,15 @@ function test_execution_styles(prob)
 end
 
 @testset "NetworkDynamics Tests" begin
+    @testset "Package Quality Tests" begin
+        # print_explicit_imports(NetworkDynamics)
+        @test check_no_implicit_imports(NetworkDynamics) === nothing
+        @test check_no_stale_explicit_imports(NetworkDynamics) === nothing
+        Aqua.test_all(NetworkDynamics;
+            ambiguities=false,
+            persistent_tasks=false)
+    end
+
     @safetestset "utils test" begin include("utils_test.jl") end
     @safetestset "construction test" begin include("construction_test.jl") end
     @safetestset "Aggregation Tests" begin include("aggregators_test.jl") end
