@@ -180,7 +180,6 @@ _resolve_colon(nw::Network, sni::EPIndex{Int,Colon}) = EPIndex{Int, UnitRange{In
 ####
 #### Structural things
 ####
-SII.symbolic_container(nw::Network) = nw
 SII.is_independent_variable(nw::Network, sym) = sym == :t
 SII.independent_variable_symbols(nw::Network) = [:t]
 SII.is_time_dependent(nw::Network) = true
@@ -254,10 +253,6 @@ function _is_parameter(nw::Network,
     cf = getcomp(nw, sni)
     return subsym_has_idx(sni.subidx, psym(cf))
 end
-
-# workaround for https://github.com/SciML/SymbolicIndexingInterface.jl/issues/85
-SII.is_timeseries_parameter(nw::Network, sym) = false
-SII.get_all_timeseries_indexes(nw::Network, sym) = Set([SII.ContinuousTimeseries()])
 
 function SII.parameter_index(nw::Network, sni)
     if _hascolon(sni)

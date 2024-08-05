@@ -1,6 +1,6 @@
 module NetworkDynamics
 using Graphs: Graphs, AbstractGraph, SimpleEdge, edges, vertices, ne, nv
-using TimerOutputs: @timeit_debug, reset_timer!, print_timer
+using TimerOutputs: @timeit_debug, reset_timer!
 
 using ArgCheck: @argcheck
 using PreallocationTools: PreallocationTools, LazyBufferCache
@@ -13,13 +13,13 @@ using Polyester: Polyester
 using Mixers: Mixers
 using LinearAlgebra: LinearAlgebra, UniformScaling
 using SparseArrays: sparse
-using DocStringExtensions
-using StyledStrings: StyledStrings, @styled_str, AnnotatedString
+using DocStringExtensions: FIELDS, TYPEDEF
+using StyledStrings: StyledStrings, @styled_str
 
-@static if VERSION >= v"1.11-beta"
-    using Base: AnnotatedIOBuffer
+@static if VERSION ≤ v"1.10"
+    using StyledStrings: AnnotatedIOBuffer, AnnotatedString
 else
-    using StyledStrings: AnnotatedIOBuffer
+    using Base: AnnotatedIOBuffer, AnnotatedString
 end
 
 using Adapt: Adapt, adapt
