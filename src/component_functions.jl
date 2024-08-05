@@ -199,6 +199,11 @@ Fills up kw arguments with default values and performs sanity checks.
 function _construct_comp(::Type{T}, kwargs) where {T}
     dict = _fill_defaults(T, kwargs)
 
+    # check signature of f
+    # if !_valid_signature(T, dict[:f])
+    #     throw(ArgumentError("Function f does not take the correct number of arguments."))
+    # end
+
     # pop check keyword
     check = pop!(dict, :check, true)
 
@@ -390,3 +395,10 @@ function _maybewrap!(d, s, T)
         end
     end
 end
+
+_valid_signature(::Type{<:StaticVertex}, f) = _takes_n_vectors(f, 3) #(u, edges, p, t)
+_valid_signature(::Type{<:ODEVertex}, f) = _takes_n_vectors(f, 4) #(du, u, edges, p, t)
+_valid_signature(::Type{<:StaticEdge}, f) = _takes_n_vectors(f, 4) #(u, src, dst, p, t)
+_valid_signature(::Type{<:ODEEdge}, f) = _takes_n_vectors(f, 5) #(du, u, src, dst, p, t)
+
+_takes_n_vectors(f, n) = hasmethod(f, (Tuple(Vector{Float64} for i in 1:n)..., Float64))

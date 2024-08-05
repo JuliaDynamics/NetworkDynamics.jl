@@ -71,7 +71,11 @@ function print_states_params(io, c::ComponentFunction, styling)
     push!(info, styled"$num &$word: &&$(stylesymbolarray(c.sym, c.def, styling))")
 
     if hasproperty(c, :mass_matrix) && c.mass_matrix != LinearAlgebra.I
-        info[end] *= "\n&with mass matrix $(c.mass_matrix)"
+        if LinearAlgebra.isdiag(c.mass_matrix)
+            info[end] *= "\n&with diagonal mass matrix $(LinearAlgebra.diag(c.mass_matrix))"
+        else
+            info[end] *= "\n&with mass matrix $(c.mass_matrix)"
+        end
     end
 
     num, word = maybe_plural(pdim(c), "param")
@@ -234,10 +238,10 @@ end
 
 function align_strings(_vecofstr::AbstractVector{<:AbstractString}; padding=:alternating)
     # FIXME: workaround for github.com/JuliaLang/StyledStrings.jl/issues/64
-    @static if VERSION < v"1.11"
-        vecofstr = String.(_vecofstr)
-    else
+    @static if VERSION > v"1.10"
         vecofstr = _vecofstr
+    else
+        vecofstr = String.(_vecofstr)
     end
     splitted = Vector{AbstractString}[]
     sizehint!(splitted, length(vecofstr))
