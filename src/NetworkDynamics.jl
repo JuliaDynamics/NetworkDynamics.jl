@@ -16,10 +16,10 @@ using SparseArrays: sparse
 using DocStringExtensions: FIELDS, TYPEDEF
 using StyledStrings: StyledStrings, @styled_str
 
-@static if VERSION ≤ v"1.10"
-    using StyledStrings: AnnotatedIOBuffer, AnnotatedString
-else
+@static if VERSION ≥ v"1.11.0-0"
     using Base: AnnotatedIOBuffer, AnnotatedString
+else
+    using StyledStrings: AnnotatedIOBuffer, AnnotatedString
 end
 
 using Adapt: Adapt, adapt
