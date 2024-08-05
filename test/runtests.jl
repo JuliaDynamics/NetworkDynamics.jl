@@ -123,6 +123,8 @@ end
     if CUDA.functional()
         @safetestset "GPU test" begin include("GPU_test.jl") end
     end
+
+    @safetestset "MTK extension test" begin include("MTK_test.jl") end
 end
 
 @testset "Test Doc Examples" begin

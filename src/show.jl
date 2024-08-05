@@ -71,7 +71,11 @@ function print_states_params(io, c::ComponentFunction, styling)
     push!(info, styled"$num &$word: &&$(stylesymbolarray(c.sym, c.def, styling))")
 
     if hasproperty(c, :mass_matrix) && c.mass_matrix != LinearAlgebra.I
-        info[end] *= "\n&with mass matrix $(c.mass_matrix)"
+        if LinearAlgebra.isdiag(c.mass_matrix)
+            info[end] *= "\n&with diagonal mass matrix $(LinearAlgebra.diag(c.mass_matrix))"
+        else
+            info[end] *= "\n&with mass matrix $(c.mass_matrix)"
+        end
     end
 
     num, word = maybe_plural(pdim(c), "param")

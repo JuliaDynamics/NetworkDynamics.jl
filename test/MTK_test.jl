@@ -1,22 +1,17 @@
 import ModelingToolkit as MTK
 using ModelingToolkit
-using ModelingToolkit, OrdinaryDiffEq, Plots
 using ModelingToolkit: t_nounits as t, D_nounits as Dt
 using NetworkDynamics
 using OrdinaryDiffEq
+using LinearAlgebra
 using Graphs
-using Plots
 
-####
-#### Try again with specific definition of input/output
-####
 @mtkmodel Bus begin
     @variables begin
         θ(t), [description = "voltage angle", output=true]
         P(t), [description = "Electical Powerflow into Network", input=true]
     end
 end;
-
 
 @mtkmodel SwingNode begin
     @extend Bus()
@@ -36,6 +31,7 @@ end;
 
 @named swing = SwingNode()
 v = ODEVertex(swing, [:P], [:θ])
+v = ODEVertex(swing, :P, :θ)
 
 @mtkmodel Line begin
     @variables begin
@@ -60,7 +56,7 @@ end
     end
 end
 @named line = StaticPowerLine()
-e = StaticEdge(line, [:dstθ], [:srcθ], [:dstP, :srcP], Fiducial())
+e = StaticEdge(line, [:srcθ], [:dstθ], [:dstP, :srcP], Fiducial())
 
 g = complete_graph(4)
 nw = Network(g, v, e)
@@ -72,11 +68,10 @@ u0.p.v[3, :Pmech] = -1.0
 u0.p.v[4, :Pmech] = -1.0
 
 prob = ODEProblem(nw, uflat(u0), (0, 10), pflat(u0))
-prob = ODEProblem(nw, uflat(u0), (0, 10), u0.p)
 sol = solve(prob, Tsit5())
 
-plot(sol; idxs=vidxs(nw, :, :θ))
-plot(sol; idxs=vidxs(nw, :, :ω))
+# plot(sol; idxs=vidxs(nw, :, :θ))
+# plot(sol; idxs=vidxs(nw, :, :ω))
 
 ####
 #### dq model
@@ -114,7 +109,7 @@ end
 
 @named dqswing = DQSwing()
 v = ODEVertex(dqswing, [:i_r, :i_i], [:u_r, :u_i])
-v.mass_matrix
+@test v.mass_matrix == Diagonal([0,0,1,1])
 
 @mtkmodel DQLine begin
     @variables begin
@@ -146,4 +141,4 @@ end
 end
 
 @named piline = DQPiLine()
-StaticEdge(piline, [:src_u_r, :src_u_i], [:dst_u_r, :dst_u_i], [:dst_i_r, :dst_i_i, :src_i_r, :src_i_i], Fiducial())
+l = StaticEdge(piline, [:src_u_r, :src_u_i], [:dst_u_r, :dst_u_i], [:dst_i_r, :dst_i_i, :src_i_r, :src_i_i], Fiducial())
