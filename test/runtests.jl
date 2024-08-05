@@ -127,3 +127,8 @@ end
         eval(:(@safetestset $name begin include($file) end))
     end
 end
+
+if !CUDA.functional()
+    @test gethostname() != "hw-g14" # on this pc, CUDA *should* be available
+    @warn "Skipped all CUDA tests because no device is available."
+end

@@ -52,7 +52,7 @@ struct Network{EX<:ExecutionStyle,G,NL,VTup,MM}
     "index manager"
     im::IndexManager{G}
     "lazy cache pool"
-    cachepool::LazyBufferCache
+    cachepool::LazyBufferCache{typeof(identity),typeof(identity)}
     "mass matrix"
     mass_matrix::MM
 end
