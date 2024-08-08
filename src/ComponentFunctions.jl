@@ -56,7 +56,7 @@ the key constructor `network_dynamics`.
 the following calling syntax
 
 ```julia
-f(e, v_s, v_t, p, t) -> nothing
+f(e, v_s, v_d, p, t) -> nothing
 ```
 
 Here  `e`, `p` and `t` are the usual arguments, while
@@ -67,19 +67,29 @@ the source and destination of the described edge.
   - `sym` is an array of symbols for these variables.
   - `coupling` is a Symbol describing if the EdgeFunction is intended for a directed graph (`:directed`) or for an undirected graph (`{:undirected, :symmetric, :antisymmetric, :fiducial}`). `:directed` is intended for directed graphs. `:undirected` is the default option and is only compatible with SimpleGraph.  In this case f should specify the coupling from a source vertex to a destination vertex. `:symmetric` and `:antisymmetric` trigger performance optimizations, if `f` has that symmetry property. `:fiducial` lets the user specify both the coupling from src to dst, as well as the coupling from dst to src and is intended for advanced users, i.e. the edge gets passed a vector of `2dim` edge states, where the first `dim` elements will be presented to the dst and the second `dim` elements will be presented to src,
 
+Optional metadata keywords:
+  - `name` string representation of model
+  - `psym` vector of symbols to name parameters
+  - `obsf` function `g(e, v_s, v_d, p, t) -> obs` which returns a vector of virtual/observed states
+  - `obssym` vector of symbols to describe order of observed states
+
 For more details see the documentation.
 """
-Base.@kwdef struct StaticEdge{T} <: EdgeFunction
+Base.@kwdef struct StaticEdge{T,G} <: EdgeFunction
     f::T # (e, v_s, v_t, p, t) -> nothing
     dim::Int # number of dimensions of e
     coupling = :undefined # :directed, :symmetric, :antisymmetric, :fiducial, :undirected
     sym = [:e for i in 1:dim] # Symbols for the dimensions
-
+    name::String = "StaticEdge"          # optional: name of edge
+    psym::Vector{Symbol} = Symbol[]   # optional: symbols of parameters in order
+    obsf::G = nothing                 # optional: observables
+    obssym::Vector{Symbol} = Symbol[] # optional: symbols of observables
 
     function StaticEdge(user_f::T,
                         dim::Int,
                         coupling::Symbol,
-                        sym::Vector{Symbol}) where {T}
+                        sym::Vector{Symbol},
+                        name="StaticEdge", psym=Symbol[], obsf::G=nothing, obssym=Symbol[]) where {T,G}
 
         coupling_types = (:undefined, :directed, :fiducial, :undirected, :symmetric,
                           :antisymmetric)
@@ -90,13 +100,13 @@ Base.@kwdef struct StaticEdge{T} <: EdgeFunction
         _argcheck(user_f, 5)
 
         if coupling ∈ [:undefined, :directed]
-            return new{T}(user_f, dim, coupling, sym)
+            return new{T,G}(user_f, dim, coupling, sym, name, psym, obsf, obssym)
 
         elseif coupling == :fiducial
             dim % 2 != 0 && error("Fiducial edges are required to have even dim. ",
                                   "The first dim args are used for src -> dst ",
                                   "the second for dst -> src coupling.")
-            return new{T}(user_f, dim, coupling, sym)
+            return new{T,G}(user_f, dim, coupling, sym, name, psym, obsf, obssym)
 
         elseif coupling == :undirected
             # This might cause unexpected behaviour if source and destination vertex don't
@@ -125,7 +135,7 @@ Base.@kwdef struct StaticEdge{T} <: EdgeFunction
             end
         end
         # For edges with mass matrix this will be a little more complicated
-        return new{typeof(f)}(f, 2dim, coupling, repeat(sym, 2))
+        return new{typeof(f),G}(f, 2dim, coupling, _double_syms(sym), name, psym, obsf, obssym)
     end
 end
 
@@ -154,18 +164,29 @@ Here `dv`, `v`, `p` and `t` are the usual ODE arguments, while
 matrix `I`. If a mass matrix M is given the system `M * dv = f` will be
 solved.
 
+Optional metadata keywords:
+  - `name` string representation of model
+  - `psym` vector of symbols to name parameters
+  - `obsf` function `g(v, edges, p, t) -> obs` which returns a vector of virtual/observed states
+  - `obssym` vector of symbols to describe order of observed states
+
 For more details see the documentation.
 """
-Base.@kwdef struct ODEVertex{T} <: VertexFunction
+Base.@kwdef struct ODEVertex{T,G} <: VertexFunction
     f::T # signature (dx, x, edges, p, t) -> nothing
     dim::Int
     mass_matrix = I
     sym = [:v for i in 1:dim]
+    name::String = "ODEVertex"        # optional: name of vertex
+    psym::Vector{Symbol} = Symbol[]   # optional: symbols of parameters in order
+    obsf::G = nothing                 # optional: observable
+    obssym::Vector{Symbol} = Symbol[] # optional: symbols of observables
 
-    function ODEVertex(f::T, dim::Int, mass_matrix = I, sym = [:v for i in 1:dim]) where T
+    function ODEVertex(f, dim, mass_matrix, sym,
+                       name="ODEVertex", psym=Symbol[], obsf=nothing, obssym=Symbol[])
         _dimcheck(dim, sym)
         _argcheck(f, 5)
-        return new{typeof(f)}(f, dim, mass_matrix, sym)
+        return new{typeof(f), typeof(obsf)}(f, dim, mass_matrix, sym, name, psym, obsf, obssym)
     end
 end
 
@@ -188,9 +209,15 @@ described vertex is the destination (in-edges for directed graphs).
 `dim` is the number of independent variables in the vertex equations and
 `sym` is an array of symbols for these variables.
 
+Optional metadata keywords:
+  - `name` string representation of model
+  - `psym` vector of symbols to name parameters
+  - `obsf` function `g(v, edges, p, t) -> obs` which returns a vector of virtual/observed states
+  - `obssym` vector of symbols to describe order of observed states
+
 For more details see the documentation.
 """
-function StaticVertex(; f, dim::Int, sym::Vector{Symbol}=[:v for i in 1:dim])
+function StaticVertex(; f, dim::Int, kwargs...)
     # If mass matrix = 0 the differential equation sets dx = 0.
     # To set x to the value calculated by f we first write the value calculated
     # by f into dx, then subtract x. This leads to the  constraint
@@ -204,7 +231,7 @@ function StaticVertex(; f, dim::Int, sym::Vector{Symbol}=[:v for i in 1:dim])
         end
         return nothing
     end
-    return ODEVertex(_f, dim, 0.0, sym)
+    return ODEVertex(; f=_f, dim, mass_matrix=0.0, kwargs...)
 end
 
 
@@ -218,7 +245,7 @@ the key constructor `network_dynamics`.
 the following calling syntax
 
 ```julia
-f(de, e, v_s, v_t, p, t) -> nothing
+f(de, e, v_s, v_d, p, t) -> nothing
 ```
 
 Here  `de`, `e`, `p` and `t` are the usual arguments, while
@@ -232,21 +259,31 @@ the documentation.
 matrix `I`. If a mass matrix M is given the system `M * de = f` will be
 solved.
 
+Optional metadata keywords:
+  - `name` string representation of model
+  - `psym` vector of symbols to name parameters
+  - `obsf` function `g(e, v_s, v_d, p, t) -> obs` which returns a vector of virtual/observed states
+  - `obssym` vector of symbols to describe order of observed states
+
 For more details see the documentation.
 """
-Base.@kwdef struct ODEEdge{T} <: EdgeFunction
+Base.@kwdef struct ODEEdge{T,G} <: EdgeFunction
     f::T # (de, e, v_s, v_t, p, t) -> nothing
     dim::Int # number of dimensions of e
     coupling = :undefined # :directed, :symmetric, :antisymmetric, :fiducial, :undirected
     mass_matrix = I # Mass matrix for the equation
     sym = [:e for i in 1:dim] # Symbols for the dimensions
-
+    name::String = "ODEEdge"          # optional: name of edge
+    psym::Vector{Symbol} = Symbol[]   # optional: symbols of parameters in order
+    obsf::G = nothing                 # optional: observables
+    obssym::Vector{Symbol} = Symbol[] # optional: symbols of observables
 
     function ODEEdge(user_f::T,
                      dim::Int,
                      coupling::Symbol,
                      mass_matrix,
-                     sym::Vector{Symbol}) where {T}
+                     sym::Vector{Symbol},
+                     name="ODEEdge", psym=Symbol[], obsf::G=nothing, obssym=Symbol[]) where {T,G}
 
         coupling_types = (:directed, :fiducial, :undirected)
 
@@ -259,12 +296,12 @@ Base.@kwdef struct ODEEdge{T} <: EdgeFunction
         _dimcheck(dim, sym)
 
         if coupling == :directed
-            return new{T}(user_f, dim, coupling, mass_matrix, sym)
+            return new{T,G}(user_f, dim, coupling, mass_matrix, sym, name, psym, obsf, obssym)
         elseif coupling == :fiducial
             dim % 2 != 0 && error("Fiducial edges are required to have even dim. ",
                                   "The first dim args are used for src -> dst ",
                                   "the second for dst -> src coupling.")
-            return new{T}(user_f, dim, coupling, mass_matrix, sym)
+            return new{T,G}(user_f, dim, coupling, mass_matrix, sym, name, psym, obsf, obssym)
 
         elseif coupling == :undirected
             # This might cause unexpected behaviour if source and destination vertex don't
@@ -285,7 +322,7 @@ Base.@kwdef struct ODEEdge{T} <: EdgeFunction
                 elseif M isa Matrix
                     newM = [M zeros(size(M)); zeros(size(M)) M]
                 end
-                return new{typeof(f)}(f, 2dim, coupling, newM, repeat(sym, 2))
+                return new{typeof(f),G}(f, 2dim, coupling, newM, _double_syms(sym), name, psym, obsf, obssym)
             end
         end
     end
@@ -374,7 +411,7 @@ Base.@kwdef struct StaticDelayEdge{T} <: EdgeFunction
                 nothing
             end
         end
-        return new{typeof(f)}(f, 2dim, coupling, repeat(sym, 2))
+        return new{typeof(f)}(f, 2dim, coupling, _double_syms(sym))
     end
 end
 
@@ -397,7 +434,7 @@ function ODEEdge(se::StaticEdge)
     # by f into dx, then subtract x. This leads to the  constraint
     # 0 = - x + f(...)
     # where f(...) denotes the value that f(a, ...) writes into a.
-    let _f = se.f, dim = se.dim, coupling = se.coupling, sym = se.sym
+    let _f=se.f, dim=se.dim, coupling=se.coupling, sym=se.sym, name=se.name, psym=se.psym, obsf=se.obsf, obssym=se.obssym
 
         f = (dx, x, v_s, v_d, p, t) -> begin
             _f(dx, v_s, v_d, p, t)
@@ -415,4 +452,15 @@ function ODEEdge(se::StaticEdge)
             return ODEEdge(f, dim, coupling, 0.0, sym)
         end
     end
+end
+
+syms(v::VertexFunction) = v.sym
+syms(e::EdgeFunction)   = e.sym
+
+observed_syms(v::VertexFunction) = v.obssym
+observed_f(v::VertexFunction) = v.obsf
+
+function _double_syms(syms)
+    strs = string.(syms)
+    Symbol.(vcat("dst_" .* strs, "src_" .* strs))
 end

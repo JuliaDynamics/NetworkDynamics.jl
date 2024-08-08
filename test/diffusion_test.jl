@@ -109,7 +109,7 @@ println("Building Static Network Dynamics with artifical ODE Edges...")
     x0_ode = find_valid_ic(diff_network_ode, randn(nv(g) + 2 * ne(g)))
     dx0_ode = similar(x0_ode)
     diff_network_ode(dx0_ode, x0_ode, nothing, 0.0)
-    @test_broken @allocated diff_network_ode(dx0_ode, x0_ode, nothing, 0.0) == 0.0
+    @test NetworkDynamics.allocations(diff_network_ode, nothing) == 0
 end
 
 @inline function real_ode_edge!(de, e, v_s, v_d, p, t)

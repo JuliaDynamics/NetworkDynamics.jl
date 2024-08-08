@@ -10,7 +10,7 @@ include("NetworkStructures.jl")
 include("NetworkDiffEq.jl")
 
 
-export network_dynamics
+export network_dynamics, allocation_report
 
 
 
@@ -256,6 +256,7 @@ end
     prepare_edges(edges, g::SimpleGraph)
 """
 function prepare_edges(edges::Vector, g::SimpleGraph)
+    ne(g) == length(edges) || error("If edges are given as Vector, size musst equal number of edges in g.")
     # Depending on the coupling we might get different eltypes
     new_edges = Vector{EdgeFunction}(undef, length(edges))
     infobool = true
@@ -280,6 +281,7 @@ end
 """
 """
 function prepare_edges(edges::Vector, g::SimpleDiGraph)
+    ne(g) == length(edges) || error("If edges are given as Vector, size musst equal number of edges in g.")
     # Depending on the coupling we might get different eltypes
     new_edges = Vector{EdgeFunction}(undef, length(edges))
     infobool = true
@@ -304,11 +306,8 @@ end
 
 
 @inline function reconstruct_edge(edge::StaticEdge, coupling::Symbol)
-    let f = edge.f, dim = edge.dim, sym = edge.sym
-        return StaticEdge(; f=f,
-                          dim=dim,
-                          coupling=coupling,
-                          sym=sym)
+    let f = edge.f, dim = edge.dim, sym = edge.sym, name=edge.name, psym=edge.psym, obsf=edge.obsf, obssym=edge.obssym
+        return StaticEdge(; f, dim, coupling, sym, name, psym, obsf, obssym)
     end
 end
 @inline function reconstruct_edge(edge::StaticDelayEdge, coupling::Symbol)
