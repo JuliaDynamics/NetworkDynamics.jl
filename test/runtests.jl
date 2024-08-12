@@ -120,6 +120,8 @@ end
     @safetestset "doctor test" begin include("doctor_test.jl") end
     @safetestset "initialization test" begin include("initialization_test.jl") end
 
+    @safetestset "AD test" begin include("AD_test.jl") end
+
     if CUDA.functional()
         @safetestset "GPU test" begin include("GPU_test.jl") end
     end
