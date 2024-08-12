@@ -1,16 +1,10 @@
+using NetworkDynamics
+using Graphs
 using DifferentiationInterface
+using DifferentiationInterfaceTest
 import ForwardDiff, ReverseDiff, Enzyme, Zygote, FiniteDiff, FiniteDifferences
 
 (isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
-
-f(x) = sum(abs2, x)
-
-x = [1.0, 2.0]
-
-value_and_gradient(f, AutoForwardDiff(), x) # returns (5.0, [2.0, 4.0]) with ForwardDiff.jl
-value_and_gradient(f, AutoEnzyme(),      x) # returns (5.0, [2.0, 4.0]) with Enzyme.jl
-value_and_gradient(f, AutoZygote(),      x) # returns (5.0, [2.0, 4.0]) with Zygote.jl
-
 
 g = complete_graph(4)
 vf = [Lib.kuramoto_second(), Lib.diffusion_vertex(), Lib.kuramoto_second(), Lib.diffusion_vertex()]
@@ -31,24 +25,30 @@ fx = function(x)
     nw(dx, x, pflat(p0), 0.0)
     dx
 end
-
-# jacobian(fx, AutoEnzyme(), x0)
-# jacobian(fx, AutoZygote(), x0)
-# jacobian(fx, AutoFiniteDifferences(), x0)
-jacobian(fx, AutoForwardDiff(), x0)
-jacobian(fx, AutoReverseDiff(), x0)
-jacobian(fx, AutoFiniteDiff(), x0)
+# jacobian(fx, AutoForwardDiff(), x0)
+# jacobian(fx, AutoReverseDiff(), x0)
+# jacobian(fx, AutoFiniteDiff(), x0)
 
 
 fp = function(p)
-    dx = similar(x0)
+    dx = similar(p,length(x0))
     nw(dx, x0, p, 0.0)
     dx
 end
-
 # jacobian(fp, AutoEnzyme(), pflat(p0)
 # jacobian(fp, AutoZygote(), pflat(p0))
 # jacobian(fp, AutoFiniteDifferences(), pflat(p0))
-jacobian(fp, AutoForwardDiff(), pflat(p0))
-jacobian(fp, AutoReverseDiff(), pflat(p0))
-jacobian(fp, AutoFiniteDiff(), pflat(p0))
+# jacobian(fp, AutoForwardDiff(), pflat(p0))
+# jacobian(fp, AutoReverseDiff(), pflat(p0))
+# jacobian(fp, AutoFiniteDiff(), pflat(p0))
+
+scenarios = [JacobianScenario(fx; x=x0, y=fx(x0), nb_args=1, place=:inplace, jac=jacobian(fx, AutoFiniteDiff(), x0)),
+             JacobianScenario(fp; x=pflat(p0), y=fp(pflat(p0)), nb_args=1, place=:inplace, jac=jacobian(fp, AutoFiniteDiff(), pflat(p0)))]
+backends = [AutoForwardDiff(), AutoReverseDiff()]
+test_differentiation(
+    backends,             # the backends you want to compare
+    scenarios,            # the scenarios you defined,
+    correctness=true,     # compares values against the reference
+    type_stability=false, # checks type stability with JET.jl
+    detailed=true,        # prints a detailed test set
+)
