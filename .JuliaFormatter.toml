@@ -1,22 +1,26 @@
 # full list: https://domluna.github.io/JuliaFormatter.jl/dev/#Formatting-Options
-style = "sciml"
-yas_style_nesting = true # special for this style
-margin = 92
+# style = "sciml"
+style = "yas"
+margin = 120
 always_for_in = true
 normalize_line_endings = "unix"
 whitespace_in_kwargs = false
 whitespace_typedefs = false
 whitespace_ops_in_indices = false
-format_markdown = true
+format_markdown = false
 format_docstrings = true
 join_lines_based_on_source = true
 remove_extra_newlines = false
+pipe_to_function_call = false
+always_use_return = false
 
 align_assignment = true
 align_struct_field = true
 align_conditional = true
 align_pair_arrow = true
 align_matrix = true
+
+# ignore = ["docs/examples", "oldexamples", "test/oldtests"]
 
 # indent = 4,
 # margin = 92,

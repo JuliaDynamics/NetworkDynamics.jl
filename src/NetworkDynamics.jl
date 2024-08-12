@@ -65,8 +65,10 @@ export chk_component
 include("doctor.jl")
 
 #=
-styled"{bright_red:red} {bright_green:green} {bright_yellow:yellow} {bright_blue:blue} {bright_magenta:magenta} {bright_cyan:cyan} {bright_black:black} {bright_white:white}"
-styled"{red:red} {green:green} {yellow:yellow} {blue:blue} {magenta:magenta} {cyan:cyan} {black:black} {white:white}"
+using StyledStrings
+s1 = styled"{bright_red:brred} {bright_green:brgreen} {bright_yellow:bryellow} {bright_blue:brblue} {bright_magenta:brmagenta} {bright_cyan:brcyan} {bright_black:brblack} {bright_white:brwhite}";
+s2 = styled"{red:  red} {green:  green} {yellow:  yellow} {blue:  blue} {magenta:  magenta} {cyan:  cyan} {black:  black} {white:  white}";
+println(s1, "\n", s2)
 =#
 const ND_FACES = [
     :NetworkDynamics_inactive => StyledStrings.Face(foreground=:bright_black),
