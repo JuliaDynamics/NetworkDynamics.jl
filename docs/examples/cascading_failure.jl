@@ -33,7 +33,7 @@ function swing_equation(dv, v, esum, p,t)
     dv[2] = dv[2] / I
     nothing
 end
-odevertex  = ODEVertex(swing_equation; sym=[:δ, :ω], psym=[:P_ref, :I=>1, :γ=>0.1], depth=1)
+odevertex = ODEVertex(swing_equation; sym=[:δ, :ω], psym=[:P_ref, :I=>1, :γ=>0.1], depth=1)
 
 #=
 Lets define a simple purely active power line whose active power flow is
@@ -84,11 +84,19 @@ function affect!(integrator, idx)
     p = NWParameter(integrator) # get indexable parameter object
     p.e[idx, :K] = 0
     auto_dt_reset!(integrator)
+    save_parameters!(integrator)
     nothing
 end
 nothing #hide #md
 
 #=
+There is one important aspect to this function: the [`save_parameters`](@docs) call.
+In the callback, we change the parameters of the network, making the parameters time
+dependent. The flow on the line is a function `P(t) = f(u(t), p(t))`. Thus we need to
+inform the integrator, that a discrete change in parameters happend. With this, the
+solution object not only tracks `u(t)` but also `p(t)` and we may extract the observable `P(t)`
+directly.
+
 The callback trigger condition is a bit more complicated. The straight forward version looks like this:
 =#
 function naive_condition(out, u, t, integrator)
@@ -107,11 +115,14 @@ However, from a performacne perspectiv there are problems with this solution: on
 every call, we need to perform symbolic indexing into the `NWState` object.
 Symbolic indexing is not cheap, as it requires to gather meta data about the network.
 Luckily, the `SymbolicIndexingInterface` package which powers the symbolic indexing
-provids the lower level functions `getp` and `getu` which can be used to create and
+provides the lower level functions `getp` and `getu` which can be used to create and
 cache accessors to the internal states.
+
+This still isn't ideal beacuse both `getlim` and `getflow` getters will create arrays
+within the callback. But is far better then resolving the flat state indices every time.
 =#
-condition = let getlim = SII.getp(swing_network, EPIndex(1:ne(g), :limit)),
-                getflow = SII.getu(swing_network, EIndex(1:ne(g), :P))
+condition = let getlim = SII.getp(swing_network, epidxs(swing_network, :, :limit)),
+                getflow = SII.getu(swing_network, eidxs(swing_network, :, :P))
     function (out, u, t, integrator)
         ## careful,  u != integrator.u
         ## therefore construct nwstate with Network info from integrator but u
@@ -147,12 +158,7 @@ prob = ODEProblem(swing_network, uflat(u0), (0,6), copy(pflat(p));
 Main.test_execution_styles(prob) # testing all ex styles #src
 sol = solve(prob, Tsit5());
 
+nothing #hide
+
+# Through the magic of symbolic indexing we can plot the power flows on all lines:
 plot(sol; idxs=eidxs(sol,:,:P))
-
-#=
-Currently, plotting of "observed" states such as static edge states does not work,
-because they depend on `e(t) = f(u(t), p(t), t)`, and currently the ODESolution
-does not track `p` over time.
-
-TODO: eventually SII will allow for "parameter timeseries" which track the parameters
-=#

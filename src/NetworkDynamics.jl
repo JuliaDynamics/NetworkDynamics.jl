@@ -15,6 +15,7 @@ using LinearAlgebra: LinearAlgebra, UniformScaling
 using SparseArrays: sparse
 using DocStringExtensions: FIELDS, TYPEDEF
 using StyledStrings: StyledStrings, @styled_str
+using RecursiveArrayTools: DiffEqArray
 
 @static if VERSION ≥ v"1.11.0-0"
     using Base: AnnotatedIOBuffer, AnnotatedString
@@ -52,6 +53,7 @@ include("adapt.jl")
 # XXX: have both, s[:] and uflat(s) ?
 export VIndex, EIndex, VPIndex, EPIndex, NWState, NWParameter, uflat, pflat
 export vidxs, eidxs, vpidxs, epidxs
+export save_parameters!
 include("symbolicindexing.jl")
 
 using NonlinearSolve: NonlinearProblem, AbstractNonlinearSolveAlgorithm

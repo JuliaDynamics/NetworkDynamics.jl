@@ -59,6 +59,6 @@ f(dx, x0, nothing, 0.0)
 
 
 estates1 = sol_st_ver(sol_st_ver.t[end], idxs=EIndex(1:ne(g),1))
-estates2 = NWState(diff_network_st_ver, sol_st_ver[end]).e[1:ne(g),1]
-estates3 = NWState(sol_st_ver, sol_st_ver[end]).e[1:ne(g),1]
+estates2 = NWState(diff_network_st_ver, sol_st_ver.u[end]).e[1:ne(g),1]
+estates3 = NWState(sol_st_ver, sol_st_ver.u[end]).e[1:ne(g),1]
 @test estates1 == estates2 == estates3

@@ -305,11 +305,24 @@ end
 
 @info "Test state getindex call"
 for idx in idxtypes
-    b = @b $s[$idx]
+    # HACK: _expand_and_collect to workaround https://github.com/SciML/SymbolicIndexingInterface.jl/issues/94
+    _idx = NetworkDynamics._expand_and_collect(s, idx)
+    getter = SII.getu(s, _idx)
+    b = @b $(SII.getu)($s, $_idx)
     if b.allocs != 0
-        println(idx, " => ", b.allocs, " allocations")
+        println(idx, "\t=> ", b.allocs, " allocations to generate getter")
     end
-    @test b.allocs <= 24
+    b = @b $getter($s)
+    v = getter(s)
+    if v isa Number
+        @test b.allocs == 0
+        b.allocs != 0 && println(idx, " => ", b.allocs, " allocations to call getter")
+    elseif v isa AbstractArray
+        @test b.allocs == 2
+        b.allocs > 2 && println(idx, " => ", b.allocs, " allocations to call getter")
+    else
+        @test false
+    end
 end
 
 # tests for state/parameter constructing/conversion
@@ -390,3 +403,23 @@ nw = Network(g, [n1, n2, n3], [e1, e2])
                                              VPIndex(2, :p1),
                                              VPIndex(2, :p2)]
 @test epidxs(nw,:,:) == EPIndex[]
+
+####
+#### Timeseries parameter test
+####
+using NetworkDynamics: vidxs, eidxs, vpidxs, epidxs
+n1 = ODEVertex(x->x, [:u, :v], [:p1, :p2])
+n2 = ODEVertex(x->x, [:x1, :x2], [:p1, :p2], obsf=identity, obssym=[:o1, :o2])
+n3 = ODEVertex(x->x, 3; name=:Vertex3)
+e1 = StaticEdge(x->x, [:e1], AntiSymmetric())
+e2 = StaticEdge(x->x, [:esrc,:edst], Fiducial())
+g = path_graph(3)
+nw = Network(g, [n1, n2, n3], [e1, e2])
+
+@test SII.get_all_timeseries_indexes(nw, :t) == Set([SII.ContinuousTimeseries()])
+# https://github.com/SciML/SymbolicIndexingInterface.jl/issues/95
+@test_broken SII.get_all_timeseries_indexes(nw, :x) == Set()
+
+@test SII.get_all_timeseries_indexes(nw, VIndex(1,:u)) == Set([SII.ContinuousTimeseries()])
+@test SII.get_all_timeseries_indexes(nw, VPIndex(1,:p1)) == Set([1])
+@test SII.get_all_timeseries_indexes(nw, [VIndex(1,:u), VPIndex(1,:p1)]) == Set([SII.ContinuousTimeseries(), 1])

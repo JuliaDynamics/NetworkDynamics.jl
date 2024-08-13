@@ -283,6 +283,66 @@ function SII.parameter_symbols(nw::Network)
 end
 
 ####
+#### Timeseries parameter indexing
+####
+SII.is_timeseries_parameter(nw::Network, sni) = SII.is_parameter(nw::Network, sni)
+function SII.timeseries_parameter_index(nw::Network, sni)
+    # NOTE: ALL parameters are lumped in timeseries with idx 1
+    SII.ParameterTimeseriesIndex.(1, SII.parameter_index.(nw, sni))
+end
+
+function SII.get_all_timeseries_indexes(nw::Network, sym)
+    # allways return ContTimeseries if sym is random stuff, see
+    # https://github.com/SciML/SymbolicIndexingInterface.jl/issues/95
+
+    # if SII.is_variable(nw, sym) || SII.is_independent_variable(nw, sym) || SII.is_observed(nw, sym)
+    #     return Set([SII.ContinuousTimeseries()])
+    # elseif SII.is_timeseries_parameter(nw, sym)
+    #     return Set([SII.timeseries_parameter_index(nw, sym).timeseries_idx])
+    # else
+    #     return Set()
+    # end
+    if SII.is_timeseries_parameter(nw, sym)
+        return Set{Union{Int, SII.ContinuousTimeseries}}([SII.timeseries_parameter_index(nw, sym).timeseries_idx])
+    else
+        return Set{Union{Int, SII.ContinuousTimeseries}}([SII.ContinuousTimeseries()])
+    end
+end
+function SII.get_all_timeseries_indexes(nw::Network, sym::AbstractArray)
+    return mapreduce(Base.Fix1(SII.get_all_timeseries_indexes, nw), union, sym;
+        init = Set{Union{Int, SII.ContinuousTimeseries}}())
+end
+
+function SII.with_updated_parameter_timeseries_values(nw::Network, params, args::Pair...)
+    @assert length(args) == 1 "Did not expect more than 1 timeseries here, please report issue."
+    tsidx, p = args[1]
+    @assert tsidx == 1 "Did not expect the passed timeseries to have other index then 1, please report issue."
+    params .= p
+end
+
+
+function SciMLBase.create_parameter_timeseries_collection(nw::Network, p::AbstractVector, tspan)
+    data = DiffEqArray(Vector{Float64}[copy(p)], Float64[tspan[begin]])
+    tsc = SII.ParameterTimeseriesCollection((data,), copy(p))
+    return tsc
+end
+
+function SciMLBase.get_saveable_values(nw::Network, p::AbstractVector, timeseries_idx)
+    @assert timeseries_idx == 1 # nothing else makes sense
+    copy(p)
+end
+"""
+    save_parameters!(integrator::SciMLBase.DEIntegrator)
+
+Save the current parameter values in the integrator. Call this function inside callbacks
+if the parameter values have changed. This will store a timeseries of said parameters in the
+solution object, thus alowing us to recosntruct observables which depend on time-dependet variables.
+"""
+function save_parameters!(integrator::SciMLBase.DEIntegrator)
+    SciMLBase.save_discretes!(integrator, 1)
+end
+
+####
 #### Observed indexing
 ####
 function SII.is_observed(nw::Network, sni)
@@ -382,7 +442,8 @@ function SII.observed(nw::Network, snis)
         end
     end
 end
-function _expand_and_collect(nw::Network, sni::SymbolicIndex)
+function _expand_and_collect(inpr, sni::SymbolicIndex)
+    nw = extract_nw(inpr)
     if _hascolon(sni)
         collect(_resolve_colon(nw, sni))
     elseif SII.symbolic_type(sni) === SII.ArraySymbolic()
@@ -391,7 +452,8 @@ function _expand_and_collect(nw::Network, sni::SymbolicIndex)
         sni
     end
 end
-function _expand_and_collect(nw::Network, snis)
+function _expand_and_collect(inpr, snis)
+    nw = extract_nw(inpr)
     mapreduce(vcat, snis) do sni
         _expand_and_collect(nw, sni)
     end
@@ -644,7 +706,8 @@ SII.current_time(s::NWParameter) = error("Parameter type does not holde time val
 
 # NWParameter: getindex
 Base.getindex(p::NWParameter, ::Colon) = pflat(p)
-Base.getindex(p::NWParameter, idx) = SII.getp(p, _paraindex(idx))(p)
+# HACK: _expand_and_collect to workaround https://github.com/SciML/SymbolicIndexingInterface.jl/issues/94
+Base.getindex(p::NWParameter, idx) = SII.getp(p, _expand_and_collect(p, _paraindex(idx)))(p)
 
 # NWParameter: setindex!
 function Base.setindex!(p::NWParameter, val, idx)
@@ -661,11 +724,13 @@ _paraindex(idx::SymbolicParameterIndex) = idx
 
 # NWState: getindex
 Base.getindex(s::NWState, ::Colon) = uflat(s)
-Base.getindex(s::NWState, idx::SymbolicParameterIndex) = SII.getp(s, idx)(s)
+# HACK: _expand_and_collect to workaround https://github.com/SciML/SymbolicIndexingInterface.jl/issues/94
+Base.getindex(s::NWState, idx::SymbolicParameterIndex) = SII.getp(s, _expand_and_collect(s, idx))(s)
 Base.getindex(s::NWState, idx::SymbolicStateIndex) = SII.getu(s, idx)(s)
 function Base.getindex(s::NWState, idxs)
     if all(i -> i isa SymbolicParameterIndex, idxs)
-        SII.getp(s, idxs)(s)
+        # HACK: _expand_and_collect to workaround https://github.com/SciML/SymbolicIndexingInterface.jl/issues/94
+        SII.getp(s, _expand_and_collect(s, idxs))(s)
     else
         SII.getu(s, idxs)(s)
     end
