@@ -38,6 +38,7 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t) where {A,B,C,D,E,dT,T}
     return nothing
 end
 
+get_ustacked_buf(s) = get_ustacked_buf(s.nw, uflat(s), pflat(s), s.t)
 function get_ustacked_buf(nw, u, p, t)
     _u = nw.cachepool[u, nw.im.lastidx_static]
     _u[1:nw.im.lastidx_dynamic] .= u
@@ -47,7 +48,7 @@ function get_ustacked_buf(nw, u, p, t)
     aggbuf = nw.cachepool[_u, nw.im.lastidx_aggr]
     aggregate!(nw.layer.aggregator, aggbuf, _u)
     process_vertices!(ex, nw, aggbuf, dupt; filt=isstatic)
-    _u
+    _u, aggbuf
 end
 
 ####

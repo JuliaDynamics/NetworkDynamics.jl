@@ -107,6 +107,7 @@ end
         Aqua.test_all(NetworkDynamics;
             ambiguities=false,
             persistent_tasks=false)
+        @test_broken isempty(Docs.undocumented_names(NetworkDynamics))
     end
 
     @safetestset "utils test" begin include("utils_test.jl") end

@@ -23,6 +23,7 @@ function find_fixpoint(nw::Network, x0::AbstractVector, p::AbstractVector;
     prob = SteadyStateProblem(nw, x0, p)
     sol = _solve_fixpoint(prob, alg; kwargs...)
     if !SciMLBase.successful_retcode(sol.retcode)
+        @warn "Solver did not finish retcode = $(sol.retcode) (alg = $alg)!"
         error("""
         Could not find fixpoint, solver returned $(sol.retcode)! For debugging, \
         it is advised to manually construct the steady state problem and try \
@@ -39,7 +40,7 @@ function find_fixpoint(nw::Network, x0::AbstractVector, p::AbstractVector;
 end
 
 function _solve_fixpoint(prob, alg::AbstractNonlinearSolveAlgorithm; kwargs...)
-    _prob = NonlinearProblem(nw, prob)
+    _prob = NonlinearProblem(prob)
     SciMLBase.solve(_prob, alg; kwargs...)
 end
 
