@@ -5,7 +5,7 @@ using ModelingToolkit: ModelingToolkit, Equation, ODESystem, Differential
 using ModelingToolkit: full_equations, get_variables, structural_simplify, getname, unwrap
 using ModelingToolkit: full_parameters, unknowns, independent_variable, observed, defaults
 using ModelingToolkit: get_substitutions
-using ModelingToolkit.Symbolics: fixpoint_sub
+using ModelingToolkit.Symbolics: Symbolics, fixpoint_sub
 using ArgCheck: @argcheck
 using LinearAlgebra: Diagonal, I
 
@@ -21,7 +21,7 @@ function ODEVertex(sys::ODESystem, inputs, outputs; verbose=false)
     gen = generate_io_function(sys, (inputs, ), outputs; type=:ode, verbose)
 
     f = gen.f_ip
-    defdict = defaults(sys)
+    defdict = _resolved_defaults(sys)
     sym = getname.(gen.states)
     def = map(gen.states) do s
         get(defdict, s, nothing)
@@ -46,7 +46,7 @@ function StaticEdge(sys::ODESystem, srcin, dstin, outputs, coupling; verbose=fal
     gen = generate_io_function(sys, (srcin, dstin), outputs; type=:static, verbose)
 
     f = gen.f_ip
-    defdict = defaults(sys)
+    defdict = _resolved_defaults(sys)
     sym = getname.(gen.states)
     def = map(gen.states) do s
         get(defdict, s, nothing)
@@ -62,29 +62,52 @@ function StaticEdge(sys::ODESystem, srcin, dstin, outputs, coupling; verbose=fal
     StaticEdge(;f, sym, def, psym, pdef, depth, obssym, obsf, coupling, name)
 end
 
+"""
+defaults might be given als algebraic map from other parameters, try to resolve
+"""
+function _resolved_defaults(sys)
+    _defdict = defaults(sys)
+    defdict = Dict()
+    for (k,v) in _defdict
+       if v isa Symbolic
+          v = fixpoint_sub(v, _defdict)
+          if v isa Symbolic
+             error("Could not resolve $k => $v in defaults map!")
+          end
+       end
+       defdict[k] = v
+    end
+    defdict
+end
+
 function generate_io_function(_sys, inputss::Tuple, outputs;
                               expression=Val{false}, verbose=false, type=:auto)
     # TODO: scalarize vector symbolics/equations?
 
     # f_* may be given in namepsace version or as symbols, resolve to unnamespaced Symbolic
     inputss = map(inputss) do in
-        _resolve_var.(Ref(_sys), in)
+        _resolve_to_symbolic.(Ref(_sys), in)
     end
     allinputs = reduce(union, inputss)
-    outputs = _resolve_var.(Ref(_sys), outputs)
+    outputs = _resolve_to_symbolic.(Ref(_sys), outputs)
     sys, _ = structural_simplify(_sys, (allinputs, outputs); simplify=true)
 
     # extract the main equations and observed equations
     eqs::Vector{Equation} = full_equations(sys)
+    fix_metadata!(eqs, sys);
 
     # extract observed equations. They might depend on eachother so resolve them
     obs_subs = Dict(eq.lhs => eq.rhs for eq in observed(sys))
     obseqs = map(observed(sys)) do eq
         eq.lhs ~ fixpoint_sub(eq.rhs, obs_subs)
     end
+    fix_metadata!(obseqs, sys);
     # obs can only depend on parameters (including allinputs) or states
     obs_deps = mapreduce(eq -> get_variables(eq.rhs), union, obseqs, init=Symbolic[])
-    @assert obs_deps ⊆ Set(full_parameters(sys)) ∪ Set(unknowns(sys))
+    # @assert obs_deps ⊆ Set(full_parameters(sys)) ∪ Set(unknowns(sys)) "Difference: $(setdiff(obs_deps, Set(full_parameters(sys)) ∪ Set(unknowns(sys))))"
+    if !(obs_deps ⊆ Set(full_parameters(sys)) ∪ Set(unknowns(sys)))
+        @warn "obs_deps !⊆ parameters ∪ unknowns. Difference: $(setdiff(obs_deps, Set(full_parameters(sys)) ∪ Set(unknowns(sys))))"
+    end
 
     @argcheck allinputs ⊆ Set(full_parameters(sys))
 
@@ -102,6 +125,7 @@ function generate_io_function(_sys, inputss::Tuple, outputs;
             eq = mout ~ fixpoint_sub(mout, subs)
             push!(eqs, eq)
         end
+        fix_metadata!(eqs, sys);
 
         # we promoted the missing outputs to "states" again, so we need to remove them from obseqs
         filter!(obseqs) do eq

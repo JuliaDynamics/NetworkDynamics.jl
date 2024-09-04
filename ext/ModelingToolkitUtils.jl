@@ -66,11 +66,16 @@ function _collect_differentials!(found, ex)
     return found
 end
 
-function _resolve_var(sys, var)
+function _resolve_to_symbolic(sys, var)
     ns = string(getname(sys))
     varname = string(getname(var))
-    varname_nons = Symbol(replace(varname, r"^"*ns*"₊" => ""))
-    unwrap(getproperty(sys, varname_nons; namespace=false))
+    varname_nons = replace(varname, r"^"*ns*"₊" => "")
+    parts = split(varname_nons, "₊")
+    r = getproperty(sys, Symbol(parts[1]); namespace=false)
+    for part in parts[2:end]
+        r = getproperty(r, Symbol(part); namespace=true)
+    end
+    unwrap(r)
 end
 
 function reorder_by_states(eqs::AbstractVector{Equation}, states)
@@ -109,4 +114,56 @@ function warn_events(sys)
     if !isempty(cev) || !isempty(dev)
         @warn "Model has attached events, which is not supportet."
     end
+end
+
+function check_metadata(exprs)
+    nometadata = []
+    for ex in exprs
+        if ex isa Equation
+            _check_metadata!(nometadata, ex.rhs)
+            _check_metadata!(nometadata, ex.lhs)
+        else
+            _check_metadata!(nometadata, ex)
+        end
+    end
+    return unique!(nometadata)
+end
+function _check_metadata!(nometadata, expr)
+    vars = Symbolics.get_variables(expr)
+    for v in vars
+        isnothing(Symbolics.metadata(v)) && push!(nometadata, v)
+    end
+end
+
+function fix_metadata!(invalid_eqs, sys)
+    missingmetadata = check_metadata(invalid_eqs)
+    if isempty(missingmetadata)
+        return invalid_eqs
+    end
+
+    metadatasubs = Dict()
+    allsyms = ModelingToolkit.all_symbols(sys)
+    allnames = string.(ModelingToolkit.getname.(allsyms))
+    for invalids in missingmetadata
+        invalidname = getname(invalids)
+        valid = if hasproperty(sys, getname(invalidname))
+            getproperty(sys, getname(invalidname); namespace=false)
+        else
+            idxs = findall(contains(string(invalidname)), allnames)
+            if length(idxs) == 1
+                allsyms[only(idxs)]
+            else
+                @warn "Could not resolve invalid symbol $invalidname, options are $(allsyms[idxs])"
+            end
+        end
+        metadatasubs[invalids] = valid
+    end
+
+    fixedeqs = [Symbolics.fast_substitute(eq, metadatasubs) for eq in invalid_eqs]
+    if !isempty(check_metadata(fixedeqs))
+        @warn "Some transformation droped metadata ($missingmetadata)! Could NOT be fixed. $(check_metadata(fixedeqs))"
+    else
+        @warn "Some transformation droped metadata ($missingmetadata)! Could be fixed."
+    end
+    invalid_eqs .= fixedeqs
 end

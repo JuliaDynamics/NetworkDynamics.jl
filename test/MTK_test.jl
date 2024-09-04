@@ -6,6 +6,8 @@ using OrdinaryDiffEq
 using LinearAlgebra
 using Graphs
 
+# TODO: Clean up MTK tests
+
 @mtkmodel Bus begin
     @variables begin
         θ(t), [description = "voltage angle", output=true]
@@ -86,6 +88,8 @@ sol = solve(prob, Tsit5())
 end
 
 rotm(θ) = [cos(θ) -sin(θ); sin(θ) cos(θ)]
+
+
 @mtkmodel DQSwing begin
     @extend DQBus()
     @variables begin
@@ -101,9 +105,10 @@ rotm(θ) = [cos(θ) -sin(θ); sin(θ) cos(θ)]
     end
     @equations begin
         Dt(θ) ~ ω
+        Pel ~ real((u_r + im*u_i) * (i_r - im*i_i))
         Dt(ω) ~ 1/M * (Pmech - D*ω + Pel)
-        Pel ~ real(Complex(u_r, u_i) * conj(Complex(i_r, i_i)))
-        [u_r, u_i] ~ rotm(θ) * [V; 0]
+        u_r ~ V*cos(θ)
+        u_i ~ V*sin(θ)
     end
 end
 
@@ -121,6 +126,19 @@ v = ODEVertex(dqswing, [:i_r, :i_i], [:u_r, :u_i])
         src_i_i(t), [description = "src d-current", output=true]
         dst_i_r(t), [description = "dst d-current", output=true]
         dst_i_i(t), [description = "dst d-current", output=true]
+    end
+end
+
+@mtkmodel DQYLine begin
+    @extend DQLine()
+    @parameters begin
+        Y_r, [description = "Real part of admittance"]
+        Y_i, [description = "Imaginary part of admittance"]
+    end
+    @equations begin
+        icomplex ~ (Y_r + im*Y_i) * (dst_u_r + im*dst_u_i - src_u_r - im*src_u_i)
+        dst_i_r ~ real(icomplex)
+        dst_i_i ~ imag(icomplex)
     end
 end
 
