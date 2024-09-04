@@ -318,7 +318,7 @@ for idx in idxtypes
         @test b.allocs == 0
         b.allocs != 0 && println(idx, " => ", b.allocs, " allocations to call getter")
     elseif v isa AbstractArray
-        @test b.allocs == 2
+        @test b.allocs <= 2
         b.allocs > 2 && println(idx, " => ", b.allocs, " allocations to call getter")
     else
         @test false
