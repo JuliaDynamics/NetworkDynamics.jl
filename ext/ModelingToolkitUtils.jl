@@ -144,10 +144,13 @@ function fix_metadata!(invalid_eqs, sys)
     metadatasubs = Dict()
     allsyms = ModelingToolkit.all_symbols(sys)
     allnames = string.(ModelingToolkit.getname.(allsyms))
+
     for invalids in missingmetadata
         invalidname = getname(invalids)
         valid = if hasproperty(sys, getname(invalidname))
-            getproperty(sys, getname(invalidname); namespace=false)
+            # https://github.com/SciML/ModelingToolkit.jl/issues/3016
+            # getproperty(sys, getname(invalidname); namespace=false)
+            _resolve_to_symbolic(sys, invalids) # like getproperty but works on namespaced symbols foo₊bar directly
         else
             idxs = findall(contains(string(invalidname)), allnames)
             if length(idxs) == 1
