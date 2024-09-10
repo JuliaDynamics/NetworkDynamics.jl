@@ -1,6 +1,6 @@
 module ModelingToolkitExt
 
-using ModelingToolkit: Symbolic, istree, operation, arguments, build_function
+using ModelingToolkit: Symbolic, iscall, operation, arguments, build_function
 using ModelingToolkit: ModelingToolkit, Equation, ODESystem, Differential
 using ModelingToolkit: full_equations, get_variables, structural_simplify, getname, unwrap
 using ModelingToolkit: full_parameters, unknowns, independent_variable, observed, defaults
@@ -129,7 +129,7 @@ function generate_io_function(_sys, inputss::Tuple, outputs;
 
         for mout in missingouts
             eq = mout ~ fixpoint_sub(mout, subs)
-            if !istree(eq.rhs) || operation(eq.rhs) isa Symbolics.BasicSymbolic
+            if !iscall(eq.rhs) || operation(eq.rhs) isa Symbolics.BasicSymbolic
                 @warn "Adding trivial equation $eq. This needs to be fixed in NetworkDynamics."
             end
             push!(eqs, eq)

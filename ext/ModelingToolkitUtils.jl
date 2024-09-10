@@ -9,7 +9,7 @@ Checks the type of the equation. Returns:
 
 """
 function eq_type(eq::Equation)
-    if istree(eq.lhs) && operation(eq.lhs) isa Differential
+    if iscall(eq.lhs) && operation(eq.lhs) isa Differential
         vars = get_variables(eq.lhs)
         @argcheck length(vars) == 1 "Diff. eq $eq has more than one variable in lhs!"
         return (:explicit_diffeq, vars[1])
@@ -54,7 +54,7 @@ end
 _collect_differentials(ex) = _collect_differentials!(Set{Symbolic}(), ex)
 
 function _collect_differentials!(found, ex)
-    if istree(ex)
+    if iscall(ex)
         if operation(ex) isa Differential
             push!(found, ex)
         else
