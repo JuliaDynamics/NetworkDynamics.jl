@@ -424,56 +424,47 @@ function SII.observed(nw::Network, snis)
         _snis = (_snis, )
     end
 
-    # First: resolve everything in fullstate (static and dynamic states)
+    # mapping i -> index in fullstate (dynamic and static states)
     flatidxs = Dict{Int, Int}()
+    # mapping i -> f(fullstate, p, t) (component observables)
+    obsfuns = Dict{Int, Function}()
     for (i, sni) in enumerate(_snis)
         if SII.is_variable(nw, sni)
             flatidxs[i] = SII.variable_index(nw, sni)
         else
             cf = getcomp(nw, sni)
-            if !isdynamic(cf) && subsym_has_idx(sni.subidx, sym(cf))
+            if !isdynamic(cf) && subsym_has_idx(sni.subidx, sym(cf)) # static state
                 _range = getcomprange(nw, sni)
                 flatidxs[i] = _range[subsym_to_idx(sni.subidx, sym(cf))]
+            elseif subsym_has_idx(sni.subidx, obssym(cf)) #found in observed
+                _idx = subsym_to_idx(sni.subidx, obssym(cf))
+                _obsf = _get_observed_f(nw, cf, sni.compidx)
+                obsfuns[i] = (u, aggbuf, p, t) -> _obsf(u, aggbuf, p, t)[_idx]
+            else
+                throw(ArgumentError("Cannot resolve observable $sni"))
             end
         end
     end
 
-    # mapping i -> f(fullstate, p, t)
-    obsfuns = Dict{Int, Function}()
-    for (i, sni) in enumerate(_snis)
-        cf = getcomp(nw, sni)
-        if subsym_has_idx(sni.subidx, obssym(cf)) #found in observed
-            _idx = subsym_to_idx(sni.subidx, obssym(cf))
-            _obsf = _get_observed_f(nw, cf, sni.compidx)
-            obsfuns[i] = (u, aggbuf, p, t) -> _obsf(u, aggbuf, p, t)[_idx]
-        end
-    end
-
-    foundkeys = sort!(vcat(collect(keys(flatidxs)), collect(keys(obsfuns))))
-    if foundkeys != 1:length(_snis)
-        msg = "Could not resolve all observables:"
-        setdiff(1:length(_snis), foundkeys) |> (i -> msg *= "\n  - $(_snis[i])")
-        if unique(foundkeys) != foundkeys
-            msg *= "\n  - some observables are defined multiple times. Report as bug!"
-        end
-        throw(ArgumentError(msg))
-    end
-
-    let _nw=nw, _flatidxs=flatidxs, _obsfuns=obsfuns
-        function(u, p, t)
-            _u, _aggbuf = get_ustacked_buf(_nw, u, p, t)
-            out = similar(u, length(_snis))
-            for (i, flati) in _flatidxs
+    @closure (u, p, t) -> begin
+        _u, _aggbuf = get_ustacked_buf(nw, u, p, t)
+        if isscalar
+            if !isempty(flatidxs)
+                idx = only(flatidxs).second
+                _u[idx]
+            else
+                obsf = only(obsfuns).second
+                obsf(_u, _aggbuf, p, t)::typeof(u)
+            end
+        else
+            out = similar(u, length(snis))
+            for (i, flati) in flatidxs
                 out[i] = _u[flati]
             end
-            for (i, obsf) in _obsfuns
-                out[i] = obsf(_u, _aggbuf, p, t)
+            for (i, obsf) in obsfuns
+                out[i] = obsf(_u, _aggbuf, p, t)::typeof(u)
             end
-            if isscalar
-                only(out)
-            else
-                out
-            end
+            out
         end
     end
 end

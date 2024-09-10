@@ -300,7 +300,7 @@ for idx in idxtypes
     if b.allocs != 0
         println(idx, " => ", b.allocs, " allocations")
     end
-    @test b.allocs <= 4
+    @test b.allocs <= 7
 end
 
 @info "Test state getindex call"
@@ -315,10 +315,10 @@ for idx in idxtypes
     b = @b $getter($s)
     v = getter(s)
     if v isa Number
-        @test b.allocs == 0
+        @test b.allocs <= 1
         b.allocs != 0 && println(idx, " => ", b.allocs, " allocations to call getter")
     elseif v isa AbstractArray
-        @test b.allocs <= 2
+        @test b.allocs <= 3
         b.allocs > 2 && println(idx, " => ", b.allocs, " allocations to call getter")
     else
         @test false

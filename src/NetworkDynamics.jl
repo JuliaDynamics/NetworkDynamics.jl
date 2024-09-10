@@ -16,6 +16,7 @@ using SparseArrays: sparse
 using DocStringExtensions: FIELDS, TYPEDEF
 using StyledStrings: StyledStrings, @styled_str
 using RecursiveArrayTools: DiffEqArray
+using FastClosures: @closure
 
 @static if VERSION ≥ v"1.11.0-0"
     using Base: AnnotatedIOBuffer, AnnotatedString
