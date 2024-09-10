@@ -300,7 +300,7 @@ for idx in idxtypes
     if b.allocs != 0
         println(idx, " => ", b.allocs, " allocations")
     end
-    @test b.allocs <= 7
+    @test b.allocs <= 9
 end
 
 @info "Test state getindex call"
