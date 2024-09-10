@@ -88,12 +88,8 @@ function stylesymbolarray(syms, defaults, symstyles=Dict{Int,Symbol}())
     @assert length(syms) == length(defaults)
     ret = "["
     for (i, sym, default) in zip(1:length(syms), syms, defaults)
-        style = get(symstyles, i, nothing)
-        if isnothing(style)
-            ret = ret * string(sym)
-        else
-            ret = ret * styled"{$style:$(string(sym))}"
-        end
+        style = get(symstyles, i, :default)
+        ret = ret * styled"{$style:$(string(sym))}"
         if !isnothing(default)
             ret = ret * styled"{NetworkDynamics_defaultval:=$default}"
         end
