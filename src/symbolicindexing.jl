@@ -454,7 +454,7 @@ function SII.observed(nw::Network, snis)
                 _u[idx]
             else
                 obsf = only(obsfuns).second
-                obsf(_u, _aggbuf, p, t)::typeof(u)
+                obsf(_u, _aggbuf, p, t)::eltype(u)
             end
         else
             out = similar(u, length(snis))
@@ -462,7 +462,7 @@ function SII.observed(nw::Network, snis)
                 out[i] = _u[flati]
             end
             for (i, obsf) in obsfuns
-                out[i] = obsf(_u, _aggbuf, p, t)::typeof(u)
+                out[i] = obsf(_u, _aggbuf, p, t)::eltype(u)
             end
             out
         end
