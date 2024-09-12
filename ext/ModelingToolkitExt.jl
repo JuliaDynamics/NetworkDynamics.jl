@@ -210,4 +210,11 @@ function generate_io_function(_sys, inputss::Tuple, outputs;
             params)
 end
 
+using PrecompileTools: @setup_workload, @compile_workload
+@setup_workload begin
+    @compile_workload begin
+        include("precompile_workload.jl")
+    end
+end
+
 end
