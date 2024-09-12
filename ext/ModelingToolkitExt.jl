@@ -176,7 +176,7 @@ function generate_io_function(_sys, inputss::Tuple, outputs;
 
         # create massmatrix, we don't use the method provided by ODESystem because of reordering
         mm = generate_massmatrix(eqs)
-        verbose && @info "Reordered by states and generated mass matrix" mass_matrix
+        verbose && @info "Reordered by states and generated mass matrix" mm
         mm
     elseif type == :static
         all_static = all(isequal(:explicit_algebraic), first.(eq_type.(eqs)))
