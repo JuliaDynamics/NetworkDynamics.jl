@@ -3,7 +3,7 @@ module ModelingToolkitExt
 using ModelingToolkit: Symbolic, iscall, operation, arguments, build_function
 using ModelingToolkit: ModelingToolkit, Equation, ODESystem, Differential
 using ModelingToolkit: full_equations, get_variables, structural_simplify, getname, unwrap
-using ModelingToolkit: full_parameters, unknowns, independent_variable, observed, defaults
+using ModelingToolkit: full_parameters, unknowns, independent_variables, observed, defaults
 using ModelingToolkit: get_substitutions
 using ModelingToolkit.Symbolics: Symbolics, fixpoint_sub
 using ArgCheck: @argcheck
@@ -151,7 +151,7 @@ function generate_io_function(_sys, inputss::Tuple, outputs;
     # filter out unnecessary parameters
     used_params = params ∩ (mapreduce(get_variables, ∪, eqs, init=Set{Symbolic}()) ∪ mapreduce(get_variables, ∪, obseqs, init=Set{Symbolic}()))
     if Set(params) != Set(used_params)
-        @info "Remove parameters $(collect(setdiff(params, used_params))) which arn't used in the equations."
+        verbose && @info "Remove parameters $(collect(setdiff(params, used_params))) which arn't used in the equations."
         params = used_params
     end
 
@@ -187,7 +187,7 @@ function generate_io_function(_sys, inputss::Tuple, outputs;
     end
 
     # now generate the actual functions
-    iv = independent_variable(sys)
+    iv = independent_variables(sys)
 
     formulas = [eq.rhs for eq in eqs]
     if type == :ode
