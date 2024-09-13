@@ -93,7 +93,7 @@ function reloadfaces!()
 end
 # NetworkDynamics.reloadfaces!()
 
-using PrecompileTools: @setup_workload, @compile_workload    # this is a small dependency
+using PrecompileTools: @setup_workload, @compile_workload
 @setup_workload begin
     @compile_workload begin
         include("precompile_workload.jl")
