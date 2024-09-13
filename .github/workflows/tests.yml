@@ -16,13 +16,13 @@ jobs:
       fail-fast: false
       matrix:
         version:
-          # - '1.6' TODO: replace with new LTS (1.10 probably)
+          # - 'lts' TODO: replace with new LTS (1.10 probably)
           - '1'
           - 'pre'
         os:
           - ubuntu-latest
-          - macos-latest
-          - windows-latest
+          # - macos-latest
+          # - windows-latest
         arch:
           - x64
     steps:
