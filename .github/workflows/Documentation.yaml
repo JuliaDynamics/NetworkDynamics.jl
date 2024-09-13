@@ -7,6 +7,10 @@ on:
     tags: '*'
   pull_request:
   workflow_dispatch:
+concurrency:
+  # Skip intermediate builds: always.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true # allways cancle old runs on new push
 jobs:
   build:
     runs-on: ubuntu-latest

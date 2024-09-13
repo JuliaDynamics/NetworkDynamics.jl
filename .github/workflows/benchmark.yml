@@ -3,6 +3,11 @@ name: Benchmark a pull request
 on:
   pull_request:
 
+concurrency:
+  # Skip intermediate builds: always.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true # allways cancle old runs on new push
+
 permissions:
   pull-requests: write
   actions: write

@@ -5,6 +5,10 @@ on:
       - main
   pull_request:
   workflow_dispatch:
+concurrency:
+  # Skip intermediate builds: always.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true # allways cancle old runs on new push
 jobs:
   test:
     name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }}
