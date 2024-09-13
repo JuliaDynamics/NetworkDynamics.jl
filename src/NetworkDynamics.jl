@@ -16,6 +16,7 @@ using SparseArrays: sparse
 using DocStringExtensions: FIELDS, TYPEDEF
 using StyledStrings: StyledStrings, @styled_str
 using RecursiveArrayTools: DiffEqArray
+using FastClosures: @closure
 
 @static if VERSION ≥ v"1.11.0-0"
     using Base: AnnotatedIOBuffer, AnnotatedString
@@ -91,5 +92,12 @@ function reloadfaces!()
     foreach(StyledStrings.addface!, NetworkDynamics.ND_FACES)
 end
 # NetworkDynamics.reloadfaces!()
+
+using PrecompileTools: @setup_workload, @compile_workload
+@setup_workload begin
+    @compile_workload begin
+        include("precompile_workload.jl")
+    end
+end
 
 end

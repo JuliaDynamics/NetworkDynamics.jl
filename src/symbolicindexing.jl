@@ -419,26 +419,52 @@ Types of observable calls:
 
 function SII.observed(nw::Network, snis)
     _snis = _expand_and_collect(nw, snis)
+    isscalar = _snis isa SymbolicIndex
+    if isscalar
+        _snis = (_snis, )
+    end
 
-    # First: resolve everything in fullstate (static and dynamic states)
-    flatidxs = broadcast(_snis) do sni
+    # mapping i -> index in fullstate (dynamic and static states)
+    flatidxs = Dict{Int, Int}()
+    # mapping i -> f(fullstate, p, t) (component observables)
+    obsfuns = Dict{Int, Function}()
+    for (i, sni) in enumerate(_snis)
         if SII.is_variable(nw, sni)
-            SII.variable_index(nw, sni)
+            flatidxs[i] = SII.variable_index(nw, sni)
         else
             cf = getcomp(nw, sni)
-            if !isdynamic(cf) && subsym_has_idx(sni.subidx, sym(cf))
+            if !isdynamic(cf) && subsym_has_idx(sni.subidx, sym(cf)) # static state
                 _range = getcomprange(nw, sni)
-                _range[subsym_to_idx(sni.subidx, sym(cf))]
+                flatidxs[i] = _range[subsym_to_idx(sni.subidx, sym(cf))]
+            elseif subsym_has_idx(sni.subidx, obssym(cf)) #found in observed
+                _idx = subsym_to_idx(sni.subidx, obssym(cf))
+                _obsf = _get_observed_f(nw, cf, sni.compidx)
+                obsfuns[i] = (u, aggbuf, p, t) -> _obsf(u, aggbuf, p, t)[_idx]
             else
-                error("Observalbe mechanism cannot handle $sni yet.")
+                throw(ArgumentError("Cannot resolve observable $sni"))
             end
         end
     end
 
-    let _nw=nw, _flatidxs=flatidxs
-        function(u, p, t)
-            _u, _ = get_ustacked_buf(_nw, u, p, t)
-            _u[_flatidxs]
+    @closure (u, p, t) -> begin
+        _u, _aggbuf = get_ustacked_buf(nw, u, p, t)
+        if isscalar
+            if !isempty(flatidxs)
+                idx = only(flatidxs).second
+                _u[idx]
+            else
+                obsf = only(obsfuns).second
+                obsf(_u, _aggbuf, p, t)::eltype(u)
+            end
+        else
+            out = similar(u, length(snis))
+            for (i, flati) in flatidxs
+                out[i] = _u[flati]
+            end
+            for (i, obsf) in obsfuns
+                out[i] = obsf(_u, _aggbuf, p, t)::eltype(u)
+            end
+            out
         end
     end
 end
@@ -456,6 +482,33 @@ function _expand_and_collect(inpr, snis)
     nw = extract_nw(inpr)
     mapreduce(vcat, snis) do sni
         _expand_and_collect(nw, sni)
+    end
+end
+
+function _get_observed_f(nw::Network, cf::VertexFunction, vidx)
+    N = length(cf.obssym)
+    ur   = nw.im.v_data[vidx]
+    aggr = nw.im.v_aggr[vidx]
+    pr   = nw.im.v_para[vidx]
+    out = Vector{Float64}(undef, N)
+
+    function(u, aggbuf, p, t)
+        cf.obsf(out, view(u, ur), view(aggbuf, aggr), view(p, pr), t)
+        out
+    end
+end
+
+function _get_observed_f(nw::Network, cf::EdgeFunction, eidx)
+    N = length(cf.obssym)
+    ur    = nw.im.e_data[eidx]
+    esrcr = nw.im.e_src[eidx]
+    edstr = nw.im.e_dst[eidx]
+    pr   =  nw.im.e_para[eidx]
+    out = Vector{Float64}(undef, N)
+
+    function(u, aggbuf, p, t)
+        cf.obsf(out, view(u, ur), view(u, esrcr), view(u, edstr), view(p, pr), t)
+        out
     end
 end
 

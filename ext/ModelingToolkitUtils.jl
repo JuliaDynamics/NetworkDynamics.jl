@@ -9,7 +9,7 @@ Checks the type of the equation. Returns:
 
 """
 function eq_type(eq::Equation)
-    if istree(eq.lhs) && operation(eq.lhs) isa Differential
+    if iscall(eq.lhs) && operation(eq.lhs) isa Differential
         vars = get_variables(eq.lhs)
         @argcheck length(vars) == 1 "Diff. eq $eq has more than one variable in lhs!"
         return (:explicit_diffeq, vars[1])
@@ -54,7 +54,7 @@ end
 _collect_differentials(ex) = _collect_differentials!(Set{Symbolic}(), ex)
 
 function _collect_differentials!(found, ex)
-    if istree(ex)
+    if iscall(ex)
         if operation(ex) isa Differential
             push!(found, ex)
         else
@@ -144,10 +144,13 @@ function fix_metadata!(invalid_eqs, sys)
     metadatasubs = Dict()
     allsyms = ModelingToolkit.all_symbols(sys)
     allnames = string.(ModelingToolkit.getname.(allsyms))
+
     for invalids in missingmetadata
         invalidname = getname(invalids)
         valid = if hasproperty(sys, getname(invalidname))
-            getproperty(sys, getname(invalidname); namespace=false)
+            # https://github.com/SciML/ModelingToolkit.jl/issues/3016
+            # getproperty(sys, getname(invalidname); namespace=false)
+            _resolve_to_symbolic(sys, invalids) # like getproperty but works on namespaced symbols foo₊bar directly
         else
             idxs = findall(contains(string(invalidname)), allnames)
             if length(idxs) == 1

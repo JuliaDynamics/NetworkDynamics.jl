@@ -1,9 +1,9 @@
 module ModelingToolkitExt
 
-using ModelingToolkit: Symbolic, istree, operation, arguments, build_function
+using ModelingToolkit: Symbolic, iscall, operation, arguments, build_function
 using ModelingToolkit: ModelingToolkit, Equation, ODESystem, Differential
 using ModelingToolkit: full_equations, get_variables, structural_simplify, getname, unwrap
-using ModelingToolkit: full_parameters, unknowns, independent_variable, observed, defaults
+using ModelingToolkit: full_parameters, unknowns, independent_variables, observed, defaults
 using ModelingToolkit: get_substitutions
 using ModelingToolkit.Symbolics: Symbolics, fixpoint_sub
 using ArgCheck: @argcheck
@@ -32,7 +32,7 @@ function ODEVertex(sys::ODESystem, inputs, outputs; verbose=false)
     end
     depth = length(outputs)
     obsf = gen.g_ip
-    obssym = getname.(gen.params)
+    obssym = getname.(gen.obsstates)
     mass_matrix = gen.mass_matrix
     name = getname(sys)
     ODEVertex(;f, sym, def, psym, pdef, depth, obssym, obsf, mass_matrix, name)
@@ -56,7 +56,7 @@ function StaticEdge(sys::ODESystem, srcin, dstin, outputs, coupling; verbose=fal
         get(defdict, p, nothing)
     end
     obsf = gen.g_ip
-    obssym = getname.(gen.params)
+    obssym = getname.(gen.obsstates)
     depth = coupling isa Fiducial ? Int(length(outputs)/2) : length(outputs)
     name = getname(sys)
     StaticEdge(;f, sym, def, psym, pdef, depth, obssym, obsf, coupling, name)
@@ -90,7 +90,13 @@ function generate_io_function(_sys, inputss::Tuple, outputs;
     end
     allinputs = reduce(union, inputss)
     outputs = _resolve_to_symbolic.(Ref(_sys), outputs)
-    sys, _ = structural_simplify(_sys, (allinputs, outputs); simplify=true)
+
+    sys = if ModelingToolkit.iscomplete(_sys)
+        _sys
+    else
+        _openinputs = setdiff(allinputs, Set(full_parameters(_sys)))
+        structural_simplify(_sys, (_openinputs, outputs); simplify=true)[1]
+    end
 
     # extract the main equations and observed equations
     eqs::Vector{Equation} = full_equations(sys)
@@ -123,6 +129,9 @@ function generate_io_function(_sys, inputss::Tuple, outputs;
 
         for mout in missingouts
             eq = mout ~ fixpoint_sub(mout, subs)
+            if !iscall(eq.rhs) || operation(eq.rhs) isa Symbolics.BasicSymbolic
+                @warn "Adding trivial equation $eq. This needs to be fixed in NetworkDynamics."
+            end
             push!(eqs, eq)
         end
         fix_metadata!(eqs, sys);
@@ -138,6 +147,13 @@ function generate_io_function(_sys, inputss::Tuple, outputs;
     # make sure that outputs appear first
     states = vcat(outputs, unknowns(sys)) |> unique
     params = setdiff(full_parameters(sys), Set(allinputs))
+
+    # filter out unnecessary parameters
+    used_params = params ∩ (mapreduce(get_variables, ∪, eqs, init=Set{Symbolic}()) ∪ mapreduce(get_variables, ∪, obseqs, init=Set{Symbolic}()))
+    if Set(params) != Set(used_params)
+        verbose && @info "Remove parameters $(collect(setdiff(params, used_params))) which arn't used in the equations."
+        params = used_params
+    end
 
     eqs = reorder_by_states(eqs, states)
 
@@ -160,7 +176,7 @@ function generate_io_function(_sys, inputss::Tuple, outputs;
 
         # create massmatrix, we don't use the method provided by ODESystem because of reordering
         mm = generate_massmatrix(eqs)
-        verbose && @info "Reordered by states and generated mass matrix" mass_matrix
+        verbose && @info "Reordered by states and generated mass matrix" mm
         mm
     elseif type == :static
         all_static = all(isequal(:explicit_algebraic), first.(eq_type.(eqs)))
@@ -171,7 +187,7 @@ function generate_io_function(_sys, inputss::Tuple, outputs;
     end
 
     # now generate the actual functions
-    iv = independent_variable(sys)
+    iv = independent_variables(sys)
 
     formulas = [eq.rhs for eq in eqs]
     if type == :ode
@@ -192,6 +208,13 @@ function generate_io_function(_sys, inputss::Tuple, outputs;
             obsstates,
             g_oop, g_ip,
             params)
+end
+
+using PrecompileTools: @setup_workload, @compile_workload
+@setup_workload begin
+    @compile_workload begin
+        include("precompile_workload.jl")
+    end
 end
 
 end
