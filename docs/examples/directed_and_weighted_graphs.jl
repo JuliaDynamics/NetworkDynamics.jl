@@ -47,6 +47,7 @@ The network weight matrix is given as a text file containing 90 lines with 90 nu
 using DelimitedFiles
 using SimpleWeightedGraphs, Graphs
 using NetworkDynamics
+using OrdinaryDiffEqTsit5
 using OrdinaryDiffEqSDIRK
 using Plots
 
