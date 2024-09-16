@@ -1,6 +1,6 @@
 using NetworkDynamics
 using Graphs
-using OrdinaryDiffEq
+using OrdinaryDiffEqTsit5
 using Chairmarks
 using Test
 import SymbolicIndexingInterface as SII

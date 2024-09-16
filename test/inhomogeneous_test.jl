@@ -3,7 +3,8 @@ using NetworkDynamics
 using Graphs
 using LinearAlgebra
 using SparseArrays
-using OrdinaryDiffEq
+using OrdinaryDiffEqRosenbrock
+using OrdinaryDiffEqNonlinearSolve
 using Random
 Random.seed!(42)
 

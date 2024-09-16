@@ -151,6 +151,7 @@ function generate_io_function(_sys, inputss::Tuple, outputs;
             eqs = map(eq -> substitute(eq, renamings), eqs)
             obseqs = map(eq -> substitute(eq, renamings), obseqs)
             _states = map(s -> substitute(s, renamings), _states)
+            verbose && @info "New States:" _states
         end
 
         # we promoted the missing outputs to "states" again, so we need to remove them from obseqs

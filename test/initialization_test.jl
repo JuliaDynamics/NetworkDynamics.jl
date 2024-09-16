@@ -1,5 +1,5 @@
 using NetworkDynamics, Graphs
-using SteadyStateDiffEq, OrdinaryDiffEq
+using SteadyStateDiffEq, OrdinaryDiffEqRosenbrock
 
 
 @testset "test find_fixpoint" begin

@@ -2,7 +2,7 @@ import ModelingToolkit as MTK
 using ModelingToolkit
 using ModelingToolkit: t_nounits as t, D_nounits as Dt
 using NetworkDynamics
-using OrdinaryDiffEq
+using OrdinaryDiffEqTsit5
 using LinearAlgebra
 using Graphs
 

@@ -17,3 +17,6 @@ StyledStrings = "f489334b-da3d-4c2e-b8f0-e476e12c162b"
 ThreadPinning = "811555cd-349b-4f26-b7bc-1f208b848042"
 TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"
+
+[sources]
+NetworkDynamics = {path = ".."}
