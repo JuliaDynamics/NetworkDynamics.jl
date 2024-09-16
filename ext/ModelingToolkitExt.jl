@@ -98,6 +98,10 @@ function generate_io_function(_sys, inputss::Tuple, outputs;
         structural_simplify(_sys, (_openinputs, outputs); simplify=true)[1]
     end
 
+    # extract "temporary" states and params, those might change in the following steps
+    _states = unknowns(sys)
+    _params = full_parameters(sys)
+
     # extract the main equations and observed equations
     eqs::Vector{Equation} = full_equations(sys)
     fix_metadata!(eqs, sys);
@@ -110,31 +114,44 @@ function generate_io_function(_sys, inputss::Tuple, outputs;
     fix_metadata!(obseqs, sys);
     # obs can only depend on parameters (including allinputs) or states
     obs_deps = mapreduce(eq -> get_variables(eq.rhs), union, obseqs, init=Symbolic[])
-    # @assert obs_deps ⊆ Set(full_parameters(sys)) ∪ Set(unknowns(sys)) "Difference: $(setdiff(obs_deps, Set(full_parameters(sys)) ∪ Set(unknowns(sys))))"
-    if !(obs_deps ⊆ Set(full_parameters(sys)) ∪ Set(unknowns(sys)))
-        @warn "obs_deps !⊆ parameters ∪ unknowns. Difference: $(setdiff(obs_deps, Set(full_parameters(sys)) ∪ Set(unknowns(sys))))"
+    if !(obs_deps ⊆ Set(_params) ∪ Set(_states))
+        @warn "obs_deps !⊆ parameters ∪ unknowns. Difference: $(setdiff(obs_deps, Set(_params) ∪ Set(_states)))"
     end
 
-    @argcheck allinputs ⊆ Set(full_parameters(sys))
+    @argcheck allinputs ⊆ Set(_params)
 
-    if !(outputs ⊆ Set(unknowns(sys)))
+    if !(outputs ⊆ Set(_states))
         # structural simplify might remove explicit equations for outputs
         # so we reconstruct equations for them based on the substitutions
-        missingouts = setdiff(Set(outputs), unknowns(sys))
-
-        subeqs = get_substitutions(sys).subs
-        subs = Dict(eq.lhs => eq.rhs for eq in subeqs)
-
+        missingouts = setdiff(Set(outputs), _states)
+        subs = Dict(eq.lhs => eq.rhs for eq in obseqs)
         @argcheck missingouts ⊆ keys(subs)
 
+        renamings = Dict()
         for mout in missingouts
             eq = mout ~ fixpoint_sub(mout, subs)
-            if !iscall(eq.rhs) || operation(eq.rhs) isa Symbolics.BasicSymbolic
-                @warn "Adding trivial equation $eq. This needs to be fixed in NetworkDynamics."
+
+            # try the ol' switcheroo for trivial equations a ~ b
+            if iscall(eq.rhs) && operation(eq.rhs) isa Symbolics.BasicSymbolic && eq.rhs ∈ Set(_states)
+                verbose && @info "Encountered trivial equation $eq. Swap out $(eq.lhs) <=> $(eq.rhs) everywhere."
+                renamings[eq.lhs] = eq.rhs
+                renamings[eq.rhs] = eq.lhs
+                continue
+            end
+            # chech for potentially other solvable scenarios
+            rhs_vars = get_variables(eq.rhs)
+            if length(rhs_vars) == 1 && (rhs_vars ⊆ Set(_states) || rhs_vars ⊆ Set(_params))
+                @warn "Adding possible trivial equation $eq. This should be resolved in NetworkDynamics."
             end
             push!(eqs, eq)
         end
         fix_metadata!(eqs, sys);
+
+        if !isempty(renamings)
+            eqs = map(eq -> substitute(eq, renamings), eqs)
+            obseqs = map(eq -> substitute(eq, renamings), obseqs)
+            _states = map(s -> substitute(s, renamings), _states)
+        end
 
         # we promoted the missing outputs to "states" again, so we need to remove them from obseqs
         filter!(obseqs) do eq
@@ -142,11 +159,21 @@ function generate_io_function(_sys, inputss::Tuple, outputs;
         end
     end
 
-    @argcheck isempty(rhs_differentials(eqs)) "RHS should not contain any differentials at this point."
+    if !isempty(rhs_differentials(eqs))
+        diffs = rhs_differentials(eqs)
+        buf = IOBuffer()
+        println(buf, "Equations contain differentials in their rhs: ", diffs)
+        # for (i, eqs) in enumerate(eqs)
+        #     if !isempty(rhs_differentials(eqs))
+        #         println(buf, " - $i: $eqs")
+        #     end
+        # end
+        throw(ArgumentError(String(take!(buf))))
+    end
 
     # make sure that outputs appear first
-    states = vcat(outputs, unknowns(sys)) |> unique
-    params = setdiff(full_parameters(sys), Set(allinputs))
+    states = vcat(outputs, _states) |> unique
+    params = setdiff(_params, Set(allinputs))
 
     # filter out unnecessary parameters
     used_params = params ∩ (mapreduce(get_variables, ∪, eqs, init=Set{Symbolic}()) ∪ mapreduce(get_variables, ∪, obseqs, init=Set{Symbolic}()))

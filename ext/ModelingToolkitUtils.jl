@@ -50,6 +50,7 @@ function rhs_differentials(eqs::Vector{Equation})
     end
     return diffs
 end
+rhs_differentials(eq::Equation) = _collect_differentials!(Set{Symbolic}(), eq.rhs)
 
 _collect_differentials(ex) = _collect_differentials!(Set{Symbolic}(), ex)
 
