@@ -16,7 +16,7 @@ and a function of the difference between source and destination angle `δ_src - 
 
 using NetworkDynamics
 using Graphs
-using OrdinaryDiffEq
+using OrdinaryDiffEqTsit5
 using DiffEqCallbacks
 using Plots
 import SymbolicIndexingInterface as SII

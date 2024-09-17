@@ -24,7 +24,7 @@ From the above considerations we see that in this model the nodes do not have an
 =#
 using Graphs
 using NetworkDynamics
-using OrdinaryDiffEq
+using OrdinaryDiffEqTsit5
 using Plots
 
 function diffusionedge!(e, v_s, v_d, p, t)

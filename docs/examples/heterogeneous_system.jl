@@ -12,7 +12,7 @@ components can differ in their parameters as well as in their dynamics.
 We start by setting up a simple system of Kuramoto oscillators.
 =#
 
-using NetworkDynamics, OrdinaryDiffEq, Plots, Graphs
+using NetworkDynamics, OrdinaryDiffEqTsit5, Plots, Graphs
 
 N = 8
 g = watts_strogatz(N, 2, 0) # ring network
