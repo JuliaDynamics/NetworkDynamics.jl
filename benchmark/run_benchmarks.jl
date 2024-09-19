@@ -150,11 +150,11 @@ function benchmark(; name, rev, cmd)
     result = deserialize(exp_tmp)
 end
 
-target = if contains(args[:target], r".data$")
+target = if contains(args[:target], r"\.data$")
     path = joinpath(original_path, args[:target])
     deserialize(path)
 elseif args[:target] == "latest"
-    file = sort(filter(contains(r"target*.data$"), readdir(original_path)))[end]
+    file = sort(filter(contains(r"target*\.data$"), readdir(original_path)))[end]
     @info "Use file $file as target"
     deserialize(joinpath(original_path, file))
 else
@@ -163,10 +163,10 @@ end
 
 baseline = if args[:baseline] ∉ ["nothing", "none"]
     if args[:baseline] == "latest"
-        file = sort(filter(contains(r"baseline*.data$"), readdir(original_path)))[end]
+        file = sort(filter(contains(r"baseline*\.data$"), readdir(original_path)))[end]
         @info "Use file $file as baseline"
         deserialize(joinpath(original_path, file))
-    elseif contains(args[:baseline], r".data$")
+    elseif contains(args[:baseline], r"\.data$")
         path = joinpath(original_path, args[:baseline])
         deserialize(path)
     elseif args[:baseline] ∉ ["nothing", "none"]
