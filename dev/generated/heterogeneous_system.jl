@@ -19,12 +19,12 @@ function kuramoto_edge!(e, θ_s, θ_d, (K,), t)
     nothing
 end
 
-function kuramoto_vertex!(dθ, θ, esum, (ω,), t)
-    dθ[1] = ω + esum[1]
+function kuramoto_vertex!(dθ, θ, esum, (ω0,), t)
+    dθ[1] = ω0 + esum[1]
     nothing
 end
 
-vertex! = ODEVertex(kuramoto_vertex!; sym=[:θ], psym=[:ω], name=:kuramoto)
+vertex! = ODEVertex(kuramoto_vertex!; sym=[:θ], psym=[:ω0], name=:kuramoto)
 
 edge! = StaticEdge(kuramoto_edge!; dim=1, psym=[:K=>3], coupling=AntiSymmetric())
 nw = Network(g, vertex!, edge!);
@@ -38,7 +38,7 @@ p = NWParameter(nw)
 
 ω = collect(1:N) ./ N
 ω .-= sum(ω) / N
-p.v[:, :ω] = ω
+p.v[:, :ω0] = ω
 
 # Here, the index pairing `:, :ω` is used to index state ω for all node indices.
 #
@@ -79,13 +79,13 @@ end
 # A Kuramoto model with inertia consists of two internal variables leading to
 # more complicated (and for many applications more realistic) local dynamics.
 
-function kuramoto_inertia!(dv, v, esum, (ω,), t)
+function kuramoto_inertia!(dv, v, esum, (ω0,), t)
     dv[1] = v[2]
-    dv[2] = ω - 1.0 * v[2] + esum[1]
+    dv[2] = ω0 - 1.0 * v[2] + esum[1]
     nothing
 end
 
-inertia! = ODEVertex(kuramoto_inertia!; sym=[:θ, :ω], psym=[:ω], name=:inertia)
+inertia! = ODEVertex(kuramoto_inertia!; sym=[:θ, :ω], psym=[:ω0], name=:inertia)
 
 # Since now we model a system with heterogeneous node dynamics we can no longer
 # straightforwardly pass a single VertexFunction to the `Network` constructor but
@@ -119,7 +119,7 @@ state.v[5,:ω] = 5
 # The edge parameters are already filled with default values.
 # The vertex parameters can be copied from our old parmeter object `p`.
 
-state.p.v[2:8, :ω] = p.v[2:8, :ω]
+state.p.v[2:8, :ω0] = p.v[2:8, :ω0]
 
 # For the problem construction, we need to convert the nested stuctures to flat arrays using the `uflat` and `pflat` methods.
 
