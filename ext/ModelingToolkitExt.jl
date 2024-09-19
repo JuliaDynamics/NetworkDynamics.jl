@@ -4,7 +4,6 @@ using ModelingToolkit: Symbolic, iscall, operation, arguments, build_function
 using ModelingToolkit: ModelingToolkit, Equation, ODESystem, Differential
 using ModelingToolkit: full_equations, get_variables, structural_simplify, getname, unwrap
 using ModelingToolkit: full_parameters, unknowns, independent_variables, observed, defaults
-using ModelingToolkit: get_substitutions
 using ModelingToolkit.Symbolics: Symbolics, fixpoint_sub, substitute
 using ArgCheck: @argcheck
 using LinearAlgebra: Diagonal, I

@@ -83,9 +83,9 @@ has_oob(a::AccessTracker) = !isempty(oob_reads(a)) || !isempty(oob_writes(a))
 
 
 function chk_component(c::ComponentFunction)
-    du = AccessTracker(rand(c.dim))
-    u = AccessTracker(rand(c.dim))
-    p = AccessTracker(rand(c.pdim))
+    du = AccessTracker(rand(dim(c)))
+    u = AccessTracker(rand(dim(c)))
+    p = AccessTracker(rand(pdim(c)))
     esum = AccessTracker(rand(depth(c))) # bit weird, we don't know the size of esum
     vsrc = AccessTracker(rand(depth(c)))
     vdst = AccessTracker(rand(depth(c)))

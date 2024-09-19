@@ -68,7 +68,7 @@ end
 function print_states_params(io, c::ComponentFunction, styling)
     info = AnnotatedString{String}[]
     num, word = maybe_plural(dim(c), "state")
-    push!(info, styled"$num &$word: &&$(stylesymbolarray(c.sym, c.def, styling))")
+    push!(info, styled"$num &$word: &&$(stylesymbolarray(c.sym, def(c), styling))")
 
     if hasproperty(c, :mass_matrix) && c.mass_matrix != LinearAlgebra.I
         if LinearAlgebra.isdiag(c.mass_matrix)
@@ -79,7 +79,7 @@ function print_states_params(io, c::ComponentFunction, styling)
     end
 
     num, word = maybe_plural(pdim(c), "param")
-    pdim(c) > 0 && push!(info, styled"$num &$word: &&$(stylesymbolarray(c.psym, c.pdef))")
+    pdim(c) > 0 && push!(info, styled"$num &$word: &&$(stylesymbolarray(c.psym, pdef(c)))")
 
     print_treelike(io, align_strings(info))
 end
