@@ -103,6 +103,7 @@ end
 
 @testset "test componen function constructors" begin
     using LinearAlgebra
+    using NetworkDynamics: pdef, def
     v = ODEVertex(identity; dim=2, pdim=3)
     @test v.name == :ODEVertex
     @test v.obsf == nothing
@@ -110,18 +111,17 @@ end
     @test v.mass_matrix == LinearAlgebra.I
 
     v = ODEVertex(identity; sym=[:foo,:bar], pdim=3)
-    @test v.dim == 2
+    @test dim(v) == 2
     @test length(v.psym) == 3
 
     v = ODEVertex(identity; sym=[:foo,:bar], psym=[:a])
-    @test v.pdim==1
-    @test v.dim==2
+    @test pdim(v)==1
+    @test dim(v)==2
 
     @test_throws ArgumentError ODEVertex(identity; dim=1, pdim=1, mass_matrix=[1 2;3 4])
 
     @test_throws ArgumentError ODEVertex(identity, 1, 0; obsf=identity)
     v = ODEVertex(identity, 1, 0; obsf=identity, obssym=[:foo])
-    @test_throws ArgumentError ODEVertex(identity, 1, 0; obsf=nothing, obssym=[:foo])
 
     @test_throws ArgumentError ODEVertex(identity, 1, 0; depth=2)
 
@@ -135,26 +135,26 @@ end
     StaticVertex(identity, 5, 0)
 
     v = ODEVertex(identity, 2, 3)
-    @test v.dim == 2
-    @test v.pdim == 3
+    @test dim(v) == 2
+    @test pdim(v) == 3
     v = ODEVertex(identity, [:foo, :bar], 3)
-    @test v.dim == 2
-    @test v.pdim == 3
+    @test dim(v) == 2
+    @test pdim(v) == 3
     v = ODEVertex(identity, 2, [:a, :b, :c])
-    @test v.dim == 2
-    @test v.pdim == 3
+    @test dim(v) == 2
+    @test pdim(v) == 3
     v = ODEVertex(identity, [:foo, :bar], [:a, :b, :c])
-    @test v.dim == 2
-    @test v.pdim == 3
+    @test dim(v) == 2
+    @test pdim(v) == 3
 
-    using NetworkDynamics: _has_defaults
-    @test _has_defaults([:a,:b,:c]) == false
-    @test _has_defaults([:a=>1,:b,:c]) == true
-    @test _has_defaults([:a=>1,:b=>2,:c=>3]) == true
+    using NetworkDynamics: _has_metadata
+    @test _has_metadata([:a,:b,:c]) == false
+    @test _has_metadata([:a=>1,:b,:c]) == true
+    @test _has_metadata([:a=>1,:b=>2,:c=>3]) == true
 
     v = ODEVertex(identity, [:foo=>1, :bar], [:a=>2, :b, :c=>7])
-    @test v.def == [1,nothing]
-    @test v.pdef == [2,nothing,7]
+    @test def(v) == [1,nothing]
+    @test pdef(v) == [2,nothing,7]
 
     @test_throws ArgumentError ODEVertex(identity, [:foo=>1]; def=[1])
     @test_throws ArgumentError ODEVertex(identity, 1, [:foo=>1]; pdef=[1])
@@ -165,13 +165,13 @@ end
 
     v = ODEVertex(identity, :foo=>1, :bar)
     @test v.sym == [:foo]
-    @test v.def == [1]
+    @test def(v) == [1]
     @test v.psym == [:bar]
 
     v = ODEVertex(identity, :foo, :bar=>1)
     @test v.sym == [:foo]
     @test v.psym == [:bar]
-    @test v.pdef == [1]
+    @test pdef(v) == [1]
 end
 
 @testset "test dispatchT isbitstype" begin
@@ -187,4 +187,40 @@ end
         T = Type{dispatchT(st)}
         @test Core.Compiler.isconstType(T)
     end
+end
+
+@testset "test metadata constructors" begin
+    using NetworkDynamics
+    using NetworkDynamics: _fill_defaults, _split_metadata
+
+    d1 = _split_metadata([:a=>1, :b=>2])[2]
+    d2 = _split_metadata([:a=>(;default=1), :b=>2])[2]
+    @test d1==d2
+
+    d1 = _split_metadata([:a=>1, :b])[2]
+    d2 = _split_metadata([:a=>(;default=1), :b])[2]
+    @test d1==d2
+
+
+    kwargs = Dict(:sym=>[:a,:b], :psym=>[:a,:d])
+    @test_throws ArgumentError _fill_defaults(ODEVertex, kwargs)
+
+    kwargs = Dict(:sym=>[:a,:b], :dim=>3)
+    @test_throws ArgumentError _fill_defaults(ODEVertex, kwargs)
+
+    kwargs = Dict(:sym=>[:a,:b], :dim=>3, :pdim=>0)
+    @test_throws ArgumentError _fill_defaults(ODEVertex, kwargs)
+
+    kwargs = Dict(:sym=>[:a,:b], :pdim=>0, :psym=>[:c])
+    @test_throws ArgumentError _fill_defaults(ODEVertex, kwargs)
+
+    # different length of sym/def
+    kwargs = Dict(:sym=>[:a,:b],:def=>[1], :pdim=>0 )
+    @test_throws ArgumentError _fill_defaults(ODEVertex, kwargs)
+
+    # different provision of defs
+    kwargs = Dict(:sym=>[:a,:b=>2],:def=>[1,nothing], :pdim=>0 )
+    _fill_defaults(ODEVertex, kwargs)[:symmetadata]
+    kwargs = Dict(:sym=>[:a=>2,:b],:def=>[1,nothing], :pdim=>0 )
+    @test_throws ArgumentError _fill_defaults(ODEVertex, kwargs)
 end

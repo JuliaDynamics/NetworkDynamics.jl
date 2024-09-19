@@ -519,23 +519,23 @@ end
 function SII.default_values(nw::Network)
     defs = Dict{SymbolicIndex{Int,Symbol},Float64}()
     for (ci, cf) in pairs(nw.im.vertexf)
-        for (s, def) in zip(psym(cf), pdef(cf))
-            isnothing(def) && continue
-            defs[VPIndex(ci, s)] = def
+        for s in psym(cf)
+            has_default(cf, s) || continue
+            defs[VPIndex(ci, s)] = get_default(cf, s)
         end
-        for (s, def) in zip(sym(cf), def(cf))
-            isnothing(def) && continue
-            defs[VIndex(ci, s)] = def
+        for s in sym(cf)
+            has_default(cf, s) || continue
+            defs[VIndex(ci, s)] = get_default(cf, s)
         end
     end
     for (ci, cf) in pairs(nw.im.edgef)
-        for (s, def) in zip(psym(cf), pdef(cf))
-            isnothing(def) && continue
-            defs[EPIndex(ci, s)] = def
+        for s in psym(cf)
+            has_default(cf, s) || continue
+            defs[EPIndex(ci, s)] = get_default(cf, s)
         end
-        for (s, def) in zip(sym(cf), def(cf))
-            isnothing(def) && continue
-            defs[EIndex(ci, s)] = def
+        for s in sym(cf)
+            has_default(cf, s) || continue
+            defs[EIndex(ci, s)] = get_default(cf,s)
         end
     end
     return defs
