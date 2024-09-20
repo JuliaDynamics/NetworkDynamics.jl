@@ -28,6 +28,7 @@ makedocs(; root=joinpath(pkgdir(NetworkDynamics), "docs"),
              # "BasicConstructors.md",
              # "parameters.md",
              # "Multithreading.md",
+             "symbolic_indexing.md",
              "Library.md",
              # "accessing_edge_variables.md",
              "Tutorials" => [

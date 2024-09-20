@@ -742,7 +742,18 @@ _convertorcopy(T, x) = convert(T, x)
 
 Base.eltype(s::NWState) = eltype(s.uflat)
 Base.length(s::NWState) = length(s.uflat)
+"""
+    uflat(s::NWState)
+
+Retrieve the wrapped flat array representation of the state.
+"""
 uflat(s::NWState) = s.uflat
+"""
+    pflat(p::NWParameter)
+    pflat(s::NWState)
+
+Retrieve the wrapped flat array representation of the parameters.
+"""
 pflat(s::NWState) = pflat(s.p)
 pflat(p::NWParameter) = p.pflat
 

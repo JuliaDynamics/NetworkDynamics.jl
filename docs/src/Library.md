@@ -33,6 +33,14 @@ Fiducial
 ```
 
 ## Symbolic Indexing
+### Network Parameter Object
+```@docs
+NWParameter
+NWParameter(::Any)
+NWParameter(::NWParameter)
+NWParameter(::SciMLBase.DEIntegrator)
+```
+
 ### Network State Object
 ```@docs
 NWState
@@ -40,14 +48,8 @@ NWState(::Any)
 NWState(::NWState)
 NWState(::NWParameter)
 NWState(::SciMLBase.DEIntegrator)
-```
-
-### Network Parameter Object
-```@docs
-NWParameter
-NWParameter(::Any)
-NWParameter(::NWParameter)
-NWParameter(::SciMLBase.DEIntegrator)
+uflat
+pflat
 ```
 
 ### Index generators
@@ -64,4 +66,10 @@ VIndex
 EIndex
 VPIndex
 EPIndex
+```
+
+## Utils
+### Callbacks
+```@docs
+save_parameters!
 ```

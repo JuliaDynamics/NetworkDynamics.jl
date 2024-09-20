@@ -90,7 +90,7 @@ end
 nothing #hide #md
 
 #=
-There is one important aspect to this function: the [`save_parameters`](@docs) call.
+There is one important aspect to this function: the [`save_parameters!`](@ref) call.
 In the callback, we change the parameters of the network, making the parameters time
 dependent. The flow on the line is a function `P(t) = f(u(t), p(t))`. Thus we need to
 inform the integrator, that a discrete change in parameters happend. With this, the
