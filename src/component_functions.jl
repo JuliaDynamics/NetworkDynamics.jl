@@ -424,7 +424,7 @@ function _fill_defaults(T, kwargs)
         if haskey(dict, :inputsym_src) || haskey(dict, :inputsym_dst)
             throw(ArgumentError("Keywords `inputsym_src` and `inputsym_dst` are not valid for $T."))
         end
-        if haskey(dict, :inputsym)
+        if haskey(dict, :inputsym) && !isnothing(dict[:inputsym])
             if _has_metadata(dict[:inputsym])
                 dict[:inputsym], _metadata = _split_metadata(dict[:inputsym])
                 mergewith!(merge!, symmetadata, _metadata)
