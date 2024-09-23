@@ -54,7 +54,16 @@ In order to initialize the remaining variables we use [`initialize_component!`](
 
 ```@example compinit
 initialize_component!(vf; verbose=true)
+nothing #hide
+```
+```@example compinit
+vf #hide
 ```
 
 Which lead to a successfull initialization of states `:θ` and `:ω` as well as parameter `:Pm`.
 To retrieve the residual you can use [`init_residual`](@ref).
+
+As a quick test we can ensure that the angle indeed matches the voltag angel:
+```@example compinit
+get_init(vf, :θ) ≈ atan(get_default(vf, :u_i), get_default(vf, :u_r))
+```
