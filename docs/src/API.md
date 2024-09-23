@@ -2,14 +2,11 @@
 
 The following functions are designed for public use
 
-```@index
-```
-
 ## Network Construction
 ```@docs
 Network
-dim
-pdim
+dim(::Network)
+pdim(::Network)
 ```
 
 ## Vertex Functions
@@ -66,6 +63,46 @@ VIndex
 EIndex
 VPIndex
 EPIndex
+```
+
+## Metadata API
+### Component Accessors
+```@docs
+dim(::NetworkDynamics.ComponentFunction)
+sym
+pdim(::NetworkDynamics.ComponentFunction)
+psym
+obssym
+depth
+hasinputsym
+inputsym
+coupling
+```
+### Component Metadata API
+```@docs
+metadata
+get_metadata(::NetworkDynamics.ComponentFunction, ::Symbol)
+has_metadata(::NetworkDynamics.ComponentFunction, ::Symbol)
+set_metadata!(::NetworkDynamics.ComponentFunction, ::Symbol, ::Any)
+```
+### Per-Symbol Metadata API
+```@docs
+symmetadata
+get_metadata(::NetworkDynamics.ComponentFunction, ::Symbol, ::Symbol)
+has_metadata(::NetworkDynamics.ComponentFunction, ::Symbol, ::Symbol)
+set_metadata!(::NetworkDynamics.ComponentFunction, ::Symbol, ::Symbol, ::Any)
+has_default
+get_default
+set_default!
+has_guess
+get_guess
+set_guess!
+has_init
+get_init
+set_init!
+has_bounds
+get_bounds
+set_bounds!
 ```
 
 ## Initialization

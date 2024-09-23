@@ -70,20 +70,108 @@ Mixers.@pour CommonFields begin
     symmetadata::Dict{Symbol,Dict{Symbol, Any}}
     metadata::Dict{Symbol,Any}
 end
+
+"""
+    compf(c::ComponentFunction)
+
+Retrieve the actual dynamical function the component.
+"""
 compf(c::ComponentFunction) = c.f
+
+"""
+    dim(c::ComponentFunction)::Int
+
+Retrieve the dimension of the component.
+"""
 dim(c::ComponentFunction)::Int = length(sym(c))
+
+"""
+    sym(c::ComponentFunction)::Vector{Symbol}
+
+Retrieve the symbols of the component.
+"""
 sym(c::ComponentFunction)::Vector{Symbol} = c.sym
+
+"""
+    pdim(c::ComponentFunction)::Int
+
+Retrieve the parameter dimension of the component.
+"""
 pdim(c::ComponentFunction)::Int = length(psym(c))
+
+"""
+    psym(c::ComponentFunction)::Vector{Symbol}
+
+Retrieve the parameter symbols of the component.
+"""
 psym(c::ComponentFunction)::Vector{Symbol} = c.psym
+
+"""
+    obsf(c::ComponentFunction)
+
+Retrieve the observation function of the component.
+"""
 obsf(c::ComponentFunction) = c.obsf
+
+"""
+    obssym(c::ComponentFunction)::Vector{Symbol}
+
+Retrieve the observation symbols of the component.
+"""
 obssym(c::ComponentFunction)::Vector{Symbol} = c.obssym
+
+"""
+    depth(c::ComponentFunction)::Int
+
+Retrieve the depth of the component. The depth is the number of "outputs". For
+example, in a vertex function, a depth `N` means, that the connected edges receive
+the states `1:N`.
+"""
 depth(c::ComponentFunction)::Int = c.depth
+
+"""
+    symmetadata(c::ComponentFunction)::Dict{Symbol,Dict{Symbol,Any}}
+
+Retrieve the metadata dictionary for the symbols. Keys are the names of the
+symbols as they appear in [`sym`](@ref), [`psym`](@ref), [`obssym`](@ref) and [`inputsym`](@ref).
+
+See also [`symmetadata`](@ref)
+"""
 symmetadata(c::ComponentFunction)::Dict{Symbol,Dict{Symbol,Any}} = c.symmetadata
+
+"""
+    metadata(c::ComponentFunction)
+
+Retrieve metadata object for the component.
+
+See also [`metadata`](@ref)
+"""
 metadata(c::ComponentFunction)::Dict{Symbol,Any} = c.metadata
+
+"""
+    hasinputsym(c::ComponentFunction)
+
+Checks if the optioan field `inputsym` is present in the component function.
+"""
 hasinputsym(c::ComponentFunction) = !isnothing(c.inputsym)
+
+"""
+    hasinputsym(c::VertexFunction)::Vector{Symbol}
+    hasinputsym(c::EdgeFunction)::NamedTuple with :src and :dst keys
+
+Musst be called *after* [`hasinputsym`](@ref) returned true.
+Gives the `inputsym` vector(s). For vertex functions just a single vector, for
+edges it returns a named tuple `(; src, dst)` with two symbol vectors.
+"""
 inputsym(c::VertexFunction)::Vector{Symbol} = c.inputsym
 inputsym(c::EdgeFunction)::@NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}} = c.inputsym
 
+"""
+    coupling(::EdgeFunction)
+    coupling(::Type{<:EdgeFunction})
+
+Returns the coupling of the given `EdgeFunction`.
+"""
 coupling(::EdgeFunction{C}) where {C} = C()
 coupling(::Type{<:EdgeFunction{C}}) where {C} = C()
 
@@ -482,37 +570,131 @@ _takes_n_vectors(f, n) = hasmethod(f, (Tuple(Vector{Float64} for i in 1:n)..., F
 ####
 #### per sym metadata
 ####
-function has_metadata(c::ComponentFunction, sym, key)
+"""
+    has_metadata(c::ComponentFunction, sym::Symbol, key::Symbol)
+
+Checks if symbol metadata `key` is present for symbol `sym`.
+"""
+function has_metadata(c::ComponentFunction, sym::Symbol, key::Symbol)
     md = symmetadata(c)
     haskey(md, sym) && haskey(md[sym], key)
 end
-get_metadata(c::ComponentFunction, sym, key) = symmetadata(c)[sym][key]
+"""
+    get_metadata(c::ComponentFunction, sym::Symbol, key::Symbol)
 
-set_metadata!(c::ComponentFunction, sym, pair::Pair) = set_metadata!(c, sym, pair.first, pair.second)
-function set_metadata!(c::ComponentFunction, sym, key, value)
+Retrievs the metadata `key` for symbol `sym`.
+"""
+get_metadata(c::ComponentFunction, sym::Symbol, key::Symbol) = symmetadata(c)[sym][key]
+
+"""
+    set_metadata!(c::ComponentFunction, sym::Symbol, key::Symbol, value)
+    set_metadata!(c::ComponentFunction, sym::Symbol, pair)
+
+Sets the metadata `key` for symbol `sym` to `value`.
+"""
+function set_metadata!(c::ComponentFunction, sym::Symbol, key::Symbol, value)
     d = get!(symmetadata(c), sym, Dict{Symbol,Any}())
     d[key] = value
 end
+set_metadata!(c::ComponentFunction, sym::Symbol, pair::Pair) = set_metadata!(c, sym, pair.first, pair.second)
 
-has_default(c::ComponentFunction, sym) = has_metadata(c, sym, :default)
-get_default(c::ComponentFunction, sym) = get_metadata(c, sym, :default)
-set_default!(c::ComponentFunction, sym, value) = set_metadata!(c, sym, :default, value)
+#### default
+"""
+    has_default(c::ComponentFunction, sym::Symbol)
 
-has_guess(c::ComponentFunction, sym) = has_metadata(c, sym, :guess)
-get_guess(c::ComponentFunction, sym) = get_metadata(c, sym, :guess)
-set_guess!(c::ComponentFunction, sym, value) = set_metadata!(c, sym, :guess, value)
+Checks if a `default` value is present for symbol `sym`.
+"""
+has_default(c::ComponentFunction, sym::Symbol) = has_metadata(c, sym, :default)
+"""
+    get_default(c::ComponentFunction, sym::Symbol)
 
-has_bounds(c::ComponentFunction, sym) = has_metadata(c, sym, :bounds)
-get_bounds(c::ComponentFunction, sym) = get_metadata(c, sym, :bounds)
-set_bounds!(c::ComponentFunction, sym, value) = set_metadata!(c, sym, :bounds, value)
+Returns the `default` value for symbol `sym`.
+"""
+get_default(c::ComponentFunction, sym::Symbol) = get_metadata(c, sym, :default)
+"""
+    set_default!(c::ComponentFunction, sym::Symbol, value)
 
-has_init(c::ComponentFunction, sym) = has_metadata(c, sym, :init)
-get_init(c::ComponentFunction, sym) = get_metadata(c, sym, :init)
-set_init!(c::ComponentFunction, sym, value) = set_metadata!(c, sym, :init, value)
+Sets the `default` value for symbol `sym` to `value`.
+"""
+set_default!(c::ComponentFunction, sym::Symbol, value) = set_metadata!(c, sym, :default, value)
 
-has_default_or_init(c::ComponentFunction, sym) = has_default(c, sym) || has_init(c, sym)
-get_default_or_init(c::ComponentFunction, sym) = has_default(c, sym) ? get_default(c, sym) : get_init(c, sym)
+#### guess
+"""
+    has_guess(c::ComponentFunction, sym::Symbol)
 
+Checks if a `guess` value is present for symbol `sym`.
+"""
+has_guess(c::ComponentFunction, sym::Symbol) = has_metadata(c, sym, :guess)
+"""
+    get_guess(c::ComponentFunction, sym::Symbol)
+
+Returns the `guess` value for symbol `sym`.
+"""
+get_guess(c::ComponentFunction, sym::Symbol) = get_metadata(c, sym, :guess)
+"""
+    set_guess!(c::ComponentFunction, sym::Symbol, value)
+
+Sets the `guess` value for symbol `sym` to `value`.
+"""
+set_guess!(c::ComponentFunction, sym::Symbol, value) = set_metadata!(c, sym, :guess, value)
+
+#### init
+"""
+    has_init(c::ComponentFunction, sym::Symbol)
+
+Checks if a `init` value is present for symbol `sym`.
+"""
+has_init(c::ComponentFunction, sym::Symbol) = has_metadata(c, sym, :init)
+"""
+    get_init(c::ComponentFunction, sym::Symbol)
+
+Returns the `init` value for symbol `sym`.
+"""
+get_init(c::ComponentFunction, sym::Symbol) = get_metadata(c, sym, :init)
+"""
+    set_init!(c::ComponentFunction, sym::Symbol, value)
+
+Sets the `init` value for symbol `sym` to `value`.
+"""
+set_init!(c::ComponentFunction, sym::Symbol, value) = set_metadata!(c, sym, :init, value)
+
+#### bounds
+"""
+    has_bounds(c::ComponentFunction, sym::Symbol)
+
+Checks if a `bounds` value is present for symbol `sym`.
+"""
+has_bounds(c::ComponentFunction, sym::Symbol) = has_metadata(c, sym, :bounds)
+"""
+    get_bounds(c::ComponentFunction, sym::Symbol)
+
+Returns the `bounds` value for symbol `sym`.
+"""
+get_bounds(c::ComponentFunction, sym::Symbol) = get_metadata(c, sym, :bounds)
+"""
+    set_bounds!(c::ComponentFunction, sym::Symbol, value)
+
+Sets the `bounds` value for symbol `sym` to `value`.
+"""
+set_bounds!(c::ComponentFunction, sym::Symbol, value) = set_metadata!(c, sym, :bounds, value)
+
+
+#### default or init
+"""
+    has_default_or_init(c::ComponentFunction, sym::Symbol)
+
+Checks if a `default` or `init` value is present for symbol `sym`.
+"""
+has_default_or_init(c::ComponentFunction, sym::Symbol) = has_default(c, sym) || has_init(c, sym)
+"""
+    get_default_or_init(c::ComponentFunction, sym::Symbol)
+
+Returns if a `default` value if available, otherwise returns `init` value for symbol `sym`.
+"""
+get_default_or_init(c::ComponentFunction, sym::Symbol) = has_default(c, sym) ? get_default(c, sym) : get_init(c, sym)
+
+
+# TODO: legacy, only used within show methods
 function def(c::ComponentFunction)::Vector{Union{Nothing,Float64}}
     map(c.sym) do s
         has_default_or_init(c, s) ? get_default_or_init(c, s) : nothing
@@ -527,8 +709,23 @@ end
 ####
 #### Component metadata
 ####
+"""
+    has_metadata(c::ComponentFunction, key::Symbol)
+
+Checks if metadata `key` is present for the component.
+"""
 function has_metadata(c::ComponentFunction, key)
     haskey(metadata(c), key)
 end
+"""
+    get_metadata(c::ComponentFunction, key::Symbol)
+
+Retrieves the metadata `key` for the component.
+"""
 get_metadata(c::ComponentFunction, key::Symbol) = metadata(c)[key]
+"""
+    set_metadata!(c::ComponentFunction, key::Symbol, value)
+
+Sets the metadata `key` for the component to `value`.
+"""
 set_metadata!(c::ComponentFunction, key::Symbol, val) = setindex!(metadata(c), val, key)

@@ -57,4 +57,4 @@ initialize_component!(vf; verbose=true)
 ```
 
 Which lead to a successfull initialization of states `:θ` and `:ω` as well as parameter `:Pm`.
-To retrieve the residual you can use [`init_residual`](@doc).
+To retrieve the residual you can use [`init_residual`](@ref).

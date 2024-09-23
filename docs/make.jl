@@ -26,12 +26,11 @@ makedocs(; root=joinpath(pkgdir(NetworkDynamics), "docs"),
          pagesonly=true,
          pages=["General" => "index.md",
              # "BasicConstructors.md",
-             # "parameters.md",
              # "Multithreading.md",
              "symbolic_indexing.md",
+             "metadata.md",
              "initialization.md",
              "API.md",
-             # "accessing_edge_variables.md",
              "Tutorials" => [
                  "Getting started" => "generated/getting_started_with_network_dynamics.md",
                  "Directed and weighted graphs" => "generated/directed_and_weighted_graphs.md",
@@ -42,7 +41,24 @@ makedocs(; root=joinpath(pkgdir(NetworkDynamics), "docs"),
          ],
          draft=false,
          format = Documenter.HTML(ansicolor = true),
-         warnonly=true)
+         warnonly=[:cross_references, :missing_docs, :docs_block],
+         # warnonly=true,
+)
 
 deploydocs(; repo="github.com/JuliaDynamics/NetworkDynamics.jl.git",
            devbranch="main", push_preview=true)
+
+# warnonly options
+# :autodocs_block
+# :cross_references
+# :docs_block
+# :doctest
+# :eval_block
+# :example_block
+# :footnote
+# :linkcheck_remotes
+# :linkcheck
+# :meta_block
+# :missing_docs
+# :parse_error
+# :setup_block.

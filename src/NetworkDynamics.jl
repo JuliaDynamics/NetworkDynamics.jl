@@ -36,7 +36,13 @@ include("utils.jl")
 
 export ODEVertex, StaticVertex, StaticEdge, ODEEdge
 export Symmetric, AntiSymmetric, Directed, Fiducial
-export dim, pdim, sdim
+export dim, sym, pdim, psym, obssym, depth, hasinputsym, inputsym, coupling
+export metadata, symmetadata
+export has_metadata, get_metadata, set_metadata!
+export has_default, get_default, set_default!
+export has_guess, get_guess, set_guess!
+export has_init, get_init, set_init!
+export has_bounds, get_bounds, set_bounds!
 include("component_functions.jl")
 
 export Network
