@@ -498,13 +498,28 @@ has_default(c::ComponentFunction, sym) = has_metadata(c, sym, :default)
 get_default(c::ComponentFunction, sym) = get_metadata(c, sym, :default)
 set_default!(c::ComponentFunction, sym, value) = set_metadata!(c, sym, :default, value)
 
+has_guess(c::ComponentFunction, sym) = has_metadata(c, sym, :guess)
+get_guess(c::ComponentFunction, sym) = get_metadata(c, sym, :guess)
+set_guess!(c::ComponentFunction, sym, value) = set_metadata!(c, sym, :guess, value)
+
+has_bounds(c::ComponentFunction, sym) = has_metadata(c, sym, :bounds)
+get_bounds(c::ComponentFunction, sym) = get_metadata(c, sym, :bounds)
+set_bounds!(c::ComponentFunction, sym, value) = set_metadata!(c, sym, :bounds, value)
+
+has_init(c::ComponentFunction, sym) = has_metadata(c, sym, :init)
+get_init(c::ComponentFunction, sym) = get_metadata(c, sym, :init)
+set_init!(c::ComponentFunction, sym, value) = set_metadata!(c, sym, :init, value)
+
+has_default_or_init(c::ComponentFunction, sym) = has_default(c, sym) || has_init(c, sym)
+get_default_or_init(c::ComponentFunction, sym) = has_default(c, sym) ? get_default(c, sym) : get_init(c, sym)
+
 function def(c::ComponentFunction)::Vector{Union{Nothing,Float64}}
     map(c.sym) do s
-        has_default(c, s) ? get_default(c, s) : nothing
+        has_default_or_init(c, s) ? get_default_or_init(c, s) : nothing
     end
 end
 function pdef(c::ComponentFunction)::Vector{Union{Nothing,Float64}}
     map(c.psym) do s
-        has_default(c, s) ? get_default(c, s) : nothing
+        has_default_or_init(c, s) ? get_default_or_init(c, s) : nothing
     end
 end

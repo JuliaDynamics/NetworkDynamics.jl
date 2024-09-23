@@ -520,22 +520,22 @@ function SII.default_values(nw::Network)
     defs = Dict{SymbolicIndex{Int,Symbol},Float64}()
     for (ci, cf) in pairs(nw.im.vertexf)
         for s in psym(cf)
-            has_default(cf, s) || continue
-            defs[VPIndex(ci, s)] = get_default(cf, s)
+            has_default_or_init(cf, s) || continue
+            defs[VPIndex(ci, s)] = get_default_or_init(cf, s)
         end
         for s in sym(cf)
-            has_default(cf, s) || continue
-            defs[VIndex(ci, s)] = get_default(cf, s)
+            has_default_or_init(cf, s) || continue
+            defs[VIndex(ci, s)] = get_default_or_init(cf, s)
         end
     end
     for (ci, cf) in pairs(nw.im.edgef)
         for s in psym(cf)
-            has_default(cf, s) || continue
-            defs[EPIndex(ci, s)] = get_default(cf, s)
+            has_default_or_init(cf, s) || continue
+            defs[EPIndex(ci, s)] = get_default_or_init(cf, s)
         end
         for s in sym(cf)
-            has_default(cf, s) || continue
-            defs[EIndex(ci, s)] = get_default(cf,s)
+            has_default_or_init(cf, s) || continue
+            defs[EIndex(ci, s)] = get_default_or_init(cf,s)
         end
     end
     return defs

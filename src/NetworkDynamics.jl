@@ -3,7 +3,7 @@ using Graphs: Graphs, AbstractGraph, SimpleEdge, edges, vertices, ne, nv
 using TimerOutputs: @timeit_debug, reset_timer!
 
 using ArgCheck: @argcheck
-using PreallocationTools: PreallocationTools, LazyBufferCache
+using PreallocationTools: PreallocationTools, LazyBufferCache, DiffCache
 using SciMLBase: SciMLBase
 using Base.Threads: @threads
 using NNlib: NNlib
@@ -57,7 +57,8 @@ export vidxs, eidxs, vpidxs, epidxs
 export save_parameters!
 include("symbolicindexing.jl")
 
-using NonlinearSolve: NonlinearProblem, AbstractNonlinearSolveAlgorithm
+using NonlinearSolve: AbstractNonlinearSolveAlgorithm, NonlinearFunction
+using NonlinearSolve: NonlinearLeastSquaresProblem, NonlinearProblem
 using SteadyStateDiffEq: SteadyStateProblem, SteadyStateDiffEqAlgorithm, SSRootfind
 export find_fixpoint
 include("initialization.jl")

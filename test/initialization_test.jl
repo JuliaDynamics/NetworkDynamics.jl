@@ -34,9 +34,9 @@ end
     @mtkmodel InitSwing begin
         @variables begin
             u_r(t)=1, [description="bus d-voltage", output=true]
-            u_i(t)=0, [description="bus q-voltage", output=true]
-            i_r(t), [description="bus d-current (flowing into bus)", input=true]
-            i_i(t), [description="bus d-current (flowing into bus)", input=true]
+            u_i(t)=0.1, [description="bus q-voltage", output=true]
+            i_r(t)=1, [description="bus d-current (flowing into bus)", input=true]
+            i_i(t)=0.1, [description="bus d-current (flowing into bus)", input=true]
             ω(t), [guess=0.0, description="Rotor frequency"]
             θ(t), [guess=0.0, bounds=[-π, π], description="Rotor angle"]
             Pel(t), [guess=1, description="Electrical Power injected into the grid"]
@@ -44,9 +44,9 @@ end
         @parameters begin
             M=0.005, [description="Inertia"]
             D=0.1, [description="Damping"]
-            V=1.0, [description="Voltage magnitude"]
+            V=sqrt(u_r^2 + u_i^2), [description="Voltage magnitude"]
             ω_ref=0, [description="Reference frequency"]
-            Pm, [guess=1,description="Mechanical Power"]
+            Pm, [guess=0.1,description="Mechanical Power"]
         end
         @equations begin
             Dt(θ) ~ ω - ω_ref
@@ -58,8 +58,14 @@ end
     end
     sys = InitSwing(name=:swing)
     vf = ODEVertex(sys, [:i_r, :i_i], [:u_r, :u_i])
-    @test vf.symmetadata[:u_r][:default] == 1
-    @test vf.symmetadata[:Pm][:guess] == 1
-    @test vf.symmetadata[:θ][:bounds] == [-π, π]
 
+    @test vf.symmetadata[:u_r][:default] == 1
+    @test vf.symmetadata[:u_i][:default] == 0.1
+    @test vf.symmetadata[:Pm][:guess] == 0.1
+    @test vf.symmetadata[:θ][:bounds] == [-π, π]
+    @test vf.symmetadata[:i_r][:default] == 1
+    @test vf.symmetadata[:i_i][:default] == 0.1
+
+    NetworkDynamics.initialize_component!(vf)
+    @test NetworkDynamics.init_residual(vf) < 1e-8
 end

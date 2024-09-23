@@ -88,7 +88,7 @@ function _get_metadata(sys, name)
     if ModelingToolkit.hasdefault(sym)
         def = ModelingToolkit.getdefault(sym)
         if def isa Symbolic
-            def = fixpoint_sub(v, defaults(sys))
+            def = fixpoint_sub(def, defaults(sys))
         end
         def isa Symbolic && error("Could not resolve default $(ModelingToolkit.getdefault(sym)) for $name")
         nt = (; nt..., default=def)
@@ -96,7 +96,7 @@ function _get_metadata(sys, name)
     if ModelingToolkit.hasguess(sym)
         guess = ModelingToolkit.getguess(sym)
         if guess isa Symbolic
-            guess = fixpoint_sub(v, defaults(sys))
+            guess = fixpoint_sub(def, defaults(sys))
         end
         guess isa Symbolic && error("Could not resolve guess $(ModelingToolkit.getguess(sym)) for $name")
         nt = (; nt..., guess=guess)
