@@ -523,3 +523,12 @@ function pdef(c::ComponentFunction)::Vector{Union{Nothing,Float64}}
         has_default_or_init(c, s) ? get_default_or_init(c, s) : nothing
     end
 end
+
+####
+#### Component metadata
+####
+function has_metadata(c::ComponentFunction, key)
+    haskey(metadata(c), key)
+end
+get_metadata(c::ComponentFunction, key::Symbol) = metadata(c)[key]
+set_metadata!(c::ComponentFunction, key::Symbol, val) = setindex!(metadata(c), val, key)

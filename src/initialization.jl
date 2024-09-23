@@ -128,14 +128,19 @@ end
 function initialize_component!(cf; verbose=true, kwargs...)
     prob = initialization_problem(cf)
     sol = SciMLBase.solve(prob; kwargs...)
+
     if sol.prob isa NonlinearLeastSquaresProblem && sol.retcode == SciMLBase.ReturnCode.Stalled
         # https://github.com/SciML/NonlinearSolve.jl/issues/459
+        res = LinearAlgebra.norm(sol.resid)
+        @warn "Initialization for componend stalled with residual $(res)"
     elseif !SciMLBase.successful_retcode(sol.retcode)
         throw(ArgumentError("Initialization failed. Solver returned $(sol.retcode)"))
     end
     set_init!.(Ref(cf), SII.variable_symbols(sol), sol.u)
 
-    verbose && @info "Initialization successful with residual $(init_residual(cf))"
+    set_metadata!(cf, :init_residual, sol.resid)
+
+    verbose && @info "Initialization successful with residual $(LinearAlgebra.norm(sol.resid))"
     cf
 end
 
@@ -145,21 +150,36 @@ function isinitialized(cf::ComponentFunction)
     all(has_default_or_init(cf, s) for s in vcat(sym(cf), psym(cf)))
 end
 
-function init_residual(cf::T; t=NaN) where {T<:Union{ODEVertex, ODEEdge}}
+"""
+    init_residual(cf::T; t=NaN, recalc=false)
+
+Calculates the residual |du| for the given component function for the values
+provided via `default` and `init` [Metadata](@ref).
+
+If recalc=false just return the residual determined in the actual initialization process.
+
+See also [`initialize_component!`](@ref).
+"""
+function init_residual(cf::T; t=NaN, recalc=false) where {T<:Union{ODEVertex, ODEEdge}}
     if !isinitialized(cf)
         throw(ArgumentError("Component is not initialized."))
     end
-    u = Float64[get_default_or_init(cf, s) for s in sym(cf)]
-    p = Float64[get_default_or_init(cf, s) for s in psym(cf)]
-    res = zeros(dim(cf))
 
-    if T <: EdgeFunction
-        src=Float64[get_default(cf, s) for s in inputsym(cf).src]
-        dst=Float64[get_default(cf, s) for s in inputsym(cf).dst]
-        compf(cf)(res, u, src, dst, p, t)
+    if recalc || !has_metadata(cf, :init_residual)
+        u = Float64[get_default_or_init(cf, s) for s in sym(cf)]
+        p = Float64[get_default_or_init(cf, s) for s in psym(cf)]
+        res = zeros(dim(cf))
+
+        if T <: EdgeFunction
+            src=Float64[get_default(cf, s) for s in inputsym(cf).src]
+            dst=Float64[get_default(cf, s) for s in inputsym(cf).dst]
+            compf(cf)(res, u, src, dst, p, t)
+        else
+            input = Float64[get_default(cf, s) for s in inputsym(cf)]
+            compf(cf)(res, u, input, p, t)
+        end
+        LinearAlgebra.norm(res)
     else
-        input = Float64[get_default(cf, s) for s in inputsym(cf)]
-        compf(cf)(res, u, input, p, t)
+        LinearAlgebra.norm(get_metadata(cf, :init_residual))
     end
-    LinearAlgebra.norm(res)
 end

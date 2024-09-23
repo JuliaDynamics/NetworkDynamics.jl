@@ -68,4 +68,5 @@ end
 
     NetworkDynamics.initialize_component!(vf)
     @test NetworkDynamics.init_residual(vf) < 1e-8
+    @test init_residual(vf) ≈ init_residual(vf; recalc=true)
 end
