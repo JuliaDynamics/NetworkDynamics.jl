@@ -238,10 +238,6 @@ function _fill_defaults(T, kwargs)
     symmetadata = get!(dict, :symmetadata, Dict{Symbol,Dict{Symbol,Any}}())
     metadata = get!(dict, :metadata, Dict{Symbol,Any}())
 
-    if haskey(dict, :sym) && haskey(dict, :psym)
-        @argcheck isempty(dict[:sym] ∩ dict[:psym]) "There are name colisions between sym and psym!"
-    end
-
     # sym & dim
     haskey(dict, :dim) || haskey(dict, :sym) || throw(ArgumentError("Either `dim` or `sym` must be provided to construct $T."))
     if haskey(dict, :sym)
@@ -322,6 +318,10 @@ function _fill_defaults(T, kwargs)
         if !(haskey(dict, :obsf) && haskey(dict, :obssym))
             throw(ArgumentError("If `obsf` is provided, `obssym` must be provided as well."))
         end
+        if _has_metadata(dict[:obssym])
+            dict[:obssym], _metadata = _split_metadata(dict[:obssym])
+            mergewith!(merge!, symmetadata, _metadata)
+        end
     else
         dict[:obsf] = nothing
         dict[:obssym] = Symbol[]
@@ -377,6 +377,12 @@ function _fill_defaults(T, kwargs)
     elseif dict[:depth] > dim
         throw(ArgumentError("Depth cannot exceed half the dimension."))
     end
+
+    # check for name clashes (at the end because only now sym, psym, obssym are initialized)
+    _s  = get(dict, :sym, Symbol[])
+    _ps = get(dict, :psym, Symbol[])
+    _os = get(dict, :obssym, Symbol[])
+    allunique(vcat(_s, _ps, _os)) || throw(ArgumentError("Symbol names must be unique. There are clashes in sym, psym and obssym."))
 
     return dict
 end
