@@ -47,13 +47,24 @@ const CouplingUnion = Union{AntiSymmetric,Symmetric,Directed,Fiducial}
 
 abstract type ComponentFunction end
 
+"""
+Abstract supertype for all vertex functions.
+"""
+abstract type VertexFunction <: ComponentFunction end
+
+"""
+Abstract supertype for all edge functions.
+"""
+# abstract type EdgeFunction{C<:Coupling} <: ComponentFunction end
+abstract type EdgeFunction{C} <: ComponentFunction end
+
 Mixers.@pour CommonFields begin
     name::Symbol
     f::F
     sym::Vector{Symbol}
     depth::Int
     psym::Vector{Symbol}
-    inputsym::Union{Nothing,Vector{Symbol}}
+    inputsym:: Union{Nothing, Vector{Symbol}, @NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}}}
     obsf::OF
     obssym::Vector{Symbol}
     symmetadata::Dict{Symbol,Dict{Symbol, Any}}
@@ -70,18 +81,8 @@ depth(c::ComponentFunction)::Int = c.depth
 symmetadata(c::ComponentFunction)::Dict{Symbol,Dict{Symbol,Any}} = c.symmetadata
 metadata(c::ComponentFunction)::Dict{Symbol,Any} = c.metadata
 hasinputsym(c::ComponentFunction) = !isnothing(c.inputsym)
-inputsym(c::ComponentFunction)::Vector{Symbol} = c.inputsym
-
-"""
-Abstract supertype for all vertex functions.
-"""
-abstract type VertexFunction <: ComponentFunction end
-
-"""
-Abstract supertype for all edge functions.
-"""
-# abstract type EdgeFunction{C<:Coupling} <: ComponentFunction end
-abstract type EdgeFunction{C} <: ComponentFunction end
+inputsym(c::VertexFunction)::Vector{Symbol} = c.inputsym
+inputsym(c::EdgeFunction)::@NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}} = c.inputsym
 
 coupling(::EdgeFunction{C}) where {C} = C()
 coupling(::Type{<:EdgeFunction{C}}) where {C} = C()
@@ -331,13 +332,32 @@ function _fill_defaults(T, kwargs)
     end
 
     # inputsym
-    if haskey(dict, :inputsym)
-        if _has_metadata(dict[:inputsym])
-            dict[:inputsym], _metadata = _split_metadata(dict[:inputsym])
-            mergewith!(merge!, symmetadata, _metadata)
+    if T <: VertexFunction
+        if haskey(dict, :inputsym_src) || haskey(dict, :inputsym_dst)
+            throw(ArgumentError("Keywords `inputsym_src` and `inputsym_dst` are not valid for $T."))
         end
-    else
-        dict[:inputsym] = nothing
+        if haskey(dict, :inputsym)
+            if _has_metadata(dict[:inputsym])
+                dict[:inputsym], _metadata = _split_metadata(dict[:inputsym])
+                mergewith!(merge!, symmetadata, _metadata)
+            end
+        else
+            dict[:inputsym] = nothing
+        end
+    elseif T <: EdgeFunction
+        haskey(dict, :inputsym) && throw(ArgumentError("Keywords `inputsym` is not valid for $T."))
+        if haskey(dict, :inputsym_src) || haskey(dict, :inputsym_dst)
+            if !(haskey(dict, :inputsym_src) && haskey(dict, :inputsym_dst))
+                throw(ArgumentError("Both `inputsym_src` and `inputsym_dst` must be provided."))
+            end
+            src, _metadata = _split_metadata(pop!(dict, :inputsym_src))
+            mergewith!(merge!, symmetadata, _metadata)
+            dst, _metadata = _split_metadata(pop!(dict, :inputsym_dst))
+            mergewith!(merge!, symmetadata, _metadata)
+            dict[:inputsym] = (; src, dst)
+        else
+            dict[:inputsym] = nothing
+        end
     end
 
     # name
@@ -395,7 +415,14 @@ function _fill_defaults(T, kwargs)
     _s  = dict[:sym]
     _ps = dict[:psym]
     _os = dict[:obssym]
-    _is = isnothing(dict[:inputsym]) ? Symbol[] : dict[:inputsym]
+    __is = dict[:inputsym]
+    _is = if isnothing(__is)
+        Symbol[]
+    elseif __is isa NamedTuple
+        vcat(__is.src, __is.dst)
+    else
+        __is
+    end
     if !allunique(vcat(_s, _ps, _os, _is))
         throw(ArgumentError("Symbol names must be unique. There are clashes in sym, psym, obssym and inputsym."))
     end

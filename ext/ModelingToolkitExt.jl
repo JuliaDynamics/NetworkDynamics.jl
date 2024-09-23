@@ -27,14 +27,14 @@ function ODEVertex(sys::ODESystem, inputs, outputs; verbose=false)
     _psym = getname.(gen.params)
     psym = [s => _get_metadata(sys, s) for s in _psym]
 
-    depth = length(outputs)
-    obsf = gen.g_ip
-
     _obssym = getname.(gen.obsstates)
     obssym = [s => _get_metadata(sys, s) for s in _obssym]
 
     _inputsym = getname.(inputs)
     inputsym = [s => _get_metadata(sys, s) for s in _inputsym]
+
+    depth = length(outputs)
+    obsf = gen.g_ip
 
     mass_matrix = gen.mass_matrix
     name = getname(sys)
@@ -59,12 +59,17 @@ function StaticEdge(sys::ODESystem, srcin, dstin, outputs, coupling; verbose=fal
     _obssym = getname.(gen.obsstates)
     obssym = [s => _get_metadata(sys, s) for s in _obssym]
 
-    _inputsym = getname.(inputs)
-    inputsym = [s => _get_metadata(sys, s) for s in _inputsym]
+    _inputsym_src = getname.(srcin)
+    inputsym_src = [s => _get_metadata(sys, s)  for s in _inputsym_src]
+
+    _inputsym_dst = getname.(dstin)
+    inputsym_dst = [s => _get_metadata(sys, s)  for s in _inputsym_dst]
 
     depth = coupling isa Fiducial ? Int(length(outputs)/2) : length(outputs)
+    obsf = gen.g_ip
+
     name = getname(sys)
-    StaticEdge(;f, sym, psym, depth, inputsym, obssym, obsf, coupling, name)
+    StaticEdge(;f, sym, psym, depth, inputsym_src, inputsym_dst, obssym, obsf, coupling, name)
 end
 
 """
