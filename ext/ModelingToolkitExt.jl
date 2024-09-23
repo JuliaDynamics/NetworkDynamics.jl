@@ -33,9 +33,12 @@ function ODEVertex(sys::ODESystem, inputs, outputs; verbose=false)
     _obssym = getname.(gen.obsstates)
     obssym = [s => _get_metadata(sys, s) for s in _obssym]
 
+    _inputsym = getname.(inputs)
+    inputsym = [s => _get_metadata(sys, s) for s in _inputsym]
+
     mass_matrix = gen.mass_matrix
     name = getname(sys)
-    ODEVertex(;f, sym, psym, depth, obssym, obsf, mass_matrix, name)
+    ODEVertex(;f, sym, psym, depth, inputsym, obssym, obsf, mass_matrix, name)
 end
 
 function StaticEdge(sys::ODESystem, srcin, dstin, outputs, coupling; verbose=false)
@@ -46,20 +49,22 @@ function StaticEdge(sys::ODESystem, srcin, dstin, outputs, coupling; verbose=fal
     gen = generate_io_function(sys, (srcin, dstin), outputs; type=:static, verbose)
 
     f = gen.f_ip
-    defdict = _resolved_defaults(sys)
-    sym = getname.(gen.states)
-    def = map(gen.states) do s
-        get(defdict, s, nothing)
-    end
-    psym = getname.(gen.params)
-    pdef = map(gen.params) do p
-        get(defdict, p, nothing)
-    end
-    obsf = gen.g_ip
-    obssym = getname.(gen.obsstates)
+
+    _sym = getname.(gen.states)
+    sym = [s => _get_metadata(sys, s) for s in _sym]
+
+    _psym = getname.(gen.params)
+    psym = [s => _get_metadata(sys, s) for s in _psym]
+
+    _obssym = getname.(gen.obsstates)
+    obssym = [s => _get_metadata(sys, s) for s in _obssym]
+
+    _inputsym = getname.(inputs)
+    inputsym = [s => _get_metadata(sys, s) for s in _inputsym]
+
     depth = coupling isa Fiducial ? Int(length(outputs)/2) : length(outputs)
     name = getname(sys)
-    StaticEdge(;f, sym, def, psym, pdef, depth, obssym, obsf, coupling, name)
+    StaticEdge(;f, sym, psym, depth, inputsym, obssym, obsf, coupling, name)
 end
 
 """

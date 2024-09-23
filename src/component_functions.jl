@@ -53,6 +53,7 @@ Mixers.@pour CommonFields begin
     sym::Vector{Symbol}
     depth::Int
     psym::Vector{Symbol}
+    inputsym::Union{Nothing,Vector{Symbol}}
     obsf::OF
     obssym::Vector{Symbol}
     symmetadata::Dict{Symbol,Dict{Symbol, Any}}
@@ -68,6 +69,8 @@ obssym(c::ComponentFunction)::Vector{Symbol} = c.obssym
 depth(c::ComponentFunction)::Int = c.depth
 symmetadata(c::ComponentFunction)::Dict{Symbol,Dict{Symbol,Any}} = c.symmetadata
 metadata(c::ComponentFunction)::Dict{Symbol,Any} = c.metadata
+hasinputsym(c::ComponentFunction) = !isnothing(c.inputsym)
+inputsym(c::ComponentFunction)::Vector{Symbol} = c.inputsym
 
 """
 Abstract supertype for all vertex functions.
@@ -327,6 +330,16 @@ function _fill_defaults(T, kwargs)
         dict[:obssym] = Symbol[]
     end
 
+    # inputsym
+    if haskey(dict, :inputsym)
+        if _has_metadata(dict[:inputsym])
+            dict[:inputsym], _metadata = _split_metadata(dict[:inputsym])
+            mergewith!(merge!, symmetadata, _metadata)
+        end
+    else
+        dict[:inputsym] = nothing
+    end
+
     # name
     if !haskey(dict, :name)
         dict[:name] = _default_name(T)
@@ -379,10 +392,13 @@ function _fill_defaults(T, kwargs)
     end
 
     # check for name clashes (at the end because only now sym, psym, obssym are initialized)
-    _s  = get(dict, :sym, Symbol[])
-    _ps = get(dict, :psym, Symbol[])
-    _os = get(dict, :obssym, Symbol[])
-    allunique(vcat(_s, _ps, _os)) || throw(ArgumentError("Symbol names must be unique. There are clashes in sym, psym and obssym."))
+    _s  = dict[:sym]
+    _ps = dict[:psym]
+    _os = dict[:obssym]
+    _is = isnothing(dict[:inputsym]) ? Symbol[] : dict[:inputsym]
+    if !allunique(vcat(_s, _ps, _os, _is))
+        throw(ArgumentError("Symbol names must be unique. There are clashes in sym, psym, obssym and inputsym."))
+    end
 
     return dict
 end
