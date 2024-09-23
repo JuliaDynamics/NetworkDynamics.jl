@@ -67,7 +67,15 @@ function _collect_differentials!(found, ex)
     return found
 end
 
-function _resolve_to_symbolic(sys, var)
+"""
+    getproperty_symbolic(sys, var)
+
+Like `getproperty` but works on a greater varaity of "var"
+- var can be Num or Symbolic (resolved using genname)
+- strip namespace of sys if present
+- for nested variables (foo₊bar₊baz) resolve them one by one
+"""
+function getproperty_symbolic(sys, var)
     ns = string(getname(sys))
     varname = string(getname(var))
     varname_nons = replace(varname, r"^"*ns*"₊" => "")
@@ -151,7 +159,7 @@ function fix_metadata!(invalid_eqs, sys)
         valid = if hasproperty(sys, getname(invalidname))
             # https://github.com/SciML/ModelingToolkit.jl/issues/3016
             # getproperty(sys, getname(invalidname); namespace=false)
-            _resolve_to_symbolic(sys, invalids) # like getproperty but works on namespaced symbols foo₊bar directly
+            getproperty_symbolic(sys, invalids) # like getproperty but works on namespaced symbols foo₊bar directly
         else
             idxs = findall(contains(string(invalidname)), allnames)
             if length(idxs) == 1

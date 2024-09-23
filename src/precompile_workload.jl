@@ -1,6 +1,6 @@
 is_precompiling() = ccall(:jl_generating_output, Cint, ()) == 1
 
-using TimerOutputs: TimerOutput, @timeit
+using TimerOutputs: TimerOutput, @timeit, print_timer
 using NetworkDynamics
 using Graphs: complete_graph
 

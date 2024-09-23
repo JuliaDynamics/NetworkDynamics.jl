@@ -72,7 +72,14 @@ For a given system and name, extract all the relevant meta we want to keep for t
 """
 function _get_metadata(sys, name)
     nt = (;)
-    sym = getproperty(sys, name)
+    sym = try
+        getproperty_symbolic(sys, name)
+    catch e
+        if !endswith(string(name), "ˍt") # known for "internal" derivatives
+            @warn "Could not extract metadata for $name $(e.msg)"
+        end
+        return nt
+    end
     if ModelingToolkit.hasdefault(sym)
         def = ModelingToolkit.getdefault(sym)
         if def isa Symbolic
@@ -104,10 +111,10 @@ function generate_io_function(_sys, inputss::Tuple, outputs;
 
     # f_* may be given in namepsace version or as symbols, resolve to unnamespaced Symbolic
     inputss = map(inputss) do in
-        _resolve_to_symbolic.(Ref(_sys), in)
+        getproperty_symbolic.(Ref(_sys), in)
     end
     allinputs = reduce(union, inputss)
-    outputs = _resolve_to_symbolic.(Ref(_sys), outputs)
+    outputs = getproperty_symbolic.(Ref(_sys), outputs)
 
     sys = if ModelingToolkit.iscomplete(_sys)
         _sys

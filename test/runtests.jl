@@ -128,6 +128,10 @@ end
     end
 
     @safetestset "MTK extension test" begin include("MTK_test.jl") end
+
+    # check on the precompile files
+    @safetestset "Precompile workload" begin include("../src/precompile_workload.jl") end
+    @safetestset "MTK precompile workload" begin include("../ext/precompile_workload.jl") end
 end
 
 @testset "Test Doc Examples" begin
