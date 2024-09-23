@@ -125,6 +125,19 @@ function initialization_problem(cf::T; t=NaN, verbose=true) where {T<:Union{ODEV
     NonlinearLeastSquaresProblem(nlf, uguess)
 end
 
+"""
+    initialize_component!(cf::ComponentFunction; verbose=true, kwargs...)
+
+Initialize a `ComponentFunction` by solving the corresponding `NonlinearLeastSquaresProblem`.
+During initialization, everyting which has a `default` value (see [Metadata](@ref)) is considered
+"fixed". All other variables are considered "free" and are solved for. The initial guess for each
+variable depends on the `guess` value in the [Metadata](@ref).
+
+The result is stored in the `ComponentFunction` itself. The values of the free variables are stored
+in the metadata field `init`.
+
+The `kwargs` are passed to the nonlinear solver.
+"""
 function initialize_component!(cf; verbose=true, kwargs...)
     prob = initialization_problem(cf)
     sol = SciMLBase.solve(prob; kwargs...)

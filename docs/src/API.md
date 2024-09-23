@@ -68,6 +68,13 @@ VPIndex
 EPIndex
 ```
 
+## Initialization
+```@docs
+find_fixpoint
+initialize_component!
+init_residual
+```
+
 ## Utils
 ### Callbacks
 ```@docs
