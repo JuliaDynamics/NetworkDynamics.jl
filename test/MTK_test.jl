@@ -59,6 +59,8 @@ end
 end
 @named line = StaticPowerLine()
 e = StaticEdge(line, [:srcθ], [:dstθ], [:dstP, :srcP], Fiducial())
+@test NetworkDynamics.inputsym(e).src == [:srcθ]
+@test NetworkDynamics.inputsym(e).dst == [:dstθ]
 
 g = complete_graph(4)
 nw = Network(g, v, e)

@@ -71,7 +71,7 @@ function print_states_params(io, c::ComponentFunction, styling)
     push!(info, styled"$num &$word: &&$(stylesymbolarray(c.sym, def(c), styling))")
 
     if hasproperty(c, :mass_matrix) && c.mass_matrix != LinearAlgebra.I
-        if LinearAlgebra.isdiag(c.mass_matrix)
+        if LinearAlgebra.isdiag(c.mass_matrix) && !(c.mass_matrix isa UniformScaling)
             info[end] *= "\n&with diagonal mass matrix $(LinearAlgebra.diag(c.mass_matrix))"
         else
             info[end] *= "\n&with mass matrix $(c.mass_matrix)"

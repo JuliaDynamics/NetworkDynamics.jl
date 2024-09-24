@@ -15,7 +15,7 @@ using Pkg
 Pkg.activate(@__DIR__)
 Pkg.develop(PackageSpec(path=dirname(@__DIR__))) # adds the package this script is called from
 Pkg.instantiate()
-print("Do you want to update docs environment? [y/n]")
+print("Do you want to update docs environment? [y/n] ")
 answer = readline()
 if !isempty(answer) && answer[1] == 'y'
     Pkg.update()

@@ -20,21 +20,25 @@ function ODEVertex(sys::ODESystem, inputs, outputs; verbose=false)
     gen = generate_io_function(sys, (inputs, ), outputs; type=:ode, verbose)
 
     f = gen.f_ip
-    defdict = _resolved_defaults(sys)
-    sym = getname.(gen.states)
-    def = map(gen.states) do s
-        get(defdict, s, nothing)
-    end
-    psym = getname.(gen.params)
-    pdef = map(gen.params) do p
-        get(defdict, p, nothing)
-    end
+
+    _sym = getname.(gen.states)
+    sym = [s => _get_metadata(sys, s) for s in _sym]
+
+    _psym = getname.(gen.params)
+    psym = [s => _get_metadata(sys, s) for s in _psym]
+
+    _obssym = getname.(gen.obsstates)
+    obssym = [s => _get_metadata(sys, s) for s in _obssym]
+
+    _inputsym = getname.(inputs)
+    inputsym = [s => _get_metadata(sys, s) for s in _inputsym]
+
     depth = length(outputs)
     obsf = gen.g_ip
-    obssym = getname.(gen.obsstates)
+
     mass_matrix = gen.mass_matrix
     name = getname(sys)
-    ODEVertex(;f, sym, def, psym, pdef, depth, obssym, obsf, mass_matrix, name)
+    ODEVertex(;f, sym, psym, depth, inputsym, obssym, obsf, mass_matrix, name)
 end
 
 function StaticEdge(sys::ODESystem, srcin, dstin, outputs, coupling; verbose=false)
@@ -45,38 +49,65 @@ function StaticEdge(sys::ODESystem, srcin, dstin, outputs, coupling; verbose=fal
     gen = generate_io_function(sys, (srcin, dstin), outputs; type=:static, verbose)
 
     f = gen.f_ip
-    defdict = _resolved_defaults(sys)
-    sym = getname.(gen.states)
-    def = map(gen.states) do s
-        get(defdict, s, nothing)
-    end
-    psym = getname.(gen.params)
-    pdef = map(gen.params) do p
-        get(defdict, p, nothing)
-    end
-    obsf = gen.g_ip
-    obssym = getname.(gen.obsstates)
+
+    _sym = getname.(gen.states)
+    sym = [s => _get_metadata(sys, s) for s in _sym]
+
+    _psym = getname.(gen.params)
+    psym = [s => _get_metadata(sys, s) for s in _psym]
+
+    _obssym = getname.(gen.obsstates)
+    obssym = [s => _get_metadata(sys, s) for s in _obssym]
+
+    _inputsym_src = getname.(srcin)
+    inputsym_src = [s => _get_metadata(sys, s)  for s in _inputsym_src]
+
+    _inputsym_dst = getname.(dstin)
+    inputsym_dst = [s => _get_metadata(sys, s)  for s in _inputsym_dst]
+
     depth = coupling isa Fiducial ? Int(length(outputs)/2) : length(outputs)
+    obsf = gen.g_ip
+
     name = getname(sys)
-    StaticEdge(;f, sym, def, psym, pdef, depth, obssym, obsf, coupling, name)
+    StaticEdge(;f, sym, psym, depth, inputsym_src, inputsym_dst, obssym, obsf, coupling, name)
 end
 
 """
-defaults might be given als algebraic map from other parameters, try to resolve
+For a given system and name, extract all the relevant meta we want to keep for the component function.
 """
-function _resolved_defaults(sys)
-    _defdict = defaults(sys)
-    defdict = Dict()
-    for (k,v) in _defdict
-       if v isa Symbolic
-          v = fixpoint_sub(v, _defdict)
-          if v isa Symbolic
-             error("Could not resolve $k => $v in defaults map!")
-          end
-       end
-       defdict[k] = v
+function _get_metadata(sys, name)
+    nt = (;)
+    sym = try
+        getproperty_symbolic(sys, name)
+    catch e
+        if !endswith(string(name), "ˍt") # known for "internal" derivatives
+            @warn "Could not extract metadata for $name $(e.msg)"
+        end
+        return nt
     end
-    defdict
+    if ModelingToolkit.hasdefault(sym)
+        def = ModelingToolkit.getdefault(sym)
+        if def isa Symbolic
+            def = fixpoint_sub(def, defaults(sys))
+        end
+        def isa Symbolic && error("Could not resolve default $(ModelingToolkit.getdefault(sym)) for $name")
+        nt = (; nt..., default=def)
+    end
+    if ModelingToolkit.hasguess(sym)
+        guess = ModelingToolkit.getguess(sym)
+        if guess isa Symbolic
+            guess = fixpoint_sub(def, defaults(sys))
+        end
+        guess isa Symbolic && error("Could not resolve guess $(ModelingToolkit.getguess(sym)) for $name")
+        nt = (; nt..., guess=guess)
+    end
+    if ModelingToolkit.hasbounds(sym)
+        nt = (; nt..., bounds=ModelingToolkit.getbounds(sym))
+    end
+    if ModelingToolkit.hasdescription(sym)
+        nt = (; nt..., description=ModelingToolkit.getdescription(sym))
+    end
+    nt
 end
 
 function generate_io_function(_sys, inputss::Tuple, outputs;
@@ -85,10 +116,10 @@ function generate_io_function(_sys, inputss::Tuple, outputs;
 
     # f_* may be given in namepsace version or as symbols, resolve to unnamespaced Symbolic
     inputss = map(inputss) do in
-        _resolve_to_symbolic.(Ref(_sys), in)
+        getproperty_symbolic.(Ref(_sys), in)
     end
     allinputs = reduce(union, inputss)
-    outputs = _resolve_to_symbolic.(Ref(_sys), outputs)
+    outputs = getproperty_symbolic.(Ref(_sys), outputs)
 
     sys = if ModelingToolkit.iscomplete(_sys)
         _sys
@@ -240,7 +271,7 @@ end
 using PrecompileTools: @setup_workload, @compile_workload
 @setup_workload begin
     @compile_workload begin
-        include("precompile_workload.jl")
+        # include("precompile_workload.jl")
     end
 end
 

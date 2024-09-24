@@ -3,7 +3,7 @@ using Graphs: Graphs, AbstractGraph, SimpleEdge, edges, vertices, ne, nv
 using TimerOutputs: @timeit_debug, reset_timer!
 
 using ArgCheck: @argcheck
-using PreallocationTools: PreallocationTools, LazyBufferCache
+using PreallocationTools: PreallocationTools, LazyBufferCache, DiffCache
 using SciMLBase: SciMLBase
 using Base.Threads: @threads
 using NNlib: NNlib
@@ -36,7 +36,13 @@ include("utils.jl")
 
 export ODEVertex, StaticVertex, StaticEdge, ODEEdge
 export Symmetric, AntiSymmetric, Directed, Fiducial
-export dim, pdim, sdim
+export dim, sym, pdim, psym, obssym, depth, hasinputsym, inputsym, coupling
+export metadata, symmetadata
+export has_metadata, get_metadata, set_metadata!
+export has_default, get_default, set_default!
+export has_guess, get_guess, set_guess!
+export has_init, get_init, set_init!
+export has_bounds, get_bounds, set_bounds!
 include("component_functions.jl")
 
 export Network
@@ -57,9 +63,10 @@ export vidxs, eidxs, vpidxs, epidxs
 export save_parameters!
 include("symbolicindexing.jl")
 
-using NonlinearSolve: NonlinearProblem, AbstractNonlinearSolveAlgorithm
+using NonlinearSolve: AbstractNonlinearSolveAlgorithm, NonlinearFunction
+using NonlinearSolve: NonlinearLeastSquaresProblem, NonlinearProblem
 using SteadyStateDiffEq: SteadyStateProblem, SteadyStateDiffEqAlgorithm, SSRootfind
-export find_fixpoint
+export find_fixpoint, initialize_component!, init_residual
 include("initialization.jl")
 
 include("show.jl")
@@ -96,7 +103,7 @@ end
 using PrecompileTools: @setup_workload, @compile_workload
 @setup_workload begin
     @compile_workload begin
-        include("precompile_workload.jl")
+        # include("precompile_workload.jl")
     end
 end
 
