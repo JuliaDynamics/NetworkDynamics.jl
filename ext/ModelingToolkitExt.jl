@@ -85,22 +85,31 @@ function _get_metadata(sys, name)
         end
         return nt
     end
-    if ModelingToolkit.hasdefault(sym)
-        def = ModelingToolkit.getdefault(sym)
+    alldefaults = defaults(sys)
+    if haskey(alldefaults, sym)
+        def = alldefaults[sym]
         if def isa Symbolic
-            def = fixpoint_sub(def, defaults(sys))
+            def = fixpoint_sub(def, alldefaults)
         end
         def isa Symbolic && error("Could not resolve default $(ModelingToolkit.getdefault(sym)) for $name")
         nt = (; nt..., default=def)
     end
-    if ModelingToolkit.hasguess(sym)
-        guess = ModelingToolkit.getguess(sym)
+
+    # check for guess both in symbol metadata and in guesses of system
+    # fixes https://github.com/SciML/ModelingToolkit.jl/issues/3075
+    if ModelingToolkit.hasguess(sym) || haskey(ModelingToolkit.guesses(sys), sym)
+        guess = if ModelingToolkit.hasguess(sym)
+            ModelingToolkit.getguess(sym)
+        else
+            ModelingToolkit.guesses(sys)[sym]
+        end
         if guess isa Symbolic
-            guess = fixpoint_sub(def, defaults(sys))
+            guess = fixpoint_sub(def, merge(defaults(sys), guesses(sys)))
         end
         guess isa Symbolic && error("Could not resolve guess $(ModelingToolkit.getguess(sym)) for $name")
         nt = (; nt..., guess=guess)
     end
+
     if ModelingToolkit.hasbounds(sym)
         nt = (; nt..., bounds=ModelingToolkit.getbounds(sym))
     end
