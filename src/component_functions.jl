@@ -693,6 +693,20 @@ Returns if a `default` value if available, otherwise returns `init` value for sy
 """
 get_default_or_init(c::ComponentFunction, sym::Symbol) = has_default(c, sym) ? get_default(c, sym) : get_init(c, sym)
 
+#### default or guess
+"""
+    has_default_or_guess(c::ComponentFunction, sym::Symbol)
+
+Checks if a `default` or `guess` value is present for symbol `sym`.
+"""
+has_default_or_guess(c::ComponentFunction, sym::Symbol) = has_default(c, sym) || has_guess(c, sym)
+"""
+    get_default_or_guess(c::ComponentFunction, sym::Symbol)
+
+Returns if a `default` value if available, otherwise returns `guess` value for symbol `sym`.
+"""
+get_default_or_guess(c::ComponentFunction, sym::Symbol) = has_default(c, sym) ? get_default(c, sym) : get_guess(c, sym)
+
 
 # TODO: legacy, only used within show methods
 function def(c::ComponentFunction)::Vector{Union{Nothing,Float64}}
