@@ -131,7 +131,7 @@ function generate_io_function(_sys, inputss::Tuple, outputs;
     outputs = getproperty_symbolic.(Ref(_sys), outputs)
 
     sys = if ModelingToolkit.iscomplete(_sys)
-        _sys
+        deepcopy(_sys)
     else
         _openinputs = setdiff(allinputs, Set(full_parameters(_sys)))
         structural_simplify(_sys, (_openinputs, outputs); simplify=true)[1]
