@@ -81,9 +81,12 @@ coupling
 ### Component Metadata API
 ```@docs
 metadata
-get_metadata(::NetworkDynamics.ComponentFunction, ::Symbol)
 has_metadata(::NetworkDynamics.ComponentFunction, ::Symbol)
+get_metadata(::NetworkDynamics.ComponentFunction, ::Symbol)
 set_metadata!(::NetworkDynamics.ComponentFunction, ::Symbol, ::Any)
+has_graphelement
+get_graphelement
+set_graphelement!
 ```
 ### Per-Symbol Metadata API
 ```@docs

@@ -41,6 +41,39 @@ using Graphs
     @test_throws ArgumentError nd(_du, _u, rand(pdim(nd)+1), 0.0)
 end
 
+@testset "graphless constructor" begin
+    @test_throws ArgumentError ODEVertex(x->x^1, 2, 0; metadata="foba")
+    v1 = ODEVertex(x->x^1, 2, 0; metadata=Dict(:graphelement=>1), name=:v1)
+    @test has_graphelement(v1) && get_graphelement(v1) == 1
+    v2 = ODEVertex(x->x^2, 2, 0; name=:v2)
+    set_graphelement!(v2, 3)
+    v3 = ODEVertex(x->x^3, 2, 0; name=:v3)
+    set_graphelement!(v3, 2)
+
+    e1 = StaticEdge(nothing, 0, Symmetric(); graphelement=(;src=1,dst=2))
+    @test get_graphelement(e1) == (;src=1,dst=2)
+    e2 = StaticEdge(nothing, 0, Symmetric())
+    set_graphelement!(e2, (;src=:v3,dst=:v2))
+    e3 = StaticEdge(nothing, 0, Symmetric())
+
+    @test_throws ArgumentError Network([v1,v2,v3], [e1,e2,e3])
+    set_graphelement!(e3, (;src=3,dst=1))
+
+    nw = Network([v1,v2,v3], [e1,e2,e3])
+    @test nw.im.vertexf == [v1, v3, v2]
+    g = SimpleDiGraph(3)
+    add_edge!(g, 1, 2)
+    add_edge!(g, 2, 3)
+    add_edge!(g, 3, 1)
+    @test nw.im.g == g
+
+    set_graphelement!(e3, (;src=1,dst=2))
+    @test_throws ArgumentError Network([v1,v2,v3], [e1,e2,e3])
+
+    set_graphelement!(e3, (;src=2,dst=1))
+    Network([v1,v2,v3], [e1,e2,e3]) # throws waring about 1->2 and 2->1 beeing present
+end
+
 @testset "Vertex batch" begin
     using NetworkDynamics: BatchStride, VertexBatch, parameter_range
     vb = VertexBatch{ODEVertex, typeof(sum), Vector{Int}}([1, 2, 3, 4], # vertices

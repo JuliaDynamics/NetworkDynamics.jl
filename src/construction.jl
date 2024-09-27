@@ -16,6 +16,28 @@ function Network(g::AbstractGraph,
         @argcheck length(_vertexf) == nv(g)
         @argcheck length(_edgef) == ne(g)
 
+        # check if graphelement is set correctly, warn otherwise
+        for (i, v) in pairs(_vertexf)
+            if has_graphelement(v)
+                if get_graphelement(v) != i
+                    @warn "Vertex function $v has wrong `:graphelement` $(get_graphelement(v)) != $i. \
+                    Using this constructor the provided `:graphelement` is ignored!"
+                end
+            end
+        end
+        if any(has_graphelement, _edgef)
+            vnamedict = _unique_name_dict(_vertexf)
+            for (iteredge, ef) in zip(edges(g), _edgef)
+                if has_graphelement(ef)
+                    ge = get_graphelement(ef)
+                    if iteredge != _resolve_ge_to_edge(ge, vnamedict)
+                        @warn "Edge function $ef has wrong `:graphelement` $(get_graphelement(ef)) != $iteredge. \
+                        Using this constructor the provided `:graphelement` is ignored!"
+                    end
+                end
+            end
+        end
+
         verbose &&
             println("Create dynamic network with $(nv(g)) vertices and $(ne(g)) edges:")
         @argcheck execution isa ExecutionStyle "Execution type $execution not supported (choose from $(subtypes(ExecutionStyle)))"
@@ -94,6 +116,74 @@ function Network(g::AbstractGraph,
     end
     # print_timer()
     return nw
+end
+
+function Network(vertexfs, edgefs; kwargs...)
+    @argcheck all(has_graphelement, vertexfs) "All vertex functions must have assigned `graphelement` to implicitly construct graph!"
+    @argcheck all(has_graphelement, edgefs) "All edge functions must have assigned `graphelement` to implicitly construct graph!"
+
+    vidxs = get_graphelement.(vertexfs)
+    allunique(vidxs) || throw(ArgumentError("All vertex functions must have unique `graphelement`!"))
+    sort(vidxs) == 1:length(vidxs) || throw(ArgumentError("Vertex functions must have `graphelement` in range 1:length(vertexfs)!"))
+
+    vdict = Dict(vidxs .=> vertexfs)
+
+    vnamedict = _unique_name_dict(vertexfs)
+
+    simpleedges = map(edgefs) do e
+        ge = get_graphelement(e)
+        _resolve_ge_to_edge(ge, vnamedict)
+    end
+    allunique(simpleedges) || throw(ArgumentError("Not all assigned edges are unique!"))
+    edict = Dict(simpleedges .=> edgefs)
+
+    # if all src < dst then we can use SimpleGraph, else digraph
+    g = if all(e -> e.src < e.dst, simpleedges)
+        SimpleGraph(length(vertexfs))
+    else
+        SimpleDiGraph(length(vertexfs))
+    end
+    for edge in simpleedges
+        if g isa SimpleDiGraph && has_edge(g, edge.dst, edge.src)
+            @warn "Edges $(edge.src) -> $(edge.dst) and $(edge.dst) -> $(edge.src) are both present in the graph!"
+        end
+        r = add_edge!(g, edge)
+        r || error("Could not add edge $(edge) to graph $(g)!")
+    end
+
+    vfs_ordered = [vdict[k] for k in vertices(g)]
+    efs_ordered = [edict[k] for k in edges(g)]
+
+    Network(g, vfs_ordered, efs_ordered; kwargs...)
+end
+
+function _unique_name_dict(cfs::AbstractVector{<:ComponentFunction})
+    # find all names to resolve
+    names = getproperty.(cfs, :name)
+    dict = Dict(names .=> get_graphelement.(cfs))
+    # delete all names which occure multiple times
+    for i in eachindex(names)
+        if names[i] ∈ @views names[i+1:end]
+            delete!(dict, names[i])
+        end
+    end
+    dict
+end
+# resolve the graphelement ge (named tuple) to simple edge with potential lookup in vertex name dict dict
+function _resolve_ge_to_edge(ge, vnamedict)
+    src = if ge.src isa Symbol
+        haskey(vnamedict, ge.src) || throw(ArgumentError("Edge function has unknown or non-unique source vertex name $(ge.src)"))
+        vnamedict[ge.src]
+    else
+        ge.src
+    end
+    dst = if ge.dst isa Symbol
+        haskey(vnamedict, ge.dst) || throw(ArgumentError("Edge function has unknown or non-unique source vertex name $(ge.dst)"))
+        vnamedict[ge.dst]
+    else
+        ge.dst
+    end
+    SimpleEdge(src, dst)
 end
 
 function VertexBatch(im::IndexManager, idxs::Vector{Int}; verbose)
