@@ -13,7 +13,7 @@ import NetworkDynamics: ODEVertex, StaticEdge
 
 include("ModelingToolkitUtils.jl")
 
-function ODEVertex(sys::ODESystem, inputs, outputs; verbose=false)
+function ODEVertex(sys::ODESystem, inputs, outputs; verbose=false, name=getname(sys))
     warn_events(sys)
     inputs = inputs isa AbstractVector ? inputs : [inputs]
     outputs = outputs isa AbstractVector ? outputs : [outputs]
@@ -37,11 +37,10 @@ function ODEVertex(sys::ODESystem, inputs, outputs; verbose=false)
     obsf = gen.g_ip
 
     mass_matrix = gen.mass_matrix
-    name = getname(sys)
     ODEVertex(;f, sym, psym, depth, inputsym, obssym, obsf, mass_matrix, name)
 end
 
-function StaticEdge(sys::ODESystem, srcin, dstin, outputs, coupling; verbose=false)
+function StaticEdge(sys::ODESystem, srcin, dstin, outputs, coupling; verbose=false, name=getname(sys))
     warn_events(sys)
     srcin = srcin isa AbstractVector ? srcin : [srcin]
     dstin = dstin isa AbstractVector ? dstin : [dstin]
@@ -68,7 +67,6 @@ function StaticEdge(sys::ODESystem, srcin, dstin, outputs, coupling; verbose=fal
     depth = coupling isa Fiducial ? Int(length(outputs)/2) : length(outputs)
     obsf = gen.g_ip
 
-    name = getname(sys)
     StaticEdge(;f, sym, psym, depth, inputsym_src, inputsym_dst, obssym, obsf, coupling, name)
 end
 

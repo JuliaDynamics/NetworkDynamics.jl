@@ -134,7 +134,7 @@ function Network(vertexfs, edgefs; kwargs...)
         ge = get_graphelement(e)
         _resolve_ge_to_edge(ge, vnamedict)
     end
-    allunique(simpleedges) || throw(ArgumentError("Not all assigned edges are unique!"))
+    allunique(simpleedges) || throw(ArgumentError("Some edge functions have the same `graphelement`!"))
     edict = Dict(simpleedges .=> edgefs)
 
     # if all src < dst then we can use SimpleGraph, else digraph
