@@ -328,7 +328,17 @@ function _fill_defaults(T, kwargs)
     _maybewrap!(dict, :obssym, Symbol)
 
     symmetadata = get!(dict, :symmetadata, Dict{Symbol,Dict{Symbol,Any}}())
-    metadata = get!(dict, :metadata, Dict{Symbol,Any}())
+
+    metadata = try
+        convert(Dict{Symbol,Any}, get!(dict, :metadata, Dict{Symbol,Any}()))
+    catch e
+        throw(ArgumentError("Provided metadata keyword musst be a Dict{Symbol,Any}. Got $(repr(dict[:metadata]))."))
+    end
+
+    if haskey(dict, :graphelement)
+        ge = pop!(dict, :graphelement)
+        metadata[:graphelement] = ge
+    end
 
     # sym & dim
     haskey(dict, :dim) || haskey(dict, :sym) || throw(ArgumentError("Either `dim` or `sym` must be provided to construct $T."))
@@ -693,6 +703,20 @@ Returns if a `default` value if available, otherwise returns `init` value for sy
 """
 get_default_or_init(c::ComponentFunction, sym::Symbol) = has_default(c, sym) ? get_default(c, sym) : get_init(c, sym)
 
+#### default or guess
+"""
+    has_default_or_guess(c::ComponentFunction, sym::Symbol)
+
+Checks if a `default` or `guess` value is present for symbol `sym`.
+"""
+has_default_or_guess(c::ComponentFunction, sym::Symbol) = has_default(c, sym) || has_guess(c, sym)
+"""
+    get_default_or_guess(c::ComponentFunction, sym::Symbol)
+
+Returns if a `default` value if available, otherwise returns `guess` value for symbol `sym`.
+"""
+get_default_or_guess(c::ComponentFunction, sym::Symbol) = has_default(c, sym) ? get_default(c, sym) : get_guess(c, sym)
+
 
 # TODO: legacy, only used within show methods
 function def(c::ComponentFunction)::Vector{Union{Nothing,Float64}}
@@ -729,3 +753,32 @@ get_metadata(c::ComponentFunction, key::Symbol) = metadata(c)[key]
 Sets the metadata `key` for the component to `value`.
 """
 set_metadata!(c::ComponentFunction, key::Symbol, val) = setindex!(metadata(c), val, key)
+
+#### graphelement field for edges and vertices
+"""
+    has_graphelement(c)
+
+Checks if the edge or vetex function function has the `graphelement` metadata.
+"""
+has_graphelement(c::EdgeFunction) = has_metadata(c, :graphelement)
+has_graphelement(c::VertexFunction) = has_metadata(c, :graphelement)
+"""
+    get_graphelement(c::EdgeFunction)::@NamedTuple{src::T, dst::T}
+    get_graphelement(c::VertexFunction)::Int
+
+Retrieves the `graphelement` metadata for the component function. For edges this
+returns a named tupe `(;src, dst)` where both are either integers (vertex index)
+or symbols (vertex name).
+"""
+get_graphelement(c::EdgeFunction) = get_metadata(c, :graphelement)::@NamedTuple{src::T, dst::T} where {T<:Union{Int,Symbol}}
+get_graphelement(c::VertexFunction) = get_metadata(c, :graphelement)::Int
+"""
+    set_graphelement!(c::EdgeFunction, src, dst)
+    set_graphelement!(c::VertexFunction, vidx)
+
+Sets the `graphelement` metadata for the edge function. For edges this takes two
+arguments `src` and `dst` which are either integer (vertex index) or symbol
+(vertex name). For vertices it takes a single integer `vidx`.
+"""
+set_graphelement!(c::EdgeFunction, nt::@NamedTuple{src::T, dst::T}) where {T<:Union{Int,Symbol}} = set_metadata!(c, :graphelement, nt)
+set_graphelement!(c::VertexFunction, vidx::Int) = set_metadata!(c, :graphelement, vidx)

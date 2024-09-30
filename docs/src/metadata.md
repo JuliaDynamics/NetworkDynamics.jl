@@ -7,7 +7,13 @@ Component metadata is a `Dict{Symbol,Any}` attached to each component to store v
 
 To access the data, you can use the methods `has_metadata`, `get_metadata` and `set_metadata!` (see [Component Metadata API](@ref)).
 
-Special uses: after [component wise initialization](@ref), the field `:init_residual` stores the residual vector of the nonlinear problem.
+Special metadata: 
+
+- `:init_residual`: after [component wise initialization](@ref), this field stores the residual vector of the nonlinear problem.
+- `:graphelement`: optional field to specialize the graphelement for each
+  component (`vidx`) for vertices, `(;src,dst)` named tuple of either vertex
+  names or vertex indices for edges. Has special accessors `has_/get_/set_graphelement`.
+
 
 ## Symbol Metadata
 Each component stores symbol metadata. The symbol metadata is a `Dict{Symbol, Dict{Symbol, Any}}` which stores a metadate dict per symbol. Symbols are everything that appears in [`sym`](@ref), [`psym`](@ref), [`obssym`](@ref) and [`inputsym`](@ref).

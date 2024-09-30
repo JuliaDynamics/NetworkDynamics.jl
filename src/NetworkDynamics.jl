@@ -1,5 +1,6 @@
 module NetworkDynamics
-using Graphs: Graphs, AbstractGraph, SimpleEdge, edges, vertices, ne, nv
+using Graphs: Graphs, AbstractGraph, SimpleEdge, edges, vertices, ne, nv,
+              SimpleGraph, SimpleDiGraph, add_edge!, has_edge
 using TimerOutputs: @timeit_debug, reset_timer!
 
 using ArgCheck: @argcheck
@@ -43,6 +44,7 @@ export has_default, get_default, set_default!
 export has_guess, get_guess, set_guess!
 export has_init, get_init, set_init!
 export has_bounds, get_bounds, set_bounds!
+export has_graphelement, get_graphelement, set_graphelement!
 include("component_functions.jl")
 
 export Network

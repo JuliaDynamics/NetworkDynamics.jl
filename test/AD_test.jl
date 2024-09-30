@@ -42,8 +42,8 @@ end
 # jacobian(fp, AutoReverseDiff(), pflat(p0))
 # jacobian(fp, AutoFiniteDiff(), pflat(p0))
 
-scenarios = [JacobianScenario(fx; x=x0, y=fx(x0), nb_args=1, place=:inplace, jac=jacobian(fx, AutoFiniteDiff(), x0)),
-             JacobianScenario(fp; x=pflat(p0), y=fp(pflat(p0)), nb_args=1, place=:inplace, jac=jacobian(fp, AutoFiniteDiff(), pflat(p0)))]
+scenarios = [Scenario{:jacobian, :in}(fx, x0; res1=jacobian(fx, AutoFiniteDiff(), x0)) ,
+             Scenario{:jacobian, :in}(fp, pflat(p0); res1=jacobian(fp, AutoFiniteDiff(), pflat(p0)))]
 backends = [AutoForwardDiff(), AutoReverseDiff()]
 test_differentiation(
     backends,             # the backends you want to compare

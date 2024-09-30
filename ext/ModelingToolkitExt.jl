@@ -13,7 +13,7 @@ import NetworkDynamics: ODEVertex, StaticEdge
 
 include("ModelingToolkitUtils.jl")
 
-function ODEVertex(sys::ODESystem, inputs, outputs; verbose=false)
+function ODEVertex(sys::ODESystem, inputs, outputs; verbose=false, name=getname(sys))
     warn_events(sys)
     inputs = inputs isa AbstractVector ? inputs : [inputs]
     outputs = outputs isa AbstractVector ? outputs : [outputs]
@@ -37,11 +37,10 @@ function ODEVertex(sys::ODESystem, inputs, outputs; verbose=false)
     obsf = gen.g_ip
 
     mass_matrix = gen.mass_matrix
-    name = getname(sys)
     ODEVertex(;f, sym, psym, depth, inputsym, obssym, obsf, mass_matrix, name)
 end
 
-function StaticEdge(sys::ODESystem, srcin, dstin, outputs, coupling; verbose=false)
+function StaticEdge(sys::ODESystem, srcin, dstin, outputs, coupling; verbose=false, name=getname(sys))
     warn_events(sys)
     srcin = srcin isa AbstractVector ? srcin : [srcin]
     dstin = dstin isa AbstractVector ? dstin : [dstin]
@@ -68,7 +67,6 @@ function StaticEdge(sys::ODESystem, srcin, dstin, outputs, coupling; verbose=fal
     depth = coupling isa Fiducial ? Int(length(outputs)/2) : length(outputs)
     obsf = gen.g_ip
 
-    name = getname(sys)
     StaticEdge(;f, sym, psym, depth, inputsym_src, inputsym_dst, obssym, obsf, coupling, name)
 end
 
@@ -85,22 +83,31 @@ function _get_metadata(sys, name)
         end
         return nt
     end
-    if ModelingToolkit.hasdefault(sym)
-        def = ModelingToolkit.getdefault(sym)
+    alldefaults = defaults(sys)
+    if haskey(alldefaults, sym)
+        def = alldefaults[sym]
         if def isa Symbolic
-            def = fixpoint_sub(def, defaults(sys))
+            def = fixpoint_sub(def, alldefaults)
         end
         def isa Symbolic && error("Could not resolve default $(ModelingToolkit.getdefault(sym)) for $name")
         nt = (; nt..., default=def)
     end
-    if ModelingToolkit.hasguess(sym)
-        guess = ModelingToolkit.getguess(sym)
+
+    # check for guess both in symbol metadata and in guesses of system
+    # fixes https://github.com/SciML/ModelingToolkit.jl/issues/3075
+    if ModelingToolkit.hasguess(sym) || haskey(ModelingToolkit.guesses(sys), sym)
+        guess = if ModelingToolkit.hasguess(sym)
+            ModelingToolkit.getguess(sym)
+        else
+            ModelingToolkit.guesses(sys)[sym]
+        end
         if guess isa Symbolic
-            guess = fixpoint_sub(def, defaults(sys))
+            guess = fixpoint_sub(def, merge(defaults(sys), guesses(sys)))
         end
         guess isa Symbolic && error("Could not resolve guess $(ModelingToolkit.getguess(sym)) for $name")
         nt = (; nt..., guess=guess)
     end
+
     if ModelingToolkit.hasbounds(sym)
         nt = (; nt..., bounds=ModelingToolkit.getbounds(sym))
     end
@@ -122,7 +129,7 @@ function generate_io_function(_sys, inputss::Tuple, outputs;
     outputs = getproperty_symbolic.(Ref(_sys), outputs)
 
     sys = if ModelingToolkit.iscomplete(_sys)
-        _sys
+        deepcopy(_sys)
     else
         _openinputs = setdiff(allinputs, Set(full_parameters(_sys)))
         structural_simplify(_sys, (_openinputs, outputs); simplify=true)[1]
