@@ -72,8 +72,17 @@ end
 
     set_graphelement!(e3, (;src=2,dst=1))
     Network([v1,v2,v3], [e1,e2,e3]) # throws waring about 1->2 and 2->1 beeing present
-end
 
+    v1 = ODEVertex(x->x^1, 2, 0; metadata=Dict(:graphelement=>1), name=:v1)
+    v2 = ODEVertex(x->x^2, 2, 0; name=:v2)
+    v3 = ODEVertex(x->x^3, 2, 0; name=:v3)
+    @test NetworkDynamics._unique_name_dict([v1,v2,v3]) == Dict(:v1=>1)
+
+    v1 = ODEVertex(x->x^1, 2, 0; metadata=Dict(:graphelement=>1), name=:v1)
+    v2 = ODEVertex(x->x^2, 2, 0; name=:v1)
+    v3 = ODEVertex(x->x^3, 2, 0; name=:v3)
+    @test NetworkDynamics._unique_name_dict([v1,v2,v3]) == Dict()
+end
 @testset "Vertex batch" begin
     using NetworkDynamics: BatchStride, VertexBatch, parameter_range
     vb = VertexBatch{ODEVertex, typeof(sum), Vector{Int}}([1, 2, 3, 4], # vertices

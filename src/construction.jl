@@ -160,7 +160,7 @@ end
 function _unique_name_dict(cfs::AbstractVector{<:ComponentFunction})
     # find all names to resolve
     names = getproperty.(cfs, :name)
-    dict = Dict(names .=> get_graphelement.(cfs))
+    dict = Dict(cf.name => get_graphelement(cf) for cf in cfs if has_graphelement(cf))
     # delete all names which occure multiple times
     for i in eachindex(names)
         if names[i] ∈ @views names[i+1:end]
@@ -344,6 +344,7 @@ end
     Network(nw::Network; kwargs...)
 
 Rebuild the Network with same graph and vertex/edge functions but possibly different kwargs.
+# FIXME : needs to take all Network kw arguments into acount!
 """
 function Network(nw::Network; kwargs...)
     Network(nw.im.g, nw.im.vertexf, nw.im.edgef; kwargs...)

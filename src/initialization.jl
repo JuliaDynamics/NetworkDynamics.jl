@@ -148,19 +148,25 @@ in the metadata field `init`.
 The `kwargs` are passed to the nonlinear solver.
 """
 function initialize_component!(cf; verbose=true, kwargs...)
-    prob = initialization_problem(cf)
-    sol = SciMLBase.solve(prob; kwargs...)
+    prob = initialization_problem(cf; verbose)
 
-    if sol.prob isa NonlinearLeastSquaresProblem && sol.retcode == SciMLBase.ReturnCode.Stalled
-        # https://github.com/SciML/NonlinearSolve.jl/issues/459
-        res = LinearAlgebra.norm(sol.resid)
-        @warn "Initialization for componend stalled with residual $(res)"
-    elseif !SciMLBase.successful_retcode(sol.retcode)
-        throw(ArgumentError("Initialization failed. Solver returned $(sol.retcode)"))
+    if !isempty(prob.u0)
+        sol = SciMLBase.solve(prob; kwargs...)
+
+        if sol.prob isa NonlinearLeastSquaresProblem && sol.retcode == SciMLBase.ReturnCode.Stalled
+            # https://github.com/SciML/NonlinearSolve.jl/issues/459
+            res = LinearAlgebra.norm(sol.resid)
+            @warn "Initialization for componend stalled with residual $(res)"
+        elseif !SciMLBase.successful_retcode(sol.retcode)
+            throw(ArgumentError("Initialization failed. Solver returned $(sol.retcode)"))
+        end
+        set_init!.(Ref(cf), SII.variable_symbols(sol), sol.u)
+        resid = sol.resid
+    else
+        resid = init_residual(cf; recalc=true)
     end
-    set_init!.(Ref(cf), SII.variable_symbols(sol), sol.u)
 
-    set_metadata!(cf, :init_residual, sol.resid)
+    set_metadata!(cf, :init_residual, resid)
 
     verbose && @info "Initialization successful with residual $(LinearAlgebra.norm(sol.resid))"
     cf

@@ -760,8 +760,7 @@ set_metadata!(c::ComponentFunction, key::Symbol, val) = setindex!(metadata(c), v
 
 Checks if the edge or vetex function function has the `graphelement` metadata.
 """
-has_graphelement(c::EdgeFunction) = has_metadata(c, :graphelement)
-has_graphelement(c::VertexFunction) = has_metadata(c, :graphelement)
+has_graphelement(c::ComponentFunction) = has_metadata(c, :graphelement)
 """
     get_graphelement(c::EdgeFunction)::@NamedTuple{src::T, dst::T}
     get_graphelement(c::VertexFunction)::Int
