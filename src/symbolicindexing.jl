@@ -285,10 +285,11 @@ end
 ####
 #### Timeseries parameter indexing
 ####
+const DEFAULT_PARA_TS_IDX = 1
 SII.is_timeseries_parameter(nw::Network, sni) = SII.is_parameter(nw::Network, sni)
 function SII.timeseries_parameter_index(nw::Network, sni)
     # NOTE: ALL parameters are lumped in timeseries with idx 1
-    SII.ParameterTimeseriesIndex.(1, SII.parameter_index.(nw, sni))
+    SII.ParameterTimeseriesIndex.(DEFAULT_PARA_TS_IDX, SII.parameter_index.(nw, sni))
 end
 
 function SII.get_all_timeseries_indexes(nw::Network, sym)
@@ -303,7 +304,9 @@ function SII.get_all_timeseries_indexes(nw::Network, sym)
     #     return Set()
     # end
     if SII.is_timeseries_parameter(nw, sym)
-        return Set{Union{Int, SII.ContinuousTimeseries}}([SII.timeseries_parameter_index(nw, sym).timeseries_idx])
+        return Set{Union{Int, SII.ContinuousTimeseries}}([DEFAULT_PARA_TS_IDX])
+    elseif SII.is_observed(nw, sym)
+        return Set{Union{Int, SII.ContinuousTimeseries}}([SII.ContinuousTimeseries(), DEFAULT_PARA_TS_IDX])
     else
         return Set{Union{Int, SII.ContinuousTimeseries}}([SII.ContinuousTimeseries()])
     end
@@ -352,6 +355,8 @@ function SII.is_observed(nw::Network, sni)
         # if has colon check if all are observed OR variables and return true
         # the observed function will handle the whole thing then
         all(s -> SII.is_variable(nw, s) || SII.is_observed(nw, s), sni)
+    elseif sni isa AbstractVector
+        any(SII.is_observed.(Ref(nw), sni))
     else
         _is_observed(nw, sni)
     end
