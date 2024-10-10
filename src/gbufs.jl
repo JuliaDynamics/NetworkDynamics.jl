@@ -33,7 +33,9 @@ function EagerGBufProvider(im::IndexManager, batches)
     if map != map2
         error("nope not the same")
     end
-    EagerGBufProvider(map, DiffCache(map))
+
+    N = ForwardDiff.pickchunksize(max(im.lastidx_dynamic, im.lastidx_p))
+    EagerGBufProvider(map, DiffCache(Float64.(map), N))
 end
 
 function get_gbuf(bufp::EagerGBufProvider, u)

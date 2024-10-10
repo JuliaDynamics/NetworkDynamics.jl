@@ -106,8 +106,9 @@ function Network(g::AbstractGraph,
 
         @assert isdense(im)
         mass_matrix = construct_mass_matrix(im)
-        caches = (;state = DiffCache(zeros(im.lastidx_static), im.lastidx_dynamic),
-                  aggregation = DiffCache(zeros(im.lastidx_aggr), im.lastidx_dynamic))
+        N = ForwardDiff.pickchunksize(max(im.lastidx_dynamic, im.lastidx_p))
+        caches = (;state = DiffCache(zeros(im.lastidx_static), N),
+                  aggregation = DiffCache(zeros(im.lastidx_aggr), N))
 
         gbufprovider = if usebuffer(execution)
             EagerGBufProvider(im, edgebatches)
