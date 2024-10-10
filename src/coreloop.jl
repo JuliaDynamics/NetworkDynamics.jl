@@ -179,7 +179,7 @@ end
     apply_edge!(T, batch, I, du, u, gbuf, p, t)
 end
 @kernel function ekernel!(::Type{T}, @Const(batch),
-                          @Const(du), u, gbuf,
+                          @Const(du), u, @Const(gbuf),
                           @Const(p), @Const(t)) where {T<:StaticEdge}
     I = @index(Global)
     apply_edge!(T, batch, I, du, u, gbuf, p, t)
