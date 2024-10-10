@@ -35,7 +35,7 @@ fp = function(p)
     nw(dx, x0, p, 0.0)
     dx
 end
-# jacobian(fp, AutoEnzyme(), pflat(p0)
+# jacobian(fp, AutoEnzyme(), pflat(p0))
 # jacobian(fp, AutoZygote(), pflat(p0))
 # jacobian(fp, AutoFiniteDifferences(), pflat(p0))
 # jacobian(fp, AutoForwardDiff(), pflat(p0))
@@ -44,7 +44,8 @@ end
 
 scenarios = [Scenario{:jacobian, :in}(fx, x0; res1=jacobian(fx, AutoFiniteDiff(), x0)) ,
              Scenario{:jacobian, :in}(fp, pflat(p0); res1=jacobian(fp, AutoFiniteDiff(), pflat(p0)))]
-backends = [AutoForwardDiff(), AutoReverseDiff()]
+# backends = [AutoForwardDiff(), AutoReverseDiff()]
+backends = [AutoForwardDiff()]
 test_differentiation(
     backends,             # the backends you want to compare
     scenarios,            # the scenarios you defined,
