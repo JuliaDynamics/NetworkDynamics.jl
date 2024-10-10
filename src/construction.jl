@@ -102,18 +102,26 @@ function Network(g::AbstractGraph,
             _aggregator = aggregator(im, edgebatches)
         end
 
-        nl = NetworkLayer(im, edgebatches, _aggregator)
+        nl = NetworkLayer(im.g, edgebatches, _aggregator, im.edepth, im.vdepth)
 
         @assert isdense(im)
         mass_matrix = construct_mass_matrix(im)
-        caches = (;state = DiffCache(zeros(im.lastidx_static), nw.lastidx_dynamic),
-                  aggregation = DiffCache(zeros(im.lastidx_aggr), nw.lastidx_dynamic))
+        caches = (;state = DiffCache(zeros(im.lastidx_static), im.lastidx_dynamic),
+                  aggregation = DiffCache(zeros(im.lastidx_aggr), im.lastidx_dynamic))
 
-        nw = Network{typeof(execution),typeof(g),typeof(nl),typeof(vertexbatches),typeof(mass_matrix),eltype(caches)}(
+        gbufprovider = if usebuffer(execution)
+            EagerGBufProvider(im, edgebatches)
+        else
+            LazyGBufProvider(im, edgebatches)
+        end
+
+        nw = Network{typeof(execution),typeof(g),typeof(nl), typeof(vertexbatches),
+                     typeof(mass_matrix),eltype(caches),typeof(gbufprovider)}(
             vertexbatches,
             nl, im,
             caches,
-            mass_matrix
+            mass_matrix,
+            gbufprovider
         )
 
     end
@@ -237,22 +245,6 @@ function EdgeBatch(im::IndexManager, idxs::Vector{Int}; verbose)
             rethrow(e)
         end
     end
-end
-
-function NetworkLayer(im::IndexManager, batches, agg)
-    map = zeros(Int, ne(im.g) * im.vdepth, 2)
-    for batch in batches
-        for i in 1:length(batch)
-            eidx = batch.indices[i]
-            e = im.edgevec[eidx]
-            dst_range = im.v_data[e.src][1:im.vdepth]
-            src_range = im.v_data[e.dst][1:im.vdepth]
-            range = gbuf_range(batch, i)
-            map[range, 1] .= dst_range
-            map[range, 2] .= src_range
-        end
-    end
-    NetworkLayer(im.g, batches, agg, im.edepth, im.vdepth, map)
 end
 
 batch_by_idxs(v, idxs::Vector{Vector{Int}}) = [v for batch in idxs]

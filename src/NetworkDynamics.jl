@@ -54,6 +54,7 @@ include("network_structure.jl")
 export NaiveAggregator, KAAggregator, SequentialAggregator,
        PolyesterAggregator, ThreadedAggregator
 include("aggregators.jl")
+include("gbufs.jl")
 include("construction.jl")
 include("coreloop.jl")
 

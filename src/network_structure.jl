@@ -49,7 +49,7 @@ iscudacompatible(x) = iscudacompatible(typeof(x))
 iscudacompatible(::Type{<:ExecutionStyle}) = false
 iscudacompatible(::Type{<:KAExecution{true}}) = true
 
-struct Network{EX<:ExecutionStyle,G,NL,VTup,MM,CT}
+struct Network{EX<:ExecutionStyle,G,NL,VTup,MM,CT,GBT}
     "vertex batches of same function"
     vertexbatches::VTup
     "network layer"
@@ -60,6 +60,8 @@ struct Network{EX<:ExecutionStyle,G,NL,VTup,MM,CT}
     caches::@NamedTuple{state::CT,aggregation::CT}
     "mass matrix"
     mass_matrix::MM
+    "Gather buffer provider (lazy or eager)"
+    gbufprovider::GBT
 end
 executionstyle(::Network{ex}) where {ex} = ex()
 nvbatches(::Network) = length(vertexbatches)
@@ -86,7 +88,7 @@ Base.broadcastable(nw::Network) = Ref(nw)
 get_state_cache(nw::Network, T) = get_tmp(nw.caches.state, T)
 get_aggregation_cache(nw::Network, T) = get_tmp(nw.caches.aggregation, T)
 
-struct NetworkLayer{GT,ETup,AF,MT}
+struct NetworkLayer{GT,ETup,AF}
     "graph/toplogy of layer"
     g::GT
     "edge batches with same function"
@@ -97,8 +99,6 @@ struct NetworkLayer{GT,ETup,AF,MT}
     edepth::Int # potential becomes range for multilayer
     "vertex dimensions visible to edges"
     vdepth::Int # potential becomes range for multilayer
-    "mapping e_idx -> [v_src_idx_in_fullflat; v_dst_idx_in_fullflat]"
-    gather_map::MT # input_map[:, e_idx] = [v_src_idx, v_dst_idx]
 end
 
 abstract type ComponentBatch{F} end

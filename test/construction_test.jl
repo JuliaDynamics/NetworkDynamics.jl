@@ -124,14 +124,14 @@ end
     @test nd.mass_matrix == I && nd.mass_matrix isa UniformScaling
 end
 
-@testset "gbuf map construction" begin
+@testset "eager gbuf map construction" begin
     using NetworkDynamics: gbuf_range
     e1 = StaticEdge(x->x^1, 1, 0, AntiSymmetric())
     e2 = StaticEdge(x->x^1, 1, 0, AntiSymmetric())
     v = ODEVertex(x->x^1, 1, 0)
     g = path_graph(4)
     nd = Network(g, v, [e1,e2,e1])
-    map = nd.layer.gather_map
+    map = nd.gbufprovider.map
     for batch in nd.layer.edgebatches
         for batch_subi in 1:length(batch)
             eidx = batch.indices[batch_subi]

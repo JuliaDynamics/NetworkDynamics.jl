@@ -22,8 +22,8 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t) where {A,B,C,D,E,dT,T}
 
         # NOTE: first all static vertices, than all edges (regarless) then dyn vertices
         # maybe disallow static vertices entierly, otherwise the order gets complicated
-
-        @timeit_debug "process layer" process_layer!(ex, nw, nw.layer, dupt)
+        gbuf =  get_gbuf(nw.gbufprovider, _u)
+        @timeit_debug "process layer" process_layer!(ex, nw, nw.layer, gbuf, dupt)
 
         @timeit_debug "aggregate" begin
             if nw.im.lastidx_aggr == nw.im.lastidx_static
@@ -44,7 +44,8 @@ function get_ustacked_buf(nw, u, p, t)
     _u[1:nw.im.lastidx_dynamic] .= u
     dupt = (nothing, _u, p, t)
     ex = executionstyle(nw)
-    process_layer!(ex, nw, nw.layer, dupt; filt=isstatic)
+    gbuf = get_gbuf(nw.gbufprovider, _u)
+    process_layer!(ex, nw, nw.layer, gbuf, dupt; filt=isstatic)
     aggbuf = get_aggregation_cache(nw, _u)
     aggregate!(nw.layer.aggregator, aggbuf, _u)
     process_vertices!(ex, nw, aggbuf, dupt; filt=isstatic)
@@ -129,162 +130,68 @@ end
 end
 
 ####
-#### Edge Layer Execution unbuffered
+#### Edge Layer Execution
 ####
-@inline function process_layer!(::SequentialExecution{false}, nw, layer, dupt; filt=nofilt)
+@inline function process_layer!(::SequentialExecution, nw, layer, gbuf, dupt; filt=nofilt)
     unrolled_foreach(filt, layer.edgebatches) do batch
         (du, u, p, t) = dupt
         for i in 1:length(batch)
             _type = dispatchT(batch)
-            apply_edge_unbuffered!(_type, batch, i, du, u, nw.im.e_src, nw.im.e_dst, p, t)
+            apply_edge!(_type, batch, i, du, u, gbuf, p, t)
         end
     end
 end
 
-@inline function process_layer!(::ThreadedExecution{false}, nw, layer, dupt; filt=nofilt)
+@inline function process_layer!(::ThreadedExecution, nw, layer, gbuf, dupt; filt=nofilt)
     unrolled_foreach(filt, layer.edgebatches) do batch
         (du, u, p, t) = dupt
         Threads.@threads for i in 1:length(batch)
             _type = dispatchT(batch)
-            apply_edge_unbuffered!(_type, batch, i, du, u, nw.im.e_src, nw.im.e_dst, p, t)
+            apply_edge!(_type, batch, i, du, u, gbuf, p, t)
         end
     end
 end
 
-@inline function process_layer!(::PolyesterExecution{false}, nw, layer, dupt; filt=nofilt)
+@inline function process_layer!(::PolyesterExecution, nw, layer, gbuf, dupt; filt=nofilt)
     unrolled_foreach(filt, layer.edgebatches) do batch
         (du, u, p, t) = dupt
         Polyester.@batch for i in 1:length(batch)
             _type = dispatchT(batch)
-            apply_edge_unbuffered!(_type, batch, i, du, u, nw.im.e_src, nw.im.e_dst, p, t)
+            apply_edge!(_type, batch, i, du, u, gbuf, p, t)
         end
     end
 end
 
-@inline function process_layer!(::KAExecution{false}, nw, layer, dupt; filt=nofilt)
+@inline function process_layer!(::KAExecution, nw, layer, gbuf, dupt; filt=nofilt)
     _backend = get_backend(dupt[2])
     unrolled_foreach(filt, layer.edgebatches) do batch
         (du, u, p, t) = dupt
         kernel = ekernel!(_backend)
         kernel(dispatchT(batch), batch,
-               du, u, nw.im.e_src, nw.im.e_dst, p, t; ndrange=length(batch))
+               du, u, gbuf, p, t; ndrange=length(batch))
     end
     KernelAbstractions.synchronize(_backend)
 end
 @kernel function ekernel!(::Type{T}, @Const(batch),
-                          du, @Const(u),
-                          @Const(srcrange), @Const(dstrange),
+                          du, @Const(u), @Const(gbuf),
                           @Const(p), @Const(t)) where {T<:ODEEdge}
     I = @index(Global)
-    apply_edge_unbuffered!(T, batch, I, du, u, srcrange, dstrange, p, t)
+    apply_edge!(T, batch, I, du, u, gbuf, p, t)
 end
 @kernel function ekernel!(::Type{T}, @Const(batch),
-                          @Const(du), u,
-                          @Const(srcrange), @Const(dstrange),
+                          @Const(du), u, gbuf,
                           @Const(p), @Const(t)) where {T<:StaticEdge}
     I = @index(Global)
-    apply_edge_unbuffered!(T, batch, I, du, u, srcrange, dstrange, p, t)
+    apply_edge!(T, batch, I, du, u, gbuf, p, t)
 end
 
-@inline function apply_edge_unbuffered!(::Type{T}, batch, i,
-                                        du, u, srcrange, dstrange, p, t) where {T}
+@inline function apply_edge!(::Type{T}, batch, i, du, u, gbuf, p, t) where {T}
     @inbounds begin
         _du  = _has_dynamic(T) ? view(du, state_range(batch, i))   : nothing
         _u   = _has_dynamic(T) ? view(u,  state_range(batch, i))   : nothing
         _s   = _has_static(T)  ? view(u,  state_range(batch, i))    : nothing
         _p   = _indexable(p)   ? view(p,  parameter_range(batch, i)) : p
-        eidx = @views batch.indices[i]
-        _src = @views u[srcrange[eidx]]
-        _dst = @views u[dstrange[eidx]]
-        apply_compf(T, compf(batch), _du, _u, _s, _src, _dst, _p, t)
-    end
-    nothing
-end
-
-####
-#### Edge Layer Execution buffered
-####
-@inline function process_layer!(::SequentialExecution{true}, nw, layer, dupt; filt=nofilt)
-    u = dupt[2]
-    gbuf = nw.cachepool[u, size(layer.gather_map)]
-    NNlib.gather!(gbuf, u, layer.gather_map)
-
-    unrolled_foreach(filt, layer.edgebatches) do batch
-        (_du, _u, _p, _t) = dupt
-        for i in 1:length(batch)
-            _type = dispatchT(batch)
-            apply_edge_buffered!(_type, batch, i, _du, _u, gbuf, _p, _t)
-        end
-    end
-end
-
-@inline function process_layer!(::ThreadedExecution{true}, nw, layer, dupt; filt=nofilt)
-    u = dupt[2]
-    gbuf = nw.cachepool[u, size(layer.gather_map)]
-    NNlib.gather!(gbuf, u, layer.gather_map)
-
-    unrolled_foreach(filt, layer.edgebatches) do batch
-        (_du, _u, _p, _t) = dupt
-        Threads.@threads for i in 1:length(batch)
-            _type = dispatchT(batch)
-            apply_edge_buffered!(_type, batch, i, _du, _u, gbuf, _p, _t)
-        end
-    end
-end
-
-@inline function process_layer!(::PolyesterExecution{true}, nw, layer, dupt; filt=nofilt)
-    u = dupt[2]
-    gbuf = nw.cachepool[u, size(layer.gather_map)]
-    NNlib.gather!(gbuf, u, layer.gather_map)
-
-    unrolled_foreach(filt, layer.edgebatches) do batch
-        (_du, _u, _p, _t) = dupt
-        Polyester.@batch for i in 1:length(batch)
-            _type = dispatchT(batch)
-            apply_edge_buffered!(_type, batch, i, _du, _u, gbuf, _p, _t)
-        end
-    end
-end
-
-@inline function process_layer!(::KAExecution{true}, nw, layer, dupt; filt=nofilt)
-    # buffered/gathered
-    u = dupt[2]
-    gbuf = nw.cachepool[u, size(layer.gather_map)]
-    NNlib.gather!(gbuf, u, layer.gather_map)
-
-    backend = get_backend(u)
-    unrolled_foreach(filt, layer.edgebatches) do batch
-        (_du, _u, _p, _t) = dupt
-        kernel = ekernel_buffered!(backend)
-        kernel(dispatchT(batch), batch,
-               _du, _u, gbuf, _p, _t; ndrange=length(batch))
-    end
-    KernelAbstractions.synchronize(backend)
-end
-
-@kernel function ekernel_buffered!(::Type{T}, @Const(batch),
-                                   du, @Const(u),
-                                   @Const(gbuf), @Const(p), @Const(t)) where {T<:ODEEdge}
-    I = @index(Global)
-    apply_edge_buffered!(T, batch, I, du, u, gbuf, p, t)
-end
-@kernel function ekernel_buffered!(::Type{T}, @Const(batch),
-                                   @Const(du), u,
-                                   @Const(gbuf), @Const(p), @Const(t)) where {T<:StaticEdge}
-    I = @index(Global)
-    apply_edge_buffered!(T, batch, I, du, u, gbuf, p, t)
-end
-
-@inline function apply_edge_buffered!(::Type{T}, batch, i,
-                                      du, u, gbuf, p, t) where {T}
-    @inbounds begin
-        _du  = _has_dynamic(T) ? view(du, state_range(batch, i))   : nothing
-        _u   = _has_dynamic(T) ? view(u,  state_range(batch, i))   : nothing
-        _s   = _has_static(T)  ? view(u,  state_range(batch, i))    : nothing
-        _p   = _indexable(p)   ? view(p,  parameter_range(batch, i)) : p
-        bufr = @views gbuf_range(batch, i)
-        _src = @views gbuf[bufr, 1]
-        _dst = @views gbuf[bufr, 2]
+        _src, _dst = get_src_dst(gbuf, batch, i)
         apply_compf(T, compf(batch), _du, _u, _s, _src, _dst, _p, t)
     end
     nothing
