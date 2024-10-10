@@ -303,9 +303,9 @@ function SII.get_all_timeseries_indexes(nw::Network, sym)
     # else
     #     return Set()
     # end
-    if SII.is_timeseries_parameter(nw, sym)
+    if !iszero(pdim(nw)) && SII.is_timeseries_parameter(nw, sym)
         return Set{Union{Int, SII.ContinuousTimeseries}}([DEFAULT_PARA_TS_IDX])
-    elseif SII.is_observed(nw, sym)
+    elseif !iszero(pdim(nw)) && SII.is_observed(nw, sym)
         return Set{Union{Int, SII.ContinuousTimeseries}}([SII.ContinuousTimeseries(), DEFAULT_PARA_TS_IDX])
     else
         return Set{Union{Int, SII.ContinuousTimeseries}}([SII.ContinuousTimeseries()])
@@ -319,7 +319,7 @@ end
 function SII.with_updated_parameter_timeseries_values(nw::Network, params, args::Pair...)
     @assert length(args) == 1 "Did not expect more than 1 timeseries here, please report issue."
     tsidx, p = args[1]
-    @assert tsidx == 1 "Did not expect the passed timeseries to have other index then 1, please report issue."
+    @assert tsidx == DEFAULT_PARA_TS_IDX "Did not expect the passed timeseries to have other index then 1, please report issue."
     params .= p
 end
 
@@ -331,7 +331,7 @@ function SciMLBase.create_parameter_timeseries_collection(nw::Network, p::Abstra
 end
 
 function SciMLBase.get_saveable_values(nw::Network, p::AbstractVector, timeseries_idx)
-    @assert timeseries_idx == 1 # nothing else makes sense
+    @assert timeseries_idx == DEFAULT_PARA_TS_IDX # nothing else makes sense
     copy(p)
 end
 """
@@ -342,7 +342,7 @@ if the parameter values have changed. This will store a timeseries of said param
 solution object, thus alowing us to recosntruct observables which depend on time-dependet variables.
 """
 function save_parameters!(integrator::SciMLBase.DEIntegrator)
-    SciMLBase.save_discretes!(integrator, 1)
+    SciMLBase.save_discretes!(integrator, DEFAULT_PARA_TS_IDX)
 end
 
 ####
