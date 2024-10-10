@@ -20,7 +20,7 @@ jobs:
       fail-fast: false
       matrix:
         version:
-          # - 'lts' TODO: replace with new LTS (1.10 probably)
+          - 'lts'
           - '1'
           - 'pre'
         os:
