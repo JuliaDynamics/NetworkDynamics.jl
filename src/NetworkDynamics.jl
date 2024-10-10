@@ -4,7 +4,7 @@ using Graphs: Graphs, AbstractGraph, SimpleEdge, edges, vertices, ne, nv,
 using TimerOutputs: @timeit_debug, reset_timer!
 
 using ArgCheck: @argcheck
-using PreallocationTools: PreallocationTools, LazyBufferCache, DiffCache, get_tmp
+using PreallocationTools: PreallocationTools, DiffCache, get_tmp
 using SciMLBase: SciMLBase
 using Base.Threads: @threads
 using NNlib: NNlib
