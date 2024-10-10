@@ -63,10 +63,13 @@ SII.all_variable_symbols(nw)
 @test filter(s->SII.is_parameter(nw,s), SII.all_symbols(nw)) == SII.parameter_symbols(nw)
 @test filter(s->SII.is_variable(nw,s), SII.all_symbols(nw)) == SII.variable_symbols(nw)
 
-sol[EIndex(1,:P)]
-sol[EIndex(2,:P)]
-sol[EIndex(3,:P)]
-@test sol[EIndex(1:3,:P)] == sol[[EIndex(1,:P),EIndex(2,:P),EIndex(3,:P)]]
+# sol[obs] does not work, because obs has two timeseries: Continous and Discrete
+# it is unclear, whether it should return onlye discre values or for all sol.t
+@test_broken sol[EIndex(1,:P)]
+@test_broken sol[EIndex(2,:P)]
+@test_broken sol[EIndex(3,:P)]
+@test_broken sol[EIndex(1:3,:P)] == sol[[EIndex(1,:P),EIndex(2,:P),EIndex(3,:P)]]
+@test sol(sol.t, idxs=EIndex(1:3,:P)) == sol(sol.t, idxs=[EIndex(1,:P),EIndex(2,:P),EIndex(3,:P)])
 
 ####
 #### more complex problem
