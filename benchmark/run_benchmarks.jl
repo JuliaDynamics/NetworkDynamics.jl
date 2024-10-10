@@ -18,7 +18,9 @@ BMPATH = joinpath(NDPATH, "benchmark")
 @info "Activate Benchmark environment"
 import Pkg;
 Pkg.activate(BMPATH);
-Pkg.develop(; path=NDPATH);
+if VERSION < v"1.11.0-0"
+    Pkg.develop(; path=NDPATH);
+end
 Pkg.precompile();
 
 using PkgBenchmark
@@ -96,6 +98,9 @@ isdirty = with(LibGit2.isdirty, GitRepo(ndpath_tmp))
 if isdirty
     @info "Dirty directory, add everything to new commit!"
     @assert realpath(pwd()) == realpath(ndpath_tmp) "Julia is in $(pwd()) not it $ndpath_tmp"
+    run(`git status`)
+    run(`git config --global user.email "benchmarkbot@example.com"`)
+    run(`git config --global user.name "Benchmark Bot"`)
     run(`git checkout -b $(randstring(15))`)
     run(`git add -A`)
     run(`git commit -m "tmp commit for benchmarking"`)
