@@ -11,7 +11,7 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t) where {A,B,C,D,E,dT,T}
             fill!(du, zero(eltype(du)))
         end
         @timeit_debug "create _u" begin
-            _u = nw.cachepool[du, nw.im.lastidx_static]
+            _u = get_state_cache(nw, du)
             _u[1:nw.im.lastidx_dynamic] .= u
         end
 
@@ -29,7 +29,7 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t) where {A,B,C,D,E,dT,T}
             if nw.im.lastidx_aggr == nw.im.lastidx_static
                 error("Aggbuf and _u buf cannot be the same size! This is a known bug.")
             end
-            aggbuf = nw.cachepool[_u, nw.im.lastidx_aggr]
+            aggbuf = get_aggregation_cache(nw, _u)
             aggregate!(nw.layer.aggregator, aggbuf, _u)
         end
 
@@ -40,12 +40,12 @@ end
 
 get_ustacked_buf(s) = get_ustacked_buf(s.nw, uflat(s), pflat(s), s.t)
 function get_ustacked_buf(nw, u, p, t)
-    _u = nw.cachepool[u, nw.im.lastidx_static]
+    _u = get_state_cache(nw, u)
     _u[1:nw.im.lastidx_dynamic] .= u
     dupt = (nothing, _u, p, t)
     ex = executionstyle(nw)
     process_layer!(ex, nw, nw.layer, dupt; filt=isstatic)
-    aggbuf = nw.cachepool[_u, nw.im.lastidx_aggr]
+    aggbuf = get_aggregation_cache(nw, _u)
     aggregate!(nw.layer.aggregator, aggbuf, _u)
     process_vertices!(ex, nw, aggbuf, dupt; filt=isstatic)
     _u, aggbuf

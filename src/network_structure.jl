@@ -49,7 +49,7 @@ iscudacompatible(x) = iscudacompatible(typeof(x))
 iscudacompatible(::Type{<:ExecutionStyle}) = false
 iscudacompatible(::Type{<:KAExecution{true}}) = true
 
-struct Network{EX<:ExecutionStyle,G,NL,VTup,MM}
+struct Network{EX<:ExecutionStyle,G,NL,VTup,MM,CT}
     "vertex batches of same function"
     vertexbatches::VTup
     "network layer"
@@ -57,7 +57,7 @@ struct Network{EX<:ExecutionStyle,G,NL,VTup,MM}
     "index manager"
     im::IndexManager{G}
     "lazy cache pool"
-    cachepool::LazyBufferCache{typeof(identity),typeof(identity)}
+    caches::@NamedTuple{state::CT,aggregation::CT}
     "mass matrix"
     mass_matrix::MM
 end
@@ -82,6 +82,9 @@ pdim(nw::Network) = pdim(nw.im)
 Graphs.nv(nw::Network) = nv(nw.im.g)
 Graphs.ne(nw::Network) = ne(nw.im.g)
 Base.broadcastable(nw::Network) = Ref(nw)
+
+get_state_cache(nw::Network, T) = get_tmp(nw.caches.state, T)
+get_aggregation_cache(nw::Network, T) = get_tmp(nw.caches.aggregation, T)
 
 struct NetworkLayer{GT,ETup,AF,MT}
     "graph/toplogy of layer"

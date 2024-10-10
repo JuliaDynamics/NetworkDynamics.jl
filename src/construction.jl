@@ -106,10 +106,13 @@ function Network(g::AbstractGraph,
 
         @assert isdense(im)
         mass_matrix = construct_mass_matrix(im)
-        nw = Network{typeof(execution),typeof(g),typeof(nl),typeof(vertexbatches),typeof(mass_matrix)}(
+        caches = (;state = DiffCache(zeros(im.lastidx_static), nw.lastidx_dynamic),
+                  aggregation = DiffCache(zeros(im.lastidx_aggr), nw.lastidx_dynamic))
+
+        nw = Network{typeof(execution),typeof(g),typeof(nl),typeof(vertexbatches),typeof(mass_matrix),eltype(caches)}(
             vertexbatches,
             nl, im,
-            LazyBufferCache(),
+            caches,
             mass_matrix
         )
 
