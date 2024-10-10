@@ -17,6 +17,7 @@ using Graphs
 using OrdinaryDiffEqTsit5
 using DiffEqCallbacks
 using Plots
+using Test #hide
 import SymbolicIndexingInterface as SII
 
 # For the nodes we define the swing equation. State `v[1] = δ`, `v[2] = ω`.
@@ -137,7 +138,9 @@ trip_first_cb = PresetTimeCallback(1.0, integrator->affect!(integrator, 5));
 prob = ODEProblem(swing_network, uflat(u0), (0,6), copy(pflat(p));
                   callback=CallbackSet(trip_cb, trip_first_cb))
 sol = solve(prob, Tsit5());
-
+# we want to test the reconstruction of the observables # hide
+@test all(!iszero, sol(sol.t; idxs=eidxs(sol,:,:P))[begin]) # hide
+@test all(iszero, sol(sol.t; idxs=eidxs(sol,:,:P))[end][[1:5...,7]]) # hide
 nothing #hide
 
 # Through the magic of symbolic indexing we can plot the power flows on all lines:
