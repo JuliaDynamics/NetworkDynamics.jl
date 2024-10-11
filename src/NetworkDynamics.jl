@@ -26,8 +26,6 @@ else
     using StyledStrings: AnnotatedIOBuffer, AnnotatedString
 end
 
-using Adapt: Adapt, adapt
-
 using Base: @propagate_inbounds
 using InteractiveUtils: subtypes
 
@@ -58,8 +56,6 @@ include("aggregators.jl")
 include("gbufs.jl")
 include("construction.jl")
 include("coreloop.jl")
-
-include("adapt.jl")
 
 # XXX: have both, s[:] and uflat(s) ?
 export VIndex, EIndex, VPIndex, EPIndex, NWState, NWParameter, uflat, pflat

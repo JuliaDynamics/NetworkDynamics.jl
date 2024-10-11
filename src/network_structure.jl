@@ -88,6 +88,8 @@ Base.broadcastable(nw::Network) = Ref(nw)
 get_state_cache(nw::Network, T) = get_tmp(nw.caches.state, T)
 get_aggregation_cache(nw::Network, T) = get_tmp(nw.caches.aggregation, T)
 
+iscudacompatible(nw::Network) = iscudacompatible(executionstyle(nw)) && iscudacompatible(nw.layer.aggregator)
+
 struct NetworkLayer{GT,ETup,AF}
     "graph/toplogy of layer"
     g::GT
@@ -103,7 +105,7 @@ end
 
 abstract type ComponentBatch{F} end
 
-struct VertexBatch{T<:VertexFunction,F,IV<:AbstractVector{<:Int}} <: ComponentBatch{T}
+struct VertexBatch{T<:VertexFunction,F,IV<:AbstractVector{<:Integer}} <: ComponentBatch{T}
     "vertex indices contained in batch"
     indices::IV
     "vertex function"
@@ -116,7 +118,7 @@ struct VertexBatch{T<:VertexFunction,F,IV<:AbstractVector{<:Int}} <: ComponentBa
     aggbufstride::BatchStride
 end
 
-struct EdgeBatch{T<:EdgeFunction,F,IV<:AbstractVector{<:Int}} <: ComponentBatch{T}
+struct EdgeBatch{T<:EdgeFunction,F,IV<:AbstractVector{<:Integer}} <: ComponentBatch{T}
     "edge indices (as in edge iterator) contained in batch"
     indices::IV
     "edge function"

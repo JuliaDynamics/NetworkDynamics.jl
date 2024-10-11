@@ -64,7 +64,7 @@ function test_execution_styles(prob)
         end
 
         if CUDA.functional()
-            to = CuArray
+            to = CuArray{Float32}
             u_d = adapt(to, u)
             p_d = adapt(to, p)
 

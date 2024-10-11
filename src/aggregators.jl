@@ -107,6 +107,7 @@ function aggregate!(a::KAAggregator, aggbuf, data)
     # kernel(a.f, aggbuf, view(data, am.range), am.map)
     kernel = agg_kernel!(_backend)
     kernel(a.f, aggbuf, view(data, am.range), am.map; ndrange=length(am.map))
+    # TODO: synchronize after both aggregation sweeps?
     KernelAbstractions.synchronize(_backend)
 
     if !isempty(am.symrange)
@@ -268,6 +269,8 @@ function SparseAggregator(f)
     SparseAggregator
 end
 function SparseAggregator(im, batches)
+    # sparse multiply is faster with Matrix{Float} . Vector{Float} than int!
+    # (both on GPU and CPU)
     I, J, V = Float64[], Float64[], Float64[]
     unrolled_foreach(batches) do batch
         for eidx in batch.indices
