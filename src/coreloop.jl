@@ -26,9 +26,6 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t) where {A,B,C,D,E,dT,T}
         @timeit_debug "process layer" process_layer!(ex, nw, nw.layer, gbuf, dupt)
 
         @timeit_debug "aggregate" begin
-            if nw.im.lastidx_aggr == nw.im.lastidx_static
-                error("Aggbuf and _u buf cannot be the same size! This is a known bug.")
-            end
             aggbuf = get_aggregation_cache(nw, _u)
             aggregate!(nw.layer.aggregator, aggbuf, _u)
         end
@@ -187,9 +184,9 @@ end
 
 @inline function apply_edge!(::Type{T}, batch, i, du, u, gbuf, p, t) where {T}
     @inbounds begin
-        _du  = _has_dynamic(T) ? view(du, state_range(batch, i))   : nothing
-        _u   = _has_dynamic(T) ? view(u,  state_range(batch, i))   : nothing
-        _s   = _has_static(T)  ? view(u,  state_range(batch, i))    : nothing
+        _du  = _has_dynamic(T) ? view(du, state_range(batch, i))     : nothing
+        _u   = _has_dynamic(T) ? view(u,  state_range(batch, i))     : nothing
+        _s   = _has_static(T)  ? view(u,  state_range(batch, i))     : nothing
         _p   = _indexable(p)   ? view(p,  parameter_range(batch, i)) : p
         _src, _dst = get_src_dst(gbuf, batch, i)
         apply_compf(T, compf(batch), _du, _u, _s, _src, _dst, _p, t)
