@@ -37,7 +37,7 @@ to = CuArray([1,2,3])
 to = cu(rand(3))
 @test_throws ArgumentError adapt(to, nw)
 
-to1 = CuArray{Float32}
+to1 = CuArray#{Float32}
 to2 = CuArray{Float64}
 nw1 = adapt(to1, nw)
 nw2 = adapt(to2, nw)
@@ -57,6 +57,9 @@ end
 @test nw2.caches.aggregation.du isa CuArray{Float64}
 @test nw2.layer.aggregator.m.symmap isa CuArray{Float64}
 
+# to1 = CuArray
+# nw1 = adapt(to1, nw)
+# nw1.vertexbatches[1].indices
 x0_d1 = adapt(to1, x0)
 p_d1 = adapt(to1, p)
 dx_d1 = adapt(to1, zeros(length(x0)))

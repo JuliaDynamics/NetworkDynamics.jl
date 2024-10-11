@@ -19,10 +19,10 @@ function Adapt.adapt_structure(to, n::Network)
         throw(ArgumentError("Can't handle Adaptor $to.\
             Please adapt using `CuArray{Float32}` or `CuArray{Float64}`!"))
     end
-    if eltype(to) ∉ (Float32, Float64)
-        throw(ArgumentError("Use adapt on Network with either `CuArray{Float32}` or `CuArray{Float64}` \
-            such that internal caches can be created with the correct type!"))
-    end
+    # if eltype(to) ∉ (Float32, Float64)
+    #     throw(ArgumentError("Use adapt on Network with either `CuArray{Float32}` or `CuArray{Float64}` \
+    #         such that internal caches can be created with the correct type!"))
+    # end
     if !iscudacompatible(n)
         throw(ArgumentError("The provided network has non-cuda compatible aggregator or exectuion strategies."))
     end
@@ -45,27 +45,42 @@ Adapt.@adapt_structure AggregationMap
 Adapt.@adapt_structure SparseAggregator
 Adapt.@adapt_structure LazyGBufProvider
 
-function Adapt.adapt_structure(to::Type{<:CuArray}, gbp::EagerGBufProvider)
-    map = adapt(CuArray{Int32}, gbp.map)
-    cache = adapt_diffcache(to, gbp.diffcache)
+# function Adapt.adapt_structure(to::Type{<:CuArray{<:AbstractFloat}}, gbp::EagerGBufProvider)
+#     _adapt_eager_gbufp(CuArray, to, gbp)
+# end
+function Adapt.adapt_structure(to, gbp::EagerGBufProvider)
+    _adapt_eager_gbufp(to, to, gbp)
+end
+function _adapt_eager_gbufp(mapto, cacheto, gbp)
+    map = adapt(mapto, gbp.map)
+    cache = adapt_diffcache(cacheto, gbp.diffcache)
     EagerGBufProvider(map, cache)
 end
 
-function adapt_diffcache(to::Type{<:CuArray}, c::DiffCache)
+function adapt_diffcache(to, c::DiffCache)
     du = adapt(to, c.du)
     dual_du = adapt(to, c.dual_du)
     DiffCache(du, dual_du, c.any_du)
 end
 
-function Adapt.adapt_structure(to::Type{<:CuArray}, b::VertexBatch)
-    # idxs = adapt(CuArray{Int32}, b.indices)
-    idxs = adapt(CuArray, b.indices)
+# function Adapt.adapt_structure(to::Type{<:CuArray{<:AbstractFloat}}, b::VertexBatch)
+#     Adapt.adapt_structure(CuArray, b)
+# end
+# function Adapt.adapt_structure(to::Type{<:CuArray{<:AbstractFloat}}, b::EdgeBatch)
+#     Adapt.adapt_structure(CuArray, b)
+# end
+
+# Adapt.adapt_structure(to::Type{CuArray{Float32}}, b::VertexBatch) = Adapt.adapt_structure(CuArray, b)
+# Adapt.adapt_structure(to::Type{CuArray{Float64}}, b::VertexBatch) = Adapt.adapt_structure(CuArray, b)
+# Adapt.adapt_structure(to::Type{CuArray{Float32}}, b::EdgeBatch) = Adapt.adapt_structure(CuArray, b)
+# Adapt.adapt_structure(to::Type{CuArray{Float64}}, b::EdgeBatch) = Adapt.adapt_structure(CuArray, b)
+function Adapt.adapt_structure(to, b::VertexBatch)
+    idxs = adapt(to, b.indices)
     VertexBatch{dispatchT(b), typeof(compf(b)), typeof(idxs)}(
         idxs, compf(b), b.statestride, b.pstride, b.aggbufstride)
 end
-function Adapt.adapt_structure(to::Type{<:CuArray}, b::EdgeBatch)
-    # idxs = adapt(CuArray{Int32}, b.indices)
-    idxs = adapt(CuArray, b.indices)
+function Adapt.adapt_structure(to, b::EdgeBatch)
+    idxs = adapt(to, b.indices)
     EdgeBatch{dispatchT(b), typeof(compf(b)), typeof(idxs)}(
         idxs, compf(b), b.statestride, b.pstride, b.gbufstride)
 end
