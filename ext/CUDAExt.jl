@@ -1,7 +1,7 @@
 module CUDAExt
 using NetworkDynamics: Network, NetworkLayer, VertexBatch, EdgeBatch,
                        KAAggregator, AggregationMap, SparseAggregator,
-                       LazyGBufProvider, EagerGBufProvider,
+                       LazyGBufProvider, EagerGBufProvider, LazyGBuf,
                        dispatchT, compf, iscudacompatible, executionstyle
 using NetworkDynamics.PreallocationTools: DiffCache
 using NetworkDynamics: KernelAbstractions as KA
@@ -31,8 +31,8 @@ function Adapt.adapt_structure(to, n::Network)
     layer = adapt(to, n.layer)
     mm = adapt(to, n.mass_matrix)
     gbp = adapt(to, n.gbufprovider)
-    caches = (;state = adapt_diffcache(to, n.caches.state),
-              aggregation = adapt_diffcache(to, n.caches.aggregation))
+    caches = (;state = _adapt_diffcache(to, n.caches.state),
+              aggregation = _adapt_diffcache(to, n.caches.aggregation))
     exT = typeof(executionstyle(n))
     gT = typeof(n.im.g)
 
@@ -41,6 +41,11 @@ function Adapt.adapt_structure(to, n::Network)
 end
 
 Adapt.@adapt_structure NetworkLayer
+
+
+####
+#### Adapt Aggregators
+####
 Adapt.@adapt_structure KAAggregator
 
 # overload to retain int types for aggregation map
@@ -52,7 +57,16 @@ function Adapt.adapt_structure(to::Type{<:CuArray{<:AbstractFloat}}, am::Aggrega
 end
 
 Adapt.@adapt_structure SparseAggregator
+
+
+####
+#### Adapt GBufProviders
+####
 Adapt.@adapt_structure LazyGBufProvider
+function Adapt.adapt_structure(to::Type{<:CuArray{<:AbstractFloat}}, gbp::LazyGBufProvider)
+    adapt(CuArray, gbp) # preserve Vector{UnitRange}
+end
+Adapt.@adapt_structure LazyGBuf
 
 # overload to retain int types for eager gbuf map
 function Adapt.adapt_structure(to::Type{<:CuArray{<:AbstractFloat}}, gbp::EagerGBufProvider)
@@ -63,20 +77,14 @@ function Adapt.adapt_structure(to, gbp::EagerGBufProvider)
 end
 function _adapt_eager_gbufp(mapto, cacheto, gbp)
     map = adapt(mapto, gbp.map)
-    cache = adapt_diffcache(cacheto, gbp.diffcache)
+    cache = _adapt_diffcache(cacheto, gbp.diffcache)
     EagerGBufProvider(map, cache)
 end
 
-# define similar to adapt_structure for DiffCache without type piracy
-function adapt_diffcache(to, c::DiffCache)
-    du = adapt(to, c.du)
-    dual_du = adapt(to, c.dual_du)
-    DiffCache(du, dual_du, c.any_du)
-    # N = length(c.dual_du) ÷ length(c.du) - 1
-    # DiffCache(du, N)
-end
 
-# keep Int types in indices for VertexBatch/EdgeBatch
+####
+#### Adapt VertexBatch/EdgeBatch
+####
 function Adapt.adapt_structure(to::Type{<:CuArray{<:AbstractFloat}}, b::VertexBatch)
     Adapt.adapt_structure(CuArray, b)
 end
@@ -92,6 +100,19 @@ function Adapt.adapt_structure(to, b::EdgeBatch)
     idxs = adapt(to, b.indices)
     EdgeBatch{dispatchT(b), typeof(compf(b)), typeof(idxs)}(
         idxs, compf(b), b.statestride, b.pstride, b.gbufstride)
+end
+
+
+####
+#### utils
+####
+# define similar to adapt_structure for DiffCache without type piracy
+function _adapt_diffcache(to, c::DiffCache)
+    du = adapt(to, c.du)
+    dual_du = adapt(to, c.dual_du)
+    DiffCache(du, dual_du, c.any_du)
+    # N = length(c.dual_du) ÷ length(c.du) - 1
+    # DiffCache(du, N)
 end
 
 end

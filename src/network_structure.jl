@@ -47,7 +47,7 @@ usebuffer(::Type{<:ExecutionStyle{buffered}}) where {buffered} = buffered
 # check cuda compatibliity
 iscudacompatible(x) = iscudacompatible(typeof(x))
 iscudacompatible(::Type{<:ExecutionStyle}) = false
-iscudacompatible(::Type{<:KAExecution{true}}) = true
+iscudacompatible(::Type{<:KAExecution}) = true
 
 struct Network{EX<:ExecutionStyle,G,NL,VTup,MM,CT,GBT}
     "vertex batches of same function"

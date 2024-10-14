@@ -22,7 +22,6 @@ nw = Network(g, vf, ef)
 @test_throws ArgumentError adapt(CuArray{Float32}, nw) # wrong execution
 
 nw = Network(g, vf, ef; execution=KAExecution{true}(), aggregator=KAAggregator(+))
-
 x0 = rand(rng, dim(nw))
 p  = rand(rng, pdim(nw))
 dx = zeros(length(x0))
