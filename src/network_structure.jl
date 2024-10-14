@@ -85,7 +85,13 @@ Graphs.nv(nw::Network) = nv(nw.im.g)
 Graphs.ne(nw::Network) = ne(nw.im.g)
 Base.broadcastable(nw::Network) = Ref(nw)
 
-get_state_cache(nw::Network, T) = get_tmp(nw.caches.state, T)
+function get_state_cache(nw::Network, T)
+    if eltype(T) <: AbstractFloat && eltype(nw.caches.state.du) != eltype(T)
+        throw(ArgumentError("Network caches are initialized with $(eltype(nw.caches.state.du)) \
+            but is used for $(eltype(T)) data!"))
+    end
+    get_tmp(nw.caches.state, T)
+end
 get_aggregation_cache(nw::Network, T) = get_tmp(nw.caches.aggregation, T)
 
 iscudacompatible(nw::Network) = iscudacompatible(executionstyle(nw)) && iscudacompatible(nw.layer.aggregator)

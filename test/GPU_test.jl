@@ -19,7 +19,7 @@ ef = [Lib.diffusion_odeedge(),
       Lib.diffusion_odeedge(),
       Lib.diffusion_edge_fid()]
 nw = Network(g, vf, ef)
-@test_throws ArgumentError adapt(CuArray{Float32}, nw)
+@test_throws ArgumentError adapt(CuArray{Float32}, nw) # wrong execution
 
 nw = Network(g, vf, ef; execution=KAExecution{true}(), aggregator=KAAggregator(+))
 
@@ -36,51 +36,50 @@ to = CuArray([1,2,3])
 @test_throws ArgumentError adapt(to, nw)
 to = cu(rand(3))
 @test_throws ArgumentError adapt(to, nw)
+to = CuArray
+@test_throws ArgumentError adapt(to, nw)
 
-to1 = CuArray#{Float32}
+to1 = CuArray{Float32}
 to2 = CuArray{Float64}
 nw1 = adapt(to1, nw)
 nw2 = adapt(to2, nw)
 
-
 for nw in (nw1, nw2)
-    @test nw.vertexbatches[1].indices isa CuArray{Int32}
-    @test nw.layer.edgebatches[1].indices isa CuArray{Int32}
-    @test nw.gbufprovider.map isa CuArray{Int32}
+    @test nw.vertexbatches[1].indices isa CuArray{Int}
+    @test nw.layer.edgebatches[1].indices isa CuArray{Int}
+    @test nw.gbufprovider.map isa CuArray{Int}
+    @test nw.layer.aggregator.m.map isa CuArray{Int}
+    @test nw.layer.aggregator.m.symmap isa CuArray{Int}
 end
 
 @test nw1.caches.state.du isa CuArray{Float32}
 @test nw1.caches.aggregation.du isa CuArray{Float32}
-@test nw1.layer.aggregator.m.map isa CuArray{Float32}
-
 @test nw2.caches.state.du isa CuArray{Float64}
 @test nw2.caches.aggregation.du isa CuArray{Float64}
-@test nw2.layer.aggregator.m.symmap isa CuArray{Float64}
 
-# to1 = CuArray
-# nw1 = adapt(to1, nw)
-# nw1.vertexbatches[1].indices
 x0_d1 = adapt(to1, x0)
 p_d1 = adapt(to1, p)
 dx_d1 = adapt(to1, zeros(length(x0)))
 nw1(dx_d1, x0_d1, p_d1, NaN)
 @test Vector(dx_d1) ≈ dx
+@test_throws ArgumentError nw2(dx_d1, x0_d1, p_d1, NaN) # wrong type for cache
 
 x0_d2 = adapt(to2, x0)
 p_d2 = adapt(to2, p)
 dx_d2 = adapt(to2, zeros(length(x0)))
 nw2(dx_d2, x0_d2, p_d2, NaN)
 @test Vector(dx_d2) ≈ dx
+@test_throws ArgumentError nw1(dx_d2, x0_d2, p_d2, NaN) # wrong type for cache
 
 
 # try SparseAggregator
 nw2 = Network(g, vf, ef; execution=KAExecution{true}(), aggregator=SparseAggregator(+))
-nw2_d = adapt(CuArray, nw2)
+nw2_d = adapt(CuArray{Float32}, nw2)
 
 @test nw2_d.layer.aggregator.m isa CuSparseMatrixCSC
-fill!(dx_d, 0)
-nw2_d(dx_d, x0_d, p_d, NaN)
-@test Vector(dx_d) ≈ dx
+fill!(dx_d1, 0)
+nw2_d(dx_d1, x0_d1, p_d1, NaN)
+@test Vector(dx_d1) ≈ dx
 
 # mini benchmark
 

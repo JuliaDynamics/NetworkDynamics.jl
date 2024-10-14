@@ -9,6 +9,7 @@ using NetworkDynamics: KernelAbstractions as KA
 using CUDA: CuArray
 using Adapt: Adapt, adapt
 
+# main entry for bringing Network to GPU
 function Adapt.adapt_structure(to, n::Network)
     if to isa KA.GPU
         throw(ArgumentError("Looks like to passed an KernelAbstractions backend to adapt Network to GPU. \
@@ -16,13 +17,13 @@ function Adapt.adapt_structure(to, n::Network)
             Please adapt using `CuArray{Float32}` or `CuArray{Float64}`!"))
     end
     if !(to isa Type{<:CuArray})
-        throw(ArgumentError("Can't handle Adaptor $to.\
+        throw(ArgumentError("Can't handle Adaptor $to. \
             Please adapt using `CuArray{Float32}` or `CuArray{Float64}`!"))
     end
-    # if eltype(to) ∉ (Float32, Float64)
-    #     throw(ArgumentError("Use adapt on Network with either `CuArray{Float32}` or `CuArray{Float64}` \
-    #         such that internal caches can be created with the correct type!"))
-    # end
+    if eltype(to) ∉ (Float32, Float64)
+        throw(ArgumentError("Use adapt on Network with either `CuArray{Float32}` or `CuArray{Float64}` \
+            such that internal caches can be created with the correct type!"))
+    end
     if !iscudacompatible(n)
         throw(ArgumentError("The provided network has non-cuda compatible aggregator or exectuion strategies."))
     end
@@ -41,13 +42,22 @@ end
 
 Adapt.@adapt_structure NetworkLayer
 Adapt.@adapt_structure KAAggregator
+
+# overload to retain int types for aggregation map
 Adapt.@adapt_structure AggregationMap
+function Adapt.adapt_structure(to::Type{<:CuArray{<:AbstractFloat}}, am::AggregationMap)
+    map = adapt(CuArray, am.map)
+    symmap = adapt(CuArray, am.symmap)
+    AggregationMap(am.range, map, am.symrange, symmap)
+end
+
 Adapt.@adapt_structure SparseAggregator
 Adapt.@adapt_structure LazyGBufProvider
 
-# function Adapt.adapt_structure(to::Type{<:CuArray{<:AbstractFloat}}, gbp::EagerGBufProvider)
-#     _adapt_eager_gbufp(CuArray, to, gbp)
-# end
+# overload to retain int types for eager gbuf map
+function Adapt.adapt_structure(to::Type{<:CuArray{<:AbstractFloat}}, gbp::EagerGBufProvider)
+    _adapt_eager_gbufp(CuArray, to, gbp)
+end
 function Adapt.adapt_structure(to, gbp::EagerGBufProvider)
     _adapt_eager_gbufp(to, to, gbp)
 end
@@ -57,23 +67,22 @@ function _adapt_eager_gbufp(mapto, cacheto, gbp)
     EagerGBufProvider(map, cache)
 end
 
+# define similar to adapt_structure for DiffCache without type piracy
 function adapt_diffcache(to, c::DiffCache)
     du = adapt(to, c.du)
     dual_du = adapt(to, c.dual_du)
     DiffCache(du, dual_du, c.any_du)
+    # N = length(c.dual_du) ÷ length(c.du) - 1
+    # DiffCache(du, N)
 end
 
-# function Adapt.adapt_structure(to::Type{<:CuArray{<:AbstractFloat}}, b::VertexBatch)
-#     Adapt.adapt_structure(CuArray, b)
-# end
-# function Adapt.adapt_structure(to::Type{<:CuArray{<:AbstractFloat}}, b::EdgeBatch)
-#     Adapt.adapt_structure(CuArray, b)
-# end
-
-# Adapt.adapt_structure(to::Type{CuArray{Float32}}, b::VertexBatch) = Adapt.adapt_structure(CuArray, b)
-# Adapt.adapt_structure(to::Type{CuArray{Float64}}, b::VertexBatch) = Adapt.adapt_structure(CuArray, b)
-# Adapt.adapt_structure(to::Type{CuArray{Float32}}, b::EdgeBatch) = Adapt.adapt_structure(CuArray, b)
-# Adapt.adapt_structure(to::Type{CuArray{Float64}}, b::EdgeBatch) = Adapt.adapt_structure(CuArray, b)
+# keep Int types in indices for VertexBatch/EdgeBatch
+function Adapt.adapt_structure(to::Type{<:CuArray{<:AbstractFloat}}, b::VertexBatch)
+    Adapt.adapt_structure(CuArray, b)
+end
+function Adapt.adapt_structure(to::Type{<:CuArray{<:AbstractFloat}}, b::EdgeBatch)
+    Adapt.adapt_structure(CuArray, b)
+end
 function Adapt.adapt_structure(to, b::VertexBatch)
     idxs = adapt(to, b.indices)
     VertexBatch{dispatchT(b), typeof(compf(b)), typeof(idxs)}(
