@@ -1,4 +1,4 @@
-module ModelingToolkitExt
+module MTKExt
 
 using ModelingToolkit: Symbolic, iscall, operation, arguments, build_function
 using ModelingToolkit: ModelingToolkit, Equation, ODESystem, Differential
@@ -11,7 +11,7 @@ using LinearAlgebra: Diagonal, I
 using NetworkDynamics: Fiducial
 import NetworkDynamics: ODEVertex, StaticEdge
 
-include("ModelingToolkitUtils.jl")
+include("MTKUtils.jl")
 
 function ODEVertex(sys::ODESystem, inputs, outputs; verbose=false, name=getname(sys))
     warn_events(sys)

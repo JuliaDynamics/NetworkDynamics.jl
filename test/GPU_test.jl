@@ -6,6 +6,7 @@ using StableRNGs
 using KernelAbstractions
 using Graphs
 using Random
+using Test
 (isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
 
 rng = StableRNG(1)
@@ -17,34 +18,67 @@ ef = [Lib.diffusion_odeedge(),
       Lib.diffusion_edge_fid(),
       Lib.diffusion_odeedge(),
       Lib.diffusion_edge_fid()]
-nw = Network(g, vf, ef; execution=KAExecution{true}(), aggregator=KAAggregator(+))
+nw = Network(g, vf, ef)
+@test_throws ArgumentError adapt(CuArray{Float32}, nw) # wrong execution
 
+nw = Network(g, vf, ef; execution=KAExecution{true}(), aggregator=KAAggregator(+))
 x0 = rand(rng, dim(nw))
 p  = rand(rng, pdim(nw))
 dx = zeros(length(x0))
 nw(dx, x0, p, NaN)
 
 to = CUDABackend()
-nw_d = adapt(to, nw)
-@test nw_d.vertexbatches[1].indices isa CuArray
-@test nw_d.layer.edgebatches[1].indices isa CuArray
-@test nw_d.layer.gather_map isa CuArray
-@test nw_d.layer.aggregator.m.map isa CuArray
-@test nw_d.layer.aggregator.m.symmap isa CuArray
-x0_d = adapt(to, x0)
-p_d = adapt(to, p)
-dx_d = adapt(to, zeros(length(x0)))
-nw_d(dx_d, x0_d, p_d, NaN)
-@test Vector(dx_d) ≈ dx
+@test_throws ArgumentError adapt(to, nw)
+to = :foo
+@test_throws ArgumentError adapt(to, nw)
+to = CuArray([1,2,3])
+@test_throws ArgumentError adapt(to, nw)
+to = cu(rand(3))
+@test_throws ArgumentError adapt(to, nw)
+to = CuArray
+@test_throws ArgumentError adapt(to, nw)
+
+to1 = CuArray{Float32}
+to2 = CuArray{Float64}
+nw1 = adapt(to1, nw)
+nw2 = adapt(to2, nw)
+
+for nw in (nw1, nw2)
+    @test nw.vertexbatches[1].indices isa CuArray{Int}
+    @test nw.layer.edgebatches[1].indices isa CuArray{Int}
+    @test nw.gbufprovider.map isa CuArray{Int}
+    @test nw.layer.aggregator.m.map isa CuArray{Int}
+    @test nw.layer.aggregator.m.symmap isa CuArray{Int}
+end
+
+@test nw1.caches.state.du isa CuArray{Float32}
+@test nw1.caches.aggregation.du isa CuArray{Float32}
+@test nw2.caches.state.du isa CuArray{Float64}
+@test nw2.caches.aggregation.du isa CuArray{Float64}
+
+x0_d1 = adapt(to1, x0)
+p_d1 = adapt(to1, p)
+dx_d1 = adapt(to1, zeros(length(x0)))
+nw1(dx_d1, x0_d1, p_d1, NaN)
+@test Vector(dx_d1) ≈ dx
+@test_throws ArgumentError nw2(dx_d1, x0_d1, p_d1, NaN) # wrong type for cache
+
+x0_d2 = adapt(to2, x0)
+p_d2 = adapt(to2, p)
+dx_d2 = adapt(to2, zeros(length(x0)))
+nw2(dx_d2, x0_d2, p_d2, NaN)
+@test Vector(dx_d2) ≈ dx
+@test_throws ArgumentError nw1(dx_d2, x0_d2, p_d2, NaN) # wrong type for cache
+
 
 # try SparseAggregator
 nw2 = Network(g, vf, ef; execution=KAExecution{true}(), aggregator=SparseAggregator(+))
-nw2_d = adapt(CuArray, nw2)
+nw2_d = adapt(CuArray{Float32}, nw2)
 
 @test nw2_d.layer.aggregator.m isa CuSparseMatrixCSC
-fill!(dx_d, 0)
-nw2_d(dx_d, x0_d, p_d, NaN)
-@test Vector(dx_d) ≈ dx
+fill!(dx_d1, 0)
+nw2_d(dx_d1, x0_d1, p_d1, NaN)
+@test Vector(dx_d1) ≈ dx
 
 # mini benchmark
 

@@ -64,7 +64,7 @@ function test_execution_styles(prob)
         end
 
         if CUDA.functional()
-            to = CuArray
+            to = CuArray{Float64}
             u_d = adapt(to, u)
             p_d = adapt(to, p)
 
@@ -78,7 +78,7 @@ function test_execution_styles(prob)
                 _nw_d(_du_d, u_d, p_d, t)
                 issame = isapprox(Vector(_du_d), du; atol=1e-10)
                 if !issame
-                    println("CUDA execution lead to different results: extrema(Δ) = $(extrema(_du - du))")
+                    println("CUDA execution lead to different results: extrema(Δ) = $(extrema(Vector(_du_d) - du))")
                 end
                 @test issame
             end

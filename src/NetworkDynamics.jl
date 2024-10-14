@@ -4,7 +4,7 @@ using Graphs: Graphs, AbstractGraph, SimpleEdge, edges, vertices, ne, nv,
 using TimerOutputs: @timeit_debug, reset_timer!
 
 using ArgCheck: @argcheck
-using PreallocationTools: PreallocationTools, LazyBufferCache, DiffCache
+using PreallocationTools: PreallocationTools, DiffCache, get_tmp
 using SciMLBase: SciMLBase
 using Base.Threads: @threads
 using NNlib: NNlib
@@ -18,14 +18,13 @@ using DocStringExtensions: FIELDS, TYPEDEF
 using StyledStrings: StyledStrings, @styled_str
 using RecursiveArrayTools: DiffEqArray
 using FastClosures: @closure
+using ForwardDiff: ForwardDiff
 
 @static if VERSION ≥ v"1.11.0-0"
     using Base: AnnotatedIOBuffer, AnnotatedString
 else
     using StyledStrings: AnnotatedIOBuffer, AnnotatedString
 end
-
-using Adapt: Adapt, adapt
 
 using Base: @propagate_inbounds
 using InteractiveUtils: subtypes
@@ -54,10 +53,9 @@ include("network_structure.jl")
 export NaiveAggregator, KAAggregator, SequentialAggregator,
        PolyesterAggregator, ThreadedAggregator
 include("aggregators.jl")
+include("gbufs.jl")
 include("construction.jl")
 include("coreloop.jl")
-
-include("adapt.jl")
 
 # XXX: have both, s[:] and uflat(s) ?
 export VIndex, EIndex, VPIndex, EPIndex, NWState, NWParameter, uflat, pflat

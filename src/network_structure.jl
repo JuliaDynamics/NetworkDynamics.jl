@@ -47,9 +47,9 @@ usebuffer(::Type{<:ExecutionStyle{buffered}}) where {buffered} = buffered
 # check cuda compatibliity
 iscudacompatible(x) = iscudacompatible(typeof(x))
 iscudacompatible(::Type{<:ExecutionStyle}) = false
-iscudacompatible(::Type{<:KAExecution{true}}) = true
+iscudacompatible(::Type{<:KAExecution}) = true
 
-struct Network{EX<:ExecutionStyle,G,NL,VTup,MM}
+struct Network{EX<:ExecutionStyle,G,NL,VTup,MM,CT,GBT}
     "vertex batches of same function"
     vertexbatches::VTup
     "network layer"
@@ -57,9 +57,11 @@ struct Network{EX<:ExecutionStyle,G,NL,VTup,MM}
     "index manager"
     im::IndexManager{G}
     "lazy cache pool"
-    cachepool::LazyBufferCache{typeof(identity),typeof(identity)}
+    caches::@NamedTuple{state::CT,aggregation::CT}
     "mass matrix"
     mass_matrix::MM
+    "Gather buffer provider (lazy or eager)"
+    gbufprovider::GBT
 end
 executionstyle(::Network{ex}) where {ex} = ex()
 nvbatches(::Network) = length(vertexbatches)
@@ -83,7 +85,18 @@ Graphs.nv(nw::Network) = nv(nw.im.g)
 Graphs.ne(nw::Network) = ne(nw.im.g)
 Base.broadcastable(nw::Network) = Ref(nw)
 
-struct NetworkLayer{GT,ETup,AF,MT}
+function get_state_cache(nw::Network, T)
+    if eltype(T) <: AbstractFloat && eltype(nw.caches.state.du) != eltype(T)
+        throw(ArgumentError("Network caches are initialized with $(eltype(nw.caches.state.du)) \
+            but is used for $(eltype(T)) data!"))
+    end
+    get_tmp(nw.caches.state, T)
+end
+get_aggregation_cache(nw::Network, T) = get_tmp(nw.caches.aggregation, T)
+
+iscudacompatible(nw::Network) = iscudacompatible(executionstyle(nw)) && iscudacompatible(nw.layer.aggregator)
+
+struct NetworkLayer{GT,ETup,AF}
     "graph/toplogy of layer"
     g::GT
     "edge batches with same function"
@@ -94,13 +107,11 @@ struct NetworkLayer{GT,ETup,AF,MT}
     edepth::Int # potential becomes range for multilayer
     "vertex dimensions visible to edges"
     vdepth::Int # potential becomes range for multilayer
-    "mapping e_idx -> [v_src_idx_in_fullflat; v_dst_idx_in_fullflat]"
-    gather_map::MT # input_map[:, e_idx] = [v_src_idx, v_dst_idx]
 end
 
 abstract type ComponentBatch{F} end
 
-struct VertexBatch{T<:VertexFunction,F,IV<:AbstractVector{<:Int}} <: ComponentBatch{T}
+struct VertexBatch{T<:VertexFunction,F,IV<:AbstractVector{<:Integer}} <: ComponentBatch{T}
     "vertex indices contained in batch"
     indices::IV
     "vertex function"
@@ -113,7 +124,7 @@ struct VertexBatch{T<:VertexFunction,F,IV<:AbstractVector{<:Int}} <: ComponentBa
     aggbufstride::BatchStride
 end
 
-struct EdgeBatch{T<:EdgeFunction,F,IV<:AbstractVector{<:Int}} <: ComponentBatch{T}
+struct EdgeBatch{T<:EdgeFunction,F,IV<:AbstractVector{<:Integer}} <: ComponentBatch{T}
     "edge indices (as in edge iterator) contained in batch"
     indices::IV
     "edge function"
