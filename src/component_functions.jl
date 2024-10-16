@@ -724,9 +724,19 @@ function def(c::ComponentFunction)::Vector{Union{Nothing,Float64}}
         has_default_or_init(c, s) ? get_default_or_init(c, s) : nothing
     end
 end
+function guess(c::ComponentFunction)::Vector{Union{Nothing,Float64}}
+    map(c.sym) do s
+        has_guess(c, s) ? get_guess(c, s) : nothing
+    end
+end
 function pdef(c::ComponentFunction)::Vector{Union{Nothing,Float64}}
     map(c.psym) do s
         has_default_or_init(c, s) ? get_default_or_init(c, s) : nothing
+    end
+end
+function pguess(c::ComponentFunction)::Vector{Union{Nothing,Float64}}
+    map(c.psym) do s
+        has_guess(c, s) ? get_guess(c, s) : nothing
     end
 end
 
@@ -781,3 +791,14 @@ arguments `src` and `dst` which are either integer (vertex index) or symbol
 """
 set_graphelement!(c::EdgeFunction, nt::@NamedTuple{src::T, dst::T}) where {T<:Union{Int,Symbol}} = set_metadata!(c, :graphelement, nt)
 set_graphelement!(c::VertexFunction, vidx::Int) = set_metadata!(c, :graphelement, vidx)
+
+
+function get_defaults(c::ComponentFunction, syms)
+    [has_default(c, sym) ? get_default(c, sym) : nothing for sym in syms]
+end
+function get_guesses(c::ComponentFunction, syms)
+    [has_guess(c, sym) ? get_guess(c, sym) : nothing for sym in syms]
+end
+function get_defaults_or_inits(c::ComponentFunction, syms)
+    [has_default_or_init(c, sym) ? get_default_or_init(c, sym) : nothing for sym in syms]
+end
