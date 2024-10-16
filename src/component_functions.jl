@@ -339,6 +339,15 @@ function _fill_defaults(T, kwargs)
         ge = pop!(dict, :graphelement)
         metadata[:graphelement] = ge
     end
+    if haskey(dict, :vidx) && T <: VertexFunction
+        vidx = pop!(dict, :vidx)
+        metadata[:graphelement] = vidx
+    end
+    if haskey(dict, :src) && haskey(dict, :dst) && T <: EdgeFunction
+        src = pop!(dict, :src)
+        dst = pop!(dict, :dst)
+        metadata[:graphelement] = (; src, dst)
+    end
 
     # sym & dim
     haskey(dict, :dim) || haskey(dict, :sym) || throw(ArgumentError("Either `dim` or `sym` must be provided to construct $T."))

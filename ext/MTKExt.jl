@@ -8,12 +8,12 @@ using ModelingToolkit.Symbolics: Symbolics, fixpoint_sub, substitute
 using ArgCheck: @argcheck
 using LinearAlgebra: Diagonal, I
 
-using NetworkDynamics: Fiducial
-import NetworkDynamics: ODEVertex, StaticEdge
+using NetworkDynamics: Coupling, Fiducial, set_metadata!
+import NetworkDynamics: ODEVertex, StaticEdge, ODEEdge
 
 include("MTKUtils.jl")
 
-function ODEVertex(sys::ODESystem, inputs, outputs; verbose=false, name=getname(sys))
+function ODEVertex(sys::ODESystem, inputs, outputs; verbose=false, name=getname(sys), kwargs...)
     warn_events(sys)
     inputs = inputs isa AbstractVector ? inputs : [inputs]
     outputs = outputs isa AbstractVector ? outputs : [outputs]
@@ -37,10 +37,47 @@ function ODEVertex(sys::ODESystem, inputs, outputs; verbose=false, name=getname(
     obsf = gen.g_ip
 
     mass_matrix = gen.mass_matrix
-    ODEVertex(;f, sym, psym, depth, inputsym, obssym, obsf, mass_matrix, name)
+    v = ODEVertex(;f, sym, psym, depth, inputsym, obssym, obsf, mass_matrix, name, kwargs...)
+    set_metadata!(v, :observed, gen.observed)
+    set_metadata!(v, :equations, gen.equations)
+    v
 end
 
-function StaticEdge(sys::ODESystem, srcin, dstin, outputs, coupling; verbose=false, name=getname(sys))
+function ODEEdge(sys::ODESystem, srcin, dstin, outputs, coupling::Coupling; verbose=false, name=getname(sys), kwargs...)
+    warn_events(sys)
+    srcin = srcin isa AbstractVector ? srcin : [srcin]
+    dstin = dstin isa AbstractVector ? dstin : [dstin]
+    outputs = outputs isa AbstractVector ? outputs : [outputs]
+    gen = generate_io_function(sys, (srcin, dstin), outputs; type=:ode, verbose)
+
+    f = gen.f_ip
+
+    _sym = getname.(gen.states)
+    sym = [s => _get_metadata(sys, s) for s in _sym]
+
+    _psym = getname.(gen.params)
+    psym = [s => _get_metadata(sys, s) for s in _psym]
+
+    _obssym = getname.(gen.obsstates)
+    obssym = [s => _get_metadata(sys, s) for s in _obssym]
+
+    _inputsym_src = getname.(srcin)
+    inputsym_src = [s => _get_metadata(sys, s)  for s in _inputsym_src]
+
+    _inputsym_dst = getname.(dstin)
+    inputsym_dst = [s => _get_metadata(sys, s)  for s in _inputsym_dst]
+
+    depth = coupling isa Fiducial ? Int(length(outputs)/2) : length(outputs)
+    obsf = gen.g_ip
+
+    mass_matrix = gen.mass_matrix
+    e = ODEEdge(;f, sym, psym, depth, inputsym_src, inputsym_dst, obssym, obsf, coupling, mass_matrix, name, kwargs...)
+    set_metadata!(e, :observed, gen.observed)
+    set_metadata!(e, :equations, gen.equations)
+    e
+end
+
+function StaticEdge(sys::ODESystem, srcin, dstin, outputs, coupling::Coupling; verbose=false, name=getname(sys), kwargs...)
     warn_events(sys)
     srcin = srcin isa AbstractVector ? srcin : [srcin]
     dstin = dstin isa AbstractVector ? dstin : [dstin]
@@ -67,7 +104,7 @@ function StaticEdge(sys::ODESystem, srcin, dstin, outputs, coupling; verbose=fal
     depth = coupling isa Fiducial ? Int(length(outputs)/2) : length(outputs)
     obsf = gen.g_ip
 
-    StaticEdge(;f, sym, psym, depth, inputsym_src, inputsym_dst, obssym, obsf, coupling, name)
+    StaticEdge(;f, sym, psym, depth, inputsym_src, inputsym_dst, obssym, obsf, coupling, name, kwargs...)
 end
 
 """
@@ -151,7 +188,7 @@ function generate_io_function(_sys, inputss::Tuple, outputs;
     fix_metadata!(obseqs, sys);
     # obs can only depend on parameters (including allinputs) or states
     obs_deps = mapreduce(eq -> get_variables(eq.rhs), union, obseqs, init=Symbolic[])
-    if !(obs_deps ⊆ Set(_params) ∪ Set(_states))
+    if !(obs_deps ⊆ Set(_params) ∪ Set(_states) ∪ independent_variables(sys))
         @warn "obs_deps !⊆ parameters ∪ unknowns. Difference: $(setdiff(obs_deps, Set(_params) ∪ Set(_states)))"
     end
 
@@ -272,6 +309,8 @@ function generate_io_function(_sys, inputss::Tuple, outputs;
             inputss,
             obsstates,
             g_oop, g_ip,
+            equations=formulas,
+            observed=Dict(obsstates .=> obsformulas),
             params)
 end
 
