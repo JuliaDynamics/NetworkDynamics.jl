@@ -5,6 +5,7 @@ function Network(g::AbstractGraph,
                  edepth=:auto,
                  vdepth=:auto,
                  aggregator=execution isa SequentialExecution ? SequentialAggregator(+) : PolyesterAggregator(+),
+                 check_graphelement=true,
                  verbose=false)
     reset_timer!()
     @timeit_debug "Construct Network" begin
@@ -17,22 +18,24 @@ function Network(g::AbstractGraph,
         @argcheck length(_edgef) == ne(g)
 
         # check if graphelement is set correctly, warn otherwise
-        for (i, v) in pairs(_vertexf)
-            if has_graphelement(v)
-                if get_graphelement(v) != i
-                    @warn "Vertex function $v has wrong `:graphelement` $(get_graphelement(v)) != $i. \
-                    Using this constructor the provided `:graphelement` is ignored!"
+        if check_graphelement
+            for (i, v) in pairs(_vertexf)
+                if has_graphelement(v)
+                    if get_graphelement(v) != i
+                        @warn "Vertex function $v has wrong `:graphelement` $(get_graphelement(v)) != $i. \
+                        Using this constructor the provided `:graphelement` is ignored!"
+                    end
                 end
             end
-        end
-        if any(has_graphelement, _edgef)
-            vnamedict = _unique_name_dict(_vertexf)
-            for (iteredge, ef) in zip(edges(g), _edgef)
-                if has_graphelement(ef)
-                    ge = get_graphelement(ef)
-                    if iteredge != _resolve_ge_to_edge(ge, vnamedict)
-                        @warn "Edge function $ef has wrong `:graphelement` $(get_graphelement(ef)) != $iteredge. \
-                        Using this constructor the provided `:graphelement` is ignored!"
+            if any(has_graphelement, _edgef)
+                vnamedict = _unique_name_dict(_vertexf)
+                for (iteredge, ef) in zip(edges(g), _edgef)
+                    if has_graphelement(ef)
+                        ge = get_graphelement(ef)
+                        if iteredge != _resolve_ge_to_edge(ge, vnamedict)
+                            @warn "Edge function $ef has wrong `:graphelement` $(get_graphelement(ef)) != $iteredge. \
+                            Using this constructor the provided `:graphelement` is ignored!"
+                        end
                     end
                 end
             end
