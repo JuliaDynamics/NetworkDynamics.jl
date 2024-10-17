@@ -37,7 +37,9 @@ makedocs(; root=joinpath(pkgdir(NetworkDynamics), "docs"),
                  "Heterogeneous systems" => "generated/heterogeneous_system.md",
                  "Stochastic differential equations" => "generated/StochasticSystem.md",
                  # "Delay differential equations" => "generated/kuramoto_delay.md",
-                 "Cascading failure" => "generated/cascading_failure.md",]
+                 "Cascading failure" => "generated/cascading_failure.md",
+                 "Hydrogen Network" => "generated/hydrogen_network.md",
+             ]
          ],
          draft=false,
          format = Documenter.HTML(ansicolor = true),
