@@ -27,6 +27,10 @@ Base.show(io::IO, s::PolyesterAggregator) = print(io, "PolyesterAggregator($(rep
 function Base.show(io::IO, ::MIME"text/plain", c::EdgeFunction)
     type = match(r"^(.*?)\{", string(typeof(c)))[1]
     print(io, type, styled" :$(c.name) with $(_styled_coupling(coupling(c))) coupling of depth {NetworkDynamics_fordst:$(depth(c))}")
+    if has_graphelement(c)
+        ge = get_graphelement(c)
+        print(io, " @ Edge $(ge.src) => $(ge.dst)")
+    end
 
     styling = Dict{Int,Symbol}()
     if coupling(c) == Fiducial()
@@ -56,6 +60,9 @@ _styled_coupling(::Symmetric) = styled"{NetworkDynamics_fordstsrc:Symmetric}"
 function Base.show(io::IO, ::MIME"text/plain", c::VertexFunction)
     type = match(r"^(.*?)\{", string(typeof(c)))[1]
     print(io, type, styled" :$(c.name) with depth {NetworkDynamics_forlayer:$(depth(c))}")
+    if has_graphelement(c)
+        print(io, " @ Vertex $(get_graphelement(c))")
+    end
 
     styling = Dict{Int,Symbol}()
     for i in 1:depth(c)
@@ -68,7 +75,7 @@ end
 function print_states_params(io, c::ComponentFunction, styling)
     info = AnnotatedString{String}[]
     num, word = maybe_plural(dim(c), "state")
-    push!(info, styled"$num &$word: &&$(stylesymbolarray(c.sym, def(c), styling))")
+    push!(info, styled"$num &$word: &&$(stylesymbolarray(c.sym, def(c), guess(c), styling))")
 
     if hasproperty(c, :mass_matrix) && c.mass_matrix != LinearAlgebra.I
         if LinearAlgebra.isdiag(c.mass_matrix) && !(c.mass_matrix isa UniformScaling)
@@ -79,19 +86,40 @@ function print_states_params(io, c::ComponentFunction, styling)
     end
 
     num, word = maybe_plural(pdim(c), "param")
-    pdim(c) > 0 && push!(info, styled"$num &$word: &&$(stylesymbolarray(c.psym, pdef(c)))")
+    pdim(c) > 0 && push!(info, styled"$num &$word: &&$(stylesymbolarray(c.psym, pdef(c), pguess(c)))")
+
+    if !isnothing(c.inputsym)
+        if c isa VertexFunction
+            _, word = maybe_plural(length(c.inputsym), "input")
+            defs = get_defaults_or_inits(c, c.inputsym)
+            guesses = get_guesses(c, c.inputsym)
+            push!(info, styled"&$word: &&$(stylesymbolarray(c.inputsym, defs, guesses))")
+        elseif c isa EdgeFunction
+            _, word = maybe_plural(length(c.inputsym.src), "input")
+            srcdefs = get_defaults_or_inits(c, c.inputsym.src)
+            dstdefs = get_defaults_or_inits(c, c.inputsym.dst)
+            srcguesses = get_guesses(c, c.inputsym.src)
+            dstguesses = get_guesses(c, c.inputsym.dst)
+            push!(info, styled"src&$word: &&$(stylesymbolarray(c.inputsym.src, srcdefs, srcguesses))\n\
+            dst&$word: &&$(stylesymbolarray(c.inputsym.dst, srcdefs, srcguesses))")
+        end
+    end
 
     print_treelike(io, align_strings(info))
 end
 
-function stylesymbolarray(syms, defaults, symstyles=Dict{Int,Symbol}())
+function stylesymbolarray(syms, defaults, guesses, symstyles=Dict{Int,Symbol}())
     @assert length(syms) == length(defaults)
     ret = "["
-    for (i, sym, default) in zip(1:length(syms), syms, defaults)
+    for (i, sym, default, guess) in zip(1:length(syms), syms, defaults, guesses)
         style = get(symstyles, i, :default)
         ret = ret * styled"{$style:$(string(sym))}"
         if !isnothing(default)
-            ret = ret * styled"{NetworkDynamics_defaultval:=$default}"
+            _str = str_significant(default; sigdigits=2)
+            ret = ret * styled"{NetworkDynamics_defaultval:=$(_str)}"
+        elseif !isnothing(guess)
+            _str = str_significant(guess; sigdigits=2)
+            ret = ret * styled"{NetworkDynamics_guessval:≈$(_str)}"
         end
         if i < length(syms)
             ret = ret * ", "
@@ -290,4 +318,17 @@ function maybe_plural(num, word, substitution=s"\1s")
         word = replace(word, r"^(.*)$" => substitution)
     end
     num, word
+end
+
+function str_significant(x; sigdigits)
+    (x == 0) && (return "0")
+    x = round(x; sigdigits)
+    n = length(@sprintf("%d", abs(x)))              # length of the integer part
+    if (x ≤ -1 || x ≥ 1)
+        decimals = max(sigdigits - n, 0)               # 'sig - n' decimals needed
+    else
+        Nzeros = ceil(Int, -log10(abs(x))) - 1      # No. zeros after decimal point before first number
+        decimals = sigdigits + Nzeros
+    end
+    return @sprintf("%.*f", decimals, x)
 end

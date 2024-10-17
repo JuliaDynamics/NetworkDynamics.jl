@@ -19,6 +19,7 @@ using StyledStrings: StyledStrings, @styled_str
 using RecursiveArrayTools: DiffEqArray
 using FastClosures: @closure
 using ForwardDiff: ForwardDiff
+using Printf: @sprintf
 
 @static if VERSION ≥ v"1.11.0-0"
     using Base: AnnotatedIOBuffer, AnnotatedString
@@ -82,7 +83,8 @@ println(s1, "\n", s2)
 =#
 const ND_FACES = [
     :NetworkDynamics_inactive => StyledStrings.Face(foreground=:bright_black),
-    :NetworkDynamics_defaultval => StyledStrings.Face(foreground=:bright_black),
+    :NetworkDynamics_defaultval => StyledStrings.Face(weight=:light),
+    :NetworkDynamics_guessval => StyledStrings.Face(foreground=:bright_black, weight=:light),
     :NetworkDynamics_fordstsrc => StyledStrings.Face(foreground=:bright_blue),
     :NetworkDynamics_fordst => StyledStrings.Face(foreground=:bright_yellow),
     :NetworkDynamics_forsrc => StyledStrings.Face(foreground=:bright_magenta),
