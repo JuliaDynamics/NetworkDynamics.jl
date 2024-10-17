@@ -193,6 +193,11 @@ as a blackbox.
 Additionally, we need to tell ModelingToolkit about the units of this object. This is just used
 for the static unit check during construction of the model. Later one, when we generate the
 Julia code from the symbolic reepresentation all units will be stripped.
+
+!!! note "Discontinuities in RHS"
+    The picewise linear interpolated function creates discontinuities in the RHS of the system.
+    However since we know the times exactly, we can handle this by simply giving a list of explicit
+    tstops to the solve command, to make sure those are hit exactly.
 =#
 load2(t) = -Interpolate(SA[0, 4, 12, 20, 24]*3600, SA[20, 30, 10, 30, 20], extrapolate=LinearInterpolations.Constant(20))(t)
 load3(t) = -Interpolate(SA[0, 4, 12, 20, 24]*3600, SA[40, 50, 30, 50, 40], extrapolate=LinearInterpolations.Constant(40))(t)
