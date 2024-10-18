@@ -29,85 +29,41 @@ function set_metadata!(c::ComponentFunction, sym::Symbol, key::Symbol, value)
 end
 set_metadata!(c::ComponentFunction, sym::Symbol, pair::Pair) = set_metadata!(c, sym, pair.first, pair.second)
 
-#### default
-"""
-    has_default(c::ComponentFunction, sym::Symbol)
+# generate default methods for some per-symbol metadata fields
+for md in [:default, :guess, :init, :bounds]
+    fname_has = Symbol(:has_, md)
+    fname_get = Symbol(:get_, md)
+    fname_set = Symbol(:set_, md, :!)
+    @eval begin
+        """
+            has_$($(QuoteNode(md)))(c::ComponentFunction, sym::Symbol)
 
-Checks if a `default` value is present for symbol `sym`.
-"""
-has_default(c::ComponentFunction, sym::Symbol) = has_metadata(c, sym, :default)
-"""
-    get_default(c::ComponentFunction, sym::Symbol)
+        Checks if a `$($(QuoteNode(md)))` value is present for symbol `sym`.
 
-Returns the `default` value for symbol `sym`.
-"""
-get_default(c::ComponentFunction, sym::Symbol) = get_metadata(c, sym, :default)
-"""
-    set_default!(c::ComponentFunction, sym::Symbol, value)
+        See also [`get_$($(QuoteNode(md)))`](@ref), [`set_$($(QuoteNode(md)))`](@ref).
+        """
+        $fname_has(c::ComponentFunction, sym::Symbol) = has_metadata(c, sym, $(QuoteNode(md)))
 
-Sets the `default` value for symbol `sym` to `value`.
-"""
-set_default!(c::ComponentFunction, sym::Symbol, value) = set_metadata!(c, sym, :default, value)
+        """
+            get_$($(QuoteNode(md)))(c::ComponentFunction, sym::Symbol)
 
-#### guess
-"""
-    has_guess(c::ComponentFunction, sym::Symbol)
+        Returns the `$($(QuoteNode(md)))` value for symbol `sym`.
 
-Checks if a `guess` value is present for symbol `sym`.
-"""
-has_guess(c::ComponentFunction, sym::Symbol) = has_metadata(c, sym, :guess)
-"""
-    get_guess(c::ComponentFunction, sym::Symbol)
+        See also [`has_$($(QuoteNode(md)))`](@ref), [`set_$($(QuoteNode(md)))`](@ref).
+        """
+        $fname_get(c::ComponentFunction, sym::Symbol) = get_metadata(c, sym, $(QuoteNode(md)))
 
-Returns the `guess` value for symbol `sym`.
-"""
-get_guess(c::ComponentFunction, sym::Symbol) = get_metadata(c, sym, :guess)
-"""
-    set_guess!(c::ComponentFunction, sym::Symbol, value)
 
-Sets the `guess` value for symbol `sym` to `value`.
-"""
-set_guess!(c::ComponentFunction, sym::Symbol, value) = set_metadata!(c, sym, :guess, value)
+        """
+            set_$($(QuoteNode(md)))(c::ComponentFunction, sym::Symbol, value)
 
-#### init
-"""
-    has_init(c::ComponentFunction, sym::Symbol)
+        Sets the `$($(QuoteNode(md)))` value for symbol `sym` to `value`.
 
-Checks if a `init` value is present for symbol `sym`.
-"""
-has_init(c::ComponentFunction, sym::Symbol) = has_metadata(c, sym, :init)
-"""
-    get_init(c::ComponentFunction, sym::Symbol)
-
-Returns the `init` value for symbol `sym`.
-"""
-get_init(c::ComponentFunction, sym::Symbol) = get_metadata(c, sym, :init)
-"""
-    set_init!(c::ComponentFunction, sym::Symbol, value)
-
-Sets the `init` value for symbol `sym` to `value`.
-"""
-set_init!(c::ComponentFunction, sym::Symbol, value) = set_metadata!(c, sym, :init, value)
-
-#### bounds
-"""
-    has_bounds(c::ComponentFunction, sym::Symbol)
-
-Checks if a `bounds` value is present for symbol `sym`.
-"""
-has_bounds(c::ComponentFunction, sym::Symbol) = has_metadata(c, sym, :bounds)
-"""
-    get_bounds(c::ComponentFunction, sym::Symbol)
-
-Returns the `bounds` value for symbol `sym`.
-"""
-get_bounds(c::ComponentFunction, sym::Symbol) = get_metadata(c, sym, :bounds)
-"""
-    set_bounds!(c::ComponentFunction, sym::Symbol, value)
-
-Sets the `bounds` value for symbol `sym` to `value`.
-"""
-set_bounds!(c::ComponentFunction, sym::Symbol, value) = set_metadata!(c, sym, :bounds, value)
+        See also [`has_$($(QuoteNode(md)))`](@ref), [`get_$($(QuoteNode(md)))`](@ref).
+        """
+        $fname_set(c::ComponentFunction, sym::Symbol, val) = set_metadata!(c, sym, $(QuoteNode(md)), val)
+    end
+end
 
 
 #### default or init
