@@ -39,12 +39,6 @@ export ODEVertex, StaticVertex, StaticEdge, ODEEdge
 export Symmetric, AntiSymmetric, Directed, Fiducial
 export dim, sym, pdim, psym, obssym, depth, hasinputsym, inputsym, coupling
 export metadata, symmetadata
-export has_metadata, get_metadata, set_metadata!
-export has_default, get_default, set_default!
-export has_guess, get_guess, set_guess!
-export has_init, get_init, set_init!
-export has_bounds, get_bounds, set_bounds!
-export has_graphelement, get_graphelement, set_graphelement!
 include("component_functions.jl")
 
 export Network
@@ -63,6 +57,14 @@ export VIndex, EIndex, VPIndex, EPIndex, NWState, NWParameter, uflat, pflat
 export vidxs, eidxs, vpidxs, epidxs
 export save_parameters!
 include("symbolicindexing.jl")
+
+export has_metadata, get_metadata, set_metadata!
+export has_default, get_default, set_default!
+export has_guess, get_guess, set_guess!
+export has_init, get_init, set_init!
+export has_bounds, get_bounds, set_bounds!
+export has_graphelement, get_graphelement, set_graphelement!
+include("metadata.jl")
 
 using NonlinearSolve: AbstractNonlinearSolveAlgorithm, NonlinearFunction
 using NonlinearSolve: NonlinearLeastSquaresProblem, NonlinearProblem
