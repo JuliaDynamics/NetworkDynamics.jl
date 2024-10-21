@@ -29,8 +29,8 @@ using StableRNGs
 
     rng = StableRNG(1)
     g = watts_strogatz(10_000, 4, 0.8; rng, is_directed=true)
-    nvec = rand(rng, vtypes, nv(g))
-    evec = rand(rng, etypes, ne(g))
+    nvec = copy.(rand(rng, vtypes, nv(g)))
+    evec = copy.(rand(rng, etypes, ne(g)))
 
     basenw = Network(g, nvec, evec);
     states = rand(rng, basenw.im.lastidx_static)
