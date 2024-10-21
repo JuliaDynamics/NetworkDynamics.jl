@@ -22,13 +22,17 @@ mutable struct IndexManager{G}
     lastidx_gbuf::Int
     vertexf::Vector{VertexFunction}
     edgef::Vector{EdgeFunction}
+    unique_vnames::Dict{Symbol,Int}
+    unique_enames::Dict{Symbol,Int}
     function IndexManager(g, dyn_states, edepth, vdepth, vertexf, edgef)
         new{typeof(g)}(g, collect(edges(g)),
                        (Vector{UnitRange{Int}}(undef, nv(g)) for i in 1:3)...,
                        (Vector{UnitRange{Int}}(undef, ne(g)) for i in 1:5)...,
                        edepth, vdepth,
                        0, dyn_states, 0, 0, 0,
-                       vertexf, edgef)
+                       vertexf, edgef,
+                       unique_mappings(getproperty.(vertexf, :name), 1:nv(g)),
+                       unique_mappings(getproperty.(edgef, :name), 1:ne(g)))
     end
 end
 dim(im::IndexManager) = im.lastidx_dynamic

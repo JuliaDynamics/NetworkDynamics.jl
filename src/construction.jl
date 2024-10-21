@@ -6,6 +6,7 @@ function Network(g::AbstractGraph,
                  vdepth=:auto,
                  aggregator=execution isa SequentialExecution ? SequentialAggregator(+) : PolyesterAggregator(+),
                  check_graphelement=true,
+                 set_graphelement=false,
                  verbose=false)
     reset_timer!()
     @timeit_debug "Construct Network" begin
@@ -17,29 +18,7 @@ function Network(g::AbstractGraph,
         @argcheck length(_vertexf) == nv(g)
         @argcheck length(_edgef) == ne(g)
 
-        # check if graphelement is set correctly, warn otherwise
-        if check_graphelement
-            for (i, v) in pairs(_vertexf)
-                if has_graphelement(v)
-                    if get_graphelement(v) != i
-                        @warn "Vertex function $v has wrong `:graphelement` $(get_graphelement(v)) != $i. \
-                        Using this constructor the provided `:graphelement` is ignored!"
-                    end
-                end
-            end
-            if any(has_graphelement, _edgef)
-                vnamedict = _unique_name_dict(_vertexf)
-                for (iteredge, ef) in zip(edges(g), _edgef)
-                    if has_graphelement(ef)
-                        ge = get_graphelement(ef)
-                        if iteredge != _resolve_ge_to_edge(ge, vnamedict)
-                            @warn "Edge function $ef has wrong `:graphelement` $(get_graphelement(ef)) != $iteredge. \
-                            Using this constructor the provided `:graphelement` is ignored!"
-                        end
-                    end
-                end
-            end
-        end
+        # check if components alias metadata and copy if necessary
 
         verbose &&
             println("Create dynamic network with $(nv(g)) vertices and $(ne(g)) edges:")
@@ -65,6 +44,33 @@ function Network(g::AbstractGraph,
 
         # create index manager
         im = IndexManager(g, dynstates, edepth, vdepth, _vertexf, _edgef)
+
+
+        # check graph_element metadata and attach if necessary
+        for (i, vf) in pairs(_vertexf)
+            if check_graphelement && has_graphelement(vf)
+                if get_graphelement(vf) != i
+                    @warn "Vertex function $(vf.name) is placed at node index $i bus has \
+                    `graphelement` $(get_graphelement(vf)) stored in metadata. \
+                    The wrong data will be " * (set_graphelement ? "overwritten!" : "ignored!") *
+                    " Use `check_graphelement` and `set_graphelement` keywords to alter this behavior."
+                end
+            end
+            set_graphelement && set_graphelement!(vf, i)
+        end
+        for (iteredge, ef) in zip(im.edgevec, _edgef)
+            if check_graphelement && has_graphelement(ef)
+                ge = get_graphelement(ef)
+                src = get(im.unique_vnames, ge.src, ge.src)
+                dst = get(im.unique_vnames, ge.dst, ge.dst)
+                if iteredge.src != src || iteredge.dst != dst
+                    @warn "Edge function $(ef.name) at $(iteredge.src) => $(iteredge.dst) has wrong `:graphelement` $src => $dst). \
+                    The wrong data will be " * (set_graphelement ? "overwritten!" : "ignored!") *
+                    " Use `check_graphelement` and `set_graphelement` keywords to alter this behavior."
+                end
+            end
+            set_graphelement && set_graphelement!(ef, (;src=iteredge.src, dst=iteredge.dst))
+        end
 
         # batch identical edge and vertex functions
         @timeit_debug "batch identical vertexes" begin
@@ -143,7 +149,8 @@ function Network(vertexfs, edgefs; kwargs...)
 
     vdict = Dict(vidxs .=> vertexfs)
 
-    vnamedict = _unique_name_dict(vertexfs)
+    # find unique maapings from name => graphelement
+    vnamedict = unique_mappings(getproperty.(vertexfs, :name), get_graphelement.(vertexfs))
 
     simpleedges = map(edgefs) do e
         ge = get_graphelement(e)
@@ -169,21 +176,9 @@ function Network(vertexfs, edgefs; kwargs...)
     vfs_ordered = [vdict[k] for k in vertices(g)]
     efs_ordered = [edict[k] for k in edges(g)]
 
-    Network(g, vfs_ordered, efs_ordered; kwargs...)
+    Network(g, vfs_ordered, efs_ordered; check_graphelement=false, set_graphelement=false, kwargs...)
 end
 
-function _unique_name_dict(cfs::AbstractVector{<:ComponentFunction})
-    # find all names to resolve
-    names = getproperty.(cfs, :name)
-    dict = Dict(cf.name => get_graphelement(cf) for cf in cfs if has_graphelement(cf))
-    # delete all names which occure multiple times
-    for i in eachindex(names)
-        if names[i] ∈ @views names[i+1:end]
-            delete!(dict, names[i])
-        end
-    end
-    dict
-end
 # resolve the graphelement ge (named tuple) to simple edge with potential lookup in vertex name dict dict
 function _resolve_ge_to_edge(ge, vnamedict)
     src = if ge.src isa Symbol

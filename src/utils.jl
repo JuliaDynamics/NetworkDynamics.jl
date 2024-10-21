@@ -26,3 +26,24 @@ end
 @inline unrolled_foreach(f, t) = unrolled_foreach(f, nofilt, t)
 
 nofilt(_) = true
+
+"""
+    unique_mappings([f=identity], from, to)
+
+Given two vectors `from` and `to`, find all keys in `from` which exist only once.
+For those unique keys, return a dict maping `from_unique => f(to)`
+"""
+unique_mappings(from, to) = unique_mappings(identity, from, to)
+function unique_mappings(f, from, to)
+    counts = Dict{eltype(from),Int}()
+    for k in from
+        counts[k] = get(counts, k, 0) + 1
+    end
+    unique = Dict{eltype(from),eltype(to)}()
+    for (k, v) in zip(from, to)
+        if get(counts, k, 0) == 1
+            unique[k] = f(v)
+        end
+    end
+    unique
+end

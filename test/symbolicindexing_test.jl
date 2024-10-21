@@ -426,3 +426,31 @@ nw = Network(g, [n1, n2, n3], [e1, e2])
 @test SII.get_all_timeseries_indexes(nw, VIndex(1,:u)) == Set([SII.ContinuousTimeseries()])
 @test SII.get_all_timeseries_indexes(nw, VPIndex(1,:p1)) == Set([1])
 @test SII.get_all_timeseries_indexes(nw, [VIndex(1,:u), VPIndex(1,:p1)]) == Set([SII.ContinuousTimeseries(), 1])
+
+# test named vertices and edges
+@testset "test sym indices for named edges/vertices" begin
+    using ModelingToolkit: @named
+    @named v1 = Lib.kuramoto_second()
+    @named v2 = Lib.kuramoto_second()
+    @named v3 = Lib.kuramoto_second()
+    @named e1 = Lib.kuramoto_edge()
+    @named e2 = Lib.kuramoto_edge()
+    @named e3 = Lib.kuramoto_edge()
+    g = complete_graph(3)
+    nw = Network(g, [v1, v2, v3], [e1, e2, e3])
+    s = NWState(nw, collect(1:dim(nw)), collect(dim(nw)+1:dim(nw)+pdim(nw)))
+    @test_throws ArgumentError s.v[:v, 1]
+    @test s.v[:v1, 1] == s[VIndex(1,1)]
+    @test s.v[:v2, 1] == s[VIndex(2,1)]
+    @test s.v[:v3, 1] == s[VIndex(3,1)]
+    @test s.e[:e1, 1] == s[EIndex(1,1)]
+    @test s.e[:e2, 1] == s[EIndex(2,1)]
+    @test s.e[:e3, 1] == s[EIndex(3,1)]
+    @test_throws ArgumentError s.p.v[:v, 1]
+    @test s.p.v[:v1, 1] == s[VPIndex(1,1)]
+    @test s.p.v[:v2, 1] == s[VPIndex(2,1)]
+    @test s.p.v[:v3, 1] == s[VPIndex(3,1)]
+    @test s.p.e[:e1, 1] == s[EPIndex(1,1)]
+    @test s.p.e[:e2, 1] == s[EPIndex(2,1)]
+    @test s.p.e[:e3, 1] == s[EPIndex(3,1)]
+end
