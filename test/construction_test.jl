@@ -266,3 +266,21 @@ end
     kwargs = Dict(:sym=>[:a=>2,:b],:def=>[1,nothing], :pdim=>0 )
     @test_throws ArgumentError _fill_defaults(ODEVertex, kwargs)
 end
+
+@testset "test dealias and copy of components" begin
+    v1 = ODEVertex(x->x^1, 2, 0; metadata=Dict(:graphelement=>1), name=:v1)
+    v2 = ODEVertex(x->x^2, 2, 0; name=:v2, vidx=2)
+    v3 = ODEVertex(x->x^3, 2, 0; name=:v3, vidx=3)
+
+    e1 = StaticEdge(nothing, 0, Symmetric(); graphelement=(;src=1,dst=2))
+    e2 = StaticEdge(nothing, 0, Symmetric(); src=:v2, dst=:v3)
+    e3 = StaticEdge(nothing, 0, Symmetric(); src=:v3, dst=:v1)
+
+    g = complete_graph(3)
+    nw = Network(g, [v1,v1,v3],[e1,e2,e3])
+    @test nw.im.vertexf[1].f == nw.im.vertexf[2].f
+    @test nw.im.vertexf[1].metadata == nw.im.vertexf[2].metadata
+    @test nw.im.vertexf[1].metadata !== nw.im.vertexf[2].metadata
+    @test nw.im.vertexf[1].symmetadata == nw.im.vertexf[2].symmetadata
+    @test nw.im.vertexf[1].symmetadata !== nw.im.vertexf[2].symmetadata
+end

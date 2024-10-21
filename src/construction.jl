@@ -11,14 +11,16 @@ function Network(g::AbstractGraph,
     reset_timer!()
     @timeit_debug "Construct Network" begin
         # collect all vertex/edgf to vector
-        _vertexf = vertexf isa Vector ? vertexf : [vertexf for _ in vertices(g)]
-        _edgef = edgef isa Vector ? edgef : [edgef for _ in edges(g)]
+        _vertexf = vertexf isa Vector ? vertexf : [copy(vertexf) for _ in vertices(g)]
+        _edgef = edgef isa Vector ? edgef : [copy(edgef) for _ in edges(g)]
         @argcheck _vertexf isa Vector{<:VertexFunction} "Expected VertexFuncions, got $(eltype(_vertexf))"
         @argcheck _edgef isa Vector{<:EdgeFunction} "Expected EdgeFuncions, got $(eltype(_vertexf))"
         @argcheck length(_vertexf) == nv(g)
         @argcheck length(_edgef) == ne(g)
 
         # check if components alias metadata and copy if necessary
+        _dealias!(_vertexf)
+        _dealias!(_edgef)
 
         verbose &&
             println("Create dynamic network with $(nv(g)) vertices and $(ne(g)) edges:")
@@ -177,6 +179,54 @@ function Network(vertexfs, edgefs; kwargs...)
     efs_ordered = [edict[k] for k in edges(g)]
 
     Network(g, vfs_ordered, efs_ordered; check_graphelement=false, set_graphelement=false, kwargs...)
+end
+
+"""
+    _dealisas!(cfs::Vector{<:ComponentFunction})
+
+Checks if any component functions reference the same metadtata/symmetada fields and
+creates copies of them if necessary.
+"""
+function _dealias!(cfs::Vector{<:ComponentFunction})
+    smd_dict = IdDict{Dict{Symbol,Dict{Symbol, Any}},Vector{Int}}()
+    md_dict = IdDict{Dict{Symbol,Any},Vector{Int}}()
+
+    needscopy = false
+    for (i, cf) in pairs(cfs)
+        if haskey(md_dict, metadata(cf))
+            needscopy = true
+            push!(md_dict[metadata(cf)], i)
+        else
+            md_dict[metadata(cf)] = [i]
+        end
+        if haskey(smd_dict, symmetadata(cf))
+            needscopy = true
+            push!(smd_dict[symmetadata(cf)], i)
+        else
+            smd_dict[symmetadata(cf)] = [i]
+        end
+    end
+
+    if !needscopy
+        return cfs
+    end
+
+    copyidxs = Int[]
+    for v in values(smd_dict)
+        length(v) > 1 && append!(copyidxs, v)
+    end
+    for v in values(md_dict)
+        length(v) > 1 && append!(copyidxs, v)
+    end
+    unique!(copyidxs)
+
+    comp = first(cfs) isa VertexFunction ? "Vertices" : "Edges"
+
+    @warn "$comp $copyidxs reference the same metadata and will be copied. This can happen if \
+    the same component reference multiple times. Manually `copy` the component functions to \
+    avoid this warning."
+
+    cfs[copyidxs] = copy.(cfs[copyidxs])
 end
 
 # resolve the graphelement ge (named tuple) to simple edge with potential lookup in vertex name dict dict

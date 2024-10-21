@@ -584,3 +584,21 @@ _valid_signature(::Type{<:StaticEdge}, f) = _takes_n_vectors(f, 4) #(u, src, dst
 _valid_signature(::Type{<:ODEEdge}, f) = _takes_n_vectors(f, 5) #(du, u, src, dst, p, t)
 
 _takes_n_vectors(f, n) = hasmethod(f, (Tuple(Vector{Float64} for i in 1:n)..., Float64))
+
+"""
+    copy(c::NetworkDynamics.ComponentFunction)
+
+Shallow copy of the component function. Creates a deepcopy of `metadata` and `symmetadata`
+but references the same objects everywhere else.
+"""
+function Base.copy(c::ComponentFunction)
+    T = typeof(c)
+    args = map(fieldnames(T)) do fn
+        if fn ∈ (:metadata, :symmetadata)
+            deepcopy(getproperty(c, fn))
+        else
+            getproperty(c, fn)
+        end
+    end
+    return T(args...)
+end
