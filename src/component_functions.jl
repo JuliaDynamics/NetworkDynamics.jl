@@ -190,6 +190,7 @@ ODEVertex(; kwargs...) = _construct_comp(ODEVertex, kwargs)
 ODEVertex(f; kwargs...) = ODEVertex(;f, kwargs...)
 ODEVertex(f, dim; kwargs...) = ODEVertex(;f, _dimsym(dim)..., kwargs...)
 ODEVertex(f, dim, pdim; kwargs...) = ODEVertex(;f, _dimsym(dim, pdim)..., kwargs...)
+ODEVertex(v::ODEVertex; kwargs...) = _reconstruct_comp(ODEVertex, v, kwargs)
 
 struct StaticVertex{F,OF} <: VertexFunction
     @CommonFields
@@ -198,6 +199,7 @@ StaticVertex(; kwargs...) = _construct_comp(StaticVertex, kwargs)
 StaticVertex(f; kwargs...) = StaticVertex(;f, kwargs...)
 StaticVertex(f, dim; kwargs...) = StaticVertex(;f, _dimsym(dim)..., kwargs...)
 StaticVertex(f, dim, pdim; kwargs...) = StaticVertex(;f, _dimsym(dim, pdim)..., kwargs...)
+StaticVertex(v::StaticVertex; kwargs...) = _reconstruct_comp(StaticVertex, v, kwargs)
 function ODEVertex(sv::StaticVertex)
     d = Dict{Symbol,Any}()
     for prop in propertynames(sv)
@@ -224,6 +226,7 @@ StaticEdge(; kwargs...) = _construct_comp(StaticEdge, kwargs)
 StaticEdge(f; kwargs...) = StaticEdge(;f, kwargs...)
 StaticEdge(f, dim, coupling; kwargs...) = StaticEdge(;f, _dimsym(dim)..., coupling, kwargs...)
 StaticEdge(f, dim, pdim, coupling; kwargs...) = StaticEdge(;f, _dimsym(dim, pdim)..., coupling, kwargs...)
+StaticEdge(e::StaticEdge; kwargs...) = _reconstruct_comp(StaticEdge, e, kwargs)
 
 struct ODEEdge{C,F,OF,MM} <: EdgeFunction{C}
     @CommonFields
@@ -234,6 +237,7 @@ ODEEdge(; kwargs...) = _construct_comp(ODEEdge, kwargs)
 ODEEdge(f; kwargs...) = ODEEdge(;f, kwargs...)
 ODEEdge(f, dim, coupling; kwargs...) = ODEEdge(;f, _dimsym(dim)..., coupling, kwargs...)
 ODEEdge(f, dim, pdim, coupling; kwargs...) = ODEEdge(;f, _dimsym(dim, pdim)..., coupling, kwargs...)
+ODEEdge(e::ODEEdge; kwargs...) = _reconstruct_comp(ODEEdge, e, kwargs)
 
 statetype(::T) where {T<:ComponentFunction} = statetype(T)
 statetype(::Type{<:ODEVertex}) = Dynamic()
@@ -311,6 +315,18 @@ function _construct_comp(::Type{T}, kwargs) where {T}
     c = T(args...)
     check && chk_component(c)
     return c
+end
+
+function _reconstruct_comp(::Type{T}, cf::ComponentFunction, kwargs) where {T}
+    fields = fieldnames(T)
+    dict = Dict{Symbol, Any}()
+    for f in fields
+        dict[f] = getproperty(cf, f)
+    end
+    for (k, v) in kwargs
+        dict[k] = v
+    end
+    _construct_comp(T, dict)
 end
 
 """
