@@ -64,6 +64,7 @@ for md in [:default, :guess, :init, :bounds]
         $fname_set(c::ComponentFunction, sym::Symbol, val) = set_metadata!(c, sym, $(QuoteNode(md)), val)
     end
 end
+set_graphelement!(c::EdgeFunction, p::Pair) = set_graphelement!(c, (;src=p.first, dst=p.second))
 
 
 #### default or init
