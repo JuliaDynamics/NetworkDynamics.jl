@@ -385,11 +385,31 @@ function _check_massmatrix(c)
 end
 
 """
-    Network(nw::Network; kwargs...)
+    Network(nw::Network; g, vertexf, edgef, kwargs...)
 
 Rebuild the Network with same graph and vertex/edge functions but possibly different kwargs.
-# FIXME : needs to take all Network kw arguments into acount!
 """
-function Network(nw::Network; kwargs...)
-    Network(nw.im.g, nw.im.vertexf, nw.im.edgef; kwargs...)
+function Network(nw::Network;
+                 g = nw.im.g,
+                 vertexf = copy.(nw.im.vertexf),
+                 edgef = copy.(nw.im.edgef),
+                 kwargs...)
+
+    _kwargs = Dict(:execution => executionstyle(nw),
+                   :edepth => :auto,
+                   :vdepth => :auto,
+                   :aggregator => get_aggr_constructor(nw.layer.aggregator),
+                   :check_graphelement => true,
+                   :set_graphelement => false,
+                   :verbose => false)
+    for (k, v) in kwargs
+        _kwargs[k] = v
+    end
+
+    # check, that we actually provide all of the arguments
+    # mainly so we don't forget to add it here if we introduce new kw arg to main constructor
+    m = only(methods(Network, [typeof(g), typeof(vertexf), typeof(edgef)]))
+    @assert keys(_kwargs) == Set(Base.kwarg_decl(m))
+
+    Network(g, vertexf, edgef; _kwargs...)
 end

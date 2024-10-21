@@ -284,3 +284,23 @@ end
     @test nw.im.vertexf[1].symmetadata == nw.im.vertexf[2].symmetadata
     @test nw.im.vertexf[1].symmetadata !== nw.im.vertexf[2].symmetadata
 end
+
+@testset "test network-remake constructor" begin
+    v1 = ODEVertex(x->x^1, 2, 0; metadata=Dict(:graphelement=>1), name=:v1)
+    v2 = ODEVertex(x->x^2, 2, 0; name=:v2, vidx=2)
+    v3 = ODEVertex(x->x^3, 2, 0; name=:v3, vidx=3)
+
+    e1 = StaticEdge(nothing, 0, Symmetric(); graphelement=(;src=1,dst=2))
+    e2 = StaticEdge(nothing, 0, Symmetric(); src=:v1, dst=:v3)
+    e3 = StaticEdge(nothing, 0, Symmetric(); src=:v2, dst=:v3)
+
+    g = complete_graph(3)
+    nw = Network(g, [v1,v2,v3],[e1,e2,e3])
+    nw2 = Network(nw)
+    nw2 = Network(nw; g=path_graph(3), edgef=[e1, e3])
+
+    for aggT in subtypes(NetworkDynamics.Aggregator)
+        @show aggT
+        @test hasmethod(NetworkDynamics.get_aggr_constructor, (aggT,))
+    end
+end
