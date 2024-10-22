@@ -429,13 +429,12 @@ nw = Network(g, [n1, n2, n3], [e1, e2])
 
 # test named vertices and edges
 @testset "test sym indices for named edges/vertices" begin
-    using ModelingToolkit: @named
-    @named v1 = Lib.kuramoto_second()
-    @named v2 = Lib.kuramoto_second()
-    @named v3 = Lib.kuramoto_second()
-    @named e1 = Lib.kuramoto_edge()
-    @named e2 = Lib.kuramoto_edge()
-    @named e3 = Lib.kuramoto_edge()
+    v1 = Lib.kuramoto_second(name=:v1)
+    v2 = Lib.kuramoto_second(name=:v2)
+    v3 = Lib.kuramoto_second(name=:v3)
+    e1 = Lib.kuramoto_edge(name=:e1)
+    e2 = Lib.kuramoto_edge(name=:e2)
+    e3 = Lib.kuramoto_edge(name=:e3)
     g = complete_graph(3)
     nw = Network(g, [v1, v2, v3], [e1, e2, e3])
     s = NWState(nw, collect(1:dim(nw)), collect(dim(nw)+1:dim(nw)+pdim(nw)))
