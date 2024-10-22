@@ -159,7 +159,7 @@ depends on temperature and pressure. While the temperature is not considered in 
 at all, I am not sure whether we sould include the pressure dependency.
 Here, i just calculated it using the "standard" pressure and "standard" temperature.
 =#
-Z̃ = 1 - 3.52 * p̃/pc * exp(-2.26*(T̃/Tc)) + 0.274 * (p̃/pc)^2 * exp(-1.878*(T̃/Tc)) # (5)
+Z̃ = 1 - 3.52 * p₁_set/pc * exp(-2.26*(T̃/Tc)) + 0.274 * (p₁_set/pc)^2 * exp(-1.878*(T̃/Tc)) # (5)
 nothing # hide
 
 #=
