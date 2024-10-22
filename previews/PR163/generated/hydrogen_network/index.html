@@ -90,7 +90,7 @@ p₁_set = 50u&quot;bar&quot;</code></pre><p>Some neede parameters for the equat
 sinθ₁₂ = ustrip(Δh₁ / L₁₂)
 sinθ₁₃ = ustrip(Δh₁ / L₁₃)
 sinθ₂₃ = 0.0</code></pre><p>Other parameters are more complicated. The compressibility factor Z according to (5) depends on temperature and pressure. While the temperature is not considered in the model at all, I am not sure whether we sould include the pressure dependency. Here, i just calculated it using the &quot;standard&quot; pressure and &quot;standard&quot; temperature.</p><pre><code class="language-julia hljs">Z̃ = 1 - 3.52 * p₁_set/pc * exp(-2.26*(T̃/Tc)) + 0.274 * (p₁_set/pc)^2 * exp(-1.878*(T̃/Tc)) # (5)</code></pre><p>Similarily, we can use (4) to derive the speed of sound. This again is temperature and compressibility dependent. Here I use the &quot;standard&quot; compressibility again to calculate a constant &quot;standard&quot; sound speed. Equivalently, we use the &quot;standard&quot; compressibility to calculate the standard density.</p><pre><code class="language-julia hljs">c = sqrt(T̃ * Rs * Z̃) # (4) but in theory this is also time dependend
-ρ̃ = p₁_set / (Rs * T̃ * Z̃) # (4)</code></pre><p>The equivalent &quot;pressure capacity&quot; at the nodes is calculated as a sum of the connected pipe parameters according ot (28).</p><pre><code class="language-julia hljs">C₂ = L₁₂*A/(2*ρ̃*c^2) + L₂₃*A/(2*ρ̃*c^2) # (28)
+ρ̃ = p̃ / (Rs * T̃ * Z̃) # (4)</code></pre><p>The equivalent &quot;pressure capacity&quot; at the nodes is calculated as a sum of the connected pipe parameters according ot (28).</p><pre><code class="language-julia hljs">C₂ = L₁₂*A/(2*ρ̃*c^2) + L₂₃*A/(2*ρ̃*c^2) # (28)
 C₃ = L₁₃*A/(2*ρ̃*c^2) + L₂₃*A/(2*ρ̃*c^2) # (28)</code></pre><h2 id="Load-Profile"><a class="docs-heading-anchor" href="#Load-Profile">Load Profile</a><a id="Load-Profile-1"></a><a class="docs-heading-anchor-permalink" href="#Load-Profile" title="Permalink"></a></h2><p>The paper specifies the load profile at two nodes. We use the package <code>LinearInterpolations</code> to get a callable object which represents this picewise linear interpolation.</p><p>However, this function is not Symbolics.jl compatible, so we need to stop Symbolics.jl/ModelingToolkit.jl from tracing it. To do so, we use <code>@register_symbolic</code> to declare it as a symbolic function which is treated as a blackbox.</p><p>Additionally, we need to tell ModelingToolkit about the units of this object. This is just used for the static unit check during construction of the model. Later one, when we generate the Julia code from the symbolic reepresentation all units will be stripped.</p><div class="admonition is-info"><header class="admonition-header">Discontinuities in RHS</header><div class="admonition-body"><p>The picewise linear interpolated function creates discontinuities in the RHS of the system. However since we know the times exactly, we can handle this by simply giving a list of explicit tstops to the solve command, to make sure those are hit exactly.</p></div></div><pre><code class="language-julia hljs">load2(t) = -Interpolate(SA[0, 4, 12, 20, 24]*3600, SA[20, 30, 10, 30, 20], extrapolate=LinearInterpolations.Constant(20))(t)
 load3(t) = -Interpolate(SA[0, 4, 12, 20, 24]*3600, SA[40, 50, 30, 50, 40], extrapolate=LinearInterpolations.Constant(40))(t)
 @register_symbolic load2(t)
@@ -102,11 +102,11 @@ v1 = ODEVertex(v1_mtk, [:q̃_nw], [:p]; name=:v1, vidx=1)</code></pre><pre class
  └─   input: [q̃_nw]</code></pre><pre><code class="language-julia hljs">@named v2_mtk = VariablePressureNode(C=C₂, load_profile=load2)
 v2 = ODEVertex(v2_mtk, [:q̃_nw], [:p]; name=:v2, vidx=2)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">ODEVertex :v2 with depth <span class="sgr94">1</span> @ Vertex 2
  ├─ 1 state: [<span class="sgr94">p</span>=5000000]
- ├─ 1 param: [C=0.0051]
+ ├─ 1 param: [C=0.25]
  └─   input: [q̃_nw]</code></pre><pre><code class="language-julia hljs">@named v3_mtk = VariablePressureNode(C=C₃, load_profile=load3)
 v3 = ODEVertex(v3_mtk, [:q̃_nw], [:p]; name=:v3, vidx=3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">ODEVertex :v3 with depth <span class="sgr94">1</span> @ Vertex 3
  ├─ 1 state: [<span class="sgr94">p</span>=5000000]
- ├─ 1 param: [C=0.0054]
+ ├─ 1 param: [C=0.27]
  └─   input: [q̃_nw]</code></pre><p>For <code>ODEEdge</code> we have two inputs: the pressure on both source and destination end. There is a single output state: the volumetric flow. However we also need to tell NetworkDynamics about the coupling type. In this case we use <code>AntiSymmetric</code>, which meas that the source end will recieve the same flow, just inverted sign.</p><pre><code class="language-julia hljs">@named e12_mtk = Pipe(; L=L₁₂, sinθ=sinθ₁₂, A, ρ̃, D, g, c, γ, η, r)
 @named e13_mtk = Pipe(; L=L₁₃, sinθ=sinθ₁₃, A, ρ̃, D, g, c, γ, η, r)
 @named e23_mtk = Pipe(; L=L₂₃, sinθ=sinθ₂₃, A, ρ̃, D, g, c, γ, η, r)
@@ -115,7 +115,7 @@ e12 = ODEEdge(e12_mtk, [:p_src], [:p_dst], [:q̃], AntiSymmetric(); name=:e12, s
 e13 = ODEEdge(e13_mtk, [:p_src], [:p_dst], [:q̃], AntiSymmetric(); name=:e13, src=1, dst=3)
 e23 = ODEEdge(e23_mtk, [:p_src], [:p_dst], [:q̃], AntiSymmetric(); name=:e23, src=2, dst=3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">ODEEdge :e23 with <span class="sgr94">AntiSymmetric</span> coupling of depth <span class="sgr93">1</span> @ Edge 2 =&gt; 3
  ├─  1 state:  [<span class="sgr94">q̃</span>=1.0]
- ├─ 10 params: [ρ̃=40, L=100000, γ=0.98, D=0.60, η=0.000010, sinθ=0, A=0.28, r=0.000012, g=10, c=350]
+ ├─ 10 params: [ρ̃=0.82, L=100000, γ=0.98, D=0.60, η=0.000010, sinθ=0, A=0.28, r=0.000012, g=10, c=350]
  └─ srcinput:  [p_src]
     dstinput:  [p_dst]</code></pre><p>To build the network object we just need to pass the vertices and edges to the constructor.</p><p>Note that we&#39;ve used the <code>vidx</code> and <code>src</code>/<code>dst</code> keywords in the constructors to define for each component to which &quot;part&quot; of the network it belongs.</p><p>This means, the constructor can automaticially construct a graph based on those informations and we don&#39;t need to pass it explicitly.</p><pre><code class="language-julia hljs">nw = Network([v1, v2, v3], [e12, e13, e23])</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Dynamic network with:
  ├─ 3 vertices (3 unique types)
@@ -129,7 +129,7 @@ Edge-Aggregation using SequentialAggregator(+)
   ├─ EIndex(1, :q̃)  =&gt; 1.0
   ├─ EIndex(2, :q̃)  =&gt; 1.0
   └─ EIndex(3, :q̃)  =&gt; 1.0
- p = Parameter([0.00508938, 0.00537212, 40.4484, 80000.0, 0.98, 0.6, 1.0e-5, 0.0, 0.282743, 1.2e-5  …  40.4484, 100000.0, 0.98, 0.6, 1.0e-5, 0.0, 0.282743, 1.2e-5, 9.81, 351.588])
+ p = Parameter([0.251141, 0.265094, 0.819687, 80000.0, 0.98, 0.6, 1.0e-5, 0.0, 0.282743, 1.2e-5  …  0.819687, 100000.0, 0.98, 0.6, 1.0e-5, 0.0, 0.282743, 1.2e-5, 9.81, 351.588])
  t = nothing</code></pre><p>This is not a steadystate of the system however. To find a true steadystate we want to ensure that the lhs of the system is zero. We can solve for a steady state numerically by defining a Nonlinear Rootfind problem.</p><p>To do so, we need to wrap the Network object in a closure. This closure is important to overwrite all changes of the solver to <code>u[1]</code>, to ensure that it is not altered while solving.</p><pre><code class="language-julia hljs">nwwrap = (du, u, p) -&gt; begin
     u[1] = uflat(uguess)[1]
     nw(du, u, p, 0)
@@ -139,21 +139,20 @@ initprob = NonlinearProblem(nwwrap, uflat(uguess), pflat(uguess))
 initsol = solve(initprob)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">retcode: Success
 u: 6-element Vector{Float64}:
   5.0e6
- -4.740391630309532e6
- -4.944477517583606e6
- 19.32915368280751
- 40.670846317192485
- -0.6708463171924879</code></pre><p>The solver complains a a bit about rank deficient matrices but is able to find a solution.</p><p>We can create a new <code>NWState</code> object by wrapping the solution from the nonlinear problem and the original prameters in a new <code>NWState</code> object.</p><pre><code class="language-julia hljs">u0 = NWState(nw, initsol.u, uguess.p)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">State{Vector{Float64}} of Dynamic network (3 vertices, 3 edges)
+  4.868953867722718e6
+  4.848775347588486e6
+ 29.817286530599834
+ 30.182713469400166
+  9.817286530599835</code></pre><p>The solver complains a a bit about rank deficient matrices but is able to find a solution.</p><p>We can create a new <code>NWState</code> object by wrapping the solution from the nonlinear problem and the original prameters in a new <code>NWState</code> object.</p><pre><code class="language-julia hljs">u0 = NWState(nw, initsol.u, uguess.p)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">State{Vector{Float64}} of Dynamic network (3 vertices, 3 edges)
   ├─ VIndex(1, :p)  =&gt; 5.0e6
-  ├─ VIndex(2, :p)  =&gt; -4.740391630309532e6
-  ├─ VIndex(3, :p)  =&gt; -4.944477517583606e6
-  ├─ EIndex(1, :q̃)  =&gt; 19.32915368280751
-  ├─ EIndex(2, :q̃)  =&gt; 40.670846317192485
-  └─ EIndex(3, :q̃)  =&gt; -0.6708463171924879
- p = Parameter([0.00508938, 0.00537212, 40.4484, 80000.0, 0.98, 0.6, 1.0e-5, 0.0, 0.282743, 1.2e-5  …  40.4484, 100000.0, 0.98, 0.6, 1.0e-5, 0.0, 0.282743, 1.2e-5, 9.81, 351.588])
+  ├─ VIndex(2, :p)  =&gt; 4.868953867722718e6
+  ├─ VIndex(3, :p)  =&gt; 4.848775347588486e6
+  ├─ EIndex(1, :q̃)  =&gt; 29.817286530599834
+  ├─ EIndex(2, :q̃)  =&gt; 30.182713469400166
+  └─ EIndex(3, :q̃)  =&gt; 9.817286530599835
+ p = Parameter([0.251141, 0.265094, 0.819687, 80000.0, 0.98, 0.6, 1.0e-5, 0.0, 0.282743, 1.2e-5  …  0.819687, 100000.0, 0.98, 0.6, 1.0e-5, 0.0, 0.282743, 1.2e-5, 9.81, 351.588])
  t = nothing</code></pre><h2 id="Solving-the-ODE"><a class="docs-heading-anchor" href="#Solving-the-ODE">Solving the ODE</a><a id="Solving-the-ODE-1"></a><a class="docs-heading-anchor-permalink" href="#Solving-the-ODE" title="Permalink"></a></h2><p>Using this as our initial state we can create the actual <code>ODEProblem</code>. Since the ode allways operates on flat state and aprameter arrays we use <code>uflat</code> and <code>pflat</code> to extract them.</p><pre><code class="language-julia hljs">prob = ODEProblem(nw, uflat(u0), (0.0,24*3600), copy(pflat(u0)))
-sol = solve(prob, Tsit5(), tstops=[0,4,12,20,24]*3600)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr33"><span class="sgr1">┌ Warning: </span></span>At t=254.60383321867008, dt was forced below floating point epsilon 2.842170943040401e-14, and step error estimate = 75.1570664050708. Aborting. There is either an error in your model specification or the true solution is unstable (or the true solution can not be represented in the precision of Float64).
-<span class="sgr33"><span class="sgr1">└ </span></span><span class="sgr90">@ SciMLBase ~/.julia/packages/SciMLBase/tey0W/src/integrator_interface.jl:620</span></code></pre><h2 id="Inspect-the-Solution"><a class="docs-heading-anchor" href="#Inspect-the-Solution">Inspect the Solution</a><a id="Inspect-the-Solution-1"></a><a class="docs-heading-anchor-permalink" href="#Inspect-the-Solution" title="Permalink"></a></h2><p>Inspecting the solution is all which is left to do.</p><pre><code class="language-julia hljs">xticks = ((0:4:24)*3600, string.(0:4:24)) # its nice to display hours
+sol = solve(prob, Tsit5(), tstops=[0,4,12,20,24]*3600)</code></pre><h2 id="Inspect-the-Solution"><a class="docs-heading-anchor" href="#Inspect-the-Solution">Inspect the Solution</a><a id="Inspect-the-Solution-1"></a><a class="docs-heading-anchor-permalink" href="#Inspect-the-Solution" title="Permalink"></a></h2><p>Inspecting the solution is all which is left to do.</p><pre><code class="language-julia hljs">xticks = ((0:4:24)*3600, string.(0:4:24)) # its nice to display hours
 fig = begin
     _fig = Figure()
     row = 1
@@ -173,7 +172,7 @@ fig = begin
     axislegend(ax)
     row += 1
     _fig
-end</code></pre><img src="426d1bdd.svg" alt="Example block output"/><p>Notably, the &quot;internal&quot; states defined in the symbolic models are not &quot;states&quot; in the sense of the ODE. For example, we captured the load profile in the <code>q̃_inj</code> state of the <code>VariablePressureNode</code>. The only dynamic state of the model however is <code>p</code>. Using the &quot;observables&quot; mechanism from SciML, which is implemented by NetworkDynamics, we can reconstruct those &quot;optimized&quot; states which have been removed symbolicially. Here we plot the reconstructed load profile of nodes 2 and 3. Also, we know that node 1 is infinetly stiff, acting as an infinite source of volumetric flow. We can reconstruct this flow too.</p><pre><code class="language-julia hljs">fig = begin
+end</code></pre><img src="c303cc75.svg" alt="Example block output"/><p>Notably, the &quot;internal&quot; states defined in the symbolic models are not &quot;states&quot; in the sense of the ODE. For example, we captured the load profile in the <code>q̃_inj</code> state of the <code>VariablePressureNode</code>. The only dynamic state of the model however is <code>p</code>. Using the &quot;observables&quot; mechanism from SciML, which is implemented by NetworkDynamics, we can reconstruct those &quot;optimized&quot; states which have been removed symbolicially. Here we plot the reconstructed load profile of nodes 2 and 3. Also, we know that node 1 is infinetly stiff, acting as an infinite source of volumetric flow. We can reconstruct this flow too.</p><pre><code class="language-julia hljs">fig = begin
     _fig = Figure()
     row = 1
     ax = Axis(_fig[row, 1]; xlabel=&quot;time [h]&quot;, ylabel=&quot;flow [m³/s]&quot;, title=&quot;Flow at nodes&quot;, xticks)
@@ -184,7 +183,7 @@ end</code></pre><img src="426d1bdd.svg" alt="Example block output"/><p>Notably, 
     end
     axislegend(ax, position=:rc)
     _fig
-end</code></pre><img src="0dfb76b8.svg" alt="Example block output"/><p>Lastly we want to observe two internal states of the pipes: the Reynolds number and the mean pressure. We see, that we&#39;re purely in the turbulent flow regime.</p><pre><code class="language-julia hljs">fig = begin
+end</code></pre><img src="80bd6f4d.svg" alt="Example block output"/><p>Lastly we want to observe two internal states of the pipes: the Reynolds number and the mean pressure. We see, that we&#39;re purely in the turbulent flow regime.</p><pre><code class="language-julia hljs">fig = begin
     _fig = Figure()
     row = 1
     ax = Axis(_fig[row, 1]; xlabel=&quot;time [h]&quot;, ylabel=&quot;Reynolds number&quot;, title=&quot;Reynolds number&quot;, xticks)
@@ -203,4 +202,4 @@ end</code></pre><img src="0dfb76b8.svg" alt="Example block output"/><p>Lastly we
     end
     axislegend(ax, position=:rb)
     _fig
-end</code></pre><img src="b9b31dfb.svg" alt="Example block output"/><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../cascading_failure/">« Cascading failure</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.7.0 on <span class="colophon-date" title="Tuesday 22 October 2024 07:09">Tuesday 22 October 2024</span>. Using Julia version 1.11.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+end</code></pre><img src="5c73573d.svg" alt="Example block output"/><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../cascading_failure/">« Cascading failure</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.7.0 on <span class="colophon-date" title="Tuesday 22 October 2024 08:32">Tuesday 22 October 2024</span>. Using Julia version 1.11.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

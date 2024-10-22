@@ -160,7 +160,7 @@ nothing # hide
 # Equivalently, we use the "standard" compressibility to calculate the standard density.
 
 c = sqrt(T̃ * Rs * Z̃) # (4) but in theory this is also time dependend
-ρ̃ = p₁_set / (Rs * T̃ * Z̃) # (4)
+ρ̃ = p̃ / (Rs * T̃ * Z̃) # (4)
 nothing #hide
 
 # The equivalent "pressure capacity" at the nodes is calculated as a sum of the connected
