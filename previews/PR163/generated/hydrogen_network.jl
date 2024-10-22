@@ -151,7 +151,7 @@ nothing # hide
 # at all, I am not sure whether we sould include the pressure dependency.
 # Here, i just calculated it using the "standard" pressure and "standard" temperature.
 
-Z̃ = 1 - 3.52 * p̃/pc * exp(-2.26*(T̃/Tc)) + 0.274 * (p̃/pc)^2 * exp(-1.878*(T̃/Tc)) # (5)
+Z̃ = 1 - 3.52 * p₁_set/pc * exp(-2.26*(T̃/Tc)) + 0.274 * (p₁_set/pc)^2 * exp(-1.878*(T̃/Tc)) # (5)
 nothing # hide
 
 # Similarily, we can use (4) to derive the speed of sound. This again is
@@ -160,7 +160,7 @@ nothing # hide
 # Equivalently, we use the "standard" compressibility to calculate the standard density.
 
 c = sqrt(T̃ * Rs * Z̃) # (4) but in theory this is also time dependend
-ρ̃ = p̃ / (Rs * T̃ * Z̃) # (4)
+ρ̃ = p₁_set / (Rs * T̃ * Z̃) # (4)
 nothing #hide
 
 # The equivalent "pressure capacity" at the nodes is calculated as a sum of the connected
