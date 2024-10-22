@@ -607,14 +607,19 @@ _takes_n_vectors(f, n) = hasmethod(f, (Tuple(Vector{Float64} for i in 1:n)..., F
 Shallow copy of the component function. Creates a deepcopy of `metadata` and `symmetadata`
 but references the same objects everywhere else.
 """
-function Base.copy(c::ComponentFunction)
-    T = typeof(c)
-    args = map(fieldnames(T)) do fn
-        if fn ∈ (:metadata, :symmetadata)
-            deepcopy(getproperty(c, fn))
-        else
-            getproperty(c, fn)
-        end
+@generated function Base.copy(c::ComponentFunction)
+    fields = fieldnames(c)
+    # fields to copy
+    cfields = (:metadata, :symmetadata)
+    # normal fields
+    nfields = setdiff(fields, cfields)
+    assign = Expr(:block,
+        (:($(field) = c.$field) for field in nfields)...,
+        (:($(field) = deepcopy(c.$field)) for field in cfields)...)
+    construct = Expr(:call, c, [:($field) for field in fields]...)
+
+    quote
+       $assign
+       $construct
     end
-    return T(args...)
 end

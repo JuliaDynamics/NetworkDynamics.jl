@@ -286,6 +286,12 @@ end
     @test nw.im.vertexf[1].metadata !== nw.im.vertexf[2].metadata
     @test nw.im.vertexf[1].symmetadata == nw.im.vertexf[2].symmetadata
     @test nw.im.vertexf[1].symmetadata !== nw.im.vertexf[2].symmetadata
+
+    v = ODEVertex(x->x^1, 2, 0; metadata=Dict(:graphelement=>1), symmetadata=Dict(:x=>Dict(:default=>1)))
+    v2 = copy(v)
+    @test get_default(v, :x) == get_default(v2, :x)
+    set_default!(v, :x, 99)
+    @test get_default(v2, :x) == 1
 end
 
 @testset "test network-remake constructor" begin
