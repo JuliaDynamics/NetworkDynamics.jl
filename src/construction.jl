@@ -6,7 +6,6 @@ function Network(g::AbstractGraph,
                  vdepth=:auto,
                  aggregator=execution isa SequentialExecution ? SequentialAggregator(+) : PolyesterAggregator(+),
                  check_graphelement=true,
-                 set_graphelement=false,
                  dealias=false,
                  verbose=false)
     reset_timer!()
@@ -62,11 +61,9 @@ function Network(g::AbstractGraph,
                 if get_graphelement(vf) != i
                     @warn "Vertex function $(vf.name) is placed at node index $i bus has \
                     `graphelement` $(get_graphelement(vf)) stored in metadata. \
-                    The wrong data will be " * (set_graphelement ? "overwritten!" : "ignored!") *
-                    " Use `check_graphelement` and `set_graphelement` keywords to alter this behavior."
+                    The wrong data will be ignored! Use `check_graphelement=false` tu supress this warning."
                 end
             end
-            set_graphelement && set_graphelement!(vf, i)
         end
         for (iteredge, ef) in zip(im.edgevec, _edgef)
             if check_graphelement && has_graphelement(ef)
@@ -75,11 +72,9 @@ function Network(g::AbstractGraph,
                 dst = get(im.unique_vnames, ge.dst, ge.dst)
                 if iteredge.src != src || iteredge.dst != dst
                     @warn "Edge function $(ef.name) at $(iteredge.src) => $(iteredge.dst) has wrong `:graphelement` $src => $dst). \
-                    The wrong data will be " * (set_graphelement ? "overwritten!" : "ignored!") *
-                    " Use `check_graphelement` and `set_graphelement` keywords to alter this behavior."
+                    The wrong data will be ignored! Use `check_graphelement=false` tu supress this warning."
                 end
             end
-            set_graphelement && set_graphelement!(ef, (;src=iteredge.src, dst=iteredge.dst))
         end
 
         # batch identical edge and vertex functions
@@ -191,7 +186,7 @@ function Network(vertexfs, edgefs; kwargs...)
     vfs_ordered = [vdict[k] for k in vertices(g)]
     efs_ordered = [edict[k] for k in edges(g)]
 
-    Network(g, vfs_ordered, efs_ordered; check_graphelement=false, set_graphelement=false, kwargs...)
+    Network(g, vfs_ordered, efs_ordered; check_graphelement=false, kwargs...)
 end
 
 """
@@ -385,7 +380,6 @@ function Network(nw::Network;
                    :vdepth => :auto,
                    :aggregator => get_aggr_constructor(nw.layer.aggregator),
                    :check_graphelement => true,
-                   :set_graphelement => false,
                    :verbose => false)
     for (k, v) in kwargs
         _kwargs[k] = v
