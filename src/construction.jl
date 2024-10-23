@@ -7,20 +7,28 @@ function Network(g::AbstractGraph,
                  aggregator=execution isa SequentialExecution ? SequentialAggregator(+) : PolyesterAggregator(+),
                  check_graphelement=true,
                  set_graphelement=false,
+                 dealias=false,
                  verbose=false)
     reset_timer!()
     @timeit_debug "Construct Network" begin
         # collect all vertex/edgf to vector
-        _vertexf = vertexf isa Vector ? vertexf : [copy(vertexf) for _ in vertices(g)]
-        _edgef = edgef isa Vector ? edgef : [copy(edgef) for _ in edges(g)]
+        maybecopy = dealias ? copy : identity
+        _vertexf = vertexf isa Vector ? vertexf : [maybecopy(vertexf) for _ in vertices(g)]
+        _edgef = edgef isa Vector ? edgef : [maybecopy(edgef) for _ in edges(g)]
+
         @argcheck _vertexf isa Vector{<:VertexFunction} "Expected VertexFuncions, got $(eltype(_vertexf))"
         @argcheck _edgef isa Vector{<:EdgeFunction} "Expected EdgeFuncions, got $(eltype(_vertexf))"
         @argcheck length(_vertexf) == nv(g)
         @argcheck length(_edgef) == ne(g)
 
-        # check if components alias metadata and copy if necessary
-        _dealias!(_vertexf)
-        _dealias!(_edgef)
+        # check if components alias eachother copy if necessary
+        # allready dealiase if provided as single functions
+        if dealias && vertexf isa Vector
+            dealias!(_vertexf)
+        end
+        if dealias && edgef isa Vector
+            dealias!(_edgef)
+        end
 
         verbose &&
             println("Create dynamic network with $(nv(g)) vertices and $(ne(g)) edges:")
@@ -187,53 +195,41 @@ function Network(vertexfs, edgefs; kwargs...)
 end
 
 """
-    _dealisas!(cfs::Vector{<:ComponentFunction})
+    dealias!(cfs::Vector{<:ComponentFunction})
 
 Checks if any component functions reference the same metadtata/symmetada fields and
 creates copies of them if necessary.
 """
-function _dealias!(cfs::Vector{<:ComponentFunction})
-    smd_dict = IdDict{Dict{Symbol,Dict{Symbol, Any}},Vector{Int}}()
-    md_dict = IdDict{Dict{Symbol,Any},Vector{Int}}()
+function dealias!(cfs::Vector{<:ComponentFunction}; warn=false)
+    ag = aliasgroups(cfs)
 
-    needscopy = false
-    for (i, cf) in pairs(cfs)
-        if haskey(md_dict, metadata(cf))
-            needscopy = true
-            push!(md_dict[metadata(cf)], i)
-        else
-            md_dict[metadata(cf)] = [i]
-        end
-        if haskey(smd_dict, symmetadata(cf))
-            needscopy = true
-            push!(smd_dict[symmetadata(cf)], i)
-        else
-            smd_dict[symmetadata(cf)] = [i]
-        end
-    end
+    isempty(ag) && return cfs # nothign to do
 
-    if !needscopy
-        return cfs
-    end
-
-    copyidxs = Int[]
-    for v in values(smd_dict)
-        length(v) > 1 && append!(copyidxs, v)
-    end
-    for v in values(md_dict)
-        length(v) > 1 && append!(copyidxs, v)
-    end
-    unique!(copyidxs)
-
-    comp = first(cfs) isa VertexFunction ? "Vertices" : "Edges"
-
-    @warn "$comp $copyidxs reference the same metadata and will be copied. This can happen if \
-    the same component reference multiple times. Manually `copy` the component functions to \
-    avoid this warning."
+    copyidxs = reduce(vcat, values(ag))
 
     cfs[copyidxs] = copy.(cfs[copyidxs])
 end
 
+
+"""
+    aliasgroups(cfs::Vector{<:ComponentFunction})
+
+Returns a dict `cf => idxs` which contains all the component functions
+which appear multiple times with all their indices.
+"""
+function aliasgroups(cfs::Vector{T}) where {T<:ComponentFunction}
+    d = IdDict{T, Vector{Int}}()
+
+    for (i, cf) in pairs(cfs)
+        if haskey(d, cf) # c allready present
+            push!(d[cf], i)
+        else
+            d[cf] = [i]
+        end
+    end
+
+    filter!(x -> length(x.second) > 1, d)
+end
 
 function VertexBatch(im::IndexManager, idxs::Vector{Int}; verbose)
     components = @view im.vertexf[idxs]
