@@ -8,12 +8,14 @@ function Network(g::AbstractGraph,
                  check_graphelement=true,
                  dealias=false,
                  verbose=false)
-    reset_timer!()
+    # TimerOutputs.reset_timer!()
     @timeit_debug "Construct Network" begin
         # collect all vertex/edgf to vector
+        all_same_v = vertexf isa VertexFunction
+        all_same_e = edgef isa EdgeFunction
         maybecopy = dealias ? copy : identity
-        _vertexf = vertexf isa Vector ? vertexf : [maybecopy(vertexf) for _ in vertices(g)]
-        _edgef = edgef isa Vector ? edgef : [maybecopy(edgef) for _ in edges(g)]
+        _vertexf = all_same_v ? [maybecopy(vertexf) for _ in vertices(g)] : vertexf
+        _edgef   = all_same_e ? [maybecopy(edgef) for _ in edges(g)] : edgef
 
         @argcheck _vertexf isa Vector{<:VertexFunction} "Expected VertexFuncions, got $(eltype(_vertexf))"
         @argcheck _edgef isa Vector{<:EdgeFunction} "Expected EdgeFuncions, got $(eltype(_vertexf))"
@@ -22,10 +24,10 @@ function Network(g::AbstractGraph,
 
         # check if components alias eachother copy if necessary
         # allready dealiase if provided as single functions
-        if dealias && vertexf isa Vector
+        if dealias && !all_same_v
             dealias!(_vertexf)
         end
-        if dealias && edgef isa Vector
+        if dealias && !all_same_e
             dealias!(_edgef)
         end
 
@@ -52,27 +54,45 @@ function Network(g::AbstractGraph,
         end
 
         # create index manager
-        im = IndexManager(g, dynstates, edepth, vdepth, _vertexf, _edgef; mightalias=!dealias)
+        @timeit_debug "Construct Index manager" begin
+            valias = dealias ? :none : (all_same_v ? :all : :some)
+            ealias = dealias ? :none : (all_same_e ? :all : :some)
+            im = IndexManager(g, dynstates, edepth, vdepth, _vertexf, _edgef; valias, ealias)
+        end
 
 
         # check graph_element metadata and attach if necessary
-        for (i, vf) in pairs(_vertexf)
-            if check_graphelement && has_graphelement(vf)
-                if get_graphelement(vf) != i
-                    @warn "Vertex function $(vf.name) is placed at node index $i bus has \
-                    `graphelement` $(get_graphelement(vf)) stored in metadata. \
-                    The wrong data will be ignored! Use `check_graphelement=false` tu supress this warning."
+        if check_graphelement
+            @timeit_debug "Check graph element" begin
+                if !all_same_v
+                    for (i, vf) in pairs(_vertexf)
+                        if has_graphelement(vf)
+                            if get_graphelement(vf) != i
+                                @warn "Vertex function $(vf.name) is placed at node index $i bus has \
+                                `graphelement` $(get_graphelement(vf)) stored in metadata. \
+                                The wrong data will be ignored! Use `check_graphelement=false` tu supress this warning."
+                            end
+                        end
+                    end
+                elseif has_graphelement(vertexf)
+                    @warn "Provided vertex function has assigned `graphelement` metadata. \
+                    but is used at every vertex. The `graphelement` will be ignored."
                 end
-            end
-        end
-        for (iteredge, ef) in zip(im.edgevec, _edgef)
-            if check_graphelement && has_graphelement(ef)
-                ge = get_graphelement(ef)
-                src = get(im.unique_vnames, ge.src, ge.src)
-                dst = get(im.unique_vnames, ge.dst, ge.dst)
-                if iteredge.src != src || iteredge.dst != dst
-                    @warn "Edge function $(ef.name) at $(iteredge.src) => $(iteredge.dst) has wrong `:graphelement` $src => $dst). \
-                    The wrong data will be ignored! Use `check_graphelement=false` tu supress this warning."
+                if !all_same_e
+                    for (iteredge, ef) in zip(im.edgevec, _edgef)
+                        if has_graphelement(ef)
+                            ge = get_graphelement(ef)
+                            src = get(im.unique_vnames, ge.src, ge.src)
+                            dst = get(im.unique_vnames, ge.dst, ge.dst)
+                            if iteredge.src != src || iteredge.dst != dst
+                                @warn "Edge function $(ef.name) at $(iteredge.src) => $(iteredge.dst) has wrong `:graphelement` $src => $dst). \
+                                The wrong data will be ignored! Use `check_graphelement=false` tu supress this warning."
+                            end
+                        end
+                    end
+                elseif has_graphelement(edgef)
+                    @warn "Provided edge function has assigned `graphelement` metadata. \
+                    but is used for all edges. The `graphelement` will be ignored."
                 end
             end
         end
@@ -140,7 +160,7 @@ function Network(g::AbstractGraph,
         )
 
     end
-    # print_timer()
+    # TimerOutputs.print_timer()
     return nw
 end
 

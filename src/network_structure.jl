@@ -26,9 +26,9 @@ mutable struct IndexManager{G}
     aliased_edgefs::IdDict{EdgeFunction, @NamedTuple{idxs::Vector{Int}, hash::UInt}}
     unique_vnames::Dict{Symbol,Int}
     unique_enames::Dict{Symbol,Int}
-    function IndexManager(g, dyn_states, edepth, vdepth, vertexf, edgef; mightalias)
-        aliased_vertexf_hashes = _aliased_hashes(VertexFunction, vertexf, mightalias)
-        aliased_edgef_hashes = _aliased_hashes(EdgeFunction, edgef, mightalias)
+    function IndexManager(g, dyn_states, edepth, vdepth, vertexf, edgef; valias, ealias)
+        aliased_vertexf_hashes = _aliased_hashes(VertexFunction, vertexf, valias)
+        aliased_edgef_hashes = _aliased_hashes(EdgeFunction, edgef, ealias)
         unique_vnames = unique_mappings(getproperty.(vertexf, :name), 1:nv(g))
         unique_enames = unique_mappings(getproperty.(edgef, :name), 1:ne(g))
         new{typeof(g)}(g, collect(edges(g)),
@@ -43,14 +43,17 @@ mutable struct IndexManager{G}
                        unique_enames)
     end
 end
-function _aliased_hashes(T, cfs, mightalias)
+function _aliased_hashes(T, cfs, aliastype)
     hashdict = IdDict{T, @NamedTuple{idxs::Vector{Int}, hash::UInt}}()
-    if mightalias
+    if aliastype == :some
         ag = aliasgroups(cfs)
         for (c, idxs) in ag
             h = hash(c)
             hashdict[c] = (; idxs=idxs, hash=h)
         end
+    elseif aliastype == :all
+        c = first(cfs)
+        hashdict[c] =(; idxs=collect(eachindex(cfs)), hash=hash(c))
     end
     hashdict
 end

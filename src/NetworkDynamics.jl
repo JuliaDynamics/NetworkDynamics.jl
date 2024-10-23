@@ -1,7 +1,7 @@
 module NetworkDynamics
 using Graphs: Graphs, AbstractGraph, SimpleEdge, edges, vertices, ne, nv,
               SimpleGraph, SimpleDiGraph, add_edge!, has_edge
-using TimerOutputs: @timeit_debug, reset_timer!
+using TimerOutputs: TimerOutputs, @timeit_debug, @timeit
 
 using ArgCheck: @argcheck
 using PreallocationTools: PreallocationTools, DiffCache, get_tmp
