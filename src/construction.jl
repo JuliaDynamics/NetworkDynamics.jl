@@ -156,7 +156,12 @@ function Network(vertexfs, edgefs; kwargs...)
 
     simpleedges = map(edgefs) do e
         ge = get_graphelement(e)
-        _resolve_ge_to_edge(ge, vnamedict)
+        src = get(vnamedict, ge.src, ge.src)
+        dst = get(vnamedict, ge.dst, ge.dst)
+        if src isa Symbol || dst isa Symbol
+            throw(ArgumentError("Edge graphelement $src => $dst continas non-unique or unknown vertex names!"))
+        end
+        SimpleEdge(src, dst)
     end
     allunique(simpleedges) || throw(ArgumentError("Some edge functions have the same `graphelement`!"))
     edict = Dict(simpleedges .=> edgefs)
@@ -229,22 +234,6 @@ function _dealias!(cfs::Vector{<:ComponentFunction})
     cfs[copyidxs] = copy.(cfs[copyidxs])
 end
 
-# resolve the graphelement ge (named tuple) to simple edge with potential lookup in vertex name dict dict
-function _resolve_ge_to_edge(ge, vnamedict)
-    src = if ge.src isa Symbol
-        haskey(vnamedict, ge.src) || throw(ArgumentError("Edge function has unknown or non-unique source vertex name $(ge.src)"))
-        vnamedict[ge.src]
-    else
-        ge.src
-    end
-    dst = if ge.dst isa Symbol
-        haskey(vnamedict, ge.dst) || throw(ArgumentError("Edge function has unknown or non-unique source vertex name $(ge.dst)"))
-        vnamedict[ge.dst]
-    else
-        ge.dst
-    end
-    SimpleEdge(src, dst)
-end
 
 function VertexBatch(im::IndexManager, idxs::Vector{Int}; verbose)
     components = @view im.vertexf[idxs]
