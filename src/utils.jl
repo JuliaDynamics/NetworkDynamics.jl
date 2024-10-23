@@ -47,3 +47,37 @@ function unique_mappings(f, from, to)
     end
     unique
 end
+
+
+"""
+    hash_fields(obj::T, h)
+
+This is @generated helper function which unrolls all fields of a struct `obj` and
+recursively hashes them.
+"""
+@generated function hash_fields(obj::T, h::UInt) where {T}
+    fields = fieldnames(obj)
+    subhashes = Expr(:block, (:(h = hash(obj.$field, h)) for field in fields)...)
+
+    quote
+        h = hash(T, h)
+        $subhashes
+        h
+    end
+end
+
+"""
+    equal_fields(a::T, b::T) where {T}
+
+Thise @generated helper function unrolls all fields of two structs `a` and `b` and
+compares them.
+"""
+@generated function equal_fields(a::T, b::T) where {T}
+    fields = fieldnames(T)
+    subequals = Expr(:block, (:(a.$field == b.$field || return false) for field in fields)...)
+
+    quote
+        $subequals
+        return true
+    end
+end

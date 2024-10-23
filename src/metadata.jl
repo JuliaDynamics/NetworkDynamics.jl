@@ -180,3 +180,44 @@ end
 function get_defaults_or_inits(c::ComponentFunction, syms)
     [has_default_or_init(c, sym) ? get_default_or_init(c, sym) : nothing for sym in syms]
 end
+
+
+####
+#### Metadata Accessors through Network
+####
+function aliased_changed(nw::Network; warn=true)
+    vchanged = _has_changed_hash(nw.im.aliased_vertexfs)
+    echanged = _has_changed_hash(nw.im.aliased_edgefs)
+    changed = vchanged || echanged
+    if changed && warn
+        s = if vchanged && echanged
+            "vertices and edges"
+        elseif vchanged
+            "vertices"
+        else
+            "edges"
+        end
+        @warn """
+        The metadata of at least one of your aliased $s changed! Proceed with caution!
+
+        Some edgef/vertexf provided to to the `Network` constructor alias eachother.
+        Which means, the Network object references the same component function in
+        multiple places. Thus, metadata changes (such as changing of default values or
+        component initialization) will be reflected in multiple components. To prevent
+        this use the `dealias=true` keyword or manualy `copy` edge/vertex functions
+        before creating the network.
+        """
+    end
+    changed
+end
+function _has_changed_hash(aliased_cfs)
+    isempty(aliased_cfs) && return false
+    changed = false
+    for (k, v) in aliased_cfs
+        if hash(k) != v.hash
+            changed = true
+            break
+        end
+    end
+    changed
+end

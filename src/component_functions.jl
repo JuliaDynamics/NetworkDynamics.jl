@@ -623,3 +623,8 @@ but references the same objects everywhere else.
        $construct
     end
 end
+
+Base.hash(cf::ComponentFunction, h::UInt) = hash_fields(cf, h)
+function Base.:(==)(cf1::ComponentFunction, cf2::ComponentFunction)
+    typeof(cf1) == typeof(cf2) && equal_fields(cf1, cf2)
+end

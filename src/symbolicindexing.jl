@@ -537,6 +537,7 @@ end
 #### Default values
 ####
 function SII.default_values(nw::Network)
+    aliased_changed(nw; warn=true)
     defs = Dict{SymbolicIndex{Int,Symbol},Float64}()
     for (ci, cf) in pairs(nw.im.vertexf)
         for s in psym(cf)

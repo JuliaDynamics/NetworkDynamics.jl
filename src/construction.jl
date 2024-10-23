@@ -52,7 +52,7 @@ function Network(g::AbstractGraph,
         end
 
         # create index manager
-        im = IndexManager(g, dynstates, edepth, vdepth, _vertexf, _edgef)
+        im = IndexManager(g, dynstates, edepth, vdepth, _vertexf, _edgef; mightalias=!dealias)
 
 
         # check graph_element metadata and attach if necessary

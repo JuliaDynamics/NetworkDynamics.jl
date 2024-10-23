@@ -271,6 +271,7 @@ end
 end
 
 @testset "test dealias and copy of components" begin
+    using NetworkDynamics: aliasgroups
     v1 = ODEVertex(x->x^1, 2, 0; metadata=Dict(:graphelement=>1), name=:v1)
     v2 = ODEVertex(x->x^2, 2, 0; name=:v2, vidx=2)
     v3 = ODEVertex(x->x^3, 2, 0; name=:v3, vidx=3)
@@ -279,19 +280,58 @@ end
     e2 = StaticEdge(nothing, 0, Symmetric(); src=:v2, dst=:v3)
     e3 = StaticEdge(nothing, 0, Symmetric(); src=:v3, dst=:v1)
 
+    @test isempty(aliasgroups([v1,v2,v3]))
+    @test aliasgroups([v1, v1, v3]) == IdDict(v1 => [1,2])
+    @test aliasgroups([v3, v1, v3]) == IdDict(v3 => [1,3])
+
     g = complete_graph(3)
-    nw = Network(g, [v1,v1,v3],[e1,e2,e3])
+    # with dealiasing / copying
+    nw = Network(g, [v1,v1,v3],[e1,e2,e3]; dealias=true, check_graphelement=false)
     @test nw.im.vertexf[1].f == nw.im.vertexf[2].f
     @test nw.im.vertexf[1].metadata == nw.im.vertexf[2].metadata
     @test nw.im.vertexf[1].metadata !== nw.im.vertexf[2].metadata
     @test nw.im.vertexf[1].symmetadata == nw.im.vertexf[2].symmetadata
     @test nw.im.vertexf[1].symmetadata !== nw.im.vertexf[2].symmetadata
+    s0 = NWState(nw)
+    @test isnan(s0.v[1,1])
+    set_default!(nw.im.vertexf[1], :v₁, 3)
+    s1 = NWState(nw)
+    @test s1.v[1,1] == 3
+
+    # witout dealisasing
+    nw = Network(g, [v1,v1,v3],[e1,e2,e1]; check_graphelement=false)
+    @test nw.im.vertexf[1] === nw.im.vertexf[2]
+    @test nw.im.edgef[1] === nw.im.edgef[3]
+    @test keys(nw.im.aliased_vertexfs) == Set([v1])
+    @test keys(nw.im.aliased_edgefs) == Set([e1])
+    @test only(unique(values(nw.im.aliased_vertexfs))) == (;idxs=[1,2], hash=hash(v1))
+    @test only(unique(values(nw.im.aliased_edgefs))) == (;idxs=[1,3], hash=hash(e1))
+    s0 = NWState(nw)
+    @test isnan(s0.v[1,1])
+    prehash = hash(v1)
+    set_default!(v1, :v₁, 3)
+    posthash = hash(v1)
+    @test prehash !== posthash
+    @test NetworkDynamics.aliased_changed(nw; warn=false)
+    s1 = NWState(nw)
+
+    # test hashes
+    h1 = hash(v1)
+    set_metadata!(v1, :foo, :bar)
+    h2 = hash(v1)
+    @test h1 !== h2
 
     v = ODEVertex(x->x^1, 2, 0; metadata=Dict(:graphelement=>1), symmetadata=Dict(:x=>Dict(:default=>1)))
     v2 = copy(v)
+    @test v !== v2
+    @test v == v2
+    @test isequal(v, v2)
     @test get_default(v, :x) == get_default(v2, :x)
     set_default!(v, :x, 99)
+    @test get_default(v, :x) == 99
     @test get_default(v2, :x) == 1
+    @test v != v2
+    @test v1 != v2
 end
 
 @testset "test network-remake constructor" begin
