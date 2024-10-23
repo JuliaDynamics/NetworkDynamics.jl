@@ -80,4 +80,23 @@ using NetworkDynamics
 
         align_strings(["row &with\n&line break", "second &row"])
     end
+
+    @testset "unique_mappings" begin
+         using NetworkDynamics: unique_mappings
+         a = [1,2,3]
+         b = [1,2,3]
+         @test unique_mappings(a, b) == Dict(1=>1, 2=>2, 3=>3)
+         a = [:a, :b, :c]
+         b = [1,2,3]
+         @test unique_mappings(a, b) == Dict(:a=>1, :b=>2, :c=>3)
+         a = [:a, :b, :c]
+         b = [1,1,3]
+         @test unique_mappings(a, b) == Dict(:a=>1, :b=>1, :c=>3)
+         a = [:a, :a, :c]
+         b = [1,1,3]
+         @test unique_mappings(a, b) == Dict(:c=>3)
+         a = [:a, :a, :c]
+         b = [1,1,-3]
+         @test unique_mappings(abs, a, b) == Dict(:c=>3)
+    end
 end

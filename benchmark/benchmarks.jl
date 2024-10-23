@@ -1,6 +1,6 @@
 using Pkg
 
-using BenchmarkTools
+using Chairmarks
 using Graphs
 using NetworkDynamics
 using Serialization

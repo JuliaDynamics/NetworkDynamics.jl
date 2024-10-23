@@ -91,20 +91,35 @@ SSI Maintainer assured that f.sys is really only used for symbolic indexig so me
 SciMLBase.__has_sys(nw::Network) = true
 Base.getproperty(nw::Network, s::Symbol) = s===:sys ? nw : getfield(nw, s)
 
-SII.symbolic_type(::Type{<:SymbolicIndex{Int,<:Union{Symbol,Int}}}) = SII.ScalarSymbolic()
+SII.symbolic_type(::Type{<:SymbolicIndex{<:Union{Symbol,Int},<:Union{Symbol,Int}}}) = SII.ScalarSymbolic()
 SII.symbolic_type(::Type{<:SymbolicIndex}) = SII.ArraySymbolic()
 
 SII.hasname(::SymbolicIndex) = false
-SII.hasname(::SymbolicIndex{Int,<:Union{Symbol,Int}}) = true
-SII.getname(x::SymbolicVertexIndex) = Symbol("v$(x.compidx)₊$(x.subidx)")
-SII.getname(x::SymbolicEdgeIndex) = Symbol("e$(x.compidx)₊$(x.subidx)")
+SII.hasname(::SymbolicIndex{<:Union{Symbol,Int},<:Union{Symbol,Int}}) = true
+function SII.getname(x::SymbolicVertexIndex)
+    prefix = x.compidx isa Int ? :v : Symbol()
+    Symbol(prefix, Symbol(x.compidx), :₊, Symbol(x.subidx))
+end
+function SII.getname(x::SymbolicEdgeIndex)
+    prefix = x.compidx isa Int ? :e : Symbol()
+    Symbol(prefix, Symbol(x.compidx), :₊, Symbol(x.subidx))
+end
 
-getcomp(nw::Network, sni::Union{EIndex{Int},EPIndex{Int}}) = nw.im.edgef[sni.compidx]
-getcomp(nw::Network, sni::Union{VIndex{Int},VPIndex{Int}}) = nw.im.vertexf[sni.compidx]
-getcomprange(nw::Network, sni::VIndex{Int}) = nw.im.v_data[sni.compidx]
-getcomprange(nw::Network, sni::EIndex{Int}) = nw.im.e_data[sni.compidx]
-getcompprange(nw::Network, sni::VPIndex{Int}) = nw.im.v_para[sni.compidx]
-getcompprange(nw::Network, sni::EPIndex{Int}) = nw.im.e_para[sni.compidx]
+resolvecompidx(nw::Network, sni::SymbolicIndex{Int}) = sni.compidx
+function resolvecompidx(nw::Network, sni::SymbolicIndex{Symbol})
+    dict = sni isa SymbolicVertexIndex ? nw.im.unique_vnames : nw.im.unique_enames
+    if haskey(dict, sni.compidx)
+        return dict[sni.compidx]
+    else
+        throw(ArgumentError("Could not resolve component index for $sni, the name might not be unique?"))
+    end
+end
+getcomp(nw::Network, sni::SymbolicEdgeIndex) = nw.im.edgef[resolvecompidx(nw, sni)]
+getcomp(nw::Network, sni::SymbolicVertexIndex) = nw.im.vertexf[resolvecompidx(nw, sni)]
+getcomprange(nw::Network, sni::VIndex{<:Union{Symbol,Int}}) = nw.im.v_data[resolvecompidx(nw, sni)]
+getcomprange(nw::Network, sni::EIndex{<:Union{Symbol,Int}}) = nw.im.e_data[resolvecompidx(nw, sni)]
+getcompprange(nw::Network, sni::VPIndex{<:Union{Symbol,Int}}) = nw.im.v_para[resolvecompidx(nw, sni)]
+getcompprange(nw::Network, sni::EPIndex{<:Union{Symbol,Int}}) = nw.im.e_para[resolvecompidx(nw, sni)]
 
 subsym_has_idx(sym::Symbol, syms) = sym ∈ syms
 subsym_has_idx(idx::Int, syms) = 1 ≤ idx ≤ length(syms)
@@ -114,7 +129,8 @@ subsym_to_idx(idx::Int, _) = idx
 ####
 #### Iterator/Broadcast interface for ArraySymbolic types
 ####
-Base.broadcastable(si::SymbolicIndex{<:Union{Int,Colon},<:Union{Int,Symbol,Colon}}) = Ref(si)
+# TODO: not broadcasting over idx with colon is weird
+Base.broadcastable(si::SymbolicIndex{<:Union{Int,Symbol,Colon},<:Union{Int,Symbol,Colon}}) = Ref(si)
 
 const _IterableComponent = SymbolicIndex{<:Union{AbstractVector,Tuple},<:Union{Int,Symbol}}
 Base.length(si::_IterableComponent) = length(si.compidx)
@@ -137,7 +153,7 @@ function Base.iterate(si::_IterableComponent, state=nothing)
     _similar(si, it[1], si.subidx), it[2]
 end
 
-const _IterableSubcomponent = SymbolicIndex{Int,<:Union{AbstractVector,Tuple}}
+const _IterableSubcomponent = SymbolicIndex{<:Union{Symbol,Int},<:Union{AbstractVector,Tuple}}
 Base.length(si::_IterableSubcomponent) = length(si.subidx)
 Base.size(si::_IterableSubcomponent) = (length(si),)
 Base.IteratorSize(si::_IterableSubcomponent) = Base.HasShape{1}()
@@ -170,10 +186,10 @@ _resolve_colon(nw::Network, sni::VIndex{Colon}) = VIndex(1:nv(nw), sni.subidx)
 _resolve_colon(nw::Network, sni::EIndex{Colon}) = EIndex(1:ne(nw), sni.subidx)
 _resolve_colon(nw::Network, sni::VPIndex{Colon}) = VPIndex(1:nv(nw), sni.subidx)
 _resolve_colon(nw::Network, sni::EPIndex{Colon}) = EPIndex(1:ne(nw), sni.subidx)
-_resolve_colon(nw::Network, sni::VIndex{Int,Colon}) = VIndex{Int, UnitRange{Int}}(sni.compidx, 1:dim(getcomp(nw,sni)))
-_resolve_colon(nw::Network, sni::EIndex{Int,Colon}) = EIndex{Int, UnitRange{Int}}(sni.compidx, 1:dim(getcomp(nw,sni)))
-_resolve_colon(nw::Network, sni::VPIndex{Int,Colon}) = VPIndex{Int, UnitRange{Int}}(sni.compidx, 1:pdim(getcomp(nw,sni)))
-_resolve_colon(nw::Network, sni::EPIndex{Int,Colon}) = EPIndex{Int, UnitRange{Int}}(sni.compidx, 1:pdim(getcomp(nw,sni)))
+_resolve_colon(nw::Network, sni::VIndex{<:Union{Symbol,Int},Colon}) = VIndex{Int, UnitRange{Int}}(sni.compidx, 1:dim(getcomp(nw,sni)))
+_resolve_colon(nw::Network, sni::EIndex{<:Union{Symbol,Int},Colon}) = EIndex{Int, UnitRange{Int}}(sni.compidx, 1:dim(getcomp(nw,sni)))
+_resolve_colon(nw::Network, sni::VPIndex{<:Union{Symbol,Int},Colon}) = VPIndex{Int, UnitRange{Int}}(sni.compidx, 1:pdim(getcomp(nw,sni)))
+_resolve_colon(nw::Network, sni::EPIndex{<:Union{Symbol,Int},Colon}) = EPIndex{Int, UnitRange{Int}}(sni.compidx, 1:pdim(getcomp(nw,sni)))
 
 
 #### Implmentation of index provider interface
@@ -195,13 +211,13 @@ function SII.is_variable(nw::Network, sni)
     if _hascolon(sni)
         SII.is_variable(nw, _resolve_colon(nw,sni))
     elseif SII.symbolic_type(sni) === SII.ArraySymbolic()
-        all(s -> SII.is_variable(nw, s), sni)
+        all(Base.Fix1(SII.is_variable, nw), sni)
     else
         _is_variable(nw, sni)
     end
 end
 _is_variable(nw::Network, sni) = false
-function _is_variable(nw::Network, sni::SymbolicStateIndex{Int,<:Union{Int,Symbol}})
+function _is_variable(nw::Network, sni::SymbolicStateIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}})
     cf = getcomp(nw, sni)
     return isdynamic(cf) && subsym_has_idx(sni.subidx, sym(cf))
 end
@@ -215,7 +231,7 @@ function SII.variable_index(nw::Network, sni)
         _variable_index(nw, sni)
     end
 end
-function _variable_index(nw::Network, sni::SymbolicStateIndex{Int,<:Union{Int,Symbol}})
+function _variable_index(nw::Network, sni::SymbolicStateIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}})
     cf = getcomp(nw, sni)
     range = getcomprange(nw, sni)
     range[subsym_to_idx(sni.subidx, sym(cf))]
@@ -242,14 +258,14 @@ function SII.is_parameter(nw::Network, sni)
     if _hascolon(sni)
         SII.is_parameter(nw, _resolve_colon(nw,sni))
     elseif SII.symbolic_type(sni) === SII.ArraySymbolic()
-        all(s -> SII.is_parameter(nw, s), sni)
+        all(Base.Fix1(SII.is_parameter, nw), sni)
     else
         _is_parameter(nw, sni)
     end
 end
 _is_parameter(nw::Network, sni) = false
 function _is_parameter(nw::Network,
-                          sni::SymbolicParameterIndex{Int,<:Union{Int,Symbol}})
+                          sni::SymbolicParameterIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}})
     cf = getcomp(nw, sni)
     return subsym_has_idx(sni.subidx, psym(cf))
 end
@@ -264,7 +280,7 @@ function SII.parameter_index(nw::Network, sni)
     end
 end
 function _parameter_index(nw::Network,
-                             sni::SymbolicParameterIndex{Int,<:Union{Int,Symbol}})
+                             sni::SymbolicParameterIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}})
     cf = getcomp(nw, sni)
     range = getcompprange(nw, sni)
     range[subsym_to_idx(sni.subidx, psym(cf))]
@@ -272,7 +288,6 @@ end
 
 function SII.parameter_symbols(nw::Network)
     syms = Vector{SymbolicParameterIndex{Int,Symbol}}(undef, pdim(nw))
-    i = 1
     for (ci, cf) in pairs(nw.im.vertexf)
         syms[nw.im.v_para[ci]] .= VPIndex.(ci, psym(cf))
     end
@@ -362,7 +377,7 @@ function SII.is_observed(nw::Network, sni)
     end
 end
 _is_observed(nw::Network, _) = false
-function _is_observed(nw::Network, sni::SymbolicStateIndex{Int,<:Union{Int,Symbol}})
+function _is_observed(nw::Network, sni::SymbolicStateIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}})
     cf = getcomp(nw, sni)
 
     if isdynamic(cf)
@@ -443,7 +458,7 @@ function SII.observed(nw::Network, snis)
                 flatidxs[i] = _range[subsym_to_idx(sni.subidx, sym(cf))]
             elseif subsym_has_idx(sni.subidx, obssym(cf)) #found in observed
                 _idx = subsym_to_idx(sni.subidx, obssym(cf))
-                _obsf = _get_observed_f(nw, cf, sni.compidx)
+                _obsf = _get_observed_f(nw, cf, resolvecompidx(nw, sni))
                 obsfuns[i] = (u, aggbuf, p, t) -> _obsf(u, aggbuf, p, t)[_idx]
             else
                 throw(ArgumentError("Cannot resolve observable $sni"))
@@ -522,6 +537,7 @@ end
 #### Default values
 ####
 function SII.default_values(nw::Network)
+    aliased_changed(nw; warn=true)
     defs = Dict{SymbolicIndex{Int,Symbol},Float64}()
     for (ci, cf) in pairs(nw.im.vertexf)
         for s in psym(cf)

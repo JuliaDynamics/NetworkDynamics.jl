@@ -56,11 +56,11 @@ end
 Base.@propagate_inbounds function kuramoto_edge!(e, θ_s, θ_d, (K,), t)
     e .= K .* sin(θ_s[1] - θ_d[1])
 end
-function kuramoto_edge()
-    StaticEdge(f=kuramoto_edge!,
+function kuramoto_edge(; name=:kuramoto_edge)
+    StaticEdge(;f=kuramoto_edge!,
                dim=1, sym=[:P],
                pdim=1, psym=[:K],
-               coupling=AntiSymmetric())
+               coupling=AntiSymmetric(), name)
 end
 
 Base.@propagate_inbounds function kuramoto_inertia!(dv, v, acc, p, t)
@@ -68,10 +68,10 @@ Base.@propagate_inbounds function kuramoto_inertia!(dv, v, acc, p, t)
     dv[1] = v[2]
     dv[2] = 1 / M * (Pm - D * v[2] + acc[1])
 end
-function kuramoto_second()
-    ODEVertex(f=kuramoto_inertia!,
+function kuramoto_second(; name=:kuramoto_second)
+    ODEVertex(; f=kuramoto_inertia!,
               dim=2, sym=[:δ, :ω], def=[0, 0],
-              pdim=3, psym=[:M, :D, :Pm], pdef=[1, 0.1, 1])
+              pdim=3, psym=[:M, :D, :Pm], pdef=[1, 0.1, 1], name)
 end
 
 Base.@propagate_inbounds function kuramoto_vertex!(dθ, θ, esum, (ω,), t)

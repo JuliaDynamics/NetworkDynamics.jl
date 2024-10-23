@@ -22,15 +22,42 @@ mutable struct IndexManager{G}
     lastidx_gbuf::Int
     vertexf::Vector{VertexFunction}
     edgef::Vector{EdgeFunction}
-    function IndexManager(g, dyn_states, edepth, vdepth, vertexf, edgef)
+    aliased_vertexfs::IdDict{VertexFunction, @NamedTuple{idxs::Vector{Int}, hash::UInt}}
+    aliased_edgefs::IdDict{EdgeFunction, @NamedTuple{idxs::Vector{Int}, hash::UInt}}
+    unique_vnames::Dict{Symbol,Int}
+    unique_enames::Dict{Symbol,Int}
+    function IndexManager(g, dyn_states, edepth, vdepth, vertexf, edgef; valias, ealias)
+        aliased_vertexf_hashes = _aliased_hashes(VertexFunction, vertexf, valias)
+        aliased_edgef_hashes = _aliased_hashes(EdgeFunction, edgef, ealias)
+        unique_vnames = unique_mappings(getproperty.(vertexf, :name), 1:nv(g))
+        unique_enames = unique_mappings(getproperty.(edgef, :name), 1:ne(g))
         new{typeof(g)}(g, collect(edges(g)),
                        (Vector{UnitRange{Int}}(undef, nv(g)) for i in 1:3)...,
                        (Vector{UnitRange{Int}}(undef, ne(g)) for i in 1:5)...,
                        edepth, vdepth,
                        0, dyn_states, 0, 0, 0,
-                       vertexf, edgef)
+                       vertexf, edgef,
+                       aliased_vertexf_hashes,
+                       aliased_edgef_hashes,
+                       unique_vnames,
+                       unique_enames)
     end
 end
+function _aliased_hashes(T, cfs, aliastype)
+    hashdict = IdDict{T, @NamedTuple{idxs::Vector{Int}, hash::UInt}}()
+    if aliastype == :some
+        ag = aliasgroups(cfs)
+        for (c, idxs) in ag
+            h = hash(c)
+            hashdict[c] = (; idxs=idxs, hash=h)
+        end
+    elseif aliastype == :all
+        c = first(cfs)
+        hashdict[c] =(; idxs=collect(eachindex(cfs)), hash=hash(c))
+    end
+    hashdict
+end
+
 dim(im::IndexManager) = im.lastidx_dynamic
 pdim(im::IndexManager) = im.lastidx_p
 sdim(im::IndexManager) = im.lastidx_static - im.lastidx_dynamic

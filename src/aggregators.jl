@@ -315,6 +315,14 @@ function aggregate!(a::SparseAggregator, aggbuf, data)
    nothing
 end
 
+# functions to retrieve the constructor of an aggregator for remake of network
+get_aggr_constructor(a::NaiveAggregator) = NaiveAggregator(a.f)
+get_aggr_constructor(a::KAAggregator) = KAAggregator(a.f)
+get_aggr_constructor(a::SequentialAggregator) = SequentialAggregator(a.f)
+get_aggr_constructor(a::PolyesterAggregator) = PolyesterAggregator(a.f)
+get_aggr_constructor(a::ThreadedAggregator) = ThreadedAggregator(a.f)
+get_aggr_constructor(a::SparseAggregator) = SparseAggregator(+)
+
 iscudacompatible(::Type{<:Aggregator}) = false
 iscudacompatible(::Type{<:KAAggregator}) = true
 iscudacompatible(::Type{<:SparseAggregator}) = true

@@ -6,39 +6,29 @@ function Network(g::AbstractGraph,
                  vdepth=:auto,
                  aggregator=execution isa SequentialExecution ? SequentialAggregator(+) : PolyesterAggregator(+),
                  check_graphelement=true,
+                 dealias=false,
                  verbose=false)
-    reset_timer!()
+    # TimerOutputs.reset_timer!()
     @timeit_debug "Construct Network" begin
         # collect all vertex/edgf to vector
-        _vertexf = vertexf isa Vector ? vertexf : [vertexf for _ in vertices(g)]
-        _edgef = edgef isa Vector ? edgef : [edgef for _ in edges(g)]
+        all_same_v = vertexf isa VertexFunction
+        all_same_e = edgef isa EdgeFunction
+        maybecopy = dealias ? copy : identity
+        _vertexf = all_same_v ? [maybecopy(vertexf) for _ in vertices(g)] : vertexf
+        _edgef   = all_same_e ? [maybecopy(edgef) for _ in edges(g)] : edgef
+
         @argcheck _vertexf isa Vector{<:VertexFunction} "Expected VertexFuncions, got $(eltype(_vertexf))"
         @argcheck _edgef isa Vector{<:EdgeFunction} "Expected EdgeFuncions, got $(eltype(_vertexf))"
         @argcheck length(_vertexf) == nv(g)
         @argcheck length(_edgef) == ne(g)
 
-        # check if graphelement is set correctly, warn otherwise
-        if check_graphelement
-            for (i, v) in pairs(_vertexf)
-                if has_graphelement(v)
-                    if get_graphelement(v) != i
-                        @warn "Vertex function $v has wrong `:graphelement` $(get_graphelement(v)) != $i. \
-                        Using this constructor the provided `:graphelement` is ignored!"
-                    end
-                end
-            end
-            if any(has_graphelement, _edgef)
-                vnamedict = _unique_name_dict(_vertexf)
-                for (iteredge, ef) in zip(edges(g), _edgef)
-                    if has_graphelement(ef)
-                        ge = get_graphelement(ef)
-                        if iteredge != _resolve_ge_to_edge(ge, vnamedict)
-                            @warn "Edge function $ef has wrong `:graphelement` $(get_graphelement(ef)) != $iteredge. \
-                            Using this constructor the provided `:graphelement` is ignored!"
-                        end
-                    end
-                end
-            end
+        # check if components alias eachother copy if necessary
+        # allready dealiase if provided as single functions
+        if dealias && !all_same_v
+            dealias!(_vertexf)
+        end
+        if dealias && !all_same_e
+            dealias!(_edgef)
         end
 
         verbose &&
@@ -64,7 +54,48 @@ function Network(g::AbstractGraph,
         end
 
         # create index manager
-        im = IndexManager(g, dynstates, edepth, vdepth, _vertexf, _edgef)
+        @timeit_debug "Construct Index manager" begin
+            valias = dealias ? :none : (all_same_v ? :all : :some)
+            ealias = dealias ? :none : (all_same_e ? :all : :some)
+            im = IndexManager(g, dynstates, edepth, vdepth, _vertexf, _edgef; valias, ealias)
+        end
+
+
+        # check graph_element metadata and attach if necessary
+        if check_graphelement
+            @timeit_debug "Check graph element" begin
+                if !all_same_v
+                    for (i, vf) in pairs(_vertexf)
+                        if has_graphelement(vf)
+                            if get_graphelement(vf) != i
+                                @warn "Vertex function $(vf.name) is placed at node index $i bus has \
+                                `graphelement` $(get_graphelement(vf)) stored in metadata. \
+                                The wrong data will be ignored! Use `check_graphelement=false` tu supress this warning."
+                            end
+                        end
+                    end
+                elseif has_graphelement(vertexf)
+                    @warn "Provided vertex function has assigned `graphelement` metadata. \
+                    but is used at every vertex. The `graphelement` will be ignored."
+                end
+                if !all_same_e
+                    for (iteredge, ef) in zip(im.edgevec, _edgef)
+                        if has_graphelement(ef)
+                            ge = get_graphelement(ef)
+                            src = get(im.unique_vnames, ge.src, ge.src)
+                            dst = get(im.unique_vnames, ge.dst, ge.dst)
+                            if iteredge.src != src || iteredge.dst != dst
+                                @warn "Edge function $(ef.name) at $(iteredge.src) => $(iteredge.dst) has wrong `:graphelement` $src => $dst). \
+                                The wrong data will be ignored! Use `check_graphelement=false` tu supress this warning."
+                            end
+                        end
+                    end
+                elseif has_graphelement(edgef)
+                    @warn "Provided edge function has assigned `graphelement` metadata. \
+                    but is used for all edges. The `graphelement` will be ignored."
+                end
+            end
+        end
 
         # batch identical edge and vertex functions
         @timeit_debug "batch identical vertexes" begin
@@ -129,7 +160,7 @@ function Network(g::AbstractGraph,
         )
 
     end
-    # print_timer()
+    # TimerOutputs.print_timer()
     return nw
 end
 
@@ -143,11 +174,17 @@ function Network(vertexfs, edgefs; kwargs...)
 
     vdict = Dict(vidxs .=> vertexfs)
 
-    vnamedict = _unique_name_dict(vertexfs)
+    # find unique maapings from name => graphelement
+    vnamedict = unique_mappings(getproperty.(vertexfs, :name), get_graphelement.(vertexfs))
 
     simpleedges = map(edgefs) do e
         ge = get_graphelement(e)
-        _resolve_ge_to_edge(ge, vnamedict)
+        src = get(vnamedict, ge.src, ge.src)
+        dst = get(vnamedict, ge.dst, ge.dst)
+        if src isa Symbol || dst isa Symbol
+            throw(ArgumentError("Edge graphelement $src => $dst continas non-unique or unknown vertex names!"))
+        end
+        SimpleEdge(src, dst)
     end
     allunique(simpleedges) || throw(ArgumentError("Some edge functions have the same `graphelement`!"))
     edict = Dict(simpleedges .=> edgefs)
@@ -169,36 +206,44 @@ function Network(vertexfs, edgefs; kwargs...)
     vfs_ordered = [vdict[k] for k in vertices(g)]
     efs_ordered = [edict[k] for k in edges(g)]
 
-    Network(g, vfs_ordered, efs_ordered; kwargs...)
+    Network(g, vfs_ordered, efs_ordered; check_graphelement=false, kwargs...)
 end
 
-function _unique_name_dict(cfs::AbstractVector{<:ComponentFunction})
-    # find all names to resolve
-    names = getproperty.(cfs, :name)
-    dict = Dict(cf.name => get_graphelement(cf) for cf in cfs if has_graphelement(cf))
-    # delete all names which occure multiple times
-    for i in eachindex(names)
-        if names[i] ∈ @views names[i+1:end]
-            delete!(dict, names[i])
+"""
+    dealias!(cfs::Vector{<:ComponentFunction})
+
+Checks if any component functions reference the same metadtata/symmetada fields and
+creates copies of them if necessary.
+"""
+function dealias!(cfs::Vector{<:ComponentFunction}; warn=false)
+    ag = aliasgroups(cfs)
+
+    isempty(ag) && return cfs # nothign to do
+
+    copyidxs = reduce(vcat, values(ag))
+
+    cfs[copyidxs] = copy.(cfs[copyidxs])
+end
+
+
+"""
+    aliasgroups(cfs::Vector{<:ComponentFunction})
+
+Returns a dict `cf => idxs` which contains all the component functions
+which appear multiple times with all their indices.
+"""
+function aliasgroups(cfs::Vector{T}) where {T<:ComponentFunction}
+    d = IdDict{T, Vector{Int}}()
+
+    for (i, cf) in pairs(cfs)
+        if haskey(d, cf) # c allready present
+            push!(d[cf], i)
+        else
+            d[cf] = [i]
         end
     end
-    dict
-end
-# resolve the graphelement ge (named tuple) to simple edge with potential lookup in vertex name dict dict
-function _resolve_ge_to_edge(ge, vnamedict)
-    src = if ge.src isa Symbol
-        haskey(vnamedict, ge.src) || throw(ArgumentError("Edge function has unknown or non-unique source vertex name $(ge.src)"))
-        vnamedict[ge.src]
-    else
-        ge.src
-    end
-    dst = if ge.dst isa Symbol
-        haskey(vnamedict, ge.dst) || throw(ArgumentError("Edge function has unknown or non-unique source vertex name $(ge.dst)"))
-        vnamedict[ge.dst]
-    else
-        ge.dst
-    end
-    SimpleEdge(src, dst)
+
+    filter!(x -> length(x.second) > 1, d)
 end
 
 function VertexBatch(im::IndexManager, idxs::Vector{Int}; verbose)
@@ -340,11 +385,31 @@ function _check_massmatrix(c)
 end
 
 """
-    Network(nw::Network; kwargs...)
+    Network(nw::Network; g, vertexf, edgef, kwargs...)
 
 Rebuild the Network with same graph and vertex/edge functions but possibly different kwargs.
-# FIXME : needs to take all Network kw arguments into acount!
 """
-function Network(nw::Network; kwargs...)
-    Network(nw.im.g, nw.im.vertexf, nw.im.edgef; kwargs...)
+function Network(nw::Network;
+                 g = nw.im.g,
+                 vertexf = copy.(nw.im.vertexf),
+                 edgef = copy.(nw.im.edgef),
+                 kwargs...)
+
+    _kwargs = Dict(:execution => executionstyle(nw),
+                   :edepth => :auto,
+                   :vdepth => :auto,
+                   :aggregator => get_aggr_constructor(nw.layer.aggregator),
+                   :check_graphelement => true,
+                   :dealias => false,
+                   :verbose => false)
+    for (k, v) in kwargs
+        _kwargs[k] = v
+    end
+
+    # check, that we actually provide all of the arguments
+    # mainly so we don't forget to add it here if we introduce new kw arg to main constructor
+    m = only(methods(Network, [typeof(g), typeof(vertexf), typeof(edgef)]))
+    @assert keys(_kwargs) == Set(Base.kwarg_decl(m))
+
+    Network(g, vertexf, edgef; _kwargs...)
 end
