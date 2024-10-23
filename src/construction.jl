@@ -380,6 +380,7 @@ function Network(nw::Network;
                    :vdepth => :auto,
                    :aggregator => get_aggr_constructor(nw.layer.aggregator),
                    :check_graphelement => true,
+                   :dealias => false,
                    :verbose => false)
     for (k, v) in kwargs
         _kwargs[k] = v
