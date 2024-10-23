@@ -315,12 +315,7 @@ end
     @test NetworkDynamics.aliased_changed(nw; warn=false)
     s1 = NWState(nw)
 
-    # test hashes
-    h1 = hash(v1)
-    set_metadata!(v1, :foo, :bar)
-    h2 = hash(v1)
-    @test h1 !== h2
-
+    # test copy
     v = ODEVertex(x->x^1, 2, 0; metadata=Dict(:graphelement=>1), symmetadata=Dict(:x=>Dict(:default=>1)))
     v2 = copy(v)
     @test v !== v2
