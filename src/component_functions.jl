@@ -263,15 +263,16 @@ dispatchT(T::Type{<:ODEEdge}) = ODEEdge{typeof(coupling(T)),nothing,nothing,noth
 
 batchequal(a, b) = false
 function batchequal(a::EdgeFunction, b::EdgeFunction)
-    for f in (compf, dim, pdim, coupling)
-        f(a) == f(b) || return false
-    end
+    compf(a) == compf(b) || return false
+    dim(a) == dim(b) || return false
+    pdim(a) == pdim(b) || return false
+    coupling(a) == coupling(b) || return false
     return true
 end
 function batchequal(a::VertexFunction, b::VertexFunction)
-    for f in (compf, dim, pdim)
-        f(a) == f(b) || return false
-    end
+    compf(a) == compf(b) || return false
+    dim(a) == dim(b) || return false
+    pdim(a) == pdim(b) || return false
     return true
 end
 
