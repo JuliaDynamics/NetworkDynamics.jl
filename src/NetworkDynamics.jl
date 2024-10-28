@@ -31,7 +31,7 @@ using Base: @propagate_inbounds
 using InteractiveUtils: subtypes
 
 import SymbolicIndexingInterface as SII
-import StaticArrays
+using StaticArrays: StaticArrays, SVector
 
 include("utils.jl")
 

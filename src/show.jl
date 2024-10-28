@@ -24,53 +24,53 @@ Base.show(io::IO, s::KAAggregator) = print(io, "KAAggregator($(repr(s.f)))")
 Base.show(io::IO, s::SequentialAggregator) = print(io, "SequentialAggregator($(repr(s.f)))")
 Base.show(io::IO, s::PolyesterAggregator) = print(io, "PolyesterAggregator($(repr(s.f)))")
 
-function Base.show(io::IO, ::MIME"text/plain", c::EdgeFunction)
-    type = match(r"^(.*?)\{", string(typeof(c)))[1]
-    print(io, type, styled" :$(c.name) with $(_styled_coupling(coupling(c))) coupling of depth {NetworkDynamics_fordst:$(depth(c))}")
-    if has_graphelement(c)
-        ge = get_graphelement(c)
-        print(io, " @ Edge $(ge.src) => $(ge.dst)")
-    end
+# function Base.show(io::IO, ::MIME"text/plain", c::EdgeFunction)
+#     type = match(r"^(.*?)\{", string(typeof(c)))[1]
+#     print(io, type, styled" :$(c.name) with $(_styled_coupling(coupling(c))) coupling of depth {NetworkDynamics_fordst:$(depth(c))}")
+#     if has_graphelement(c)
+#         ge = get_graphelement(c)
+#         print(io, " @ Edge $(ge.src) => $(ge.dst)")
+#     end
 
-    styling = Dict{Int,Symbol}()
-    if coupling(c) == Fiducial()
-        for i in 1:depth(c)
-            styling[i] = :NetworkDynamics_fordst
-        end
-        for i in depth(c)+1:2*depth(c)
-            styling[i] = :NetworkDynamics_forsrc
-        end
-    elseif coupling(c) == Directed()
-        for i in 1:depth(c)
-            styling[i] = :NetworkDynamics_fordst
-        end
-    else
-        for i in 1:depth(c)
-            styling[i] = :NetworkDynamics_fordstsrc
-        end
-    end
+#     styling = Dict{Int,Symbol}()
+#     if coupling(c) == Fiducial()
+#         for i in 1:depth(c)
+#             styling[i] = :NetworkDynamics_fordst
+#         end
+#         for i in depth(c)+1:2*depth(c)
+#             styling[i] = :NetworkDynamics_forsrc
+#         end
+#     elseif coupling(c) == Directed()
+#         for i in 1:depth(c)
+#             styling[i] = :NetworkDynamics_fordst
+#         end
+#     else
+#         for i in 1:depth(c)
+#             styling[i] = :NetworkDynamics_fordstsrc
+#         end
+#     end
 
-    print_states_params(io, c, styling)
-end
+#     print_states_params(io, c, styling)
+# end
 _styled_coupling(::Fiducial) = styled"{NetworkDynamics_fordst:Fidu}{NetworkDynamics_forsrc:cial}"
 _styled_coupling(::Directed) = styled"{NetworkDynamics_fordst:Directed}"
 _styled_coupling(::AntiSymmetric) = styled"{NetworkDynamics_fordstsrc:AntiSymmetric}"
 _styled_coupling(::Symmetric) = styled"{NetworkDynamics_fordstsrc:Symmetric}"
 
-function Base.show(io::IO, ::MIME"text/plain", c::VertexFunction)
-    type = match(r"^(.*?)\{", string(typeof(c)))[1]
-    print(io, type, styled" :$(c.name) with depth {NetworkDynamics_forlayer:$(depth(c))}")
-    if has_graphelement(c)
-        print(io, " @ Vertex $(get_graphelement(c))")
-    end
+# function Base.show(io::IO, ::MIME"text/plain", c::VertexFunction)
+#     type = match(r"^(.*?)\{", string(typeof(c)))[1]
+#     print(io, type, styled" :$(c.name) with depth {NetworkDynamics_forlayer:$(depth(c))}")
+#     if has_graphelement(c)
+#         print(io, " @ Vertex $(get_graphelement(c))")
+#     end
 
-    styling = Dict{Int,Symbol}()
-    for i in 1:depth(c)
-        styling[i] = :NetworkDynamics_forlayer
-    end
+#     styling = Dict{Int,Symbol}()
+#     for i in 1:depth(c)
+#         styling[i] = :NetworkDynamics_forlayer
+#     end
 
-    print_states_params(io, c, styling)
-end
+#     print_states_params(io, c, styling)
+# end
 
 function print_states_params(io, c::ComponentFunction, styling)
     info = AnnotatedString{String}[]

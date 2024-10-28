@@ -1,49 +1,71 @@
-abstract type Coupling end
-"""
-    struct AntiSymmetric <: Coupling end
+abstract type FeedForwardType end
+struct PureFeedForward <: FeedForwardType end
+struct FeedForward <: FeedForwardType end
+struct NoFeedForward <: FeedForwardType end
+struct PureStateMap <: FeedForwardType end
+hasfftype(::Any) = false
+hasff(x) = fftype(x) isa Union{PureFeedForward, FeedForward}
 
-AntiSymmetric coupling type. The edge function f is evaluated once:
+struct StateMask{N,I}
+    idxs::I
+    StateMask(i) = new{length(i), typeof(i)}(i)
+end
+hasfftype(::StateMask) = true
+fftype(::StateMask) = PureStateMap()
 
- - the dst vertex receives the first `d` values of the edge state,
- - the src vertex receives (-1) of that.
 
-Here, `d` is the edge depth of the Network.
-"""
-struct AntiSymmetric <: Coupling end
-"""
-    struct Symmetric <: Coupling end
+abstract type Coupling{FF} end
+hasfftype(::Coupling) = true
+fftype(::Coupling{FF}) where {FF} = FF()
 
-Symmetric coupling type. The edge function f is evaluated once:
+struct AntiSymmetric{FF,G} <: Coupling{FF}
+    g::G
+    AntiSymmetric(g; ff=_infer_ss_fftype(g)) = new{typeof(ff), typeof(g)}(g)
+end
+@inline function (c::AntiSymmetric)(osrc, odst, args...)
+    @inline c.g(odst, args...)
+    for i in eachindex(osrc, odst)
+        osrc[i] = -odst[i]
+    end
+    nothing
+end
 
- - the dst vertex receives the first `d` values of the edge state,
- - the src vertex receives the same.
+struct Symmetric{FF,G} <: Coupling{FF}
+    g::G
+    Symmetric(g; ff=_infer_ss_fftype(g)) = new{typeof(ff), typeof(g)}(g)
+end
+@inline function (c::Symmetric)(osrc, odst, args...)
+    @inline c.g(odst, args...)
+    for i in eachindex(osrc, odst)
+        osrc[i] = odst[i]
+    end
+    nothing
+end
 
-Here, `d` is the edge depth of the Network.
-"""
-struct Symmetric <: Coupling end
-"""
-    struct Directed <: Coupling end
-
-Directed coupling type. The edge function f is evaluated once:
-
- - the dst vertex receives the first `d` values of the edge state,
- - the src vertex receives nothing.
-
-Here, `d` is the edge depth of the Network.
-"""
 struct Directed <: Coupling end
-"""
-    struct Fiducial <: Coupling end
+# TODO directed
 
-Fiducial coupling type. The edge function f is evaluated once:
-
- - the dst vertex receives the `1:d` values of the edge state,
- - the src vertex receives the `d+1:2d` values of the edge state.
-
-Here, `d` is the edge depth of the Network.
-"""
-struct Fiducial <: Coupling end
-const CouplingUnion = Union{AntiSymmetric,Symmetric,Directed,Fiducial}
+struct Fiducial{FF,GS,GD} <: Coupling{FF}
+    src::GS
+    dst::GD
+    function Symmetric(src, dst; ff=nothing)
+        if isnothing(ff)
+            ffsrc = _infer_ss_fftype(src)
+            ffdst = _infer_ss_fftype(dst)
+            if ffsrc == ffdst
+                ff = ffsrc
+            else
+                error("Both src and dst coupling functions have different ff types.")
+            end
+        end
+        new{typeof(ff), typeof(src), typeof(dst)}(src, dst)
+    end
+end
+@inline function (c::Fiducial)(osrc, odst, args...)
+    @inline c.src(osrc, args...)
+    @inline c.dst(odst, args...)
+    nothing
+end
 
 abstract type ComponentFunction end
 
@@ -166,14 +188,83 @@ edges it returns a named tuple `(; src, dst)` with two symbol vectors.
 inputsym(c::VertexFunction)::Vector{Symbol} = c.inputsym
 inputsym(c::EdgeFunction)::@NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}} = c.inputsym
 
-"""
-    coupling(::EdgeFunction)
-    coupling(::Type{<:EdgeFunction})
 
-Returns the coupling of the given `EdgeFunction`.
-"""
-coupling(::EdgeFunction{C}) where {C} = C()
-coupling(::Type{<:EdgeFunction{C}}) where {C} = C()
+
+struct UnifiedVertex{F,G,FFT,OF,MM} <: VertexFunction
+    name::Symbol
+    # main function
+    f::F
+    sym::Vector{Symbol}
+    mass_matrix::MM
+    # outputs
+    g::G
+    outsym::Vector{Symbol}
+    fftype::FFT
+    # parameters and option input sym
+    psym::Vector{Symbol}
+    inputsym::Union{Nothing, Vector{Symbol}}
+    # observed
+    obsf::OF
+    obssym::Vector{Symbol}
+    # optional inputsyms
+    symmetadata::Dict{Symbol,Dict{Symbol, Any}}
+    metadata::Dict{Symbol,Any}
+end
+
+struct UnifiedEdge{F,G,FFT,OF,MM} <: EdgeFunction{C}
+    name::Symbol
+    # main function
+    f::F
+    sym::Vector{Symbol}
+    mass_matrix::MM
+    # outputs
+    g::G
+    outsym::@NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}}
+    fftype::FFT
+    # parameters and option input sym
+    psym::Vector{Symbol}
+    inputsym::Union{Nothing, @NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}}}
+    # observed
+    obsf::OF
+    obssym::Vector{Symbol}
+    # metadata
+    symmetadata::Dict{Symbol,Dict{Symbol, Any}}
+    metadata::Dict{Symbol,Any}
+end
+
+function _infer_fftype(::Type{<:VertexFunction}, g, dim)
+    pureff = _takes_n_vectors_and_t(g, 3) && iszero(dim)  # (out, ein, p, t)
+    ff     = _takes_n_vectors_and_t(g, 4)                 # (out, u, ein, p, t)
+    noff   = _takes_n_vectors_and_t(g, 3) && !iszero(dim) # (out, u, p, t)
+    pureu  = _takes_n_vectors_no_t(g, 2)                  # (out, states)
+
+    ff+noff+pureff+pureu > 1 && error("Could not determinen output map type from g signature. Provide :ff keyword explicitly!")
+    ff+noff+pureff+pureu == 0 && error("Method signature of `g` seems invalid!")
+
+    pureff && return PureStateMap()
+    ff && return FeedForward()
+    noff && return NoFeedForward()
+    pureu && return PureStateMap()
+end
+
+_infer_ss_fftype(g) = _infer_fftype(EdgeFunction, g, -1; singlesided=true)
+function _infer_fftype(::Type{<:EdgeFunction}, g, dim; singlesided=false)
+    # if singlesided we allways have one less
+    pureff = _takes_n_vectors_and_t(g, 5-singlesided) # ([osrc], odst, src, dst, p, t)
+    ff     = _takes_n_vectors_and_t(g, 6-singlesided) # ([osrc], odst, u, src, dst, p, t)
+    noff   = _takes_n_vectors_and_t(g, 4-singlesided) # ([osrc], odst, u, p, t)
+    pureu  = _takes_n_vectors_no_t(g, 3-singlesided)  # ([osrc], odst, u)
+
+    ff+noff+pureff+pureu > 1 && error("Could not determinen output map type from g signature. Provide :ff keyword explicitly!")
+    ff+noff+pureff+pureu == 0 && error("Method signature of `g` seems invalid!")
+
+    pureff && return PureStateMap()
+    ff && return FeedForward()
+    noff && return NoFeedForward()
+    pureu && return PureStateMap()
+end
+
+compg(c::ComponentFunction) = c.g
 
 """
 $(TYPEDEF)
@@ -260,16 +351,12 @@ dispatchT(::Type{<:StaticVertex}) = StaticVertex{nothing,nothing}
 dispatchT(::Type{<:ODEVertex}) = ODEVertex{nothing,nothing,nothing}
 dispatchT(T::Type{<:StaticEdge}) = StaticEdge{typeof(coupling(T)),nothing,nothing}
 dispatchT(T::Type{<:ODEEdge}) = ODEEdge{typeof(coupling(T)),nothing,nothing,nothing}
+dispatchT(T::Type{<:UnifiedVertex}) = UnifiedVertex{nothing,nothing,nothing,nothing,nothing}
+dispatchT(T::Type{<:UnifiedEdge}) = UnifiedVertex{nothing,nothing,nothing,nothing,nothing}
 
 batchequal(a, b) = false
-function batchequal(a::EdgeFunction, b::EdgeFunction)
-    for f in (compf, dim, pdim, coupling)
-        f(a) == f(b) || return false
-    end
-    return true
-end
-function batchequal(a::VertexFunction, b::VertexFunction)
-    for f in (compf, dim, pdim)
+function batchequal(a::ComponentFunction, b::ComponentFunction)
+    for f in (compf, compg, dim, pdim, odim)
         f(a) == f(b) || return false
     end
     return true
@@ -341,7 +428,12 @@ function _fill_defaults(T, kwargs)
     # syms might be provided as single pairs or symbols, wrap in vector
     _maybewrap!(dict, :sym, Union{Symbol, Pair})
     _maybewrap!(dict, :psym, Union{Symbol, Pair})
+    _maybewrap!(dict, :outsym, Symbol)
     _maybewrap!(dict, :obssym, Symbol)
+
+    if !haskey(dict, :g)
+        throw(ArgumentError("Output function g musst be provided!"))
+    end
 
     symmetadata = get!(dict, :symmetadata, Dict{Symbol,Dict{Symbol,Any}}())
 
@@ -404,6 +496,12 @@ function _fill_defaults(T, kwargs)
         end
     end
 
+    # set f to nothing if not present
+    if !haskey(dict, :f)
+        dict[:f] = nothing
+        dim == 0 || error("Does not make sense to provide no f but dim != 0")
+    end
+
     # psym & pdim
     if !haskey(dict, :pdim) && !haskey(dict, :psym)
         dict[:pdim] = 0
@@ -440,6 +538,11 @@ function _fill_defaults(T, kwargs)
         end
     end
 
+    # infer fftype
+    if !haskey(dict, :ff)
+        g = dict[:g]
+        dict[:ff] = hasfftype(g) ? fftype(g) : _infer_fftype(T, g, dim)
+    end
     # obsf & obssym
     if haskey(dict, :obsf) || haskey(dict, :obssym)
         if !(haskey(dict, :obsf) && haskey(dict, :obssym))
@@ -489,49 +592,25 @@ function _fill_defaults(T, kwargs)
     end
 
     # mass_matrix
-    if isdynamic(T)
-        if !haskey(dict, :mass_matrix)
-            dict[:mass_matrix] = LinearAlgebra.I
-        else
-            mm = dict[:mass_matrix]
-            if mm isa UniformScaling
-            elseif mm isa Vector # convert to diagonal
-                if length(mm) == dim
-                    dict[:mass_matrix] = LinearAlgebra.Diagonal(mm)
-                else
-                    throw(ArgumentError("If given as a vector, mass matrix must have length equal to dimension of component."))
-                end
-            elseif mm isa Number # convert to uniform scaling
-                dict[:mass_matrix] = LinearAlgebra.UniformScaling(mm)
-            elseif mm isa AbstractMatrix
-                @argcheck size(mm) == (dim, dim) "Size of mass matrix must match dimension of component."
+    if !haskey(dict, :mass_matrix)
+        dict[:mass_matrix] = LinearAlgebra.I
+    else
+        mm = dict[:mass_matrix]
+        if mm isa UniformScaling
+        elseif mm isa Vector # convert to diagonal
+            if length(mm) == dim
+                dict[:mass_matrix] = LinearAlgebra.Diagonal(mm)
             else
-                throw(ArgumentError("Mass matrix must be a vector, square matrix,\
-                                     a uniform scaling, or scalar. Got $(mm)."))
+                throw(ArgumentError("If given as a vector, mass matrix must have length equal to dimension of component."))
             end
-        end
-    end
-
-    # coupling
-    if T<:EdgeFunction && !haskey(dict, :coupling)
-        throw(ArgumentError("Coupling type must be provided to construct $T."))
-    end
-
-    # depth
-    if !haskey(dict, :depth)
-        if T<:VertexFunction
-            dict[:depth] = dim
-        elseif T<:EdgeFunction
-            coupling = dict[:coupling]
-            dict[:depth] = coupling==Fiducial() ? floor(Int, dim/2) : dim
+        elseif mm isa Number # convert to uniform scaling
+            dict[:mass_matrix] = LinearAlgebra.UniformScaling(mm)
+        elseif mm isa AbstractMatrix
+            @argcheck size(mm) == (dim, dim) "Size of mass matrix must match dimension of component."
         else
-            throw(ArgumentError("Cannot construct $T: default depth not known."))
+            throw(ArgumentError("Mass matrix must be a vector, square matrix,\
+                                    a uniform scaling, or scalar. Got $(mm)."))
         end
-    end
-    if haskey(dict, :coupling) && dict[:coupling]==Fiducial() && dict[:depth] > floor(dim/2)
-        throw(ArgumentError("Depth cannot exceed half the dimension for Fiducial coupling."))
-    elseif dict[:depth] > dim
-        throw(ArgumentError("Depth cannot exceed half the dimension."))
     end
 
     # check for name clashes (at the end because only now sym, psym, obssym are initialized)
@@ -555,8 +634,10 @@ end
 
 _default_name(::Type{StaticVertex}) = :StaticVertex
 _default_name(::Type{ODEVertex}) = :ODEVertex
+_default_name(::Type{UnifiedVertex}) = :UnifiedVertex
 _default_name(::Type{StaticEdge}) = :StaticEdge
 _default_name(::Type{ODEEdge}) = :ODEEdge
+_default_name(::Type{UnifiedEdge}) = :UnifiedEdge
 
 _has_metadata(vec::AbstractVector{<:Symbol}) = false
 _has_metadata(vec::AbstractVector{<:Pair}) = true
@@ -594,12 +675,13 @@ function _maybewrap!(d, s, T)
     end
 end
 
-_valid_signature(::Type{<:StaticVertex}, f) = _takes_n_vectors(f, 3) #(u, edges, p, t)
-_valid_signature(::Type{<:ODEVertex}, f) = _takes_n_vectors(f, 4) #(du, u, edges, p, t)
-_valid_signature(::Type{<:StaticEdge}, f) = _takes_n_vectors(f, 4) #(u, src, dst, p, t)
-_valid_signature(::Type{<:ODEEdge}, f) = _takes_n_vectors(f, 5) #(du, u, src, dst, p, t)
+_valid_signature(::Type{<:StaticVertex}, f) = _takes_n_vectors_and_t(f, 3) #(u, edges, p, t)
+_valid_signature(::Type{<:ODEVertex}, f) = _takes_n_vectors_and_t(f, 4) #(du, u, edges, p, t)
+_valid_signature(::Type{<:StaticEdge}, f) = _takes_n_vectors_and_t(f, 4) #(u, src, dst, p, t)
+_valid_signature(::Type{<:ODEEdge}, f) = _takes_n_vectors_and_t(f, 5) #(du, u, src, dst, p, t)
 
-_takes_n_vectors(f, n) = hasmethod(f, (Tuple(Vector{Float64} for i in 1:n)..., Float64))
+_takes_n_vectors_and_t(f, n) = hasmethod(f, (Tuple(Vector{Float64} for i in 1:n)..., Float64))
+_takes_n_vectors_no_t(f, n) = hasmethod(f, (Tuple(Vector{Float64} for i in 1:n)...))
 
 """
     copy(c::NetworkDynamics.ComponentFunction)

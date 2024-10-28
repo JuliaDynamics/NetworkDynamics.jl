@@ -6,12 +6,14 @@ mutable struct IndexManager{G}
     g::G
     edgevec::Vector{SimpleEdge{Int64}}
     v_data::Vector{UnitRange{Int}}  # v data in flat states
+    v_out::Vector{UnitRange{Int}}   # v range in output buf
     v_para::Vector{UnitRange{Int}}  # v para in flat para
     v_aggr::Vector{UnitRange{Int}}  # v input in aggbuf
     e_data::Vector{UnitRange{Int}}  # e data in flat states
+    e_out::Vector{UnitRange{Int}}   # e range in output buf
     e_para::Vector{UnitRange{Int}}  # e para in flat para
-    e_src::Vector{UnitRange{Int}}   # e input 1 in flat states
-    e_dst::Vector{UnitRange{Int}}   # e input 2 in flat states
+    e_src::Vector{UnitRange{Int}}   # e input 1 in out buf
+    e_dst::Vector{UnitRange{Int}}   # e input 2 in out buf
     e_gbufr::Vector{UnitRange{Int}} # e input range in gather buffer
     edepth::Int
     vdepth::Int

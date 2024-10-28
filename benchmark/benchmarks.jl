@@ -17,6 +17,8 @@ pinthreads(:cores)
 
 if pkgversion(NetworkDynamics) < v"0.9.0"
     (isinteractive() ? includet : include)("benchmark_models_v0.8.jl")
+elseif pkgversion(NetworkDynamics) < v"0.9.1"
+    (isinteractive() ? includet : include)("benchmark_models_v0.9.jl")
 else
     (isinteractive() ? includet : include)("benchmark_models.jl")
 end
