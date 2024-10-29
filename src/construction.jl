@@ -35,23 +35,17 @@ function Network(g::AbstractGraph,
             println("Create dynamic network with $(nv(g)) vertices and $(ne(g)) edges:")
         @argcheck execution isa ExecutionStyle "Execution type $execution not supported (choose from $(subtypes(ExecutionStyle)))"
 
-        _maxedepth = isempty(_edgef) ? 0 : mapreduce(depth, min, _edgef)
-        if edepth === :auto
-            edepth = _maxedepth
-            verbose && println(" - auto accumulation depth = $edepth")
-        end
-        @argcheck edepth<=_maxedepth "For this system accumulation depth is limited to $edepth by the edgefunctions"
 
-        _maxvdepth = mapreduce(depth, min, _vertexf)
-        if vdepth === :auto
-            vdepth = _maxvdepth
-            verbose && println(" - auto edge input depth = $vdepth")
+        if !allequal(outdim, _vertexf)
+            throw(ArgumentError("All vertex functions must have the same output dimension!"))
         end
-        @argcheck vdepth<=_maxvdepth "For this system edge input depth is limited to $edepth by the vertex dimensions"
+        if !allequal(outdim_dst, _edgef)
+            throw(ArgumentError("All edge functions must have the same output dimension!"))
+        end
+        vdepth = outdim(first(_vertexf))
+        edepth = outdim_dst(first(_edgef))
 
-        dynstates = mapreduce(+, Iterators.flatten((_vertexf,_edgef))) do t
-            isdynamic(t) ? dim(t) : 0
-        end
+        dynstates = mapreduce(dim, +, Iterators.flatten((_vertexf,_edgef)))
 
         # create index manager
         @timeit_debug "Construct Index manager" begin
@@ -141,7 +135,8 @@ function Network(g::AbstractGraph,
         @assert isdense(im)
         mass_matrix = construct_mass_matrix(im)
         N = ForwardDiff.pickchunksize(max(im.lastidx_dynamic, im.lastidx_p))
-        caches = (;state = DiffCache(zeros(im.lastidx_static), N),
+        caches = (;state = DiffCache(zeros(im.lastidx_dynamic), N),
+                  output = DiffCache(zeros(im.lastidx_out), N),
                   aggregation = DiffCache(zeros(im.lastidx_aggr), N))
 
         gbufprovider = if usebuffer(execution)
@@ -250,18 +245,23 @@ function VertexBatch(im::IndexManager, idxs::Vector{Int}; verbose)
     components = @view im.vertexf[idxs]
 
     try
+        # TODO: those checks seems expensive and redundant
         _compT = dispatchT(only(unique(dispatchT, components)))
         _compf = compf(only(unique(compf, components)))
-        _statetype = statetype(only(unique(statetype, components)))
+        _compg = compf(only(unique(compf, components)))
+
         _dim = dim(only(unique(dim, components)))
+        _outdim = outdim(only(unique(outdim, components)))
         _pdim = pdim(only(unique(pdim, components)))
 
-        (statestride, pstride, aggbufstride) = register_vertices!(im, _statetype, _dim, _pdim, idxs)
+        (statestride, outstride, pstride, aggbufstride) =
+            register_vertices!(im, _dim, _outdim, _pdim, idxs)
 
         verbose &&
         println(" - VertexBatch: dim=$(_dim), pdim=$(_pdim), length=$(length(idxs))")
 
-        VertexBatch{_compT, typeof(_compf), typeof(idxs)}(idxs, _compf, statestride, pstride, aggbufstride)
+        VertexBatch{_compT, typeof(_compf), typeof(_compg), typeof(idxs)}(
+            idxs, _compf, _compg, statestride, outstride, pstride, aggbufstride)
     catch e
         if e isa ArgumentError && startswith(e.msg, "Collection has multiple elements")
             throw(ArgumentError("Provided vertex functions $idxs use the same function but have different metadata (dim, pdim,type,...)"))
@@ -275,18 +275,23 @@ function EdgeBatch(im::IndexManager, idxs::Vector{Int}; verbose)
     components = @view im.edgef[idxs]
 
     try
+        # TODO: those checks seems expensive and redundant
         _compT = dispatchT(only(unique(dispatchT, components)))
         _compf = compf(only(unique(compf, components)))
-        _statetype = statetype(only(unique(statetype, components)))
+        _compg = compf(only(unique(compf, components)))
+
         _dim = dim(only(unique(dim, components)))
+        _outdim = outdim(only(unique(outdim, components)))
         _pdim = pdim(only(unique(pdim, components)))
 
-        (statestride, pstride, gbufstride) = register_edges!(im, _statetype, _dim, _pdim, idxs)
+        (statestride, outstride, pstride, gbufstride) =
+            register_edges!(im, _dim, _outdim, _pdim, idxs)
 
         verbose &&
         println(" - EdgeBatch: dim=$(_dim), pdim=$(_pdim), length=$(length(idxs))")
 
-        EdgeBatch{_compT, typeof(_compf), typeof(idxs)}(idxs, _compf, statestride, pstride, gbufstride)
+        EdgeBatch{_compT, typeof(_compf), typeof(_compg), typeof(idxs)}(
+            idxs, _compf, _compg, statestride, outstride, pstride, gbufstride)
     catch e
         if e isa ArgumentError && startswith(e.msg, "Collection has multiple elements")
             throw(ArgumentError("Provided edge functions $idxs use the same function but have different metadata (dim, pdim,type,...)"))

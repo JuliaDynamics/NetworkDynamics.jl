@@ -6,6 +6,9 @@ struct PureStateMap <: FeedForwardType end
 hasfftype(::Any) = false
 hasff(x) = fftype(x) isa Union{PureFeedForward, FeedForward}
 
+_hassymbolmapping(::Any) = false
+
+
 struct StateMask{N,I}
     idxs::I
     StateMask(i) = new{length(i), typeof(i)}(i)
@@ -42,7 +45,7 @@ end
     nothing
 end
 
-struct Directed <: Coupling end
+struct Directed{FF} <: Coupling{FF} end
 # TODO directed
 
 struct Fiducial{FF,GS,GD} <: Coupling{FF}
@@ -67,6 +70,7 @@ end
     nothing
 end
 
+
 abstract type ComponentFunction end
 
 """
@@ -78,7 +82,7 @@ abstract type VertexFunction <: ComponentFunction end
 Abstract supertype for all edge functions.
 """
 # abstract type EdgeFunction{C<:Coupling} <: ComponentFunction end
-abstract type EdgeFunction{C} <: ComponentFunction end
+abstract type EdgeFunction <: ComponentFunction end
 
 Mixers.@pour CommonFields begin
     name::Symbol
@@ -188,7 +192,11 @@ edges it returns a named tuple `(; src, dst)` with two symbol vectors.
 inputsym(c::VertexFunction)::Vector{Symbol} = c.inputsym
 inputsym(c::EdgeFunction)::@NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}} = c.inputsym
 
-
+outsym(c::ComponentFunction) = c.outsym
+outdim(c::VertexFunction) = length(outsym(c))
+outdim(c::EdgeFunction) = (; dst=outdim_dst(c), src=outdim_src(c))
+outdim_src(c::EdgeFunction) = length(outsym(c).src)
+outdim_dst(c::EdgeFunction) = length(outsym(c).dst)
 
 struct UnifiedVertex{F,G,FFT,OF,MM} <: VertexFunction
     name::Symbol
@@ -199,7 +207,7 @@ struct UnifiedVertex{F,G,FFT,OF,MM} <: VertexFunction
     # outputs
     g::G
     outsym::Vector{Symbol}
-    fftype::FFT
+    ff::FFT
     # parameters and option input sym
     psym::Vector{Symbol}
     inputsym::Union{Nothing, Vector{Symbol}}
@@ -210,8 +218,9 @@ struct UnifiedVertex{F,G,FFT,OF,MM} <: VertexFunction
     symmetadata::Dict{Symbol,Dict{Symbol, Any}}
     metadata::Dict{Symbol,Any}
 end
+UnifiedVertex(; kwargs...) = _construct_comp(UnifiedVertex, kwargs)
 
-struct UnifiedEdge{F,G,FFT,OF,MM} <: EdgeFunction{C}
+struct UnifiedEdge{F,G,FFT,OF,MM} <: EdgeFunction
     name::Symbol
     # main function
     f::F
@@ -219,8 +228,8 @@ struct UnifiedEdge{F,G,FFT,OF,MM} <: EdgeFunction{C}
     mass_matrix::MM
     # outputs
     g::G
-    outsym::@NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}}
-    fftype::FFT
+    outsym::@NamedTuple{dst::Vector{Symbol},src::Vector{Symbol}}
+    ff::FFT
     # parameters and option input sym
     psym::Vector{Symbol}
     inputsym::Union{Nothing, @NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}}}
@@ -231,6 +240,7 @@ struct UnifiedEdge{F,G,FFT,OF,MM} <: EdgeFunction{C}
     symmetadata::Dict{Symbol,Dict{Symbol, Any}}
     metadata::Dict{Symbol,Any}
 end
+UnifiedEdge(; kwargs...) = _construct_comp(UnifiedEdge, kwargs)
 
 function _infer_fftype(::Type{<:VertexFunction}, g, dim)
     pureff = _takes_n_vectors_and_t(g, 3) && iszero(dim)  # (out, ein, p, t)
@@ -309,7 +319,7 @@ function ODEVertex(sv::StaticVertex)
     ODEVertex(; d...)
 end
 
-struct StaticEdge{C,F,OF} <: EdgeFunction{C}
+struct StaticEdge{C,F,OF} <: EdgeFunction
     @CommonFields
     coupling::C
 end
@@ -319,7 +329,7 @@ StaticEdge(f, dim, coupling; kwargs...) = StaticEdge(;f, _dimsym(dim)..., coupli
 StaticEdge(f, dim, pdim, coupling; kwargs...) = StaticEdge(;f, _dimsym(dim, pdim)..., coupling, kwargs...)
 StaticEdge(e::StaticEdge; kwargs...) = _reconstruct_comp(StaticEdge, e, kwargs)
 
-struct ODEEdge{C,F,OF,MM} <: EdgeFunction{C}
+struct ODEEdge{C,F,OF,MM} <: EdgeFunction
     @CommonFields
     coupling::C
     mass_matrix::MM
@@ -352,7 +362,7 @@ dispatchT(::Type{<:ODEVertex}) = ODEVertex{nothing,nothing,nothing}
 dispatchT(T::Type{<:StaticEdge}) = StaticEdge{typeof(coupling(T)),nothing,nothing}
 dispatchT(T::Type{<:ODEEdge}) = ODEEdge{typeof(coupling(T)),nothing,nothing,nothing}
 dispatchT(T::Type{<:UnifiedVertex}) = UnifiedVertex{nothing,nothing,nothing,nothing,nothing}
-dispatchT(T::Type{<:UnifiedEdge}) = UnifiedVertex{nothing,nothing,nothing,nothing,nothing}
+dispatchT(T::Type{<:UnifiedEdge}) = UnifiedEdge{nothing,nothing,nothing,nothing,nothing}
 
 batchequal(a, b) = false
 function batchequal(a::ComponentFunction, b::ComponentFunction)
@@ -457,6 +467,19 @@ function _fill_defaults(T, kwargs)
         metadata[:graphelement] = (; src, dst)
     end
 
+    # set f to nothing if not present
+    if !haskey(dict, :f)
+        dict[:f] = nothing
+        if haskey(dict, :dim) && dict[:dim] != 0
+            throw(ArgumentError("Cannot provide dim != 0 without f."))
+        end
+        if haskey(dict, :sym) && !isempty(dict[:sym])
+            throw(ArgumentError("Cannot provide sym without f."))
+        end
+        dict[:sym] = Symbol[]
+        dict[:dim] = 0
+    end
+
     # sym & dim
     haskey(dict, :dim) || haskey(dict, :sym) || throw(ArgumentError("Either `dim` or `sym` must be provided to construct $T."))
     if haskey(dict, :sym)
@@ -494,12 +517,6 @@ function _fill_defaults(T, kwargs)
                 mt[:default] = def
             end
         end
-    end
-
-    # set f to nothing if not present
-    if !haskey(dict, :f)
-        dict[:f] = nothing
-        dim == 0 || error("Does not make sense to provide no f but dim != 0")
     end
 
     # psym & pdim
@@ -543,6 +560,64 @@ function _fill_defaults(T, kwargs)
         g = dict[:g]
         dict[:ff] = hasfftype(g) ? fftype(g) : _infer_fftype(T, g, dim)
     end
+
+    # outsym & outdim
+    # _hassymbolmapping(dict[:g]) || haskey(dict, :outdim) || haskey(dict, :outsym) || throw(ArgumentError("Either `outdim` or `outsym` must be provided to construct $T with arbitray g."))
+    if haskey(dict, :outsym)
+        if haskey(dict, :outdim)
+            if dict[:outdim] != length(dict[:outsym])
+                throw(ArgumentError("Length of outsym and outdim must match."))
+            end
+            # @warn "Unnecessary kw outdim, can be infered from outsym."
+            delete!(dict, :outdim)
+        end
+        outsym = dict[:outsym]
+
+        # extract and merge metadata from outsym
+        if T <: VertexFunction
+            if has_metadata(outsym)
+                dict[:outsym], _metadata = _split_metadata(outsym)
+                mergewith!(merge!, symmetadata, _metadata)
+            end
+        elseif T <: EdgeFunction
+            (; src, dst) = outsym
+            src = if has_metadata(src)
+                newsrc, _metadata = _split_metadata(src)
+                mergewith!(merge!, symmetadata, _metadata)
+                newsrc
+            end
+            dst = if has_metadata(dst)
+                newdst, _metadata = _split_metadata(dst)
+                mergewith!(merge!, symmetadata, _metadata)
+                newdst
+            end
+            dict[:outsym] = (; dst, src)
+        end
+    elseif _hassymbolmapping(dict[:g])
+        dict[:outsym] = _mapsymbols(dict[:g], dict[:sym])
+        if haskey(dict, :outdim)
+            delete!(dict, :outdim)
+            lnegth
+        end
+    elseif haskey(dict, :outdim)
+        _dim = pop!(dict, :outdim)
+        if T <: VertexFunction
+            dict[:outsym] = [_dim>1 ? Symbol("vout", subscript(i)) : :sout for i in 1:_dim]
+        elseif T <: EdgeFunction
+            base_syms = [_dim>1 ? Symbol("out", subscript(i)) : :out for i in 1:_dim]
+            dst = map(x -> Symbol("dst₊", x), base_syms)
+            src = map(x -> Symbol("src₊", x), base_syms)
+            dict[:outsym] = (; dst, src)
+        else
+            error()
+        end
+    else
+        throw(ArgumentError("Either `outdim` or `outsym` must be provided to construct $T \
+            with arbitray g. Outsyms can be inferred for `StateMask` output functions."))
+    end
+
+    outdim = length(dict[:outsym])
+
     # obsf & obssym
     if haskey(dict, :obsf) || haskey(dict, :obssym)
         if !(haskey(dict, :obsf) && haskey(dict, :obssym))
@@ -632,6 +707,30 @@ function _fill_defaults(T, kwargs)
     return dict
 end
 
+# define the symbolmapping to infer output symbols from state symbols
+_hassymbolmapping(::StateMask) = true
+_hassymbolmapping(::AntiSymmetric{<:Any, <:StateMask}) = true
+_hassymbolmapping(::Symmetric{<:Any, <:StateMask}) = true
+_hassymbolmapping(::Fiducial{<:Any, <:StateMask, <:StateMask}) = true
+
+_mapsymbols(g::StateMask, s) = s[g.idxs]
+function _mapsymbols(g::AntiSymmetric{<:Any, <:StateMask}, s)
+    dst = _mapsymbols(g.g, s)
+    src = map(x->Symbol("₋", x), dst)
+    (;dst, src)
+end
+function _mapsymbols(g::Symmetric{<:Any, <:StateMask}, s)
+    dst = _mapsymbols(g.g, s)
+    src = dst
+    (;dst, src)
+end
+function _mapsymbols(g::Fiducial{<:Any, <:StateMask, <:StateMask}, s)
+    dst = _mapsymbols(g.dst, s)
+    src = _mapsymbols(g.src, s)
+    (;dst, src)
+end
+
+
 _default_name(::Type{StaticVertex}) = :StaticVertex
 _default_name(::Type{ODEVertex}) = :ODEVertex
 _default_name(::Type{UnifiedVertex}) = :UnifiedVertex
@@ -681,7 +780,7 @@ _valid_signature(::Type{<:StaticEdge}, f) = _takes_n_vectors_and_t(f, 4) #(u, sr
 _valid_signature(::Type{<:ODEEdge}, f) = _takes_n_vectors_and_t(f, 5) #(du, u, src, dst, p, t)
 
 _takes_n_vectors_and_t(f, n) = hasmethod(f, (Tuple(Vector{Float64} for i in 1:n)..., Float64))
-_takes_n_vectors_no_t(f, n) = hasmethod(f, (Tuple(Vector{Float64} for i in 1:n)...))
+_takes_n_vectors_no_t(f, n) = hasmethod(f, Tuple(Vector{Float64} for i in 1:n))
 
 """
     copy(c::NetworkDynamics.ComponentFunction)

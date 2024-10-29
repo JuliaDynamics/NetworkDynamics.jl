@@ -1,13 +1,27 @@
-struct BatchStride
+struct BatchStride{N}
     first::Int
-    stride::Int
+    strides::NTuple{N,Int}
 end
-@inline function _range(bs::BatchStride, i)
-    start = bs.first + (i - 1) * bs.stride
-    start:start+bs.stride-1
-end
+BatchStride(first::Int, stride::Int) = BatchStride(first, (stride,))
+
+# get full stride length (all substrides)
+_fullstride(bs::BatchStride{1}) = @inbounds bs.strides[1]
+_fullstride(bs::BatchStride) = sum(bs.strides)
+
+# full range for N elements with this stride
 @inline function _fullrange(bs::BatchStride, N)
-    (bs.first):(bs.first+N*bs.stride-1)
+    (bs.first):(bs.first+N*_fullstride(bs)-1)
+end
+
+# range of i-th element
+@inline function _range(bs::BatchStride{1}, i)
+    start = bs.first + (i - 1) * _fullstride(bs)
+    start:start+_fullstride(bs)-1
+end
+# subrange j of i-th element
+@inline function _range(bs::BatchStride{N}, i, j) where {N}
+    start = bs.first + (i - 1) * _fullstride(bs) + sum(bs.strides[1:j-1])
+    start:start+bs.stride[j]-1
 end
 
 subscript(N) = String(_subscript.(reverse(digits(N))))

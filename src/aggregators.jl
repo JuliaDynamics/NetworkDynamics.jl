@@ -48,40 +48,30 @@ end
 struct AggregationMap{V}
     range::UnitRange{Int} # range in data where aggregation is necessary
     map::V                # maps data idx to destination, if zero skip
-    symrange::UnitRange{Int}     # same for symmetric/antisymmetric coupling
-    symmap::V
 end
 function AggregationMap(im, batches)
-    _map    = zeros(Int, im.lastidx_static)
-    _symmap = zeros(Int, im.lastidx_static)
+    _map    = zeros(Int, im.lastidx_out)
     for batch in batches
         for eidx in batch.indices
             edge = im.edgevec[eidx]
+            edgef = im.edgef[eidx]
 
+            # dst mapping
             target = im.v_aggr[edge.dst]
-            source = im.e_data[eidx][1:im.edepth]
+            source = im.e_out[eidx][1:outdim_dst(edgef)]
             _map[source] .= target
 
             # src mapping
-            cplng = coupling(batch)
-            if cplng == Symmetric()
+            if !iszero(outdim_src(edgef))
                 target = im.v_aggr[edge.src]
-                source = im.e_data[eidx][1:im.edepth]
-                _symmap[source] .= target
-            elseif cplng == AntiSymmetric()
-                target = -1 .* im.v_aggr[edge.src]
-                source = im.e_data[eidx][1:im.edepth]
-                _symmap[source] .= target
-            elseif cplng == Fiducial()
-                target = im.v_aggr[edge.src]
-                source = im.e_data[eidx][im.edepth+1:2*im.edepth]
-                _symmap[source] .= target
+                s = outdim_dst(edgef)+1
+                source = im.e_out[eidx][s:s+outdim_src(edgef)-1]
+                _map[source] .= target
             end
         end
     end
     range, map       = _tighten_idxrange(_map)
-    symrange, symmap = _tighten_idxrange(_symmap)
-    AggregationMap(range, map, symrange, symmap)
+    AggregationMap(range, map)
 end
 function _tighten_idxrange(v)
     first = findfirst(!iszero, v)
