@@ -135,8 +135,7 @@ function Network(g::AbstractGraph,
         @assert isdense(im)
         mass_matrix = construct_mass_matrix(im)
         N = ForwardDiff.pickchunksize(max(im.lastidx_dynamic, im.lastidx_p))
-        caches = (;state = DiffCache(zeros(im.lastidx_dynamic), N),
-                  output = DiffCache(zeros(im.lastidx_out), N),
+        caches = (; output = DiffCache(zeros(im.lastidx_out), N),
                   aggregation = DiffCache(zeros(im.lastidx_aggr), N))
 
         gbufprovider = if usebuffer(execution)
@@ -248,7 +247,8 @@ function VertexBatch(im::IndexManager, idxs::Vector{Int}; verbose)
         # TODO: those checks seems expensive and redundant
         _compT = dispatchT(only(unique(dispatchT, components)))
         _compf = compf(only(unique(compf, components)))
-        _compg = compf(only(unique(compf, components)))
+        _compg = compg(only(unique(compg, components)))
+        _ff    = fftype(only(unique(fftype, components)))
 
         _dim = dim(only(unique(dim, components)))
         _outdim = outdim(only(unique(outdim, components)))
@@ -260,8 +260,8 @@ function VertexBatch(im::IndexManager, idxs::Vector{Int}; verbose)
         verbose &&
         println(" - VertexBatch: dim=$(_dim), pdim=$(_pdim), length=$(length(idxs))")
 
-        VertexBatch{_compT, typeof(_compf), typeof(_compg), typeof(idxs)}(
-            idxs, _compf, _compg, statestride, outstride, pstride, aggbufstride)
+        VertexBatch{_compT, typeof(_compf), typeof(_compg), typeof(_ff), typeof(idxs)}(
+            idxs, _compf, _compg, _ff, statestride, outstride, pstride, aggbufstride)
     catch e
         if e isa ArgumentError && startswith(e.msg, "Collection has multiple elements")
             throw(ArgumentError("Provided vertex functions $idxs use the same function but have different metadata (dim, pdim,type,...)"))
@@ -278,7 +278,8 @@ function EdgeBatch(im::IndexManager, idxs::Vector{Int}; verbose)
         # TODO: those checks seems expensive and redundant
         _compT = dispatchT(only(unique(dispatchT, components)))
         _compf = compf(only(unique(compf, components)))
-        _compg = compf(only(unique(compf, components)))
+        _compg = compg(only(unique(compg, components)))
+        _ff    = fftype(only(unique(fftype, components)))
 
         _dim = dim(only(unique(dim, components)))
         _outdim = outdim(only(unique(outdim, components)))
@@ -290,8 +291,8 @@ function EdgeBatch(im::IndexManager, idxs::Vector{Int}; verbose)
         verbose &&
         println(" - EdgeBatch: dim=$(_dim), pdim=$(_pdim), length=$(length(idxs))")
 
-        EdgeBatch{_compT, typeof(_compf), typeof(_compg), typeof(idxs)}(
-            idxs, _compf, _compg, statestride, outstride, pstride, gbufstride)
+        EdgeBatch{_compT, typeof(_compf), typeof(_compg), typeof(_ff), typeof(idxs)}(
+            idxs, _compf, _compg, _ff, statestride, outstride, pstride, gbufstride)
     catch e
         if e isa ArgumentError && startswith(e.msg, "Collection has multiple elements")
             throw(ArgumentError("Provided edge functions $idxs use the same function but have different metadata (dim, pdim,type,...)"))

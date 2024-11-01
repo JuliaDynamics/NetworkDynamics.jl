@@ -5,16 +5,17 @@ struct Static <: StateType end
 mutable struct IndexManager{G}
     g::G
     edgevec::Vector{SimpleEdge{Int64}}
+    # positions of vertex data
     v_data::Vector{UnitRange{Int}}  # v data in flat states
     v_out::Vector{UnitRange{Int}}   # v range in output buf
     v_para::Vector{UnitRange{Int}}  # v para in flat para
     v_aggr::Vector{UnitRange{Int}}  # v input in aggbuf
+    # positions of edge data
     e_data::Vector{UnitRange{Int}}  # e data in flat states
     e_out::Vector{UnitRange{Int}}   # e range in output buf
     e_para::Vector{UnitRange{Int}}  # e para in flat para
-    e_src::Vector{UnitRange{Int}}   # e input 1 in out buf
-    e_dst::Vector{UnitRange{Int}}   # e input 2 in out buf
     e_gbufr::Vector{UnitRange{Int}} # e input range in gather buffer
+    # metadata
     edepth::Int
     vdepth::Int
     lastidx_dynamic::Int
@@ -35,7 +36,7 @@ mutable struct IndexManager{G}
         unique_enames = unique_mappings(getproperty.(edgef, :name), 1:ne(g))
         new{typeof(g)}(g, collect(edges(g)),
                        (Vector{UnitRange{Int}}(undef, nv(g)) for i in 1:4)...,
-                       (Vector{UnitRange{Int}}(undef, ne(g)) for i in 1:6)...,
+                       (Vector{UnitRange{Int}}(undef, ne(g)) for i in 1:4)...,
                        edepth, vdepth,
                        0, 0, 0, 0, 0,
                        vertexf, edgef,
@@ -86,7 +87,7 @@ struct Network{EX<:ExecutionStyle,G,NL,VTup,MM,CT,GBT}
     "index manager"
     im::IndexManager{G}
     "lazy cache pool"
-    caches::@NamedTuple{state::CT,output::CT,aggregation::CT}
+    caches::@NamedTuple{output::CT,aggregation::CT}
     "mass matrix"
     mass_matrix::MM
     "Gather buffer provider (lazy or eager)"
@@ -114,12 +115,12 @@ Graphs.nv(nw::Network) = nv(nw.im.g)
 Graphs.ne(nw::Network) = ne(nw.im.g)
 Base.broadcastable(nw::Network) = Ref(nw)
 
-function get_state_cache(nw::Network, T)
-    if eltype(T) <: AbstractFloat && eltype(nw.caches.state.du) != eltype(T)
-        throw(ArgumentError("Network caches are initialized with $(eltype(nw.caches.state.du)) \
+function get_output_cache(nw::Network, T)
+    if eltype(T) <: AbstractFloat && eltype(nw.caches.output.du) != eltype(T)
+        throw(ArgumentError("Network caches are initialized with $(eltype(nw.caches.output.du)) \
             but is used for $(eltype(T)) data!"))
     end
-    get_tmp(nw.caches.state, T)
+    get_tmp(nw.caches.output, T)
 end
 get_aggregation_cache(nw::Network, T) = get_tmp(nw.caches.aggregation, T)
 
@@ -140,13 +141,14 @@ end
 
 abstract type ComponentBatch{F} end
 
-struct VertexBatch{T<:VertexFunction,F,G,IV<:AbstractVector{<:Integer}} <: ComponentBatch{T}
+struct VertexBatch{T<:VertexFunction,F,G,FFT,IV<:AbstractVector{<:Integer}} <: ComponentBatch{T}
     "vertex indices contained in batch"
     indices::IV
     "vertex function"
     compf::F
     "vertex output function"
     compg::G
+    ff::FFT
     "state: dimension and first index"
     statestride::BatchStride{1}
     "output: dimension and first index"
@@ -157,13 +159,14 @@ struct VertexBatch{T<:VertexFunction,F,G,IV<:AbstractVector{<:Integer}} <: Compo
     aggbufstride::BatchStride{1}
 end
 
-struct EdgeBatch{T<:EdgeFunction,F,G,IV<:AbstractVector{<:Integer}} <: ComponentBatch{T}
+struct EdgeBatch{T<:EdgeFunction,F,G,FFT,IV<:AbstractVector{<:Integer}} <: ComponentBatch{T}
     "edge indices (as in edge iterator) contained in batch"
     indices::IV
     "edge function"
     compf::F
     "edge output funciton"
     compg::G
+    ff::FFT
     "state: dimension and first index"
     statestride::BatchStride{1}
     "output: dimension and first index"
@@ -179,34 +182,36 @@ end
 @inline coupling(::EdgeBatch{F}) where {F} = coupling(F)
 @inline dispatchT(::ComponentBatch{F}) where {F} = F
 @inline compf(b::ComponentBatch) = b.compf
+@inline compg(b::ComponentBatch) = b.compg
+@inline fftype(b::ComponentBatch) = b.ff
 
 @inline state_range(batch) = _fullrange(batch.statestride, length(batch))
 
 @inline state_range(batch, i)     = _range(batch.statestride, i)
 @inline parameter_range(batch, i) = _range(batch.pstride, i)
+@inline out_range(batch, i) = _range(batch.outstride, i)
+@inline out_range(batch, i, j) = _range(batch.outstride, i, j)
 @inline aggbuf_range(batch, i)    = _range(batch.aggbufstride, i)
 @inline gbuf_range(batch, i)      = _range(batch.gbufstride, i)
 
 function register_vertices!(im::IndexManager, dim, outdim, pdim, idxs)
     for i in idxs
-        im.v_data[i]    = _nexturange!(im, dim)
+        im.v_data[i] = _nexturange!(im, dim)
         im.v_out[i]  = _nextoutrange!(im, outdim)
         im.v_para[i] = _nextprange!(im, pdim)
         im.v_aggr[i] = _nextaggrrange!(im, im.edepth)
     end
     (BatchStride(first(im.v_data[first(idxs)]), dim),
-     BatchStride(first(im.e_out[first(idxs)]), outdim),
+     BatchStride(first(im.v_out[first(idxs)]), outdim),
      BatchStride(first(im.v_para[first(idxs)]), pdim),
      BatchStride(first(im.v_aggr[first(idxs)]), im.edepth))
 end
 function register_edges!(im::IndexManager, dim, outdim, pdim, idxs)
     for i in idxs
         e = im.edgevec[i]
-        im.e_data[i]     = _nexturange!(im, dim)
-        im.e_out[i]  = _nextoutrange!(im, outdim.src+outdim.dst)
+        im.e_data[i]  = _nexturange!(im, dim)
+        im.e_out[i]   = _nextoutrange!(im, outdim.src+outdim.dst)
         im.e_para[i]  = _nextprange!(im, pdim)
-        im.e_src[i]   = im.v_data[e.src][1:im.vdepth]
-        im.e_dst[i]   = im.v_data[e.dst][1:im.vdepth]
         im.e_gbufr[i] = _nextgbufrange!(im, im.vdepth)
     end
     (BatchStride(first(im.e_data[first(idxs)]), dim),

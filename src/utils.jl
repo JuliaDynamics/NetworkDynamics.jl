@@ -20,8 +20,8 @@ end
 end
 # subrange j of i-th element
 @inline function _range(bs::BatchStride{N}, i, j) where {N}
-    start = bs.first + (i - 1) * _fullstride(bs) + sum(bs.strides[1:j-1])
-    start:start+bs.stride[j]-1
+    start = bs.first + (i - 1) * _fullstride(bs) + sum(bs.strides[1:j-1], init=0)
+    start:start+bs.strides[j]-1
 end
 
 subscript(N) = String(_subscript.(reverse(digits(N))))

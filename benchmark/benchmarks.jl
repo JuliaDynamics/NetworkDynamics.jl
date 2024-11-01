@@ -46,18 +46,18 @@ try aggregations["sprs"] = SparseAggregator catch e end
 
 configurations = [
     ("seq", "seq"),
-    ("ka", "seq"),
-    ("poly", "seq"),
-    ("thrd", "seq"),
-    ("seq_buf", "seq"), # default seq
-    ("ka_buf", "seq"),
-    ("poly_buf", "seq"),
-    ("thrd_buf", "seq"),
-    ("poly_buf", "ka"),
-    ("poly_buf", "poly"),
-    ("poly_buf", "thrd"),
-    ("poly_buf", "sprs"),
-    ("poly_buf", "poly"), # default thrd
+    # ("ka", "seq"),
+    # ("poly", "seq"),
+    # ("thrd", "seq"),
+    # ("seq_buf", "seq"), # default seq
+    # ("ka_buf", "seq"),
+    # ("poly_buf", "seq"),
+    # ("thrd_buf", "seq"),
+    # ("poly_buf", "ka"),
+    # ("poly_buf", "poly"),
+    # ("poly_buf", "thrd"),
+    # ("poly_buf", "sprs"),
+    # ("poly_buf", "poly"), # default thrd
 ]
 
 ####

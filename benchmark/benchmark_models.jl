@@ -2,7 +2,7 @@ using NetworkDynamics
 ####
 #### Diffusion system
 ####
-Base.@propagate_inbounds function diffusionedge!(e, _, v_s, v_d, _, _)
+Base.@propagate_inbounds function diffusionedge!(e, v_s, v_d, _, _)
     e[1] = v_s[1] - v_d[1]
     nothing
 end
@@ -32,11 +32,11 @@ static_kuramoto_edge() = UnifiedEdge(; g=AntiSymmetric(kuramoto_edge!), outdim=1
 Base.@propagate_inbounds function kuramoto_vertex!(dθ, θ, esum, (ω,), t)
     dθ[1] = ω + esum[1]
 end
-kuramoto_vertex_1d() = UnifiedVertex(; f=kuramoto_vertex!, pdim=1, sym=[:θ], osym=[:θ])
+kuramoto_vertex_1d() = UnifiedVertex(; f=kuramoto_vertex!, pdim=1, sym=[:θ], g=StateMask(1:1))
 
 Base.@propagate_inbounds function kuramoto_inertia!(dv, v, esum, (P,), t)
     dv[1] = v[2]
     dv[2] = P - 1.0 * v[2]
     dv[2] += esum[1]
 end
-kuramoto_vertex_2d() = UnifiedVertex(; f=kuramoto_inertia!, dim=2, pdim=1, sym=[:θ, :ω]);
+kuramoto_vertex_2d() = UnifiedVertex(; f=kuramoto_inertia!, dim=2, pdim=1, sym=[:θ, :ω], g=StateMask(1:1));

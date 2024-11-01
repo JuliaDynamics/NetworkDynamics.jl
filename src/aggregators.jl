@@ -147,18 +147,11 @@ SequentialAggregator(im, batches, f) = SequentialAggregator(f, AggregationMap(im
 function aggregate!(a::SequentialAggregator, aggbuf, data)
     fill!(aggbuf, zero(eltype(aggbuf)))
 
+    am = a.m
     @inbounds begin
-        am = a.m
         for (dat, dst_idx) in zip(view(data, am.range), am.map)
             if dst_idx != 0
                 aggbuf[dst_idx] = a.f(aggbuf[dst_idx], dat)
-            end
-        end
-
-        for (dat, dst_idx) in zip(view(data, am.symrange), am.symmap)
-            if dst_idx != 0
-                _dst_idx = abs(dst_idx)
-                aggbuf[_dst_idx] = a.f(aggbuf[_dst_idx], sign(dst_idx) * dat)
             end
         end
     end

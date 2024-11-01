@@ -16,6 +16,14 @@ end
 hasfftype(::StateMask) = true
 fftype(::StateMask) = PureStateMap()
 
+@inline function (s::StateMask)(out, u)
+    vu = view(u, s.idxs)
+    @inbounds for i in eachindex(out, vu)
+        out[i] = vu[i]
+    end
+    nothing
+end
+
 
 abstract type Coupling{FF} end
 hasfftype(::Coupling) = true
@@ -27,7 +35,7 @@ struct AntiSymmetric{FF,G} <: Coupling{FF}
 end
 @inline function (c::AntiSymmetric)(osrc, odst, args...)
     @inline c.g(odst, args...)
-    for i in eachindex(osrc, odst)
+    @inbounds for i in eachindex(odst, odst)
         osrc[i] = -odst[i]
     end
     nothing
@@ -39,7 +47,7 @@ struct Symmetric{FF,G} <: Coupling{FF}
 end
 @inline function (c::Symmetric)(osrc, odst, args...)
     @inline c.g(odst, args...)
-    for i in eachindex(osrc, odst)
+    @inbounds for i in eachindex(osrc, odst)
         osrc[i] = odst[i]
     end
     nothing
@@ -51,7 +59,7 @@ struct Directed{FF} <: Coupling{FF} end
 struct Fiducial{FF,GS,GD} <: Coupling{FF}
     src::GS
     dst::GD
-    function Symmetric(src, dst; ff=nothing)
+    function Fiducial(src, dst; ff=nothing)
         if isnothing(ff)
             ffsrc = _infer_ss_fftype(src)
             ffdst = _infer_ss_fftype(dst)
@@ -64,6 +72,9 @@ struct Fiducial{FF,GS,GD} <: Coupling{FF}
         new{typeof(ff), typeof(src), typeof(dst)}(src, dst)
     end
 end
+Fiducial(src::UnitRange, dst::UnitRange; ff=nothing) = Fiducial(StateMask(src), StateMask(dst); ff)
+Fiducial(;src, dst, ff=nothing) = Fiducial(src, dst; ff)
+
 @inline function (c::Fiducial)(osrc, odst, args...)
     @inline c.src(osrc, args...)
     @inline c.dst(odst, args...)
@@ -242,6 +253,8 @@ struct UnifiedEdge{F,G,FFT,OF,MM} <: EdgeFunction
 end
 UnifiedEdge(; kwargs...) = _construct_comp(UnifiedEdge, kwargs)
 
+fftype(c::Union{<:UnifiedVertex, <:UnifiedEdge}) = c.ff
+
 function _infer_fftype(::Type{<:VertexFunction}, g, dim)
     pureff = _takes_n_vectors_and_t(g, 3) && iszero(dim)  # (out, ein, p, t)
     ff     = _takes_n_vectors_and_t(g, 4)                 # (out, u, ein, p, t)
@@ -268,7 +281,7 @@ function _infer_fftype(::Type{<:EdgeFunction}, g, dim; singlesided=false)
     ff+noff+pureff+pureu > 1 && error("Could not determinen output map type from g signature. Provide :ff keyword explicitly!")
     ff+noff+pureff+pureu == 0 && error("Method signature of `g` seems invalid!")
 
-    pureff && return PureStateMap()
+    pureff && return PureFeedForward()
     ff && return FeedForward()
     noff && return NoFeedForward()
     pureu && return PureStateMap()
@@ -345,6 +358,8 @@ statetype(::Type{<:ODEVertex}) = Dynamic()
 statetype(::Type{<:StaticVertex}) = Static()
 statetype(::Type{<:StaticEdge}) = Static()
 statetype(::Type{<:ODEEdge}) = Dynamic()
+statetype(::Type{<:UnifiedEdge}) = Dynamic()
+statetype(::Type{<:UnifiedVertex}) = Dynamic()
 
 isdynamic(x) = statetype(x) == Dynamic()
 isstatic(x)  = statetype(x) == Static()
@@ -353,7 +368,7 @@ isstatic(x)  = statetype(x) == Static()
     dispatchT(<:ComponentFunction) :: Type{<:ComponentFunction}
 
 Returns the type "essence" of the component used for dispatch.
-Fills up type parameters with `nothing` to ensure `Core.compiler.isconstType`
+Fills up type parameters with `nothing` to ensure `Core.Compiler.isconstType`
 for GPU compatibility.
 """
 dispatchT(::T) where {T<:ComponentFunction} = dispatchT(T)
