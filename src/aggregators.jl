@@ -258,43 +258,32 @@ function SparseAggregator(im, batches)
     unrolled_foreach(batches) do batch
         for eidx in batch.indices
             edge = im.edgevec[eidx]
+            edgef = im.edgef[eidx]
 
             # dst mapping
-            edat_idx = im.e_data[eidx][1:im.edepth]
-            dst_idx = im.v_aggr[edge.dst]
-            append!(I, dst_idx)
-            append!(J, edat_idx)
-            append!(V, Iterators.repeated(1, length(dst_idx)))
+            target = im.v_aggr[edge.dst]
+            source = im.e_out[eidx][1:outdim_dst(edgef)]
+            append!(I, target)
+            append!(J, source)
+            append!(V, Iterators.repeated(1, length(target)))
 
             # src mapping
-            cplng = coupling(batch)
-            if cplng == Symmetric()
-                edat_idx = im.e_data[eidx][1:im.edepth]
-                dst_idx = im.v_aggr[edge.src]
-                append!(I, dst_idx)
-                append!(J, edat_idx)
-                append!(V, Iterators.repeated(1, length(dst_idx)))
-            elseif cplng == AntiSymmetric()
-                edat_idx = im.e_data[eidx][1:im.edepth]
-                dst_idx = im.v_aggr[edge.src]
-                append!(I, dst_idx)
-                append!(J, edat_idx)
-                append!(V, Iterators.repeated(-1, length(dst_idx)))
-            elseif cplng == Fiducial()
-                edat_idx = im.e_data[eidx][im.edepth+1:2*im.edepth]
-                dst_idx = im.v_aggr[edge.src]
-                append!(I, dst_idx)
-                append!(J, edat_idx)
-                append!(V, Iterators.repeated(1, length(dst_idx)))
+            if !iszero(outdim_src(edgef))
+                target = im.v_aggr[edge.src]
+                s = outdim_dst(edgef)+1
+                source = im.e_out[eidx][s:s+outdim_src(edgef)-1]
+                append!(I, target)
+                append!(J, source)
+                append!(V, Iterators.repeated(1, length(target)))
             end
         end
     end
 
-    SparseAggregator(sparse(I,J,V, im.lastidx_aggr, im.lastidx_static))
+    SparseAggregator(sparse(I,J,V, im.lastidx_aggr, im.lastidx_out))
 end
 
-function aggregate!(a::SparseAggregator, aggbuf, data)
-   LinearAlgebra.mul!(aggbuf, a.m, data)
+function aggregate!(a::SparseAggregator, aggbuf, out)
+   LinearAlgebra.mul!(aggbuf, a.m, out)
    nothing
 end
 
@@ -306,6 +295,5 @@ get_aggr_constructor(a::PolyesterAggregator) = PolyesterAggregator(a.f)
 get_aggr_constructor(a::ThreadedAggregator) = ThreadedAggregator(a.f)
 get_aggr_constructor(a::SparseAggregator) = SparseAggregator(+)
 
-iscudacompatible(::Type{<:Aggregator}) = false
 iscudacompatible(::Type{<:KAAggregator}) = true
 iscudacompatible(::Type{<:SparseAggregator}) = true

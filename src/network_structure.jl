@@ -76,7 +76,7 @@ usebuffer(::Type{<:ExecutionStyle{buffered}}) where {buffered} = buffered
 
 # check cuda compatibliity
 iscudacompatible(x) = iscudacompatible(typeof(x))
-iscudacompatible(::Type{<:ExecutionStyle}) = false
+iscudacompatible(::Type{<:Any}) = false
 iscudacompatible(::Type{<:KAExecution}) = true
 
 struct Network{EX<:ExecutionStyle,G,NL,VTup,MM,CT,GBT}

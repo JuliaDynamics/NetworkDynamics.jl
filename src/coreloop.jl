@@ -1,16 +1,15 @@
 function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t) where {A,B,C,D,E,dT,T}
-    # if !(eachindex(du) == eachindex(u) == 1:nw.im.lastidx_dynamic)
-    #     throw(ArgumentError("du or u does not have expected size $(nw.im.lastidx_dynamic)"))
-    # end
-    # if nw.im.lastidx_p > 0 && _indexable(p) && !(eachindex(p) == 1:nw.im.lastidx_p)
-    #     throw(ArgumentError("p does not has expecte size $(nw.im.lastidx_p)"))
-    # end
+    if !(eachindex(du) == eachindex(u) == 1:nw.im.lastidx_dynamic)
+        throw(ArgumentError("du or u does not have expected size $(nw.im.lastidx_dynamic)"))
+    end
+    if nw.im.lastidx_p > 0 && _indexable(p) && !(eachindex(p) == 1:nw.im.lastidx_p)
+        throw(ArgumentError("p does not has expecte size $(nw.im.lastidx_p)"))
+    end
 
     ex = executionstyle(nw)
     fill!(du, zero(eltype(du)))
     o = get_output_cache(nw, du)
     fill!(o, convert(eltype(o), NaN))
-
 
     duopt = (du, u, o, p, t)
     aggbuf = get_aggregation_cache(nw, du)
@@ -21,6 +20,9 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t) where {A,B,C,D,E,dT,T}
     # eg without ff
     process_batches!(ex, Val{:g}(), !hasff, nw.layer.edgebatches, nothing, duopt)
 
+    # process batches might be async so sync before next step
+    ex isa KAExecution && KernelAbstractions.synchronize(get_backend(du))
+
     # gather the vertex results for edges with ff
     gather!(nw.gbufprovider, gbuf, o) # 2.6ms
 
@@ -29,11 +31,17 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t) where {A,B,C,D,E,dT,T}
     # execute f&g for edges with ff
     process_batches!(ex, Val{:fg}(), hasff, nw.layer.edgebatches, gbuf, duopt)
 
+    # process batches might be async so sync before next step
+    ex isa KAExecution && KernelAbstractions.synchronize(get_backend(du))
+
     # aggegrate the results
     aggregate!(nw.layer.aggregator, aggbuf, o)
 
     # vf for vertices without ff
     process_batches!(ex, Val{:f}(), !hasff, nw.vertexbatches, aggbuf, duopt)
+
+    # process batches might be async so sync before next step
+    ex isa KAExecution && KernelAbstractions.synchronize(get_backend(du))
     return nothing
 end
 
@@ -46,6 +54,41 @@ end
         end
     end
 end
+
+@inline function process_batches!(::KAExecution, fg, filt::F, batches, inbuf, duopt) where {F}
+    _backend = get_backend(duopt[1])
+    unrolled_foreach(filt, batches) do batch
+        (du, u, o, p, t) = duopt
+        _type = dispatchT(batch)
+        kernel = if evalf(fg, batch) && evalg(fg, batch)
+            compkernel_fg!(_backend)
+        elseif evalf(fg, batch)
+            compkernel_f!(_backend)
+        elseif evalg(fg, batch)
+            compkernel_g!(_backend)
+        end
+        kernel(_type, fg, batch, du, u, o, inbuf, p, t; ndrange=length(batch))
+    end
+end
+@kernel function compkernel_f!(::Type{T}, @Const(fg), @Const(batch),
+                               du, @Const(u), @Const(o), @Const(inbuf), @Const(p), @Const(t)) where {T}
+    I = @index(Global)
+    apply_comp!(T, fg, batch, I, du, u, o, inbuf, p, t)
+    nothing
+end
+@kernel function compkernel_g!(::Type{T}, @Const(fg), @Const(batch),
+                               @Const(du), @Const(u), o, @Const(inbuf), @Const(p), @Const(t)) where {T}
+    I = @index(Global)
+    apply_comp!(T, fg, batch, I, du, u, o, inbuf, p, t)
+    nothing
+end
+@kernel function compkernel_fg!(::Type{T}, @Const(fg), @Const(batch),
+                                du, @Const(u), o, @Const(inbuf), @Const(p), @Const(t)) where {T}
+    I = @index(Global)
+    apply_comp!(T, fg, batch, I, du, u, o, inbuf, p, t)
+    nothing
+end
+
 
 @inline function apply_comp!(::Type{<:UnifiedVertex}, fg, batch, i, du, u, o, aggbuf, p, t)
     @inbounds begin
@@ -96,18 +139,25 @@ end
     nothing
 end
 
+# check if the function arguments are actually used
 _needs_du(fg, batch) = evalf(fg, batch)
 _needs_u(fg, batch) = evalf(fg, batch) || fftype(batch) != PureFeedForward()
 _needs_out(fg, batch) = evalg(fg, batch)
 _needs_in(fg, batch) = evalf(fg, batch) || hasff(batch)
 _needs_p(fg, batch) = evalf(fg, batch) || fftype(batch) != PureStateMap()
 
+# check if eval of f or g is necessary
 evalf(::Val{:f}, batch) = !isnothing(compf(batch))
 evalf(::Val{:g}, batch) = false
 evalf(::Val{:fg}, batch) = !isnothing(compf(batch))
 evalg(::Val{:f}, _) = false
 evalg(::Val{:g}, _) = true
 evalg(::Val{:fg}, _) = true
+
+# check if indexing into p is necessary
+_indexable(::Nothing) = false
+_indexable(::SciMLBase.NullParameters) = false
+_indexable(::AbstractVector) = true
 
 
 # get_ustacked_buf(s) = get_ustacked_buf(s.nw, uflat(s), pflat(s), s.t)
@@ -282,7 +332,7 @@ evalg(::Val{:fg}, _) = true
 # _has_dynamic(::Static) = false
 # _has_static(::Dynamic) = false
 # _has_static(::Static) = true
-# check if indexing into p is necessary
-_indexable(::Nothing) = false
-_indexable(::SciMLBase.NullParameters) = false
-_indexable(::AbstractVector) = true
+# # check if indexing into p is necessary
+# _indexable(::Nothing) = false
+# _indexable(::SciMLBase.NullParameters) = false
+# _indexable(::AbstractVector) = true

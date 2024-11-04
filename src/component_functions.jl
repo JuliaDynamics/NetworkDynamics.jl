@@ -17,9 +17,8 @@ hasfftype(::StateMask) = true
 fftype(::StateMask) = PureStateMap()
 
 @inline function (s::StateMask)(out, u)
-    vu = view(u, s.idxs)
-    @inbounds for i in eachindex(out, vu)
-        out[i] = vu[i]
+    @inbounds for i in eachindex(s.idxs)
+        out[i] = u[s.idxs[i]]
     end
     nothing
 end
@@ -35,7 +34,7 @@ struct AntiSymmetric{FF,G} <: Coupling{FF}
 end
 @inline function (c::AntiSymmetric)(osrc, odst, args...)
     @inline c.g(odst, args...)
-    @inbounds for i in eachindex(odst, odst)
+    @inbounds for i in 1:length(osrc)
         osrc[i] = -odst[i]
     end
     nothing
@@ -47,7 +46,7 @@ struct Symmetric{FF,G} <: Coupling{FF}
 end
 @inline function (c::Symmetric)(osrc, odst, args...)
     @inline c.g(odst, args...)
-    @inbounds for i in eachindex(osrc, odst)
+    @inbounds for i in 1:length(osrc)
         osrc[i] = odst[i]
     end
     nothing
