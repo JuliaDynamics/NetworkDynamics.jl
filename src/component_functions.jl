@@ -589,21 +589,19 @@ function _fill_defaults(T, kwargs)
 
         # extract and merge metadata from outsym
         if T <: VertexFunction
-            if has_metadata(outsym)
+            if _has_metadata(outsym)
                 dict[:outsym], _metadata = _split_metadata(outsym)
                 mergewith!(merge!, symmetadata, _metadata)
             end
         elseif T <: EdgeFunction
             (; src, dst) = outsym
-            src = if has_metadata(src)
-                newsrc, _metadata = _split_metadata(src)
+            if _has_metadata(src)
+                src, _metadata = _split_metadata(src)
                 mergewith!(merge!, symmetadata, _metadata)
-                newsrc
             end
-            dst = if has_metadata(dst)
-                newdst, _metadata = _split_metadata(dst)
+            if _has_metadata(dst)
+                dst, _metadata = _split_metadata(dst)
                 mergewith!(merge!, symmetadata, _metadata)
-                newdst
             end
             dict[:outsym] = (; dst, src)
         end

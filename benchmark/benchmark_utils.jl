@@ -247,6 +247,7 @@ function plot_over_N(target, baseline=nothing)
     fig = Makie.Figure(size=(2000,2000))
 
     bmkeys = [
+        "powergrid",
         "diffusion_static_edge",
         "diffusion_ode_edge",
         "kuramoto_homogeneous",

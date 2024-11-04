@@ -254,6 +254,97 @@ end
 finish!(progress)
 
 
+
+####
+#### powersystem benchmark
+####
+function pd_components(N)
+    rng = StableRNG(1)
+    g = watts_strogatz(N, 3, 0.8; rng=StableRNG(1))
+    edge = piline()
+
+    vertex = [pqnode(), generator()]
+    vertices = vertex[shuffle(rng, vcat([1 for _ in 1:N÷2], [2 for _ in 1:N÷2]))]
+    (vertices, edge, g)
+end
+
+Ns = [100, 1_000, 10_000, 100_000]#, 1_000_000]
+
+@info "Benchmark powergrid"
+progress = Progress(2 * length(Ns) * length(configurations),
+                    enabled=!haskey(ENV,"GITHUB_ACTIONS"))
+for N in Ns
+    (vert, edg, g) = pd_components(N)
+    b = @be Network($g, $vert, $edg) evals=1 samples=10 seconds=SECONDS
+    bd["powergrid", "assemble", N] = BenchmarkResult(b)
+
+    _nd = Network(g, vert, edg)
+    _x0 = randx0(_nd)
+    _dx = similar(_x0)
+    p = randp(_nd)
+    _nd(_dx, _x0, p, NaN)
+
+    for (exname, aggname) in configurations
+        GC.gc()
+        haskey(executions, exname) || continue
+        haskey(aggregations, aggname) || continue
+        execution = executions[exname]
+        aggregator = aggregations[aggname]
+        next!(progress; showvalues = [(:N, N), (:ex, exname), (:agg, aggname)])
+        nd = try
+            Network(g, vert, edg; execution, aggregator)
+        catch e
+            if e.msg == "execution type not supported"
+                continue
+            else
+                rethrow(e)
+            end
+        end
+        dx = similar(_x0)
+        nd(dx, _x0, p, NaN)
+        @test dx ≈ _dx
+
+        b = @be $nd($dx, $_x0, $p, 0.0) seconds=SECONDS
+        br = BenchmarkResult(b, legacy_order(nd, dx))
+        bd["powergrid", exname, aggname, N] = br
+
+        if CUDA.functional() && iscudacompatible(execution) && iscudacompatible(nd.layer.aggregator)
+            update!(progress; showvalues = [(:N, N), (:ex, exname*"_gpu"), (:agg, aggname*"_gpu")])
+            to = CuArray{Float32}
+            nd_d = adapt(to, nd)
+            x0_d = adapt(to, _x0)
+            dx_d = similar(x0_d)
+            p_d = adapt(to, p)
+
+            nd_d(dx_d, x0_d, p_d, NaN)
+            if !(maximum(abs.(Vector(dx_d) - _dx)) < 1e-4)
+                @warn "CUDA f32 lead to different results: extrema(Δ) = $(extrema(Vector(dx_d) - _dx))"
+            end
+
+            b = @be $nd_d($dx_d, $x0_d, $p_d, 0.0) seconds=SECONDS
+            # we store the original _dx in the benchmarks results because we know
+            # our dx_d does not have the precision
+            br = BenchmarkResult(b, legacy_order(nd, _dx))
+            bd["powergrid", exname*"_cuda32", aggname*"_cuda32", N] = br
+
+            to = CuArray{Float64}
+            nd_d = adapt(to, nd)
+            x0_d = adapt(to, _x0)
+            dx_d = similar(x0_d)
+            p_d = adapt(to, p)
+
+            nd_d(dx_d, x0_d, p_d, NaN)
+            @test Vector(dx_d) ≈ _dx
+
+            b = @be $nd_d($dx_d, $x0_d, $p_d, 0.0) seconds=SECONDS
+            br = BenchmarkResult(b, legacy_order(nd, Vector(dx_d)))
+            bd["powergrid", exname*"_cuda64", aggname*"_cuda64", N] = br
+        end
+    end
+end
+finish!(progress)
+
+
 if !isempty(ARGS)
     name = ARGS[1]
     path = isabspath(name) ? name : joinpath(@__DIR__, name)
