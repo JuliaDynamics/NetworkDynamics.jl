@@ -55,6 +55,26 @@ end
     end
 end
 
+@inline function process_batches!(::ThreadedExecution, fg, filt::F, batches, inbuf, duopt) where {F}
+    unrolled_foreach(filt, batches) do batch
+        (du, u, o, p, t) = duopt
+        Threads.@threads for i in 1:length(batch)
+            _type = dispatchT(batch)
+            apply_comp!(_type, fg, batch, i, du, u, o, inbuf, p, t)
+        end
+    end
+end
+
+@inline function process_batches!(::PolyesterExecution, fg, filt::F, batches, inbuf, duopt) where {F}
+    unrolled_foreach(filt, batches) do batch
+        (du, u, o, p, t) = duopt
+        Polyester.@batch for i in 1:length(batch)
+            _type = dispatchT(batch)
+            apply_comp!(_type, fg, batch, i, du, u, o, inbuf, p, t)
+        end
+    end
+end
+
 @inline function process_batches!(::KAExecution, fg, filt::F, batches, inbuf, duopt) where {F}
     _backend = get_backend(duopt[1])
     unrolled_foreach(filt, batches) do batch
