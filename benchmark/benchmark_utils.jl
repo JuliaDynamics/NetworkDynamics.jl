@@ -247,14 +247,14 @@ function plot_over_N(target, baseline=nothing)
     fig = Makie.Figure(size=(2000,2000))
 
     bmkeys = [
-        ("diffusion", "static_edge"),
-        ("diffusion", "ode_edge"),
-        ("kuramoto", "homogeneous"),
-        ("kuramoto", "heterogeneous"),
+        "diffusion_static_edge",
+        "diffusion_ode_edge",
+        "kuramoto_homogeneous",
+        "kuramoto_heterogeneous",
     ]
 
     for (row, key) in pairs(bmkeys)
-        dat = comp[key...]
+        dat = comp[key]
 
         allex = sort(collect(filter(!isequal("assemble"), keys(dat))))
         defex = "poly_buf" ∈ allex ? "poly_buf" : allex[1]

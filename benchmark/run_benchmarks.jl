@@ -82,31 +82,38 @@ We want to have the same benchmarks for target and base therefore we copy
 NetworkDynamics/benchmark to tmp/benchmark so it won't change if the repo
 state changes.
 =#
-tmp = mkpath(tempname());
-ndpath_tmp = joinpath(tmp, "NetworkDynamics")
-@info "Copy repo to $ndpath_tmp"
-# copy but don't copy benchmark data
-run(`rsync -a --exclude='*.data' $NDPATH/ $ndpath_tmp/`)
-cd(ndpath_tmp)
+bench_target   = args[:target]   ∉ ["latest"] && !contains(args[:target],   r"\.data$")
+bench_baseline = args[:baseline] ∉ ["latest","none","nothing"] && !contains(args[:baseline], r"\.data$")
 
-# copy bm scripts to separate folder (so it won't change if the state of the nd_temp repo chagnes)
-bmpath_tmp = joinpath(tmp, "benchmark")
-cp(BMPATH, bmpath_tmp)
-script_path = joinpath(bmpath_tmp, "benchmarks.jl")
+if bench_target || bench_baseline
+    tmp = mkpath(tempname());
+    ndpath_tmp = joinpath(tmp, "NetworkDynamics")
+    @info "Copy repo to $ndpath_tmp"
+    # copy but don't copy benchmark data
+    run(`rsync -a --exclude='*.data' $NDPATH/ $ndpath_tmp/`)
+    cd(ndpath_tmp)
 
-# if directory is dirty, commit everything (otherwise we cant switch do a differen commit/branch)
-isdirty = with(LibGit2.isdirty, GitRepo(ndpath_tmp))
-if isdirty
-    @info "Dirty directory, add everything to new commit!"
-    @assert realpath(pwd()) == realpath(ndpath_tmp) "Julia is in $(pwd()) not it $ndpath_tmp"
-    run(`git status`)
-    run(`git config --global user.email "benchmarkbot@example.com"`)
-    run(`git config --global user.name "Benchmark Bot"`)
-    run(`git checkout -b $(randstring(15))`)
-    run(`git add -A`)
-    run(`git commit -m "tmp commit for benchmarking"`)
-    # assert that repo is clean now
-    with(LibGit2.isdirty, GitRepo(ndpath_tmp)) && throw(error("Repository is still dirty!"))
+    # copy bm scripts to separate folder (so it won't change if the state of the nd_temp repo chagnes)
+    bmpath_tmp = joinpath(tmp, "benchmark")
+    cp(BMPATH, bmpath_tmp)
+    script_path = joinpath(bmpath_tmp, "benchmarks.jl")
+
+    # if directory is dirty, commit everything (otherwise we cant switch do a differen commit/branch)
+    isdirty = with(LibGit2.isdirty, GitRepo(ndpath_tmp))
+    if isdirty
+        @info "Dirty directory, add everything to new commit!"
+        @assert realpath(pwd()) == realpath(ndpath_tmp) "Julia is in $(pwd()) not it $ndpath_tmp"
+        run(`git status`)
+        run(`git config --global user.email "benchmarkbot@example.com"`)
+        run(`git config --global user.name "Benchmark Bot"`)
+        run(`git checkout -b $(randstring(15))`)
+        run(`git add -A`)
+        run(`git commit -m "tmp commit for benchmarking"`)
+        # assert that repo is clean now
+        with(LibGit2.isdirty, GitRepo(ndpath_tmp)) && throw(error("Repository is still dirty!"))
+    end
+else
+    @info "Copy of repo not necessary"
 end
 
 # # activate the environment in the tmp copy of the scripts

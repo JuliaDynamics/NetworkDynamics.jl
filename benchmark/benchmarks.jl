@@ -88,7 +88,7 @@ for k in keys(edges)
     for N in Ns
         g = watts_strogatz(N, N ÷ 2, 0.0; rng=StableRNG(1))
         b = @be Network($g, $vertex, $edge) evals=1 samples=10 seconds=SECONDS
-        bd["diffusion", k, "assemble", N] = BenchmarkResult(b)
+        bd["diffusion_"*k, "assemble", N] = BenchmarkResult(b)
 
         _nd = Network(g, vertex, edge)
         _x0 = randx0(_nd)
@@ -117,7 +117,7 @@ for k in keys(edges)
 
             b = @be $nd($dx, $_x0, nothing, 0.0) seconds=SECONDS
             br = BenchmarkResult(b, legacy_order(nd, dx))
-            bd["diffusion", k, exname, aggname, N] = br
+            bd["diffusion_"*k, exname, aggname, N] = br
 
             if CUDA.functional() && iscudacompatible(execution) && iscudacompatible(nd.layer.aggregator)
                 update!(progress; showvalues = [(:edge, k), (:N, N), (:ex, exname*"_gpu"), (:agg, aggname*"_gpu")])
@@ -135,7 +135,7 @@ for k in keys(edges)
                 # we store the original _dx in the benchmarks results because we know
                 # our dx_d does not have the precision
                 br = BenchmarkResult(b, legacy_order(nd, _dx))
-                bd["diffusion", k, exname*"_cuda32", aggname*"_cuda32", N] = br
+                bd["diffusion_"*k, exname*"_cuda32", aggname*"_cuda32", N] = br
 
                 to = CuArray{Float64}
                 nd_d = adapt(to, nd)
@@ -147,7 +147,7 @@ for k in keys(edges)
 
                 b = @be $nd_d($dx_d, $x0_d, nothing, 0.0) seconds=SECONDS
                 br = BenchmarkResult(b, legacy_order(nd, Vector(dx_d)))
-                bd["diffusion", k, exname*"_cuda64", aggname*"_cuda64", N] = br
+                bd["diffusion_"*k, exname*"_cuda64", aggname*"_cuda64", N] = br
             end
         end
     end
@@ -184,7 +184,7 @@ for f in [homogeneous, heterogeneous]
     for N in Ns
         (vert, edg, g) = f(N)
         b = @be Network($g, $vert, $edg) evals=1 samples=10 seconds=SECONDS
-        bd["kuramoto", name, "assemble", N] = BenchmarkResult(b)
+        bd["kuramoto_"*name, "assemble", N] = BenchmarkResult(b)
 
         _nd = Network(g, vert, edg)
         _x0 = randx0(_nd)
@@ -214,7 +214,7 @@ for f in [homogeneous, heterogeneous]
 
             b = @be $nd($dx, $_x0, $p, 0.0) seconds=SECONDS
             br = BenchmarkResult(b, legacy_order(nd, dx))
-            bd["kuramoto", name, exname, aggname, N] = br
+            bd["kuramoto_"*name, exname, aggname, N] = br
 
             if CUDA.functional() && iscudacompatible(execution) && iscudacompatible(nd.layer.aggregator)
                 update!(progress; showvalues = [(:type, name), (:N, N), (:ex, exname*"_gpu"), (:agg, aggname*"_gpu")])
@@ -233,7 +233,7 @@ for f in [homogeneous, heterogeneous]
                 # we store the original _dx in the benchmarks results because we know
                 # our dx_d does not have the precision
                 br = BenchmarkResult(b, legacy_order(nd, _dx))
-                bd["kuramoto", name, exname*"_cuda32", aggname*"_cuda32", N] = br
+                bd["kuramoto_"*name, exname*"_cuda32", aggname*"_cuda32", N] = br
 
                 to = CuArray{Float64}
                 nd_d = adapt(to, nd)
@@ -246,7 +246,7 @@ for f in [homogeneous, heterogeneous]
 
                 b = @be $nd_d($dx_d, $x0_d, $p_d, 0.0) seconds=SECONDS
                 br = BenchmarkResult(b, legacy_order(nd, Vector(dx_d)))
-                bd["kuramoto", name, exname*"_cuda64", aggname*"_cuda64", N] = br
+                bd["kuramoto_"*name, exname*"_cuda64", aggname*"_cuda64", N] = br
             end
         end
     end
