@@ -542,7 +542,7 @@ function _fill_defaults(T, kwargs)
         if T <: EdgeFunction
             if _outdim isa NamedTuple && (_outdim.src != length(outsym.src) || _outdim.dst != length(outsym.dst))
                 throw(ArgumentError("Length of outsym and outdim must match."))
-            elseif _outdim != length(outsym.src) || _outdime != length(outsym.dst)
+            elseif _outdim != length(outsym.dst) || !(g isa Directed) && _outdime != length(outsym.src)
                 throw(ArgumentError("Length of outsym and outdim must match."))
             end
         elseif T <: VertexFunction
@@ -707,16 +707,23 @@ _has_sym_to_outsym_mapping(::Fiducial{<:Any, <:StateMask, <:StateMask}) = true
 _sym_to_outsym(g::StateMask, s::AbstractVector{Symbol}) = s[g.idxs]
 function _sym_to_outsym(g::AntiSymmetric{<:Any, <:StateMask}, s::AbstractVector{Symbol})
     s = _sym_to_outsym(g.g, s)
-    _symvec_to_sym_tup(g, s)
+    # _symvec_to_sym_tup(g, s)
+    (; src=map(x->Symbol("₋", x), s), dst=s)
 end
 function _sym_to_outsym(g::Symmetric{<:Any, <:StateMask}, s::AbstractVector{Symbol})
     s = _sym_to_outsym(g.g, s)
-    _symvec_to_sym_tup(g, s)
+    # _symvec_to_sym_tup(g, s)
+    (; src=s, dst=s)
+end
+function _sym_to_outsym(g::Directed{<:Any, <:StateMask}, s::AbstractVector{Symbol})
+    s = _sym_to_outsym(g.dst, s)
+    (; src=Symbol[], dst=s)
 end
 function _sym_to_outsym(g::Fiducial{<:Any, <:StateMask, <:StateMask}, s::AbstractVector{Symbol})
     dst = _sym_to_outsym(g.dst, s)
     src = _sym_to_outsym(g.src, s)
-    _symvec_to_sym_tup(g, src, dst)
+    # _symvec_to_sym_tup(g, src, dst)
+    (; src, dst)
 end
 _symvec_to_sym_tup(s::AbstractVector{Symbol}) = _symvec_to_sym_tup(nothing, s)
 function _symvec_to_sym_tup(g, ssrc::AbstractVector{Symbol}, sdst::AbstractVector{Symbol}=ssrc)
@@ -724,8 +731,8 @@ function _symvec_to_sym_tup(g, ssrc::AbstractVector{Symbol}, sdst::AbstractVecto
     dst = map(x->Symbol("dst₊", x), sdst)
     (;src, dst)
 end
-function _symvec_to_sym_tup(g::Directed, s::AbstractVector{Symbol})
-    dst = map(x->Symbol("dst₊", x), s)
+function _symvec_to_sym_tup(g::Directed, dst::AbstractVector{Symbol})
+    # dst = map(x->Symbol("dst₊", x), s)
     (;src=Symbol[], dst)
 end
 

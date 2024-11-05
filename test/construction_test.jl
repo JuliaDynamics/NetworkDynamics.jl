@@ -256,15 +256,18 @@ end
 
         # output sym generation
         cf = EdgeFunction(f=f, sym=[:x,:y], g=AntiSymmetric(StateMask(1:2)))
-        @test cf.outsym == (; src=[:src₊x,:src₊y], dst=[:dst₊x,:dst₊y])
+        @test cf.outsym == (; src=[:₋x,:₋y], dst=[:x,:y])
         cf = EdgeFunction(f=f, sym=[:x,:y], g=Fiducial(1:2, 2:-1:1))
-        @test cf.outsym == (; src=[:src₊x,:src₊y], dst=[:dst₊y,:dst₊x])
+        @test cf.outsym == (; src=[:x,:y], dst=[:y,:x])
         cf = EdgeFunction(f=f, g=g_ff, dim=1, outsym=(;src=[:a=>2], dst=[:b=>4]))
         @test cf.outsym == (; src=[:a], dst=[:b])
         cf = EdgeFunction(f=f, g=g_ff, dim=1, outdim=2)
         @test cf.outsym == (; src=[:src₊o₁, :src₊o₂], dst=[:dst₊o₁, :dst₊o₂])
         cf = EdgeFunction(f=f, g=Directed(g_single_ff), dim=1, outdim=2)
-        @test cf.outsym == (; src=[], dst=[:dst₊o₁, :dst₊o₂])
+        @test cf.outsym == (; src=[], dst=[:o₁, :o₂])
+        cf = EdgeFunction(f=f, g=Directed(1:2), dim=2, outdim=2)
+        @test isempty(cf.outsym.src)
+        @test cf.outsym.dst == cf.sym
         @test_throws ArgumentError EdgeFunction(f=f, g=Symmetric(g_single_ff), dim=1, outsym=[:x=>1])
 
         # input sym generation
