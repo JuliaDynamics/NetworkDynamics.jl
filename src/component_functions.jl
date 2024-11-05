@@ -6,12 +6,16 @@ struct PureStateMap <: FeedForwardType end
 hasfftype(::Any) = false
 hasff(x) = fftype(x) isa Union{PureFeedForward, FeedForward}
 
-_hassymbolmapping(::Any) = false
-
+_has_sym_to_outsym_mapping(::Any) = false
 
 struct StateMask{N,I}
     idxs::I
-    StateMask(i) = new{length(i), typeof(i)}(i)
+    function StateMask(i::AbstractArray)
+        if !isbitstype(typeof(i))
+           i = SVector{length(i)}(i)
+        end
+        new{length(i), typeof(i)}(i)
+    end
 end
 hasfftype(::StateMask) = true
 fftype(::StateMask) = PureStateMap()
@@ -30,8 +34,12 @@ fftype(::Coupling{FF}) where {FF} = FF()
 
 struct AntiSymmetric{FF,G} <: Coupling{FF}
     g::G
-    AntiSymmetric(g; ff=_infer_ss_fftype(g)) = new{typeof(ff), typeof(g)}(g)
+    function AntiSymmetric(g; ff=nothing)
+        ff = isnothing(ff) ? _infer_ss_fftype(g) : ff
+        new{typeof(ff), typeof(g)}(g)
+    end
 end
+AntiSymmetric(g::AbstractVector; ff=nothing) = AntiSymmetric(StateMask(g); ff)
 @inline function (c::AntiSymmetric)(osrc, odst, args...)
     @inline c.g(odst, args...)
     @inbounds for i in 1:length(osrc)
@@ -42,8 +50,12 @@ end
 
 struct Symmetric{FF,G} <: Coupling{FF}
     g::G
-    Symmetric(g; ff=_infer_ss_fftype(g)) = new{typeof(ff), typeof(g)}(g)
+    function Symmetric(g; ff=nothing)
+        ff = isnothing(ff) ? _infer_ss_fftype(g) : ff
+        new{typeof(ff), typeof(g)}(g)
+    end
 end
+Symmetric(g::AbstractVector; ff=nothing) = Symmetric(StateMask(g); ff)
 @inline function (c::Symmetric)(osrc, odst, args...)
     @inline c.g(odst, args...)
     @inbounds for i in 1:length(osrc)
@@ -54,8 +66,12 @@ end
 
 struct Directed{FF,G} <: Coupling{FF}
     dst::G
-    Directed(g; ff=_infer_ss_fftype(g)) = new{typeof(ff), typeof(g)}(g)
+    function Directed(g; ff=nothing)
+        ff = isnothing(ff) ? _infer_ss_fftype(g) : ff
+        new{typeof(ff), typeof(g)}(g)
+    end
 end
+Directed(g::AbstractVector; ff=nothing) = Directed(StateMask(g); ff)
 @inline function (c::Directed)(osrc, odst, args...)
     @inline c.g(odst, args...)
     nothing
@@ -77,7 +93,7 @@ struct Fiducial{FF,GS,GD} <: Coupling{FF}
         new{typeof(ff), typeof(src), typeof(dst)}(src, dst)
     end
 end
-Fiducial(src::UnitRange, dst::UnitRange; ff=nothing) = Fiducial(StateMask(src), StateMask(dst); ff)
+Fiducial(src::AbstractVector, dst::AbstractVector; ff=nothing) = Fiducial(StateMask(src), StateMask(dst); ff)
 Fiducial(;src, dst, ff=nothing) = Fiducial(src, dst; ff)
 
 @inline function (c::Fiducial)(osrc, odst, args...)
@@ -101,11 +117,11 @@ struct VertexFunction{F,G,FFT,OF,MM} <: ComponentFunction
     ff::FFT
     # parameters and option input sym
     psym::Vector{Symbol}
-    inputsym::Union{Nothing, Vector{Symbol}}
+    insym::Union{Nothing, Vector{Symbol}}
     # observed
     obsf::OF
     obssym::Vector{Symbol}
-    # optional inputsyms
+    # optional insyms
     symmetadata::Dict{Symbol,Dict{Symbol, Any}}
     metadata::Dict{Symbol,Any}
 end
@@ -120,11 +136,11 @@ struct EdgeFunction{F,G,FFT,OF,MM} <: ComponentFunction
     mass_matrix::MM
     # outputs
     g::G
-    outsym::@NamedTuple{dst::Vector{Symbol},src::Vector{Symbol}}
+    outsym::@NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}}
     ff::FFT
     # parameters and option input sym
     psym::Vector{Symbol}
-    inputsym::Union{Nothing, @NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}}}
+    insym::Union{Nothing, @NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}}}
     # observed
     obsf::OF
     obssym::Vector{Symbol}
@@ -172,19 +188,19 @@ sym(c::ComponentFunction)::Vector{Symbol} = c.sym
 
 
 """
-    outdim(c::EdgeFunction)::@NamedTuple(dst::Int, src::Int)
+    outdim(c::EdgeFunction)::@NamedTuple(src::Int, dst::Int)
     outdim(c::ComponentFunction)::Int
 
 """
 outdim(c::VertexFunction) = length(outsym(c))
-outdim(c::EdgeFunction) = (; dst=outdim_dst(c), src=outdim_src(c))
+outdim(c::EdgeFunction) = (;src=outdim_src(c), dst=outdim_dst(c))
 
 outdim_src(c::EdgeFunction) = length(outsym(c).src)
 outdim_dst(c::EdgeFunction) = length(outsym(c).dst)
 
 """
    outsym(c::VertexFunction)::Vector{Symbol}
-   outsym(c::EdgeFunction)::@NamedTuple{dst::Vector{Symbol}, src::Vector{Symbol}}
+   outsym(c::EdgeFunction)::@NamedTuple{src::Vector{Symbol}, dst::Vector{Symbol}}
 
 Retrieve the output symbols of the component.
 """
@@ -222,7 +238,7 @@ obssym(c::ComponentFunction)::Vector{Symbol} = c.obssym
     symmetadata(c::ComponentFunction)::Dict{Symbol,Dict{Symbol,Any}}
 
 Retrieve the metadata dictionary for the symbols. Keys are the names of the
-symbols as they appear in [`sym`](@ref), [`psym`](@ref), [`obssym`](@ref) and [`inputsym`](@ref).
+symbols as they appear in [`sym`](@ref), [`psym`](@ref), [`obssym`](@ref) and [`insym`](@ref).
 
 See also [`symmetadata`](@ref)
 """
@@ -238,46 +254,40 @@ See also [`metadata`](@ref)
 metadata(c::ComponentFunction)::Dict{Symbol,Any} = c.metadata
 
 """
-    hasinputsym(c::ComponentFunction)
+    hasinsym(c::ComponentFunction)
 
-Checks if the optioan field `inputsym` is present in the component function.
+Checks if the optioan field `insym` is present in the component function.
 """
-hasinputsym(c::ComponentFunction) = !isnothing(c.inputsym)
+hasinsym(c::ComponentFunction) = !isnothing(c.insym)
 
 """
-    hasinputsym(c::VertexFunction)::Vector{Symbol}
-    hasinputsym(c::EdgeFunction)::NamedTuple with :src and :dst keys
+    hasinsym(c::VertexFunction)::Vector{Symbol}
+    hasinsym(c::EdgeFunction)::NamedTuple with :src and :dst keys
 
-Musst be called *after* [`hasinputsym`](@ref) returned true.
-Gives the `inputsym` vector(s). For vertex functions just a single vector, for
+Musst be called *after* [`hasinsym`](@ref) returned true.
+Gives the `insym` vector(s). For vertex functions just a single vector, for
 edges it returns a named tuple `(; src, dst)` with two symbol vectors.
 """
-inputsym(c::VertexFunction)::Vector{Symbol} = c.inputsym
-inputsym(c::EdgeFunction)::@NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}} = c.inputsym
+insym(c::VertexFunction)::Vector{Symbol} = c.insym
+insym(c::EdgeFunction)::@NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}} = c.insym
 
 
-function _infer_fftype(::Type{<:VertexFunction}, g, dim)
-    pureff = _takes_n_vectors_and_t(g, 3) && iszero(dim)  # (out, ein, p, t)
-    ff     = _takes_n_vectors_and_t(g, 4)                 # (out, u, ein, p, t)
-    noff   = _takes_n_vectors_and_t(g, 3) && !iszero(dim) # (out, u, p, t)
-    pureu  = _takes_n_vectors_no_t(g, 2)                  # (out, states)
+_infer_ss_fftype(g) = _infer_fftype(g, 1, 2, nothing)
+_infer_fftype(::Type{<:VertexFunction}, g, dim) = _infer_fftype(g, 1, 1, dim)
+_infer_fftype(::Type{<:EdgeFunction}, g, dim) = _infer_fftype(g, 2, 2, dim)
 
-    ff+noff+pureff+pureu > 1 && error("Could not determinen output map type from g signature. Provide :ff keyword explicitly!")
-    ff+noff+pureff+pureu == 0 && error("Method signature of `g` seems invalid!")
+function _infer_fftype(g, nout, nin, dim)
+    pureff = _takes_n_vecs_and_t(g, nout + nin + 1)     # (outs..., ins..., p, t)
+    ff     = _takes_n_vecs_and_t(g, nout + 1 + nin + 1) # (outs..., u, ins..., p, t)
+    noff   = _takes_n_vecs_and_t(g, nout + 1 + 1)       # (outs..., u, p, t)
+    pureu  = _takes_n_vecs_no_t(g, nout + 1)            # (outs..., u)
 
-    pureff && return PureStateMap()
-    ff && return FeedForward()
-    noff && return NoFeedForward()
-    pureu && return PureStateMap()
-end
-
-_infer_ss_fftype(g) = _infer_fftype(EdgeFunction, g, -1; singlesided=true)
-function _infer_fftype(::Type{<:EdgeFunction}, g, dim; singlesided=false)
-    # if singlesided we allways have one less
-    pureff = _takes_n_vectors_and_t(g, 5-singlesided) # ([osrc], odst, src, dst, p, t)
-    ff     = _takes_n_vectors_and_t(g, 6-singlesided) # ([osrc], odst, u, src, dst, p, t)
-    noff   = _takes_n_vectors_and_t(g, 4-singlesided) # ([osrc], odst, u, p, t)
-    pureu  = _takes_n_vectors_no_t(g, 3-singlesided)  # ([osrc], odst, u)
+    # if nin = 1 we cannot distiguish between pureff and noff based on arguments,
+    # resolve using dimension
+    if nin==1 && pureff && noff
+        pureff = iszero(dim)
+        noff = !iszero(dim)
+    end
 
     ff+noff+pureff+pureu > 1 && error("Could not determinen output map type from g signature. Provide :ff keyword explicitly!")
     ff+noff+pureff+pureu == 0 && error("Method signature of `g` seems invalid!")
@@ -288,8 +298,8 @@ function _infer_fftype(::Type{<:EdgeFunction}, g, dim; singlesided=false)
     pureu && return PureStateMap()
 end
 
-_takes_n_vectors_and_t(f, n) = hasmethod(f, (Tuple(Vector{Float64} for i in 1:n)..., Float64))
-_takes_n_vectors_no_t(f, n) = hasmethod(f, Tuple(Vector{Float64} for i in 1:n))
+_takes_n_vecs_and_t(f, n) = hasmethod(f, (Tuple(Vector{Float64} for i in 1:n)..., Float64))
+_takes_n_vecs_no_t(f, n) = hasmethod(f, Tuple(Vector{Float64} for i in 1:n))
 
 """
     dispatchT(<:ComponentFunction) :: Type{<:ComponentFunction}
@@ -370,10 +380,6 @@ function _fill_defaults(T, kwargs)
     _maybewrap!(dict, :outsym, Symbol)
     _maybewrap!(dict, :obssym, Symbol)
 
-    if !haskey(dict, :g)
-        throw(ArgumentError("Output function g musst be provided!"))
-    end
-
     symmetadata = get!(dict, :symmetadata, Dict{Symbol,Dict{Symbol,Any}}())
 
     metadata = try
@@ -382,6 +388,9 @@ function _fill_defaults(T, kwargs)
         throw(ArgumentError("Provided metadata keyword musst be a Dict{Symbol,Any}. Got $(repr(dict[:metadata]))."))
     end
 
+    ####
+    #### graphelement
+    ####
     if haskey(dict, :graphelement)
         ge = pop!(dict, :graphelement)
         metadata[:graphelement] = ge
@@ -396,6 +405,17 @@ function _fill_defaults(T, kwargs)
         metadata[:graphelement] = (; src, dst)
     end
 
+    ####
+    #### f and g
+    ####
+    if !haskey(dict, :g)
+        throw(ArgumentError("Output function g musst be provided!"))
+    end
+    if T <: EdgeFunction && dict[:g] isa StateMask
+        throw(ArgumentError("StateMask cannot be used directly for EdgeFunction. Wrap in Fiducial, Symmetric, AntiSymmetric or Directed instead."))
+    end
+    g = dict[:g]
+
     # set f to nothing if not present
     if !haskey(dict, :f)
         dict[:f] = nothing
@@ -406,10 +426,12 @@ function _fill_defaults(T, kwargs)
             throw(ArgumentError("Cannot provide sym without f."))
         end
         dict[:sym] = Symbol[]
-        dict[:dim] = 0
     end
 
-    # sym & dim
+
+    ####
+    #### variable sym
+    ####
     haskey(dict, :dim) || haskey(dict, :sym) || throw(ArgumentError("Either `dim` or `sym` must be provided to construct $T."))
     if haskey(dict, :sym)
         if haskey(dict, :dim)
@@ -447,8 +469,16 @@ function _fill_defaults(T, kwargs)
             end
         end
     end
+    sym = dict[:sym]
 
-    # psym & pdim
+    # infer fftype (needs dim)
+    if !haskey(dict, :ff)
+        dict[:ff] = hasfftype(g) ? fftype(g) : _infer_fftype(T, g, dim)
+    end
+
+    ####
+    #### parameter sym
+    ####
     if !haskey(dict, :pdim) && !haskey(dict, :psym)
         dict[:pdim] = 0
     end
@@ -483,33 +513,105 @@ function _fill_defaults(T, kwargs)
             end
         end
     end
+    psym = dict[:psym]
 
-    # infer fftype
-    if !haskey(dict, :ff)
-        g = dict[:g]
-        dict[:ff] = hasfftype(g) ? fftype(g) : _infer_fftype(T, g, dim)
+    ####
+    #### output sym
+    ####
+    if !haskey(dict, :outsym)
+        if _has_sym_to_outsym_mapping(g)
+            dict[:outsym] = _sym_to_outsym(g, sym)
+        elseif haskey(dict, :outdim)
+            _outdim = pop!(dict, :outdim)
+            dict[:outsym] = [(_outdim>1 ? Symbol("o", subscript(i)) : :o) for i in 1:_outdim]
+        else
+            throw(ArgumentError("Either `outdim` or `outsym` must be provided to construct $T \
+                with arbitray g. Outsyms can be inferred for `StateMask` output functions."))
+        end
+    end
+    outsym = dict[:outsym]
+    if T <: EdgeFunction && outsym isa AbstractVector
+        if _has_metadata(outsym)
+            throw(ArgumentError("Metadata for outsyms can only be provided when using full (;src, dst) form"))
+        end
+        outsym = dict[:outsym] = _symvec_to_sym_tup(g, outsym)
     end
 
-    # outsym & outdim
-    # _hassymbolmapping(dict[:g]) || haskey(dict, :outdim) || haskey(dict, :outsym) || throw(ArgumentError("Either `outdim` or `outsym` must be provided to construct $T with arbitray g."))
-    if haskey(dict, :outsym)
-        if haskey(dict, :outdim)
-            if dict[:outdim] != length(dict[:outsym])
+    if haskey(dict, :outdim)
+        _outdim = pop!(dict, :outdim)
+        if T <: EdgeFunction
+            if _outdim isa NamedTuple && (_outdim.src != length(outsym.src) || _outdim.dst != length(outsym.dst))
+                throw(ArgumentError("Length of outsym and outdim must match."))
+            elseif _outdim != length(outsym.src) || _outdime != length(outsym.dst)
                 throw(ArgumentError("Length of outsym and outdim must match."))
             end
-            # @warn "Unnecessary kw outdim, can be infered from outsym."
-            delete!(dict, :outdim)
+        elseif T <: VertexFunction
+            if _outdim != length(outsym)
+                throw(ArgumentError("Length of outsym and outdim must match."))
+            end
         end
-        outsym = dict[:outsym]
+    end
 
-        # extract and merge metadata from outsym
+    # extract and merge metadata from outsym
+    if T <: VertexFunction
+        if _has_metadata(outsym)
+            dict[:outsym], _metadata = _split_metadata(outsym)
+            mergewith!(merge!, symmetadata, _metadata)
+        end
+    elseif T <: EdgeFunction
+        (; src, dst) = outsym
+        if _has_metadata(src)
+            src, _metadata = _split_metadata(src)
+            mergewith!(merge!, symmetadata, _metadata)
+        end
+        if _has_metadata(dst)
+            dst, _metadata = _split_metadata(dst)
+            mergewith!(merge!, symmetadata, _metadata)
+        end
+        dict[:outsym] = (; src, dst)
+    end
+
+    ####
+    #### insym
+    ####
+    if !haskey(dict, :insym)
+        if haskey(dict, :indim)
+            _indim = pop!(dict, :indim)
+            dict[:insym] = [(_indim>1 ? Symbol("i", subscript(i)) : :i) for i in 1:_indim]
+        else
+            dict[:insym] = nothing
+        end
+    end
+    insym = dict[:insym]
+    if T <: EdgeFunction && insym isa AbstractVector
+        if _has_metadata(insym)
+            throw(ArgumentError("Metadata for insyms can only be provided when using full (;src, dst) form"))
+        end
+        insym = dict[:insym] = _symvec_to_sym_tup(insym)
+    end
+    if haskey(dict, :indim)
+        _indim = pop!(dict, :indim)
+        if T <: EdgeFunction
+            if _indim isa NamedTuple && (_indim.src != length(insym.src) || _indim.dst != length(insym.dst))
+                throw(ArgumentError("Length of insym and indim must match."))
+            elseif _indim != length(insym.src) || _indime != length(insym.dst)
+                throw(ArgumentError("Length of insym and indim must match."))
+            end
+        elseif T <: VertexFunction
+            if _indim != length(outsym)
+                throw(ArgumentError("Length of insym and indim must match."))
+            end
+        end
+    end
+    # extract and merge metadata from insym
+    if !isnothing(insym)
         if T <: VertexFunction
-            if _has_metadata(outsym)
-                dict[:outsym], _metadata = _split_metadata(outsym)
+            if _has_metadata(insym)
+                dict[:insym], _metadata = _split_metadata(insym)
                 mergewith!(merge!, symmetadata, _metadata)
             end
         elseif T <: EdgeFunction
-            (; src, dst) = outsym
+            (; src, dst) = insym
             if _has_metadata(src)
                 src, _metadata = _split_metadata(src)
                 mergewith!(merge!, symmetadata, _metadata)
@@ -518,34 +620,13 @@ function _fill_defaults(T, kwargs)
                 dst, _metadata = _split_metadata(dst)
                 mergewith!(merge!, symmetadata, _metadata)
             end
-            dict[:outsym] = (; dst, src)
+            dict[:insym] = (; src, dst)
         end
-    elseif _hassymbolmapping(dict[:g])
-        dict[:outsym] = _mapsymbols(dict[:g], dict[:sym])
-        if haskey(dict, :outdim)
-            delete!(dict, :outdim)
-            lnegth
-        end
-    elseif haskey(dict, :outdim)
-        _dim = pop!(dict, :outdim)
-        if T <: VertexFunction
-            dict[:outsym] = [_dim>1 ? Symbol("vout", subscript(i)) : :sout for i in 1:_dim]
-        elseif T <: EdgeFunction
-            base_syms = [_dim>1 ? Symbol("out", subscript(i)) : :out for i in 1:_dim]
-            dst = map(x -> Symbol("dst₊", x), base_syms)
-            src = map(x -> Symbol("src₊", x), base_syms)
-            dict[:outsym] = (; dst, src)
-        else
-            error()
-        end
-    else
-        throw(ArgumentError("Either `outdim` or `outsym` must be provided to construct $T \
-            with arbitray g. Outsyms can be inferred for `StateMask` output functions."))
     end
 
-    outdim = length(dict[:outsym])
-
-    # obsf & obssym
+    ####
+    #### obsf & obssym
+    ####
     if haskey(dict, :obsf) || haskey(dict, :obssym)
         if !(haskey(dict, :obsf) && haskey(dict, :obssym))
             throw(ArgumentError("If `obsf` is provided, `obssym` must be provided as well."))
@@ -559,41 +640,16 @@ function _fill_defaults(T, kwargs)
         dict[:obssym] = Symbol[]
     end
 
-    # inputsym
-    if T <: VertexFunction
-        if haskey(dict, :inputsym_src) || haskey(dict, :inputsym_dst)
-            throw(ArgumentError("Keywords `inputsym_src` and `inputsym_dst` are not valid for $T."))
-        end
-        if haskey(dict, :inputsym) && !isnothing(dict[:inputsym])
-            if _has_metadata(dict[:inputsym])
-                dict[:inputsym], _metadata = _split_metadata(dict[:inputsym])
-                mergewith!(merge!, symmetadata, _metadata)
-            end
-        else
-            dict[:inputsym] = nothing
-        end
-    elseif T <: EdgeFunction
-        haskey(dict, :inputsym) && throw(ArgumentError("Keywords `inputsym` is not valid for $T."))
-        if haskey(dict, :inputsym_src) || haskey(dict, :inputsym_dst)
-            if !(haskey(dict, :inputsym_src) && haskey(dict, :inputsym_dst))
-                throw(ArgumentError("Both `inputsym_src` and `inputsym_dst` must be provided."))
-            end
-            src, _metadata = _split_metadata(pop!(dict, :inputsym_src))
-            mergewith!(merge!, symmetadata, _metadata)
-            dst, _metadata = _split_metadata(pop!(dict, :inputsym_dst))
-            mergewith!(merge!, symmetadata, _metadata)
-            dict[:inputsym] = (; src, dst)
-        else
-            dict[:inputsym] = nothing
-        end
-    end
-
-    # name
+    ####
+    #### name
+    ####
     if !haskey(dict, :name)
         dict[:name] = _default_name(T)
     end
 
-    # mass_matrix
+    ####
+    #### mass matrix
+    ####
     if !haskey(dict, :mass_matrix)
         dict[:mass_matrix] = LinearAlgebra.I
     else
@@ -616,10 +672,17 @@ function _fill_defaults(T, kwargs)
     end
 
     # check for name clashes (at the end because only now sym, psym, obssym are initialized)
-    _s  = dict[:sym]
-    _ps = dict[:psym]
-    _os = dict[:obssym]
-    __is = dict[:inputsym]
+    _s  = sym
+    _ps = psym
+    _obss = dict[:obssym]
+    _os = outsym
+    _os = if _has_sym_to_outsym_mapping(g)
+       setdiff(outsym, sym) # allow name clashes for statemask derivatives
+    else
+        outsym
+    end
+    __is = insym
+
     _is = if isnothing(__is)
         Symbol[]
     elseif __is isa NamedTuple
@@ -627,40 +690,48 @@ function _fill_defaults(T, kwargs)
     else
         __is
     end
-    if !allunique(vcat(_s, _ps, _os, _is))
-        throw(ArgumentError("Symbol names must be unique. There are clashes in sym, psym, obssym and inputsym."))
+    if !allunique(vcat(_s, _ps, _obss, _is, _os))
+        throw(ArgumentError("Symbol names must be unique. There are clashes in sym, psym, outsym, obssym and insym."))
     end
 
     return dict
 end
 
 # define the symbolmapping to infer output symbols from state symbols
-_hassymbolmapping(::StateMask) = true
-_hassymbolmapping(::AntiSymmetric{<:Any, <:StateMask}) = true
-_hassymbolmapping(::Symmetric{<:Any, <:StateMask}) = true
-_hassymbolmapping(::Fiducial{<:Any, <:StateMask, <:StateMask}) = true
+_has_sym_to_outsym_mapping(::StateMask) = true
+_has_sym_to_outsym_mapping(::Directed{<:Any, <:StateMask}) = true
+_has_sym_to_outsym_mapping(::AntiSymmetric{<:Any, <:StateMask}) = true
+_has_sym_to_outsym_mapping(::Symmetric{<:Any, <:StateMask}) = true
+_has_sym_to_outsym_mapping(::Fiducial{<:Any, <:StateMask, <:StateMask}) = true
 
-_mapsymbols(g::StateMask, s) = s[g.idxs]
-function _mapsymbols(g::AntiSymmetric{<:Any, <:StateMask}, s)
-    # TODO: symbolmap for symmetric, antysymmetric only works for functions with sym map
-    dst = _mapsymbols(g.g, s)
-    src = map(x->Symbol("₋", x), dst)
-    (;dst, src)
+_sym_to_outsym(g::StateMask, s::AbstractVector{Symbol}) = s[g.idxs]
+function _sym_to_outsym(g::AntiSymmetric{<:Any, <:StateMask}, s::AbstractVector{Symbol})
+    s = _sym_to_outsym(g.g, s)
+    _symvec_to_sym_tup(g, s)
 end
-function _mapsymbols(g::Symmetric{<:Any, <:StateMask}, s)
-    dst = _mapsymbols(g.g, s)
-    src = dst
-    (;dst, src)
+function _sym_to_outsym(g::Symmetric{<:Any, <:StateMask}, s::AbstractVector{Symbol})
+    s = _sym_to_outsym(g.g, s)
+    _symvec_to_sym_tup(g, s)
 end
-function _mapsymbols(g::Fiducial{<:Any, <:StateMask, <:StateMask}, s)
-    dst = _mapsymbols(g.dst, s)
-    src = _mapsymbols(g.src, s)
-    (;dst, src)
+function _sym_to_outsym(g::Fiducial{<:Any, <:StateMask, <:StateMask}, s::AbstractVector{Symbol})
+    dst = _sym_to_outsym(g.dst, s)
+    src = _sym_to_outsym(g.src, s)
+    _symvec_to_sym_tup(g, src, dst)
+end
+_symvec_to_sym_tup(s::AbstractVector{Symbol}) = _symvec_to_sym_tup(nothing, s)
+function _symvec_to_sym_tup(g, ssrc::AbstractVector{Symbol}, sdst::AbstractVector{Symbol}=ssrc)
+    src = map(x->Symbol("src₊", x), ssrc)
+    dst = map(x->Symbol("dst₊", x), sdst)
+    (;src, dst)
+end
+function _symvec_to_sym_tup(g::Directed, s::AbstractVector{Symbol})
+    dst = map(x->Symbol("dst₊", x), s)
+    (;src=Symbol[], dst)
 end
 
 
-_default_name(::Type{VertexFunction}) = :VertexFunction
-_default_name(::Type{EdgeFunction}) = :EdgeFunction
+_default_name(::Type{VertexFunction}) = :VF
+_default_name(::Type{EdgeFunction}) = :EF
 
 _has_metadata(vec::AbstractVector{<:Symbol}) = false
 _has_metadata(vec::AbstractVector{<:Pair}) = true

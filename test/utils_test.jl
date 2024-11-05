@@ -3,13 +3,6 @@ using NetworkDynamics
 (isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
 
 @testset "test utils" begin
-    @testset begin
-        using InteractiveUtils
-        for t in subtypes(NetworkDynamics.Coupling)
-            println(NetworkDynamics._styled_coupling(t()))
-        end
-    end
-
     @testset "subscript" begin
         using NetworkDynamics: subscript
         @test subscript(10) == "₁₀"
@@ -28,6 +21,7 @@ using NetworkDynamics
     @testset "Test Component Library" begin
         using NetworkDynamics: compf
         a = Lib.diffusion_edge()
+
         b = Lib.diffusion_edge()
         @test compf(a) == compf(b)
         a = Lib.diffusion_edge_closure()

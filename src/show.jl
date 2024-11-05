@@ -24,58 +24,38 @@ Base.show(io::IO, s::KAAggregator) = print(io, "KAAggregator($(repr(s.f)))")
 Base.show(io::IO, s::SequentialAggregator) = print(io, "SequentialAggregator($(repr(s.f)))")
 Base.show(io::IO, s::PolyesterAggregator) = print(io, "PolyesterAggregator($(repr(s.f)))")
 
-# function Base.show(io::IO, ::MIME"text/plain", c::EdgeFunction)
-#     type = match(r"^(.*?)\{", string(typeof(c)))[1]
-#     print(io, type, styled" :$(c.name) with $(_styled_coupling(coupling(c))) coupling of depth {NetworkDynamics_fordst:$(depth(c))}")
-#     if has_graphelement(c)
-#         ge = get_graphelement(c)
-#         print(io, " @ Edge $(ge.src) => $(ge.dst)")
-#     end
+function Base.show(io::IO, ::MIME"text/plain", c::ComponentFunction)
+    type = match(r"^(.*?)\{", string(typeof(c)))[1]
+    print(io, type, styled" {NetworkDynamics_name::$(c.name)}")
+    print(io, styled" {NetworkDynamics_fftype:$(fftype(c))}")
+    if has_graphelement(c)
+        ge = get_graphelement(c)
+        if c isa VertexFunction
+            print(io, " @ Vertex $ge")
+        else
+            print(io, " @ Edge $(ge.src)=>$(ge.dst)")
+        end
+    end
 
-#     styling = Dict{Int,Symbol}()
-#     if coupling(c) == Fiducial()
-#         for i in 1:depth(c)
-#             styling[i] = :NetworkDynamics_fordst
-#         end
-#         for i in depth(c)+1:2*depth(c)
-#             styling[i] = :NetworkDynamics_forsrc
-#         end
-#     elseif coupling(c) == Directed()
-#         for i in 1:depth(c)
-#             styling[i] = :NetworkDynamics_fordst
-#         end
-#     else
-#         for i in 1:depth(c)
-#             styling[i] = :NetworkDynamics_fordstsrc
-#         end
-#     end
+    styling = Dict{Int,Symbol}()
+    # for i in 1:depth(c)
+    #     styling[i] = :NetworkDynamics_forlayer
+    # end
 
-#     print_states_params(io, c, styling)
-# end
-_styled_coupling(::Fiducial) = styled"{NetworkDynamics_fordst:Fidu}{NetworkDynamics_forsrc:cial}"
-_styled_coupling(::Directed) = styled"{NetworkDynamics_fordst:Directed}"
-_styled_coupling(::AntiSymmetric) = styled"{NetworkDynamics_fordstsrc:AntiSymmetric}"
-_styled_coupling(::Symmetric) = styled"{NetworkDynamics_fordstsrc:Symmetric}"
-
-# function Base.show(io::IO, ::MIME"text/plain", c::VertexFunction)
-#     type = match(r"^(.*?)\{", string(typeof(c)))[1]
-#     print(io, type, styled" :$(c.name) with depth {NetworkDynamics_forlayer:$(depth(c))}")
-#     if has_graphelement(c)
-#         print(io, " @ Vertex $(get_graphelement(c))")
-#     end
-
-#     styling = Dict{Int,Symbol}()
-#     for i in 1:depth(c)
-#         styling[i] = :NetworkDynamics_forlayer
-#     end
-
-#     print_states_params(io, c, styling)
-# end
+    print_states_params(io, c, styling)
+end
 
 function print_states_params(io, c::ComponentFunction, styling)
     info = AnnotatedString{String}[]
+
+    if hasinsym(c)
+        push!(info, _inout_string(c, insym, "input"))
+    end
+
     num, word = maybe_plural(dim(c), "state")
     push!(info, styled"$num &$word: &&$(stylesymbolarray(c.sym, def(c), guess(c), styling))")
+
+    push!(info, _inout_string(c, outsym, "output"))
 
     if hasproperty(c, :mass_matrix) && c.mass_matrix != LinearAlgebra.I
         if LinearAlgebra.isdiag(c.mass_matrix) && !(c.mass_matrix isa UniformScaling)
@@ -88,24 +68,26 @@ function print_states_params(io, c::ComponentFunction, styling)
     num, word = maybe_plural(pdim(c), "param")
     pdim(c) > 0 && push!(info, styled"$num &$word: &&$(stylesymbolarray(c.psym, pdef(c), pguess(c)))")
 
-    if !isnothing(c.inputsym)
-        if c isa VertexFunction
-            _, word = maybe_plural(length(c.inputsym), "input")
-            defs = get_defaults_or_inits(c, c.inputsym)
-            guesses = get_guesses(c, c.inputsym)
-            push!(info, styled"&$word: &&$(stylesymbolarray(c.inputsym, defs, guesses))")
-        elseif c isa EdgeFunction
-            _, word = maybe_plural(length(c.inputsym.src), "input")
-            srcdefs = get_defaults_or_inits(c, c.inputsym.src)
-            dstdefs = get_defaults_or_inits(c, c.inputsym.dst)
-            srcguesses = get_guesses(c, c.inputsym.src)
-            dstguesses = get_guesses(c, c.inputsym.dst)
-            push!(info, styled"src&$word: &&$(stylesymbolarray(c.inputsym.src, srcdefs, srcguesses))\n\
-            dst&$word: &&$(stylesymbolarray(c.inputsym.dst, srcdefs, srcguesses))")
-        end
-    end
-
     print_treelike(io, align_strings(info))
+end
+function _inout_string(c::VertexFunction, f, name)
+    sym = f(c)
+    num, word = maybe_plural(length(sym), name)
+    defs = get_defaults_or_inits(c, sym)
+    guesses = get_guesses(c, sym)
+    styled"$num &$word: &&$(stylesymbolarray(sym, defs, guesses))"
+end
+function _inout_string(c::EdgeFunction, f, name)
+    sym = f(c)
+    word = name*"s"
+    srcnum = length(sym.src)
+    dstnum = length(sym.dst)
+    srcdefs = get_defaults_or_inits(c, sym.src)
+    dstdefs = get_defaults_or_inits(c, sym.dst)
+    srcguesses = get_guesses(c, sym.src)
+    dstguesses = get_guesses(c, sym.dst)
+    styled"$srcnum/$dstnum &$word: &&src=&$(stylesymbolarray(sym.src, srcdefs, srcguesses)) \
+            dst=$(stylesymbolarray(sym.dst, dstdefs, dstguesses))"
 end
 
 function stylesymbolarray(syms, defaults, guesses, symstyles=Dict{Int,Symbol}())
@@ -314,7 +296,7 @@ function align_strings(vecofvec::AbstractVector{<:AbstractVector}; padding=:alte
 end
 
 function maybe_plural(num, word, substitution=s"\1s")
-    if num > 1
+    if num > 1 || num == 0
         word = replace(word, r"^(.*)$" => substitution)
     end
     num, word

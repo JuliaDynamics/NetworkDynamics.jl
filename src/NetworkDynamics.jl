@@ -14,7 +14,6 @@ using Polyester: Polyester
 using Mixers: Mixers
 using LinearAlgebra: LinearAlgebra, UniformScaling
 using SparseArrays: sparse
-using DocStringExtensions: FIELDS, TYPEDEF
 using StyledStrings: StyledStrings, @styled_str
 using RecursiveArrayTools: DiffEqArray
 using FastClosures: @closure
@@ -38,7 +37,7 @@ include("utils.jl")
 export VertexFunction, EdgeFunction
 export Symmetric, AntiSymmetric, Directed, Fiducial
 export StateMask
-export dim, sym, pdim, psym, obssym, depth, hasinputsym, inputsym, coupling
+export dim, sym, pdim, psym, obssym, hasinsym, insym
 export metadata, symmetadata
 include("component_functions.jl")
 
@@ -92,6 +91,8 @@ const ND_FACES = [
     :NetworkDynamics_fordst => StyledStrings.Face(foreground=:bright_yellow),
     :NetworkDynamics_forsrc => StyledStrings.Face(foreground=:bright_magenta),
     :NetworkDynamics_forlayer => StyledStrings.Face(foreground=:bright_blue),
+    :NetworkDynamics_name => StyledStrings.Face(weight=:bold),
+    :NetworkDynamics_fftype => StyledStrings.Face(foreground=:bright_blue),
 ]
 
 __init__() = foreach(StyledStrings.addface!, ND_FACES)

@@ -56,17 +56,17 @@ function initialization_problem(cf::T; t=NaN, verbose=true) where {T<:ComponentF
     ufix = Float64[has_default(cf, s) ? get_default(cf, s) : NaN for s in sym(cf)]
     pfix = Float64[has_default(cf, s) ? get_default(cf, s) : NaN for s in psym(cf)]
 
-    hasinputsym(cf) || throw(ArgumentError("Component function musst have `inputsym` with default values!"))
+    hasinsym(cf) || throw(ArgumentError("Component function musst have `insym` with default values!"))
 
     input= try
         if T <: EdgeFunction
-            (;src=Float64[get_default(cf, s) for s in inputsym(cf).src], dst=Float64[get_default(cf, s) for s in inputsym(cf).dst])
+            (;src=Float64[get_default(cf, s) for s in insym(cf).src], dst=Float64[get_default(cf, s) for s in insym(cf).dst])
         else
-            Float64[get_default(cf, s) for s in inputsym(cf)]
+            Float64[get_default(cf, s) for s in insym(cf)]
         end
     catch e
         if e isa KeyError
-            throw(ArgumentError("Component function musst have `inputsym` with default values!"))
+            throw(ArgumentError("Component function musst have `insym` with default values!"))
         else
             rethrow(e)
         end
@@ -197,11 +197,11 @@ function init_residual(cf::T; t=NaN, recalc=false) where {T<:ComponentFunction}
         res = zeros(dim(cf))
 
         if T <: EdgeFunction
-            src=Float64[get_default(cf, s) for s in inputsym(cf).src]
-            dst=Float64[get_default(cf, s) for s in inputsym(cf).dst]
+            src=Float64[get_default(cf, s) for s in insym(cf).src]
+            dst=Float64[get_default(cf, s) for s in insym(cf).dst]
             compf(cf)(res, u, src, dst, p, t)
         else
-            input = Float64[get_default(cf, s) for s in inputsym(cf)]
+            input = Float64[get_default(cf, s) for s in insym(cf)]
             compf(cf)(res, u, input, p, t)
         end
         LinearAlgebra.norm(res)

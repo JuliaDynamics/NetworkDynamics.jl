@@ -16,7 +16,7 @@ Special metadata:
 
 
 ## Symbol Metadata
-Each component stores symbol metadata. The symbol metadata is a `Dict{Symbol, Dict{Symbol, Any}}` which stores a metadate dict per symbol. Symbols are everything that appears in [`sym`](@ref), [`psym`](@ref), [`obssym`](@ref) and [`inputsym`](@ref).
+Each component stores symbol metadata. The symbol metadata is a `Dict{Symbol, Dict{Symbol, Any}}` which stores a metadate dict per symbol. Symbols are everything that appears in [`sym`](@ref), [`psym`](@ref), [`obssym`](@ref) and [`insym`](@ref).
 
 To access the data, you can use the methods `has_metadata`, `get_metadata` and `set_metadata!` (see [Per Symbol Metadata API](@ref)).
 

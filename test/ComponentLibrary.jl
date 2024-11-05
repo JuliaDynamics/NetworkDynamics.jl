@@ -5,8 +5,7 @@ Base.@propagate_inbounds function diffusionedge!(e, v_s, v_d, (p,), _)
     e .= p * (v_s[1] .- v_d[1])
 end
 function diffusion_edge()
-    StaticEdge(f=diffusionedge!, dim=1, pdim=1, pdef=[1], coupling=AntiSymmetric(),
-               name=:diff_edge)
+    EdgeFunction(g=AntiSymmetric(diffusionedge!), outdim=1, pdim=1, pdef=[1], name=:diff_edge)
 end
 function diffusion_edge_closure()
     force_closure = rand()

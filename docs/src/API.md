@@ -74,8 +74,8 @@ pdim(::NetworkDynamics.ComponentFunction)
 psym
 obssym
 depth
-hasinputsym
-inputsym
+hasinsym
+insym
 coupling
 ```
 ### Component Metadata API

@@ -179,7 +179,6 @@ end
 
 @inline Base.length(cb::ComponentBatch) = Base.length(cb.indices)
 @inline statetype(::ComponentBatch{F}) where {F} = statetype(F)
-@inline coupling(::EdgeBatch{F}) where {F} = coupling(F)
 @inline dispatchT(::ComponentBatch{F}) where {F} = F
 @inline compf(b::ComponentBatch) = b.compf
 @inline compg(b::ComponentBatch) = b.compg
@@ -215,7 +214,7 @@ function register_edges!(im::IndexManager, dim, outdim, pdim, idxs)
         im.e_gbufr[i] = _nextgbufrange!(im, im.vdepth)
     end
     (BatchStride(first(im.e_data[first(idxs)]), dim),
-     BatchStride(first(im.e_out[first(idxs)]), (outdim.dst, outdim.src)),
+     BatchStride(first(im.e_out[first(idxs)]), (outdim.src, outdim.dst)),
      BatchStride(first(im.e_para[first(idxs)]), pdim),
      BatchStride(first(im.e_gbufr[first(idxs)]), im.vdepth))
 end

@@ -125,8 +125,8 @@ end
 
 @inline function apply_comp!(::Type{<:EdgeFunction}, fg, batch, i, du, u, o, gbuf, p, t)
     @inbounds begin
-        _odst = _needs_out(fg, batch) ? view(o, out_range(batch, i, 1))     : nothing
-        _osrc = _needs_out(fg, batch) ? view(o, out_range(batch, i, 2))     : nothing
+        _osrc = _needs_out(fg, batch) ? view(o, out_range(batch, i, 1))     : nothing
+        _odst = _needs_out(fg, batch) ? view(o, out_range(batch, i, 2))     : nothing
         _du   = _needs_du(fg, batch)  ? view(du, state_range(batch, i))     : nothing
         _u    = _needs_u(fg, batch)   ? view(u,  state_range(batch, i))     : nothing
         _ins  = _needs_in(fg, batch) ? get_src_dst(gbuf, batch, i)          : nothing

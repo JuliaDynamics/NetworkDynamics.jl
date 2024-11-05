@@ -1,4 +1,5 @@
 using NetworkDynamics
+using NetworkDynamics: Symmetric
 using Graphs
 
 @testset "nd construction tests" begin
@@ -146,77 +147,135 @@ end
     end
 end
 
-@testset "test componen function constructors" begin
-    using LinearAlgebra
-    using NetworkDynamics: pdef, def
-    v = ODEVertex(identity; dim=2, pdim=3)
-    @test v.name == :ODEVertex
-    @test v.obsf == nothing
-    @test length(v.sym) == 2
-    @test v.mass_matrix == LinearAlgebra.I
-
-    v = ODEVertex(identity; sym=[:foo,:bar], pdim=3)
-    @test dim(v) == 2
-    @test length(v.psym) == 3
-
-    v = ODEVertex(identity; sym=[:foo,:bar], psym=[:a])
-    @test pdim(v)==1
-    @test dim(v)==2
-
-    @test_throws ArgumentError ODEVertex(identity; dim=1, pdim=1, mass_matrix=[1 2;3 4])
-
-    @test_throws ArgumentError ODEVertex(identity, 1, 0; obsf=identity)
-    v = ODEVertex(identity, 1, 0; obsf=identity, obssym=[:foo])
-
-    @test_throws ArgumentError ODEVertex(identity, 1, 0; depth=2)
-
-    StaticEdge(identity, 5, 0, Fiducial(); depth=2)
-    StaticEdge(identity, 5, 0, Fiducial(); depth=1)
-    @test_throws ArgumentError StaticEdge(identity, 5, 0, Fiducial(); depth=3)
-
-    e = StaticEdge(identity, 5, 0, Directed())
-    @test e.name == :StaticEdge
-    e = ODEEdge(identity, 5, 0, Directed())
-    StaticVertex(identity, 5, 0)
-
-    v = ODEVertex(identity, 2, 3)
-    @test dim(v) == 2
-    @test pdim(v) == 3
-    v = ODEVertex(identity, [:foo, :bar], 3)
-    @test dim(v) == 2
-    @test pdim(v) == 3
-    v = ODEVertex(identity, 2, [:a, :b, :c])
-    @test dim(v) == 2
-    @test pdim(v) == 3
-    v = ODEVertex(identity, [:foo, :bar], [:a, :b, :c])
-    @test dim(v) == 2
-    @test pdim(v) == 3
-
+@testset "test component function constructors" begin
+    using NetworkDynamics: PureFeedForward, FeedForward, NoFeedForward, PureStateMap
+    using NetworkDynamics: fftype
     using NetworkDynamics: _has_metadata
-    @test _has_metadata([:a,:b,:c]) == false
-    @test _has_metadata([:a=>1,:b,:c]) == true
-    @test _has_metadata([:a=>1,:b=>2,:c=>3]) == true
+    using NetworkDynamics: get_defaults, outsym
+    @testset "VertexFunction construction" begin
+        f = (du, u, in, p, t) -> nothing
+        g_pff = (o, in, p, t) -> nothing
+        g_ff  = (o, u, in, p, t) -> nothing
+        g_nff = (o, u, p, t) -> nothing
+        g_psm = (o, u) -> nothing
 
-    v = ODEVertex(identity, [:foo=>1, :bar], [:a=>2, :b, :c=>7])
-    @test def(v) == [1,nothing]
-    @test pdef(v) == [2,nothing,7]
+        cf = VertexFunction(g=g_pff, outdim=1, insym=[:a])
+        @test fftype(cf) == PureFeedForward()
 
-    @test_throws ArgumentError ODEVertex(identity, [:foo=>1]; def=[1])
-    @test_throws ArgumentError ODEVertex(identity, 1, [:foo=>1]; pdef=[1])
+        cf = VertexFunction(f=f, dim=1, g=g_nff, outdim=1, insym=[:a])
+        @test fftype(cf) == NoFeedForward()
 
-    v = ODEVertex(identity, :foo, :bar)
-    @test v.sym == [:foo]
-    @test v.psym == [:bar]
+        @test_throws ArgumentError VertexFunction(f=f, sym=[:x,:y], g=StateMask([2,1]), outdim=1, insym=[:a])
+        cf = VertexFunction(f=f, sym=[:x,:y], g=StateMask([2,1]), insym=[:a])
+        @test fftype(cf) == PureStateMap()
+        @test NetworkDynamics.outsym(cf) == [:y, :x]
 
-    v = ODEVertex(identity, :foo=>1, :bar)
-    @test v.sym == [:foo]
-    @test def(v) == [1]
-    @test v.psym == [:bar]
+        cf = VertexFunction(f=f, sym=[:x,:y], g=g_ff, outdim=1, insym=[:a], name=:foo)
+        @test fftype(cf) == FeedForward()
+        @test NetworkDynamics.outdim(cf) == 1
+        @test cf.name == :foo
+        @test cf.obsf == nothing
+        @test cf.mass_matrix == LinearAlgebra.I
+        @test pdim(cf) == 0
 
-    v = ODEVertex(identity, :foo, :bar=>1)
-    @test v.sym == [:foo]
-    @test v.psym == [:bar]
-    @test pdef(v) == [1]
+        cf = VertexFunction(f=f, g=g_ff, dim=1, outdim=1, pdim=3, indim=2, name=:foo)
+        @test length(cf.insym) == 2
+        @test length(cf.psym) == 3
+
+        # mismatch of massmatrix size
+        @test_throws ArgumentError VertexFunction(f=identity, g=g_psm, dim=1, pdim=1, outdim=1, mass_matrix=[1 2;3 4])
+
+        # passing of obs function
+        @test_throws ArgumentError VertexFunction(g=g_pff, outdim=1, obsf=identity)
+        cf = VertexFunction(g=g_pff, outdim=1, obsf=identity, obssym=[:foo, :bar])
+        obssym(cf) == [:foo, :bar]
+
+        # pass graph element
+        cf = VertexFunction(g=g_pff, outdim=1, obsf=identity, obssym=[:foo, :bar], vidx=7)
+        @test cf.metadata[:graphelement] == 7
+        cf = VertexFunction(g=g_pff, outdim=1, obsf=identity, obssym=[:foo, :bar], graphelement=2)
+        @test cf.metadata[:graphelement] == 2
+
+        # passing of metadata
+        @test _has_metadata([:a,:b,:c]) == false
+        @test _has_metadata([:a=>1,:b,:c]) == true
+        @test _has_metadata([:a=>1,:b=>2,:c=>3]) == true
+
+        cf = VertexFunction(g=g_pff, outsym=[:foo=>1, :bar], psym=[:a=>2, :b, :c=>7])
+        @test get_default(cf, :foo) == 1
+        @test get_defaults(cf, outsym(cf)) == [1, nothing]
+        @test get_defaults(cf, psym(cf)) == [2, nothing, 7]
+
+        @test_throws ArgumentError VertexFunction(f=f, g=StateMask(1:1), sym=[:foo=>1]; def=[1])
+        @test_throws ArgumentError VertexFunction(f=f, g=StateMask(2:2), dim=2, psym=[:foo=>1]; pdef=[1])
+    end
+
+
+    @testset "EdgeFunction Constructor" begin
+        using NetworkDynamics
+        using NetworkDynamics: Symmetric
+        f = (du, u, in1, in2, p, t) -> nothing
+        g_pff = (o1, o2, in1, in2, p, t) -> nothing
+        g_ff  = (o1, o2, u, in1, in2, p, t) -> nothing
+        g_nff = (o1, o2, u, p, t) -> nothing
+        g_psm = (o1, o2, u) -> nothing
+
+        g_single_pff = (o2, in1, in2, p, t) -> nothing
+        g_single_ff = (o2, u, in1, in2, p, t) -> nothing
+        g_single_nff = (o2, u, p, t) -> nothing
+        g_single_psm = (o2, u) -> nothing
+        for c in (AntiSymmetric, Symmetric, Directed)
+            @test fftype(c(g_single_pff)) == PureFeedForward()
+            @test fftype(c(g_single_ff)) == FeedForward()
+            @test fftype(c(g_single_nff)) == NoFeedForward()
+            @test fftype(c(g_single_psm)) == PureStateMap()
+            @test fftype(c(1:2)) == PureStateMap()
+        end
+
+        cf = EdgeFunction(g=g_pff, outdim=1, insym=[:a])
+        @test fftype(cf) == PureFeedForward()
+
+        cf = EdgeFunction(f=f, dim=1, g=g_nff, outdim=1, insym=[:a])
+        @test fftype(cf) == NoFeedForward()
+
+        @test_throws ArgumentError EdgeFunction(f=f, sym=[:x,:y], g=StateMask([2,1]), outdim=1, insym=[:a])
+        @test_throws ArgumentError EdgeFunction(f=f, sym=[:x,:y], g=StateMask([2,1]), insym=[:a])
+
+        cf = EdgeFunction(f=f, sym=[:x,:y], g=AntiSymmetric(StateMask(1:2)))
+        @test fftype(cf) == PureStateMap()
+        @test NetworkDynamics.outsym(cf) == (; src=[:src₊x, :src₊y], dst=[:dst₊x, :dst₊y])
+
+        cf = EdgeFunction(f=f, sym=[:x,:y], g=g_ff, outdim=1, insym=[:a], name=:foo)
+        @test fftype(cf) == FeedForward()
+        @test NetworkDynamics.outdim(cf) == (;src=1, dst=1)
+        @test cf.name == :foo
+        @test cf.obsf == nothing
+        @test cf.mass_matrix == LinearAlgebra.I
+        @test pdim(cf) == 0
+
+
+        # output sym generation
+        cf = EdgeFunction(f=f, sym=[:x,:y], g=AntiSymmetric(StateMask(1:2)))
+        @test cf.outsym == (; src=[:src₊x,:src₊y], dst=[:dst₊x,:dst₊y])
+        cf = EdgeFunction(f=f, sym=[:x,:y], g=Fiducial(1:2, 2:-1:1))
+        @test cf.outsym == (; src=[:src₊x,:src₊y], dst=[:dst₊y,:dst₊x])
+        cf = EdgeFunction(f=f, g=g_ff, dim=1, outsym=(;src=[:a=>2], dst=[:b=>4]))
+        @test cf.outsym == (; src=[:a], dst=[:b])
+        cf = EdgeFunction(f=f, g=g_ff, dim=1, outdim=2)
+        @test cf.outsym == (; src=[:src₊o₁, :src₊o₂], dst=[:dst₊o₁, :dst₊o₂])
+        cf = EdgeFunction(f=f, g=Directed(g_single_ff), dim=1, outdim=2)
+        @test cf.outsym == (; src=[], dst=[:dst₊o₁, :dst₊o₂])
+        @test_throws ArgumentError EdgeFunction(f=f, g=Symmetric(g_single_ff), dim=1, outsym=[:x=>1])
+
+        # input sym generation
+        cf = EdgeFunction(f=f, g=g_ff, dim=1, outdim=1, pdim=3, indim=2, name=:foo)
+        @test length(cf.insym) == 2
+        @test length(cf.psym) == 3
+        @test cf.insym == (;src = [:src₊i₁, :src₊i₂], dst = [:dst₊i₁, :dst₊i₂])
+
+        cf = EdgeFunction(f=f, g=g_ff, dim=1, outdim=1, insym=[:foo])
+        @test_throws ArgumentError EdgeFunction(f=f, g=g_ff, dim=1, outdim=1, insym=(src=[:foo], dst=[:foo]))
+    end
 end
 
 @testset "test dispatchT isbitstype" begin

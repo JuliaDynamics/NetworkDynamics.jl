@@ -60,7 +60,7 @@ Base.@propagate_inbounds function piline!(out_src, out_dst, src, dst, p, t)
     out_src[2] = -imag(isrc)
     nothing
 end
-piline() = EdgeFunction(; g=piline!, outsym=(;dst=[:dst_i_r, :dst_i_i], src=[:src_i_r, :src_i_i]),
+piline() = EdgeFunction(; g=piline!, outsym=(;src=[:src_i_r, :src_i_i], dst=[:dst_i_r, :dst_i_i]),
                        psym=[:L, :R, :C1, :C2])
 
 Base.@propagate_inbounds function pq!(du, u, isum, (P,Q), t)
