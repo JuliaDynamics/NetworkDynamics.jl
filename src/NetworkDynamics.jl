@@ -35,7 +35,7 @@ using StaticArrays: StaticArrays, SVector
 
 include("utils.jl")
 
-export ODEVertex, StaticVertex, StaticEdge, ODEEdge, UnifiedVertex, UnifiedEdge
+export VertexFunction, EdgeFunction
 export Symmetric, AntiSymmetric, Directed, Fiducial
 export StateMask
 export dim, sym, pdim, psym, obssym, depth, hasinputsym, inputsym, coupling

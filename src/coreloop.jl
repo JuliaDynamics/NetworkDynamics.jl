@@ -110,7 +110,7 @@ end
 end
 
 
-@inline function apply_comp!(::Type{<:UnifiedVertex}, fg, batch, i, du, u, o, aggbuf, p, t)
+@inline function apply_comp!(::Type{<:VertexFunction}, fg, batch, i, du, u, o, aggbuf, p, t)
     @inbounds begin
         _o   = _needs_out(fg, batch) ? view(o, out_range(batch, i))         : nothing
         _du  = _needs_du(fg, batch)  ? view(du, state_range(batch, i))      : nothing
@@ -123,7 +123,7 @@ end
     nothing
 end
 
-@inline function apply_comp!(::Type{<:UnifiedEdge}, fg, batch, i, du, u, o, gbuf, p, t)
+@inline function apply_comp!(::Type{<:EdgeFunction}, fg, batch, i, du, u, o, gbuf, p, t)
     @inbounds begin
         _odst = _needs_out(fg, batch) ? view(o, out_range(batch, i, 1))     : nothing
         _osrc = _needs_out(fg, batch) ? view(o, out_range(batch, i, 2))     : nothing

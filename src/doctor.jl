@@ -82,8 +82,8 @@ oob_writes(a::AccessTracker) = filter(i -> i ∉ eachindex(a.data), writes(a))
 has_oob(a::AccessTracker) = !isempty(oob_reads(a)) || !isempty(oob_writes(a))
 
 
-chk_component(::UnifiedVertex) = @warn "Check on UnifiedVertex not implemented"
-chk_component(::UnifiedEdge) = @warn "Check on UnifiedEdge not implemented"
+chk_component(::VertexFunction) = @warn "Check on VertexFunction not implemented"
+chk_component(::EdgeFunction) = @warn "Check on EdgeFunction not implemented"
 function chk_component(c::ComponentFunction)
     du = AccessTracker(rand(dim(c)))
     u = AccessTracker(rand(dim(c)))

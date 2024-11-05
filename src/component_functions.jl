@@ -52,8 +52,14 @@ end
     nothing
 end
 
-struct Directed{FF} <: Coupling{FF} end
-# TODO directed
+struct Directed{FF,G} <: Coupling{FF}
+    dst::G
+    Directed(g; ff=_infer_ss_fftype(g)) = new{typeof(ff), typeof(g)}(g)
+end
+@inline function (c::Directed)(osrc, odst, args...)
+    @inline c.g(odst, args...)
+    nothing
+end
 
 struct Fiducial{FF,GS,GD} <: Coupling{FF}
     src::GS
@@ -83,36 +89,72 @@ end
 
 abstract type ComponentFunction end
 
-"""
-Abstract supertype for all vertex functions.
-"""
-abstract type VertexFunction <: ComponentFunction end
-
-"""
-Abstract supertype for all edge functions.
-"""
-# abstract type EdgeFunction{C<:Coupling} <: ComponentFunction end
-abstract type EdgeFunction <: ComponentFunction end
-
-Mixers.@pour CommonFields begin
+struct VertexFunction{F,G,FFT,OF,MM} <: ComponentFunction
     name::Symbol
+    # main function
     f::F
     sym::Vector{Symbol}
-    depth::Int
+    mass_matrix::MM
+    # outputs
+    g::G
+    outsym::Vector{Symbol}
+    ff::FFT
+    # parameters and option input sym
     psym::Vector{Symbol}
-    inputsym:: Union{Nothing, Vector{Symbol}, @NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}}}
+    inputsym::Union{Nothing, Vector{Symbol}}
+    # observed
     obsf::OF
     obssym::Vector{Symbol}
+    # optional inputsyms
     symmetadata::Dict{Symbol,Dict{Symbol, Any}}
     metadata::Dict{Symbol,Any}
 end
+VertexFunction(; kwargs...) = _construct_comp(VertexFunction, kwargs)
+VertexFunction(v::VertexFunction; kwargs...) = _reconstruct_comp(VertexFunction, v, kwargs)
+
+struct EdgeFunction{F,G,FFT,OF,MM} <: ComponentFunction
+    name::Symbol
+    # main function
+    f::F
+    sym::Vector{Symbol}
+    mass_matrix::MM
+    # outputs
+    g::G
+    outsym::@NamedTuple{dst::Vector{Symbol},src::Vector{Symbol}}
+    ff::FFT
+    # parameters and option input sym
+    psym::Vector{Symbol}
+    inputsym::Union{Nothing, @NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}}}
+    # observed
+    obsf::OF
+    obssym::Vector{Symbol}
+    # metadata
+    symmetadata::Dict{Symbol,Dict{Symbol, Any}}
+    metadata::Dict{Symbol,Any}
+end
+EdgeFunction(; kwargs...) = _construct_comp(EdgeFunction, kwargs)
+EdgeFunction(v::EdgeFunction; kwargs...) = _reconstruct_comp(EdgeFunction, v, kwargs)
 
 """
     compf(c::ComponentFunction)
 
-Retrieve the actual dynamical function the component.
+Retrieve internal function `f` of the component.
 """
 compf(c::ComponentFunction) = c.f
+
+"""
+    compg(c::ComponentFunction)
+
+Retrieve output function `g` of the component.
+"""
+compg(c::ComponentFunction) = c.g
+
+"""
+    fftype(c::ComponentFunction)
+
+Retrieve the feed forward type of the component.
+"""
+fftype(c::ComponentFunction) = c.ff
 
 """
     dim(c::ComponentFunction)::Int
@@ -127,6 +169,26 @@ dim(c::ComponentFunction)::Int = length(sym(c))
 Retrieve the symbols of the component.
 """
 sym(c::ComponentFunction)::Vector{Symbol} = c.sym
+
+
+"""
+    outdim(c::EdgeFunction)::@NamedTuple(dst::Int, src::Int)
+    outdim(c::ComponentFunction)::Int
+
+"""
+outdim(c::VertexFunction) = length(outsym(c))
+outdim(c::EdgeFunction) = (; dst=outdim_dst(c), src=outdim_src(c))
+
+outdim_src(c::EdgeFunction) = length(outsym(c).src)
+outdim_dst(c::EdgeFunction) = length(outsym(c).dst)
+
+"""
+   outsym(c::VertexFunction)::Vector{Symbol}
+   outsym(c::EdgeFunction)::@NamedTuple{dst::Vector{Symbol}, src::Vector{Symbol}}
+
+Retrieve the output symbols of the component.
+"""
+outsym(c::ComponentFunction) = c.outsym
 
 """
     pdim(c::ComponentFunction)::Int
@@ -155,15 +217,6 @@ obsf(c::ComponentFunction) = c.obsf
 Retrieve the observation symbols of the component.
 """
 obssym(c::ComponentFunction)::Vector{Symbol} = c.obssym
-
-"""
-    depth(c::ComponentFunction)::Int
-
-Retrieve the depth of the component. The depth is the number of "outputs". For
-example, in a vertex function, a depth `N` means, that the connected edges receive
-the states `1:N`.
-"""
-depth(c::ComponentFunction)::Int = c.depth
 
 """
     symmetadata(c::ComponentFunction)::Dict{Symbol,Dict{Symbol,Any}}
@@ -202,57 +255,6 @@ edges it returns a named tuple `(; src, dst)` with two symbol vectors.
 inputsym(c::VertexFunction)::Vector{Symbol} = c.inputsym
 inputsym(c::EdgeFunction)::@NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}} = c.inputsym
 
-outsym(c::ComponentFunction) = c.outsym
-outdim(c::VertexFunction) = length(outsym(c))
-outdim(c::EdgeFunction) = (; dst=outdim_dst(c), src=outdim_src(c))
-outdim_src(c::EdgeFunction) = length(outsym(c).src)
-outdim_dst(c::EdgeFunction) = length(outsym(c).dst)
-
-struct UnifiedVertex{F,G,FFT,OF,MM} <: VertexFunction
-    name::Symbol
-    # main function
-    f::F
-    sym::Vector{Symbol}
-    mass_matrix::MM
-    # outputs
-    g::G
-    outsym::Vector{Symbol}
-    ff::FFT
-    # parameters and option input sym
-    psym::Vector{Symbol}
-    inputsym::Union{Nothing, Vector{Symbol}}
-    # observed
-    obsf::OF
-    obssym::Vector{Symbol}
-    # optional inputsyms
-    symmetadata::Dict{Symbol,Dict{Symbol, Any}}
-    metadata::Dict{Symbol,Any}
-end
-UnifiedVertex(; kwargs...) = _construct_comp(UnifiedVertex, kwargs)
-
-struct UnifiedEdge{F,G,FFT,OF,MM} <: EdgeFunction
-    name::Symbol
-    # main function
-    f::F
-    sym::Vector{Symbol}
-    mass_matrix::MM
-    # outputs
-    g::G
-    outsym::@NamedTuple{dst::Vector{Symbol},src::Vector{Symbol}}
-    ff::FFT
-    # parameters and option input sym
-    psym::Vector{Symbol}
-    inputsym::Union{Nothing, @NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}}}
-    # observed
-    obsf::OF
-    obssym::Vector{Symbol}
-    # metadata
-    symmetadata::Dict{Symbol,Dict{Symbol, Any}}
-    metadata::Dict{Symbol,Any}
-end
-UnifiedEdge(; kwargs...) = _construct_comp(UnifiedEdge, kwargs)
-
-fftype(c::Union{<:UnifiedVertex, <:UnifiedEdge}) = c.ff
 
 function _infer_fftype(::Type{<:VertexFunction}, g, dim)
     pureff = _takes_n_vectors_and_t(g, 3) && iszero(dim)  # (out, ein, p, t)
@@ -286,82 +288,8 @@ function _infer_fftype(::Type{<:EdgeFunction}, g, dim; singlesided=false)
     pureu && return PureStateMap()
 end
 
-compg(c::ComponentFunction) = c.g
-
-"""
-$(TYPEDEF)
-
-# Fields
-$(FIELDS)
-"""
-struct ODEVertex{F,OF,MM} <: VertexFunction
-    @CommonFields
-    mass_matrix::MM
-    # dfdp dfdv dfde
-end
-ODEVertex(; kwargs...) = _construct_comp(ODEVertex, kwargs)
-ODEVertex(f; kwargs...) = ODEVertex(;f, kwargs...)
-ODEVertex(f, dim; kwargs...) = ODEVertex(;f, _dimsym(dim)..., kwargs...)
-ODEVertex(f, dim, pdim; kwargs...) = ODEVertex(;f, _dimsym(dim, pdim)..., kwargs...)
-ODEVertex(v::ODEVertex; kwargs...) = _reconstruct_comp(ODEVertex, v, kwargs)
-
-struct StaticVertex{F,OF} <: VertexFunction
-    @CommonFields
-end
-StaticVertex(; kwargs...) = _construct_comp(StaticVertex, kwargs)
-StaticVertex(f; kwargs...) = StaticVertex(;f, kwargs...)
-StaticVertex(f, dim; kwargs...) = StaticVertex(;f, _dimsym(dim)..., kwargs...)
-StaticVertex(f, dim, pdim; kwargs...) = StaticVertex(;f, _dimsym(dim, pdim)..., kwargs...)
-StaticVertex(v::StaticVertex; kwargs...) = _reconstruct_comp(StaticVertex, v, kwargs)
-function ODEVertex(sv::StaticVertex)
-    d = Dict{Symbol,Any}()
-    for prop in propertynames(sv)
-        d[prop] = getproperty(sv, prop)
-    end
-    d[:f]  = let _f = sv.f
-        (dx, x, esum, p, t) -> begin
-            _f(dx, esum, p, t)
-            @inbounds for i in eachindex(dx)
-                dx[i] = dx[i] - x[i]
-            end
-            return nothing
-        end
-    end
-    d[:mass_matrix] = 0.0
-    ODEVertex(; d...)
-end
-
-struct StaticEdge{C,F,OF} <: EdgeFunction
-    @CommonFields
-    coupling::C
-end
-StaticEdge(; kwargs...) = _construct_comp(StaticEdge, kwargs)
-StaticEdge(f; kwargs...) = StaticEdge(;f, kwargs...)
-StaticEdge(f, dim, coupling; kwargs...) = StaticEdge(;f, _dimsym(dim)..., coupling, kwargs...)
-StaticEdge(f, dim, pdim, coupling; kwargs...) = StaticEdge(;f, _dimsym(dim, pdim)..., coupling, kwargs...)
-StaticEdge(e::StaticEdge; kwargs...) = _reconstruct_comp(StaticEdge, e, kwargs)
-
-struct ODEEdge{C,F,OF,MM} <: EdgeFunction
-    @CommonFields
-    coupling::C
-    mass_matrix::MM
-end
-ODEEdge(; kwargs...) = _construct_comp(ODEEdge, kwargs)
-ODEEdge(f; kwargs...) = ODEEdge(;f, kwargs...)
-ODEEdge(f, dim, coupling; kwargs...) = ODEEdge(;f, _dimsym(dim)..., coupling, kwargs...)
-ODEEdge(f, dim, pdim, coupling; kwargs...) = ODEEdge(;f, _dimsym(dim, pdim)..., coupling, kwargs...)
-ODEEdge(e::ODEEdge; kwargs...) = _reconstruct_comp(ODEEdge, e, kwargs)
-
-statetype(::T) where {T<:ComponentFunction} = statetype(T)
-statetype(::Type{<:ODEVertex}) = Dynamic()
-statetype(::Type{<:StaticVertex}) = Static()
-statetype(::Type{<:StaticEdge}) = Static()
-statetype(::Type{<:ODEEdge}) = Dynamic()
-statetype(::Type{<:UnifiedEdge}) = Dynamic()
-statetype(::Type{<:UnifiedVertex}) = Dynamic()
-
-isdynamic(x) = statetype(x) == Dynamic()
-isstatic(x)  = statetype(x) == Static()
+_takes_n_vectors_and_t(f, n) = hasmethod(f, (Tuple(Vector{Float64} for i in 1:n)..., Float64))
+_takes_n_vectors_no_t(f, n) = hasmethod(f, Tuple(Vector{Float64} for i in 1:n))
 
 """
     dispatchT(<:ComponentFunction) :: Type{<:ComponentFunction}
@@ -371,12 +299,8 @@ Fills up type parameters with `nothing` to ensure `Core.Compiler.isconstType`
 for GPU compatibility.
 """
 dispatchT(::T) where {T<:ComponentFunction} = dispatchT(T)
-dispatchT(::Type{<:StaticVertex}) = StaticVertex{nothing,nothing}
-dispatchT(::Type{<:ODEVertex}) = ODEVertex{nothing,nothing,nothing}
-dispatchT(T::Type{<:StaticEdge}) = StaticEdge{typeof(coupling(T)),nothing,nothing}
-dispatchT(T::Type{<:ODEEdge}) = ODEEdge{typeof(coupling(T)),nothing,nothing,nothing}
-dispatchT(T::Type{<:UnifiedVertex}) = UnifiedVertex{nothing,nothing,nothing,nothing,nothing}
-dispatchT(T::Type{<:UnifiedEdge}) = UnifiedEdge{nothing,nothing,nothing,nothing,nothing}
+dispatchT(T::Type{<:VertexFunction}) = VertexFunction{nothing,nothing,nothing,nothing,nothing}
+dispatchT(T::Type{<:EdgeFunction}) = EdgeFunction{nothing,nothing,nothing,nothing,nothing}
 
 batchequal(a, b) = false
 function batchequal(a::ComponentFunction, b::ComponentFunction)
@@ -385,15 +309,6 @@ function batchequal(a::ComponentFunction, b::ComponentFunction)
     end
     return true
 end
-
-# helper functions to dispatch on correct dim/sym keywords based on type
-const _sym_T = Union{Vector, Pair, Symbol}
-_dimsym(dim::Number) = (; dim)
-_dimsym(sym::_sym_T) = (; sym)
-_dimsym(dim::Number, pdim::Number) = (; dim, pdim)
-_dimsym(dim::Number, psym::_sym_T) = (; dim, psym)
-_dimsym(sym::_sym_T, pdim::Number) = (; sym, pdim)
-_dimsym(sym::_sym_T, psym::_sym_T) = (; sym, psym)
 
 """
     _construct_comp(::Type{T}, kwargs) where {T}
@@ -727,6 +642,7 @@ _hassymbolmapping(::Fiducial{<:Any, <:StateMask, <:StateMask}) = true
 
 _mapsymbols(g::StateMask, s) = s[g.idxs]
 function _mapsymbols(g::AntiSymmetric{<:Any, <:StateMask}, s)
+    # TODO: symbolmap for symmetric, antysymmetric only works for functions with sym map
     dst = _mapsymbols(g.g, s)
     src = map(x->Symbol("₋", x), dst)
     (;dst, src)
@@ -743,12 +659,8 @@ function _mapsymbols(g::Fiducial{<:Any, <:StateMask, <:StateMask}, s)
 end
 
 
-_default_name(::Type{StaticVertex}) = :StaticVertex
-_default_name(::Type{ODEVertex}) = :ODEVertex
-_default_name(::Type{UnifiedVertex}) = :UnifiedVertex
-_default_name(::Type{StaticEdge}) = :StaticEdge
-_default_name(::Type{ODEEdge}) = :ODEEdge
-_default_name(::Type{UnifiedEdge}) = :UnifiedEdge
+_default_name(::Type{VertexFunction}) = :VertexFunction
+_default_name(::Type{EdgeFunction}) = :EdgeFunction
 
 _has_metadata(vec::AbstractVector{<:Symbol}) = false
 _has_metadata(vec::AbstractVector{<:Pair}) = true
@@ -786,14 +698,6 @@ function _maybewrap!(d, s, T)
     end
 end
 
-_valid_signature(::Type{<:StaticVertex}, f) = _takes_n_vectors_and_t(f, 3) #(u, edges, p, t)
-_valid_signature(::Type{<:ODEVertex}, f) = _takes_n_vectors_and_t(f, 4) #(du, u, edges, p, t)
-_valid_signature(::Type{<:StaticEdge}, f) = _takes_n_vectors_and_t(f, 4) #(u, src, dst, p, t)
-_valid_signature(::Type{<:ODEEdge}, f) = _takes_n_vectors_and_t(f, 5) #(du, u, src, dst, p, t)
-
-_takes_n_vectors_and_t(f, n) = hasmethod(f, (Tuple(Vector{Float64} for i in 1:n)..., Float64))
-_takes_n_vectors_no_t(f, n) = hasmethod(f, Tuple(Vector{Float64} for i in 1:n))
-
 """
     copy(c::NetworkDynamics.ComponentFunction)
 
@@ -817,6 +721,7 @@ but references the same objects everywhere else.
     end
 end
 
+# has functions/equality for use in dictionarys
 Base.hash(cf::ComponentFunction, h::UInt) = hash_fields(cf, h)
 function Base.:(==)(cf1::ComponentFunction, cf2::ComponentFunction)
     typeof(cf1) == typeof(cf2) && equal_fields(cf1, cf2)

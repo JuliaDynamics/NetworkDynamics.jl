@@ -48,7 +48,7 @@ function _solve_fixpoint(prob, alg::SteadyStateDiffEqAlgorithm; kwargs...)
     sol = SciMLBase.solve(prob, alg; kwargs...)
 end
 
-function initialization_problem(cf::T; t=NaN, verbose=true) where {T<:Union{ODEVertex, ODEEdge}}
+function initialization_problem(cf::T; t=NaN, verbose=true) where {T<:ComponentFunction}
     ufree_m = (!).(map(Base.Fix1(has_default, cf), sym(cf)))
     pfree_m = (!).(map(Base.Fix1(has_default, cf), psym(cf)))
     ufree = sum(ufree_m)
@@ -172,8 +172,6 @@ function initialize_component!(cf; verbose=true, kwargs...)
     cf
 end
 
-isinitialized(cf::StaticEdge) = true
-isinitialized(cf::StaticVertex) = true
 function isinitialized(cf::ComponentFunction)
     all(has_default_or_init(cf, s) for s in vcat(sym(cf), psym(cf)))
 end
@@ -188,7 +186,7 @@ If recalc=false just return the residual determined in the actual initialization
 
 See also [`initialize_component!`](@ref).
 """
-function init_residual(cf::T; t=NaN, recalc=false) where {T<:Union{ODEVertex, ODEEdge}}
+function init_residual(cf::T; t=NaN, recalc=false) where {T<:ComponentFunction}
     if !isinitialized(cf)
         throw(ArgumentError("Component is not initialized."))
     end
