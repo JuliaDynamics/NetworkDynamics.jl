@@ -17,6 +17,7 @@ struct StateMask{N,I}
         new{length(i), typeof(i)}(i)
     end
 end
+StateMask(i::Number) = StateMask(SVector{1}(i))
 hasfftype(::StateMask) = true
 fftype(::StateMask) = PureStateMap()
 
@@ -39,7 +40,7 @@ struct AntiSymmetric{FF,G} <: Coupling{FF}
         new{typeof(ff), typeof(g)}(g)
     end
 end
-AntiSymmetric(g::AbstractVector; ff=nothing) = AntiSymmetric(StateMask(g); ff)
+AntiSymmetric(g::Union{AbstractVector,Number}; ff=nothing) = AntiSymmetric(StateMask(g); ff)
 @inline function (c::AntiSymmetric)(osrc, odst, args...)
     @inline c.g(odst, args...)
     @inbounds for i in 1:length(osrc)
@@ -55,7 +56,7 @@ struct Symmetric{FF,G} <: Coupling{FF}
         new{typeof(ff), typeof(g)}(g)
     end
 end
-Symmetric(g::AbstractVector; ff=nothing) = Symmetric(StateMask(g); ff)
+Symmetric(g::Union{AbstractVector,Number}; ff=nothing) = Symmetric(StateMask(g); ff)
 @inline function (c::Symmetric)(osrc, odst, args...)
     @inline c.g(odst, args...)
     @inbounds for i in 1:length(osrc)
@@ -65,13 +66,13 @@ Symmetric(g::AbstractVector; ff=nothing) = Symmetric(StateMask(g); ff)
 end
 
 struct Directed{FF,G} <: Coupling{FF}
-    dst::G
+    g::G
     function Directed(g; ff=nothing)
         ff = isnothing(ff) ? _infer_ss_fftype(g) : ff
         new{typeof(ff), typeof(g)}(g)
     end
 end
-Directed(g::AbstractVector; ff=nothing) = Directed(StateMask(g); ff)
+Directed(g::Union{AbstractVector,Number}; ff=nothing) = Directed(StateMask(g); ff)
 @inline function (c::Directed)(osrc, odst, args...)
     @inline c.g(odst, args...)
     nothing
@@ -93,7 +94,9 @@ struct Fiducial{FF,GS,GD} <: Coupling{FF}
         new{typeof(ff), typeof(src), typeof(dst)}(src, dst)
     end
 end
-Fiducial(src::AbstractVector, dst::AbstractVector; ff=nothing) = Fiducial(StateMask(src), StateMask(dst); ff)
+function Fiducial(src::Union{AbstractVector,Number}, dst::Union{AbstractVector,Number}; ff=nothing)
+    Fiducial(StateMask(src), StateMask(dst); ff)
+end
 Fiducial(;src, dst, ff=nothing) = Fiducial(src, dst; ff)
 
 @inline function (c::Fiducial)(osrc, odst, args...)
@@ -189,8 +192,9 @@ sym(c::ComponentFunction)::Vector{Symbol} = c.sym
 
 """
     outdim(c::EdgeFunction)::@NamedTuple(src::Int, dst::Int)
-    outdim(c::ComponentFunction)::Int
+    outdim(c::VertexFunction)::Int
 
+Retrieve the output dimension of the component
 """
 outdim(c::VertexFunction) = length(outsym(c))
 outdim(c::EdgeFunction) = (;src=outdim_src(c), dst=outdim_dst(c))
@@ -259,17 +263,28 @@ metadata(c::ComponentFunction)::Dict{Symbol,Any} = c.metadata
 Checks if the optioan field `insym` is present in the component function.
 """
 hasinsym(c::ComponentFunction) = !isnothing(c.insym)
+hasindim(c::ComponentFunction) = hasinsym(c)
 
 """
-    hasinsym(c::VertexFunction)::Vector{Symbol}
-    hasinsym(c::EdgeFunction)::NamedTuple with :src and :dst keys
+    insym(c::VertexFunction)::Vector{Symbol}
+    insym(c::EdgeFunction)::NamedTuple with :src and :dst keys
 
-Musst be called *after* [`hasinsym`](@ref) returned true.
+Musst be called *after* [`hasinsym`](@ref)/[`hasindim`](@ref) returned true.
 Gives the `insym` vector(s). For vertex functions just a single vector, for
 edges it returns a named tuple `(; src, dst)` with two symbol vectors.
 """
 insym(c::VertexFunction)::Vector{Symbol} = c.insym
 insym(c::EdgeFunction)::@NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}} = c.insym
+
+"""
+    indim(c::VertexFunction)::Int
+    indim(c::EdgeFunction)::@NamedTuple{src::Int,dst::Int}
+
+Musst be called *after* [`hasinsym`](@ref)/[`hasindim`](@ref) returned true.
+Gives the input dimension(s).
+"""
+indim(c::VertexFunction)::Int = length(insym(c))
+indim(c::EdgeFunction)::@NamedTuple{src::Int,dst::Int} = (; src=length(insym(c).src), dst=length(insym(c).dst))
 
 
 _infer_ss_fftype(g) = _infer_fftype(g, 1, 2, nothing)
@@ -415,7 +430,7 @@ function _fill_defaults(T, @nospecialize(kwargs))
         throw(ArgumentError("Output function g musst be provided!"))
     end
     g = dict[:g]
-    if g isa AbstractVector
+    if g isa Union{AbstractVector, Number}
         g = dict[:g] = StateMask(g)
     end
     if T <: EdgeFunction && g isa StateMask
@@ -593,7 +608,7 @@ function _fill_defaults(T, @nospecialize(kwargs))
         if _has_metadata(insym)
             throw(ArgumentError("Metadata for insyms can only be provided when using full (;src, dst) form"))
         end
-        insym = dict[:insym] = _symvec_to_sym_tup(insym)
+        insym = dict[:insym] = _symvec_to_sym_tup(g, insym)
     end
     if haskey(dict, :indim)
         _indim = pop!(dict, :indim)
@@ -713,32 +728,33 @@ _has_sym_to_outsym_mapping(::Fiducial{<:Any, <:StateMask, <:StateMask}) = true
 _sym_to_outsym(g::StateMask, s::AbstractVector{Symbol}) = s[g.idxs]
 function _sym_to_outsym(g::AntiSymmetric{<:Any, <:StateMask}, s::AbstractVector{Symbol})
     s = _sym_to_outsym(g.g, s)
-    # _symvec_to_sym_tup(g, s)
-    (; src=map(x->Symbol("₋", x), s), dst=s)
+    _symvec_to_sym_tup(g, s)
 end
 function _sym_to_outsym(g::Symmetric{<:Any, <:StateMask}, s::AbstractVector{Symbol})
     s = _sym_to_outsym(g.g, s)
-    # _symvec_to_sym_tup(g, s)
-    (; src=s, dst=s)
+    _symvec_to_sym_tup(g, s)
 end
 function _sym_to_outsym(g::Directed{<:Any, <:StateMask}, s::AbstractVector{Symbol})
-    s = _sym_to_outsym(g.dst, s)
-    (; src=Symbol[], dst=s)
+    s = _sym_to_outsym(g.g, s)
+    _symvec_to_sym_tup(g, s)
 end
 function _sym_to_outsym(g::Fiducial{<:Any, <:StateMask, <:StateMask}, s::AbstractVector{Symbol})
     dst = _sym_to_outsym(g.dst, s)
     src = _sym_to_outsym(g.src, s)
-    # _symvec_to_sym_tup(g, src, dst)
     (; src, dst)
 end
-_symvec_to_sym_tup(s::AbstractVector{Symbol}) = _symvec_to_sym_tup(nothing, s)
-function _symvec_to_sym_tup(g, ssrc::AbstractVector{Symbol}, sdst::AbstractVector{Symbol}=ssrc)
-    src = map(x->Symbol("src₊", x), ssrc)
-    dst = map(x->Symbol("dst₊", x), sdst)
+function _symvec_to_sym_tup(g, s::AbstractVector{Symbol})
+    src = map(x->Symbol("src₊", x), s)
+    dst = map(x->Symbol("dst₊", x), s)
     (;src, dst)
 end
+function _symvec_to_sym_tup(g::Symmetric, s::AbstractVector{Symbol})
+    (;src=s, dst=s)
+end
+function _symvec_to_sym_tup(g::AntiSymmetric, s::AbstractVector{Symbol})
+    (; src=map(x->Symbol("₋", x), s), dst=s)
+end
 function _symvec_to_sym_tup(g::Directed, dst::AbstractVector{Symbol})
-    # dst = map(x->Symbol("dst₊", x), s)
     (;src=Symbol[], dst)
 end
 

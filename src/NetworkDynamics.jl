@@ -36,8 +36,9 @@ include("utils.jl")
 
 export VertexFunction, EdgeFunction
 export Symmetric, AntiSymmetric, Directed, Fiducial
+export PureFeedForward, FeedForward, NoFeedForward, PureStateMap
 export StateMask
-export dim, sym, pdim, psym, obssym, hasinsym, insym
+export dim, sym, pdim, psym, obssym, hasinsym, insym, hasindim, indim, outdim, outsym
 export metadata, symmetadata
 include("component_functions.jl")
 

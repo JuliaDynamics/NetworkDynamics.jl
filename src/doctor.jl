@@ -82,72 +82,102 @@ oob_writes(a::AccessTracker) = filter(i -> i ∉ eachindex(a.data), writes(a))
 has_oob(a::AccessTracker) = !isempty(oob_reads(a)) || !isempty(oob_writes(a))
 
 
-chk_component(::VertexFunction) = @warn "Check on VertexFunction not implemented"
-chk_component(::EdgeFunction) = @warn "Check on EdgeFunction not implemented"
+# chk_component(::VertexFunction) = @warn "Check on VertexFunction not implemented"
+# chk_component(::EdgeFunction) = @warn "Check on EdgeFunction not implemented"
 function chk_component(c::ComponentFunction)
+    @nospecialize
     du = AccessTracker(rand(dim(c)))
     u = AccessTracker(rand(dim(c)))
     p = AccessTracker(rand(pdim(c)))
-    esum = AccessTracker(rand(depth(c))) # bit weird, we don't know the size of esum
-    vsrc = AccessTracker(rand(depth(c)))
-    vdst = AccessTracker(rand(depth(c)))
+    ins = if hasindim(c)
+        Tuple(AccessTracker(rand(l)) for l in values(indim(c)))
+    else
+        # we don't know the size of the input but this might be reasonable guess
+        Tuple(AccessTracker(rand(l)) for l in values(outdim(c)))
+    end
+    outs = Tuple(AccessTracker(rand(l)) for l in values(outdim(c)))
     t = NaN
 
-    args = if c isa ODEVertex
-        (du, u, esum, p, t)
-    elseif c isa StaticVertex
-        (u, esum, p, t)
-    elseif c isa StaticEdge
-        (u, vsrc, vdst, p, t)
-    elseif c isa ODEEdge
-        (du, u, vsrc, vdst, p, t)
+    fargs = (du, u, ins..., p, t)
+    gargs = if fftype(c) isa PureFeedForward
+        (outs..., ins..., p, t)
+    elseif fftype(c) isa FeedForward
+        (outs..., u, ins..., p, t)
+    elseif fftype(c) isa NoFeedForward
+        (outs..., u, p, t)
+    elseif fftype(c) isa PureStateMap
+        (outs..., u)
     else
-        error("chk_component not implemented for $(typeof(c))")
+        @warn "chk_component not implemented for fftype $(fftype(c))"
+        return nothing
     end
+
     try
-        compf(c)(args...)
+        if compf(c) != nothing
+            compf(c)(fargs...)
+        end
+        compg(c)(gargs...)
     catch e
         if e isa MethodError
-            if isequal(e.args, args)
+            if isequal(e.args, fargs)
                 # @warn "Your component function signature seems to be wrong. Check the arguments!"
             else
                 @warn "Encountered MethodError. All arguments are AbstractArrays, make sure to allways index into them: $e"
             end
-        elseif e isa BoundsError
-            @warn "Call of component functions lead to out of bounds access! Check `dim` and `pdim` fields!"
+        # elseif e isa BoundsError
+        #     @warn "Call of component functions lead to out of bounds access! Check `dim` and `pdim` fields!"
         elseif e isa DimensionMismatch
             # ignore, its probably because we don't know the sizes of esum, vsrc and vdst
+            @warn "Call of component function lead to dimension mismatch: $e. Try to provide `indim` for more helpfull error."
         else
             @warn "Error while calling component function: $e"
         end
         return nothing
     end
 
+    # check for out of bound read access
     has_oob(du) && @warn "There is out of bound acces to du: reads $(oob_reads(du)) and writes $(oob_writes(du))! Check dim/sym!"
     has_oob(u) && @warn "There is out of bound acces to u: reads $(oob_reads(u)) and writes $(oob_writes(u))! Check dim/sym!"
     has_oob(p) && @warn "There is out of bound acces to p: reads $(oob_reads(p)) and writes $(oob_writes(p))! Check pdim/psim!"
-
-    if isdynamic(c)
-        has_uninit_reads(du) && @warn "There is uninitialized read access to du: $(reads(du))!"
-        has_writes(u) && @warn "There is write access to u: $(writes(u))!"
-        written = unique!(sort!(writes(du)))
-        written != 1:dim(c) && @warn "Not all state idx 1:$(dim(c)) are set, only $(written)!"
-    else
-        has_uninit_reads(u) && @warn "There is uninitialized read access to du: $(reads(du))!"
-        written = unique!(sort!(writes(u)))
-        written != 1:dim(c) && @warn "Not all state idx 1:$(dim(c)) are set, only $(written)!"
+    for (j, o) in enumerate(outs)
+        has_oob(o) && @warn "There is out of bound acces to output#$j: reads $(oob_reads(o)) and writes $(oob_writes(o))!"
     end
+    for (j, i) in enumerate(ins)
+        has_oob(i) && @warn "There is out of bound acces to input#$j: reads $(oob_reads(i)) and writes $(oob_writes(i))!"
+    end
+
+    has_uninit_reads(du) && @warn "There is uninitialized read access to du: $(reads(du))!"
+    has_writes(u) && @warn "There is write access to u: $(writes(u))!"
+    written = unique!(sort!(writes(du)))
+    written != 1:dim(c) && @warn "Not all state idx 1:$(dim(c)) are set, only $(written)!"
+
+    for (j, o) in enumerate(outs)
+        has_uninit_reads(o) && @warn "There is uninitialized read access to output#$j: $(reads(o))!"
+        written = unique!(sort!(writes(o)))
+        written != 1:length(o) && @warn "Not all idx of output#$j 1:$(length(o)) were set, only $(written)!"
+    end
+
+    for i in ins
+        has_writes(i) && @warn "There is write access to input: $(writes(i))!"
+    end
+
     has_writes(p) && @warn "There is write access to p: $(writes(p))!"
 
     similars = String[]
     has_similars(du) && push!(similars, "du")
     has_similars(u) && push!(similars, "u")
     has_similars(p) && push!(similars, "p")
-    has_similars(esum) && push!(similars, "esum")
-    has_similars(vsrc) && push!(similars, "vsrc")
-    has_similars(vdst) && push!(similars, "vdst")
+    if any(has_similars, ins)
+        push!(similars, "inputs")
+    end
+    if any(has_similars, outs)
+        push!(similars, "outputs")
+    end
     if !isempty(similars)
         @warn "Component function allocates similar arrays to $(join(similars, ", "))!"
     end
     nothing
 end
+
+_ninout(::EdgeFunction) = 2
+_ninout(::VertexFunction) = 1

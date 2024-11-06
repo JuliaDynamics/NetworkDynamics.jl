@@ -188,7 +188,6 @@ end
         @test cf.mass_matrix == LinearAlgebra.I
         @test pdim(cf) == 0
 
-
         # output sym generation
         cf = EdgeFunction(f=f, sym=[:x,:y], g=AntiSymmetric(StateMask(1:2)))
         @test cf.outsym == (; src=[:₋x,:₋y], dst=[:x,:y])
@@ -203,7 +202,10 @@ end
         cf = EdgeFunction(f=f, g=Directed(1:2), dim=2, outdim=2)
         @test isempty(cf.outsym.src)
         @test cf.outsym.dst == cf.sym
+        # no metadata without src/dst
         @test_throws ArgumentError EdgeFunction(f=f, g=Symmetric(g_single_ff), dim=1, outsym=[:x=>1])
+        cf = EdgeFunction(g=AntiSymmetric(g_single_pff), outdim=2)
+        @test cf.outsym == (; src=[:₋o₁, :₋o₂], dst=[:o₁, :o₂])
 
         # input sym generation
         cf = EdgeFunction(f=f, g=g_ff, dim=1, outdim=1, pdim=3, indim=2, name=:foo)
