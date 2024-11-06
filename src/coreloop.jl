@@ -44,6 +44,33 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t) where {A,B,C,D,E,dT,T}
     ex isa KAExecution && KernelAbstractions.synchronize(get_backend(du))
     return nothing
 end
+function get_buffers(nw, u, p, t; initbufs)
+    o = get_output_cache(nw, u)
+    aggbuf = get_aggregation_cache(nw, u)
+    if initbufs
+        du = nothing
+        duopt = (du, u, o, p, t)
+        ex = executionstyle(nw)
+        fill!(o, convert(eltype(o), NaN))
+        gbuf = get_gbuf(nw.gbufprovider, o)
+
+        # vg without ff
+        process_batches!(ex, Val{:g}(), !hasff, nw.vertexbatches, nothing, duopt)
+        # eg without ff
+        process_batches!(ex, Val{:g}(), !hasff, nw.layer.edgebatches, nothing, duopt)
+        # process batches might be async so sync before next step
+        ex isa KAExecution && KernelAbstractions.synchronize(get_backend(u))
+        # gather the vertex results for edges with ff
+        gather!(nw.gbufprovider, gbuf, o) # 2.6ms
+        # execute g for edges with ff
+        process_batches!(ex, Val{:g}(), hasff, nw.layer.edgebatches, gbuf, duopt)
+        # process batches might be async so sync before next step
+        ex isa KAExecution && KernelAbstractions.synchronize(get_backend(u))
+        # aggegrate the results
+        aggregate!(nw.layer.aggregator, aggbuf, o)
+    end
+    o, aggbuf
+end
 
 @inline function process_batches!(::SequentialExecution, fg, filt::F, batches, inbuf, duopt) where {F}
     unrolled_foreach(filt, batches) do batch

@@ -286,6 +286,11 @@ Gives the input dimension(s).
 indim(c::VertexFunction)::Int = length(insym(c))
 indim(c::EdgeFunction)::@NamedTuple{src::Int,dst::Int} = (; src=length(insym(c).src), dst=length(insym(c).dst))
 
+# return both "observed" outputs (those that do not shadow states) and true observed
+outsym_flat(c::VertexFunction) = outsym(c)
+outsym_flat(c::EdgeFunction) = collect(Iterators.flatten(outsym(c)))
+obssym_all(c::VertexFunction)::Vector{Symbol} = setdiff(outsym(c), sym(c)) ∪ obssym(c)
+obssym_all(c::EdgeFunction)::Vector{Symbol} = setdiff(Iterators.flatten(outsym(c)), sym(c)) ∪ obssym(c)
 
 _infer_ss_fftype(g) = _infer_fftype(g, 1, 2, nothing)
 _infer_fftype(::Type{<:VertexFunction}, g, dim) = _infer_fftype(g, 1, 1, dim)

@@ -43,7 +43,7 @@ sol = solve(prob, Tsit5())
 @test sol[VIndex(3,[:ω,:δ]),1] == u0[[6,5]]
 @test sol[VIndex(3,[1,:ω]),1] == u0[[5,6]]
 
-@test NetworkDynamics.observed_symbols(nw) == [EIndex(1, :P), EIndex(2, :P), EIndex(3, :P)]
+@test NetworkDynamics.observed_symbols(nw) == [EIndex(1, :₋P), EIndex(1, :P), EIndex(2, :₋P), EIndex(2, :P), EIndex(3, :₋P), EIndex(3, :P)]
 
 @test SII.parameter_symbols(nw) == [VPIndex{Int64, Symbol}(1, :M),
                                     VPIndex{Int64, Symbol}(1, :D),
@@ -70,6 +70,9 @@ SII.all_variable_symbols(nw)
 @test_broken sol[EIndex(3,:P)]
 @test_broken sol[EIndex(1:3,:P)] == sol[[EIndex(1,:P),EIndex(2,:P),EIndex(3,:P)]]
 @test sol(sol.t, idxs=EIndex(1:3,:P)) == sol(sol.t, idxs=[EIndex(1,:P),EIndex(2,:P),EIndex(3,:P)])
+@test sol(sol.t, idxs=EIndex(1:3,:₋P)) == sol(sol.t, idxs=[EIndex(1,:₋P),EIndex(2,:₋P),EIndex(3,:₋P)])
+@test sol(sol.t, idxs=EIndex(1,:P)).u == -1* sol(sol.t, idxs=EIndex(1,:₋P)).u
+
 
 ####
 #### more complex problem
@@ -161,7 +164,7 @@ s[vpidxs(s,:,"M")] .= 5
 @test NetworkDynamics._resolve_colon(nw, EPIndex(:, :δ)) == EPIndex(1:ne(g), :δ)
 @test NetworkDynamics._resolve_colon(nw, VIndex(3, :)) == VIndex(3, 1:2)
 @test NetworkDynamics._resolve_colon(nw, VPIndex(3, :)) == VPIndex(3, 1:3)
-@test NetworkDynamics._resolve_colon(nw, EIndex(4, :)) == EIndex(4, 1:2)
+@test NetworkDynamics._resolve_colon(nw, EIndex(4, :)) == EIndex(4, 1:0)
 @test NetworkDynamics._resolve_colon(nw, EPIndex(4, :)) == EPIndex(4, 1:1)
 
 @inferred NetworkDynamics._resolve_colon(nw, VIndex(:, :δ))
