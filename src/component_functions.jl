@@ -125,8 +125,8 @@ struct VertexFunction{F,G,FFT,OF,MM} <: ComponentFunction
     symmetadata::Dict{Symbol,Dict{Symbol, Any}}
     metadata::Dict{Symbol,Any}
 end
-VertexFunction(; kwargs...) = _construct_comp(VertexFunction, kwargs)
-VertexFunction(v::VertexFunction; kwargs...) = _reconstruct_comp(VertexFunction, v, kwargs)
+VertexFunction(; kwargs...) = _construct_comp(VertexFunction, Base.inferencebarrier(kwargs))
+VertexFunction(v::VertexFunction; kwargs...) = _reconstruct_comp(VertexFunction, v, Base.inferencebarrier(kwargs))
 
 struct EdgeFunction{F,G,FFT,OF,MM} <: ComponentFunction
     name::Symbol
@@ -148,8 +148,8 @@ struct EdgeFunction{F,G,FFT,OF,MM} <: ComponentFunction
     symmetadata::Dict{Symbol,Dict{Symbol, Any}}
     metadata::Dict{Symbol,Any}
 end
-EdgeFunction(; kwargs...) = _construct_comp(EdgeFunction, kwargs)
-EdgeFunction(v::EdgeFunction; kwargs...) = _reconstruct_comp(EdgeFunction, v, kwargs)
+EdgeFunction(; kwargs...) = _construct_comp(EdgeFunction, Base.inferencebarrier(kwargs))
+EdgeFunction(v::EdgeFunction; kwargs...) = _reconstruct_comp(EdgeFunction, v, Base.inferencebarrier(kwargs))
 
 """
     compf(c::ComponentFunction)
@@ -312,11 +312,14 @@ dispatchT(::T) where {T<:ComponentFunction} = dispatchT(T)
 dispatchT(T::Type{<:VertexFunction}) = VertexFunction{nothing,nothing,nothing,nothing,nothing}
 dispatchT(T::Type{<:EdgeFunction}) = EdgeFunction{nothing,nothing,nothing,nothing,nothing}
 
+# TODO: introduce batchequal hash for faster batching of component functions
 batchequal(a, b) = false
 function batchequal(a::ComponentFunction, b::ComponentFunction)
-    for f in (compf, compg, dim, pdim, odim)
-        f(a) == f(b) || return false
-    end
+    compf(a) == compf(b) || return false
+    compg(a) == compg(b) || return false
+    dim(a)   == dim(b)   || return false
+    pdim(a)  == pdim(b)  || return false
+    outdim(a)  == outdim(b)  || return false
     return true
 end
 
@@ -326,8 +329,8 @@ end
 Internal function to construct a component function from keyword arguments.
 Fills up kw arguments with default values and performs sanity checks.
 """
-function _construct_comp(::Type{T}, kwargs) where {T}
-    dict = _fill_defaults(T, kwargs)
+function _construct_comp(::Type{T}, @nospecialize(kwargs)) where {T}
+    dict = _fill_defaults(T, Base.inferencebarrier(kwargs))
 
     # check signature of f
     # if !_valid_signature(T, dict[:f])
@@ -371,7 +374,7 @@ end
 Fill up keyword arguments `kwargs` for type T with default values.
 Also perfoms sanity check some properties like mass matrix, depth, ...
 """
-function _fill_defaults(T, kwargs)
+function _fill_defaults(T, @nospecialize(kwargs))
     dict = Dict{Symbol, Any}(kwargs)
 
     # syms might be provided as single pairs or symbols, wrap in vector
@@ -411,10 +414,13 @@ function _fill_defaults(T, kwargs)
     if !haskey(dict, :g)
         throw(ArgumentError("Output function g musst be provided!"))
     end
-    if T <: EdgeFunction && dict[:g] isa StateMask
+    g = dict[:g]
+    if g isa AbstractVector
+        g = dict[:g] = StateMask(g)
+    end
+    if T <: EdgeFunction && g isa StateMask
         throw(ArgumentError("StateMask cannot be used directly for EdgeFunction. Wrap in Fiducial, Symmetric, AntiSymmetric or Directed instead."))
     end
-    g = dict[:g]
 
     # set f to nothing if not present
     if !haskey(dict, :f)

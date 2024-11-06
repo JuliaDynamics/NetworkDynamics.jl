@@ -311,22 +311,22 @@ end
 _find_identical(v::ComponentFunction, indices) = [collect(indices)]
 function _find_identical(v::Vector, indices)
     idxs_per_type = Vector{Int}[]
-    unique_compf = []
+    unique_comp = []
     for i in eachindex(v)
         found = false
-        for j in eachindex(unique_compf)
-            if compf(v[i]) == unique_compf[j]
+        for j in eachindex(unique_comp)
+            if batchequal(v[i], unique_comp[j])
                 found = true
                 push!(idxs_per_type[j], indices[i])
                 break
             end
         end
         if !found
-            push!(unique_compf, compf(v[i]))
+            push!(unique_comp, v[i])
             push!(idxs_per_type, [indices[i]])
         end
     end
-    @assert length(unique_compf) == length(idxs_per_type)
+    @assert length(unique_comp) == length(idxs_per_type)
     return idxs_per_type
 end
 

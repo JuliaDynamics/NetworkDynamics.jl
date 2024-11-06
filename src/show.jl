@@ -24,7 +24,7 @@ Base.show(io::IO, s::KAAggregator) = print(io, "KAAggregator($(repr(s.f)))")
 Base.show(io::IO, s::SequentialAggregator) = print(io, "SequentialAggregator($(repr(s.f)))")
 Base.show(io::IO, s::PolyesterAggregator) = print(io, "PolyesterAggregator($(repr(s.f)))")
 
-function Base.show(io::IO, ::MIME"text/plain", c::ComponentFunction)
+function Base.show(io::IO, ::MIME"text/plain", @nospecialize(c::ComponentFunction))
     type = match(r"^(.*?)\{", string(typeof(c)))[1]
     print(io, type, styled" {NetworkDynamics_name::$(c.name)}")
     print(io, styled" {NetworkDynamics_fftype:$(fftype(c))}")
@@ -45,7 +45,7 @@ function Base.show(io::IO, ::MIME"text/plain", c::ComponentFunction)
     print_states_params(io, c, styling)
 end
 
-function print_states_params(io, c::ComponentFunction, styling)
+function print_states_params(io, @nospecialize(c::ComponentFunction), styling)
     info = AnnotatedString{String}[]
 
     if hasinsym(c)
@@ -55,8 +55,6 @@ function print_states_params(io, c::ComponentFunction, styling)
     num, word = maybe_plural(dim(c), "state")
     push!(info, styled"$num &$word: &&$(stylesymbolarray(c.sym, def(c), guess(c), styling))")
 
-    push!(info, _inout_string(c, outsym, "output"))
-
     if hasproperty(c, :mass_matrix) && c.mass_matrix != LinearAlgebra.I
         if LinearAlgebra.isdiag(c.mass_matrix) && !(c.mass_matrix isa UniformScaling)
             info[end] *= "\n&with diagonal mass matrix $(LinearAlgebra.diag(c.mass_matrix))"
@@ -65,19 +63,21 @@ function print_states_params(io, c::ComponentFunction, styling)
         end
     end
 
+    push!(info, _inout_string(c, outsym, "output"))
+
     num, word = maybe_plural(pdim(c), "param")
     pdim(c) > 0 && push!(info, styled"$num &$word: &&$(stylesymbolarray(c.psym, pdef(c), pguess(c)))")
 
     print_treelike(io, align_strings(info))
 end
-function _inout_string(c::VertexFunction, f, name)
+function _inout_string(@nospecialize(c::VertexFunction), f, name)
     sym = f(c)
     num, word = maybe_plural(length(sym), name)
     defs = get_defaults_or_inits(c, sym)
     guesses = get_guesses(c, sym)
     styled"$num &$word: &&$(stylesymbolarray(sym, defs, guesses))"
 end
-function _inout_string(c::EdgeFunction, f, name)
+function _inout_string(@nospecialize(c::EdgeFunction), f, name)
     sym = f(c)
     word = name*"s"
     srcnum = length(sym.src)

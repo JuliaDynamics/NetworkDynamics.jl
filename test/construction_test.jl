@@ -1,116 +1,70 @@
 using NetworkDynamics
 using NetworkDynamics: Symmetric
 using Graphs
-
-@testset "nd construction tests" begin
-    using NetworkDynamics: StateType, statetype, isdense
-    g = complete_graph(10)
-    vertexf = ODEVertex(; f=x -> x^2, dim=1, pdim=2)
-    @test statetype(vertexf) == NetworkDynamics.Dynamic()
-
-    edgef = StaticEdge(; f=x -> x^2,
-        dim=2, pdim=3,
-        coupling=AntiSymmetric())
-    @test statetype(edgef) == NetworkDynamics.Static()
-
-    nd = Network(g, vertexf, edgef; verbose=false)
-
-    @test statetype(only(nd.vertexbatches)) == NetworkDynamics.Dynamic()
-    @test statetype(only(nd.layer.edgebatches)) == NetworkDynamics.Static()
-    @test isdense(nd.im)
-    @test nd.im.lastidx_dynamic == nv(g)
-    @test nd.im.lastidx_static == nd.im.lastidx_dynamic + ne(g) * 2
-    @test nd.vertexbatches isa Tuple
-    @test nd.layer.edgebatches isa Tuple
-
-    using NetworkDynamics: statetype
-    g = complete_graph(10)
-    vertexf = ODEVertex(; f=x -> x^2, dim=1, pdim=2)
-    edgef = StaticEdge(; f=x -> x^2, dim=2, pdim=3, coupling=AntiSymmetric())
-
-    using NetworkDynamics: SequentialExecution
-    nd = Network(g, vertexf, edgef; verbose=false, execution=SequentialExecution{true}())
-
-    nd = Network(g, vertexf, edgef; verbose=false,
-        execution=SequentialExecution{false}())
-
-    _du = rand(dim(nd))
-    _u = rand(dim(nd))
-    _p = rand(pdim(nd))
-    @test_throws ArgumentError nd(rand(dim(nd)+1), _u, _p, 0.0)
-    @test_throws ArgumentError nd(_du, rand(dim(nd)+1), _p, 0.0)
-    @test_throws ArgumentError nd(_du, _u, rand(pdim(nd)+1), 0.0)
-end
+using LinearAlgebra: LinearAlgebra
 
 @testset "graphless constructor" begin
-    @test_throws ArgumentError ODEVertex(x->x^1, 2, 0; metadata="foba")
-    v1 = ODEVertex(x->x^1, 2, 0; metadata=Dict(:graphelement=>1), name=:v1)
+    g = (out, in, p, t) -> nothing
+    v1 = VertexFunction(; g, outdim=2, metadata=Dict(:graphelement=>1), name=:v1)
     @test has_graphelement(v1) && get_graphelement(v1) == 1
-    v2 = ODEVertex(x->x^2, 2, 0; name=:v2)
+    v2 = VertexFunction(; g, outdim=2, name=:v2)
     set_graphelement!(v2, 3)
-    v3 = ODEVertex(x->x^3, 2, 0; name=:v3)
+    v3 = VertexFunction(; g, outdim=2, name=:v3)
     set_graphelement!(v3, 2)
 
-    e1 = StaticEdge(nothing, 0, Symmetric(); graphelement=(;src=1,dst=2))
+    ge = (out, src, dst, p, t) -> nothing
+    e1 = EdgeFunction(; g=ge, outdim=1, graphelement=(;src=1,dst=2))
     @test get_graphelement(e1) == (;src=1,dst=2)
-    e2 = StaticEdge(nothing, 0, Symmetric())
+    e2 = EdgeFunction(; g=ge, outdim=1)
     set_graphelement!(e2, (;src=:v3,dst=:v2))
-    e3 = StaticEdge(nothing, 0, Symmetric())
+    e3 = EdgeFunction(; g=ge, outdim=1)
 
+    # missing graphelement on e3
     @test_throws ArgumentError Network([v1,v2,v3], [e1,e2,e3])
     set_graphelement!(e3, (;src=3,dst=1))
 
     nw = Network([v1,v2,v3], [e1,e2,e3])
     @test nw.im.vertexf == [v1, v3, v2]
-    g = SimpleDiGraph(3)
-    add_edge!(g, 1, 2)
-    add_edge!(g, 2, 3)
-    add_edge!(g, 3, 1)
-    @test nw.im.g == g
+    graph = SimpleDiGraph(3)
+    add_edge!(graph, 1, 2)
+    add_edge!(graph, 2, 3)
+    add_edge!(graph, 3, 1)
+    @test nw.im.g == graph
 
     set_graphelement!(e3, (;src=1,dst=2))
+    # same graphelement on multiple edges
     @test_throws ArgumentError Network([v1,v2,v3], [e1,e2,e3])
 
     set_graphelement!(e3, (;src=2,dst=1))
     Network([v1,v2,v3], [e1,e2,e3]) # throws waring about 1->2 and 2->1 beeing present
 
-    v1 = ODEVertex(x->x^1, 2, 0; metadata=Dict(:graphelement=>1), name=:v1)
-    v2 = ODEVertex(x->x^2, 2, 0; name=:v2, vidx=2)
-    v3 = ODEVertex(x->x^3, 2, 0; name=:v3, vidx=3)
+    v1 = VertexFunction(; g, outdim=2, metadata=Dict(:graphelement=>1), name=:v1)
+    v2 = VertexFunction(; g, outdim=2, name=:v2, vidx=2)
+    v3 = VertexFunction(; g, outdim=2, name=:v3, vidx=3)
     nw = Network([v1,v2,v3], [e1,e2,e3])
     @test nw.im.unique_vnames == Dict(:v1=>1, :v2=>2, :v3=>3)
 
-    v1 = ODEVertex(x->x^1, 2, 0; metadata=Dict(:graphelement=>1), name=:v2)
-    v2 = ODEVertex(x->x^2, 2, 0; name=:v2, vidx=2)
-    v3 = ODEVertex(x->x^3, 2, 0; name=:v3, vidx=3)
+    v1 = VertexFunction(; g, outdim=2, metadata=Dict(:graphelement=>1), name=:v2)
+    v2 = VertexFunction(; g, outdim=2, name=:v2, vidx=2)
+    v3 =VertexFunction(; g, outdim=2, name=:v3, vidx=3)
     set_graphelement!(e2, 3=>2)
     nw = Network([v1,v2,v3], [e1,e2,e3])
     @test nw.im.unique_vnames == Dict(:v3=>3)
 end
-@testset "Vertex batch" begin
-    using NetworkDynamics: BatchStride, VertexBatch, parameter_range
-    vb = VertexBatch{ODEVertex, typeof(sum), Vector{Int}}([1, 2, 3, 4], # vertices
-        sum, # function
-        BatchStride(1, 3),
-        BatchStride(4, 2),
-        BatchStride(0, 0))
-    @test parameter_range(vb, 1) == 4:5
-    @test parameter_range(vb, 2) == 6:7
-    @test parameter_range(vb, 3) == 8:9
-    @test parameter_range(vb, 4) == 10:11
-end
 
 @testset "massmatrix construction test" begin
     using LinearAlgebra: I, UniformScaling, Diagonal
-    v1 = ODEVertex(x->x^1, 2, 0; mass_matrix=I)
-    v2 = ODEVertex(x->x^2, 2, 0; mass_matrix=Diagonal([2,0]))
-    v3 = ODEVertex(x->x^3, 2, 0; mass_matrix=[1 2;3 4])
-    v4 = ODEVertex(x->x^4, 2, 0; mass_matrix=UniformScaling(0))
-    v5 = ODEVertex(x->x^5, 2, 0; mass_matrix=I)
-    e1 = ODEEdge(x->x^1, 2, 0, Fiducial(); mass_matrix=I)
-    e2 = ODEEdge(x->x^2, 2, 0, AntiSymmetric(); mass_matrix=Diagonal([2,0]))
-    e3 = ODEEdge(x->x^3, 2, 0, NetworkDynamics.Symmetric(); mass_matrix=[1 2;3 4])
-    e4 = ODEEdge(x->x^3, 2, 0, Directed(); mass_matrix=UniformScaling(0))
+    fv = (dv, v, in, p, t) -> nothing
+    v1 = VertexFunction(; f=fv, g=1:2, dim=2, mass_matrix=I)
+    v2 = VertexFunction(; f=fv, g=1:2, dim=2, mass_matrix=Diagonal([2,0]))
+    v3 = VertexFunction(; f=fv, g=1:2, dim=2, mass_matrix=[1 2;3 4])
+    v4 = VertexFunction(; f=fv, g=1:2, dim=2, mass_matrix=UniformScaling(0))
+    v5 = VertexFunction(; f=fv, g=1:2, dim=2, mass_matrix=I)
+    fe = (de, e, in1, in2, p, t) -> nothing
+    e1 = EdgeFunction(; f=fe, g=Fiducial([1,2],[2,1]), dim=2, mass_matrix=I)
+    e2 = EdgeFunction(; f=fe, g=AntiSymmetric(1:2), dim=2, mass_matrix=Diagonal([2,0]))
+    e3 = EdgeFunction(; f=fe, g=Symmetric(1:2), dim=2, mass_matrix=[1 2;3 4])
+    e4 = EdgeFunction(; f=fe, g=Directed(1:2), dim=2, mass_matrix=UniformScaling(0))
     nd = Network(path_graph(5), [v1,v2,v3,v4,v5], [e1,e2,e3,e4])
 
     mm = Matrix(Diagonal([1,1,2,0,1,4,0,0,1,1,1,1,2,0,1,4,0,0]))
@@ -126,25 +80,6 @@ end
 
     nd = Network(path_graph(4), [v1,v1,v1,v1], [e1,e1,e1])
     @test nd.mass_matrix == I && nd.mass_matrix isa UniformScaling
-end
-
-@testset "eager gbuf map construction" begin
-    using NetworkDynamics: gbuf_range
-    e1 = StaticEdge(x->x^1, 1, 0, AntiSymmetric())
-    e2 = StaticEdge(x->x^1, 1, 0, AntiSymmetric())
-    v = ODEVertex(x->x^1, 1, 0)
-    g = path_graph(4)
-    nd = Network(g, v, [e1,e2,e1])
-    map = nd.gbufprovider.map
-    for batch in nd.layer.edgebatches
-        for batch_subi in 1:length(batch)
-            eidx = batch.indices[batch_subi]
-            src, dst = map[gbuf_range(batch, batch_subi), :]
-            edge = collect(edges(g))[eidx]
-            @test src == edge.src
-            @test dst == edge.dst
-        end
-    end
 end
 
 @testset "test component function constructors" begin
@@ -243,7 +178,7 @@ end
 
         cf = EdgeFunction(f=f, sym=[:x,:y], g=AntiSymmetric(StateMask(1:2)))
         @test fftype(cf) == PureStateMap()
-        @test NetworkDynamics.outsym(cf) == (; src=[:src₊x, :src₊y], dst=[:dst₊x, :dst₊y])
+        @test NetworkDynamics.outsym(cf) == (; src=[:₋x, :₋y], dst=[:x, :y])
 
         cf = EdgeFunction(f=f, sym=[:x,:y], g=g_ff, outdim=1, insym=[:a], name=:foo)
         @test fftype(cf) == FeedForward()
@@ -310,37 +245,39 @@ end
 
 
     kwargs = Dict(:sym=>[:a,:b], :psym=>[:a,:d])
-    @test_throws ArgumentError _fill_defaults(ODEVertex, kwargs)
+    @test_throws ArgumentError _fill_defaults(VertexFunction, kwargs)
 
     kwargs = Dict(:sym=>[:a,:b], :dim=>3)
-    @test_throws ArgumentError _fill_defaults(ODEVertex, kwargs)
+    @test_throws ArgumentError _fill_defaults(VertexFunction, kwargs)
 
     kwargs = Dict(:sym=>[:a,:b], :dim=>3, :pdim=>0)
-    @test_throws ArgumentError _fill_defaults(ODEVertex, kwargs)
+    @test_throws ArgumentError _fill_defaults(VertexFunction, kwargs)
 
     kwargs = Dict(:sym=>[:a,:b], :pdim=>0, :psym=>[:c])
-    @test_throws ArgumentError _fill_defaults(ODEVertex, kwargs)
+    @test_throws ArgumentError _fill_defaults(VertexFunction, kwargs)
 
     # different length of sym/def
     kwargs = Dict(:sym=>[:a,:b],:def=>[1], :pdim=>0 )
-    @test_throws ArgumentError _fill_defaults(ODEVertex, kwargs)
+    @test_throws ArgumentError _fill_defaults(VertexFunction, kwargs)
 
     # different provision of defs
-    kwargs = Dict(:sym=>[:a,:b=>2],:def=>[1,nothing], :pdim=>0 )
-    _fill_defaults(ODEVertex, kwargs)[:symmetadata]
+    kwargs = Dict(:sym=>[:a,:b=>2],:def=>[1,nothing], :pdim=>0, :g=>1:2, :outdim=>2, :f=>identity)
+    _fill_defaults(VertexFunction, kwargs)[:symmetadata]
     kwargs = Dict(:sym=>[:a=>2,:b],:def=>[1,nothing], :pdim=>0 )
-    @test_throws ArgumentError _fill_defaults(ODEVertex, kwargs)
+    @test_throws ArgumentError _fill_defaults(VertexFunction, kwargs)
 end
 
 @testset "test dealias and copy of components" begin
     using NetworkDynamics: aliasgroups
-    v1 = ODEVertex(x->x^1, 2, 0; metadata=Dict(:graphelement=>1), name=:v1)
-    v2 = ODEVertex(x->x^2, 2, 0; name=:v2, vidx=2)
-    v3 = ODEVertex(x->x^3, 2, 0; name=:v3, vidx=3)
+    g = (out, in, p, t) -> nothing
+    ge = (out, src, dst, p, t) -> nothing
 
-    e1 = StaticEdge(nothing, 0, Symmetric(); graphelement=(;src=1,dst=2))
-    e2 = StaticEdge(nothing, 0, Symmetric(); src=:v2, dst=:v3)
-    e3 = StaticEdge(nothing, 0, Symmetric(); src=:v3, dst=:v1)
+    v1 = VertexFunction(; g, outdim=2, metadata=Dict(:graphelement=>1), name=:v1)
+    v2 = VertexFunction(; g, outdim=2, name=:v2, vidx=2)
+    v3 = VertexFunction(; g, outdim=2, name=:v3, vidx=3)
+    e1 = EdgeFunction(; g=ge, outdim=1, graphelement=(;src=1,dst=2))
+    e2 = EdgeFunction(; g=ge, outdim=1, src=:v2, dst=:v3)
+    e3 = EdgeFunction(; g=ge, outdim=1, src=:v3, dst=:v1)
 
     @test isempty(aliasgroups([v1,v2,v3]))
     @test aliasgroups([v1, v1, v3]) == IdDict(v1 => [1,2])
@@ -378,7 +315,8 @@ end
     s1 = NWState(nw)
 
     # test copy
-    v = ODEVertex(x->x^1, 2, 0; metadata=Dict(:graphelement=>1), symmetadata=Dict(:x=>Dict(:default=>1)))
+    g = (out, in, p, t) -> nothing
+    v = VertexFunction(; g, outdim=2, metadata=Dict(:graphelement=>1), name=:v1, symmetadata=Dict(:x=>Dict(:default=>1)))
     v2 = copy(v)
     @test v !== v2
     @test v == v2
@@ -392,13 +330,14 @@ end
 end
 
 @testset "test network-remake constructor" begin
-    v1 = ODEVertex(x->x^1, 2, 0; metadata=Dict(:graphelement=>1), name=:v1)
-    v2 = ODEVertex(x->x^2, 2, 0; name=:v2, vidx=2)
-    v3 = ODEVertex(x->x^3, 2, 0; name=:v3, vidx=3)
-
-    e1 = StaticEdge(nothing, 0, Symmetric(); graphelement=(;src=1,dst=2))
-    e2 = StaticEdge(nothing, 0, Symmetric(); src=:v1, dst=:v3)
-    e3 = StaticEdge(nothing, 0, Symmetric(); src=:v2, dst=:v3)
+    g = (out, in, p, t) -> nothing
+    ge = (out, src, dst, p, t) -> nothing
+    v1 = VertexFunction(; g, outdim=2, metadata=Dict(:graphelement=>1), name=:v1)
+    v2 = VertexFunction(; g, outdim=2, name=:v2, vidx=2)
+    v3 = VertexFunction(; g, outdim=2, name=:v3, vidx=3)
+    e1 = EdgeFunction(; g=ge, outdim=1, graphelement=(;src=1,dst=2))
+    e2 = EdgeFunction(; g=ge, outdim=1, src=:v1, dst=:v3)
+    e3 = EdgeFunction(; g=ge, outdim=1, src=:v2, dst=:v3)
 
     g = complete_graph(3)
     nw = Network(g, [v1,v2,v3],[e1,e2,e3])

@@ -1,7 +1,3 @@
-abstract type StateType end
-struct Dynamic <: StateType end
-struct Static <: StateType end
-
 mutable struct IndexManager{G}
     g::G
     edgevec::Vector{SimpleEdge{Int64}}
@@ -178,7 +174,6 @@ struct EdgeBatch{T<:EdgeFunction,F,G,FFT,IV<:AbstractVector{<:Integer}} <: Compo
 end
 
 @inline Base.length(cb::ComponentBatch) = Base.length(cb.indices)
-@inline statetype(::ComponentBatch{F}) where {F} = statetype(F)
 @inline dispatchT(::ComponentBatch{F}) where {F} = F
 @inline compf(b::ComponentBatch) = b.compf
 @inline compg(b::ComponentBatch) = b.compg
