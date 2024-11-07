@@ -619,7 +619,7 @@ function _fill_defaults(T, @nospecialize(kwargs))
         if _has_metadata(insym)
             throw(ArgumentError("Metadata for insyms can only be provided when using full (;src, dst) form"))
         end
-        insym = dict[:insym] = _symvec_to_sym_tup(g, insym)
+        insym = dict[:insym] = _symvec_to_sym_tup(nothing, insym)
     end
     if haskey(dict, :indim)
         _indim = pop!(dict, :indim)
