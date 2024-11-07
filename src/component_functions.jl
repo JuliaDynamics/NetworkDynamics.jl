@@ -127,6 +127,9 @@ struct VertexFunction{F,G,FFT,OF,MM} <: ComponentFunction
     # optional insyms
     symmetadata::Dict{Symbol,Dict{Symbol, Any}}
     metadata::Dict{Symbol,Any}
+    # cached symbol collections
+    _outsym_flat::Vector{Symbol} # outsyms as they appear in outbuf
+    _obssym_all::Vector{Symbol}  # collection of true "observed" (flat_out\statesym) ∪ obssym
 end
 VertexFunction(; kwargs...) = _construct_comp(VertexFunction, Base.inferencebarrier(kwargs))
 VertexFunction(v::VertexFunction; kwargs...) = _reconstruct_comp(VertexFunction, v, Base.inferencebarrier(kwargs))
@@ -150,6 +153,9 @@ struct EdgeFunction{F,G,FFT,OF,MM} <: ComponentFunction
     # metadata
     symmetadata::Dict{Symbol,Dict{Symbol, Any}}
     metadata::Dict{Symbol,Any}
+    # cached symbol collections
+    _outsym_flat::Vector{Symbol} # outsyms as they appear in outbuf
+    _obssym_all::Vector{Symbol}  # collection of true "observed" (flat_out\statesym) ∪ obssym
 end
 EdgeFunction(; kwargs...) = _construct_comp(EdgeFunction, Base.inferencebarrier(kwargs))
 EdgeFunction(v::EdgeFunction; kwargs...) = _reconstruct_comp(EdgeFunction, v, Base.inferencebarrier(kwargs))
@@ -287,10 +293,8 @@ indim(c::VertexFunction)::Int = length(insym(c))
 indim(c::EdgeFunction)::@NamedTuple{src::Int,dst::Int} = (; src=length(insym(c).src), dst=length(insym(c).dst))
 
 # return both "observed" outputs (those that do not shadow states) and true observed
-outsym_flat(c::VertexFunction) = outsym(c)
-outsym_flat(c::EdgeFunction) = collect(Iterators.flatten(outsym(c)))
-obssym_all(c::VertexFunction)::Vector{Symbol} = setdiff(outsym(c), sym(c)) ∪ obssym(c)
-obssym_all(c::EdgeFunction)::Vector{Symbol} = setdiff(Iterators.flatten(outsym(c)), sym(c)) ∪ obssym(c)
+outsym_flat(c::ComponentFunction) = c._outsym_flat
+obssym_all(c::ComponentFunction) = c._obssym_all
 
 _infer_ss_fftype(g) = _infer_fftype(g, 1, 2, nothing)
 _infer_fftype(::Type{<:VertexFunction}, g, dim) = _infer_fftype(g, 1, 1, dim)
@@ -400,7 +404,8 @@ function _fill_defaults(T, @nospecialize(kwargs))
     # syms might be provided as single pairs or symbols, wrap in vector
     _maybewrap!(dict, :sym, Union{Symbol, Pair})
     _maybewrap!(dict, :psym, Union{Symbol, Pair})
-    _maybewrap!(dict, :outsym, Symbol)
+    _maybewrap!(dict, :insym, Union{Symbol,Pair}; allownt=T <: EdgeFunction)
+    _maybewrap!(dict, :outsym, Union{Symbol,Pair}; allownt=T <: EdgeFunction)
     _maybewrap!(dict, :obssym, Symbol)
 
     symmetadata = get!(dict, :symmetadata, Dict{Symbol,Dict{Symbol,Any}}())
@@ -665,6 +670,7 @@ function _fill_defaults(T, @nospecialize(kwargs))
         dict[:obsf] = nothing
         dict[:obssym] = Symbol[]
     end
+    obssym = dict[:obssym]
 
     ####
     #### name
@@ -697,10 +703,24 @@ function _fill_defaults(T, @nospecialize(kwargs))
         end
     end
 
+    ####
+    #### Cached outsymflat/outsymall
+    ####
+    _outsym_flat = if T <: VertexFunction
+        outsym
+    elseif T <: EdgeFunction
+        vcat(outsym.src, outsym.dst)
+    else
+        error()
+    end
+    dict[:_outsym_flat] = _outsym_flat
+    dict[:_obssym_all] = setdiff(_outsym_flat, sym) ∪ obssym
+
+
     # check for name clashes (at the end because only now sym, psym, obssym are initialized)
     _s  = sym
     _ps = psym
-    _obss = dict[:obssym]
+    _obss = obssym
     _os = outsym
     _os = if _has_sym_to_outsym_mapping(g)
        setdiff(outsym, sym) # allow name clashes for statemask derivatives
@@ -794,11 +814,19 @@ function _split_metadata(input)
 end
 
 "If index `s` in `d` exists and isa `T` wrap in vector."
-function _maybewrap!(d, s, T)
+function _maybewrap!(d, s, T; allownt=false)
     if haskey(d, s)
         v = d[s]
         if v isa T
             d[s] = [v]
+        elseif allownt && v isa NamedTuple
+            d[s] = map(Iterators.filter(_->true, pairs(v))) do (ntk, ntv)
+                if ntv isa T
+                    ntk => [ntv]
+                else
+                    ntk => ntv
+                end
+            end |> NamedTuple
         end
     end
 end

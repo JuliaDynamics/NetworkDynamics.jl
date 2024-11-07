@@ -59,7 +59,7 @@ Base.@propagate_inbounds function kuramoto_inertia!(dv, v, acc, p, t)
 end
 function kuramoto_second(; name=:kuramoto_second)
     VertexFunction(; f=kuramoto_inertia!, sym=[:δ=>0, :ω=>0],
-        psym=[:M=>1, :D=>0.1, :Pm=>1], g=StateMask(1))
+        psym=[:M=>1, :D=>0.1, :Pm=>1], g=StateMask(1), name)
 end
 
 Base.@propagate_inbounds function kuramoto_vertex!(dθ, θ, esum, (ω,), t)

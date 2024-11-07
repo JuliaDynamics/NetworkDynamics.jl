@@ -397,30 +397,6 @@ function observed_symbols(nw::Network)
     return syms
 end
 
-#=
-Types of observable calls:
-- observable of ODEVertex
-  - recalculate incident static edges
-  - aggregate locally
-  - execut observable
-- State of StaticVertex
-  - aggregate locally
-  - execute vertex
-- observable of StaticVertex
-  - aggregate locallay
-  - execute vertex
-  - execute observable
-
-- observable of ODEEdge
-  - if incident vertex is static: locally aggregate & execute vertex function
-  - execute observable
-- State of StaticEdge
-  - execute edge (cannot depend on static vertices)
-- Observable of static edge
-  - execute edge
-  - execute observable
-=#
-
 function SII.observed(nw::Network, snis)
     _snis = _expand_and_collect(nw, snis)
     isscalar = _snis isa SymbolicIndex
@@ -436,7 +412,7 @@ function SII.observed(nw::Network, snis)
     obsfuns = Dict{Int, Function}()
     for (i, sni) in enumerate(_snis)
         if SII.is_variable(nw, sni)
-            stateidxs[i] = SII.variable_index(nw, sni)
+            stateidx[i] = SII.variable_index(nw, sni)
         else
             cf = getcomp(nw, sni)
 
@@ -452,12 +428,11 @@ function SII.observed(nw::Network, snis)
             end
         end
     end
+    initbufs = !isempty(outidx) || !isempty(obsfuns)
 
-    @closure (u, p, t) -> begin
-        initbufs = !isempty(outidx) || !isempty(obsfuns)
-        outbuf, aggbuf = get_buffers(nw, u, p, t; initbufs)
-
-        if isscalar
+    if isscalar
+        @closure (u, p, t) -> begin
+            outbuf, aggbuf = get_buffers(nw, u, p, t; initbufs)
             if !isempty(stateidx)
                 idx = only(stateidx).second
                 u[idx]
@@ -468,7 +443,11 @@ function SII.observed(nw::Network, snis)
                 obsf = only(obsfuns).second
                 obsf(u, outbuf, aggbuf, p, t)::eltype(u)
             end
-        else
+        end
+    else
+        @closure (u, p, t) -> begin
+            outbuf, aggbuf = get_buffers(nw, u, p, t; initbufs)
+
             out = similar(u, length(snis))
             for (i, statei) in stateidx
                 out[i] = u[statei]
@@ -999,18 +978,18 @@ end
 
 _make_sidx_iterable(IT, inpr, cidx, idx) = _make_iterabel(idx)
 function _make_sidx_iterable(IT::Type{<:SymbolicStateIndex}, inpr, cidx, ::Colon)
-    _get_components(IT, inpr)[cidx].sym
+    comp = _get_components(IT, inpr)[cidx]
+    Iterators.flatten((sym(comp), obssym_all(comp)))
 end
 function _make_sidx_iterable(IT::Type{<:SymbolicParameterIndex}, inpr, cidx, ::Colon)
-    _get_components(IT, inpr)[cidx].psym
+    psym(_get_components(IT, inpr)[cidx])
 end
 function _make_sidx_iterable(IT::Type{<:SymbolicStateIndex}, inpr, cidx, s::Union{AbstractString,AbstractPattern})
-    comp = _get_components(IT, inpr)[cidx]
-    syms = vcat(comp.sym, comp.obssym)
-    filter(sym -> contains(string(sym), s), syms)
+    syms = _make_sidx_iterable(IT, inpr, cidx, :) # get all possible
+    Iterators.filter(sym -> contains(string(sym), s), syms)
 end
 function _make_sidx_iterable(IT::Type{<:SymbolicParameterIndex}, inpr, cidx, s::Union{AbstractString,AbstractPattern})
-    syms = _get_components(IT, inpr)[cidx].psym
+    syms = _make_sidx_iterable(IT, inpr, cidx, :) # get all possible
     filter(sym -> contains(string(sym), s), syms)
 end
 
