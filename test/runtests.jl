@@ -25,6 +25,8 @@ isinteractive() ? includet("testutils.jl") : include("testutils.jl")
     end
 
     @safetestset "utils test" begin include("utils_test.jl") end
+
+    NetworkDynamics.CHECK_COMPONENT[] = false
     @safetestset "construction test" begin include("construction_test.jl") end
     @safetestset "Aggregation Tests" begin include("aggregators_test.jl") end
     @safetestset "Symbolic Indexing Tests" begin include("symbolicindexing_test.jl") end

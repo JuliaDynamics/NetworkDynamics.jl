@@ -19,20 +19,18 @@ using NetworkDynamics
     end
 
     @testset "Test Component Library" begin
-        using NetworkDynamics: compf
+        using NetworkDynamics: compg
         a = Lib.diffusion_edge()
-
         b = Lib.diffusion_edge()
-        @test compf(a) == compf(b)
+        @test compg(a) == compg(b)
         a = Lib.diffusion_edge_closure()
         b = Lib.diffusion_edge_closure()
-        @test compf(a) != compf(b)
+        @test compg(a) != compg(b)
 
         fid = Lib.diffusion_edge_fid()
         ode = Lib.diffusion_odeedge()
 
         odevert = Lib.diffusion_vertex()
-        odevert_const = Lib.diffusion_vertex_constraint()
 
         kura_edge   = Lib.kuramoto_edge()
         kura_second = Lib.kuramoto_second()
@@ -44,12 +42,12 @@ using NetworkDynamics
         v1 = Lib.kuramoto_second()
         @test _find_identical(v1, 1:10) == [collect(1:10)]
         v2 = Lib.diffusion_vertex()
-        v3 = Lib.diffusion_vertex_constraint()
+        v3 = Lib.kuramoto_first()
 
         # v2 and v3 are equal when it comes to the function!!
         vs = [v1,v2,v3,v2,v2,v1,v1,v3]
 
-        @test _find_identical(vs, eachindex(vs)) == [[1,6,7],[2,3,4,5,8]]
+        @test _find_identical(vs, eachindex(vs)) == [[1,6,7],[2,4,5],[3,8]]
 
         es = [Lib.diffusion_edge(),
               Lib.diffusion_edge_closure(),

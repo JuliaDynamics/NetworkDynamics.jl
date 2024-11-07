@@ -1,6 +1,6 @@
 # AbstractTrees.TreeCharSet("├", "└", "│", "─", "⋮", " ⇒ ")
 
-function Base.show(io::IO, ::MIME"text/plain", nw::Network)
+function Base.show(io::IO, ::MIME"text/plain", @nospecialize(nw::Network))
     compact = get(io, :compact, false)::Bool
     if compact
         print(io, "Dynamic network ($(nv(nw.im.g)) vertices, $(ne(nw.im.g)) edges)")
@@ -123,7 +123,7 @@ function Base.show(io::IO, idx::EPIndex)
     print(io, "EPIndex(", repr(idx.compidx), ", ", repr(idx.subidx), ")")
 end
 
-function Base.show(io::IO, mime::MIME"text/plain", s::NWState; dim=nothing)
+function Base.show(io::IO, mime::MIME"text/plain", @nospecialize(s::NWState); dim=nothing)
     ioc = IOContext(io, :compact => true)
     if get(io, :limit, true)::Bool
         dsize = get(io, :displaysize, displaysize(io))::Tuple{Int,Int}
@@ -132,26 +132,30 @@ function Base.show(io::IO, mime::MIME"text/plain", s::NWState; dim=nothing)
         rowmax = typemax(Int)
     end
 
-    print(io, "State{$(typeof(uflat(s)))} of ")
+    print(io, "NWState{$(typeof(uflat(s)))} of ")
     show(ioc, mime, s.nw)
 
-    strvec = map(SII.variable_symbols(s.nw), eachindex(s.uflat)) do sym, i
-        buf = AnnotatedIOBuffer()
-        print(buf, "&")
-        show(buf, mime, sym)
-        print(buf, " &&=> ")
-        if isassigned(s.uflat, i)
-            show(buf, mime, s.uflat[i])
-        else
-            print(buf, "#undef")
+    if isempty(s.uflat) > 0
+       print(io, "\n u = ", s.uflat)
+    else
+        strvec = map(SII.variable_symbols(s.nw), eachindex(s.uflat)) do sym, i
+            buf = AnnotatedIOBuffer()
+            print(buf, "&")
+            show(buf, mime, sym)
+            print(buf, " &&=> ")
+            if isassigned(s.uflat, i)
+                show(buf, mime, s.uflat[i])
+            else
+                print(buf, "#undef")
+            end
+            str = read(seekstart(buf), AnnotatedString)
+            if !isnothing(dim) && dim(sym)
+                str = styled"{NetworkDynamics_inactive:$str}"
+            end
+            str
         end
-        str = read(seekstart(buf), AnnotatedString)
-        if !isnothing(dim) && dim(sym)
-            str = styled"{NetworkDynamics_inactive:$str}"
-        end
-        str
+        print_treelike(io, align_strings(strvec); prefix="  ", rowmax)
     end
-    print_treelike(io, align_strings(strvec); prefix="  ", rowmax)
 
     buf = IOContext(AnnotatedIOBuffer(), :compact=>true, :limit=>true)
     print(buf, "\n p = ")
@@ -166,7 +170,7 @@ function Base.show(io::IO, mime::MIME"text/plain", s::NWState; dim=nothing)
     end
 end
 
-function Base.show(io::IO, mime::MIME"text/plain", p::NWParameter; dim=nothing)
+function Base.show(io::IO, mime::MIME"text/plain", @nospecialize(p::NWParameter); dim=nothing)
     compact = get(io, :compact, false)::Bool
     if get(io, :limit, true)::Bool
         dsize = get(io, :displaysize, displaysize(io))::Tuple{Int,Int}
@@ -176,7 +180,7 @@ function Base.show(io::IO, mime::MIME"text/plain", p::NWParameter; dim=nothing)
     end
 
     if compact
-        print(io, "Parameter(")
+        print(io, "NWParameter(")
         show(io, p.pflat)
         print(io, ")")
     else

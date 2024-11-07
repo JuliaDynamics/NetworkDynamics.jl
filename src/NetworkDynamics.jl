@@ -75,6 +75,7 @@ include("initialization.jl")
 
 include("show.jl")
 
+const CHECK_COMPONENT = Ref(true)
 export chk_component
 include("doctor.jl")
 

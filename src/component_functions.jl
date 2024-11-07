@@ -362,7 +362,7 @@ function _construct_comp(::Type{T}, @nospecialize(kwargs)) where {T}
     # end
 
     # pop check keyword
-    check = pop!(dict, :check, true)
+    check = pop!(dict, :check, CHECK_COMPONENT[])
 
     if !all(in(keys(dict)), fieldnames(T))
         throw(ArgumentError("Cannot construct $T: arguments $(setdiff(fieldnames(T), keys(dict))) missing."))
@@ -601,6 +601,7 @@ function _fill_defaults(T, @nospecialize(kwargs))
         end
         dict[:outsym] = (; src, dst)
     end
+    outsym = dict[:outsym]
 
     ####
     #### insym

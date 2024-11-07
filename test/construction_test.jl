@@ -271,12 +271,13 @@ end
 
 @testset "test dealias and copy of components" begin
     using NetworkDynamics: aliasgroups
+    f = (dv, v, ein, p, t) -> nothing
     g = (out, in, p, t) -> nothing
     ge = (out, src, dst, p, t) -> nothing
 
-    v1 = VertexFunction(; g, outdim=2, metadata=Dict(:graphelement=>1), name=:v1)
-    v2 = VertexFunction(; g, outdim=2, name=:v2, vidx=2)
-    v3 = VertexFunction(; g, outdim=2, name=:v3, vidx=3)
+    v1 = VertexFunction(;f, g=1:1, dim=2, metadata=Dict(:graphelement=>1), name=:v1)
+    v2 = VertexFunction(;f, g=1:1, dim=2, name=:v2, vidx=2)
+    v3 = VertexFunction(;f, g=1:1, dim=2, name=:v3, vidx=3)
     e1 = EdgeFunction(; g=ge, outdim=1, graphelement=(;src=1,dst=2))
     e2 = EdgeFunction(; g=ge, outdim=1, src=:v2, dst=:v3)
     e3 = EdgeFunction(; g=ge, outdim=1, src=:v3, dst=:v1)
