@@ -352,3 +352,55 @@ end
         @test hasmethod(NetworkDynamics.get_aggr_constructor, (aggT,))
     end
 end
+
+@testset "test conversion of ff vertex to non ff vertex" begin
+    using NetworkDynamics: fftype, compfg
+    e = EdgeFunction(g=AntiSymmetric((e1, e2, v1, v2, p, t) -> nothing), outsym=[:i_r, :i_i])
+
+    slackg = function(v, esum, (V,δ), t)
+        v[1] = V*sin(δ)
+        v[2] = V*cos(δ)
+        nothing
+    end
+    v_pff = VertexFunction(g=slackg, outsym=[:u_r, :u_i], psym=[:V, :δ], insym=[:i_r, :i_i])
+    @test fftype(v_pff) == PureFeedForward()
+
+    swingf = function(dv, (δ, ω), (i_r, i_i), (V,Pm,M,D), t)
+        Pel = V*sin(δ)*i_r + V*cos(δ)*i_i
+        dδ = ω
+        dω = 1/M*(Pm - D*ω + Pel)
+        dv .= dδ, dω
+        nothing
+    end
+    swingg = function(o, (δ, _), (i_r, i_i), (V,), t)
+        o[1] = V*sin(δ)
+        o[2] = V*cos(δ)
+        nothing
+    end
+    v_ff = VertexFunction(f=swingf, g=swingg, sym=[:δ, :ω],
+        outsym=[:u_r, :u_i], insym=[:i_r, :i_i], psym=[:V,:Pm,:M,:D])
+
+    @test_throws ArgumentError Network(path_graph(2), v_pff, e)
+    @test_throws ArgumentError Network(path_graph(2), v_ff, e)
+
+    for v in [v_ff, v_pff]
+        out = zeros(outdim(v))
+        du = zeros(dim(v))
+        u = rand(dim(v))
+        p = rand(pdim(v))
+        in = rand(indim(v))
+        # compfg(v)(out, du, u, in, p, NaN)
+        b = @b $(compfg(v))($out, $du, $u, $in, $p, NaN)
+        @test b.allocs == 0
+
+        v2 = ff_to_constraint(v)
+        out2 = zeros(outdim(v2))
+        du2 = zeros(dim(v2))
+        u2 = vcat(u, out)
+        # compfg(v2)(out2, du2, u2, in, p, NaN)
+        b = @b $(compfg(v2))($out2, $du2, $u2, $in, $p, NaN)
+        @test b.allocs == 0
+        @test out ≈ out2
+        @test du2 ≈ vcat(du, zeros(length(out)))
+    end
+end

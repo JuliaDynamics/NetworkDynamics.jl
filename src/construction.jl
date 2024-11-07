@@ -22,6 +22,13 @@ function Network(g::AbstractGraph,
         @argcheck length(_vertexf) == nv(g)
         @argcheck length(_edgef) == ne(g)
 
+        # search for vertex functions with feed forward
+        if any(hasff, _vertexf)
+            throw(ArgumentError("Vertex functions with feed forward are not supported yet! \
+                As an intermediate solution, you can call `ff_to_constraint(vf)` on the vertex function\
+                to turn feed forward outputs into algebraic states."))
+        end
+
         # check if components alias eachother copy if necessary
         # allready dealiase if provided as single functions
         if dealias && !all_same_v

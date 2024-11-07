@@ -48,6 +48,7 @@ include("network_structure.jl")
 
 export NaiveAggregator, KAAggregator, SequentialAggregator,
        PolyesterAggregator, ThreadedAggregator
+export ff_to_constraint
 include("aggregators.jl")
 include("gbufs.jl")
 include("construction.jl")

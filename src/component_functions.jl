@@ -860,3 +860,73 @@ Base.hash(cf::ComponentFunction, h::UInt) = hash_fields(cf, h)
 function Base.:(==)(cf1::ComponentFunction, cf2::ComponentFunction)
     typeof(cf1) == typeof(cf2) && equal_fields(cf1, cf2)
 end
+
+function compfg(c::VertexFunction)
+   (out, du, u, in, p, t)  -> begin
+        f = compf(c)
+        isnothing(f) || f(du, u, in, p, t)
+        compg(c)(_gargs(fftype(c), (out,), du, u, (in,), p, t)...)
+        nothing
+   end
+end
+function compfg(c::EdgeFunction)
+   (out1, out2, du, u, in1, in2, p, t)  -> begin
+        f = compf(c)
+        isnothing(f) || f(du, u, in1, in2, p, t)
+        compg(c)(_gargs(fftype(c), (out1,out2), du, u, (in1,in2), p, t)...)
+        nothing
+   end
+end
+_gargs(::PureFeedForward, outs, du, u, ins, p, t) = (outs..., ins..., p, t)
+_gargs(::FeedForward, outs, du, u, ins, p, t) = (outs..., u, ins..., p, t)
+_gargs(::NoFeedForward, outs, du, u, ins, p, t) = (outs..., u, p, t)
+_gargs(::PureStateMap, outs, du, u, ins, p, t) = (outs..., u)
+
+function ff_to_constraint(v::VertexFunction)
+    hasff(v) || error("Vertex does not have feed forward property.")
+
+    olddim = dim(v)
+    odim = outdim(v)
+    newf = _newf(fftype(v), v.f, v.g, olddim)
+    newg = StateMask(olddim+1:olddim+odim)
+
+    mass_matrix = [v.mass_matrix zeros(olddim, odim)
+                   zeros(odim, olddim) zeros(odim, odim)]
+    if LinearAlgebra.isdiag(v.mass_matrix)
+        mass_matrix = LinearAlgebra.Diagonal(mass_matrix)
+    end
+
+    isnothing(v.obsf) || @warn "Observed function might be broke due to ff_to_constraint conversion."
+    newsym = vcat(sym(v), outsym(v))
+    VertexFunction(; f=newf, g=newg, sym=newsym, mass_matrix, name=v.name,
+        psym=v.psym, obsf=v.obsf, obssym=v.obssym, metadata=v.metadata, symmetadata=v.symmetadata)
+end
+
+function _newf(::PureFeedForward, f, g, dim)
+    @closure (du, u, esum, p, t) -> begin
+        if !isnothing(f)
+            duf = @view du[1:dim]
+            uf = @view u[1:dim]
+            f(duf, uf, esum, p, t)
+        end
+        dug = @view du[dim+1:end]
+        g(dug, esum, p, t)
+        ug = @view u[dim+1:end]
+        dug .= dug .- ug
+        nothing
+    end
+end
+function _newf(::FeedForward, f, g, dim)
+    @closure (du, u, esum, p, t) -> begin
+        if !isnothing(f)
+            duf = @view du[1:dim]
+            uf = @view u[1:dim]
+            f(duf, uf, esum, p, t)
+        end
+        dug = @view du[dim+1:end]
+        g(dug, uf, esum, p, t)
+        ug = @view u[dim+1:end]
+        dug .= dug .- ug
+        nothing
+    end
+end

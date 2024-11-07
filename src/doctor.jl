@@ -40,6 +40,8 @@ function Base.similar(a::AccessTracker, ::Type{T}, dims::Dims) where {T}
     AccessTracker(similar(a.data, T, dims))
 end
 
+Base.iterate(a::AccessTracker, i::Int=1) = (a[i], i+1)
+
 # see julia docs on interfaces, used to track similar calls
 Base.BroadcastStyle(::Type{<:AccessTracker}) = Broadcast.ArrayStyle{AccessTracker}()
 function Base.similar(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{AccessTracker}}, ::Type{ElType}) where ElType
@@ -98,34 +100,13 @@ function chk_component(c::ComponentFunction)
     outs = Tuple(AccessTracker(rand(l)) for l in values(outdim(c)))
     t = NaN
 
-    fargs = (du, u, ins..., p, t)
-    gargs = if fftype(c) isa PureFeedForward
-        (outs..., ins..., p, t)
-    elseif fftype(c) isa FeedForward
-        (outs..., u, ins..., p, t)
-    elseif fftype(c) isa NoFeedForward
-        (outs..., u, p, t)
-    elseif fftype(c) isa PureStateMap
-        (outs..., u)
-    else
-        @warn "chk_component not implemented for fftype $(fftype(c))"
-        return nothing
-    end
-
     try
-        if compf(c) != nothing
-            compf(c)(fargs...)
-        end
-        compg(c)(gargs...)
+        compfg(c)(outs..., du, u, ins..., p, t)
     catch e
         if e isa MethodError
-            if isequal(e.args, fargs)
-                # @warn "Your component function signature seems to be wrong. Check the arguments!"
-            else
-                @warn "Encountered MethodError. All arguments are AbstractArrays, make sure to allways index into them: $e"
-            end
-        # elseif e isa BoundsError
-        #     @warn "Call of component functions lead to out of bounds access! Check `dim` and `pdim` fields!"
+            @warn "Encountered MethodError. All arguments are AbstractArrays, make sure to allways index into them: $e"
+        elseif e isa BoundsError
+            @warn "Call of component functions lead to out of bounds access! Maybe you're unpacking some function input?"
         elseif e isa DimensionMismatch
             # ignore, its probably because we don't know the sizes of esum, vsrc and vdst
             @warn "Call of component function lead to dimension mismatch: $e. Try to provide `indim` for more helpfull error."
