@@ -52,8 +52,7 @@ Adapt.@adapt_structure KAAggregator
 Adapt.@adapt_structure AggregationMap
 function Adapt.adapt_structure(to::Type{<:CuArray{<:AbstractFloat}}, am::AggregationMap)
     map = adapt(CuArray, am.map)
-    symmap = adapt(CuArray, am.symmap)
-    AggregationMap(am.range, map, am.symrange, symmap)
+    AggregationMap(am.range, map)
 end
 
 Adapt.@adapt_structure SparseAggregator

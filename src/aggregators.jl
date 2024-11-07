@@ -20,24 +20,18 @@ function _aggregate!(a::NaiveAggregator, batches, aggbuf, data)
         im = a.im
         for eidx in batch.indices
             edge = im.edgevec[eidx]
+            edgef = im.edgef[eidx]
+
             # dst mapping
             target = @views aggbuf[im.v_aggr[edge.dst]]
-            source = @views data[im.e_data[eidx][1:im.edepth]]
+            source = @views data[im.e_out[eidx][1:outdim_dst(edgef)]]
             target .= a.f.(target, source)
 
             # src mapping
-            cplng = coupling(batch)
-            if cplng == Symmetric()
+            if !iszero(outdim_src(edgef))
                 target = @views aggbuf[im.v_aggr[edge.src]]
-                source = @views data[im.e_data[eidx][1:im.edepth]]
-                target .= a.f.(target, source)
-            elseif cplng == AntiSymmetric()
-                target = @views aggbuf[im.v_aggr[edge.src]]
-                source = @views data[im.e_data[eidx][1:im.edepth]]
-                target .= a.f.(target, -1 .* source)
-            elseif cplng == Fiducial()
-                target = @views aggbuf[im.v_aggr[edge.src]]
-                source = @views data[im.e_data[eidx][im.edepth+1:2*im.edepth]]
+                s = outdim_dst(edgef)+1
+                source = @views data[im.e_out[eidx][s:s+outdim_src(edgef)-1]]
                 target .= a.f.(target, source)
             end
         end
@@ -92,7 +86,6 @@ function aggregate!(a::KAAggregator, aggbuf, data)
     am = a.m
     fill!(aggbuf, zero(eltype(aggbuf)))
     _backend = get_backend(data)
-
     # kernel = agg_kernel!(_backend, 1024, length(am.map))
     # kernel(a.f, aggbuf, view(data, am.range), am.map)
     kernel = agg_kernel!(_backend)
@@ -100,13 +93,6 @@ function aggregate!(a::KAAggregator, aggbuf, data)
     # TODO: synchronize after both aggregation sweeps?
     KernelAbstractions.synchronize(_backend)
 
-    if !isempty(am.symrange)
-        # symkernel = agg_kernel_sym!(_backend, 1024, length(am.map))
-        # symkernel(a.f, aggbuf, view(data, am.symrange), am.symmap)
-        symkernel = agg_kernel_sym!(_backend)
-        symkernel(a.f, aggbuf, view(data, am.symrange), am.symmap; ndrange=length(am.symmap))
-        KernelAbstractions.synchronize(_backend)
-    end
     nothing
 end
 
@@ -116,19 +102,6 @@ end
         _dst_i = idxs[I]
         if _dst_i != 0
             _dat = data[I]
-            ref = Atomix.IndexableRef(aggbuf, (_dst_i,))
-            Atomix.modify!(ref, f, _dat)
-        end
-    end
-    nothing
-end
-@kernel function agg_kernel_sym!(f::F, aggbuf, @Const(data), @Const(idxs)) where {F}
-    I = @index(Global)
-    @inbounds if I ≤ length(idxs)
-        dst_idx = idxs[I] # might be < 1 for antisymmetric coupling
-        _dst_i = abs(idxs[I])
-        if _dst_i != 0
-            _dat = sign(dst_idx) * data[I]
             ref = Atomix.IndexableRef(aggbuf, (_dst_i,))
             Atomix.modify!(ref, f, _dat)
         end
@@ -171,10 +144,11 @@ function aggregate!(a::PolyesterAggregator, aggbuf, data)
     length(a.m) == length(aggbuf) || throw(DimensionMismatch("length of aggbuf and a.m must be equal"))
     fill!(aggbuf, zero(eltype(aggbuf)))
 
+    maxdepth = mapreduce(x -> length(x[2]), max, a.m)
+
     Polyester.@batch for (dstidx, srcidxs) in a.m
-       @inbounds for srcidx in srcidxs
-           dat = sign(srcidx) * data[abs(srcidx)]
-           aggbuf[dstidx] = a.f(aggbuf[dstidx], dat)
+       for srcidx in srcidxs
+           aggbuf[dstidx] = a.f(aggbuf[dstidx], data[srcidx])
        end
     end
     nothing
@@ -194,13 +168,11 @@ function aggregate!(a::ThreadedAggregator, aggbuf, data)
 
     Threads.@threads for (dstidx, srcidxs) in a.m
        @inbounds for srcidx in srcidxs
-           dat = sign(srcidx) * data[abs(srcidx)]
-           aggbuf[dstidx] = a.f(aggbuf[dstidx], dat)
+           aggbuf[dstidx] = a.f(aggbuf[dstidx], data[srcidx])
        end
     end
     nothing
 end
-
 
 function _inv_aggregation_map(im, batches)
     srcidxs = map(im.v_aggr, Graphs.degree(im.g)) do dst, ndegr
@@ -209,21 +181,16 @@ function _inv_aggregation_map(im, batches)
     unrolled_foreach(batches) do batch
         for eidx in batch.indices
             edge = im.edgevec[eidx]
+            edgef = im.edgef[eidx]
 
             # dst mapping
-            edat_idx = im.e_data[eidx][1:im.edepth]
+            edat_idx = im.e_out[eidx][1:outdim_dst(edgef)]
             _pusheach!(srcidxs[edge.dst], edat_idx)
 
             # src mapping
-            cplng = coupling(batch)
-            if cplng == Symmetric()
-                edat_idx = im.e_data[eidx][1:im.edepth]
-                _pusheach!(srcidxs[edge.src], edat_idx)
-            elseif cplng == AntiSymmetric()
-                edat_idx = -1 .* im.e_data[eidx][1:im.edepth]
-                _pusheach!(srcidxs[edge.src], edat_idx)
-            elseif cplng == Fiducial()
-                edat_idx = im.e_data[eidx][im.edepth+1:2*im.edepth]
+            if !iszero(outdim_src(edgef))
+                s = outdim_dst(edgef)+1
+                edat_idx = im.e_out[eidx][s:s+outdim_src(edgef)-1]
                 _pusheach!(srcidxs[edge.src], edat_idx)
             end
         end
