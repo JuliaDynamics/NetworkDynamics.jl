@@ -119,7 +119,7 @@ getcomp(nw::Network, sni::SymbolicVertexIndex) = nw.im.vertexf[resolvecompidx(nw
 getcomprange(nw::Network, sni::VIndex{<:Union{Symbol,Int}}) = nw.im.v_data[resolvecompidx(nw, sni)]
 getcomprange(nw::Network, sni::EIndex{<:Union{Symbol,Int}}) = nw.im.e_data[resolvecompidx(nw, sni)]
 getcompoutrange(nw::Network, sni::VIndex{<:Union{Symbol,Int}}) = nw.im.v_out[resolvecompidx(nw, sni)]
-getcompoutrange(nw::Network, sni::EIndex{<:Union{Symbol,Int}}) = nw.im.e_out[resolvecompidx(nw, sni)]
+getcompoutrange(nw::Network, sni::EIndex{<:Union{Symbol,Int}}) = flatrange(nw.im.e_out[resolvecompidx(nw, sni)])
 getcompprange(nw::Network, sni::VPIndex{<:Union{Symbol,Int}}) = nw.im.v_para[resolvecompidx(nw, sni)]
 getcompprange(nw::Network, sni::EPIndex{<:Union{Symbol,Int}}) = nw.im.e_para[resolvecompidx(nw, sni)]
 

@@ -24,6 +24,13 @@ end
     start:start+bs.strides[j]-1
 end
 
+flatrange(r::AbstractRange) = r
+function flatrange(rs::@NamedTuple{src::UnitRange{Int}, dst::UnitRange{Int}})
+    @assert last(rs.src) + step(rs.src) == first(rs.dst)
+    @assert step(rs.src) == step(rs.dst)
+    UnitRange(first(rs.src), last(rs.dst))
+end
+
 subscript(N) = String(_subscript.(reverse(digits(N))))
 _subscript(i) = Char(0x02080 + i)
 

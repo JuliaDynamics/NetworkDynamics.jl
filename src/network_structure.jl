@@ -8,7 +8,7 @@ mutable struct IndexManager{G}
     v_aggr::Vector{UnitRange{Int}}  # v input in aggbuf
     # positions of edge data
     e_data::Vector{UnitRange{Int}}  # e data in flat states
-    e_out::Vector{UnitRange{Int}}   # e range in output buf
+    e_out::Vector{@NamedTuple{src::UnitRange{Int},dst::UnitRange{Int}}}   # e range in output buf
     e_para::Vector{UnitRange{Int}}  # e para in flat para
     e_gbufr::Vector{UnitRange{Int}} # e input range in gather buffer
     # metadata
@@ -32,7 +32,9 @@ mutable struct IndexManager{G}
         unique_enames = unique_mappings(getproperty.(edgef, :name), 1:ne(g))
         new{typeof(g)}(g, collect(edges(g)),
                        (Vector{UnitRange{Int}}(undef, nv(g)) for i in 1:4)...,
-                       (Vector{UnitRange{Int}}(undef, ne(g)) for i in 1:4)...,
+                       Vector{UnitRange{Int}}(undef, ne(g)),
+                       Vector{@NamedTuple{src::UnitRange{Int},dst::UnitRange{Int}}}(undef, ne(g)),
+                       (Vector{UnitRange{Int}}(undef, ne(g)) for i in 1:2)...,
                        edepth, vdepth,
                        0, 0, 0, 0, 0,
                        vertexf, edgef,
@@ -204,12 +206,13 @@ function register_edges!(im::IndexManager, dim, outdim, pdim, idxs)
     for i in idxs
         e = im.edgevec[i]
         im.e_data[i]  = _nexturange!(im, dim)
-        im.e_out[i]   = _nextoutrange!(im, outdim.src+outdim.dst)
+        im.e_out[i]   = (src = _nextoutrange!(im, outdim.src),
+                         dst = _nextoutrange!(im, outdim.dst))
         im.e_para[i]  = _nextprange!(im, pdim)
         im.e_gbufr[i] = _nextgbufrange!(im, im.vdepth)
     end
     (BatchStride(first(im.e_data[first(idxs)]), dim),
-     BatchStride(first(im.e_out[first(idxs)]), (outdim.src, outdim.dst)),
+     BatchStride(first(flatrange(im.e_out[first(idxs)])), (outdim.src, outdim.dst)),
      BatchStride(first(im.e_para[first(idxs)]), pdim),
      BatchStride(first(im.e_gbufr[first(idxs)]), im.vdepth))
 end
@@ -256,7 +259,7 @@ function isdense(im::IndexManager)
     end
     for outranges in (im.v_out, im.e_out)
         for range in outranges
-            append!(outidxs, range)
+            append!(outidxs, flatrange(range))
         end
     end
     sort!(pidxs)

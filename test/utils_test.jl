@@ -91,4 +91,14 @@ using NetworkDynamics
          b = [1,1,-3]
          @test unique_mappings(abs, a, b) == Dict(:c=>3)
     end
+
+    @testset "flatrange to compbine ranges" begin
+        using NetworkDynamics: flatrange
+        r1 = 1:10
+        r2 = 11:12
+        @test flatrange((src=r1,dst=r2)) == 1:12
+        @test flatrange(r1) == r1
+        r3 = 12:13
+        @test_throws AssertionError flatrange((src=r1,dst=r3))
+    end
 end

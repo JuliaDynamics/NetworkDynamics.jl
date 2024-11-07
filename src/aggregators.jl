@@ -20,18 +20,16 @@ function _aggregate!(a::NaiveAggregator, batches, aggbuf, data)
         im = a.im
         for eidx in batch.indices
             edge = im.edgevec[eidx]
-            edgef = im.edgef[eidx]
 
             # dst mapping
+            source = @views data[im.e_out[eidx].dst]
             target = @views aggbuf[im.v_aggr[edge.dst]]
-            source = @views data[im.e_out[eidx][1:outdim_dst(edgef)]]
             target .= a.f.(target, source)
 
             # src mapping
-            if !iszero(outdim_src(edgef))
+            source = @views data[im.e_out[eidx].src]
+            if !isempty(source)
                 target = @views aggbuf[im.v_aggr[edge.src]]
-                s = outdim_dst(edgef)+1
-                source = @views data[im.e_out[eidx][s:s+outdim_src(edgef)-1]]
                 target .= a.f.(target, source)
             end
         end
@@ -48,18 +46,16 @@ function AggregationMap(im, batches)
     for batch in batches
         for eidx in batch.indices
             edge = im.edgevec[eidx]
-            edgef = im.edgef[eidx]
 
             # dst mapping
+            source = im.e_out[eidx].dst
             target = im.v_aggr[edge.dst]
-            source = im.e_out[eidx][1:outdim_dst(edgef)]
             _map[source] .= target
 
             # src mapping
-            if !iszero(outdim_src(edgef))
+            source = im.e_out[eidx].src
+            if !isempty(source)
                 target = im.v_aggr[edge.src]
-                s = outdim_dst(edgef)+1
-                source = im.e_out[eidx][s:s+outdim_src(edgef)-1]
                 _map[source] .= target
             end
         end
@@ -181,16 +177,14 @@ function _inv_aggregation_map(im, batches)
     unrolled_foreach(batches) do batch
         for eidx in batch.indices
             edge = im.edgevec[eidx]
-            edgef = im.edgef[eidx]
 
             # dst mapping
-            edat_idx = im.e_out[eidx][1:outdim_dst(edgef)]
+            edat_idx = im.e_out[eidx].dst
             _pusheach!(srcidxs[edge.dst], edat_idx)
 
             # src mapping
-            if !iszero(outdim_src(edgef))
-                s = outdim_dst(edgef)+1
-                edat_idx = im.e_out[eidx][s:s+outdim_src(edgef)-1]
+            edat_idx = im.e_out[eidx].src
+            if !isempty(edat_idx)
                 _pusheach!(srcidxs[edge.src], edat_idx)
             end
         end
@@ -228,17 +222,16 @@ function SparseAggregator(im, batches)
             edgef = im.edgef[eidx]
 
             # dst mapping
+            source = im.e_out[eidx].dst
             target = im.v_aggr[edge.dst]
-            source = im.e_out[eidx][1:outdim_dst(edgef)]
             append!(I, target)
             append!(J, source)
             append!(V, Iterators.repeated(1, length(target)))
 
             # src mapping
-            if !iszero(outdim_src(edgef))
+            source = im.e_out[eidx].src
+            if !isempty(source)
                 target = im.v_aggr[edge.src]
-                s = outdim_dst(edgef)+1
-                source = im.e_out[eidx][s:s+outdim_src(edgef)-1]
                 append!(I, target)
                 append!(J, source)
                 append!(V, Iterators.repeated(1, length(target)))
