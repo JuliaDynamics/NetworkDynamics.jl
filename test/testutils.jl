@@ -84,4 +84,5 @@ function test_execution_styles(prob)
             end
         end
     end
+    nothing
 end
