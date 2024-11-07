@@ -109,7 +109,9 @@ function chk_component(c::ComponentFunction)
             @warn "Call of component functions lead to out of bounds access! Maybe you're unpacking some function input?"
         elseif e isa DimensionMismatch
             # ignore, its probably because we don't know the sizes of esum, vsrc and vdst
-            @warn "Call of component function lead to dimension mismatch: $e. Try to provide `indim` for more helpfull error."
+            if hasindim(c)
+                @warn "Call of component function lead to dimension mismatch: $e."
+            end
         else
             @warn "Error while calling component function: $e"
         end
