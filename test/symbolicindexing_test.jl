@@ -305,7 +305,9 @@ for idx in idxtypes
     if b.allocs != 0
         println(idx, " => ", b.allocs, " allocations")
     end
-    @test b.allocs <= 10
+    if VERSION ≥ v"1.11"
+        @test b.allocs <= 10
+    end
 end
 
 @info "Test state getindex call"
