@@ -95,7 +95,8 @@ function chk_component(c::ComponentFunction)
         Tuple(AccessTracker(rand(l)) for l in values(indim(c)))
     else
         # we don't know the size of the input but this might be reasonable guess
-        Tuple(AccessTracker(rand(l)) for l in values(outdim(c)))
+        indim_guess = max(outdim_normalized(c)...)
+        Tuple(AccessTracker(rand(indim_guess)) for _ in outdim_normalized(c))
     end
     outs = Tuple(AccessTracker(rand(l)) for l in values(outdim(c)))
     t = NaN
@@ -125,8 +126,10 @@ function chk_component(c::ComponentFunction)
     for (j, o) in enumerate(outs)
         has_oob(o) && @warn "There is out of bound acces to output#$j: reads $(oob_reads(o)) and writes $(oob_writes(o))!"
     end
-    for (j, i) in enumerate(ins)
-        has_oob(i) && @warn "There is out of bound acces to input#$j: reads $(oob_reads(i)) and writes $(oob_writes(i))!"
+    if hasindim(c)
+        for (j, i) in enumerate(ins)
+            has_oob(i) &&  @warn "There is out of bound acces to input#$j: reads $(oob_reads(i)) and writes $(oob_writes(i))!"
+        end
     end
 
     has_uninit_reads(du) && @warn "There is uninitialized read access to du: $(reads(du))!"
