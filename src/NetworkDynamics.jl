@@ -19,6 +19,7 @@ using RecursiveArrayTools: DiffEqArray
 using FastClosures: @closure
 using ForwardDiff: ForwardDiff
 using Printf: @sprintf
+using Random: Random
 
 @static if VERSION ≥ v"1.11.0-0"
     using Base: AnnotatedIOBuffer, AnnotatedString

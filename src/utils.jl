@@ -102,3 +102,15 @@ compares them.
         return true
     end
 end
+
+function rand_inputs_fg(rng, cf)
+    @argcheck hasindim(cf) "ComponentFunction has no specified input dimensions/syms"
+    du = rand(rng, dim(cf))
+    u = rand(rng, dim(cf))
+    p = rand(rng, pdim(cf))
+    ins = Tuple(rand(rng, l) for l in values(indim(cf)))
+    outs = Tuple(rand(rng, l) for l in values(outdim(cf)))
+    t = NaN
+    (outs..., du, u, ins..., p, t)
+end
+rand_inputs_fg(cf) = rand_inputs_fg(Random.default_rng(), cf)

@@ -400,6 +400,7 @@ Also perfoms sanity check some properties like mass matrix, depth, ...
 """
 function _fill_defaults(T, @nospecialize(kwargs))
     dict = Dict{Symbol, Any}(kwargs)
+    allow_output_sym_clash = pop!(dict, :allow_output_sym_clash, false)
 
     # syms might be provided as single pairs or symbols, wrap in vector
     _maybewrap!(dict, :sym, Union{Symbol, Pair})
@@ -722,8 +723,7 @@ function _fill_defaults(T, @nospecialize(kwargs))
     _s  = sym
     _ps = psym
     _obss = obssym
-    _os = outsym
-    _os = if _has_sym_to_outsym_mapping(g)
+    _os = if allow_output_sym_clash || _has_sym_to_outsym_mapping(g)
        setdiff(outsym, sym) # allow name clashes for statemask derivatives
     else
         outsym

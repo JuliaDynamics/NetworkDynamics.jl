@@ -13,6 +13,7 @@ using ExplicitImports
 
 isinteractive() ? includet("testutils.jl") : include("testutils.jl")
 
+NetworkDynamics.CHECK_COMPONENT[] = false
 @testset "NetworkDynamics Tests" begin
     @testset "Package Quality Tests" begin
         # print_explicit_imports(NetworkDynamics)
@@ -26,7 +27,6 @@ isinteractive() ? includet("testutils.jl") : include("testutils.jl")
 
     @safetestset "utils test" begin include("utils_test.jl") end
 
-    NetworkDynamics.CHECK_COMPONENT[] = false
     @safetestset "construction test" begin include("construction_test.jl") end
     @safetestset "Aggregation Tests" begin include("aggregators_test.jl") end
     @safetestset "Symbolic Indexing Tests" begin include("symbolicindexing_test.jl") end

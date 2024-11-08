@@ -5,6 +5,8 @@ using NetworkDynamics
 using OrdinaryDiffEqTsit5
 using LinearAlgebra
 using Graphs
+using Chairmarks: @b
+using Test
 
 # TODO: Clean up MTK tests
 
@@ -32,8 +34,11 @@ end;
 end;
 
 @named swing = SwingNode()
-v = ODEVertex(swing, [:P], [:θ])
-v = ODEVertex(swing, :P, :θ)
+v = VertexFunction(swing, [:P], [:θ])
+
+data = NetworkDynamics.rand_inputs_fg(v)
+b = @b $(NetworkDynamics.compfg(v))($data...)
+@test b.allocs == 0
 
 @mtkmodel Line begin
     @variables begin
@@ -58,9 +63,13 @@ end
     end
 end
 @named line = StaticPowerLine()
-e = StaticEdge(line, [:srcθ], [:dstθ], [:dstP, :srcP], Fiducial())
+e = EdgeFunction(line, [:srcθ], [:dstθ], [:srcP], [:dstP])
 @test NetworkDynamics.insym(e).src == [:srcθ]
 @test NetworkDynamics.insym(e).dst == [:dstθ]
+
+data = NetworkDynamics.rand_inputs_fg(e)
+b = @b $(NetworkDynamics.compfg(e))($data...)
+@test b.allocs == 0
 
 g = complete_graph(4)
 nw = Network(g, v, e)
@@ -115,8 +124,8 @@ rotm(θ) = [cos(θ) -sin(θ); sin(θ) cos(θ)]
 end
 
 @named dqswing = DQSwing()
-v = ODEVertex(dqswing, [:i_r, :i_i], [:u_r, :u_i])
-@test v.mass_matrix == Diagonal([0,0,1,1])
+v = VertexFunction(dqswing, [:i_r, :i_i], [:u_r, :u_i])
+@test v.mass_matrix == Diagonal([1,1])
 
 @mtkmodel DQLine begin
     @variables begin
@@ -161,4 +170,4 @@ end
 end
 
 @named piline = DQPiLine()
-l = StaticEdge(piline, [:src_u_r, :src_u_i], [:dst_u_r, :dst_u_i], [:dst_i_r, :dst_i_i, :src_i_r, :src_i_i], Fiducial())
+l = EdgeFunction(piline, [:src_u_r, :src_u_i], [:dst_u_r, :dst_u_i], [:src_i_r, :src_i_i], [:dst_i_r, :dst_i_i])

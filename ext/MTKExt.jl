@@ -5,21 +5,25 @@ using ModelingToolkit: ModelingToolkit, Equation, ODESystem, Differential
 using ModelingToolkit: full_equations, get_variables, structural_simplify, getname, unwrap
 using ModelingToolkit: full_parameters, unknowns, independent_variables, observed, defaults
 using ModelingToolkit.Symbolics: Symbolics, fixpoint_sub, substitute
+using RecursiveArrayTools: RecursiveArrayTools
 using ArgCheck: @argcheck
 using LinearAlgebra: Diagonal, I
 
-using NetworkDynamics: Coupling, Fiducial, set_metadata!
-import NetworkDynamics: ODEVertex, StaticEdge, ODEEdge
+using NetworkDynamics: NetworkDynamics, set_metadata!,
+                       PureFeedForward, FeedForward, NoFeedForward, PureStateMap
+import NetworkDynamics: VertexFunction, EdgeFunction
 
 include("MTKUtils.jl")
 
-function ODEVertex(sys::ODESystem, inputs, outputs; verbose=false, name=getname(sys), kwargs...)
+function VertexFunction(sys::ODESystem, inputs, outputs; verbose=false, name=getname(sys), kwargs...)
     warn_events(sys)
     inputs = inputs isa AbstractVector ? inputs : [inputs]
     outputs = outputs isa AbstractVector ? outputs : [outputs]
-    gen = generate_io_function(sys, (inputs, ), outputs; type=:ode, verbose)
+    gen = generate_io_function(sys, (inputs,), (outputs,); verbose)
 
-    f = gen.f_ip
+    f = gen.f
+    g = gen.g
+    obsf = gen.obsf
 
     _sym = getname.(gen.states)
     sym = [s => _get_metadata(sys, s) for s in _sym]
@@ -30,27 +34,33 @@ function ODEVertex(sys::ODESystem, inputs, outputs; verbose=false, name=getname(
     _obssym = getname.(gen.obsstates)
     obssym = [s => _get_metadata(sys, s) for s in _obssym]
 
-    _inputsym = getname.(inputs)
-    inputsym = [s => _get_metadata(sys, s) for s in _inputsym]
+    _insym = getname.(inputs)
+    insym = [s => _get_metadata(sys, s) for s in _insym]
 
-    depth = length(outputs)
-    obsf = gen.g_ip
+    _outsym = getname.(outputs)
+    outsym = [s => _get_metadata(sys, s) for s in _outsym]
 
     mass_matrix = gen.mass_matrix
-    v = ODEVertex(;f, sym, psym, depth, inputsym, obssym, obsf, mass_matrix, name, kwargs...)
-    set_metadata!(v, :observed, gen.observed)
-    set_metadata!(v, :equations, gen.equations)
-    v
+    c = VertexFunction(;f, g, sym, insym, outsym, psym, obssym,
+            obsf, mass_matrix, ff=gen.fftype, name, allow_output_sym_clash=true, kwargs...)
+    set_metadata!(c, :observed, gen.observed)
+    set_metadata!(c, :equations, gen.equations)
+    set_metadata!(c, :outputeqs, gen.outputeqs)
+    c
 end
 
-function ODEEdge(sys::ODESystem, srcin, dstin, outputs, coupling::Coupling; verbose=false, name=getname(sys), kwargs...)
+function EdgeFunction(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=false, name=getname(sys), kwargs...)
     warn_events(sys)
     srcin = srcin isa AbstractVector ? srcin : [srcin]
     dstin = dstin isa AbstractVector ? dstin : [dstin]
-    outputs = outputs isa AbstractVector ? outputs : [outputs]
-    gen = generate_io_function(sys, (srcin, dstin), outputs; type=:ode, verbose)
+    srcout = srcout isa AbstractVector ? srcout : [srcout]
+    dstout = dstout isa AbstractVector ? dstout : [dstin]
 
-    f = gen.f_ip
+    gen = generate_io_function(sys, (srcin, dstin), (srcout, dstout); verbose)
+
+    f = gen.f
+    g = gen.g
+    obsf = gen.obsf
 
     _sym = getname.(gen.states)
     sym = [s => _get_metadata(sys, s) for s in _sym]
@@ -61,50 +71,25 @@ function ODEEdge(sys::ODESystem, srcin, dstin, outputs, coupling::Coupling; verb
     _obssym = getname.(gen.obsstates)
     obssym = [s => _get_metadata(sys, s) for s in _obssym]
 
-    _inputsym_src = getname.(srcin)
-    inputsym_src = [s => _get_metadata(sys, s)  for s in _inputsym_src]
+    _insym_src = getname.(srcin)
+    insym_src = [s => _get_metadata(sys, s)  for s in _insym_src]
+    _insym_dst = getname.(dstin)
+    insym_dst = [s => _get_metadata(sys, s)  for s in _insym_dst]
+    insym = (;src=insym_src, dst=insym_dst)
 
-    _inputsym_dst = getname.(dstin)
-    inputsym_dst = [s => _get_metadata(sys, s)  for s in _inputsym_dst]
-
-    depth = coupling isa Fiducial ? Int(length(outputs)/2) : length(outputs)
-    obsf = gen.g_ip
+    _outsym_src = getname.(srcout)
+    outsym_src = [s => _get_metadata(sys, s)  for s in _outsym_src]
+    _outsym_dst = getname.(dstout)
+    outsym_dst = [s => _get_metadata(sys, s)  for s in _outsym_dst]
+    outsym = (;src=outsym_src, dst=outsym_dst)
 
     mass_matrix = gen.mass_matrix
-    e = ODEEdge(;f, sym, psym, depth, inputsym_src, inputsym_dst, obssym, obsf, coupling, mass_matrix, name, kwargs...)
-    set_metadata!(e, :observed, gen.observed)
-    set_metadata!(e, :equations, gen.equations)
-    e
-end
-
-function StaticEdge(sys::ODESystem, srcin, dstin, outputs, coupling::Coupling; verbose=false, name=getname(sys), kwargs...)
-    warn_events(sys)
-    srcin = srcin isa AbstractVector ? srcin : [srcin]
-    dstin = dstin isa AbstractVector ? dstin : [dstin]
-    outputs = outputs isa AbstractVector ? outputs : [outputs]
-    gen = generate_io_function(sys, (srcin, dstin), outputs; type=:static, verbose)
-
-    f = gen.f_ip
-
-    _sym = getname.(gen.states)
-    sym = [s => _get_metadata(sys, s) for s in _sym]
-
-    _psym = getname.(gen.params)
-    psym = [s => _get_metadata(sys, s) for s in _psym]
-
-    _obssym = getname.(gen.obsstates)
-    obssym = [s => _get_metadata(sys, s) for s in _obssym]
-
-    _inputsym_src = getname.(srcin)
-    inputsym_src = [s => _get_metadata(sys, s)  for s in _inputsym_src]
-
-    _inputsym_dst = getname.(dstin)
-    inputsym_dst = [s => _get_metadata(sys, s)  for s in _inputsym_dst]
-
-    depth = coupling isa Fiducial ? Int(length(outputs)/2) : length(outputs)
-    obsf = gen.g_ip
-
-    StaticEdge(;f, sym, psym, depth, inputsym_src, inputsym_dst, obssym, obsf, coupling, name, kwargs...)
+    c = EdgeFunction(;f, g, sym, insym, outsym, psym, obssym,
+            obsf, mass_matrix, ff=gen.fftype, name,  allow_output_sym_clash=true, kwargs...)
+    set_metadata!(c, :observed, gen.observed)
+    set_metadata!(c, :equations, gen.equations)
+    set_metadata!(c, :outputeqs, gen.outputeqs)
+    c
 end
 
 """
@@ -154,8 +139,8 @@ function _get_metadata(sys, name)
     nt
 end
 
-function generate_io_function(_sys, inputss::Tuple, outputs;
-                              expression=Val{false}, verbose=false, type=:auto)
+function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
+                              expression=Val{false}, verbose=false)
     # TODO: scalarize vector symbolics/equations?
 
     # f_* may be given in namepsace version or as symbols, resolve to unnamespaced Symbolic
@@ -163,77 +148,27 @@ function generate_io_function(_sys, inputss::Tuple, outputs;
         getproperty_symbolic.(Ref(_sys), in)
     end
     allinputs = reduce(union, inputss)
-    outputs = getproperty_symbolic.(Ref(_sys), outputs)
+    outputss = map(outputss) do out
+        getproperty_symbolic.(Ref(_sys), out)
+    end
+    alloutputs = reduce(union, outputss)
 
     sys = if ModelingToolkit.iscomplete(_sys)
         deepcopy(_sys)
     else
         _openinputs = setdiff(allinputs, Set(full_parameters(_sys)))
-        structural_simplify(_sys, (_openinputs, outputs); simplify=true)[1]
+        structural_simplify(_sys, (_openinputs, alloutputs); simplify=true)[1]
     end
 
-    # extract "temporary" states and params, those might change in the following steps
-    _states = unknowns(sys)
-    _params = full_parameters(sys)
+    states = unknowns(sys)
+    allparams = full_parameters(sys) # contains inputs!
+    @argcheck allinputs ⊆ Set(allparams)
+    params = setdiff(allparams, Set(allinputs))
 
     # extract the main equations and observed equations
     eqs::Vector{Equation} = full_equations(sys)
     fix_metadata!(eqs, sys);
-
-    # extract observed equations. They might depend on eachother so resolve them
-    obs_subs = Dict(eq.lhs => eq.rhs for eq in observed(sys))
-    obseqs = map(observed(sys)) do eq
-        eq.lhs ~ fixpoint_sub(eq.rhs, obs_subs)
-    end
-    fix_metadata!(obseqs, sys);
-    # obs can only depend on parameters (including allinputs) or states
-    obs_deps = mapreduce(eq -> get_variables(eq.rhs), union, obseqs, init=Symbolic[])
-    if !(obs_deps ⊆ Set(_params) ∪ Set(_states) ∪ independent_variables(sys))
-        @warn "obs_deps !⊆ parameters ∪ unknowns. Difference: $(setdiff(obs_deps, Set(_params) ∪ Set(_states)))"
-    end
-
-    @argcheck allinputs ⊆ Set(_params)
-
-    if !(outputs ⊆ Set(_states))
-        # structural simplify might remove explicit equations for outputs
-        # so we reconstruct equations for them based on the substitutions
-        missingouts = setdiff(Set(outputs), _states)
-        subs = Dict(eq.lhs => eq.rhs for eq in obseqs)
-        @argcheck missingouts ⊆ keys(subs)
-
-        renamings = Dict()
-        for mout in missingouts
-            eq = mout ~ fixpoint_sub(mout, subs)
-
-            # try the ol' switcheroo for trivial equations a ~ b
-            if iscall(eq.rhs) && operation(eq.rhs) isa Symbolics.BasicSymbolic && eq.rhs ∈ Set(_states)
-                verbose && @info "Encountered trivial equation $eq. Swap out $(eq.lhs) <=> $(eq.rhs) everywhere."
-                renamings[eq.lhs] = eq.rhs
-                renamings[eq.rhs] = eq.lhs
-                continue
-            end
-            # chech for potentially other solvable scenarios
-            rhs_vars = get_variables(eq.rhs)
-            if length(rhs_vars) == 1 && (rhs_vars ⊆ Set(_states) || rhs_vars ⊆ Set(_params))
-                @warn "Adding possible trivial equation $eq. This should be resolved in NetworkDynamics."
-            end
-            push!(eqs, eq)
-        end
-        fix_metadata!(eqs, sys);
-
-        if !isempty(renamings)
-            eqs = map(eq -> substitute(eq, renamings), eqs)
-            obseqs = map(eq -> substitute(eq, renamings), obseqs)
-            _states = map(s -> substitute(s, renamings), _states)
-            verbose && @info "New States:" _states
-        end
-
-        # we promoted the missing outputs to "states" again, so we need to remove them from obseqs
-        filter!(obseqs) do eq
-            eq.lhs ∉ missingouts
-        end
-    end
-
+    # check hat there are no rhs differentials in the equations
     if !isempty(rhs_differentials(eqs))
         diffs = rhs_differentials(eqs)
         buf = IOBuffer()
@@ -245,29 +180,8 @@ function generate_io_function(_sys, inputss::Tuple, outputs;
         # end
         throw(ArgumentError(String(take!(buf))))
     end
-
-    # make sure that outputs appear first
-    states = vcat(outputs, _states) |> unique
-    params = setdiff(_params, Set(allinputs))
-
-    # filter out unnecessary parameters
-    used_params = params ∩ (mapreduce(get_variables, ∪, eqs, init=Set{Symbolic}()) ∪ mapreduce(get_variables, ∪, obseqs, init=Set{Symbolic}()))
-    if Set(params) != Set(used_params)
-        verbose && @info "Remove parameters $(collect(setdiff(params, used_params))) which arn't used in the equations."
-        params = used_params
-    end
-
-    eqs = reorder_by_states(eqs, states)
-
-    verbose && @info "Reordered eqs" eqs states
-
-    if type == :auto
-        all_static = all(isequal(:explicit_algebraic), first.(eq_type.(eqs)))
-        type = all_static ? :static : :ode
-        verbose && @info "auto-equation type: $type"
-    end
-
-    mass_matrix = if type == :ode
+    # generate mass matrix (this might change the equations)
+    mass_matrix = begin
         # equations of form o = f(...) have to be transformed to 0 = f(...) - o
         for (i, eq) in enumerate(eqs)
            if eq_type(eq)[1] == :explicit_algebraic
@@ -280,39 +194,111 @@ function generate_io_function(_sys, inputss::Tuple, outputs;
         mm = generate_massmatrix(eqs)
         verbose && @info "Reordered by states and generated mass matrix" mm
         mm
-    elseif type == :static
-        all_static = all(isequal(:explicit_algebraic), first.(eq_type.(eqs)))
-        all_static || throw(ArgumentError("Equations of system are not static!"))
-        nothing
-    else
-        throw(ArgumentError("Unknown type $type"))
     end
 
-    # now generate the actual functions
-    iv = independent_variables(sys)
+    # extract observed equations. They might depend on eachother so resolve them
+    obs_subs = Dict(eq.lhs => eq.rhs for eq in observed(sys))
+    obseqs = map(observed(sys)) do eq
+        eq.lhs ~ fixpoint_sub(eq.rhs, obs_subs)
+    end
+    fix_metadata!(obseqs, sys);
+    # obs can only depend on parameters (including allinputs) or states
+    obs_deps = _all_rhs_symbols(obseqs)
+    if !(obs_deps ⊆ Set(allparams) ∪ Set(states) ∪ independent_variables(sys))
+        @warn "obs_deps !⊆ parameters ∪ unknowns. Difference: $(setdiff(obs_deps, Set(allparams) ∪ Set(states)))"
+    end
 
+    # find the output equations, this might remove the mfrom obseqs!
+    outeqs = map(Iterators.flatten(outputss)) do out
+        if out ∈ Set(states)
+            out ~ out
+        else
+            idx = findfirst(eq -> isequal(eq.lhs, out), obseqs)
+            if isnothing(idx)
+                throw(ArgumentError("Output $out was neither foundin states nor in observed equations."))
+            end
+            eq = obseqs[idx]
+            deleteat!(obseqs, idx)
+            obseqs
+            eq
+        end
+    end
+
+    iv = only(independent_variables(sys))
+    out_deps = _all_rhs_symbols(outeqs)
+    fftype = _determine_fftype(out_deps, states, allinputs, params, iv)
+
+    # filter out unnecessary parameters
+    var_deps = _all_rhs_symbols(eqs)
+    used_params = params ∩ (var_deps ∪ obs_deps ∪ out_deps)
+    if Set(params) != Set(used_params)
+        verbose && @info "Remove parameters $(collect(setdiff(params, used_params))) which arn't used in the equations."
+        params = used_params
+    end
+
+    # TODO: explore Symbolcs/SymbolicUtils CSE
+    # now generate the actual functions
     formulas = [eq.rhs for eq in eqs]
-    if type == :ode
-        f_oop, f_ip = build_function(formulas, states, inputss..., params, iv; expression)
-    elseif type == :static
-        f_oop, f_ip = build_function(formulas, inputss..., params, iv; expression)
+    if !isempty(formulas)
+        _, f_ip = build_function(formulas, states, inputss..., params, iv; cse=true, expression)
+    else
+        f_ip = nothing
+    end
+
+    gformulas = [eq.rhs for eq in outeqs]
+    gformargs = if fftype isa PureFeedForward
+        (inputss..., params, iv)
+    elseif fftype isa FeedForward
+        (states, inputss..., params, iv)
+    elseif fftype isa NoFeedForward
+        (states, params, iv)
+    elseif fftype isa PureStateMap
+        (states,)
+    end
+    _, _g_ip = build_function(gformulas, gformargs...; cse=true, expression)
+    # for more thatn 1 output wrap funktion
+    g_ip = if length(outputss) == 1
+        _g_ip
+    else
+        MultipleOutputWrapper{fftype, length(outputss), typeof(_g_ip)}(_g_ip)
     end
 
     # and the observed functions
     obsstates = [eq.lhs for eq in obseqs]
     obsformulas = [eq.rhs for eq in obseqs]
-    g_oop, g_ip = build_function(obsformulas, states, inputss..., params, iv; expression)
+    _, obsf_ip = build_function(obsformulas, states, inputss..., params, iv; cse=true, expression)
 
-    return (;f_oop, f_ip,
+    return (;f=f_ip, g=g_ip,
             mass_matrix,
             states,
             inputss,
+            outputss,
             obsstates,
-            g_oop, g_ip,
+            fftype,
+            obsf = obsf_ip,
             equations=formulas,
+            outputeqs=Dict(Iterators.flatten(outputss) .=> gformulas),
             observed=Dict(obsstates .=> obsformulas),
             params)
 end
+
+function _determine_fftype(deps, states, allinputs, params, t)
+    if isempty(allinputs ∩ deps) # no ff path
+        if isempty(params ∩ deps) && !(t ∈ deps) # no p nor t
+            return PureStateMap()
+        else # needs p or t
+            return NoFeedForward()
+        end
+    else # ff path
+        if isempty(states ∩ deps) # without state dependency
+            return PureFeedForward()
+        else # with state dependency
+            return FeedForward()
+        end
+    end
+end
+
+_all_rhs_symbols(eqs) = mapreduce(eq->get_variables(eq.rhs), ∪, eqs, init=Set{Symbolic}())
 
 using PrecompileTools: @setup_workload, @compile_workload
 @setup_workload begin
