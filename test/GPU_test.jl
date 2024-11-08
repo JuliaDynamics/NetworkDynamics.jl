@@ -48,12 +48,11 @@ for nw in (nw1, nw2)
     @test nw.layer.edgebatches[1].indices isa CuArray{Int}
     @test nw.gbufprovider.map isa CuArray{Int}
     @test nw.layer.aggregator.m.map isa CuArray{Int}
-    @test nw.layer.aggregator.m.symmap isa CuArray{Int}
 end
 
-@test nw1.caches.state.du isa CuArray{Float32}
+@test nw1.caches.output.du isa CuArray{Float32}
 @test nw1.caches.aggregation.du isa CuArray{Float32}
-@test nw2.caches.state.du isa CuArray{Float64}
+@test nw2.caches.output.du isa CuArray{Float64}
 @test nw2.caches.aggregation.du isa CuArray{Float64}
 
 x0_d1 = adapt(to1, x0)
