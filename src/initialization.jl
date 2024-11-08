@@ -49,37 +49,50 @@ function _solve_fixpoint(prob, alg::SteadyStateDiffEqAlgorithm; kwargs...)
 end
 
 function initialization_problem(cf::T; t=NaN, verbose=true) where {T<:ComponentFunction}
+    hasinsym(cf) || throw(ArgumentError("Component function musst have `insym`!"))
+
+    outfree_ms = Tuple((!).(map(s -> has_default(cf, s), sv)) for sv in outsym_normalized(cf))
+    outfixs = Tuple(Float64[has_default(cf, s) ? get_default(cf, s) : NaN for s in sv] for sv in outsym_normalized(cf))
+
     ufree_m = (!).(map(Base.Fix1(has_default, cf), sym(cf)))
-    pfree_m = (!).(map(Base.Fix1(has_default, cf), psym(cf)))
-    ufree = sum(ufree_m)
-    pfree = sum(pfree_m)
     ufix = Float64[has_default(cf, s) ? get_default(cf, s) : NaN for s in sym(cf)]
+
+    infree_ms = Tuple((!).(map(s -> has_default(cf, s), sv)) for sv in insym_normalized(cf))
+    infixs = Tuple(Float64[has_default(cf, s) ? get_default(cf, s) : NaN for s in sv] for sv in insym_normalized(cf))
+
+    pfree_m = (!).(map(Base.Fix1(has_default, cf), psym(cf)))
     pfix = Float64[has_default(cf, s) ? get_default(cf, s) : NaN for s in psym(cf)]
 
-    hasinsym(cf) || throw(ArgumentError("Component function musst have `insym` with default values!"))
+    # count free variables and equations
+    Nfree = mapreduce(sum, +, outfree_ms) + sum(ufree_m) + mapreduce(sum, +, infree_ms) + sum(pfree_m)
+    Neqs = dim(cf)  + mapreduce(length, +, outfree_ms)
 
-    input= try
-        if T <: EdgeFunction
-            (;src=Float64[get_default(cf, s) for s in insym(cf).src], dst=Float64[get_default(cf, s) for s in insym(cf).dst])
-        else
-            Float64[get_default(cf, s) for s in insym(cf)]
-        end
-    catch e
-        if e isa KeyError
-            throw(ArgumentError("Component function musst have `insym` with default values!"))
-        else
-            rethrow(e)
-        end
-    end
 
-    freesym = vcat(sym(cf)[ufree_m], psym(cf)[pfree_m])
-
-    Nfree = length(freesym)
-    Neqs = dim(cf)
+    freesym = vcat(mapreduce((syms, map) -> syms[map], vcat, outsym_normalized(cf), outfree_ms),
+                   sym(cf)[ufree_m],
+                   mapreduce((syms, map) -> syms[map], vcat, insym_normalized(cf), outfree_ms),
+                   psym(cf)[pfree_m])
+    @assert length(freesym) == Nfree
     if Neqs < Nfree
         throw(ArgumentError("Initialization problem underconstraint. $(Neqs) Equations and  $(Nfree) variables."))
     end
 
+    # which parts of the nonlinear u (unl) correspond to which free parameters
+    nextrange = let lasti = 0
+        (mask) -> begin
+            start = lasti + 1
+            stop = lasti + sum(mask)
+            lasti = stop
+            start:stop
+        end
+    end
+    unl_range_outs = map(nextrange, outfree_ms)
+    unl_range_u = nextrange(ufree_m)
+    unl_range_ins = map(nextrange, infree_ms)
+    unl_range_p = nextrange(pfree_m)
+    @assert vcat(unl_range_outs..., unl_range_u, unl_range_ins..., unl_range_p) == 1:Nfree
+
+    # check for missin guesses
     missing_guesses = Symbol[]
     uguess = map(freesym) do s
         if has_guess(cf, s)
@@ -97,29 +110,55 @@ function initialization_problem(cf::T; t=NaN, verbose=true) where {T<:ComponentF
 
     isempty(missing_guesses) || throw(ArgumentError("Missing guesses for free variables $(missing_guesses)"))
 
-    fz = let f = compf(cf),
+    fz = let fg = compfg(cf),
+        outcaches=map(d->DiffCache(zeros(d)), outdim_normalized(cf)),
         ucache=DiffCache(zeros(dim(cf))),
+        incaches=map(d->DiffCache(zeros(d)), indim_normalized(cf)),
         pcache=DiffCache(zeros(pdim(cf))),
         t=t,
-        ufree_m=ufree_m, pfree_m=pfree_m, ufree=ufree, pfree=pfree,
-        ufix=ufix, pfix=pfix,
-        input=input,
-        T=T
+        outfree_ms=outfree_ms, ufree_m=ufree_m, infree_ms=infree_ms, pfree_m=pfree_m,
+        outfixs=outfixs, ufix=ufix, infixs=infixs, pfix=pfix,
+        unl_range_outs=unl_range_outs, unl_range_u=unl_range_u,
+        unl_range_ins=unl_range_ins, unl_range_p=unl_range_p
 
-        (du, u, _) -> begin
-            ubuf = PreallocationTools.get_tmp(ucache, u)
-            pbuf = PreallocationTools.get_tmp(pcache, u)
+        (dunl, unl, _) -> begin
+            outbufs = PreallocationTools.get_tmp.(outcaches, Ref(dunl))
+            ubuf = PreallocationTools.get_tmp(ucache, dunl)
+            inbufs = PreallocationTools.get_tmp.(incaches, Ref(dunl))
+            pbuf = PreallocationTools.get_tmp(pcache, dunl)
 
-            ubuf .= ufix
-            ubuf[ufree_m] .= u[1:ufree]
-            pbuf .= pfix
-            pbuf[pfree_m] .= u[ufree+1:ufree+pfree]
-
-            if T <: ODEEdge
-                f(du, ubuf, input.src, input.dst, pbuf, t)
-            elseif T <: ODEVertex
-                f(du, ubuf, input, pbuf, t)
+            # prefill buffers with fixed values
+            for (buf, fix) in zip(outbufs, outfixs)
+                buf .= fix
             end
+            ubuf .= ufix
+            for (buf, fix) in zip(inbufs, infixs)
+                buf .= fix
+            end
+            pbuf .= pfix
+
+            # overwrite nonfixed values
+            for (buf, mask, range) in zip(outbufs, outfree_ms, unl_range_outs)
+                buf[mask] .= unl[range]
+            end
+            ubuf[ufree_m] .= unl[unl_range_u]
+            for (buf, mask, range) in zip(inbufs, infree_ms, unl_range_ins)
+                buf[mask] .= unl[range]
+            end
+            pbuf[pfree_m] .= unl[unl_range_p]
+
+            # view into du buffer for the fg funtion
+            @views dunl_fg = dunl[1:dim(cf)]
+            # view into the output buffer for the outputs
+            @views dunl_out = dunl[dim(cf)+1:end]
+
+            # this fills the second half of the du buffer with the fixed and current outputs
+            dunl_out .= RecursiveArrayTools.ArrayPartition(outbufs...)
+            # execute fg to fill dunl and outputs
+            fg(outbufs..., dunl, ubuf, inbufs..., pbuf, t)
+
+            # calculate the residual for the second half ov the dunl buf, the outputs
+            dunl_out .= dunl_out .- RecursiveArrayTools.ArrayPartition(outbufs...)
             nothing
         end
     end
@@ -192,18 +231,18 @@ function init_residual(cf::T; t=NaN, recalc=false) where {T<:ComponentFunction}
     end
 
     if recalc || !has_metadata(cf, :init_residual)
+        outs = Tuple(Float64[get_default_or_init(cf, s) for s in sv] for sv in outsym_normalized(cf))
         u = Float64[get_default_or_init(cf, s) for s in sym(cf)]
+        ins = Tuple(Float64[get_default_or_init(cf, s) for s in sv] for sv in insym_normalized(cf))
         p = Float64[get_default_or_init(cf, s) for s in psym(cf)]
-        res = zeros(dim(cf))
+        res = zeros(dim(cf) + sum(outdim_normalized(cf)))
 
-        if T <: EdgeFunction
-            src=Float64[get_default(cf, s) for s in insym(cf).src]
-            dst=Float64[get_default(cf, s) for s in insym(cf).dst]
-            compf(cf)(res, u, src, dst, p, t)
-        else
-            input = Float64[get_default(cf, s) for s in insym(cf)]
-            compf(cf)(res, u, input, p, t)
-        end
+        res_fg  = @views res[1:dim(cf)]
+        res_out = @views res[dim(cf)+1:end]
+        res_out .= RecursiveArrayTools.ArrayPartition(outs...)
+        compfg(cf)(outs..., res_fg, u, ins..., p, t)
+        res_out .= res_out .- RecursiveArrayTools.ArrayPartition(outs...)
+
         LinearAlgebra.norm(res)
     else
         LinearAlgebra.norm(get_metadata(cf, :init_residual))

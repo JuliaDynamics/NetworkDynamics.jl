@@ -296,6 +296,14 @@ indim(c::EdgeFunction)::@NamedTuple{src::Int,dst::Int} = (; src=length(insym(c).
 outsym_flat(c::ComponentFunction) = c._outsym_flat
 obssym_all(c::ComponentFunction) = c._obssym_all
 
+# normalized means, that we'll always return a tuple of values, thus we can generalize better over Edges/Vertices
+insym_normalized(c::EdgeFunction) = values(insym(c))
+insym_normalized(c::VertexFunction) = (insym(c),)
+indim_normalized(c::ComponentFunction) = map(length, insym_normalized(c))
+outsym_normalized(c::EdgeFunction) = values(outsym(c))
+outsym_normalized(c::VertexFunction) = (outsym(c),)
+outdim_normalized(c::ComponentFunction) = map(length, outsym_normalized(c))
+
 _infer_ss_fftype(g) = _infer_fftype(g, 1, 2, nothing)
 _infer_fftype(::Type{<:VertexFunction}, g, dim) = _infer_fftype(g, 1, 1, dim)
 _infer_fftype(::Type{<:EdgeFunction}, g, dim) = _infer_fftype(g, 2, 2, dim)

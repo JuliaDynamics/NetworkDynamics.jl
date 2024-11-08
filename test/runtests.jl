@@ -37,7 +37,7 @@ isinteractive() ? includet("testutils.jl") : include("testutils.jl")
 
     @safetestset "Diffusion test" begin include("diffusion_test.jl") end
     @safetestset "inhomogeneous test" begin include("inhomogeneous_test.jl") end
-    # @safetestset "initialization test" begin include("initialization_test.jl") end
+    @safetestset "initialization test" begin include("initialization_test.jl") end
 
     # @safetestset "AD test" begin include("AD_test.jl") end
 

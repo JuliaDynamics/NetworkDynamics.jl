@@ -15,7 +15,7 @@ using Mixers: Mixers
 using LinearAlgebra: LinearAlgebra, UniformScaling
 using SparseArrays: sparse
 using StyledStrings: StyledStrings, @styled_str
-using RecursiveArrayTools: DiffEqArray
+using RecursiveArrayTools: RecursiveArrayTools, DiffEqArray
 using FastClosures: @closure
 using ForwardDiff: ForwardDiff
 using Printf: @sprintf
