@@ -179,15 +179,15 @@ will look as follows:
 =#
 
 # FIXME: does not make sense in explicit f/g interface
-function edgeA!(de, e, v_s, v_d, p, t)
-    de[1] = f(e, v_s, v_d, p, t) # dynamic variable
-    e[2]  = g(e, v_s, v_d, p, t) # static variable
-end
+# function edgeA!(de, e, v_s, v_d, p, t)
+#     de[1] = f(e, v_s, v_d, p, t) # dynamic variable
+#     e[2]  = g(e, v_s, v_d, p, t) # static variable
+# end
 
-M = zeros(2, 2)
-M[1, 1] = 1
+# M = zeros(2, 2)
+# M[1, 1] = 1
 
-nd_edgeA! = ODEEdge(; f=edgeA!, dim=2, coupling=:undirected, mass_matrix=M);
+# nd_edgeA! = ODEEdge(; f=edgeA!, dim=2, coupling=:undirected, mass_matrix=M);
 nothing #hide #md
 
 #=
