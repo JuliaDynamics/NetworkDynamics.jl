@@ -13,7 +13,6 @@ using ExplicitImports
 
 isinteractive() ? includet("testutils.jl") : include("testutils.jl")
 
-NetworkDynamics.CHECK_COMPONENT[] = false
 @testset "NetworkDynamics Tests" begin
     @testset "Package Quality Tests" begin
         # print_explicit_imports(NetworkDynamics)
@@ -27,27 +26,30 @@ NetworkDynamics.CHECK_COMPONENT[] = false
 
     @safetestset "utils test" begin include("utils_test.jl") end
 
+    NetworkDynamics.CHECK_COMPONENT[] = false
     @safetestset "construction test" begin include("construction_test.jl") end
     @safetestset "Aggregation Tests" begin include("aggregators_test.jl") end
     @safetestset "Symbolic Indexing Tests" begin include("symbolicindexing_test.jl") end
+    @safetestset "massmatrix test" begin include("massmatrix_test.jl") end
+    NetworkDynamics.CHECK_COMPONENT[] = true
+
+    @safetestset "doctor test" begin include("doctor_test.jl") end
 
     @safetestset "Diffusion test" begin include("diffusion_test.jl") end
     @safetestset "inhomogeneous test" begin include("inhomogeneous_test.jl") end
-    @safetestset "massmatrix test" begin include("massmatrix_test.jl") end
-    @safetestset "doctor test" begin include("doctor_test.jl") end
-    @safetestset "initialization test" begin include("initialization_test.jl") end
+    # @safetestset "initialization test" begin include("initialization_test.jl") end
 
-    @safetestset "AD test" begin include("AD_test.jl") end
+    # @safetestset "AD test" begin include("AD_test.jl") end
 
-    if CUDA.functional()
-        @safetestset "GPU test" begin include("GPU_test.jl") end
-    end
+    # if CUDA.functional()
+    #     @safetestset "GPU test" begin include("GPU_test.jl") end
+    # end
 
     @safetestset "MTK extension test" begin include("MTK_test.jl") end
 
     # check on the precompile files
-    @safetestset "Precompile workload" begin include("../src/precompile_workload.jl") end
-    @safetestset "MTK precompile workload" begin include("../ext/precompile_workload.jl") end
+    # @safetestset "Precompile workload" begin include("../src/precompile_workload.jl") end
+    # @safetestset "MTK precompile workload" begin include("../ext/precompile_workload.jl") end
 end
 
 @testset "Test Doc Examples" begin

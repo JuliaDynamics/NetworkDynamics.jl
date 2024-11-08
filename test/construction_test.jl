@@ -2,6 +2,7 @@ using NetworkDynamics
 using NetworkDynamics: Symmetric
 using Graphs
 using LinearAlgebra: LinearAlgebra
+using Chairmarks: @b
 
 @testset "graphless constructor" begin
     g = (out, in, p, t) -> nothing
@@ -380,8 +381,10 @@ end
     v_ff = VertexFunction(f=swingf, g=swingg, sym=[:δ, :ω],
         outsym=[:u_r, :u_i], insym=[:i_r, :i_i], psym=[:V,:Pm,:M,:D])
 
+    NetworkDynamics.CHECK_COMPONENT[] = true
     @test_throws ArgumentError Network(path_graph(2), v_pff, e)
     @test_throws ArgumentError Network(path_graph(2), v_ff, e)
+    NetworkDynamics.CHECK_COMPONENT[] = false
 
     for v in [v_ff, v_pff]
         out = zeros(outdim(v))
