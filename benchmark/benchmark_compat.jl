@@ -22,16 +22,20 @@ if pkgversion(NetworkDynamics) < v"0.9.0"
             error("execution type not supported")
         end
     end
+elseif pkgversion(NetworkDynamics) < v"0.9.1"
+    isdynamic = NetworkDynamics.isdynamic
+else
+    isdynamic(_) = true
 end
 
 function _syms_old_order(nd::Network)
     syms = []
     for (i,cf) in enumerate(nd.im.vertexf)
-        NetworkDynamics.isdynamic(cf) || continue
+        isdynamic(cf) || continue
         append!(syms, collect(VIndex(i, 1:dim(cf))))
     end
     for (i,cf) in enumerate(nd.im.edgef)
-        NetworkDynamics.isdynamic(cf) || continue
+        isdynamic(cf) || continue
         append!(syms, collect(EIndex(i, 1:dim(cf))))
     end
     syms

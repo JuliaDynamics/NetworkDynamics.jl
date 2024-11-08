@@ -49,27 +49,27 @@ try aggregations["sprs"] = SparseAggregator catch e end
 
 configurations = [
     # differet ex over same agg
-    # ("seq", "seq"),
-    # ("ka", "seq"),
+    ("seq", "seq"),
+    ("ka", "seq"),
     # ("ka", "sprs"), # additional for GPU
     # ("ka", "ka"), # additional for GPU
-    # ("poly", "seq"),
-    # ("thrd", "seq"),
+    ("poly", "seq"),
+    ("thrd", "seq"),
     ("seq_buf", "seq"), # default seq
     ("ka_buf", "seq"),
-    ("ka_buf", "sprs"), # additional for GPU
+    # ("ka_buf", "sprs"), # additional for GPU
     # ("ka_buf", "ka"), # additional for GPU
     ("poly_buf", "seq"),
     ("thrd_buf", "seq"),
     # different agg over same ex
-    # ("poly_buf", "ka"),
-    # ("poly_buf", "poly"),
-    # ("poly_buf", "thrd"),
+    ("poly_buf", "ka"),
+    ("poly_buf", "poly"),
+    ("poly_buf", "thrd"),
     ("poly_buf", "sprs"),
-    # ("poly_buf", "poly"), # default thrd
+    ("poly_buf", "poly"), # default thrd
 ]
 
-SECONDS = 2
+SECONDS = 1
 
 ####
 #### diffusion benchmarks on a dense watts strogatz graph
