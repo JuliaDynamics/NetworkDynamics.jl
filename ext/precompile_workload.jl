@@ -82,8 +82,8 @@ end
 @named swingbus = Bus()
 
 if is_precompiling()
-    ODEVertex(swingbus, [:busbar₊i_r, :busbar₊i_i], [:busbar₊u_r, :busbar₊u_i]; verbose=false)
+    VertexFunction(swingbus, [:busbar₊i_r, :busbar₊i_i], [:busbar₊u_r, :busbar₊u_i]; verbose=false)
 else
     @info "ODEVertex"
-    @time @eval ODEVertex(swingbus, [:busbar₊i_r, :busbar₊i_i], [:busbar₊u_r, :busbar₊u_i]; verbose=false)
+    @time @eval VertexFunction(swingbus, [:busbar₊i_r, :busbar₊i_i], [:busbar₊u_r, :busbar₊u_i]; verbose=false)
 end

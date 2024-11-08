@@ -19,8 +19,8 @@ to = TimerOutput();
         g = complete_graph(3)
     end
     @timeit to "create network" begin
-        edge = StaticEdge(f=diffusionedge!, dim=1, pdim=1, pdef=[1], coupling=AntiSymmetric())
-        vert = ODEVertex(f=diffusionvertex!, dim=1, pdim=0)
+        edge = EdgeFunction(g=AntiSymmetric(diffusionedge!), outdim=1, pdim=1, pdef=[1])
+        vert = VertexFunction(f=diffusionvertex!, g=1, dim=1, pdim=0)
         nd = Network(g, vert, edge)
     end
     u = rand(dim(nd))
