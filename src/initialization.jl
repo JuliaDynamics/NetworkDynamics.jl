@@ -110,10 +110,11 @@ function initialization_problem(cf::T; t=NaN, verbose=true) where {T<:ComponentF
 
     isempty(missing_guesses) || throw(ArgumentError("Missing guesses for free variables $(missing_guesses)"))
 
+    N = ForwardDiff.pickchunksize(Nfree)
     fz = let fg = compfg(cf),
-        outcaches=map(d->DiffCache(zeros(d)), outdim_normalized(cf)),
-        ucache=DiffCache(zeros(dim(cf))),
-        incaches=map(d->DiffCache(zeros(d)), indim_normalized(cf)),
+        outcaches=map(d->DiffCache(zeros(d), N), outdim_normalized(cf)),
+        ucache=DiffCache(zeros(dim(cf)), N),
+        incaches=map(d->DiffCache(zeros(d), N), indim_normalized(cf)),
         pcache=DiffCache(zeros(pdim(cf))),
         t=t,
         outfree_ms=outfree_ms, ufree_m=ufree_m, infree_ms=infree_ms, pfree_m=pfree_m,
