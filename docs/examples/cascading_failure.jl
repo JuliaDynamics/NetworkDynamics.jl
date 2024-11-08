@@ -26,6 +26,10 @@ import SymbolicIndexingInterface as SII
 For the nodes we define the swing equation. State `v[1] = δ`, `v[2] = ω`.
 The swing equation has three parameters: `p = (P_ref, I, γ)` where `P_ref`
 is the power setpopint, `I` is the inertia and `γ` is the droop or damping coeficcient.
+
+The output of the node is just the first state. `g=1` is a shorthand for `g=StateMask(1:1)`
+which implements a trivial output function `g` which just takes the first element of the
+state vector.
 =#
 function swing_equation(dv, v, esum, p,t)
     P, I, γ = p
@@ -34,7 +38,7 @@ function swing_equation(dv, v, esum, p,t)
     dv[2] = dv[2] / I
     nothing
 end
-odevertex = ODEVertex(swing_equation; sym=[:δ, :ω], psym=[:P_ref, :I=>1, :γ=>0.1], depth=1)
+vertex = VertexFunction(f=swing_equation, g=1, sym=[:δ, :ω], psym=[:P_ref, :I=>1, :γ=>0.1])
 
 #=
 Lets define a simple purely active power line whose active power flow is
@@ -45,7 +49,7 @@ We give an additonal parameter, the line limit, which we'll use later in the cal
 function simple_edge(e, v_s, v_d, (K,), t)
     e[1] = K * sin(v_s[1] - v_d[1])
 end
-staticedge = StaticEdge(simple_edge; sym=:P, psym=[:K=>1.63, :limit=>1], coupling=AntiSymmetric())
+edge = EdgeFunction(;g=AntiSymmetric(simple_edge), outsym=:P, psym=[:K=>1.63, :limit=>1])
 
 #=
 With the definition of the graph topology we can build the `Network` object:
@@ -55,7 +59,7 @@ g = SimpleGraph([0 1 1 0 1;
                  1 1 0 1 0;
                  0 1 1 0 1;
                  1 0 0 1 0])
-swing_network = Network(g, odevertex, staticedge)
+swing_network = Network(g, vertex, edge)
 
 #=
 For the parameters, we create the `NWParameter` object prefilled with default p values

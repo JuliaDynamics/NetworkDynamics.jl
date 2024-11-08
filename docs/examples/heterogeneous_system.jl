@@ -27,9 +27,9 @@ function kuramoto_vertex!(dθ, θ, esum, (ω0,), t)
     nothing
 end
 
-vertex! = ODEVertex(kuramoto_vertex!; sym=[:θ], psym=[:ω0], name=:kuramoto)
+vertex! = VertexFunction(f=kuramoto_vertex!, g=StateMask(1:1), sym=[:θ], psym=[:ω0], name=:kuramoto)
 
-edge! = StaticEdge(kuramoto_edge!; dim=1, psym=[:K=>3], coupling=AntiSymmetric())
+edge! = EdgeFunction(g=AntiSymmetric(kuramoto_edge!), outdim=1, psym=[:K=>3])
 nw = Network(g, vertex!, edge!);
 nothing #hide #md
 
@@ -79,11 +79,11 @@ algebraic constraint, or we can create a node without dynamic (du = 0) and a
 specific initial value.
 =#
 
-static! = ODEVertex(sym=[:θ=>ω[1]], name=:static) do du, u, esum, p, t
+function static_f(du, u, esum, p, t)
     du .= 0
     nothing
 end
-
+static! = VertexFunction(f=static_f, g=1, sym=[:θ=>ω[1]], name=:static)
 #=
 Here we used a form of the ODEVertex constructor which allows us to specify
 default initial conditions.
@@ -97,7 +97,7 @@ function kuramoto_inertia!(dv, v, esum, (ω0,), t)
     nothing
 end
 
-inertia! = ODEVertex(kuramoto_inertia!; sym=[:θ, :ω], psym=[:ω0], name=:inertia)
+inertia! = VertexFunction(f=kuramoto_inertia!, g=1:1, sym=[:θ, :ω], psym=[:ω0], name=:inertia)
 nothing #hide #md
 
 #=
@@ -106,7 +106,7 @@ straightforwardly pass a single VertexFunction to the `Network` constructor but
 instead have to hand over an Array.
 =#
 
-vertex_array    = ODEVertex[vertex! for i in 1:N]
+vertex_array    = VertexFunction[vertex! for i in 1:N]
 vertex_array[1] = static!
 vertex_array[5] = inertia! # index should correspond to the node's index in the graph
 nw_hetero! = Network(g, vertex_array, edge!)
@@ -178,6 +178,7 @@ then there is the option to supply a mass matrix for the given component. In gen
 will look as follows:
 =#
 
+# FIXME: does not make sense in explicit f/g interface
 function edgeA!(de, e, v_s, v_d, p, t)
     de[1] = f(e, v_s, v_d, p, t) # dynamic variable
     e[2]  = g(e, v_s, v_d, p, t) # static variable

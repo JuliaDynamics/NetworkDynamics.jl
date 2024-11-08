@@ -25,6 +25,7 @@ From the above considerations we see that in this model the nodes do not have an
 using Graphs
 using NetworkDynamics
 using OrdinaryDiffEqTsit5
+using StableRNGs
 using Plots
 
 function diffusionedge!(e, v_s, v_d, p, t)
@@ -67,17 +68,18 @@ nothing #hide #md
 
 # The [Barabási–Albert model](https://en.wikipedia.org/wiki/Barab%C3%A1si%E2%80%93Albert_model) generates a scale-free random graph.
 
-nd_diffusion_vertex = ODEVertex(; f=diffusionvertex!, dim=1)
-nd_diffusion_edge = StaticEdge(; f=diffusionedge!, dim=1, coupling=AntiSymmetric())
+nd_diffusion_vertex = VertexFunction(; f=diffusionvertex!, g=StateMask(1:1), dim=1)
+nd_diffusion_edge = EdgeFunction(; g=AntiSymmetric(diffusionedge!), outdim=1)
 
 nd = Network(g, nd_diffusion_vertex, nd_diffusion_edge)
 
 #=
-`ODEVertex` and `StaticEdge` are functions wrappers that equip the functions we defined above with additional information like **`dim`** and return objects of type `VertexFunction` and `EdgeFunction`. Then the key constructor `Network` combines them with the topological information contained in the graph **`g`** and returns an `ODEFunction` compatible with the solvers of `DifferentialEquations.jl`. The keyword **`dim`** specifies the number of variables at each edge or node.
+`VertexFunction` and `EdgeFunction` are functions wrappers that equip the functions we defined above with additional information like **`dim`** and return objects of type `VertexFunction` and `EdgeFunction`. Then the key constructor `Network` combines them with the topological information contained in the graph **`g`** and returns an `Network` compatible with the solvers of `DifferentialEquations.jl`. The keyword **`dim`** specifies the number of variables at each edge or node.
 =#
 
-x0 = randn(N) # random initial conditions
-ode_prob = ODEProblem(nd, x0, (0.0, 4.0))
+rng = StableRNG(1)
+x0 = randn(rng, N) # random initial conditions
+ode_prob = ODEProblem(nd, x0, (0.0, 2.0))
 Main.test_execution_styles(ode_prob) # testing all ex styles #src
 sol = solve(ode_prob, Tsit5());
 nothing #hide #md
@@ -95,7 +97,7 @@ In oder to collect multiple indices we can use the helper function `vidxs` and `
 
 To illustrate a very simple multi-dimensional case, in the following we simulate two independent diffusions on an identical network. The first uses the symbol `x` and is started with initial conditions drawn from the standard normal distribution $N(0,1)$, the second uses the symbol `ϕ` with squared standard normal inital conditions.
 
-The symbols have to be passed with the keyword **`sym`** to `ODEVertex`.
+The symbols have to be passed with the keyword **`sym`** to `VertexFunction`.
 =#
 
 N = 10 # number of nodes
@@ -103,11 +105,11 @@ k = 4  # average degree
 g = barabasi_albert(N, k) # a little more exciting than a bare random graph
 
 ## We will have two independent diffusions on the network, hence dim = 2
-nd_diffusion_vertex_2 = ODEVertex(; f=diffusionvertex!, dim=2, sym=[:x, :ϕ])
-nd_diffusion_edge_2 = StaticEdge(; f=diffusionedge!, dim=2, sym=[:flow_x, :flow_ϕ], coupling=AntiSymmetric())
+nd_diffusion_vertex_2 = VertexFunction(; f=diffusionvertex!, g=1:2, dim=2, sym=[:x, :ϕ])
+nd_diffusion_edge_2 = EdgeFunction(; g=AntiSymmetric(diffusionedge!), outsym=[:flow_x, :flow_ϕ])
 nd_2 = Network(g, nd_diffusion_vertex_2, nd_diffusion_edge_2)
 
-x0_2 = vec(transpose([randn(N) .^ 2 randn(N)])) # x ~ N(0,1)^2; ϕ ~ N(0,1)
+x0_2 = vec(transpose([randn(rng, N) .^ 2 randn(rng, N)])) # x ~ N(0,1)^2; ϕ ~ N(0,1)
 ode_prob_2 = ODEProblem(nd_2, x0_2, (0.0, 3.0))
 Main.test_execution_styles(ode_prob_2) # testing all ex styles #src
 sol_2 = solve(ode_prob_2, Tsit5());

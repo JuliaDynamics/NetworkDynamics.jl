@@ -49,6 +49,7 @@ using SimpleWeightedGraphs, Graphs
 using NetworkDynamics
 using OrdinaryDiffEqTsit5
 using OrdinaryDiffEqSDIRK
+using StableRNGs
 using Plots
 
 ## adjust the load path for your filesystem!
@@ -85,17 +86,17 @@ Base.@propagate_inbounds function fhn_electrical_vertex!(dv, v, esum, p, t)
     dv[2] = (v[1] - a) * ϵ
     nothing
 end
-odeelevertex = ODEVertex(fhn_electrical_vertex!; sym=[:u, :v], psym=[:a=>0.5, :ϵ=>0.05])
+vertex = VertexFunction(f=fhn_electrical_vertex!, g=1, sym=[:u, :v], psym=[:a=>0.5, :ϵ=>0.05])
 #-
 
 Base.@propagate_inbounds function electrical_edge!(e, v_s, v_d, (w, σ), t)
     e[1] = w * (v_s[1] - v_d[1]) * σ
     nothing
 end
-electricaledge = StaticEdge(electrical_edge!; dim=1, psym=[:weight, :σ=>0.5], coupling=Directed())
+electricaledge = EdgeFunction(g=Directed(electrical_edge!), outdim=1, psym=[:weight, :σ=>0.5])
 #-
 
-fhn_network! = Network(g_directed, odeelevertex, electricaledge)
+fhn_network! = Network(g_directed, vertex, electricaledge)
 
 #=
 Since this system is a directed one with thus directed edges, the keyword argument `coupling` is used to set the coupling of the edges to `Directed()`.
@@ -115,7 +116,7 @@ The initial conditions could be created similarly to the parameters as an indexa
 Since we chose a random initial condition we initialize the flat array directly:
 =#
 
-x0 = randn(dim(fhn_network!)) * 5
+x0 = randn(StableRNG(42), dim(fhn_network!)) * 5
 
 nothing #hide #md
 

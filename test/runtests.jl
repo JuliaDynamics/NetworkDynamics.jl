@@ -64,10 +64,6 @@ end
         name = basename(file)
 
         @info "Test $name"
-        if name == "kuramoto_delay.jl"
-            @test_broken false
-            continue
-        end
         eval(:(@safetestset $name begin include($file) end))
     end
 end
