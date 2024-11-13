@@ -5,18 +5,17 @@ using ModelingToolkit: t_nounits as t, D_nounits as Dt
 
 
 @testset "test find_fixpoint" begin
-
     function swing_equation!(dv, v, esum, (M, P, D), t)
         dv[1] = v[2]
         dv[2] = 1/M *(P - D * v[2] + esum[1])
         nothing
     end
-    swing_vertex = ODEVertex(swing_equation!; sym=[:θ, :ω], psym=[:M=>1, :P, :D=>0.1])
+    swing_vertex = VertexFunction(f=swing_equation!, g=1, sym=[:θ, :ω], psym=[:M=>1, :P, :D=>0.1])
 
     function powerflow!(e, v_s, v_d, (K,), t)
         e[1] = K * sin(v_s[1] - v_d[1])
     end
-    powerflow_edge = StaticEdge(powerflow!; dim=1, psym=[:K=>6], coupling=AntiSymmetric())
+    powerflow_edge = EdgeFunction(g=AntiSymmetric(powerflow!); outdim=1, psym=[:K=>6])
     g = watts_strogatz(4, 2, 0.0)
 
     nd = Network(g, swing_vertex, powerflow_edge)
@@ -57,7 +56,7 @@ end
         end
     end
     sys = InitSwing(name=:swing)
-    vf = ODEVertex(sys, [:i_r, :i_i], [:u_r, :u_i])
+    vf = VertexFunction(sys, [:i_r, :i_i], [:u_r, :u_i])
 
     @test vf.symmetadata[:u_r][:default] == 1
     @test vf.symmetadata[:u_i][:default] == 0.1

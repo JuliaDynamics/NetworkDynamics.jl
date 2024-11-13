@@ -1,82 +1,357 @@
-abstract type Coupling end
 """
-    struct AntiSymmetric <: Coupling end
+    abstract type FeedForwardType end
 
-AntiSymmetric coupling type. The edge function f is evaluated once:
-
- - the dst vertex receives the first `d` values of the edge state,
- - the src vertex receives (-1) of that.
-
-Here, `d` is the edge depth of the Network.
+Abstract supertype for the FeedForwardType traits.
 """
-struct AntiSymmetric <: Coupling end
+abstract type FeedForwardType end
 """
-    struct Symmetric <: Coupling end
+    PureFeedForward <: FeedForwardType
 
-Symmetric coupling type. The edge function f is evaluated once:
+Trait for component output functions `g` that have pure feed forward behavior
+(do not depend on x):
 
- - the dst vertex receives the first `d` values of the edge state,
- - the src vertex receives the same.
+    g!(outs..., ins..., p, t)
 
-Here, `d` is the edge depth of the Network.
+See also [`FeedForward`](@ref), [`NoFeedForward`](@ref) and [`PureStateMap`](@ref).
 """
-struct Symmetric <: Coupling end
+struct PureFeedForward <: FeedForwardType end
 """
-    struct Directed <: Coupling end
+    FeedForward <: FeedForwardType
 
-Directed coupling type. The edge function f is evaluated once:
+Trait for component output functions `g` that have feed forward behavior. May
+depend on everything:
 
- - the dst vertex receives the first `d` values of the edge state,
- - the src vertex receives nothing.
+    g!(outs..., x, ins..., p, t)
 
-Here, `d` is the edge depth of the Network.
+See also [`PureFeedForward`](@ref), [`NoFeedForward`](@ref) and [`PureStateMap`](@ref).
 """
-struct Directed <: Coupling end
+struct FeedForward <: FeedForwardType end
 """
-    struct Fiducial <: Coupling end
+    NoFeedForward <: FeedForwardType
 
-Fiducial coupling type. The edge function f is evaluated once:
+Trait for component output functions `g` that have no feed forward behavior (do
+not depend on inputs):
 
- - the dst vertex receives the `1:d` values of the edge state,
- - the src vertex receives the `d+1:2d` values of the edge state.
+    g!(outs..., x, p, t)
 
-Here, `d` is the edge depth of the Network.
+See also [`PureFeedForward`](@ref), [`FeedForward`](@ref) and [`PureStateMap`](@ref).
 """
-struct Fiducial <: Coupling end
-const CouplingUnion = Union{AntiSymmetric,Symmetric,Directed,Fiducial}
+struct NoFeedForward <: FeedForwardType end
+"""
+    PureStateMap <: FeedForwardType
+
+Trait for component output functions `g` that only depends on state:
+
+    g!(outs..., x)
+
+See also [`PureFeedForward`](@ref), [`FeedForward`](@ref) and [`NoFeedForward`](@ref).
+"""
+struct PureStateMap <: FeedForwardType end
+
+"""
+    fftype(x)
+
+Retrieve the feed forward trait of `x`.
+"""
+function fftype end
+
+hasfftype(::Any) = false
+hasff(x) = fftype(x) isa Union{PureFeedForward, FeedForward}
+
+_has_sym_to_outsym_mapping(::Any) = false
+
+"""
+    StateMask(i::AbstractArray)
+    StateMaks(i::Number)
+
+A `StateMask` is a predefined output function. It can be used to define
+the output of a component function by picking from the internal state.
+
+I.e. `g=StateMask(2:3)` in a vertex function will output the internal states 2 and 3.
+In many contexts, `StateMask`s can be constructed implicitly by just providing
+the indices, e.g. `g=1:2`.
+
+For [`EdgeFunction`](@ref) this needs to be combined with a [`Directed`](@ref),
+[`Symmetric`](@ref), [`AntiSymmetric`](@ref) or [`Fiducial`](@ref) coupling, e.g.
+`g=Fiducial(1:2, 3:4)` forwards states 1:2 to dst and states 3:4 to src.
+"""
+struct StateMask{N,I}
+    idxs::I
+    function StateMask(i::AbstractArray)
+        if !isbitstype(typeof(i))
+           i = SVector{length(i)}(i)
+        end
+        new{length(i), typeof(i)}(i)
+    end
+end
+StateMask(i::Number) = StateMask(SVector{1}(i))
+hasfftype(::StateMask) = true
+fftype(::StateMask) = PureStateMap()
+
+@inline function (s::StateMask)(out, u)
+    @inbounds for i in eachindex(s.idxs)
+        out[i] = u[s.idxs[i]]
+    end
+    nothing
+end
+
+
+abstract type OutputWrapper{FF} end
+hasfftype(::OutputWrapper) = true
+fftype(::OutputWrapper{FF}) where {FF} = FF()
+
+"""
+    AntiSymmetric(g_dst)
+
+Wraps a single-sided output function `g_dst` turns it into a double sided
+output function which applies
+
+    y_dst = g_dst(...)
+    y_src = -y_dst
+
+`g_dst` can be a `Number`/`AbstractArray` to impicitly wrap the corresponding [`StateMask`](@ref).
+
+See also [`Symmetric`](@ref), [`Directed`](@ref), [`Fiducial`](@ref) and [`StateMask`](@ref).
+"""
+struct AntiSymmetric{FF,G} <: OutputWrapper{FF}
+    g::G
+    function AntiSymmetric(g; ff=nothing)
+        ff = isnothing(ff) ? _infer_ss_fftype(g) : ff
+        new{typeof(ff), typeof(g)}(g)
+    end
+end
+AntiSymmetric(g::Union{AbstractVector,Number}; ff=nothing) = AntiSymmetric(StateMask(g); ff)
+@inline function (c::AntiSymmetric)(osrc, odst, args...)
+    @inline c.g(odst, args...)
+    @inbounds for i in 1:length(osrc)
+        osrc[i] = -odst[i]
+    end
+    nothing
+end
+
+"""
+    Symmetric(g)
+
+Wraps a single-sided output function `g` turns it into a double sided
+output function which applies
+
+    y_dst = g(...)
+    y_src = y_dst
+
+`g` can be a `Number`/`AbstractArray` to impicitly wrap the corresponding [`StateMask`](@ref).
+
+See also [`AntiSymmetric`](@ref), [`Directed`](@ref), [`Fiducial`](@ref) and [`StateMask`](@ref).
+"""
+struct Symmetric{FF,G} <: OutputWrapper{FF}
+    g::G
+    function Symmetric(g; ff=nothing)
+        ff = isnothing(ff) ? _infer_ss_fftype(g) : ff
+        new{typeof(ff), typeof(g)}(g)
+    end
+end
+Symmetric(g::Union{AbstractVector,Number}; ff=nothing) = Symmetric(StateMask(g); ff)
+@inline function (c::Symmetric)(osrc, odst, args...)
+    @inline c.g(odst, args...)
+    @inbounds for i in 1:length(osrc)
+        osrc[i] = odst[i]
+    end
+    nothing
+end
+
+"""
+    Directed(g_dst)
+
+Wraps a single-sided output function `g_dst` turns it into a double sided
+output function which applies
+
+    y_dst = g_dst(...)
+
+With `Directed` there is no output for the `src` side.
+`g_dst` can be a `Number`/`AbstractArray` to impicitly wrap the corresponding [`StateMask`](@ref).
+
+See also [`AntiSymmetric`](@ref), [`Symmetric`](@ref), [`Fiducial`](@ref) and [`StateMask`](@ref).
+"""
+struct Directed{FF,G} <: OutputWrapper{FF}
+    g::G
+    function Directed(g; ff=nothing)
+        ff = isnothing(ff) ? _infer_ss_fftype(g) : ff
+        new{typeof(ff), typeof(g)}(g)
+    end
+end
+Directed(g::Union{AbstractVector,Number}; ff=nothing) = Directed(StateMask(g); ff)
+@inline function (c::Directed)(osrc, odst, args...)
+    @inline c.g(odst, args...)
+    nothing
+end
+
+"""
+    Fiducial(g_src, g_dst)
+
+Wraps two single-sided output function `g_src` and `g_dst` and turns them
+into a double sided output function which applies
+
+    y_dst = g_src(...)
+    y_src = g_dst(...)
+
+`g` can be a `Number`/`AbstractArray` to impicitly wrap the corresponding [`StateMask`](@ref).
+
+See also [`AntiSymmetric`](@ref), [`Directed`](@ref), [`Fiducial`](@ref) and [`StateMask`](@ref).
+"""
+struct Fiducial{FF,GS,GD} <: OutputWrapper{FF}
+    src::GS
+    dst::GD
+    function Fiducial(src, dst; ff=nothing)
+        if isnothing(ff)
+            ffsrc = _infer_ss_fftype(src)
+            ffdst = _infer_ss_fftype(dst)
+            if ffsrc == ffdst
+                ff = ffsrc
+            else
+                error("Both src and dst coupling functions have different ff types.")
+            end
+        end
+        new{typeof(ff), typeof(src), typeof(dst)}(src, dst)
+    end
+end
+function Fiducial(src::Union{AbstractVector,Number}, dst::Union{AbstractVector,Number}; ff=nothing)
+    Fiducial(StateMask(src), StateMask(dst); ff)
+end
+Fiducial(;src, dst, ff=nothing) = Fiducial(src, dst; ff)
+
+@inline function (c::Fiducial)(osrc, odst, args...)
+    @inline c.src(osrc, args...)
+    @inline c.dst(odst, args...)
+    nothing
+end
+
 
 abstract type ComponentFunction end
 
-"""
-Abstract supertype for all vertex functions.
-"""
-abstract type VertexFunction <: ComponentFunction end
-
-"""
-Abstract supertype for all edge functions.
-"""
-# abstract type EdgeFunction{C<:Coupling} <: ComponentFunction end
-abstract type EdgeFunction{C} <: ComponentFunction end
-
-Mixers.@pour CommonFields begin
+struct VertexFunction{F,G,FFT,OF,MM} <: ComponentFunction
     name::Symbol
+    # main function
     f::F
     sym::Vector{Symbol}
-    depth::Int
+    mass_matrix::MM
+    # outputs
+    g::G
+    outsym::Vector{Symbol}
+    ff::FFT
+    # parameters and option input sym
     psym::Vector{Symbol}
-    inputsym:: Union{Nothing, Vector{Symbol}, @NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}}}
+    insym::Union{Nothing, Vector{Symbol}}
+    # observed
     obsf::OF
     obssym::Vector{Symbol}
+    # optional insyms
     symmetadata::Dict{Symbol,Dict{Symbol, Any}}
     metadata::Dict{Symbol,Any}
+    # cached symbol collections
+    _outsym_flat::Vector{Symbol} # outsyms as they appear in outbuf
+    _obssym_all::Vector{Symbol}  # collection of true "observed" (flat_out\statesym) ∪ obssym
 end
+"""
+    VertexFunction(; kwargs...)
+
+Build a `VertexFunction` according to the keyword arguments.
+
+Main Arguments:
+- `f=nothing`: Dynamic function of the component. Can be nothing if `dim` is 0.
+- `g`: Output function of the component. Usefull helpers: [`StateMask`](@ref)
+- `sym`/`dim`: Symbolic names of the states. If `dim` is provided, `sym` is set automaticially.
+- `outsym`/`outdim`:
+   Symbolic names of the outputs. If `outdim` is provided, `outsym` is set automaticially.
+   Can be infered automaticially if `g` isa `StateMask`.
+- psym`/`pdim=0`: Symbolic names of the parameters. If `pdim` is provided, `psym` is set automaticially.
+- `mass_matrix=I`: Mass matrix of component. Can be a vector `v` and is then interpreted as `Diagonal(v)`.
+- `name=dim>0 ? :VertexF : :StaticVertexF`: Name of the component.
+
+Optional Arguments:
+- `insym`/`indim`: Symbolic names of the inputs. If `indim` is provided, `insym` is set automaticially.
+- `vidx`: Index of the vertex in the graph, enables graphless constructor.
+- `ff`: `FeedForwardType` of component. Will be typically infered from `g` automaticially.
+- `obssym`/`obsf`: Define additional "observable" states.
+- `symmetadata`/`metadata`: Provide prefilled metadata dictionaries.
+
+All Symbol arguments can be used to set default values, i.e. `psym=[:K=>1, :p]`.
+"""
+VertexFunction(; kwargs...) = _construct_comp(VertexFunction, Base.inferencebarrier(kwargs))
+VertexFunction(v::VertexFunction; kwargs...) = _reconstruct_comp(VertexFunction, v, Base.inferencebarrier(kwargs))
+
+struct EdgeFunction{F,G,FFT,OF,MM} <: ComponentFunction
+    name::Symbol
+    # main function
+    f::F
+    sym::Vector{Symbol}
+    mass_matrix::MM
+    # outputs
+    g::G
+    outsym::@NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}}
+    ff::FFT
+    # parameters and option input sym
+    psym::Vector{Symbol}
+    insym::Union{Nothing, @NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}}}
+    # observed
+    obsf::OF
+    obssym::Vector{Symbol}
+    # metadata
+    symmetadata::Dict{Symbol,Dict{Symbol, Any}}
+    metadata::Dict{Symbol,Any}
+    # cached symbol collections
+    _outsym_flat::Vector{Symbol} # outsyms as they appear in outbuf
+    _obssym_all::Vector{Symbol}  # collection of true "observed" (flat_out\statesym) ∪ obssym
+end
+"""
+    EdgeFunction(; kwargs...)
+
+Build a `EdgeFunction` according to the keyword arguments.
+
+Main Arguments:
+- `f=nothing`: Dynamic function of the component. Can be nothing if `dim` is 0.
+- `g`: Output function of the component. Usefull helpers: [`AntiSymmetric`](@ref), [`Symmetric`](@ref), [`Fiducial`](@ref), [`Directed`](@ref) and [`StateMask`](@ref).
+- `sym`/`dim`: Symbolic names of the states. If `dim` is provided, `sym` is set automaticially.
+- `outsym`/`outdim`:
+   Symbolic names of the outputs. If `outdim` is provided, `outsym` is set automaticially.
+   In general, outsym for edges isa named tuple `(; src, dst)`. However, depending on the `g` function,
+   it might be enough to provide a single vector or even nothing (e.g. `AntiSymmetric(StateMask(1:2))`).
+   See [Building `EdgeFunction`s](@ref) for examples.
+- psym`/`pdim=0`: Symbolic names of the parameters. If `pdim` is provided, `psym` is set automaticially.
+- `mass_matrix=I`: Mass matrix of component. Can be a vector `v` and is then interpreted as `Diagonal(v)`.
+- `name=dim>0 ? :EdgeF : :StaticEdgeF`: Name of the component.
+
+Optional Arguments:
+- `insym`/`indim`: Symbolic names of the inputs. If `indim` is provided, `insym` is set automaticially.
+   For edges, `insym` is a named tuple `(; src, dst)`. If give as vector tuple is created automaticially.
+- `src`/`dst`: Index or name of the vertices at src and dst end. Enables graphless constructor.
+- `ff`: `FeedForwardType` of component. Will be typically infered from `g` automaticially.
+- `obssym`/`obsf`: Define additional "observable" states.
+- `symmetadata`/`metadata`: Provide prefilled metadata dictionaries.
+
+All Symbol arguments can be used to set default values, i.e. `psym=[:K=>1, :p]`.
+"""
+EdgeFunction(; kwargs...) = _construct_comp(EdgeFunction, Base.inferencebarrier(kwargs))
+EdgeFunction(v::EdgeFunction; kwargs...) = _reconstruct_comp(EdgeFunction, v, Base.inferencebarrier(kwargs))
 
 """
     compf(c::ComponentFunction)
 
-Retrieve the actual dynamical function the component.
+Retrieve internal function `f` of the component.
 """
 compf(c::ComponentFunction) = c.f
+
+"""
+    compg(c::ComponentFunction)
+
+Retrieve output function `g` of the component.
+"""
+compg(c::ComponentFunction) = c.g
+
+"""
+    fftype(c::ComponentFunction)
+
+Retrieve the feed forward type of the component.
+"""
+fftype(c::ComponentFunction) = c.ff
 
 """
     dim(c::ComponentFunction)::Int
@@ -91,6 +366,27 @@ dim(c::ComponentFunction)::Int = length(sym(c))
 Retrieve the symbols of the component.
 """
 sym(c::ComponentFunction)::Vector{Symbol} = c.sym
+
+
+"""
+    outdim(c::VertexFunction)::Int
+    outdim(c::EdgeFunction)::@NamedTuple(src::Int, dst::Int)
+
+Retrieve the output dimension of the component
+"""
+outdim(c::VertexFunction) = length(outsym(c))
+outdim(c::EdgeFunction) = (;src=outdim_src(c), dst=outdim_dst(c))
+
+outdim_src(c::EdgeFunction) = length(outsym(c).src)
+outdim_dst(c::EdgeFunction) = length(outsym(c).dst)
+
+"""
+   outsym(c::VertexFunction)::Vector{Symbol}
+   outsym(c::EdgeFunction)::@NamedTuple{src::Vector{Symbol}, dst::Vector{Symbol}}
+
+Retrieve the output symbols of the component.
+"""
+outsym(c::ComponentFunction) = c.outsym
 
 """
     pdim(c::ComponentFunction)::Int
@@ -121,19 +417,10 @@ Retrieve the observation symbols of the component.
 obssym(c::ComponentFunction)::Vector{Symbol} = c.obssym
 
 """
-    depth(c::ComponentFunction)::Int
-
-Retrieve the depth of the component. The depth is the number of "outputs". For
-example, in a vertex function, a depth `N` means, that the connected edges receive
-the states `1:N`.
-"""
-depth(c::ComponentFunction)::Int = c.depth
-
-"""
     symmetadata(c::ComponentFunction)::Dict{Symbol,Dict{Symbol,Any}}
 
 Retrieve the metadata dictionary for the symbols. Keys are the names of the
-symbols as they appear in [`sym`](@ref), [`psym`](@ref), [`obssym`](@ref) and [`inputsym`](@ref).
+symbols as they appear in [`sym`](@ref), [`psym`](@ref), [`obssym`](@ref) and [`insym`](@ref).
 
 See also [`symmetadata`](@ref)
 """
@@ -149,140 +436,102 @@ See also [`metadata`](@ref)
 metadata(c::ComponentFunction)::Dict{Symbol,Any} = c.metadata
 
 """
-    hasinputsym(c::ComponentFunction)
+    hasinsym(c::ComponentFunction)
 
-Checks if the optioan field `inputsym` is present in the component function.
+Checks if the optioan field `insym` is present in the component function.
 """
-hasinputsym(c::ComponentFunction) = !isnothing(c.inputsym)
+hasinsym(c::ComponentFunction) = !isnothing(c.insym)
+"""
+    hasindim(c::ComponentFunction)
+
+Checks if the optioan field `insym` is present in the component function.
+"""
+hasindim(c::ComponentFunction) = hasinsym(c)
 
 """
-    hasinputsym(c::VertexFunction)::Vector{Symbol}
-    hasinputsym(c::EdgeFunction)::NamedTuple with :src and :dst keys
+    insym(c::VertexFunction)::Vector{Symbol}
+    insym(c::EdgeFunction)::@NamedTuple{src::Vector{Symbol}, dst::Vector{Symbol}}
 
-Musst be called *after* [`hasinputsym`](@ref) returned true.
-Gives the `inputsym` vector(s). For vertex functions just a single vector, for
+Musst be called *after* [`hasinsym`](@ref)/[`hasindim`](@ref) returned true.
+Gives the `insym` vector(s). For vertex functions just a single vector, for
 edges it returns a named tuple `(; src, dst)` with two symbol vectors.
 """
-inputsym(c::VertexFunction)::Vector{Symbol} = c.inputsym
-inputsym(c::EdgeFunction)::@NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}} = c.inputsym
+insym(c::VertexFunction)::Vector{Symbol} = c.insym
+insym(c::EdgeFunction)::@NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}} = c.insym
 
 """
-    coupling(::EdgeFunction)
-    coupling(::Type{<:EdgeFunction})
+    indim(c::VertexFunction)::Int
+    indim(c::EdgeFunction)::@NamedTuple{src::Int,dst::Int}
 
-Returns the coupling of the given `EdgeFunction`.
+Musst be called *after* [`hasinsym`](@ref)/[`hasindim`](@ref) returned true.
+Gives the input dimension(s).
 """
-coupling(::EdgeFunction{C}) where {C} = C()
-coupling(::Type{<:EdgeFunction{C}}) where {C} = C()
+indim(c::VertexFunction)::Int = length(insym(c))
+indim(c::EdgeFunction)::@NamedTuple{src::Int,dst::Int} = (; src=length(insym(c).src), dst=length(insym(c).dst))
 
-"""
-$(TYPEDEF)
+# return both "observed" outputs (those that do not shadow states) and true observed
+outsym_flat(c::ComponentFunction) = c._outsym_flat
+obssym_all(c::ComponentFunction) = c._obssym_all
 
-# Fields
-$(FIELDS)
-"""
-struct ODEVertex{F,OF,MM} <: VertexFunction
-    @CommonFields
-    mass_matrix::MM
-    # dfdp dfdv dfde
-end
-ODEVertex(; kwargs...) = _construct_comp(ODEVertex, kwargs)
-ODEVertex(f; kwargs...) = ODEVertex(;f, kwargs...)
-ODEVertex(f, dim; kwargs...) = ODEVertex(;f, _dimsym(dim)..., kwargs...)
-ODEVertex(f, dim, pdim; kwargs...) = ODEVertex(;f, _dimsym(dim, pdim)..., kwargs...)
-ODEVertex(v::ODEVertex; kwargs...) = _reconstruct_comp(ODEVertex, v, kwargs)
+# normalized means, that we'll always return a tuple of values, thus we can generalize better over Edges/Vertices
+insym_normalized(c::EdgeFunction) = values(insym(c))
+insym_normalized(c::VertexFunction) = (insym(c),)
+indim_normalized(c::ComponentFunction) = map(length, insym_normalized(c))
+outsym_normalized(c::EdgeFunction) = values(outsym(c))
+outsym_normalized(c::VertexFunction) = (outsym(c),)
+outdim_normalized(c::ComponentFunction) = map(length, outsym_normalized(c))
 
-struct StaticVertex{F,OF} <: VertexFunction
-    @CommonFields
-end
-StaticVertex(; kwargs...) = _construct_comp(StaticVertex, kwargs)
-StaticVertex(f; kwargs...) = StaticVertex(;f, kwargs...)
-StaticVertex(f, dim; kwargs...) = StaticVertex(;f, _dimsym(dim)..., kwargs...)
-StaticVertex(f, dim, pdim; kwargs...) = StaticVertex(;f, _dimsym(dim, pdim)..., kwargs...)
-StaticVertex(v::StaticVertex; kwargs...) = _reconstruct_comp(StaticVertex, v, kwargs)
-function ODEVertex(sv::StaticVertex)
-    d = Dict{Symbol,Any}()
-    for prop in propertynames(sv)
-        d[prop] = getproperty(sv, prop)
+_infer_ss_fftype(g) = _infer_fftype(g, 1, 2, nothing)
+_infer_fftype(::Type{<:VertexFunction}, g, dim) = _infer_fftype(g, 1, 1, dim)
+_infer_fftype(::Type{<:EdgeFunction}, g, dim) = _infer_fftype(g, 2, 2, dim)
+
+function _infer_fftype(g, nout, nin, dim)
+    pureff = _takes_n_vecs_and_t(g, nout + nin + 1)     # (outs..., ins..., p, t)
+    ff     = _takes_n_vecs_and_t(g, nout + 1 + nin + 1) # (outs..., u, ins..., p, t)
+    noff   = _takes_n_vecs_and_t(g, nout + 1 + 1)       # (outs..., u, p, t)
+    pureu  = _takes_n_vecs_no_t(g, nout + 1)            # (outs..., u)
+
+    # if nin = 1 we cannot distiguish between pureff and noff based on arguments,
+    # resolve using dimension
+    if nin==1 && pureff && noff
+        pureff = iszero(dim)
+        noff = !iszero(dim)
     end
-    d[:f]  = let _f = sv.f
-        (dx, x, esum, p, t) -> begin
-            _f(dx, esum, p, t)
-            @inbounds for i in eachindex(dx)
-                dx[i] = dx[i] - x[i]
-            end
-            return nothing
-        end
-    end
-    d[:mass_matrix] = 0.0
-    ODEVertex(; d...)
+
+    ff+noff+pureff+pureu > 1 && error("Could not determinen output map type from g signature. Provide :ff keyword explicitly!")
+    ff+noff+pureff+pureu == 0 && error("Method signature of `g` seems invalid!")
+
+    pureff && return PureFeedForward()
+    ff && return FeedForward()
+    noff && return NoFeedForward()
+    pureu && return PureStateMap()
 end
 
-struct StaticEdge{C,F,OF} <: EdgeFunction{C}
-    @CommonFields
-    coupling::C
-end
-StaticEdge(; kwargs...) = _construct_comp(StaticEdge, kwargs)
-StaticEdge(f; kwargs...) = StaticEdge(;f, kwargs...)
-StaticEdge(f, dim, coupling; kwargs...) = StaticEdge(;f, _dimsym(dim)..., coupling, kwargs...)
-StaticEdge(f, dim, pdim, coupling; kwargs...) = StaticEdge(;f, _dimsym(dim, pdim)..., coupling, kwargs...)
-StaticEdge(e::StaticEdge; kwargs...) = _reconstruct_comp(StaticEdge, e, kwargs)
-
-struct ODEEdge{C,F,OF,MM} <: EdgeFunction{C}
-    @CommonFields
-    coupling::C
-    mass_matrix::MM
-end
-ODEEdge(; kwargs...) = _construct_comp(ODEEdge, kwargs)
-ODEEdge(f; kwargs...) = ODEEdge(;f, kwargs...)
-ODEEdge(f, dim, coupling; kwargs...) = ODEEdge(;f, _dimsym(dim)..., coupling, kwargs...)
-ODEEdge(f, dim, pdim, coupling; kwargs...) = ODEEdge(;f, _dimsym(dim, pdim)..., coupling, kwargs...)
-ODEEdge(e::ODEEdge; kwargs...) = _reconstruct_comp(ODEEdge, e, kwargs)
-
-statetype(::T) where {T<:ComponentFunction} = statetype(T)
-statetype(::Type{<:ODEVertex}) = Dynamic()
-statetype(::Type{<:StaticVertex}) = Static()
-statetype(::Type{<:StaticEdge}) = Static()
-statetype(::Type{<:ODEEdge}) = Dynamic()
-
-isdynamic(x) = statetype(x) == Dynamic()
-isstatic(x)  = statetype(x) == Static()
+_takes_n_vecs_and_t(f, n) = hasmethod(f, (Tuple(Vector{Float64} for i in 1:n)..., Float64))
+_takes_n_vecs_no_t(f, n) = hasmethod(f, Tuple(Vector{Float64} for i in 1:n))
 
 """
     dispatchT(<:ComponentFunction) :: Type{<:ComponentFunction}
 
 Returns the type "essence" of the component used for dispatch.
-Fills up type parameters with `nothing` to ensure `Core.compiler.isconstType`
+Fills up type parameters with `nothing` to ensure `Core.Compiler.isconstType`
 for GPU compatibility.
 """
 dispatchT(::T) where {T<:ComponentFunction} = dispatchT(T)
-dispatchT(::Type{<:StaticVertex}) = StaticVertex{nothing,nothing}
-dispatchT(::Type{<:ODEVertex}) = ODEVertex{nothing,nothing,nothing}
-dispatchT(T::Type{<:StaticEdge}) = StaticEdge{typeof(coupling(T)),nothing,nothing}
-dispatchT(T::Type{<:ODEEdge}) = ODEEdge{typeof(coupling(T)),nothing,nothing,nothing}
+dispatchT(T::Type{<:VertexFunction}) = VertexFunction{nothing,nothing,nothing,nothing,nothing}
+dispatchT(T::Type{<:EdgeFunction}) = EdgeFunction{nothing,nothing,nothing,nothing,nothing}
 
+# TODO: introduce batchequal hash for faster batching of component functions
 batchequal(a, b) = false
-function batchequal(a::EdgeFunction, b::EdgeFunction)
-    for f in (compf, dim, pdim, coupling)
-        f(a) == f(b) || return false
-    end
+function batchequal(a::ComponentFunction, b::ComponentFunction)
+    compf(a) == compf(b)    || return false
+    compg(a) == compg(b)    || return false
+    fftype(a) == fftype(b)  || return false
+    dim(a)   == dim(b)      || return false
+    outdim(a)  == outdim(b) || return false
+    pdim(a)  == pdim(b)     || return false
     return true
 end
-function batchequal(a::VertexFunction, b::VertexFunction)
-    for f in (compf, dim, pdim)
-        f(a) == f(b) || return false
-    end
-    return true
-end
-
-# helper functions to dispatch on correct dim/sym keywords based on type
-const _sym_T = Union{Vector, Pair, Symbol}
-_dimsym(dim::Number) = (; dim)
-_dimsym(sym::_sym_T) = (; sym)
-_dimsym(dim::Number, pdim::Number) = (; dim, pdim)
-_dimsym(dim::Number, psym::_sym_T) = (; dim, psym)
-_dimsym(sym::_sym_T, pdim::Number) = (; sym, pdim)
-_dimsym(sym::_sym_T, psym::_sym_T) = (; sym, psym)
 
 """
     _construct_comp(::Type{T}, kwargs) where {T}
@@ -290,8 +539,8 @@ _dimsym(sym::_sym_T, psym::_sym_T) = (; sym, psym)
 Internal function to construct a component function from keyword arguments.
 Fills up kw arguments with default values and performs sanity checks.
 """
-function _construct_comp(::Type{T}, kwargs) where {T}
-    dict = _fill_defaults(T, kwargs)
+function _construct_comp(::Type{T}, @nospecialize(kwargs)) where {T}
+    dict = _fill_defaults(T, Base.inferencebarrier(kwargs))
 
     # check signature of f
     # if !_valid_signature(T, dict[:f])
@@ -299,7 +548,7 @@ function _construct_comp(::Type{T}, kwargs) where {T}
     # end
 
     # pop check keyword
-    check = pop!(dict, :check, true)
+    check = pop!(dict, :check, CHECK_COMPONENT[])
 
     if !all(in(keys(dict)), fieldnames(T))
         throw(ArgumentError("Cannot construct $T: arguments $(setdiff(fieldnames(T), keys(dict))) missing."))
@@ -335,12 +584,15 @@ end
 Fill up keyword arguments `kwargs` for type T with default values.
 Also perfoms sanity check some properties like mass matrix, depth, ...
 """
-function _fill_defaults(T, kwargs)
+function _fill_defaults(T, @nospecialize(kwargs))
     dict = Dict{Symbol, Any}(kwargs)
+    allow_output_sym_clash = pop!(dict, :allow_output_sym_clash, false)
 
     # syms might be provided as single pairs or symbols, wrap in vector
     _maybewrap!(dict, :sym, Union{Symbol, Pair})
     _maybewrap!(dict, :psym, Union{Symbol, Pair})
+    _maybewrap!(dict, :insym, Union{Symbol,Pair}; allownt=T <: EdgeFunction)
+    _maybewrap!(dict, :outsym, Union{Symbol,Pair}; allownt=T <: EdgeFunction)
     _maybewrap!(dict, :obssym, Symbol)
 
     symmetadata = get!(dict, :symmetadata, Dict{Symbol,Dict{Symbol,Any}}())
@@ -351,6 +603,9 @@ function _fill_defaults(T, kwargs)
         throw(ArgumentError("Provided metadata keyword musst be a Dict{Symbol,Any}. Got $(repr(dict[:metadata]))."))
     end
 
+    ####
+    #### graphelement
+    ####
     if haskey(dict, :graphelement)
         ge = pop!(dict, :graphelement)
         metadata[:graphelement] = ge
@@ -365,7 +620,36 @@ function _fill_defaults(T, kwargs)
         metadata[:graphelement] = (; src, dst)
     end
 
-    # sym & dim
+    ####
+    #### f and g
+    ####
+    if !haskey(dict, :g)
+        throw(ArgumentError("Output function g musst be provided!"))
+    end
+    g = dict[:g]
+    if g isa Union{AbstractVector, Number}
+        g = dict[:g] = StateMask(g)
+    end
+    if T <: EdgeFunction && g isa StateMask
+        throw(ArgumentError("StateMask cannot be used directly for EdgeFunction. Wrap in Fiducial, Symmetric, AntiSymmetric or Directed instead."))
+    end
+
+    # set f to nothing if not present
+    if !haskey(dict, :f)
+        dict[:f] = nothing
+        if haskey(dict, :dim) && dict[:dim] != 0
+            throw(ArgumentError("Cannot provide dim != 0 without f."))
+        end
+        if haskey(dict, :sym) && !isempty(dict[:sym])
+            throw(ArgumentError("Cannot provide sym without f."))
+        end
+        dict[:sym] = Symbol[]
+    end
+
+
+    ####
+    #### variable sym
+    ####
     haskey(dict, :dim) || haskey(dict, :sym) || throw(ArgumentError("Either `dim` or `sym` must be provided to construct $T."))
     if haskey(dict, :sym)
         if haskey(dict, :dim)
@@ -403,8 +687,16 @@ function _fill_defaults(T, kwargs)
             end
         end
     end
+    sym = dict[:sym]
 
-    # psym & pdim
+    # infer fftype (needs dim)
+    if !haskey(dict, :ff)
+        dict[:ff] = hasfftype(g) ? fftype(g) : _infer_fftype(T, g, dim)
+    end
+
+    ####
+    #### parameter sym
+    ####
     if !haskey(dict, :pdim) && !haskey(dict, :psym)
         dict[:pdim] = 0
     end
@@ -439,8 +731,121 @@ function _fill_defaults(T, kwargs)
             end
         end
     end
+    psym = dict[:psym]
 
-    # obsf & obssym
+    ####
+    #### output sym
+    ####
+    if !haskey(dict, :outsym)
+        if _has_sym_to_outsym_mapping(g)
+            dict[:outsym] = _sym_to_outsym(g, sym)
+        elseif haskey(dict, :outdim)
+            _outdim = pop!(dict, :outdim)
+            dict[:outsym] = [(_outdim>1 ? Symbol("o", subscript(i)) : :o) for i in 1:_outdim]
+        else
+            throw(ArgumentError("Either `outdim` or `outsym` must be provided to construct $T \
+                with arbitray g. Outsyms can be inferred for `StateMask` output functions."))
+        end
+    end
+    outsym = dict[:outsym]
+    if T <: EdgeFunction && outsym isa AbstractVector
+        if _has_metadata(outsym)
+            throw(ArgumentError("Metadata for outsyms can only be provided when using full (;src, dst) form"))
+        end
+        outsym = dict[:outsym] = _symvec_to_sym_tup(g, outsym)
+    end
+
+    if haskey(dict, :outdim)
+        _outdim = pop!(dict, :outdim)
+        if T <: EdgeFunction
+            if _outdim isa NamedTuple && (_outdim.src != length(outsym.src) || _outdim.dst != length(outsym.dst))
+                throw(ArgumentError("Length of outsym and outdim must match."))
+            elseif _outdim != length(outsym.dst) || !(g isa Directed) && _outdime != length(outsym.src)
+                throw(ArgumentError("Length of outsym and outdim must match."))
+            end
+        elseif T <: VertexFunction
+            if _outdim != length(outsym)
+                throw(ArgumentError("Length of outsym and outdim must match."))
+            end
+        end
+    end
+
+    # extract and merge metadata from outsym
+    if T <: VertexFunction
+        if _has_metadata(outsym)
+            dict[:outsym], _metadata = _split_metadata(outsym)
+            mergewith!(merge!, symmetadata, _metadata)
+        end
+    elseif T <: EdgeFunction
+        (; src, dst) = outsym
+        if _has_metadata(src)
+            src, _metadata = _split_metadata(src)
+            mergewith!(merge!, symmetadata, _metadata)
+        end
+        if _has_metadata(dst)
+            dst, _metadata = _split_metadata(dst)
+            mergewith!(merge!, symmetadata, _metadata)
+        end
+        dict[:outsym] = (; src, dst)
+    end
+    outsym = dict[:outsym]
+
+    ####
+    #### insym
+    ####
+    if !haskey(dict, :insym)
+        if haskey(dict, :indim)
+            _indim = pop!(dict, :indim)
+            dict[:insym] = [(_indim>1 ? Symbol("i", subscript(i)) : :i) for i in 1:_indim]
+        else
+            dict[:insym] = nothing
+        end
+    end
+    insym = dict[:insym]
+    if T <: EdgeFunction && insym isa AbstractVector
+        if _has_metadata(insym)
+            throw(ArgumentError("Metadata for insyms can only be provided when using full (;src, dst) form"))
+        end
+        insym = dict[:insym] = _symvec_to_sym_tup(nothing, insym)
+    end
+    if haskey(dict, :indim)
+        _indim = pop!(dict, :indim)
+        if T <: EdgeFunction
+            if _indim isa NamedTuple && (_indim.src != length(insym.src) || _indim.dst != length(insym.dst))
+                throw(ArgumentError("Length of insym and indim must match."))
+            elseif _indim != length(insym.src) || _indime != length(insym.dst)
+                throw(ArgumentError("Length of insym and indim must match."))
+            end
+        elseif T <: VertexFunction
+            if _indim != length(outsym)
+                throw(ArgumentError("Length of insym and indim must match."))
+            end
+        end
+    end
+    # extract and merge metadata from insym
+    if !isnothing(insym)
+        if T <: VertexFunction
+            if _has_metadata(insym)
+                dict[:insym], _metadata = _split_metadata(insym)
+                mergewith!(merge!, symmetadata, _metadata)
+            end
+        elseif T <: EdgeFunction
+            (; src, dst) = insym
+            if _has_metadata(src)
+                src, _metadata = _split_metadata(src)
+                mergewith!(merge!, symmetadata, _metadata)
+            end
+            if _has_metadata(dst)
+                dst, _metadata = _split_metadata(dst)
+                mergewith!(merge!, symmetadata, _metadata)
+            end
+            dict[:insym] = (; src, dst)
+        end
+    end
+
+    ####
+    #### obsf & obssym
+    ####
     if haskey(dict, :obsf) || haskey(dict, :obssym)
         if !(haskey(dict, :obsf) && haskey(dict, :obssym))
             throw(ArgumentError("If `obsf` is provided, `obssym` must be provided as well."))
@@ -453,92 +858,70 @@ function _fill_defaults(T, kwargs)
         dict[:obsf] = nothing
         dict[:obssym] = Symbol[]
     end
+    obssym = dict[:obssym]
 
-    # inputsym
-    if T <: VertexFunction
-        if haskey(dict, :inputsym_src) || haskey(dict, :inputsym_dst)
-            throw(ArgumentError("Keywords `inputsym_src` and `inputsym_dst` are not valid for $T."))
-        end
-        if haskey(dict, :inputsym) && !isnothing(dict[:inputsym])
-            if _has_metadata(dict[:inputsym])
-                dict[:inputsym], _metadata = _split_metadata(dict[:inputsym])
-                mergewith!(merge!, symmetadata, _metadata)
-            end
-        else
-            dict[:inputsym] = nothing
-        end
-    elseif T <: EdgeFunction
-        haskey(dict, :inputsym) && throw(ArgumentError("Keywords `inputsym` is not valid for $T."))
-        if haskey(dict, :inputsym_src) || haskey(dict, :inputsym_dst)
-            if !(haskey(dict, :inputsym_src) && haskey(dict, :inputsym_dst))
-                throw(ArgumentError("Both `inputsym_src` and `inputsym_dst` must be provided."))
-            end
-            src, _metadata = _split_metadata(pop!(dict, :inputsym_src))
-            mergewith!(merge!, symmetadata, _metadata)
-            dst, _metadata = _split_metadata(pop!(dict, :inputsym_dst))
-            mergewith!(merge!, symmetadata, _metadata)
-            dict[:inputsym] = (; src, dst)
-        else
-            dict[:inputsym] = nothing
-        end
-    end
-
-    # name
+    ####
+    #### name
+    ####
     if !haskey(dict, :name)
-        dict[:name] = _default_name(T)
+        dict[:name] = if T <: VertexFunction
+            dim > 0 ? :VertexF : :StaticVertexF
+        elseif T <: EdgeFunction
+            dim > 0 ? :EdgeF : :StaticEdgeF
+        else
+            error()
+        end
     end
 
-    # mass_matrix
-    if isdynamic(T)
-        if !haskey(dict, :mass_matrix)
-            dict[:mass_matrix] = LinearAlgebra.I
-        else
-            mm = dict[:mass_matrix]
-            if mm isa UniformScaling
-            elseif mm isa Vector # convert to diagonal
-                if length(mm) == dim
-                    dict[:mass_matrix] = LinearAlgebra.Diagonal(mm)
-                else
-                    throw(ArgumentError("If given as a vector, mass matrix must have length equal to dimension of component."))
-                end
-            elseif mm isa Number # convert to uniform scaling
-                dict[:mass_matrix] = LinearAlgebra.UniformScaling(mm)
-            elseif mm isa AbstractMatrix
-                @argcheck size(mm) == (dim, dim) "Size of mass matrix must match dimension of component."
+    ####
+    #### mass matrix
+    ####
+    if !haskey(dict, :mass_matrix)
+        dict[:mass_matrix] = LinearAlgebra.I
+    else
+        mm = dict[:mass_matrix]
+        if mm isa UniformScaling
+        elseif mm isa Vector # convert to diagonal
+            if length(mm) == dim
+                dict[:mass_matrix] = LinearAlgebra.Diagonal(mm)
             else
-                throw(ArgumentError("Mass matrix must be a vector, square matrix,\
-                                     a uniform scaling, or scalar. Got $(mm)."))
+                throw(ArgumentError("If given as a vector, mass matrix must have length equal to dimension of component."))
             end
-        end
-    end
-
-    # coupling
-    if T<:EdgeFunction && !haskey(dict, :coupling)
-        throw(ArgumentError("Coupling type must be provided to construct $T."))
-    end
-
-    # depth
-    if !haskey(dict, :depth)
-        if T<:VertexFunction
-            dict[:depth] = dim
-        elseif T<:EdgeFunction
-            coupling = dict[:coupling]
-            dict[:depth] = coupling==Fiducial() ? floor(Int, dim/2) : dim
+        elseif mm isa Number # convert to uniform scaling
+            dict[:mass_matrix] = LinearAlgebra.UniformScaling(mm)
+        elseif mm isa AbstractMatrix
+            @argcheck size(mm) == (dim, dim) "Size of mass matrix must match dimension of component."
         else
-            throw(ArgumentError("Cannot construct $T: default depth not known."))
+            throw(ArgumentError("Mass matrix must be a vector, square matrix,\
+                                    a uniform scaling, or scalar. Got $(mm)."))
         end
     end
-    if haskey(dict, :coupling) && dict[:coupling]==Fiducial() && dict[:depth] > floor(dim/2)
-        throw(ArgumentError("Depth cannot exceed half the dimension for Fiducial coupling."))
-    elseif dict[:depth] > dim
-        throw(ArgumentError("Depth cannot exceed half the dimension."))
+
+    ####
+    #### Cached outsymflat/outsymall
+    ####
+    _outsym_flat = if T <: VertexFunction
+        outsym
+    elseif T <: EdgeFunction
+        vcat(outsym.src, outsym.dst)
+    else
+        error()
     end
+    dict[:_outsym_flat] = _outsym_flat
+    dict[:_obssym_all] = setdiff(_outsym_flat, sym) ∪ obssym
+
 
     # check for name clashes (at the end because only now sym, psym, obssym are initialized)
-    _s  = dict[:sym]
-    _ps = dict[:psym]
-    _os = dict[:obssym]
-    __is = dict[:inputsym]
+    _s  = sym
+    _ps = psym
+    _obss = obssym
+    _os = if allow_output_sym_clash || _has_sym_to_outsym_mapping(g)
+       setdiff(outsym, sym) # allow name clashes for statemask derivatives
+    else
+        outsym
+    end
+    __is = insym
+
     _is = if isnothing(__is)
         Symbol[]
     elseif __is isa NamedTuple
@@ -546,17 +929,52 @@ function _fill_defaults(T, kwargs)
     else
         __is
     end
-    if !allunique(vcat(_s, _ps, _os, _is))
-        throw(ArgumentError("Symbol names must be unique. There are clashes in sym, psym, obssym and inputsym."))
+    if !allunique(vcat(_s, _ps, _obss, _is, _os))
+        throw(ArgumentError("Symbol names must be unique. There are clashes in sym, psym, outsym, obssym and insym."))
     end
 
     return dict
 end
 
-_default_name(::Type{StaticVertex}) = :StaticVertex
-_default_name(::Type{ODEVertex}) = :ODEVertex
-_default_name(::Type{StaticEdge}) = :StaticEdge
-_default_name(::Type{ODEEdge}) = :ODEEdge
+# define the symbolmapping to infer output symbols from state symbols
+_has_sym_to_outsym_mapping(::StateMask) = true
+_has_sym_to_outsym_mapping(::Directed{<:Any, <:StateMask}) = true
+_has_sym_to_outsym_mapping(::AntiSymmetric{<:Any, <:StateMask}) = true
+_has_sym_to_outsym_mapping(::Symmetric{<:Any, <:StateMask}) = true
+_has_sym_to_outsym_mapping(::Fiducial{<:Any, <:StateMask, <:StateMask}) = true
+
+_sym_to_outsym(g::StateMask, s::AbstractVector{Symbol}) = s[g.idxs]
+function _sym_to_outsym(g::AntiSymmetric{<:Any, <:StateMask}, s::AbstractVector{Symbol})
+    s = _sym_to_outsym(g.g, s)
+    _symvec_to_sym_tup(g, s)
+end
+function _sym_to_outsym(g::Symmetric{<:Any, <:StateMask}, s::AbstractVector{Symbol})
+    s = _sym_to_outsym(g.g, s)
+    _symvec_to_sym_tup(g, s)
+end
+function _sym_to_outsym(g::Directed{<:Any, <:StateMask}, s::AbstractVector{Symbol})
+    s = _sym_to_outsym(g.g, s)
+    _symvec_to_sym_tup(g, s)
+end
+function _sym_to_outsym(g::Fiducial{<:Any, <:StateMask, <:StateMask}, s::AbstractVector{Symbol})
+    dst = _sym_to_outsym(g.dst, s)
+    src = _sym_to_outsym(g.src, s)
+    (; src, dst)
+end
+function _symvec_to_sym_tup(g, s::AbstractVector{Symbol})
+    src = map(x->Symbol("src₊", x), s)
+    dst = map(x->Symbol("dst₊", x), s)
+    (;src, dst)
+end
+function _symvec_to_sym_tup(g::Symmetric, s::AbstractVector{Symbol})
+    (;src=s, dst=s)
+end
+function _symvec_to_sym_tup(g::AntiSymmetric, s::AbstractVector{Symbol})
+    (; src=map(x->Symbol("₋", x), s), dst=s)
+end
+function _symvec_to_sym_tup(g::Directed, dst::AbstractVector{Symbol})
+    (;src=Symbol[], dst)
+end
 
 _has_metadata(vec::AbstractVector{<:Symbol}) = false
 _has_metadata(vec::AbstractVector{<:Pair}) = true
@@ -585,21 +1003,22 @@ function _split_metadata(input)
 end
 
 "If index `s` in `d` exists and isa `T` wrap in vector."
-function _maybewrap!(d, s, T)
+function _maybewrap!(d, s, T; allownt=false)
     if haskey(d, s)
         v = d[s]
         if v isa T
             d[s] = [v]
+        elseif allownt && v isa NamedTuple
+            d[s] = map(Iterators.filter(_->true, pairs(v))) do (ntk, ntv)
+                if ntv isa T
+                    ntk => [ntv]
+                else
+                    ntk => ntv
+                end
+            end |> NamedTuple
         end
     end
 end
-
-_valid_signature(::Type{<:StaticVertex}, f) = _takes_n_vectors(f, 3) #(u, edges, p, t)
-_valid_signature(::Type{<:ODEVertex}, f) = _takes_n_vectors(f, 4) #(du, u, edges, p, t)
-_valid_signature(::Type{<:StaticEdge}, f) = _takes_n_vectors(f, 4) #(u, src, dst, p, t)
-_valid_signature(::Type{<:ODEEdge}, f) = _takes_n_vectors(f, 5) #(du, u, src, dst, p, t)
-
-_takes_n_vectors(f, n) = hasmethod(f, (Tuple(Vector{Float64} for i in 1:n)..., Float64))
 
 """
     copy(c::NetworkDynamics.ComponentFunction)
@@ -624,7 +1043,88 @@ but references the same objects everywhere else.
     end
 end
 
+# has functions/equality for use in dictionarys
 Base.hash(cf::ComponentFunction, h::UInt) = hash_fields(cf, h)
 function Base.:(==)(cf1::ComponentFunction, cf2::ComponentFunction)
     typeof(cf1) == typeof(cf2) && equal_fields(cf1, cf2)
+end
+
+function compfg(c::VertexFunction)
+   (out, du, u, in, p, t)  -> begin
+        f = compf(c)
+        isnothing(f) || f(du, u, in, p, t)
+        compg(c)(_gargs(fftype(c), (out,), du, u, (in,), p, t)...)
+        nothing
+   end
+end
+function compfg(c::EdgeFunction)
+   (out1, out2, du, u, in1, in2, p, t)  -> begin
+        f = compf(c)
+        isnothing(f) || f(du, u, in1, in2, p, t)
+        compg(c)(_gargs(fftype(c), (out1,out2), du, u, (in1,in2), p, t)...)
+        nothing
+   end
+end
+_gargs(::PureFeedForward, outs, du, u, ins, p, t) = (outs..., ins..., p, t)
+_gargs(::FeedForward, outs, du, u, ins, p, t) = (outs..., u, ins..., p, t)
+_gargs(::NoFeedForward, outs, du, u, ins, p, t) = (outs..., u, p, t)
+_gargs(::PureStateMap, outs, du, u, ins, p, t) = (outs..., u)
+
+"""
+    ff_to_constraint(v::VertexFunction)
+
+Takes `VertexFunction` `v` with feed forward and turns all algebraic output
+states into internal states by defining algebraic constraints
+contraints `0 = out - g(...)`. The new output function is
+just a [`StateMask`](@ref) into the extended internal state vector.
+
+Returns the transformed `VertexFunction`.
+"""
+function ff_to_constraint(v::VertexFunction)
+    hasff(v) || error("Vertex does not have feed forward property.")
+
+    olddim = dim(v)
+    odim = outdim(v)
+    newf = _newf(fftype(v), v.f, v.g, olddim)
+    newg = StateMask(olddim+1:olddim+odim)
+
+    mass_matrix = [v.mass_matrix zeros(olddim, odim)
+                   zeros(odim, olddim) zeros(odim, odim)]
+    if LinearAlgebra.isdiag(v.mass_matrix)
+        mass_matrix = LinearAlgebra.Diagonal(mass_matrix)
+    end
+
+    isnothing(v.obsf) || @warn "Observed function might be broke due to ff_to_constraint conversion."
+    newsym = vcat(sym(v), outsym(v))
+    VertexFunction(; f=newf, g=newg, sym=newsym, mass_matrix, name=v.name,
+        psym=v.psym, obsf=v.obsf, obssym=v.obssym, metadata=v.metadata, symmetadata=v.symmetadata)
+end
+
+function _newf(::PureFeedForward, f, g, dim)
+    @closure (du, u, esum, p, t) -> begin
+        if !isnothing(f)
+            duf = @view du[1:dim]
+            uf = @view u[1:dim]
+            f(duf, uf, esum, p, t)
+        end
+        dug = @view du[dim+1:end]
+        g(dug, esum, p, t)
+        ug = @view u[dim+1:end]
+        dug .= dug .- ug
+        nothing
+    end
+end
+function _newf(::FeedForward, f, g, dim)
+    @closure (du, u, esum, p, t) -> begin
+        if !isnothing(f)
+            duf = @view du[1:dim]
+            uf = @view u[1:dim]
+            f(duf, uf, esum, p, t)
+        end
+        dug = @view du[dim+1:end]
+        g(dug, uf, esum, p, t)
+        ug = @view u[dim+1:end]
+        dug .= dug .- ug
+        nothing
+    end
 end

@@ -65,7 +65,7 @@ struct VPIndex{C,S} <: SymbolicParameterIndex{C,S}
     subidx::S
 end
 """
-    VEIndex{C,S} <: SymbolicStateIndex{C,S}
+    EPIndex{C,S} <: SymbolicStateIndex{C,S}
     idx = VEIndex(comp, sub)
 
 A symbolic index into the parameter a vertex:
@@ -118,6 +118,8 @@ getcomp(nw::Network, sni::SymbolicEdgeIndex) = nw.im.edgef[resolvecompidx(nw, sn
 getcomp(nw::Network, sni::SymbolicVertexIndex) = nw.im.vertexf[resolvecompidx(nw, sni)]
 getcomprange(nw::Network, sni::VIndex{<:Union{Symbol,Int}}) = nw.im.v_data[resolvecompidx(nw, sni)]
 getcomprange(nw::Network, sni::EIndex{<:Union{Symbol,Int}}) = nw.im.e_data[resolvecompidx(nw, sni)]
+getcompoutrange(nw::Network, sni::VIndex{<:Union{Symbol,Int}}) = nw.im.v_out[resolvecompidx(nw, sni)]
+getcompoutrange(nw::Network, sni::EIndex{<:Union{Symbol,Int}}) = flatrange(nw.im.e_out[resolvecompidx(nw, sni)])
 getcompprange(nw::Network, sni::VPIndex{<:Union{Symbol,Int}}) = nw.im.v_para[resolvecompidx(nw, sni)]
 getcompprange(nw::Network, sni::EPIndex{<:Union{Symbol,Int}}) = nw.im.e_para[resolvecompidx(nw, sni)]
 
@@ -219,7 +221,7 @@ end
 _is_variable(nw::Network, sni) = false
 function _is_variable(nw::Network, sni::SymbolicStateIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}})
     cf = getcomp(nw, sni)
-    return isdynamic(cf) && subsym_has_idx(sni.subidx, sym(cf))
+    return subsym_has_idx(sni.subidx, sym(cf))
 end
 
 function SII.variable_index(nw::Network, sni)
@@ -240,11 +242,9 @@ end
 function SII.variable_symbols(nw::Network)
     syms = Vector{SymbolicStateIndex{Int,Symbol}}(undef, dim(nw))
     for (ci, cf) in pairs(nw.im.vertexf)
-        isdynamic(cf) || continue
         syms[nw.im.v_data[ci]] .= VIndex.(ci, sym(cf))
     end
     for (ci, cf) in pairs(nw.im.edgef)
-        isdynamic(cf) || continue
         syms[nw.im.e_data[ci]] .= EIndex.(ci, sym(cf))
     end
     return syms
@@ -379,63 +379,23 @@ end
 _is_observed(nw::Network, _) = false
 function _is_observed(nw::Network, sni::SymbolicStateIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}})
     cf = getcomp(nw, sni)
-
-    if isdynamic(cf)
-        return sni.subidx ∈ obssym(cf) # only works if symbol is given
-    else
-        return sni.subidx ∈ obssym(cf) || subsym_has_idx(sni.subidx, sym(cf))
-    end
-    error("Could not handle $sni. Should never be reached.")
+    return sni.subidx ∈ obssym_all(cf)
 end
 
 function observed_symbols(nw::Network)
     syms = SymbolicStateIndex{Int,Symbol}[]
     for (ci, cf) in pairs(nw.im.vertexf)
-        if !isdynamic(cf)
-            for s in sym(cf)
-                push!(syms, VIndex(ci, s))
-            end
-        end
-        for s in obssym(cf)
+        for s in obssym_all(cf)
             push!(syms, VIndex(ci, s))
         end
     end
     for (ci, cf) in pairs(nw.im.edgef)
-        if !isdynamic(cf)
-            for s in sym(cf)
-                push!(syms, EIndex(ci, s))
-            end
-        end
-        for s in obssym(cf)
+        for s in obssym_all(cf)
             push!(syms, EIndex(ci, s))
         end
     end
     return syms
 end
-
-#=
-Types of observable calls:
-- observable of ODEVertex
-  - recalculate incident static edges
-  - aggregate locally
-  - execut observable
-- State of StaticVertex
-  - aggregate locally
-  - execute vertex
-- observable of StaticVertex
-  - aggregate locallay
-  - execute vertex
-  - execute observable
-
-- observable of ODEEdge
-  - if incident vertex is static: locally aggregate & execute vertex function
-  - execute observable
-- State of StaticEdge
-  - execute edge (cannot depend on static vertices)
-- Observable of static edge
-  - execute edge
-  - execute observable
-=#
 
 function SII.observed(nw::Network, snis)
     _snis = _expand_and_collect(nw, snis)
@@ -444,45 +404,59 @@ function SII.observed(nw::Network, snis)
         _snis = (_snis, )
     end
 
-    # mapping i -> index in fullstate (dynamic and static states)
-    flatidxs = Dict{Int, Int}()
+    # mapping i -> index in state
+    stateidx = Dict{Int, Int}()
+    # mapping i -> index in output
+    outidx = Dict{Int, Int}()
     # mapping i -> f(fullstate, p, t) (component observables)
     obsfuns = Dict{Int, Function}()
     for (i, sni) in enumerate(_snis)
         if SII.is_variable(nw, sni)
-            flatidxs[i] = SII.variable_index(nw, sni)
+            stateidx[i] = SII.variable_index(nw, sni)
         else
             cf = getcomp(nw, sni)
-            if !isdynamic(cf) && subsym_has_idx(sni.subidx, sym(cf)) # static state
-                _range = getcomprange(nw, sni)
-                flatidxs[i] = _range[subsym_to_idx(sni.subidx, sym(cf))]
-            elseif subsym_has_idx(sni.subidx, obssym(cf)) #found in observed
-                _idx = subsym_to_idx(sni.subidx, obssym(cf))
+
+            @argcheck sni.subidx isa Symbol "Observed musst be referenced by symbol, got $sni"
+            if (idx=findfirst(isequal(sni.subidx), outsym_flat(cf))) != nothing # output
+                _range = getcompoutrange(nw, sni)
+                outidx[i] = _range[idx]
+            elseif (idx=findfirst(isequal(sni.subidx), obssym(cf))) != nothing #found in observed
                 _obsf = _get_observed_f(nw, cf, resolvecompidx(nw, sni))
-                obsfuns[i] = (u, aggbuf, p, t) -> _obsf(u, aggbuf, p, t)[_idx]
+                obsfuns[i] = (u, aggbuf, p, t) -> _obsf(u, aggbuf, p, t)[idx]
             else
                 throw(ArgumentError("Cannot resolve observable $sni"))
             end
         end
     end
+    initbufs = !isempty(outidx) || !isempty(obsfuns)
 
-    @closure (u, p, t) -> begin
-        _u, _aggbuf = get_ustacked_buf(nw, u, p, t)
-        if isscalar
-            if !isempty(flatidxs)
-                idx = only(flatidxs).second
-                _u[idx]
+    if isscalar
+        @closure (u, p, t) -> begin
+            outbuf, aggbuf = get_buffers(nw, u, p, t; initbufs)
+            if !isempty(stateidx)
+                idx = only(stateidx).second
+                u[idx]
+            elseif !isempty(outidx)
+                idx = only(outidx).second
+                outbuf[idx]
             else
                 obsf = only(obsfuns).second
-                obsf(_u, _aggbuf, p, t)::eltype(u)
+                obsf(u, outbuf, aggbuf, p, t)::eltype(u)
             end
-        else
+        end
+    else
+        @closure (u, p, t) -> begin
+            outbuf, aggbuf = get_buffers(nw, u, p, t; initbufs)
+
             out = similar(u, length(snis))
-            for (i, flati) in flatidxs
-                out[i] = _u[flati]
+            for (i, statei) in stateidx
+                out[i] = u[statei]
+            end
+            for (i, outi) in outidx
+                out[i] = outbuf[outi]
             end
             for (i, obsf) in obsfuns
-                out[i] = obsf(_u, _aggbuf, p, t)::eltype(u)
+                out[i] = obsf(u, outbuf, aggbuf, p, t)::eltype(u)
             end
             out
         end
@@ -510,11 +484,11 @@ function _get_observed_f(nw::Network, cf::VertexFunction, vidx)
     ur   = nw.im.v_data[vidx]
     aggr = nw.im.v_aggr[vidx]
     pr   = nw.im.v_para[vidx]
-    out = Vector{Float64}(undef, N)
+    ret = Vector{Float64}(undef, N)
 
-    function(u, aggbuf, p, t)
-        cf.obsf(out, view(u, ur), view(aggbuf, aggr), view(p, pr), t)
-        out
+    @closure (u, outbuf, aggbuf, p, t) -> begin
+        cf.obsf(ret, view(u, ur), view(aggbuf, aggr), view(p, pr), t)
+        ret
     end
 end
 
@@ -524,11 +498,11 @@ function _get_observed_f(nw::Network, cf::EdgeFunction, eidx)
     esrcr = nw.im.e_src[eidx]
     edstr = nw.im.e_dst[eidx]
     pr   =  nw.im.e_para[eidx]
-    out = Vector{Float64}(undef, N)
+    ret = Vector{Float64}(undef, N)
 
-    function(u, aggbuf, p, t)
-        cf.obsf(out, view(u, ur), view(u, esrcr), view(u, edstr), view(p, pr), t)
-        out
+    @closure (u, outbuf, aggbuf, p, t) -> begin
+        cf.obsf(ret, view(u, ur), view(outbuff, esrcr), view(outbuf, edstr), view(p, pr), t)
+        ret
     end
 end
 
@@ -1004,18 +978,18 @@ end
 
 _make_sidx_iterable(IT, inpr, cidx, idx) = _make_iterabel(idx)
 function _make_sidx_iterable(IT::Type{<:SymbolicStateIndex}, inpr, cidx, ::Colon)
-    _get_components(IT, inpr)[cidx].sym
+    comp = _get_components(IT, inpr)[cidx]
+    Iterators.flatten((sym(comp), obssym_all(comp)))
 end
 function _make_sidx_iterable(IT::Type{<:SymbolicParameterIndex}, inpr, cidx, ::Colon)
-    _get_components(IT, inpr)[cidx].psym
+    psym(_get_components(IT, inpr)[cidx])
 end
 function _make_sidx_iterable(IT::Type{<:SymbolicStateIndex}, inpr, cidx, s::Union{AbstractString,AbstractPattern})
-    comp = _get_components(IT, inpr)[cidx]
-    syms = vcat(comp.sym, comp.obssym)
-    filter(sym -> contains(string(sym), s), syms)
+    syms = _make_sidx_iterable(IT, inpr, cidx, :) # get all possible
+    Iterators.filter(sym -> contains(string(sym), s), syms)
 end
 function _make_sidx_iterable(IT::Type{<:SymbolicParameterIndex}, inpr, cidx, s::Union{AbstractString,AbstractPattern})
-    syms = _get_components(IT, inpr)[cidx].psym
+    syms = _make_sidx_iterable(IT, inpr, cidx, :) # get all possible
     filter(sym -> contains(string(sym), s), syms)
 end
 

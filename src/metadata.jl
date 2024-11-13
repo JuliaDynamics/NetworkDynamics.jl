@@ -40,7 +40,7 @@ for md in [:default, :guess, :init, :bounds]
 
         Checks if a `$($(QuoteNode(md)))` value is present for symbol `sym`.
 
-        See also [`get_$($(QuoteNode(md)))`](@ref), [`set_$($(QuoteNode(md)))`](@ref).
+        See also [`get_$($(QuoteNode(md)))`](@ref), [`set_$($(QuoteNode(md)))!`](@ref).
         """
         $fname_has(c::ComponentFunction, sym::Symbol) = has_metadata(c, sym, $(QuoteNode(md)))
 
@@ -49,7 +49,7 @@ for md in [:default, :guess, :init, :bounds]
 
         Returns the `$($(QuoteNode(md)))` value for symbol `sym`.
 
-        See also [`has_$($(QuoteNode(md)))`](@ref), [`set_$($(QuoteNode(md)))`](@ref).
+        See also [`has_$($(QuoteNode(md)))`](@ref), [`set_$($(QuoteNode(md)))!`](@ref).
         """
         $fname_get(c::ComponentFunction, sym::Symbol) = get_metadata(c, sym, $(QuoteNode(md)))
 

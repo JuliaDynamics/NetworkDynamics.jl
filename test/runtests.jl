@@ -11,7 +11,7 @@ using NetworkDynamics: iscudacompatible
 using Aqua
 using ExplicitImports
 
-isinteractive() ? includet("testutils.jl") : include("testutils.jl")
+(isinteractive() ? includet : include)(joinpath(pkgdir(NetworkDynamics, "test", "testutils.jl")))
 
 @testset "NetworkDynamics Tests" begin
     @testset "Package Quality Tests" begin
@@ -25,14 +25,18 @@ isinteractive() ? includet("testutils.jl") : include("testutils.jl")
     end
 
     @safetestset "utils test" begin include("utils_test.jl") end
+
+    NetworkDynamics.CHECK_COMPONENT[] = false
     @safetestset "construction test" begin include("construction_test.jl") end
     @safetestset "Aggregation Tests" begin include("aggregators_test.jl") end
     @safetestset "Symbolic Indexing Tests" begin include("symbolicindexing_test.jl") end
+    @safetestset "massmatrix test" begin include("massmatrix_test.jl") end
+    NetworkDynamics.CHECK_COMPONENT[] = true
+
+    @safetestset "doctor test" begin include("doctor_test.jl") end
 
     @safetestset "Diffusion test" begin include("diffusion_test.jl") end
     @safetestset "inhomogeneous test" begin include("inhomogeneous_test.jl") end
-    @safetestset "massmatrix test" begin include("massmatrix_test.jl") end
-    @safetestset "doctor test" begin include("doctor_test.jl") end
     @safetestset "initialization test" begin include("initialization_test.jl") end
 
     @safetestset "AD test" begin include("AD_test.jl") end
@@ -60,10 +64,6 @@ end
         name = basename(file)
 
         @info "Test $name"
-        if name == "kuramoto_delay.jl"
-            @test_broken false
-            continue
-        end
         eval(:(@safetestset $name begin include($file) end))
     end
 end

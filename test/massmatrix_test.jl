@@ -7,26 +7,20 @@ N = 5
 g = star_digraph(N)
 add_edge!(g, 2, 3)
 
-static_vertex = StaticVertex(; f=(x, edges, p, t) -> nothing, dim=1, pdim=0) |> ODEVertex
-no_mm_vertex  = ODEVertex(; f=(dx, x, edges, p, t) -> nothing, dim=1, pdim=0)
-num_mm_vertex = ODEVertex(; f=(dx, x, edges, p, t) -> nothing, dim=1, pdim=0,
-    mass_matrix=0)
-vec_mm_vertex = ODEVertex(; f=(dx, x, edges, p, t) -> nothing, dim=2, pdim=0,
-    mass_matrix=Diagonal([1, 0]))
-mat_mm_vertex = ODEVertex(; f=(dx, x, edges, p, t) -> nothing, dim=2, pdim=0,
-    mass_matrix=[[1, 1] [0, 0]])
+static_vertex = VertexFunction(; g=(x, edges, p, t) -> nothing, outdim=1) |> ff_to_constraint
+no_mm_vertex  = VertexFunction(; f=(dx, x, edges, p, t) -> nothing, dim=1, g=1)
+num_mm_vertex = VertexFunction(; f=(dx, x, edges, p, t) -> nothing, dim=1, g=1, mass_matrix=0)
+vec_mm_vertex = VertexFunction(; f=(dx, x, edges, p, t) -> nothing, dim=2, g=1, mass_matrix=Diagonal([1, 0]))
+mat_mm_vertex = VertexFunction(; f=(dx, x, edges, p, t) -> nothing, dim=2, g=1, mass_matrix=[[1, 1] [0, 0]])
 
 vertex_list = [static_vertex, no_mm_vertex, num_mm_vertex, vec_mm_vertex, mat_mm_vertex]
 
-static_edge = StaticEdge(; f=(e, v_s, v_d, p, t) -> nothing, dim=1, pdim=0, coupling=Directed())
-no_mm_edge = ODEEdge(; f=(de, e, v_s, v_d, p, t) -> nothing, dim=1, pdim=0, coupling=Directed())
-num_mm_edge = ODEEdge(; f=(de, e, v_s, v_d, p, t) -> nothing, dim=1, pdim=0,
-    mass_matrix=0, coupling=Directed())
-vec_mm_edge = ODEEdge(; f=(de, e, v_s, v_d, p, t) -> nothing, dim=2, pdim=0,
-    mass_matrix=Diagonal([1, 0]), coupling=Directed())
-mat_mm_edge = ODEEdge(; f=(de, e, v_s, v_d, p, t) -> nothing, dim=2, pdim=0,
-    mass_matrix=[[1, 1] [0, 0]], coupling=Directed())
-zero_mm_edge = ODEEdge(; f=(de, e, v_s, v_d, p, t) -> nothing, dim=1, pdim=0, coupling=Directed(), mass_matrix=0)
+static_edge = EdgeFunction(; g=Directed((e, v_s, v_d, p, t) -> nothing), outdim=1)
+no_mm_edge = EdgeFunction(; f=(de, e, v_s, v_d, p, t) -> nothing, g=Directed(1), dim=1)
+num_mm_edge = EdgeFunction(; f=(de, e, v_s, v_d, p, t) -> nothing, g=Directed(1), dim=1, mass_matrix=0)
+vec_mm_edge = EdgeFunction(; f=(de, e, v_s, v_d, p, t) -> nothing, g=Directed(1), dim=2, mass_matrix=Diagonal([1, 0]))
+mat_mm_edge = EdgeFunction(; f=(de, e, v_s, v_d, p, t) -> nothing, g=Directed(1), dim=2, mass_matrix=[[1, 1] [0, 0]])
+zero_mm_edge = EdgeFunction(; f=(de, e, v_s, v_d, p, t) -> nothing, g=Directed(1), dim=1, mass_matrix=0)
 
 edge_list = [static_edge, no_mm_edge, num_mm_edge, vec_mm_edge, mat_mm_edge]
 ode_edge_list = [zero_mm_edge, no_mm_edge, num_mm_edge, vec_mm_edge, mat_mm_edge]

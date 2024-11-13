@@ -1,9 +1,37 @@
+"""
+    Network([g,] vertexf, edgef; kwarg...)
+
+Construct a `Network` object from a graph `g` and edge and component functions `vertexf` and `edgef`.
+
+Arguments:
+ - `g::AbstractGraph`: The graph on which the network is defined.
+    Optional, can be ommittet if all component functions have a defined `graphelement`.
+    See `vidx` and `src`/`dst` keywors for [`VertexFunction`](@ref) and [`EdgeFunction`](@ref) constructors respectively.
+ - `vertexf`:
+    A single [`VertexFunction`](@ref) or a vector of [`VertexFunction`](@ref) objects.
+    The order of the vertex functions must mirror the order of the `vertices(g)` iterator.
+
+ - `edgef`: A single [`EdgeFunction`](@ref) or a vector of [`EdgeFunction`](@ref) objects.
+    The order of the edge functions must mirror the order of the `edges(g)` iterator.
+
+Optional keyword arguments:
+ - `execution=SequentialExecution{true}()`:
+    Execution model of the network. E.g. [`SequentialExecution`](@ref), [`KAExecution`](@ref), [`PolyesterExecution`](@ref) or [`ThreadedExecution`](@ref).
+ - `aggregator=execution isa SequentialExecution ? SequentialAggregator(+) : PolyesterAggregator(+)`:
+    Aggregation function applied to the edge functions. E.g. [`SequentialAggregator`](@ref), [`PolyesterAggregator`](@ref), [`ThreadedAggregator`](@ref), [`SparseAggregator`](@ref).
+ - `check_graphelement=true`:
+    Check if the `graphelement` metadata is consistent with the graph.
+ - `dealias=false`
+    Check if the components alias eachother and create copies if necessary.
+    This is necessary if the same component function is referenced in multiple places in the Network but you want to
+    dynamicially asign metadata, such as initialization information to specific instances.
+ - `verbose=false`:
+    Show additional information during construction.
+"""
 function Network(g::AbstractGraph,
                  vertexf::Union{VertexFunction,Vector{<:VertexFunction}},
                  edgef::Union{EdgeFunction,Vector{<:EdgeFunction}};
                  execution=SequentialExecution{true}(),
-                 edepth=:auto,
-                 vdepth=:auto,
                  aggregator=execution isa SequentialExecution ? SequentialAggregator(+) : PolyesterAggregator(+),
                  check_graphelement=true,
                  dealias=false,
@@ -22,6 +50,13 @@ function Network(g::AbstractGraph,
         @argcheck length(_vertexf) == nv(g)
         @argcheck length(_edgef) == ne(g)
 
+        # search for vertex functions with feed forward
+        if CHECK_COMPONENT[] && any(hasff, _vertexf)
+            throw(ArgumentError("Vertex functions with feed forward are not supported yet! \
+                As an intermediate solution, you can call `ff_to_constraint(vf)` on the vertex function\
+                to turn feed forward outputs into algebraic states."))
+        end
+
         # check if components alias eachother copy if necessary
         # allready dealiase if provided as single functions
         if dealias && !all_same_v
@@ -35,23 +70,17 @@ function Network(g::AbstractGraph,
             println("Create dynamic network with $(nv(g)) vertices and $(ne(g)) edges:")
         @argcheck execution isa ExecutionStyle "Execution type $execution not supported (choose from $(subtypes(ExecutionStyle)))"
 
-        _maxedepth = isempty(_edgef) ? 0 : mapreduce(depth, min, _edgef)
-        if edepth === :auto
-            edepth = _maxedepth
-            verbose && println(" - auto accumulation depth = $edepth")
-        end
-        @argcheck edepth<=_maxedepth "For this system accumulation depth is limited to $edepth by the edgefunctions"
 
-        _maxvdepth = mapreduce(depth, min, _vertexf)
-        if vdepth === :auto
-            vdepth = _maxvdepth
-            verbose && println(" - auto edge input depth = $vdepth")
+        if !allequal(outdim, _vertexf)
+            throw(ArgumentError("All vertex functions must have the same output dimension!"))
         end
-        @argcheck vdepth<=_maxvdepth "For this system edge input depth is limited to $edepth by the vertex dimensions"
+        if !allequal(outdim_dst, _edgef)
+            throw(ArgumentError("All edge functions must have the same output dimension!"))
+        end
+        vdepth = outdim(first(_vertexf))
+        edepth = outdim_dst(first(_edgef))
 
-        dynstates = mapreduce(+, Iterators.flatten((_vertexf,_edgef))) do t
-            isdynamic(t) ? dim(t) : 0
-        end
+        dynstates = mapreduce(dim, +, Iterators.flatten((_vertexf,_edgef)))
 
         # create index manager
         @timeit_debug "Construct Index manager" begin
@@ -141,7 +170,7 @@ function Network(g::AbstractGraph,
         @assert isdense(im)
         mass_matrix = construct_mass_matrix(im)
         N = ForwardDiff.pickchunksize(max(im.lastidx_dynamic, im.lastidx_p))
-        caches = (;state = DiffCache(zeros(im.lastidx_static), N),
+        caches = (; output = DiffCache(zeros(im.lastidx_out), N),
                   aggregation = DiffCache(zeros(im.lastidx_aggr), N))
 
         gbufprovider = if usebuffer(execution)
@@ -250,18 +279,30 @@ function VertexBatch(im::IndexManager, idxs::Vector{Int}; verbose)
     components = @view im.vertexf[idxs]
 
     try
-        _compT = dispatchT(only(unique(dispatchT, components)))
-        _compf = compf(only(unique(compf, components)))
-        _statetype = statetype(only(unique(statetype, components)))
-        _dim = dim(only(unique(dim, components)))
-        _pdim = pdim(only(unique(pdim, components)))
+        # TODO: those checks seems expensive and redundant
+        # _compT = dispatchT(only(unique(dispatchT, components)))
+        # _compf = compf(only(unique(compf, components)))
+        # _compg = compg(only(unique(compg, components)))
+        # _ff    = fftype(only(unique(fftype, components)))
+        # _dim = dim(only(unique(dim, components)))
+        # _outdim = outdim(only(unique(outdim, components)))
+        # _pdim = pdim(only(unique(pdim, components)))
+        _compT = dispatchT(first(components))
+        _compf = compf(first(components))
+        _compg = compg(first(components))
+        _ff    = fftype(first(components))
+        _dim = dim(first(components))
+        _outdim = outdim(first(components))
+        _pdim = pdim(first(components))
 
-        (statestride, pstride, aggbufstride) = register_vertices!(im, _statetype, _dim, _pdim, idxs)
+        (statestride, outstride, pstride, aggbufstride) =
+            register_vertices!(im, _dim, _outdim, _pdim, idxs)
 
         verbose &&
         println(" - VertexBatch: dim=$(_dim), pdim=$(_pdim), length=$(length(idxs))")
 
-        VertexBatch{_compT, typeof(_compf), typeof(idxs)}(idxs, _compf, statestride, pstride, aggbufstride)
+        VertexBatch{_compT, typeof(_compf), typeof(_compg), typeof(_ff), typeof(idxs)}(
+            idxs, _compf, _compg, _ff, statestride, outstride, pstride, aggbufstride)
     catch e
         if e isa ArgumentError && startswith(e.msg, "Collection has multiple elements")
             throw(ArgumentError("Provided vertex functions $idxs use the same function but have different metadata (dim, pdim,type,...)"))
@@ -275,18 +316,30 @@ function EdgeBatch(im::IndexManager, idxs::Vector{Int}; verbose)
     components = @view im.edgef[idxs]
 
     try
-        _compT = dispatchT(only(unique(dispatchT, components)))
-        _compf = compf(only(unique(compf, components)))
-        _statetype = statetype(only(unique(statetype, components)))
-        _dim = dim(only(unique(dim, components)))
-        _pdim = pdim(only(unique(pdim, components)))
+        # TODO: those checks seems expensive and redundant
+        # _compT = dispatchT(only(unique(dispatchT, components)))
+        # _compf = compf(only(unique(compf, components)))
+        # _compg = compg(only(unique(compg, components)))
+        # _ff    = fftype(only(unique(fftype, components)))
+        # _dim = dim(only(unique(dim, components)))
+        # _outdim = outdim(only(unique(outdim, components)))
+        # _pdim = pdim(only(unique(pdim, components)))
+        _compT = dispatchT(first(components))
+        _compf = compf(first(components))
+        _compg = compg(first(components))
+        _ff    = fftype(first(components))
+        _dim = dim(first(components))
+        _outdim = outdim(first(components))
+        _pdim = pdim(first(components))
 
-        (statestride, pstride, gbufstride) = register_edges!(im, _statetype, _dim, _pdim, idxs)
+        (statestride, outstride, pstride, gbufstride) =
+            register_edges!(im, _dim, _outdim, _pdim, idxs)
 
         verbose &&
         println(" - EdgeBatch: dim=$(_dim), pdim=$(_pdim), length=$(length(idxs))")
 
-        EdgeBatch{_compT, typeof(_compf), typeof(idxs)}(idxs, _compf, statestride, pstride, gbufstride)
+        EdgeBatch{_compT, typeof(_compf), typeof(_compg), typeof(_ff), typeof(idxs)}(
+            idxs, _compf, _compg, _ff, statestride, outstride, pstride, gbufstride)
     catch e
         if e isa ArgumentError && startswith(e.msg, "Collection has multiple elements")
             throw(ArgumentError("Provided edge functions $idxs use the same function but have different metadata (dim, pdim,type,...)"))
@@ -305,22 +358,22 @@ end
 _find_identical(v::ComponentFunction, indices) = [collect(indices)]
 function _find_identical(v::Vector, indices)
     idxs_per_type = Vector{Int}[]
-    unique_compf = []
+    unique_comp = []
     for i in eachindex(v)
         found = false
-        for j in eachindex(unique_compf)
-            if compf(v[i]) == unique_compf[j]
+        for j in eachindex(unique_comp)
+            if batchequal(v[i], unique_comp[j])
                 found = true
                 push!(idxs_per_type[j], indices[i])
                 break
             end
         end
         if !found
-            push!(unique_compf, compf(v[i]))
+            push!(unique_comp, v[i])
             push!(idxs_per_type, [indices[i]])
         end
     end
-    @assert length(unique_compf) == length(idxs_per_type)
+    @assert length(unique_comp) == length(idxs_per_type)
     return idxs_per_type
 end
 
@@ -396,8 +449,6 @@ function Network(nw::Network;
                  kwargs...)
 
     _kwargs = Dict(:execution => executionstyle(nw),
-                   :edepth => :auto,
-                   :vdepth => :auto,
                    :aggregator => get_aggr_constructor(nw.layer.aggregator),
                    :check_graphelement => true,
                    :dealias => false,

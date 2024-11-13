@@ -1,5 +1,6 @@
 #!julia --startup-file=no
-@info "Start Benchmark Script with $ARGS"
+
+# @info "Start Benchmark Script with $ARGS"
 
 original_path = pwd()
 
@@ -21,19 +22,10 @@ Pkg.activate(BMPATH);
 if VERSION < v"1.11.0-0"
     Pkg.develop(; path=NDPATH);
 end
-Pkg.update();
-Pkg.precompile();
+Pkg.instantiate()
 
-using PkgBenchmark
-using LibGit2
-using Dates
-using Random
 using ArgParse
-using Serialization
-using StyledStrings
-using CairoMakie
-
-(isinteractive() ? includet : include)("benchmark_utils.jl")
+using Dates
 
 s = ArgParseSettings()
 #! format: off
@@ -66,12 +58,32 @@ s = ArgParseSettings()
     "--no-txt-export"
         help = "Don't export comparison.txt table"
         action = :store_true
+    "--noupdate"
+        help = "Don't update the packages"
+        action = :store_true
 end
 #! format: on
 args = parse_args(s; as_symbols=true)
 if args[:prefix] != ""
     args[:prefix] *= '_'
 end
+
+if args[:noupdate]
+    @info "Skip update of packages due to `--noupdate` flag"
+else
+    @info "Update packages"
+    Pkg.update()
+end
+Pkg.precompile();
+
+using PkgBenchmark
+using LibGit2
+using Random
+using Serialization
+using StyledStrings
+using CairoMakie
+
+(isinteractive() ? includet : include)("benchmark_utils.jl")
 
 @info "Run benchmarks on $(args[:target]) and compare to $(args[:baseline])"
 
@@ -82,31 +94,38 @@ We want to have the same benchmarks for target and base therefore we copy
 NetworkDynamics/benchmark to tmp/benchmark so it won't change if the repo
 state changes.
 =#
-tmp = mkpath(tempname());
-ndpath_tmp = joinpath(tmp, "NetworkDynamics")
-@info "Copy repo to $ndpath_tmp"
-# copy but don't copy benchmark data
-run(`rsync -a --exclude='*.data' $NDPATH/ $ndpath_tmp/`)
-cd(ndpath_tmp)
+bench_target   = args[:target]   ∉ ["latest"] && !contains(args[:target],   r"\.data$")
+bench_baseline = args[:baseline] ∉ ["latest","none","nothing"] && !contains(args[:baseline], r"\.data$")
 
-# copy bm scripts to separate folder (so it won't change if the state of the nd_temp repo chagnes)
-bmpath_tmp = joinpath(tmp, "benchmark")
-cp(BMPATH, bmpath_tmp)
-script_path = joinpath(bmpath_tmp, "benchmarks.jl")
+if bench_target || bench_baseline
+    tmp = mkpath(tempname());
+    ndpath_tmp = joinpath(tmp, "NetworkDynamics")
+    @info "Copy repo to $ndpath_tmp"
+    # copy but don't copy benchmark data
+    run(`rsync -a --exclude='*.data' $NDPATH/ $ndpath_tmp/`)
+    cd(ndpath_tmp)
 
-# if directory is dirty, commit everything (otherwise we cant switch do a differen commit/branch)
-isdirty = with(LibGit2.isdirty, GitRepo(ndpath_tmp))
-if isdirty
-    @info "Dirty directory, add everything to new commit!"
-    @assert realpath(pwd()) == realpath(ndpath_tmp) "Julia is in $(pwd()) not it $ndpath_tmp"
-    run(`git status`)
-    run(`git config --global user.email "benchmarkbot@example.com"`)
-    run(`git config --global user.name "Benchmark Bot"`)
-    run(`git checkout -b $(randstring(15))`)
-    run(`git add -A`)
-    run(`git commit -m "tmp commit for benchmarking"`)
-    # assert that repo is clean now
-    with(LibGit2.isdirty, GitRepo(ndpath_tmp)) && throw(error("Repository is still dirty!"))
+    # copy bm scripts to separate folder (so it won't change if the state of the nd_temp repo chagnes)
+    bmpath_tmp = joinpath(tmp, "benchmark")
+    cp(BMPATH, bmpath_tmp)
+    script_path = joinpath(bmpath_tmp, "benchmarks.jl")
+
+    # if directory is dirty, commit everything (otherwise we cant switch do a differen commit/branch)
+    isdirty = with(LibGit2.isdirty, GitRepo(ndpath_tmp))
+    if isdirty
+        @info "Dirty directory, add everything to new commit!"
+        @assert realpath(pwd()) == realpath(ndpath_tmp) "Julia is in $(pwd()) not it $ndpath_tmp"
+        run(`git status`)
+        run(`git config --global user.email "benchmarkbot@example.com"`)
+        run(`git config --global user.name "Benchmark Bot"`)
+        run(`git checkout -b $(randstring(15))`)
+        run(`git add -A`)
+        run(`git commit -m "tmp commit for benchmarking"`)
+        # assert that repo is clean now
+        with(LibGit2.isdirty, GitRepo(ndpath_tmp)) && throw(error("Repository is still dirty!"))
+    end
+else
+    @info "Copy of repo not necessary"
 end
 
 # # activate the environment in the tmp copy of the scripts
@@ -160,7 +179,7 @@ target = if contains(args[:target], r"\.data$")
     path = joinpath(original_path, args[:target])
     deserialize(path)
 elseif args[:target] == "latest"
-    file = sort(filter(contains(r"target*\.data$"), readdir(original_path)))[end]
+    file = sort(filter(contains(r"target.*\.data$"), readdir(original_path)))[end]
     @info "Use file $file as target"
     deserialize(joinpath(original_path, file))
 else
@@ -169,9 +188,8 @@ end
 
 baseline = if args[:baseline] ∉ ["nothing", "none"]
     if args[:baseline] == "latest"
-        file = sort(filter(contains(r"baseline*\.data$"), readdir(original_path)))[end]
-        @info "Use file $file as baseline"
-        deserialize(joinpath(original_path, file))
+        file = sort(filter(contains(r"baseline.*\.data$"), readdir(original_path)))[end]
+        baseline = deserialize(joinpath(original_path, file))
     elseif contains(args[:baseline], r"\.data$")
         path = joinpath(original_path, args[:baseline])
         deserialize(path)

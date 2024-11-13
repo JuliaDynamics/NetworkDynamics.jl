@@ -44,7 +44,7 @@ using ModelingToolkit: t_nounits as t, D_nounits as Dt
     end
 end
 sys = Swing(name=:swing)
-vf = ODEVertex(sys, [:i_r, :i_i], [:u_r, :u_i])
+vf = VertexFunction(sys, [:i_r, :i_i], [:u_r, :u_i])
 ```
 You can see in the provided [metadata](@ref), that we've set `default` values for the node outputs `u_r`, `u_i`, the node inputs `i_r`, `i_i` and most parameters.
 For some states and parameters, we've onlye provided a `guess` rather than a default.

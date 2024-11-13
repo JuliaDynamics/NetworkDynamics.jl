@@ -48,7 +48,7 @@ function test_execution_styles(prob)
                 _nw(_du, u, p, t)
             catch e
                 # XXX: fix for https://github.com/JuliaLang/julia/issues/55075
-                if e isa MethodError && e.f == Base.elsize
+                if e isa MethodError && e.f == Base.elsize && execution isa KAExecution
                     @test_broken false
                     continue
                 end
@@ -84,4 +84,5 @@ function test_execution_styles(prob)
             end
         end
     end
+    nothing
 end

@@ -16,7 +16,7 @@ When construction component functions, you can pass symbolic names using the `sy
 function _edgef!(e, v_s, v_d, (K,), t)
     e .= K * (v_s[1] .- v_d[1])
 end
-edgef = StaticEdge(_edgef!; sym=[:flow], psym=[:K=>1], coupling=AntiSymmetric())
+edgef = EdgeFunction(;g=AntiSymmetric(_edgef!), outsym=[:flow], psym=[:K=>1])
 ```
 Here we created a static diffusion edge with suitable variable and parameter names.
 Similarly, we define the diffusion vertex with symbolic names.
@@ -24,7 +24,7 @@ Similarly, we define the diffusion vertex with symbolic names.
 function _vertexf!(dv, v, esum, p, t)
     dv[1] = esum[1]
 end
-vertexf = ODEVertex(_vertexf!; sym=[:storage])
+vertexf = VertexFunction(f=_vertexf!, g=1, sym=[:storage])
 ```
 
 

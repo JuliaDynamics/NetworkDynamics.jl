@@ -1,4 +1,3 @@
-using NetworkDynamics
 ####
 #### Diffusion system
 ####
@@ -6,20 +5,20 @@ Base.@propagate_inbounds function diffusionedge!(e, v_s, v_d, _, _)
     e[1] = v_s[1] - v_d[1]
     nothing
 end
-diffusion_edge() = EdgeFunction(; g=AntiSymmetric(diffusionedge!), outdim=1, pdim=0)
+diffusion_edge() = StaticEdge(; f=diffusionedge!, dim=1, pdim=0, coupling=AntiSymmetric())
 
 Base.@propagate_inbounds function diffusion_dedge!(de, e, v_s, v_d, _, _)
     de[1] = 100.0 * (sin(v_s[1] - v_d[1]) - e[1])
     de[2] = 100.0 * (sin(v_d[1] - v_s[1]) - e[2])
     nothing
 end
-diffusion_dedge() = EdgeFunction(; f=diffusion_dedge!, dim=2, pdim=0, g=Fiducial(dst=1:1, src=2:2))
+diffusion_dedge() = ODEEdge(; f=diffusion_dedge!, dim=2, pdim=0, coupling=Fiducial())
 
 Base.@propagate_inbounds function diffusionvertex!(dv, _, esum, _, _)
     dv[1] = esum[1]
     nothing
 end
-diffusion_vertex() = VertexFunction(; f=diffusionvertex!, dim=1, pdim=0, g=StateMask(1:1))
+diffusion_vertex() = ODEVertex(; f=diffusionvertex!, dim=1, pdim=0, depth=1)
 
 ####
 #### inhomogenious kuramoto system
@@ -27,24 +26,24 @@ diffusion_vertex() = VertexFunction(; f=diffusionvertex!, dim=1, pdim=0, g=State
 Base.@propagate_inbounds function kuramoto_edge!(e, θ_s, θ_d, (K,), t)
     e[1] = K * sin(θ_s[1] - θ_d[1])
 end
-static_kuramoto_edge() = EdgeFunction(; g=AntiSymmetric(kuramoto_edge!), outdim=1, pdim=1)
+static_kuramoto_edge() = StaticEdge(; f=kuramoto_edge!, dim=1, pdim=1, coupling=AntiSymmetric())
 
 Base.@propagate_inbounds function kuramoto_vertex!(dθ, θ, esum, (ω,), t)
     dθ[1] = ω + esum[1]
 end
-kuramoto_vertex_1d() = VertexFunction(; f=kuramoto_vertex!, pdim=1, sym=[:θ], g=StateMask(1:1))
+kuramoto_vertex_1d() = ODEVertex(; f=kuramoto_vertex!, dim=1, pdim=1, sym=[:θ])
 
 Base.@propagate_inbounds function kuramoto_inertia!(dv, v, esum, (P,), t)
     dv[1] = v[2]
     dv[2] = P - 1.0 * v[2]
     dv[2] += esum[1]
 end
-kuramoto_vertex_2d() = VertexFunction(; f=kuramoto_inertia!, dim=2, pdim=1, sym=[:θ, :ω], g=StateMask(1:1));
+kuramoto_vertex_2d() = ODEVertex(; f=kuramoto_inertia!, dim=2, pdim=1, sym=[:θ, :ω]);
 
 ####
 #### powergrid model
 ####
-Base.@propagate_inbounds function piline!(out_src, out_dst, src, dst, p, t)
+Base.@propagate_inbounds function piline!(out, src, dst, p, t)
     L, R, C1, C2 = p
     ω = 2π*50
     Vsrc = Complex(src[1], src[2])
@@ -54,14 +53,13 @@ Base.@propagate_inbounds function piline!(out_src, out_dst, src, dst, p, t)
     iC2 = Vdst*im*ω*C2
     isrc = - (imain + iC1)
     idst = imain - iC2
-    out_dst[1] = -real(idst)
-    out_dst[2] = -imag(idst)
-    out_src[1] = -real(isrc)
-    out_src[2] = -imag(isrc)
+    out[1] = -real(idst)
+    out[2] = -imag(idst)
+    out[3] = -real(isrc)
+    out[4] = -imag(isrc)
     nothing
 end
-piline() = EdgeFunction(; g=piline!, outsym=(;src=[:src_i_r, :src_i_i], dst=[:dst_i_r, :dst_i_i]),
-                       psym=[:L, :R, :C1, :C2])
+piline() = StaticEdge(; f=piline!, dim=4, depth=2, coupling=Fiducial(), psym=[:L, :R, :C1, :C2])
 
 Base.@propagate_inbounds function pq!(du, u, isum, (P,Q), t)
     ic = Complex(isum[1], isum[2])
@@ -71,7 +69,7 @@ Base.@propagate_inbounds function pq!(du, u, isum, (P,Q), t)
     du[2] = imag(uc)
     nothing
 end
-pqnode() = VertexFunction(; f=pq!, sym=[:u_r, :u_i], g=StateMask(1:2), psym=[:P, :Q], mass_matrix=0)
+pqnode() = ODEVertex(; f=pq!, sym=[:u_r, :u_i], depth=2, psym=[:P, :Q], mass_matrix=0)
 
 Base.@propagate_inbounds function gen!(dv, v, isum, p, T)
     # unpack parameters
@@ -107,5 +105,5 @@ Base.@propagate_inbounds function gen!(dv, v, isum, p, T)
 
     nothing
 end
-generator() = VertexFunction(; f=gen!, sym=[:u_r, :u_i, :θ, :ω], g=StateMask(1:2),
+generator() = ODEVertex(; f=gen!, sym=[:u_r, :u_i, :θ, :ω], depth=2,
             psym=[:H, :P, :D, :Ω, :E_f, :T_d_dash, :T_q_dash, :X_d_dash, :X_q_dash, :X_d, :X_q])

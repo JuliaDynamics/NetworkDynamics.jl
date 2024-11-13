@@ -3,13 +3,6 @@ using NetworkDynamics
 (isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
 
 @testset "test utils" begin
-    @testset begin
-        using InteractiveUtils
-        for t in subtypes(NetworkDynamics.Coupling)
-            println(NetworkDynamics._styled_coupling(t()))
-        end
-    end
-
     @testset "subscript" begin
         using NetworkDynamics: subscript
         @test subscript(10) == "₁₀"
@@ -26,19 +19,18 @@ using NetworkDynamics
     end
 
     @testset "Test Component Library" begin
-        using NetworkDynamics: compf
+        using NetworkDynamics: compg
         a = Lib.diffusion_edge()
         b = Lib.diffusion_edge()
-        @test compf(a) == compf(b)
+        @test compg(a) == compg(b)
         a = Lib.diffusion_edge_closure()
         b = Lib.diffusion_edge_closure()
-        @test compf(a) != compf(b)
+        @test compg(a) != compg(b)
 
         fid = Lib.diffusion_edge_fid()
         ode = Lib.diffusion_odeedge()
 
         odevert = Lib.diffusion_vertex()
-        odevert_const = Lib.diffusion_vertex_constraint()
 
         kura_edge   = Lib.kuramoto_edge()
         kura_second = Lib.kuramoto_second()
@@ -50,12 +42,12 @@ using NetworkDynamics
         v1 = Lib.kuramoto_second()
         @test _find_identical(v1, 1:10) == [collect(1:10)]
         v2 = Lib.diffusion_vertex()
-        v3 = Lib.diffusion_vertex_constraint()
+        v3 = Lib.kuramoto_first()
 
         # v2 and v3 are equal when it comes to the function!!
         vs = [v1,v2,v3,v2,v2,v1,v1,v3]
 
-        @test _find_identical(vs, eachindex(vs)) == [[1,6,7],[2,3,4,5,8]]
+        @test _find_identical(vs, eachindex(vs)) == [[1,6,7],[2,4,5],[3,8]]
 
         es = [Lib.diffusion_edge(),
               Lib.diffusion_edge_closure(),
@@ -98,5 +90,15 @@ using NetworkDynamics
          a = [:a, :a, :c]
          b = [1,1,-3]
          @test unique_mappings(abs, a, b) == Dict(:c=>3)
+    end
+
+    @testset "flatrange to compbine ranges" begin
+        using NetworkDynamics: flatrange
+        r1 = 1:10
+        r2 = 11:12
+        @test flatrange((src=r1,dst=r2)) == 1:12
+        @test flatrange(r1) == r1
+        r3 = 12:13
+        @test_throws AssertionError flatrange((src=r1,dst=r3))
     end
 end

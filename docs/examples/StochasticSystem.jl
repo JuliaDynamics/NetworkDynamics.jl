@@ -55,13 +55,13 @@ function swing_equation!(dv, v, esum, (M, P, D), t)
     dv[2] = 1/M *(P - D * v[2] + esum[1])
     nothing
 end
-swing_vertex = ODEVertex(swing_equation!; sym=[:θ, :ω], psym=[:M=>1, :P, :D=>0.1])
+swing_vertex = VertexFunction(f=swing_equation!, g=1, sym=[:θ, :ω], psym=[:M=>1, :P, :D=>0.1])
 #-
 
 function powerflow!(e, v_s, v_d, (K,), t)
     e[1] = K * sin(v_s[1] - v_d[1])
 end
-powerflow_edge = StaticEdge(powerflow!; dim=1, psym=[:K=>6], coupling=AntiSymmetric())
+powerflow_edge = EdgeFunction(g=AntiSymmetric(powerflow!), outdim=1, psym=[:K=>6])
 
 #=
 ## Contructing the Deterministic Dynamics
@@ -122,20 +122,21 @@ nothing #hide #md
 
 #=
 The dynamics at the nodes has to have the same dimension as in the deterministic case. In our example we only have fluctuations in the second variable.
+FIXME: stochastic system should be simulated using symbolic indexing, this is jsut wrong in current ND!
 =#
 
-function fluctuation!(dx, x, edges, p, t)
-    dx[1] = 0.0
-    dx[2] = 0.05
-end
-nothing #hide #md
+# function fluctuation!(dx, x, edges, p, t)
+#     dx[1] = 0.0
+#     dx[2] = 0.05
+# end
+# nothing #hide #md
 
 #=
 Now we can construct the dynamics of the second layer by using `network_dynamics()`. Since the graph structure of the stochastic layer has no edges we can take the edge function of the deterministic case as a placeholder.
 =#
 
-fluctuation_vertex = ODEVertex(fluctuation!; dim=2)
-nd_noise = Network(h, fluctuation_vertex, NetworkDynamics.EdgeFunction[])
+# fluctuation_vertex = VertexFunction(f=fluctuation!, g=1:2, dim=2)
+# nd_noise = Network(h, fluctuation_vertex, NetworkDynamics.EdgeFunction[])
 nothing #hide #md
 
 #=
@@ -144,9 +145,9 @@ nothing #hide #md
 Finally, we can create an `SDEProblem` and solve it with `DifferentialEquations`.
 =#
 
-sde_prob = SDEProblem(nd, nd_noise, uflat(u0), (0.0, 500.0), pflat(p))
-sde_sol = solve(sde_prob, SOSRA())
-plot(sde_sol; idxs=vidxs(nd,:,:ω), ylims=(-1.0, 1.0), ylabel=L"\omega", legend=false, fmt=:png)
+# sde_prob = SDEProblem(nd, nd_noise, uflat(u0), (0.0, 500.0), pflat(p))
+# sde_sol = solve(sde_prob, SOSRA())
+# plot(sde_sol; idxs=vidxs(nd,:,:ω), ylims=(-1.0, 1.0), ylabel=L"\omega", legend=false, fmt=:png)
 
 #=
 More details on SDE problems, e.g. how to include correlations or how to define an `EnsembleProblem`, can be found in the [documentation](https://diffeq.sciml.ai/stable/types/sde_types/) of `DifferentialEquations`.

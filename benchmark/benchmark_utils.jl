@@ -247,14 +247,15 @@ function plot_over_N(target, baseline=nothing)
     fig = Makie.Figure(size=(2000,2000))
 
     bmkeys = [
-        ("diffusion", "static_edge"),
-        ("diffusion", "ode_edge"),
-        ("kuramoto", "homogeneous"),
-        ("kuramoto", "heterogeneous"),
+        "powergrid",
+        "diffusion_static_edge",
+        "diffusion_ode_edge",
+        "kuramoto_homogeneous",
+        "kuramoto_heterogeneous",
     ]
 
     for (row, key) in pairs(bmkeys)
-        dat = comp[key...]
+        dat = comp[key]
 
         allex = sort(collect(filter(!isequal("assemble"), keys(dat))))
         defex = "poly_buf" ∈ allex ? "poly_buf" : allex[1]
@@ -273,6 +274,19 @@ function plot_over_N(target, baseline=nothing)
                 Makie.scatterlines!(ax, N, btime; linestyle=:dash, color=sc.color)
             end
         end
+        # gpu timeseries
+        for (ex, agg) in [("ka_buf_cuda32", "sprs_cuda32"), ("ka_buf_cuda64", "sprs_cuda64")]
+            datagg = dat[ex, agg]
+            isempty(datagg) && continue
+            N = collect(keys(datagg))
+            ttime = getproperty.(gettarget.(values(datagg)), :time)
+            sc = Makie.scatterlines!(ax, N, ttime, label="$ex")
+            if all(hasbaseline.(values(datagg)))
+                btime = getproperty.(getbaseline.(values(datagg)), :time)
+                Makie.scatterlines!(ax, N, btime; linestyle=:dash, color=sc.color)
+            end
+        end
+
         Makie.axislegend(ax; position=:lt)
 
         ax = Makie.Axis(fig[row,2]; xscale=log10, yscale=log10, ylabel="coreloop time", title="$key aggregations ex=$defex")

@@ -14,12 +14,12 @@ using Polyester: Polyester
 using Mixers: Mixers
 using LinearAlgebra: LinearAlgebra, UniformScaling
 using SparseArrays: sparse
-using DocStringExtensions: FIELDS, TYPEDEF
 using StyledStrings: StyledStrings, @styled_str
-using RecursiveArrayTools: DiffEqArray
+using RecursiveArrayTools: RecursiveArrayTools, DiffEqArray
 using FastClosures: @closure
 using ForwardDiff: ForwardDiff
 using Printf: @sprintf
+using Random: Random
 
 @static if VERSION ≥ v"1.11.0-0"
     using Base: AnnotatedIOBuffer, AnnotatedString
@@ -31,14 +31,15 @@ using Base: @propagate_inbounds
 using InteractiveUtils: subtypes
 
 import SymbolicIndexingInterface as SII
-import StaticArrays
+using StaticArrays: StaticArrays, SVector
 
 include("utils.jl")
 
-export ODEVertex, StaticVertex, StaticEdge, ODEEdge
-export Symmetric, AntiSymmetric, Directed, Fiducial
-export dim, sym, pdim, psym, obssym, depth, hasinputsym, inputsym, coupling
-export metadata, symmetadata
+export VertexFunction, EdgeFunction
+export StateMask, Symmetric, AntiSymmetric, Directed, Fiducial
+export FeedForwardType, PureFeedForward, FeedForward, NoFeedForward, PureStateMap
+export dim, sym, pdim, psym, obssym, hasinsym, insym, hasindim, indim,
+       outdim, outsym, fftype, metadata, symmetadata
 include("component_functions.jl")
 
 export Network
@@ -47,6 +48,7 @@ include("network_structure.jl")
 
 export NaiveAggregator, KAAggregator, SequentialAggregator,
        PolyesterAggregator, ThreadedAggregator
+export ff_to_constraint
 include("aggregators.jl")
 include("gbufs.jl")
 include("construction.jl")
@@ -74,6 +76,7 @@ include("initialization.jl")
 
 include("show.jl")
 
+const CHECK_COMPONENT = Ref(true)
 export chk_component
 include("doctor.jl")
 
@@ -91,6 +94,8 @@ const ND_FACES = [
     :NetworkDynamics_fordst => StyledStrings.Face(foreground=:bright_yellow),
     :NetworkDynamics_forsrc => StyledStrings.Face(foreground=:bright_magenta),
     :NetworkDynamics_forlayer => StyledStrings.Face(foreground=:bright_blue),
+    :NetworkDynamics_name => StyledStrings.Face(weight=:bold),
+    :NetworkDynamics_fftype => StyledStrings.Face(foreground=:bright_blue),
 ]
 
 __init__() = foreach(StyledStrings.addface!, ND_FACES)

@@ -43,7 +43,7 @@ sol = solve(prob, Tsit5())
 @test sol[VIndex(3,[:ω,:δ]),1] == u0[[6,5]]
 @test sol[VIndex(3,[1,:ω]),1] == u0[[5,6]]
 
-@test NetworkDynamics.observed_symbols(nw) == [EIndex(1, :P), EIndex(2, :P), EIndex(3, :P)]
+@test NetworkDynamics.observed_symbols(nw) == [EIndex(1, :₋P), EIndex(1, :P), EIndex(2, :₋P), EIndex(2, :P), EIndex(3, :₋P), EIndex(3, :P)]
 
 @test SII.parameter_symbols(nw) == [VPIndex{Int64, Symbol}(1, :M),
                                     VPIndex{Int64, Symbol}(1, :D),
@@ -70,6 +70,9 @@ SII.all_variable_symbols(nw)
 @test_broken sol[EIndex(3,:P)]
 @test_broken sol[EIndex(1:3,:P)] == sol[[EIndex(1,:P),EIndex(2,:P),EIndex(3,:P)]]
 @test sol(sol.t, idxs=EIndex(1:3,:P)) == sol(sol.t, idxs=[EIndex(1,:P),EIndex(2,:P),EIndex(3,:P)])
+@test sol(sol.t, idxs=EIndex(1:3,:₋P)) == sol(sol.t, idxs=[EIndex(1,:₋P),EIndex(2,:₋P),EIndex(3,:₋P)])
+@test sol(sol.t, idxs=EIndex(1,:P)).u == -1* sol(sol.t, idxs=EIndex(1,:₋P)).u
+
 
 ####
 #### more complex problem
@@ -161,7 +164,7 @@ s[vpidxs(s,:,"M")] .= 5
 @test NetworkDynamics._resolve_colon(nw, EPIndex(:, :δ)) == EPIndex(1:ne(g), :δ)
 @test NetworkDynamics._resolve_colon(nw, VIndex(3, :)) == VIndex(3, 1:2)
 @test NetworkDynamics._resolve_colon(nw, VPIndex(3, :)) == VPIndex(3, 1:3)
-@test NetworkDynamics._resolve_colon(nw, EIndex(4, :)) == EIndex(4, 1:2)
+@test NetworkDynamics._resolve_colon(nw, EIndex(4, :)) == EIndex(4, 1:0)
 @test NetworkDynamics._resolve_colon(nw, EPIndex(4, :)) == EPIndex(4, 1:1)
 
 @inferred NetworkDynamics._resolve_colon(nw, VIndex(:, :δ))
@@ -190,12 +193,12 @@ end
 @test_broken s[EIndex(:,1)] == s[EIndex(1:6,1)]
 
           # variable     variable     observed     observed
-mixedidx = [VIndex(1,1), EIndex(1,1), EIndex(2,1), EIndex(3,1)]
+mixedidx = [VIndex(1,1), EIndex(1,1), EIndex(2,:P), EIndex(3,:P)]
 @test SII.is_observed.(s, mixedidx) == [0,0,1,1]
 @test SII.is_variable.(s, mixedidx) == [1,1,0,0]
 s[mixedidx] # -> calls observed for all indices
 
-mixedidx = [VIndex(1,1), EIndex(1,1), EIndex(2,1)]
+mixedidx = [VIndex(1,1), EIndex(1,1), EIndex(2,:P)]
 @test SII.is_observed.(s, mixedidx) == [0,0,1]
 @test SII.is_variable.(s, mixedidx) == [1,1,0]
 s[mixedidx] # -> calls observed for all indices
@@ -218,13 +221,13 @@ using NetworkDynamics: _expand_and_collect
 
 idxtypes = [
     VIndex(1,1), # variable
-    EIndex(1,1), # observed
-    EIndex(2,1), # variable
+    EIndex(1,1), # variable
+    EIndex(2,:P), # observed
     VPIndex(1,1), # parameter
     EPIndex(1,1), # parameter
     VIndex(1,1:1), # variable bc
-    EIndex(1,1:1), # observed bc
-    EIndex(2,1:1), # variable bc
+    EIndex(1,1:1), # variable bc
+    EIndex(2,[:P,:₋P]), # observed bc # does not work with ranges anymore
     VPIndex(1,1:1), # parameter bc
     EPIndex(1,1:1), # parameter bc
     VIndex(1,:), # variable bc
@@ -238,8 +241,7 @@ idxtypes = [
     # VPIndex(:,1), # parameter bc first
     EPIndex(:,1), # parameter bc first
     VIndex(1:3,1), # variable bc first
-    EIndex(1:3,1), # observed bc first
-    EIndex(1:3,1), # variable bc first
+    EIndex(2:3,:P), # variable bc first # observables require symbols now
     VPIndex([1,3],1), # parameter bc first
     EPIndex(1:3,1), # parameter bc first
 ]
@@ -303,7 +305,9 @@ for idx in idxtypes
     if b.allocs != 0
         println(idx, " => ", b.allocs, " allocations")
     end
-    @test b.allocs <= 9
+    if VERSION ≥ v"1.11"
+        @test b.allocs <= 10
+    end
 end
 
 @info "Test state getindex call"
@@ -318,10 +322,10 @@ for idx in idxtypes
     b = @b $getter($s)
     v = getter(s)
     if v isa Number
-        @test b.allocs <= 1
+        @test b.allocs <= 0
         b.allocs != 0 && println(idx, " => ", b.allocs, " allocations to call getter")
     elseif v isa AbstractArray
-        @test b.allocs <= 3
+        @test b.allocs <= 2
         b.allocs > 2 && println(idx, " => ", b.allocs, " allocations to call getter")
     else
         @test false
@@ -369,11 +373,15 @@ s3 = NWState(s, utype=Vector{Int}, ptype=Vector{Int})
 
 # test new index generator methods
 using NetworkDynamics: vidxs, eidxs, vpidxs, epidxs
-n1 = ODEVertex(x->x, [:u, :v], [:p1, :p2])
-n2 = ODEVertex(x->x, [:x1, :x2], [:p1, :p2], obsf=identity, obssym=[:o1, :o2])
-n3 = ODEVertex(x->x, 3; name=:Vertex3)
-e1 = StaticEdge(x->x, [:e1], AntiSymmetric())
-e2 = StaticEdge(x->x, [:esrc,:edst], Fiducial())
+fv = (du, u, ein, p, t) -> nothing
+n1 = VertexFunction(; f=fv, g=1:2, sym=[:u, :v], psym=[:p1, :p2], name=:VF)
+n2 = VertexFunction(; f=fv, g=1:2, sym=[:x1, :x2], psym=[:p1, :p2], obsf=identity, obssym=[:obs1, :obs2], name=:VF)
+n3 = VertexFunction(; f=fv, g=1:2, dim=3, name=:Vertex3)
+
+gss = (odst, vsrc, vdst, p, t) -> nothing
+gfid = (osrc, odst, vsrc, vdst, p ,t) -> nothing
+e1 = EdgeFunction(; g=AntiSymmetric(gss), outsym=[:e1])
+e2 = EdgeFunction(; g=gfid, outsym=(src=:esrc, dst=:edst))
 g = path_graph(3)
 nw = Network(g, [n1, n2, n3], [e1, e2])
 
@@ -381,18 +389,23 @@ nw = Network(g, [n1, n2, n3], [e1, e2])
                     VIndex(1, :v),
                     VIndex(2, :x1),
                     VIndex(2, :x2),
+                    VIndex(2, :obs1),
+                    VIndex(2, :obs2),
                     VIndex(3, :v₁),
                     VIndex(3, :v₂),
                     VIndex(3, :v₃)]
-@test eidxs(nw) == [EIndex(1, :e1),
+@test eidxs(nw) == [EIndex(1, :₋e1),
+                    EIndex(1, :e1),
                     EIndex(2, :esrc),
                     EIndex(2, :edst)]
 
 @test vidxs(nw, 1) == [VIndex(1, :u), VIndex(1, :v)]
-@test vidxs(nw, :ODEVertex) == [VIndex(1, :u),
-                                VIndex(1, :v),
-                                VIndex(2, :x1),
-                                VIndex(2, :x2)]
+@test vidxs(nw, :VF) == [VIndex(1, :u),
+                         VIndex(1, :v),
+                         VIndex(2, :x1),
+                         VIndex(2, :x2),
+                         VIndex(2, :obs1),
+                         VIndex(2, :obs2)]
 @test vidxs(nw, "3") == [VIndex(3, :v₁),
                          VIndex(3, :v₂),
                          VIndex(3, :v₃)]
@@ -411,11 +424,15 @@ nw = Network(g, [n1, n2, n3], [e1, e2])
 #### Timeseries parameter test
 ####
 using NetworkDynamics: vidxs, eidxs, vpidxs, epidxs
-n1 = ODEVertex(x->x, [:u, :v], [:p1, :p2])
-n2 = ODEVertex(x->x, [:x1, :x2], [:p1, :p2], obsf=identity, obssym=[:o1, :o2])
-n3 = ODEVertex(x->x, 3; name=:Vertex3)
-e1 = StaticEdge(x->x, [:e1], AntiSymmetric())
-e2 = StaticEdge(x->x, [:esrc,:edst], Fiducial())
+fv = (du, u, ein, p, t) -> nothing
+n1 = VertexFunction(; f=fv, g=1:2, sym=[:u, :v], psym=[:p1, :p2])
+n2 = VertexFunction(; f=fv, g=1:2, sym=[:x1, :x2], psym=[:p1, :p2], obsf=identity, obssym=[:obs1, :obs2])
+n3 = VertexFunction(; f=fv, g=1:2, dim=3, name=:Vertex3)
+
+gss = (odst, vsrc, vdst, p, t) -> nothing
+gfid = (osrc, odst, vsrc, vdst, p ,t) -> nothing
+e1 = EdgeFunction(; g=AntiSymmetric(gss), outsym=[:e1])
+e2 = EdgeFunction(; g=gfid, outsym=(src=:esrc, dst=:edst))
 g = path_graph(3)
 nw = Network(g, [n1, n2, n3], [e1, e2])
 
@@ -442,9 +459,9 @@ nw = Network(g, [n1, n2, n3], [e1, e2])
     @test s.v[:v1, 1] == s[VIndex(1,1)]
     @test s.v[:v2, 1] == s[VIndex(2,1)]
     @test s.v[:v3, 1] == s[VIndex(3,1)]
-    @test s.e[:e1, 1] == s[EIndex(1,1)]
-    @test s.e[:e2, 1] == s[EIndex(2,1)]
-    @test s.e[:e3, 1] == s[EIndex(3,1)]
+    @test s.e[:e1, :P] == s[EIndex(1,:P)]
+    @test s.e[:e2, :P] == s[EIndex(2,:P)]
+    @test s.e[:e3, :P] == s[EIndex(3,:P)]
     @test_throws ArgumentError s.p.v[:v, 1]
     @test s.p.v[:v1, 1] == s[VPIndex(1,1)]
     @test s.p.v[:v2, 1] == s[VPIndex(2,1)]

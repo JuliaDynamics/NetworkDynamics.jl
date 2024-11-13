@@ -3,12 +3,15 @@ using Pkg
 using Chairmarks
 using Graphs
 using NetworkDynamics
+using NetworkDynamics: iscudacompatible
 using Serialization
 using StableRNGs
 using SciMLBase
 using Test
 using ProgressMeter
 using Random
+using CUDA
+using CUDA: adapt
 (isinteractive() ? includet : include)("benchmark_utils.jl")
 (isinteractive() ? includet : include)("benchmark_compat.jl")
 
@@ -17,6 +20,8 @@ pinthreads(:cores)
 
 if pkgversion(NetworkDynamics) < v"0.9.0"
     (isinteractive() ? includet : include)("benchmark_models_v0.8.jl")
+elseif pkgversion(NetworkDynamics) < v"0.9.1"
+    (isinteractive() ? includet : include)("benchmark_models_v0.9.jl")
 else
     (isinteractive() ? includet : include)("benchmark_models.jl")
 end
@@ -43,20 +48,28 @@ try aggregations["thrd"] = ThreadedAggregator(+) catch e end
 try aggregations["sprs"] = SparseAggregator catch e end
 
 configurations = [
+    # differet ex over same agg
     ("seq", "seq"),
     ("ka", "seq"),
+    # ("ka", "sprs"), # additional for GPU
+    # ("ka", "ka"), # additional for GPU
     ("poly", "seq"),
     ("thrd", "seq"),
     ("seq_buf", "seq"), # default seq
     ("ka_buf", "seq"),
+    # ("ka_buf", "sprs"), # additional for GPU
+    # ("ka_buf", "ka"), # additional for GPU
     ("poly_buf", "seq"),
     ("thrd_buf", "seq"),
+    # different agg over same ex
     ("poly_buf", "ka"),
     ("poly_buf", "poly"),
     ("poly_buf", "thrd"),
     ("poly_buf", "sprs"),
     ("poly_buf", "poly"), # default thrd
 ]
+
+SECONDS = 1
 
 ####
 #### diffusion benchmarks on a dense watts strogatz graph
@@ -74,8 +87,8 @@ for k in keys(edges)
 
     for N in Ns
         g = watts_strogatz(N, N ÷ 2, 0.0; rng=StableRNG(1))
-        b = @be Network($g, $vertex, $edge) evals=1 samples=10 seconds=2
-        bd["diffusion", k, "assemble", N] = BenchmarkResult(b)
+        b = @be Network($g, $vertex, $edge) evals=1 samples=10 seconds=SECONDS
+        bd["diffusion_"*k, "assemble", N] = BenchmarkResult(b)
 
         _nd = Network(g, vertex, edge)
         _x0 = randx0(_nd)
@@ -102,9 +115,40 @@ for k in keys(edges)
             nd(dx, _x0, nothing, NaN)
             @test dx ≈ _dx
 
-            b = @be $nd($dx, $_x0, nothing, 0.0) seconds=2
+            b = @be $nd($dx, $_x0, nothing, 0.0) seconds=SECONDS
             br = BenchmarkResult(b, legacy_order(nd, dx))
-            bd["diffusion", k, exname, aggname, N] = br
+            bd["diffusion_"*k, exname, aggname, N] = br
+
+            if CUDA.functional() && iscudacompatible(execution) && iscudacompatible(nd.layer.aggregator)
+                update!(progress; showvalues = [(:edge, k), (:N, N), (:ex, exname*"_gpu"), (:agg, aggname*"_gpu")])
+                to = CuArray{Float32}
+                nd_d = adapt(to, nd)
+                x0_d = adapt(to, _x0)
+                dx_d = similar(x0_d)
+
+                nd_d(dx_d, x0_d, nothing, NaN)
+                if !(maximum(abs.(Vector(dx_d) - _dx)) < 1e-4)
+                    @warn "CUDA f32 lead to different results: extrema(Δ) = $(extrema(Vector(dx_d) - _dx))"
+                end
+
+                b = @be $nd_d($dx_d, $x0_d, nothing, 0.0) seconds=SECONDS
+                # we store the original _dx in the benchmarks results because we know
+                # our dx_d does not have the precision
+                br = BenchmarkResult(b, legacy_order(nd, _dx))
+                bd["diffusion_"*k, exname*"_cuda32", aggname*"_cuda32", N] = br
+
+                to = CuArray{Float64}
+                nd_d = adapt(to, nd)
+                x0_d = adapt(to, _x0)
+                dx_d = similar(x0_d)
+
+                nd_d(dx_d, x0_d, nothing, NaN)
+                @test Vector(dx_d) ≈ _dx
+
+                b = @be $nd_d($dx_d, $x0_d, nothing, 0.0) seconds=SECONDS
+                br = BenchmarkResult(b, legacy_order(nd, Vector(dx_d)))
+                bd["diffusion_"*k, exname*"_cuda64", aggname*"_cuda64", N] = br
+            end
         end
     end
 end
@@ -139,8 +183,8 @@ for f in [homogeneous, heterogeneous]
     name = string(f)
     for N in Ns
         (vert, edg, g) = f(N)
-        b = @be Network($g, $vert, $edg) evals=1 samples=10 seconds=2
-        bd["kuramoto", name, "assemble", N] = BenchmarkResult(b)
+        b = @be Network($g, $vert, $edg) evals=1 samples=10 seconds=SECONDS
+        bd["kuramoto_"*name, "assemble", N] = BenchmarkResult(b)
 
         _nd = Network(g, vert, edg)
         _x0 = randx0(_nd)
@@ -168,9 +212,133 @@ for f in [homogeneous, heterogeneous]
             nd(dx, _x0, p, NaN)
             @test dx ≈ _dx
 
-            b = @be $nd($dx, $_x0, $p, 0.0) seconds=2
+            b = @be $nd($dx, $_x0, $p, 0.0) seconds=SECONDS
             br = BenchmarkResult(b, legacy_order(nd, dx))
-            bd["kuramoto", name, exname, aggname, N] = br
+            bd["kuramoto_"*name, exname, aggname, N] = br
+
+            if CUDA.functional() && iscudacompatible(execution) && iscudacompatible(nd.layer.aggregator)
+                update!(progress; showvalues = [(:type, name), (:N, N), (:ex, exname*"_gpu"), (:agg, aggname*"_gpu")])
+                to = CuArray{Float32}
+                nd_d = adapt(to, nd)
+                x0_d = adapt(to, _x0)
+                dx_d = similar(x0_d)
+                p_d = adapt(to, p)
+
+                nd_d(dx_d, x0_d, p_d, NaN)
+                if !(maximum(abs.(Vector(dx_d) - _dx)) < 1e-4)
+                    @warn "CUDA f32 lead to different results: extrema(Δ) = $(extrema(Vector(dx_d) - _dx))"
+                end
+
+                b = @be $nd_d($dx_d, $x0_d, $p_d, 0.0) seconds=SECONDS
+                # we store the original _dx in the benchmarks results because we know
+                # our dx_d does not have the precision
+                br = BenchmarkResult(b, legacy_order(nd, _dx))
+                bd["kuramoto_"*name, exname*"_cuda32", aggname*"_cuda32", N] = br
+
+                to = CuArray{Float64}
+                nd_d = adapt(to, nd)
+                x0_d = adapt(to, _x0)
+                dx_d = similar(x0_d)
+                p_d = adapt(to, p)
+
+                nd_d(dx_d, x0_d, p_d, NaN)
+                @test Vector(dx_d) ≈ _dx
+
+                b = @be $nd_d($dx_d, $x0_d, $p_d, 0.0) seconds=SECONDS
+                br = BenchmarkResult(b, legacy_order(nd, Vector(dx_d)))
+                bd["kuramoto_"*name, exname*"_cuda64", aggname*"_cuda64", N] = br
+            end
+        end
+    end
+end
+finish!(progress)
+
+
+
+####
+#### powersystem benchmark
+####
+function pd_components(N)
+    rng = StableRNG(1)
+    g = watts_strogatz(N, 3, 0.8; rng=StableRNG(1))
+    edge = piline()
+
+    vertex = [pqnode(), generator()]
+    vertices = vertex[shuffle(rng, vcat([1 for _ in 1:N÷2], [2 for _ in 1:N÷2]))]
+    (vertices, edge, g)
+end
+
+Ns = [100, 1_000, 10_000, 100_000]#, 1_000_000]
+
+@info "Benchmark powergrid"
+progress = Progress(2 * length(Ns) * length(configurations),
+                    enabled=!haskey(ENV,"GITHUB_ACTIONS"))
+for N in Ns
+    (vert, edg, g) = pd_components(N)
+    b = @be Network($g, $vert, $edg) evals=1 samples=10 seconds=SECONDS
+    bd["powergrid", "assemble", N] = BenchmarkResult(b)
+
+    _nd = Network(g, vert, edg)
+    _x0 = randx0(_nd)
+    _dx = similar(_x0)
+    p = randp(_nd)
+    _nd(_dx, _x0, p, NaN)
+
+    for (exname, aggname) in configurations
+        GC.gc()
+        haskey(executions, exname) || continue
+        haskey(aggregations, aggname) || continue
+        execution = executions[exname]
+        aggregator = aggregations[aggname]
+        next!(progress; showvalues = [(:N, N), (:ex, exname), (:agg, aggname)])
+        nd = try
+            Network(g, vert, edg; execution, aggregator)
+        catch e
+            if e.msg == "execution type not supported"
+                continue
+            else
+                rethrow(e)
+            end
+        end
+        dx = similar(_x0)
+        nd(dx, _x0, p, NaN)
+        @test dx ≈ _dx
+
+        b = @be $nd($dx, $_x0, $p, 0.0) seconds=SECONDS
+        br = BenchmarkResult(b, legacy_order(nd, dx))
+        bd["powergrid", exname, aggname, N] = br
+
+        if CUDA.functional() && iscudacompatible(execution) && iscudacompatible(nd.layer.aggregator)
+            update!(progress; showvalues = [(:N, N), (:ex, exname*"_gpu"), (:agg, aggname*"_gpu")])
+            to = CuArray{Float32}
+            nd_d = adapt(to, nd)
+            x0_d = adapt(to, _x0)
+            dx_d = similar(x0_d)
+            p_d = adapt(to, p)
+
+            nd_d(dx_d, x0_d, p_d, NaN)
+            if !(maximum(abs.(Vector(dx_d) - _dx)) < 1e-4)
+                @warn "CUDA f32 lead to different results: extrema(Δ) = $(extrema(Vector(dx_d) - _dx))"
+            end
+
+            b = @be $nd_d($dx_d, $x0_d, $p_d, 0.0) seconds=SECONDS
+            # we store the original _dx in the benchmarks results because we know
+            # our dx_d does not have the precision
+            br = BenchmarkResult(b, legacy_order(nd, _dx))
+            bd["powergrid", exname*"_cuda32", aggname*"_cuda32", N] = br
+
+            to = CuArray{Float64}
+            nd_d = adapt(to, nd)
+            x0_d = adapt(to, _x0)
+            dx_d = similar(x0_d)
+            p_d = adapt(to, p)
+
+            nd_d(dx_d, x0_d, p_d, NaN)
+            @test Vector(dx_d) ≈ _dx
+
+            b = @be $nd_d($dx_d, $x0_d, $p_d, 0.0) seconds=SECONDS
+            br = BenchmarkResult(b, legacy_order(nd, Vector(dx_d)))
+            bd["powergrid", exname*"_cuda64", aggname*"_cuda64", N] = br
         end
     end
 end
