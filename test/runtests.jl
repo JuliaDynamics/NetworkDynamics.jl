@@ -11,7 +11,7 @@ using NetworkDynamics: iscudacompatible
 using Aqua
 using ExplicitImports
 
-isinteractive() ? includet("testutils.jl") : include("testutils.jl")
+(isinteractive() ? includet : include)(joinpath(pkgdir(NetworkDynamics, "test", "testutils.jl")))
 
 @testset "NetworkDynamics Tests" begin
     @testset "Package Quality Tests" begin

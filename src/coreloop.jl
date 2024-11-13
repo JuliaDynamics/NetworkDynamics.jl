@@ -114,7 +114,7 @@ end
         elseif evalg(fg, batch)
             compkernel_g!(_backend)
         end
-        kernel(_type, fg, batch, du, u, o, inbuf, p, t; ndrange=length(batch))
+        isnothing(kernel) || kernel(_type, fg, batch, du, u, o, inbuf, p, t; ndrange=length(batch))
     end
 end
 @kernel function compkernel_f!(::Type{T}, @Const(fg), @Const(batch),
