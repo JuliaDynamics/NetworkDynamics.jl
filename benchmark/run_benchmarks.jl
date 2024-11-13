@@ -22,6 +22,7 @@ Pkg.activate(BMPATH);
 if VERSION < v"1.11.0-0"
     Pkg.develop(; path=NDPATH);
 end
+Pkg.instantiate()
 
 using ArgParse
 using Dates
