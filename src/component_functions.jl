@@ -347,11 +347,12 @@ dispatchT(T::Type{<:EdgeFunction}) = EdgeFunction{nothing,nothing,nothing,nothin
 # TODO: introduce batchequal hash for faster batching of component functions
 batchequal(a, b) = false
 function batchequal(a::ComponentFunction, b::ComponentFunction)
-    compf(a) == compf(b) || return false
-    compg(a) == compg(b) || return false
-    dim(a)   == dim(b)   || return false
-    pdim(a)  == pdim(b)  || return false
-    outdim(a)  == outdim(b)  || return false
+    compf(a) == compf(b)    || return false
+    compg(a) == compg(b)    || return false
+    fftype(a) == fftype(b)  || return false
+    dim(a)   == dim(b)      || return false
+    outdim(a)  == outdim(b) || return false
+    pdim(a)  == pdim(b)     || return false
     return true
 end
 

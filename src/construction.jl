@@ -252,14 +252,20 @@ function VertexBatch(im::IndexManager, idxs::Vector{Int}; verbose)
 
     try
         # TODO: those checks seems expensive and redundant
-        _compT = dispatchT(only(unique(dispatchT, components)))
-        _compf = compf(only(unique(compf, components)))
-        _compg = compg(only(unique(compg, components)))
-        _ff    = fftype(only(unique(fftype, components)))
-
-        _dim = dim(only(unique(dim, components)))
-        _outdim = outdim(only(unique(outdim, components)))
-        _pdim = pdim(only(unique(pdim, components)))
+        # _compT = dispatchT(only(unique(dispatchT, components)))
+        # _compf = compf(only(unique(compf, components)))
+        # _compg = compg(only(unique(compg, components)))
+        # _ff    = fftype(only(unique(fftype, components)))
+        # _dim = dim(only(unique(dim, components)))
+        # _outdim = outdim(only(unique(outdim, components)))
+        # _pdim = pdim(only(unique(pdim, components)))
+        _compT = dispatchT(first(components))
+        _compf = compf(first(components))
+        _compg = compg(first(components))
+        _ff    = fftype(first(components))
+        _dim = dim(first(components))
+        _outdim = outdim(first(components))
+        _pdim = pdim(first(components))
 
         (statestride, outstride, pstride, aggbufstride) =
             register_vertices!(im, _dim, _outdim, _pdim, idxs)
@@ -283,14 +289,20 @@ function EdgeBatch(im::IndexManager, idxs::Vector{Int}; verbose)
 
     try
         # TODO: those checks seems expensive and redundant
-        _compT = dispatchT(only(unique(dispatchT, components)))
-        _compf = compf(only(unique(compf, components)))
-        _compg = compg(only(unique(compg, components)))
-        _ff    = fftype(only(unique(fftype, components)))
-
-        _dim = dim(only(unique(dim, components)))
-        _outdim = outdim(only(unique(outdim, components)))
-        _pdim = pdim(only(unique(pdim, components)))
+        # _compT = dispatchT(only(unique(dispatchT, components)))
+        # _compf = compf(only(unique(compf, components)))
+        # _compg = compg(only(unique(compg, components)))
+        # _ff    = fftype(only(unique(fftype, components)))
+        # _dim = dim(only(unique(dim, components)))
+        # _outdim = outdim(only(unique(outdim, components)))
+        # _pdim = pdim(only(unique(pdim, components)))
+        _compT = dispatchT(first(components))
+        _compf = compf(first(components))
+        _compg = compg(first(components))
+        _ff    = fftype(first(components))
+        _dim = dim(first(components))
+        _outdim = outdim(first(components))
+        _pdim = pdim(first(components))
 
         (statestride, outstride, pstride, gbufstride) =
             register_edges!(im, _dim, _outdim, _pdim, idxs)
