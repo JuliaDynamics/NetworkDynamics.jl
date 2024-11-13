@@ -1,6 +1,6 @@
 # API
 
-The following functions are designed for public use
+The following functions are designed for public use.
 
 ## Network Construction
 ```@docs
@@ -9,24 +9,44 @@ dim(::Network)
 pdim(::Network)
 ```
 
-## Vertex Functions
+## Component Functions
 ```@docs
-StaticVertex
-ODEVertex
+VertexFunction
+EdgeFunction
 ```
 
-## Edge Functions
+### Output Function Helpers/Wrappers 
 ```@docs
-StaticEdge
-ODEEdge
-```
-
-### Coupling types
-```@docs
+StateMask
 Symmetric
 AntiSymmetric
 Directed
 Fiducial
+```
+
+### Accessors for Component Properties
+```@docs
+fftype
+dim(::NetworkDynamics.ComponentFunction)
+sym
+outdim
+outsym
+pdim(::NetworkDynamics.ComponentFunction)
+psym
+obssym
+hasinsym
+insym
+hasindim
+indim
+```
+
+### `FeedForwardType`-Traits
+```@docs
+FeedForwardType
+PureFeedForward
+FeedForward
+NoFeedForward
+PureStateMap
 ```
 
 ## Symbolic Indexing
@@ -49,14 +69,6 @@ uflat
 pflat
 ```
 
-### Index generators
-```@docs
-vidxs
-eidxs
-vpidxs
-epidxs
-```
-
 ### Symbolic Indices
 ```@docs
 VIndex
@@ -65,19 +77,15 @@ VPIndex
 EPIndex
 ```
 
-## Metadata API
-### Component Accessors
+### Index generators
 ```@docs
-dim(::NetworkDynamics.ComponentFunction)
-sym
-pdim(::NetworkDynamics.ComponentFunction)
-psym
-obssym
-depth
-hasinsym
-insym
-coupling
+vidxs
+eidxs
+vpidxs
+epidxs
 ```
+
+## Metadata API
 ### Component Metadata API
 ```@docs
 metadata

@@ -36,11 +36,10 @@ using StaticArrays: StaticArrays, SVector
 include("utils.jl")
 
 export VertexFunction, EdgeFunction
-export Symmetric, AntiSymmetric, Directed, Fiducial
-export PureFeedForward, FeedForward, NoFeedForward, PureStateMap
-export StateMask
-export dim, sym, pdim, psym, obssym, hasinsym, insym, hasindim, indim, outdim, outsym
-export metadata, symmetadata
+export StateMask, Symmetric, AntiSymmetric, Directed, Fiducial
+export FeedForwardType, PureFeedForward, FeedForward, NoFeedForward, PureStateMap
+export dim, sym, pdim, psym, obssym, hasinsym, insym, hasindim, indim,
+       outdim, outsym, fftype, metadata, symmetadata
 include("component_functions.jl")
 
 export Network

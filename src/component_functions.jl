@@ -1,13 +1,80 @@
+"""
+    abstract type FeedForwardType end
+
+Abstract supertype for the FeedForwardType traits.
+"""
 abstract type FeedForwardType end
+"""
+    PureFeedForward <: FeedForwardType
+
+Trait for component output functions `g` that have pure feed forward behavior
+(do not depend on x):
+
+    g!(outs..., ins..., p, t)
+
+See also [`FeedForward`](@ref), [`NoFeedForward`](@ref) and [`PureStateMap`](@ref).
+"""
 struct PureFeedForward <: FeedForwardType end
+"""
+    FeedForward <: FeedForwardType
+
+Trait for component output functions `g` that have feed forward behavior. May
+depend on everything:
+
+    g!(outs..., x, ins..., p, t)
+
+See also [`PureFeedForward`](@ref), [`NoFeedForward`](@ref) and [`PureStateMap`](@ref).
+"""
 struct FeedForward <: FeedForwardType end
+"""
+    NoFeedForward <: FeedForwardType
+
+Trait for component output functions `g` that have no feed forward behavior (do
+not depend on inputs):
+
+    g!(outs..., x, p, t)
+
+See also [`PureFeedForward`](@ref), [`FeedForward`](@ref) and [`PureStateMap`](@ref).
+"""
 struct NoFeedForward <: FeedForwardType end
+"""
+    PureStateMap <: FeedForwardType
+
+Trait for component output functions `g` that only depends on state:
+
+    g!(outs..., x)
+
+See also [`PureFeedForward`](@ref), [`FeedForward`](@ref) and [`NoFeedForward`](@ref).
+"""
 struct PureStateMap <: FeedForwardType end
+
+"""
+    fftype(x)
+
+Retrieve the feed forward trait of `x`.
+"""
+function fftype end
+
 hasfftype(::Any) = false
 hasff(x) = fftype(x) isa Union{PureFeedForward, FeedForward}
 
 _has_sym_to_outsym_mapping(::Any) = false
 
+"""
+    StateMask(i::AbstractArray)
+    StateMaks(i::Number)
+
+A `StateMask` is a predefined output function. It can be used to define
+the output of a component function by picking from the internal state.
+
+I.e. `g=StateMask(2:3)` in a vertex function will output the internal states 2 and 3.
+In many contexts, `StateMask`s can be constructed implicitly by just providing
+the indices, e.g. `g=1:2`.
+
+For [`EdgeFunction`](@ref) this needs to be combined with a [`Directed`](@ref),
+[`Symmetric`](@ref), [`AntiSymmetric`](@ref) or [`Fiducial`](@ref) coupling, e.g.
+`g=Fiducial(1:2, 3:4)` forwards states 1:2 to dst and states 3:4 to src.
+"""
 struct StateMask{N,I}
     idxs::I
     function StateMask(i::AbstractArray)
@@ -29,11 +96,24 @@ fftype(::StateMask) = PureStateMap()
 end
 
 
-abstract type Coupling{FF} end
-hasfftype(::Coupling) = true
-fftype(::Coupling{FF}) where {FF} = FF()
+abstract type OutputWrapper{FF} end
+hasfftype(::OutputWrapper) = true
+fftype(::OutputWrapper{FF}) where {FF} = FF()
 
-struct AntiSymmetric{FF,G} <: Coupling{FF}
+"""
+    AntiSymmetric(g_dst)
+
+Wraps a single-sided output function `g_dst` turns it into a double sided
+output function which applies
+
+    y_dst = g_dst(...)
+    y_src = -y_dst
+
+`g_dst` can be a `Number`/`AbstractArray` to impicitly wrap the corresponding [`StateMask`](@ref).
+
+See also [`Symmetric`](@ref), [`Directed`](@ref), [`Fiducial`](@ref) and [`StateMask`](@ref).
+"""
+struct AntiSymmetric{FF,G} <: OutputWrapper{FF}
     g::G
     function AntiSymmetric(g; ff=nothing)
         ff = isnothing(ff) ? _infer_ss_fftype(g) : ff
@@ -49,7 +129,20 @@ AntiSymmetric(g::Union{AbstractVector,Number}; ff=nothing) = AntiSymmetric(State
     nothing
 end
 
-struct Symmetric{FF,G} <: Coupling{FF}
+"""
+    Symmetric(g)
+
+Wraps a single-sided output function `g` turns it into a double sided
+output function which applies
+
+    y_dst = g(...)
+    y_src = y_dst
+
+`g` can be a `Number`/`AbstractArray` to impicitly wrap the corresponding [`StateMask`](@ref).
+
+See also [`AntiSymmetric`](@ref), [`Directed`](@ref), [`Fiducial`](@ref) and [`StateMask`](@ref).
+"""
+struct Symmetric{FF,G} <: OutputWrapper{FF}
     g::G
     function Symmetric(g; ff=nothing)
         ff = isnothing(ff) ? _infer_ss_fftype(g) : ff
@@ -65,7 +158,20 @@ Symmetric(g::Union{AbstractVector,Number}; ff=nothing) = Symmetric(StateMask(g);
     nothing
 end
 
-struct Directed{FF,G} <: Coupling{FF}
+"""
+    Directed(g_dst)
+
+Wraps a single-sided output function `g_dst` turns it into a double sided
+output function which applies
+
+    y_dst = g_dst(...)
+
+With `Directed` there is no output for the `src` side.
+`g_dst` can be a `Number`/`AbstractArray` to impicitly wrap the corresponding [`StateMask`](@ref).
+
+See also [`AniSymmetric`](@ref), [`Symmetric`](@ref), [`Fiducial`](@ref) and [`StateMask`](@ref).
+"""
+struct Directed{FF,G} <: OutputWrapper{FF}
     g::G
     function Directed(g; ff=nothing)
         ff = isnothing(ff) ? _infer_ss_fftype(g) : ff
@@ -78,7 +184,20 @@ Directed(g::Union{AbstractVector,Number}; ff=nothing) = Directed(StateMask(g); f
     nothing
 end
 
-struct Fiducial{FF,GS,GD} <: Coupling{FF}
+"""
+    Fiducial(g_src, g_dst)
+
+Wraps two single-sided output function `g_src` and `g_dst` and turns them
+into a double sided output function which applies
+
+    y_dst = g_src(...)
+    y_src = g_dst(...)
+
+`g` can be a `Number`/`AbstractArray` to impicitly wrap the corresponding [`StateMask`](@ref).
+
+See also [`AntiSymmetric`](@ref), [`Directed`](@ref), [`Fiducial`](@ref) and [`StateMask`](@ref).
+"""
+struct Fiducial{FF,GS,GD} <: OutputWrapper{FF}
     src::GS
     dst::GD
     function Fiducial(src, dst; ff=nothing)
@@ -131,6 +250,31 @@ struct VertexFunction{F,G,FFT,OF,MM} <: ComponentFunction
     _outsym_flat::Vector{Symbol} # outsyms as they appear in outbuf
     _obssym_all::Vector{Symbol}  # collection of true "observed" (flat_out\statesym) ∪ obssym
 end
+"""
+    VertexFunction(; kwargs...)
+
+Build a `VertexFunction` according to the keyword arguments.
+
+Main Arguments:
+- `f=nothing`: Dynamic function of the component. Can be nothing if `dim` is 0.
+- `g`: Output function of the component. Usefull helpers: [`StateMask`](@ref)
+- `sym`/`dim`: Symbolic names of the states. If `dim` is provided, `sym` is set automaticially.
+- `outsym`/`outdim`:
+   Symbolic names of the outputs. If `outdim` is provided, `outsym` is set automaticially.
+   Can be infered automaticially if `g` isa `StateMask`.
+- psym`/`pdim=0`: Symbolic names of the parameters. If `pdim` is provided, `psym` is set automaticially.
+- `mass_matrix=I`: Mass matrix of component. Can be a vector `v` and is then interpreted as `Diagonal(v)`.
+- `name=:VF`: Name of the component.
+
+Optional Arguments:
+- `insym`/`indim`: Symbolic names of the inputs. If `indim` is provided, `insym` is set automaticially.
+- `vidx`: Index of the vertex in the graph, enables graphless constructor.
+- `ff`: `FeedForwardType` of component. Will be typically infered from `g` automaticially.
+- `obssym`/`obsf`: Define additional "observable" states.
+- `symmetadata`/`metadata`: Provide prefilled metadata dictionaries.
+
+All Symbol arguments can be used to set default values, i.e. `psym=[:K=>1, :p]`.
+"""
 VertexFunction(; kwargs...) = _construct_comp(VertexFunction, Base.inferencebarrier(kwargs))
 VertexFunction(v::VertexFunction; kwargs...) = _reconstruct_comp(VertexFunction, v, Base.inferencebarrier(kwargs))
 
@@ -157,6 +301,34 @@ struct EdgeFunction{F,G,FFT,OF,MM} <: ComponentFunction
     _outsym_flat::Vector{Symbol} # outsyms as they appear in outbuf
     _obssym_all::Vector{Symbol}  # collection of true "observed" (flat_out\statesym) ∪ obssym
 end
+"""
+    EdgeFunction(; kwargs...)
+
+Build a `EdgeFunction` according to the keyword arguments.
+
+Main Arguments:
+- `f=nothing`: Dynamic function of the component. Can be nothing if `dim` is 0.
+- `g`: Output function of the component. Usefull helpers: [`AntiSymmetric`](@ref), [`Symmetric`](@ref), [`Fiducial`](@ref), [`Directed`](@ref) and [`StateMask`](@ref).
+- `sym`/`dim`: Symbolic names of the states. If `dim` is provided, `sym` is set automaticially.
+- `outsym`/`outdim`:
+   Symbolic names of the outputs. If `outdim` is provided, `outsym` is set automaticially.
+   In general, outsym for edges isa named tuple `(; src, dst)`. However, depending on the `g` function,
+   it might be enough to provide a single vector or even nothing (e.g. `AntiSymmetric(StateMask(1:2))`).
+   See [Building `EdgeFunction`s](@ref) for examples.
+- psym`/`pdim=0`: Symbolic names of the parameters. If `pdim` is provided, `psym` is set automaticially.
+- `mass_matrix=I`: Mass matrix of component. Can be a vector `v` and is then interpreted as `Diagonal(v)`.
+- `name=:VF`: Name of the component.
+
+Optional Arguments:
+- `insym`/`indim`: Symbolic names of the inputs. If `indim` is provided, `insym` is set automaticially.
+   For edges, `insym` is a named tuple `(; src, dst)`. If give as vector tuple is created automaticially.
+- `src`/`dst`: Index or name of the vertices at src and dst end. Enables graphless constructor.
+- `ff`: `FeedForwardType` of component. Will be typically infered from `g` automaticially.
+- `obssym`/`obsf`: Define additional "observable" states.
+- `symmetadata`/`metadata`: Provide prefilled metadata dictionaries.
+
+All Symbol arguments can be used to set default values, i.e. `psym=[:K=>1, :p]`.
+"""
 EdgeFunction(; kwargs...) = _construct_comp(EdgeFunction, Base.inferencebarrier(kwargs))
 EdgeFunction(v::EdgeFunction; kwargs...) = _reconstruct_comp(EdgeFunction, v, Base.inferencebarrier(kwargs))
 
@@ -197,8 +369,8 @@ sym(c::ComponentFunction)::Vector{Symbol} = c.sym
 
 
 """
-    outdim(c::EdgeFunction)::@NamedTuple(src::Int, dst::Int)
     outdim(c::VertexFunction)::Int
+    outdim(c::EdgeFunction)::@NamedTuple(src::Int, dst::Int)
 
 Retrieve the output dimension of the component
 """
@@ -269,11 +441,16 @@ metadata(c::ComponentFunction)::Dict{Symbol,Any} = c.metadata
 Checks if the optioan field `insym` is present in the component function.
 """
 hasinsym(c::ComponentFunction) = !isnothing(c.insym)
+"""
+    hasindim(c::ComponentFunction)
+
+Checks if the optioan field `insym` is present in the component function.
+"""
 hasindim(c::ComponentFunction) = hasinsym(c)
 
 """
     insym(c::VertexFunction)::Vector{Symbol}
-    insym(c::EdgeFunction)::NamedTuple with :src and :dst keys
+    insym(c::EdgeFunction)::@NamedTuple{src::Vector{Symbol}, dst::Vector{Symbol}}
 
 Musst be called *after* [`hasinsym`](@ref)/[`hasindim`](@ref) returned true.
 Gives the `insym` vector(s). For vertex functions just a single vector, for
