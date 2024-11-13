@@ -1,5 +1,5 @@
 #=
-# [Network diffusion](@id getting_started)
+# [Network Diffusion](@id Getting Started)
 
 This introductory example explains the use of the basic types and constructors
 in NetworkDynamics.jl by modeling a simple diffusion on an undirected network.

@@ -169,7 +169,7 @@ output function which applies
 With `Directed` there is no output for the `src` side.
 `g_dst` can be a `Number`/`AbstractArray` to impicitly wrap the corresponding [`StateMask`](@ref).
 
-See also [`AniSymmetric`](@ref), [`Symmetric`](@ref), [`Fiducial`](@ref) and [`StateMask`](@ref).
+See also [`AntiSymmetric`](@ref), [`Symmetric`](@ref), [`Fiducial`](@ref) and [`StateMask`](@ref).
 """
 struct Directed{FF,G} <: OutputWrapper{FF}
     g::G
@@ -1068,6 +1068,16 @@ _gargs(::FeedForward, outs, du, u, ins, p, t) = (outs..., u, ins..., p, t)
 _gargs(::NoFeedForward, outs, du, u, ins, p, t) = (outs..., u, p, t)
 _gargs(::PureStateMap, outs, du, u, ins, p, t) = (outs..., u)
 
+"""
+    ff_to_constraint(v::VertexFunction)
+
+Takes `VertexFunction` `v` with feed forward and turns all algebraic output
+states into internal states by defining algebraic constraints
+contraints `0 = out - g(...)`. The new output function is
+just a [`StateMask`](@ref) into the extended internal state vector.
+
+Returns the transformed `VertexFunction`.
+"""
 function ff_to_constraint(v::VertexFunction)
     hasff(v) || error("Vertex does not have feed forward property.")
 

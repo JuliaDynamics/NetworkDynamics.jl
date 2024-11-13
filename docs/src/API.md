@@ -2,7 +2,7 @@
 
 The following functions are designed for public use.
 
-## Network Construction
+## Network Construction API
 ```@docs
 Network
 dim(::Network)
@@ -49,7 +49,7 @@ NoFeedForward
 PureStateMap
 ```
 
-## Symbolic Indexing
+## Symbolic Indexing API
 ### Network Parameter Object
 ```@docs
 NWParameter
@@ -124,7 +124,8 @@ init_residual
 ```
 
 ## Utils
-### Callbacks
 ```@docs
 save_parameters!
+ff_to_constraint
+Base.copy(::NetworkDynamics.ComponentFunction)
 ```

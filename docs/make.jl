@@ -19,30 +19,34 @@ end
 # TODO: doc on steady state solve https://docs.sciml.ai/NonlinearSolve/stable/native/steadystatediffeq/#SteadyStateDiffEq.SSRootfind
 # TODO: doc on parameter & state handling? -> symbolic indexing
 
-makedocs(; root=joinpath(pkgdir(NetworkDynamics), "docs"),
-         sitename="NetworkDynamics",
-         modules=[NetworkDynamics],
-         linkcheck=true, # checks if external links resolve
-         pagesonly=true,
-         pages=["General" => "index.md",
-             "mathematical_model.md",
-             "network_construction.md",
-             "symbolic_indexing.md",
-             "metadata.md",
-             "initialization.md",
-             "API.md",
-             "Tutorials" => [
-                 "Getting started" => "generated/getting_started_with_network_dynamics.md",
-                 "Directed and weighted graphs" => "generated/directed_and_weighted_graphs.md",
-                 "Heterogeneous systems" => "generated/heterogeneous_system.md",
-                 # "Stochastic differential equations" => "generated/StochasticSystem.md",
-                 # "Delay differential equations" => "generated/kuramoto_delay.md",
-                 "Cascading failure" => "generated/cascading_failure.md",]
-         ],
-         draft=false,
-         format = Documenter.HTML(ansicolor = true),
-         warnonly=[:cross_references, :missing_docs, :docs_block],
-         # warnonly=true,
+makedocs(;
+    root=joinpath(pkgdir(NetworkDynamics), "docs"),
+    sitename="NetworkDynamics",
+    modules=[NetworkDynamics],
+    linkcheck=true, # checks if external links resolve
+    pagesonly=true,
+    pages=[
+        "General" => "index.md",
+        "mathematical_model.md",
+        "network_construction.md",
+        "Features" => [
+            "symbolic_indexing.md",
+            "metadata.md",
+            "initialization.md",
+        ],
+        "API.md",
+        "Tutorials" => [
+            "Getting Started" => "generated/getting_started_with_network_dynamics.md",
+            "Directed and Weighted Graphs" => "generated/directed_and_weighted_graphs.md",
+            "Heterogeneous Systems" => "generated/heterogeneous_system.md",
+            # "Stochastic differential equations" => "generated/StochasticSystem.md",
+            # "Delay differential equations" => "generated/kuramoto_delay.md",
+            "Cascading Failure" => "generated/cascading_failure.md",]
+    ],
+    draft=false,
+    format = Documenter.HTML(ansicolor = true),
+    warnonly=[:cross_references, :missing_docs, :docs_block],
+    # warnonly=true,
 )
 
 deploydocs(; repo="github.com/JuliaDynamics/NetworkDynamics.jl.git",

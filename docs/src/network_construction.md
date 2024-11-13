@@ -1,8 +1,8 @@
 # Network Construction
 
-## Building the Network
+## Building a Network
 The main type of `NetworkDyanmics.jl` is a [`Network`](@ref).
-A network bundles various component functions (edge and vertex subsystesm) together with a graph to form a callable object which represents the RHS of the overall dynamical system, see [Mathematical Model](@ref).
+A network bundles various component functions (edge and vertex subsystems) together with a graph to form a callable object which represents the RHS of the overall dynamical system, see [Mathematical Model](@ref).
 
 A `Network` is build by passing a graph `g`, vertex functions `vertexf` and edge function `edgef`.
 ```julia
@@ -12,6 +12,7 @@ nw = Network(g, vertexf, edgef)
 The network also stores metadata bout different [execution configurations](@ref). The [`Network`](@ref) docstring goes into more detail on the available options.
 
 ## Building `VertexFunction`s
+This chapter walks through the most important aspects when defining custom vertex functions. For a list of all keyword arguments please check out the docstring of [`VertexFunction`](@ref).
 As an example, we'll construct an second order kuramoto model, because that's what we do.
 ```@example construction
 using NetworkDynamics #hide
@@ -58,7 +59,9 @@ VertexFunction(; f=kuramoto_f!, g=1,
 ```
 
 ## Building `EdgeFunction`s
-In a similar fashion we want to define standard sinusodial coupling between the vertices in our network. The full definition looks like this:
+This chapter walks through the most important aspects when defining custom edge functions. For a list of all keyword arguments please check out the docstring of [`EdgeFunction`](@ref).
+
+As an example edge model we want to define standard sinusoidal coupling between the vertices in our network. The full definition looks like this:
 
 ```@example construction
 function edge_f!(de, e, vsrc, vdst, p, t)
