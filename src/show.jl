@@ -38,9 +38,6 @@ function Base.show(io::IO, ::MIME"text/plain", @nospecialize(c::ComponentFunctio
     end
 
     styling = Dict{Int,Symbol}()
-    # for i in 1:depth(c)
-    #     styling[i] = :NetworkDynamics_forlayer
-    # end
 
     print_states_params(io, c, styling)
 end
