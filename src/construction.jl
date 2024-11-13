@@ -449,8 +449,6 @@ function Network(nw::Network;
                  kwargs...)
 
     _kwargs = Dict(:execution => executionstyle(nw),
-                   :edepth => :auto,
-                   :vdepth => :auto,
                    :aggregator => get_aggr_constructor(nw.layer.aggregator),
                    :check_graphelement => true,
                    :dealias => false,
