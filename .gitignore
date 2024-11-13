@@ -14,3 +14,4 @@ benchmark/*.data
 benchmark/*.txt
 /benchmark/*.pdf
 /docs/src/generated/
+/docs/src/assets/.auctex-auto/
