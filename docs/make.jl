@@ -41,7 +41,8 @@ makedocs(;
             "Heterogeneous Systems" => "generated/heterogeneous_system.md",
             # "Stochastic differential equations" => "generated/StochasticSystem.md",
             # "Delay differential equations" => "generated/kuramoto_delay.md",
-            "Cascading Failure" => "generated/cascading_failure.md",]
+            "Cascading Failure" => "generated/cascading_failure.md",
+        ]
     ],
     draft=false,
     format = Documenter.HTML(ansicolor = true),

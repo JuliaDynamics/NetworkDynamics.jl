@@ -21,17 +21,17 @@ function kuramoto_edge!(e, θ_s, θ_d, (K,), t)
     e[1] = K * sin(θ_s[1] - θ_d[1])
     nothing
 end
+edge! = EdgeFunction(g=AntiSymmetric(kuramoto_edge!), outdim=1, psym=[:K=>3])
+#-
 
 function kuramoto_vertex!(dθ, θ, esum, (ω0,), t)
     dθ[1] = ω0 + esum[1]
     nothing
 end
-
 vertex! = VertexFunction(f=kuramoto_vertex!, g=StateMask(1:1), sym=[:θ], psym=[:ω0], name=:kuramoto)
+#-
 
-edge! = EdgeFunction(g=AntiSymmetric(kuramoto_edge!), outdim=1, psym=[:K=>3])
-nw = Network(g, vertex!, edge!);
-nothing #hide #md
+nw = Network(g, vertex!, edge!)
 
 #=
 To assign parameters, we can create a `NWParameter` object based on the `nw` definition.
@@ -40,7 +40,7 @@ This parameter object will be pre-filled with the default parameters.
 p = NWParameter(nw)
 
 #=
-To set the node parameters, we can use indexing of the `p.v` field:
+To set the vertex parameters, we can use indexing of the `p.v` field:
 =#
 ω = collect(1:N) ./ N
 ω .-= sum(ω) / N
@@ -71,23 +71,28 @@ plot(sol; ylabel="θ", fmt=:png)
 
 Two paradigmatic modifications of the node model above are static nodes and nodes with
 inertia.
-
-A static node has no internal dynamics and instead fixes the variable at a
-constant value. There are two ways to achive such behavior in network dynamics.
-We can either create a [`StaticVertex`](@ref) which is implemented as an
-algebraic constraint, or we can create a node without dynamic (du = 0) and a
-specific initial value.
+A static node has no internal states and instead fixes the variable at a
+constant value.
 =#
-
-function static_f(du, u, esum, p, t)
-    du .= 0
+function static_g(out, u, p, t)
+    out[1] = p[1]
     nothing
 end
-static! = VertexFunction(f=static_f, g=1, sym=[:θ=>ω[1]], name=:static)
-#=
-Here we used a form of the ODEVertex constructor which allows us to specify
-default initial conditions.
+static! = VertexFunction(g=static_g, outsym=[:θ], psym=[:θfix => ω[1]], name=:static)
 
+#=
+But wait! NetworkDynamics classified this as [`PureFeedForward`](@ref), because it cannot
+distinguish between the function signatures
+```
+g(out, u, p, t)    # PureFeedForward
+g(out, ins, p, t)  # NoFeedForward
+```
+and since `dim(u)=0` it wrongfully assumes that the latter is meant.
+We can overwrite the classification by passing the ff keyword:
+=#
+static! = VertexFunction(g=static_g, outsym=[:θ], psym=[:θfix => ω[1]], ff=NoFeedForward(), name=:static)
+
+#=
 A Kuramoto model with inertia consists of two internal variables leading to
 more complicated (and for many applications more realistic) local dynamics.
 =#
@@ -98,7 +103,6 @@ function kuramoto_inertia!(dv, v, esum, (ω0,), t)
 end
 
 inertia! = VertexFunction(f=kuramoto_inertia!, g=1:1, sym=[:θ, :ω], psym=[:ω0], name=:inertia)
-nothing #hide #md
 
 #=
 Since now we model a system with heterogeneous node dynamics we can no longer
@@ -169,29 +173,3 @@ colors = map(vertex_array) do vertexf
 end
 
 plot(sol_hetero; ylabel="θ", idxs=vidxs(1:8,:θ), lc=colors', fmt=:png)
-
-#=
-## Components with algebraic constraints
-
-If one of the network components contains an algebraic as well as dynamical component,
-then there is the option to supply a mass matrix for the given component. In general this
-will look as follows:
-=#
-
-# FIXME: does not make sense in explicit f/g interface
-# function edgeA!(de, e, v_s, v_d, p, t)
-#     de[1] = f(e, v_s, v_d, p, t) # dynamic variable
-#     e[2]  = g(e, v_s, v_d, p, t) # static variable
-# end
-
-# M = zeros(2, 2)
-# M[1, 1] = 1
-
-# nd_edgeA! = ODEEdge(; f=edgeA!, dim=2, coupling=:undirected, mass_matrix=M);
-nothing #hide #md
-
-#=
-This handles the second equations as `0 = M[2,2] * de[2] = g(e, v_s, v_d, p, t) - e[2]`.
-
-See the example kuramoto_plasticity.jl and the discussion on [github](https://github.com/JuliaDynamics/NetworkDynamics.jl/issues/45#issuecomment-659491913) for more details.
-=#

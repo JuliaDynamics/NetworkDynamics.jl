@@ -16,9 +16,9 @@ Arguments:
 
 Optional keyword arguments:
  - `execution=SequentialExecution{true}()`:
-    Execution model of the n
+    Execution model of the network. E.g. [`SequentialExecution`](@ref), [`KAExecution`](@ref), [`PolyesterExecution`](@ref) or [`ThreadedExecution`](@ref).
  - `aggregator=execution isa SequentialExecution ? SequentialAggregator(+) : PolyesterAggregator(+)`:
-    Aggregation function applied to the edge functions.
+    Aggregation function applied to the edge functions. E.g. [`SequentialAggregator`](@ref), [`PolyesterAggregator`](@ref), [`ThreadedAggregator`](@ref), [`SparseAggregator`](@ref).
  - `check_graphelement=true`:
     Check if the `graphelement` metadata is consistent with the graph.
  - `dealias=false`

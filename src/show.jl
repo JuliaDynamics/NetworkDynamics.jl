@@ -1,21 +1,23 @@
-# AbstractTrees.TreeCharSet("├", "└", "│", "─", "⋮", " ⇒ ")
+# AbstractTrees.TreeCharSet("├", "└","┌" "│", "─", "⋮", " ⇒ ")
 
 function Base.show(io::IO, ::MIME"text/plain", @nospecialize(nw::Network))
     compact = get(io, :compact, false)::Bool
     if compact
-        print(io, "Dynamic network ($(nv(nw.im.g)) vertices, $(ne(nw.im.g)) edges)")
+        print(io, "Network ($(nv(nw.im.g)) vertices, $(ne(nw.im.g)) edges)")
     else
-        print(io, "Dynamic network with:")
+        print(io, "Network")
+        num, word = maybe_plural(dim(nw), "state")
+        print(io, " with $num $word")
+        num, word = maybe_plural(pdim(nw), "parameter")
+        print(io, " and $num $word")
         num, word = maybe_plural(length(nw.vertexbatches), "type")
         print(io, "\n ├─ $(nv(nw.im.g)) vertices ($num unique $word)")
         num, word = maybe_plural(length(nw.layer.edgebatches), "type")
         print(io, "\n └─ $(ne(nw.im.g)) edges ($num unique $word)")
         print(io, "\nEdge-Aggregation using ")
         print(io, nw.layer.aggregator)
-        num, word = maybe_plural(nw.layer.edepth, "state")
-        print(io, "\n ├─ vertices receive edge states 1:$(num) (edge depth = $num)")
-        num, word = maybe_plural(nw.layer.vdepth, "state")
-        print(io, "\n └─ edges receive vertex states  1:$(num) (vertex depth = $num)")
+        # print(io, "\n ├─ vertex output dimension: $(nw.im.vdepth)")
+        # print(io, "\n └─   edge output dimension: $(nw.im.edepth)")
     end
 end
 
