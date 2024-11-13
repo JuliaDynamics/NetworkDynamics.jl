@@ -264,7 +264,7 @@ Main Arguments:
    Can be infered automaticially if `g` isa `StateMask`.
 - psym`/`pdim=0`: Symbolic names of the parameters. If `pdim` is provided, `psym` is set automaticially.
 - `mass_matrix=I`: Mass matrix of component. Can be a vector `v` and is then interpreted as `Diagonal(v)`.
-- `name=:VF`: Name of the component.
+- `name=dim>0 ? :VertexF : :StaticVertexF`: Name of the component.
 
 Optional Arguments:
 - `insym`/`indim`: Symbolic names of the inputs. If `indim` is provided, `insym` is set automaticially.
@@ -317,7 +317,7 @@ Main Arguments:
    See [Building `EdgeFunction`s](@ref) for examples.
 - psym`/`pdim=0`: Symbolic names of the parameters. If `pdim` is provided, `psym` is set automaticially.
 - `mass_matrix=I`: Mass matrix of component. Can be a vector `v` and is then interpreted as `Diagonal(v)`.
-- `name=:VF`: Name of the component.
+- `name=dim>0 ? :EdgeF : :StaticEdgeF`: Name of the component.
 
 Optional Arguments:
 - `insym`/`indim`: Symbolic names of the inputs. If `indim` is provided, `insym` is set automaticially.
@@ -864,7 +864,13 @@ function _fill_defaults(T, @nospecialize(kwargs))
     #### name
     ####
     if !haskey(dict, :name)
-        dict[:name] = _default_name(T)
+        dict[:name] = if T <: VertexFunction
+            dim > 0 ? :VertexF : :StaticVertexF
+        elseif T <: EdgeFunction
+            dim > 0 ? :EdgeF : :StaticEdgeF
+        else
+            error()
+        end
     end
 
     ####
@@ -969,10 +975,6 @@ end
 function _symvec_to_sym_tup(g::Directed, dst::AbstractVector{Symbol})
     (;src=Symbol[], dst)
 end
-
-
-_default_name(::Type{VertexFunction}) = :VF
-_default_name(::Type{EdgeFunction}) = :EF
 
 _has_metadata(vec::AbstractVector{<:Symbol}) = false
 _has_metadata(vec::AbstractVector{<:Pair}) = true
