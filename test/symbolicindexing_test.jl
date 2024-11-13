@@ -374,8 +374,8 @@ s3 = NWState(s, utype=Vector{Int}, ptype=Vector{Int})
 # test new index generator methods
 using NetworkDynamics: vidxs, eidxs, vpidxs, epidxs
 fv = (du, u, ein, p, t) -> nothing
-n1 = VertexFunction(; f=fv, g=1:2, sym=[:u, :v], psym=[:p1, :p2])
-n2 = VertexFunction(; f=fv, g=1:2, sym=[:x1, :x2], psym=[:p1, :p2], obsf=identity, obssym=[:obs1, :obs2])
+n1 = VertexFunction(; f=fv, g=1:2, sym=[:u, :v], psym=[:p1, :p2], name=:VF)
+n2 = VertexFunction(; f=fv, g=1:2, sym=[:x1, :x2], psym=[:p1, :p2], obsf=identity, obssym=[:obs1, :obs2], name=:VF)
 n3 = VertexFunction(; f=fv, g=1:2, dim=3, name=:Vertex3)
 
 gss = (odst, vsrc, vdst, p, t) -> nothing
