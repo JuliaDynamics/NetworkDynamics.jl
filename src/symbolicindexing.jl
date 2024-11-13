@@ -422,7 +422,7 @@ function SII.observed(nw::Network, snis)
                 outidx[i] = _range[idx]
             elseif (idx=findfirst(isequal(sni.subidx), obssym(cf))) != nothing #found in observed
                 _obsf = _get_observed_f(nw, cf, resolvecompidx(nw, sni))
-                obsfuns[i] = (u, aggbuf, p, t) -> _obsf(u, aggbuf, p, t)[idx]
+                obsfuns[i] = (u, outbuf, aggbuf, p, t) -> _obsf(u, outbuf, aggbuf, p, t)[idx]
             else
                 throw(ArgumentError("Cannot resolve observable $sni"))
             end
@@ -495,13 +495,13 @@ end
 function _get_observed_f(nw::Network, cf::EdgeFunction, eidx)
     N = length(cf.obssym)
     ur    = nw.im.e_data[eidx]
-    esrcr = nw.im.e_src[eidx]
-    edstr = nw.im.e_dst[eidx]
+    esrcr = nw.im.v_out[nw.im.edgevec[eidx].src]
+    edstr = nw.im.v_out[nw.im.edgevec[eidx].dst]
     pr   =  nw.im.e_para[eidx]
     ret = Vector{Float64}(undef, N)
 
     @closure (u, outbuf, aggbuf, p, t) -> begin
-        cf.obsf(ret, view(u, ur), view(outbuff, esrcr), view(outbuf, edstr), view(p, pr), t)
+        cf.obsf(ret, view(u, ur), view(outbuf, esrcr), view(outbuf, edstr), view(p, pr), t)
         ret
     end
 end
@@ -702,6 +702,26 @@ end
 Create `NWState` object from `integrator`.
 """
 NWState(int::SciMLBase.DEIntegrator) = NWState(int, int.u, int.p, int.t)
+
+"""
+    NWState(sol::SciMLBase.AbstractODESolution, t)
+
+Create `NWState` object from solution object `sol` for timepoint `t`.
+"""
+function NWState(sol::SciMLBase.AbstractODESolution, t)
+    u = sol(t)
+    discs = RecursiveArrayTools.get_discretes(sol)
+    para_ts = discs[DEFAULT_PARA_TS_IDX]
+
+    tidx = findfirst(_t -> _t > t, para_ts.t)
+    p = if isnothing(tidx)
+        para_ts[end]
+    else
+        para_ts[tidx-1]
+    end
+
+    NWState(sol, u, p, t)
+end
 
 # init flat array of type T with length N. Init with nothing if possible, else with zeros
 function _init_flat(T, N, fill)
