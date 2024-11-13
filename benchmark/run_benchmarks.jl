@@ -1,5 +1,6 @@
 #!julia --startup-file=no
-@info "Start Benchmark Script with $ARGS"
+
+# @info "Start Benchmark Script with $ARGS"
 
 original_path = pwd()
 
@@ -21,19 +22,9 @@ Pkg.activate(BMPATH);
 if VERSION < v"1.11.0-0"
     Pkg.develop(; path=NDPATH);
 end
-Pkg.update();
-Pkg.precompile();
 
-using PkgBenchmark
-using LibGit2
-using Dates
-using Random
 using ArgParse
-using Serialization
-using StyledStrings
-using CairoMakie
-
-(isinteractive() ? includet : include)("benchmark_utils.jl")
+using Dates
 
 s = ArgParseSettings()
 #! format: off
@@ -66,12 +57,32 @@ s = ArgParseSettings()
     "--no-txt-export"
         help = "Don't export comparison.txt table"
         action = :store_true
+    "--noupdate"
+        help = "Don't update the packages"
+        action = :store_true
 end
 #! format: on
 args = parse_args(s; as_symbols=true)
 if args[:prefix] != ""
     args[:prefix] *= '_'
 end
+
+if args[:noupdate]
+    @info "Skip update of packages due to `--noupdate` flag"
+else
+    @info "Update packages"
+    Pkg.update()
+end
+Pkg.precompile();
+
+using PkgBenchmark
+using LibGit2
+using Random
+using Serialization
+using StyledStrings
+using CairoMakie
+
+(isinteractive() ? includet : include)("benchmark_utils.jl")
 
 @info "Run benchmarks on $(args[:target]) and compare to $(args[:baseline])"
 
