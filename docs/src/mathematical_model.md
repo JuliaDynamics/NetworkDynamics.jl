@@ -90,9 +90,9 @@ The sign convention for both outputs of an edge must be identical,
 typically, a positive flow represents a flow *into* the connected vertex.
 This is important, because the vertex only receives the flows, it does not know whether the flow was produce by the source or destination end of an edge.
 ```
- ┌───────┐ y_src     y_dst ┌───────┐
- │ V_src ├───←─────────→───┤ V_dst │
- └───────┘                 └───────┘
+          y_src     y_dst 
+  V_src o───←─────────→───o V_dst
+
 ```
 
 

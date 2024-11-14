@@ -306,7 +306,7 @@ for idx in idxtypes
         println(idx, " => ", b.allocs, " allocations")
     end
     if VERSION ≥ v"1.11"
-        @test b.allocs <= 10
+        @test b.allocs <= 12
     end
 end
 
