@@ -628,7 +628,7 @@ struct NWState{U,P,T,NW<:Network}
     uflat::U
     p::P
     t::T
-    function NWState(thing, uflat, p=nothing, t=nothing)
+    function NWState(thing, uflat::AbstractVector, p=nothing, t=nothing)
         nw = extract_nw(thing)
         _p = p isa Union{NWParameter,Nothing} ? p : NWParameter(nw, p)
         s = new{typeof(uflat),typeof(_p),typeof(t),typeof(nw)}(nw,uflat,_p,t)
@@ -708,7 +708,7 @@ NWState(int::SciMLBase.DEIntegrator) = NWState(int, int.u, int.p, int.t)
 
 Create `NWState` object from solution object `sol` for timepoint `t`.
 """
-function NWState(sol::SciMLBase.AbstractODESolution, t)
+function NWState(sol::SciMLBase.AbstractODESolution, t::Number)
     u = sol(t)
     discs = RecursiveArrayTools.get_discretes(sol)
     para_ts = discs[DEFAULT_PARA_TS_IDX]
