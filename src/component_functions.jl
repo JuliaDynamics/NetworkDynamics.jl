@@ -55,10 +55,13 @@ Retrieve the feed forward trait of `x`.
 """
 function fftype end
 
+"""
+    hasfftype(x)
+
+Defaults to false. Musst be overloaded for objects for which `fftype(x)` is defined.
+"""
 hasfftype(::Any) = false
 hasff(x) = fftype(x) isa Union{PureFeedForward, FeedForward}
-
-_has_sym_to_outsym_mapping(::Any) = false
 
 """
     StateMask(i::AbstractArray)
@@ -223,6 +226,49 @@ Fiducial(;src, dst, ff=nothing) = Fiducial(src, dst; ff)
     @inline c.dst(odst, args...)
     nothing
 end
+
+"""
+    AnnotatedSym{F}
+
+Wrapper to annotate a vector of symbols as AntiSymmetric, Symmetric or Directed.
+"""
+struct AnnotatedSym{F}
+    s::Vector{Symbol}
+end
+function AnnotatedSym(wrapper, s::AbstractVector{<:Symbol})
+    if wrapper ∉ (AntiSymmetric, Symmetric, Directed)
+        throw(ArgumentError("Only AntiSymmetric, Symmetric and Directed are allowed."))
+    end
+    AnnotatedSym{wrapper}(s)
+end
+sym(s::AnnotatedSym) = s.s
+wrapper(s::AnnotatedSym{W}) where {W} = W
+Base.show(io::IO, ::MIME"text/plain", s::AnnotatedSym) = print(io, wrapper(s), "(", sym(s), ")")
+
+"""
+    AntiSymmetric(s::AbstractVector{<:Symbol})
+
+Annotate a vector of output-symbols as `AntiSymmetric`, used when creating `EdgeFunctions` from
+single-sided MTK models.
+"""
+AntiSymmetric(s::Symbol) = AntiSymmetric([s])
+AntiSymmetric(s::AbstractVector{<:Symbol}) = AnnotatedSym(AntiSymmetric, s)
+"""
+    Symmetric(s::AbstractVector{<:Symbol})
+
+Annotate a vector of output-symbols as `Symmetric`, used when creating `EdgeFunctions` from
+single-sided MTK models.
+"""
+Symmetric(s::Symbol) = Symmetric([s])
+Symmetric(s::AbstractVector{<:Symbol}) = AnnotatedSym(Symmetric, s)
+"""
+    Directed(s::AbstractVector{<:Symbol})
+
+Annotate a vector of output-symbols as `Directed`, used when creating `EdgeFunctions` from
+single-sided MTK models.
+"""
+Directed(s::Symbol) = Directed([s])
+Directed(s::AbstractVector{<:Symbol}) = AnnotatedSym(Directed, s)
 
 
 abstract type ComponentFunction end
@@ -750,7 +796,8 @@ function _fill_defaults(T, @nospecialize(kwargs))
     outsym = dict[:outsym]
     if T <: EdgeFunction && outsym isa AbstractVector
         if _has_metadata(outsym)
-            throw(ArgumentError("Metadata for outsyms can only be provided when using full (;src, dst) form"))
+            outsym, _metadata = _split_metadata(outsym)
+            mergewith!(merge!, symmetadata, _metadata)
         end
         outsym = dict[:outsym] = _symvec_to_sym_tup(g, outsym)
     end
@@ -937,6 +984,7 @@ function _fill_defaults(T, @nospecialize(kwargs))
 end
 
 # define the symbolmapping to infer output symbols from state symbols
+_has_sym_to_outsym_mapping(::Any) = false
 _has_sym_to_outsym_mapping(::StateMask) = true
 _has_sym_to_outsym_mapping(::Directed{<:Any, <:StateMask}) = true
 _has_sym_to_outsym_mapping(::AntiSymmetric{<:Any, <:StateMask}) = true

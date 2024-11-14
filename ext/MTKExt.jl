@@ -11,7 +11,7 @@ using LinearAlgebra: Diagonal, I
 
 using NetworkDynamics: NetworkDynamics, set_metadata!,
                        PureFeedForward, FeedForward, NoFeedForward, PureStateMap
-import NetworkDynamics: VertexFunction, EdgeFunction
+import NetworkDynamics: VertexFunction, EdgeFunction, AnnotatedSym
 
 include("MTKUtils.jl")
 
@@ -49,17 +49,33 @@ function VertexFunction(sys::ODESystem, inputs, outputs; verbose=false, name=get
     c
 end
 
+EdgeFunction(sys::ODESystem, srcin, dstin, dstout; kwargs...) = EdgeFunction(sys, srcin, dstin, nothing, dstout; kwargs...)
 function EdgeFunction(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=false, name=getname(sys), kwargs...)
     warn_events(sys)
     srcin = srcin isa AbstractVector ? srcin : [srcin]
     dstin = dstin isa AbstractVector ? dstin : [dstin]
-    srcout = srcout isa AbstractVector ? srcout : [srcout]
-    dstout = dstout isa AbstractVector ? dstout : [dstin]
 
-    gen = generate_io_function(sys, (srcin, dstin), (srcout, dstout); verbose)
+    singlesided = isnothing(srcout)
+    if singlesided && !(dstout isa AnnotatedSym)
+        throw(ArgumentError("If you only provide one output (single sided \
+        model), it musst be wrapped either in `AntiSymmetric`, `Symmetric` or \
+        `Directed`!"))
+    end
+
+    if singlesided
+        gwrap = NetworkDynamics.wrapper(dstout)
+        dstout = NetworkDynamics.sym(dstout)
+        outs = (dstout, )
+    else
+        srcout = srcout isa AbstractVector ? srcout : [srcout]
+        dstout = dstout isa AbstractVector ? dstout : [dstin]
+        outs = (srcout, dstout)
+    end
+
+    gen = generate_io_function(sys, (srcin, dstin), outs; verbose)
 
     f = gen.f
-    g = gen.g
+    g = singlesided ? gwrap(gen.g; ff=gen.fftype) : gen.g
     obsf = gen.obsf
 
     _sym = getname.(gen.states)
@@ -77,11 +93,16 @@ function EdgeFunction(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=fals
     insym_dst = [s => _get_metadata(sys, s)  for s in _insym_dst]
     insym = (;src=insym_src, dst=insym_dst)
 
-    _outsym_src = getname.(srcout)
-    outsym_src = [s => _get_metadata(sys, s)  for s in _outsym_src]
-    _outsym_dst = getname.(dstout)
-    outsym_dst = [s => _get_metadata(sys, s)  for s in _outsym_dst]
-    outsym = (;src=outsym_src, dst=outsym_dst)
+    if singlesided
+        _outsym_dst = getname.(dstout)
+        outsym = [s => _get_metadata(sys, s)  for s in _outsym_dst]
+    else
+        _outsym_src = getname.(srcout)
+        outsym_src = [s => _get_metadata(sys, s)  for s in _outsym_src]
+        _outsym_dst = getname.(dstout)
+        outsym_dst = [s => _get_metadata(sys, s)  for s in _outsym_dst]
+        outsym = (;src=outsym_src, dst=outsym_dst)
+    end
 
     mass_matrix = gen.mass_matrix
     c = EdgeFunction(;f, g, sym, insym, outsym, psym, obssym,
