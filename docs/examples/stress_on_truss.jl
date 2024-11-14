@@ -2,22 +2,26 @@
 # Stress on Truss
 In this exampe we'll simulate the time evolution of a truss structure consisting
 of joints and stiff springs.
+This example can be dowloaded as a normal Julia script [here](@__NAME__.jl). #md
 
 ![truss animation](truss.mp4)
 
 The mathematical model is quite simple: the vertices are point masses with
-positions `x` and `y` and velocities `vx` and `vy`. The edges are relativly stiff springs.
-```@math
-\dot{x} &= vx
-\dot{y} &= vy
-\dot{vx} &= (\sum F_x - γ*vx) / M
-\dot{vy} &= (\sum F_y - γ*vy) / M - g
+positions $x$ and $y$ and velocities $v_x$ and $v_y$.
+For simplicity, we add some damping to the nodal motion based on the velocity.
+```math
+\begin{aligned}
+\dot{x} &= v_x\\
+\dot{y} &= v_y\\
+\dot{v}_x &= \frac{1}{M}\left(\sum F_x - γ\,v_x\right)\\
+\dot{v}_y &= \frac{1}{M}\left(\sum F_y - γ\,v_y\right) - g
+\end{aligned}
 ```
 The vertices cannot absorb any torque, so the beams only exert forces in the direction of the beam.
-
-```@math
+```math
 |F| = K\cdot(L - |Δd|)
 ```
+where $L$ is the nominal lenth and $|Δd|$ is the actual length of the beam.
 
 We start by loading the necessary packages.
 =#
@@ -25,7 +29,7 @@ using NetworkDynamics
 using OrdinaryDiffEqTsit5
 using Graphs
 using GraphMakie
-using LinearAlgebra: norm, ⋅
+using LinearAlgebra: norm
 using Printf
 using CairoMakie
 CairoMakie.activate!()
@@ -35,15 +39,19 @@ CairoMakie.activate!()
 
 We need 3 models:
 - a fixed vertex which cannot change its position,
-- a free vertex which can move,
+- a free vertex which can move, and
 - a beam which connects two vertices.
 =#
 
-function fixed_g(pos, u, p, t)
+function fixed_g(pos, x, p, t)
     pos .= p
 end
 vertex_fix = VertexFunction(g=fixed_g, psym=[:xfix, :yfix], outsym=[:x, :y], ff=NoFeedForward())
-#-
+#=
+Here we need to specify the `ff` keyword manually, because NetworkDynamics cannot distinguish between
+`g(out, x, p, t)`  (`NoFeedForwarwd`) and `g(out, in, p, t)` (`PureFeedForward()`)
+and guesses the latter when $\mathrm{dim}(x)=0$.
+=#
 
 function free_f(dx, x, Fsum, (M, γ, g), t)
     v = view(x, 1:2)
@@ -55,10 +63,11 @@ end
 vertex_free = VertexFunction(f=free_f, g=3:4, sym=[:vx=>0, :vy=>0, :x, :y],
                              psym=[:M=>10, :γ=>200, :g=>9.81], insym=[:Fx, :Fy])
 #=
-For the edge, we want to dosomething special. Later on, we want to color the edges according to the force they exert.
+For the edge, we want to do something special. Later on, we want to color the edges according to the force they exert.
 Therefore, are interested in the absolut force rather than just the force vector.
 NetworkDynamics allows you to  define so called `Observed` functions, which can recover additional states,
-so called observed, after the simulations
+so called observed, after the simulations. We can use this mechanis, to define a "recipe" for calculating the beam force
+based on the inputs (nodal positions) and  the beam parameters.
 =#
 
 function edge_g!(F, pos_src, pos_dst, (K, L), t)
@@ -80,7 +89,7 @@ end
 beam = EdgeFunction(g=AntiSymmetric(edge_g!), psym=[:K=>0.5e6, :L], outsym=[:Fx, :Fy], obsf=observedf, obssym=[:Fabs])
 
 #=
-Set up graph topology and initial positions.
+With the models define we can set up graph topology and initial positions.
 =#
 N = 5
 dx = 1.0
@@ -101,7 +110,7 @@ fixed = [1,4] # set fixed vertices
 nothing #hide
 
 #=
-Now can collect the vertex models.
+Now can collect the vertex models and construct the Network object.
 =#
 verts = VertexFunction[vertex_free for i in 1:nv(g)]
 for i in fixed
@@ -110,12 +119,11 @@ end
 nw = Network(g, verts, beam)
 #=
 In order to simulate the system we need to initialize the state and parameter vectors.
-
 Some states and parameters are shared between all vertices/edges. Those have been allready set
 in their constructors. The free symbols are
 - `x` and `y` for the position of the free vertices,
 - `xfix` and `yfix` for the position of the fixed vertices,
-- `L` for the length of the beams.
+- `L` for the nominal length of the beams.
 =#
 s = NWState(nw)
 ## set x/y and xfix/yfix
@@ -135,7 +143,7 @@ end
 nothing #hide
 
 #=
-Lastly there is a special vertex at the end of the truss which has a higher mass.
+Lastly there is a special vertex at the end of the truss which has a higher mass and reduced damping.
 =#
 s.p.v[11, :M] = 200
 s.p.v[11, :γ] = 100
@@ -152,37 +160,36 @@ nothing #hide
 #=
 ## Plot the solution
 
-To plot the solution we want to make use of the `GraphMakie` package.
+Plotting trajectories of points is kinda boring. So instead we're going to use
+[`GraphMakie.jl`](https://github.com/MakieOrg/GraphMakie.jl) to create a animation of the timeseries.
 =#
 fig = Figure(size=(1000,550));
 fig[1,1] = title = Label(fig, "Stress on truss", fontsize=30)
 title.tellwidth = false
 
 fig[2,1] = ax = Axis(fig)
+ax.aspect = DataAspect();
+hidespines!(ax); # no borders
+hidedecorations!(ax); # no grid, axis, ...
+limits!(ax, -0.1, pos0[end][1]+0.3, pos0[end][2]-0.5, 1.15) # axis limits to show full plot
 
 ## get the maximum force during the simulation to get the color scale
-(fmin, fmax) = 0.3 .*extrema(Iterators.flatten(sol(sol.t, idxs=eidxs(nw, :, :Fabs))))
-nlabels = ["" for i in 1:nv(g)]
-nlabels[fixed] .= "Δ"
-elabels = ["edge $i" for i in 1:ne(g)]
+## It is only possible to access `:Fabs` directly becaus we've define the observable function for it!
+(fmin, fmax) = 0.3 .* extrema(Iterators.flatten(sol(sol.t, idxs=eidxs(nw, :, :Fabs))))
 p = graphplot!(ax, g;
-               edge_width=4.0,
-               node_size=3*sqrt.(try s.p.v[i, :M] catch; 10.0 end for i in 1:nv(g)),
-               nlabels=nlabels,
-               nlabels_align=(:center,:top),
-               nlabels_fontsize=30,
-               elabels=elabels,
-               elabels_side=Dict(ne(g) => :right),
-               edge_color=[0.0 for i in 1:ne(g)],
-               edge_attr=(colorrange=(fmin,fmax),
+               edge_width = 4.0,
+               node_size = 3*sqrt.(try s.p.v[i, :M] catch; 10.0 end for i in 1:nv(g)),
+               nlabels = [i in fixed ? "Δ" : "" for i in 1:nv(g)],
+               nlabels_align = (:center,:top),
+               nlabels_fontsize = 30,
+               elabels = ["edge $i" for i in 1:ne(g)],
+               elabels_side = Dict(ne(g)  => :right),
+               edge_color = [0.0 for i in 1:ne(g)],
+               edge_attr = (colorrange=(fmin,fmax),
                           colormap=:diverging_bkr_55_10_c35_n256))
-hidespines!(ax); hidedecorations!(ax);
-limits!(ax, -0.1, pos0[end][1]+0.3, pos0[end][2]-0.5, 1.15)
-
-ax.aspect = DataAspect();
 
 ## draw colorbar
-fig[3,1] = cb = Colorbar(fig, p.plots[1].plots[1], label = "Axial force", vertical=false)
+fig[3,1] = cb = Colorbar(fig, get_edge_plot(p), label = "Axial force", vertical=false)
 
 T = tspan[2]
 fps = 30
