@@ -15,6 +15,14 @@ import NetworkDynamics: VertexFunction, EdgeFunction, AnnotatedSym
 
 include("MTKUtils.jl")
 
+"""
+    VertexFunction(sys::ODESystem, inputs, outputs; kwargs...)
+
+Create a vertex function object from a given `ODESystem` created with ModelingToolkit.
+You need to provide 2 lists of symbolic names (`Symbol` or `Vector{Symbols}`):
+- `inputs`: names of variables in you equation representing the aggregated edge states
+- `outputs`: names of variables in you equation representing the node output
+"""
 function VertexFunction(sys::ODESystem, inputs, outputs; verbose=false, name=getname(sys), kwargs...)
     warn_events(sys)
     inputs = inputs isa AbstractVector ? inputs : [inputs]
@@ -49,7 +57,30 @@ function VertexFunction(sys::ODESystem, inputs, outputs; verbose=false, name=get
     c
 end
 
+"""
+    EdgeFunction(sys::ODESystem, srcin, dstin, AntiSymmetric(dstout); kwargs...)
+
+Create a edge function object from a given `ODESystem` created with ModelingToolkit.
+
+Here you only need to provide one list of output symbols: `dstout`.
+To make it clear how to handle the single-sided output definiton, you musst wrap
+the symbol vector in
+- `AntiSymmetric(dstout)`,
+- `Symmetric(dstout)`, or
+- `Directed(dstout)`.
+"""
 EdgeFunction(sys::ODESystem, srcin, dstin, dstout; kwargs...) = EdgeFunction(sys, srcin, dstin, nothing, dstout; kwargs...)
+
+"""
+    EdgeFunction(sys::ODESystem, srcin, srcout, dstin, dstout; kwargs...)
+
+Create a edge function object from a given `ODESystem` created with ModelingToolkit.
+You need to provide 4 lists of symbolic names (`Symbol` or `Vector{Symbols}`):
+- `srcin`: names of variables in you equation representing the node state at the source
+- `dstin`: names of variables in you equation representing the node state at the destination
+- `srcout`: names of variables in you equation representing the output at the source
+- `dstout`: names of variables in you equation representing the output at the destination
+"""
 function EdgeFunction(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=false, name=getname(sys), kwargs...)
     warn_events(sys)
     srcin = srcin isa AbstractVector ? srcin : [srcin]
