@@ -3,9 +3,9 @@
 
 This Example is based on the paper
 
-    Albertus J. Malan, Lukas Rausche, Felix Strehle, Sören Hohmann,
-    Port-Hamiltonian Modelling for Analysis and Control of Gas Networks,
-    IFAC-PapersOnLine, Volume 56, Issue 2, 2023, https://doi.org/10.1016/j.ifacol.2023.10.193.
+> Albertus J. Malan, Lukas Rausche, Felix Strehle, Sören Hohmann,
+> Port-Hamiltonian Modelling for Analysis and Control of Gas Networks,
+> IFAC-PapersOnLine, Volume 56, Issue 2, 2023, https://doi.org/10.1016/j.ifacol.2023.10.193.
 
 and tries replicate a simple simulation of flow in a 3-node gas network.
 
@@ -27,12 +27,13 @@ CairoMakie.activate!(type="svg") #hide
 #=
 ## Node Models
 
-There are 2 node models used in the paper. The first node type has a constant
-pressure. We model this as an first order ODE with zero rhs.
-
 In this example, we use the equation based modeling using `ModelingToolkit.jl`.
 To verify the equations on a basic level we also provide units to eveything to
 perform dimensionality checks.
+
+There are 2 node models used in the paper. The first node type has a constant
+pressure.
+Additionally, we ad some "internal" state `q̃_inj` which we want to plot later.
 =#
 @mtkmodel ConstantPressureNode begin
     @parameters begin
@@ -41,10 +42,10 @@ perform dimensionality checks.
     @variables begin
         p(t) = p_set, [description="Pressure", unit=u"Pa", output=true]
         q̃_nw(t), [description="aggregated flow from pipes into node", unit=u"m^3/s", input=true]
-        q̃_inj(t), [description="internal help variable", unit=u"m^3/s"]
+        q̃_inj(t), [description="internal state for introspection", unit=u"m^3/s"]
     end
     @equations begin
-        Dt(p) ~ 0
+        p ~ p_set
         q̃_inj ~ -q̃_nw
     end
 end
@@ -86,15 +87,20 @@ destination end, but the source end will just recive just that times (-1).
 @mtkmodel Pipe begin
     @parameters begin
         L, [description="Length of pipe", unit=u"m"]
-        A, [description="Cross-sectional area of pipe", unit=u"m^2"]
-        ρ̃, [description="constant standard density", unit=u"kg/m^3"]
         D, [description="Diameter of pipe", unit=u"m"]
-        g, [description="Gravitational acceleration", unit=u"m/s^2"]
+        A, [description="Cross-sectional area of pipe", unit=u"m^2"]
         sinθ, [description="Angle of inclination" ]
-        c, [description="Speed of sound in fluid", unit=u"m/s"]
         γ, [description="Friction efficiency factor"]
         η, [description="Dynamic viscosity", unit=u"kg/(m*s)"]
         r, [description="Pipe roughness", unit=u"m"]
+        g, [description="Gravitational acceleration", unit=u"m/s^2"]
+        T, [description="simulation temperature", unit=u"K"]
+        Tc, [description="crictical temperature", unit=u"K"]
+        pc, [description="critical pressure", unit=us"Pa"]
+        Rs, [description="Specific gas constant for natural gas", unit=us"J/(kg*K)"]
+        c̃, [description="Speed of sound in fluid at standard conditions", unit=u"m/s"]
+        ρ̃, [description="standard density", unit=u"kg/m^3"]
+        p̃, [description="standard pressure", unit=us"Pa"]
     end
     @variables begin
         p_src(t), [description="Pressure at source end", unit=us"Pa", input=true]
@@ -104,9 +110,22 @@ destination end, but the source end will just recive just that times (-1).
         λ(t), [description="Friction factor"]
         λe(t), [description="Effective friction factor"]
         pM(t), [description="mean pressure", unit=us"Pa"]
+        Z(t), [description="compressibility factor"]
+        ρ(t), [description="density", unit=u"kg/m^3"]
+        c(t), [description="speed of sound", unit=u"m/s"]
     end
     @equations begin
-        Re ~ (ρ̃ * abs(q̃) * D) / (η * A) # (6)
+        Z ~ 1 - 3.52 * pM/pc * exp(-2.26*(T/Tc)) + 0.274 * (pM/pc)^2 * exp(-1.878*(T/Tc)) # (5)
+        ρ ~ pM / (Rs * T * Z) # (4)
+
+        ## TODO: Whats the correct speed of sound?
+        c ~ sqrt(T * Rs * Z) # (4) # pressure/temp dependent
+        ## c ~ c̃                   # "standard" speed of sound based on standard conditions
+
+        ## TODO: Whats the correct Reynolds number?
+        Re ~ (ρ * abs(q̃*p̃/pM) * D) / (η * A) # (6) # based "actual" conditions
+        ## Re ~ (ρ̃ * abs(q̃) * D) / (η * A) # (6)   # based on standard conditions
+
         λ ~ ifelse(Re < 2300,
             64/Re, # laminar (7)
             (2*log10(4.518/Re * log10(Re/7) + r/(3.71*D)))^(-2) # turbulent (8)
@@ -114,7 +133,7 @@ destination end, but the source end will just recive just that times (-1).
         λe ~ λ/γ^2 # (10)
         pM ~ 2/3*(p_src + p_dst - (p_src*p_dst)/(p_src + p_dst)) # (20)
 
-        ρ̃ * L / A * Dt(q̃) ~ -(λe * ρ̃^2 * c^2 * L * abs(q̃))/(2 * D * A^2 * pM) * q̃ - (g * L * sinθ)/(c^2) * pM + (p_src - p_dst) # (31)
+        Dt(q̃) ~ A/(L*ρ̃)*(-(λe * ρ̃^2 * c^2 * L * abs(q̃))/(2 * D * A^2 * pM) * q̃ - (g * L * sinθ)/(c^2) * pM + (p_src - p_dst)) # (31)
     end
 end
 nothing #hide
@@ -127,25 +146,27 @@ The parameterization turned out to be a bit tricky. There might be errors in the
 Some of them are quite cleare and explicitly given.
 =#
 g = 9.81u"m/s^2"       # that we just know
-Rs = 518.28u"J/(kg*K)" # Specific gas constant for hydrogen
+Rs = 518.28u"J/(kg*K)" # Specific gas constant for natural gas
 η  = 1e-5u"kg/(m*s)"   # Dynamic viscosity
 pc = 46.5u"bar"        # Critical pressure
 p̃  = 1.01325u"bar"     # standard pressure
 Tc = 190.55u"K"        # critical temperature
 T̃  = 273.15u"K"        # standard temperature
+T  = 278u"K"           # simulation temperature
 γ  = 0.98              # friction efficiency factor
 r  = 0.012u"mm"        # pipe roughness
 D  = 0.6u"m"           # pipe diameter
 
-L₁₂ = 80u"km"
-L₁₃ = 90u"km"
+## TODO: here is switched the lenths l12 and l13. The results are better. Is this a mistake in the paper?
+L₁₂ = 90u"km"
+L₁₃ = 80u"km"
 L₂₃ = 100u"km"
 Δh₁ = 0u"km"           # this value is different for different sims in the paper
 p₁_set = 50u"bar"
 nothing # hide
 
 #=
-Some neede parameters for the equations are easily derived.
+The geometric parameters for the pipes can be directly derived.
 =#
 A = π/4 * D^2
 sinθ₁₂ = ustrip(Δh₁ / L₁₂)
@@ -154,30 +175,29 @@ sinθ₂₃ = 0.0
 nothing # hide
 
 #=
-Other parameters are more complicated. The compressibility factor Z according to (5)
-depends on temperature and pressure. While the temperature is not considered in the model
-at all, I am not sure whether we sould include the pressure dependency.
-Here, i just calculated it using the "standard" pressure and "standard" temperature.
+Lastly, we need to calculate the compressibility factor, the speed of sound and
+the density at standard conditions:
 =#
-Z̃ = 1 - 3.52 * p₁_set/pc * exp(-2.26*(T̃/Tc)) + 0.274 * (p₁_set/pc)^2 * exp(-1.878*(T̃/Tc)) # (5)
-nothing # hide
+Z̃ = 1 - 3.52 * p̃/pc * exp(-2.26*(T̃/Tc)) + 0.274 * (p̃/pc)^2 * exp(-1.878*(T̃/Tc)) # (5)
+c̃ = sqrt(T̃ * Rs * Z̃) # (4) at standard conditions
+ρ̃ = p̃ / (Rs * T̃ * Z̃) # (4) at standard conditions
 
-#=
-Similarily, we can use (4) to derive the speed of sound. This again is
-temperature and compressibility dependent. Here I use the "standard" compressibility again
-to calculate a constant "standard" sound speed.
-Equivalently, we use the "standard" compressibility to calculate the standard density.
-=#
-c = sqrt(T̃ * Rs * Z̃) # (4) but in theory this is also time dependend
-ρ̃ = p̃ / (Rs * T̃ * Z̃) # (4)
-nothing #hide
+nothing # hide
 
 #=
 The equivalent "pressure capacity" at the nodes is calculated as a sum of the connected
 pipe parameters according ot (28).
+
+Here use defintions based on the speed and "standard" conditions. But is this correct?
 =#
-C₂ = L₁₂*A/(2*ρ̃*c^2) + L₂₃*A/(2*ρ̃*c^2) # (28)
-C₃ = L₁₃*A/(2*ρ̃*c^2) + L₂₃*A/(2*ρ̃*c^2) # (28)
+C₂ = L₁₂*A/(2*ρ̃*c̃^2) + L₂₃*A/(2*ρ̃*c̃^2) # (28)
+C₃ = L₁₃*A/(2*ρ̃*c̃^2) + L₂₃*A/(2*ρ̃*c̃^2) # (28)
+
+#=
+Alternatively, could calculate Z2 and Z3 based on the actuel pressure and simulation temperature.
+Then we could calculated the speed of sound for the "correct" conditions at the node.
+It seems to have very little effect on the actual results so I kept it simple.
+=#
 nothing #hide
 
 #=
@@ -239,9 +259,9 @@ There is a single output state: the volumetric flow. However we also need to tel
 NetworkDynamics about the coupling type. In this case we use `AntiSymmetric`, which
 meas that the source end will recieve the same flow, just inverted sign.
 =#
-@named e12_mtk = Pipe(; L=L₁₂, sinθ=sinθ₁₂, A, ρ̃, D, g, c, γ, η, r)
-@named e13_mtk = Pipe(; L=L₁₃, sinθ=sinθ₁₃, A, ρ̃, D, g, c, γ, η, r)
-@named e23_mtk = Pipe(; L=L₂₃, sinθ=sinθ₂₃, A, ρ̃, D, g, c, γ, η, r)
+@named e12_mtk = Pipe(; L=L₁₂, sinθ=sinθ₁₂, D, A, γ, η, r, g, T, Tc, pc, Rs, c̃, ρ̃, p̃)
+@named e13_mtk = Pipe(; L=L₁₃, sinθ=sinθ₁₃, D, A, γ, η, r, g, T, Tc, pc, Rs, c̃, ρ̃, p̃)
+@named e23_mtk = Pipe(; L=L₂₃, sinθ=sinθ₂₃, D, A, γ, η, r, g, T, Tc, pc, Rs, c̃, ρ̃, p̃)
 
 e12 = EdgeFunction(e12_mtk, [:p_src], [:p_dst], AntiSymmetric([:q̃]); name=:e12, src=1, dst=2)
 e13 = EdgeFunction(e13_mtk, [:p_src], [:p_dst], AntiSymmetric([:q̃]); name=:e13, src=1, dst=3)
@@ -277,13 +297,9 @@ This is not a steadystate of the system however. To find a true steadystate we w
 that the lhs of the system is zero.
 We can solve for a steady state numerically by defining a Nonlinear Rootfind problem.
 
-To do so, we need to wrap the Network object in a closure. This closure is important to
-overwrite all changes of the solver to `u[1]`, to ensure that it is not altered while
-solving.
+To do so, we need to wrap the Network object in a closure.
 =#
-
 nwwrap = (du, u, p) -> begin
-    u[1] = uflat(uguess)[1]
     nw(du, u, p, 0)
     nothing
 end
@@ -291,8 +307,6 @@ initprob = NonlinearProblem(nwwrap, uflat(uguess), pflat(uguess))
 initsol = solve(initprob)
 
 #=
-The solver complains a a bit about rank deficient matrices but is able to find a solution.
-
 We can create a new `NWState` object by wrapping the solution from the nonlinear problem and the
 original prameters in a new `NWState` object.
 =#
@@ -319,6 +333,7 @@ fig = begin
     row = 1
     ax = Axis(_fig[row, 1]; xlabel="time [h]", ylabel="pressure [Pa]", title="Pressure at nodes", xticks)
     xlims!(ax, sol.t[begin], sol.t[end])
+    ylims!(ax, 47.9e5, 49.9e5)
     for i in 1:3
         lines!(ax, sol, idxs=vidxs(nw, i, :p); label="v$i", color=Cycled(i))
     end
@@ -327,10 +342,11 @@ fig = begin
 
     ax = Axis(_fig[row, 1]; xlabel="time [h]", ylabel="flow [m³/s]", title="Flow through pipes", xticks)
     xlims!(ax, sol.t[begin], sol.t[end])
+    ylims!(ax, 16, 44)
     for i in 1:2
         lines!(ax, sol, idxs=eidxs(nw, i, :q̃); label="e$i flow", color=Cycled(i))
     end
-    axislegend(ax)
+    axislegend(ax, position=:rb)
     row += 1
     _fig
 end
