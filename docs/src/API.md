@@ -123,6 +123,25 @@ initialize_component!
 init_residual
 ```
 
+## Execution Types
+```@docs
+ExecutionStyle
+SequentialExecution
+PolyesterExecution
+ThreadedExecution
+KAExecution
+```
+
+## Aggregators
+```@docs
+Aggregator
+SequentialAggregator
+SparseAggregator
+ThreadedAggregator
+PolyesterAggregator
+KAAggregator
+```
+
 ## Utils
 ```@docs
 save_parameters!

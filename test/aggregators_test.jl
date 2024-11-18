@@ -1,5 +1,5 @@
 using NetworkDynamics
-using NetworkDynamics: aggregate!
+using NetworkDynamics: aggregate!, NaiveAggregator
 using Graphs
 using Random
 using Chairmarks

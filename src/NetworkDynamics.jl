@@ -42,13 +42,13 @@ export dim, sym, pdim, psym, obssym, hasinsym, insym, hasindim, indim,
        outdim, outsym, fftype, metadata, symmetadata
 include("component_functions.jl")
 
-export SequentialExecution, KAExecution, ThreadedExecution, PolyesterExecution
+export ExecutionStyle, SequentialExecution, KAExecution, ThreadedExecution, PolyesterExecution
 include("executionstyles.jl")
 
 export Network
 include("network_structure.jl")
 
-export KAAggregator, SequentialAggregator, PolyesterAggregator, ThreadedAggregator, SparseAggregator
+export Aggregator, KAAggregator, SequentialAggregator, PolyesterAggregator, ThreadedAggregator, SparseAggregator
 export ff_to_constraint
 include("aggregators.jl")
 include("gbufs.jl")

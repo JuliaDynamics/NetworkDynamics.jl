@@ -234,7 +234,7 @@ nothing #hide
 To bild the Network we first need to define the components. This is a two step process:
 
 - first create the symbolic `ODESystem` using ModelingToolkit
-- secondly build a NetworkDynamics component function ([`VertexFunction`](@ref)/[`EdgeFunsction`](@ref)) based on the symbolic system.
+- secondly build a NetworkDynamics component function ([`VertexFunction`](@ref)/[`EdgeFunction`](@ref)) based on the symbolic system.
 
 In the first step we can use the keyword arguments to pass "default" values for our parameters and states.
 Those values will be automaticially transfered to the metadata of the component function the second step.
