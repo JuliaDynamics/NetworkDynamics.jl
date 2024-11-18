@@ -205,16 +205,24 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     end
     alloutputs = reduce(union, outputss)
 
+    missing_inputs = Set{Symbolic}()
     sys = if ModelingToolkit.iscomplete(_sys)
         deepcopy(_sys)
     else
         _openinputs = setdiff(allinputs, Set(full_parameters(_sys)))
+        get_variables.(full_equations(_sys))
+        all_eq_vars = mapreduce(get_variables, union, full_equations(_sys), init=Set{Symbolic}())
+        if !(_openinputs ⊆ all_eq_vars)
+            missing_inputs = setdiff(_openinputs, all_eq_vars)
+            @warn "The specified inputs ($missing_inputs) do not appear in the equations of the system!"
+            _openinputs = setdiff(_openinputs, missing_inputs)
+        end
         structural_simplify(_sys, (_openinputs, alloutputs); simplify=true)[1]
     end
 
     states = unknowns(sys)
     allparams = full_parameters(sys) # contains inputs!
-    @argcheck allinputs ⊆ Set(allparams)
+    @argcheck allinputs ⊆ Set(allparams) ∪ missing_inputs
     params = setdiff(allparams, Set(allinputs))
 
     # extract the main equations and observed equations
