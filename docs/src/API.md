@@ -11,8 +11,15 @@ pdim(::Network)
 
 ## Component Functions
 ```@docs
-VertexFunction
-EdgeFunction
+VertexFunction()
+EdgeFunction()
+```
+
+## Component Functions with MTK
+```@docs
+VertexFunction(::ModelingToolkit.ODESystem, ::Any, ::Any)
+EdgeFunction(::ModelingToolkit.ODESystem, ::Any, ::Any, ::Any, ::Any)
+EdgeFunction(::ModelingToolkit.ODESystem, ::Any, ::Any, ::Any)
 ```
 
 ### Output Function Helpers/Wrappers 
