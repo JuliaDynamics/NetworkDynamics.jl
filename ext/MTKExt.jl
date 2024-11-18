@@ -11,10 +11,18 @@ using LinearAlgebra: Diagonal, I
 
 using NetworkDynamics: NetworkDynamics, set_metadata!,
                        PureFeedForward, FeedForward, NoFeedForward, PureStateMap
-import NetworkDynamics: VertexFunction, EdgeFunction
+import NetworkDynamics: VertexFunction, EdgeFunction, AnnotatedSym
 
 include("MTKUtils.jl")
 
+"""
+    VertexFunction(sys::ODESystem, inputs, outputs; kwargs...)
+
+Create a vertex function object from a given `ODESystem` created with ModelingToolkit.
+You need to provide 2 lists of symbolic names (`Symbol` or `Vector{Symbols}`):
+- `inputs`: names of variables in you equation representing the aggregated edge states
+- `outputs`: names of variables in you equation representing the node output
+"""
 function VertexFunction(sys::ODESystem, inputs, outputs; verbose=false, name=getname(sys), kwargs...)
     warn_events(sys)
     inputs = inputs isa AbstractVector ? inputs : [inputs]
@@ -49,17 +57,56 @@ function VertexFunction(sys::ODESystem, inputs, outputs; verbose=false, name=get
     c
 end
 
+"""
+    EdgeFunction(sys::ODESystem, srcin, dstin, AntiSymmetric(dstout); kwargs...)
+
+Create a edge function object from a given `ODESystem` created with ModelingToolkit.
+
+Here you only need to provide one list of output symbols: `dstout`.
+To make it clear how to handle the single-sided output definiton, you musst wrap
+the symbol vector in
+- `AntiSymmetric(dstout)`,
+- `Symmetric(dstout)`, or
+- `Directed(dstout)`.
+"""
+EdgeFunction(sys::ODESystem, srcin, dstin, dstout; kwargs...) = EdgeFunction(sys, srcin, dstin, nothing, dstout; kwargs...)
+
+"""
+    EdgeFunction(sys::ODESystem, srcin, srcout, dstin, dstout; kwargs...)
+
+Create a edge function object from a given `ODESystem` created with ModelingToolkit.
+You need to provide 4 lists of symbolic names (`Symbol` or `Vector{Symbols}`):
+- `srcin`: names of variables in you equation representing the node state at the source
+- `dstin`: names of variables in you equation representing the node state at the destination
+- `srcout`: names of variables in you equation representing the output at the source
+- `dstout`: names of variables in you equation representing the output at the destination
+"""
 function EdgeFunction(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=false, name=getname(sys), kwargs...)
     warn_events(sys)
     srcin = srcin isa AbstractVector ? srcin : [srcin]
     dstin = dstin isa AbstractVector ? dstin : [dstin]
-    srcout = srcout isa AbstractVector ? srcout : [srcout]
-    dstout = dstout isa AbstractVector ? dstout : [dstin]
 
-    gen = generate_io_function(sys, (srcin, dstin), (srcout, dstout); verbose)
+    singlesided = isnothing(srcout)
+    if singlesided && !(dstout isa AnnotatedSym)
+        throw(ArgumentError("If you only provide one output (single sided \
+        model), it musst be wrapped either in `AntiSymmetric`, `Symmetric` or \
+        `Directed`!"))
+    end
+
+    if singlesided
+        gwrap = NetworkDynamics.wrapper(dstout)
+        dstout = NetworkDynamics.sym(dstout)
+        outs = (dstout, )
+    else
+        srcout = srcout isa AbstractVector ? srcout : [srcout]
+        dstout = dstout isa AbstractVector ? dstout : [dstin]
+        outs = (srcout, dstout)
+    end
+
+    gen = generate_io_function(sys, (srcin, dstin), outs; verbose)
 
     f = gen.f
-    g = gen.g
+    g = singlesided ? gwrap(gen.g; ff=gen.fftype) : gen.g
     obsf = gen.obsf
 
     _sym = getname.(gen.states)
@@ -77,11 +124,16 @@ function EdgeFunction(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=fals
     insym_dst = [s => _get_metadata(sys, s)  for s in _insym_dst]
     insym = (;src=insym_src, dst=insym_dst)
 
-    _outsym_src = getname.(srcout)
-    outsym_src = [s => _get_metadata(sys, s)  for s in _outsym_src]
-    _outsym_dst = getname.(dstout)
-    outsym_dst = [s => _get_metadata(sys, s)  for s in _outsym_dst]
-    outsym = (;src=outsym_src, dst=outsym_dst)
+    if singlesided
+        _outsym_dst = getname.(dstout)
+        outsym = [s => _get_metadata(sys, s)  for s in _outsym_dst]
+    else
+        _outsym_src = getname.(srcout)
+        outsym_src = [s => _get_metadata(sys, s)  for s in _outsym_src]
+        _outsym_dst = getname.(dstout)
+        outsym_dst = [s => _get_metadata(sys, s)  for s in _outsym_dst]
+        outsym = (;src=outsym_src, dst=outsym_dst)
+    end
 
     mass_matrix = gen.mass_matrix
     c = EdgeFunction(;f, g, sym, insym, outsym, psym, obssym,
@@ -153,16 +205,24 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     end
     alloutputs = reduce(union, outputss)
 
+    missing_inputs = Set{Symbolic}()
     sys = if ModelingToolkit.iscomplete(_sys)
         deepcopy(_sys)
     else
         _openinputs = setdiff(allinputs, Set(full_parameters(_sys)))
+        get_variables.(full_equations(_sys))
+        all_eq_vars = mapreduce(get_variables, union, full_equations(_sys), init=Set{Symbolic}())
+        if !(_openinputs ⊆ all_eq_vars)
+            missing_inputs = setdiff(_openinputs, all_eq_vars)
+            @warn "The specified inputs ($missing_inputs) do not appear in the equations of the system!"
+            _openinputs = setdiff(_openinputs, missing_inputs)
+        end
         structural_simplify(_sys, (_openinputs, alloutputs); simplify=true)[1]
     end
 
     states = unknowns(sys)
     allparams = full_parameters(sys) # contains inputs!
-    @argcheck allinputs ⊆ Set(allparams)
+    @argcheck allinputs ⊆ Set(allparams) ∪ missing_inputs
     params = setdiff(allparams, Set(allinputs))
 
     # extract the main equations and observed equations

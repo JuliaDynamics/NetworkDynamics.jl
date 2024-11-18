@@ -42,7 +42,8 @@ makedocs(;
             # "Stochastic differential equations" => "generated/StochasticSystem.md",
             # "Delay differential equations" => "generated/kuramoto_delay.md",
             "Cascading Failure" => "generated/cascading_failure.md",
-            "Stress on Truss" => "generated/stress_on_truss.md"
+            "Stress on Truss" => "generated/stress_on_truss.md",
+            "Gas Network" => "generated/gas_network.md",
         ]
     ],
     draft=false,
