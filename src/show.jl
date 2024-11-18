@@ -96,10 +96,10 @@ function stylesymbolarray(syms, defaults, guesses, symstyles=Dict{Int,Symbol}())
         style = get(symstyles, i, :default)
         ret = ret * styled"{$style:$(string(sym))}"
         if !isnothing(default)
-            _str = str_significant(default; sigdigits=2)
+            _str = str_significant(default; sigdigits=5)
             ret = ret * styled"{NetworkDynamics_defaultval:=$(_str)}"
         elseif !isnothing(guess)
-            _str = str_significant(guess; sigdigits=2)
+            _str = str_significant(guess; sigdigits=5)
             ret = ret * styled"{NetworkDynamics_guessval:≈$(_str)}"
         end
         if i < length(syms)
@@ -306,14 +306,12 @@ function maybe_plural(num, word, substitution=s"\1s")
 end
 
 function str_significant(x; sigdigits)
-    (x == 0) && (return "0")
-    x = round(x; sigdigits)
-    n = length(@sprintf("%d", abs(x)))              # length of the integer part
-    if (x ≤ -1 || x ≥ 1)
-        decimals = max(sigdigits - n, 0)               # 'sig - n' decimals needed
-    else
-        Nzeros = ceil(Int, -log10(abs(x))) - 1      # No. zeros after decimal point before first number
-        decimals = sigdigits + Nzeros
+    # isinteger(x) && return string(Int(x))
+    formatted = @sprintf("%.*g", sigdigits, x)
+    if occursin(r"e\+0*", formatted)
+        formatted = replace(formatted, r"e\+0*" => "e")
+    elseif occursin(r"e\-0+", formatted)
+        formatted = replace(formatted, r"e\-0+" => "e-")
     end
-    return @sprintf("%.*f", decimals, x)
+    formatted
 end

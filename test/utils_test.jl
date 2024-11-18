@@ -101,4 +101,15 @@ using NetworkDynamics
         r3 = 12:13
         @test_throws AssertionError flatrange((src=r1,dst=r3))
     end
+
+    @testset "significant digits print" begin
+        using NetworkDynamics: str_significant
+        @test str_significant(0.0; sigdigits=3) == "0"
+        @test str_significant(1.23456789; sigdigits=3) == "1.23"
+        @test str_significant(9.81; sigdigits=3) == "9.81"
+        @test str_significant(9.81; sigdigits=2) == "9.8"
+        @test str_significant(1002.1; sigdigits=3) == "1e3"
+        @test str_significant(0.00000122; sigdigits=3) == "1.22e-6"
+        @test str_significant(-123.294191; sigdigits=5) == "-123.29"
+    end
 end
