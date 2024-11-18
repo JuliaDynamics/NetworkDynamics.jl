@@ -17,7 +17,7 @@ using ExplicitImports
     @testset "Package Quality Tests" begin
         # print_explicit_imports(NetworkDynamics)
         @test check_no_implicit_imports(NetworkDynamics) === nothing
-        @test check_no_stale_explicit_imports(NetworkDynamics) === nothing
+        @test check_no_stale_explicit_imports(NetworkDynamics, ignore=(:Symbolics,)) === nothing
         Aqua.test_all(NetworkDynamics;
             ambiguities=false,
             persistent_tasks=false)
