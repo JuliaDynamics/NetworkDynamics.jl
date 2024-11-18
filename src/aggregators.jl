@@ -1,3 +1,18 @@
+"""
+    abstract type Aggregator end
+
+Abstract sypertype for aggregators. Aggregators operate on the output buffer of
+all components and fill the aggregation buffer with the aggregatated edge values
+per vertex.
+
+All aggregators have the constructor
+
+    Aggegator(aggfun)
+
+for example
+
+    SequentialAggreator(+)
+"""
 abstract type Aggregator end
 
 struct NaiveAggregator{F,ETup,G} <: Aggregator
@@ -71,6 +86,12 @@ function _tighten_idxrange(v)
     return range, v[range]
 end
 
+"""
+    KAAggregator(aggfun)
+
+Parallel aggregation using [`KernelAbstractions.jl`](https://github.com/JuliaGPU/KernelAbstractions.jl).
+Works with both GPU and CPU arrays.
+"""
 struct KAAggregator{F,V} <: Aggregator
     f::F
     m::AggregationMap{V}
@@ -106,6 +127,11 @@ end
 end
 
 
+"""
+    SequentialAggregator(aggfun)
+
+Sequential aggregation.
+"""
 struct SequentialAggregator{F} <: Aggregator
     f::F
     m::AggregationMap{Vector{Int}}
@@ -129,6 +155,11 @@ function aggregate!(a::SequentialAggregator, aggbuf, data)
 end
 
 
+"""
+    PolyesterAggregator(aggfun)
+
+Parallel aggregation using [`Polyester.jl`](https://github.com/JuliaSIMD/Polyester.jl).
+"""
 struct PolyesterAggregator{F} <: Aggregator
     f::F
     m::Vector{Tuple{Int64,Vector{Int64}}}
@@ -151,6 +182,11 @@ function aggregate!(a::PolyesterAggregator, aggbuf, data)
 end
 
 
+"""
+    ThreadedAggregator(aggfun)
+
+Parallel aggregation using Julia threads.
+"""
 struct ThreadedAggregator{F} <: Aggregator
     f::F
     m::Vector{Tuple{Int64,Vector{Int64}}}
@@ -204,6 +240,12 @@ function _pusheach!(target, src)
     end
 end
 
+"""
+    SparseAggregator(+)
+
+Only works with additive aggregation `+`. Aggregates via sparse inplace matrix
+multiplication. Works with GPU Arrays.
+"""
 struct SparseAggregator{M} <: Aggregator
     m::M
     SparseAggregator(m::AbstractMatrix) = new{typeof(m)}(m)

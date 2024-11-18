@@ -1,25 +1,32 @@
-# NetworkDynamics
+# NetworkDynamics.jl
 
 [![](https://img.shields.io/badge/docs-dev-blue.svg)](https://juliadynamics.github.io/NetworkDynamics.jl/dev/)
 [![](https://img.shields.io/badge/docs-stable-blue.svg)](https://juliadynamics.github.io/NetworkDynamics.jl/stable)
 
-A package for working with dynamical systems on complex networks. NetworkDynamics.jl provides an interface between [Graphs.jl](https://github.com/JuliaGraphs/Graphs.jl) and [DifferentialEquations.jl](https://github.com/JuliaDiffEq/DifferentialEquations.jl). It allows to define several types of dynamic and static nodes and edges and to link them up in order to create complex network dynamics.
+A package for working with dynamical systems on complex networks. NetworkDynamics.jl provides an interface between [Graphs.jl](https://github.com/JuliaGraphs/Graphs.jl) and [DifferentialEquations.jl](https://github.com/JuliaDiffEq/DifferentialEquations.jl).
+It allows modeling of dynamical processes on networks using a *modular* approach: meaning that the overall network dynamics are composed based on dynamical models for the *nodes* and the *edges*.
+The dynamical behavior of those components are described by differential algebraic equations with inputs and outputs.
 
-The behavior of a node or an edge can be described by algebraic equations, by differential algebraic equation (DAEs) in mass matrix form or by ordinary differential equations (ODE). Stochastic ordinary differential equations (SDE) can be implemented as a [two-layer network](https://juliadynamics.github.io/NetworkDynamics.jl/dev/generated/StochasticSystem/). For details see the [docs](https://juliadynamics.github.io/NetworkDynamics.jl/dev/).
+Typical usecases for this modeling appraoch are diffusion processes, oscillator networks or power grids.
 
 ## Getting started
 
-Check out the [getting started](https://juliadynamics.github.io/NetworkDynamics.jl/dev/generated/getting_started_with_network_dynamics/) example in our docs.
+Check out our [documentation](https://juliadynamics.github.io/NetworkDynamics.jl/dev/).
+A good place to start is the page on the [mathematical model](https://juliadynamics.github.io/NetworkDynamics.jl/dev/mathematical_model/). For a more hands-on approach check out the [getting started example](https://juliadynamics.github.io/NetworkDynamics.jl/dev/generated/getting_started_with_network_dynamics/).
 
-An [introductory talk](https://www.youtube.com/watch?v=GrmnbDYr6mM) was recorded at JuliaCon2020.
+An [introductory talk](https://www.youtube.com/watch?v=GrmnbDYr6mM) for an older version of this package was recorded for JuliaCon2020. Be aware that the API change significantly since then, but it can still give some insights into usecases of the package.
 
 ## Benchmarks
 
 In our benchmark on the Kuramoto model NetworkDynamics.jl + DifferentialEquations.jl proved to be an especially performant solution, see https://github.com/PIK-ICoNe/NetworkDynamicsBenchmarks.
 
-## PowerDynamics
+## PowerDynamics.jl
+
+> [!IMPORTANT]
+> As of 11/2024, the currently available version of PowerDynamics.jl is quite outdated and builds on an old version of NetworkDynamics. However, PowerDynamics will receive an Substantial update as part of an ongoing project. We expect a pre-release of that in the first half of 2025!
 
 [PowerDynamics.jl](https://juliaenergy.github.io/PowerDynamics.jl/stable/) is an open-source framework for dynamic power grid modeling and analysis build on top of NetworkDynamics.jl.
+
 
 ## Citations
 

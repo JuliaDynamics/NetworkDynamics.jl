@@ -126,9 +126,43 @@ gᵥ(yᵥ, xᵥ, e_aggr, pᵥ, t)
 gₑ([y_src], y_dst, xᵥ, v_src, v_dst, pₑ, t)
 ```
 
-NetworkDyanmics cannot couple two components with feed forward to each other.
+NetworkDynamics cannot couple two components with feed forward to each other.
 It is always possible to transform feed forward behavior to an internal state `x` with mass matrix entry zero to circumvent this problem. This transformation can be performed automatically by using [`ff_to_constraint`](@ref).
 
 !!! warning "Feed Forward Vertices"
     As of 11/2024, vertices with feed forward are not supported at all. Use [`ff_to_constraint`](@ref) to transform them into vertex functions without FF.
+
+Concretely, NetworkDynamics distinguishes between 4 types of feed forward behaviors of `g` functions based on the [`FeedForwardType`](@ref) trait.
+The different types the signature of provided function `g`.
+Based on the signatures avaialable, ND.jl will try to find the correct type automaticially. Using the `ff`
+keyword in the constructors, the user can enforce a specific type.
+
+**[`PureFeedForward()`](@ref)**
+```julia
+g!(outs...,          ins...,       p, t) # abstractly
+g!(out_dst,          v_src, v_dst, p, t) # single-sided edge function
+g!(out_src, out_dst, v_src, v_dst, p, t) # double-sided edge function
+g!(v_out,            e_aggr,       p, t) # single layer vertex function
+```
+**[`FeedForward()`](@ref)**
+```julia
+g!(outs...,          x, ins...,       p, t) # abstractly
+g!(out_dst,          x, v_src, v_dst, p, t) # single-sided edge function
+g!(out_src, out_dst, x, v_src, v_dst, p, t) # double-sided edge function
+g!(v_out,            x, e_aggr,       p, t) # single layer vertex function
+```
+**[`NoFeedForward()`](@ref)**
+```julia
+g!(outs...,          x, p, t) # abstractly
+g!(out_dst,          x, p, t) # single-sided edge function
+g!(out_src, out_dst, x, p, t) # double-sided edge function
+g!(v_out,            x, p, t) # single layer vertex function
+```
+**[`PureStateMap()`](@ref)**
+```julia
+g!(outs...,          x) # abstractly
+g!(out_dst,          x) # single-sided edge function
+g!(out_src, out_dst, x) # double-sided edge function
+g!(v_out,            x) # single layer vertex function
+```
 

@@ -11,8 +11,15 @@ pdim(::Network)
 
 ## Component Functions
 ```@docs
-VertexFunction
-EdgeFunction
+VertexFunction()
+EdgeFunction()
+```
+
+## Component Functions with MTK
+```@docs
+VertexFunction(::ModelingToolkit.ODESystem, ::Any, ::Any)
+EdgeFunction(::ModelingToolkit.ODESystem, ::Any, ::Any, ::Any, ::Any)
+EdgeFunction(::ModelingToolkit.ODESystem, ::Any, ::Any, ::Any)
 ```
 
 ### Output Function Helpers/Wrappers 
@@ -121,6 +128,25 @@ set_bounds!
 find_fixpoint
 initialize_component!
 init_residual
+```
+
+## Execution Types
+```@docs
+ExecutionStyle
+SequentialExecution
+PolyesterExecution
+ThreadedExecution
+KAExecution
+```
+
+## Aggregators
+```@docs
+Aggregator
+SequentialAggregator
+SparseAggregator
+ThreadedAggregator
+PolyesterAggregator
+KAAggregator
 ```
 
 ## Utils

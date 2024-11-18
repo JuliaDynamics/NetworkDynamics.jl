@@ -6,10 +6,23 @@ A network bundles various component functions (edge and vertex subsystems) toget
 
 A `Network` is build by passing a graph `g`, vertex functions `vertexf` and edge function `edgef`.
 ```julia
-nw = Network(g, vertexf, edgef)
+nw = Network(g, vertexf, edgef; kwargs...)
 ```
 
-The network also stores metadata bout different [execution configurations](@ref). The [`Network`](@ref) docstring goes into more detail on the available options.
+Two important keywords for the [`Network`](@ref) constructor are:
+
+- `execution`: 
+    Defines the [`ExecutionStyle`](@ref) of the coreloop, e.g. `SequentialExecution{true}()`.
+    A execution style is a special struct which tells the backend how to parallelize for example.
+    A list of available executions styles can be found under [Execution Types](@ref) in the API.
+
+- `aggregator`: 
+    Tells the backend how to aggregate and which aggregation function to use.
+    Aggregation is the process of creating a single vertex input by reducing over
+    the outputs of adjecent edges of said vertex. The `aggregator` contains both the
+    function and the algorith. E.g. `SequentialAggregator(+)` is a sequential
+    aggregation by summation. A list of availabe Aggregators can be found under
+    [`Aggregators`](@ref) in the API.
 
 ## Building `VertexFunction`s
 This chapter walks through the most important aspects when defining custom vertex functions. For a list of all keyword arguments please check out the docstring of [`VertexFunction`](@ref).

@@ -100,10 +100,16 @@ You can allways access the flat representations by calling [`uflat`](@ref) and [
 
 
 ## Observables
-Some "States" arn't states in the sense of the ODE, but rather observables.
-That means, they can be calculated explicitly from the state and parameters.
-Those observables can be also accessed using symbolic indexing.
-For example, the flows in the network don't show up in the state array but can be accessed in all the ways discussed above, for example
+Sometimes, the "states" you're interested in aren't really states in the DAE sense but rather
+algebraic derivations from DAE states, parameters and time -- in accordance with the naming in 
+the `SciML`-ecosystem those states are called Observables.
+
+A prime example of Observables are edge/vertex-outputs, such as the `flow` in the edge model defined above.
+It is also possible to define additional Observables manually by using the `obssym` and `obsf` keyword
+on the `EdgeFunction`/`VertexFunction` constructors.
+When building models using ModelingToolkit, the reduced algebraic states will be preserved as observables automatically.
+
+Observables can be accessed like any other state, for example, the flows in the network don't show up in the state array but can be accessed in all the ways discussed above, for example
 
 ```@example si
 plot(sol; idxs=eidxs(nw, :, :flow))

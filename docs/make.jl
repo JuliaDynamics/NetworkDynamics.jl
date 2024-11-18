@@ -4,6 +4,7 @@ using Documenter
 using NetworkDynamics
 using SciMLBase
 using Literate
+using ModelingToolkit
 
 # generate examples
 example_dir = joinpath(@__DIR__, "examples")
@@ -19,10 +20,11 @@ end
 # TODO: doc on steady state solve https://docs.sciml.ai/NonlinearSolve/stable/native/steadystatediffeq/#SteadyStateDiffEq.SSRootfind
 # TODO: doc on parameter & state handling? -> symbolic indexing
 
+mtkext = Base.get_extension(NetworkDynamics, :MTKExt)
 makedocs(;
     root=joinpath(pkgdir(NetworkDynamics), "docs"),
     sitename="NetworkDynamics",
-    modules=[NetworkDynamics],
+    modules=[NetworkDynamics, mtkext],
     linkcheck=true, # checks if external links resolve
     pagesonly=true,
     pages=[
@@ -33,6 +35,7 @@ makedocs(;
             "symbolic_indexing.md",
             "metadata.md",
             "initialization.md",
+            "mtk_integration.md",
         ],
         "API.md",
         "Tutorials" => [
