@@ -7,7 +7,7 @@ using InteractiveUtils
 using CUDA
 using KernelAbstractions
 using Adapt
-using NetworkDynamics: iscudacompatible
+using NetworkDynamics: iscudacompatible, NaiveAggregator
 using Aqua
 using ExplicitImports
 
