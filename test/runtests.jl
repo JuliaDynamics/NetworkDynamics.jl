@@ -20,6 +20,7 @@ using ExplicitImports
         @test check_no_stale_explicit_imports(NetworkDynamics, ignore=(:Symbolics,)) === nothing
         Aqua.test_all(NetworkDynamics;
             ambiguities=false,
+            stale_deps=(; ignore=[:Symbolics]),
             persistent_tasks=false)
         @test_broken isempty(Docs.undocumented_names(NetworkDynamics))
     end
