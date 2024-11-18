@@ -33,7 +33,7 @@ perform dimensionality checks.
 
 There are 2 node models used in the paper. The first node type has a constant
 pressure.
-Additionally, we ad some "internal" state `q̃_inj` which we want to plot later.
+Additionally, we ad some "internal" state `q̃_inj` which we want to plot later (see also [Observables](@ref)).
 =#
 @mtkmodel ConstantPressureNode begin
     @parameters begin
@@ -52,7 +52,7 @@ end
 nothing #hide
 
 #=
-The second node model is a variable pressure node. It has one output state, the pressure and one input state,
+The second node model is a variable pressure node. It has one output state (the pressure) and one input state,
 the aggregated flows from the connected pipes.
 As an internal state we have the injected flow from our source/load.
 The source/load behaviour itself is provided via a time dependent function.
@@ -186,15 +186,16 @@ nothing # hide
 
 #=
 The equivalent "pressure capacity" at the nodes is calculated as a sum of the connected
-pipe parameters according ot (28).
+pipe parameters according to (28).
 
-Here use defintions based on the speed and "standard" conditions. But is this correct?
+Here use defintions based on the speed and "standard" conditions.
 =#
 C₂ = L₁₂*A/(2*ρ̃*c̃^2) + L₂₃*A/(2*ρ̃*c̃^2) # (28)
 C₃ = L₁₃*A/(2*ρ̃*c̃^2) + L₂₃*A/(2*ρ̃*c̃^2) # (28)
+nothing #hide
 
 #=
-Alternatively, could calculate Z2 and Z3 based on the actuel pressure and simulation temperature.
+Alternatively, we could calculate `Z2` and `Z3` based on the actuel pressure and simulation temperature.
 Then we could calculated the speed of sound for the "correct" conditions at the node.
 It seems to have very little effect on the actual results so I kept it simple.
 =#
@@ -203,7 +204,7 @@ nothing #hide
 #=
 ## Load Profile
 
-The paper specifies the load profile at two nodes. We use the package `LinearInterpolations`
+The paper specifies the load profile at two nodes. We use the package [`LinearInterpolations.jl`](https://github.com/jw3126/LinearInterpolations.jl)
 to get a callable object which represents this picewise linear interpolation.
 
 However, this function is not Symbolics.jl compatible, so we need to stop Symbolics.jl/ModelingToolkit.jl
