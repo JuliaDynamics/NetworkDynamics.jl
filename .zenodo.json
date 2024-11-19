@@ -1,0 +1,40 @@
+{
+  "upload_type": "software",
+
+  "title": "NetworkDynamics.jl",
+
+  "creators": [
+    {
+      "name": "Lindner, Michael",
+      "affiliation": "Technische Universität Berlin",
+      "orcid": "0000-0001-9697-7577"
+    },
+    {
+      "name": "Würfel, Hans",
+      "affiliation": "Potsdam Institute for Climate Impact Research (PIK)",
+      "orcid": "0000-0003-2431-5480"
+    },
+    {
+      "name": "Hellmann, Frank",
+      "affiliation": "Potsdam Institute for Climate Impact Research (PIK)",
+      "orcid": "0000-0001-5635-4949"
+    }
+  ],
+
+  "contributors": [
+    {
+      "name": "Hellmann, Frank",
+      "type": "ContactPerson",
+      "affiliation": "Potsdam Institute for Climate Impact Research (PIK)",
+      "orcid": "0000-0001-5635-4949"
+    }
+  ],
+
+  "description": "A Julia package for simulating Dynamical Systems on Networks ",
+
+  "access_right": "open",
+
+  "license": "MIT",
+
+  "keywords": ["Potsdam Institute for Climate Impact Research", "PIK", "Software", "active-development"],
+}
