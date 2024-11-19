@@ -11,12 +11,12 @@ Using SciML's [`SymblicIndexingInterface.jl`](https://github.com/SciML/SymbolicI
     ```
 
 ## Provide Symbol Names
-When construction component functions, you can pass symbolic names using the `sym` and `psym` keywords.
+When construction component models, you can pass symbolic names using the `sym` and `psym` keywords.
 ```@example si
 function _edgef!(e, v_s, v_d, (K,), t)
     e .= K * (v_s[1] .- v_d[1])
 end
-edgef = EdgeFunction(;g=AntiSymmetric(_edgef!), outsym=[:flow], psym=[:K=>1])
+edgef = EdgeModel(;g=AntiSymmetric(_edgef!), outsym=[:flow], psym=[:K=>1])
 ```
 Here we created a static diffusion edge with suitable variable and parameter names.
 Similarly, we define the diffusion vertex with symbolic names.
@@ -24,7 +24,7 @@ Similarly, we define the diffusion vertex with symbolic names.
 function _vertexf!(dv, v, esum, p, t)
     dv[1] = esum[1]
 end
-vertexf = VertexFunction(f=_vertexf!, g=1, sym=[:storage])
+vertexf = VertexModel(f=_vertexf!, g=1, sym=[:storage])
 ```
 
 
@@ -106,7 +106,7 @@ the `SciML`-ecosystem those states are called Observables.
 
 A prime example of Observables are edge/vertex-outputs, such as the `flow` in the edge model defined above.
 It is also possible to define additional Observables manually by using the `obssym` and `obsf` keyword
-on the `EdgeFunction`/`VertexFunction` constructors.
+on the `EdgeModel`/`VertexModel` constructors.
 When building models using ModelingToolkit, the reduced algebraic states will be preserved as observables automatically.
 
 Observables can be accessed like any other state, for example, the flows in the network don't show up in the state array but can be accessed in all the ways discussed above, for example

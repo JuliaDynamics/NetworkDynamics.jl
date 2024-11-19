@@ -19,17 +19,17 @@ mutable struct IndexManager{G}
     lastidx_p::Int
     lastidx_aggr::Int
     lastidx_gbuf::Int
-    vertexf::Vector{VertexFunction}
-    edgef::Vector{EdgeFunction}
-    aliased_vertexfs::IdDict{VertexFunction, @NamedTuple{idxs::Vector{Int}, hash::UInt}}
-    aliased_edgefs::IdDict{EdgeFunction, @NamedTuple{idxs::Vector{Int}, hash::UInt}}
+    vertexm::Vector{VertexModel}
+    edgem::Vector{EdgeModel}
+    aliased_vertexms::IdDict{VertexModel, @NamedTuple{idxs::Vector{Int}, hash::UInt}}
+    aliased_edgems::IdDict{EdgeModel, @NamedTuple{idxs::Vector{Int}, hash::UInt}}
     unique_vnames::Dict{Symbol,Int}
     unique_enames::Dict{Symbol,Int}
-    function IndexManager(g, dyn_states, edepth, vdepth, vertexf, edgef; valias, ealias)
-        aliased_vertexf_hashes = _aliased_hashes(VertexFunction, vertexf, valias)
-        aliased_edgef_hashes = _aliased_hashes(EdgeFunction, edgef, ealias)
-        unique_vnames = unique_mappings(getproperty.(vertexf, :name), 1:nv(g))
-        unique_enames = unique_mappings(getproperty.(edgef, :name), 1:ne(g))
+    function IndexManager(g, dyn_states, edepth, vdepth, vertexm, edgem; valias, ealias)
+        aliased_vertexm_hashes = _aliased_hashes(VertexModel, vertexm, valias)
+        aliased_edgem_hashes = _aliased_hashes(EdgeModel, edgem, ealias)
+        unique_vnames = unique_mappings(getproperty.(vertexm, :name), 1:nv(g))
+        unique_enames = unique_mappings(getproperty.(edgem, :name), 1:ne(g))
         new{typeof(g)}(g, collect(edges(g)),
                        (Vector{UnitRange{Int}}(undef, nv(g)) for i in 1:4)...,
                        Vector{UnitRange{Int}}(undef, ne(g)),
@@ -37,9 +37,9 @@ mutable struct IndexManager{G}
                        (Vector{UnitRange{Int}}(undef, ne(g)) for i in 1:2)...,
                        edepth, vdepth,
                        0, 0, 0, 0, 0,
-                       vertexf, edgef,
-                       aliased_vertexf_hashes,
-                       aliased_edgef_hashes,
+                       vertexm, edgem,
+                       aliased_vertexm_hashes,
+                       aliased_edgem_hashes,
                        unique_vnames,
                        unique_enames)
     end
@@ -126,7 +126,7 @@ end
 
 abstract type ComponentBatch{F} end
 
-struct VertexBatch{T<:VertexFunction,F,G,FFT,IV<:AbstractVector{<:Integer}} <: ComponentBatch{T}
+struct VertexBatch{T<:VertexModel,F,G,FFT,IV<:AbstractVector{<:Integer}} <: ComponentBatch{T}
     "vertex indices contained in batch"
     indices::IV
     "vertex function"
@@ -144,7 +144,7 @@ struct VertexBatch{T<:VertexFunction,F,G,FFT,IV<:AbstractVector{<:Integer}} <: C
     aggbufstride::BatchStride{1}
 end
 
-struct EdgeBatch{T<:EdgeFunction,F,G,FFT,IV<:AbstractVector{<:Integer}} <: ComponentBatch{T}
+struct EdgeBatch{T<:EdgeModel,F,G,FFT,IV<:AbstractVector{<:Integer}} <: ComponentBatch{T}
     "edge indices (as in edge iterator) contained in batch"
     indices::IV
     "edge function"

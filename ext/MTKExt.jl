@@ -11,19 +11,19 @@ using LinearAlgebra: Diagonal, I
 
 using NetworkDynamics: NetworkDynamics, set_metadata!,
                        PureFeedForward, FeedForward, NoFeedForward, PureStateMap
-import NetworkDynamics: VertexFunction, EdgeFunction, AnnotatedSym
+import NetworkDynamics: VertexModel, EdgeModel, AnnotatedSym
 
 include("MTKUtils.jl")
 
 """
-    VertexFunction(sys::ODESystem, inputs, outputs; kwargs...)
+    VertexModel(sys::ODESystem, inputs, outputs; kwargs...)
 
-Create a vertex function object from a given `ODESystem` created with ModelingToolkit.
+Create a `VertexModel` object from a given `ODESystem` created with ModelingToolkit.
 You need to provide 2 lists of symbolic names (`Symbol` or `Vector{Symbols}`):
 - `inputs`: names of variables in you equation representing the aggregated edge states
 - `outputs`: names of variables in you equation representing the node output
 """
-function VertexFunction(sys::ODESystem, inputs, outputs; verbose=false, name=getname(sys), kwargs...)
+function VertexModel(sys::ODESystem, inputs, outputs; verbose=false, name=getname(sys), kwargs...)
     warn_events(sys)
     inputs = inputs isa AbstractVector ? inputs : [inputs]
     outputs = outputs isa AbstractVector ? outputs : [outputs]
@@ -49,7 +49,7 @@ function VertexFunction(sys::ODESystem, inputs, outputs; verbose=false, name=get
     outsym = [s => _get_metadata(sys, s) for s in _outsym]
 
     mass_matrix = gen.mass_matrix
-    c = VertexFunction(;f, g, sym, insym, outsym, psym, obssym,
+    c = VertexModel(;f, g, sym, insym, outsym, psym, obssym,
             obsf, mass_matrix, ff=gen.fftype, name, allow_output_sym_clash=true, kwargs...)
     set_metadata!(c, :observed, gen.observed)
     set_metadata!(c, :equations, gen.equations)
@@ -58,9 +58,9 @@ function VertexFunction(sys::ODESystem, inputs, outputs; verbose=false, name=get
 end
 
 """
-    EdgeFunction(sys::ODESystem, srcin, dstin, AntiSymmetric(dstout); kwargs...)
+    EdgeModel(sys::ODESystem, srcin, dstin, AntiSymmetric(dstout); kwargs...)
 
-Create a edge function object from a given `ODESystem` created with ModelingToolkit.
+Create a `EdgeModel` object from a given `ODESystem` created with ModelingToolkit.
 
 Here you only need to provide one list of output symbols: `dstout`.
 To make it clear how to handle the single-sided output definiton, you musst wrap
@@ -69,19 +69,19 @@ the symbol vector in
 - `Symmetric(dstout)`, or
 - `Directed(dstout)`.
 """
-EdgeFunction(sys::ODESystem, srcin, dstin, dstout; kwargs...) = EdgeFunction(sys, srcin, dstin, nothing, dstout; kwargs...)
+EdgeModel(sys::ODESystem, srcin, dstin, dstout; kwargs...) = EdgeModel(sys, srcin, dstin, nothing, dstout; kwargs...)
 
 """
-    EdgeFunction(sys::ODESystem, srcin, srcout, dstin, dstout; kwargs...)
+    EdgeModel(sys::ODESystem, srcin, srcout, dstin, dstout; kwargs...)
 
-Create a edge function object from a given `ODESystem` created with ModelingToolkit.
+Create a `EdgeModel` object from a given `ODESystem` created with ModelingToolkit.
 You need to provide 4 lists of symbolic names (`Symbol` or `Vector{Symbols}`):
 - `srcin`: names of variables in you equation representing the node state at the source
 - `dstin`: names of variables in you equation representing the node state at the destination
 - `srcout`: names of variables in you equation representing the output at the source
 - `dstout`: names of variables in you equation representing the output at the destination
 """
-function EdgeFunction(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=false, name=getname(sys), kwargs...)
+function EdgeModel(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=false, name=getname(sys), kwargs...)
     warn_events(sys)
     srcin = srcin isa AbstractVector ? srcin : [srcin]
     dstin = dstin isa AbstractVector ? dstin : [dstin]
@@ -136,7 +136,7 @@ function EdgeFunction(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=fals
     end
 
     mass_matrix = gen.mass_matrix
-    c = EdgeFunction(;f, g, sym, insym, outsym, psym, obssym,
+    c = EdgeModel(;f, g, sym, insym, outsym, psym, obssym,
             obsf, mass_matrix, ff=gen.fftype, name,  allow_output_sym_clash=true, kwargs...)
     set_metadata!(c, :observed, gen.observed)
     set_metadata!(c, :equations, gen.equations)
@@ -145,7 +145,7 @@ function EdgeFunction(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=fals
 end
 
 """
-For a given system and name, extract all the relevant meta we want to keep for the component function.
+For a given system and name, extract all the relevant meta we want to keep for the component model.
 """
 function _get_metadata(sys, name)
     nt = (;)

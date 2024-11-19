@@ -76,7 +76,7 @@ nothing #hide #md
 #=
 ## Setting up the ODEProblem
 
-Defining `VertexFunction` and `EdgeFunction` is similar to the example before. The macro `Base.@propagate_inbounds` tells the compiler to inline the function and propagate the inbounds context. For more details see the julia [documentation](https://docs.julialang.org/en/v1/devdocs/boundscheck/).
+Defining the `VertexModel` and `EdgeModel` is similar to the example before. The macro `Base.@propagate_inbounds` tells the compiler to inline the function and propagate the inbounds context. For more details see the julia [documentation](https://docs.julialang.org/en/v1/devdocs/boundscheck/).
 
 =#
 
@@ -86,14 +86,14 @@ Base.@propagate_inbounds function fhn_electrical_vertex!(dv, v, esum, p, t)
     dv[2] = (v[1] - a) * ϵ
     nothing
 end
-vertex = VertexFunction(f=fhn_electrical_vertex!, g=1, sym=[:u, :v], psym=[:a=>0.5, :ϵ=>0.05])
+vertex = VertexModel(f=fhn_electrical_vertex!, g=1, sym=[:u, :v], psym=[:a=>0.5, :ϵ=>0.05])
 #-
 
 Base.@propagate_inbounds function electrical_edge!(e, v_s, v_d, (w, σ), t)
     e[1] = w * (v_s[1] - v_d[1]) * σ
     nothing
 end
-electricaledge = EdgeFunction(g=Directed(electrical_edge!), outdim=1, psym=[:weight, :σ=>0.5])
+electricaledge = EdgeModel(g=Directed(electrical_edge!), outdim=1, psym=[:weight, :σ=>0.5])
 #-
 
 fhn_network! = Network(g_directed, vertex, electricaledge)

@@ -12,7 +12,7 @@ N = 20 # number of nodes
 k = 8  # average degree
 g = watts_strogatz(N, k, 0.0) # ring network
 
-# the signature of the edge and vertex functions differs from the ODE signature
+# the signature of the edge and vertex model differs from the ODE signature
 function diffusionedge!(e, v_s, v_d, p, t)
     e .= 0.1 * (v_s - v_d)
     nothing
@@ -124,7 +124,7 @@ plot(sol; vars=syms_containing(nd, "v"), legend=false)
 svertex! = StaticVertex(; f=(x, edges, p, t) -> x .= 1, dim=1)
 
 # convert to list of VertexFunctions, that may contain different types of vertices
-vlist = Array{VertexFunction}([kdvertex! for i in 1:nv(g)])
+vlist = Array{VertexModel}([kdvertex! for i in 1:nv(g)])
 vlist[1] = svertex!
 # at the moment if either edges or vertices is a list, the other has to be a list as well
 elist = [kdedge! for i in 1:ne(g)]

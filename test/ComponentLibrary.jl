@@ -5,14 +5,14 @@ Base.@propagate_inbounds function diffusionedge!(e, v_s, v_d, (p,), _)
     e .= p * (v_s[1] .- v_d[1])
 end
 function diffusion_edge()
-    EdgeFunction(g=AntiSymmetric(diffusionedge!), outdim=1, pdim=1, pdef=[1], name=:diff_edge)
+    EdgeModel(g=AntiSymmetric(diffusionedge!), outdim=1, pdim=1, pdef=[1], name=:diff_edge)
 end
 function diffusion_edge_closure()
     force_closure = rand()
     gs = (e, v_s, v_d, (p,), _) -> begin
         e .= p * (v_s[1] .- v_d[1]) .+ 0 * force_closure
     end
-    EdgeFunction(;g=AntiSymmetric(gs), outdim=1, pdim=1, pdef=[1])
+    EdgeModel(;g=AntiSymmetric(gs), outdim=1, pdim=1, pdef=[1])
 end
 
 Base.@propagate_inbounds function diffusionedge_fid!(e_s, e_d, v_s, v_d, (p,), _)
@@ -20,7 +20,7 @@ Base.@propagate_inbounds function diffusionedge_fid!(e_s, e_d, v_s, v_d, (p,), _
     e_s[1] = -e_d[1]
 end
 function diffusion_edge_fid()
-    EdgeFunction(g=diffusionedge_fid!, outdim=1, pdim=1, pdef=[1], name=:diff_edge_fid)
+    EdgeModel(g=diffusionedge_fid!, outdim=1, pdim=1, pdef=[1], name=:diff_edge_fid)
 end
 
 Base.@propagate_inbounds function diffusion_dedge!(de, e, v_s, v_d, (τ,), _)
@@ -29,7 +29,7 @@ Base.@propagate_inbounds function diffusion_dedge!(de, e, v_s, v_d, (τ,), _)
     nothing
 end
 function diffusion_odeedge()
-    EdgeFunction(f=diffusion_dedge!,
+    EdgeModel(f=diffusion_dedge!,
         dim=2, sym=[:e_dst, :e_src],
         pdim=1, pdef=[100], psym=[:τ],
         g=Fiducial(dst=1:1, src=2:2), name=:diff_edge_ode)
@@ -39,7 +39,7 @@ Base.@propagate_inbounds function diffusionvertex!(dv, _, acc, _, _)
     dv[1] = acc[1]
     nothing
 end
-diffusion_vertex() = VertexFunction(f=diffusionvertex!, dim=1, g=1:1)
+diffusion_vertex() = VertexModel(f=diffusionvertex!, dim=1, g=1:1)
 
 ####
 #### inhomogenious kuramoto system
@@ -48,7 +48,7 @@ Base.@propagate_inbounds function kuramoto_edge!(e, θ_s, θ_d, (K,), t)
     e .= K .* sin(θ_s[1] - θ_d[1])
 end
 function kuramoto_edge(; name=:kuramoto_edge)
-    EdgeFunction(;g=AntiSymmetric(kuramoto_edge!),
+    EdgeModel(;g=AntiSymmetric(kuramoto_edge!),
         outsym=[:P], psym=[:K], name)
 end
 
@@ -58,13 +58,13 @@ Base.@propagate_inbounds function kuramoto_inertia!(dv, v, acc, p, t)
     dv[2] = 1 / M * (Pm - D * v[2] + acc[1])
 end
 function kuramoto_second(; name=:kuramoto_second)
-    VertexFunction(; f=kuramoto_inertia!, sym=[:δ=>0, :ω=>0],
+    VertexModel(; f=kuramoto_inertia!, sym=[:δ=>0, :ω=>0],
         psym=[:M=>1, :D=>0.1, :Pm=>1], g=StateMask(1), name)
 end
 
 Base.@propagate_inbounds function kuramoto_vertex!(dθ, θ, esum, (ω,), t)
     dθ[1] = ω + esum[1]
 end
-kuramoto_first() = VertexFunction(; f=kuramoto_vertex!, sym=[:θ], psym=[:ω], g=1)
+kuramoto_first() = VertexModel(; f=kuramoto_vertex!, sym=[:θ], psym=[:ω], g=1)
 
 end #module

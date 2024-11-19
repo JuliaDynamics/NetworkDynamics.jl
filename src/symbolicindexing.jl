@@ -114,8 +114,8 @@ function resolvecompidx(nw::Network, sni::SymbolicIndex{Symbol})
         throw(ArgumentError("Could not resolve component index for $sni, the name might not be unique?"))
     end
 end
-getcomp(nw::Network, sni::SymbolicEdgeIndex) = nw.im.edgef[resolvecompidx(nw, sni)]
-getcomp(nw::Network, sni::SymbolicVertexIndex) = nw.im.vertexf[resolvecompidx(nw, sni)]
+getcomp(nw::Network, sni::SymbolicEdgeIndex) = nw.im.edgem[resolvecompidx(nw, sni)]
+getcomp(nw::Network, sni::SymbolicVertexIndex) = nw.im.vertexm[resolvecompidx(nw, sni)]
 getcomprange(nw::Network, sni::VIndex{<:Union{Symbol,Int}}) = nw.im.v_data[resolvecompidx(nw, sni)]
 getcomprange(nw::Network, sni::EIndex{<:Union{Symbol,Int}}) = nw.im.e_data[resolvecompidx(nw, sni)]
 getcompoutrange(nw::Network, sni::VIndex{<:Union{Symbol,Int}}) = nw.im.v_out[resolvecompidx(nw, sni)]
@@ -241,10 +241,10 @@ end
 
 function SII.variable_symbols(nw::Network)
     syms = Vector{SymbolicStateIndex{Int,Symbol}}(undef, dim(nw))
-    for (ci, cf) in pairs(nw.im.vertexf)
+    for (ci, cf) in pairs(nw.im.vertexm)
         syms[nw.im.v_data[ci]] .= VIndex.(ci, sym(cf))
     end
-    for (ci, cf) in pairs(nw.im.edgef)
+    for (ci, cf) in pairs(nw.im.edgem)
         syms[nw.im.e_data[ci]] .= EIndex.(ci, sym(cf))
     end
     return syms
@@ -288,10 +288,10 @@ end
 
 function SII.parameter_symbols(nw::Network)
     syms = Vector{SymbolicParameterIndex{Int,Symbol}}(undef, pdim(nw))
-    for (ci, cf) in pairs(nw.im.vertexf)
+    for (ci, cf) in pairs(nw.im.vertexm)
         syms[nw.im.v_para[ci]] .= VPIndex.(ci, psym(cf))
     end
-    for (ci, cf) in pairs(nw.im.edgef)
+    for (ci, cf) in pairs(nw.im.edgem)
         syms[nw.im.e_para[ci]] .= EPIndex.(ci, psym(cf))
     end
     return syms
@@ -384,12 +384,12 @@ end
 
 function observed_symbols(nw::Network)
     syms = SymbolicStateIndex{Int,Symbol}[]
-    for (ci, cf) in pairs(nw.im.vertexf)
+    for (ci, cf) in pairs(nw.im.vertexm)
         for s in obssym_all(cf)
             push!(syms, VIndex(ci, s))
         end
     end
-    for (ci, cf) in pairs(nw.im.edgef)
+    for (ci, cf) in pairs(nw.im.edgem)
         for s in obssym_all(cf)
             push!(syms, EIndex(ci, s))
         end
@@ -479,7 +479,7 @@ function _expand_and_collect(inpr, snis)
     end
 end
 
-function _get_observed_f(nw::Network, cf::VertexFunction, vidx)
+function _get_observed_f(nw::Network, cf::VertexModel, vidx)
     N = length(cf.obssym)
     ur   = nw.im.v_data[vidx]
     aggr = nw.im.v_aggr[vidx]
@@ -492,7 +492,7 @@ function _get_observed_f(nw::Network, cf::VertexFunction, vidx)
     end
 end
 
-function _get_observed_f(nw::Network, cf::EdgeFunction, eidx)
+function _get_observed_f(nw::Network, cf::EdgeModel, eidx)
     N = length(cf.obssym)
     ur    = nw.im.e_data[eidx]
     esrcr = nw.im.v_out[nw.im.edgevec[eidx].src]
@@ -513,7 +513,7 @@ end
 function SII.default_values(nw::Network)
     aliased_changed(nw; warn=true)
     defs = Dict{SymbolicIndex{Int,Symbol},Float64}()
-    for (ci, cf) in pairs(nw.im.vertexf)
+    for (ci, cf) in pairs(nw.im.vertexm)
         for s in psym(cf)
             has_default_or_init(cf, s) || continue
             defs[VPIndex(ci, s)] = get_default_or_init(cf, s)
@@ -523,7 +523,7 @@ function SII.default_values(nw::Network)
             defs[VIndex(ci, s)] = get_default_or_init(cf, s)
         end
     end
-    for (ci, cf) in pairs(nw.im.edgef)
+    for (ci, cf) in pairs(nw.im.edgem)
         for s in psym(cf)
             has_default_or_init(cf, s) || continue
             defs[EPIndex(ci, s)] = get_default_or_init(cf, s)
@@ -1013,8 +1013,8 @@ function _make_sidx_iterable(IT::Type{<:SymbolicParameterIndex}, inpr, cidx, s::
     filter(sym -> contains(string(sym), s), syms)
 end
 
-_get_components(::Type{<:SymbolicVertexIndex}, inpr) = extract_nw(inpr).im.vertexf
-_get_components(::Type{<:SymbolicEdgeIndex}, inpr) = extract_nw(inpr).im.edgef
+_get_components(::Type{<:SymbolicVertexIndex}, inpr) = extract_nw(inpr).im.vertexm
+_get_components(::Type{<:SymbolicEdgeIndex}, inpr) = extract_nw(inpr).im.edgem
 
 
 """

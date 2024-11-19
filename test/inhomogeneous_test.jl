@@ -30,15 +30,15 @@ end
     nothing
 end
 
-statvertex = VertexFunction(;g=(v, edges, p, t) -> v .= pi, outdim=1) |> ff_to_constraint
-odevertex = VertexFunction(; f=diffusion_vertex!, g=1, dim=1)
+statvertex = VertexModel(;g=(v, edges, p, t) -> v .= pi, outdim=1) |> ff_to_constraint
+odevertex = VertexModel(; f=diffusion_vertex!, g=1, dim=1)
 
-staticedge = EdgeFunction(; g=AntiSymmetric(diffusion_edge!), outdim=1)
-staticedge2 = EdgeFunction(; g=AntiSymmetric(diffusion_edge2!), outdim=1)
+staticedge = EdgeModel(; g=AntiSymmetric(diffusion_edge!), outdim=1)
+staticedge2 = EdgeModel(; g=AntiSymmetric(diffusion_edge2!), outdim=1)
 
 vertex_list = [statvertex, odevertex]
 append!(vertex_list, [odevertex for i in 1:N-2])
-edge_list = EdgeFunction[staticedge for e in edges(g)]
+edge_list = EdgeModel[staticedge for e in edges(g)]
 edge_list[2] = staticedge2
 
 diff_network_st_ver = Network(g, vertex_list, edge_list)

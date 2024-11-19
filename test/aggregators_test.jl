@@ -11,21 +11,21 @@ using StableRNGs
 
 @testset "compare different aggregators" begin
     fv = (dv, v, ein, p, t) -> nothing
-    vtypes = [VertexFunction(; f=fv, dim=2, g=1:2),
-              VertexFunction(; f=fv, dim=3, g=1:2),
-              VertexFunction(; f=fv, dim=4, g=1:2)]
+    vtypes = [VertexModel(; f=fv, dim=2, g=1:2),
+              VertexModel(; f=fv, dim=3, g=1:2),
+              VertexModel(; f=fv, dim=4, g=1:2)]
 
     gss = (e, vsrc, vdst, p, t) -> nothing
-    etypes = [EdgeFunction(; g=Symmetric(gss), outdim=2),
-              EdgeFunction(; g=Symmetric(gss), outdim=2),
-              EdgeFunction(; g=Symmetric(gss), outdim=2),
-              EdgeFunction(; g=AntiSymmetric(gss), outdim=2),
-              EdgeFunction(; g=AntiSymmetric(gss), outdim=2),
-              EdgeFunction(; g=AntiSymmetric(gss), outdim=2),
-              EdgeFunction(; g=Fiducial(gss,gss), outdim=2),
-              EdgeFunction(; g=Fiducial(gss,gss), outdim=2),
-              EdgeFunction(; g=Directed(gss), outdim=2),
-              EdgeFunction(; g=Directed(gss), outdim=2)]
+    etypes = [EdgeModel(; g=Symmetric(gss), outdim=2),
+              EdgeModel(; g=Symmetric(gss), outdim=2),
+              EdgeModel(; g=Symmetric(gss), outdim=2),
+              EdgeModel(; g=AntiSymmetric(gss), outdim=2),
+              EdgeModel(; g=AntiSymmetric(gss), outdim=2),
+              EdgeModel(; g=AntiSymmetric(gss), outdim=2),
+              EdgeModel(; g=Fiducial(gss,gss), outdim=2),
+              EdgeModel(; g=Fiducial(gss,gss), outdim=2),
+              EdgeModel(; g=Directed(gss), outdim=2),
+              EdgeModel(; g=Directed(gss), outdim=2)]
 
     rng = StableRNG(1)
     g = watts_strogatz(10_000, 4, 0.8; rng, is_directed=true)

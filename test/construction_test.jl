@@ -6,26 +6,26 @@ using Chairmarks: @b
 
 @testset "graphless constructor" begin
     g = (out, in, p, t) -> nothing
-    v1 = VertexFunction(; g, outdim=2, metadata=Dict(:graphelement=>1), name=:v1)
+    v1 = VertexModel(; g, outdim=2, metadata=Dict(:graphelement=>1), name=:v1)
     @test has_graphelement(v1) && get_graphelement(v1) == 1
-    v2 = VertexFunction(; g, outdim=2, name=:v2)
+    v2 = VertexModel(; g, outdim=2, name=:v2)
     set_graphelement!(v2, 3)
-    v3 = VertexFunction(; g, outdim=2, name=:v3)
+    v3 = VertexModel(; g, outdim=2, name=:v3)
     set_graphelement!(v3, 2)
 
     ge = (out, src, dst, p, t) -> nothing
-    e1 = EdgeFunction(; g=ge, outdim=1, graphelement=(;src=1,dst=2))
+    e1 = EdgeModel(; g=ge, outdim=1, graphelement=(;src=1,dst=2))
     @test get_graphelement(e1) == (;src=1,dst=2)
-    e2 = EdgeFunction(; g=ge, outdim=1)
+    e2 = EdgeModel(; g=ge, outdim=1)
     set_graphelement!(e2, (;src=:v3,dst=:v2))
-    e3 = EdgeFunction(; g=ge, outdim=1)
+    e3 = EdgeModel(; g=ge, outdim=1)
 
     # missing graphelement on e3
     @test_throws ArgumentError Network([v1,v2,v3], [e1,e2,e3])
     set_graphelement!(e3, (;src=3,dst=1))
 
     nw = Network([v1,v2,v3], [e1,e2,e3])
-    @test nw.im.vertexf == [v1, v3, v2]
+    @test nw.im.vertexm == [v1, v3, v2]
     graph = SimpleDiGraph(3)
     add_edge!(graph, 1, 2)
     add_edge!(graph, 2, 3)
@@ -39,15 +39,15 @@ using Chairmarks: @b
     set_graphelement!(e3, (;src=2,dst=1))
     Network([v1,v2,v3], [e1,e2,e3]) # throws waring about 1->2 and 2->1 beeing present
 
-    v1 = VertexFunction(; g, outdim=2, metadata=Dict(:graphelement=>1), name=:v1)
-    v2 = VertexFunction(; g, outdim=2, name=:v2, vidx=2)
-    v3 = VertexFunction(; g, outdim=2, name=:v3, vidx=3)
+    v1 = VertexModel(; g, outdim=2, metadata=Dict(:graphelement=>1), name=:v1)
+    v2 = VertexModel(; g, outdim=2, name=:v2, vidx=2)
+    v3 = VertexModel(; g, outdim=2, name=:v3, vidx=3)
     nw = Network([v1,v2,v3], [e1,e2,e3])
     @test nw.im.unique_vnames == Dict(:v1=>1, :v2=>2, :v3=>3)
 
-    v1 = VertexFunction(; g, outdim=2, metadata=Dict(:graphelement=>1), name=:v2)
-    v2 = VertexFunction(; g, outdim=2, name=:v2, vidx=2)
-    v3 =VertexFunction(; g, outdim=2, name=:v3, vidx=3)
+    v1 = VertexModel(; g, outdim=2, metadata=Dict(:graphelement=>1), name=:v2)
+    v2 = VertexModel(; g, outdim=2, name=:v2, vidx=2)
+    v3 = VertexModel(; g, outdim=2, name=:v3, vidx=3)
     set_graphelement!(e2, 3=>2)
     nw = Network([v1,v2,v3], [e1,e2,e3])
     @test nw.im.unique_vnames == Dict(:v3=>3)
@@ -56,16 +56,16 @@ end
 @testset "massmatrix construction test" begin
     using LinearAlgebra: I, UniformScaling, Diagonal
     fv = (dv, v, in, p, t) -> nothing
-    v1 = VertexFunction(; f=fv, g=1:2, dim=2, mass_matrix=I)
-    v2 = VertexFunction(; f=fv, g=1:2, dim=2, mass_matrix=Diagonal([2,0]))
-    v3 = VertexFunction(; f=fv, g=1:2, dim=2, mass_matrix=[1 2;3 4])
-    v4 = VertexFunction(; f=fv, g=1:2, dim=2, mass_matrix=UniformScaling(0))
-    v5 = VertexFunction(; f=fv, g=1:2, dim=2, mass_matrix=I)
+    v1 = VertexModel(; f=fv, g=1:2, dim=2, mass_matrix=I)
+    v2 = VertexModel(; f=fv, g=1:2, dim=2, mass_matrix=Diagonal([2,0]))
+    v3 = VertexModel(; f=fv, g=1:2, dim=2, mass_matrix=[1 2;3 4])
+    v4 = VertexModel(; f=fv, g=1:2, dim=2, mass_matrix=UniformScaling(0))
+    v5 = VertexModel(; f=fv, g=1:2, dim=2, mass_matrix=I)
     fe = (de, e, in1, in2, p, t) -> nothing
-    e1 = EdgeFunction(; f=fe, g=Fiducial([1,2],[2,1]), dim=2, mass_matrix=I)
-    e2 = EdgeFunction(; f=fe, g=AntiSymmetric(1:2), dim=2, mass_matrix=Diagonal([2,0]))
-    e3 = EdgeFunction(; f=fe, g=Symmetric(1:2), dim=2, mass_matrix=[1 2;3 4])
-    e4 = EdgeFunction(; f=fe, g=Directed(1:2), dim=2, mass_matrix=UniformScaling(0))
+    e1 = EdgeModel(; f=fe, g=Fiducial([1,2],[2,1]), dim=2, mass_matrix=I)
+    e2 = EdgeModel(; f=fe, g=AntiSymmetric(1:2), dim=2, mass_matrix=Diagonal([2,0]))
+    e3 = EdgeModel(; f=fe, g=Symmetric(1:2), dim=2, mass_matrix=[1 2;3 4])
+    e4 = EdgeModel(; f=fe, g=Directed(1:2), dim=2, mass_matrix=UniformScaling(0))
     nd = Network(path_graph(5), [v1,v2,v3,v4,v5], [e1,e2,e3,e4])
 
     mm = Matrix(Diagonal([1,1,2,0,1,4,0,0,1,1,1,1,2,0,1,4,0,0]))
@@ -83,30 +83,30 @@ end
     @test nd.mass_matrix == I && nd.mass_matrix isa UniformScaling
 end
 
-@testset "test component function constructors" begin
+@testset "test component model constructors" begin
     using NetworkDynamics: PureFeedForward, FeedForward, NoFeedForward, PureStateMap
     using NetworkDynamics: fftype
     using NetworkDynamics: _has_metadata
     using NetworkDynamics: get_defaults, outsym
-    @testset "VertexFunction construction" begin
+    @testset "VertexModel construction" begin
         f = (du, u, in, p, t) -> nothing
         g_pff = (o, in, p, t) -> nothing
         g_ff  = (o, u, in, p, t) -> nothing
         g_nff = (o, u, p, t) -> nothing
         g_psm = (o, u) -> nothing
 
-        cf = VertexFunction(g=g_pff, outdim=1, insym=[:a])
+        cf = VertexModel(g=g_pff, outdim=1, insym=[:a])
         @test fftype(cf) == PureFeedForward()
 
-        cf = VertexFunction(f=f, dim=1, g=g_nff, outdim=1, insym=[:a])
+        cf = VertexModel(f=f, dim=1, g=g_nff, outdim=1, insym=[:a])
         @test fftype(cf) == NoFeedForward()
 
-        @test_throws ArgumentError VertexFunction(f=f, sym=[:x,:y], g=StateMask([2,1]), outdim=1, insym=[:a])
-        cf = VertexFunction(f=f, sym=[:x,:y], g=StateMask([2,1]), insym=[:a])
+        @test_throws ArgumentError VertexModel(f=f, sym=[:x,:y], g=StateMask([2,1]), outdim=1, insym=[:a])
+        cf = VertexModel(f=f, sym=[:x,:y], g=StateMask([2,1]), insym=[:a])
         @test fftype(cf) == PureStateMap()
         @test NetworkDynamics.outsym(cf) == [:y, :x]
 
-        cf = VertexFunction(f=f, sym=[:x,:y], g=g_ff, outdim=1, insym=[:a], name=:foo)
+        cf = VertexModel(f=f, sym=[:x,:y], g=g_ff, outdim=1, insym=[:a], name=:foo)
         @test fftype(cf) == FeedForward()
         @test NetworkDynamics.outdim(cf) == 1
         @test cf.name == :foo
@@ -114,22 +114,22 @@ end
         @test cf.mass_matrix == LinearAlgebra.I
         @test pdim(cf) == 0
 
-        cf = VertexFunction(f=f, g=g_ff, dim=1, outdim=1, pdim=3, indim=2, name=:foo)
+        cf = VertexModel(f=f, g=g_ff, dim=1, outdim=1, pdim=3, indim=2, name=:foo)
         @test length(cf.insym) == 2
         @test length(cf.psym) == 3
 
         # mismatch of massmatrix size
-        @test_throws ArgumentError VertexFunction(f=identity, g=g_psm, dim=1, pdim=1, outdim=1, mass_matrix=[1 2;3 4])
+        @test_throws ArgumentError VertexModel(f=identity, g=g_psm, dim=1, pdim=1, outdim=1, mass_matrix=[1 2;3 4])
 
         # passing of obs function
-        @test_throws ArgumentError VertexFunction(g=g_pff, outdim=1, obsf=identity)
-        cf = VertexFunction(g=g_pff, outdim=1, obsf=identity, obssym=[:foo, :bar])
+        @test_throws ArgumentError VertexModel(g=g_pff, outdim=1, obsf=identity)
+        cf = VertexModel(g=g_pff, outdim=1, obsf=identity, obssym=[:foo, :bar])
         obssym(cf) == [:foo, :bar]
 
         # pass graph element
-        cf = VertexFunction(g=g_pff, outdim=1, obsf=identity, obssym=[:foo, :bar], vidx=7)
+        cf = VertexModel(g=g_pff, outdim=1, obsf=identity, obssym=[:foo, :bar], vidx=7)
         @test cf.metadata[:graphelement] == 7
-        cf = VertexFunction(g=g_pff, outdim=1, obsf=identity, obssym=[:foo, :bar], graphelement=2)
+        cf = VertexModel(g=g_pff, outdim=1, obsf=identity, obssym=[:foo, :bar], graphelement=2)
         @test cf.metadata[:graphelement] == 2
 
         # passing of metadata
@@ -137,17 +137,17 @@ end
         @test _has_metadata([:a=>1,:b,:c]) == true
         @test _has_metadata([:a=>1,:b=>2,:c=>3]) == true
 
-        cf = VertexFunction(g=g_pff, outsym=[:foo=>1, :bar], psym=[:a=>2, :b, :c=>7])
+        cf = VertexModel(g=g_pff, outsym=[:foo=>1, :bar], psym=[:a=>2, :b, :c=>7])
         @test get_default(cf, :foo) == 1
         @test get_defaults(cf, outsym(cf)) == [1, nothing]
         @test get_defaults(cf, psym(cf)) == [2, nothing, 7]
 
-        @test_throws ArgumentError VertexFunction(f=f, g=StateMask(1:1), sym=[:foo=>1]; def=[1])
-        @test_throws ArgumentError VertexFunction(f=f, g=StateMask(2:2), dim=2, psym=[:foo=>1]; pdef=[1])
+        @test_throws ArgumentError VertexModel(f=f, g=StateMask(1:1), sym=[:foo=>1]; def=[1])
+        @test_throws ArgumentError VertexModel(f=f, g=StateMask(2:2), dim=2, psym=[:foo=>1]; pdef=[1])
     end
 
 
-    @testset "EdgeFunction Constructor" begin
+    @testset "EdgeModel Constructor" begin
         using NetworkDynamics
         using NetworkDynamics: Symmetric
         f = (du, u, in1, in2, p, t) -> nothing
@@ -168,20 +168,20 @@ end
             @test fftype(c(1:2)) == PureStateMap()
         end
 
-        cf = EdgeFunction(g=g_pff, outdim=1, insym=[:a])
+        cf = EdgeModel(g=g_pff, outdim=1, insym=[:a])
         @test fftype(cf) == PureFeedForward()
 
-        cf = EdgeFunction(f=f, dim=1, g=g_nff, outdim=1, insym=[:a])
+        cf = EdgeModel(f=f, dim=1, g=g_nff, outdim=1, insym=[:a])
         @test fftype(cf) == NoFeedForward()
 
-        @test_throws ArgumentError EdgeFunction(f=f, sym=[:x,:y], g=StateMask([2,1]), outdim=1, insym=[:a])
-        @test_throws ArgumentError EdgeFunction(f=f, sym=[:x,:y], g=StateMask([2,1]), insym=[:a])
+        @test_throws ArgumentError EdgeModel(f=f, sym=[:x,:y], g=StateMask([2,1]), outdim=1, insym=[:a])
+        @test_throws ArgumentError EdgeModel(f=f, sym=[:x,:y], g=StateMask([2,1]), insym=[:a])
 
-        cf = EdgeFunction(f=f, sym=[:x,:y], g=AntiSymmetric(StateMask(1:2)))
+        cf = EdgeModel(f=f, sym=[:x,:y], g=AntiSymmetric(StateMask(1:2)))
         @test fftype(cf) == PureStateMap()
         @test NetworkDynamics.outsym(cf) == (; src=[:₋x, :₋y], dst=[:x, :y])
 
-        cf = EdgeFunction(f=f, sym=[:x,:y], g=g_ff, outdim=1, insym=[:a], name=:foo)
+        cf = EdgeModel(f=f, sym=[:x,:y], g=g_ff, outdim=1, insym=[:a], name=:foo)
         @test fftype(cf) == FeedForward()
         @test NetworkDynamics.outdim(cf) == (;src=1, dst=1)
         @test cf.name == :foo
@@ -190,43 +190,43 @@ end
         @test pdim(cf) == 0
 
         # output sym generation
-        cf = EdgeFunction(f=f, sym=[:x,:y], g=AntiSymmetric(StateMask(1:2)))
+        cf = EdgeModel(f=f, sym=[:x,:y], g=AntiSymmetric(StateMask(1:2)))
         @test cf.outsym == (; src=[:₋x,:₋y], dst=[:x,:y])
-        cf = EdgeFunction(f=f, sym=[:x,:y], g=Fiducial(1:2, 2:-1:1))
+        cf = EdgeModel(f=f, sym=[:x,:y], g=Fiducial(1:2, 2:-1:1))
         @test cf.outsym == (; src=[:x,:y], dst=[:y,:x])
-        cf = EdgeFunction(f=f, g=g_ff, dim=1, outsym=(;src=[:a=>2], dst=[:b=>4]))
+        cf = EdgeModel(f=f, g=g_ff, dim=1, outsym=(;src=[:a=>2], dst=[:b=>4]))
         @test cf.outsym == (; src=[:a], dst=[:b])
-        cf = EdgeFunction(f=f, g=g_ff, dim=1, outdim=2)
+        cf = EdgeModel(f=f, g=g_ff, dim=1, outdim=2)
         @test cf.outsym == (; src=[:src₊o₁, :src₊o₂], dst=[:dst₊o₁, :dst₊o₂])
-        cf = EdgeFunction(f=f, g=Directed(g_single_ff), dim=1, outdim=2)
+        cf = EdgeModel(f=f, g=Directed(g_single_ff), dim=1, outdim=2)
         @test cf.outsym == (; src=[], dst=[:o₁, :o₂])
-        cf = EdgeFunction(f=f, g=Directed(1:2), dim=2, outdim=2)
+        cf = EdgeModel(f=f, g=Directed(1:2), dim=2, outdim=2)
         @test isempty(cf.outsym.src)
         @test cf.outsym.dst == cf.sym
-        cf = EdgeFunction(g=AntiSymmetric(g_single_pff), outdim=2)
+        cf = EdgeModel(g=AntiSymmetric(g_single_pff), outdim=2)
         @test cf.outsym == (; src=[:₋o₁, :₋o₂], dst=[:o₁, :o₂])
 
         # input sym generation
-        cf = EdgeFunction(f=f, g=g_ff, dim=1, outdim=1, pdim=3, indim=2, name=:foo)
+        cf = EdgeModel(f=f, g=g_ff, dim=1, outdim=1, pdim=3, indim=2, name=:foo)
         @test length(cf.insym) == 2
         @test length(cf.psym) == 3
         @test cf.insym == (;src = [:src₊i₁, :src₊i₂], dst = [:dst₊i₁, :dst₊i₂])
 
-        cf = EdgeFunction(f=f, g=g_ff, dim=1, outdim=1, insym=[:foo])
-        @test_throws ArgumentError EdgeFunction(f=f, g=g_ff, dim=1, outdim=1, insym=(src=[:foo], dst=[:foo]))
+        cf = EdgeModel(f=f, g=g_ff, dim=1, outdim=1, insym=[:foo])
+        @test_throws ArgumentError EdgeModel(f=f, g=g_ff, dim=1, outdim=1, insym=(src=[:foo], dst=[:foo]))
     end
 end
 
 @testset "test dispatchT isbitstype" begin
     using InteractiveUtils
-    using NetworkDynamics: EdgeFunction, VertexFunction, dispatchT, Symmetric
+    using NetworkDynamics: EdgeModel, VertexModel, dispatchT, Symmetric
 
-    for st in subtypes(EdgeFunction)
+    for st in subtypes(EdgeModel)
         st = st{Symmetric}
         T = Type{dispatchT(st)}
         @test Core.Compiler.isconstType(T)
     end
-    for st in subtypes(VertexFunction)
+    for st in subtypes(VertexModel)
         T = Type{dispatchT(st)}
         @test Core.Compiler.isconstType(T)
     end
@@ -246,26 +246,26 @@ end
 
 
     kwargs = Dict(:sym=>[:a,:b], :psym=>[:a,:d])
-    @test_throws ArgumentError _fill_defaults(VertexFunction, kwargs)
+    @test_throws ArgumentError _fill_defaults(VertexModel, kwargs)
 
     kwargs = Dict(:sym=>[:a,:b], :dim=>3)
-    @test_throws ArgumentError _fill_defaults(VertexFunction, kwargs)
+    @test_throws ArgumentError _fill_defaults(VertexModel, kwargs)
 
     kwargs = Dict(:sym=>[:a,:b], :dim=>3, :pdim=>0)
-    @test_throws ArgumentError _fill_defaults(VertexFunction, kwargs)
+    @test_throws ArgumentError _fill_defaults(VertexModel, kwargs)
 
     kwargs = Dict(:sym=>[:a,:b], :pdim=>0, :psym=>[:c])
-    @test_throws ArgumentError _fill_defaults(VertexFunction, kwargs)
+    @test_throws ArgumentError _fill_defaults(VertexModel, kwargs)
 
     # different length of sym/def
     kwargs = Dict(:sym=>[:a,:b],:def=>[1], :pdim=>0 )
-    @test_throws ArgumentError _fill_defaults(VertexFunction, kwargs)
+    @test_throws ArgumentError _fill_defaults(VertexModel, kwargs)
 
     # different provision of defs
     kwargs = Dict(:sym=>[:a,:b=>2],:def=>[1,nothing], :pdim=>0, :g=>1:2, :outdim=>2, :f=>identity)
-    _fill_defaults(VertexFunction, kwargs)[:symmetadata]
+    _fill_defaults(VertexModel, kwargs)[:symmetadata]
     kwargs = Dict(:sym=>[:a=>2,:b],:def=>[1,nothing], :pdim=>0 )
-    @test_throws ArgumentError _fill_defaults(VertexFunction, kwargs)
+    @test_throws ArgumentError _fill_defaults(VertexModel, kwargs)
 end
 
 @testset "test dealias and copy of components" begin
@@ -274,12 +274,12 @@ end
     g = (out, in, p, t) -> nothing
     ge = (out, src, dst, p, t) -> nothing
 
-    v1 = VertexFunction(;f, g=1:1, dim=2, metadata=Dict(:graphelement=>1), name=:v1)
-    v2 = VertexFunction(;f, g=1:1, dim=2, name=:v2, vidx=2)
-    v3 = VertexFunction(;f, g=1:1, dim=2, name=:v3, vidx=3)
-    e1 = EdgeFunction(; g=ge, outdim=1, graphelement=(;src=1,dst=2))
-    e2 = EdgeFunction(; g=ge, outdim=1, src=:v2, dst=:v3)
-    e3 = EdgeFunction(; g=ge, outdim=1, src=:v3, dst=:v1)
+    v1 = VertexModel(;f, g=1:1, dim=2, metadata=Dict(:graphelement=>1), name=:v1)
+    v2 = VertexModel(;f, g=1:1, dim=2, name=:v2, vidx=2)
+    v3 = VertexModel(;f, g=1:1, dim=2, name=:v3, vidx=3)
+    e1 = EdgeModel(; g=ge, outdim=1, graphelement=(;src=1,dst=2))
+    e2 = EdgeModel(; g=ge, outdim=1, src=:v2, dst=:v3)
+    e3 = EdgeModel(; g=ge, outdim=1, src=:v3, dst=:v1)
 
     @test isempty(aliasgroups([v1,v2,v3]))
     @test aliasgroups([v1, v1, v3]) == IdDict(v1 => [1,2])
@@ -288,25 +288,25 @@ end
     g = complete_graph(3)
     # with dealiasing / copying
     nw = Network(g, [v1,v1,v3],[e1,e2,e3]; dealias=true, check_graphelement=false)
-    @test nw.im.vertexf[1].f == nw.im.vertexf[2].f
-    @test nw.im.vertexf[1].metadata == nw.im.vertexf[2].metadata
-    @test nw.im.vertexf[1].metadata !== nw.im.vertexf[2].metadata
-    @test nw.im.vertexf[1].symmetadata == nw.im.vertexf[2].symmetadata
-    @test nw.im.vertexf[1].symmetadata !== nw.im.vertexf[2].symmetadata
+    @test nw.im.vertexm[1].f == nw.im.vertexm[2].f
+    @test nw.im.vertexm[1].metadata == nw.im.vertexm[2].metadata
+    @test nw.im.vertexm[1].metadata !== nw.im.vertexm[2].metadata
+    @test nw.im.vertexm[1].symmetadata == nw.im.vertexm[2].symmetadata
+    @test nw.im.vertexm[1].symmetadata !== nw.im.vertexm[2].symmetadata
     s0 = NWState(nw)
     @test isnan(s0.v[1,1])
-    set_default!(nw.im.vertexf[1], :v₁, 3)
+    set_default!(nw.im.vertexm[1], :v₁, 3)
     s1 = NWState(nw)
     @test s1.v[1,1] == 3
 
     # witout dealisasing
     nw = Network(g, [v1,v1,v3],[e1,e2,e1]; check_graphelement=false)
-    @test nw.im.vertexf[1] === nw.im.vertexf[2]
-    @test nw.im.edgef[1] === nw.im.edgef[3]
-    @test keys(nw.im.aliased_vertexfs) == Set([v1])
-    @test keys(nw.im.aliased_edgefs) == Set([e1])
-    @test only(unique(values(nw.im.aliased_vertexfs))) == (;idxs=[1,2], hash=hash(v1))
-    @test only(unique(values(nw.im.aliased_edgefs))) == (;idxs=[1,3], hash=hash(e1))
+    @test nw.im.vertexm[1] === nw.im.vertexm[2]
+    @test nw.im.edgem[1] === nw.im.edgem[3]
+    @test keys(nw.im.aliased_vertexms) == Set([v1])
+    @test keys(nw.im.aliased_edgems) == Set([e1])
+    @test only(unique(values(nw.im.aliased_vertexms))) == (;idxs=[1,2], hash=hash(v1))
+    @test only(unique(values(nw.im.aliased_edgems))) == (;idxs=[1,3], hash=hash(e1))
     s0 = NWState(nw)
     @test isnan(s0.v[1,1])
     prehash = hash(v1)
@@ -318,7 +318,7 @@ end
 
     # test copy
     g = (out, in, p, t) -> nothing
-    v = VertexFunction(; g, outdim=2, metadata=Dict(:graphelement=>1), name=:v1, symmetadata=Dict(:x=>Dict(:default=>1)))
+    v = VertexModel(; g, outdim=2, metadata=Dict(:graphelement=>1), name=:v1, symmetadata=Dict(:x=>Dict(:default=>1)))
     v2 = copy(v)
     @test v !== v2
     @test v == v2
@@ -334,17 +334,17 @@ end
 @testset "test network-remake constructor" begin
     g = (out, in, p, t) -> nothing
     ge = (out, src, dst, p, t) -> nothing
-    v1 = VertexFunction(; g, outdim=2, metadata=Dict(:graphelement=>1), name=:v1)
-    v2 = VertexFunction(; g, outdim=2, name=:v2, vidx=2)
-    v3 = VertexFunction(; g, outdim=2, name=:v3, vidx=3)
-    e1 = EdgeFunction(; g=ge, outdim=1, graphelement=(;src=1,dst=2))
-    e2 = EdgeFunction(; g=ge, outdim=1, src=:v1, dst=:v3)
-    e3 = EdgeFunction(; g=ge, outdim=1, src=:v2, dst=:v3)
+    v1 = VertexModel(; g, outdim=2, metadata=Dict(:graphelement=>1), name=:v1)
+    v2 = VertexModel(; g, outdim=2, name=:v2, vidx=2)
+    v3 = VertexModel(; g, outdim=2, name=:v3, vidx=3)
+    e1 = EdgeModel(; g=ge, outdim=1, graphelement=(;src=1,dst=2))
+    e2 = EdgeModel(; g=ge, outdim=1, src=:v1, dst=:v3)
+    e3 = EdgeModel(; g=ge, outdim=1, src=:v2, dst=:v3)
 
     g = complete_graph(3)
     nw = Network(g, [v1,v2,v3],[e1,e2,e3])
     nw2 = Network(nw)
-    nw2 = Network(nw; g=path_graph(3), edgef=[e1, e3])
+    nw2 = Network(nw; g=path_graph(3), edgem=[e1, e3])
 
     for aggT in subtypes(NetworkDynamics.Aggregator)
         @show aggT
@@ -354,14 +354,14 @@ end
 
 @testset "test conversion of ff vertex to non ff vertex" begin
     using NetworkDynamics: fftype, compfg
-    e = EdgeFunction(g=AntiSymmetric((e1, e2, v1, v2, p, t) -> nothing), outsym=[:i_r, :i_i])
+    e = EdgeModel(g=AntiSymmetric((e1, e2, v1, v2, p, t) -> nothing), outsym=[:i_r, :i_i])
 
     slackg = function(v, esum, (V,δ), t)
         v[1] = V*sin(δ)
         v[2] = V*cos(δ)
         nothing
     end
-    v_pff = VertexFunction(g=slackg, outsym=[:u_r, :u_i], psym=[:V, :δ], insym=[:i_r, :i_i])
+    v_pff = VertexModel(g=slackg, outsym=[:u_r, :u_i], psym=[:V, :δ], insym=[:i_r, :i_i])
     @test fftype(v_pff) == PureFeedForward()
 
     swingf = function(dv, (δ, ω), (i_r, i_i), (V,Pm,M,D), t)
@@ -376,7 +376,7 @@ end
         o[2] = V*cos(δ)
         nothing
     end
-    v_ff = VertexFunction(f=swingf, g=swingg, sym=[:δ, :ω],
+    v_ff = VertexModel(f=swingf, g=swingg, sym=[:δ, :ω],
         outsym=[:u_r, :u_i], insym=[:i_r, :i_i], psym=[:V,:Pm,:M,:D])
 
     NetworkDynamics.CHECK_COMPONENT[] = true

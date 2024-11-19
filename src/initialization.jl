@@ -48,8 +48,8 @@ function _solve_fixpoint(prob, alg::SteadyStateDiffEqAlgorithm; kwargs...)
     sol = SciMLBase.solve(prob, alg; kwargs...)
 end
 
-function initialization_problem(cf::T; t=NaN, verbose=true) where {T<:ComponentFunction}
-    hasinsym(cf) || throw(ArgumentError("Component function musst have `insym`!"))
+function initialization_problem(cf::T; t=NaN, verbose=true) where {T<:ComponentModel}
+    hasinsym(cf) || throw(ArgumentError("Component model musst have `insym`!"))
 
     outfree_ms = Tuple((!).(map(s -> has_default(cf, s), sv)) for sv in outsym_normalized(cf))
     outfixs = Tuple(Float64[has_default(cf, s) ? get_default(cf, s) : NaN for s in sv] for sv in outsym_normalized(cf))
@@ -175,14 +175,14 @@ function initialization_problem(cf::T; t=NaN, verbose=true) where {T<:ComponentF
 end
 
 """
-    initialize_component!(cf::ComponentFunction; verbose=true, kwargs...)
+    initialize_component!(cf::ComponentModel; verbose=true, kwargs...)
 
-Initialize a `ComponentFunction` by solving the corresponding `NonlinearLeastSquaresProblem`.
+Initialize a `ComponentModel` by solving the corresponding `NonlinearLeastSquaresProblem`.
 During initialization, everyting which has a `default` value (see [Metadata](@ref)) is considered
 "fixed". All other variables are considered "free" and are solved for. The initial guess for each
 variable depends on the `guess` value in the [Metadata](@ref).
 
-The result is stored in the `ComponentFunction` itself. The values of the free variables are stored
+The result is stored in the `ComponentModel` itself. The values of the free variables are stored
 in the metadata field `init`.
 
 The `kwargs` are passed to the nonlinear solver.
@@ -212,21 +212,21 @@ function initialize_component!(cf; verbose=true, kwargs...)
     cf
 end
 
-function isinitialized(cf::ComponentFunction)
+function isinitialized(cf::ComponentModel)
     all(has_default_or_init(cf, s) for s in vcat(sym(cf), psym(cf)))
 end
 
 """
     init_residual(cf::T; t=NaN, recalc=false)
 
-Calculates the residual |du| for the given component function for the values
+Calculates the residual |du| for the given component model for the values
 provided via `default` and `init` [Metadata](@ref).
 
 If recalc=false just return the residual determined in the actual initialization process.
 
 See also [`initialize_component!`](@ref).
 """
-function init_residual(cf::T; t=NaN, recalc=false) where {T<:ComponentFunction}
+function init_residual(cf::T; t=NaN, recalc=false) where {T<:ComponentModel}
     if !isinitialized(cf)
         throw(ArgumentError("Component is not initialized."))
     end

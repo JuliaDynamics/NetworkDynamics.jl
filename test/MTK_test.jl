@@ -34,7 +34,7 @@ end;
 end;
 
 @named swing = SwingNode()
-v = VertexFunction(swing, [:P], [:θ])
+v = VertexModel(swing, [:P], [:θ])
 
 data = NetworkDynamics.rand_inputs_fg(v)
 b = @b $(NetworkDynamics.compfg(v))($data...)
@@ -63,7 +63,7 @@ end
     end
 end
 @named line = StaticPowerLine()
-e = EdgeFunction(line, [:srcθ], [:dstθ], [:srcP], [:dstP])
+e = EdgeModel(line, [:srcθ], [:dstθ], [:srcP], [:dstP])
 @test NetworkDynamics.insym(e).src == [:srcθ]
 @test NetworkDynamics.insym(e).dst == [:dstθ]
 
@@ -124,7 +124,7 @@ rotm(θ) = [cos(θ) -sin(θ); sin(θ) cos(θ)]
 end
 
 @named dqswing = DQSwing()
-v = VertexFunction(dqswing, [:i_r, :i_i], [:u_r, :u_i])
+v = VertexModel(dqswing, [:i_r, :i_i], [:u_r, :u_i])
 @test v.mass_matrix == Diagonal([1,1])
 
 @mtkmodel DQLine begin
@@ -170,4 +170,4 @@ end
 end
 
 @named piline = DQPiLine()
-l = EdgeFunction(piline, [:src_u_r, :src_u_i], [:dst_u_r, :dst_u_i], [:src_i_r, :src_i_i], [:dst_i_r, :dst_i_i])
+l = EdgeModel(piline, [:src_u_r, :src_u_i], [:dst_u_r, :dst_u_i], [:src_i_r, :src_i_i], [:dst_i_r, :dst_i_i])

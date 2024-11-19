@@ -46,7 +46,7 @@ We need 3 models:
 function fixed_g(pos, x, p, t)
     pos .= p
 end
-vertex_fix = VertexFunction(g=fixed_g, psym=[:xfix, :yfix], outsym=[:x, :y], ff=NoFeedForward())
+vertex_fix = VertexModel(g=fixed_g, psym=[:xfix, :yfix], outsym=[:x, :y], ff=NoFeedForward())
 #=
 Here we need to specify the `ff` keyword manually, because NetworkDynamics cannot distinguish between
 `g(out, x, p, t)`  (`NoFeedForwarwd`) and `g(out, in, p, t)` (`PureFeedForward()`)
@@ -60,7 +60,7 @@ function free_f(dx, x, Fsum, (M, γ, g), t)
     dx[3:4] .= v
     nothing
 end
-vertex_free = VertexFunction(f=free_f, g=3:4, sym=[:vx=>0, :vy=>0, :x, :y],
+vertex_free = VertexModel(f=free_f, g=3:4, sym=[:vx=>0, :vy=>0, :x, :y],
                              psym=[:M=>10, :γ=>200, :g=>9.81], insym=[:Fx, :Fy])
 #=
 For the edge, we want to do something special. Later on, we want to color the edges according to the force they exert.
@@ -86,7 +86,7 @@ function observedf(obsout, u, pos_src, pos_dst, (K, L), t)
     obsout[1] = K * (L - d)
     nothing
 end
-beam = EdgeFunction(g=AntiSymmetric(edge_g!), psym=[:K=>0.5e6, :L], outsym=[:Fx, :Fy], obsf=observedf, obssym=[:Fabs])
+beam = EdgeModel(g=AntiSymmetric(edge_g!), psym=[:K=>0.5e6, :L], outsym=[:Fx, :Fy], obsf=observedf, obssym=[:Fabs])
 
 #=
 With the models define we can set up graph topology and initial positions.
@@ -112,7 +112,7 @@ nothing #hide
 #=
 Now can collect the vertex models and construct the Network object.
 =#
-verts = VertexFunction[vertex_free for i in 1:nv(g)]
+verts = VertexModel[vertex_free for i in 1:nv(g)]
 for i in fixed
     verts[i] = vertex_fix # use the fixed vertex for the fixed points
 end

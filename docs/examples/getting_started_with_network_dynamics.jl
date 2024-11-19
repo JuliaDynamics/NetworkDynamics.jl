@@ -33,7 +33,7 @@ From the above considerations we see that in this model the nodes do not have an
 
 In order to bring this equation into the form required by NetworkDynamics.jl we need split the dynamics into edge and vertex parts and bring them into the correct input-output formulation.
 The vertices have one internal state $v$ which is also the output. The input is
-the sum over all flows of connected edges. This directly correspons to the component function definition outlined in [Mathematical Model](@ref):
+the sum over all flows of connected edges. This directly correspons to the component model definition outlined in [Mathematical Model](@ref):
 ```math
 \begin{aligned}
 \dot x^\mathrm{v} &= f^{\mathrm v}(u^{\mathrm v}, \sum_k^{\text{incident}} y^{\mathrm e}_k, p^{\mathrm v}, t) &&= \sum_k^\mathrm{incident} y^\mathrm{e}_k \\
@@ -50,7 +50,7 @@ y^{\mathrm e}_{\mathrm{src}} &= g_\mathrm{src}^{\mathrm e}(u^{\mathrm e}, y^{\ma
 \end{aligned}
 ```
 
-### Definition of `EdgeFunction`
+### Definition of `EdgeModel`
 =#
 function diffusionedge_g!(e_dst, v_src, v_dst, p, t)
     ## e_dst, v_src, v_dst are arrays, hence we use the broadcasting operator
@@ -64,12 +64,12 @@ The function `diffusionedge_g!` takes as inputs the current state of the edge `e
 
 `diffusionedge_g!` is called a **mutating** function, since it modifies (or *mutates*) one of its inputs, namely the edge state `e`. As a convention in Julia names of mutating functions end with an `!`. The use of mutating functions reduces allocations and thereby speeds up computations. After the function call the edge's output value `e` equals the difference between its source and its destination vertex (i.e. the discrete gradient along that edge).
 
-Notably, this function only models $g_\mathrm{dst}$. However we can wrap this single-sided output function in an [`AntiSymmetric`](@ref) output wrapper to construct the [`EdgeFunction`](@ref):
+Notably, this function only models $g_\mathrm{dst}$. However we can wrap this single-sided output function in an [`AntiSymmetric`](@ref) output wrapper to construct the [`EdgeModel`](@ref):
 =#
-nd_diffusion_edge = EdgeFunction(; g=AntiSymmetric(diffusionedge_g!), outsym=[:flow])
+nd_diffusion_edge = EdgeModel(; g=AntiSymmetric(diffusionedge_g!), outsym=[:flow])
 
 #=
-### Definition of `VertexFunction`
+### Definition of `VertexModel`
 For undirected graphs, the `edgefunction!` specifies the coupling from a source- to a destination vertex. The contributions of the connected edges to a single vertex are "aggregated". Default aggregation is the summation of all incident edge states. The aggregated edge state is made available via the `esum` argument of the vertex function.
 =#
 function diffusionvertex_f!(dv, v, esum, p, t)
@@ -84,7 +84,7 @@ Just like above the input arguments `v, esum, p, t` are mandatory for the syntax
 
 The output function `g` is just taking part of the internal states. For that we can use the [`StateMask`](@ref) helper function `g = StateMaks(1:1)`
 =#
-nd_diffusion_vertex = VertexFunction(; f=diffusionvertex_f!, g=StateMask(1:1), dim=1)
+nd_diffusion_vertex = VertexModel(; f=diffusionvertex_f!, g=StateMask(1:1), dim=1)
 
 
 #=
@@ -104,7 +104,7 @@ nothing #hide #md
 nd = Network(g, nd_diffusion_vertex, nd_diffusion_edge)
 
 #=
-The constructor `Network` combines the component function with the topological information contained in the graph **`g`** and returns an `Network` compatible with the solvers of `DifferentialEquations.jl`.
+The constructor `Network` combines the component model with the topological information contained in the graph **`g`** and returns an `Network` compatible with the solvers of `DifferentialEquations.jl`.
 =#
 
 rng = StableRNG(1)
@@ -129,7 +129,7 @@ In oder to collect multiple indices we can use the helper function [`vidxs`](@re
 
 To illustrate a very simple multi-dimensional case, in the following we simulate two independent diffusions on an identical graph. The first uses the symbol `x` and is started with initial conditions drawn from the standard normal distribution $N(0,1)$, the second uses the symbol `ϕ` with squared standard normal inital conditions.
 
-The symbols have to be passed with the keyword **`sym`** to `VertexFunction`.
+The symbols have to be passed with the keyword **`sym`** to `VertexModel`.
 =#
 
 N = 10 # number of nodes
@@ -137,8 +137,8 @@ k = 4  # average degree
 g = barabasi_albert(N, k) # a little more exciting than a bare random graph
 
 ## We will have two independent diffusions on the network, hence dim = 2
-nd_diffusion_vertex_2 = VertexFunction(; f=diffusionvertex_f!, g=1:2, dim=2, sym=[:x, :ϕ])
-nd_diffusion_edge_2 = EdgeFunction(; g=AntiSymmetric(diffusionedge_g!), outsym=[:flow_x, :flow_ϕ])
+nd_diffusion_vertex_2 = VertexModel(; f=diffusionvertex_f!, g=1:2, dim=2, sym=[:x, :ϕ])
+nd_diffusion_edge_2 = EdgeModel(; g=AntiSymmetric(diffusionedge_g!), outsym=[:flow_x, :flow_ϕ])
 nd_2 = Network(g, nd_diffusion_vertex_2, nd_diffusion_edge_2)
 
 x0_2 = vec(transpose([randn(rng, N) .^ 2 randn(rng, N)])) # x ~ N(0,1)^2; ϕ ~ N(0,1)
