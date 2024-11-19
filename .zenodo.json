@@ -36,5 +36,13 @@
 
   "license": "MIT",
 
-  "keywords": ["Potsdam Institute for Climate Impact Research", "PIK", "Software", "active-development"],
+  "keywords": [
+    "Potsdam Institute for Climate Impact Research",
+    "PIK",
+    "RD4 - Complexity Science",
+    "Software",
+    "active-development",
+    "Complex Networks",
+    "Nonlinear Dynamics",
+  ],
 }
