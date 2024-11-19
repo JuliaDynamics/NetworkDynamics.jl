@@ -63,10 +63,10 @@ inertia! = ODEVertex(; f=kuramoto_inertia!, dim=2, sym=[:θ, :ω]);
 
 
 # Since now we model a system with hetereogeneous node dynamics we can no longer
-# straightforwardly pass a single VertexFunction to `network_dynamics` but instead have to
+# straightforwardly pass a single VertexModel to `network_dynamics` but instead have to
 # hand over an Array.
 
-vertex_array    = Array{VertexFunction}([vertex! for i in 1:N])
+vertex_array    = Array{VertexModel}([vertex! for i in 1:N])
 vertex_array[1] = static!
 vertex_array[5] = inertia! # index should correspond to the node's index in the graph
 nd_hetero! = network_dynamics(vertex_array, edge!, g);

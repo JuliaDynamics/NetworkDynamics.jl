@@ -35,7 +35,7 @@ using StaticArrays: StaticArrays, SVector
 
 include("utils.jl")
 
-export VertexFunction, EdgeFunction
+export VertexModel, EdgeModel
 export StateMask, Symmetric, AntiSymmetric, Directed, Fiducial
 export FeedForwardType, PureFeedForward, FeedForward, NoFeedForward, PureStateMap
 export dim, sym, pdim, psym, obssym, hasinsym, insym, hasindim, indim,

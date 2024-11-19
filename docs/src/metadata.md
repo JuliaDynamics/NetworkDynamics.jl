@@ -1,6 +1,6 @@
 # Metadata
 
-Component function such as [`VertexFunction`](@ref) and [`EdgeFunction`](@ref) can store metadata. We distinguish between two kinds of metadata: component metadata and symbol metadata.
+Component model such as [`VertexModel`](@ref) and [`EdgeModel`](@ref) can store metadata. We distinguish between two kinds of metadata: component metadata and symbol metadata.
 
 ## Component Metadata
 Component metadata is a `Dict{Symbol,Any}` attached to each component to store various information. Use [`metadata`](@ref) to retrieve the full dict.

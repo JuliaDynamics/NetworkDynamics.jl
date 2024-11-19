@@ -30,11 +30,11 @@ end
 
 function _syms_old_order(nd::Network)
     syms = []
-    for (i,cf) in enumerate(nd.im.vertexf)
+    for (i,cf) in enumerate(nd.im.vertexm)
         isdynamic(cf) || continue
         append!(syms, collect(VIndex(i, 1:dim(cf))))
     end
-    for (i,cf) in enumerate(nd.im.edgef)
+    for (i,cf) in enumerate(nd.im.edgem)
         isdynamic(cf) || continue
         append!(syms, collect(EIndex(i, 1:dim(cf))))
     end
@@ -42,10 +42,10 @@ function _syms_old_order(nd::Network)
 end
 function _psyms_old_order(nd::Network)
     syms = []
-    for (i,cf) in enumerate(nd.im.vertexf)
+    for (i,cf) in enumerate(nd.im.vertexm)
         append!(syms, collect(VPIndex(i, 1:pdim(cf))))
     end
-    for (i,cf) in enumerate(nd.im.edgef)
+    for (i,cf) in enumerate(nd.im.edgem)
         append!(syms, collect(EPIndex(i, 1:pdim(cf))))
     end
     syms

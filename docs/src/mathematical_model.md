@@ -12,8 +12,8 @@ nw(du, u, p, t) # mutates du
 ```
 with stored mass matrix information to build an `ODEProblem` based on the `Network`.
 
-Instead of defining $f^{\mathrm{nw}}$ by hand, `ND.jl` helps you to build it automatically based on a list of decentralized nodal and edge dynamics, so-called `VertexFunction` and `EdgeFunction` objects.
-Each component function $\mathrm c$ is modeled as general input-output-system
+Instead of defining $f^{\mathrm{nw}}$ by hand, `ND.jl` helps you to build it automatically based on a list of decentralized nodal and edge dynamics, so-called `VertexModel` and `EdgeModel` objects.
+Each component model $\mathrm c$ is modeled as general input-output-system
 
 ```math
 \begin{aligned}
@@ -29,8 +29,8 @@ In the network context, the **output of the edges are flow variables**. The **ou
 <img src="../assets/mathmodel.svg" width="100%"/>
 ``` 
 
-## Vertex Functions
-Specifically, a (single-layer) vertex function has one input, and one output. 
+## Vertex Models
+Specifically, a (single-layer) vertex model has one input, and one output.
 The input is an aggregation/reduction over all *incident edge outputs*,
 ```math
 i^{\mathrm v} = \mathop{\mathrm{agg}}\limits_k^{\text{incident}} y^{\mathrm e}_k \qquad\text{often}\qquad
@@ -53,11 +53,11 @@ function gᵥ(yᵥ, xᵥ, e_aggr, pᵥ, t)
     # mutate yᵥ
     nothing
 end
-vertf = VertexFunction(; f=fᵥ, g=gᵥ, mass_matrix=Mᵥ, ...)
+vertf = VertexModel(; f=fᵥ, g=gᵥ, mass_matrix=Mᵥ, ...)
 ```
 
-## Edge Functions
-In contrast to vertex functions, edge functions in general have *two* inputs and *two* outputs, both for source and destination end of the edge.
+## Edge Models
+In contrast to vertex models, edge models in general have *two* inputs and *two* outputs, both for source and destination end of the edge.
 We commonly use `src` and `dst` to describe the source and destination end of an edge respectively. 
 
 !!! note "On the directionality of edges"
@@ -83,7 +83,7 @@ function gₑ(y_src, y_dst, xᵥ, v_src, v_dst, pₑ, t)
     # mutate y_src and y_dst
     nothing
 end
-vertf = EdgeFunction(; f=fₑ, g=gₑ, mass_matrix=Mₑ, ...)
+vertf = EdgeModel(; f=fₑ, g=gₑ, mass_matrix=Mₑ, ...)
 ```
 
 The sign convention for both outputs of an edge must be identical, 
@@ -97,23 +97,23 @@ This is important, because the vertex only receives the flows, it does not know 
 
 
 ### Single Sided Edge Outputs
-Often, edge function will possess some symmetry which makes it more convenient to define "single sided" edge functions
+Often, edge outputs will possess some symmetry which makes it more convenient to define "single sided" edge output functions
 ```julia
 function g_single(y, xᵥ, v_src, v_dst, pₑ, t)
     # mutate y
     nothing
 end
 ```
-There are multiple wrappers available to automaticially convert them into double-sided edge functions:
+There are multiple wrappers available to automaticially convert them into double-sided edge output functions:
 
 - `Directed(g_single)` builds a double-sided function *which only couples* to the destination side.
 - `Symmetric(g_single)` builds a double-sided function in which both ends receive `y`.
 - `AntiSymmetric(g_single)` builds a double-sided function where the destination receives `y` and the source receives `-y`.
-- `Fiducial(g_single_src, g_singl_dst)` builds a double-sided edge function based on two single sided functions.
+- `Fiducial(g_single_src, g_singl_dst)` builds a double-sided edge output function based on two single sided functions.
 
 
 ## Feed Forward Behavior
-The most general version of the component functions can contain direct feed forwards from the input, i.e. the edge output might depend directly on the connected vertices or the vertex output might depend directly on the aggregated edge input.
+The most general version of the component models can contain direct feed forwards from the input, i.e. the edge output might depend directly on the connected vertices or the vertex output might depend directly on the aggregated edge input.
 
 Whenever possible, you should define output functions without feed forwards, i.e.
 ```julia
@@ -130,7 +130,7 @@ NetworkDynamics cannot couple two components with feed forward to each other.
 It is always possible to transform feed forward behavior to an internal state `x` with mass matrix entry zero to circumvent this problem. This transformation can be performed automatically by using [`ff_to_constraint`](@ref).
 
 !!! warning "Feed Forward Vertices"
-    As of 11/2024, vertices with feed forward are not supported at all. Use [`ff_to_constraint`](@ref) to transform them into vertex functions without FF.
+    As of 11/2024, vertices with feed forward are not supported at all. Use [`ff_to_constraint`](@ref) to transform them into vertex model without FF.
 
 Concretely, NetworkDynamics distinguishes between 4 types of feed forward behaviors of `g` functions based on the [`FeedForwardType`](@ref) trait.
 The different types the signature of provided function `g`.
@@ -140,29 +140,29 @@ keyword in the constructors, the user can enforce a specific type.
 **[`PureFeedForward()`](@ref)**
 ```julia
 g!(outs...,          ins...,       p, t) # abstractly
-g!(out_dst,          v_src, v_dst, p, t) # single-sided edge function
-g!(out_src, out_dst, v_src, v_dst, p, t) # double-sided edge function
-g!(v_out,            e_aggr,       p, t) # single layer vertex function
+g!(out_dst,          v_src, v_dst, p, t) # single-sided edge
+g!(out_src, out_dst, v_src, v_dst, p, t) # double-sided edge
+g!(v_out,            e_aggr,       p, t) # single layer vertex
 ```
 **[`FeedForward()`](@ref)**
 ```julia
 g!(outs...,          x, ins...,       p, t) # abstractly
-g!(out_dst,          x, v_src, v_dst, p, t) # single-sided edge function
-g!(out_src, out_dst, x, v_src, v_dst, p, t) # double-sided edge function
-g!(v_out,            x, e_aggr,       p, t) # single layer vertex function
+g!(out_dst,          x, v_src, v_dst, p, t) # single-sided edge
+g!(out_src, out_dst, x, v_src, v_dst, p, t) # double-sided edge
+g!(v_out,            x, e_aggr,       p, t) # single layer vertex
 ```
 **[`NoFeedForward()`](@ref)**
 ```julia
 g!(outs...,          x, p, t) # abstractly
-g!(out_dst,          x, p, t) # single-sided edge function
-g!(out_src, out_dst, x, p, t) # double-sided edge function
-g!(v_out,            x, p, t) # single layer vertex function
+g!(out_dst,          x, p, t) # single-sided edge
+g!(out_src, out_dst, x, p, t) # double-sided edge
+g!(v_out,            x, p, t) # single layer vertex
 ```
 **[`PureStateMap()`](@ref)**
 ```julia
 g!(outs...,          x) # abstractly
-g!(out_dst,          x) # single-sided edge function
-g!(out_src, out_dst, x) # double-sided edge function
-g!(v_out,            x) # single layer vertex function
+g!(out_dst,          x) # single-sided edge
+g!(out_src, out_dst, x) # double-sided edge
+g!(v_out,            x) # single layer vertex
 ```
 

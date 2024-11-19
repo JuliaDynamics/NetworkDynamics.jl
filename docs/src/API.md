@@ -9,17 +9,17 @@ dim(::Network)
 pdim(::Network)
 ```
 
-## Component Functions
+## Component Models
 ```@docs
-VertexFunction()
-EdgeFunction()
+VertexModel()
+EdgeModel()
 ```
 
-## Component Functions with MTK
+## Component Models with MTK
 ```@docs
-VertexFunction(::ModelingToolkit.ODESystem, ::Any, ::Any)
-EdgeFunction(::ModelingToolkit.ODESystem, ::Any, ::Any, ::Any, ::Any)
-EdgeFunction(::ModelingToolkit.ODESystem, ::Any, ::Any, ::Any)
+VertexModel(::ModelingToolkit.ODESystem, ::Any, ::Any)
+EdgeModel(::ModelingToolkit.ODESystem, ::Any, ::Any, ::Any, ::Any)
+EdgeModel(::ModelingToolkit.ODESystem, ::Any, ::Any, ::Any)
 ```
 
 ### Output Function Helpers/Wrappers 
@@ -34,11 +34,11 @@ Fiducial
 ### Accessors for Component Properties
 ```@docs
 fftype
-dim(::NetworkDynamics.ComponentFunction)
+dim(::NetworkDynamics.ComponentModel)
 sym
 outdim
 outsym
-pdim(::NetworkDynamics.ComponentFunction)
+pdim(::NetworkDynamics.ComponentModel)
 psym
 obssym
 hasinsym
@@ -96,9 +96,9 @@ epidxs
 ### Component Metadata API
 ```@docs
 metadata
-has_metadata(::NetworkDynamics.ComponentFunction, ::Symbol)
-get_metadata(::NetworkDynamics.ComponentFunction, ::Symbol)
-set_metadata!(::NetworkDynamics.ComponentFunction, ::Symbol, ::Any)
+has_metadata(::NetworkDynamics.ComponentModel, ::Symbol)
+get_metadata(::NetworkDynamics.ComponentModel, ::Symbol)
+set_metadata!(::NetworkDynamics.ComponentModel, ::Symbol, ::Any)
 has_graphelement
 get_graphelement
 set_graphelement!
@@ -106,9 +106,9 @@ set_graphelement!
 ### Per-Symbol Metadata API
 ```@docs
 symmetadata
-get_metadata(::NetworkDynamics.ComponentFunction, ::Symbol, ::Symbol)
-has_metadata(::NetworkDynamics.ComponentFunction, ::Symbol, ::Symbol)
-set_metadata!(::NetworkDynamics.ComponentFunction, ::Symbol, ::Symbol, ::Any)
+get_metadata(::NetworkDynamics.ComponentModel, ::Symbol, ::Symbol)
+has_metadata(::NetworkDynamics.ComponentModel, ::Symbol, ::Symbol)
+set_metadata!(::NetworkDynamics.ComponentModel, ::Symbol, ::Symbol, ::Any)
 has_default
 get_default
 set_default!
@@ -153,5 +153,5 @@ KAAggregator
 ```@docs
 save_parameters!
 ff_to_constraint
-Base.copy(::NetworkDynamics.ComponentFunction)
+Base.copy(::NetworkDynamics.ComponentModel)
 ```

@@ -42,7 +42,7 @@ Here, $dW_i = \xi_i dt$ is the infinitesimal increment of the Wiener process. Pr
 
 ## Implementing the Swing Equation
 
-First we will implement the node and edge functions for the deterministic case
+First we will implement the node and edge models for the deterministic case
 without the fluctuations. We set the defaults for the inertia and damping
 parameters to be $M_i = 1.0$ and $D_i = 0.1$. The default coupling strength is $K=6$.
 =#
@@ -55,13 +55,13 @@ function swing_equation!(dv, v, esum, (M, P, D), t)
     dv[2] = 1/M *(P - D * v[2] + esum[1])
     nothing
 end
-swing_vertex = VertexFunction(f=swing_equation!, g=1, sym=[:θ, :ω], psym=[:M=>1, :P, :D=>0.1])
+swing_vertex = VertexModel(f=swing_equation!, g=1, sym=[:θ, :ω], psym=[:M=>1, :P, :D=>0.1])
 #-
 
 function powerflow!(e, v_s, v_d, (K,), t)
     e[1] = K * sin(v_s[1] - v_d[1])
 end
-powerflow_edge = EdgeFunction(g=AntiSymmetric(powerflow!), outdim=1, psym=[:K=>6])
+powerflow_edge = EdgeModel(g=AntiSymmetric(powerflow!), outdim=1, psym=[:K=>6])
 
 #=
 ## Contructing the Deterministic Dynamics
@@ -132,11 +132,11 @@ FIXME: stochastic system should be simulated using symbolic indexing, this is js
 # nothing #hide #md
 
 #=
-Now we can construct the dynamics of the second layer by using `network_dynamics()`. Since the graph structure of the stochastic layer has no edges we can take the edge function of the deterministic case as a placeholder.
+Now we can construct the dynamics of the second layer by using `network_dynamics()`. Since the graph structure of the stochastic layer has no edges we can take the edge model of the deterministic case as a placeholder.
 =#
 
-# fluctuation_vertex = VertexFunction(f=fluctuation!, g=1:2, dim=2)
-# nd_noise = Network(h, fluctuation_vertex, NetworkDynamics.EdgeFunction[])
+# fluctuation_vertex = VertexModel(f=fluctuation!, g=1:2, dim=2)
+# nd_noise = Network(h, fluctuation_vertex, NetworkDynamics.EdgeModel[])
 nothing #hide #md
 
 #=

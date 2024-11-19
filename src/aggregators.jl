@@ -261,7 +261,7 @@ function SparseAggregator(im, batches)
     unrolled_foreach(batches) do batch
         for eidx in batch.indices
             edge = im.edgevec[eidx]
-            edgef = im.edgef[eidx]
+            edgef = im.edgem[eidx]
 
             # dst mapping
             source = im.e_out[eidx].dst

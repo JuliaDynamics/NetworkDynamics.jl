@@ -68,14 +68,14 @@ end
         du[1:2] .= p
         du[3] = 4
     end
-    @test_logs min_level=Logging.Warn VertexFunction(;f=fv, g=1, dim=3, pdim=2)
+    @test_logs min_level=Logging.Warn VertexModel(;f=fv, g=1, dim=3, pdim=2)
 
     # don't warn on faulty broadcast (DimensionMismatch)
     f = (du, u, edges, p, t) -> begin
         du[1:2] .= edges
         du[3] = 4
     end
-    @test_logs min_level=Logging.Warn VertexFunction(;f,g=1:3,dim=3,pdim=2)
+    @test_logs min_level=Logging.Warn VertexModel(;f,g=1:3,dim=3,pdim=2)
     # but error if we know the in dim
-    @test_logs (:warn, ) min_level=Logging.Warn VertexFunction(;f,g=1:3,dim=3,pdim=2,indim=3)
+    @test_logs (:warn, ) min_level=Logging.Warn VertexModel(;f,g=1:3,dim=3,pdim=2,indim=3)
 end

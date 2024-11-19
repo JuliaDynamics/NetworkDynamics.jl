@@ -37,7 +37,7 @@ function swing_equation(dv, v, esum, p,t)
     dv[2] = dv[2] / I
     nothing
 end
-vertex = VertexFunction(f=swing_equation, g=1, sym=[:δ, :ω], psym=[:P_ref, :I=>1, :γ=>0.1])
+vertex = VertexModel(f=swing_equation, g=1, sym=[:δ, :ω], psym=[:P_ref, :I=>1, :γ=>0.1])
 
 #=
 Lets define a simple purely active power line whose active power flow is
@@ -48,7 +48,7 @@ We give an additonal parameter, the line limit, which we'll use later in the cal
 function simple_edge(e, v_s, v_d, (K,), t)
     e[1] = K * sin(v_s[1] - v_d[1])
 end
-edge = EdgeFunction(;g=AntiSymmetric(simple_edge), outsym=:P, psym=[:K=>1.63, :limit=>1])
+edge = EdgeModel(;g=AntiSymmetric(simple_edge), outsym=:P, psym=[:K=>1.63, :limit=>1])
 
 #=
 With the definition of the graph topology we can build the `Network` object:

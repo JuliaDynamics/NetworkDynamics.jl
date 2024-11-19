@@ -374,14 +374,14 @@ s3 = NWState(s, utype=Vector{Int}, ptype=Vector{Int})
 # test new index generator methods
 using NetworkDynamics: vidxs, eidxs, vpidxs, epidxs
 fv = (du, u, ein, p, t) -> nothing
-n1 = VertexFunction(; f=fv, g=1:2, sym=[:u, :v], psym=[:p1, :p2], name=:VF)
-n2 = VertexFunction(; f=fv, g=1:2, sym=[:x1, :x2], psym=[:p1, :p2], obsf=identity, obssym=[:obs1, :obs2], name=:VF)
-n3 = VertexFunction(; f=fv, g=1:2, dim=3, name=:Vertex3)
+n1 = VertexModel(; f=fv, g=1:2, sym=[:u, :v], psym=[:p1, :p2], name=:VF)
+n2 = VertexModel(; f=fv, g=1:2, sym=[:x1, :x2], psym=[:p1, :p2], obsf=identity, obssym=[:obs1, :obs2], name=:VF)
+n3 = VertexModel(; f=fv, g=1:2, dim=3, name=:Vertex3)
 
 gss = (odst, vsrc, vdst, p, t) -> nothing
 gfid = (osrc, odst, vsrc, vdst, p ,t) -> nothing
-e1 = EdgeFunction(; g=AntiSymmetric(gss), outsym=[:e1])
-e2 = EdgeFunction(; g=gfid, outsym=(src=:esrc, dst=:edst))
+e1 = EdgeModel(; g=AntiSymmetric(gss), outsym=[:e1])
+e2 = EdgeModel(; g=gfid, outsym=(src=:esrc, dst=:edst))
 g = path_graph(3)
 nw = Network(g, [n1, n2, n3], [e1, e2])
 
@@ -425,14 +425,14 @@ nw = Network(g, [n1, n2, n3], [e1, e2])
 ####
 using NetworkDynamics: vidxs, eidxs, vpidxs, epidxs
 fv = (du, u, ein, p, t) -> nothing
-n1 = VertexFunction(; f=fv, g=1:2, sym=[:u, :v], psym=[:p1, :p2])
-n2 = VertexFunction(; f=fv, g=1:2, sym=[:x1, :x2], psym=[:p1, :p2], obsf=identity, obssym=[:obs1, :obs2])
-n3 = VertexFunction(; f=fv, g=1:2, dim=3, name=:Vertex3)
+n1 = VertexModel(; f=fv, g=1:2, sym=[:u, :v], psym=[:p1, :p2])
+n2 = VertexModel(; f=fv, g=1:2, sym=[:x1, :x2], psym=[:p1, :p2], obsf=identity, obssym=[:obs1, :obs2])
+n3 = VertexModel(; f=fv, g=1:2, dim=3, name=:Vertex3)
 
 gss = (odst, vsrc, vdst, p, t) -> nothing
 gfid = (osrc, odst, vsrc, vdst, p ,t) -> nothing
-e1 = EdgeFunction(; g=AntiSymmetric(gss), outsym=[:e1])
-e2 = EdgeFunction(; g=gfid, outsym=(src=:esrc, dst=:edst))
+e1 = EdgeModel(; g=AntiSymmetric(gss), outsym=[:e1])
+e2 = EdgeModel(; g=gfid, outsym=(src=:esrc, dst=:edst))
 g = path_graph(3)
 nw = Network(g, [n1, n2, n3], [e1, e2])
 

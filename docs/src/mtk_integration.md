@@ -6,17 +6,17 @@ which are then connected on network scale using NetworkDynamics.
 
 The main entry point for this interop are the constructors
 ```julia
-VertexFunction(::ODESystem, inputs, outputs)
-EdgeFunction(::ODESystem, srcin, dstin, [srscout], dstout)
+VertexModel(::ODESystem, inputs, outputs)
+EdgeModel(::ODESystem, srcin, dstin, [srscout], dstout)
 ```
-whose docstrings can be found in the [Component Functions with MTK](@ref) section in the API.
+whose docstrings can be found in the [Component Models with MTK](@ref) section in the API.
 
 These constructors will:
 - transforming the states marked as input to parameters and `structural_simplify`ing the system,
 - generating the `f` and `g` functions,
 - generate code for observables,
 - port all supported [Metadata](@ref) from MTK symbols to component symbols and
-- output a `Vertex-`/`EdgeFunction` function compatible with NetworkDynamics.jl.
+- output a `Vertex-`/`EdgeModel` function compatible with NetworkDynamics.jl.
 
 The main usecase for this feature is when you want to build relatively complex
 component models but interconnect them in a very homogeneous way (i.e. having the
@@ -76,7 +76,7 @@ An ideal voltage source is just a model which pins its output voltage to a fixed
 The source ejects whatever current is necessary. We introduce another variable `i(t)`
 to "capture" this current. This variable will be removed during structural simplify, but will
 be available for plotting through the [Observables](@ref) mechanism.
-The `VertexFunction` can be generated from an `ODESystem` by providing names of the input and output states:
+The `VertexModel` can be generated from an `ODESystem` by providing names of the input and output states:
 
 ```@example mtk
 @mtkmodel VoltageSource begin
@@ -95,7 +95,7 @@ The `VertexFunction` can be generated from an `ODESystem` by providing names of 
     end
 end
 @named vs = VoltageSource()
-vs_vertex = VertexFunction(vs, [:p₊i], [:p₊v]; vidx=1)
+vs_vertex = VertexModel(vs, [:p₊i], [:p₊v]; vidx=1)
 ```
 
 A capacitor is a slightly more complicated model. Its voltage is defined as an differential
@@ -114,7 +114,7 @@ equation based on the inflowing current.
     end
 end
 @named cap = Capacitor()
-cap_vertex = VertexFunction(cap, [:p₊i], [:p₊v], vidx=2)
+cap_vertex = VertexModel(cap, [:p₊i], [:p₊v], vidx=2)
 ```
 
 For the resistor we need two pins, one for the `src` and one for the `dst` side.
@@ -135,7 +135,7 @@ The equations are straight forward.
     end
 end
 @named resistor = Resistor()
-resistor_edge = EdgeFunction(resistor, [:src₊v], [:dst₊v], [:src₊i], [:dst₊i]; src=:vs, dst=:cap)
+resistor_edge = EdgeModel(resistor, [:src₊v], [:dst₊v], [:src₊i], [:dst₊i]; src=:vs, dst=:cap)
 ```
 
 Having all those components defined, we can build the network. We don't need to provide a graph

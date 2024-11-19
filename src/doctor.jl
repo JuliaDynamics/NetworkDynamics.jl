@@ -84,9 +84,9 @@ oob_writes(a::AccessTracker) = filter(i -> i ∉ eachindex(a.data), writes(a))
 has_oob(a::AccessTracker) = !isempty(oob_reads(a)) || !isempty(oob_writes(a))
 
 
-# chk_component(::VertexFunction) = @warn "Check on VertexFunction not implemented"
-# chk_component(::EdgeFunction) = @warn "Check on EdgeFunction not implemented"
-function chk_component(c::ComponentFunction)
+# chk_component(::VertexModel) = @warn "Check on VertexModel not implemented"
+# chk_component(::EdgeModel) = @warn "Check on EdgeModel not implemented"
+function chk_component(c::ComponentModel)
     @nospecialize
     du = AccessTracker(rand(dim(c)))
     u = AccessTracker(rand(dim(c)))
@@ -107,14 +107,14 @@ function chk_component(c::ComponentFunction)
         if e isa MethodError
             @warn "Encountered MethodError. All arguments are AbstractArrays, make sure to allways index into them: $e"
         elseif e isa BoundsError
-            @warn "Call of component functions lead to out of bounds access! Maybe you're unpacking some function input?"
+            @warn "Call of component models lead to out of bounds access! Maybe you're unpacking some function input?"
         elseif e isa DimensionMismatch
             # ignore, its probably because we don't know the sizes of esum, vsrc and vdst
             if hasindim(c)
-                @warn "Call of component function lead to dimension mismatch: $e."
+                @warn "Call of component model lead to dimension mismatch: $e."
             end
         else
-            @warn "Error while calling component function: $e"
+            @warn "Error while calling component model: $e"
         end
         return nothing
     end
@@ -160,10 +160,10 @@ function chk_component(c::ComponentFunction)
         push!(similars, "outputs")
     end
     if !isempty(similars)
-        @warn "Component function allocates similar arrays to $(join(similars, ", "))!"
+        @warn "Component model allocates similar arrays to $(join(similars, ", "))!"
     end
     nothing
 end
 
-_ninout(::EdgeFunction) = 2
-_ninout(::VertexFunction) = 1
+_ninout(::EdgeModel) = 2
+_ninout(::VertexModel) = 1

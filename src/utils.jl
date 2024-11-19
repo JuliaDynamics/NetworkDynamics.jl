@@ -104,7 +104,7 @@ compares them.
 end
 
 function rand_inputs_fg(rng, cf)
-    @argcheck hasindim(cf) "ComponentFunction has no specified input dimensions/syms"
+    @argcheck hasindim(cf) "ComponentModel has no specified input dimensions/syms"
     du = rand(rng, dim(cf))
     u = rand(rng, dim(cf))
     p = rand(rng, pdim(cf))

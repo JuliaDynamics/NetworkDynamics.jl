@@ -1,36 +1,36 @@
 """
     Network([g,] vertexf, edgef; kwarg...)
 
-Construct a `Network` object from a graph `g` and edge and component functions `vertexf` and `edgef`.
+Construct a `Network` object from a graph `g` and edge and component models `vertexf` and `edgef`.
 
 Arguments:
  - `g::AbstractGraph`: The graph on which the network is defined.
-    Optional, can be ommittet if all component functions have a defined `graphelement`.
-    See `vidx` and `src`/`dst` keywors for [`VertexFunction`](@ref) and [`EdgeFunction`](@ref) constructors respectively.
- - `vertexf`:
-    A single [`VertexFunction`](@ref) or a vector of [`VertexFunction`](@ref) objects.
-    The order of the vertex functions must mirror the order of the `vertices(g)` iterator.
+    Optional, can be ommittet if all component models have a defined `graphelement`.
+    See `vidx` and `src`/`dst` keywors for [`VertexModel`](@ref) and [`EdgeModel`](@ref) constructors respectively.
+ - `vertexm`:
+    A single [`VertexModel`](@ref) or a vector of [`VertexModel`](@ref) objects.
+    The order of the vertex models must mirror the order of the `vertices(g)` iterator.
 
- - `edgef`: A single [`EdgeFunction`](@ref) or a vector of [`EdgeFunction`](@ref) objects.
-    The order of the edge functions must mirror the order of the `edges(g)` iterator.
+ - `edgem`: A single [`EdgeModel`](@ref) or a vector of [`EdgeModel`](@ref) objects.
+    The order of the edge models must mirror the order of the `edges(g)` iterator.
 
 Optional keyword arguments:
  - `execution=SequentialExecution{true}()`:
     Execution model of the network. E.g. [`SequentialExecution`](@ref), [`KAExecution`](@ref), [`PolyesterExecution`](@ref) or [`ThreadedExecution`](@ref).
  - `aggregator=execution isa SequentialExecution ? SequentialAggregator(+) : PolyesterAggregator(+)`:
-    Aggregation function applied to the edge functions. E.g. [`SequentialAggregator`](@ref), [`PolyesterAggregator`](@ref), [`ThreadedAggregator`](@ref), [`SparseAggregator`](@ref).
+    Aggregation function applied to the edge models. E.g. [`SequentialAggregator`](@ref), [`PolyesterAggregator`](@ref), [`ThreadedAggregator`](@ref), [`SparseAggregator`](@ref).
  - `check_graphelement=true`:
     Check if the `graphelement` metadata is consistent with the graph.
  - `dealias=false`
     Check if the components alias eachother and create copies if necessary.
-    This is necessary if the same component function is referenced in multiple places in the Network but you want to
+    This is necessary if the same component model is referenced in multiple places in the Network but you want to
     dynamicially asign metadata, such as initialization information to specific instances.
  - `verbose=false`:
     Show additional information during construction.
 """
 function Network(g::AbstractGraph,
-                 vertexf::Union{VertexFunction,Vector{<:VertexFunction}},
-                 edgef::Union{EdgeFunction,Vector{<:EdgeFunction}};
+                 vertexm::Union{VertexModel,Vector{<:VertexModel}},
+                 edgem::Union{EdgeModel,Vector{<:EdgeModel}};
                  execution=SequentialExecution{true}(),
                  aggregator=execution isa SequentialExecution ? SequentialAggregator(+) : PolyesterAggregator(+),
                  check_graphelement=true,
@@ -39,31 +39,31 @@ function Network(g::AbstractGraph,
     # TimerOutputs.reset_timer!()
     @timeit_debug "Construct Network" begin
         # collect all vertex/edgf to vector
-        all_same_v = vertexf isa VertexFunction
-        all_same_e = edgef isa EdgeFunction
+        all_same_v = vertexm isa VertexModel
+        all_same_e = edgem isa EdgeModel
         maybecopy = dealias ? copy : identity
-        _vertexf = all_same_v ? [maybecopy(vertexf) for _ in vertices(g)] : vertexf
-        _edgef   = all_same_e ? [maybecopy(edgef) for _ in edges(g)] : edgef
+        _vertexm = all_same_v ? [maybecopy(vertexm) for _ in vertices(g)] : vertexm
+        _edgem   = all_same_e ? [maybecopy(edgem) for _ in edges(g)] : edgem
 
-        @argcheck _vertexf isa Vector{<:VertexFunction} "Expected VertexFuncions, got $(eltype(_vertexf))"
-        @argcheck _edgef isa Vector{<:EdgeFunction} "Expected EdgeFuncions, got $(eltype(_vertexf))"
-        @argcheck length(_vertexf) == nv(g)
-        @argcheck length(_edgef) == ne(g)
+        @argcheck _vertexm isa Vector{<:VertexModel} "Expected VertexModels, got $(eltype(_vertexm))"
+        @argcheck _edgem isa Vector{<:EdgeModel} "Expected EdgeModels, got $(eltype(_vertexm))"
+        @argcheck length(_vertexm) == nv(g)
+        @argcheck length(_edgem) == ne(g)
 
-        # search for vertex functions with feed forward
-        if CHECK_COMPONENT[] && any(hasff, _vertexf)
-            throw(ArgumentError("Vertex functions with feed forward are not supported yet! \
-                As an intermediate solution, you can call `ff_to_constraint(vf)` on the vertex function\
+        # search for vertex models with feed forward
+        if CHECK_COMPONENT[] && any(hasff, _vertexm)
+            throw(ArgumentError("Vertex model with feed forward are not supported yet! \
+                As an intermediate solution, you can call `ff_to_constraint(vf)` on the vertex model\
                 to turn feed forward outputs into algebraic states."))
         end
 
         # check if components alias eachother copy if necessary
         # allready dealiase if provided as single functions
         if dealias && !all_same_v
-            dealias!(_vertexf)
+            dealias!(_vertexm)
         end
         if dealias && !all_same_e
-            dealias!(_edgef)
+            dealias!(_edgem)
         end
 
         verbose &&
@@ -71,22 +71,22 @@ function Network(g::AbstractGraph,
         @argcheck execution isa ExecutionStyle "Execution type $execution not supported (choose from $(subtypes(ExecutionStyle)))"
 
 
-        if !allequal(outdim, _vertexf)
-            throw(ArgumentError("All vertex functions must have the same output dimension!"))
+        if !allequal(outdim, _vertexm)
+            throw(ArgumentError("All vertex models must have the same output dimension!"))
         end
-        if !allequal(outdim_dst, _edgef)
-            throw(ArgumentError("All edge functions must have the same output dimension!"))
+        if !allequal(outdim_dst, _edgem)
+            throw(ArgumentError("All edge models must have the same output dimension!"))
         end
-        vdepth = outdim(first(_vertexf))
-        edepth = outdim_dst(first(_edgef))
+        vdepth = outdim(first(_vertexm))
+        edepth = outdim_dst(first(_edgem))
 
-        dynstates = mapreduce(dim, +, Iterators.flatten((_vertexf,_edgef)))
+        dynstates = mapreduce(dim, +, Iterators.flatten((_vertexm,_edgem)))
 
         # create index manager
         @timeit_debug "Construct Index manager" begin
             valias = dealias ? :none : (all_same_v ? :all : :some)
             ealias = dealias ? :none : (all_same_e ? :all : :some)
-            im = IndexManager(g, dynstates, edepth, vdepth, _vertexf, _edgef; valias, ealias)
+            im = IndexManager(g, dynstates, edepth, vdepth, _vertexm, _edgem; valias, ealias)
         end
 
 
@@ -94,44 +94,44 @@ function Network(g::AbstractGraph,
         if check_graphelement
             @timeit_debug "Check graph element" begin
                 if !all_same_v
-                    for (i, vf) in pairs(_vertexf)
+                    for (i, vf) in pairs(_vertexm)
                         if has_graphelement(vf)
                             if get_graphelement(vf) != i
-                                @warn "Vertex function $(vf.name) is placed at node index $i bus has \
+                                @warn "Vertex model $(vf.name) is placed at node index $i bus has \
                                 `graphelement` $(get_graphelement(vf)) stored in metadata. \
                                 The wrong data will be ignored! Use `check_graphelement=false` tu supress this warning."
                             end
                         end
                     end
-                elseif has_graphelement(vertexf)
-                    @warn "Provided vertex function has assigned `graphelement` metadata. \
+                elseif has_graphelement(vertexm)
+                    @warn "Provided vertex model has assigned `graphelement` metadata. \
                     but is used at every vertex. The `graphelement` will be ignored."
                 end
                 if !all_same_e
-                    for (iteredge, ef) in zip(im.edgevec, _edgef)
+                    for (iteredge, ef) in zip(im.edgevec, _edgem)
                         if has_graphelement(ef)
                             ge = get_graphelement(ef)
                             src = get(im.unique_vnames, ge.src, ge.src)
                             dst = get(im.unique_vnames, ge.dst, ge.dst)
                             if iteredge.src != src || iteredge.dst != dst
-                                @warn "Edge function $(ef.name) at $(iteredge.src) => $(iteredge.dst) has wrong `:graphelement` $src => $dst). \
+                                @warn "Edge model $(ef.name) at $(iteredge.src) => $(iteredge.dst) has wrong `:graphelement` $src => $dst). \
                                 The wrong data will be ignored! Use `check_graphelement=false` tu supress this warning."
                             end
                         end
                     end
-                elseif has_graphelement(edgef)
-                    @warn "Provided edge function has assigned `graphelement` metadata. \
+                elseif has_graphelement(edgem)
+                    @warn "Provided edge model has assigned `graphelement` metadata. \
                     but is used for all edges. The `graphelement` will be ignored."
                 end
             end
         end
 
-        # batch identical edge and vertex functions
+        # batch identical edge and vertex model
         @timeit_debug "batch identical vertexes" begin
-            vidxs = _find_identical(vertexf, 1:nv(g))
+            vidxs = _find_identical(vertexm, 1:nv(g))
         end
         @timeit_debug "batch identical edges" begin
-            eidxs = _find_identical(edgef, 1:ne(g))
+            eidxs = _find_identical(edgem, 1:ne(g))
         end
 
         # create vertex batches and initialize with index manager
@@ -194,12 +194,12 @@ function Network(g::AbstractGraph,
 end
 
 function Network(vertexfs, edgefs; kwargs...)
-    @argcheck all(has_graphelement, vertexfs) "All vertex functions must have assigned `graphelement` to implicitly construct graph!"
-    @argcheck all(has_graphelement, edgefs) "All edge functions must have assigned `graphelement` to implicitly construct graph!"
+    @argcheck all(has_graphelement, vertexfs) "All vertex models must have assigned `graphelement` to implicitly construct graph!"
+    @argcheck all(has_graphelement, edgefs) "All edge models must have assigned `graphelement` to implicitly construct graph!"
 
     vidxs = get_graphelement.(vertexfs)
-    allunique(vidxs) || throw(ArgumentError("All vertex functions must have unique `graphelement`!"))
-    sort(vidxs) == 1:length(vidxs) || throw(ArgumentError("Vertex functions must have `graphelement` in range 1:length(vertexfs)!"))
+    allunique(vidxs) || throw(ArgumentError("All vertex models must have unique `graphelement`!"))
+    sort(vidxs) == 1:length(vidxs) || throw(ArgumentError("Vertex models must have `graphelement` in range 1:length(vertexfs)!"))
 
     vdict = Dict(vidxs .=> vertexfs)
 
@@ -215,7 +215,7 @@ function Network(vertexfs, edgefs; kwargs...)
         end
         SimpleEdge(src, dst)
     end
-    allunique(simpleedges) || throw(ArgumentError("Some edge functions have the same `graphelement`!"))
+    allunique(simpleedges) || throw(ArgumentError("Some edge models have the same `graphelement`!"))
     edict = Dict(simpleedges .=> edgefs)
 
     # if all src < dst then we can use SimpleGraph, else digraph
@@ -239,12 +239,12 @@ function Network(vertexfs, edgefs; kwargs...)
 end
 
 """
-    dealias!(cfs::Vector{<:ComponentFunction})
+    dealias!(cfs::Vector{<:ComponentModel})
 
-Checks if any component functions reference the same metadtata/symmetada fields and
+Checks if any component models reference the same metadtata/symmetada fields and
 creates copies of them if necessary.
 """
-function dealias!(cfs::Vector{<:ComponentFunction}; warn=false)
+function dealias!(cfs::Vector{<:ComponentModel}; warn=false)
     ag = aliasgroups(cfs)
 
     isempty(ag) && return cfs # nothign to do
@@ -256,12 +256,12 @@ end
 
 
 """
-    aliasgroups(cfs::Vector{<:ComponentFunction})
+    aliasgroups(cfs::Vector{<:ComponentModel})
 
-Returns a dict `cf => idxs` which contains all the component functions
+Returns a dict `cf => idxs` which contains all the component models
 which appear multiple times with all their indices.
 """
-function aliasgroups(cfs::Vector{T}) where {T<:ComponentFunction}
+function aliasgroups(cfs::Vector{T}) where {T<:ComponentModel}
     d = IdDict{T, Vector{Int}}()
 
     for (i, cf) in pairs(cfs)
@@ -276,7 +276,7 @@ function aliasgroups(cfs::Vector{T}) where {T<:ComponentFunction}
 end
 
 function VertexBatch(im::IndexManager, idxs::Vector{Int}; verbose)
-    components = @view im.vertexf[idxs]
+    components = @view im.vertexm[idxs]
 
     try
         # TODO: those checks seems expensive and redundant
@@ -305,7 +305,7 @@ function VertexBatch(im::IndexManager, idxs::Vector{Int}; verbose)
             idxs, _compf, _compg, _ff, statestride, outstride, pstride, aggbufstride)
     catch e
         if e isa ArgumentError && startswith(e.msg, "Collection has multiple elements")
-            throw(ArgumentError("Provided vertex functions $idxs use the same function but have different metadata (dim, pdim,type,...)"))
+            throw(ArgumentError("Provided vertex models $idxs use the same function but have different metadata (dim, pdim,type,...)"))
         else
             rethrow(e)
         end
@@ -313,7 +313,7 @@ function VertexBatch(im::IndexManager, idxs::Vector{Int}; verbose)
 end
 
 function EdgeBatch(im::IndexManager, idxs::Vector{Int}; verbose)
-    components = @view im.edgef[idxs]
+    components = @view im.edgem[idxs]
 
     try
         # TODO: those checks seems expensive and redundant
@@ -342,7 +342,7 @@ function EdgeBatch(im::IndexManager, idxs::Vector{Int}; verbose)
             idxs, _compf, _compg, _ff, statestride, outstride, pstride, gbufstride)
     catch e
         if e isa ArgumentError && startswith(e.msg, "Collection has multiple elements")
-            throw(ArgumentError("Provided edge functions $idxs use the same function but have different metadata (dim, pdim,type,...)"))
+            throw(ArgumentError("Provided edge models $idxs use the same function but have different metadata (dim, pdim,type,...)"))
         else
             rethrow(e)
         end
@@ -355,7 +355,7 @@ function batch_by_idxs(v::AbstractVector, batches::Vector{Vector{Int}})
     [v[batch] for batch in batches]
 end
 
-_find_identical(v::ComponentFunction, indices) = [collect(indices)]
+_find_identical(v::ComponentModel, indices) = [collect(indices)]
 function _find_identical(v::Vector, indices)
     idxs_per_type = Vector{Int}[]
     unique_comp = []
@@ -378,10 +378,10 @@ function _find_identical(v::Vector, indices)
 end
 
 function construct_mass_matrix(im; type=nothing)
-    vertexd = filter(pairs(im.vertexf)) do (_, c)
+    vertexd = filter(pairs(im.vertexm)) do (_, c)
         hasproperty(c,:mass_matrix) && c.mass_matrix != LinearAlgebra.I
     end
-    edged = filter(pairs(im.edgef)) do (_, c)
+    edged = filter(pairs(im.edgem)) do (_, c)
         hasproperty(c,:mass_matrix) && c.mass_matrix != LinearAlgebra.I
     end
     if isempty(vertexd) && isempty(edged)
@@ -438,14 +438,14 @@ function _check_massmatrix(c)
 end
 
 """
-    Network(nw::Network; g, vertexf, edgef, kwargs...)
+    Network(nw::Network; g, vertexm, edgem, kwargs...)
 
-Rebuild the Network with same graph and vertex/edge functions but possibly different kwargs.
+Rebuild the Network with same graph and vertex/edge models but possibly different kwargs.
 """
 function Network(nw::Network;
                  g = nw.im.g,
-                 vertexf = copy.(nw.im.vertexf),
-                 edgef = copy.(nw.im.edgef),
+                 vertexm = copy.(nw.im.vertexm),
+                 edgem = copy.(nw.im.edgem),
                  kwargs...)
 
     _kwargs = Dict(:execution => executionstyle(nw),
@@ -459,8 +459,8 @@ function Network(nw::Network;
 
     # check, that we actually provide all of the arguments
     # mainly so we don't forget to add it here if we introduce new kw arg to main constructor
-    m = only(methods(Network, [typeof(g), typeof(vertexf), typeof(edgef)]))
+    m = only(methods(Network, [typeof(g), typeof(vertexm), typeof(edgem)]))
     @assert keys(_kwargs) == Set(Base.kwarg_decl(m))
 
-    Network(g, vertexf, edgef; _kwargs...)
+    Network(g, vertexm, edgem; _kwargs...)
 end

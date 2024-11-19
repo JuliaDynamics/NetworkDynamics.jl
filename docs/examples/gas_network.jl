@@ -234,25 +234,25 @@ nothing #hide
 To bild the Network we first need to define the components. This is a two step process:
 
 - first create the symbolic `ODESystem` using ModelingToolkit
-- secondly build a NetworkDynamics component function ([`VertexFunction`](@ref)/[`EdgeFunction`](@ref)) based on the symbolic system.
+- secondly build a NetworkDynamics component model ([`VertexModel`](@ref)/[`EdgeModel`](@ref)) based on the symbolic system.
 
 In the first step we can use the keyword arguments to pass "default" values for our parameters and states.
-Those values will be automaticially transfered to the metadata of the component function the second step.
+Those values will be automaticially transfered to the metadata of the component model the second step.
 
 The second step requires to define the interface variables, i.e. what are the "input" states of your
-component function and what are the "output" states.
-For `VertexFunction` the input state is the aggregated flow of all connected pipes. The output state is the pressure of the node.
+component model and what are the "output" states.
+For `VertexModel` the input state is the aggregated flow of all connected pipes. The output state is the pressure of the node.
 =#
 @named v1_mtk = ConstantPressureNode(p_set=p₁_set)
-v1 = VertexFunction(v1_mtk, [:q̃_nw], [:p]; name=:v1, vidx=1)
+v1 = VertexModel(v1_mtk, [:q̃_nw], [:p]; name=:v1, vidx=1)
 #
 
 @named v2_mtk = VariablePressureNode(C=C₂, load_profile=load2)
-v2 = VertexFunction(v2_mtk, [:q̃_nw], [:p]; name=:v2, vidx=2)
+v2 = VertexModel(v2_mtk, [:q̃_nw], [:p]; name=:v2, vidx=2)
 #
 
 @named v3_mtk = VariablePressureNode(C=C₃, load_profile=load3)
-v3 = VertexFunction(v3_mtk, [:q̃_nw], [:p]; name=:v3, vidx=3)
+v3 = VertexModel(v3_mtk, [:q̃_nw], [:p]; name=:v3, vidx=3)
 
 #=
 For the edge Model we have two inputs: the pressure on both source and destination end.
@@ -264,9 +264,9 @@ meas that the source end will recieve the same flow, just inverted sign.
 @named e13_mtk = Pipe(; L=L₁₃, sinθ=sinθ₁₃, D, A, γ, η, r, g, T, Tc, pc, Rs, c̃, ρ̃, p̃)
 @named e23_mtk = Pipe(; L=L₂₃, sinθ=sinθ₂₃, D, A, γ, η, r, g, T, Tc, pc, Rs, c̃, ρ̃, p̃)
 
-e12 = EdgeFunction(e12_mtk, [:p_src], [:p_dst], AntiSymmetric([:q̃]); name=:e12, src=1, dst=2)
-e13 = EdgeFunction(e13_mtk, [:p_src], [:p_dst], AntiSymmetric([:q̃]); name=:e13, src=1, dst=3)
-e23 = EdgeFunction(e23_mtk, [:p_src], [:p_dst], AntiSymmetric([:q̃]); name=:e23, src=2, dst=3)
+e12 = EdgeModel(e12_mtk, [:p_src], [:p_dst], AntiSymmetric([:q̃]); name=:e12, src=1, dst=2)
+e13 = EdgeModel(e13_mtk, [:p_src], [:p_dst], AntiSymmetric([:q̃]); name=:e13, src=1, dst=3)
+e23 = EdgeModel(e23_mtk, [:p_src], [:p_dst], AntiSymmetric([:q̃]); name=:e23, src=2, dst=3)
 
 #=
 To build the network object we just need to pass the vertices and edges to the constructor.

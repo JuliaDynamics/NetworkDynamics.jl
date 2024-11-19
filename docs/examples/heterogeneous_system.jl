@@ -21,14 +21,14 @@ function kuramoto_edge!(e, θ_s, θ_d, (K,), t)
     e[1] = K * sin(θ_s[1] - θ_d[1])
     nothing
 end
-edge! = EdgeFunction(g=AntiSymmetric(kuramoto_edge!), outdim=1, psym=[:K=>3])
+edge! = EdgeModel(g=AntiSymmetric(kuramoto_edge!), outdim=1, psym=[:K=>3])
 #-
 
 function kuramoto_vertex!(dθ, θ, esum, (ω0,), t)
     dθ[1] = ω0 + esum[1]
     nothing
 end
-vertex! = VertexFunction(f=kuramoto_vertex!, g=StateMask(1:1), sym=[:θ], psym=[:ω0], name=:kuramoto)
+vertex! = VertexModel(f=kuramoto_vertex!, g=StateMask(1:1), sym=[:θ], psym=[:ω0], name=:kuramoto)
 #-
 
 nw = Network(g, vertex!, edge!)
@@ -78,7 +78,7 @@ function static_g(out, u, p, t)
     out[1] = p[1]
     nothing
 end
-static! = VertexFunction(g=static_g, outsym=[:θ], psym=[:θfix => ω[1]], name=:static)
+static! = VertexModel(g=static_g, outsym=[:θ], psym=[:θfix => ω[1]], name=:static)
 
 #=
 But wait! NetworkDynamics classified this as [`PureFeedForward`](@ref), because it cannot
@@ -90,7 +90,7 @@ g(out, ins, p, t)  # NoFeedForward
 and since `dim(u)=0` it wrongfully assumes that the latter is meant.
 We can overwrite the classification by passing the ff keyword:
 =#
-static! = VertexFunction(g=static_g, outsym=[:θ], psym=[:θfix => ω[1]], ff=NoFeedForward(), name=:static)
+static! = VertexModel(g=static_g, outsym=[:θ], psym=[:θfix => ω[1]], ff=NoFeedForward(), name=:static)
 
 #=
 A Kuramoto model with inertia consists of two internal variables leading to
@@ -102,15 +102,15 @@ function kuramoto_inertia!(dv, v, esum, (ω0,), t)
     nothing
 end
 
-inertia! = VertexFunction(f=kuramoto_inertia!, g=1:1, sym=[:θ, :ω], psym=[:ω0], name=:inertia)
+inertia! = VertexModel(f=kuramoto_inertia!, g=1:1, sym=[:θ, :ω], psym=[:ω0], name=:inertia)
 
 #=
 Since now we model a system with heterogeneous node dynamics we can no longer
-straightforwardly pass a single VertexFunction to the `Network` constructor but
+straightforwardly pass a single VertexModel to the `Network` constructor but
 instead have to hand over an Array.
 =#
 
-vertex_array    = VertexFunction[vertex! for i in 1:N]
+vertex_array    = VertexModel[vertex! for i in 1:N]
 vertex_array[1] = static!
 vertex_array[5] = inertia! # index should correspond to the node's index in the graph
 nw_hetero! = Network(g, vertex_array, edge!)

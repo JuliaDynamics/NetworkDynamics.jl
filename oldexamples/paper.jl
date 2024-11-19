@@ -90,7 +90,7 @@ begin
         return nothing
     end
 
-    v_arr = Array{VertexFunction}([f_node! for v in vertices(g)])
+    v_arr = Array{VertexModel}([f_node! for v in vertices(g)])
     v_arr[1] = inertia!
     v_arr[N÷2] = static!
     nd_hetero! = network_dynamics(v_arr, f_edge!, g)

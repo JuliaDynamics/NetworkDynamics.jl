@@ -8,7 +8,7 @@ Users of the package should probably read the new documentation carefully.
 The most important changes are:
 
 - Explicit split in `f` and `g` function: There is no split into `ODE` and
-  `Static` components anymore, verything is unified in component functions with
+  `Static` components anymore, everything is unified in component models with
   internal function `f` and output function `g`.
 - Parameters handling: Parameters are allways stored in a flat array. The
   Symbolic Indexing Interfaces helps to set and retrieve parameters.
