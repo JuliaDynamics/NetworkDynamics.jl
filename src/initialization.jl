@@ -156,7 +156,7 @@ function initialization_problem(cf::T; t=NaN, verbose=true) where {T<:ComponentM
             # this fills the second half of the du buffer with the fixed and current outputs
             dunl_out .= RecursiveArrayTools.ArrayPartition(outbufs...)
             # execute fg to fill dunl and outputs
-            fg(outbufs..., dunl, ubuf, inbufs..., pbuf, t)
+            fg(outbufs..., dunl_fg, ubuf, inbufs..., pbuf, t)
 
             # calculate the residual for the second half ov the dunl buf, the outputs
             dunl_out .= dunl_out .- RecursiveArrayTools.ArrayPartition(outbufs...)

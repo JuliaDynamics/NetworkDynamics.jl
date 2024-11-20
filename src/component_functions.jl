@@ -1145,7 +1145,8 @@ function ff_to_constraint(v::VertexModel)
     isnothing(v.obsf) || @warn "Observed function might be broke due to ff_to_constraint conversion."
     newsym = vcat(sym(v), outsym(v))
     VertexModel(; f=newf, g=newg, sym=newsym, mass_matrix, name=v.name,
-        psym=v.psym, obsf=v.obsf, obssym=v.obssym, metadata=v.metadata, symmetadata=v.symmetadata)
+        psym=v.psym, obsf=v.obsf, obssym=v.obssym, insym=v.insym,
+        metadata=v.metadata, symmetadata=v.symmetadata)
 end
 
 function _newf(::PureFeedForward, f, g, dim)
