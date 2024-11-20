@@ -4,7 +4,7 @@ using ModelingToolkit: Symbolic, iscall, operation, arguments, build_function
 using ModelingToolkit: ModelingToolkit, Equation, ODESystem, Differential
 using ModelingToolkit: full_equations, get_variables, structural_simplify, getname, unwrap
 using ModelingToolkit: full_parameters, unknowns, independent_variables, observed, defaults
-using ModelingToolkit.Symbolics: Symbolics, fixpoint_sub
+using ModelingToolkit.Symbolics: Symbolics, fixpoint_sub, substitute
 using RecursiveArrayTools: RecursiveArrayTools
 using ArgCheck: @argcheck
 using LinearAlgebra: Diagonal, I
@@ -16,18 +16,20 @@ import NetworkDynamics: VertexModel, EdgeModel, AnnotatedSym
 include("MTKUtils.jl")
 
 """
-    VertexModel(sys::ODESystem, inputs, outputs; kwargs...)
+    VertexModel(sys::ODESystem, inputs, outputs; ff_to_constraint=true, kwargs...)
 
 Create a `VertexModel` object from a given `ODESystem` created with ModelingToolkit.
 You need to provide 2 lists of symbolic names (`Symbol` or `Vector{Symbols}`):
 - `inputs`: names of variables in you equation representing the aggregated edge states
 - `outputs`: names of variables in you equation representing the node output
+
+`ff_to_constraint` controlls, whether output transformations `g` which depend on inputs should be
 """
-function VertexModel(sys::ODESystem, inputs, outputs; verbose=false, name=getname(sys), kwargs...)
+function VertexModel(sys::ODESystem, inputs, outputs; verbose=false, name=getname(sys), ff_to_constraint=true, kwargs...)
     warn_events(sys)
     inputs = inputs isa AbstractVector ? inputs : [inputs]
     outputs = outputs isa AbstractVector ? outputs : [outputs]
-    gen = generate_io_function(sys, (inputs,), (outputs,); verbose)
+    gen = generate_io_function(sys, (inputs,), (outputs,); verbose, ff_to_constraint)
 
     f = gen.f
     g = gen.g
@@ -58,7 +60,7 @@ function VertexModel(sys::ODESystem, inputs, outputs; verbose=false, name=getnam
 end
 
 """
-    EdgeModel(sys::ODESystem, srcin, dstin, AntiSymmetric(dstout); kwargs...)
+    EdgeModel(sys::ODESystem, srcin, dstin, AntiSymmetric(dstout); ff_to_constraint=false, kwargs...)
 
 Create a `EdgeModel` object from a given `ODESystem` created with ModelingToolkit.
 
@@ -68,11 +70,14 @@ the symbol vector in
 - `AntiSymmetric(dstout)`,
 - `Symmetric(dstout)`, or
 - `Directed(dstout)`.
+
+`ff_to_constraint` controlls, whether output transformations `g` which depend on inputs should be
+transformed into constraints.
 """
 EdgeModel(sys::ODESystem, srcin, dstin, dstout; kwargs...) = EdgeModel(sys, srcin, dstin, nothing, dstout; kwargs...)
 
 """
-    EdgeModel(sys::ODESystem, srcin, srcout, dstin, dstout; kwargs...)
+    EdgeModel(sys::ODESystem, srcin, srcout, dstin, dstout; ff_to_constraint=false, kwargs...)
 
 Create a `EdgeModel` object from a given `ODESystem` created with ModelingToolkit.
 You need to provide 4 lists of symbolic names (`Symbol` or `Vector{Symbols}`):
@@ -80,8 +85,11 @@ You need to provide 4 lists of symbolic names (`Symbol` or `Vector{Symbols}`):
 - `dstin`: names of variables in you equation representing the node state at the destination
 - `srcout`: names of variables in you equation representing the output at the source
 - `dstout`: names of variables in you equation representing the output at the destination
+
+`ff_to_constraint` controlls, whether output transformations `g` which depend on inputs should be
+transformed into constraints.
 """
-function EdgeModel(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=false, name=getname(sys), kwargs...)
+function EdgeModel(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=false, name=getname(sys), ff_to_constraint=false, kwargs...)
     warn_events(sys)
     srcin = srcin isa AbstractVector ? srcin : [srcin]
     dstin = dstin isa AbstractVector ? dstin : [dstin]
@@ -103,7 +111,7 @@ function EdgeModel(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=false, 
         outs = (srcout, dstout)
     end
 
-    gen = generate_io_function(sys, (srcin, dstin), outs; verbose)
+    gen = generate_io_function(sys, (srcin, dstin), outs; verbose, ff_to_constraint)
 
     f = gen.f
     g = singlesided ? gwrap(gen.g; ff=gen.fftype) : gen.g
@@ -192,7 +200,8 @@ function _get_metadata(sys, name)
 end
 
 function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
-                              expression=Val{false}, verbose=false)
+                              expression=Val{false}, verbose=false,
+                              ff_to_constraint)
     # TODO: scalarize vector symbolics/equations?
 
     # f_* may be given in namepsace version or as symbols, resolve to unnamespaced Symbolic
@@ -240,21 +249,6 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         # end
         throw(ArgumentError(String(take!(buf))))
     end
-    # generate mass matrix (this might change the equations)
-    mass_matrix = begin
-        # equations of form o = f(...) have to be transformed to 0 = f(...) - o
-        for (i, eq) in enumerate(eqs)
-           if eq_type(eq)[1] == :explicit_algebraic
-               eqs[i] = 0 ~ eq.rhs - eq.lhs
-           end
-        end
-        verbose && @info "Transformed algebraic eqs" eqs
-
-        # create massmatrix, we don't use the method provided by ODESystem because of reordering
-        mm = generate_massmatrix(eqs)
-        verbose && @info "Reordered by states and generated mass matrix" mm
-        mm
-    end
 
     # extract observed equations. They might depend on eachother so resolve them
     obs_subs = Dict(eq.lhs => eq.rhs for eq in observed(sys))
@@ -268,10 +262,29 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         @warn "obs_deps !⊆ parameters ∪ unknowns. Difference: $(setdiff(obs_deps, Set(allparams) ∪ Set(states)))"
     end
 
-    # find the output equations, this might remove the mfrom obseqs!
-    outeqs = map(Iterators.flatten(outputss)) do out
+    # if some states shadow outputs (out ~ state in observed)
+    # switch their names. I.e. prioritize use of name `out`
+    renamings = Dict()
+    for eq in obseqs
+        if eq.lhs ∈ Set(alloutputs) && iscall(eq.rhs) &&
+            operation(eq.rhs) isa Symbolics.BasicSymbolic && eq.rhs ∈ Set(states)
+            verbose && @info "Encountered trivial equation $eq. Swap out $(eq.lhs) <=> $(eq.rhs) everywhere."
+            renamings[eq.lhs] = eq.rhs
+            renamings[eq.rhs] = eq.lhs
+        end
+    end
+    if !isempty(renamings)
+        eqs = map(eq -> substitute(eq, renamings), eqs)
+        obseqs = map(eq -> substitute(eq, renamings), obseqs)
+        states = map(s -> substitute(s, renamings), states)
+        verbose && @info "New States:" states
+    end
+
+    # find the output equations, this might remove them from obseqs!
+    outeqs = Equation[]
+    for out in Iterators.flatten(outputss)
         if out ∈ Set(states)
-            out ~ out
+            push!(outeqs, out ~ out)
         else
             idx = findfirst(eq -> isequal(eq.lhs, out), obseqs)
             if isnothing(idx)
@@ -279,9 +292,32 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
             end
             eq = obseqs[idx]
             deleteat!(obseqs, idx)
-            obseqs
-            eq
+
+            if ff_to_constraint && !isempty(get_variables(eq.rhs) ∩ allinputs)
+                verbose && @info "Output $out would lead to FF in g, promote to state instead."
+                push!(eqs, 0 ~ eq.lhs - eq.rhs)
+                push!(states, eq.lhs)
+                push!(outeqs, eq.lhs ~ eq.lhs)
+            else
+                push!(outeqs, eq)
+            end
         end
+    end
+
+    # generate mass matrix (this might change the equations)
+    mass_matrix = begin
+        # equations of form o = f(...) have to be transformed to 0 = f(...) - o
+        for (i, eq) in enumerate(eqs)
+           if eq_type(eq)[1] == :explicit_algebraic
+               eqs[i] = 0 ~ eq.rhs - eq.lhs
+           end
+        end
+        verbose && @info "Transformed algebraic eqs" eqs
+
+        # create massmatrix, we don't use the method provided by ODESystem because of reordering
+        mm = generate_massmatrix(eqs)
+        verbose && @info "Generated mass matrix" mm
+        mm
     end
 
     iv = only(independent_variables(sys))
