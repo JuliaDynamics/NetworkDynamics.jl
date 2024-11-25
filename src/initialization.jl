@@ -199,16 +199,17 @@ function initialize_component!(cf; verbose=true, kwargs...)
             @warn "Initialization for componend stalled with residual $(res)"
         elseif !SciMLBase.successful_retcode(sol.retcode)
             throw(ArgumentError("Initialization failed. Solver returned $(sol.retcode)"))
+        else
+            verbose && @info "Initialization successful with residual $(LinearAlgebra.norm(sol.resid))"
         end
         set_init!.(Ref(cf), SII.variable_symbols(sol), sol.u)
         resid = sol.resid
     else
         resid = init_residual(cf; recalc=true)
+        verbose && @info "No free variables! Residual $(LinearAlgebra.norm(resid))"
     end
 
     set_metadata!(cf, :init_residual, resid)
-
-    verbose && @info "Initialization successful with residual $(LinearAlgebra.norm(sol.resid))"
     cf
 end
 
