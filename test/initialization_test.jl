@@ -65,7 +65,14 @@ end
     @test vf.symmetadata[:i_r][:default] == 1
     @test vf.symmetadata[:i_i][:default] == 0.1
 
-    NetworkDynamics.initialize_component!(vf)
+    NetworkDynamics.initialize_component!(vf; verbose=true)
     @test NetworkDynamics.init_residual(vf) < 1e-8
     @test init_residual(vf) ≈ init_residual(vf; recalc=true)
+
+    # make empty problem
+    set_default!(vf, :Pm, get_init(vf, :Pm))
+    set_default!(vf, :θ, get_init(vf, :θ))
+    set_default!(vf, :ω, get_init(vf, :ω))
+
+    NetworkDynamics.initialize_component!(vf; verbose=true)
 end
