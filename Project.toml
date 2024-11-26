@@ -43,7 +43,7 @@ MTKExt = "ModelingToolkit"
 [compat]
 Adapt = "4.0.4"
 ArgCheck = "2.3.0"
-Atomix = "0.1.0"
+Atomix = "0.1.0, 1"
 CUDA = "5.5.2"
 DocStringExtensions = "0.9.3"
 FastClosures = "0.3.2"
