@@ -20,6 +20,7 @@ using FastClosures: @closure
 using ForwardDiff: ForwardDiff
 using Printf: @sprintf
 using Random: Random
+using Static: Static, StaticInt
 
 @static if VERSION ≥ v"1.11.0-0"
     using Base: AnnotatedIOBuffer, AnnotatedString

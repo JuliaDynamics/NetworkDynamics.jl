@@ -112,4 +112,37 @@ using NetworkDynamics
         @test str_significant(0.00000122; sigdigits=3) == "1.22e-6"
         @test str_significant(-123.294191; sigdigits=5) == "-123.29"
     end
+
+    @testset "batch stride" begin
+        using NetworkDynamics: BatchStride, _fullstride, _fullrange, _range
+        using Static
+
+        b1 = BatchStride(2, 3)
+        b2 = BatchStride(2, (3, 1))
+
+        @test _fullstride(b1) == 3
+        @test _fullstride(b2) == 4
+        Test.@inferred _fullstride(b1)
+        Test.@inferred _fullstride(b2)
+
+        @test _fullrange(b1, 2) == 2:(2*3+2-1)
+        @test _fullrange(b2, 2) == 2:(2*(3+1)+2-1)
+
+        @test _range(b1, 1) == 2:4
+        @test _range(b1, 2) == 5:7
+        @test _range(b2, 1, 1) == 2:4
+        @test _range(b2, 1, 2) == 5:5
+        @test _range(b2, 2, 1) == 6:8
+        @test _range(b2, 2, 2) == 9:9
+
+        # named batch stride
+        bn = BatchStride(2, (;src=3, dst=1))
+        @test _fullstride(bn) == 4
+        Test.@inferred _fullstride(bn)
+        @test _fullrange(bn, 2) == 2:(2*(3+1)+2-1)
+        @test _range(bn, 1, 1) == 2:4
+        @test _range(bn, 1, 2) == 5:5
+        @test _range(bn, 2, 1) == 6:8
+        @test _range(bn, 2, 2) == 9:9
+    end
 end

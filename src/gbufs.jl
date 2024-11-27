@@ -11,10 +11,10 @@ struct EagerGBufProvider{MT,C} <: GBufProvider
 end
 
 function EagerGBufProvider(im::IndexManager, batches)
-    map = zeros(Int, ne(im.g) * im.vdepth, 2)
+    map = zeros(Int, ne(im.g) * im.vdepth * 2)
     for (i, e) in pairs(im.edgevec)
-        map[im.e_gbufr[i], 1] .= im.v_out[e.src]
-        map[im.e_gbufr[i], 2] .= im.v_out[e.dst]
+        map[im.e_gbufr[i].src] .= im.v_out[e.src]
+        map[im.e_gbufr[i].dst] .= im.v_out[e.dst]
     end
 
     N = ForwardDiff.pickchunksize(max(im.lastidx_dynamic, im.lastidx_p))
@@ -25,9 +25,8 @@ get_gbuf(bufp::EagerGBufProvider, o) = get_tmp(bufp.diffcache, o)
 gather!(bufp::EagerGBufProvider, gbuf, o) = NNlib.gather!(gbuf, o, bufp.map)
 
 Base.@propagate_inbounds function get_src_dst(gbuf::AbstractArray, batch, i)
-    bufr = @views gbuf_range(batch, i)
-    src = @views gbuf[bufr, 1]
-    dst = @views gbuf[bufr, 2]
+    src = @views gbuf[in_range(batch, i, :src)]
+    dst = @views gbuf[in_range(batch, i, :dst)]
     src, dst
 end
 
