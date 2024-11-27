@@ -46,7 +46,11 @@ function _symidex_to_extidx(im, sni)
     end
 end
 
-function collect_externals!(map::ExtMap, extbuf, u, o)
+# CPU version
+function collect_externals!(map::ExtMap, extbuf::Vector, u::Vector, o::Vector)
+    # the performance of this function really depends on the fact
+    # that julia somehow inferes that if src isn't a statebuf it musst be a outbuf
+    # wasn't able to recreate something this fast in a more general way
     @inbounds for (dst, src) in pairs(map.map)
         if src isa StateBufIdx
             extbuf[dst] = u[src.idx]
@@ -54,6 +58,24 @@ function collect_externals!(map::ExtMap, extbuf, u, o)
             extbuf[dst] = o[src.idx]
         end
     end
+    extbuf
+end
+
+# GPU Version
+function collect_externals!(map::ExtMap, extbuf, u, o)
+    _backend = get_backend(extbuf)
+    kernel = collect_ext_kernel!(_backend)
+    kernel(map.map, extbuf, u, o; ndrange=length(extbuf))
+end
+@kernel function collect_ext_kernel!(map, extbuf, @Const(u), @Const(o))
+    dst = @index(Global)
+    src = map[dst]
+    if src isa StateBufIdx
+        extbuf[dst] = u[src.idx]
+    else
+        extbuf[dst] = o[src.idx]
+    end
+    nothing
 end
 
 has_external_inputs(c::ComponentModel) = !iszero(extdim(c))

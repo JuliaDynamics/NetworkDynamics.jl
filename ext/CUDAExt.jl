@@ -2,7 +2,7 @@ module CUDAExt
 using NetworkDynamics: Network, NetworkLayer, ComponentBatch,
                        KAAggregator, AggregationMap, SparseAggregator,
                        LazyGBufProvider, EagerGBufProvider, LazyGBuf,
-                       dispatchT, iscudacompatible, executionstyle
+                       dispatchT, iscudacompatible, executionstyle, ExtMap
 using NetworkDynamics.PreallocationTools: DiffCache
 using NetworkDynamics: KernelAbstractions as KA
 
@@ -80,6 +80,14 @@ function _adapt_eager_gbufp(mapto, cacheto, gbp)
     map = adapt(mapto, gbp.map)
     cache = _adapt_diffcache(cacheto, gbp.diffcache)
     EagerGBufProvider(map, cache)
+end
+
+####
+#### Adapt external input map
+####
+Adapt.@adapt_structure ExtMap
+function Adapt.adapt_structure(to::Type{<:CuArray{<:AbstractFloat}}, em::ExtMap)
+    adapt(CuArray, em)
 end
 
 

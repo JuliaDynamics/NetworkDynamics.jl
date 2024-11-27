@@ -3,6 +3,7 @@ using Chairmarks: @b
 
 using NetworkDynamics: StateBufIdx, OutBufIdx, ExtMap, collect_externals!
 using Random
+using CUDA, Adapt
 
 @testset "test extmap performance" begin
     N = 10_000
@@ -13,15 +14,18 @@ using Random
 
     exbuf = zeros(N)
     fill!(exbuf, NaN)
-    b = @b collect_externals!(map, exbuf, u, o) # 6.583μs
+    b = @b collect_externals!($map, $exbuf, $u, $o) # 6.583μs
     @test iszero(b.allocs)
 
-    _map = [StateBufIdx(i) for i in 1:N]
-    map = ExtMap(Random.shuffle(_map))
-    exbuf = zeros(N)
-    fill!(exbuf, NaN)
-    b = @b collect_externals!(map, exbuf, u, o) # 5.6μs
-    @test iszero(b.allocs)
+    for to in (CuArray{Float64}, CuArray{Float32})
+        map_d = adapt(to, map)
+        exbuf_d = adapt(to, zeros(N))
+        u_d = adapt(to, u)
+        o_d = adapt(to, o)
+        b = @b collect_externals!($map_d, $exbuf_d, $u_d, $o_d)
+        display(b)
+        @test Vector(exbuf_d) ≈ exbuf
+    end
 end
 
 @testset "test construction of elements with external inputs" begin
