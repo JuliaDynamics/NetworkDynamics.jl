@@ -34,6 +34,8 @@ using ExplicitImports
     NetworkDynamics.CHECK_COMPONENT[] = true
 
     @safetestset "Symbolic Indexing Tests" begin include("symbolicindexing_test.jl") end
+    @safetestset "external input test" begin include("external_inputs_test.jl") end
+
     @safetestset "doctor test" begin include("doctor_test.jl") end
 
     @safetestset "Diffusion test" begin include("diffusion_test.jl") end

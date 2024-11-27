@@ -1,6 +1,3 @@
-abstract type SymbolicIndex{C,S} end
-abstract type SymbolicStateIndex{C,S} <: SymbolicIndex{C,S} end
-abstract type SymbolicParameterIndex{C,S} <: SymbolicIndex{C,S} end
 """
     VIndex{C,S} <: SymbolicStateIndex{C,S}
     idx = VIndex(comp, sub)
@@ -105,21 +102,28 @@ function SII.getname(x::SymbolicEdgeIndex)
     Symbol(prefix, Symbol(x.compidx), :₊, Symbol(x.subidx))
 end
 
-resolvecompidx(nw::Network, sni::SymbolicIndex{Int}) = sni.compidx
-function resolvecompidx(nw::Network, sni::SymbolicIndex{Symbol})
-    dict = sni isa SymbolicVertexIndex ? nw.im.unique_vnames : nw.im.unique_enames
+resolvecompidx(nw::Network, sni) = resolvecompidx(nw.im, sni)
+resolvecompidx(::IndexManager, sni::SymbolicIndex{Int}) = sni.compidx
+function resolvecompidx(im::IndexManager, sni::SymbolicIndex{Symbol})
+    dict = sni isa SymbolicVertexIndex ? im.unique_vnames : im.unique_enames
     if haskey(dict, sni.compidx)
         return dict[sni.compidx]
     else
         throw(ArgumentError("Could not resolve component index for $sni, the name might not be unique?"))
     end
 end
-getcomp(nw::Network, sni::SymbolicEdgeIndex) = nw.im.edgem[resolvecompidx(nw, sni)]
-getcomp(nw::Network, sni::SymbolicVertexIndex) = nw.im.vertexm[resolvecompidx(nw, sni)]
-getcomprange(nw::Network, sni::VIndex{<:Union{Symbol,Int}}) = nw.im.v_data[resolvecompidx(nw, sni)]
-getcomprange(nw::Network, sni::EIndex{<:Union{Symbol,Int}}) = nw.im.e_data[resolvecompidx(nw, sni)]
-getcompoutrange(nw::Network, sni::VIndex{<:Union{Symbol,Int}}) = nw.im.v_out[resolvecompidx(nw, sni)]
-getcompoutrange(nw::Network, sni::EIndex{<:Union{Symbol,Int}}) = flatrange(nw.im.e_out[resolvecompidx(nw, sni)])
+getcomp(nw::Network, sni) = getcomp(nw.im, sni)
+getcomp(im::IndexManager, sni::SymbolicEdgeIndex) = im.edgem[resolvecompidx(im, sni)]
+getcomp(im::IndexManager, sni::SymbolicVertexIndex) = im.vertexm[resolvecompidx(im, sni)]
+
+getcomprange(nw::Network, sni) = getcomprange(nw.im, sni)
+getcomprange(im::IndexManager, sni::VIndex{<:Union{Symbol,Int}}) = im.v_data[resolvecompidx(im, sni)]
+getcomprange(im::IndexManager, sni::EIndex{<:Union{Symbol,Int}}) = im.e_data[resolvecompidx(im, sni)]
+
+getcompoutrange(nw::Network, sni) = getcompoutrange(nw.im, sni)
+getcompoutrange(im::IndexManager, sni::VIndex{<:Union{Symbol,Int}}) = im.v_out[resolvecompidx(im, sni)]
+getcompoutrange(im::IndexManager, sni::EIndex{<:Union{Symbol,Int}}) = flatrange(im.e_out[resolvecompidx(im, sni)])
+
 getcompprange(nw::Network, sni::VPIndex{<:Union{Symbol,Int}}) = nw.im.v_para[resolvecompidx(nw, sni)]
 getcompprange(nw::Network, sni::EPIndex{<:Union{Symbol,Int}}) = nw.im.e_para[resolvecompidx(nw, sni)]
 

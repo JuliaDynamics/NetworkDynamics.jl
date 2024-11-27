@@ -283,13 +283,14 @@ struct VertexModel{F,G,FFT,OF,MM} <: ComponentModel
     g::G
     outsym::Vector{Symbol}
     ff::FFT
-    # parameters and option input sym
+    # parameters, optional input sym and optional external inputs
     psym::Vector{Symbol}
     insym::Union{Nothing, Vector{Symbol}}
+    extsym::Vector{SymbolicIndex}
     # observed
     obsf::OF
     obssym::Vector{Symbol}
-    # optional insyms
+    # metadata
     symmetadata::Dict{Symbol,Dict{Symbol, Any}}
     metadata::Dict{Symbol,Any}
     # cached symbol collections
@@ -334,9 +335,10 @@ struct EdgeModel{F,G,FFT,OF,MM} <: ComponentModel
     g::G
     outsym::@NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}}
     ff::FFT
-    # parameters and option input sym
+    # parameters, optional input sym and optional external inputs
     psym::Vector{Symbol}
     insym::Union{Nothing, @NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}}}
+    extsym::Vector{SymbolicIndex}
     # observed
     obsf::OF
     obssym::Vector{Symbol}
@@ -515,6 +517,20 @@ Gives the input dimension(s).
 indim(c::VertexModel)::Int = length(insym(c))
 indim(c::EdgeModel)::@NamedTuple{src::Int,dst::Int} = (; src=length(insym(c).src), dst=length(insym(c).dst))
 
+"""
+    extsym(c::ComponentModel)::Vector{Symbol}
+
+Retrieve the external input symbols of the component.
+"""
+extsym(c::ComponentModel) = c.extsym
+
+"""
+    extdim(c::ComponentModel)::Int
+
+Retrieve the external input dimension of the component.
+"""
+extdim(c::ComponentModel) = length(extsym(c))
+
 # return both "observed" outputs (those that do not shadow states) and true observed
 outsym_flat(c::ComponentModel) = c._outsym_flat
 obssym_all(c::ComponentModel) = c._obssym_all
@@ -570,12 +586,13 @@ dispatchT(T::Type{<:EdgeModel}) = EdgeModel{nothing,nothing,nothing,nothing,noth
 # TODO: introduce batchequal hash for faster batching of component models
 batchequal(a, b) = false
 function batchequal(a::ComponentModel, b::ComponentModel)
-    compf(a) == compf(b)    || return false
-    compg(a) == compg(b)    || return false
-    fftype(a) == fftype(b)  || return false
-    dim(a)   == dim(b)      || return false
-    outdim(a)  == outdim(b) || return false
-    pdim(a)  == pdim(b)     || return false
+    compf(a)  == compf(b)  || return false
+    compg(a)  == compg(b)  || return false
+    fftype(a) == fftype(b) || return false
+    dim(a)    == dim(b)    || return false
+    outdim(a) == outdim(b) || return false
+    pdim(a)   == pdim(b)   || return false
+    extdim(a) == extdim(b) || return false
     return true
 end
 
@@ -957,6 +974,15 @@ function _fill_defaults(T, @nospecialize(kwargs))
     dict[:_outsym_flat] = _outsym_flat
     dict[:_obssym_all] = setdiff(_outsym_flat, sym) ∪ obssym
 
+    ####
+    #### Extsym
+    ####
+    if haskey(dict, :extsym)
+        @assert dict[:extsym] isa Vector{<:SymbolicIndex}
+    else
+        dict[:extsym] = SymbolicIndex[]
+    end
+
 
     # check for name clashes (at the end because only now sym, psym, obssym are initialized)
     _s  = sym
@@ -1098,20 +1124,22 @@ function Base.:(==)(cf1::ComponentModel, cf2::ComponentModel)
 end
 
 function compfg(c::VertexModel)
-   (out, du, u, in, p, t)  -> begin
+    (out, du, u, in, p, t, ext=nothing) -> begin
         f = compf(c)
-        isnothing(f) || f(du, u, in, p, t)
+        fargs = isnothing(ext) ? (du, u, in, p, t) : (du, u, in, p, t, ext)
+        isnothing(f) || f(fargs...)
         compg(c)(_gargs(fftype(c), (out,), du, u, (in,), p, t)...)
         nothing
-   end
+    end
 end
 function compfg(c::EdgeModel)
-   (out1, out2, du, u, in1, in2, p, t)  -> begin
+    (out1, out2, du, u, in1, in2, p, t, ext=nothing) -> begin
         f = compf(c)
-        isnothing(f) || f(du, u, in1, in2, p, t)
+        fargs = isnothing(ext) ? (du, u, in1, in2, p, t) : (du, u, in1, in2, p, t, ext)
+        isnothing(f) || f(fargs...)
         compg(c)(_gargs(fftype(c), (out1,out2), du, u, (in1,in2), p, t)...)
         nothing
-   end
+    end
 end
 _gargs(::PureFeedForward, outs, du, u, ins, p, t) = (outs..., ins..., p, t)
 _gargs(::FeedForward, outs, du, u, ins, p, t) = (outs..., u, ins..., p, t)

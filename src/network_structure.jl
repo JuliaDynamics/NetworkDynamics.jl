@@ -6,11 +6,13 @@ mutable struct IndexManager{G}
     v_out::Vector{UnitRange{Int}}   # v range in output buf
     v_para::Vector{UnitRange{Int}}  # v para in flat para
     v_aggr::Vector{UnitRange{Int}}  # v input in aggbuf
+    v_ext::Vector{UnitRange{Int}}   # v external inputs in ext buf
     # positions of edge data
     e_data::Vector{UnitRange{Int}}  # e data in flat states
     e_out::Vector{@NamedTuple{src::UnitRange{Int},dst::UnitRange{Int}}}   # e range in output buf
     e_para::Vector{UnitRange{Int}}  # e para in flat para
     e_gbufr::Vector{@NamedTuple{src::UnitRange{Int},dst::UnitRange{Int}}}   # e range in input buf
+    e_ext::Vector{UnitRange{Int}}   # v external inputs in ext buf
     # metadata
     edepth::Int
     vdepth::Int
@@ -19,6 +21,7 @@ mutable struct IndexManager{G}
     lastidx_p::Int
     lastidx_aggr::Int
     lastidx_gbuf::Int
+    lastidx_extbuf::Int
     vertexm::Vector{VertexModel}
     edgem::Vector{EdgeModel}
     aliased_vertexms::IdDict{VertexModel, @NamedTuple{idxs::Vector{Int}, hash::UInt}}
@@ -31,13 +34,14 @@ mutable struct IndexManager{G}
         unique_vnames = unique_mappings(getproperty.(vertexm, :name), 1:nv(g))
         unique_enames = unique_mappings(getproperty.(edgem, :name), 1:ne(g))
         new{typeof(g)}(g, collect(edges(g)),
-                       (Vector{UnitRange{Int}}(undef, nv(g)) for i in 1:4)...,
+                       (Vector{UnitRange{Int}}(undef, nv(g)) for i in 1:5)...,
                        Vector{UnitRange{Int}}(undef, ne(g)),
                        Vector{@NamedTuple{src::UnitRange{Int},dst::UnitRange{Int}}}(undef, ne(g)),
                        Vector{UnitRange{Int}}(undef, ne(g)),
                        Vector{@NamedTuple{src::UnitRange{Int},dst::UnitRange{Int}}}(undef, ne(g)),
+                       Vector{UnitRange{Int}}(undef, ne(g)),
                        edepth, vdepth,
-                       0, 0, 0, 0, 0,
+                       0, 0, 0, 0, 0, 0,
                        vertexm, edgem,
                        aliased_vertexm_hashes,
                        aliased_edgem_hashes,
@@ -62,10 +66,9 @@ end
 
 dim(im::IndexManager) = im.lastidx_dynamic
 pdim(im::IndexManager) = im.lastidx_p
-sdim(im::IndexManager) = im.lastidx_static - im.lastidx_dynamic
 
 
-struct Network{EX<:ExecutionStyle,G,NL,VTup,MM,CT,GBT}
+struct Network{EX<:ExecutionStyle,G,NL,VTup,MM,CT,GBT,EM}
     "vertex batches of same function"
     vertexbatches::VTup
     "network layer"
@@ -73,11 +76,13 @@ struct Network{EX<:ExecutionStyle,G,NL,VTup,MM,CT,GBT}
     "index manager"
     im::IndexManager{G}
     "lazy cache pool"
-    caches::@NamedTuple{output::CT,aggregation::CT}
+    caches::@NamedTuple{output::CT,aggregation::CT,external::CT}
     "mass matrix"
     mass_matrix::MM
     "Gather buffer provider (lazy or eager)"
     gbufprovider::GBT
+    "map to gather external inputs"
+    extmap::EM
 end
 executionstyle(::Network{ex}) where {ex} = ex()
 nvbatches(::Network) = length(vertexbatches)
@@ -109,6 +114,7 @@ function get_output_cache(nw::Network, T)
     get_tmp(nw.caches.output, T)
 end
 get_aggregation_cache(nw::Network, T) = get_tmp(nw.caches.aggregation, T)
+get_extinput_cache(nw::Network, T) = get_tmp(nw.caches.external, T)
 
 iscudacompatible(nw::Network) = iscudacompatible(executionstyle(nw)) && iscudacompatible(nw.layer.aggregator)
 
@@ -125,7 +131,7 @@ struct NetworkLayer{GT,ETup,AF}
     vdepth::Int # potential becomes range for multilayer
 end
 
-struct ComponentBatch{T,F,G,FFT,DIM,PDIM,INDIMS,OUTDIMS,IV}
+struct ComponentBatch{T,F,G,FFT,DIM,PDIM,INDIMS,OUTDIMS,EXTDIM,IV}
     "indices contained in batch"
     indices::IV
     "internal function"
@@ -141,9 +147,11 @@ struct ComponentBatch{T,F,G,FFT,DIM,PDIM,INDIMS,OUTDIMS,IV}
     inbufstride::BatchStride{INDIMS}
     "outputbuf: dimension(s) and first index"
     outbufstride::BatchStride{OUTDIMS}
-    function ComponentBatch(dT, i, f, g, ff, ss, ps, is, os)
-        new{dT,typeof.((f,g,ff))...,stridesT.((ss, ps, is, os))...,typeof(i)}(
-            i, f, g, ff, ss, ps, is, os)
+    "external inputs: dimension and first index"
+    extbufstride::BatchStride{EXTDIM}
+    function ComponentBatch(dT, i, f, g, ff, ss, ps, is, os, es)
+        new{dT,typeof.((f,g,ff))...,stridesT.((ss, ps, is, os, es))...,typeof(i)}(
+            i, f, g, ff, ss, ps, is, os, es)
     end
 end
 
@@ -152,6 +160,8 @@ end
 @inline compf(b::ComponentBatch) = b.compf
 @inline compg(b::ComponentBatch) = b.compg
 @inline fftype(b::ComponentBatch) = b.ff
+@inline pdim(b::ComponentBatch) = b.pstride.strides
+@inline extdim(b::ComponentBatch) = b.extbufstride.strides
 
 @inline state_range(batch) = _fullrange(batch.statestride, length(batch))
 
@@ -161,22 +171,25 @@ end
 @inline out_range(batch, i, j)    = _range(batch.outbufstride, i, j)
 @inline in_range(batch, i)        = _range(batch.inbufstride, i)
 @inline in_range(batch, i, j)     = _range(batch.inbufstride, i, j)
+@inline extbuf_range(batch, i)    = _range(batch.extbufstride, i)
 
-function register_vertices!(im::IndexManager, dim, outdim, pdim, idxs)
+function register_vertices!(im::IndexManager, idxs, dim, outdim, pdim, extdim)
     for i in idxs
         im.v_data[i] = _nexturange!(im, dim)
         im.v_out[i]  = _nextoutrange!(im, outdim)
         im.v_para[i] = _nextprange!(im, pdim)
         im.v_aggr[i] = _nextaggrrange!(im, im.edepth)
+        im.v_ext[i]  = _nextextrange!(im, extdim)
     end
     (;
      state = BatchStride(first(im.v_data[first(idxs)]), dim),
      p     = BatchStride(first(im.v_para[first(idxs)]), pdim),
      in    = BatchStride(first(im.v_aggr[first(idxs)]), im.edepth),
      out   = BatchStride(first(im.v_out[first(idxs)]), outdim),
+     ext   = BatchStride(first(im.v_ext[first(idxs)]), extdim),
     )
 end
-function register_edges!(im::IndexManager, dim, outdim, pdim, idxs)
+function register_edges!(im::IndexManager, idxs, dim, outdim, pdim, extdim)
     for i in idxs
         e = im.edgevec[i]
         im.e_data[i]  = _nexturange!(im, dim)
@@ -185,12 +198,14 @@ function register_edges!(im::IndexManager, dim, outdim, pdim, idxs)
         im.e_para[i]  = _nextprange!(im, pdim)
         im.e_gbufr[i] = (src = _nextgbufrange!(im, im.vdepth),
                          dst = _nextgbufrange!(im, im.vdepth))
+        im.e_ext[i]  = _nextextrange!(im, extdim)
     end
     (;
      state = BatchStride(first(im.e_data[first(idxs)]), dim),
      p     = BatchStride(first(im.e_para[first(idxs)]), pdim),
      in    = BatchStride(first(flatrange(im.e_gbufr[first(idxs)])), (;src=im.vdepth, dst=im.vdepth)),
      out   = BatchStride(first(flatrange(im.e_out[first(idxs)])), (;src=outdim.src, dst=outdim.dst)),
+     ext   = BatchStride(first(im.e_ext[first(idxs)]), extdim),
     )
 end
 function _nexturange!(im::IndexManager, N)
@@ -218,12 +233,18 @@ function _nextgbufrange!(im::IndexManager, N)
     im.lastidx_gbuf = newlast
     return range
 end
+function _nextextrange!(im::IndexManager, N)
+    newlast, range = _nextrange(im.lastidx_extbuf, N)
+    im.lastidx_extbuf = newlast
+    return range
+end
 _nextrange(last, N) = last + N, last+1:last+N
 
 function isdense(im::IndexManager)
-    pidxs = Int[]
-    stateidxs = Int[]
-    outidxs = Int[]
+    stateidxs = sizehint!(Int[], im.lastidx_dynamic)
+    pidxs     = sizehint!(Int[], im.lastidx_p)
+    outidxs   = sizehint!(Int[], im.lastidx_out)
+    extidxs   = sizehint!(Int[], im.lastidx_extbuf)
     for dataranges in (im.v_data, im.e_data)
         for range in dataranges
             append!(stateidxs, range)
@@ -239,11 +260,18 @@ function isdense(im::IndexManager)
             append!(outidxs, flatrange(range))
         end
     end
+    for extranges in (im.v_ext, im.e_ext)
+        for range in extranges
+            append!(extidxs, flatrange(range))
+        end
+    end
     sort!(pidxs)
     sort!(stateidxs)
+    sort!(outidxs)
     sort!(outidxs)
     @assert pidxs == 1:im.lastidx_p
     @assert stateidxs == 1:im.lastidx_dynamic
     @assert outidxs == 1:im.lastidx_out
+    @assert extidxs == 1:im.lastidx_extbuf
     return true
 end
