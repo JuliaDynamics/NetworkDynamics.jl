@@ -10,7 +10,7 @@ mutable struct IndexManager{G}
     e_data::Vector{UnitRange{Int}}  # e data in flat states
     e_out::Vector{@NamedTuple{src::UnitRange{Int},dst::UnitRange{Int}}}   # e range in output buf
     e_para::Vector{UnitRange{Int}}  # e para in flat para
-    e_gbufr::Vector{UnitRange{Int}} # e input range in gather buffer
+    e_gbufr::Vector{@NamedTuple{src::UnitRange{Int},dst::UnitRange{Int}}}   # e range in input buf
     # metadata
     edepth::Int
     vdepth::Int
@@ -34,7 +34,8 @@ mutable struct IndexManager{G}
                        (Vector{UnitRange{Int}}(undef, nv(g)) for i in 1:4)...,
                        Vector{UnitRange{Int}}(undef, ne(g)),
                        Vector{@NamedTuple{src::UnitRange{Int},dst::UnitRange{Int}}}(undef, ne(g)),
-                       (Vector{UnitRange{Int}}(undef, ne(g)) for i in 1:2)...,
+                       Vector{UnitRange{Int}}(undef, ne(g)),
+                       Vector{@NamedTuple{src::UnitRange{Int},dst::UnitRange{Int}}}(undef, ne(g)),
                        edepth, vdepth,
                        0, 0, 0, 0, 0,
                        vertexm, edgem,
@@ -124,46 +125,30 @@ struct NetworkLayer{GT,ETup,AF}
     vdepth::Int # potential becomes range for multilayer
 end
 
-abstract type ComponentBatch{F} end
-
-struct VertexBatch{T<:VertexModel,F,G,FFT,IV<:AbstractVector{<:Integer}} <: ComponentBatch{T}
-    "vertex indices contained in batch"
+struct ComponentBatch{T,F,G,FFT,DIM,PDIM,INDIMS,OUTDIMS,IV}
+    "indices contained in batch"
     indices::IV
-    "vertex function"
+    "internal function"
     compf::F
-    "vertex output function"
+    "output function"
     compg::G
     ff::FFT
     "state: dimension and first index"
-    statestride::BatchStride{1}
-    "output: dimension and first index"
-    outstride::BatchStride{1}
+    statestride::BatchStride{DIM}
     "parameter: dimension and first index"
-    pstride::BatchStride{1}
-    "aggregation: dimension and first index"
-    aggbufstride::BatchStride{1}
-end
-
-struct EdgeBatch{T<:EdgeModel,F,G,FFT,IV<:AbstractVector{<:Integer}} <: ComponentBatch{T}
-    "edge indices (as in edge iterator) contained in batch"
-    indices::IV
-    "edge function"
-    compf::F
-    "edge output funciton"
-    compg::G
-    ff::FFT
-    "state: dimension and first index"
-    statestride::BatchStride{1}
-    "output: dimension and first index"
-    outstride::BatchStride{2}
-    "parameter: dimension and first index"
-    pstride::BatchStride{1}
-    "gathered vector: dimension and first index"
-    gbufstride::BatchStride{1}
+    pstride::BatchStride{PDIM}
+    "inputbuf: dimension(s) and first index"
+    inbufstride::BatchStride{INDIMS}
+    "outputbuf: dimension(s) and first index"
+    outbufstride::BatchStride{OUTDIMS}
+    function ComponentBatch(dT, i, f, g, ff, ss, ps, is, os)
+        new{dT,typeof.((f,g,ff))...,stridesT.((ss, ps, is, os))...,typeof(i)}(
+            i, f, g, ff, ss, ps, is, os)
+    end
 end
 
 @inline Base.length(cb::ComponentBatch) = Base.length(cb.indices)
-@inline dispatchT(::ComponentBatch{F}) where {F} = F
+@inline dispatchT(::ComponentBatch{T}) where {T} = T
 @inline compf(b::ComponentBatch) = b.compf
 @inline compg(b::ComponentBatch) = b.compg
 @inline fftype(b::ComponentBatch) = b.ff
@@ -172,10 +157,10 @@ end
 
 @inline state_range(batch, i)     = _range(batch.statestride, i)
 @inline parameter_range(batch, i) = _range(batch.pstride, i)
-@inline out_range(batch, i) = _range(batch.outstride, i)
-@inline out_range(batch, i, j) = _range(batch.outstride, i, j)
-@inline aggbuf_range(batch, i)    = _range(batch.aggbufstride, i)
-@inline gbuf_range(batch, i)      = _range(batch.gbufstride, i)
+@inline out_range(batch, i)       = _range(batch.outbufstride, i)
+@inline out_range(batch, i, j)    = _range(batch.outbufstride, i, j)
+@inline in_range(batch, i)        = _range(batch.inbufstride, i)
+@inline in_range(batch, i, j)     = _range(batch.inbufstride, i, j)
 
 function register_vertices!(im::IndexManager, dim, outdim, pdim, idxs)
     for i in idxs
@@ -184,10 +169,12 @@ function register_vertices!(im::IndexManager, dim, outdim, pdim, idxs)
         im.v_para[i] = _nextprange!(im, pdim)
         im.v_aggr[i] = _nextaggrrange!(im, im.edepth)
     end
-    (BatchStride(first(im.v_data[first(idxs)]), dim),
-     BatchStride(first(im.v_out[first(idxs)]), outdim),
-     BatchStride(first(im.v_para[first(idxs)]), pdim),
-     BatchStride(first(im.v_aggr[first(idxs)]), im.edepth))
+    (;
+     state = BatchStride(first(im.v_data[first(idxs)]), dim),
+     p     = BatchStride(first(im.v_para[first(idxs)]), pdim),
+     in    = BatchStride(first(im.v_aggr[first(idxs)]), im.edepth),
+     out   = BatchStride(first(im.v_out[first(idxs)]), outdim),
+    )
 end
 function register_edges!(im::IndexManager, dim, outdim, pdim, idxs)
     for i in idxs
@@ -196,12 +183,15 @@ function register_edges!(im::IndexManager, dim, outdim, pdim, idxs)
         im.e_out[i]   = (src = _nextoutrange!(im, outdim.src),
                          dst = _nextoutrange!(im, outdim.dst))
         im.e_para[i]  = _nextprange!(im, pdim)
-        im.e_gbufr[i] = _nextgbufrange!(im, im.vdepth)
+        im.e_gbufr[i] = (src = _nextgbufrange!(im, im.vdepth),
+                         dst = _nextgbufrange!(im, im.vdepth))
     end
-    (BatchStride(first(im.e_data[first(idxs)]), dim),
-     BatchStride(first(flatrange(im.e_out[first(idxs)])), (outdim.src, outdim.dst)),
-     BatchStride(first(im.e_para[first(idxs)]), pdim),
-     BatchStride(first(im.e_gbufr[first(idxs)]), im.vdepth))
+    (;
+     state = BatchStride(first(im.e_data[first(idxs)]), dim),
+     p     = BatchStride(first(im.e_para[first(idxs)]), pdim),
+     in    = BatchStride(first(flatrange(im.e_gbufr[first(idxs)])), (;src=im.vdepth, dst=im.vdepth)),
+     out   = BatchStride(first(flatrange(im.e_out[first(idxs)])), (;src=outdim.src, dst=outdim.dst)),
+    )
 end
 function _nexturange!(im::IndexManager, N)
     newlast, range = _nextrange(im.lastidx_dynamic, N)

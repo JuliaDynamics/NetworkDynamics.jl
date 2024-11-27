@@ -1,11 +1,15 @@
-struct BatchStride{N}
+struct BatchStride{T}
     first::Int
-    strides::NTuple{N,Int}
+    strides::T # either StaticInt, Tuple or NamedTuple of StaticInt
 end
-BatchStride(first::Int, stride::Int) = BatchStride(first, (stride,))
+stridesT(::BatchStride{T}) where {T} = T
+function BatchStride(first::Int, strides::Union{Tuple,NamedTuple})
+    strides = map(Static.static, strides)
+    BatchStride{typeof(strides)}(first, strides)
+end
+BatchStride(first::Int, stride::Int) = BatchStride(first, Static.static(stride))
 
 # get full stride length (all substrides)
-_fullstride(bs::BatchStride{1}) = @inbounds bs.strides[1]
 _fullstride(bs::BatchStride) = sum(bs.strides)
 
 # full range for N elements with this stride
@@ -14,14 +18,20 @@ _fullstride(bs::BatchStride) = sum(bs.strides)
 end
 
 # range of i-th element
-@inline function _range(bs::BatchStride{1}, i)
+@inline function _range(bs::BatchStride{<:StaticInt}, i)
     start = bs.first + (i - 1) * _fullstride(bs)
     start:start+_fullstride(bs)-1
 end
 # subrange j of i-th element
-@inline function _range(bs::BatchStride{N}, i, j) where {N}
-    start = bs.first + (i - 1) * _fullstride(bs) + sum(bs.strides[1:j-1], init=0)
+@inline function _range(bs::BatchStride{<:Union{Tuple, NamedTuple}}, i, j)
+    start = bs.first + (i - 1) * _fullstride(bs) + _sum_upto_dim(bs.strides, j)
     start:start+bs.strides[j]-1
+end
+@inline _sum_upto_dim(t::Tuple, idx, init=0) = sum(t[1:idx-1], init=0)
+@inline _sum_upto_dim(t::NamedTuple, idx::Int) = _sum_upto_dim(values(t), idx)
+@inline function _sum_upto_dim(t::NamedTuple, name::Symbol)
+    idx = findfirst(isequal(name), keys(t))
+    _sum_upto_dim(values(t), idx)
 end
 
 flatrange(r::AbstractRange) = r

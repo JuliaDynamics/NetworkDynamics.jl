@@ -277,76 +277,36 @@ end
 
 function VertexBatch(im::IndexManager, idxs::Vector{Int}; verbose)
     components = @view im.vertexm[idxs]
+    _compT  = dispatchT(first(components))
+    _compf  = compf(first(components))
+    _compg  = compg(first(components))
+    _ff     = fftype(first(components))
+    _dim    = dim(first(components))
+    _pdim   = pdim(first(components))
+    _outdim = outdim(first(components))
 
-    try
-        # TODO: those checks seems expensive and redundant
-        # _compT = dispatchT(only(unique(dispatchT, components)))
-        # _compf = compf(only(unique(compf, components)))
-        # _compg = compg(only(unique(compg, components)))
-        # _ff    = fftype(only(unique(fftype, components)))
-        # _dim = dim(only(unique(dim, components)))
-        # _outdim = outdim(only(unique(outdim, components)))
-        # _pdim = pdim(only(unique(pdim, components)))
-        _compT = dispatchT(first(components))
-        _compf = compf(first(components))
-        _compg = compg(first(components))
-        _ff    = fftype(first(components))
-        _dim = dim(first(components))
-        _outdim = outdim(first(components))
-        _pdim = pdim(first(components))
+    strides = register_vertices!(im, _dim, _outdim, _pdim, idxs)
 
-        (statestride, outstride, pstride, aggbufstride) =
-            register_vertices!(im, _dim, _outdim, _pdim, idxs)
+    verbose && println(" - VertexBatch: dim=$(_dim), pdim=$(_pdim), length=$(length(idxs))")
 
-        verbose &&
-        println(" - VertexBatch: dim=$(_dim), pdim=$(_pdim), length=$(length(idxs))")
-
-        VertexBatch{_compT, typeof(_compf), typeof(_compg), typeof(_ff), typeof(idxs)}(
-            idxs, _compf, _compg, _ff, statestride, outstride, pstride, aggbufstride)
-    catch e
-        if e isa ArgumentError && startswith(e.msg, "Collection has multiple elements")
-            throw(ArgumentError("Provided vertex models $idxs use the same function but have different metadata (dim, pdim,type,...)"))
-        else
-            rethrow(e)
-        end
-    end
+    ComponentBatch(_compT, idxs, _compf, _compg, _ff, strides.state, strides.p, strides.in, strides.out)
 end
 
 function EdgeBatch(im::IndexManager, idxs::Vector{Int}; verbose)
     components = @view im.edgem[idxs]
+    _compT  = dispatchT(first(components))
+    _compf  = compf(first(components))
+    _compg  = compg(first(components))
+    _ff     = fftype(first(components))
+    _dim    = dim(first(components))
+    _pdim   = pdim(first(components))
+    _outdim = outdim(first(components))
 
-    try
-        # TODO: those checks seems expensive and redundant
-        # _compT = dispatchT(only(unique(dispatchT, components)))
-        # _compf = compf(only(unique(compf, components)))
-        # _compg = compg(only(unique(compg, components)))
-        # _ff    = fftype(only(unique(fftype, components)))
-        # _dim = dim(only(unique(dim, components)))
-        # _outdim = outdim(only(unique(outdim, components)))
-        # _pdim = pdim(only(unique(pdim, components)))
-        _compT = dispatchT(first(components))
-        _compf = compf(first(components))
-        _compg = compg(first(components))
-        _ff    = fftype(first(components))
-        _dim = dim(first(components))
-        _outdim = outdim(first(components))
-        _pdim = pdim(first(components))
+    strides = register_edges!(im, _dim, _outdim, _pdim, idxs)
 
-        (statestride, outstride, pstride, gbufstride) =
-            register_edges!(im, _dim, _outdim, _pdim, idxs)
+    verbose && println(" - EdgeBatch: dim=$(_dim), pdim=$(_pdim), length=$(length(idxs))")
 
-        verbose &&
-        println(" - EdgeBatch: dim=$(_dim), pdim=$(_pdim), length=$(length(idxs))")
-
-        EdgeBatch{_compT, typeof(_compf), typeof(_compg), typeof(_ff), typeof(idxs)}(
-            idxs, _compf, _compg, _ff, statestride, outstride, pstride, gbufstride)
-    catch e
-        if e isa ArgumentError && startswith(e.msg, "Collection has multiple elements")
-            throw(ArgumentError("Provided edge models $idxs use the same function but have different metadata (dim, pdim,type,...)"))
-        else
-            rethrow(e)
-        end
-    end
+    ComponentBatch(_compT, idxs, _compf, _compg, _ff, strides.state, strides.p, strides.in, strides.out)
 end
 
 batch_by_idxs(v, idxs::Vector{Vector{Int}}) = [v for batch in idxs]

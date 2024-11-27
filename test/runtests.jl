@@ -30,10 +30,10 @@ using ExplicitImports
     NetworkDynamics.CHECK_COMPONENT[] = false
     @safetestset "construction test" begin include("construction_test.jl") end
     @safetestset "Aggregation Tests" begin include("aggregators_test.jl") end
-    @safetestset "Symbolic Indexing Tests" begin include("symbolicindexing_test.jl") end
     @safetestset "massmatrix test" begin include("massmatrix_test.jl") end
     NetworkDynamics.CHECK_COMPONENT[] = true
 
+    @safetestset "Symbolic Indexing Tests" begin include("symbolicindexing_test.jl") end
     @safetestset "doctor test" begin include("doctor_test.jl") end
 
     @safetestset "Diffusion test" begin include("diffusion_test.jl") end

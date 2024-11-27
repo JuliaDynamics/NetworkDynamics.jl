@@ -1,8 +1,8 @@
 module CUDAExt
-using NetworkDynamics: Network, NetworkLayer, VertexBatch, EdgeBatch,
+using NetworkDynamics: Network, NetworkLayer, ComponentBatch,
                        KAAggregator, AggregationMap, SparseAggregator,
                        LazyGBufProvider, EagerGBufProvider, LazyGBuf,
-                       dispatchT, compf, compg, fftype, iscudacompatible, executionstyle
+                       dispatchT, iscudacompatible, executionstyle
 using NetworkDynamics.PreallocationTools: DiffCache
 using NetworkDynamics: KernelAbstractions as KA
 
@@ -84,29 +84,14 @@ end
 ####
 #### Adapt VertexBatch/EdgeBatch
 ####
-function Adapt.adapt_structure(to::Type{<:CuArray{<:AbstractFloat}}, b::VertexBatch)
+function Adapt.adapt_structure(to::Type{<:CuArray{<:AbstractFloat}}, b::ComponentBatch)
     Adapt.adapt_structure(CuArray, b)
 end
-function Adapt.adapt_structure(to::Type{<:CuArray{<:AbstractFloat}}, b::EdgeBatch)
-    Adapt.adapt_structure(CuArray, b)
+function Adapt.adapt_structure(to, b::ComponentBatch)
+    indices = adapt(to, b.indices)
+    ComponentBatch(dispatchT(b), indices, b.compf, b.compg, b.ff,
+        b.statestride, b.pstride, b.inbufstride, b.outbufstride)
 end
-function Adapt.adapt_structure(to, b::VertexBatch)
-    idxs = adapt(to, b.indices)
-    f = compf(b)
-    g = compg(b)
-    ff = fftype(b)
-    VertexBatch{dispatchT(b), typeof.((f,g,ff,idxs))...}(
-        idxs, f, g, ff, b.statestride, b.outstride, b.pstride, b.aggbufstride)
-end
-function Adapt.adapt_structure(to, b::EdgeBatch)
-    idxs = adapt(to, b.indices)
-    f = compf(b)
-    g = compg(b)
-    ff = fftype(b)
-    EdgeBatch{dispatchT(b), typeof.((f,g,ff,idxs))...}(
-        idxs, f, g, ff, b.statestride, b.outstride, b.pstride, b.gbufstride)
-end
-
 
 ####
 #### utils

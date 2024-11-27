@@ -142,7 +142,7 @@ end
         _o   = _needs_out(fg, batch) ? view(o, out_range(batch, i))         : nothing
         _du  = _needs_du(fg, batch)  ? view(du, state_range(batch, i))      : nothing
         _u   = _needs_u(fg, batch)   ? view(u,  state_range(batch, i))      : nothing
-        _agg = _needs_in(fg, batch)  ? view(aggbuf, aggbuf_range(batch, i)) : nothing
+        _agg = _needs_in(fg, batch)  ? view(aggbuf, in_range(batch, i))     : nothing
         _p   = _needs_p(fg, batch) && _indexable(p) ? view(p,  parameter_range(batch, i))  : p
         evalf(fg, batch) && apply_compf(compf(batch), _du, _u, (_agg,), _p, t)
         evalg(fg, batch) && apply_compg(fftype(batch), compg(batch), (_o,), _u, (_agg,), _p, t)
