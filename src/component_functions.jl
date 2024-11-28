@@ -1136,6 +1136,8 @@ Returns the transformed `VertexModel`.
 """
 function ff_to_constraint(v::VertexModel)
     hasff(v) || error("Vertex does not have feed forward property.")
+    # TODO: ff_to_constraint with ext einput
+    has_external_input(v) && error("ff_to_constraint for model with external input not implemented.")
 
     olddim = dim(v)
     odim = outdim(v)
