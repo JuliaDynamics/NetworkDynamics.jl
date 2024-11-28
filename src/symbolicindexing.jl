@@ -426,7 +426,7 @@ function SII.observed(nw::Network, snis)
                 outidx[i] = _range[idx]
             elseif (idx=findfirst(isequal(sni.subidx), obssym(cf))) != nothing #found in observed
                 _obsf = _get_observed_f(nw, cf, resolvecompidx(nw, sni))
-                obsfuns[i] = (u, outbuf, aggbuf, p, t) -> _obsf(u, outbuf, aggbuf, p, t)[idx]
+                obsfuns[i] = (u, outbuf, aggbuf, extbuf, p, t) -> _obsf(u, outbuf, aggbuf, extbuf, p, t)[idx]
             else
                 throw(ArgumentError("Cannot resolve observable $sni"))
             end
@@ -436,7 +436,7 @@ function SII.observed(nw::Network, snis)
 
     if isscalar
         @closure (u, p, t) -> begin
-            outbuf, aggbuf = get_buffers(nw, u, p, t; initbufs)
+            outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs)
             if !isempty(stateidx)
                 idx = only(stateidx).second
                 u[idx]
@@ -445,12 +445,12 @@ function SII.observed(nw::Network, snis)
                 outbuf[idx]
             else
                 obsf = only(obsfuns).second
-                obsf(u, outbuf, aggbuf, p, t)::eltype(u)
+                obsf(u, outbuf, aggbuf, extbuf, p, t)::eltype(u)
             end
         end
     else
         @closure (u, p, t) -> begin
-            outbuf, aggbuf = get_buffers(nw, u, p, t; initbufs)
+            outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs)
 
             out = similar(u, length(snis))
             for (i, statei) in stateidx
@@ -460,7 +460,7 @@ function SII.observed(nw::Network, snis)
                 out[i] = outbuf[outi]
             end
             for (i, obsf) in obsfuns
-                out[i] = obsf(u, outbuf, aggbuf, p, t)::eltype(u)
+                out[i] = obsf(u, outbuf, aggbuf, extbuf, p, t)::eltype(u)
             end
             out
         end
@@ -487,11 +487,17 @@ function _get_observed_f(nw::Network, cf::VertexModel, vidx)
     N = length(cf.obssym)
     ur   = nw.im.v_data[vidx]
     aggr = nw.im.v_aggr[vidx]
+    extr = nw.im.v_out[vidx]
     pr   = nw.im.v_para[vidx]
     ret = Vector{Float64}(undef, N)
 
-    @closure (u, outbuf, aggbuf, p, t) -> begin
-        cf.obsf(ret, view(u, ur), view(aggbuf, aggr), view(p, pr), t)
+    @closure (u, outbuf, aggbuf, extbuf, p, t) -> begin
+        ins = if has_external_input(cf)
+            (view(aggbuf, aggr), view(extbuf, extr))
+        else
+            (view(aggbuf, aggr), )
+        end
+        cf.obsf(ret, view(u, ur), ins..., view(p, pr), t)
         ret
     end
 end
@@ -501,11 +507,16 @@ function _get_observed_f(nw::Network, cf::EdgeModel, eidx)
     ur    = nw.im.e_data[eidx]
     esrcr = nw.im.v_out[nw.im.edgevec[eidx].src]
     edstr = nw.im.v_out[nw.im.edgevec[eidx].dst]
+    extr = nw.im.v_out[vidx]
     pr   =  nw.im.e_para[eidx]
     ret = Vector{Float64}(undef, N)
 
-    @closure (u, outbuf, aggbuf, p, t) -> begin
-        cf.obsf(ret, view(u, ur), view(outbuf, esrcr), view(outbuf, edstr), view(p, pr), t)
+    @closure (u, outbuf, aggbuf, extbuf, p, t) -> begin
+        ins = (view(outbuf, esrcr), view(outbuf, edstr))
+        if has_external_input(cf)
+            (ins..., view(aggbuf, aggr), view(extbuf, extr))
+        end
+        cf.obsf(ret, view(u, ur), ins..., view(p, pr), t)
         ret
     end
 end

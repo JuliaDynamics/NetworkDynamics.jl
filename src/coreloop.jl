@@ -50,6 +50,7 @@ end
 function get_buffers(nw, u, p, t; initbufs)
     o = get_output_cache(nw, u)
     aggbuf = get_aggregation_cache(nw, u)
+    extbuf = has_external_input(nw) ? get_extinput_cache(nw, u) : nothing
     if initbufs
         du = nothing
         duopt = (du, u, o, p, t)
@@ -63,6 +64,8 @@ function get_buffers(nw, u, p, t; initbufs)
         process_batches!(ex, Val{:g}(), !hasff, nw.layer.edgebatches, (nothing, nothing), duopt)
         # process batches might be async so sync before next step
         ex isa KAExecution && KernelAbstractions.synchronize(get_backend(u))
+        # gather the external inputs
+        has_external_input(nw) && collect_externals!(nw.extmap, extbuf, u, o)
         # gather the vertex results for edges with ff
         gather!(nw.gbufprovider, gbuf, o) # 2.6ms
         # execute g for edges with ff
@@ -72,7 +75,7 @@ function get_buffers(nw, u, p, t; initbufs)
         # aggegrate the results
         aggregate!(nw.layer.aggregator, aggbuf, o)
     end
-    o, aggbuf
+    o, aggbuf, extbuf
 end
 
 @inline function process_batches!(::SequentialExecution, fg, filt::F, batches, inbufs, duopt) where {F}

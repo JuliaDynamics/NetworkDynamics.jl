@@ -25,11 +25,21 @@ You need to provide 2 lists of symbolic names (`Symbol` or `Vector{Symbols}`):
 
 `ff_to_constraint` controlls, whether output transformations `g` which depend on inputs should be
 """
-function VertexModel(sys::ODESystem, inputs, outputs; verbose=false, name=getname(sys), ff_to_constraint=true, kwargs...)
+function VertexModel(sys::ODESystem, inputs, outputs; verbose=false, name=getname(sys),
+                     ff_to_constraint=true, extin=nothing, kwargs...)
     warn_events(sys)
     inputs = inputs isa AbstractVector ? inputs : [inputs]
     outputs = outputs isa AbstractVector ? outputs : [outputs]
-    gen = generate_io_function(sys, (inputs,), (outputs,); verbose, ff_to_constraint)
+
+    if isnothing(extin)
+        extin_nwidx = NetworkDynamics.SymbolicIndex[]
+        ins = (inputs, )
+    else
+        extin_sym, extin_nwidx = _split_extin(extin)
+        ins = (inputs, extin_sym)
+    end
+
+    gen = generate_io_function(sys, ins, (outputs,); verbose, ff_to_constraint)
 
     f = gen.f
     g = gen.g
@@ -52,7 +62,8 @@ function VertexModel(sys::ODESystem, inputs, outputs; verbose=false, name=getnam
 
     mass_matrix = gen.mass_matrix
     c = VertexModel(;f, g, sym, insym, outsym, psym, obssym,
-            obsf, mass_matrix, ff=gen.fftype, name, allow_output_sym_clash=true, kwargs...)
+            obsf, mass_matrix, ff=gen.fftype, name, extin=extin_nwidx,
+            allow_output_sym_clash=true, kwargs...)
     set_metadata!(c, :observed, gen.observed)
     set_metadata!(c, :equations, gen.equations)
     set_metadata!(c, :outputeqs, gen.outputeqs)
@@ -89,10 +100,19 @@ You need to provide 4 lists of symbolic names (`Symbol` or `Vector{Symbols}`):
 `ff_to_constraint` controlls, whether output transformations `g` which depend on inputs should be
 transformed into constraints.
 """
-function EdgeModel(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=false, name=getname(sys), ff_to_constraint=false, kwargs...)
+function EdgeModel(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=false, name=getname(sys),
+                   ff_to_constraint=false, extin=nothing, kwargs...)
     warn_events(sys)
     srcin = srcin isa AbstractVector ? srcin : [srcin]
     dstin = dstin isa AbstractVector ? dstin : [dstin]
+
+    if isnothing(extin)
+        extin_nwidx = NetworkDynamics.SymbolicIndex[]
+        ins = (srcin, dstin)
+    else
+        extin_sym, extin_nwidx = _split_extin(extin)
+        ins = (srcin, dstin, extin_sym)
+    end
 
     singlesided = isnothing(srcout)
     if singlesided && !(dstout isa AnnotatedSym)
@@ -111,10 +131,10 @@ function EdgeModel(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=false, 
         outs = (srcout, dstout)
     end
 
-    gen = generate_io_function(sys, (srcin, dstin), outs; verbose, ff_to_constraint)
+    gen = generate_io_function(sys, ins, outs; verbose, ff_to_constraint)
 
     f = gen.f
-    g = singlesided ? gwrap(gen.g; ff=gen.fftype) : gen.g
+    g = singlesided ? gwrap(gen.g) : gen.g
     obsf = gen.obsf
 
     _sym = getname.(gen.states)
@@ -197,6 +217,18 @@ function _get_metadata(sys, name)
         nt = (; nt..., description=ModelingToolkit.getdescription(sym))
     end
     nt
+end
+
+function _split_extin(extin)
+    try
+        extin_sym   = first.(extin)
+        extin_nwidx = last.(extin)
+        @assert extin_sym isa Vector{Symbol}
+        @assert extin_nwidx isa Vector{<:NetworkDynamics.SymbolicIndex}
+        return extin_sym, extin_nwidx
+    catch e
+        @error "Could not evaluate extin keyword argument!"
+    end
 end
 
 function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;

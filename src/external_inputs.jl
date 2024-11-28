@@ -12,14 +12,14 @@ function ExtMap(im::IndexManager)
     map = Vector{Union{StateBufIdx, OutBufIdx}}(undef, im.lastidx_extbuf)
     isempty(map) && error("There are no external inputs.")
 
-    for vm in im.vertexm
+    for (vi, vm) in pairs(im.vertexm)
         for (i, si) in pairs(vm.extin)
-            map[im.v_ext[i]] = _symidx_to_extidx(im, si)
+            map[im.v_ext[vi][i]] = _symidx_to_extidx(im, si)
         end
     end
-    for em in im.edgem
+    for (ei, em) in pairs(im.edgem)
         for (i, si) in pairs(em.extin)
-            map[im.e_ext[i]] = _symidx_to_extidx(im, si)
+            map[im.e_ext[ei][i]] = _symidx_to_extidx(im, si)
         end
     end
 
@@ -30,7 +30,7 @@ function ExtMap(im::IndexManager)
     ExtMap(map)
 end
 
-function _symidex_to_extidx(im, sni)
+function _symidx_to_extidx(im, sni)
     cm = getcomp(im, sni)
     if subsym_has_idx(sni.subidx, sym(cm))
         range = getcomprange(im, sni)
