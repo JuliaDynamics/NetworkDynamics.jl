@@ -507,7 +507,7 @@ function _get_observed_f(nw::Network, cf::EdgeModel, eidx)
     ur    = nw.im.e_data[eidx]
     esrcr = nw.im.v_out[nw.im.edgevec[eidx].src]
     edstr = nw.im.v_out[nw.im.edgevec[eidx].dst]
-    extr = nw.im.v_out[vidx]
+    extr = nw.im.v_out[eidx]
     pr   =  nw.im.e_para[eidx]
     ret = Vector{Float64}(undef, N)
 
