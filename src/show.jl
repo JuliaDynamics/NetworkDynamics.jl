@@ -67,7 +67,7 @@ function print_states_params(io, @nospecialize(c::ComponentModel), styling)
     num, word = maybe_plural(pdim(c), "param")
     pdim(c) > 0 && push!(info, styled"$num &$word: &&$(stylesymbolarray(c.psym, pdef(c), pguess(c)))")
 
-    if has_external_inputs(c)
+    if has_external_input(c)
         num = extdim(c)
         arr = match(r"(\[.*\])", repr(extsym(c)))[1]
         push!(info, styled"$num &ext in: &&$arr")

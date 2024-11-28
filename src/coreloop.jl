@@ -9,7 +9,7 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t) where {A,B,C,D,E,dT,T}
     ex = executionstyle(nw)
     fill!(du, zero(eltype(du)))
     o = get_output_cache(nw, du)
-    extbuf = has_external_inputs(nw) ? get_extinput_cache(nw, du) : nothing
+    extbuf = has_external_input(nw) ? get_extinput_cache(nw, du) : nothing
 
     duopt = (du, u, o, p, t)
     aggbuf = get_aggregation_cache(nw, du)
@@ -24,7 +24,7 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t) where {A,B,C,D,E,dT,T}
     ex isa KAExecution && KernelAbstractions.synchronize(get_backend(du))
 
     # gather the external inputs
-    has_external_inputs(nw) && collect_externals!(nw.extmap, extbuf, u, o)
+    has_external_input(nw) && collect_externals!(nw.extmap, extbuf, u, o)
 
     # gather the vertex results for edges with ff
     gather!(nw.gbufprovider, gbuf, o)
@@ -148,7 +148,7 @@ end
         _u   = _needs_u(fg, batch)   ? view(u,  state_range(batch, i))      : nothing
         _ins = _needs_in(fg, batch)  ? (view(aggbuf, in_range(batch, i)),)  : nothing
         _p   = _needs_p(fg, batch)   ? view(p,  parameter_range(batch, i))  : nothing
-        if has_external_inputs(batch) && _needs_in(fg, batch)
+        if has_external_input(batch) && _needs_in(fg, batch)
             _ext = view(extbuf, extbuf_range(batch, i))
             _ins = (_ins..., _ext)
         end
@@ -167,7 +167,7 @@ end
         _u    = _needs_u(fg, batch)   ? view(u,  state_range(batch, i))      : nothing
         _ins  = _needs_in(fg, batch)  ? get_src_dst(gbuf, batch, i)          : nothing
         _p    = _needs_p(fg, batch)   ? view(p,  parameter_range(batch, i))  : nothing
-        if has_external_inputs(batch) && _needs_in(fg, batch)
+        if has_external_input(batch) && _needs_in(fg, batch)
             _ext = view(extbuf, extbuf_range(batch, i))
             _ins = (_ins..., _ext)
         end
