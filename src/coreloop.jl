@@ -9,9 +9,7 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t) where {A,B,C,D,E,dT,T}
     ex = executionstyle(nw)
     fill!(du, zero(eltype(du)))
     o = get_output_cache(nw, du)
-    fill!(o, convert(eltype(o), NaN))
-    extbuf = get_extinput_cache(nw, du)
-    fill!(o, convert(eltype(extbuf), NaN))
+    extbuf = has_external_inputs(nw) ? get_extinput_cache(nw, du) : nothing
 
     duopt = (du, u, o, p, t)
     aggbuf = get_aggregation_cache(nw, du)
@@ -26,7 +24,7 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t) where {A,B,C,D,E,dT,T}
     ex isa KAExecution && KernelAbstractions.synchronize(get_backend(du))
 
     # gather the external inputs
-    collect_externals!(nw.extmap, extbuf, u, o)
+    has_external_inputs(nw) && collect_externals!(nw.extmap, extbuf, u, o)
 
     # gather the vertex results for edges with ff
     gather!(nw.gbufprovider, gbuf, o)
@@ -148,11 +146,14 @@ end
         _o   = _needs_out(fg, batch) ? view(o, out_range(batch, i))         : nothing
         _du  = _needs_du(fg, batch)  ? view(du, state_range(batch, i))      : nothing
         _u   = _needs_u(fg, batch)   ? view(u,  state_range(batch, i))      : nothing
-        _agg = _needs_in(fg, batch)  ? view(aggbuf, in_range(batch, i))     : nothing
+        _ins = _needs_in(fg, batch)  ? (view(aggbuf, in_range(batch, i)),)  : nothing
         _p   = _needs_p(fg, batch)   ? view(p,  parameter_range(batch, i))  : nothing
-        _ext = _needs_ext(fg, batch) ? view(extbuf, extbuf_range(batch, i)) : nothing
-        evalf(fg, batch) && apply_compf(compf(batch), _du, _u, (_agg,), _p, t, _ext)
-        evalg(fg, batch) && apply_compg(fftype(batch), compg(batch), (_o,), _u, (_agg,), _p, t)
+        if has_external_inputs(batch) && _needs_in(fg, batch)
+            _ext = view(extbuf, extbuf_range(batch, i))
+            _ins = (_ins..., _ext)
+        end
+        evalf(fg, batch) && apply_compf(compf(batch), _du, _u, _ins, _p, t)
+        evalg(fg, batch) && apply_compg(fftype(batch), compg(batch), (_o,), _u, _ins, _p, t)
     end
     nothing
 end
@@ -166,20 +167,18 @@ end
         _u    = _needs_u(fg, batch)   ? view(u,  state_range(batch, i))      : nothing
         _ins  = _needs_in(fg, batch)  ? get_src_dst(gbuf, batch, i)          : nothing
         _p    = _needs_p(fg, batch)   ? view(p,  parameter_range(batch, i))  : nothing
-        _ext  = _needs_ext(fg, batch) ? view(extbuf, extbuf_range(batch, i)) : nothing
-        evalf(fg, batch) && apply_compf(compf(batch), _du, _u, _ins, _p, t, _ext)
+        if has_external_inputs(batch) && _needs_in(fg, batch)
+            _ext = view(extbuf, extbuf_range(batch, i))
+            _ins = (_ins..., _ext)
+        end
+        evalf(fg, batch) && apply_compf(compf(batch), _du, _u, _ins, _p, t)
         evalg(fg, batch) && apply_compg(fftype(batch), compg(batch), (_osrc, _odst), _u, _ins, _p, t)
     end
     nothing
 end
 
-@propagate_inbounds function apply_compf(f::F, du, u, ins, p, t, ::Nothing) where {F}
+@propagate_inbounds function apply_compf(f::F, du, u, ins, p, t) where {F}
     f(du, u, ins..., p, t)
-    nothing
-end
-
-@propagate_inbounds function apply_compf(f::F, du, u, ins, p, t, ext) where {F}
-    f(du, u, ins..., p, t, ext)
     nothing
 end
 
@@ -206,7 +205,6 @@ _needs_u(fg, batch)   = evalf(fg, batch) || fftype(batch) != PureFeedForward()
 _needs_out(fg, batch) = evalg(fg, batch)
 _needs_in(fg, batch)  = evalf(fg, batch) || hasff(batch)
 _needs_p(fg, batch)   = !iszero(pdim(batch)) && (evalf(fg, batch) || fftype(batch) != PureStateMap())
-_needs_ext(fg, batch) = !iszero(extdim(batch)) && evalf(fg, batch)
 
 # check if eval of f or g is necessary
 evalf(::Val{:f}, batch) = !isnothing(compf(batch))

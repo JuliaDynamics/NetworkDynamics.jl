@@ -111,10 +111,14 @@ function get_output_cache(nw::Network, T)
         throw(ArgumentError("Network caches are initialized with $(eltype(nw.caches.output.du)) \
             but is used for $(eltype(T)) data!"))
     end
-    get_tmp(nw.caches.output, T)
+    o = get_tmp(nw.caches.output, T)
+    fill!(o, convert(eltype(o), NaN))
 end
 get_aggregation_cache(nw::Network, T) = get_tmp(nw.caches.aggregation, T)
-get_extinput_cache(nw::Network, T) = get_tmp(nw.caches.external, T)
+function get_extinput_cache(nw::Network, T)
+    ext = get_tmp(nw.caches.external, T)
+    fill!(ext, convert(eltype(ext), NaN))
+end
 
 iscudacompatible(nw::Network) = iscudacompatible(executionstyle(nw)) && iscudacompatible(nw.layer.aggregator)
 

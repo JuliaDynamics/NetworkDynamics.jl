@@ -100,6 +100,9 @@ function chk_component(c::ComponentModel)
     end
     outs = Tuple(AccessTracker(rand(l)) for l in values(outdim(c)))
     ext = AccessTracker(rand(extdim(c)))
+    if has_external_inputs(c)
+        ins = (ins..., ext)
+    end
     t = NaN
 
     try

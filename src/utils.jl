@@ -119,6 +119,10 @@ function rand_inputs_fg(rng, cf)
     u = rand(rng, dim(cf))
     p = rand(rng, pdim(cf))
     ins = Tuple(rand(rng, l) for l in values(indim(cf)))
+    if has_external_inputs(cf)
+        ext = rand(rng, extdim(cf))
+        ins = (ins..., ext)
+    end
     outs = Tuple(rand(rng, l) for l in values(outdim(cf)))
     t = NaN
     (outs..., du, u, ins..., p, t)

@@ -10,7 +10,7 @@ end
 
 function ExtMap(im::IndexManager)
     map = Vector{Union{StateBufIdx, OutBufIdx}}(undef, im.lastidx_extbuf)
-    isempty(map) && return ExtMap(map)
+    isempty(map) && error("There are no external inputs.")
 
     for vm in im.vertexm
         for (i, si) in pairs(vm.extsym)
@@ -79,4 +79,6 @@ end
 end
 
 has_external_inputs(c::ComponentModel) = !iszero(extdim(c))
-has_external_inputs(cb::ComponentBatch) = !iszero(stridesT(cb.extbufstride))
+has_external_inputs(cb::ComponentBatch) = !iszero(cb.extbufstride.strides)
+has_external_inputs(nw::Network) = !isnothing(nw.extmap)
+has_external_inputs(im::IndexManager) = !iszero(im.lastidx_extbuf)
