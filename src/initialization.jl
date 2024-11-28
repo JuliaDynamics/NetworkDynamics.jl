@@ -156,7 +156,7 @@ function initialization_problem(cf::T; t=NaN, verbose=true) where {T<:ComponentM
             # this fills the second half of the du buffer with the fixed and current outputs
             dunl_out .= RecursiveArrayTools.ArrayPartition(outbufs...)
             # execute fg to fill dunl and outputs
-            fg(outbufs..., dunl_fg, ubuf, inbufs..., pbuf, t)
+            fg(outbufs, dunl_fg, ubuf, inbufs, pbuf, t)
 
             # calculate the residual for the second half ov the dunl buf, the outputs
             dunl_out .= dunl_out .- RecursiveArrayTools.ArrayPartition(outbufs...)
@@ -242,7 +242,7 @@ function init_residual(cf::T; t=NaN, recalc=false) where {T<:ComponentModel}
         res_fg  = @views res[1:dim(cf)]
         res_out = @views res[dim(cf)+1:end]
         res_out .= RecursiveArrayTools.ArrayPartition(outs...)
-        compfg(cf)(outs..., res_fg, u, ins..., p, t)
+        compfg(cf)(outs, res_fg, u, ins, p, t)
         res_out .= res_out .- RecursiveArrayTools.ArrayPartition(outs...)
 
         LinearAlgebra.norm(res)

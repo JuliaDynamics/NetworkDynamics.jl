@@ -106,7 +106,7 @@ function chk_component(c::ComponentModel)
     t = NaN
 
     try
-        compfg(c)(outs..., du, u, ins..., p, t, ext)
+        compfg(c)(outs, du, u, ins, p, t)
     catch e
         if e isa MethodError
             @warn "Encountered MethodError. All arguments are AbstractArrays, make sure to allways index into them: $e"

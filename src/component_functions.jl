@@ -1111,21 +1111,11 @@ function Base.:(==)(cf1::ComponentModel, cf2::ComponentModel)
     typeof(cf1) == typeof(cf2) && equal_fields(cf1, cf2)
 end
 
-function compfg(c::VertexModel)
-    (out, du, u, in, p, t, ext=nothing) -> begin
+function compfg(c)
+    (outs, du, u, ins, p, t) -> begin
         f = compf(c)
-        fargs = isnothing(ext) ? (du, u, in, p, t) : (du, u, in, p, t, ext)
-        isnothing(f) || f(fargs...)
-        compg(c)(_gargs(fftype(c), (out,), du, u, (in,), p, t)...)
-        nothing
-    end
-end
-function compfg(c::EdgeModel)
-    (out1, out2, du, u, in1, in2, p, t, ext=nothing) -> begin
-        f = compf(c)
-        fargs = isnothing(ext) ? (du, u, in1, in2, p, t) : (du, u, in1, in2, p, t, ext)
-        isnothing(f) || f(fargs...)
-        compg(c)(_gargs(fftype(c), (out1,out2), du, u, (in1,in2), p, t)...)
+        isnothing(f) || f(du, u, ins..., p, t)
+        compg(c)(_gargs(fftype(c), outs, du, u, ins, p, t)...)
         nothing
     end
 end
