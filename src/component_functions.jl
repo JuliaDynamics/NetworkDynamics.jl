@@ -247,7 +247,7 @@ Directed(s::AbstractVector{<:Symbol}) = AnnotatedSym(Directed, s)
 
 abstract type ComponentModel end
 
-struct VertexModel{F,G,FFT,OF,MM} <: ComponentModel
+struct VertexModel{F,G,FFT,OF,MM,EX<:Union{Nothing,Vector{<:SymbolicIndex}}} <: ComponentModel
     name::Symbol
     # main function
     f::F
@@ -260,7 +260,7 @@ struct VertexModel{F,G,FFT,OF,MM} <: ComponentModel
     # parameters, optional input sym and optional external inputs
     psym::Vector{Symbol}
     insym::Union{Nothing, Vector{Symbol}}
-    extin::Vector{SymbolicIndex}
+    extin::EX
     # observed
     obsf::OF
     obssym::Vector{Symbol}
@@ -293,7 +293,7 @@ Optional Arguments:
 - `ff`: `FeedForwardType` of component. Will be typically infered from `g` automaticially.
 - `obssym`/`obsf`: Define additional "observable" states.
 - `symmetadata`/`metadata`: Provide prefilled metadata dictionaries.
-- `extin=SymbolicIndex[]`:
+- `extin=nothing`:
    Define "external" inputs for the model with Network indices, i.e. `extin=[VIndex(7,:x), ..]`.
    Those inputs will be provided as another input vector `f(x, in, extin, p, t)` and `g(y, x, in, extin, p, t)`.
 
@@ -302,7 +302,7 @@ All Symbol arguments can be used to set default values, i.e. `psym=[:K=>1, :p]`.
 VertexModel(; kwargs...) = _construct_comp(VertexModel, Base.inferencebarrier(kwargs))
 VertexModel(v::VertexModel; kwargs...) = _reconstruct_comp(VertexModel, v, Base.inferencebarrier(kwargs))
 
-struct EdgeModel{F,G,FFT,OF,MM} <: ComponentModel
+struct EdgeModel{F,G,FFT,OF,MM,EX<:Union{Nothing,Vector{<:SymbolicIndex}}} <: ComponentModel
     name::Symbol
     # main function
     f::F
@@ -315,7 +315,7 @@ struct EdgeModel{F,G,FFT,OF,MM} <: ComponentModel
     # parameters, optional input sym and optional external inputs
     psym::Vector{Symbol}
     insym::Union{Nothing, @NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}}}
-    extin::Vector{SymbolicIndex}
+    extin::EX
     # observed
     obsf::OF
     obssym::Vector{Symbol}
@@ -351,7 +351,7 @@ Optional Arguments:
 - `ff`: `FeedForwardType` of component. Will be typically infered from `g` automaticially.
 - `obssym`/`obsf`: Define additional "observable" states.
 - `symmetadata`/`metadata`: Provide prefilled metadata dictionaries.
-- `extin=SymbolicIndex[]`:
+- `extin=nothing`:
    Define "external" inputs for the model with Network indices, i.e. `extin=[VIndex(7,:x), ..]`.
    Those inputs will be provided as another input vector `f(x, insrc, indst, extin, p, t)` and `g(ysrc, ydst, x, insrc, indst, extin, p, t)`.
 
@@ -498,7 +498,7 @@ indim(c::VertexModel)::Int = length(insym(c))
 indim(c::EdgeModel)::@NamedTuple{src::Int,dst::Int} = (; src=length(insym(c).src), dst=length(insym(c).dst))
 
 """
-    extin(c::ComponentModel)::Vector{Symbol}
+    extin(c::ComponentModel)
 
 Retrieve the external input symbols of the component.
 """
@@ -509,7 +509,7 @@ extin(c::ComponentModel) = c.extin
 
 Retrieve the external input dimension of the component.
 """
-extdim(c::ComponentModel) = length(extin(c))
+extdim(c::ComponentModel) = has_external_input(c) ? length(extin(c)) : 0
 
 # return both "observed" outputs (those that do not shadow states) and true observed
 outsym_flat(c::ComponentModel) = c._outsym_flat
@@ -571,8 +571,8 @@ Fills up type parameters with `nothing` to ensure `Core.Compiler.isconstType`
 for GPU compatibility.
 """
 dispatchT(::T) where {T<:ComponentModel} = dispatchT(T)
-dispatchT(T::Type{<:VertexModel}) = VertexModel{nothing,nothing,nothing,nothing,nothing}
-dispatchT(T::Type{<:EdgeModel}) = EdgeModel{nothing,nothing,nothing,nothing,nothing}
+dispatchT(T::Type{<:VertexModel}) = VertexModel{nothing,nothing,nothing,nothing,nothing,Nothing}
+dispatchT(T::Type{<:EdgeModel}) = EdgeModel{nothing,nothing,nothing,nothing,nothing,Nothing}
 
 # TODO: introduce batchequal hash for faster batching of component models
 batchequal(a, b) = false
@@ -966,7 +966,7 @@ function _fill_defaults(T, @nospecialize(kwargs))
     if haskey(dict, :extin)
         @assert dict[:extin] isa Vector{<:SymbolicIndex}
     else
-        dict[:extin] = SymbolicIndex[]
+        dict[:extin] = nothing
     end
 
     # infer fftype (needs dim and extdim)
@@ -974,7 +974,7 @@ function _fill_defaults(T, @nospecialize(kwargs))
         dict[:ff] = if hasfftype(g)
             fftype(g)
         else
-            infer_fftype(T, g, dim, !isempty(dict[:extin]))
+            infer_fftype(T, g, dim, !isnothing(dict[:extin]))
         end
     end
 

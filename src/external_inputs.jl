@@ -78,7 +78,7 @@ end
     nothing
 end
 
-has_external_input(c::ComponentModel) = !iszero(extdim(c))
+has_external_input(c::ComponentModel) = !isnothing(c.extin)
 has_external_input(cb::ComponentBatch) = !iszero(cb.extbufstride.strides)
 has_external_input(nw::Network) = !isnothing(nw.extmap)
 has_external_input(im::IndexManager) = !iszero(im.lastidx_extbuf)
