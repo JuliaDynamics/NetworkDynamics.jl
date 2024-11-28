@@ -149,7 +149,7 @@ end
 
     @testset "EdgeModel Constructor" begin
         using NetworkDynamics
-        using NetworkDynamics: Symmetric
+        using NetworkDynamics: Symmetric, infer_fftype
         f = (du, u, in1, in2, p, t) -> nothing
         g_pff = (o1, o2, in1, in2, p, t) -> nothing
         g_ff  = (o1, o2, u, in1, in2, p, t) -> nothing
@@ -161,11 +161,13 @@ end
         g_single_nff = (o2, u, p, t) -> nothing
         g_single_psm = (o2, u) -> nothing
         for c in (AntiSymmetric, Symmetric, Directed)
-            @test fftype(c(g_single_pff)) == PureFeedForward()
-            @test fftype(c(g_single_ff)) == FeedForward()
-            @test fftype(c(g_single_nff)) == NoFeedForward()
-            @test fftype(c(g_single_psm)) == PureStateMap()
-            @test fftype(c(1:2)) == PureStateMap()
+            T = EdgeModel
+            dim = nothing # not used
+            @test infer_fftype(T, c(g_single_pff), dim, false) == PureFeedForward()
+            @test infer_fftype(T, c(g_single_ff), dim, false) == FeedForward()
+            @test infer_fftype(T, c(g_single_nff), dim, false) == NoFeedForward()
+            @test infer_fftype(T, c(g_single_psm), dim, false) == PureStateMap()
+            @test infer_fftype(T, c(1:2), dim, false) == PureStateMap()
         end
 
         cf = EdgeModel(g=g_pff, outdim=1, insym=[:a])

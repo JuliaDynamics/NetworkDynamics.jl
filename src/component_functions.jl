@@ -99,9 +99,7 @@ fftype(::StateMask) = PureStateMap()
 end
 
 
-abstract type OutputWrapper{FF} end
-hasfftype(::OutputWrapper) = true
-fftype(::OutputWrapper{FF}) where {FF} = FF()
+abstract type SingleSidedOutputWrapper end
 
 """
     AntiSymmetric(g_dst)
@@ -116,14 +114,10 @@ output function which applies
 
 See also [`Symmetric`](@ref), [`Directed`](@ref), [`Fiducial`](@ref) and [`StateMask`](@ref).
 """
-struct AntiSymmetric{FF,G} <: OutputWrapper{FF}
+struct AntiSymmetric{G} <: SingleSidedOutputWrapper
     g::G
-    function AntiSymmetric(g; ff=nothing)
-        ff = isnothing(ff) ? _infer_ss_fftype(g) : ff
-        new{typeof(ff), typeof(g)}(g)
-    end
 end
-AntiSymmetric(g::Union{AbstractVector,Number}; ff=nothing) = AntiSymmetric(StateMask(g); ff)
+AntiSymmetric(g::Union{AbstractVector,Number}) = AntiSymmetric(StateMask(g))
 @inline function (c::AntiSymmetric)(osrc, odst, args...)
     @inline c.g(odst, args...)
     @inbounds for i in 1:length(osrc)
@@ -145,14 +139,10 @@ output function which applies
 
 See also [`AntiSymmetric`](@ref), [`Directed`](@ref), [`Fiducial`](@ref) and [`StateMask`](@ref).
 """
-struct Symmetric{FF,G} <: OutputWrapper{FF}
+struct Symmetric{G} <: SingleSidedOutputWrapper
     g::G
-    function Symmetric(g; ff=nothing)
-        ff = isnothing(ff) ? _infer_ss_fftype(g) : ff
-        new{typeof(ff), typeof(g)}(g)
-    end
 end
-Symmetric(g::Union{AbstractVector,Number}; ff=nothing) = Symmetric(StateMask(g); ff)
+Symmetric(g::Union{AbstractVector,Number}) = Symmetric(StateMask(g))
 @inline function (c::Symmetric)(osrc, odst, args...)
     @inline c.g(odst, args...)
     @inbounds for i in 1:length(osrc)
@@ -174,14 +164,10 @@ With `Directed` there is no output for the `src` side.
 
 See also [`AntiSymmetric`](@ref), [`Symmetric`](@ref), [`Fiducial`](@ref) and [`StateMask`](@ref).
 """
-struct Directed{FF,G} <: OutputWrapper{FF}
+struct Directed{G} <: SingleSidedOutputWrapper
     g::G
-    function Directed(g; ff=nothing)
-        ff = isnothing(ff) ? _infer_ss_fftype(g) : ff
-        new{typeof(ff), typeof(g)}(g)
-    end
 end
-Directed(g::Union{AbstractVector,Number}; ff=nothing) = Directed(StateMask(g); ff)
+Directed(g::Union{AbstractVector,Number}) = Directed(StateMask(g))
 @inline function (c::Directed)(osrc, odst, args...)
     @inline c.g(odst, args...)
     nothing
@@ -200,26 +186,14 @@ into a double sided output function which applies
 
 See also [`AntiSymmetric`](@ref), [`Directed`](@ref), [`Fiducial`](@ref) and [`StateMask`](@ref).
 """
-struct Fiducial{FF,GS,GD} <: OutputWrapper{FF}
+struct Fiducial{GS,GD} <: SingleSidedOutputWrapper
     src::GS
     dst::GD
-    function Fiducial(src, dst; ff=nothing)
-        if isnothing(ff)
-            ffsrc = _infer_ss_fftype(src)
-            ffdst = _infer_ss_fftype(dst)
-            if ffsrc == ffdst
-                ff = ffsrc
-            else
-                error("Both src and dst coupling functions have different ff types.")
-            end
-        end
-        new{typeof(ff), typeof(src), typeof(dst)}(src, dst)
-    end
 end
-function Fiducial(src::Union{AbstractVector,Number}, dst::Union{AbstractVector,Number}; ff=nothing)
-    Fiducial(StateMask(src), StateMask(dst); ff)
+function Fiducial(src::Union{AbstractVector,Number}, dst::Union{AbstractVector,Number})
+    Fiducial(StateMask(src), StateMask(dst))
 end
-Fiducial(;src, dst, ff=nothing) = Fiducial(src, dst; ff)
+Fiducial(;src, dst) = Fiducial(src, dst)
 
 @inline function (c::Fiducial)(osrc, odst, args...)
     @inline c.src(osrc, args...)
@@ -543,10 +517,21 @@ outsym_normalized(c::EdgeModel) = values(outsym(c))
 outsym_normalized(c::VertexModel) = (outsym(c),)
 outdim_normalized(c::ComponentModel) = map(length, outsym_normalized(c))
 
-_infer_ss_fftype(g) = _infer_fftype(g, 1, 2, nothing)
-_infer_fftype(::Type{<:VertexModel}, g, dim) = _infer_fftype(g, 1, 1, dim)
-_infer_fftype(::Type{<:EdgeModel}, g, dim) = _infer_fftype(g, 2, 2, dim)
-
+infer_fftype(::Type{<:VertexModel}, g, dim, hasext) = _infer_fftype(g, 1, 1+hasext, dim)
+infer_fftype(::Type{<:EdgeModel}, g, dim, hasext) = _infer_fftype(g, 2, 2+hasext, dim)
+# special cases for wrapped output functions
+function infer_fftype(::Type{<:EdgeModel}, g::Union{Symmetric, AntiSymmetric, Directed}, dim, hasext)
+    _infer_fftype(g.g, 1, 2+hasext, dim)
+end
+function infer_fftype(::Type{<:EdgeModel}, g::Fiducial, dim, hasext)
+    ffsrc = _infer_fftype(g.src, 1, 2+hasext, dim)
+    ffdst = _infer_fftype(g.dst, 1, 2+hasext, dim)
+    if ffsrc == ffdst
+        return ffsrc
+    else
+        error("Both src and dst coupling functions have different ff types.")
+    end
+end
 function _infer_fftype(g, nout, nin, dim)
     pureff = _takes_n_vecs_and_t(g, nout + nin + 1)     # (outs..., ins..., p, t)
     ff     = _takes_n_vecs_and_t(g, nout + 1 + nin + 1) # (outs..., u, ins..., p, t)
@@ -751,11 +736,6 @@ function _fill_defaults(T, @nospecialize(kwargs))
         end
     end
     sym = dict[:sym]
-
-    # infer fftype (needs dim)
-    if !haskey(dict, :ff)
-        dict[:ff] = hasfftype(g) ? fftype(g) : _infer_fftype(T, g, dim)
-    end
 
     ####
     #### parameter sym
@@ -983,6 +963,14 @@ function _fill_defaults(T, @nospecialize(kwargs))
         dict[:extsym] = SymbolicIndex[]
     end
 
+    # infer fftype (needs dim and extdim)
+    if !haskey(dict, :ff)
+        dict[:ff] = if hasfftype(g)
+            fftype(g)
+        else
+            infer_fftype(T, g, dim, !isempty(dict[:extsym]))
+        end
+    end
 
     # check for name clashes (at the end because only now sym, psym, obssym are initialized)
     _s  = sym
@@ -1012,25 +1000,25 @@ end
 # define the symbolmapping to infer output symbols from state symbols
 _has_sym_to_outsym_mapping(::Any) = false
 _has_sym_to_outsym_mapping(::StateMask) = true
-_has_sym_to_outsym_mapping(::Directed{<:Any, <:StateMask}) = true
-_has_sym_to_outsym_mapping(::AntiSymmetric{<:Any, <:StateMask}) = true
-_has_sym_to_outsym_mapping(::Symmetric{<:Any, <:StateMask}) = true
-_has_sym_to_outsym_mapping(::Fiducial{<:Any, <:StateMask, <:StateMask}) = true
+_has_sym_to_outsym_mapping(::Directed{<:StateMask}) = true
+_has_sym_to_outsym_mapping(::AntiSymmetric{<:StateMask}) = true
+_has_sym_to_outsym_mapping(::Symmetric{<:StateMask}) = true
+_has_sym_to_outsym_mapping(::Fiducial{<:StateMask, <:StateMask}) = true
 
 _sym_to_outsym(g::StateMask, s::AbstractVector{Symbol}) = s[g.idxs]
-function _sym_to_outsym(g::AntiSymmetric{<:Any, <:StateMask}, s::AbstractVector{Symbol})
+function _sym_to_outsym(g::AntiSymmetric{<:StateMask}, s::AbstractVector{Symbol})
     s = _sym_to_outsym(g.g, s)
     _symvec_to_sym_tup(g, s)
 end
-function _sym_to_outsym(g::Symmetric{<:Any, <:StateMask}, s::AbstractVector{Symbol})
+function _sym_to_outsym(g::Symmetric{<:StateMask}, s::AbstractVector{Symbol})
     s = _sym_to_outsym(g.g, s)
     _symvec_to_sym_tup(g, s)
 end
-function _sym_to_outsym(g::Directed{<:Any, <:StateMask}, s::AbstractVector{Symbol})
+function _sym_to_outsym(g::Directed{<:StateMask}, s::AbstractVector{Symbol})
     s = _sym_to_outsym(g.g, s)
     _symvec_to_sym_tup(g, s)
 end
-function _sym_to_outsym(g::Fiducial{<:Any, <:StateMask, <:StateMask}, s::AbstractVector{Symbol})
+function _sym_to_outsym(g::Fiducial{<:StateMask, <:StateMask}, s::AbstractVector{Symbol})
     dst = _sym_to_outsym(g.dst, s)
     src = _sym_to_outsym(g.src, s)
     (; src, dst)
