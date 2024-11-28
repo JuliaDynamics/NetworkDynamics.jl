@@ -17,14 +17,16 @@ using CUDA, Adapt
     b = @b collect_externals!($map, $exbuf, $u, $o) # 6.583μs
     @test iszero(b.allocs)
 
-    for to in (CuArray{Float64}, CuArray{Float32})
-        map_d = adapt(to, map)
-        exbuf_d = adapt(to, zeros(N))
-        u_d = adapt(to, u)
-        o_d = adapt(to, o)
-        b = @b collect_externals!($map_d, $exbuf_d, $u_d, $o_d)
-        display(b)
-        @test Vector(exbuf_d) ≈ exbuf
+    if CUDA.functional()
+        for to in (CuArray{Float64}, CuArray{Float32})
+            map_d = adapt(to, map)
+            exbuf_d = adapt(to, zeros(N))
+            u_d = adapt(to, u)
+            o_d = adapt(to, o)
+            b = @b collect_externals!($map_d, $exbuf_d, $u_d, $o_d)
+            display(b)
+            @test Vector(exbuf_d) ≈ exbuf
+        end
     end
 end
 

@@ -392,16 +392,16 @@ end
         u = rand(dim(v))
         p = rand(pdim(v))
         in = rand(indim(v))
-        # compfg(v)(out, du, u, in, p, NaN)
-        b = @b $(compfg(v))($out, $du, $u, $in, $p, NaN)
+        # compfg(v)((out,), du, u, (in,), p, NaN)
+        b = @b $(compfg(v))($(out,), $du, $u, $(in,), $p, NaN)
         @test b.allocs == 0
 
         v2 = ff_to_constraint(v)
         out2 = zeros(outdim(v2))
         du2 = zeros(dim(v2))
         u2 = vcat(u, out)
-        # compfg(v2)(out2, du2, u2, in, p, NaN)
-        b = @b $(compfg(v2))($out2, $du2, $u2, $in, $p, NaN)
+        # compfg(v2)((out2,), du2, u2, (in,), p, NaN)
+        b = @b $(compfg(v2))($(out2,), $du2, $u2, $(in,), $p, NaN)
         @test b.allocs == 0
         @test out ≈ out2
         @test du2 ≈ vcat(du, zeros(length(out)))
