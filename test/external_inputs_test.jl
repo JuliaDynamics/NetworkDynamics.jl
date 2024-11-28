@@ -32,5 +32,5 @@ end
     function fext(dv, v, ein, p, t, ext)
         dv[1] = ext[1]
     end
-    c = VertexModel(f=fext, g=1, dim=1, extsym=[VIndex(18,:a)])
+    c = VertexModel(f=fext, g=1, dim=1, extin=[VIndex(18,:a)])
 end

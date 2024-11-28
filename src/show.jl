@@ -69,7 +69,7 @@ function print_states_params(io, @nospecialize(c::ComponentModel), styling)
 
     if has_external_input(c)
         num = extdim(c)
-        arr = match(r"(\[.*\])", repr(extsym(c)))[1]
+        arr = match(r"(\[.*\])", repr(extin(c)))[1]
         push!(info, styled"$num &ext in: &&$arr")
     end
 

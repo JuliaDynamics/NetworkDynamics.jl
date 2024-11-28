@@ -260,7 +260,7 @@ struct VertexModel{F,G,FFT,OF,MM} <: ComponentModel
     # parameters, optional input sym and optional external inputs
     psym::Vector{Symbol}
     insym::Union{Nothing, Vector{Symbol}}
-    extsym::Vector{SymbolicIndex}
+    extin::Vector{SymbolicIndex}
     # observed
     obsf::OF
     obssym::Vector{Symbol}
@@ -293,6 +293,9 @@ Optional Arguments:
 - `ff`: `FeedForwardType` of component. Will be typically infered from `g` automaticially.
 - `obssym`/`obsf`: Define additional "observable" states.
 - `symmetadata`/`metadata`: Provide prefilled metadata dictionaries.
+- `extin=SymbolicIndex[]`:
+   Define "external" inputs for the model with Network indices, i.e. `extin=[VIndex(7,:x), ..]`.
+   Those inputs will be provided as another input vector `f(x, in, extin, p, t)` and `g(y, x, in, extin, p, t)`.
 
 All Symbol arguments can be used to set default values, i.e. `psym=[:K=>1, :p]`.
 """
@@ -312,7 +315,7 @@ struct EdgeModel{F,G,FFT,OF,MM} <: ComponentModel
     # parameters, optional input sym and optional external inputs
     psym::Vector{Symbol}
     insym::Union{Nothing, @NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}}}
-    extsym::Vector{SymbolicIndex}
+    extin::Vector{SymbolicIndex}
     # observed
     obsf::OF
     obssym::Vector{Symbol}
@@ -348,6 +351,9 @@ Optional Arguments:
 - `ff`: `FeedForwardType` of component. Will be typically infered from `g` automaticially.
 - `obssym`/`obsf`: Define additional "observable" states.
 - `symmetadata`/`metadata`: Provide prefilled metadata dictionaries.
+- `extin=SymbolicIndex[]`:
+   Define "external" inputs for the model with Network indices, i.e. `extin=[VIndex(7,:x), ..]`.
+   Those inputs will be provided as another input vector `f(x, insrc, indst, extin, p, t)` and `g(ysrc, ydst, x, insrc, indst, extin, p, t)`.
 
 All Symbol arguments can be used to set default values, i.e. `psym=[:K=>1, :p]`.
 """
@@ -492,18 +498,18 @@ indim(c::VertexModel)::Int = length(insym(c))
 indim(c::EdgeModel)::@NamedTuple{src::Int,dst::Int} = (; src=length(insym(c).src), dst=length(insym(c).dst))
 
 """
-    extsym(c::ComponentModel)::Vector{Symbol}
+    extin(c::ComponentModel)::Vector{Symbol}
 
 Retrieve the external input symbols of the component.
 """
-extsym(c::ComponentModel) = c.extsym
+extin(c::ComponentModel) = c.extin
 
 """
     extdim(c::ComponentModel)::Int
 
 Retrieve the external input dimension of the component.
 """
-extdim(c::ComponentModel) = length(extsym(c))
+extdim(c::ComponentModel) = length(extin(c))
 
 # return both "observed" outputs (those that do not shadow states) and true observed
 outsym_flat(c::ComponentModel) = c._outsym_flat
@@ -955,12 +961,12 @@ function _fill_defaults(T, @nospecialize(kwargs))
     dict[:_obssym_all] = setdiff(_outsym_flat, sym) ∪ obssym
 
     ####
-    #### Extsym
+    #### External Inputs
     ####
-    if haskey(dict, :extsym)
-        @assert dict[:extsym] isa Vector{<:SymbolicIndex}
+    if haskey(dict, :extin)
+        @assert dict[:extin] isa Vector{<:SymbolicIndex}
     else
-        dict[:extsym] = SymbolicIndex[]
+        dict[:extin] = SymbolicIndex[]
     end
 
     # infer fftype (needs dim and extdim)
@@ -968,7 +974,7 @@ function _fill_defaults(T, @nospecialize(kwargs))
         dict[:ff] = if hasfftype(g)
             fftype(g)
         else
-            infer_fftype(T, g, dim, !isempty(dict[:extsym]))
+            infer_fftype(T, g, dim, !isempty(dict[:extin]))
         end
     end
 
