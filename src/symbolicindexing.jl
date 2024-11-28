@@ -507,14 +507,14 @@ function _get_observed_f(nw::Network, cf::EdgeModel, eidx)
     ur    = nw.im.e_data[eidx]
     esrcr = nw.im.v_out[nw.im.edgevec[eidx].src]
     edstr = nw.im.v_out[nw.im.edgevec[eidx].dst]
-    extr = nw.im.v_out[eidx]
+    extr = nw.im.e_out[eidx]
     pr   =  nw.im.e_para[eidx]
     ret = Vector{Float64}(undef, N)
 
     @closure (u, outbuf, aggbuf, extbuf, p, t) -> begin
         ins = (view(outbuf, esrcr), view(outbuf, edstr))
         if has_external_input(cf)
-            (ins..., view(aggbuf, aggr), view(extbuf, extr))
+            (ins..., view(extbuf, extr))
         end
         cf.obsf(ret, view(u, ur), ins..., view(p, pr), t)
         ret

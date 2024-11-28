@@ -13,11 +13,13 @@ function ExtMap(im::IndexManager)
     isempty(map) && error("There are no external inputs.")
 
     for (vi, vm) in pairs(im.vertexm)
+        has_external_input(vm) || continue
         for (i, si) in pairs(vm.extin)
             map[im.v_ext[vi][i]] = _symidx_to_extidx(im, si)
         end
     end
     for (ei, em) in pairs(im.edgem)
+        has_external_input(em) || continue
         for (i, si) in pairs(em.extin)
             map[im.e_ext[ei][i]] = _symidx_to_extidx(im, si)
         end

@@ -964,7 +964,7 @@ function _fill_defaults(T, @nospecialize(kwargs))
     #### External Inputs
     ####
     if haskey(dict, :extin)
-        @assert dict[:extin] isa Vector{<:SymbolicIndex}
+        @assert dict[:extin] isa Union{Nothing, Vector{<:SymbolicIndex}}
     else
         dict[:extin] = nothing
     end
