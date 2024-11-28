@@ -32,7 +32,7 @@ function VertexModel(sys::ODESystem, inputs, outputs; verbose=false, name=getnam
     outputs = outputs isa AbstractVector ? outputs : [outputs]
 
     if isnothing(extin)
-        extin_nwidx = NetworkDynamics.SymbolicIndex[]
+        extin_nwidx = nothing
         ins = (inputs, )
     else
         extin_sym, extin_nwidx = _split_extin(extin)
@@ -107,7 +107,7 @@ function EdgeModel(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=false, 
     dstin = dstin isa AbstractVector ? dstin : [dstin]
 
     if isnothing(extin)
-        extin_nwidx = NetworkDynamics.SymbolicIndex[]
+        extin_nwidx = nothing
         ins = (srcin, dstin)
     else
         extin_sym, extin_nwidx = _split_extin(extin)
