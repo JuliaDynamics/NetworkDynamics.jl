@@ -165,7 +165,8 @@ function EdgeModel(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=false, 
 
     mass_matrix = gen.mass_matrix
     c = EdgeModel(;f, g, sym, insym, outsym, psym, obssym,
-            obsf, mass_matrix, ff=gen.fftype, name,  allow_output_sym_clash=true, kwargs...)
+            obsf, mass_matrix, ff=gen.fftype, name, extin=extin_nwidx,
+            allow_output_sym_clash=true, kwargs...)
     set_metadata!(c, :observed, gen.observed)
     set_metadata!(c, :equations, gen.equations)
     set_metadata!(c, :outputeqs, gen.outputeqs)
