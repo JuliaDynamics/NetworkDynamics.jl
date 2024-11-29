@@ -119,8 +119,18 @@ function rand_inputs_fg(rng, cf)
     u = rand(rng, dim(cf))
     p = rand(rng, pdim(cf))
     ins = Tuple(rand(rng, l) for l in values(indim(cf)))
+    if has_external_input(cf)
+        ext = rand(rng, extdim(cf))
+        ins = (ins..., ext)
+    end
     outs = Tuple(rand(rng, l) for l in values(outdim(cf)))
     t = NaN
-    (outs..., du, u, ins..., p, t)
+    (outs, du, u, ins, p, t)
 end
 rand_inputs_fg(cf) = rand_inputs_fg(Random.default_rng(), cf)
+
+
+# abstract symbolic index types
+abstract type SymbolicIndex{C,S} end
+abstract type SymbolicStateIndex{C,S} <: SymbolicIndex{C,S} end
+abstract type SymbolicParameterIndex{C,S} <: SymbolicIndex{C,S} end

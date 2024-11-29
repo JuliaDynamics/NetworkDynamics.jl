@@ -67,6 +67,12 @@ function print_states_params(io, @nospecialize(c::ComponentModel), styling)
     num, word = maybe_plural(pdim(c), "param")
     pdim(c) > 0 && push!(info, styled"$num &$word: &&$(stylesymbolarray(c.psym, pdef(c), pguess(c)))")
 
+    if has_external_input(c)
+        num = extdim(c)
+        arr = match(r"(\[.*\])", repr(extin(c)))[1]
+        push!(info, styled"$num &ext in: &&$arr")
+    end
+
     print_treelike(io, align_strings(info))
 end
 function _inout_string(@nospecialize(c::VertexModel), f, name)

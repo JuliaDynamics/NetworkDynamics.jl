@@ -2,7 +2,7 @@ module CUDAExt
 using NetworkDynamics: Network, NetworkLayer, ComponentBatch,
                        KAAggregator, AggregationMap, SparseAggregator,
                        LazyGBufProvider, EagerGBufProvider, LazyGBuf,
-                       dispatchT, iscudacompatible, executionstyle
+                       dispatchT, iscudacompatible, executionstyle, ExtMap
 using NetworkDynamics.PreallocationTools: DiffCache
 using NetworkDynamics: KernelAbstractions as KA
 
@@ -32,12 +32,14 @@ function Adapt.adapt_structure(to, n::Network)
     mm = adapt(to, n.mass_matrix)
     gbp = adapt(to, n.gbufprovider)
     caches = (;output = _adapt_diffcache(to, n.caches.output),
-              aggregation = _adapt_diffcache(to, n.caches.aggregation))
+              aggregation = _adapt_diffcache(to, n.caches.aggregation),
+              external = _adapt_diffcache(to, n.caches.external))
     exT = typeof(executionstyle(n))
     gT = typeof(n.im.g)
+    extmap = adapt(to, n.extmap)
 
-    Network{exT,gT,typeof(layer),typeof(vb),typeof(mm),eltype(caches),typeof(gbp)}(
-        vb, layer, n.im, caches, mm, gbp)
+    Network{exT,gT,typeof(layer),typeof(vb),typeof(mm),eltype(caches),typeof(gbp),typeof(extmap)}(
+        vb, layer, n.im, caches, mm, gbp, extmap)
 end
 
 Adapt.@adapt_structure NetworkLayer
@@ -80,6 +82,14 @@ function _adapt_eager_gbufp(mapto, cacheto, gbp)
     EagerGBufProvider(map, cache)
 end
 
+####
+#### Adapt external input map
+####
+Adapt.@adapt_structure ExtMap
+function Adapt.adapt_structure(to::Type{<:CuArray{<:AbstractFloat}}, em::ExtMap)
+    adapt(CuArray, em)
+end
+
 
 ####
 #### Adapt VertexBatch/EdgeBatch
@@ -90,7 +100,7 @@ end
 function Adapt.adapt_structure(to, b::ComponentBatch)
     indices = adapt(to, b.indices)
     ComponentBatch(dispatchT(b), indices, b.compf, b.compg, b.ff,
-        b.statestride, b.pstride, b.inbufstride, b.outbufstride)
+        b.statestride, b.pstride, b.inbufstride, b.outbufstride, b.extbufstride)
 end
 
 ####

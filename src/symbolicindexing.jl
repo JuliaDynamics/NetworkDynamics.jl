@@ -1,6 +1,3 @@
-abstract type SymbolicIndex{C,S} end
-abstract type SymbolicStateIndex{C,S} <: SymbolicIndex{C,S} end
-abstract type SymbolicParameterIndex{C,S} <: SymbolicIndex{C,S} end
 """
     VIndex{C,S} <: SymbolicStateIndex{C,S}
     idx = VIndex(comp, sub)
@@ -105,21 +102,28 @@ function SII.getname(x::SymbolicEdgeIndex)
     Symbol(prefix, Symbol(x.compidx), :₊, Symbol(x.subidx))
 end
 
-resolvecompidx(nw::Network, sni::SymbolicIndex{Int}) = sni.compidx
-function resolvecompidx(nw::Network, sni::SymbolicIndex{Symbol})
-    dict = sni isa SymbolicVertexIndex ? nw.im.unique_vnames : nw.im.unique_enames
+resolvecompidx(nw::Network, sni) = resolvecompidx(nw.im, sni)
+resolvecompidx(::IndexManager, sni::SymbolicIndex{Int}) = sni.compidx
+function resolvecompidx(im::IndexManager, sni::SymbolicIndex{Symbol})
+    dict = sni isa SymbolicVertexIndex ? im.unique_vnames : im.unique_enames
     if haskey(dict, sni.compidx)
         return dict[sni.compidx]
     else
         throw(ArgumentError("Could not resolve component index for $sni, the name might not be unique?"))
     end
 end
-getcomp(nw::Network, sni::SymbolicEdgeIndex) = nw.im.edgem[resolvecompidx(nw, sni)]
-getcomp(nw::Network, sni::SymbolicVertexIndex) = nw.im.vertexm[resolvecompidx(nw, sni)]
-getcomprange(nw::Network, sni::VIndex{<:Union{Symbol,Int}}) = nw.im.v_data[resolvecompidx(nw, sni)]
-getcomprange(nw::Network, sni::EIndex{<:Union{Symbol,Int}}) = nw.im.e_data[resolvecompidx(nw, sni)]
-getcompoutrange(nw::Network, sni::VIndex{<:Union{Symbol,Int}}) = nw.im.v_out[resolvecompidx(nw, sni)]
-getcompoutrange(nw::Network, sni::EIndex{<:Union{Symbol,Int}}) = flatrange(nw.im.e_out[resolvecompidx(nw, sni)])
+getcomp(nw::Network, sni) = getcomp(nw.im, sni)
+getcomp(im::IndexManager, sni::SymbolicEdgeIndex) = im.edgem[resolvecompidx(im, sni)]
+getcomp(im::IndexManager, sni::SymbolicVertexIndex) = im.vertexm[resolvecompidx(im, sni)]
+
+getcomprange(nw::Network, sni) = getcomprange(nw.im, sni)
+getcomprange(im::IndexManager, sni::VIndex{<:Union{Symbol,Int}}) = im.v_data[resolvecompidx(im, sni)]
+getcomprange(im::IndexManager, sni::EIndex{<:Union{Symbol,Int}}) = im.e_data[resolvecompidx(im, sni)]
+
+getcompoutrange(nw::Network, sni) = getcompoutrange(nw.im, sni)
+getcompoutrange(im::IndexManager, sni::VIndex{<:Union{Symbol,Int}}) = im.v_out[resolvecompidx(im, sni)]
+getcompoutrange(im::IndexManager, sni::EIndex{<:Union{Symbol,Int}}) = flatrange(im.e_out[resolvecompidx(im, sni)])
+
 getcompprange(nw::Network, sni::VPIndex{<:Union{Symbol,Int}}) = nw.im.v_para[resolvecompidx(nw, sni)]
 getcompprange(nw::Network, sni::EPIndex{<:Union{Symbol,Int}}) = nw.im.e_para[resolvecompidx(nw, sni)]
 
@@ -422,7 +426,7 @@ function SII.observed(nw::Network, snis)
                 outidx[i] = _range[idx]
             elseif (idx=findfirst(isequal(sni.subidx), obssym(cf))) != nothing #found in observed
                 _obsf = _get_observed_f(nw, cf, resolvecompidx(nw, sni))
-                obsfuns[i] = (u, outbuf, aggbuf, p, t) -> _obsf(u, outbuf, aggbuf, p, t)[idx]
+                obsfuns[i] = (u, outbuf, aggbuf, extbuf, p, t) -> _obsf(u, outbuf, aggbuf, extbuf, p, t)[idx]
             else
                 throw(ArgumentError("Cannot resolve observable $sni"))
             end
@@ -432,7 +436,7 @@ function SII.observed(nw::Network, snis)
 
     if isscalar
         @closure (u, p, t) -> begin
-            outbuf, aggbuf = get_buffers(nw, u, p, t; initbufs)
+            outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs)
             if !isempty(stateidx)
                 idx = only(stateidx).second
                 u[idx]
@@ -441,12 +445,12 @@ function SII.observed(nw::Network, snis)
                 outbuf[idx]
             else
                 obsf = only(obsfuns).second
-                obsf(u, outbuf, aggbuf, p, t)::eltype(u)
+                obsf(u, outbuf, aggbuf, extbuf, p, t)::eltype(u)
             end
         end
     else
         @closure (u, p, t) -> begin
-            outbuf, aggbuf = get_buffers(nw, u, p, t; initbufs)
+            outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs)
 
             out = similar(u, length(snis))
             for (i, statei) in stateidx
@@ -456,7 +460,7 @@ function SII.observed(nw::Network, snis)
                 out[i] = outbuf[outi]
             end
             for (i, obsf) in obsfuns
-                out[i] = obsf(u, outbuf, aggbuf, p, t)::eltype(u)
+                out[i] = obsf(u, outbuf, aggbuf, extbuf, p, t)::eltype(u)
             end
             out
         end
@@ -483,11 +487,17 @@ function _get_observed_f(nw::Network, cf::VertexModel, vidx)
     N = length(cf.obssym)
     ur   = nw.im.v_data[vidx]
     aggr = nw.im.v_aggr[vidx]
+    extr = nw.im.v_out[vidx]
     pr   = nw.im.v_para[vidx]
     ret = Vector{Float64}(undef, N)
 
-    @closure (u, outbuf, aggbuf, p, t) -> begin
-        cf.obsf(ret, view(u, ur), view(aggbuf, aggr), view(p, pr), t)
+    @closure (u, outbuf, aggbuf, extbuf, p, t) -> begin
+        ins = if has_external_input(cf)
+            (view(aggbuf, aggr), view(extbuf, extr))
+        else
+            (view(aggbuf, aggr), )
+        end
+        cf.obsf(ret, view(u, ur), ins..., view(p, pr), t)
         ret
     end
 end
@@ -497,11 +507,16 @@ function _get_observed_f(nw::Network, cf::EdgeModel, eidx)
     ur    = nw.im.e_data[eidx]
     esrcr = nw.im.v_out[nw.im.edgevec[eidx].src]
     edstr = nw.im.v_out[nw.im.edgevec[eidx].dst]
+    extr = nw.im.e_out[eidx]
     pr   =  nw.im.e_para[eidx]
     ret = Vector{Float64}(undef, N)
 
-    @closure (u, outbuf, aggbuf, p, t) -> begin
-        cf.obsf(ret, view(u, ur), view(outbuf, esrcr), view(outbuf, edstr), view(p, pr), t)
+    @closure (u, outbuf, aggbuf, extbuf, p, t) -> begin
+        ins = (view(outbuf, esrcr), view(outbuf, edstr))
+        if has_external_input(cf)
+            (ins..., view(extbuf, extr))
+        end
+        cf.obsf(ret, view(u, ur), ins..., view(p, pr), t)
         ret
     end
 end

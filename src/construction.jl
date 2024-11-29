@@ -171,7 +171,8 @@ function Network(g::AbstractGraph,
         mass_matrix = construct_mass_matrix(im)
         N = ForwardDiff.pickchunksize(max(im.lastidx_dynamic, im.lastidx_p))
         caches = (; output = DiffCache(zeros(im.lastidx_out), N),
-                  aggregation = DiffCache(zeros(im.lastidx_aggr), N))
+                    aggregation = DiffCache(zeros(im.lastidx_aggr), N),
+                    external = DiffCache(zeros(im.lastidx_extbuf), N))
 
         gbufprovider = if usebuffer(execution)
             EagerGBufProvider(im, edgebatches)
@@ -179,13 +180,17 @@ function Network(g::AbstractGraph,
             LazyGBufProvider(im, edgebatches)
         end
 
+        # create map for extenral inputs
+        extmap = has_external_input(im) ? ExtMap(im) : nothing
+
         nw = Network{typeof(execution),typeof(g),typeof(nl), typeof(vertexbatches),
-                     typeof(mass_matrix),eltype(caches),typeof(gbufprovider)}(
+                     typeof(mass_matrix),eltype(caches),typeof(gbufprovider),typeof(extmap)}(
             vertexbatches,
             nl, im,
             caches,
             mass_matrix,
-            gbufprovider
+            gbufprovider,
+            extmap,
         )
 
     end
@@ -276,37 +281,39 @@ function aliasgroups(cfs::Vector{T}) where {T<:ComponentModel}
 end
 
 function VertexBatch(im::IndexManager, idxs::Vector{Int}; verbose)
-    components = @view im.vertexm[idxs]
-    _compT  = dispatchT(first(components))
-    _compf  = compf(first(components))
-    _compg  = compg(first(components))
-    _ff     = fftype(first(components))
-    _dim    = dim(first(components))
-    _pdim   = pdim(first(components))
-    _outdim = outdim(first(components))
+    first_comp = im.vertexm[first(idxs)]
+    _compT  = dispatchT(first_comp)
+    _compf  = compf(first_comp)
+    _compg  = compg(first_comp)
+    _ff     = fftype(first_comp)
+    _dim    = dim(first_comp)
+    _pdim   = pdim(first_comp)
+    _outdim = outdim(first_comp)
+    _extdim = extdim(first_comp)
 
-    strides = register_vertices!(im, _dim, _outdim, _pdim, idxs)
+    strides = register_vertices!(im, idxs, _dim, _outdim, _pdim, _extdim)
 
     verbose && println(" - VertexBatch: dim=$(_dim), pdim=$(_pdim), length=$(length(idxs))")
 
-    ComponentBatch(_compT, idxs, _compf, _compg, _ff, strides.state, strides.p, strides.in, strides.out)
+    ComponentBatch(_compT, idxs, _compf, _compg, _ff, strides.state, strides.p, strides.in, strides.out, strides.ext)
 end
 
 function EdgeBatch(im::IndexManager, idxs::Vector{Int}; verbose)
-    components = @view im.edgem[idxs]
-    _compT  = dispatchT(first(components))
-    _compf  = compf(first(components))
-    _compg  = compg(first(components))
-    _ff     = fftype(first(components))
-    _dim    = dim(first(components))
-    _pdim   = pdim(first(components))
-    _outdim = outdim(first(components))
+    first_comp = im.edgem[first(idxs)]
+    _compT  = dispatchT(first_comp)
+    _compf  = compf(first_comp)
+    _compg  = compg(first_comp)
+    _ff     = fftype(first_comp)
+    _dim    = dim(first_comp)
+    _pdim   = pdim(first_comp)
+    _outdim = outdim(first_comp)
+    _extdim = extdim(first_comp)
 
-    strides = register_edges!(im, _dim, _outdim, _pdim, idxs)
+    strides = register_edges!(im, idxs, _dim, _outdim, _pdim, _extdim)
 
     verbose && println(" - EdgeBatch: dim=$(_dim), pdim=$(_pdim), length=$(length(idxs))")
 
-    ComponentBatch(_compT, idxs, _compf, _compg, _ff, strides.state, strides.p, strides.in, strides.out)
+    ComponentBatch(_compT, idxs, _compf, _compg, _ff, strides.state, strides.p, strides.in, strides.out, strides.ext)
 end
 
 batch_by_idxs(v, idxs::Vector{Vector{Int}}) = [v for batch in idxs]

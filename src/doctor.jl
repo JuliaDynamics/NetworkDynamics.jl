@@ -99,10 +99,14 @@ function chk_component(c::ComponentModel)
         Tuple(AccessTracker(rand(indim_guess)) for _ in outdim_normalized(c))
     end
     outs = Tuple(AccessTracker(rand(l)) for l in values(outdim(c)))
+    ext = AccessTracker(rand(extdim(c)))
+    if has_external_input(c)
+        ins = (ins..., ext)
+    end
     t = NaN
 
     try
-        compfg(c)(outs..., du, u, ins..., p, t)
+        compfg(c)(outs, du, u, ins, p, t)
     catch e
         if e isa MethodError
             @warn "Encountered MethodError. All arguments are AbstractArrays, make sure to allways index into them: $e"
@@ -123,6 +127,7 @@ function chk_component(c::ComponentModel)
     has_oob(du) && @warn "There is out of bound acces to du: reads $(oob_reads(du)) and writes $(oob_writes(du))! Check dim/sym!"
     has_oob(u) && @warn "There is out of bound acces to u: reads $(oob_reads(u)) and writes $(oob_writes(u))! Check dim/sym!"
     has_oob(p) && @warn "There is out of bound acces to p: reads $(oob_reads(p)) and writes $(oob_writes(p))! Check pdim/psim!"
+    has_oob(ext) && @warn "There is out of bound acces to external input: reads $(oob_reads(ext)) and writes $(oob_writes(ext))!"
     for (j, o) in enumerate(outs)
         has_oob(o) && @warn "There is out of bound acces to output#$j: reads $(oob_reads(o)) and writes $(oob_writes(o))!"
     end
@@ -148,6 +153,7 @@ function chk_component(c::ComponentModel)
     end
 
     has_writes(p) && @warn "There is write access to p: $(writes(p))!"
+    has_writes(ext) && @warn "There is write access to external inputs: $(writes(ext))!"
 
     similars = String[]
     has_similars(du) && push!(similars, "du")

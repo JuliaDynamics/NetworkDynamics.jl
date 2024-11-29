@@ -16,20 +16,36 @@ import NetworkDynamics: VertexModel, EdgeModel, AnnotatedSym
 include("MTKUtils.jl")
 
 """
-    VertexModel(sys::ODESystem, inputs, outputs; ff_to_constraint=true, kwargs...)
+    VertexModel(sys::ODESystem, inputs, outputs;
+                verbose=false, name=getname(sys), extin=nothing, ff_to_constraint=true, kwargs...)
 
 Create a `VertexModel` object from a given `ODESystem` created with ModelingToolkit.
 You need to provide 2 lists of symbolic names (`Symbol` or `Vector{Symbols}`):
 - `inputs`: names of variables in you equation representing the aggregated edge states
 - `outputs`: names of variables in you equation representing the node output
 
-`ff_to_constraint` controlls, whether output transformations `g` which depend on inputs should be
+Additional kw arguments:
+- `name`: Set name of the component model. Will be lifted from the ODESystem name.
+- `extin=nothing`: Provide external inputs as pairs, i.e. `extin=[:extvar => VIndex(1, :a)]`
+   will bound the variable `extvar(t)` in the equations to the state `a` of the first vertex.
+- `ff_to_constraint=true`: Controlls, whether output transformations `g` which depend on inputs should be
+  transformed into constraints. Defaults to true since ND.jl does not handle vertices with FF yet.
 """
-function VertexModel(sys::ODESystem, inputs, outputs; verbose=false, name=getname(sys), ff_to_constraint=true, kwargs...)
+function VertexModel(sys::ODESystem, inputs, outputs; verbose=false, name=getname(sys),
+                     ff_to_constraint=true, extin=nothing, kwargs...)
     warn_events(sys)
     inputs = inputs isa AbstractVector ? inputs : [inputs]
     outputs = outputs isa AbstractVector ? outputs : [outputs]
-    gen = generate_io_function(sys, (inputs,), (outputs,); verbose, ff_to_constraint)
+
+    if isnothing(extin)
+        extin_nwidx = nothing
+        ins = (inputs, )
+    else
+        extin_sym, extin_nwidx = _split_extin(extin)
+        ins = (inputs, extin_sym)
+    end
+
+    gen = generate_io_function(sys, ins, (outputs,); verbose, ff_to_constraint)
 
     f = gen.f
     g = gen.g
@@ -52,7 +68,8 @@ function VertexModel(sys::ODESystem, inputs, outputs; verbose=false, name=getnam
 
     mass_matrix = gen.mass_matrix
     c = VertexModel(;f, g, sym, insym, outsym, psym, obssym,
-            obsf, mass_matrix, ff=gen.fftype, name, allow_output_sym_clash=true, kwargs...)
+            obsf, mass_matrix, ff=gen.fftype, name, extin=extin_nwidx,
+            allow_output_sym_clash=true, kwargs...)
     set_metadata!(c, :observed, gen.observed)
     set_metadata!(c, :equations, gen.equations)
     set_metadata!(c, :outputeqs, gen.outputeqs)
@@ -60,9 +77,9 @@ function VertexModel(sys::ODESystem, inputs, outputs; verbose=false, name=getnam
 end
 
 """
-    EdgeModel(sys::ODESystem, srcin, dstin, AntiSymmetric(dstout); ff_to_constraint=false, kwargs...)
+    EdgeModel(sys::ODESystem, srcin, dstin, AntiSymmetric(dstout); kwargs...)
 
-Create a `EdgeModel` object from a given `ODESystem` created with ModelingToolkit.
+Create a `EdgeModel` object from a given `ODESystem` created with ModelingToolkit for **single sided models**.
 
 Here you only need to provide one list of output symbols: `dstout`.
 To make it clear how to handle the single-sided output definiton, you musst wrap
@@ -71,13 +88,13 @@ the symbol vector in
 - `Symmetric(dstout)`, or
 - `Directed(dstout)`.
 
-`ff_to_constraint` controlls, whether output transformations `g` which depend on inputs should be
-transformed into constraints.
+Additional `kwargs` are the same as for the double-sided EdgeModel MTK constructor.
 """
 EdgeModel(sys::ODESystem, srcin, dstin, dstout; kwargs...) = EdgeModel(sys, srcin, dstin, nothing, dstout; kwargs...)
 
 """
-    EdgeModel(sys::ODESystem, srcin, srcout, dstin, dstout; ff_to_constraint=false, kwargs...)
+    EdgeModel(sys::ODESystem, srcin, srcout, dstin, dstout;
+              verbose=false, name=getname(sys), extin=nothing, ff_to_constraint=false, kwargs...)
 
 Create a `EdgeModel` object from a given `ODESystem` created with ModelingToolkit.
 You need to provide 4 lists of symbolic names (`Symbol` or `Vector{Symbols}`):
@@ -86,13 +103,26 @@ You need to provide 4 lists of symbolic names (`Symbol` or `Vector{Symbols}`):
 - `srcout`: names of variables in you equation representing the output at the source
 - `dstout`: names of variables in you equation representing the output at the destination
 
-`ff_to_constraint` controlls, whether output transformations `g` which depend on inputs should be
-transformed into constraints.
+Additional kw arguments:
+- `name`: Set name of the component model. Will be lifted from the ODESystem name.
+- `extin=nothing`: Provide external inputs as pairs, i.e. `extin=[:extvar => VIndex(1, :a)]`
+   will bound the variable `extvar(t)` in the equations to the state `a` of the first vertex.
+- `ff_to_constraint=false`: Controlls, whether output transformations `g` which depend on inputs should be
+  transformed into constraints.
 """
-function EdgeModel(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=false, name=getname(sys), ff_to_constraint=false, kwargs...)
+function EdgeModel(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=false, name=getname(sys),
+                   ff_to_constraint=false, extin=nothing, kwargs...)
     warn_events(sys)
     srcin = srcin isa AbstractVector ? srcin : [srcin]
     dstin = dstin isa AbstractVector ? dstin : [dstin]
+
+    if isnothing(extin)
+        extin_nwidx = nothing
+        ins = (srcin, dstin)
+    else
+        extin_sym, extin_nwidx = _split_extin(extin)
+        ins = (srcin, dstin, extin_sym)
+    end
 
     singlesided = isnothing(srcout)
     if singlesided && !(dstout isa AnnotatedSym)
@@ -111,10 +141,10 @@ function EdgeModel(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=false, 
         outs = (srcout, dstout)
     end
 
-    gen = generate_io_function(sys, (srcin, dstin), outs; verbose, ff_to_constraint)
+    gen = generate_io_function(sys, ins, outs; verbose, ff_to_constraint)
 
     f = gen.f
-    g = singlesided ? gwrap(gen.g; ff=gen.fftype) : gen.g
+    g = singlesided ? gwrap(gen.g) : gen.g
     obsf = gen.obsf
 
     _sym = getname.(gen.states)
@@ -145,7 +175,8 @@ function EdgeModel(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=false, 
 
     mass_matrix = gen.mass_matrix
     c = EdgeModel(;f, g, sym, insym, outsym, psym, obssym,
-            obsf, mass_matrix, ff=gen.fftype, name,  allow_output_sym_clash=true, kwargs...)
+            obsf, mass_matrix, ff=gen.fftype, name, extin=extin_nwidx,
+            allow_output_sym_clash=true, kwargs...)
     set_metadata!(c, :observed, gen.observed)
     set_metadata!(c, :equations, gen.equations)
     set_metadata!(c, :outputeqs, gen.outputeqs)
@@ -197,6 +228,18 @@ function _get_metadata(sys, name)
         nt = (; nt..., description=ModelingToolkit.getdescription(sym))
     end
     nt
+end
+
+function _split_extin(extin)
+    try
+        extin_sym   = first.(extin)
+        extin_nwidx = last.(extin)
+        @assert extin_sym isa Vector{Symbol}
+        @assert extin_nwidx isa Vector{<:NetworkDynamics.SymbolicIndex}
+        return extin_sym, extin_nwidx
+    catch e
+        @error "Could not evaluate extin keyword argument!"
+    end
 end
 
 function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;

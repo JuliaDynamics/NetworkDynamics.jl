@@ -36,6 +36,7 @@ makedocs(;
             "metadata.md",
             "initialization.md",
             "mtk_integration.md",
+            "external_inputs.md",
         ],
         "API.md",
         "Tutorials" => [

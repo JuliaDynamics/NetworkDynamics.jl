@@ -55,6 +55,7 @@ include("aggregators.jl")
 include("gbufs.jl")
 include("construction.jl")
 include("coreloop.jl")
+include("external_inputs.jl")
 
 # XXX: have both, s[:] and uflat(s) ?
 export VIndex, EIndex, VPIndex, EPIndex, NWState, NWParameter, uflat, pflat
