@@ -116,8 +116,8 @@ if bench_target || bench_baseline
         @info "Dirty directory, add everything to new commit!"
         @assert realpath(pwd()) == realpath(ndpath_tmp) "Julia is in $(pwd()) not it $ndpath_tmp"
         run(`git status`)
-        run(`git config --global user.email "benchmarkbot@example.com"`)
-        run(`git config --global user.name "Benchmark Bot"`)
+        run(`git config --local user.email "benchmarkbot@example.com"`)
+        run(`git config --local user.name "Benchmark Bot"`)
         run(`git checkout -b $(randstring(15))`)
         run(`git add -A`)
         run(`git commit -m "tmp commit for benchmarking"`)
