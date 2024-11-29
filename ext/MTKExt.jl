@@ -16,14 +16,20 @@ import NetworkDynamics: VertexModel, EdgeModel, AnnotatedSym
 include("MTKUtils.jl")
 
 """
-    VertexModel(sys::ODESystem, inputs, outputs; ff_to_constraint=true, kwargs...)
+    VertexModel(sys::ODESystem, inputs, outputs;
+                verbose=false, name=getname(sys), extin=nothing, ff_to_constraint=true, kwargs...)
 
 Create a `VertexModel` object from a given `ODESystem` created with ModelingToolkit.
 You need to provide 2 lists of symbolic names (`Symbol` or `Vector{Symbols}`):
 - `inputs`: names of variables in you equation representing the aggregated edge states
 - `outputs`: names of variables in you equation representing the node output
 
-`ff_to_constraint` controlls, whether output transformations `g` which depend on inputs should be
+Additional kw arguments:
+- `name`: Set name of the component model. Will be lifted from the ODESystem name.
+- `extin=nothing`: Provide external inputs as pairs, i.e. `extin=[:extvar => VIndex(1, :a)]`
+   will bound the variable `extvar(t)` in the equations to the state `a` of the first vertex.
+- `ff_to_constraint=true`: Controlls, whether output transformations `g` which depend on inputs should be
+  transformed into constraints. Defaults to true since ND.jl does not handle vertices with FF yet.
 """
 function VertexModel(sys::ODESystem, inputs, outputs; verbose=false, name=getname(sys),
                      ff_to_constraint=true, extin=nothing, kwargs...)
@@ -71,9 +77,9 @@ function VertexModel(sys::ODESystem, inputs, outputs; verbose=false, name=getnam
 end
 
 """
-    EdgeModel(sys::ODESystem, srcin, dstin, AntiSymmetric(dstout); ff_to_constraint=false, kwargs...)
+    EdgeModel(sys::ODESystem, srcin, dstin, AntiSymmetric(dstout); kwargs...)
 
-Create a `EdgeModel` object from a given `ODESystem` created with ModelingToolkit.
+Create a `EdgeModel` object from a given `ODESystem` created with ModelingToolkit for **single sided models**.
 
 Here you only need to provide one list of output symbols: `dstout`.
 To make it clear how to handle the single-sided output definiton, you musst wrap
@@ -82,13 +88,13 @@ the symbol vector in
 - `Symmetric(dstout)`, or
 - `Directed(dstout)`.
 
-`ff_to_constraint` controlls, whether output transformations `g` which depend on inputs should be
-transformed into constraints.
+Additional `kwargs` are the same as for the double-sided EdgeModel MTK constructor.
 """
 EdgeModel(sys::ODESystem, srcin, dstin, dstout; kwargs...) = EdgeModel(sys, srcin, dstin, nothing, dstout; kwargs...)
 
 """
-    EdgeModel(sys::ODESystem, srcin, srcout, dstin, dstout; ff_to_constraint=false, kwargs...)
+    EdgeModel(sys::ODESystem, srcin, srcout, dstin, dstout;
+              verbose=false, name=getname(sys), extin=nothing, ff_to_constraint=false, kwargs...)
 
 Create a `EdgeModel` object from a given `ODESystem` created with ModelingToolkit.
 You need to provide 4 lists of symbolic names (`Symbol` or `Vector{Symbols}`):
@@ -97,8 +103,12 @@ You need to provide 4 lists of symbolic names (`Symbol` or `Vector{Symbols}`):
 - `srcout`: names of variables in you equation representing the output at the source
 - `dstout`: names of variables in you equation representing the output at the destination
 
-`ff_to_constraint` controlls, whether output transformations `g` which depend on inputs should be
-transformed into constraints.
+Additional kw arguments:
+- `name`: Set name of the component model. Will be lifted from the ODESystem name.
+- `extin=nothing`: Provide external inputs as pairs, i.e. `extin=[:extvar => VIndex(1, :a)]`
+   will bound the variable `extvar(t)` in the equations to the state `a` of the first vertex.
+- `ff_to_constraint=false`: Controlls, whether output transformations `g` which depend on inputs should be
+  transformed into constraints.
 """
 function EdgeModel(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=false, name=getname(sys),
                    ff_to_constraint=false, extin=nothing, kwargs...)
