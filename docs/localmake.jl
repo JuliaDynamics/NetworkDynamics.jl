@@ -11,9 +11,9 @@ use the updated `*.md` and source files. This way the Julia session keeps alive 
 individual builds are much faster.
 =#
 
+#=
 using Pkg
 Pkg.activate(@__DIR__)
-Pkg.develop(PackageSpec(path=dirname(@__DIR__))) # adds the package this script is called from
 Pkg.instantiate()
 print("Do you want to update docs environment? [y/n] ")
 answer = readline()
@@ -47,3 +47,17 @@ while true
         break
     end
 end
+=#
+
+
+using Pkg
+Pkg.activate(@__DIR__)
+using NetworkDynamics
+using LiveServer
+
+cd(pkgdir(NetworkDynamics))
+
+servedocs(
+    literate_dir = joinpath("docs", "examples"),
+    skip_dir = joinpath("docs", "src", "generated")
+)
