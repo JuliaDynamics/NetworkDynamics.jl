@@ -2,7 +2,7 @@ using NetworkDynamics
 using Graphs
 using DifferentiationInterface
 using DifferentiationInterfaceTest
-import ForwardDiff, ReverseDiff, Enzyme, FiniteDiff
+import ForwardDiff, FiniteDiff
 
 (isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
 

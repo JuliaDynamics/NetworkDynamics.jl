@@ -56,11 +56,6 @@ using ExplicitImports
 end
 
 @testset "Test Doc Examples" begin
-    @info "Activate doc environment and test examples"
-    Pkg.activate(joinpath(pkgdir(NetworkDynamics), "docs"))
-    Pkg.develop(path=pkgdir(NetworkDynamics))
-    Pkg.instantiate()
-
     examples = joinpath(pkgdir(NetworkDynamics), "docs", "examples")
     for file in readdir(examples; join=true)
         endswith(file, ".jl") || continue
