@@ -189,7 +189,7 @@ For a given system and name, extract all the relevant meta we want to keep for t
 function _get_metadata(sys, name)
     nt = (;)
     sym = try
-        getproperty_symbolic(sys, name)
+        getproperty_symbolic(sys, name; might_contain_toplevel_ns=false)
     catch e
         if !endswith(string(name), "ˍt") # known for "internal" derivatives
             @warn "Could not extract metadata for $name $(e.msg)"

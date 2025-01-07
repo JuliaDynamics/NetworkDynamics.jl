@@ -93,18 +93,24 @@ function _collect_differentials!(found, ex)
 end
 
 """
-    getproperty_symbolic(sys, var)
+    getproperty_symbolic(sys, var; might_contain_toplevel_ns=true)
 
 Like `getproperty` but works on a greater varaity of "var"
 - var can be Num or Symbolic (resolved using genname)
-- strip namespace of sys if present
+- strip namespace of sys if present (don't strip if `might_contain_top_level_ns=false`)
 - for nested variables (foo₊bar₊baz) resolve them one by one
 """
-function getproperty_symbolic(sys, var)
+function getproperty_symbolic(sys, var; might_contain_toplevel_ns=true)
     ns = string(getname(sys))
     varname = string(getname(var))
-    varname_nons = replace(varname, r"^"*ns*"₊" => "")
-    parts = split(varname_nons, "₊")
+    # split of the toplevel namespace if necessary
+    if might_contain_toplevel_ns && startswith(varname, ns*"₊")
+        if getname(sys) ∈ getname.(ModelingToolkit.get_systems(sys))
+            @warn "Namespace :$ns appears multiple times, this might lead to unexpected, since it is not clear whether the namespace should be stripped or not."
+        end
+        varname = replace(varname, r"^"*ns*"₊" => "")
+    end
+    parts = split(varname, "₊")
     r = getproperty(sys, Symbol(parts[1]); namespace=false)
     for part in parts[2:end]
         r = getproperty(r, Symbol(part); namespace=true)
