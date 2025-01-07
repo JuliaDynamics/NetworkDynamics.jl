@@ -134,3 +134,6 @@ rand_inputs_fg(cf) = rand_inputs_fg(Random.default_rng(), cf)
 abstract type SymbolicIndex{C,S} end
 abstract type SymbolicStateIndex{C,S} <: SymbolicIndex{C,S} end
 abstract type SymbolicParameterIndex{C,S} <: SymbolicIndex{C,S} end
+
+flatten_sym(v::NamedTuple) = reduce(vcat, values(v))
+flatten_sym(v::AbstractVector{Symbol}) = v

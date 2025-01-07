@@ -306,7 +306,7 @@ for idx in idxtypes
         println(idx, " => ", b.allocs, " allocations")
     end
     if VERSION ≥ v"1.11"
-        @test b.allocs <= 12
+        @test b.allocs <= 13
     end
 end
 
@@ -469,4 +469,22 @@ nw = Network(g, [n1, n2, n3], [e1, e2])
     @test s.p.e[:e1, 1] == s[EPIndex(1,1)]
     @test s.p.e[:e2, 1] == s[EPIndex(2,1)]
     @test s.p.e[:e3, 1] == s[EPIndex(3,1)]
+end
+
+# test observed for inputs
+@testset "test observing of model input" begin
+    v1 = Lib.kuramoto_second(name=:v1, vidx=1, insym=[:Pin])
+    v2 = Lib.kuramoto_second(name=:v2, vidx=2, insym=[:Pin])
+    v3 = Lib.kuramoto_second(name=:v3, vidx=3, insym=[:Pin])
+    e1 = Lib.kuramoto_edge(name=:e1, src=1, dst=2, insym=[:δin])
+    e2 = Lib.kuramoto_edge(name=:e2, src=2, dst=3, insym=[:δin])
+    nw = Network([v1,v2,v3], [e1,e2])
+    s = NWState(nw, rand(dim(nw)), rand(pdim(nw)))
+    @test s[VIndex(:v1, :Pin)] == s[EIndex(:e1, :₋P)]
+    @test s[VIndex(:v2, :Pin)] == s[EIndex(:e1, :P)] + s[EIndex(:e2, :₋P)]
+    @test s[VIndex(:v3, :Pin)] == s[EIndex(:e2, :P)]
+    @test s[EIndex(:e1, :src₊δin)] == s[VIndex(:v1, :δ)]
+    @test s[EIndex(:e1, :dst₊δin)] == s[VIndex(:v2, :δ)]
+    @test s[EIndex(:e2, :src₊δin)] == s[VIndex(:v2, :δ)]
+    @test s[EIndex(:e2, :dst₊δin)] == s[VIndex(:v3, :δ)]
 end

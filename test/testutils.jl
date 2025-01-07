@@ -1,3 +1,7 @@
+using CUDA
+using Adapt
+using NetworkDynamics: iscudacompatible, NaiveAggregator
+
 """
 Test utility, which rebuilds the Network with all different execution styles and compares the
 results of the coreloop.

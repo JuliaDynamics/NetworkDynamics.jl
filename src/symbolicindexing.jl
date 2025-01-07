@@ -412,6 +412,8 @@ function SII.observed(nw::Network, snis)
     stateidx = Dict{Int, Int}()
     # mapping i -> index in output
     outidx = Dict{Int, Int}()
+    # mapping i -> index in aggbuf
+    aggidx = Dict{Int, Int}()
     # mapping i -> f(fullstate, p, t) (component observables)
     obsfuns = Dict{Int, Function}()
     for (i, sni) in enumerate(_snis)
@@ -427,12 +429,28 @@ function SII.observed(nw::Network, snis)
             elseif (idx=findfirst(isequal(sni.subidx), obssym(cf))) != nothing #found in observed
                 _obsf = _get_observed_f(nw, cf, resolvecompidx(nw, sni))
                 obsfuns[i] = (u, outbuf, aggbuf, extbuf, p, t) -> _obsf(u, outbuf, aggbuf, extbuf, p, t)[idx]
+            elseif hasinsym(cf) && sni.subidx ∈ insym_all(cf) # found in input
+                if sni isa SymbolicVertexIndex
+                    idx = findfirst(isequal(sni.subidx), insym_all(cf))
+                    aggidx[i] = nw.im.v_aggr[resolvecompidx(nw, sni)][idx]
+                elseif sni isa SymbolicEdgeIndex
+                    edge = nw.im.edgevec[resolvecompidx(nw, sni)]
+                    if (idx = findfirst(isequal(sni.subidx), insym(cf).src)) != nothing
+                        outidx[i] = nw.im.v_out[edge.src][idx]
+                    elseif (idx = findfirst(isequal(sni.subidx), insym(cf).dst)) != nothing
+                        outidx[i] = nw.im.v_out[edge.dst][idx]
+                    else
+                        error()
+                    end
+                else
+                    error()
+                end
             else
                 throw(ArgumentError("Cannot resolve observable $sni"))
             end
         end
     end
-    initbufs = !isempty(outidx) || !isempty(obsfuns)
+    initbufs = !isempty(outidx) || !isempty(aggidx) || !isempty(obsfuns)
 
     if isscalar
         @closure (u, p, t) -> begin
@@ -443,6 +461,9 @@ function SII.observed(nw::Network, snis)
             elseif !isempty(outidx)
                 idx = only(outidx).second
                 outbuf[idx]
+            elseif !isempty(aggidx)
+                idx = only(aggidx).second
+                aggbuf[idx]
             else
                 obsf = only(obsfuns).second
                 obsf(u, outbuf, aggbuf, extbuf, p, t)::eltype(u)
@@ -458,6 +479,9 @@ function SII.observed(nw::Network, snis)
             end
             for (i, outi) in outidx
                 out[i] = outbuf[outi]
+            end
+            for (i, aggi) in aggidx
+                out[i] = aggbuf[aggi]
             end
             for (i, obsf) in obsfuns
                 out[i] = obsf(u, outbuf, aggbuf, extbuf, p, t)::eltype(u)
