@@ -958,6 +958,7 @@ function _fill_defaults(T, @nospecialize(kwargs))
 
     dict[:_obssym_all] = setdiff(_outsym_flat, sym) ∪ obssym
 
+    insym = dict[:insym]
     if !isnothing(insym)
         insym_flat = flatten_sym(insym)
         dict[:_obssym_all] = dict[:_obssym_all] ∪ insym_flat
@@ -994,10 +995,8 @@ function _fill_defaults(T, @nospecialize(kwargs))
 
     _is = if isnothing(__is)
         Symbol[]
-    elseif __is isa NamedTuple
-        vcat(__is.src, __is.dst)
     else
-        __is
+        flatten_sym(insym)
     end
     if !allunique(vcat(_s, _ps, _obss, _is, _os))
         throw(ArgumentError("Symbol names must be unique. There are clashes in sym, psym, outsym, obssym and insym."))
