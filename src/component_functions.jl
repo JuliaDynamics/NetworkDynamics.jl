@@ -487,6 +487,9 @@ edges it returns a named tuple `(; src, dst)` with two symbol vectors.
 insym(c::VertexModel)::Vector{Symbol} = c.insym
 insym(c::EdgeModel)::@NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}} = c.insym
 
+insym_all(c::VertexModel) = c.insym
+insym_all(c::EdgeModel) = Iterators.flatten(values(c.insym))
+
 """
     indim(c::VertexModel)::Int
     indim(c::EdgeModel)::@NamedTuple{src::Int,dst::Int}
@@ -950,15 +953,16 @@ function _fill_defaults(T, @nospecialize(kwargs))
     ####
     #### Cached outsymflat/outsymall
     ####
-    _outsym_flat = if T <: VertexModel
-        outsym
-    elseif T <: EdgeModel
-        vcat(outsym.src, outsym.dst)
-    else
-        error()
-    end
+    _outsym_flat = flatten_sym(outsym)
     dict[:_outsym_flat] = _outsym_flat
+
     dict[:_obssym_all] = setdiff(_outsym_flat, sym) ∪ obssym
+
+    insym = dict[:insym]
+    if !isnothing(insym)
+        insym_flat = flatten_sym(insym)
+        dict[:_obssym_all] = dict[:_obssym_all] ∪ insym_flat
+    end
 
     ####
     #### External Inputs
@@ -991,10 +995,8 @@ function _fill_defaults(T, @nospecialize(kwargs))
 
     _is = if isnothing(__is)
         Symbol[]
-    elseif __is isa NamedTuple
-        vcat(__is.src, __is.dst)
     else
-        __is
+        flatten_sym(insym)
     end
     if !allunique(vcat(_s, _ps, _obss, _is, _os))
         throw(ArgumentError("Symbol names must be unique. There are clashes in sym, psym, outsym, obssym and insym."))

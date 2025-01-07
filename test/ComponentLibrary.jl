@@ -47,9 +47,9 @@ diffusion_vertex() = VertexModel(f=diffusionvertex!, dim=1, g=1:1)
 Base.@propagate_inbounds function kuramoto_edge!(e, θ_s, θ_d, (K,), t)
     e .= K .* sin(θ_s[1] - θ_d[1])
 end
-function kuramoto_edge(; name=:kuramoto_edge)
+function kuramoto_edge(; name=:kuramoto_edge, kwargs...)
     EdgeModel(;g=AntiSymmetric(kuramoto_edge!),
-        outsym=[:P], psym=[:K], name)
+        outsym=[:P], psym=[:K], name, kwargs...)
 end
 
 Base.@propagate_inbounds function kuramoto_inertia!(dv, v, acc, p, t)
@@ -57,9 +57,9 @@ Base.@propagate_inbounds function kuramoto_inertia!(dv, v, acc, p, t)
     dv[1] = v[2]
     dv[2] = 1 / M * (Pm - D * v[2] + acc[1])
 end
-function kuramoto_second(; name=:kuramoto_second)
+function kuramoto_second(; name=:kuramoto_second, kwargs...)
     VertexModel(; f=kuramoto_inertia!, sym=[:δ=>0, :ω=>0],
-        psym=[:M=>1, :D=>0.1, :Pm=>1], g=StateMask(1), name)
+        psym=[:M=>1, :D=>0.1, :Pm=>1], g=StateMask(1), name, kwargs...)
 end
 
 Base.@propagate_inbounds function kuramoto_vertex!(dθ, θ, esum, (ω,), t)
