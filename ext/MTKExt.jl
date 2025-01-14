@@ -262,14 +262,13 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         deepcopy(_sys)
     else
         _openinputs = setdiff(allinputs, Set(full_parameters(_sys)))
-        get_variables.(full_equations(_sys))
         all_eq_vars = mapreduce(get_variables, union, full_equations(_sys), init=Set{Symbolic}())
         if !(_openinputs ⊆ all_eq_vars)
             missing_inputs = setdiff(_openinputs, all_eq_vars)
             @warn "The specified inputs ($missing_inputs) do not appear in the equations of the system!"
             _openinputs = setdiff(_openinputs, missing_inputs)
         end
-        structural_simplify(_sys, (_openinputs, alloutputs); simplify=true)[1]
+        structural_simplify(_sys, (_openinputs, alloutputs); simplify=false)[1]
     end
 
     states = unknowns(sys)
@@ -334,6 +333,10 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
                 throw(ArgumentError("Output $out was neither foundin states nor in observed equations."))
             end
             eq = obseqs[idx]
+            if !isempty(rhs_differentials(eq))
+                println(obs_subs[out])
+                throw(ArgumentError("Algebraic FF equation for output $out contains differentials in the RHS: $(rhs_differentials(eq))"))
+            end
             deleteat!(obseqs, idx)
 
             if ff_to_constraint && !isempty(get_variables(eq.rhs) ∩ allinputs)
