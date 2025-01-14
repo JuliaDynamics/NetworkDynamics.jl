@@ -311,13 +311,16 @@ function maybe_plural(num, word, substitution=s"\1s")
     num, word
 end
 
-function str_significant(x; sigdigits)
+function str_significant(x; sigdigits, phantom_minus=false)
     # isinteger(x) && return string(Int(x))
     formatted = @sprintf("%.*g", sigdigits, x)
     if occursin(r"e\+0*", formatted)
         formatted = replace(formatted, r"e\+0*" => "e")
     elseif occursin(r"e\-0+", formatted)
         formatted = replace(formatted, r"e\-0+" => "e-")
+    end
+    if phantom_minus && x >= 0
+        formatted = " " * formatted
     end
     formatted
 end
