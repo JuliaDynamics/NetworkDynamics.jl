@@ -3,6 +3,7 @@ using SteadyStateDiffEq, OrdinaryDiffEqRosenbrock
 using ModelingToolkit
 using ModelingToolkit: t_nounits as t, D_nounits as Dt
 using SymbolicIndexingInterface: SymbolicIndexingInterface as SII
+using Chairmarks
 
 
 @testset "test find_fixpoint" begin
