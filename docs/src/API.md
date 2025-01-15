@@ -128,6 +128,8 @@ set_bounds!
 find_fixpoint
 initialize_component!
 init_residual
+get_initial_state
+dump_initial_state
 ```
 
 ## Execution Types

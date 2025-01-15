@@ -67,3 +67,8 @@ As a quick test we can ensure that the angle indeed matches the voltag angel:
 ```@example compinit
 get_init(vf, :θ) ≈ atan(get_default(vf, :u_i), get_default(vf, :u_r))
 ```
+
+It is possible to inspect initial states (also for observed symbols) using [`get_initial_state`](@ref). You can print out the whole state using [`dump_initial_state`](@ref).
+```@example compinit
+dump_initial_state(vf)
+```

@@ -2,6 +2,8 @@ using NetworkDynamics, Graphs
 using SteadyStateDiffEq, OrdinaryDiffEqRosenbrock
 using ModelingToolkit
 using ModelingToolkit: t_nounits as t, D_nounits as Dt
+using SymbolicIndexingInterface: SymbolicIndexingInterface as SII
+using Chairmarks
 
 
 @testset "test find_fixpoint" begin
@@ -75,4 +77,124 @@ end
     set_default!(vf, :ω, get_init(vf, :ω))
 
     NetworkDynamics.initialize_component!(vf; verbose=true)
+end
+
+@testset "test component initialization with bounds" begin
+    @mtkmodel SauerPaiMachine begin
+        @parameters begin
+            R_s=0, [description="stator resistance"]
+            X_d=2.0, [description="d-axis synchronous reactance"]
+            X_q=2.0, [description="q-axis synchronous reactance"]
+            X′_d=0.3, [description="d-axis transient reactance"]
+            X′_q=0.3, [description="q-axis transient reactance"]
+            X″_d=0.2, [description="d-axis subtransient reactance"]
+            X″_q=0.2, [description="q-axis subtransient reactance"]
+            X_ls=0.172, [description="stator leakage reactance"]
+            T′_d0=6.66667, [description="d-axis transient time constant"]
+            T″_d0=0.075, [description="d-axis subtransient time constant"]
+            T′_q0=6.66667, [description="q-axis transient time constant"]
+            T″_q0=0.075, [description="q-axis subtransient time constant"]
+            H=1.3, [description="inertia constant"]
+            D=0, [description="direct shaft damping"]
+            # System and machine base
+            S_b=100, [description="System power basis in MVA"]
+            V_b=110, [description="System voltage basis in kV"]
+            ω_b=2*pi*50, [description="System base frequency in rad/s"]
+            Sn=200, [description="Machine power rating in MVA"]
+            Vn=120, [description="Machine voltage rating in kV"]
+            # input/parameter switches
+            vf, [guess=1, bounds=(0,Inf), description="field voltage"]
+            τ_m, [guess=1, bounds=(0, Inf), description="mechanical torque"]
+        end
+        @variables begin
+            # inputs
+            u_r(t)=1, [description="bus d-voltage", output=true]
+            u_i(t)=0, [description="bus q-voltage", output=true]
+            i_r(t)=-0.5, [description="bus d-current (flowing into bus)", input=true]
+            i_i(t)=0, [description="bus d-current (flowing into bus)", input=true]
+            ψ_d(t), [description="d-axis flux linkage"]
+            ψ_q(t), [description="q-axis flux linkage"]
+            ψ″_d(t), [guess=-1, description="flux linkage assosciated with X″_d"]
+            ψ″_q(t), [guess=0, description="flux linkage assosciated with X″_q"]
+            I_d(t), [guess=0, description="d-axis current"]
+            I_q(t), [guess=0, description="q-axis current"]
+            V_d(t), [guess=0, description="d-axis voltage"]
+            V_q(t), [guess=1, description="q-axis voltage"]
+            E′_d(t), [guess=0, description="transient voltage behind transient reactance in d-axis"]
+            E′_q(t), [guess=-1, description="transient voltage behind transient reactance in q-axis"]
+            δ(t), [guess=0, description="rotor angle"]
+            ω(t), [guess=1, description="rotor speed"]
+            τ_e(t), [bounds=(0, Inf), description="electrical torque"]
+            i_mag(t), [description="terminal current magnitude"]
+            i_arg(t), [description="terminal current angle"]
+        end
+        begin
+            γ_d1 = (X″_d - X_ls)/(X′_d - X_ls)
+            γ_q1 = (X″_q - X_ls)/(X′_q - X_ls)
+            γ_d2 = (X′_d-X″_d)/(X′_d-X_ls)^2 # ~ (1 - γ_d1)/(X′_d - X_ls)
+            γ_q2 = (X′_q-X″_q)/(X′_q-X_ls)^2 # ~ (1 - γ_q1)/(X′_q - X_ls)
+            T_to_loc(α)  = [ sin(α) -cos(α);
+                            cos(α)  sin(α)]
+            T_to_glob(α) = [ sin(α)  cos(α);
+                            -cos(α)  sin(α)]
+        end
+        @equations begin
+            [u_r, u_i] .~ T_to_glob(δ)*[V_d, V_q] * Vn/V_b
+            [I_d, I_q] .~ -T_to_loc(δ)*[i_r, i_i] * (S_b/V_b)/(Sn/Vn)
+
+            τ_e ~ ψ_d*I_q - ψ_q*I_d
+            Dt(δ) ~ ω_b*(ω - 1)
+            2*H * Dt(ω) ~ τ_m  - τ_e - D*(ω - 1)
+            V_d ~ -R_s*I_d - ω * ψ_q
+            V_q ~ -R_s*I_q + ω * ψ_d
+
+            T′_d0 * Dt(E′_q) ~ -E′_q - (X_d - X′_d)*(I_d - γ_d2*ψ″_d - (1-γ_d1)*I_d + γ_d2*E′_q) + vf
+            T′_q0 * Dt(E′_d) ~ -E′_d + (X_q - X′_q)*(I_q - γ_q2*ψ″_q - (1-γ_q1)*I_q - γ_q2*E′_d)
+            T″_d0 * Dt(ψ″_d) ~ -ψ″_d + E′_q - (X′_d - X_ls)*I_d
+            T″_q0 * Dt(ψ″_q) ~ -ψ″_q - E′_d - (X′_q - X_ls)*I_q
+
+            ψ_d ~ -X″_d*I_d + γ_d1*E′_q + (1-γ_d1)*ψ″_d
+            ψ_q ~ -X″_q*I_q - γ_q1*E′_d + (1-γ_q1)*ψ″_q
+            i_mag ~ i_r^2 + i_i^2
+            i_arg ~ atan(i_i, i_r)
+        end
+    end
+
+    sys = SauerPaiMachine(name=:swing)
+    vf = VertexModel(sys, [:i_r, :i_i], [:u_r, :u_i])
+
+    @test get_initial_state(vf, sym(vf)) == [nothing, nothing, nothing, nothing, nothing, nothing, 1.0, 0.0]
+    @test get_initial_state(vf, insym(vf)) == [-0.5, 0.0]
+    @test get_initial_state(vf, outsym(vf)) == [1.0, 0.0]
+    get_initial_state(vf, psym(vf)) # evaluates
+    get_initial_state(vf, obssym(vf)) # no error
+
+    NetworkDynamics.initialize_component!(vf; verbose=true)
+    @test get_initial_state(vf, :vf) > 1
+    @test !any(isnothing, get_initial_state(vf, obssym(vf)))
+
+    # known bad seed which validates the constraint
+    set_guess!(vf, :E′_d,  -0.31205)
+    set_guess!(vf, :E′_q,   1.3396)
+    set_guess!(vf, :δ,      0.4516)
+    set_guess!(vf, :ψ″_d,   0.50574)
+    set_guess!(vf, :ψ″_q,   1.353)
+    set_guess!(vf, :ω,     -1.55)
+    NetworkDynamics.initialize_component!(vf; verbose=true, apply_bound_transformation=false)
+    @test get_initial_state(vf, :vf) < 1 # does not conserve
+    NetworkDynamics.initialize_component!(vf; verbose=true, apply_bound_transformation=true)
+    @test get_initial_state(vf, :vf) > 1 # conserves
+
+    # no lets try to force it negative
+    set_bounds!(vf, :vf, (-Inf, 0))
+    set_guess!(vf, :vf, -1)
+    NetworkDynamics.initialize_component!(vf; verbose=true)
+    @test get_initial_state(vf, :vf) < 1
+
+    # check performance
+
+    prob, _ = NetworkDynamics.initialization_problem(vf; apply_bound_transformation=true);
+    du = zeros(length(prob.f.resid_prototype));
+    b = @b $(prob.f)($du, $(prob.u0), nothing)
+    @test iszero(b.allocs)
 end

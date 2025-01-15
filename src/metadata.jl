@@ -171,14 +171,161 @@ set_graphelement!(c::EdgeModel, nt::@NamedTuple{src::T, dst::T}) where {T<:Union
 set_graphelement!(c::VertexModel, vidx::Int) = set_metadata!(c, :graphelement, vidx)
 
 
-function get_defaults(c::ComponentModel, syms)
-    [has_default(c, sym) ? get_default(c, sym) : nothing for sym in syms]
+function get_defaults(c::ComponentModel, syms; missing_val=nothing)
+    [has_default(c, sym) ? get_default(c, sym) : missing_val for sym in syms]
 end
-function get_guesses(c::ComponentModel, syms)
-    [has_guess(c, sym) ? get_guess(c, sym) : nothing for sym in syms]
+function get_guesses(c::ComponentModel, syms; missing_val=nothing)
+    [has_guess(c, sym) ? get_guess(c, sym) : missing_val for sym in syms]
 end
-function get_defaults_or_inits(c::ComponentModel, syms)
-    [has_default_or_init(c, sym) ? get_default_or_init(c, sym) : nothing for sym in syms]
+function get_defaults_or_inits(c::ComponentModel, syms; missing_val=nothing)
+    [has_default_or_init(c, sym) ? get_default_or_init(c, sym) : missing_val for sym in syms]
+end
+
+####
+#### Extract initial state from component
+####
+"""
+    get_initial_state(c::ComponentModel, syms; missing_val=nothing)
+
+Returns the initial state for symbol `sym` (single symbol of vector) of the component model `c`.
+Returns `missing_val` if the symbol is not initialized. Also works for observed symbols.
+
+See also: [`dump_initial_state`](@ref).
+"""
+get_initial_state(c::ComponentModel, s::Symbol; kw...) = only(get_initial_state(c, (s,); kw...))
+function get_initial_state(cf::ComponentModel, syms; missing_val=nothing)
+    obsbuf = any(in(syms), obssym(cf)) ? _get_initial_observed(cf) : nothing
+    map(syms) do sym
+        if (idx = findfirst(isequal(sym), obssym(cf))) !== nothing
+            obs = obsbuf[idx]
+            isnan(obs) ? missing_val : obs
+        elseif has_default_or_init(cf, sym)
+            Float64(get_default_or_init(cf, sym))
+        else
+            missing_val
+        end
+    end
+end
+
+function _get_initial_observed(cf)
+    missing_val = NaN
+    obs = Vector{Float64}(undef, length(obssym(cf)))
+    u = get_defaults_or_inits(cf, sym(cf); missing_val)
+    ins = if cf isa EdgeModel
+        (get_defaults_or_inits(cf, insym(cf).src; missing_val),
+         get_defaults_or_inits(cf, insym(cf).dst; missing_val))
+    else
+        (get_defaults_or_inits(cf, insym(cf); missing_val), )
+    end
+    p = get_defaults_or_inits(cf, psym(cf); missing_val)
+    cf.obsf(obs, u, ins..., p, NaN)
+    obs
+end
+
+"""
+    dump_initial_state(cf::ComponentModel; sigdigits=5, p=true, obs=true)
+
+Prints the initial state of the component model `cf` to the console. Optionally
+contains parameters and observed.
+
+See also: [`get_initial_state`](@ref).
+"""
+function dump_initial_state(cf::ComponentModel; sigdigits=5, p=true, obs=true)
+    lns = AnnotatedString[]
+    symidx  = _append_states!(lns, cf, sort(sym(cf)); sigdigits)
+    psymidx = _append_states!(lns, cf, sort(psym(cf)); sigdigits)
+    insymidx = _append_states!(lns, cf, sort(insym_all(cf)); sigdigits)
+    outsymidx = _append_states!(lns, cf, sort(outsym_flat(cf)); sigdigits)
+
+    obsidx = _append_observed!(lns, cf; sigdigits)
+    aligned = align_strings(lns)
+
+    printstyled("Inputs:\n", bold=true)
+    _printlines(aligned, insymidx)
+    printstyled("States:\n", bold=true)
+    _printlines(aligned, symidx)
+    printstyled("Outputs:\n", bold=true)
+    _printlines(aligned, outsymidx)
+    if p
+        printstyled("Parameters:\n", bold=true)
+        _printlines(aligned, psymidx)
+    end
+    if obs
+        if length(obsidx) == 0
+            printstyled("$(length(obssym(cf))) Observed symbols uninitialized.", bold=true)
+        elseif length(obsidx) == length(obssym(cf))
+            printstyled("Observed:\n", bold=true)
+        else
+            diff = length(obssym(cf)) - length(obsidx)
+            printstyled("Observed ($diff additional uninitialized):\n", bold=true)
+        end
+        _printlines(aligned, obsidx; newline=false)
+    end
+end
+function _append_states!(lns, cf, syms; sigdigits)
+    fidx = length(lns)+1
+    for sym in syms
+        str = "  &" * string(sym) * " &&= "
+        if has_default_or_init(cf, sym)
+            val = get_default_or_init(cf, sym)
+            val_str = str_significant(val; sigdigits, phantom_minus=true)
+            if has_default(cf, sym)
+                str*= styled"{blue:$(val_str)}"
+            else
+                str *= styled"{yellow:$(val_str)}"
+            end
+        else
+            val = nothing
+            str *= styled"{red: uninitialized}"
+        end
+        str *= "&&"
+        if has_guess(cf, sym)
+            guess = str_significant(get_guess(cf, sym); sigdigits, phantom_minus=true)
+            str *= " (guess $guess)"
+        end
+        str *= "&&"
+        if has_bounds(cf, sym)
+            lb, ub = get_bounds(cf, sym)
+            if isnothing(val) || bounds_satisfied(val, (lb, ub))
+                str *= " (bounds $lb..$ub)"
+            else
+                str *= styled" {red:(bounds $lb..$ub not satisfied)}"
+            end
+        end
+        push!(lns, str)
+    end
+    fidx:length(lns)
+end
+function _append_observed!(lns, cf; sigdigits)
+    fidx = length(lns)+1
+    syms = obssym(cf)
+    obs = _get_initial_observed(cf)
+    perm = sortperm(syms)
+    for (sym, val) in zip(syms[perm], obs[perm])
+        isnan(val) && continue
+        str = "  &" * string(sym) * " &&= " * str_significant(val; sigdigits, phantom_minus=true)
+        str *= "&& &&"
+        if has_bounds(cf, sym)
+            lb, ub = get_bounds(cf, sym)
+            if bounds_satisfied(val, (lb, ub))
+                str *= " (bounds $lb..$ub)"
+            else
+                str *= styled" {red:(bounds $lb..$ub not satisfied)}"
+            end
+        end
+        push!(lns, str)
+    end
+    fidx:length(lns)
+end
+function _printlines(aligned, range; newline=true)
+    lines = @views aligned[range]
+    for i in eachindex(lines)
+        if newline == false && i == lastindex(lines)
+            print(lines[i])
+        else
+            println(lines[i])
+        end
+    end
 end
 
 
