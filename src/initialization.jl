@@ -154,64 +154,57 @@ function initialization_problem(cf::T; t=NaN, apply_bound_transformation, verbos
     end
 
     N = ForwardDiff.pickchunksize(Nfree)
-    fz = let fg = compfg(cf),
-        unlcache=map(d->DiffCache(zeros(d), N), length(freesym)),
-        outcaches=map(d->DiffCache(zeros(d), N), outdim_normalized(cf)),
-        ucache=DiffCache(zeros(dim(cf)), N),
-        incaches=map(d->DiffCache(zeros(d), N), indim_normalized(cf)),
-        pcache=DiffCache(zeros(pdim(cf))),
-        t=t,
-        outfree_ms=outfree_ms, ufree_m=ufree_m, infree_ms=infree_ms, pfree_m=pfree_m,
-        outfixs=outfixs, ufix=ufix, infixs=infixs, pfix=pfix,
-        unl_range_outs=unl_range_outs, unl_range_u=unl_range_u,
-        unl_range_ins=unl_range_ins, unl_range_p=unl_range_p,
-        boundT! = boundT!
+    fg = compfg(cf)
+    unlcache = map(d->DiffCache(zeros(d), N), length(freesym))
+    outcaches = map(d->DiffCache(zeros(d), N), outdim_normalized(cf))
+    ucache = DiffCache(zeros(dim(cf)), N)
+    incaches = map(d->DiffCache(zeros(d), N), indim_normalized(cf))
+    pcache = DiffCache(zeros(pdim(cf)))
 
-        (dunl, unl, _) -> begin
-            # apply the bound conserving transformation
-            unlbuf = PreallocationTools.get_tmp(unlcache, unl)
-            unlbuf .= unl
-            boundT!(unlbuf)
+    fz = (dunl, unl, _) -> begin
+        # apply the bound conserving transformation
+        unlbuf = PreallocationTools.get_tmp(unlcache, unl)
+        unlbuf .= unl
+        boundT!(unlbuf)
 
-            outbufs = PreallocationTools.get_tmp.(outcaches, Ref(dunl))
-            ubuf = PreallocationTools.get_tmp(ucache, dunl)
-            inbufs = PreallocationTools.get_tmp.(incaches, Ref(dunl))
-            pbuf = PreallocationTools.get_tmp(pcache, dunl)
+        outbufs = PreallocationTools.get_tmp.(outcaches, Ref(dunl))
+        ubuf = PreallocationTools.get_tmp(ucache, dunl)
+        inbufs = PreallocationTools.get_tmp.(incaches, Ref(dunl))
+        pbuf = PreallocationTools.get_tmp(pcache, dunl)
 
-            # prefill buffers with fixed values
-            for (buf, fix) in zip(outbufs, outfixs)
-                buf .= fix
-            end
-            ubuf .= ufix
-            for (buf, fix) in zip(inbufs, infixs)
-                buf .= fix
-            end
-            pbuf .= pfix
-
-            # overwrite nonfixed values
-            for (buf, mask, range) in zip(outbufs, outfree_ms, unl_range_outs)
-                _overwrite_at_mask!(buf, mask, unlbuf, range)
-            end
-            _overwrite_at_mask!(ubuf, ufree_m, unlbuf, unl_range_u)
-            for (buf, mask, range) in zip(inbufs, infree_ms, unl_range_ins)
-                _overwrite_at_mask!(buf, mask, unlbuf, range)
-            end
-            _overwrite_at_mask!(pbuf, pfree_m, unlbuf, unl_range_p)
-
-            # view into du buffer for the fg funtion
-            @views dunl_fg = dunl[1:dim(cf)]
-            # view into the output buffer for the outputs
-            @views dunl_out = dunl[dim(cf)+1:end]
-
-            # this fills the second half of the du buffer with the fixed and current outputs
-            dunl_out .= RecursiveArrayTools.ArrayPartition(outbufs...)
-            # execute fg to fill dunl and outputs
-            fg(outbufs, dunl_fg, ubuf, inbufs, pbuf, t)
-
-            # calculate the residual for the second half ov the dunl buf, the outputs
-            dunl_out .= dunl_out .- RecursiveArrayTools.ArrayPartition(outbufs...)
-            nothing
+        # prefill buffers with fixed values
+        for (buf, fix) in zip(outbufs, outfixs)
+            buf .= fix
         end
+        ubuf .= ufix
+        for (buf, fix) in zip(inbufs, infixs)
+            buf .= fix
+        end
+        pbuf .= pfix
+
+        # overwrite nonfixed values
+        for (buf, mask, range) in zip(outbufs, outfree_ms, unl_range_outs)
+            _overwrite_at_mask!(buf, mask, unlbuf, range)
+        end
+        _overwrite_at_mask!(ubuf, ufree_m, unlbuf, unl_range_u)
+        for (buf, mask, range) in zip(inbufs, infree_ms, unl_range_ins)
+            _overwrite_at_mask!(buf, mask, unlbuf, range)
+        end
+        _overwrite_at_mask!(pbuf, pfree_m, unlbuf, unl_range_p)
+
+        # view into du buffer for the fg funtion
+        @views dunl_fg = dunl[1:dim(cf)]
+        # view into the output buffer for the outputs
+        @views dunl_out = dunl[dim(cf)+1:end]
+
+        # this fills the second half of the du buffer with the fixed and current outputs
+        dunl_out .= RecursiveArrayTools.ArrayPartition(outbufs...)
+        # execute fg to fill dunl and outputs
+        fg(outbufs, dunl_fg, ubuf, inbufs, pbuf, t)
+
+        # calculate the residual for the second half ov the dunl buf, the outputs
+        dunl_out .= dunl_out .- RecursiveArrayTools.ArrayPartition(outbufs...)
+        nothing
     end
 
     nlf = NonlinearFunction(fz; resid_prototype=zeros(Neqs), sys=SII.SymbolCache(freesym))

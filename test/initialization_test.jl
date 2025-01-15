@@ -194,5 +194,6 @@ end
 
     prob, _ = NetworkDynamics.initialization_problem(vf; apply_bound_transformation=true);
     du = zeros(length(prob.f.resid_prototype));
-    @b $(prob.f)($du, $(prob.u0), nothing)
+    b = @b $(prob.f)($du, $(prob.u0), nothing)
+    @test iszero(b.allocs)
 end
