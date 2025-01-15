@@ -69,6 +69,7 @@ export has_guess, get_guess, set_guess!
 export has_init, get_init, set_init!
 export has_bounds, get_bounds, set_bounds!
 export has_graphelement, get_graphelement, set_graphelement!
+export get_initial_state, dump_initial_state
 include("metadata.jl")
 
 using NonlinearSolve: AbstractNonlinearSolveAlgorithm, NonlinearFunction
