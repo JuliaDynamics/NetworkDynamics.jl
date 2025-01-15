@@ -97,20 +97,20 @@ end
             D=0, [description="direct shaft damping"]
             # System and machine base
             S_b=100, [description="System power basis in MVA"]
-            V_b=100, [description="System voltage basis in kV"]
+            V_b=110, [description="System voltage basis in kV"]
             ω_b=2*pi*50, [description="System base frequency in rad/s"]
-            Sn=S_b, [description="Machine power rating in MVA"]
-            Vn=V_b, [description="Machine voltage rating in kV"]
+            Sn=200, [description="Machine power rating in MVA"]
+            Vn=120, [description="Machine voltage rating in kV"]
             # input/parameter switches
-            vf, [guess=1, description="field voltage"]
-            τ_m, [guess=1, description="mechanical torque"]
+            vf, [guess=1, bounds=(0,Inf), description="field voltage"]
+            τ_m, [guess=1, bounds=(0, Inf), description="mechanical torque"]
         end
         @variables begin
             # inputs
             u_r(t)=1, [description="bus d-voltage", output=true]
             u_i(t)=0, [description="bus q-voltage", output=true]
-            i_r(t)=0.5, [description="bus d-current (flowing into bus)", input=true]
-            i_i(t)=0.5, [description="bus d-current (flowing into bus)", input=true]
+            i_r(t)=-0.5, [description="bus d-current (flowing into bus)", input=true]
+            i_i(t)=0, [description="bus d-current (flowing into bus)", input=true]
             ψ_d(t), [description="d-axis flux linkage"]
             ψ_q(t), [description="q-axis flux linkage"]
             ψ″_d(t), [guess=1, description="flux linkage assosciated with X″_d"]
@@ -123,7 +123,7 @@ end
             E′_q(t), [guess=0, description="transient voltage behind transient reactance in q-axis"]
             δ(t), [guess=0, description="rotor angle"]
             ω(t), [guess=1, description="rotor speed"]
-            τ_e(t), [description="electrical torque"]
+            τ_e(t), [bounds=(0, Inf), description="electrical torque"]
         end
         begin
             γ_d1 = (X″_d - X_ls)/(X′_d - X_ls)
@@ -137,7 +137,7 @@ end
         end
         @equations begin
             [u_r, u_i] .~ T_to_glob(δ)*[V_d, V_q] * Vn/V_b
-            [I_d, I_q] .~ T_to_loc(δ)*[i_r, i_i] * (S_b/V_b)/(Sn/Vn)
+            [I_d, I_q] .~ -T_to_loc(δ)*[i_r, i_i] * (S_b/V_b)/(Sn/Vn)
 
             τ_e ~ ψ_d*I_q - ψ_q*I_d
             Dt(δ) ~ ω_b*(ω - 1)

@@ -250,3 +250,8 @@ function init_residual(cf::T; t=NaN, recalc=false) where {T<:ComponentModel}
         LinearAlgebra.norm(get_metadata(cf, :init_residual))
     end
 end
+
+function bounds_satisfied(val, bounds)
+    @assert length(bounds) == 2
+    !isnothing(val) && !isnan(val) && first(bounds) ≤ val ≤ last(bounds)
+end

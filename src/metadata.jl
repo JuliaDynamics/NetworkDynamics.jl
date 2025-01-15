@@ -263,21 +263,30 @@ function _append_states!(lns, cf, syms; sigdigits)
     fidx = length(lns)+1
     for sym in syms
         str = "  &" * string(sym) * " &&= "
-        if has_default(cf, sym)
-            def = str_significant(get_default(cf, sym); sigdigits, phantom_minus=true)
-            str*= styled"{blue:$(def)}"
-        elseif has_init(cf, sym)
-            init = str_significant(get_init(cf, sym); sigdigits, phantom_minus=true)
-            str *= styled"{yellow:$(init)}"
-            if has_guess(cf ,sym)
-                guess = str_significant(get_guess(cf, sym); sigdigits, phantom_minus=true)
-                str *= "&& (from $guess)"
+        if has_default_or_init(cf, sym)
+            val = get_default_or_init(cf, sym)
+            val_str = str_significant(val; sigdigits, phantom_minus=true)
+            if has_default(cf, sym)
+                str*= styled"{blue:$(val_str)}"
+            else
+                str *= styled"{yellow:$(val_str)}"
             end
         else
-            str *= styled"{red:uninitialized}"
-            if has_guess(cf ,sym)
-                guess = str_significant(get_guess(cf, sym); sigdigits, phantom_minus=true)
-                str *= "&& (guess $guess)"
+            val = nothing
+            str *= styled"{red: uninitialized}"
+        end
+        str *= "&&"
+        if has_guess(cf, sym)
+            guess = str_significant(get_guess(cf, sym); sigdigits, phantom_minus=true)
+            str *= " (guess $guess)"
+        end
+        str *= "&&"
+        if has_bounds(cf, sym)
+            lb, ub = get_bounds(cf, sym)
+            if isnothing(val) || bounds_satisfied(val, (lb, ub))
+                str *= " (bounds $lb..$ub)"
+            else
+                str *= styled" {red:(bounds $lb..$ub not satisfied)}"
             end
         end
         push!(lns, str)
@@ -294,6 +303,15 @@ function _append_observed!(lns, cf; sigdigits)
     perm = sortperm(syms)
     for (sym, val) in zip(syms[perm], obs[perm])
         str = "  &" * string(sym) * " &&= " * str_significant(val; sigdigits, phantom_minus=true)
+        str *= "&& &&"
+        if has_bounds(cf, sym)
+            lb, ub = get_bounds(cf, sym)
+            if bounds_satisfied(val, (lb, ub))
+                str *= " (bounds $lb..$ub)"
+            else
+                str *= styled" {red:(bounds $lb..$ub not satisfied)}"
+            end
+        end
         push!(lns, str)
     end
     fidx:length(lns)
