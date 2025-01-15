@@ -113,7 +113,7 @@ end
             i_i(t)=0, [description="bus d-current (flowing into bus)", input=true]
             ψ_d(t), [description="d-axis flux linkage"]
             ψ_q(t), [description="q-axis flux linkage"]
-            ψ″_d(t), [guess=1, description="flux linkage assosciated with X″_d"]
+            ψ″_d(t), [guess=-1, description="flux linkage assosciated with X″_d"]
             ψ″_q(t), [guess=0, description="flux linkage assosciated with X″_q"]
             I_d(t), [guess=0, description="d-axis current"]
             I_q(t), [guess=0, description="q-axis current"]
@@ -161,6 +161,7 @@ end
 
     sys = SauerPaiMachine(name=:swing)
     vf = VertexModel(sys, [:i_r, :i_i], [:u_r, :u_i])
+
     @test get_initial_state(vf, sym(vf)) == [nothing, nothing, nothing, nothing, nothing, nothing, 1.0, 0.0]
     @test get_initial_state(vf, insym(vf)) == [-0.5, 0.0]
     @test get_initial_state(vf, outsym(vf)) == [1.0, 0.0]
@@ -168,7 +169,30 @@ end
     get_initial_state(vf, obssym(vf)) # no error
 
     NetworkDynamics.initialize_component!(vf; verbose=true)
-    # @test get_initial_state(vf, :vf) == -1
+    @test get_initial_state(vf, :vf) > 1
     @test !any(isnothing, get_initial_state(vf, obssym(vf)))
-    dump_initial_state(vf)
+
+    # known bad seed which validates the constraint
+    set_guess!(vf, :E′_d,  -0.31205)
+    set_guess!(vf, :E′_q,   1.3396)
+    set_guess!(vf, :δ,      0.4516)
+    set_guess!(vf, :ψ″_d,   0.50574)
+    set_guess!(vf, :ψ″_q,   1.353)
+    set_guess!(vf, :ω,     -1.55)
+    NetworkDynamics.initialize_component!(vf; verbose=true, apply_bound_transformation=false)
+    @test get_initial_state(vf, :vf) < 1 # does not conserve
+    NetworkDynamics.initialize_component!(vf; verbose=true, apply_bound_transformation=true)
+    @test get_initial_state(vf, :vf) > 1 # conserves
+
+    # no lets try to force it negative
+    set_bounds!(vf, :vf, (-Inf, 0))
+    set_guess!(vf, :vf, -1)
+    NetworkDynamics.initialize_component!(vf; verbose=true)
+    @test get_initial_state(vf, :vf) < 1
+
+    # check performance
+
+    prob, _ = NetworkDynamics.initialization_problem(vf; apply_bound_transformation=true);
+    du = zeros(length(prob.f.resid_prototype));
+    @b $(prob.f)($du, $(prob.u0), nothing)
 end
