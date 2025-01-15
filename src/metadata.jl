@@ -251,12 +251,15 @@ function dump_initial_state(cf::ComponentModel; sigdigits=5, p=true, obs=true)
         _printlines(aligned, psymidx)
     end
     if obs
-        if !isnothing(obsidx)
+        if length(obsidx) == 0
+            printstyled("$(length(obssym(cf))) Observed symbols uninitialized.", bold=true)
+        elseif length(obsidx) == length(obssym(cf))
             printstyled("Observed:\n", bold=true)
-            _printlines(aligned, obsidx; newline=false)
         else
-            printstyled("Cannnot show observed for partialy initialized system!", bold=true)
+            diff = length(obssym(cf)) - length(obsidx)
+            printstyled("Observed ($diff additional uninitialized):\n", bold=true)
         end
+        _printlines(aligned, obsidx; newline=false)
     end
 end
 function _append_states!(lns, cf, syms; sigdigits)
@@ -297,11 +300,9 @@ function _append_observed!(lns, cf; sigdigits)
     fidx = length(lns)+1
     syms = obssym(cf)
     obs = _get_initial_observed(cf)
-    if any(isnan, obs)
-        return nothing
-    end
     perm = sortperm(syms)
     for (sym, val) in zip(syms[perm], obs[perm])
+        isnan(val) && continue
         str = "  &" * string(sym) * " &&= " * str_significant(val; sigdigits, phantom_minus=true)
         str *= "&& &&"
         if has_bounds(cf, sym)

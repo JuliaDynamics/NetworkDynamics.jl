@@ -420,7 +420,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
             obsf = obsf_ip,
             equations=formulas,
             outputeqs=Dict(Iterators.flatten(outputss) .=> gformulas),
-            observed=Dict(obsstates .=> obsformulas),
+            observed=Dict(getname.(obsstates) .=> obsformulas),
             params)
 end
 
