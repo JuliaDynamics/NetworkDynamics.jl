@@ -251,7 +251,7 @@ function initialize_component!(cf; verbose=true, apply_bound_transformation=true
     prob, boundT! = initialization_problem(cf; verbose, apply_bound_transformation)
 
     if !isempty(prob.u0)
-        sol = SciMLBase.solve(prob; kwargs...)
+        sol = SciMLBase.solve(prob; verbose, kwargs...)
 
         if sol.prob isa NonlinearLeastSquaresProblem && sol.retcode == SciMLBase.ReturnCode.Stalled
             # https://github.com/SciML/NonlinearSolve.jl/issues/459
