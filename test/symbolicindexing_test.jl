@@ -3,6 +3,7 @@ using Graphs
 using OrdinaryDiffEqTsit5
 using Chairmarks
 using Test
+using Symbolics
 import SymbolicIndexingInterface as SII
 using NetworkDynamics: VIndex, EIndex, VPIndex, EPIndex, _resolve_colon
 
@@ -487,4 +488,21 @@ end
     @test s[EIndex(:e1, :dst₊δin)] == s[VIndex(:v2, :δ)]
     @test s[EIndex(:e2, :src₊δin)] == s[VIndex(:v2, :δ)]
     @test s[EIndex(:e2, :dst₊δin)] == s[VIndex(:v3, :δ)]
+end
+
+@testset "test observed expressions" begin
+    v1 = Lib.kuramoto_second(name=:v1, vidx=1, insym=[:Pin])
+    v2 = Lib.kuramoto_second(name=:v2, vidx=2, insym=[:Pin])
+    v3 = Lib.kuramoto_second(name=:v3, vidx=3, insym=[:Pin])
+    e1 = Lib.kuramoto_edge(name=:e1, src=1, dst=2, insym=[:δin])
+    e2 = Lib.kuramoto_edge(name=:e2, src=2, dst=3, insym=[:δin])
+    nw = Network([v1,v2,v3], [e1,e2])
+    s = NWState(nw, rand(dim(nw)), rand(pdim(nw)))
+
+    obsex = @obsex(VIndex(1,:δ) + VIndex(2,:δ))
+    @test s[obsex] == s[VIndex(1,:δ)] + s[VIndex(2,:δ)]
+    @test s[@obsex VIndex(1,:δ) - EIndex(:e1, :src₊δin)] == 0
+
+    @test SII.getname(@obsex(VIndex(1,:δ) + VIndex(2,:δ))) == Symbol("v1₊δ+v2₊δ")
+    @test SII.getname(@obsex(δ²=VIndex(1,:δ)^2)) == :δ²
 end

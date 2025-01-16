@@ -61,6 +61,7 @@ include("external_inputs.jl")
 export VIndex, EIndex, VPIndex, EPIndex, NWState, NWParameter, uflat, pflat
 export vidxs, eidxs, vpidxs, epidxs
 export save_parameters!
+export @obsex
 include("symbolicindexing.jl")
 
 export has_metadata, get_metadata, set_metadata!
