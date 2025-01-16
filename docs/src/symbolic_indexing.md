@@ -114,3 +114,20 @@ Observables can be accessed like any other state, for example, the flows in the 
 ```@example si
 plot(sol; idxs=eidxs(nw, :, :flow))
 ```
+
+## Derived `ObservableExpressions` using `@obsex`
+
+Sometimes it is usefull to plot or observe some simple derived quantity.For that,
+one can used the [`@obsex`](@ref) macro, to define simple derived quantities.
+
+For example, we can directly plot the storage difference with respect to storage of node 1.
+
+```@example si
+plot(sol; idxs=@obsex(vidxs(nw,:,:storage) .- VIndex(1,:storage)))
+```
+
+Other examples are the calculation of magnitude and argument of complex values which are modeld in real and imaginary part.
+```
+@obsex mag = sqrt(VIndex(1, :u_r)^2 + VIndex(2, :u_i)^2)
+```
+

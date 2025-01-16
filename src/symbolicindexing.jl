@@ -1148,6 +1148,15 @@ function SII.observed(nw::Network, obsex::ObservableExpression)
         obsex.f(input)
     end
 end
+function SII.observed(nw::Network, obsexs::AbstractVector{<:ObservableExpression})
+    inputfs = map(obsex -> SII.observed(nw, obsex.inputs), obsexs)
+    (u, p, t) -> begin
+        map(obsexs, inputfs) do obsex, inputf
+            input = inputf(u, p, t)
+            obsex.f(input)
+        end
+    end
+end
 
 Base.getindex(s::NWState, idx::ObservableExpression) = SII.getu(s, idx)(s)
 Base.getindex(s::NWParameter, idx::ObservableExpression) = SII.getp(s, idx)(s)

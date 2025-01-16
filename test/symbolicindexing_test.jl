@@ -505,4 +505,8 @@ end
 
     @test SII.getname(@obsex(VIndex(1,:δ) + VIndex(2,:δ))) == Symbol("v1₊δ+v2₊δ")
     @test SII.getname(@obsex(δ²=VIndex(1,:δ)^2)) == :δ²
+
+    @test s[@obsex(vidxs(s, :, :δ) .- VIndex(1, :δ))] == [0, s[VIndex(2,:δ)] - s[VIndex(1,:δ)], s[VIndex(3,:δ)] - s[VIndex(1,:δ)]]
+
+    obsex = @obsex(δ_rel = vidxs(s, :, :δ) .- VIndex(1, :δ))
 end
