@@ -402,7 +402,7 @@ function observed_symbols(nw::Network)
 end
 
 function SII.observed(nw::Network, snis)
-    if any(sni -> sni isa ObservableExpression, snis)
+    if (snis isa AbstractVector || snis isa Tuple) && any(sni -> sni isa ObservableExpression, snis)
         throw(ArgumentError("Cannot mix normal symbolic indices with @obsex currently!"))
     end
 
