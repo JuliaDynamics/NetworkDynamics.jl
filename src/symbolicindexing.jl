@@ -402,6 +402,10 @@ function observed_symbols(nw::Network)
 end
 
 function SII.observed(nw::Network, snis)
+    if (snis isa AbstractVector || snis isa Tuple) && any(sni -> sni isa ObservableExpression, snis)
+        throw(ArgumentError("Cannot mix normal symbolic indices with @obsex currently!"))
+    end
+
     _snis = _expand_and_collect(nw, snis)
     isscalar = _snis isa SymbolicIndex
     if isscalar
@@ -1079,3 +1083,80 @@ extract_nw(p::IndexingProxy) = extract_nw(p.s)
 function extract_nw(::Nothing)
     throw(ArgumentError("Needs system context to generate matching indices. Pass Network, sol, prob, ..."))
 end
+
+####
+#### Observable Expressions
+####
+struct ObservableExpression{VT,F,Ex,N}
+    inputs::Vector{VT}
+    f::F
+    ex::Ex
+    name::N
+end
+function Base.show(io::IO, mime::MIME"text/plain", obsex::ObservableExpression)
+    print(io, "ObservableExpression(")
+    isnothing(obsex.name) || print(io, obsex.name, " = ")
+    show(io, mime, obsex.ex)
+    print(io, ")")
+end
+
+"""
+    @obsex([name =] expression)
+
+Define observable expressions, which are simple combinations of knonw
+states/parameters/observables. `@obsex(...)` returns an `ObservableExpression`
+which can be used as an symbolic index. This is mainly intended for quick
+plotting or export of common "derived" variables, such as the argument of a
+2-component complex state. For example:
+
+    sol(t; idxs=@obsex(arg = atan(VIndex(1,:u_i), VIndex(1,:u_r))]
+    sol(t; idxs=@obsex(δrel = VIndex(1,:δ) - VIndex(2,:δ)))
+
+"""
+macro obsex(ex)
+    generate_observable_expression(ex)
+end
+
+function generate_observable_expression(::Any)
+    error("@obsex can only be used when Symbolics.jl is loaded.")
+end
+
+# define function stub to overload in SymbolicsExt
+function collect_symbol! end
+
+function SII.is_observed(nw::Network, obsex::ObservableExpression)
+    true
+end
+
+SII.symbolic_type(::Type{<:ObservableExpression}) = SII.ScalarSymbolic()
+SII.hasname(::ObservableExpression) = true
+function SII.getname(obsex::ObservableExpression)
+    if obsex.name isa Symbol
+        return obsex.name
+    else
+        io = IOBuffer()
+        show(io, MIME"text/plain"(), obsex.ex)
+        str = String(take!(io))
+        return Symbol(replace(str, " "=>""))
+    end
+end
+
+function SII.observed(nw::Network, obsex::ObservableExpression)
+    inputf = SII.observed(nw, obsex.inputs)
+    (u, p, t) -> begin
+        input = inputf(u, p, t)
+        obsex.f(input)
+    end
+end
+function SII.observed(nw::Network, obsexs::AbstractVector{<:ObservableExpression})
+    inputfs = map(obsex -> SII.observed(nw, obsex.inputs), obsexs)
+    (u, p, t) -> begin
+        map(obsexs, inputfs) do obsex, inputf
+            input = inputf(u, p, t)
+            obsex.f(input)
+        end
+    end
+end
+
+Base.getindex(s::NWState, idx::ObservableExpression) = SII.getu(s, idx)(s)
+Base.getindex(s::NWParameter, idx::ObservableExpression) = SII.getp(s, idx)(s)
