@@ -344,7 +344,7 @@ end
 
 
 function SciMLBase.create_parameter_timeseries_collection(nw::Network, p::AbstractVector, tspan)
-    data = DiffEqArray(Vector{Float64}[copy(p)], Float64[tspan[begin]])
+    data = DiffEqArray(Vector{eltype(p)}[copy(p)], Float64[tspan[begin]])
     tsc = SII.ParameterTimeseriesCollection((data,), copy(p))
     return tsc
 end
