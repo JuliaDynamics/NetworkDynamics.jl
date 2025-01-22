@@ -73,6 +73,7 @@ function VertexModel(sys::ODESystem, inputs, outputs; verbose=false, name=getnam
     set_metadata!(c, :observed, gen.observed)
     set_metadata!(c, :equations, gen.equations)
     set_metadata!(c, :outputeqs, gen.outputeqs)
+    set_metadata!(c, :odesystem, gen.odesystem)
     c
 end
 
@@ -180,6 +181,7 @@ function EdgeModel(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=false, 
     set_metadata!(c, :observed, gen.observed)
     set_metadata!(c, :equations, gen.equations)
     set_metadata!(c, :outputeqs, gen.outputeqs)
+    set_metadata!(c, :odesystem, gen.odesystem)
     c
 end
 
@@ -421,6 +423,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
             equations=formulas,
             outputeqs=Dict(Iterators.flatten(outputss) .=> gformulas),
             observed=Dict(getname.(obsstates) .=> obsformulas),
+            odesystem=sys,
             params)
 end
 
