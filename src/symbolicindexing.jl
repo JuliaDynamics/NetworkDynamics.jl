@@ -406,7 +406,7 @@ function SII.observed(nw::Network, snis)
         throw(ArgumentError("Cannot mix normal symbolic indices with @obsex currently!"))
     end
 
-    _is_normalized(snis) || return SII.observed(nw, _expand_and_collect(snis))
+    _is_normalized(snis) || return SII.observed(nw, _expand_and_collect(nw, snis))
 
     isscalar = snis isa SymbolicIndex
     _snis = isscalar ? (snis,) : snis
@@ -458,7 +458,7 @@ function SII.observed(nw::Network, snis)
     initbufs = !isempty(outidx) || !isempty(aggidx) || !isempty(obsfuns)
 
     if isscalar
-        @closure (u, p, t) -> begin
+        (u, p, t) -> begin
             outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs)
             if !isempty(stateidx)
                 idx = only(stateidx).second
@@ -475,10 +475,13 @@ function SII.observed(nw::Network, snis)
             end
         end
     else
-        @closure (u, p, t) -> begin
-            outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs)
+        # make tuple to have concretely typed obsf
+        obsfunstup = zip(keys(obsfuns), values(obsfuns)) |> Tuple
+        (u, p, t, out=similar(u, length(_snis))) -> begin
+            if any(!isempty, (outidx, aggidx, obsfuns))
+                outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs)
+            end
 
-            out = similar(u, length(snis))
             for (i, statei) in stateidx
                 out[i] = u[statei]
             end
@@ -488,7 +491,7 @@ function SII.observed(nw::Network, snis)
             for (i, aggi) in aggidx
                 out[i] = aggbuf[aggi]
             end
-            for (i, obsf) in obsfuns
+            for (i, obsf) in obsfunstup
                 out[i] = obsf(u, outbuf, aggbuf, extbuf, p, t)::eltype(u)
             end
             out

@@ -524,19 +524,24 @@ end
     idxs1 = [VIndex(1,:δ), VIndex(2, :Pdamping), EIndex(1,:P), VIndex(2,:P)]
     idxs2 = [VIndex(1,:δ), VIndex(2,:θ)]
     # full call
-    @b $s[$idxs1] # 134 101
-    @b $s[$idxs2] # 31  31
+    # @b $s[$idxs1] # 134 106
+    # @b $s[$idxs2] # 31  31
 
-    @b SII.observed($nw, $idxs1) # 69 36
-    @b SII.observed($nw, $idxs2) # 12 7
-    obsf1 = SII.observed(nw, idxs1)
-    obsf2 = SII.observed(nw, idxs1)
+    # scalar call
+    # @b $s[$(VIndex(2,:Pdamping))]
 
-    @b SII.getu($nw, $idxs1) # 130  97
-    @b SII.getu($nw, $idxs2) # 28   28
-    getu1 = SII.getu(nw, idxs1);
-    getu2 = SII.getu(nw, idxs2);
+    # @b SII.observed($nw, $(VIndex(2,:Pdamping))) # 15
+    # @b SII.observed($nw, $(VIndex(2,:θ))) # 7
 
-    @b $getu1($s) # 3
-    @b $getu2($s) # 2
+    b = @b SII.observed($nw, $idxs1) # 69 36 42
+    @test b.allocs <= 42
+    b = @b SII.observed($nw, $idxs2) # 12 7  10
+    @test b.allocs <= 10
+
+    # obsf1 = SII.observed(nw, idxs1)
+    # obsf2 = SII.observed(nw, idxs2)
+    # @b $obsf1($(rand(dim(nw))), $(rand(pdim(nw))), NaN) # 81ns 2 allocs
+    # @b $obsf2($(rand(dim(nw))), $(rand(pdim(nw))), NaN) # 34ns 2 allocs
+    # @b $obsf1($(rand(dim(nw))), $(rand(pdim(nw))), NaN, $(zeros(length(idxs1)))) # 64ns 0 allocs
+    # @b $obsf2($(rand(dim(nw))), $(rand(pdim(nw))), NaN, $(zeros(length(idxs2)))) # 17ns 0 allocs
 end
