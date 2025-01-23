@@ -91,4 +91,25 @@ function swing_mtk(; kwargs...)
     VertexModel(SwingNode(name=:swing_mtk), [:P], [:θ]; kwargs...)
 end
 
+function line_mtk(; kwargs...)
+    @mtkmodel StaticPowerLine begin
+        @variables begin
+            srcθ(t), [description = "voltage angle at src end", input=true]
+            dstθ(t), [description = "voltage angle at dst end", input=true]
+            P(t), [description = "flow towards node at dst end", output=true]
+            Δθ(t)
+        end
+        @parameters begin
+            active = 1, [description = "line active"]
+            K = 1.63, [description = "Line conductance"]
+            limit = 1, [description = "Line limit"]
+        end
+        @equations begin
+            Δθ ~ srcθ - dstθ
+            P ~ active*K*sin(Δθ)
+        end
+    end
+    EdgeModel(StaticPowerLine(name=:line_mtk), [:srcθ], [:dstθ], AntiSymmetric([:P]); kwargs...)
+end
+
 end #module
