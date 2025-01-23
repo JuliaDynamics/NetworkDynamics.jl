@@ -510,3 +510,33 @@ end
 
     obsex = @obsex(δ_rel = vidxs(s, :, :δ) .- VIndex(1, :δ))
 end
+
+@testset "test performace of created observed functions" begin
+    v1 = Lib.kuramoto_second(name=:v1, vidx=1, insym=[:Pin])
+    v2 = Lib.swing_mtk(name=:v2, vidx=2)
+    set_default!(v2, :Pmech, -1.0)
+    e = Lib.kuramoto_edge(name=:e12, src=1, dst=2)
+    set_default!(e, :K, 1.0)
+    nw = Network([v1,v2],e)
+
+    s = NWState(nw)
+    # normal state, observed and output state
+    idxs1 = [VIndex(1,:δ), VIndex(2, :Pdamping), EIndex(1,:P), VIndex(2,:P)]
+    idxs2 = [VIndex(1,:δ), VIndex(2,:θ)]
+    # full call
+    @b $s[$idxs1] # 134 101
+    @b $s[$idxs2] # 31  31
+
+    @b SII.observed($nw, $idxs1) # 69 36
+    @b SII.observed($nw, $idxs2) # 12 7
+    obsf1 = SII.observed(nw, idxs1)
+    obsf2 = SII.observed(nw, idxs1)
+
+    @b SII.getu($nw, $idxs1) # 130  97
+    @b SII.getu($nw, $idxs2) # 28   28
+    getu1 = SII.getu(nw, idxs1);
+    getu2 = SII.getu(nw, idxs2);
+
+    @b $getu1($s) # 3
+    @b $getu2($s) # 2
+end
