@@ -74,6 +74,10 @@ export get_initial_state, dump_initial_state
 export has_callback, get_callbacks, set_callback!, add_callback!
 include("metadata.jl")
 
+export ComponentCondition, ComponentAffect
+export ContinouseComponentCallback, VectorContinousComponentCallback
+include("callbacks.jl")
+
 using NonlinearSolve: AbstractNonlinearSolveAlgorithm, NonlinearFunction
 using NonlinearSolve: NonlinearLeastSquaresProblem, NonlinearProblem
 using SteadyStateDiffEq: SteadyStateProblem, SteadyStateDiffEqAlgorithm, SSRootfind
