@@ -170,6 +170,40 @@ arguments `src` and `dst` which are either integer (vertex index) or symbol
 set_graphelement!(c::EdgeModel, nt::@NamedTuple{src::T, dst::T}) where {T<:Union{Int,Symbol}} = set_metadata!(c, :graphelement, nt)
 set_graphelement!(c::VertexModel, vidx::Int) = set_metadata!(c, :graphelement, vidx)
 
+"""
+    has_callback(c::ComponentModel)
+
+Checks if the component has a callback function in metadata.
+"""
+has_callback(c::ComponentModel) = has_metadata(c, :callback)
+"""
+    get_callback(c::ComponentModel)
+
+Gets all callback functions for the component. Wraps in tuple, even if there is only a single one.
+"""
+function get_callbacks(c::ComponentModel)
+    cb = get_metadata(c, :callback)
+    cb isa ComponentCallback ? (cb,) : cb
+end
+"""
+    set_callback!(c::ComponentModel, cb)
+
+Sets the callback function for the component. Overwrites any existing callback.
+See also [`add_callback!`](@ref).
+"""
+function set_callback!(c::ComponentModel, cb)
+    if !(cb isa ComponentCallback) && !(cb isa NTuple{N, <:ComponentCallback} where N)
+        throw(ArgumentError("Callback must be a ComponentCallback or a tuple of ComponentCallbacks"))
+    end
+    set_metadata!(c, :callback, cb)
+end
+"""
+    add_callback!(c::ComponentModel, cb)
+
+Adds a callback function to the component. Does not overwrite existing callbacks.
+See also [`set_callback!`](@ref).
+"""
+add_calllback!(c::ComponentModel, cb) = set_metadata!(c, :callback, (get_callbacks(c)..., cb))
 
 function get_defaults(c::ComponentModel, syms; missing_val=nothing)
     [has_default(c, sym) ? get_default(c, sym) : missing_val for sym in syms]

@@ -71,6 +71,7 @@ export has_init, get_init, set_init!
 export has_bounds, get_bounds, set_bounds!
 export has_graphelement, get_graphelement, set_graphelement!
 export get_initial_state, dump_initial_state
+export has_callback, get_callbacks, set_callback!, add_callback!
 include("metadata.jl")
 
 using NonlinearSolve: AbstractNonlinearSolveAlgorithm, NonlinearFunction
