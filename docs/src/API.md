@@ -124,6 +124,22 @@ get_bounds
 set_bounds!
 ```
 
+## Callbacks API
+### Define Callbacks
+```@docs
+ContionusComponentCallback
+VectorContinousComponentCallback
+Componentcondition
+ComponenAffect
+```
+### Attach Callbacks to Edge/VertexModels
+```@docs
+has_callback
+get_callbacks
+set_callback!
+add_callback!
+```
+
 ## Initialization
 ```@docs
 find_fixpoint

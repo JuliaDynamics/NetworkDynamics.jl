@@ -13,6 +13,7 @@ Special metadata:
 - `:graphelement`: optional field to specialize the graphelement for each
   component (`vidx`) for vertices, `(;src,dst)` named tuple of either vertex
   names or vertex indices for edges. Has special accessors `has_/get_/set_graphelement`.
+- `:callback`: optional field to define callback functions on the component level. See [Callbacks](@ref) and [Callbacks API](@ref) for more information.
 
 
 ## Symbol Metadata

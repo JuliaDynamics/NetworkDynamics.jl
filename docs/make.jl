@@ -35,6 +35,7 @@ makedocs(;
             "symbolic_indexing.md",
             "metadata.md",
             "initialization.md",
+            "callbacks.md",
             "mtk_integration.md",
             "external_inputs.md",
         ],
