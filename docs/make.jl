@@ -21,7 +21,7 @@ end
 # TODO: doc on parameter & state handling? -> symbolic indexing
 
 mtkext = Base.get_extension(NetworkDynamics, :MTKExt)
-makedocs(;
+kwargs = (;
     root=joinpath(pkgdir(NetworkDynamics), "docs"),
     sitename="NetworkDynamics",
     modules=[NetworkDynamics, mtkext],
@@ -53,12 +53,29 @@ makedocs(;
     ],
     draft=false,
     format = Documenter.HTML(ansicolor = true),
-    warnonly=[:cross_references, :missing_docs, :docs_block],
     # warnonly=true,
 )
 
+success = true
+thrown_ex = nothing
+try
+    # strict build
+    makedocs(; kwargs...)
+catch e
+    @info "Strict doc build failed, try again with warnonly=true"
+    global success = false
+    global thrown_ex = e
+    # kwargs = (; kwargs..., warnonly=[:cross_references, :missing_docs, :docs_block])
+    kwargs_warnonly = (; kwargs..., warnonly=true)
+    makedocs(; kwargs_warnonly...)
+end
+
 deploydocs(; repo="github.com/JuliaDynamics/NetworkDynamics.jl.git",
            devbranch="main", push_preview=true)
+
+if !success
+    rethrow(thrown_ex)
+end
 
 # warnonly options
 # :autodocs_block
