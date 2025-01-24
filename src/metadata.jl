@@ -37,31 +37,37 @@ for md in [:default, :guess, :init, :bounds]
     @eval begin
         """
             has_$($(QuoteNode(md)))(c::ComponentModel, sym::Symbol)
+            has_$($(QuoteNode(md)))(nw::Network, sni::SymbolicIndex)
 
         Checks if a `$($(QuoteNode(md)))` value is present for symbol `sym`.
 
         See also [`get_$($(QuoteNode(md)))`](@ref), [`set_$($(QuoteNode(md)))!`](@ref).
         """
         $fname_has(c::ComponentModel, sym::Symbol) = has_metadata(c, sym, $(QuoteNode(md)))
+        $fname_has(nw::Network, sni::SymbolicIndex) = $fname_has(getcomp(nw, sni), sni.subidx)
 
         """
             get_$($(QuoteNode(md)))(c::ComponentModel, sym::Symbol)
+            get_$($(QuoteNode(md)))(nw::Network, sni::SymbolicIndex)
 
         Returns the `$($(QuoteNode(md)))` value for symbol `sym`.
 
         See also [`has_$($(QuoteNode(md)))`](@ref), [`set_$($(QuoteNode(md)))!`](@ref).
         """
         $fname_get(c::ComponentModel, sym::Symbol) = get_metadata(c, sym, $(QuoteNode(md)))
+        $fname_get(nw::Network, sni::SymbolicIndex) = $fname_get(getcomp(nw, sni), sni.subidx)
 
 
         """
             set_$($(QuoteNode(md)))(c::ComponentModel, sym::Symbol, value)
+            set_$($(QuoteNode(md)))(nw::Network, sni::SymbolicIndex, value)
 
         Sets the `$($(QuoteNode(md)))` value for symbol `sym` to `value`.
 
         See also [`has_$($(QuoteNode(md)))`](@ref), [`get_$($(QuoteNode(md)))`](@ref).
         """
         $fname_set(c::ComponentModel, sym::Symbol, val) = set_metadata!(c, sym, $(QuoteNode(md)), val)
+        $fname_set(nw::Network, sni::SymbolicIndex, val) = $fname_set(getcomp(nw, sni), sni.subidx, val)
     end
 end
 set_graphelement!(c::EdgeModel, p::Pair) = set_graphelement!(c, (;src=p.first, dst=p.second))
@@ -70,30 +76,38 @@ set_graphelement!(c::EdgeModel, p::Pair) = set_graphelement!(c, (;src=p.first, d
 #### default or init
 """
     has_default_or_init(c::ComponentModel, sym::Symbol)
+    has_default_or_init(nw::Network, sni::SymbolicIndex)
 
 Checks if a `default` or `init` value is present for symbol `sym`.
 """
 has_default_or_init(c::ComponentModel, sym::Symbol) = has_default(c, sym) || has_init(c, sym)
+has_default_or_init(nw::Network, sni::SymbolicIndex) = has_default_or_init(getcomp(nw, sni), sni.subidx)
 """
     get_default_or_init(c::ComponentModel, sym::Symbol)
+    get_default_or_init(nw::Network, sni::SymbolicIndex)
 
 Returns if a `default` value if available, otherwise returns `init` value for symbol `sym`.
 """
 get_default_or_init(c::ComponentModel, sym::Symbol) = has_default(c, sym) ? get_default(c, sym) : get_init(c, sym)
+get_default_or_init(nw::Network, sni::SymbolicIndex) = get_default_or_init(getcomp(nw, sni), sni.subidx)
 
 #### default or guess
 """
     has_default_or_guess(c::ComponentModel, sym::Symbol)
+    has_default_or_guess(nw::Network, sni::SymbolicIndex)
 
 Checks if a `default` or `guess` value is present for symbol `sym`.
 """
 has_default_or_guess(c::ComponentModel, sym::Symbol) = has_default(c, sym) || has_guess(c, sym)
+has_default_or_guess(nw::Network, sni::SymbolicIndex) = has_default_or_guess(getcomp(nw, sni), sni.subidx)
 """
     get_default_or_guess(c::ComponentModel, sym::Symbol)
+    get_default_or_guess(nw::Network, sni::SymbolicIndex)
 
 Returns if a `default` value if available, otherwise returns `guess` value for symbol `sym`.
 """
 get_default_or_guess(c::ComponentModel, sym::Symbol) = has_default(c, sym) ? get_default(c, sym) : get_guess(c, sym)
+get_default_or_guess(nw::Network, sni::SymbolicIndex) = get_default_or_guess(getcomp(nw, sni), sni.subidx)
 
 
 # TODO: legacy, only used within show methods

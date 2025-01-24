@@ -65,7 +65,7 @@ export @obsex
 include("symbolicindexing.jl")
 
 export has_metadata, get_metadata, set_metadata!
-export has_default, get_default, set_default!
+export has_default, get_default, set_default!, set_defaults!
 export has_guess, get_guess, set_guess!
 export has_init, get_init, set_init!
 export has_bounds, get_bounds, set_bounds!

@@ -147,6 +147,7 @@ initialize_component!
 init_residual
 get_initial_state
 dump_initial_state
+set_defaults!
 ```
 
 ## Execution Types

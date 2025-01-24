@@ -332,3 +332,19 @@ function bounds_satisfied(val, bounds)
     @assert length(bounds) == 2
     !isnothing(val) && !isnan(val) && first(bounds) ≤ val ≤ last(bounds)
 end
+
+"""
+    set_defaults!(nw::Network, s::NWState)
+
+Set the default values of the network to the values of the given state.
+Can be used to "store" the found fixpoint in the network metadata.
+"""
+function set_defaults!(nw::Network, s::NWState)
+    for (sni, val) in zip(SII.variable_symbols(nw), uflat(s))
+        set_default!(nw, sni, val)
+    end
+    for (sni, val) in zip(SII.parameter_symbols(nw), pflat(s))
+        set_default!(nw, sni, val)
+    end
+    nw
+end
