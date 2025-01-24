@@ -18,22 +18,15 @@ struct ComponentAffect{A,DIM,PDIM}
     end
 end
 
-# ComponentCondition([:u1, :u2], [:p1, :p2]) do out, u, p, t
-#     out[1] = u[1] + p[1]
-#     out[2] = u[2] + p[2]
-# end
-
-# ComponentAffect([], [:p1]) do u, p, idx, ctx
-#     p[:p1] = 0
-# end
-
-
 struct ContinousComponentCallback{C,A,CDIM,CPDIM,ADIM,APDIM} <: ComponentCallback{C,A}
     condition::ComponentCondition{C,CDIM,CPDIM}
     affect::ComponentAffect{A,ADIM,APDIM}
     kwargs::NamedTuple
 end
 function ContinousComponentCallback(condition, affect; kwargs...)
+    if haskey(kwargs, :affect_neg!)
+        throw(ArgumentError("affect_neg! not supported yet. Please raise issue."))
+    end
     ContinousComponentCallback(condition, affect, NamedTuple(kwargs))
 end
 
@@ -44,6 +37,9 @@ struct VectorContinousComponentCallback{C,A,CDIM,CPDIM,ADIM,APDIM} <: ComponentC
     kwargs::NamedTuple
 end
 function VectorContinousComponentCallback(condition, affect, len; kwargs...)
+    if haskey(kwargs, :affect_neg!)
+        throw(ArgumentError("affect_neg! not supported yet. Please raise issue."))
+    end
     VectorContinousComponentCallback(condition, affect, len, NamedTuple(kwargs))
 end
 
@@ -84,7 +80,7 @@ affect_prange(cbb, i) = (1 + (i-1)*affect_pdim(cbb)) : i*affect_pdim(cbb)
 
 condition_outrange(cbb, i) = (1 + (i-1)*cbb.sublen) : i*cbb.sublen
 
-cbidx_from_outidx(cbb, outidx) = div(cbb.sublen, outidx) + 1
+cbidx_from_outidx(cbb, outidx) = div(outidx-1, cbb.sublen) + 1
 
 function collect_c_or_a_indices(cbb::CallbackBatch, c_or_a, u_or_p)
     sidxs = SymbolicIndex[]
@@ -218,6 +214,8 @@ function batch_affect(cbb)
     pidxs = SII.parameter_index.(Ref(cbb.nw), psymidxs)
 
     (integrator, outidx) -> begin
+        i = cbidx_from_outidx(cbb, outidx)
+
         uidxsv = view(uidxs, affect_urange(cbb, i))
         uv = view(integrator.u, uidxsv)
         _u = SymbolicView(uv, cbb.callbacks[i].affect.sym)
@@ -226,28 +224,26 @@ function batch_affect(cbb)
         pv = view(integrator.p, pidxsv)
         _p = SymbolicView(pv, cbb.callbacks[i].affect.psym)
 
-        i = cbidx_from_outidx(cbb, outidx)
-
         uhash = hash(uv)
         phash = hash(pv)
-        cbb.affect(_u, _p, integrator.t, get_ctx(cbb, i))
+        cbb.affect(_u, _p, get_ctx(integrator, cbb, cbb.components[i]))
         pchanged = hash(pv) != phash
         uchanged = hash(uv) != uhash
 
-        (pchanged || uchanged) && auto_dt_reset!(integrator)
+        (pchanged || uchanged) && SciMLBase.auto_dt_reset!(integrator)
         pchanged && save_parameters!(integrator)
     end
 end
 
 get_ctx(cbb, i::Int) = get_ctx(cbb, cbb.components[i])
-function get_ctx(cbb, sym::VIndex)
+function get_ctx(integrator, cbb, sym::VIndex)
     idx = sym.compidx
-    (; model=cbb.nw.im.vertexm[idx], vidx=idx)
+    (; integrator, t=integrator.t, model=cbb.nw.im.vertexm[idx], vidx=idx)
 end
-function get_ctx(cbb, sym::EIndex)
+function get_ctx(integrator, cbb, sym::EIndex)
     idx = sym.compidx
     edge = cbb.nw.im.edgevec[idx]
-    (; model=cbb.nw.im.edgem[idx], eidx=idx, src=edge.src, dst=edge.dst)
+    (; integrator, t=integrator.t, model=cbb.nw.im.edgem[idx], eidx=idx, src=edge.src, dst=edge.dst)
 end
 
 struct SymbolicView{N,VT}
@@ -298,4 +294,23 @@ function assert_cb_compat(comp::ComponentModel, cb)
         throw(ArgumentError("All p symbols in the callback affect must be parameters. Found invalid $invalid !⊆ $(comp.psym)."))
     end
     cb
+end
+
+function to_callback(cbb::CallbackBatch)
+    kwargs = first(cbb.callbacks).kwargs
+    cond = batch_condition(cbb)
+    affect = batch_affect(cbb)
+    len = cbb.sublen * length(cbb.callbacks)
+    VectorContinuousCallback(cond, affect, len; kwargs...)
+end
+
+function get_callbacks(nw::Network)
+    cbbs = collect_callbackbatches(nw)
+    if isempty(cbbs)
+        return nothing
+    elseif length(cbbs) == 1
+        return to_callback(only(cbbs))
+    else
+        CallbackSet(to_callback.(cbbs)...)
+    end
 end

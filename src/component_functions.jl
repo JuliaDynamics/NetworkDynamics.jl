@@ -514,7 +514,7 @@ Retrieve the external input dimension of the component.
 """
 extdim(c::ComponentModel) = has_external_input(c) ? length(extin(c)) : 0
 
-# return both "observed" outputs (those that do not shadow states) and true observed
+# return both "observed" outputs (those that do not shadow states) and true outputs
 outsym_flat(c::ComponentModel) = c._outsym_flat
 obssym_all(c::ComponentModel) = c._obssym_all
 

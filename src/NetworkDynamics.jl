@@ -21,6 +21,7 @@ using ForwardDiff: ForwardDiff
 using Printf: @sprintf
 using Random: Random
 using Static: Static, StaticInt
+using SciMLBase: VectorContinuousCallback, CallbackSet
 
 @static if VERSION ≥ v"1.11.0-0"
     using Base: AnnotatedIOBuffer, AnnotatedString
