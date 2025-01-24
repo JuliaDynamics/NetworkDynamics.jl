@@ -17,9 +17,6 @@ for example in filter(contains(r".jl$"), readdir(example_dir, join=true))
     Literate.script(example, outdir; keep_comments=true)
 end
 
-# TODO: doc on steady state solve https://docs.sciml.ai/NonlinearSolve/stable/native/steadystatediffeq/#SteadyStateDiffEq.SSRootfind
-# TODO: doc on parameter & state handling? -> symbolic indexing
-
 mtkext = Base.get_extension(NetworkDynamics, :MTKExt)
 kwargs = (;
     root=joinpath(pkgdir(NetworkDynamics), "docs"),
@@ -55,27 +52,28 @@ kwargs = (;
     format = Documenter.HTML(ansicolor = true),
     # warnonly=true,
 )
+kwargs_warnonly = (; kwargs..., warnonly=true)
 
-success = true
-thrown_ex = nothing
-try
-    # strict build
-    makedocs(; kwargs...)
-catch e
-    @info "Strict doc build failed, try again with warnonly=true"
-    global success = false
-    global thrown_ex = e
-    # kwargs = (; kwargs..., warnonly=[:cross_references, :missing_docs, :docs_block])
-    kwargs_warnonly = (; kwargs..., warnonly=true)
+if haskey(ENV,"GITHUB_ACTIONS")
+    success = true
+    thrown_ex = nothing
+    try
+        makedocs(; kwargs...)
+    catch e
+        @info "Strict doc build failed, try again with warnonly=true"
+        global success = false
+        global thrown_ex = e
+        makedocs(; kwargs_warnonly...)
+    end
+
+    deploydocs(; repo="github.com/JuliaDynamics/NetworkDynamics.jl.git",
+            devbranch="main", push_preview=true)
+
+    success || throw(thrown_ex)
+else # local build
     makedocs(; kwargs_warnonly...)
 end
 
-deploydocs(; repo="github.com/JuliaDynamics/NetworkDynamics.jl.git",
-           devbranch="main", push_preview=true)
-
-if !success
-    rethrow(thrown_ex)
-end
 
 # warnonly options
 # :autodocs_block
