@@ -159,6 +159,18 @@ function batch_condition(cbb)
     usymidxs = collect_c_or_a_indices(cbb, :condition, :sym)
     psymidxs = collect_c_or_a_indices(cbb, :condition, :psym)
     ucache = DiffCache(zeros(length(usymidxs)), 12)
+
+    obscond = s -> SII.is_observed(cbb.nw, s) || SII.is_variable(cbb.nw, s)
+    pcond = p -> SII.is_parameter(cbb.nw, p)
+    if !all(obscond, usymidxs)
+        invalid = filter(!obscond, usymidxs)
+        throw(ArgumentError("All u symbols in the callback condition must be observed or variable. Found invalid $invalid."))
+    end
+    if !all(pcond, psymidxs)
+        invalid = filter(!pcond, psymidxs)
+        throw(ArgumentError("All p symbols in the callback condition must be parameters. Found invalid $invalid."))
+    end
+
     obsf = SII.observed(cbb.nw, usymidxs)
     pidxs = SII.parameter_index.(Ref(cbb.nw), psymidxs)
 
@@ -190,6 +202,18 @@ end
 function batch_affect(cbb)
     usymidxs = collect_c_or_a_indices(cbb, :affect, :sym)
     psymidxs = collect_c_or_a_indices(cbb, :affect, :psym)
+
+    ucond = s -> SII.is_variable(cbb.nw, s)
+    pcond = p -> SII.is_parameter(cbb.nw, p)
+    if !all(ucond, usymidxs)
+        invalid = filter(!ucond, usymidxs)
+        throw(ArgumentError("All u symbols in the callback affect must be variables (in contrast to condition, observables are not allowed here). Found invalid $invalid."))
+    end
+    if !all(pcond, psymidxs)
+        invalid = filter(!pcond, psymidxs)
+        throw(ArgumentError("All p symbols in the callback affect must be parameters. Found invalid $invalid."))
+    end
+
     uidxs = SII.variable_index.(Ref(cbb.nw), usymidxs)
     pidxs = SII.parameter_index.(Ref(cbb.nw), psymidxs)
 
