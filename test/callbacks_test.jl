@@ -83,7 +83,7 @@ end
     cond = ComponentCondition((args...)->nothing, [:P, :₋P, :srcθ, :limit], [:limit, :K])
     affect = ComponentAffect((args...)->nothing, [:₋P],[:active])
     cb = ContinousComponentCallback(cond, affect)
-    set_callback!.(nw.im.edgem, Ref(cb));
+    set_callback!.(nw.im.edgem, Ref(cb); check=false);
     cbb = only(NetworkDynamics.collect_callbackbatches(nw));
     @test_throws ArgumentError NetworkDynamics.batch_condition(cbb)
     @test_throws ArgumentError NetworkDynamics.batch_affect(cbb)
@@ -92,8 +92,26 @@ end
     cond = ComponentCondition((args...)->nothing, [:P, :₋P, :srcθ], [:limit, :K, :P])
     affect = ComponentAffect((args...)->nothing, [],[:active, :₋P])
     cb = ContinousComponentCallback(cond, affect)
-    set_callback!.(nw.im.edgem, Ref(cb));
+    set_callback!.(nw.im.edgem, Ref(cb); check=false);
     cbb = only(NetworkDynamics.collect_callbackbatches(nw));
     @test_throws ArgumentError NetworkDynamics.batch_condition(cbb)
     @test_throws ArgumentError NetworkDynamics.batch_affect(cbb)
+
+    # test on set_callback
+    cond = ComponentCondition((args...)->nothing, [:P, :₋P, :srcθ, :limit], [:limit, :K])
+    affect = ComponentAffect((args...)->nothing, [],[:active])
+    cb = ContinousComponentCallback(cond, affect)
+    @test_throws ArgumentError set_callback!(nw.im.edgem[1], cb)
+    cond = ComponentCondition((args...)->nothing, [:P, :₋P, :srcθ], [:limit, :K, :P])
+    affect = ComponentAffect((args...)->nothing, [],[:active])
+    cb = ContinousComponentCallback(cond, affect)
+    @test_throws ArgumentError set_callback!(nw.im.edgem[1], cb)
+    cond = ComponentCondition((args...)->nothing, [:P, :₋P, :srcθ], [:limit, :K])
+    affect = ComponentAffect((args...)->nothing, [:₋P],[:active])
+    cb = ContinousComponentCallback(cond, affect)
+    @test_throws ArgumentError set_callback!(nw.im.edgem[1], cb)
+    cond = ComponentCondition((args...)->nothing, [:P, :₋P, :srcθ], [:limit, :K])
+    affect = ComponentAffect((args...)->nothing, [],[:active, :P])
+    cb = ContinousComponentCallback(cond, affect)
+    @test_throws ArgumentError set_callback!(nw.im.edgem[1], cb)
 end

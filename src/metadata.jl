@@ -205,10 +205,11 @@ end
 Sets the callback function for the component. Overwrites any existing callback.
 See also [`add_callback!`](@ref).
 """
-function set_callback!(c::ComponentModel, cb)
+function set_callback!(c::ComponentModel, cb; check=true)
     if !(cb isa ComponentCallback) && !(cb isa NTuple{N, <:ComponentCallback} where N)
         throw(ArgumentError("Callback must be a ComponentCallback or a tuple of ComponentCallbacks"))
     end
+    check && assert_cb_compat(c, cb)
     set_metadata!(c, :callback, cb)
 end
 """
@@ -217,7 +218,10 @@ end
 Adds a callback function to the component. Does not overwrite existing callbacks.
 See also [`set_callback!`](@ref).
 """
-add_calllback!(c::ComponentModel, cb) = set_metadata!(c, :callback, (get_callbacks(c)..., cb))
+function add_calllback!(c::ComponentModel, cb; check=true)
+    check && assert_cb_compat(c, cb)
+    set_metadata!(c, :callback, (get_callbacks(c)..., cb))
+end
 
 function get_defaults(c::ComponentModel, syms; missing_val=nothing)
     [has_default(c, sym) ? get_default(c, sym) : missing_val for sym in syms]

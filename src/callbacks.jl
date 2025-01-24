@@ -273,3 +273,29 @@ function _sym_to_int(x::SymbolicView, sym::Symbol)
 end
 _sym_to_int(x::SymbolicView, idx::Int) = idx
 _sym_to_int(x::SymbolicView, idx) = _sym_to_int.(Ref(x), idx)
+
+assert_cb_compat(comp::ComponentModel, t::Tuple) = assert_cb_compat.(Ref(comp), t)
+function assert_cb_compat(comp::ComponentModel, cb)
+    all_obssym = Set(comp.obssym) ∪ insym_all(comp) ∪ outsym_flat(comp)
+    pcond = s -> s in comp.psym
+    ucond_cond = s -> s in all_obssym
+    ucond_affect = s -> s in comp.sym
+
+    if !(all(ucond_cond, cb.condition.sym))
+        invalid = filter(!ucond_cond, cb.condition.sym)
+        throw(ArgumentError("All u symbols in the callback condition must be observed or variable. Found invalid $invalid !⊆ $all_obssym."))
+    end
+    if !(all(ucond_affect, cb.affect.sym))
+        invalid = filter(!ucond_affect, cb.affect.sym)
+        throw(ArgumentError("All u symbols in the callback affect must be variables (in contrast to condition, observables are not allowed here). Found invalid $invalid !⊆ $(comp.sym)."))
+    end
+    if !(all(pcond, cb.condition.psym))
+        invalid = filter(!pcond, cb.condition.psym)
+        throw(ArgumentError("All p symbols in the callback condition must be parameters. Found invalid $invalid !⊆ $(comp.psym)."))
+    end
+    if !(all(pcond, cb.affect.psym))
+        invalid = filter(!pcond, cb.affect.psym)
+        throw(ArgumentError("All p symbols in the callback affect must be parameters. Found invalid $invalid !⊆ $(comp.psym)."))
+    end
+    cb
+end
