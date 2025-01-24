@@ -218,7 +218,7 @@ end
 Adds a callback function to the component. Does not overwrite existing callbacks.
 See also [`set_callback!`](@ref).
 """
-function add_calllback!(c::ComponentModel, cb; check=true)
+function add_callback!(c::ComponentModel, cb; check=true)
     check && assert_cb_compat(c, cb)
     set_metadata!(c, :callback, (get_callbacks(c)..., cb))
 end
