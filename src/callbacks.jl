@@ -20,7 +20,7 @@ abstract type ComponentCallback{C,A} end
 
 Creates a callback condition for a [`ComponentCallback`].
 - `f`: The condition function. Must be a function of the form `out=f(u, p, t)` when used
-  for [`ContinouseComponentcallback`](@ref) or `f!(out, u, p, t)` when used for
+  for [`ContinousComponentCallback`](@ref) or `f!(out, u, p, t)` when used for
   [`VectorContinousComponentCallback`](@ref).
   - Arguments of `f`
     - `u`: The current value of the selecte `sym` states, provided as a [`SymbolicView`](@ref) object.
@@ -59,7 +59,7 @@ end
 
 Creates a callback condition for a [`ComponentCallback`].
 - `f`: The affect function. Must be a function of the form `f(u, p, [event_idx], ctx)` where `event_idx`
-  is only available in [`VectorContinouseComponentcallback`](@ref).
+  is only available in [`VectorContinousComponentCallback`](@ref).
   - Arguments of `f`
     - `u`: The current (mutable) value of the selected `sym` states, provided as a [`SymbolicView`](@ref) object.
     - `p`: The current (mutalbe) value of the selected `psym` parameters.

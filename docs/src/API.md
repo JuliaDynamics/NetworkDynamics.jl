@@ -131,6 +131,7 @@ ContinousComponentCallback
 VectorContinousComponentCallback
 ComponentCondition
 ComponentAffect
+SymbolicView
 ```
 ### Attach Callbacks to Edge/VertexModels
 ```@docs
