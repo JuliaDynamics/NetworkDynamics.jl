@@ -400,13 +400,8 @@ Is a (smallish) fixed size vector type with named dimensions.
 Its main purpose is to allow named acces to variables in
 [`ComponentCondition`](@ref) and [`ComponentAffect`](@ref) functions.
 
-```jldoctest
-julia> sv = SymbolicView([1,2,3],(:a,:b,:c))
-SymbolicView{3, Vector{Int64}}([1, 2, 3], (:a, :b, :c))
-
-julia> sv[1] == sv[:a]
-true
-```
+I.e. when the `ComponentAffect` declared `sym=[:x, :y]`, you can
+acces `u[:x]` and `u[:y]` inside the condition function.
 """
 struct SymbolicView{N,VT} <: AbstractVector{VT}
     v::VT
