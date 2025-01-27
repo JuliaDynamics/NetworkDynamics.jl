@@ -220,7 +220,8 @@ See also [`set_callback!`](@ref).
 """
 function add_callback!(c::ComponentModel, cb; check=true)
     check && assert_cb_compat(c, cb)
-    set_metadata!(c, :callback, (get_callbacks(c)..., cb))
+    newcb = has_callback(c) ? (get_callbacks(c)..., cb) : (cb, )
+    set_metadata!(c, :callback, newcb)
 end
 
 function get_defaults(c::ComponentModel, syms; missing_val=nothing)
