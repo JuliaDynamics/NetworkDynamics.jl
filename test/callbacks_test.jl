@@ -94,6 +94,23 @@ end
     @test maximum(abs.(tript - tref)) < 1e-5
 end
 
+@testest "show functions for callbacks" begin
+    nw = basenetwork()
+    v = nw.im.vertexm[1]
+
+    cond = ComponentCondition(identity, [:θ, :ω], [])
+    affect = ComponentAffect(identity, [:θ, :ω],[])
+    cb = VectorContinousComponentCallback(cond, affect, 2)
+    add_callback!(v, cb)
+    display(v)
+    cond = ComponentCondition(identity, [:θ], [])
+    affect = ComponentAffect(identity, [],[:M])
+    cb2 = ContinousComponentCallback(cond, affect)
+    add_callback!(v, cb2)
+    display(v)
+    display(nw)
+end
+
 @testset "vector callbacks" begin
     nw = basenetwork()
     u0 = zeros(dim(nw))

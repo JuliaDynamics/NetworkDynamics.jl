@@ -23,6 +23,16 @@ function Base.show(io::IO, ::MIME"text/plain", @nospecialize(nw::Network))
         print(io, nw.layer.aggregator)
         # print(io, "\n ├─ vertex output dimension: $(nw.im.vdepth)")
         # print(io, "\n └─   edge output dimension: $(nw.im.edepth)")
+
+        Ncb = length(collect_callbackbatches(nw))
+        if Ncb ≥ 1
+            nvert = mapreduce(has_callback, +, nw.im.vertexm)
+            nedge = mapreduce(has_callback, +, nw.im.edgem)
+            _, setword = maybe_plural(Ncb, "callback set")
+            _, vertword = maybe_plural(nvert, "vertex", "vertices")
+            _, edgeword = maybe_plural(nedge, "edge")
+            print(io, "\n$Ncb $setword across $nvert $vertword and $nedge $edgeword")
+        end
     end
 end
 
@@ -76,6 +86,17 @@ function print_states_params(io, @nospecialize(c::ComponentModel), styling)
         num = extdim(c)
         arr = match(r"(\[.*\])", repr(extin(c)))[1]
         push!(info, styled"$num &ext in: &&$arr")
+    end
+
+    if has_callback(c)
+        cbs = get_callbacks(c)
+        num, word = maybe_plural(length(cbs), "callback")
+        str = ""
+        str *= styled"$num &$word: &&$(shortrepr(first(cbs)))"
+        for cb in Base.tail(cbs)
+            str *= styled"\n&&&$(shortrepr(cb))"
+        end
+        push!(info, str)
     end
 
     print_treelike(io, align_strings(info))
@@ -328,4 +349,47 @@ function str_significant(x; sigdigits, phantom_minus=false)
         formatted = " " * formatted
     end
     formatted
+end
+
+function Base.show(io::IO, ::MIME"text/plain", @nospecialize(cb::ComponentCallback))
+    basename = readuntil(IOBuffer(repr(cb)), '{')
+    print(io, basename)
+    print(io, "(")
+    _print_condsyms(io, cb)
+    print(io, " affecting ")
+    _print_affectsyms(io, cb)
+    if cb isa VectorContinousComponentCallback
+        print(io, ", len=", cb.len)
+    end
+    print(io, ")")
+end
+
+function shortrepr(cb::ComponentCallback)
+    io = IOBuffer()
+    _print_condsyms(io, cb)
+    print(io, " affecting ")
+    _print_affectsyms(io, cb)
+    String(take!(io))
+end
+
+function _print_condsyms(io, @nospecialize(cb::ComponentCallback))
+    print(io, "(")
+    _print_syms(io, cb.condition.sym, true)
+    _print_syms(io, cb.condition.psym, isempty(cb.condition.sym))
+    print(io, ")")
+end
+function _print_affectsyms(io, @nospecialize(cb::ComponentCallback))
+    print(io, "(")
+    _print_syms(io, cb.affect.sym, true)
+    _print_syms(io, cb.affect.psym, isempty(cb.affect.sym))
+    print(io, ")")
+end
+function _print_syms(io, syms::Tuple, isfirst)
+    for s in syms
+        if !isfirst
+            print(io, ", ")
+        end
+        print(io, ':', s)
+        isfirst = false
+    end
 end
