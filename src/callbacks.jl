@@ -1,5 +1,50 @@
+"""
+    abstract type ComponentCallback{C,A} end
+
+Abstract type for a component based callback. A component callback
+bundles a [`ComponentCondition`](@ref) as well as a [`ComponentAffect`](@ref)
+which can be then tied to a component model using [`add_callback!`](@ref) or
+[`set_callback!`](@ref).
+
+On a Network level, you can automaticially create network wide `CallbackSet`s using
+[`get_callbacks`](@ref).
+
+See
+[`ContinousComponentCallback`](@ref) and [`VectorContinousComponentCallback`](@ref) for concrete
+implemenations of this abstract type.
+"""
 abstract type ComponentCallback{C,A} end
 
+"""
+    ComponentCondition(f::Function, sym, psym)
+
+Creates a callback condition for a [`ComponentCallback`].
+- `f`: The condition function. Must be a function of the form `out=f(u, p, t)` when used
+  for [`ContinouseComponentcallback`](@ref) or `f!(out, u, p, t)` when used for
+  [`VectorContinousComponentCallback`](@ref).
+  - Arguments of `f`
+    - `u`: The current value of the selecte `sym` states, provided as a [`SymbolicView`](@ref) object.
+    - `p`: The current value of the selected `psym` parameters.
+    - `t`: The current simulation time.
+- `sym`: A vector or tuple of symbols, which represent **states** (including
+  inputs, outputs, observed) of the component model. Determines, which states will
+  be available thorugh parameter `u` in the callback condition function `f`.
+- `psym`: A vector or tuple of symbols, which represetn **parameters** of the component mode.
+  Determines, which parameters will be available in the condition function `f`
+
+# Example
+Consider a component model with states `[:u1, :u2]`, inputs `[:i]`, outputs
+`[:o]` and parameters `[:p1, :p2]`.
+
+    ComponentCondition([:u1, :o], [:p1]) do (u, p, t)
+        # access states symbolicially or via int index
+        u[:u1] == u[1]
+        u[:o] == u[2]
+        p[:p1] == p[1]
+        # the states/prameters `:u2`, `:i` and `:p2` are not available as
+        # they are not listed in the `sym` and `psym` arguments.
+    end
+"""
 struct ComponentCondition{C,DIM,PDIM}
     f::C
     sym::NTuple{DIM,Symbol}
@@ -9,6 +54,38 @@ struct ComponentCondition{C,DIM,PDIM}
     end
 end
 
+"""
+    ComponentCondition(f::Function, sym, psym)
+
+Creates a callback condition for a [`ComponentCallback`].
+- `f`: The affect function. Must be a function of the form `f(u, p, [event_idx], ctx)` where `event_idx`
+  is only available in [`VectorContinouseComponentcallback`](@ref).
+  - Arguments of `f`
+    - `u`: The current (mutable) value of the selected `sym` states, provided as a [`SymbolicView`](@ref) object.
+    - `p`: The current (mutalbe) value of the selected `psym` parameters.
+    - `event_idx`: The current event index, i.e. which `out` element triggerd in case of [`VectorContinousComponentCallback`](@ref).
+    - `ctx::NamedTuple` a named tuple with context variables.
+       - `ctx.model`: a referenc to the ocmponent model
+       - `ctx.vidx`/ctx.eidx: The index of the vertex/edge model.
+       - `ctx.src`/`ctx.dst`: src and dst indices (only for edge models).
+       - `ctx.integrator`: The integrator object.
+       - `ctx.t=ctx.integrator.t`: The current simulation time.
+- `sym`: A vector or tuple of symbols, which represent **states** (**excluding**
+  inputs, outputs, observed) of the component model. Determines, which states will
+  be available thorugh parameter `u` in the callback condition function `f`.
+- `psym`: A vector or tuple of symbols, which represetn **parameters** of the component mode.
+  Determines, which parameters will be available in the condition function `f`
+
+# Example
+Consider a component model with states `[:u1, :u2]`, inputs `[:i]`, outputs
+`[:o]` and parameters `[:p1, :p2]`.
+
+    ComponentAffect([:u1, :o], [:p1]) do (u, p, ctx)
+        u[:u1] = 0 # change the state
+        p[:p1] = 1 # change the parameter
+        @info "Changed :u1 and :p1 on vertex \$(ctx.vidx)" # access context
+    end
+"""
 struct ComponentAffect{A,DIM,PDIM}
     f::A
     sym::NTuple{DIM,Symbol}
@@ -18,6 +95,18 @@ struct ComponentAffect{A,DIM,PDIM}
     end
 end
 
+"""
+    ContinousComponentCallback(condition, affect; kwargs...)
+
+Connect a [`ComponentCondition`](@ref) and a [`ComponentAffect`)[@ref] to a
+continous callback which can be attached to a component model using
+[`add_callback!`](@ref) or [`set_callback!`](@ref).
+
+The `kwargs` will be forwarded to the `VectorContinuousCallback` when the component based
+callbacks are collected for the whole network using `get_callbacks`.
+[`DiffEq.jl docs`](https://docs.sciml.ai/DiffEqDocs/stable/features/callback_functions/)
+for available options.
+"""
 struct ContinousComponentCallback{C,A,CDIM,CPDIM,ADIM,APDIM} <: ComponentCallback{C,A}
     condition::ComponentCondition{C,CDIM,CPDIM}
     affect::ComponentAffect{A,ADIM,APDIM}
@@ -30,6 +119,21 @@ function ContinousComponentCallback(condition, affect; kwargs...)
     ContinousComponentCallback(condition, affect, NamedTuple(kwargs))
 end
 
+"""
+    VectorContinousComponentCallback(condition, affect, len; kwargs...)
+
+Connect a [`ComponentCondition`](@ref) and a [`ComponentAffect`)[@ref] to a
+continous callback which can be attached to a component model using
+[`add_callback!`](@ref) or [`set_callback!`](@ref). This vector version allows
+for `condions` which have `len` output dimensions.
+The `affect` will be triggered with the additional `event_idx` argument to know in which
+dimension the zerocrossing was detected.
+
+The `kwargs` will be forwarded to the `VectorContinuousCallback` when the component based
+callbacks are collected for the whole network using `get_callbacks`.
+[`DiffEq.jl docs`](https://docs.sciml.ai/DiffEqDocs/stable/features/callback_functions/)
+for available options.
+"""
 struct VectorContinousComponentCallback{C,A,CDIM,CPDIM,ADIM,APDIM} <: ComponentCallback{C,A}
     condition::ComponentCondition{C,CDIM,CPDIM}
     affect::ComponentAffect{A,ADIM,APDIM}
@@ -43,25 +147,43 @@ function VectorContinousComponentCallback(condition, affect, len; kwargs...)
     VectorContinousComponentCallback(condition, affect, len, NamedTuple(kwargs))
 end
 
-struct CallbackBatch{T<:ComponentCallback,C,A,ST<:SymbolicIndex}
+
+"""
+    get_callbacks(nw::Network)::CallbackSet
+
+Returns a `CallbackSet` composed of all the "component-based" callbacks in the metadata of the
+Network components.
+"""
+function get_callbacks(nw::Network)
+    cbbs = collect_callbackbatches(nw)
+    if isempty(cbbs)
+        return nothing
+    elseif length(cbbs) == 1
+        return to_callback(only(cbbs))
+    else
+        CallbackSet(to_callback.(cbbs)...)
+    end
+end
+####
+#### batching of callbacks
+####
+struct CallbackBatch{T<:ComponentCallback,C,ST<:SymbolicIndex}
     nw::Network
     components::Vector{ST}
     callbacks::Vector{T}
     sublen::Int # length of each callback
     condition::C
-    affect::A
 end
 function CallbackBatch(nw, components, callbacks)
     if !isconcretetype(eltype(components))
-        components = Vector{typeof(first(components))}(components)
+        components = [c for c in components]
     end
     if !isconcretetype(eltype(callbacks))
-        callbacks = Vector{typeof(first(callbacks))}(callbacks)
+        callbacks = [cb for cb in callbacks]
     end
     sublen = eltype(callbacks) <: ContinousComponentCallback ? 1 : first(callbacks).len
     condition = first(callbacks).condition.f
-    affect = first(callbacks).affect.f
-    CallbackBatch(nw, components, callbacks, sublen, condition, affect)
+    CallbackBatch(nw, components, callbacks, sublen, condition)
 end
 
 Base.length(cbb::CallbackBatch) = length(cbb.callbacks)
@@ -70,17 +192,18 @@ cbtype(cbb::CallbackBatch{T}) where {T} = T
 
 condition_dim(cbb)  = first(cbb.callbacks).condition.sym  |> length
 condition_pdim(cbb) = first(cbb.callbacks).condition.psym |> length
-affect_dim(cbb)  = first(cbb.callbacks).affect.sym  |> length
-affect_pdim(cbb) = first(cbb.callbacks).affect.psym |> length
+affect_dim(cbb,i)  = cbb.callbacks[i].affect.sym  |> length
+affect_pdim(cbb,i) = cbb.callbacks[i].affect.psym |> length
 
 condition_urange(cbb, i) = (1 + (i-1)*condition_dim(cbb))  : i*condition_dim(cbb)
 condition_prange(cbb, i) = (1 + (i-1)*condition_pdim(cbb)) : i*condition_pdim(cbb)
-affect_urange(cbb, i) = (1 + (i-1)*affect_dim(cbb) ) : i*affect_dim(cbb)
-affect_prange(cbb, i) = (1 + (i-1)*affect_pdim(cbb)) : i*affect_pdim(cbb)
+affect_urange(cbb, i) = (1 + (i-1)*affect_dim(cbb,i) ) : i*affect_dim(cbb,i)
+affect_prange(cbb, i) = (1 + (i-1)*affect_pdim(cbb,i)) : i*affect_pdim(cbb,i)
 
 condition_outrange(cbb, i) = (1 + (i-1)*cbb.sublen) : i*cbb.sublen
 
 cbidx_from_outidx(cbb, outidx) = div(outidx-1, cbb.sublen) + 1
+subidx_from_outidx(cbb, outidx) = mod(outidx, 1:cbb.sublen)
 
 function collect_c_or_a_indices(cbb::CallbackBatch, c_or_a, u_or_p)
     sidxs = SymbolicIndex[]
@@ -114,7 +237,6 @@ function collect_callbackbatches(nw)
             push!(callbacks, cb)
         end
     end
-
     idx_per_type = _find_identical(callbacks, 1:length(components))
     batches = CallbackBatch[]
     for typeidx in idx_per_type
@@ -128,15 +250,15 @@ end
 
 function batchequal(a::ContinousComponentCallback, b::ContinousComponentCallback)
     batchequal(a.condition, b.condition) || return false
-    batchequal(a.affect, b.affect)       || return false
+    # batchequal(a.affect, b.affect)       || return false
     batchequal(a.kwargs, b.kwargs)       || return false
     return true
 end
 function batchequal(a::VectorContinousComponentCallback, b::VectorContinousComponentCallback)
     batchequal(a.condition, b.condition) || return false
-    batchequal(a.affect, b.affect)       || return false
+    # batchequal(a.affect, b.affect)       || return false
     batchequal(a.kwargs, b.kwargs)       || return false
-    batchequal(a.len, b.len)             || return false
+    a.len == b.len                       || return false
     return true
 end
 function batchequal(a::T, b::T) where {T <: Union{ComponentCondition, ComponentAffect}}
@@ -151,7 +273,19 @@ function batchequal(a::NamedTuple, b::NamedTuple)
     return true
 end
 
-function batch_condition(cbb)
+"""
+    to_callback(cbb:CallbackBatch)
+
+Generate a `VectorContinuousCallback` from a callback batch.
+"""
+function to_callback(cbb::CallbackBatch)
+    kwargs = first(cbb.callbacks).kwargs
+    cond = _batch_condition(cbb)
+    affect = _batch_affect(cbb)
+    len = cbb.sublen * length(cbb.callbacks)
+    VectorContinuousCallback(cond, affect, len; kwargs...)
+end
+function _batch_condition(cbb::CallbackBatch)
     usymidxs = collect_c_or_a_indices(cbb, :condition, :sym)
     psymidxs = collect_c_or_a_indices(cbb, :condition, :psym)
     ucache = DiffCache(zeros(length(usymidxs)), 12)
@@ -190,12 +324,14 @@ function batch_condition(cbb)
             elseif cbtype(cbb) <: VectorContinousComponentCallback
                 @views _out = out[condition_outrange(cbb, i)]
                 cbb.condition(_out, _u, _p, t)
+            else
+                error()
             end
         end
         nothing
     end
 end
-function batch_affect(cbb)
+function _batch_affect(cbb::CallbackBatch)
     usymidxs = collect_c_or_a_indices(cbb, :affect, :sym)
     psymidxs = collect_c_or_a_indices(cbb, :affect, :psym)
 
@@ -226,7 +362,15 @@ function batch_affect(cbb)
 
         uhash = hash(uv)
         phash = hash(pv)
-        cbb.affect(_u, _p, get_ctx(integrator, cbb, cbb.components[i]))
+        ctx = _get_ctx(integrator, cbb, cbb.components[i])
+        if cbtype(cbb) <: ContinousComponentCallback
+            cbb.callbacks[i].affect.f(_u, _p, ctx)
+        elseif cbtype(cbb) <: VectorContinousComponentCallback
+            num = subidx_from_outidx(cbb, outidx)
+            cbb.callbacks[i].affect.f(_u, _p, num, ctx)
+        else
+            error()
+        end
         pchanged = hash(pv) != phash
         uchanged = hash(uv) != uhash
 
@@ -235,18 +379,36 @@ function batch_affect(cbb)
     end
 end
 
-get_ctx(cbb, i::Int) = get_ctx(cbb, cbb.components[i])
-function get_ctx(integrator, cbb, sym::VIndex)
+_get_ctx(cbb, i::Int) = _get_ctx(cbb, cbb.components[i])
+function _get_ctx(integrator, cbb, sym::VIndex)
     idx = sym.compidx
     (; integrator, t=integrator.t, model=cbb.nw.im.vertexm[idx], vidx=idx)
 end
-function get_ctx(integrator, cbb, sym::EIndex)
+function _get_ctx(integrator, cbb, sym::EIndex)
     idx = sym.compidx
     edge = cbb.nw.im.edgevec[idx]
     (; integrator, t=integrator.t, model=cbb.nw.im.edgem[idx], eidx=idx, src=edge.src, dst=edge.dst)
 end
 
-struct SymbolicView{N,VT}
+####
+#### SymbolicView helper type
+####
+"""
+    SymbolicView{N,VT} <: AbstractVetor{VT}
+
+Is a (smallish) fixed size vector type with named dimensions.
+Its main purpose is to allow named acces to variables in
+[`ComponentCondition`](@ref) and [`ComponentAffect`](@ref) functions.
+
+```jldoctest
+julia> sv = SymbolicView([1,2,3],(:a,:b,:c))
+SymbolicView{3, Vector{Int64}}([1, 2, 3], (:a, :b, :c))
+
+julia> sv[1] == sv[:a]
+true
+```
+"""
+struct SymbolicView{N,VT} <: AbstractVector{VT}
     v::VT
     syms::NTuple{N,Symbol}
 end
@@ -270,9 +432,12 @@ end
 _sym_to_int(x::SymbolicView, idx::Int) = idx
 _sym_to_int(x::SymbolicView, idx) = _sym_to_int.(Ref(x), idx)
 
+####
+#### Internal function to check cb compat when added as metadata
+####
 assert_cb_compat(comp::ComponentModel, t::Tuple) = assert_cb_compat.(Ref(comp), t)
 function assert_cb_compat(comp::ComponentModel, cb)
-    all_obssym = Set(comp.obssym) ∪ insym_all(comp) ∪ outsym_flat(comp)
+    all_obssym = Set(sym(comp)) ∪ Set(comp.obssym) ∪ insym_all(comp) ∪ outsym_flat(comp)
     pcond = s -> s in comp.psym
     ucond_cond = s -> s in all_obssym
     ucond_affect = s -> s in comp.sym
@@ -294,23 +459,4 @@ function assert_cb_compat(comp::ComponentModel, cb)
         throw(ArgumentError("All p symbols in the callback affect must be parameters. Found invalid $invalid !⊆ $(comp.psym)."))
     end
     cb
-end
-
-function to_callback(cbb::CallbackBatch)
-    kwargs = first(cbb.callbacks).kwargs
-    cond = batch_condition(cbb)
-    affect = batch_affect(cbb)
-    len = cbb.sublen * length(cbb.callbacks)
-    VectorContinuousCallback(cond, affect, len; kwargs...)
-end
-
-function get_callbacks(nw::Network)
-    cbbs = collect_callbackbatches(nw)
-    if isempty(cbbs)
-        return nothing
-    elseif length(cbbs) == 1
-        return to_callback(only(cbbs))
-    else
-        CallbackSet(to_callback.(cbbs)...)
-    end
 end

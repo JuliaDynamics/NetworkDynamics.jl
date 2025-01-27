@@ -207,7 +207,7 @@ See also [`add_callback!`](@ref).
 """
 function set_callback!(c::ComponentModel, cb; check=true)
     if !(cb isa ComponentCallback) && !(cb isa NTuple{N, <:ComponentCallback} where N)
-        throw(ArgumentError("Callback must be a ComponentCallback or a tuple of ComponentCallbacks"))
+        throw(ArgumentError("Callback must be a ComponentCallback or a tuple of ComponentCallbacks, got $(typeof(cb))."))
     end
     check && assert_cb_compat(c, cb)
     set_metadata!(c, :callback, cb)

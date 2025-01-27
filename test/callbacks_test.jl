@@ -53,8 +53,8 @@ end
 
     @test NetworkDynamics.condition_dim(cbb) == 3
     @test NetworkDynamics.condition_pdim(cbb) == 2
-    @test NetworkDynamics.affect_dim(cbb) == 0
-    @test NetworkDynamics.affect_pdim(cbb) == 1
+    @test all(NetworkDynamics.affect_dim.(Ref(cbb), 1:7) .== 0)
+    @test all(NetworkDynamics.affect_pdim.(Ref(cbb),1:7) .== 1)
 
     @test NetworkDynamics.condition_urange.(Ref(cbb), 1:length(cbb)) == [1:3,4:6,7:9,10:12,13:15,16:18,19:21]
     @test NetworkDynamics.condition_prange.(Ref(cbb), 1:length(cbb)) == [1:2,3:4,5:6,7:8,9:10,11:12,13:14]
@@ -67,7 +67,7 @@ end
     @test NetworkDynamics.collect_c_or_a_indices(cbb, :affect, :sym) == []
     @test NetworkDynamics.collect_c_or_a_indices(cbb, :affect, :psym) == collect(EPIndex(i, :active) for i in 1:7)
 
-    batchcond = NetworkDynamics.batch_condition(cbb)
+    batchcond = NetworkDynamics._batch_condition(cbb)
     out = zeros(7)
     fill!(out, NaN)
     s0 = NWState(nw)
@@ -75,7 +75,6 @@ end
     integrator = (; p = pflat(s0))
     b = @b $batchcond($out, $u, NaN, $integrator)
     @test b.allocs == 0
-
 
     trip_first_cb = PresetTimeCallback(1.0, integrator -> begin
         i = 5
@@ -95,6 +94,77 @@ end
     @test maximum(abs.(tript - tref)) < 1e-5
 end
 
+@testset "vector callbacks" begin
+    nw = basenetwork()
+    u0 = zeros(dim(nw))
+    p0 = NWParameter(nw)
+    p0.v[:, :D] .= 1
+    prob = ODEProblem(nw, u0, (0, 10.0), pflat(p0))
+    sol = solve(prob, Tsit5())
+
+    events = []
+    cond = ComponentCondition([:θ, :ω], []) do out, u, p ,t
+        out[1] = 0.18 - abs(u[:θ])
+        out[2] = -0.2 - u[:ω]
+    end
+    affect = ComponentAffect([:θ, :ω],[]) do u, p, event_idx, ctx
+        push!(events, (;θ=u[:θ], ω=u[:ω], t=ctx.t, vidx=ctx.vidx, event_idx=event_idx))
+        @info "Triggered event_idx $event_idx t=$(ctx.t) on $(ctx.vidx)"
+    end
+    ccb = VectorContinousComponentCallback(cond, affect, 2)
+    set_callback!(nw.im.vertexm[1], ccb)
+    set_callback!(nw.im.vertexm[2], ccb)
+
+    cbbs = NetworkDynamics.collect_callbackbatches(nw);
+    @test length(cbbs) == 1
+
+    nwcb = get_callbacks(nw);
+    prob = remake(prob, callback=nwcb);
+    sol = solve(prob, Tsit5());
+
+    # plot for interacive inspection
+    # let
+    #     fig = Figure();
+    #     ax1 = Axis(fig[1,1])
+    #     ax2 = Axis(fig[2,1])
+    #     lines!(ax1, sol; idxs=vidxs(sol, 1:2, :θ))
+    #     hlines!(ax1, [0.18], color=:black)
+    #     hlines!(ax1, [-0.18], color=:black)
+    #     lines!(ax2, sol; idxs=vidxs(sol, 1:2, :ω))
+    #     hlines!(ax2, [-0.2], color=:black)
+    #     for e in events
+    #         color = CairoMakie.Makie.wong_colors()[e.vidx]
+    #         @show color
+    #         if e.event_idx ==1
+    #             scatter!(ax1, [e.t], [e.θ], color=color)
+    #         else
+    #             scatter!(ax2, [e.t], [e.ω], color=color)
+    #         end
+    #     end
+    #     fig
+    # end
+
+    ref_events = [
+        (θ=-0.026601727368181737, ω=-0.19999999999999982, t=0.2449490689620347, vidx=1, event_idx=2)
+        (θ=0.17999999999999963, ω=0.3881117850566674, t=0.6113543225776816, vidx=2, event_idx=1)
+        (θ=-0.1600980341412601, ω=-0.20000000000000004, t=0.781905478960556, vidx=1, event_idx=2)
+        (θ=-0.18000000000000002, ω=-0.1403736920664344, t=0.8982900942874107, vidx=1, event_idx=1)
+        (θ=0.26148399109049375, ω=-0.19999999999999998, t=1.3593250291764198, vidx=2, event_idx=2)
+        (θ=-0.18, ω=0.11335697475352356, t=1.4312072751759022, vidx=1, event_idx=1)
+        (θ=0.18000000000000033, ω=-0.3092908878282453, t=1.6621217378351785, vidx=2, event_idx=1)
+        (θ=0.06997679994525381, ω=-0.2000000000000001, t=2.0617667253585683, vidx=2, event_idx=2)
+        (θ=0.17999999999999997, ω=0.13070953683042436, t=3.3585329163801663, vidx=2, event_idx=1)
+        (θ=0.18000000000000013, ω=-0.09014601420085934, t=4.213717530716612, vidx=2, event_idx=1)
+    ]
+    for (e, re) in zip(events, ref_events)
+        @test e.vidx == re.vidx
+        @test e.event_idx == re.event_idx
+        @test abs(e.θ - re.θ) < 1e-5
+        @test abs(e.ω - re.ω) < 1e-5
+        @test abs(e.t - re.t) < 1e-5
+    end
+end
+
 @testset "wrong symboltype test" begin
     nw = basenetwork()
 
@@ -105,8 +175,8 @@ end
     cb = ContinousComponentCallback(cond, affect)
     set_callback!.(nw.im.edgem, Ref(cb); check=false);
     cbb = only(NetworkDynamics.collect_callbackbatches(nw));
-    @test_throws ArgumentError NetworkDynamics.batch_condition(cbb)
-    @test_throws ArgumentError NetworkDynamics.batch_affect(cbb)
+    @test_throws ArgumentError NetworkDynamics._batch_condition(cbb)
+    @test_throws ArgumentError NetworkDynamics._batch_affect(cbb)
 
     # invalid state in condition p
     cond = ComponentCondition((args...)->nothing, [:P, :₋P, :srcθ], [:limit, :K, :P])
@@ -114,8 +184,8 @@ end
     cb = ContinousComponentCallback(cond, affect)
     set_callback!.(nw.im.edgem, Ref(cb); check=false);
     cbb = only(NetworkDynamics.collect_callbackbatches(nw));
-    @test_throws ArgumentError NetworkDynamics.batch_condition(cbb)
-    @test_throws ArgumentError NetworkDynamics.batch_affect(cbb)
+    @test_throws ArgumentError NetworkDynamics._batch_condition(cbb)
+    @test_throws ArgumentError NetworkDynamics._batch_affect(cbb)
 
     # test on set_callback
     cond = ComponentCondition((args...)->nothing, [:P, :₋P, :srcθ, :limit], [:limit, :K])
@@ -134,4 +204,14 @@ end
     affect = ComponentAffect((args...)->nothing, [],[:active, :P])
     cb = ContinousComponentCallback(cond, affect)
     @test_throws ArgumentError set_callback!(nw.im.edgem[1], cb)
+end
+
+@testset "symbolic view test" begin
+    a = collect(1:10)
+    v = SymbolicView(view(a,1:3), (:a,:b,:c))
+    @test v[:a] == 1
+    @test v[:b] == 2
+    @test v[:c] == 3
+    v[:c] = 7
+    @test a == [1,2,7,4,5,6,7,8,9,10]
 end
