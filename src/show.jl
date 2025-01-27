@@ -1,5 +1,10 @@
 # AbstractTrees.TreeCharSet("├", "└","┌" "│", "─", "⋮", " ⇒ ")
 
+# overload to reduce excessive printing
+function Base.show(io::IO, @nospecialize(nw::Network))
+    print(io, "Network($(nv(nw.im.g)) vertices, $(ne(nw.im.g)) edges")
+end
+
 function Base.show(io::IO, ::MIME"text/plain", @nospecialize(nw::Network))
     compact = get(io, :compact, false)::Bool
     if compact
