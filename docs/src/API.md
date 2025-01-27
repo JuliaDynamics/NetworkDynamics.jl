@@ -127,10 +127,10 @@ set_bounds!
 ## Callbacks API
 ### Define Callbacks
 ```@docs
-ContionusComponentCallback
+ContinousComponentCallback
 VectorContinousComponentCallback
-Componentcondition
-ComponenAffect
+ComponentCondition
+ComponentAffect
 ```
 ### Attach Callbacks to Edge/VertexModels
 ```@docs

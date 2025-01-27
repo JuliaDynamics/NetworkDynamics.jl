@@ -50,7 +50,7 @@ kwargs = (;
     ],
     draft=false,
     format = Documenter.HTML(ansicolor = true),
-    # warnonly=true,
+    warnonly=[:missing_docs],
 )
 kwargs_warnonly = (; kwargs..., warnonly=true)
 
