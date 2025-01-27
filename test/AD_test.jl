@@ -50,6 +50,6 @@ test_differentiation(
     backends,             # the backends you want to compare
     scenarios,            # the scenarios you defined,
     correctness=true,     # compares values against the reference
-    type_stability=false, # checks type stability with JET.jl
+    type_stability=:none, # checks type stability with JET.jl
     detailed=true,        # prints a detailed test set
 )
