@@ -94,7 +94,7 @@ end
     @test maximum(abs.(tript - tref)) < 1e-5
 end
 
-@testest "show functions for callbacks" begin
+@testset "show functions for callbacks" begin
     nw = basenetwork()
     v = nw.im.vertexm[1]
 
