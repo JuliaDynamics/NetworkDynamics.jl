@@ -15,20 +15,9 @@ permissions:
 
 jobs:
   run_benchmarks:
+    if: "!contains(github.event.pull_request.title, '[no benchmark]') && !contains(github.event.pull_request.body, '[no benchmark]')"
     runs-on: ubuntu-latest
     steps:
-      - name: Check for '[no benchmark]' in PR
-        id: check-no-benchmark
-        run: |
-          if [[ "${{ github.event.pull_request.title }}" == *"[no benchmark]"* ]] || [[ "${{ github.event.pull_request.body }}" == *"[no benchmark]"* ]]; then
-            echo "Skipping benchmarks because '[no benchmark]' is found in the PR title or body."
-            echo "skip_benchmark=true" >> $GITHUB_ENV
-          else
-            echo "skip_benchmark=false" >> $GITHUB_ENV
-          fi
-      - name: Exit if skipping benchmarks
-        if: env.skip_benchmark == 'true'
-        run: exit 0
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # fetch all history
