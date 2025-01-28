@@ -1,14 +1,13 @@
-# Callbacks and Events (@id Callbacks)
+# [Callbacks and Events](@id Callbacks)
 
 Callback-functions are a way of handling discontinuities in differential equations.
 In a nutshell, the solver checks for some "condition" (i.e. a zero crossing of some variable)
 and calls some "affect" if the condition is fulfilled.
-In the affect it is safe to modify the integrator, e.g. changing some state or some parameter.
+Within the affect function, it is safe to modify the integrator, e.g. changing some state or some parameter.
 
 Since `NetworkDynamics.jl` provides nothing more than a RHS for DifferentialEquations.jl, please check
 [their docs on event handling](https://docs.sciml.ai/DiffEqDocs/stable/features/callback_functions/)
 as a general reference.
-
 This page at introducing the general concepts, for a hands on example of a simulation with callbacks
 refer to the [Cascading Failure](@ref) example.
 
@@ -84,7 +83,7 @@ add_callback!(vert, vccb)
 
 
 ### Extracting the Callback
-In order to use the callback during simulation, we need to generate a [`SciMLBase.CallbackSet`](@extref) which contains the conditions and affects of all the component based callbacks in the network. For that we use [`get_callbacks(::Network)`](@ref `get_callbacks(::NetworkDynamics.Network)`):
+In order to use the callback during simulation, we need to generate a [`SciMLBase.CallbackSet`](@extref) which contains the conditions and affects of all the component based callbacks in the network. For that we use [`get_callbacks(::Network)`](@ref):
 ```julia
 u0 = NWState(u0)
 cbs = get_callbacks(nw)
@@ -105,7 +104,7 @@ To access states and parameters of specific components, we havily rely on the [S
 using SymbolicIndexingInterface as SII
 nw = Network(#= some network =#)
 
-condition = let getvalue = SII.getu(nw, VIndex(1:5, :some_state))
+condition = let getvalue = SII.getsym(nw, VIndex(1:5, :some_state))
     function(out, u, t, integrator)
         s = NWState(integrator, u, integrator.p, t)
         some_state = getvalue(s)
@@ -115,7 +114,7 @@ end
 ```
 Please not a few important things here:
  - Symbolic indexing can be costly, and the condition function gets called very
-   often. By using [`SII.getu`](@extref `SymbolicIndexingInterface.getu`) we did
+   often. By using [`SII.getsym`](@extref `SymbolicIndexingInterface.getsym`) we did
    some of the work *before* the callback by creating the accessor function.
    When handling with "normal states" and parameters consider using
    [`SII.variable_index`](@ref `SymbolicIndexingInterface.variable_index`) and
@@ -150,4 +149,4 @@ Once the `condition` and `affect!` is defined, you can use the [`SciMLBase.Conti
     To extract or plot timeseries of observed states under *time variant
     parameters* (i.e. parameters that are changed in a callback), those changes
     need to be recorded using the [`save_parameters!`](@ref) function whenever `p` is changed.
-    When using [ComponentCallback](@ref), NetworkDynamics will automaticially check for changes in `p` and save them if necessary.
+    When using [ComponentCallback](@ref NetworkDynamics.ComponentCallback), NetworkDynamics will automaticially check for changes in `p` and save them if necessary.

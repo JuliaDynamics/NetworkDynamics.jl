@@ -77,7 +77,7 @@ include("metadata.jl")
 
 export ComponentCondition, ComponentAffect
 export ContinousComponentCallback, VectorContinousComponentCallback
-export SymbolicView, get_callbacks
+export SymbolicView
 include("callbacks.jl")
 
 using NonlinearSolve: AbstractNonlinearSolveAlgorithm, NonlinearFunction

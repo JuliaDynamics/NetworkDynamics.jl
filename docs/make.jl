@@ -8,9 +8,9 @@ using ModelingToolkit
 using DocumenterInterLinks
 
 links = InterLinks(
-    "diffeq" => "https://diffeq.sciml.ai/stable/",
-    "mtk" => "https://mtk.sciml.ai/stable/",
-    "sii" => "https://docs.sciml.ai/SymbolicIndexingInterface/stable/",
+    "DiffEq" => "https://docs.sciml.ai/DiffEqDocs/stable/",
+    "MTK" => "https://docs.sciml.ai/ModelingToolkit/stable/",
+    "SymbolicIndexingInterface" => "https://docs.sciml.ai/SymbolicIndexingInterface/stable/",
 )
 
 # generate examples

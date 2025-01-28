@@ -66,7 +66,7 @@ Creates a callback condition for a [`ComponentCallback`].
     - `event_idx`: The current event index, i.e. which `out` element triggerd in case of [`VectorContinousComponentCallback`](@ref).
     - `ctx::NamedTuple` a named tuple with context variables.
        - `ctx.model`: a referenc to the ocmponent model
-       - `ctx.vidx`/ctx.eidx: The index of the vertex/edge model.
+       - `ctx.vidx`/`ctx.eidx`: The index of the vertex/edge model.
        - `ctx.src`/`ctx.dst`: src and dst indices (only for edge models).
        - `ctx.integrator`: The integrator object.
        - `ctx.t=ctx.integrator.t`: The current simulation time.
@@ -155,6 +155,7 @@ Returns a `CallbackSet` composed of all the "component-based" callbacks in the m
 Network components.
 """
 function get_callbacks(nw::Network)
+    aliased_changed(nw; warn=true)
     cbbs = collect_callbackbatches(nw)
     if isempty(cbbs)
         return nothing
@@ -432,7 +433,8 @@ _sym_to_int(x::SymbolicView, idx) = _sym_to_int.(Ref(x), idx)
 ####
 assert_cb_compat(comp::ComponentModel, t::Tuple) = assert_cb_compat.(Ref(comp), t)
 function assert_cb_compat(comp::ComponentModel, cb)
-    all_obssym = Set(sym(comp)) ∪ Set(comp.obssym) ∪ insym_all(comp) ∪ outsym_flat(comp)
+    insym = hasinsym(comp) ? insym_all(comp) : []
+    all_obssym = Set(sym(comp)) ∪ Set(comp.obssym) ∪ insym ∪ outsym_flat(comp)
     pcond = s -> s in comp.psym
     ucond_cond = s -> s in all_obssym
     ucond_affect = s -> s in comp.sym

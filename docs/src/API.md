@@ -127,7 +127,7 @@ set_bounds!
 ## Callbacks API
 ### Define Callbacks
 ```@docs
-ComponentCallback
+NetworkDynamics.ComponentCallback
 ContinousComponentCallback
 VectorContinousComponentCallback
 ComponentCondition
