@@ -19,8 +19,8 @@ ThreadPinning = "811555cd-349b-4f26-b7bc-1f208b848042"
 TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 UnicodePlots = "b8865327-cd53-5732-bb35-84acbb429228"
 
-[sources]
-NetworkDynamics = {path = ".."}
+[sources.NetworkDynamics]
+path = ".."
 
 [compat]
 AbstractTrees = "0.4.5"
@@ -30,6 +30,7 @@ CairoMakie = "0.13.1"
 Chairmarks = "1.3.1"
 Graphs = "≥0.0.1"
 Makie = "0.22.1"
+NetworkDynamics = "0.9"
 OrderedCollections = "1.7.0"
 PkgBenchmark = "0.2.12"
 PrettyTables = "2.4.0"
