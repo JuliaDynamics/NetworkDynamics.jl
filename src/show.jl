@@ -147,6 +147,12 @@ end
 function Base.show(io::IO, idx::EIndex)
     print(io, "EIndex(", repr(idx.compidx), ", ", repr(idx.subidx), ")")
 end
+function Base.show(io::IO, idx::VIndex{<:Any,Nothing})
+    print(io, "VIndex(", repr(idx.compidx), ")")
+end
+function Base.show(io::IO, idx::EIndex{<:Any,Nothing})
+    print(io, "EIndex(", repr(idx.compidx), ")")
+end
 function Base.show(io::IO, idx::VPIndex)
     print(io, "VPIndex(", repr(idx.compidx), ", ", repr(idx.subidx), ")")
 end

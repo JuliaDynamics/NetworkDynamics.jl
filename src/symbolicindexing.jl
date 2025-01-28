@@ -10,6 +10,7 @@ A symbolic index for a vertex state variable.
 VIndex(1, :P)      # vertex 1, variable :P
 VIndex(1:5, 1)     # first state of vertices 1 to 5
 VIndex(7, (:x,:y)) # states :x and :y of vertex 7
+VIndex(2)          # references the second vertex model
 ```
 
 Can be used to index into objects supporting the `SymbolicIndexingInterface`,
@@ -21,6 +22,7 @@ struct VIndex{C,S} <: SymbolicStateIndex{C,S}
     compidx::C
     subidx::S
 end
+VIndex(ci::Union{Symbol,Int}) = VIndex(ci, nothing)
 """
     EIndex{C,S} <: SymbolicStateIndex{C,S}
     idx = EIndex(comp, sub)
@@ -33,6 +35,7 @@ A symbolic index for an edge state variable.
 EIndex(1, :P)      # edge 1, variable :P
 EIndex(1:5, 1)     # first state of edges 1 to 5
 EIndex(7, (:x,:y)) # states :x and :y of edge 7
+EIndex(2)          # references the second edge model
 ```
 
 Can be used to index into objects supporting the `SymbolicIndexingInterface`,
@@ -44,6 +47,7 @@ struct EIndex{C,S} <: SymbolicStateIndex{C,S}
     compidx::C
     subidx::S
 end
+EIndex(ci::Union{Symbol,Int}) = EIndex(ci, nothing)
 """
     VPIndex{C,S} <: SymbolicStateIndex{C,S}
     idx = VPIndex(comp, sub)
@@ -1168,3 +1172,11 @@ end
 
 Base.getindex(s::NWState, idx::ObservableExpression) = SII.getu(s, idx)(s)
 Base.getindex(s::NWParameter, idx::ObservableExpression) = SII.getp(s, idx)(s)
+
+# using getindex to access component models
+function Base.getindex(nw::Network, i::EIndex{<:Union{Symbol,Int}, Nothing})
+    return nw.im.edgem[resolvecompidx(nw,i)]
+end
+function Base.getindex(nw::Network, i::VIndex{<:Union{Symbol,Int}, Nothing})
+    return nw.im.vertexm[resolvecompidx(nw,i)]
+end
