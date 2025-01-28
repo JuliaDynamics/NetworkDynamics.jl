@@ -55,7 +55,7 @@ struct ComponentCondition{C,DIM,PDIM}
 end
 
 """
-    ComponentCondition(f::Function, sym, psym)
+    ComponentAffect(f::Function, sym, psym)
 
 Creates a callback condition for a [`ComponentCallback`].
 - `f`: The affect function. Must be a function of the form `f(u, p, [event_idx], ctx)` where `event_idx`

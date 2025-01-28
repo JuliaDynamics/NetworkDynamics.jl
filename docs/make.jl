@@ -5,6 +5,13 @@ using NetworkDynamics
 using SciMLBase
 using Literate
 using ModelingToolkit
+using DocumenterInterLinks
+
+links = InterLinks(
+    "diffeq" => "https://diffeq.sciml.ai/stable/",
+    "mtk" => "https://mtk.sciml.ai/stable/",
+    "sii" => "https://docs.sciml.ai/SymbolicIndexingInterface/stable/",
+)
 
 # generate examples
 example_dir = joinpath(@__DIR__, "examples")
@@ -24,6 +31,7 @@ kwargs = (;
     modules=[NetworkDynamics, mtkext],
     linkcheck=true, # checks if external links resolve
     pagesonly=true,
+    plugins=[links],
     pages=[
         "General" => "index.md",
         "mathematical_model.md",

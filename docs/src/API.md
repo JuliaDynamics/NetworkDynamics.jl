@@ -127,16 +127,18 @@ set_bounds!
 ## Callbacks API
 ### Define Callbacks
 ```@docs
+ComponentCallback
 ContinousComponentCallback
 VectorContinousComponentCallback
 ComponentCondition
 ComponentAffect
 SymbolicView
+get_callbacks(::NetworkDynamics.Network)
 ```
 ### Attach Callbacks to Edge/VertexModels
 ```@docs
 has_callback
-get_callbacks
+get_callbacks(::NetworkDynamics.ComponentModel)
 set_callback!
 add_callback!
 ```
