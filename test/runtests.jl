@@ -41,6 +41,7 @@ using ExplicitImports
     @safetestset "Diffusion test" begin include("diffusion_test.jl") end
     @safetestset "inhomogeneous test" begin include("inhomogeneous_test.jl") end
     @safetestset "initialization test" begin include("initialization_test.jl") end
+    @safetestset "Callbacks test" begin include("callbacks_test.jl") end
 
     @safetestset "AD test" begin include("AD_test.jl") end
 

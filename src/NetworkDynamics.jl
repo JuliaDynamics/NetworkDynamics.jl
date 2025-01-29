@@ -21,6 +21,8 @@ using ForwardDiff: ForwardDiff
 using Printf: @sprintf
 using Random: Random
 using Static: Static, StaticInt
+using SciMLBase: VectorContinuousCallback, CallbackSet, DiscreteCallback
+using DiffEqCallbacks: DiffEqCallbacks
 
 @static if VERSION ≥ v"1.11.0-0"
     using Base: AnnotatedIOBuffer, AnnotatedString
@@ -65,13 +67,20 @@ export @obsex
 include("symbolicindexing.jl")
 
 export has_metadata, get_metadata, set_metadata!
-export has_default, get_default, set_default!
+export has_default, get_default, set_default!, set_defaults!
 export has_guess, get_guess, set_guess!
 export has_init, get_init, set_init!
 export has_bounds, get_bounds, set_bounds!
 export has_graphelement, get_graphelement, set_graphelement!
 export get_initial_state, dump_initial_state
+export has_callback, get_callbacks, set_callback!, add_callback!
 include("metadata.jl")
+
+export ComponentCondition, ComponentAffect
+export ContinousComponentCallback, VectorContinousComponentCallback
+export DiscreteComponentCallback, PresetTimeComponentCallback
+export SymbolicView
+include("callbacks.jl")
 
 using NonlinearSolve: AbstractNonlinearSolveAlgorithm, NonlinearFunction
 using NonlinearSolve: NonlinearLeastSquaresProblem, NonlinearProblem

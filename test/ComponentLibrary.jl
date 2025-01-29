@@ -1,5 +1,7 @@
 module Lib
 using NetworkDynamics
+using ModelingToolkit
+using ModelingToolkit: t_nounits as t, D_nounits as Dt
 
 Base.@propagate_inbounds function diffusionedge!(e, v_s, v_d, (p,), _)
     e .= p * (v_s[1] .- v_d[1])
@@ -66,5 +68,48 @@ Base.@propagate_inbounds function kuramoto_vertex!(dθ, θ, esum, (ω,), t)
     dθ[1] = ω + esum[1]
 end
 kuramoto_first() = VertexModel(; f=kuramoto_vertex!, sym=[:θ], psym=[:ω], g=1)
+
+function swing_mtk(; kwargs...)
+    @mtkmodel SwingNode begin
+        @variables begin
+            θ(t) = 0.0, [description = "voltage angle", output=true]
+            P(t), [description = "Electical Powerflow into Network", input=true]
+            ω(t) = 0.0, [description = "Rotor frequency"]
+            Pdamping(t), [description = "Damping Power (observed)"]
+        end
+        @parameters begin
+            M = 1, [description = "Inertia"]
+            D = 0.1, [description = "Damping"]
+            Pmech, [description = "Mechanical Power"]
+        end
+        @equations begin
+            Dt(θ) ~ ω
+            Pdamping ~ - D * ω
+            Dt(ω) ~ 1/M * (Pmech + Pdamping + P)
+        end
+    end
+    VertexModel(SwingNode(name=:swing_mtk), [:P], [:θ]; kwargs...)
+end
+
+function line_mtk(; kwargs...)
+    @mtkmodel StaticPowerLine begin
+        @variables begin
+            srcθ(t), [description = "voltage angle at src end", input=true]
+            dstθ(t), [description = "voltage angle at dst end", input=true]
+            P(t), [description = "flow towards node at dst end", output=true]
+            Δθ(t)
+        end
+        @parameters begin
+            active = 1, [description = "line active"]
+            K = 1.63, [description = "Line conductance"]
+            limit = 1, [description = "Line limit"]
+        end
+        @equations begin
+            Δθ ~ srcθ - dstθ
+            P ~ active*K*sin(Δθ)
+        end
+    end
+    EdgeModel(StaticPowerLine(name=:line_mtk), [:srcθ], [:dstθ], AntiSymmetric([:P]); kwargs...)
+end
 
 end #module

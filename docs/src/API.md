@@ -124,6 +124,27 @@ get_bounds
 set_bounds!
 ```
 
+## Callbacks API
+### Define Callbacks
+```@docs
+NetworkDynamics.ComponentCallback
+ContinousComponentCallback
+VectorContinousComponentCallback
+DiscreteComponentCallback
+PresetTimeComponentCallback
+ComponentCondition
+ComponentAffect
+SymbolicView
+get_callbacks(::NetworkDynamics.Network)
+```
+### Attach Callbacks to Edge/VertexModels
+```@docs
+has_callback
+get_callbacks(::NetworkDynamics.ComponentModel)
+set_callback!
+add_callback!
+```
+
 ## Initialization
 ```@docs
 find_fixpoint
@@ -131,6 +152,7 @@ initialize_component!
 init_residual
 get_initial_state
 dump_initial_state
+set_defaults!
 ```
 
 ## Execution Types

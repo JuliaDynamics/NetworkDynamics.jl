@@ -8,6 +8,12 @@ This script can be dowloaded as a normal Julia script [here](@__NAME__.jl). #md
 
 > [1] Schäfer, B., Witthaut, D., Timme, M., & Latora, V. (2018). Dynamically induced cascading failures in power grids. Nature communications, 9(1), 1-13. https://www.nature.com/articles/s41467-018-04287-5
 
+This example has three subchaperts:
+ - first we [define the network model](#define-the-model),
+ - secondly, we implement [component based callbacks](#component-based-callbacks) and
+ - thirdly we solve the problem using [systemwide callbacks](#system-wide-callbacks).
+
+
 The system is modeled using swing equation and active power edges. The nodes are
 characterized by the voltage angle `δ`, the active power on each line is symmetric
 and a function of the difference between source and destination angle `δ_src - δ_dst`.
@@ -22,6 +28,8 @@ using Test #hide
 import SymbolicIndexingInterface as SII
 
 #=
+## Defining the Model
+
 For the nodes we define the swing equation. State `v[1] = δ`, `v[2] = ω`.
 The swing equation has three parameters: `p = (P_ref, I, γ)` where `P_ref`
 is the power setpopint, `I` is the inertia and `γ` is the droop or damping coeficcient.
@@ -58,25 +66,102 @@ g = SimpleGraph([0 1 1 0 1;
                  1 1 0 1 0;
                  0 1 1 0 1;
                  1 0 0 1 0])
-swing_network = Network(g, vertex, edge)
+nw = Network(g, vertex, edge; dealias=true)
 
 #=
-For the parameters, we create the `NWParameter` object prefilled with default p values
+Note that we used `dealias=true` to automaticially generate separate
+`ComponentModels` for each vertex/edge. Doing so allows us to later
+set different metadata (callbacks, default values, etc.) for each vertex/edge.
+
+We proceed by setting the default reference power for the nodes:
 =#
-p = NWParameter(swing_network)
-## vertices 1, 3 and 4 act as loads
-p.v[(1,3,4), :P_ref] .= -1
-## vertices 2 and 5 act as generators
-p.v[(2,5), :P_ref] .= 1.5
+set_default!(nw, VIndex(1, :P_ref), -1.0) # load
+set_default!(nw, VIndex(2, :P_ref),  1.5) # generator
+set_default!(nw, VIndex(3, :P_ref), -1.0) # load
+set_default!(nw, VIndex(4, :P_ref), -1.0) # load
+set_default!(nw, VIndex(5, :P_ref),  1.5) # generator
 nothing #hide #md
 
 #=
-We can use `find_fixpoint` to find a valid initial condition of the network
+We can use `find_fixpoint` to find a valid initial condition of the network.
+We also use `set_defaults!` to overwirte all the default values for states and parameters
+with the one of the fixpoint, this means that we can allways re-extract this setpoint by
+using `u0 = NWState(nw)`.
 =#
-u0 = find_fixpoint(swing_network, p)
+u0 = find_fixpoint(nw)
+set_defaults!(nw, u0)
 nothing #hide #md
 
 #=
+## Component-based Callbacks
+
+For the component based callback we need to define a condtion and an affect.
+Both functions take three inputs:
+  - the actual function `f`
+  - the states which to be accessed `sym`
+  - the parameters to be accessed `psym`
+=#
+cond = ComponentCondition([:P], [:limit]) do u, p, t
+    abs(u[:P]) - p[:limit]
+end
+affect = ComponentAffect([], [:K]) do u, p, ctx
+    println("Line $(ctx.eidx) tripped at t=$(ctx.integrator.t)")
+    p[:K] = 0
+end
+edge_cb = ContinousComponentCallback(cond, affect)
+#=
+To enable the callback in simulation, we need to attach them to the individual
+edgemodels/vertexmodels.
+=#
+for i in 1:ne(g)
+    edgemodel = nw[EIndex(i)]
+    set_callback!(edgemodel, edge_cb)
+end
+nothing #hide #md
+
+#=
+The system starts at a steady state.
+In order to see any dynamic, we need to fail a first line intentionally.
+For that we use a [`PresetTimeComponentCallback`](@ref), which triggers an
+`ComponentAffect` at a given time. We can reuse the previously defined component
+affect for that and just add it to line number 5 at time 1.0.
+=#
+trip_first_cb = PresetTimeComponentCallback(1.0, affect)
+add_callback!(nw[EIndex(5)], trip_first_cb)
+nothing #hide #md
+#=
+When we inspect the edge model for 5 no, we see that we've registered 2 callbacks:
+=#
+nw[EIndex(5)]
+
+#=
+Now we can simulate the network. We use [`get_callbacks(::Network)`](@ref)
+to generate a callback set for the whole network which represents all of the individual
+component callbacks.
+=#
+u0 = NWState(nw)
+network_cb = get_callbacks(nw)
+prob = ODEProblem(nw, uflat(u0), (0, 6), pflat(u0); callback=network_cb)
+sol = solve(prob, Tsit5());
+nothing #hide #md
+
+#=
+Lastly we plot the power flow on all lines using the [`eidxs`](@ref) function to generate the
+symbolic indices for the states of interest:
+=#
+plot(sol; idxs=eidxs(sol, :, :P))
+
+#=
+## System wide Callbacks
+
+The above solution relies on the `ComponentCallback` features of
+NetworkDyanmics. The "low-level" API would be to use `VectorContinousCallback`
+and `PresetTimeCallback` directly to achieve the same effect, essentially doing
+manually what [`get_callbacks(::Network)`](@ref) is doing for us.
+
+While not necessary in this case, this method offers more flexiblity then the
+component based appraoch.
+
 In order to implement the line failures, we need to create a `VectorContinousCallback`.
 In the callback, we compare the current flow on the line with the limit. If the limit is reached,
 the coupling `K` is set to 0.
@@ -125,8 +210,8 @@ cache accessors to the internal states.
 This still isn't ideal beacuse both `getlim` and `getflow` getters will create arrays
 within the callback. But is far better then resolving the flat state indices every time.
 =#
-condition = let getlim = SII.getp(swing_network, epidxs(swing_network, :, :limit)),
-                getflow = SII.getu(swing_network, eidxs(swing_network, :, :P))
+condition = let getlim = SII.getp(nw, epidxs(nw, :, :limit)),
+                getflow = SII.getu(nw, eidxs(nw, :, :P))
     function (out, u, t, integrator)
         ## careful,  u != integrator.u
         ## therefore construct nwstate with Network info from integrator but u
@@ -143,28 +228,26 @@ We can combine affect and condition to form the callback.
 trip_cb = VectorContinuousCallback(condition, affect!, ne(g));
 
 #=
-However, there is another component missing. If we look at the powerflow on the
-lines in the initial steady state
-=#
-u0.e[:, :P]
-#=
+Similarily to before, we need to generate a initial perturbation by failing one line
+using a `PresetTimeCallback`.
 We see that every flow is below the trip value 1.0. Therefor we need to add a distrubance
 to the network. We do this by manually disabeling line 5 at time 1.
 =#
 trip_first_cb = PresetTimeCallback(1.0, integrator->affect!(integrator, 5));
 
 #=
-With those components, we can create the problem and solve it.
+Now we are set for solving the system again. This time we create our own callback
+set by combining both Callbacks manually.
 =#
-
-prob = ODEProblem(swing_network, uflat(u0), (0,6), copy(pflat(p));
-                  callback=CallbackSet(trip_cb, trip_first_cb))
+u0 = NWState(nw)
+cbset = CallbackSet(trip_cb, trip_first_cb)
+prob = ODEProblem(nw, uflat(u0), (0,6), pflat(u0); callback=cbset)
 Main.test_execution_styles(prob) # testing all ex styles #src
-sol = solve(prob, Tsit5());
+sol2 = solve(prob, Tsit5());
 ## we want to test the reconstruction of the observables # hide
-@test all(!iszero, sol(sol.t; idxs=eidxs(sol,:,:P))[begin]) # hide
-@test all(iszero, sol(sol.t; idxs=eidxs(sol,:,:P))[end][[1:5...,7]]) # hide
+@test all(!iszero, sol2(sol2.t; idxs=eidxs(sol2,:,:P))[begin]) # hide
+@test all(iszero, sol2(sol2.t; idxs=eidxs(sol2,:,:P))[end][[1:5...,7]]) # hide
 nothing #hide
 
-# Through the magic of symbolic indexing we can plot the power flows on all lines:
-plot(sol; idxs=eidxs(sol,:,:P))
+# Then again we plot the solution:
+plot(sol2; idxs=eidxs(sol2,:,:P))

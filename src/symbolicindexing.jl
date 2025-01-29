@@ -10,6 +10,7 @@ A symbolic index for a vertex state variable.
 VIndex(1, :P)      # vertex 1, variable :P
 VIndex(1:5, 1)     # first state of vertices 1 to 5
 VIndex(7, (:x,:y)) # states :x and :y of vertex 7
+VIndex(2)          # references the second vertex model
 ```
 
 Can be used to index into objects supporting the `SymbolicIndexingInterface`,
@@ -21,6 +22,7 @@ struct VIndex{C,S} <: SymbolicStateIndex{C,S}
     compidx::C
     subidx::S
 end
+VIndex(ci::Union{Symbol,Int}) = VIndex(ci, nothing)
 """
     EIndex{C,S} <: SymbolicStateIndex{C,S}
     idx = EIndex(comp, sub)
@@ -33,6 +35,7 @@ A symbolic index for an edge state variable.
 EIndex(1, :P)      # edge 1, variable :P
 EIndex(1:5, 1)     # first state of edges 1 to 5
 EIndex(7, (:x,:y)) # states :x and :y of edge 7
+EIndex(2)          # references the second edge model
 ```
 
 Can be used to index into objects supporting the `SymbolicIndexingInterface`,
@@ -44,6 +47,7 @@ struct EIndex{C,S} <: SymbolicStateIndex{C,S}
     compidx::C
     subidx::S
 end
+EIndex(ci::Union{Symbol,Int}) = EIndex(ci, nothing)
 """
     VPIndex{C,S} <: SymbolicStateIndex{C,S}
     idx = VPIndex(comp, sub)
@@ -406,11 +410,10 @@ function SII.observed(nw::Network, snis)
         throw(ArgumentError("Cannot mix normal symbolic indices with @obsex currently!"))
     end
 
-    _snis = _expand_and_collect(nw, snis)
-    isscalar = _snis isa SymbolicIndex
-    if isscalar
-        _snis = (_snis, )
-    end
+    _is_normalized(snis) || return SII.observed(nw, _expand_and_collect(nw, snis))
+
+    isscalar = snis isa SymbolicIndex
+    _snis = isscalar ? (snis,) : snis
 
     # mapping i -> index in state
     stateidx = Dict{Int, Int}()
@@ -432,7 +435,9 @@ function SII.observed(nw::Network, snis)
                 outidx[i] = _range[idx]
             elseif (idx=findfirst(isequal(sni.subidx), obssym(cf))) != nothing #found in observed
                 _obsf = _get_observed_f(nw, cf, resolvecompidx(nw, sni))
-                obsfuns[i] = (u, outbuf, aggbuf, extbuf, p, t) -> _obsf(u, outbuf, aggbuf, extbuf, p, t)[idx]
+                obsfuns[i] = let obsidx = idx # otherwise $idx is boxed everywhere in function
+                    (u, outbuf, aggbuf, extbuf, p, t) -> _obsf(u, outbuf, aggbuf, extbuf, p, t)[obsidx]
+                end
             elseif hasinsym(cf) && sni.subidx ∈ insym_all(cf) # found in input
                 if sni isa SymbolicVertexIndex
                     idx = findfirst(isequal(sni.subidx), insym_all(cf))
@@ -457,7 +462,7 @@ function SII.observed(nw::Network, snis)
     initbufs = !isempty(outidx) || !isempty(aggidx) || !isempty(obsfuns)
 
     if isscalar
-        @closure (u, p, t) -> begin
+        (u, p, t) -> begin
             outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs)
             if !isempty(stateidx)
                 idx = only(stateidx).second
@@ -474,10 +479,13 @@ function SII.observed(nw::Network, snis)
             end
         end
     else
-        @closure (u, p, t) -> begin
-            outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs)
+        # make tuple to have concretely typed obsf
+        obsfunstup = zip(keys(obsfuns), values(obsfuns)) |> Tuple
+        (u, p, t, out=similar(u, length(_snis))) -> begin
+            if any(!isempty, (outidx, aggidx, obsfuns))
+                outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs)
+            end
 
-            out = similar(u, length(snis))
             for (i, statei) in stateidx
                 out[i] = u[statei]
             end
@@ -487,7 +495,7 @@ function SII.observed(nw::Network, snis)
             for (i, aggi) in aggidx
                 out[i] = aggbuf[aggi]
             end
-            for (i, obsf) in obsfuns
+            for (i, obsf) in obsfunstup
                 out[i] = obsf(u, outbuf, aggbuf, extbuf, p, t)::eltype(u)
             end
             out
@@ -510,6 +518,10 @@ function _expand_and_collect(inpr, snis)
         _expand_and_collect(nw, sni)
     end
 end
+function _is_normalized(snis)
+    all(sni -> _is_normalized(sni), snis)
+end
+_is_normalized(snis::SymbolicIndex) = SII.symbolic_type(snis) === SII.ScalarSymbolic()
 
 function _get_observed_f(nw::Network, cf::VertexModel, vidx)
     N = length(cf.obssym)
@@ -1160,3 +1172,11 @@ end
 
 Base.getindex(s::NWState, idx::ObservableExpression) = SII.getu(s, idx)(s)
 Base.getindex(s::NWParameter, idx::ObservableExpression) = SII.getp(s, idx)(s)
+
+# using getindex to access component models
+function Base.getindex(nw::Network, i::EIndex{<:Union{Symbol,Int}, Nothing})
+    return nw.im.edgem[resolvecompidx(nw,i)]
+end
+function Base.getindex(nw::Network, i::VIndex{<:Union{Symbol,Int}, Nothing})
+    return nw.im.vertexm[resolvecompidx(nw,i)]
+end

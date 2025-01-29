@@ -5,6 +5,14 @@ using NetworkDynamics
 using SciMLBase
 using Literate
 using ModelingToolkit
+using DocumenterInterLinks
+
+links = InterLinks(
+    "DiffEq" => "https://docs.sciml.ai/DiffEqDocs/stable/",
+    "MTK" => "https://docs.sciml.ai/ModelingToolkit/stable/",
+    "SymbolicIndexingInterface" => "https://docs.sciml.ai/SymbolicIndexingInterface/stable/",
+    "DiffEqCallbacks" => "https://docs.sciml.ai/DiffEqCallbacks/stable/",
+)
 
 # generate examples
 example_dir = joinpath(@__DIR__, "examples")
@@ -17,16 +25,14 @@ for example in filter(contains(r".jl$"), readdir(example_dir, join=true))
     Literate.script(example, outdir; keep_comments=true)
 end
 
-# TODO: doc on steady state solve https://docs.sciml.ai/NonlinearSolve/stable/native/steadystatediffeq/#SteadyStateDiffEq.SSRootfind
-# TODO: doc on parameter & state handling? -> symbolic indexing
-
 mtkext = Base.get_extension(NetworkDynamics, :MTKExt)
-makedocs(;
+kwargs = (;
     root=joinpath(pkgdir(NetworkDynamics), "docs"),
     sitename="NetworkDynamics",
     modules=[NetworkDynamics, mtkext],
     linkcheck=true, # checks if external links resolve
     pagesonly=true,
+    plugins=[links],
     pages=[
         "General" => "index.md",
         "mathematical_model.md",
@@ -35,6 +41,7 @@ makedocs(;
             "symbolic_indexing.md",
             "metadata.md",
             "initialization.md",
+            "callbacks.md",
             "mtk_integration.md",
             "external_inputs.md",
         ],
@@ -52,12 +59,30 @@ makedocs(;
     ],
     draft=false,
     format = Documenter.HTML(ansicolor = true),
-    warnonly=[:cross_references, :missing_docs, :docs_block],
-    # warnonly=true,
+    warnonly=[:missing_docs],
 )
+kwargs_warnonly = (; kwargs..., warnonly=true)
 
-deploydocs(; repo="github.com/JuliaDynamics/NetworkDynamics.jl.git",
-           devbranch="main", push_preview=true)
+if haskey(ENV,"GITHUB_ACTIONS")
+    success = true
+    thrown_ex = nothing
+    try
+        makedocs(; kwargs...)
+    catch e
+        @info "Strict doc build failed, try again with warnonly=true"
+        global success = false
+        global thrown_ex = e
+        makedocs(; kwargs_warnonly...)
+    end
+
+    deploydocs(; repo="github.com/JuliaDynamics/NetworkDynamics.jl.git",
+            devbranch="main", push_preview=true)
+
+    success || throw(thrown_ex)
+else # local build
+    makedocs(; kwargs_warnonly...)
+end
+
 
 # warnonly options
 # :autodocs_block

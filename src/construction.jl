@@ -199,6 +199,8 @@ function Network(g::AbstractGraph,
 end
 
 function Network(vertexfs, edgefs; kwargs...)
+    vertexfs = vertexfs isa VertexModel ? [vertexfs] : vertexfs
+    edgefs   = edgefs isa EdgeModel     ? [edgefs]   : edgefs
     @argcheck all(has_graphelement, vertexfs) "All vertex models must have assigned `graphelement` to implicitly construct graph!"
     @argcheck all(has_graphelement, edgefs) "All edge models must have assigned `graphelement` to implicitly construct graph!"
 

@@ -510,3 +510,44 @@ end
 
     obsex = @obsex(δ_rel = vidxs(s, :, :δ) .- VIndex(1, :δ))
 end
+
+@testset "test performace of created observed functions" begin
+    v1 = Lib.kuramoto_second(name=:v1, vidx=1, insym=[:Pin])
+    v2 = Lib.swing_mtk(name=:v2, vidx=2)
+    set_default!(v2, :Pmech, -1.0)
+    e = Lib.kuramoto_edge(name=:e12, src=1, dst=2)
+    set_default!(e, :K, 1.0)
+    nw = Network([v1,v2],e)
+
+    s = NWState(nw)
+    # normal state, observed and output state
+    idxs1 = [VIndex(1,:δ), VIndex(2, :Pdamping), EIndex(1,:P), VIndex(2,:P)]
+    idxs2 = [VIndex(1,:δ), VIndex(2,:θ)]
+    # full call
+    # @b $s[$idxs1] # 134 106
+    # @b $s[$idxs2] # 31  31
+
+    # scalar call
+    # @b $s[$(VIndex(2,:Pdamping))]
+
+    # @b SII.observed($nw, $(VIndex(2,:Pdamping))) # 15
+    # @b SII.observed($nw, $(VIndex(2,:θ))) # 7
+
+    b = @b SII.observed($nw, $idxs1) # 69 36 42
+    if VERSION ≥ v"1.11"
+        @test b.allocs <= 42
+    end
+    b = @b SII.observed($nw, $idxs2) # 12 7  10
+    if VERSION ≥ v"1.11"
+        @test b.allocs <= 10
+    end
+
+    obsf1 = SII.observed(nw, idxs1)
+    obsf2 = SII.observed(nw, idxs2)
+    # @b $obsf1($(rand(dim(nw))), $(rand(pdim(nw))), NaN) # 81ns 2 allocs
+    # @b $obsf2($(rand(dim(nw))), $(rand(pdim(nw))), NaN) # 34ns 2 allocs
+    b = @b $obsf1($(rand(dim(nw))), $(rand(pdim(nw))), NaN, $(zeros(length(idxs1)))) # 64ns 0 allocs
+    @test b.allocs == 0
+    b = @b $obsf2($(rand(dim(nw))), $(rand(pdim(nw))), NaN, $(zeros(length(idxs2)))) # 17ns 0 allocs
+    @test b.allocs == 0
+end
