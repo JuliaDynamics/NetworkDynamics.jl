@@ -16,13 +16,17 @@ refer to the [Cascading Failure](@ref) example.
 In practice, events often act locally, meaning they only depend and act on a
 specific component or type of component. `NetworkDynamics.jl` provides a way of
 defining those callbacks on a component level and automaticially combine them into performant
-[`VectorContinuousCallback`](@extref SciMLBase.VectorContinuousCallback) for the whole network.
+[`VectorContinuousCallback`](@extref SciMLBase.VectorContinuousCallback) and [`DiscreteCallback`](@extref SciMLBase.DiscreteCallback) for the whole network.
 
-The main entry points are the types [`ContinousComponentCallback`](@ref) and
-[`VectorContinousComponentCallback`](@ref). Both of those objects combine a [`ComponentCondition`](@ref)
-with an [`ComponentAffect`](@ref).
-The "normal" `ContinousComponentCallback` has a condition which returns a single value. The corresponding affect is triggered when the return value hits zero.
+The main entry points are the types [`ContinousComponentCallback`](@ref),
+[`VectorContinousComponentCallback`](@ref) and [`DiscreteComponentCallback`](@ref). All of those objects combine a [`ComponentCondition`](@ref) with an [`ComponentAffect`](@ref).
+
+The "normal" [`ContinousComponentCallback`](@ref) and [`DiscreteComponentCallback`](@ref) have a condition which returns a single value. The corresponding affect is triggered when the return value hits zero.
 In contrast, the "vector" version has an in-place condition which writes `len` outputs. When any of those outputs hits zero, the affect is triggered with an additional argument `event_idx` which tells the effect which dimension encountered the zerocrossing.
+
+There is a special type [`PresetTimeComponentCallback`](@ref) which has no explicit condition and triggers the affect at given times.
+This internally generates a [`PresetTimeCallback`](@ref DiffEqCallbacks.PresetTimeCallback) object from `DiffEqCallbacks.jl`.
+
 
 ### Defining the Callback
 To construct a condition function, you need to tell network dynamics which states and parameters you'd like to "observe" within the condition. Within the actual condition, those states will be made available:

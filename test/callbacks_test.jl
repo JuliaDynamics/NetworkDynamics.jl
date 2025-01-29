@@ -76,13 +76,28 @@ end
     b = @b $batchcond($out, $u, NaN, $integrator)
     @test b.allocs == 0
 
+    # test the preste time callback
     tripfirst = PresetTimeComponentCallback(1.0, affect) # reuse the same affect
     add_callback!(nw[EIndex(5)], tripfirst)
 
-    nwcb = NetworkDynamics.get_callbacks(nw)
+    # add a useless discrete callback
+    useless_triggertime = Ref{Float64}(0.0)
+    usless_cond = ComponentCondition([:P, :₋P, :srcθ], [:limit, :K]) do u, p, t
+        t > 0.1 && iszero(useless_triggertime[])
+    end
+    usless_affect = ComponentAffect([], [:limit, :K]) do u, p, ctx
+        @info "Usless effect triggered at $(ctx.t)"
+        useless_triggertime[] = ctx.t
+    end
+    useless_cb = DiscreteComponentCallback(usless_cond, usless_affect)
+    add_callback!(nw[EIndex(1)], useless_cb)
+
+    nwcb = NetworkDynamics.get_callbacks(nw);
     s0 = NWState(nw)
     prob = ODEProblem(nw, uflat(s0), (0,6), copy(pflat(s0)), callback=nwcb)
     sol = solve(prob, Tsit5());
+
+    @test 0.1 < useless_triggertime[] <= 1.0
 
     @test tripi == [5,7,4,1,3,2]
     tref = [1, 2.247676397005474, 2.502523192233235, 3.1947647115093654, 3.3380530127462587, 3.4042696241577888]

@@ -19,8 +19,9 @@ abstract type ComponentCallback end
     ComponentCondition(f::Function, sym, psym)
 
 Creates a callback condition for a [`ComponentCallback`].
-- `f`: The condition function. Must be a function of the form `out=f(u, p, t)` when used
-  for [`ContinousComponentCallback`](@ref) or `f!(out, u, p, t)` when used for
+- `f`: The condition function. Must be a function of the form `out=f(u, p, t)`
+  when used for [`ContinousComponentCallback`](@ref) or
+  [`DiscreteComponentcallback`](@ref) and `f!(out, u, p, t)` when used for
   [`VectorContinousComponentCallback`](@ref).
   - Arguments of `f`
     - `u`: The current value of the selecte `sym` states, provided as a [`SymbolicView`](@ref) object.
@@ -130,7 +131,7 @@ The `affect` will be triggered with the additional `event_idx` argument to know 
 dimension the zerocrossing was detected.
 
 The `kwargs` will be forwarded to the `VectorContinuousCallback` when the component based
-callbacks are collected for the whole network using `get_callbacks`.
+callbacks are collected for the whole network using [`get_callbacks(::Network)`](@ref).
 [`DiffEq.jl docs`](https://docs.sciml.ai/DiffEqDocs/stable/features/callback_functions/)
 for available options.
 """
@@ -147,6 +148,21 @@ function VectorContinousComponentCallback(condition, affect, len; kwargs...)
     VectorContinousComponentCallback(condition, affect, len, NamedTuple(kwargs))
 end
 
+"""
+    DiscreteComponentCallback(condition, affect; kwargs...)
+
+Connect a [`ComponentCondition`](@ref) and a [`ComponentAffect`)[@ref] to a
+discrete callback which can be attached to a component model using
+[`add_callback!`](@ref) or [`set_callback!`](@ref).
+
+Note that the `condition` function returns a boolean value, as the discrete
+callback perform no rootfinding.
+
+The `kwargs` will be forwarded to the `DiscreteCallback` when the component based
+callbacks are collected for the whole network using [`get_callbacks(::Network)`](@ref).
+[`DiffEq.jl docs`](https://docs.sciml.ai/DiffEqDocs/stable/features/callback_functions/)
+for available options.
+"""
 struct DiscreteComponentCallback{C<:ComponentCondition,A<:ComponentAffect} <: ComponentCallback
     condition::C
     affect::A
@@ -156,6 +172,20 @@ function DiscreteComponentCallback(condition, affect; kwargs...)
     DiscreteComponentCallback(condition, affect, NamedTuple(kwargs))
 end
 
+"""
+    PresetTimeComponentCallback(ts, affect; kwargs...)
+
+Tirgger a [`ComponentAffect`](@ref) at given timesteps `ts` in discrete
+callback, which can be attached to a component model using
+[`add_callback!`](@ref) or [`set_callback!`](@ref).
+
+The `kwargs` will be forwarded to the [`PresetTimeCallback`](@ref DiffEqCallbacks.PresetTimeCallback)
+when the component based callbacks are collected for the whole network using
+[`get_callbacks(::Network)`](@ref).
+
+The `PresetTimeCallback` will take care of adding the timesteps to the solver, ensuring to
+exactly trigger at the correct times.
+"""
 struct PresetTimeComponentCallback{T,A} <: ComponentCallback
     ts::T
     affect::A
@@ -417,12 +447,12 @@ end
 function _batch_condition(dcw::DiscreteCallbackWrapper)
     uidxtype = dcw.component isa EIndex ? EIndex : VIndex
     pidxtype = dcw.component isa EIndex ? EPIndex : VPIndex
-    usymidxs = uidxtype(dcw.component.compidx, dcw.callback.cond.sym)
-    psymidxs = pidxtype(dcw.component.compidx, dcw.callback.cond.psym)
+    usymidxs = uidxtype(dcw.component.compidx, dcw.callback.condition.sym)
+    psymidxs = pidxtype(dcw.component.compidx, dcw.callback.condition.psym)
     ucache = DiffCache(zeros(length(usymidxs)), 12)
 
-    obsf = SII.observed(ccw.nw, usymidxs)
-    pidxs = SII.parameter_index.(Ref(ccw.nw), psymidxs)
+    obsf = SII.observed(dcw.nw, usymidxs)
+    pidxs = SII.parameter_index.(Ref(dcw.nw), psymidxs)
 
     (u, t, integrator) -> begin
         us = PreallocationTools.get_tmp(ucache, u)

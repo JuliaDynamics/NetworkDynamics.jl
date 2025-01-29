@@ -130,6 +130,8 @@ set_bounds!
 NetworkDynamics.ComponentCallback
 ContinousComponentCallback
 VectorContinousComponentCallback
+DiscreteComponentCallback
+PresetTimeComponentCallback
 ComponentCondition
 ComponentAffect
 SymbolicView
