@@ -25,7 +25,7 @@ The "normal" [`ContinousComponentCallback`](@ref) and [`DiscreteComponentCallbac
 In contrast, the "vector" version has an in-place condition which writes `len` outputs. When any of those outputs hits zero, the affect is triggered with an additional argument `event_idx` which tells the effect which dimension encountered the zerocrossing.
 
 There is a special type [`PresetTimeComponentCallback`](@ref) which has no explicit condition and triggers the affect at given times.
-This internally generates a [`PresetTimeCallback`](@ref DiffEqCallbacks.PresetTimeCallback) object from `DiffEqCallbacks.jl`.
+This internally generates a [`PresetTimeCallback`](@extref DiffEqCallbacks.PresetTimeCallback) object from `DiffEqCallbacks.jl`.
 
 
 ### Defining the Callback
@@ -121,8 +121,8 @@ Please not a few important things here:
    often. By using [`SII.getsym`](@extref `SymbolicIndexingInterface.getsym`) we did
    some of the work *before* the callback by creating the accessor function.
    When handling with "normal states" and parameters consider using
-   [`SII.variable_index`](@ref `SymbolicIndexingInterface.variable_index`) and
-   [`SII.parameter_index`](@ref `SymbolicIndexingInterface.parameter_index`) for
+   [`SII.variable_index`](@extref `SymbolicIndexingInterface.variable_index`) and
+   [`SII.parameter_index`](@extref `SymbolicIndexingInterface.parameter_index`) for
    even better access patterns.
  - `t` refers to the current time of the zerocrossing-detection-algorithm. This is different from `integrator.t` which refers to the current timestep in which the zerocross-detectio takes place..
 

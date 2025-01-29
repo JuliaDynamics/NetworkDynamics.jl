@@ -11,6 +11,7 @@ links = InterLinks(
     "DiffEq" => "https://docs.sciml.ai/DiffEqDocs/stable/",
     "MTK" => "https://docs.sciml.ai/ModelingToolkit/stable/",
     "SymbolicIndexingInterface" => "https://docs.sciml.ai/SymbolicIndexingInterface/stable/",
+    "DiffEqCallbacks" => "https://docs.sciml.ai/DiffEqCallbacks/stable/",
 )
 
 # generate examples

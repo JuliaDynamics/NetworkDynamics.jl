@@ -128,14 +128,14 @@ affect for that and just add it to line number 5 at time 1.0.
 =#
 trip_first_cb = PresetTimeComponentCallback(1.0, affect)
 add_callback!(nw[EIndex(5)], trip_first_cb)
-nothing
+nothing #hide #md
 #=
 When we inspect the edge model for 5 no, we see that we've registered 2 callbacks:
 =#
 nw[EIndex(5)]
 
 #=
-Now we can simulate the network. We use [`get_callbacks(::Networl)`](@ref)
+Now we can simulate the network. We use [`get_callbacks(::Network)`](@ref)
 to generate a callback set for the whole network which represents all of the individual
 component callbacks.
 =#

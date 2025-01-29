@@ -21,7 +21,7 @@ abstract type ComponentCallback end
 Creates a callback condition for a [`ComponentCallback`].
 - `f`: The condition function. Must be a function of the form `out=f(u, p, t)`
   when used for [`ContinousComponentCallback`](@ref) or
-  [`DiscreteComponentcallback`](@ref) and `f!(out, u, p, t)` when used for
+  [`DiscreteComponentCallback`](@ref) and `f!(out, u, p, t)` when used for
   [`VectorContinousComponentCallback`](@ref).
   - Arguments of `f`
     - `u`: The current value of the selecte `sym` states, provided as a [`SymbolicView`](@ref) object.
@@ -179,7 +179,7 @@ Tirgger a [`ComponentAffect`](@ref) at given timesteps `ts` in discrete
 callback, which can be attached to a component model using
 [`add_callback!`](@ref) or [`set_callback!`](@ref).
 
-The `kwargs` will be forwarded to the [`PresetTimeCallback`](@ref DiffEqCallbacks.PresetTimeCallback)
+The `kwargs` will be forwarded to the [`PresetTimeCallback`](@extref DiffEqCallbacks.PresetTimeCallback)
 when the component based callbacks are collected for the whole network using
 [`get_callbacks(::Network)`](@ref).
 
