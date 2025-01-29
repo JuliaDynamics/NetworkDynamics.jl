@@ -83,17 +83,20 @@ set_default!(nw, VIndex(5, :P_ref),  1.5) # generator
 nothing #hide #md
 
 #=
-We can use `find_fixpoint` to find a valid initial condition of the network
+We can use `find_fixpoint` to find a valid initial condition of the network.
+We also use `set_defaults!` to overwirte all the default values for states and parameters
+with the one of the fixpoint, this means that we can allways re-extract this setpoint by
+using `u0 = NWState(nw)`.
 =#
 u0 = find_fixpoint(nw)
-set_defaults!(nw, u0) # overwrite the default values with the fixpoint values
+set_defaults!(nw, u0)
 nothing #hide #md
 
 #=
 ## Component-based Callbacks
 
 For the component based callback we need to define a condtion and an affect.
-Both functions take trhee inputs:
+Both functions take three inputs:
   - the actual function `f`
   - the states which to be accessed `sym`
   - the parameters to be accessed `psym`
@@ -119,38 +122,45 @@ nothing #hide #md
 #=
 The system starts at a steady state.
 In order to see any dynamic, we need to fail a first line intentionally.
-For that we define a PresetTimecallback from DiffEqCallbacks library:
+For that we use a [`PresetTimeComponentCallback`](@ref), which triggers an
+`ComponentAffect` at a given time. We can reuse the previously defined component
+affect for that and just add it to line number 5 at time 1.0.
 =#
-trip_first_cb = PresetTimeCallback(1.0, integrator -> begin
-    @info "Trip initial line 5 at t=$(integrator.t)"
-    p = NWParameter(integrator)
-    p.e[5,:K] = 0
-    auto_dt_reset!(integrator)
-    save_parameters!(integrator)
-end)
+trip_first_cb = PresetTimeComponentCallback(1.0, affect)
+add_callback!(nw[EIndex(5)], trip_first_cb)
 nothing
+#=
+When we inspect the edge model for 5 no, we see that we've registered 2 callbacks:
+=#
+nw[EIndex(5)]
 
 #=
-
+Now we can simulate the network. We use [`get_callbacks(::Networl)`](@ref)
+to generate a callback set for the whole network which represents all of the individual
+component callbacks.
 =#
-
 u0 = NWState(nw)
 network_cb = get_callbacks(nw)
-all_cb = CallbackSet(network_cb, trip_first_cb)
-prob = ODEProblem(nw, uflat(u0), (0, 6), pflat(u0); callback=all_cb)
+prob = ODEProblem(nw, uflat(u0), (0, 6), pflat(u0); callback=network_cb)
 sol = solve(prob, Tsit5());
 nothing #hide #md
 
 #=
-Lastly we can plot the power on all of the powerlines:
+Lastly we plot the power flow on all lines using the [`eidxs`](@ref) function to generate the
+symbolic indices for the states of interest:
 =#
 plot(sol; idxs=eidxs(sol, :, :P))
 
 #=
 ## System wide Callbacks
 
-#
+The above solution relies on the `ComponentCallback` features of
+NetworkDyanmics. The "low-level" API would be to use `VectorContinousCallback`
+and `PresetTimeCallback` directly to achieve the same effect, essentially doing
+manually what [`get_callbacks(::Network)`](@ref) is doing for us.
 
+While not necessary in this case, this method offers more flexiblity then the
+component based appraoch.
 
 In order to implement the line failures, we need to create a `VectorContinousCallback`.
 In the callback, we compare the current flow on the line with the limit. If the limit is reached,
@@ -218,28 +228,26 @@ We can combine affect and condition to form the callback.
 trip_cb = VectorContinuousCallback(condition, affect!, ne(g));
 
 #=
-However, there is another component missing. If we look at the powerflow on the
-lines in the initial steady state
-=#
-u0.e[:, :P]
-#=
+Similarily to before, we need to generate a initial perturbation by failing one line
+using a `PresetTimeCallback`.
 We see that every flow is below the trip value 1.0. Therefor we need to add a distrubance
 to the network. We do this by manually disabeling line 5 at time 1.
 =#
 trip_first_cb = PresetTimeCallback(1.0, integrator->affect!(integrator, 5));
 
 #=
-With those components, we can create the problem and solve it.
+Now we are set for solving the system again. This time we create our own callback
+set by combining both Callbacks manually.
 =#
-
-prob = ODEProblem(nw, uflat(u0), (0,6), copy(pflat(p));
-                  callback=CallbackSet(trip_cb, trip_first_cb))
+u0 = NWState(nw)
+cbset = CallbackSet(trip_cb, trip_first_cb)
+prob = ODEProblem(nw, uflat(u0), (0,6), pflat(u0); callback=cbset)
 Main.test_execution_styles(prob) # testing all ex styles #src
-sol = solve(prob, Tsit5());
+sol2 = solve(prob, Tsit5());
 ## we want to test the reconstruction of the observables # hide
-@test all(!iszero, sol(sol.t; idxs=eidxs(sol,:,:P))[begin]) # hide
-@test all(iszero, sol(sol.t; idxs=eidxs(sol,:,:P))[end][[1:5...,7]]) # hide
+@test all(!iszero, sol2(sol2.t; idxs=eidxs(sol2,:,:P))[begin]) # hide
+@test all(iszero, sol2(sol2.t; idxs=eidxs(sol2,:,:P))[end][[1:5...,7]]) # hide
 nothing #hide
 
-# Through the magic of symbolic indexing we can plot the power flows on all lines:
-plot(sol; idxs=eidxs(sol,:,:P))
+# Then again we plot the solution:
+plot(sol2; idxs=eidxs(sol2,:,:P))
