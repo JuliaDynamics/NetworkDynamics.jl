@@ -30,7 +30,7 @@ function basenetwork()
     nw
 end
 
-@testset "basic callback tests" begin
+@testset "continous callback batch tests" begin
     nw = basenetwork()
 
     tript = Float64[]
@@ -47,7 +47,7 @@ end
     cb = ContinousComponentCallback(cond, affect)
     set_callback!.(nw.im.edgem, Ref(cb))
 
-    batches = NetworkDynamics.collect_callbackbatches(nw);
+    batches = NetworkDynamics.wrap_component_callbacks(nw);
     @test length(batches) == 1
     cbb = only(batches);
 
@@ -76,21 +76,16 @@ end
     b = @b $batchcond($out, $u, NaN, $integrator)
     @test b.allocs == 0
 
-    trip_first_cb = PresetTimeCallback(1.0, integrator -> begin
-        i = 5
-        @info "Trip initial line $i at t=$(integrator.t)"
-        p = NWParameter(integrator)
-        p.e[i,:active] = 0
-        auto_dt_reset!(integrator)
-        save_parameters!(integrator)
-    end)
+    tripfirst = PresetTimeComponentCallback(1.0, affect) # reuse the same affect
+    add_callback!(nw[EIndex(5)], tripfirst)
+
     nwcb = NetworkDynamics.get_callbacks(nw)
     s0 = NWState(nw)
-    prob = ODEProblem(nw, uflat(s0), (0,6), copy(pflat(s0)), callback=CallbackSet(trip_first_cb, nwcb))
+    prob = ODEProblem(nw, uflat(s0), (0,6), copy(pflat(s0)), callback=nwcb)
     sol = solve(prob, Tsit5());
 
-    @test tripi == [7,4,1,3,2]
-    tref = [2.247676397005474, 2.502523192233235, 3.1947647115093654, 3.3380530127462587, 3.4042696241577888]
+    @test tripi == [5,7,4,1,3,2]
+    tref = [1, 2.247676397005474, 2.502523192233235, 3.1947647115093654, 3.3380530127462587, 3.4042696241577888]
     @test maximum(abs.(tript - tref)) < 1e-5
 end
 
@@ -132,7 +127,7 @@ end
     set_callback!(nw.im.vertexm[1], ccb)
     set_callback!(nw.im.vertexm[2], ccb)
 
-    cbbs = NetworkDynamics.collect_callbackbatches(nw);
+    cbbs = NetworkDynamics.wrap_component_callbacks(nw);
     @test length(cbbs) == 1
 
     nwcb = get_callbacks(nw);
@@ -191,7 +186,7 @@ end
     affect = ComponentAffect((args...)->nothing, [:₋P],[:active])
     cb = ContinousComponentCallback(cond, affect)
     set_callback!.(nw.im.edgem, Ref(cb); check=false);
-    cbb = only(NetworkDynamics.collect_callbackbatches(nw));
+    cbb = only(NetworkDynamics.wrap_component_callbacks(nw));
     @test_throws ArgumentError NetworkDynamics._batch_condition(cbb)
     @test_throws ArgumentError NetworkDynamics._batch_affect(cbb)
 
@@ -200,7 +195,7 @@ end
     affect = ComponentAffect((args...)->nothing, [],[:active, :₋P])
     cb = ContinousComponentCallback(cond, affect)
     set_callback!.(nw.im.edgem, Ref(cb); check=false);
-    cbb = only(NetworkDynamics.collect_callbackbatches(nw));
+    cbb = only(NetworkDynamics.wrap_component_callbacks(nw));
     @test_throws ArgumentError NetworkDynamics._batch_condition(cbb)
     @test_throws ArgumentError NetworkDynamics._batch_affect(cbb)
 
@@ -221,6 +216,9 @@ end
     affect = ComponentAffect((args...)->nothing, [],[:active, :P])
     cb = ContinousComponentCallback(cond, affect)
     @test_throws ArgumentError set_callback!(nw.im.edgem[1], cb)
+end
+
+@testset "discrete callback tests" begin
 end
 
 @testset "symbolic view test" begin

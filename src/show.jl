@@ -24,7 +24,7 @@ function Base.show(io::IO, ::MIME"text/plain", @nospecialize(nw::Network))
         # print(io, "\n ├─ vertex output dimension: $(nw.im.vdepth)")
         # print(io, "\n └─   edge output dimension: $(nw.im.edepth)")
 
-        Ncb = length(collect_callbackbatches(nw))
+        Ncb = length(wrap_component_callbacks(nw))
         if Ncb ≥ 1
             nvert = mapreduce(has_callback, +, nw.im.vertexm)
             nedge = mapreduce(has_callback, +, nw.im.edgem)
@@ -361,9 +361,7 @@ function Base.show(io::IO, ::MIME"text/plain", @nospecialize(cb::ComponentCallba
     basename = readuntil(IOBuffer(repr(cb)), '{')
     print(io, basename)
     print(io, "(")
-    _print_condsyms(io, cb)
-    print(io, " affecting ")
-    _print_affectsyms(io, cb)
+    print(io, shortrepr(cb))
     if cb isa VectorContinousComponentCallback
         print(io, ", len=", cb.len)
     end
@@ -375,6 +373,13 @@ function shortrepr(cb::ComponentCallback)
     _print_condsyms(io, cb)
     print(io, " affecting ")
     _print_affectsyms(io, cb)
+    String(take!(io))
+end
+function shortrepr(cb::PresetTimeComponentCallback)
+    io = IOBuffer()
+    _print_affectsyms(io, cb)
+    print(io, " affected at t=")
+    print(io, cb.ts)
     String(take!(io))
 end
 

@@ -1,5 +1,5 @@
 """
-    abstract type ComponentCallback{C,A} end
+    abstract type ComponentCallback end
 
 Abstract type for a component based callback. A component callback
 bundles a [`ComponentCondition`](@ref) as well as a [`ComponentAffect`](@ref)
@@ -13,7 +13,7 @@ See
 [`ContinousComponentCallback`](@ref) and [`VectorContinousComponentCallback`](@ref) for concrete
 implemenations of this abstract type.
 """
-abstract type ComponentCallback{C,A} end
+abstract type ComponentCallback end
 
 """
     ComponentCondition(f::Function, sym, psym)
@@ -107,7 +107,7 @@ callbacks are collected for the whole network using `get_callbacks`.
 [`DiffEq.jl docs`](https://docs.sciml.ai/DiffEqDocs/stable/features/callback_functions/)
 for available options.
 """
-struct ContinousComponentCallback{C,A,CDIM,CPDIM,ADIM,APDIM} <: ComponentCallback{C,A}
+struct ContinousComponentCallback{C,A,CDIM,CPDIM,ADIM,APDIM} <: ComponentCallback
     condition::ComponentCondition{C,CDIM,CPDIM}
     affect::ComponentAffect{A,ADIM,APDIM}
     kwargs::NamedTuple
@@ -134,7 +134,7 @@ callbacks are collected for the whole network using `get_callbacks`.
 [`DiffEq.jl docs`](https://docs.sciml.ai/DiffEqDocs/stable/features/callback_functions/)
 for available options.
 """
-struct VectorContinousComponentCallback{C,A,CDIM,CPDIM,ADIM,APDIM} <: ComponentCallback{C,A}
+struct VectorContinousComponentCallback{C,A,CDIM,CPDIM,ADIM,APDIM} <: ComponentCallback
     condition::ComponentCondition{C,CDIM,CPDIM}
     affect::ComponentAffect{A,ADIM,APDIM}
     len::Int
@@ -147,6 +147,23 @@ function VectorContinousComponentCallback(condition, affect, len; kwargs...)
     VectorContinousComponentCallback(condition, affect, len, NamedTuple(kwargs))
 end
 
+struct DiscreteComponentCallback{C<:ComponentCondition,A<:ComponentAffect} <: ComponentCallback
+    condition::C
+    affect::A
+    kwargs::NamedTuple
+end
+function DiscreteComponentCallback(condition, affect; kwargs...)
+    DiscreteComponentCallback(condition, affect, NamedTuple(kwargs))
+end
+
+struct PresetTimeComponentCallback{T,A} <: ComponentCallback
+    ts::T
+    affect::A
+    kwargs::NamedTuple
+end
+function PresetTimeComponentCallback(ts, affect; kwargs...)
+    PresetTimeComponentCallback(ts, affect, NamedTuple(kwargs))
+end
 
 """
     get_callbacks(nw::Network)::CallbackSet
@@ -156,7 +173,7 @@ Network components.
 """
 function get_callbacks(nw::Network)
     aliased_changed(nw; warn=true)
-    cbbs = collect_callbackbatches(nw)
+    cbbs = wrap_component_callbacks(nw)
     if isempty(cbbs)
         return nothing
     elseif length(cbbs) == 1
@@ -165,63 +182,11 @@ function get_callbacks(nw::Network)
         CallbackSet(to_callback.(cbbs)...)
     end
 end
+
 ####
-#### batching of callbacks
+#### identifying callbacks which can be combined into batches
 ####
-struct CallbackBatch{T<:ComponentCallback,C,ST<:SymbolicIndex}
-    nw::Network
-    components::Vector{ST}
-    callbacks::Vector{T}
-    sublen::Int # length of each callback
-    condition::C
-end
-function CallbackBatch(nw, components, callbacks)
-    if !isconcretetype(eltype(components))
-        components = [c for c in components]
-    end
-    if !isconcretetype(eltype(callbacks))
-        callbacks = [cb for cb in callbacks]
-    end
-    sublen = eltype(callbacks) <: ContinousComponentCallback ? 1 : first(callbacks).len
-    condition = first(callbacks).condition.f
-    CallbackBatch(nw, components, callbacks, sublen, condition)
-end
-
-Base.length(cbb::CallbackBatch) = length(cbb.callbacks)
-
-cbtype(cbb::CallbackBatch{T}) where {T} = T
-
-condition_dim(cbb)  = first(cbb.callbacks).condition.sym  |> length
-condition_pdim(cbb) = first(cbb.callbacks).condition.psym |> length
-affect_dim(cbb,i)  = cbb.callbacks[i].affect.sym  |> length
-affect_pdim(cbb,i) = cbb.callbacks[i].affect.psym |> length
-
-condition_urange(cbb, i) = (1 + (i-1)*condition_dim(cbb))  : i*condition_dim(cbb)
-condition_prange(cbb, i) = (1 + (i-1)*condition_pdim(cbb)) : i*condition_pdim(cbb)
-affect_urange(cbb, i) = (1 + (i-1)*affect_dim(cbb,i) ) : i*affect_dim(cbb,i)
-affect_prange(cbb, i) = (1 + (i-1)*affect_pdim(cbb,i)) : i*affect_pdim(cbb,i)
-
-condition_outrange(cbb, i) = (1 + (i-1)*cbb.sublen) : i*cbb.sublen
-
-cbidx_from_outidx(cbb, outidx) = div(outidx-1, cbb.sublen) + 1
-subidx_from_outidx(cbb, outidx) = mod(outidx, 1:cbb.sublen)
-
-function collect_c_or_a_indices(cbb::CallbackBatch, c_or_a, u_or_p)
-    sidxs = SymbolicIndex[]
-    for (component, cb) in zip(cbb.components, cbb.callbacks)
-        syms = getproperty(getproperty(cb, c_or_a), u_or_p)
-        symidxtype = if component isa VIndex
-            u_or_p == :sym ? VIndex : VPIndex
-        else
-            u_or_p ==:sym ? EIndex : EPIndex
-        end
-        sidx = collect(symidxtype(component.compidx, syms))
-        append!(sidxs, sidx)
-    end
-    sidxs
-end
-
-function collect_callbackbatches(nw)
+function wrap_component_callbacks(nw)
     components = SymbolicIndex[]
     callbacks = ComponentCallback[]
     for (i, v) in pairs(nw.im.vertexm)
@@ -238,26 +203,31 @@ function collect_callbackbatches(nw)
             push!(callbacks, cb)
         end
     end
+    # group the callbacks such that they are in groups which are "batchequal"
+    # batchequal groups can be wrapped into a single callback
     idx_per_type = _find_identical(callbacks, 1:length(components))
-    batches = CallbackBatch[]
+    batches = []
     for typeidx in idx_per_type
         batchcomps = components[typeidx]
         batchcbs = callbacks[typeidx]
-        cbs = CallbackBatch(nw, batchcomps, batchcbs)
-        push!(batches, cbs)
+        if first(batchcbs) isa Union{ContinousComponentCallback, VectorContinousComponentCallback}
+            cb = ContinousCallbackWrapper(nw, batchcomps, batchcbs)
+        elseif only(batchcbs) isa Union{DiscreteComponentCallback, PresetTimeComponentCallback}
+            cb = DiscreteCallbackWrapper(nw, only(batchcomps), only(batchcbs))
+        else
+            error("Unknown callback type, should never be reached. Please report this issue.")
+        end
+        push!(batches, cb)
     end
     return batches
 end
-
 function batchequal(a::ContinousComponentCallback, b::ContinousComponentCallback)
     batchequal(a.condition, b.condition) || return false
-    # batchequal(a.affect, b.affect)       || return false
     batchequal(a.kwargs, b.kwargs)       || return false
     return true
 end
 function batchequal(a::VectorContinousComponentCallback, b::VectorContinousComponentCallback)
     batchequal(a.condition, b.condition) || return false
-    # batchequal(a.affect, b.affect)       || return false
     batchequal(a.kwargs, b.kwargs)       || return false
     a.len == b.len                       || return false
     return true
@@ -274,57 +244,102 @@ function batchequal(a::NamedTuple, b::NamedTuple)
     return true
 end
 
-"""
-    to_callback(cbb:CallbackBatch)
+# a callback wrapper is a container, which wraps a network, a component callback
+# and a component index. It is used for bookkeeping to know to which component
+# each callback belongs to
+abstract type CallbackWrapper end
 
-Generate a `VectorContinuousCallback` from a callback batch.
-"""
-function to_callback(cbb::CallbackBatch)
-    kwargs = first(cbb.callbacks).kwargs
-    cond = _batch_condition(cbb)
-    affect = _batch_affect(cbb)
-    len = cbb.sublen * length(cbb.callbacks)
+####
+#### wrapping of continous callbacks
+####
+struct ContinousCallbackWrapper{T<:ComponentCallback,C,ST<:SymbolicIndex} <: CallbackWrapper
+    nw::Network
+    components::Vector{ST}
+    callbacks::Vector{T}
+    sublen::Int # length of each callback
+    condition::C
+end
+function ContinousCallbackWrapper(nw, components, callbacks)
+    if !isconcretetype(eltype(components))
+        components = [c for c in components]
+    end
+    if !isconcretetype(eltype(callbacks))
+        callbacks = [cb for cb in callbacks]
+    end
+    sublen = eltype(callbacks) <: ContinousComponentCallback ? 1 : first(callbacks).len
+    condition = first(callbacks).condition.f
+    ContinousCallbackWrapper(nw, components, callbacks, sublen, condition)
+end
+
+Base.length(ccw::ContinousCallbackWrapper) = length(ccw.callbacks)
+cbtype(ccw::ContinousCallbackWrapper{T}) where {T} = T
+
+condition_dim(ccw)  = first(ccw.callbacks).condition.sym  |> length
+condition_pdim(ccw) = first(ccw.callbacks).condition.psym |> length
+affect_dim(ccw,i)  = ccw.callbacks[i].affect.sym  |> length
+affect_pdim(ccw,i) = ccw.callbacks[i].affect.psym |> length
+
+condition_urange(ccw, i) = (1 + (i-1)*condition_dim(ccw))  : i*condition_dim(ccw)
+condition_prange(ccw, i) = (1 + (i-1)*condition_pdim(ccw)) : i*condition_pdim(ccw)
+affect_urange(ccw, i) = (1 + (i-1)*affect_dim(ccw,i) ) : i*affect_dim(ccw,i)
+affect_prange(ccw, i) = (1 + (i-1)*affect_pdim(ccw,i)) : i*affect_pdim(ccw,i)
+
+condition_outrange(ccw, i) = (1 + (i-1)*ccw.sublen) : i*ccw.sublen
+
+cbidx_from_outidx(ccw, outidx) = div(outidx-1, ccw.sublen) + 1
+subidx_from_outidx(ccw, outidx) = mod(outidx, 1:ccw.sublen)
+
+function collect_c_or_a_indices(ccw::ContinousCallbackWrapper, c_or_a, u_or_p)
+    sidxs = SymbolicIndex[]
+    for (component, cb) in zip(ccw.components, ccw.callbacks)
+        syms = getproperty(getproperty(cb, c_or_a), u_or_p)
+        symidxtype = if component isa VIndex
+            u_or_p == :sym ? VIndex : VPIndex
+        else
+            u_or_p ==:sym ? EIndex : EPIndex
+        end
+        sidx = collect(symidxtype(component.compidx, syms))
+        append!(sidxs, sidx)
+    end
+    sidxs
+end
+
+# generate VectorContinuousCallback from a ContinousCallbackWrapper
+function to_callback(ccw::ContinousCallbackWrapper)
+    kwargs = first(ccw.callbacks).kwargs
+    cond = _batch_condition(ccw)
+    affect = _batch_affect(ccw)
+    len = ccw.sublen * length(ccw.callbacks)
     VectorContinuousCallback(cond, affect, len; kwargs...)
 end
-function _batch_condition(cbb::CallbackBatch)
-    usymidxs = collect_c_or_a_indices(cbb, :condition, :sym)
-    psymidxs = collect_c_or_a_indices(cbb, :condition, :psym)
+function _batch_condition(ccw::ContinousCallbackWrapper)
+    usymidxs = collect_c_or_a_indices(ccw, :condition, :sym)
+    psymidxs = collect_c_or_a_indices(ccw, :condition, :psym)
     ucache = DiffCache(zeros(length(usymidxs)), 12)
 
-    obscond = s -> SII.is_observed(cbb.nw, s) || SII.is_variable(cbb.nw, s)
-    pcond = p -> SII.is_parameter(cbb.nw, p)
-    if !all(obscond, usymidxs)
-        invalid = filter(!obscond, usymidxs)
-        throw(ArgumentError("All u symbols in the callback condition must be observed or variable. Found invalid $invalid."))
-    end
-    if !all(pcond, psymidxs)
-        invalid = filter(!pcond, psymidxs)
-        throw(ArgumentError("All p symbols in the callback condition must be parameters. Found invalid $invalid."))
-    end
-
-    obsf = SII.observed(cbb.nw, usymidxs)
-    pidxs = SII.parameter_index.(Ref(cbb.nw), psymidxs)
+    obsf = SII.observed(ccw.nw, usymidxs)
+    pidxs = SII.parameter_index.(Ref(ccw.nw), psymidxs)
 
     (out, u, t, integrator) -> begin
         us = PreallocationTools.get_tmp(ucache, u)
-        obsf(u, integrator.p, t, us)
+        obsf(u, integrator.p, t, us) # fills us inplace
 
-        for i in 1:length(cbb)
+        for i in 1:length(ccw)
             # symbolic view into u
-            uv = view(us, condition_urange(cbb, i))
-            _u = SymbolicView(uv, cbb.callbacks[i].condition.sym)
+            uv = view(us, condition_urange(ccw, i))
+            _u = SymbolicView(uv, ccw.callbacks[i].condition.sym)
 
             # symbolic view into p
-            pidxsv = view(pidxs, condition_prange(cbb, i))
+            pidxsv = view(pidxs, condition_prange(ccw, i))
             pv = view(integrator.p, pidxsv)
-            _p = SymbolicView(pv, cbb.callbacks[i].condition.psym)
+            _p = SymbolicView(pv, ccw.callbacks[i].condition.psym)
 
-            if cbtype(cbb) <: ContinousComponentCallback
-                oidx = only(condition_outrange(cbb, i))
-                out[oidx] = cbb.condition(_u, _p, t)
-            elseif cbtype(cbb) <: VectorContinousComponentCallback
-                @views _out = out[condition_outrange(cbb, i)]
-                cbb.condition(_out, _u, _p, t)
+            if cbtype(ccw) <: ContinousComponentCallback
+                oidx = only(condition_outrange(ccw, i))
+                out[oidx] = ccw.condition(_u, _p, t)
+            elseif cbtype(ccw) <: VectorContinousComponentCallback
+                @views _out = out[condition_outrange(ccw, i)]
+                ccw.condition(_out, _u, _p, t)
             else
                 error()
             end
@@ -332,43 +347,33 @@ function _batch_condition(cbb::CallbackBatch)
         nothing
     end
 end
-function _batch_affect(cbb::CallbackBatch)
-    usymidxs = collect_c_or_a_indices(cbb, :affect, :sym)
-    psymidxs = collect_c_or_a_indices(cbb, :affect, :psym)
+function _batch_affect(ccw::ContinousCallbackWrapper)
+    usymidxs = collect_c_or_a_indices(ccw, :affect, :sym)
+    psymidxs = collect_c_or_a_indices(ccw, :affect, :psym)
 
-    ucond = s -> SII.is_variable(cbb.nw, s)
-    pcond = p -> SII.is_parameter(cbb.nw, p)
-    if !all(ucond, usymidxs)
-        invalid = filter(!ucond, usymidxs)
-        throw(ArgumentError("All u symbols in the callback affect must be variables (in contrast to condition, observables are not allowed here). Found invalid $invalid."))
-    end
-    if !all(pcond, psymidxs)
-        invalid = filter(!pcond, psymidxs)
-        throw(ArgumentError("All p symbols in the callback affect must be parameters. Found invalid $invalid."))
-    end
-
-    uidxs = SII.variable_index.(Ref(cbb.nw), usymidxs)
-    pidxs = SII.parameter_index.(Ref(cbb.nw), psymidxs)
+    uidxs = SII.variable_index.(Ref(ccw.nw), usymidxs)
+    pidxs = SII.parameter_index.(Ref(ccw.nw), psymidxs)
 
     (integrator, outidx) -> begin
-        i = cbidx_from_outidx(cbb, outidx)
+        i = cbidx_from_outidx(ccw, outidx)
 
-        uidxsv = view(uidxs, affect_urange(cbb, i))
+        uidxsv = view(uidxs, affect_urange(ccw, i))
         uv = view(integrator.u, uidxsv)
-        _u = SymbolicView(uv, cbb.callbacks[i].affect.sym)
+        _u = SymbolicView(uv, ccw.callbacks[i].affect.sym)
 
-        pidxsv = view(pidxs, affect_prange(cbb, i))
+        pidxsv = view(pidxs, affect_prange(ccw, i))
         pv = view(integrator.p, pidxsv)
-        _p = SymbolicView(pv, cbb.callbacks[i].affect.psym)
+        _p = SymbolicView(pv, ccw.callbacks[i].affect.psym)
+
+        ctx = get_ctx(integrator, ccw.components[i])
 
         uhash = hash(uv)
         phash = hash(pv)
-        ctx = _get_ctx(integrator, cbb, cbb.components[i])
-        if cbtype(cbb) <: ContinousComponentCallback
-            cbb.callbacks[i].affect.f(_u, _p, ctx)
-        elseif cbtype(cbb) <: VectorContinousComponentCallback
-            num = subidx_from_outidx(cbb, outidx)
-            cbb.callbacks[i].affect.f(_u, _p, num, ctx)
+        if cbtype(ccw) <: ContinousComponentCallback
+            ccw.callbacks[i].affect.f(_u, _p, ctx)
+        elseif cbtype(ccw) <: VectorContinousComponentCallback
+            num = subidx_from_outidx(ccw, outidx)
+            ccw.callbacks[i].affect.f(_u, _p, num, ctx)
         else
             error()
         end
@@ -380,15 +385,95 @@ function _batch_affect(cbb::CallbackBatch)
     end
 end
 
-_get_ctx(cbb, i::Int) = _get_ctx(cbb, cbb.components[i])
-function _get_ctx(integrator, cbb, sym::VIndex)
-    idx = sym.compidx
-    (; integrator, t=integrator.t, model=cbb.nw.im.vertexm[idx], vidx=idx)
+####
+#### wrapping of discrete callbacks
+####
+struct DiscreteCallbackWrapper{N,ST,T} <: CallbackWrapper
+    nw::N
+    component::ST
+    callback::T
+    function DiscreteCallbackWrapper(nw, component, callback)
+        @assert nw isa Network
+        @assert component isa SymbolicIndex
+        @assert callback isa Union{DiscreteComponentCallback, PresetTimeComponentCallback}
+        new{typeof(nw),typeof(component),typeof(callback)}(nw, component, callback)
+    end
 end
-function _get_ctx(integrator, cbb, sym::EIndex)
+
+# generate a DiscreteCallback from a DiscreteCallbackWrapper
+function to_callback(dcw::DiscreteCallbackWrapper)
+    kwargs = dcw.callback.kwargs
+    cond = _batch_condition(dcw)
+    affect = _batch_affect(dcw)
+    DiscreteCallback(cond, affect; kwargs...)
+end
+# generate a PresetTimeCallback from a DiscreteCallbackWrapper
+function to_callback(dcw::DiscreteCallbackWrapper{<:Any,<:Any,<:PresetTimeComponentCallback})
+    kwargs = dcw.callback.kwargs
+    affect = _batch_affect(dcw)
+    ts = dcw.callback.ts
+    DiffEqCallbacks.PresetTimeCallback(ts, affect; kwargs...)
+end
+function _batch_condition(dcw::DiscreteCallbackWrapper)
+    uidxtype = dcw.component isa EIndex ? EIndex : VIndex
+    pidxtype = dcw.component isa EIndex ? EPIndex : VPIndex
+    usymidxs = uidxtype(dcw.component.compidx, dcw.callback.cond.sym)
+    psymidxs = pidxtype(dcw.component.compidx, dcw.callback.cond.psym)
+    ucache = DiffCache(zeros(length(usymidxs)), 12)
+
+    obsf = SII.observed(ccw.nw, usymidxs)
+    pidxs = SII.parameter_index.(Ref(ccw.nw), psymidxs)
+
+    (u, t, integrator) -> begin
+        us = PreallocationTools.get_tmp(ucache, u)
+        obsf(u, integrator.p, t, us) # fills us inplace
+        _u = SymbolicView(u, dcw.callback.condition.sym)
+        pv = view(integrator.p, pidxs)
+        _p = SymbolicView(pv, dcw.callback.condition.psym)
+        dcw.callback.condition.f(_u, _p, t)
+    end
+end
+function _batch_affect(dcw::DiscreteCallbackWrapper)
+    uidxtype = dcw.component isa EIndex ? EIndex : VIndex
+    pidxtype = dcw.component isa EIndex ? EPIndex : VPIndex
+    usymidxs = uidxtype(dcw.component.compidx, dcw.callback.affect.sym)
+    psymidxs = pidxtype(dcw.component.compidx, dcw.callback.affect.psym)
+
+    uidxs = SII.variable_index.(Ref(dcw.nw), usymidxs)
+    pidxs = SII.parameter_index.(Ref(dcw.nw), psymidxs)
+
+    (integrator) -> begin
+        uv = view(integrator.u, uidxs)
+        _u = SymbolicView(uv, dcw.callback.affect.sym)
+        pv = view(integrator.p, pidxs)
+        _p = SymbolicView(pv, dcw.callback.affect.psym)
+        ctx = get_ctx(integrator, dcw.component)
+
+        uhash = hash(uv)
+        phash = hash(pv)
+        dcw.callback.affect.f(_u, _p, ctx)
+        pchanged = hash(pv) != phash
+        uchanged = hash(uv) != uhash
+
+        (pchanged || uchanged) && SciMLBase.auto_dt_reset!(integrator)
+        pchanged && save_parameters!(integrator)
+    end
+end
+
+
+####
+#### generate the context for the callback effects
+####
+function get_ctx(integrator, sym::VIndex)
+    nw = extract_nw(integrator)
     idx = sym.compidx
-    edge = cbb.nw.im.edgevec[idx]
-    (; integrator, t=integrator.t, model=cbb.nw.im.edgem[idx], eidx=idx, src=edge.src, dst=edge.dst)
+    (; integrator, t=integrator.t, model=nw[sym], vidx=idx)
+end
+function get_ctx(integrator, sym::EIndex)
+    nw = extract_nw(integrator)
+    idx = sym.compidx
+    edge = nw.im.edgevec[idx]
+    (; integrator, t=integrator.t, model=nw[sym], eidx=idx, src=edge.src, dst=edge.dst)
 end
 
 ####
@@ -439,17 +524,19 @@ function assert_cb_compat(comp::ComponentModel, cb)
     ucond_cond = s -> s in all_obssym
     ucond_affect = s -> s in comp.sym
 
-    if !(all(ucond_cond, cb.condition.sym))
-        invalid = filter(!ucond_cond, cb.condition.sym)
-        throw(ArgumentError("All u symbols in the callback condition must be observed or variable. Found invalid $invalid !⊆ $all_obssym."))
+    if !(cb isa PresetTimeComponentCallback)
+        if !(all(ucond_cond, cb.condition.sym))
+            invalid = filter(!ucond_cond, cb.condition.sym)
+            throw(ArgumentError("All u symbols in the callback condition must be observed or variable. Found invalid $invalid !⊆ $all_obssym."))
+        end
+        if !(all(pcond, cb.condition.psym))
+            invalid = filter(!pcond, cb.condition.psym)
+            throw(ArgumentError("All p symbols in the callback condition must be parameters. Found invalid $invalid !⊆ $(comp.psym)."))
+        end
     end
     if !(all(ucond_affect, cb.affect.sym))
         invalid = filter(!ucond_affect, cb.affect.sym)
         throw(ArgumentError("All u symbols in the callback affect must be variables (in contrast to condition, observables are not allowed here). Found invalid $invalid !⊆ $(comp.sym)."))
-    end
-    if !(all(pcond, cb.condition.psym))
-        invalid = filter(!pcond, cb.condition.psym)
-        throw(ArgumentError("All p symbols in the callback condition must be parameters. Found invalid $invalid !⊆ $(comp.psym)."))
     end
     if !(all(pcond, cb.affect.psym))
         invalid = filter(!pcond, cb.affect.psym)

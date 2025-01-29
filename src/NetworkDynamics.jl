@@ -22,6 +22,7 @@ using Printf: @sprintf
 using Random: Random
 using Static: Static, StaticInt
 using SciMLBase: VectorContinuousCallback, CallbackSet
+using DiffEqCallbacks: DiffEqCallbacks
 
 @static if VERSION ≥ v"1.11.0-0"
     using Base: AnnotatedIOBuffer, AnnotatedString
@@ -77,6 +78,7 @@ include("metadata.jl")
 
 export ComponentCondition, ComponentAffect
 export ContinousComponentCallback, VectorContinousComponentCallback
+export DiscreteComponentCallback, PresetTimeComponentCallback
 export SymbolicView
 include("callbacks.jl")
 
