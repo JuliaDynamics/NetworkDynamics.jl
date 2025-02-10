@@ -28,8 +28,8 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 StyledStrings = "f489334b-da3d-4c2e-b8f0-e476e12c162b"
 SymbolicIndexingInterface = "2efcf032-c050-4f8e-a9bb-153293bab1f5"
 
-[sources.NetworkDynamics]
-path = ".."
+[sources]
+NetworkDynamics = {path = ".."}
 
 [compat]
 CairoMakie = "0.13.1"
