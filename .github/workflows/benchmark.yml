@@ -58,13 +58,13 @@ jobs:
         run: |
           julia --color=yes ./run_benchmarks.jl -t ${{github.event.pull_request.head.ref}} -b ${{github.event.pull_request.base.ref}} --no-data-export --prefix ""
           echo '<details>' > body.md
-          echo '<summary>Benchmark Results</summary>' > body.md
+          echo '<summary>Benchmark Results</summary>' >> body.md
           echo '' >> body.md
           echo '```' >> body.md
           cat comparison.txt >> body.md
           echo '```' >> body.md
           echo '' >> body.md
-          echo '</details>' > body.md
+          echo '</details>' >> body.md
           echo '' >> body.md
       - name: Upload plot
         uses: actions/upload-artifact@v4
