@@ -2,11 +2,11 @@ name: Benchmark a pull request
 
 on:
   pull_request:
+    types: [opened, synchronize, edited] # Triggers on PR updates
 
 concurrency:
-  # Skip intermediate builds: always.
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true # always cancel old runs on new push
+  cancel-in-progress: true # Always cancel old runs on new pushes
 
 permissions:
   pull-requests: write
@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 jobs:
-  check_skip: # check for "[no benchmark]" in pr body
+  check_skip:
     runs-on: ubuntu-latest
     outputs:
       skip: ${{ steps.check.outputs.skip_benchmark }}
@@ -22,11 +22,13 @@ jobs:
       - name: Fetch latest PR details
         id: fetch-pr
         run: |
-          PR_DATA=$(gh pr view ${{ github.event.pull_request.number }} --json body,title -q '{body: .body, title: .title}')
-          echo "PR_TITLE=$(echo $PR_DATA | jq -r '.title')" >> $GITHUB_ENV
-          echo "PR_BODY=$(echo $PR_DATA | jq -r '.body')" >> $GITHUB_ENV
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_DATA=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                           -H "Accept: application/vnd.github.v3+json" \
+                           "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}")
+          PR_TITLE=$(echo "$PR_DATA" | jq -r '.title')
+          PR_BODY=$(echo "$PR_DATA" | jq -r '.body')
+          echo "PR_TITLE=$PR_TITLE" >> $GITHUB_ENV
+          echo "PR_BODY=$PR_BODY" >> $GITHUB_ENV
       - name: Check for '[no benchmark]'
         id: check
         run: |
