@@ -14,8 +14,33 @@ permissions:
   contents: read
 
 jobs:
+  check_skip: # check for "[no benchmark]" in pr body
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.check.outputs.skip_benchmark }}
+    steps:
+      - name: Fetch latest PR details
+        id: fetch-pr
+        run: |
+          PR_DATA=$(gh pr view ${{ github.event.pull_request.number }} --json body,title -q '{body: .body, title: .title}')
+          echo "PR_TITLE=$(echo $PR_DATA | jq -r '.title')" >> $GITHUB_ENV
+          echo "PR_BODY=$(echo $PR_DATA | jq -r '.body')" >> $GITHUB_ENV
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check for '[no benchmark]'
+        id: check
+        run: |
+          if [[ "$PR_TITLE" == *"[no benchmark]"* || "$PR_BODY" == *"[no benchmark]"* ]]; then
+            echo "Benchmarks will be skipped."
+            echo "skip_benchmark=true" >> $GITHUB_OUTPUT
+          else
+            echo "Benchmarks will run."
+            echo "skip_benchmark=false" >> $GITHUB_OUTPUT
+          fi
+
   run_benchmarks:
-    if: "!contains(github.event.pull_request.title, '[no benchmark]') && !contains(github.event.pull_request.body, '[no benchmark]')"
+    needs: check_skip
+    if: needs.check_skip.outputs.skip == 'false' # Skip the job if '[no benchmark]' is found
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
