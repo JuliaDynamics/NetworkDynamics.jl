@@ -2,11 +2,11 @@ name: Benchmark a pull request
 
 on:
   pull_request:
+    types: [opened, synchronize, edited] # Triggers on PR updates
 
 concurrency:
-  # Skip intermediate builds: always.
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true # always cancel old runs on new push
+  cancel-in-progress: true # Always cancel old runs on new pushes
 
 permissions:
   pull-requests: write
@@ -14,8 +14,35 @@ permissions:
   contents: read
 
 jobs:
+  check_skip:
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.check.outputs.skip_benchmark }}
+    steps:
+      - name: Fetch latest PR details
+        id: fetch-pr
+        run: |
+          PR_DATA=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                           -H "Accept: application/vnd.github.v3+json" \
+                           "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}")
+          PR_TITLE=$(echo "$PR_DATA" | jq -r '.title')
+          PR_BODY=$(echo "$PR_DATA" | jq -r '.body')
+          echo "PR_TITLE=$PR_TITLE" >> $GITHUB_ENV
+          echo "PR_BODY=$PR_BODY" >> $GITHUB_ENV
+      - name: Check for '[no benchmark]'
+        id: check
+        run: |
+          if [[ "$PR_TITLE" == *"[no benchmark]"* || "$PR_BODY" == *"[no benchmark]"* ]]; then
+            echo "Benchmarks will be skipped."
+            echo "skip_benchmark=true" >> $GITHUB_OUTPUT
+          else
+            echo "Benchmarks will run."
+            echo "skip_benchmark=false" >> $GITHUB_OUTPUT
+          fi
+
   run_benchmarks:
-    if: "!contains(github.event.pull_request.title, '[no benchmark]') && !contains(github.event.pull_request.body, '[no benchmark]')"
+    needs: check_skip
+    if: needs.check_skip.outputs.skip == 'false' # Skip the job if '[no benchmark]' is found
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,11 +57,14 @@ jobs:
         working-directory: benchmark
         run: |
           julia --color=yes ./run_benchmarks.jl -t ${{github.event.pull_request.head.ref}} -b ${{github.event.pull_request.base.ref}} --no-data-export --prefix ""
-          echo '### Benchmark Results' > body.md
+          echo '<details>' > body.md
+          echo '<summary>Benchmark Results</summary>' >> body.md
           echo '' >> body.md
           echo '```' >> body.md
           cat comparison.txt >> body.md
           echo '```' >> body.md
+          echo '' >> body.md
+          echo '</details>' >> body.md
           echo '' >> body.md
       - name: Upload plot
         uses: actions/upload-artifact@v4
