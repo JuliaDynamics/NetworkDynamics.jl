@@ -2,6 +2,7 @@
 
 [![](https://img.shields.io/badge/docs-dev-blue.svg)](https://juliadynamics.github.io/NetworkDynamics.jl/dev/)
 [![](https://img.shields.io/badge/docs-stable-blue.svg)](https://juliadynamics.github.io/NetworkDynamics.jl/stable)
+[![DOI](https://zenodo.org/badge/169404414.svg)](https://doi.org/10.5281/zenodo.4396192)
 
 A package for working with dynamical systems on complex networks. NetworkDynamics.jl provides an interface between [Graphs.jl](https://github.com/JuliaGraphs/Graphs.jl) and [DifferentialEquations.jl](https://github.com/JuliaDiffEq/DifferentialEquations.jl).
 It allows modeling of dynamical processes on networks using a *modular* approach: meaning that the overall network dynamics are composed based on dynamical models for the *nodes* and the *edges*.
