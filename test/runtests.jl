@@ -13,6 +13,8 @@ using ExplicitImports
 
 (isinteractive() ? includet : include)(joinpath(pkgdir(NetworkDynamics, "test", "testutils.jl")))
 
+haskey(ENV, "BUILDKITE") && @test CUDA.functional() # fail early in buildkite if cuda is not available
+
 @testset "NetworkDynamics Tests" begin
     @testset "Package Quality Tests" begin
         # print_explicit_imports(NetworkDynamics)
