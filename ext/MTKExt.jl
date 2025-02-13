@@ -55,7 +55,14 @@ function VertexModel(sys::ODESystem, inputs, outputs; verbose=false, name=getnam
     sym = [s => _get_metadata(sys, s) for s in _sym]
 
     _psym = getname.(gen.params)
-    psym = [s => _get_metadata(sys, s) for s in _psym]
+    psym = map(gen.params) do p
+        pname = getname(p)
+        md = _get_metadata(sys, pname)
+        if p in gen.unused_params
+            md = (; md..., unused=true)
+        end
+        pname => md
+    end
 
     _obssym = getname.(gen.obsstates)
     obssym = [s => _get_metadata(sys, s) for s in _obssym]
@@ -152,7 +159,14 @@ function EdgeModel(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=false, 
     sym = [s => _get_metadata(sys, s) for s in _sym]
 
     _psym = getname.(gen.params)
-    psym = [s => _get_metadata(sys, s) for s in _psym]
+    psym = map(gen.params) do p
+        pname = getname(p)
+        md = _get_metadata(sys, pname)
+        if p in gen.unused_params
+            md = (; md..., unused=true)
+        end
+        pname => md
+    end
 
     _obssym = getname.(gen.obsstates)
     obssym = [s => _get_metadata(sys, s) for s in _obssym]
@@ -373,12 +387,11 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     fftype = _determine_fftype(out_deps, states, allinputs, params, iv)
 
     # filter out unnecessary parameters
-    # var_deps = _all_rhs_symbols(eqs)
-    # used_params = params ∩ (var_deps ∪ obs_deps ∪ out_deps)
-    # if Set(params) != Set(used_params)
-    #     verbose && @info "Remove parameters $(collect(setdiff(params, used_params))) which arn't used in the equations."
-    #     params = used_params
-    # end
+    var_deps = _all_rhs_symbols(eqs)
+    unused_params = Set(setdiff(params, (var_deps ∪ out_deps))) # do not exclud obs_deps
+    if verbose && !isempth(unused_params)
+        @info "Parameters $(unused_params) do not appear in equations of f and g and will be marked as unused."
+    end
 
     # TODO: explore Symbolcs/SymbolicUtils CSE
     # now generate the actual functions
@@ -412,19 +425,22 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     obsformulas = [eq.rhs for eq in obseqs]
     _, obsf_ip = build_function(obsformulas, states, inputss..., params, iv; cse=true, expression)
 
-    return (;f=f_ip, g=g_ip,
-            mass_matrix,
-            states,
-            inputss,
-            outputss,
-            obsstates,
-            fftype,
-            obsf = obsf_ip,
-            equations=formulas,
-            outputeqs=Dict(Iterators.flatten(outputss) .=> gformulas),
-            observed=Dict(getname.(obsstates) .=> obsformulas),
-            odesystem=sys,
-            params)
+    return (;
+        f=f_ip, g=g_ip,
+        mass_matrix,
+        states,
+        inputss,
+        outputss,
+        obsstates,
+        fftype,
+        obsf = obsf_ip,
+        equations=formulas,
+        outputeqs=Dict(Iterators.flatten(outputss) .=> gformulas),
+        observed=Dict(getname.(obsstates) .=> obsformulas),
+        odesystem=sys,
+        params,
+        unused_params
+    )
 end
 
 function _determine_fftype(deps, states, allinputs, params, t)

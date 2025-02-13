@@ -72,6 +72,18 @@ for md in [:default, :guess, :init, :bounds]
 end
 set_graphelement!(c::EdgeModel, p::Pair) = set_graphelement!(c, (;src=p.first, dst=p.second))
 
+"""
+    is_unused(c::ComponentModel, sym::Symbol)
+
+Checks if symbol `sym` is marked as unused (i.e. it does not appear in the equations of f and g explicitly).
+"""
+function is_unused(c::ComponentModel, sym::Symbol)
+    if has_metadata(c, sym, :unused)
+        get_metadata(c, sym, :unused)
+    else
+        false
+    end
+end
 
 #### default or init
 """
@@ -318,7 +330,13 @@ end
 function _append_states!(lns, cf, syms; sigdigits)
     fidx = length(lns)+1
     for sym in syms
-        str = "  &" * string(sym) * " &&= "
+        str = "  &"
+        if is_unused(cf, sym)
+            str *= styled"{gray:$(string(sym)) (unused)}"
+        else
+            str *= string(sym)
+        end
+        str *= " &&= "
         if has_default_or_init(cf, sym)
             val = get_default_or_init(cf, sym)
             val_str = str_significant(val; sigdigits, phantom_minus=true)
