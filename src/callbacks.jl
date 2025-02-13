@@ -37,7 +37,7 @@ Creates a callback condition for a [`ComponentCallback`].
 Consider a component model with states `[:u1, :u2]`, inputs `[:i]`, outputs
 `[:o]` and parameters `[:p1, :p2]`.
 
-    ComponentCondition([:u1, :o], [:p1]) do (u, p, t)
+    ComponentCondition([:u1, :o], [:p1]) do u, p, t
         # access states symbolicially or via int index
         u[:u1] == u[1]
         u[:o] == u[2]
@@ -81,7 +81,7 @@ Creates a callback condition for a [`ComponentCallback`].
 Consider a component model with states `[:u1, :u2]`, inputs `[:i]`, outputs
 `[:o]` and parameters `[:p1, :p2]`.
 
-    ComponentAffect([:u1, :o], [:p1]) do (u, p, ctx)
+    ComponentAffect([:u1, :o], [:p1]) do u, p, ctx
         u[:u1] = 0 # change the state
         p[:p1] = 1 # change the parameter
         @info "Changed :u1 and :p1 on vertex \$(ctx.vidx)" # access context

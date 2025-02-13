@@ -48,6 +48,7 @@ end
             V=sqrt(u_r^2 + u_i^2), [description="Voltage magnitude"]
             ω_ref=0, [description="Reference frequency"]
             Pm, [guess=0.1,description="Mechanical Power"]
+            aux, [description="Auxiliary, unused parameter"]
         end
         @equations begin
             Dt(θ) ~ ω - ω_ref
@@ -66,6 +67,8 @@ end
     @test vf.symmetadata[:θ][:bounds] == [-π, π]
     @test vf.symmetadata[:i_r][:default] == 1
     @test vf.symmetadata[:i_i][:default] == 0.1
+    @test filter(p->NetworkDynamics.is_unused(vf, p), psym(vf)) == [:aux]
+    @test NetworkDynamics.has_default_or_init(vf, :aux) == false
 
     NetworkDynamics.initialize_component!(vf; verbose=true)
     @test NetworkDynamics.init_residual(vf) < 1e-8
@@ -77,6 +80,7 @@ end
     set_default!(vf, :ω, get_init(vf, :ω))
 
     NetworkDynamics.initialize_component!(vf; verbose=true)
+    dump_initial_state(vf)
 end
 
 @testset "test component initialization with bounds" begin

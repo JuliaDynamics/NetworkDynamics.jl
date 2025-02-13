@@ -27,8 +27,10 @@ jobs:
                            "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}")
           PR_TITLE=$(echo "$PR_DATA" | jq -r '.title')
           PR_BODY=$(echo "$PR_DATA" | jq -r '.body')
+          # Ensure PR_BODY is single-line and sanitized for GitHub env vars
+          PR_BODY_ESCAPED=$(echo "$PR_BODY" | tr '\n' ' ' | tr '\r' ' ')
           echo "PR_TITLE=$PR_TITLE" >> $GITHUB_ENV
-          echo "PR_BODY=$PR_BODY" >> $GITHUB_ENV
+          echo "PR_BODY=$PR_BODY_ESCAPED" >> $GITHUB_ENV
       - name: Check for '[no benchmark]'
         id: check
         run: |

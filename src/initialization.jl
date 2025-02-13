@@ -60,7 +60,8 @@ function initialization_problem(cf::T; t=NaN, apply_bound_transformation, verbos
     infree_ms = Tuple((!).(map(s -> has_default(cf, s), sv)) for sv in insym_normalized(cf))
     infixs = Tuple(Float64[has_default(cf, s) ? get_default(cf, s) : NaN for s in sv] for sv in insym_normalized(cf))
 
-    pfree_m = (!).(map(Base.Fix1(has_default, cf), psym(cf)))
+    is_free_p = s -> !is_unused(cf, s) && !has_default(cf, s) # free p are not unused and have no default
+    pfree_m = map(is_free_p, psym(cf))
     pfix = Float64[has_default(cf, s) ? get_default(cf, s) : NaN for s in psym(cf)]
 
     # count free variables and equations
@@ -74,7 +75,7 @@ function initialization_problem(cf::T; t=NaN, apply_bound_transformation, verbos
                    psym(cf)[pfree_m])
     @assert length(freesym) == Nfree
     if Neqs < Nfree
-        throw(ArgumentError("Initialization problem underconstraint. $(Neqs) Equations and  $(Nfree) variables."))
+        throw(ArgumentError("Initialization problem underconstraint. $(Neqs) Equations and  $(Nfree) variables: $freesym"))
     end
 
     # which parts of the nonlinear u (unl) correspond to which free parameters
@@ -282,7 +283,7 @@ function initialize_component!(cf; verbose=true, apply_bound_transformation=true
 end
 
 function isinitialized(cf::ComponentModel)
-    all(has_default_or_init(cf, s) for s in vcat(sym(cf), psym(cf)))
+    all(has_default_or_init(cf, s) || is_unused(cf, s) for s in vcat(sym(cf), psym(cf)))
 end
 
 """
@@ -304,7 +305,7 @@ function init_residual(cf::T; t=NaN, recalc=false) where {T<:ComponentModel}
         outs = Tuple(Float64[get_default_or_init(cf, s) for s in sv] for sv in outsym_normalized(cf))
         u = Float64[get_default_or_init(cf, s) for s in sym(cf)]
         ins = Tuple(Float64[get_default_or_init(cf, s) for s in sv] for sv in insym_normalized(cf))
-        p = Float64[get_default_or_init(cf, s) for s in psym(cf)]
+        p = Float64[is_unused(cf, s) ? NaN : get_default_or_init(cf, s) for s in psym(cf)]
         res = zeros(dim(cf) + sum(outdim_normalized(cf)))
 
         res_fg  = @views res[1:dim(cf)]
