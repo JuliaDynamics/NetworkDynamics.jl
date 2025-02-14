@@ -1,13 +1,4 @@
-struct TimeSlider{T} <: Bonito.AbstractSlider{T}
-    values::Observable{Vector{T}}
-    value::Observable{T}
-    style::Styles
-    track_style::Styles
-    thumb_style::Styles
-    track_active_style::Styles
-end
-
-function TimeSlider(value::Observable{T}, values::Observable{Vector{T}}) where {T}
+function get_slider_style()
     slider_height=15
     thumb_width=slider_height
     thumb_height=slider_height
@@ -61,10 +52,31 @@ function TimeSlider(value::Observable{T}, values::Observable{Vector{T}}) where {
         "left" => "$(-half_thumb_width)px",
         "background-color" => thumb_color,
     )
+    (; style, track_style, track_active_style, thumb_style)
+end
 
-    slider = TimeSlider(
-        values,
-        value,
+struct ContinuousSlider{T} <: Bonito.AbstractSlider{T}
+    range::Observable{Tuple{T,T}}
+    value_l::Observable{T}
+    value_r::Observable{T}
+    style::Styles
+    track_style::Styles
+    thumb_style::Styles
+    track_active_style::Styles
+end
+
+function ContinuousSlider(range, value::Observable{T}) where {T}
+    value_l = Observable{T}(zero(T)/zero(T))
+    ContinuousSlider(range, value_l, value)
+end
+
+function ContinuousSlider(range, value_l::Observable{T}, value_r::Observable{T}) where {T}
+    style, track_style, track_active_style, thumb_style = get_slider_style()
+
+    slider = ContinuousSlider(
+        range,
+        value_l,
+        value_r,
         style,
         track_style,
         thumb_style,
@@ -73,7 +85,7 @@ function TimeSlider(value::Observable{T}, values::Observable{Vector{T}}) where {
     return slider
 end
 
-function Bonito.jsrender(session::Session, slider::TimeSlider)
+function Bonito.jsrender(session::Session, slider::ContinuousSlider)
     # Define the CSS styles
     container_style = slider.style
     track_style = slider.track_style
@@ -81,75 +93,119 @@ function Bonito.jsrender(session::Session, slider::TimeSlider)
     thumb_style = slider.thumb_style
 
     # Create elements
-    thumb = DOM.div(; style=thumb_style)
+    thumb_l = DOM.div(; style=thumb_style)
+    thumb_r = DOM.div(; style=thumb_style)
     track = DOM.div(; style=track_style)
     track_active = DOM.div(; style=track_active_style)
-    container = DOM.div(track, track_active, thumb; style=container_style)
+    container = DOM.div(track, track_active, thumb_l, thumb_r; style=container_style)
 
     # JavaScript for interactivity
     jscode = js"""
     (container)=> {
-        const thumb = $(thumb);
+        const thumb_r = $(thumb_r);
+        const thumb_l = $(thumb_l);
         const track_active = $(track_active);
         const track = $(track);
-        let isDragging = false;
-        let thumbpos = 0;
-        let thumbval = 0;
-        $(slider.value).on(val => set_thumb_val(val));
-        function move_thumb(e) {
+        let isDragging_r = false;
+        let isDragging_l = false;
+        let thumbpos_l = 0;
+        let thumbval_l = 0;
+        let thumbpos_r = 0;
+        let thumbval_r = 0;
+        $(slider.value_l).on(val => set_thumb_val(val, 'l'));
+        $(slider.value_r).on(val => set_thumb_val(val, 'r'));
+
+        function thumb_event(e, thumb) {
+            let new_pos = e.clientX - container.getBoundingClientRect().left;
+            const llim = thumb==='r' ? thumbpos_l : 0;
+            const rlim = thumb==='l' ? thumbpos_r : track.offsetWidth;
+            new_pos = Math.max(new_pos, llim);
+            new_pos = Math.min(new_pos, rlim);
+            set_thumb_pos(new_pos, thumb)
+        }
+
+        function set_thumb_pos(new_pos, thumb) {
+            if (thumb=='l' && new_pos !== thumbpos_l || thumb=='r' && new_pos !== thumbpos_r) {
+                const thumb_width = thumb_r.offsetWidth / 2;
+                const width = track.offsetWidth;
+                const new_left = (new_pos - thumb_width) + 'px';
+
+                const new_val = pos_to_val(new_pos)
+                if (thumb=='l') {
+                    thumbpos_l = new_pos;
+                    thumbval_l = new_val;
+                    thumb_l.style.left = new_left
+                    $(slider.value_l).notify(new_val);
+                } else {
+                    thumbpos_r = new_pos;
+                    thumbval_r = new_val;
+                    thumb_r.style.left = new_left
+                    $(slider.value_r).notify(new_val);
+                }
+                track_active.style.left = thumbpos_l + 'px';  // Update the active track
+                track_active.style.width = (thumbpos_r-thumbpos_l) + 'px';  // Update the active track
+            }
+        }
+
+        function set_thumb_val(new_val, thumb) {
+            if (thumb=='l' && new_val !== thumbval_l || thumb=='r' && new_val !== thumbval_r) {
+                const thumb_width = thumb_r.offsetWidth / 2;
+                const new_pos = isNaN(new_val) ? 0 : val_to_pos(new_val);
+                const new_left = (new_pos - thumb_width) + 'px';
+                if (thumb=='l') {
+                    if (isNaN(new_val)) {
+                        thumb_l.style.display = 'none';
+                    } else if (isNaN(thumbval_l)) {
+                        thumb_l.style.display = 'block';
+                    }
+                    thumbpos_l = new_pos;
+                    thumbval_l = new_val;
+                    thumb_l.style.left = new_left;
+                } else {
+                    thumbpos_r = new_pos;
+                    thumbval_r = new_val;
+                    thumb_r.style.left = new_left;
+                }
+                track_active.style.left = thumbpos_l + 'px';  // Update the active track
+                track_active.style.width = (thumbpos_r-thumbpos_l) + 'px';  // Update the active track
+            }
+        }
+
+        function pos_to_val(pos) {
             const width = track.offsetWidth;
-            let new_left = e.clientX - container.getBoundingClientRect().left;
-            new_left = Math.max(new_left, 0);
-            new_left = Math.min(new_left, width);
-            set_thumb_pos(new_left)
+            const startval = $(slider.range[][1]);
+            const endval = $(slider.range[][2]);
+            const val = startval + (pos / width) * (endval - startval);
+            return val;
         }
-        function set_thumb_pos(new_left) {
-            if(new_left !== thumbpos) {
-                const thumb_width = thumb.offsetWidth / 2;
-                const width = track.offsetWidth;
-                thumb.style.left = (new_left - thumb_width) + 'px';  // Update the left position of the thumb
-                track_active.style.width = new_left + 'px';  // Update the active track
 
-                const startval = $(slider.values[][begin]);
-                const endval = $(slider.values[][end]);
-                const new_val = startval + (new_left / width) * (endval - startval);
+        function val_to_pos(val) {
+            const width = track.offsetWidth;
+            const startval = $(slider.range[][1]);
+            const endval = $(slider.range[][2]);
+            const pos = (val - startval) / (endval - startval) * width;
+            return pos;
+        }
 
-                thumbpos = new_left;
-                thumbval = new_val;
-                $(slider.value).notify(new_val);
-            }
-        }
-        function set_thumb_val(new_val) {
-            if(new_val !== thumbval) {
-                const startval = $(slider.values[][begin]);
-                const endval = $(slider.values[][end]);
-                const thumb_width = thumb.offsetWidth / 2;
-                const width = track.offsetWidth;
-                const new_left = (new_val - startval) / (endval - startval) * width;
-                thumb.style.left = (new_left - thumb_width) + 'px';  // Update the left position of the thumb
-                track_active.style.width = new_left + 'px';  // Update the active track
-
-                thumbpos = new_left;
-                thumbval = new_val;
-            }
-        }
-        function move_thumb_incremental(direction, shiftPressed) {
-            const startval = $(slider.values[][begin]);
-            const endval = $(slider.values[][end]);
-            let step = (endval - startval) / 100;
-            if (shiftPressed) {step *= 10;}
-            if (direction === 'right') {
-                set_thumb_val(Math.min(thumbval + step, endval));
-            } else if (direction === 'left') {
-                set_thumb_val(Math.max(thumbval - step, startval));
-            }
-        }
-        const move_thumb_throttled = Bonito.throttle_function(move_thumb, 100);
+        //const move_thumb_throttled = Bonito.throttle_function(thumb_event, 100);
         const controller = new AbortController();
         document.addEventListener('mousedown', function (e) {
-            if(e.target === thumb || e.target === track_active || e.target === track || e.targar === container){
-                isDragging = true;
-                move_thumb(e);
+            if (e.target === thumb_r){
+                isDragging_r = true;
+                thumb_event(e, 'r');
+                e.preventDefault();  // Prevent default behavior
+            } else if (e.target === thumb_l) {
+                isDragging_l = true;
+                thumb_event(e, 'l');
+                e.preventDefault();  // Prevent default behavior
+            } else if (e.target == track_active || e.target === track){
+                let new_pos = e.clientX - container.getBoundingClientRect().left;
+                // if closer to the right thumb, move the right thumb
+                if(isNaN(thumbval_l) || Math.abs(new_pos - thumbpos_r) < Math.abs(new_pos - thumbpos_l)) {
+                    thumb_event(e, 'r');
+                } else {
+                    thumb_event(e, 'l');
+                }
                 e.preventDefault();  // Prevent default behavior
             }
         }, { signal: controller.signal});
@@ -157,25 +213,40 @@ function Bonito.jsrender(session::Session, slider::TimeSlider)
             if (!document.body.contains(container)) {
                 controller.abort();
             }
-            isDragging = false;
+            isDragging_r = false;
+            isDragging_l = false;
         }, { signal: controller.signal });
         document.addEventListener('mousemove', function (e) {
-            if (isDragging) {
-                move_thumb_throttled(e);
+            if (isDragging_r) {
+                thumb_event(e, 'r');
+            } else if (isDragging_l) {
+                thumb_event(e, 'l');
             }
         }, { signal: controller.signal });
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'ArrowRight') {
-                move_thumb_incremental('right', e.shiftKey);
-                e.preventDefault();
-            } else if (e.key === 'ArrowLeft') {
-                move_thumb_incremental('left', e.shiftKey);
-                e.preventDefault();
-            }
-        }, { signal: controller.signal });
-        set_thumb_val($(slider.value).value)
+        set_thumb_val($(slider.value_l).value, 'l');
+        set_thumb_val($(slider.value_r).value, 'r');
     }
     """
+    # function move_thumb_incremental(direction, shiftPressed) {
+    #     const startval = $(slider.values[][begin]);
+    #     const endval = $(slider.values[][end]);
+    #     let step = (endval - startval) / 100;
+    #     if (shiftPressed) {step *= 10;}
+    #     if (direction === 'right') {
+    #         set_thumb_val(Math.min(thumbval + step, endval));
+    #     } else if (direction === 'left') {
+    #         set_thumb_val(Math.max(thumbval - step, startval));
+    #     }
+    # }
+    # document.addEventListener('keydown', function (e) {
+    #     if (e.key === 'ArrowRight') {
+    #         move_thumb_incremental('right', e.shiftKey);
+    #         e.preventDefault();
+    #     } else if (e.key === 'ArrowLeft') {
+    #         move_thumb_incremental('left', e.shiftKey);
+    #         e.preventDefault();
+    #     }
+    # }, { signal: controller.signal });
     onload(session, container, jscode)
 
     return jsrender(session, container)

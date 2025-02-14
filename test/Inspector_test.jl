@@ -45,18 +45,36 @@ sol = let
     sol = solve(prob, Tsit5());
 end
 
-guistate = (;
-    ts = Observable{Vector{Float64}}([0.0, 1.0, 5.0, 10.0]),
+app = (;
+    trange_full = Observable{Tuple{Float64, Float64}}((0.0, 10.0)),
+    tmin = Observable{Float64}(1.0),
+    tmax = Observable{Float64}(9.0),
     t = Observable{Float64}(0.0)
 )
 
 App() do session
-    tslider = NetworkDynamicsInspector.TimeSlider(guistate.t, guistate.ts)
+    tw_slider = ContinuousSlider(app.trange_full, app.tmin, app.tmax)
+    twindow = @lift ($(app.tmin), $(app.tmax))
+    # if window changes, keep t[] inside
+    onany(app.tmin, app.tmax) do tmin, tmax
+        _t = clamp(app.t[], tmin, tmax)
+        if _t != app.t[]
+            app.t[] = _t
+        end
+    end
+    t_slider = ContinuousSlider(twindow, app.t)
 
     return Card(Grid(
-        tslider, Bonito.Label(tslider.value);
-        columns="80% 20%",
+        DOM.div(), t_slider, Bonito.Label(t_slider.value_r),
+        Bonito.Label(tw_slider.value_l), tw_slider, Bonito.Label(tw_slider.value_r);
+        columns="10% 80% 10%",
         justify_content="begin",
         align_items="center",
-    ); width="300px",)
+    ); width="500px",)
 end
+
+app.tmin[] = NaN
+app.tmin[] = 1.0
+
+app.tmin[]
+app.tmax[]
