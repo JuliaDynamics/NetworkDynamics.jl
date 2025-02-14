@@ -4,6 +4,7 @@ using Bonito
 using Bonito.Observables
 using Bonito: Grid, @js_str, onload, jsrender
 
+export ContinuousSlider
 include("widgets.jl")
 
 # function inspect(sol)
