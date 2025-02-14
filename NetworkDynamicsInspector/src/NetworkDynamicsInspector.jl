@@ -16,7 +16,7 @@ using GraphMakie.NetworkLayout
 export ContinuousSlider, RoundedLabel
 include("widgets.jl")
 
-function graphplot_card(app)
+function graphplot_card(app; kwargs...)
     nw = map!(extract_nw, Observable{Network}(), app.sol)
     NV = nv(nw[])
     NE = ne(nw[])
@@ -101,23 +101,18 @@ function graphplot_card(app)
         Stress(; pin)
     end
 
-    fig = Figure()
-    ax = Axis(fig[1,1]; aspect=DataAspect())
+    fig = Figure(; figure_padding=0)
+    ax = Axis(fig[1,1])
     graphplot!(ax, g; layout, node_marker, node_color, node_size, edge_color, edge_width,
         node_attr=(;colorrange=app.graphplot.ncolorrange, colormap=app.graphplot.ncolorscheme),
         edge_attr=(;colorrange=app.graphplot.ncolorrange, colormap=app.graphplot.ncolorscheme))
+
     hidespines!(ax)
     hidedecorations!(ax)
-    # place the colorbars
-    # Colorbar(fig[1,1];
-    #     colormap=app.graphplot.ncolorscheme,
-    #     colorrange=app.graphplot.ncolorrange,
-    #     vertical=true, label=@lift("node colors "*string($(app.graphplot.nstate))), flipaxis=false)
-    # Colorbar(fig[1,3];
-    #     colormap=app.graphplot.ecolorscheme,
-    #     colorrange=app.graphplot.ecolorrange,
-    #     vertical=true, label=@lift("edge colors "*string($(app.graphplot.estate))), flipaxis=true)
-    Card(fig)
+    on(ax.scene.viewport) do lims
+        adapt_xy_scaling!(ax)
+    end
+    Card(fig; kwargs...)
 end
 function _gracefully_extract_states!(vec, sol, t, idxs, rel)
     isvalid(s) = SII.is_variable(sol, s) || SII.is_parameter(sol, s) || SII.is_observed(sol, s)
@@ -128,6 +123,23 @@ function _gracefully_extract_states!(vec, sol, t, idxs, rel)
         vec[mask] .= reduce(-, sol([t, sol.t[begin]]; idxs=idxs[mask]).u)
     else
         vec[mask] .= only(sol([t]; idxs=idxs[mask]).u)
+    end
+end
+function adapt_xy_scaling!(ax)
+    vp = ax.scene.viewport[]
+    fl = ax.finallimits[]
+    vp_aspect = reduce(/, vp.widths)
+    fl_aspect = reduce(/, fl.widths)
+    ratio = vp_aspect/fl_aspect
+
+    if ratio > 1 # need to increase x limits
+        low = ax.finallimits[].origin[1]
+        hi = low + ax.finallimits[].widths[1]
+        xlims!(ax, ratio*low, ratio*hi)
+    else # need to increast y limits
+        low = ax.finallimits[].origin[2]
+        hi = low + ax.finallimits[].widths[2]
+        ylims!(ax, low/ratio, hi/ratio)
     end
 end
 
@@ -174,7 +186,7 @@ function nodestate_control_card(app)
         app.graphplot.ncolorrange[] = (_clow, _chi)
     end
 
-    fig = Figure()
+    fig = Figure(; figure_padding=0)
     Colorbar(fig[1,1];
         colormap=app.graphplot.ncolorscheme,
         colorrange=app.graphplot.ncolorrange,
@@ -184,11 +196,11 @@ function nodestate_control_card(app)
 
     Card(
         Grid(
-            DOM.div(fig; style=Styles("grid-column" => "1 / 4", "height" => "50px")),
-            RoundedLabel(@lift $maxrange[1]; style=Styles("text-align"=>"right")),
+            DOM.div(fig; style=Styles("height" => "40px")),
+            # RoundedLabel(@lift $maxrange[1]; style=Styles("text-align"=>"right")),
             cslider,
-            RoundedLabel(@lift $maxrange[2]; style=Styles("text-align"=>"left"));
-            columns="30pt 1fr 30pt",
+            # RoundedLabel(@lift $maxrange[2]; style=Styles("text-align"=>"left"));
+            columns="100%",
         )
     )
 end
