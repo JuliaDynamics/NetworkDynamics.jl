@@ -246,6 +246,14 @@ function get_defaults_or_inits(c::ComponentModel, syms; missing_val=nothing)
     [has_default_or_init(c, sym) ? get_default_or_init(c, sym) : missing_val for sym in syms]
 end
 
+has_position(c::ComponentModel) = has_metadata(c, :position)
+get_position(c::ComponentModel) = get_metadata(c, :position)
+set_position!(c::ComponentModel, pos) = set_metadata!(c, :position, pos)
+
+has_marker(c::ComponentModel) = has_metadata(c, :marker)
+get_marker(c::ComponentModel)::Symbol = get_metadata(c, :marker)
+set_marker!(c::ComponentModel, marker::Symbol) = set_metadata!(c, :marker, marker)
+
 ####
 #### Extract initial state from component
 ####

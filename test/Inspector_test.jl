@@ -2,6 +2,7 @@ using NetworkDynamicsInspector
 using NetworkDynamics
 using Bonito
 using WGLMakie
+using WGLMakie.Makie.ColorSchemes
 using GraphMakie
 using Graphs: SimpleGraph
 using OrdinaryDiffEqTsit5
@@ -26,6 +27,13 @@ sol = let
     s0 = find_fixpoint(nw)
     set_defaults!(nw, s0)
 
+    # set_position!(vs[1], (0.0, 0.0))
+    set_marker!(vs[1], :dtriangle)
+    set_marker!(vs[2], :utriangle)
+    set_marker!(vs[3], :dtriangle)
+    set_marker!(vs[4], :dtriangle)
+    set_marker!(vs[5], :utriangle)
+
     cond = ComponentCondition([:P, :₋P, :srcθ], [:limit, :K]) do u, p, t
         abs(u[:P]) - p[:limit]
     end
@@ -46,32 +54,36 @@ sol = let
 end
 
 app = (;
-    trange_full = Observable{Tuple{Float64, Float64}}((0.0, 10.0)),
-    tmin = Observable{Float64}(1.0),
-    tmax = Observable{Float64}(9.0),
-    t = Observable{Float64}(0.0)
-)
+    sol = Observable{Any}(sol),
+    t = Observable{Float64}(0.0),
+    tmin = Observable{Float64}(sol.t[begin]),
+    tmax = Observable{Float64}(sol.t[end]),
+    sel_nodes = Observable{Vector{Int}}(Int[]),
+    sel_edges = Observable{Vector{Int}}(Int[]),
+    graphplot = (;
+        nstate = Observable{Union{Symbol,Nothing}}(:θ),
+        estate = Observable{Union{Symbol,Nothing}}(:P),
+        nstate_rel = Observable{Bool}(false),
+        estate_rel = Observable{Bool}(false),
+        ncolorrange = Observable{Tuple{Float32,Float32}}((-1.0, 1.0)),
+        ncolorscheme = Observable{ColorScheme}(ColorSchemes.coolwarm),
+        ecolorrange = Observable{Tuple{Float32,Float32}}((-1.0, 1.0)),
+        ecolorscheme = Observable{ColorScheme}(ColorSchemes.coolwarm),
+    )
+);
 
 App() do session
-    tw_slider = ContinuousSlider(app.trange_full, app.tmin, app.tmax)
-    twindow = @lift ($(app.tmin), $(app.tmax))
-    # if window changes, keep t[] inside
-    onany(app.tmin, app.tmax) do tmin, tmax
-        _t = clamp(app.t[], tmin, tmax)
-        if _t != app.t[]
-            app.t[] = _t
-        end
-    end
-    t_slider = ContinuousSlider(twindow, app.t)
-
-    return Card(Grid(
-        DOM.div(), t_slider, Bonito.Label(t_slider.value_r),
-        Bonito.Label(tw_slider.value_l), tw_slider, Bonito.Label(tw_slider.value_r);
-        columns="10% 80% 10%",
-        justify_content="begin",
-        align_items="center",
-    ); width="500px",)
+    WGLMakie.activate!(resize_to=:parent)
+    NetworkDynamicsInspector.clear_obs!(app)
+    Grid(
+        NetworkDynamicsInspector.graphplot_card(app),
+        NetworkDynamicsInspector.nodestate_control_card(app),
+        NetworkDynamicsInspector.timeslider_card(app),
+        columns="100%",
+        width="500px"
+    )
 end
+app.t[] = 4.0
 
 app.tmin[] = NaN
 app.tmin[] = 1.0

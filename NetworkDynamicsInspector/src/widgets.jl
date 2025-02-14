@@ -114,14 +114,27 @@ function Bonito.jsrender(session::Session, slider::ContinuousSlider)
         let thumbval_r = 0;
         $(slider.value_l).on(val => set_thumb_val(val, 'l'));
         $(slider.value_r).on(val => set_thumb_val(val, 'r'));
+        $(slider.range).on(val => set_thumb_val(thumbval_l, 'l'));
+        $(slider.range).on(val => set_thumb_val(thumbval_r, 'r'));
 
         function thumb_event(e, thumb) {
             let new_pos = e.clientX - container.getBoundingClientRect().left;
-            const llim = thumb==='r' ? thumbpos_l : 0;
-            const rlim = thumb==='l' ? thumbpos_r : track.offsetWidth;
+            const width = track.offsetWidth;
+            if (thumb==='r') {
+                llim = (e.shiftKey) ? (Math.ceil(width/2)+1) : thumbpos_l+1;
+                rlim = width;
+            } else if (thumb==='l') {
+                llim = 0;
+                rlim = (e.shiftKey) ? (Math.floor(width/2)-1) : thumbpos_r-1;
+            }
             new_pos = Math.max(new_pos, llim);
             new_pos = Math.min(new_pos, rlim);
-            set_thumb_pos(new_pos, thumb)
+            set_thumb_pos(new_pos, thumb);
+
+            if (e.shiftKey) {
+                const other = thumb==='l' ? 'r' : 'l';
+                set_thumb_pos(width - new_pos, other);
+            }
         }
 
         function set_thumb_pos(new_pos, thumb) {
@@ -148,41 +161,39 @@ function Bonito.jsrender(session::Session, slider::ContinuousSlider)
         }
 
         function set_thumb_val(new_val, thumb) {
-            if (thumb=='l' && new_val !== thumbval_l || thumb=='r' && new_val !== thumbval_r) {
-                const thumb_width = thumb_r.offsetWidth / 2;
-                const new_pos = isNaN(new_val) ? 0 : val_to_pos(new_val);
-                const new_left = (new_pos - thumb_width) + 'px';
-                if (thumb=='l') {
-                    if (isNaN(new_val)) {
-                        thumb_l.style.display = 'none';
-                    } else if (isNaN(thumbval_l)) {
-                        thumb_l.style.display = 'block';
-                    }
-                    thumbpos_l = new_pos;
-                    thumbval_l = new_val;
-                    thumb_l.style.left = new_left;
-                } else {
-                    thumbpos_r = new_pos;
-                    thumbval_r = new_val;
-                    thumb_r.style.left = new_left;
+            const thumb_width = thumb_r.offsetWidth / 2;
+            const new_pos = isNaN(new_val) ? 0 : val_to_pos(new_val);
+            const new_left = (new_pos - thumb_width) + 'px';
+            if (thumb=='l') {
+                if (isNaN(new_val)) {
+                    thumb_l.style.display = 'none';
+                } else if (isNaN(thumbval_l)) {
+                    thumb_l.style.display = 'block';
                 }
-                track_active.style.left = thumbpos_l + 'px';  // Update the active track
-                track_active.style.width = (thumbpos_r-thumbpos_l) + 'px';  // Update the active track
+                thumbpos_l = new_pos;
+                thumbval_l = new_val;
+                thumb_l.style.left = new_left;
+            } else {
+                thumbpos_r = new_pos;
+                thumbval_r = new_val;
+                thumb_r.style.left = new_left;
             }
+            track_active.style.left = thumbpos_l + 'px';  // Update the active track
+            track_active.style.width = (thumbpos_r-thumbpos_l) + 'px';  // Update the active track
         }
 
         function pos_to_val(pos) {
             const width = track.offsetWidth;
-            const startval = $(slider.range[][1]);
-            const endval = $(slider.range[][2]);
+            const startval = $(slider.range).value[0];
+            const endval = $(slider.range).value[1];
             const val = startval + (pos / width) * (endval - startval);
             return val;
         }
 
         function val_to_pos(val) {
             const width = track.offsetWidth;
-            const startval = $(slider.range[][1]);
-            const endval = $(slider.range[][2]);
+            const startval = $(slider.range).value[0];
+            const endval = $(slider.range).value[1];
             const pos = (val - startval) / (endval - startval) * width;
             return pos;
         }
@@ -250,4 +261,11 @@ function Bonito.jsrender(session::Session, slider::ContinuousSlider)
     onload(session, container, jscode)
 
     return jsrender(session, container)
+end
+
+
+function RoundedLabel(value; sigdigits=2, style=Styles(), attributes...)
+    styled = Styles(style, "font-size" => "1rem")
+    str = @lift NetworkDynamics.str_significant($value; sigdigits=$sigdigits)
+    return DOM.span(str; style=styled)
 end
