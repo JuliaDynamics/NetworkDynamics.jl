@@ -6,6 +6,7 @@ using WGLMakie.Makie.ColorSchemes
 using GraphMakie
 using Graphs: SimpleGraph
 using OrdinaryDiffEqTsit5
+using Graphs: Graphs
 
 sol = let
     include(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl"))
@@ -72,17 +73,20 @@ app = (;
     )
 );
 
+gpfig = Ref{Any}()
 App() do session
     WGLMakie.activate!(resize_to=:parent)
     NetworkDynamicsInspector.clear_obs!(app)
+    gpfig[] = fig
     Grid(
-        NetworkDynamicsInspector.graphplot_card(app),
+        NetworkDynamicsInspector.graphplot_card(app; height="400px"),
         NetworkDynamicsInspector.nodestate_control_card(app),
         NetworkDynamicsInspector.timeslider_card(app),
         columns="100%",
         width="500px"
     )
 end
+
 app.t[] = 4.0
 
 app.tmin[] = NaN
@@ -90,3 +94,10 @@ app.tmin[] = 1.0
 
 app.tmin[]
 app.tmax[]
+
+fig = Figure()
+ax = Axis(fig[1,1])
+graphplot!(ax, Graphs.smallgraph(:karate))
+
+
+
