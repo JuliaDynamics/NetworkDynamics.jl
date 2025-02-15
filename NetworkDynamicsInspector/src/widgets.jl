@@ -2,8 +2,8 @@ function get_slider_style()
     slider_height=15
     thumb_width=slider_height
     thumb_height=slider_height
-    track_height=slider_height / 2
-    track_active_height=track_height + 2
+    track_height=slider_height / 3
+    track_active_height=track_height# + 2
     backgroundcolor="transparent"
     track_color="#eee"
     track_active_color="#ddd"
