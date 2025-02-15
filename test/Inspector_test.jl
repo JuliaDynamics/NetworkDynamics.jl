@@ -101,3 +101,178 @@ graphplot!(ax, Graphs.smallgraph(:karate))
 
 
 
+using Bonito
+
+struct OptionGroup{T}
+    label::String
+    options::Vector{T}
+end
+
+multiselect = (;
+    options = Observable([
+        # OptionGroup("Programming Languages", ["Julia", "Rust", "Java"]),
+        # OptionGroup("Languages", ["French", "Spanish", "German"]),
+        (;label="Programming Languages", options=[(; id=1, text="Julia"), (;id=2,text="Rust")]),
+        (;label="Languages", options=[(; id=3, text="Spanish"), (;id=4,text="French")]),
+    ]),
+    selection = Observable{Vector{Int}}([1]),
+    placeholder="Select state(s) to plot"
+)
+
+SERVER = Ref{Any}()
+let
+    app = App(;) do session
+        jquery = Asset("https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js")
+        select2_css = Asset("https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css")
+        select2_js = Asset("https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js")
+
+        # Create a multi-select element
+        id = replace(string(gensym("selectbox")), "#"=>"")
+        select = DOM.select(
+            DOM.option();
+            multiple = true,
+            class = "js-example-basic-multiple",
+            style = "width: 300px",
+            name = "states[]",
+            id
+        )
+
+        # jqdocument = Bonito.JSString(raw"$(document)")
+        jqselect = Bonito.JSString(raw"$('#"* id * raw"')")
+
+        esc = Bonito.JSString(raw"$")
+
+        js_onload = js"""
+        (select) => {
+            $jqselect.select2({
+                placeholder: "select a state"
+            });
+            $jqselect.bind('change', onSelectChange);
+
+            function onSelectChange(event){
+                const new_sel = $jqselect.select2('val')
+                const old_sel = $(multiselect.selection).value
+
+                // only push back to julia if different
+                if (!(new_sel.length === old_sel.length &&
+                        new_sel.every(function(val, i) { return val == old_sel[i]}))){
+                    console.log("new", new_sel)
+                    console.log("old", old_sel)
+                    $(multiselect.selection).notify(new_sel);
+                }
+                // console.log("Slected ", $jqselect.select2('val') );
+                // console.log("Observable ", $(multiselect.options).value);
+                //console.log("JS data ", options);
+            };
+
+            function updateDisplayedItems(new_options) {
+                const jq_select = $jqselect;
+
+                // Clear previous options
+                jq_select.empty();
+
+                // Loop through each group and create optgroups
+                new_options.forEach(group => {
+                    let jq_optgroup = $esc('<optgroup>', { label: group.label });
+
+                    group.options.forEach(option => {
+                        let newOption = new Option(option.text, option.id, false, false);
+                        jq_optgroup.append(newOption);
+                    });
+
+                    jq_select.append(jq_optgroup);
+                });
+            }
+            updateDisplayedItems($(multiselect.options).value);
+            $(multiselect.options).on(updateDisplayedItems);
+
+            function updateDisplayedSelection(new_sel) {
+                selection = new_sel;
+                $jqselect.val(new_sel).trigger('change');
+            }
+            updateDisplayedSelection($(multiselect.selection).value)
+            $(multiselect.selection).on(updateDisplayedSelection)
+
+            // Trigger update for Select2 to recognize new options
+            $jqselect.trigger('change');
+
+            // Don't reorder
+            // https://github.com/select2/select2/issues/3106#issuecomment-255492815
+            /*
+            $jqselect.on('select2:select', function(e) {
+                var element = $esc(this).find('[value="' + e.params.data.id + '"]');
+                $esc(this).append(element);
+                $esc(this).trigger('change');
+            });
+            */
+        }
+        """
+        Bonito.onload(session, select, js_onload)
+
+        return DOM.div(
+            jquery,
+            select2_css,
+            select2_js,
+            # styles,
+            DOM.h2("Select Programming Languages:"),
+            select,
+            DOM.br(),
+        )
+    end;
+    try
+        println("Close existing")
+        close(SERVER[])
+    catch
+    end
+    println("Start server")
+    SERVER[] = Bonito.Server(app, "0.0.0.0", 8080)
+    # Bonito.update_app!
+end
+
+multiselect.selection[] = [4,3]
+multiselect.selection[]
+
+close(server)
+server
+
+
+
+
+# Start the server
+server = Server(app, "0.0.0.0", 8080)
+wait(server)
+
+
+d = DOM.div("foo")
+jsrender()
+
+
+    # jquery = Asset("https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js")
+        # DOM.head(jquery),
+
+using Bonito
+app = App() do session
+    return DOM.html(
+        DOM.head(
+            DOM.meta(name="viewport", content="width=device-width, initial-scale=1.0"),
+            DOM.meta(charset="utf-8"),
+            Bonito.TailwindCSS,
+        ),
+        DOM.body(
+            DOM.div("Hello")
+        )
+    )
+end;
+server = Bonito.Server(app, "0.0.0.0", 8080)
+
+using Bonito
+app = App() do session
+    return DOM.html(
+        DOM.head(),
+        DOM.body(
+            DOM.div("Hello")
+        )
+    )
+end;
+server = Bonito.Server(app, "0.0.0.0", 8080)
+close(server)
