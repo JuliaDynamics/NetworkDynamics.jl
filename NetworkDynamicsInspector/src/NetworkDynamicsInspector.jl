@@ -223,6 +223,7 @@ function clear_obs!(nt::NamedTuple)
     end
 end
 clear_obs!(obs::Observable) = empty!(obs.listeners)
+clear_obs!(x) = x
 
 # TODO: move to grpahmakie
 GraphMakie._dimensionality(obs::Observable, g) = GraphMakie._dimensionality(obs[], g)
