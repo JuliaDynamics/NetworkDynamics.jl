@@ -103,11 +103,21 @@ graphplot!(ax, Graphs.smallgraph(:karate))
 
 using Bonito
 using NetworkDynamicsInspector
+using NetworkDynamicsInspector: OptionGroup
 
-struct OptionGroup{T}
-    label::String
-    options::Vector{T}
-end
+options = [
+    OptionGroup("Programming Languages", ["Julia", :Rust, "Java"]),
+    OptionGroup("Languages", ["French", "Spanish", "German"]),
+    :car,
+    1.0
+]
+jsoptions = NetworkDynamicsInspector.options_to_jsoptions(options)
+
+sel = NetworkDynamicsInspector.jsselection_to_selection(options, 1:8)
+NetworkDynamicsInspector.selection_to_jsselection(options, sel) == 1:8
+
+
+
 
 multiselect = (;
     options = Observable([
@@ -120,147 +130,32 @@ multiselect = (;
     placeholder="Select state(s) to plot"
 )
 
+using Bonito
+using NetworkDynamicsInspector
+using NetworkDynamicsInspector: OptionGroup, MultiSelect
+
+gui = (;
+    options = Observable{Vector{Union{Symbol,OptionGroup{Symbol}}}}([
+        OptionGroup("Programming Languages", [:Julia, :Rust, :Java]),
+        OptionGroup("Languages", [:French, :Spanish, :German]),
+    ]),
+    selection = Observable{Vector{Symbol}}(Symbol[:Rust]),
+)
+
 SERVER = Ref{Any}()
 let
     app = App(;) do session
-        NetworkDynamicsInspector.clear_obs!(multiselect)
-        jquery = Asset("https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js")
-        select2_css = Asset("https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css")
-        select2_js = Asset("https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js")
+        NetworkDynamicsInspector.clear_obs!(gui)
 
-        # Create a multi-select element
-        id = replace(string(gensym("selectbox")), "#"=>"")
-        select = DOM.select(
-            DOM.option();
-            multiple = true,
-            class = "js-example-basic-multiple",
-            style = "width: 300px",
-            name = "states[]",
-            id
-        )
+        ms = MultiSelect(gui.options, gui.selection; placeholder="pick language", T=Symbol)
+        @info "compare" ms.selection gui.selection ms.selection===gui.selection
 
-        # jqdocument = Bonito.JSString(raw"$(document)")
-        jqselect = Bonito.JSString(raw"$('#"* id * raw"')")
-
-        esc = Bonito.JSString(raw"$")
-
-        js_onload = js"""
-        (select) => {
-            $jqselect.select2({
-                placeholder: "select a state"
-            });
-            /*
-            $jqselect.bind('change', onSelectChange);
-            function onSelectChange(event){
-                const new_sel = $jqselect.select2('val').map(Number);
-                const old_sel = $(multiselect.selection).value;
-
-                // only push back to julia if different
-                if (!(new_sel.length === old_sel.length &&
-                        new_sel.every(function(val, i) { return val == old_sel[i]}))){
-                    console.log("new", new_sel)
-                    console.log("old", old_sel)
-                    $(multiselect.selection).notify(new_sel);
-                }
-                // console.log("Slected ", $jqselect.select2('val') );
-                // console.log("Observable ", $(multiselect.options).value);
-                //console.log("JS data ", options);
-            };
-            */
-
-            function array_equal(a1, a2){
-                return a1.length === a2.length &&
-                        a1.every(function(val, i) { return val == a2[i]})
-            }
-
-            function updateDisplayedOptions(new_options) {
-                const jq_select = $jqselect;
-
-                // Clear previous options
-                jq_select.empty();
-
-                // Loop through each group and create optgroups
-                new_options.forEach(group => {
-                    let jq_optgroup = $esc('<optgroup>', { label: group.label });
-
-                    group.options.forEach(option => {
-                        let newOption = new Option(option.text, option.id, false, false);
-                        jq_optgroup.append(newOption);
-                    });
-
-                    jq_select.append(jq_optgroup);
-                });
-            }
-            updateDisplayedOptions($(multiselect.options).value);
-            $(multiselect.options).on(updateDisplayedOptions);
-
-            function updateDisplayedSelection(new_sel_nr) {
-                const jq_select = $jqselect
-                const new_sel = new_sel_nr.map(String);
-                const old_sel = jq_select.data('preserved-order') || [];
-                if (!array_equal(new_sel, old_sel)){
-                    jq_select.data('preserved-order', new_sel);
-                    jq_select.val(new_sel).trigger('change');
-                    select2_renderSelections();
-                }
-            }
-            updateDisplayedSelection($(multiselect.selection).value)
-            $(multiselect.selection).on(updateDisplayedSelection)
-
-            // Trigger update for Select2 to recognize new options
-            $jqselect.trigger('change');
-
-            // Don't reorder
-            // https://github.com/select2/select2/issues/3106#issuecomment-333341636
-            function select2_renderSelections(){
-                jq_select2 = $jqselect
-                const def_order  = jq_select2.val();
-                const pre_order  = jq_select2.data('preserved-order');
-                const jq_tags    = jq_select2.next('.select2-container').find('li.select2-selection__choice');
-                const jq_tags_ul = jq_tags.first().parent()
-
-                const new_order = pre_order.map(val=>{
-                    return def_order.indexOf(val);
-                });
-
-                const sortedElements = new_order.map(i => jq_tags.eq(i));
-                jq_tags_ul.append(sortedElements);
-            }
-            function selectionHandler(e){
-                const jq_select2  = $esc(this);
-                const val         = e.params.data.id;
-                const order       = jq_select2.data('preserved-order');
-
-                switch (e.type){
-                    case 'select2:select':
-                        order[ order.length ] = val;
-                        break;
-                    case 'select2:unselect':
-                        let found_index = order.indexOf(val);
-                        if (found_index >= 0 )
-                            order.splice(found_index,1);
-                        break;
-                }
-                jq_select2.data('preserved-order', order); // store it for later
-                console.log("preserved-order", order);
-                select2_renderSelections();
-
-                // notify julia about changed selection
-                $(multiselect.selection).notify(order.map(Number));
-            }
-            $jqselect.on('select2:select select2:unselect', selectionHandler);
-        }
-        """
-        Bonito.onload(session, select, js_onload)
+        on(gui.selection) do sel
+            @show sel
+        end
 
         return DOM.div(
-            jquery,
-            select2_css,
-            select2_js,
-            # styles,
-            DOM.h2("Select Programming Languages:"),
-            select,
-            DOM.br(),
+            ms
         )
     end;
     try
@@ -272,8 +167,16 @@ let
     SERVER[] = Bonito.Server(app, "0.0.0.0", 8080)
     # Bonito.update_app!
 end
+push!(gui.options[], :Baz)
+gui.options[]
 
-multiselect.selection[] = [1]
+gui.selection[] = [:Rust, :Julia]
+gui.selection[] = [:Julia, :Rust]
+
+NetworkDynamicsInspector.selection_to_jsselection(gui.options[], gui.selection[])
+
+gui.selection[] = [:rust, :julia]
+
 multiselect.selection[] = [1,2]
 multiselect.selection[] = [2,1]
 

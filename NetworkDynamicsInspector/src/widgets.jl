@@ -275,11 +275,230 @@ struct OptionGroup{T}
     options::Vector{T}
 end
 
-struct MultiSelect
-    options::Observable{Vector{Any}}
-    value::Observable{Any}
-    option_to_string::Function
-    option_index::Observable{Int}
-    attributes::Dict{Symbol,Any}
-    style::Styles
+struct MultiSelect{T}
+    options::Observable{Vector{Union{T, OptionGroup{T}}}}
+    selection::Observable{Vector{T}}
+    placeholder::String
+    option_to_string::Any
+    function MultiSelect(_options, _selection=nothing; T=Any, option_to_string=repr, placeholder="")
+        options = _options isa Observable ? _options : Observable{Vector{T}}(_options)
+        selection = if isnothing(_selection)
+            Observable(T[])
+        elseif _selection isa Observable
+            @assert _selection isa Observable{Vector{T}}
+            _selection
+        else
+            Observable{Vector{T}}(_selection)
+        end
+        new{T}(options, selection, placeholder, option_to_string)
+    end
+end
+
+function Bonito.jsrender(session::Session, multiselect::MultiSelect)
+    jquery = Asset("https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js")
+    select2_css = Asset("https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css")
+    select2_js = Asset("https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js")
+
+    # generate internal observables of js representation of options and selection
+    jsoptions = @lift options_to_jsoptions($(multiselect.options); option_to_string=multiselect.option_to_string)
+    jsselection = Observable{Vector{Int}}(
+        selection_to_jsselection(multiselect.options[], multiselect.selection[]))
+    onany(multiselect.options, jsselection) do _opts, _jssel
+        sel = jsselection_to_selection(_opts, _jssel)
+        @info "got new selection $sel" multiselect.selection[]
+        if sel != multiselect.selection[]
+
+            multiselect.selection[] = sel
+        end
+    end
+    onany(multiselect.options, multiselect.selection) do _opts, _sel
+        jssel = selection_to_jsselection(_opts, _sel)
+        if jssel != jsselection[]
+            jsselection[] = jssel
+        end
+    end
+
+    # Create a multi-select element
+    id = replace(string(gensym("selectbox")), "#"=>"")
+    select = DOM.select(
+        DOM.option();
+        multiple = true,
+        class = "js-example-basic-multiple",
+        style = "width: 300px",
+        name = "states[]",
+        id
+    )
+
+    container = DOM.div(
+        jquery,
+        select2_css,
+        select2_js,
+        select
+    )
+
+    # jqdocument = Bonito.JSString(raw"$(document)")
+    jqselect = Bonito.JSString(raw"$('#"* id * raw"')")
+
+    esc = Bonito.JSString(raw"$")
+    js_onload = js"""
+    (select) => {
+        $jqselect.select2({
+            placeholder: "select a state"
+        });
+        /*
+        $jqselect.bind('change', onSelectChange);
+        function onSelectChange(event){
+            const new_sel = $jqselect.select2('val').map(Number);
+            const old_sel = $(jsselection).value;
+
+            // only push back to julia if different
+            if (!(new_sel.length === old_sel.length &&
+                    new_sel.every(function(val, i) { return val == old_sel[i]}))){
+                console.log("new", new_sel)
+                console.log("old", old_sel)
+                $(jsselection).notify(new_sel);
+            }
+            // console.log("Slected ", $jqselect.select2('val') );
+            // console.log("Observable ", $(jsoptions).value);
+            //console.log("JS data ", options);
+        };
+        */
+
+        function array_equal(a1, a2){
+            return a1.length === a2.length &&
+                    a1.every(function(val, i) { return val == a2[i]})
+        }
+
+        function updateDisplayedOptions(new_options) {
+            const jq_select = $jqselect;
+
+            // Clear previous options
+            jq_select.empty();
+
+            // Loop through each group and create optgroups
+            new_options.forEach(group => {
+                let jq_optgroup = $esc('<optgroup>', { label: group.label });
+
+                group.options.forEach(option => {
+                    let newOption = new Option(option.text, option.id, false, false);
+                    jq_optgroup.append(newOption);
+                });
+
+                jq_select.append(jq_optgroup);
+            });
+        }
+        updateDisplayedOptions($(jsoptions).value);
+        $(jsoptions).on(updateDisplayedOptions);
+
+        function updateDisplayedSelection(new_sel_nr) {
+            const jq_select = $jqselect
+            const new_sel = new_sel_nr.map(String);
+            const old_sel = jq_select.data('preserved-order') || [];
+            if (!array_equal(new_sel, old_sel)){
+                jq_select.data('preserved-order', new_sel);
+                jq_select.val(new_sel).trigger('change');
+                select2_renderSelections();
+            }
+        }
+        updateDisplayedSelection($(jsselection).value)
+        $(jsselection).on(updateDisplayedSelection)
+
+        // Trigger update for Select2 to recognize new options
+        $jqselect.trigger('change');
+
+        // Don't reorder
+        // https://github.com/select2/select2/issues/3106#issuecomment-333341636
+        function select2_renderSelections(){
+            jq_select2 = $jqselect
+            const def_order  = jq_select2.val();
+            const pre_order  = jq_select2.data('preserved-order');
+            const jq_tags    = jq_select2.next('.select2-container').find('li.select2-selection__choice');
+            const jq_tags_ul = jq_tags.first().parent()
+
+            const new_order = pre_order.map(val=>{
+                return def_order.indexOf(val);
+            });
+
+            const sortedElements = new_order.map(i => jq_tags.eq(i));
+            jq_tags_ul.append(sortedElements);
+        }
+        function selectionHandler(e){
+            const jq_select2  = $esc(this);
+            const val         = e.params.data.id;
+            const order       = jq_select2.data('preserved-order');
+
+            switch (e.type){
+                case 'select2:select':
+                    order[ order.length ] = val;
+                    break;
+                case 'select2:unselect':
+                    let found_index = order.indexOf(val);
+                    if (found_index >= 0 )
+                        order.splice(found_index,1);
+                    break;
+            }
+            jq_select2.data('preserved-order', order); // store it for later
+            console.log("preserved-order", order);
+            select2_renderSelections();
+
+            // notify julia about changed selection
+            $(jsselection).notify(order.map(Number));
+        }
+        $jqselect.on('select2:select select2:unselect', selectionHandler);
+    }
+    """
+    Bonito.onload(session, select, js_onload)
+
+    return jsrender(session, container)
+end
+
+function options_to_jsoptions(options; option_to_string=repr)
+    jsoptions = []
+    id = 1
+    for option in options
+        if option isa OptionGroup
+            jssuboptions = []
+            for suboption in option.options
+                push!(jssuboptions, (;text=option_to_string(suboption), id=id))
+                id += 1
+            end
+            push!(jsoptions, (;label=option.label, options=jssuboptions))
+        else
+            push!(jsoptions, (;text=option_to_string(option), id=id))
+            id += 1
+        end
+    end
+    jsoptions
+end
+
+jsselection_to_selection(options, jsselection) = _jsselection_to_selection.(Ref(options), jsselection)
+function _jsselection_to_selection(options, jsselection::Int)
+    id = 1
+    for option in options
+        if option isa OptionGroup
+            for suboption in option.options
+                id == jsselection && return suboption
+                id += 1
+            end
+        else
+            id == jsselection && return option
+            id += 1
+        end
+    end
+end
+
+selection_to_jsselection(options, selection) = _selection_to_jsselection.(Ref(options), selection)
+function _selection_to_jsselection(options, selection)
+    id = 1
+    for option in options
+        if option isa OptionGroup
+            for suboption in option.options
+                suboption == selection && return id
+                id += 1
+            end
+        else
+            option == selection && return id
+            id += 1
+        end
+    end
 end
