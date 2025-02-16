@@ -303,16 +303,26 @@ function Bonito.jsrender(session::Session, multiselect::MultiSelect)
     jsoptions = @lift options_to_jsoptions($(multiselect.options); option_to_string=multiselect.option_to_string)
     jsselection = Observable{Vector{Int}}(
         selection_to_jsselection(multiselect.options[], multiselect.selection[]))
-    onany(multiselect.options, jsselection) do _opts, _jssel
-        sel = jsselection_to_selection(_opts, _jssel)
-        @info "got new selection $sel" multiselect.selection[]
-        if sel != multiselect.selection[]
 
+    onany(jsselection) do _jssel
+        sel = jsselection_to_selection(multiselect.options[], _jssel)
+        @info "New jsselection triggers new selection:" _jssel sel
+        if sel != multiselect.selection[]
             multiselect.selection[] = sel
         end
     end
+
     onany(multiselect.options, multiselect.selection) do _opts, _sel
         jssel = selection_to_jsselection(_opts, _sel)
+        @info "New options or selection triggers new jsselection:" _opts _sel jssel
+
+        # filter out invalid selections
+        if any(isnothing, jssel)
+            invalid = findall(isnothing, jssel)
+            deleteat!(_sel, invalid)
+            filter!(!isnothing, jssel)
+        end
+
         if jssel != jsselection[]
             jsselection[] = jssel
         end
@@ -345,24 +355,6 @@ function Bonito.jsrender(session::Session, multiselect::MultiSelect)
         $jqselect.select2({
             placeholder: "select a state"
         });
-        /*
-        $jqselect.bind('change', onSelectChange);
-        function onSelectChange(event){
-            const new_sel = $jqselect.select2('val').map(Number);
-            const old_sel = $(jsselection).value;
-
-            // only push back to julia if different
-            if (!(new_sel.length === old_sel.length &&
-                    new_sel.every(function(val, i) { return val == old_sel[i]}))){
-                console.log("new", new_sel)
-                console.log("old", old_sel)
-                $(jsselection).notify(new_sel);
-            }
-            // console.log("Slected ", $jqselect.select2('val') );
-            // console.log("Observable ", $(jsoptions).value);
-            //console.log("JS data ", options);
-        };
-        */
 
         function array_equal(a1, a2){
             return a1.length === a2.length &&
@@ -376,15 +368,20 @@ function Bonito.jsrender(session::Session, multiselect::MultiSelect)
             jq_select.empty();
 
             // Loop through each group and create optgroups
-            new_options.forEach(group => {
-                let jq_optgroup = $esc('<optgroup>', { label: group.label });
+            new_options.forEach(opt_or_group => {
+                if (opt_or_group.options === undefined) {
+                    let newOption = new Option(opt_or_group.text, opt_or_group.id, false, false);
+                    jq_select.append(newOption);
+                } else {
+                    let jq_optgroup = $esc('<optgroup>', { label: opt_or_group.label });
 
-                group.options.forEach(option => {
-                    let newOption = new Option(option.text, option.id, false, false);
-                    jq_optgroup.append(newOption);
-                });
+                    opt_or_group.options.forEach(option => {
+                        let newOption = new Option(option.text, option.id, false, false);
+                        jq_optgroup.append(newOption);
+                    });
 
-                jq_select.append(jq_optgroup);
+                    jq_select.append(jq_optgroup);
+                }
             });
         }
         updateDisplayedOptions($(jsoptions).value);
@@ -438,7 +435,6 @@ function Bonito.jsrender(session::Session, multiselect::MultiSelect)
                     break;
             }
             jq_select2.data('preserved-order', order); // store it for later
-            console.log("preserved-order", order);
             select2_renderSelections();
 
             // notify julia about changed selection
