@@ -16,6 +16,22 @@ using GraphMakie.NetworkLayout
 export ContinuousSlider, RoundedLabel
 include("widgets.jl")
 
+export wrap_assets
+function wrap_assets(appdom)
+    jquery = Asset("https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js")
+    select2_css = Asset("https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css")
+    select2_js = Asset("https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js")
+    css = Asset(joinpath(pkgdir(NetworkDynamicsInspector), "assets", "app.css"))
+
+    DOM.body(
+        jquery,
+        select2_css,
+        select2_js,
+        css,
+        appdom;
+    )
+end
+
 function graphplot_card(app; kwargs...)
     nw = map!(extract_nw, Observable{Network}(), app.sol)
     NV = nv(nw[])
@@ -227,5 +243,32 @@ clear_obs!(x) = x
 
 # TODO: move to grpahmakie
 GraphMakie._dimensionality(obs::Observable, g) = GraphMakie._dimensionality(obs[], g)
+
+
+SERVER = Ref{Any}(nothing)
+
+export serve_app
+function serve_app(newapp)
+    if !isnothing(SERVER[]) && Bonito.HTTPServer.isrunning(SERVER[])
+        @info "Stop running server..."
+        close(SERVER[])
+    end
+    SERVER[] = Bonito.Server(newapp, "0.0.0.0", 8080)
+end
+
+# APP = Ref{Any}(nothing)
+# function serve_app(newapp)
+#     if isnothing(SERVER[]) || !Bonito.HTTPServer.isrunning(SERVER[])
+#         @info "Start new SErver"
+#         SERVER[] = Bonito.Server(newapp, "0.0.0.0", 8080)
+#         APP[] = newapp
+#     else
+#         oldapp = APP[]
+#         APP[] = newapp
+#         @info "Update App"
+#         Bonito.update_app!(oldapp, newapp)
+#     end
+#     nothing
+# end
 
 end # module NetworkDynamicsInspector
