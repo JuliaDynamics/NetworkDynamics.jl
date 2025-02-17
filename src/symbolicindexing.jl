@@ -82,8 +82,8 @@ struct EPIndex{C,S} <: SymbolicParameterIndex{C,S}
     compidx::C
     subidx::S
 end
-const SymbolicEdgeIndex = Union{EIndex, EPIndex}
-const SymbolicVertexIndex = Union{VIndex, VPIndex}
+const SymbolicEdgeIndex{C,S} = Union{EIndex{C,S}, EPIndex{C,S}}
+const SymbolicVertexIndex{C,S} = Union{VIndex{C,S}, VPIndex{C,S}}
 
 #=
 SciMLBase gets the index provider from ODEFunction.sys which defaults to f.sys so we provide it...
@@ -128,8 +128,8 @@ getcompoutrange(nw::Network, sni) = getcompoutrange(nw.im, sni)
 getcompoutrange(im::IndexManager, sni::VIndex{<:Union{Symbol,Int}}) = im.v_out[resolvecompidx(im, sni)]
 getcompoutrange(im::IndexManager, sni::EIndex{<:Union{Symbol,Int}}) = flatrange(im.e_out[resolvecompidx(im, sni)])
 
-getcompprange(nw::Network, sni::VPIndex{<:Union{Symbol,Int}}) = nw.im.v_para[resolvecompidx(nw, sni)]
-getcompprange(nw::Network, sni::EPIndex{<:Union{Symbol,Int}}) = nw.im.e_para[resolvecompidx(nw, sni)]
+getcompprange(nw::Network, sni::SymbolicVertexIndex{<:Union{Symbol,Int}}) = nw.im.v_para[resolvecompidx(nw, sni)]
+getcompprange(nw::Network, sni::SymbolicEdgeIndex{<:Union{Symbol,Int}}) = nw.im.e_para[resolvecompidx(nw, sni)]
 
 subsym_has_idx(sym::Symbol, syms) = sym ∈ syms
 subsym_has_idx(idx::Int, syms) = 1 ≤ idx ≤ length(syms)
@@ -273,7 +273,7 @@ function SII.is_parameter(nw::Network, sni)
 end
 _is_parameter(nw::Network, sni) = false
 function _is_parameter(nw::Network,
-                          sni::SymbolicParameterIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}})
+                          sni::SymbolicIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}})
     cf = getcomp(nw, sni)
     return subsym_has_idx(sni.subidx, psym(cf))
 end
@@ -288,14 +288,14 @@ function SII.parameter_index(nw::Network, sni)
     end
 end
 function _parameter_index(nw::Network,
-                             sni::SymbolicParameterIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}})
+                             sni::SymbolicIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}})
     cf = getcomp(nw, sni)
     range = getcompprange(nw, sni)
     range[subsym_to_idx(sni.subidx, psym(cf))]
 end
 
 function SII.parameter_symbols(nw::Network)
-    syms = Vector{SymbolicParameterIndex{Int,Symbol}}(undef, pdim(nw))
+    syms = Vector{SymbolicIndex{Int,Symbol}}(undef, pdim(nw))
     for (ci, cf) in pairs(nw.im.vertexm)
         syms[nw.im.v_para[ci]] .= VPIndex.(ci, psym(cf))
     end
