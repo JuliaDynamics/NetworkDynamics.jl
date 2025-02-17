@@ -52,9 +52,9 @@ sol = let
     s0 = NWState(nw)
     prob = ODEProblem(nw, uflat(s0), (0,6), copy(pflat(s0)), callback=nwcb)
     sol = solve(prob, Tsit5());
-end
+end;
 
-ENV["JULIA_DEBUG"] = NetworkDynamicsInspector
+# ENV["JULIA_DEBUG"] = NetworkDynamicsInspector
 # ENV["JULIA_DEBUG"] = ""
 
 app = (;
