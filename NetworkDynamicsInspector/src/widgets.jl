@@ -296,9 +296,9 @@ struct MultiSelect{T}
 end
 
 function Bonito.jsrender(session::Session, multiselect::MultiSelect)
-    jquery = Asset("https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js")
-    select2_css = Asset("https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css")
-    select2_js = Asset("https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js")
+    # jquery = Asset("https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js")
+    # select2_css = Asset("https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css")
+    # select2_js = Asset("https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js")
 
     # generate internal observables of js representation of options and selection
     jsoptions = @lift options_to_jsoptions($(multiselect.options); option_to_string=multiselect.option_to_string)
@@ -307,7 +307,7 @@ function Bonito.jsrender(session::Session, multiselect::MultiSelect)
 
     onany(jsselection) do _jssel
         sel = jsselection_to_selection(multiselect.options[], _jssel)
-        @info "New jsselection triggers new selection:" _jssel sel
+        # @info "New jsselection triggers new selection:" _jssel sel
         if sel != multiselect.selection[]
             multiselect.selection[] = sel
         end
@@ -351,9 +351,9 @@ function Bonito.jsrender(session::Session, multiselect::MultiSelect)
     )
 
     container = DOM.div(
-        jquery,
-        select2_css,
-        select2_js,
+        # jquery,
+        # select2_css,
+        # select2_js,
         select
     )
 

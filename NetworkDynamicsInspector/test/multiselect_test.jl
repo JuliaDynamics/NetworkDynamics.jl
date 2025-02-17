@@ -13,7 +13,6 @@ gui = (;
     selection_single = Observable{Vector{Symbol}}(Symbol[:Julia])
 )
 
-SERVER = Ref{Any}()
 let
     app = App(;) do session
         NetworkDynamicsInspector.clear_obs!(gui)
@@ -21,17 +20,18 @@ let
         ms1 = MultiSelect(gui.options, gui.selection; placeholder="pick language", T=Symbol)
         ms2 = MultiSelect(gui.options, gui.selection_single; placeholder="pick language", multi=false, T=Symbol)
 
-        return Grid(ms1, ms2)
+        return wrap_assets(Grid(ms1, ms2; columns="100%", width="500px"))
     end;
-    try
-        println("Close existing")
-        close(SERVER[])
-    catch
-    end
-    println("Start server")
-    SERVER[] = Bonito.Server(app, "0.0.0.0", 8080)
-    # Bonito.update_app!
+    serve_app(app)
 end
+
+foo = Ref{Any}()
+isdefined(foo,1)
+foo[] = 2
+
+
+(SERVER[])
+s = SERVER[]
 
 @test gui.selection[] == [:Rust, :French]
 gui.selection[] = [:Rust, :French, :Julia, :foo]
@@ -51,12 +51,3 @@ gui.options[] = [
     ]
 @test gui.selection[] == [:Rust]
 @test gui.selection_single[] == []
-
-# TODO
-# - css file for app
-
-
-
-#
-
-gui.selection[] = [:Julia, :Rust]

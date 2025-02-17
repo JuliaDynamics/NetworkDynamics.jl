@@ -1,0 +1,16 @@
+body {
+    font-family: sans-serif;
+    font-size: 12px;
+}
+
+.select2-container .select2-selection .select2-selection__rendered,
+.select2-container .select2-selection--single .select2-selection__rendered,
+.select2-container .select2-results__option{
+    font-family: monospace;
+    //font-size: 20px;
+}
+.select2-results__group {
+    font-family: sans-serif;
+    //font-size: 12px;
+    //color: blue;
+}
