@@ -1,5 +1,5 @@
-using NetworkDynamicsInspector
 using NetworkDynamics
+using NetworkDynamicsInspector
 using Bonito
 using WGLMakie
 using WGLMakie.Makie.ColorSchemes
@@ -54,6 +54,9 @@ sol = let
     sol = solve(prob, Tsit5());
 end
 
+# ENV["JULIA_DEBUG"] = NetworkDynamicsInspector
+# ENV["JULIA_DEBUG"] = ""
+
 app = (;
     sol = Observable{Any}(sol),
     t = Observable{Float64}(0.0),
@@ -62,8 +65,8 @@ app = (;
     sel_nodes = Observable{Vector{Int}}(Int[]),
     sel_edges = Observable{Vector{Int}}(Int[]),
     graphplot = (;
-        nstate = Observable{Union{Symbol,Nothing}}(:θ),
-        estate = Observable{Union{Symbol,Nothing}}(:P),
+        nstate = Observable{Vector{Symbol}}([:θ]),
+        estate = Observable{Vector{Symbol}}([:P]),
         nstate_rel = Observable{Bool}(false),
         estate_rel = Observable{Bool}(false),
         ncolorrange = Observable{Tuple{Float32,Float32}}((-1.0, 1.0)),
@@ -73,16 +76,17 @@ app = (;
     )
 );
 
-gpfig = Ref{Any}()
-App() do session
-    WGLMakie.activate!(resize_to=:parent)
-    NetworkDynamicsInspector.clear_obs!(app)
-    gpfig[] = fig
-    Grid(
-        NetworkDynamicsInspector.graphplot_card(app; height="400px"),
-        NetworkDynamicsInspector.nodestate_control_card(app),
-        NetworkDynamicsInspector.timeslider_card(app),
-        columns="100%",
-        width="500px"
-    )
+let
+   _app = App() do session
+        WGLMakie.activate!(resize_to=:parent)
+        NetworkDynamicsInspector.clear_obs!(app)
+        Grid(
+            NetworkDynamicsInspector.graphplot_card(app; height="400px"),
+            NetworkDynamicsInspector.nodestate_control_card(app),
+            NetworkDynamicsInspector.timeslider_card(app),
+            columns="100%",
+            width="500px"
+        ) |> wrap_assets
+    end;
+    serve_app(_app)
 end

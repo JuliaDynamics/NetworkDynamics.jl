@@ -16,6 +16,12 @@ using GraphMakie.NetworkLayout
 export ContinuousSlider, RoundedLabel
 include("widgets.jl")
 
+function apptheme()
+    Theme(
+        fontsize=10,
+    )
+end
+
 export wrap_assets
 function wrap_assets(appdom)
     jquery = Asset("https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js")
@@ -38,6 +44,7 @@ function graphplot_card(app; kwargs...)
     NE = ne(nw[])
 
     node_marker = map(nw) do _nw
+        @debug "GP: app.ng => node_marker"
         if any(m->has_metadata(m, :marker), _nw.im.vertexm)
             [has_metadata(m, :marker) ? get_metadata(m, :marker) : :circle for m in _nw.im.vertexm]
         else
@@ -52,20 +59,35 @@ function graphplot_card(app; kwargs...)
 
     node_state = Observable(Vector{Float32}(undef, NV))
     onany(app.sol, app.t, app.graphplot.nstate, app.graphplot.nstate_rel) do _sol, _t, _state, _rel
-        idxs = VIndex(1:NV, _state)
-        _gracefully_extract_states!(node_state[], _sol, _t, idxs, _rel)
+        @debug "GP: app.sol, app.t, app.gp.nstate, app.gp.nstate_rel => node_state"
+        if length(_state) == 0
+            fill!(node_state[], NaN)
+        elseif length(_state) == 1
+            idxs = VIndex.(1:NV, only(_state))
+            _gracefully_extract_states!(node_state[], _sol, _t, idxs, _rel)
+        else
+            error("Received more than one node state to plot...")
+        end
         notify(node_state)
     end;
 
     edge_state = Observable(Vector{Float32}(undef, NE))
     onany(app.sol, app.t, app.graphplot.estate, app.graphplot.nstate_rel) do _sol, _t, _state, _rel
-        idxs = EIndex(1:NE, _state)
-        _gracefully_extract_states!(edge_state[], _sol, _t, idxs, _rel)
+        @debug "GP: app.sol, app.t, app.gp.estate, app.gp.estate_rel => edge_state"
+        if length(_state) == 0
+            fill!(edge_state[], NaN)
+        elseif length(_state) == 1
+            idxs = EIndex.(1:NE, only(_state))
+            _gracefully_extract_states!(edge_state[], _sol, _t, idxs, _rel)
+        else
+            error("Received more than one edge state to plot...")
+        end
         notify(edge_state)
     end;
 
     node_color = Observable(Vector{RGB{Float64}}(undef, NV))
     onany(node_state, app.graphplot.ncolorrange, app.graphplot.ncolorscheme) do statevec, range, scheme
+        @debug "GP: node_state, app.gp.ncolorrange, app.gp.ncolorrange => node_color"
         for i in 1:NV
             node_color[][i] = isnan(statevec[i]) ? RGB(0,0,0) : get(scheme, statevec[i], range)
         end
@@ -74,6 +96,7 @@ function graphplot_card(app; kwargs...)
 
     edge_color = Observable(Vector{RGB{Float64}}(undef, NE))
     onany(edge_state, app.graphplot.ecolorrange, app.graphplot.ecolorscheme) do statevec, range, scheme
+        @debug "GP: edge_state, app.gp.ecolorrange, app.gp.ecolorrange => edge_color"
         for i in 1:NV
             edge_color[][i] = isnan(statevec[i]) ? RGB(0,0,0) : get(scheme, statevec[i], range)
         end
@@ -86,6 +109,7 @@ function graphplot_card(app; kwargs...)
     BIG = 50
     node_size = Observable(fill(SMALL, NV))
     onany(app.sel_nodes; update=true) do selected
+        @debug "GP: app.sel_nodes => node_size"
         fill!(node_size[], SMALL)
         for sel in selected
             node_size[][sel] = BIG
@@ -97,6 +121,7 @@ function graphplot_card(app; kwargs...)
     THICK = 6
     edge_width = Observable(fill(THIN, NE))
     onany(app.sel_edges; update=true) do selected
+        @debug "GP: app.sel_edges => edge_width"
         fill!(edge_width[], THIN)
         for sel in selected
             edge_width[][sel] = THICK
@@ -107,6 +132,7 @@ function graphplot_card(app; kwargs...)
     g = @lift $(nw).im.g
 
     layout = map(nw) do _nw
+        @debug "GP: app.nw => layout"
         pin = Dict{Int,Point2f}()
         for i in 1:NV
             vm = _nw[VIndex(i)]
@@ -117,15 +143,19 @@ function graphplot_card(app; kwargs...)
         Stress(; pin)
     end
 
-    fig = Figure(; figure_padding=0)
-    ax = Axis(fig[1,1])
-    graphplot!(ax, g; layout, node_marker, node_color, node_size, edge_color, edge_width,
-        node_attr=(;colorrange=app.graphplot.ncolorrange, colormap=app.graphplot.ncolorscheme),
-        edge_attr=(;colorrange=app.graphplot.ncolorrange, colormap=app.graphplot.ncolorscheme))
+    fig, ax = with_theme(apptheme()) do
+        fig = Figure(; figure_padding=0)
+        ax = Axis(fig[1,1])
+        graphplot!(ax, g; layout, node_marker, node_color, node_size, edge_color, edge_width,
+            node_attr=(;colorrange=app.graphplot.ncolorrange, colormap=app.graphplot.ncolorscheme),
+            edge_attr=(;colorrange=app.graphplot.ncolorrange, colormap=app.graphplot.ncolorscheme))
 
-    hidespines!(ax)
-    hidedecorations!(ax)
+        hidespines!(ax)
+        hidedecorations!(ax)
+        fig, ax
+    end
     on(ax.scene.viewport) do lims
+        @debug "GP: viewport => adapt xy scaling"
         adapt_xy_scaling!(ax)
     end
     Card(fig; kwargs...)
@@ -167,6 +197,7 @@ function timeslider_card(app)
     onany(app.tmin, app.tmax; update=true) do tmin, tmax
         _t = clamp(app.t[], tmin, tmax)
         if _t != app.t[]
+            @debug "app.tmin, app.tmax => clamp app.t[]"
             app.t[] = _t
         end
     end
@@ -177,7 +208,7 @@ function timeslider_card(app)
             RoundedLabel(tw_slider.value_l; style=Styles("text-align"=>"right")),
             tw_slider,
             RoundedLabel(tw_slider.value_r; style=Styles("text-align"=>"left"));
-            columns="10% 80% 10%",
+            columns="70px 1fr 70px",
             justify_content="begin",
             align_items="center",
         );
@@ -185,33 +216,81 @@ function timeslider_card(app)
 end
 
 function nodestate_control_card(app)
-    NV = nv(extract_nw(app.sol[]))
-    maxrange = Observable{Tuple{Float32,Float32}}()
-    onany(app.sol, app.graphplot.nstate, app.graphplot.nstate_rel; update=true) do _sol, _state, _rel
-        idxs = VIndex(1:NV, _state)
-        r = _maxrange(_sol, idxs, _rel)
-        if r[1] < 0 && r[2] > 0
-            r = (-maximum(abs.(r)), maximum(abs.(r)))
-        end
-        maxrange[] = r
-    end;
-    clow = Observable{Float32}(maxrange[][1])
-    chi = Observable{Float32}(maxrange[][2])
+    ####
+    #### Node State selection
+    ####
+    options = Observable{Vector{OptionGroup{Symbol}}}()
+    on(app.sol; update=true) do _sol
+        _nw = extract_nw(_sol)
+        idxs = VIndex.(1:nv(_nw))
+        options[] = state_options(_nw, idxs)
+    end
+    multisel = MultiSelect(options, app.graphplot.nstate; placeholder="Select state for coloring", multi=false, T=Symbol)
+    selector = Grid(
+        DOM.span("Node state:"),
+        multisel;
+        columns = "70px 1fr",
+        align_items = "center"
+    )
 
-    onany(clow, chi; update=true) do _clow, _chi
-        app.graphplot.ncolorrange[] = (_clow, _chi)
+    ####
+    #### Color Bar & Color Bar Scaling
+    ####
+    thumb_pos_cache = Dict{UInt64, Tuple{Float32,Float32}}()
+    function thumb_pos_key()
+        hash((app.sol[], app.graphplot.nstate[], app.graphplot.nstate_rel[]))
     end
 
-    fig = Figure(; figure_padding=0)
-    Colorbar(fig[1,1];
-        colormap=app.graphplot.ncolorscheme,
-        colorrange=app.graphplot.ncolorrange,
-        vertical=false, flipaxis=true)
+    maxrange = Observable{Tuple{Float32,Float32}}()
+    thumb_l = Observable{Float32}()
+    thumb_r = Observable{Float32}()
 
-    cslider = ContinuousSlider(maxrange, clow, chi)
+    onany(app.sol, app.graphplot.nstate, app.graphplot.nstate_rel; update=true) do _sol, _state, _rel
+        @debug "GP: app.sol, app.gp.nstate, app.gp.nstate_rel => ncolor maxrange"
+        if length(_state) == 0
+            maxrange[] = (-1.0, 1.0)
+        elseif length(_state) == 1
+            idxs = VIndex.(1:nv(extract_nw(_sol)), only(_state))
+            r = Float32.(_maxrange(_sol, idxs, _rel))
+            if r[1] < 0 && r[2] > 0
+                r = (-maximum(abs.(r)), maximum(abs.(r)))
+            end
+
+            # we nee some range otherwise the colorbar fails
+            if r[1] == r[2]
+                r = (prevfloat(r[1]), nextfloat(r[2]))
+            end
+
+            maxrange[] = r
+            # adjust thumb position
+            new_thumbs = get(thumb_pos_cache, thumb_pos_key(), r)
+            thumb_l[], thumb_r[] = new_thumbs
+        else
+            error("More than one state for maxrange calculation...")
+        end
+    end;
+
+    onany(thumb_l, thumb_r; update=true) do _thumb_l, _thumb_r
+        @debug "GP: node color slider => app.gp.ncolorrange"
+        # store the thumb position
+        thumb_pos_cache[thumb_pos_key()] = (_thumb_l, _thumb_r)
+        app.graphplot.ncolorrange[] = (_thumb_l, _thumb_r)
+    end
+
+    fig = with_theme(apptheme()) do
+        fig = Figure(; figure_padding=10)
+        Colorbar(fig[1,1];
+            colormap=app.graphplot.ncolorscheme,
+            colorrange=app.graphplot.ncolorrange,
+            vertical=false, flipaxis=true)
+        fig
+    end
+
+    cslider = ContinuousSlider(maxrange, thumb_l, thumb_r)
 
     Card(
         Grid(
+            selector,
             DOM.div(fig; style=Styles("height" => "40px")),
             # RoundedLabel(@lift $maxrange[1]; style=Styles("text-align"=>"right")),
             cslider,
@@ -221,8 +300,8 @@ function nodestate_control_card(app)
     )
 end
 function _maxrange(sol, idxs, rel)
-    isvalid(s) = SII.is_variable(sol, s) || SII.is_parameter(sol, s) || SII.is_observed(sol, s)
-    mask = isvalid.(idxs)
+    _isvalid(s) = SII.is_variable(sol, s) || SII.is_parameter(sol, s) || SII.is_observed(sol, s)
+    mask = _isvalid.(idxs)
 
     u_for_t = sol(sol.t; idxs=idxs[mask]).u
     if rel
@@ -231,6 +310,34 @@ function _maxrange(sol, idxs, rel)
         end
     end
     extrema(Iterators.flatten(u_for_t))
+end
+
+function state_options(nw::Network, sidxs)
+    groups = [
+        ("Outputs & States", cf -> unique!(vcat(NetworkDynamics.outsym_flat(cf), sym(cf)))),
+        ("Inputs", NetworkDynamics.insym_all),
+        ("Observables", obssym),
+        ("Parameters", psym),
+    ]
+    options = OptionGroup{Symbol}[]
+    exclusive_syms = Symbol[]
+    for (label, getter) in groups
+        common_syms = mapreduce(∩, sidxs) do sidx
+            cf = nw[sidx]
+            getter(cf)
+        end
+        push!(options, OptionGroup{Symbol}(label, common_syms))
+
+        all_syms = mapreduce(∪, sidxs) do sidx
+            cf = nw[sidx]
+            getter(cf)
+        end
+        append!(exclusive_syms, setdiff(all_syms, common_syms))
+    end
+    if !isempty(exclusive_syms)
+        push!(options, OptionGroup{Symbol}("Partially available syms", exclusive_syms))
+    end
+    options
 end
 
 function clear_obs!(nt::NamedTuple)
@@ -270,5 +377,14 @@ end
 #     end
 #     nothing
 # end
+
+NetworkDynamics.extract_nw(o::Observable) = extract_nw(o.val)
+function NetworkDynamics.extract_nw(o::NamedTuple)
+    if haskey(o, :sol)
+        return extract_nw(o.sol)
+    else
+        error("No sol in NamedTuple")
+    end
+end
 
 end # module NetworkDynamicsInspector

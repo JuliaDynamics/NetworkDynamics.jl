@@ -73,6 +73,23 @@ end
 function ContinuousSlider(range, value_l::Observable{T}, value_r::Observable{T}) where {T}
     style, track_style, track_active_style, thumb_style = get_slider_style()
 
+    #=
+    on(range; update=true) do _r
+        changed = false
+        l_c = clamp(value_l[], _r[1], _r[2])
+        if l_c != value_l
+            changed = true
+            value_l[] = l_c
+        end
+        r_c = clamp(value_r[], _r[1], _r[2])
+        if r_c != value_r
+            changed = true
+            value_r[] = r_c
+        end
+        changed && @debug "Slider: range changed => clamped thumb values"
+    end
+    =#
+
     slider = ContinuousSlider(
         range,
         value_l,
