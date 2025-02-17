@@ -279,8 +279,9 @@ struct MultiSelect{T}
     options::Observable{Vector{Union{T, OptionGroup{T}}}}
     selection::Observable{Vector{T}}
     placeholder::String
+    multi::Bool
     option_to_string::Any
-    function MultiSelect(_options, _selection=nothing; T=Any, option_to_string=repr, placeholder="")
+    function MultiSelect(_options, _selection=nothing; T=Any, placeholder="", multi=true, option_to_string=repr)
         options = _options isa Observable ? _options : Observable{Vector{T}}(_options)
         selection = if isnothing(_selection)
             Observable(T[])
@@ -290,7 +291,7 @@ struct MultiSelect{T}
         else
             Observable{Vector{T}}(_selection)
         end
-        new{T}(options, selection, placeholder, option_to_string)
+        new{T}(options, selection, placeholder, multi, option_to_string)
     end
 end
 
@@ -313,8 +314,11 @@ function Bonito.jsrender(session::Session, multiselect::MultiSelect)
     end
 
     onany(multiselect.options, multiselect.selection) do _opts, _sel
+        if !multiselect.multi && length(_sel) > 1
+            deleteat!(_sel, firstindex(_sel)+1:lastindex(_sel))
+        end
         jssel = selection_to_jsselection(_opts, _sel)
-        @info "New options or selection triggers new jsselection:" _opts _sel jssel
+        # @info "New options or selection triggers new jsselection:" _opts _sel jssel
 
         # filter out invalid selections
         if any(isnothing, jssel)
@@ -330,12 +334,19 @@ function Bonito.jsrender(session::Session, multiselect::MultiSelect)
 
     # Create a multi-select element
     id = replace(string(gensym("selectbox")), "#"=>"")
+
+    style = Styles(
+        "width" => "100%",
+        # "font-family" => "monospace",
+    )
+
+    class = multiselect.multi ? "bonito-select2-multi" : "bonito-select2-single"
     select = DOM.select(
         DOM.option();
-        multiple = true,
-        class = "js-example-basic-multiple",
-        style = "width: 300px",
-        name = "states[]",
+        multiple = multiselect.multi,
+        class,
+        # name = "states[]",
+        style,
         id
     )
 
@@ -353,7 +364,7 @@ function Bonito.jsrender(session::Session, multiselect::MultiSelect)
     js_onload = js"""
     (select) => {
         $jqselect.select2({
-            placeholder: "select a state"
+            placeholder: $(multiselect.placeholder)
         });
 
         function array_equal(a1, a2){
@@ -408,7 +419,7 @@ function Bonito.jsrender(session::Session, multiselect::MultiSelect)
         function select2_renderSelections(){
             jq_select2 = $jqselect
             const def_order  = jq_select2.val();
-            const pre_order  = jq_select2.data('preserved-order');
+            const pre_order  = jq_select2.data('preserved-order') || [];
             const jq_tags    = jq_select2.next('.select2-container').find('li.select2-selection__choice');
             const jq_tags_ul = jq_tags.first().parent()
 
@@ -422,7 +433,13 @@ function Bonito.jsrender(session::Session, multiselect::MultiSelect)
         function selectionHandler(e){
             const jq_select2  = $esc(this);
             const val         = e.params.data.id;
-            const order       = jq_select2.data('preserved-order');
+
+            let order;
+            if ($(multiselect.multi)){
+                order = jq_select2.data('preserved-order') || [];
+            } else {
+                order = [];
+            }
 
             switch (e.type){
                 case 'select2:select':
@@ -434,6 +451,7 @@ function Bonito.jsrender(session::Session, multiselect::MultiSelect)
                         order.splice(found_index,1);
                     break;
             }
+
             jq_select2.data('preserved-order', order); // store it for later
             select2_renderSelections();
 
