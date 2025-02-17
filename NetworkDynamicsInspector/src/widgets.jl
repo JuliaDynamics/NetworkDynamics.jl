@@ -282,6 +282,22 @@ function Bonito.jsrender(session::Session, slider::ContinuousSlider)
                 }
             }, { signal: controller.signal });
         }
+
+        // update positions on resize
+        const observer = new ResizeObserver(entries => {
+            thumbpos_r = isNaN(thumbval_r) ? 0 : val_to_pos(thumbval_r);
+            thumbpos_l = isNaN(thumbval_l) ? 0 : val_to_pos(thumbval_l);
+
+            const thumb_width = thumb_r.offsetWidth / 2;
+            const left_r = (thumbpos_r - thumb_width) + 'px';
+            const left_l = (thumbpos_l - thumb_width) + 'px';
+
+            thumb_l.style.left = left_l;
+            thumb_r.style.left = left_r;
+            track_active.style.left = thumbpos_l + 'px';  // Update the active track
+            track_active.style.width = (thumbpos_r-thumbpos_l) + 'px';  // Update the active track
+        });
+        observer.observe(container);
     }
     """
     onload(session, container, jscode)
@@ -383,14 +399,17 @@ function Bonito.jsrender(session::Session, multiselect::MultiSelect)
         select
     )
 
-    # jqdocument = Bonito.JSString(raw"$(document)")
+    jqdocument = Bonito.JSString(raw"$(document)")
     jqselect = Bonito.JSString(raw"$('#"* id * raw"')")
 
     esc = Bonito.JSString(raw"$")
     js_onload = js"""
     (select) => {
-        $jqselect.select2({
-            placeholder: $(multiselect.placeholder)
+        $(jqdocument).ready(function(){
+            $jqselect.select2({
+                width: '100%',
+                placeholder: $(multiselect.placeholder)
+            });
         });
 
         function array_equal(a1, a2){

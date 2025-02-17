@@ -158,7 +158,7 @@ function graphplot_card(app; kwargs...)
         @debug "GP: viewport => adapt xy scaling"
         adapt_xy_scaling!(ax)
     end
-    Card(fig; kwargs...)
+    Card(fig; class="graphplot-card", kwargs...)
 end
 function _gracefully_extract_states!(vec, sol, t, idxs, rel)
     isvalid(s) = SII.is_variable(sol, s) || SII.is_parameter(sol, s) || SII.is_observed(sol, s)
@@ -172,6 +172,7 @@ function _gracefully_extract_states!(vec, sol, t, idxs, rel)
     end
 end
 function adapt_xy_scaling!(ax)
+    autolimits!(ax)
     vp = ax.scene.viewport[]
     fl = ax.finallimits[]
     vp_aspect = reduce(/, vp.widths)
@@ -212,6 +213,7 @@ function timeslider_card(app)
             justify_content="begin",
             align_items="center",
         );
+        class="timeslider-card"
     );
 end
 
@@ -222,6 +224,7 @@ function gpstate_control_card(app, type)
     stateobs_rel = type ==:vertex ? app.graphplot.nstate_rel : app.graphplot.estate_rel
     colorrange = type == :vertex ? app.graphplot.ncolorrange : app.graphplot.ecolorrange
     colorscheme = type == :vertex ? app.graphplot.ncolorscheme : app.graphplot.ecolorscheme
+    class = type == :vertex ? "gpstate-control-card vertex" : "gpstate-control-card edge"
 
     ####
     #### State selection
@@ -306,7 +309,8 @@ function gpstate_control_card(app, type)
             cslider,
             # RoundedLabel(@lift $maxrange[2]; style=Styles("text-align"=>"left"));
             columns="100%",
-        )
+        );
+        class
     )
 end
 function _maxrange(sol, idxs, rel)

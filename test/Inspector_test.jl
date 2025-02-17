@@ -81,13 +81,20 @@ let
         @info "start new session"
         WGLMakie.activate!(resize_to=:parent)
         NetworkDynamicsInspector.clear_obs!(app)
-        Grid(
-            NetworkDynamicsInspector.graphplot_card(app; height="400px"),
-            NetworkDynamicsInspector.gpstate_control_card(app, :vertex),
-            NetworkDynamicsInspector.gpstate_control_card(app, :edge),
-            NetworkDynamicsInspector.timeslider_card(app),
-            columns="100%",
-            width="500px"
+        DOM.div(
+            DOM.div(
+                NetworkDynamicsInspector.graphplot_card(app),
+                NetworkDynamicsInspector.gpstate_control_card(app, :vertex),
+                NetworkDynamicsInspector.gpstate_control_card(app, :edge),
+                class="graphplot-col"
+            ),
+            DOM.div(
+                NetworkDynamicsInspector.timeslider_card(app),
+                class="timeseries-col"
+            ),
+            # columns="1fr 2fr",
+            # width="500px",
+            class="maingrid"
         ) |> wrap_assets
     end;
     serve_app(_app)
