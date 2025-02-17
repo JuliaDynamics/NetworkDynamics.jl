@@ -97,7 +97,7 @@ function graphplot_card(app; kwargs...)
     edge_color = Observable(Vector{RGB{Float64}}(undef, NE))
     onany(edge_state, app.graphplot.ecolorrange, app.graphplot.ecolorscheme) do statevec, range, scheme
         @debug "GP: edge_state, app.gp.ecolorrange, app.gp.ecolorrange => edge_color"
-        for i in 1:NV
+        for i in 1:NE
             edge_color[][i] = isnan(statevec[i]) ? RGB(0,0,0) : get(scheme, statevec[i], range)
         end
         notify(edge_color)
@@ -215,19 +215,26 @@ function timeslider_card(app)
     );
 end
 
-function nodestate_control_card(app)
+function gpstate_control_card(app, type)
+    VEIndex = type == :vertex ? VIndex : EIndex
+    label = type == :vertex ? "Node state:" : "Edge state:"
+    stateobs = type == :vertex ? app.graphplot.nstate : app.graphplot.estate
+    stateobs_rel = type ==:vertex ? app.graphplot.nstate_rel : app.graphplot.estate_rel
+    colorrange = type == :vertex ? app.graphplot.ncolorrange : app.graphplot.ecolorrange
+    colorscheme = type == :vertex ? app.graphplot.ncolorscheme : app.graphplot.ecolorscheme
+
     ####
-    #### Node State selection
+    #### State selection
     ####
     options = Observable{Vector{OptionGroup{Symbol}}}()
     on(app.sol; update=true) do _sol
         _nw = extract_nw(_sol)
-        idxs = VIndex.(1:nv(_nw))
+        idxs = VEIndex.(1:nv(_nw))
         options[] = state_options(_nw, idxs)
     end
-    multisel = MultiSelect(options, app.graphplot.nstate; placeholder="Select state for coloring", multi=false, T=Symbol)
+    multisel = MultiSelect(options, stateobs; placeholder="Select state for coloring", multi=false, T=Symbol)
     selector = Grid(
-        DOM.span("Node state:"),
+        DOM.span(label),
         multisel;
         columns = "70px 1fr",
         align_items = "center"
@@ -238,27 +245,30 @@ function nodestate_control_card(app)
     ####
     thumb_pos_cache = Dict{UInt64, Tuple{Float32,Float32}}()
     function thumb_pos_key()
-        hash((app.sol[], app.graphplot.nstate[], app.graphplot.nstate_rel[]))
+        hash((app.sol[], stateobs[], stateobs_rel[]))
     end
 
     maxrange = Observable{Tuple{Float32,Float32}}()
     thumb_l = Observable{Float32}()
     thumb_r = Observable{Float32}()
 
-    onany(app.sol, app.graphplot.nstate, app.graphplot.nstate_rel; update=true) do _sol, _state, _rel
-        @debug "GP: app.sol, app.gp.nstate, app.gp.nstate_rel => ncolor maxrange"
+    onany(app.sol, stateobs, stateobs_rel; update=true) do _sol, _state, _rel
+        @debug "GP: $type state sel: app.sol, app.gp.state, app.gp.state_rel => $type color maxrange"
         if length(_state) == 0
             maxrange[] = (-1.0, 1.0)
         elseif length(_state) == 1
-            idxs = VIndex.(1:nv(extract_nw(_sol)), only(_state))
+            idxs = VEIndex.(1:nv(extract_nw(_sol)), only(_state))
             r = Float32.(_maxrange(_sol, idxs, _rel))
-            if r[1] < 0 && r[2] > 0
-                r = (-maximum(abs.(r)), maximum(abs.(r)))
-            end
 
-            # we nee some range otherwise the colorbar fails
             if r[1] == r[2]
-                r = (prevfloat(r[1]), nextfloat(r[2]))
+                r = r[1] < 0 ? (r[1], 0.0f0) : (0.0f0, r[2])
+                colorscheme[] = ColorScheme([colorant"gray"])
+            elseif r[1] < 0 && r[2] > 0
+                r = (-maximum(abs.(r)), maximum(abs.(r)))
+                colorscheme[] = ColorSchemes.coolwarm
+            elseif r[1] ≥ 0
+                r = (0.0f0, r[2])
+                colorscheme.val = ColorSchemes.thermal
             end
 
             maxrange[] = r
@@ -271,17 +281,17 @@ function nodestate_control_card(app)
     end;
 
     onany(thumb_l, thumb_r; update=true) do _thumb_l, _thumb_r
-        @debug "GP: node color slider => app.gp.ncolorrange"
+        @debug "GP: $(type) color slider => app.gp.colorrange"
         # store the thumb position
         thumb_pos_cache[thumb_pos_key()] = (_thumb_l, _thumb_r)
-        app.graphplot.ncolorrange[] = (_thumb_l, _thumb_r)
+        colorrange[] = (_thumb_l, _thumb_r)
     end
 
     fig = with_theme(apptheme()) do
         fig = Figure(; figure_padding=10)
         Colorbar(fig[1,1];
-            colormap=app.graphplot.ncolorscheme,
-            colorrange=app.graphplot.ncolorrange,
+            colormap=colorscheme,
+            colorrange=colorrange,
             vertical=false, flipaxis=true)
         fig
     end

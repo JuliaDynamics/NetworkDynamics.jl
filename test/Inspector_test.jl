@@ -54,7 +54,7 @@ sol = let
     sol = solve(prob, Tsit5());
 end
 
-# ENV["JULIA_DEBUG"] = NetworkDynamicsInspector
+ENV["JULIA_DEBUG"] = NetworkDynamicsInspector
 # ENV["JULIA_DEBUG"] = ""
 
 app = (;
@@ -77,12 +77,14 @@ app = (;
 );
 
 let
-   _app = App() do session
+    _app = App() do session
+        @info "start new session"
         WGLMakie.activate!(resize_to=:parent)
         NetworkDynamicsInspector.clear_obs!(app)
         Grid(
             NetworkDynamicsInspector.graphplot_card(app; height="400px"),
-            NetworkDynamicsInspector.nodestate_control_card(app),
+            NetworkDynamicsInspector.gpstate_control_card(app, :vertex),
+            NetworkDynamicsInspector.gpstate_control_card(app, :edge),
             NetworkDynamicsInspector.timeslider_card(app),
             columns="100%",
             width="500px"
@@ -90,3 +92,14 @@ let
     end;
     serve_app(_app)
 end
+
+sol([0, 2], idxs=EIndex.(2:5,:active))
+
+sol = app.sol[]
+idxs = EIndex.(1:7, :active);
+rel = false;
+NetworkDynamicsInspector._maxrange(sol, idxs, rel)
+
+using WGLMakie.Colors
+
+ColorScheme((colorant"gray",colorant"gray"))
