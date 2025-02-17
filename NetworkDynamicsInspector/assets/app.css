@@ -16,3 +16,34 @@ html, body {
     //font-size: 12px;
     //color: blue;
 }
+
+.maingrid {
+    display: grid;
+    grid-template-columns: 25% 75%;
+    width: 100%;
+}
+.graphplot-col {
+    display: grid;
+    grid-template-columns: 100%;
+}
+.timeseries-col{
+    display: grid;
+    grid-template-columns: 100%;
+}
+
+.graphplot-card {
+    heigth:400px;
+    /* grid-column: 1; */
+}
+.gpstate-control-card.vertex {
+    height:min-content;
+    /* grid-column: 1; */
+}
+.gpstate-control-card.edge {
+    height:min-content;
+    /* grid-column: 1; */
+}
+
+.timeslider-card {
+    height:min-content;
+}
