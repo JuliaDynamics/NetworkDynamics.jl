@@ -6,14 +6,18 @@ gui = (;
     range = Observable{NTuple{2, Float64}}((-1.0, 1.0)),
     val1 = Observable{Float64}(-1.0),
     val2 = Observable{Float64}(1.0),
+    val = Observable{Float64}(0.0)
 )
 
 let
     app = App(;) do session
         NetworkDynamicsInspector.clear_obs!(gui)
-        slider = ContinuousSlider(gui.range, gui.val1, gui.val2)
+        sl1 = ContinuousSlider(gui.range, gui.val1, gui.val2)
+        sl2 = ContinuousSlider(gui.range, gui.val; arrowkeys=true)
 
-        return wrap_assets(Grid(RoundedLabel(gui.val1), slider, RoundedLabel(gui.val2);
+        return wrap_assets(Grid(
+            RoundedLabel(gui.val1), sl1, RoundedLabel(gui.val2),
+            RoundedLabel(gui.val), sl2;
             columns="1fr 3fr 1fr", width="500px"))
     end;
     serve_app(app)

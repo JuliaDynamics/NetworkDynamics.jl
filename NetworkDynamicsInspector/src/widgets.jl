@@ -63,14 +63,15 @@ struct ContinuousSlider{T} <: Bonito.AbstractSlider{T}
     track_style::Styles
     thumb_style::Styles
     track_active_style::Styles
+    arrowkeys::Bool
 end
 
-function ContinuousSlider(range, value::Observable{T}) where {T}
+function ContinuousSlider(range, value::Observable{T}; kwargs...) where {T}
     value_l = Observable{T}(zero(T)/zero(T))
-    ContinuousSlider(range, value_l, value)
+    ContinuousSlider(range, value_l, value; kwargs...)
 end
 
-function ContinuousSlider(range, value_l::Observable{T}, value_r::Observable{T}) where {T}
+function ContinuousSlider(range, value_l::Observable{T}, value_r::Observable{T}; arrowkeys=false) where {T}
     style, track_style, track_active_style, thumb_style = get_slider_style()
 
     #=
@@ -98,6 +99,7 @@ function ContinuousSlider(range, value_l::Observable{T}, value_r::Observable{T})
         track_style,
         thumb_style,
         track_active_style,
+        arrowkeys
     )
     return slider
 end
@@ -253,28 +255,35 @@ function Bonito.jsrender(session::Session, slider::ContinuousSlider)
         }, { signal: controller.signal });
         set_thumb_val($(slider.value_l).value, 'l');
         set_thumb_val($(slider.value_r).value, 'r');
+
+        function move_thumb_incremental(direction, shiftPressed) {
+            const startval = $(slider.range).value[0];
+            const endval = $(slider.range).value[1];
+            let step = (endval - startval) / 100;
+            if (shiftPressed) {step *= 10;}
+
+            let newval;
+            if (direction === 'right') {
+                newval = Math.min(thumbval_r + step, endval);
+            } else if (direction === 'left') {
+                newval = Math.max(thumbval_r - step, startval);
+            }
+            $(slider.value_r).notify(newval);
+        }
+
+        if ($(slider.arrowkeys)) {
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'ArrowRight') {
+                    move_thumb_incremental('right', e.shiftKey);
+                    e.preventDefault();
+                } else if (e.key === 'ArrowLeft') {
+                    move_thumb_incremental('left', e.shiftKey);
+                    e.preventDefault();
+                }
+            }, { signal: controller.signal });
+        }
     }
     """
-    # function move_thumb_incremental(direction, shiftPressed) {
-    #     const startval = $(slider.values[][begin]);
-    #     const endval = $(slider.values[][end]);
-    #     let step = (endval - startval) / 100;
-    #     if (shiftPressed) {step *= 10;}
-    #     if (direction === 'right') {
-    #         set_thumb_val(Math.min(thumbval + step, endval));
-    #     } else if (direction === 'left') {
-    #         set_thumb_val(Math.max(thumbval - step, startval));
-    #     }
-    # }
-    # document.addEventListener('keydown', function (e) {
-    #     if (e.key === 'ArrowRight') {
-    #         move_thumb_incremental('right', e.shiftKey);
-    #         e.preventDefault();
-    #     } else if (e.key === 'ArrowLeft') {
-    #         move_thumb_incremental('left', e.shiftKey);
-    #         e.preventDefault();
-    #     }
-    # }, { signal: controller.signal });
     onload(session, container, jscode)
 
     return jsrender(session, container)

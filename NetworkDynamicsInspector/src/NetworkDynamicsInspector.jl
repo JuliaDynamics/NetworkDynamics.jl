@@ -201,7 +201,7 @@ function timeslider_card(app)
             app.t[] = _t
         end
     end
-    t_slider = ContinuousSlider(twindow, app.t)
+    t_slider = ContinuousSlider(twindow, app.t; arrowkeys=true)
     Card(
         Grid(
             DOM.span("Time"), t_slider, RoundedLabel(t_slider.value_r),
