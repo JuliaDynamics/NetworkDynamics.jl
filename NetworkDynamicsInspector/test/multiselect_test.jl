@@ -17,21 +17,13 @@ let
     app = App(;) do session
         NetworkDynamicsInspector.clear_obs!(gui)
 
-        ms1 = MultiSelect(gui.options, gui.selection; placeholder="pick language", T=Symbol)
-        ms2 = MultiSelect(gui.options, gui.selection_single; placeholder="pick language", multi=false, T=Symbol)
+        ms1 = MultiSelect(gui.options, gui.selection; placeholder="multi", T=Symbol)
+        ms2 = MultiSelect(gui.options, gui.selection_single; placeholder="single", multi=false, T=Symbol)
 
         return wrap_assets(Grid(ms1, ms2; columns="100%", width="500px"))
     end;
     serve_app(app)
 end
-
-foo = Ref{Any}()
-isdefined(foo,1)
-foo[] = 2
-
-
-(SERVER[])
-s = SERVER[]
 
 @test gui.selection[] == [:Rust, :French]
 gui.selection[] = [:Rust, :French, :Julia, :foo]
@@ -43,11 +35,21 @@ gui.selection_single[] = [:French, :Julia]
 @test gui.selection_single[] == [:French]
 gui.selection_single[] = []
 
-gui.selection[] = [:Rust, :French]
+gui.selection[] = [:German, :Rust, :French]
 gui.selection_single[] = [:French]
 # change options
 gui.options[] = [
-        OptionGroup("Programming Languages", [:Julia, :Rust, :Java]),
+        OptionGroup("Languages", [:French, :Spanish, :German]),
     ]
-@test gui.selection[] == [:Rust]
-@test gui.selection_single[] == []
+@test gui.selection[] == [:German, :French]
+@test gui.selection_single[] == [:French]
+
+
+# change options but keep number the same
+gui.selection[] = [:French]
+gui.selection_single[] = [:French]
+gui.options[] = [
+        OptionGroup("Languages", [:French, :Spanish]),
+    ]
+@test gui.selection[] == [:French]
+@test gui.selection_single[] == [:French]
