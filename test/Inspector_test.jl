@@ -1,4 +1,5 @@
 using NetworkDynamics
+using NetworkDynamics: SymbolicIndex
 using NetworkDynamicsInspector
 using Bonito
 using WGLMakie
@@ -62,9 +63,9 @@ app = (;
     t = Observable{Float64}(0.0),
     tmin = Observable{Float64}(sol.t[begin]),
     tmax = Observable{Float64}(sol.t[end]),
-    sel_nodes = Observable{Vector{Int}}(Int[]),
-    sel_edges = Observable{Vector{Int}}(Int[]),
+    active_tsplot = Observable{Int}(1),
     graphplot = (;
+        selcomp = Observable{Vector{SymbolicIndex}}(SymbolicIndex[]),
         nstate = Observable{Vector{Symbol}}([:θ]),
         estate = Observable{Vector{Symbol}}([:P]),
         nstate_rel = Observable{Bool}(false),
@@ -73,6 +74,10 @@ app = (;
         ncolorscheme = Observable{ColorScheme}(ColorSchemes.coolwarm),
         ecolorrange = Observable{Tuple{Float32,Float32}}((-1.0, 1.0)),
         ecolorscheme = Observable{ColorScheme}(ColorSchemes.coolwarm),
+    ),
+    tsplot = (;
+        selcomp = Observable{Vector{SymbolicIndex}}(SymbolicIndex[]),
+        states = Observable{Vector{Symbol}}(Symbol[]),
     )
 );
 
@@ -90,19 +95,28 @@ let
             ),
             DOM.div(
                 NetworkDynamicsInspector.timeslider_card(app),
+                NetworkDynamicsInspector.timeseries_card(app),
                 class="timeseries-col"
             ),
-            # columns="1fr 2fr",
-            # width="500px",
             class="maingrid"
         ) |> wrap_assets
     end;
     serve_app(_app)
 end
 
+
+app.tsplot.states[] = [ :θ, :P]
+notify(app.tsplot.states)
+app.tsplot.selcomp[]
+
 sol([0, 2], idxs=EIndex.(2:5,:active))
 
 sol = app.sol[]
+nw = NetworkDynamics.extract_nw(sol)
+sidxs = app.tsplot.selcomp[]
+NetworkDynamicsInspector.gen_state_options(nw, sidxs)
+
+
 idxs = EIndex.(1:7, :active);
 rel = false;
 NetworkDynamicsInspector._maxrange(sol, idxs, rel)

@@ -88,6 +88,7 @@ function ContinuousSlider(range, value_l::Observable{T}, value_r::Observable{T};
             value_r[] = r_c
         end
         changed && @debug "Slider: range changed => clamped thumb values"
+        nothing
     end
     =#
 
@@ -344,8 +345,7 @@ function Bonito.jsrender(session::Session, multiselect::MultiSelect)
 
     # generate internal observables of js representation of options and selection
     jsoptions = @lift options_to_jsoptions($(multiselect.options); option_to_string=multiselect.option_to_string)
-    jsselection = Observable{Vector{Int}}(
-        selection_to_jsselection(multiselect.options[], multiselect.selection[]))
+    jsselection = Observable{Vector{Int}}()
 
     onany(jsselection) do _jssel
         sel = jsselection_to_selection(multiselect.options[], _jssel)
@@ -353,14 +353,15 @@ function Bonito.jsrender(session::Session, multiselect::MultiSelect)
         if sel != multiselect.selection[]
             multiselect.selection[] = sel
         end
+        nothing
     end
 
-    onany(multiselect.options, multiselect.selection) do _opts, _sel
+    onany(multiselect.options, multiselect.selection; update=true) do _opts, _sel
         if !multiselect.multi && length(_sel) > 1
             deleteat!(_sel, firstindex(_sel)+1:lastindex(_sel))
         end
         jssel = selection_to_jsselection(_opts, _sel)
-        # @info "New options or selection triggers new jsselection:" _opts _sel jssel
+        @debug "MS \"$(multiselect.placeholder)\": New opts or sel triggers new jsselection:" _opts _sel jssel
 
         # filter out invalid selections
         if any(isnothing, jssel)
@@ -369,9 +370,8 @@ function Bonito.jsrender(session::Session, multiselect::MultiSelect)
             filter!(!isnothing, jssel)
         end
 
-        if jssel != jsselection[]
-            jsselection[] = jssel
-        end
+        jsselection[] = jssel
+        nothing
     end
 
     # Create a multi-select element
@@ -446,12 +446,10 @@ function Bonito.jsrender(session::Session, multiselect::MultiSelect)
         function updateDisplayedSelection(new_sel_nr) {
             const jq_select = $jqselect
             const new_sel = new_sel_nr.map(String);
-            const old_sel = jq_select.data('preserved-order') || [];
-            if (!array_equal(new_sel, old_sel)){
-                jq_select.data('preserved-order', new_sel);
-                jq_select.val(new_sel).trigger('change');
-                select2_renderSelections();
-            }
+
+            jq_select.data('preserved-order', new_sel);
+            jq_select.val(new_sel).trigger('change');
+            select2_renderSelections();
         }
         updateDisplayedSelection($(jsselection).value)
         $(jsselection).on(updateDisplayedSelection)

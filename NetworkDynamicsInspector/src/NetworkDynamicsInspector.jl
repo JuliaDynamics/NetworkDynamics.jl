@@ -7,7 +7,7 @@ using Bonito: Grid, @js_str, onload, jsrender
 using WGLMakie.Makie
 using WGLMakie.Makie.Colors
 using WGLMakie.Makie.ColorSchemes
-using NetworkDynamics: extract_nw
+using NetworkDynamics: extract_nw, SymbolicIndex
 using NetworkDynamics: SII
 using Graphs: nv, ne
 using GraphMakie
@@ -69,6 +69,7 @@ function graphplot_card(app; kwargs...)
             error("Received more than one node state to plot...")
         end
         notify(node_state)
+        nothing
     end;
 
     edge_state = Observable(Vector{Float32}(undef, NE))
@@ -83,6 +84,7 @@ function graphplot_card(app; kwargs...)
             error("Received more than one edge state to plot...")
         end
         notify(edge_state)
+        nothing
     end;
 
     node_color = Observable(Vector{RGB{Float64}}(undef, NV))
@@ -92,6 +94,7 @@ function graphplot_card(app; kwargs...)
             node_color[][i] = isnan(statevec[i]) ? RGB(0,0,0) : get(scheme, statevec[i], range)
         end
         notify(node_color)
+        nothing
     end
 
     edge_color = Observable(Vector{RGB{Float64}}(undef, NE))
@@ -101,6 +104,7 @@ function graphplot_card(app; kwargs...)
             edge_color[][i] = isnan(statevec[i]) ? RGB(0,0,0) : get(scheme, statevec[i], range)
         end
         notify(edge_color)
+        nothing
     end
 
     notify(app.t) # trigger updates
@@ -108,25 +112,24 @@ function graphplot_card(app; kwargs...)
     SMALL = 30
     BIG = 50
     node_size = Observable(fill(SMALL, NV))
-    onany(app.sel_nodes; update=true) do selected
-        @debug "GP: app.sel_nodes => node_size"
-        fill!(node_size[], SMALL)
-        for sel in selected
-            node_size[][sel] = BIG
-        end
-        notify(node_size)
-    end
-
     THIN = 3
     THICK = 6
     edge_width = Observable(fill(THIN, NE))
-    onany(app.sel_edges; update=true) do selected
-        @debug "GP: app.sel_edges => edge_width"
+
+    onany(app.graphplot.selcomp) do selcomp
+        @debug "GP: Sel comp => node_size, edge_width"
+        fill!(node_size[], SMALL)
         fill!(edge_width[], THIN)
-        for sel in selected
-            edge_width[][sel] = THICK
+        for s in selcomp
+            if s isa VIndex
+                node_size[][s.compidx] = BIG
+            else
+                edge_width[][s.compidx] = THICK
+            end
         end
+        notify(node_size)
         notify(edge_width)
+        nothing
     end
 
     g = @lift $(nw).im.g
@@ -157,6 +160,7 @@ function graphplot_card(app; kwargs...)
     on(ax.scene.viewport) do lims
         @debug "GP: viewport => adapt xy scaling"
         adapt_xy_scaling!(ax)
+        nothing
     end
     Card(fig; class="graphplot-card", kwargs...)
 end
@@ -201,6 +205,7 @@ function timeslider_card(app)
             @debug "app.tmin, app.tmax => clamp app.t[]"
             app.t[] = _t
         end
+        nothing
     end
     t_slider = ContinuousSlider(twindow, app.t; arrowkeys=true)
     Card(
@@ -233,7 +238,8 @@ function gpstate_control_card(app, type)
     on(app.sol; update=true) do _sol
         _nw = extract_nw(_sol)
         idxs = VEIndex.(1:nv(_nw))
-        options[] = state_options(_nw, idxs)
+        options[] = gen_state_options(_nw, idxs)
+        nothing
     end
     multisel = MultiSelect(options, stateobs; placeholder="Select state for coloring", multi=false, T=Symbol)
     selector = Grid(
@@ -281,6 +287,7 @@ function gpstate_control_card(app, type)
         else
             error("More than one state for maxrange calculation...")
         end
+        nothing
     end;
 
     onany(thumb_l, thumb_r; update=true) do _thumb_l, _thumb_r
@@ -288,6 +295,7 @@ function gpstate_control_card(app, type)
         # store the thumb position
         thumb_pos_cache[thumb_pos_key()] = (_thumb_l, _thumb_r)
         colorrange[] = (_thumb_l, _thumb_r)
+        nothing
     end
 
     fig = with_theme(apptheme()) do
@@ -326,14 +334,15 @@ function _maxrange(sol, idxs, rel)
     extrema(Iterators.flatten(u_for_t))
 end
 
-function state_options(nw::Network, sidxs)
+function gen_state_options(nw::Network, sidxs)
+    options = OptionGroup{Symbol}[]
+    isempty(sidxs) && return options
     groups = [
         ("Outputs & States", cf -> unique!(vcat(NetworkDynamics.outsym_flat(cf), sym(cf)))),
-        ("Inputs", NetworkDynamics.insym_all),
+        ("Inputs", cf -> collect(NetworkDynamics.insym_all(cf))),
         ("Observables", obssym),
         ("Parameters", psym),
     ]
-    options = OptionGroup{Symbol}[]
     exclusive_syms = Symbol[]
     for (label, getter) in groups
         common_syms = mapreduce(∩, sidxs) do sidx
@@ -354,6 +363,55 @@ function state_options(nw::Network, sidxs)
     options
 end
 
+function timeseries_card(app)
+    comp_options = Observable{Vector{OptionGroup{SymbolicIndex}}}()
+    on(app.sol; update=true) do _sol
+        @debug "TS: app.sol => comp_options"
+        g = extract_nw(_sol).im.g
+        vg = OptionGroup{SymbolicIndex}("Nodes", VIndex.(1:nv(g)))
+        eg = OptionGroup{SymbolicIndex}("Edges", EIndex.(1:ne(g)))
+        comp_options[] = [vg, eg]
+        nothing
+    end
+
+    state_options = Observable{Vector{OptionGroup{Symbol}}}()
+    onany(app.sol, app.tsplot.selcomp; update=true) do _sol, _sel
+        @debug "TS: app.sol, app.tsplot.selcomp => state_options"
+        _nw = extract_nw(_sol)
+        state_options[] = gen_state_options(_nw, _sel)
+        nothing
+    end
+
+    comp_sel = MultiSelect(comp_options, app.tsplot.selcomp;
+        placeholder="Select components",
+        multi=true,
+        option_to_string=_sidx_to_str,
+        T=SymbolicIndex)
+    comp_sel_dom = Grid(DOM.span("States"), comp_sel; columns = "70px 1fr", align_items = "center")
+    state_sel = MultiSelect(state_options, app.tsplot.states;
+        placeholder="Select states",
+        multi=true,
+        T=Symbol)
+    state_sel_dom = Grid(DOM.span("Components"), state_sel; columns = "70px 1fr", align_items = "center")
+
+    # hl choice of elements in graphplot
+    on(app.tsplot.selcomp; update=true) do _sel
+        if app.graphplot.selcomp[] != _sel
+            app.graphplot.selcomp[] = _sel
+        end
+        nothing
+    end
+
+    Card(
+        Grid(
+            comp_sel_dom,
+            state_sel_dom,
+        )
+    )
+end
+function _sidx_to_str(s)
+    (s isa VIndex ? "v" : "e") * string(s.compidx)
+end
 function clear_obs!(nt::NamedTuple)
     for v in values(nt)
         clear_obs!(v)
