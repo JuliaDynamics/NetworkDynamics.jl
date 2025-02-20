@@ -352,17 +352,29 @@ function timeseries_card(app, session)
         placeholder="Select components",
         multi=true,
         option_to_string=_sidx_to_str,
-        T=SymbolicIndex)
+        T=SymbolicIndex,
+        id=gendomid("compsel"))
     # comp_sel_dom = Grid(DOM.span("Components"), comp_sel; columns = "70px 1fr", align_items = "center")
     state_sel = MultiSelect(state_options, app.tsplot.states;
         placeholder="Select states",
         multi=true,
-        T=Symbol)
+        T=Symbol,
+        id=gendomid("statesel"))
+
+    reset_button = Bonito.Button("Reset Color", style=Styles("margin-left"=>"10px"))
+    on(reset_button.value) do _
+        empty!(color_cache)
+        empty!(linestyle_cache)
+        notify(app.tsplot.selcomp)
+        notify(app.tsplot.states)
+    end
+
+    rel_toggle = ToggleSwitch(value=app.tsplot.rel, label="Rel to u0")
 
     comp_state_sel_dom = Grid(
-        DOM.span("Components"), comp_sel,
-        DOM.span("States"), state_sel;
-        columns = "auto 1fr", align_items = "center"
+        DOM.span("Components"), comp_sel, reset_button,
+        DOM.span("States"), state_sel, rel_toggle;
+        columns = "auto 1fr auto", align_items = "center"
     )
 
     # hl choice of elements in graphplot
@@ -377,8 +389,15 @@ function timeseries_card(app, session)
     ####
     #### actual plot
     ####
+    COLORS = Makie.wong_colors()
+    LINESTYLES = [:solid, :dot, :dash, :dashdot, :dashdotdot]
+    LINESTYLES = ["─", "⋯", "--", "-⋅-", "-⋅⋅"]
     color_cache = Dict{Union{EIndex{Int,Nothing},VIndex{Int,Nothing}}, Int}()
     linestyle_cache = Dict{Symbol,Int}()
+
+    colorpairs = Observable{Vector{@NamedTuple{title::String,color::String}}}()
+    lstylepairs = Observable{Vector{@NamedTuple{title::String,linestyle::String}}}()
+
     on(app.tsplot.selcomp; update=true) do _sel
         @debug "TS: comp selection => update color_cache"
         for unused in setdiff(keys(color_cache), _sel)
@@ -388,6 +407,9 @@ function timeseries_card(app, session)
             i = _smallest_free(color_cache)
             color_cache[new] = i
         end
+        colorpairs[] = [(; title=_sidx_to_str(k),
+                         color="#"*Colors.hex(getcycled(COLORS, v)))
+                        for (k,v) in color_cache]
         nothing
     end
     on(app.tsplot.states; update=true) do _states
@@ -399,9 +421,91 @@ function timeseries_card(app, session)
             i = _smallest_free(linestyle_cache)
             linestyle_cache[new] = i
         end
+        lstylepairs[] = [(; title=repr(s), linestyle=getcycled(LINESTYLES, i))
+                         for (s,i) in linestyle_cache]
         nothing
     end
 
+    comp_ms_id = Bonito.JSString(comp_sel.id)
+    state_ms_id = Bonito.JSString(state_sel.id)
+
+    js = js"""
+    function colorListItems(items) {
+        let styleTag = document.getElementById("dynamic-style-$(comp_ms_id)");
+
+        // Create the <style> tag if it doesn't exist
+        if (!styleTag) {
+            styleTag = document.createElement("style");
+            styleTag.id = "dynamic-style-$(comp_ms_id)";
+            document.head.appendChild(styleTag);
+        }
+
+        // Clear previous styles
+        styleTag.innerHTML = "";
+
+        // Generate new styles
+        let styleContent = "";
+        items.forEach(({ title, color }) => {
+            styleContent += `#$(comp_ms_id) +span li[title='${title}']::after {
+                content: 'xx';
+                display: inline-block;
+                padding-left: 0px 4px;
+                background-color: ${color} !important;
+                color: ${color} !important;
+                border-left: 1px solid #aaa;
+                cursor: default;
+            }\n`;
+        });
+
+        // Insert new styles
+        styleTag.innerHTML = styleContent;
+    }
+
+    colorListItems($(colorpairs).value);
+    $(colorpairs).on((c) => {
+        colorListItems(c);
+    });
+
+    function linestyleListItems(items) {
+        let styleTag = document.getElementById("dynamic-style-$(state_ms_id)");
+
+        // Create the <style> tag if it doesn't exist
+        if (!styleTag) {
+            styleTag = document.createElement("style");
+            styleTag.id = "dynamic-style-$(state_ms_id)";
+            document.head.appendChild(styleTag);
+        }
+
+        // Clear previous styles
+        styleTag.innerHTML = "";
+
+        // Generate new styles
+        let styleContent = "";
+
+        if(items.length > 1) {
+            items.forEach(({ title, linestyle }) => {
+                styleContent += `#$(state_ms_id) +span li[title='${title}']::after {
+                    content: '${linestyle}';
+                    display: inline-block;
+                    padding-left: 5px;
+                    padding-right: 5px;
+                    color: inherit;
+                    border-left: 1px solid #aaa;
+                    font-size: smaller;
+                    cursor: default;
+                }\n`;
+            });
+
+            // Insert new styles
+            styleTag.innerHTML = styleContent;
+        }
+    }
+    linestyleListItems($(lstylepairs).value);
+    $(lstylepairs).on((c) => {
+        linestyleListItems(c);
+    });
+    """
+    evaljs(session, js)
 
     fig, ax = with_theme(apptheme()) do
         fig = Figure()

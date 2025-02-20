@@ -324,7 +324,9 @@ struct MultiSelect{T}
     placeholder::String
     multi::Bool
     option_to_string::Any
-    function MultiSelect(_options, _selection=nothing; T=Any, placeholder="", multi=true, option_to_string=repr)
+    class::String
+    id::String
+    function MultiSelect(_options, _selection=nothing; T=Any, placeholder="", multi=true, option_to_string=repr, class="", id="")
         options = _options isa Observable ? _options : Observable{Vector{T}}(_options)
         selection = if isnothing(_selection)
             Observable(T[])
@@ -334,7 +336,14 @@ struct MultiSelect{T}
         else
             Observable{Vector{T}}(_selection)
         end
-        new{T}(options, selection, placeholder, multi, option_to_string)
+        _class = multi ? "bonito-select2-multi" : "bonito-select2-single"
+        if class != ""
+            _class *= " " * class
+        end
+        if id == ""
+            id = gendomid("selectbox")
+        end
+        new{T}(options, selection, placeholder, multi, option_to_string, _class, id)
     end
 end
 
@@ -375,21 +384,17 @@ function Bonito.jsrender(session::Session, multiselect::MultiSelect)
     end
 
     # Create a multi-select element
-    id = replace(string(gensym("selectbox")), "#"=>"")
-
     style = Styles(
         "width" => "100%",
-        # "font-family" => "monospace",
     )
 
-    class = multiselect.multi ? "bonito-select2-multi" : "bonito-select2-single"
     select = DOM.select(
         DOM.option();
         multiple = multiselect.multi,
-        class,
+        class=multiselect.class,
         # name = "states[]",
         style,
-        id
+        id=multiselect.id,
     )
 
     container = DOM.div(
@@ -400,7 +405,7 @@ function Bonito.jsrender(session::Session, multiselect::MultiSelect)
     )
 
     jqdocument = Bonito.JSString(raw"$(document)")
-    jqselect = Bonito.JSString(raw"$('#"* id * raw"')")
+    jqselect = Bonito.JSString(raw"$('#"* multiselect.id * raw"')")
 
     esc = Bonito.JSString(raw"$")
     js_onload = js"""
@@ -472,6 +477,7 @@ function Bonito.jsrender(session::Session, multiselect::MultiSelect)
 
             const sortedElements = new_order.map(i => jq_tags.eq(i));
             jq_tags_ul.append(sortedElements);
+            console.log("Rendered selection")
         }
         function selectionHandler(e){
             const jq_select2  = $esc(this);

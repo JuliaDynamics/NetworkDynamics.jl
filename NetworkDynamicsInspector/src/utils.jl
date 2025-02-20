@@ -74,3 +74,6 @@ function NetworkDynamics.extract_nw(o::NamedTuple)
         error("No sol in NamedTuple")
     end
 end
+
+getcycled(v::AbstractVector, i) = v[mod1(i, length(v))]
+gendomid(s::String) = replace(string(gensym("selectbox")), "#"=>"")
