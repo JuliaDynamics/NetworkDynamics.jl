@@ -124,15 +124,3 @@ let
     end
     server_ref[] = Bonito.Server(_app, "0.0.0.0", 8080)
 end
-
-tog = Observable{Bool}(false)
-on(tog) do state
-    @info "value = $state"
-end
-let
-    _app = App() do session
-        toggle = NetworkDynamicsInspector.ToggleSwitch(tog)
-        toggle
-    end;
-    serve_app(_app)
-end
