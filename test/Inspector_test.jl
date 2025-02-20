@@ -1,5 +1,5 @@
 using NetworkDynamics
-using NetworkDynamics: SymbolicIndex
+using NetworkDynamics: SymbolicIndex, SII
 using NetworkDynamicsInspector
 using Bonito
 using WGLMakie
@@ -55,7 +55,7 @@ sol = let
     sol = solve(prob, Tsit5());
 end;
 
-# ENV["JULIA_DEBUG"] = NetworkDynamicsInspector
+ENV["JULIA_DEBUG"] = NetworkDynamicsInspector
 # ENV["JULIA_DEBUG"] = ""
 
 app = (;
@@ -78,6 +78,7 @@ app = (;
     tsplot = (;
         selcomp = Observable{Vector{SymbolicIndex}}(SymbolicIndex[]),
         states = Observable{Vector{Symbol}}(Symbol[]),
+        rel = Observable{Bool}(false),
     )
 );
 
@@ -95,7 +96,7 @@ let
             ),
             DOM.div(
                 NetworkDynamicsInspector.timeslider_card(app),
-                NetworkDynamicsInspector.timeseries_card(app),
+                NetworkDynamicsInspector.timeseries_card(app, session),
                 class="timeseries-col"
             ),
             class="maingrid"
@@ -104,23 +105,34 @@ let
     serve_app(_app)
 end
 
+server_ref = Ref(nothing)
+let
+    _app = App() do session
+        fig = Figure()
+        ax = Axis(fig[1,1])
+        button = Bonito.Button("add plot")
 
-app.tsplot.states[] = [ :θ, :P]
-notify(app.tsplot.states)
-app.tsplot.selcomp[]
+        on(button.value) do _
+            scatter!(ax, rand(3))
+        end
 
-sol([0, 2], idxs=EIndex.(2:5,:active))
+        Grid(Card(fig), button)
+    end;
+    if !isnothing(server_ref[]) && Bonito.HTTPServer.isrunning(server_ref[])
+        @info "Stop running server..."
+        close(SERVER[])
+    end
+    server_ref[] = Bonito.Server(_app, "0.0.0.0", 8080)
+end
 
-sol = app.sol[]
-nw = NetworkDynamics.extract_nw(sol)
-sidxs = app.tsplot.selcomp[]
-NetworkDynamicsInspector.gen_state_options(nw, sidxs)
-
-
-idxs = EIndex.(1:7, :active);
-rel = false;
-NetworkDynamicsInspector._maxrange(sol, idxs, rel)
-
-using WGLMakie.Colors
-
-ColorScheme((colorant"gray",colorant"gray"))
+tog = Observable{Bool}(false)
+on(tog) do state
+    @info "value = $state"
+end
+let
+    _app = App() do session
+        toggle = NetworkDynamicsInspector.ToggleSwitch(tog)
+        toggle
+    end;
+    serve_app(_app)
+end
