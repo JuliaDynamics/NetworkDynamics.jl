@@ -559,3 +559,99 @@ function _selection_to_jsselection(options, selection)
         end
     end
 end
+
+struct ToggleSwitch
+    value::Observable{Bool}
+end
+
+function Bonito.jsrender(session::Session, slider::ToggleSwitch)
+    # main properties
+    height = 24
+    width = 35
+    inset = 3
+    checked_color = "#2196F3"
+    background_color = "#ccc"
+    thumb_color = "white"
+    transition_time = 0.4
+    label = "rel to u0"
+
+    thumb_diameter = height - 2 * inset
+    translate = width - thumb_diameter - 2*inset
+
+
+    switch_style = Styles(
+        "position" => "relative",
+        "display" => "inline-block",
+        "width" => "$(width)px",
+        "height" => "$(height)px",
+    )
+
+    input_style = Styles(
+        CSS(
+            "opacity" => "0",
+            "width" => "0",
+            "height" => "0",
+        ),
+        CSS(":checked + .slider",
+            "background-color" => checked_color,
+        ),
+        CSS(":focus + .slider",
+            "box-shadow" => "0 0 1px $(checked_color)",
+        ),
+        CSS(":checked + .slider:before",
+            "-webkit-transform" => "translateX($(translate)px)",
+            "-ms-transform" => "translateX($(translate)px)",
+            "transform" => "translateX($(translate)px)",
+        ),
+    )
+
+    slider_style = Styles(
+        CSS(
+            "position" => "absolute",
+            "cursor" => "pointer",
+            "top" => "0",
+            "left" => "0",
+            "right" => "0",
+            # "width" => "$(width)px",
+            "bottom" => "0",
+            "background-color" => background_color,
+            "-webkit-transition" => "$(transition_time)s",
+            "transition" => "$(transition_time)s",
+            "border-radius" => "$(height/2)px",
+        ),
+        CSS(":hover",
+            # "background-color" => "#2196F3",
+        ),
+        CSS("::before",
+            "position" => "absolute",
+            "content" => "''",
+            "height" => "$(thumb_diameter)px",
+            "width" => "$(thumb_diameter)px",
+            "left" => "$(inset)px",
+            "bottom" => "$(inset)px",
+            "background-color" => "white",
+            "-webkit-transition" => "$(transition_time)s",
+            "transition" => "$(transition_time)s",
+            "border-radius" => "50%",
+        )
+    )
+
+    container = DOM.div(
+        DOM.label(
+            DOM.input(
+                type="checkbox",
+                checked=slider.value[],
+                onchange=js"""
+                (e) => {
+                    $(slider.value).notify(e.target.checked);
+                }
+                """;
+                style=input_style
+            ),
+            DOM.span(; class="slider", style=slider_style),
+            DOM.span(label; class="sliederlabel");
+            class="switch", style=switch_style
+        )
+    )
+    jsrender(session, container)
+end

@@ -363,7 +363,7 @@ function gen_state_options(nw::Network, sidxs)
     options
 end
 
-function timeseries_card(app)
+function timeseries_card(app, session)
     comp_options = Observable{Vector{OptionGroup{SymbolicIndex}}}()
     on(app.sol; update=true) do _sol
         @debug "TS: app.sol => comp_options"
@@ -396,22 +396,171 @@ function timeseries_card(app)
 
     # hl choice of elements in graphplot
     on(app.tsplot.selcomp; update=true) do _sel
+        @debug "TS: comp selection => graphplot selection"
         if app.graphplot.selcomp[] != _sel
             app.graphplot.selcomp[] = _sel
         end
         nothing
     end
 
+    ####
+    #### actual plot
+    ####
+    color_cache = Dict{Union{EIndex{Int,Nothing},VIndex{Int,Nothing}}, Int}()
+    linestyle_cache = Dict{Symbol,Int}()
+    on(app.tsplot.selcomp) do _sel
+        @debug "TS: comp selection => update color_cache"
+        for unused in setdiff(keys(color_cache), _sel)
+            delete!(color_cache, unused)
+        end
+        for new in setdiff(_sel, keys(color_cache))
+            i = _smallest_free(color_cache)
+            color_cache[new] = i
+        end
+        nothing
+    end
+    on(app.tsplot.states) do _states
+        @debug "TS: state selection => update linestyle_cache"
+        for unused in setdiff(keys(linestyle_cache), _states)
+            delete!(linestyle_cache, unused)
+        end
+        for new in setdiff(_states, keys(linestyle_cache))
+            i = _smallest_free(linestyle_cache)
+            linestyle_cache[new] = i
+        end
+        nothing
+    end
+    getcolor = (s) -> begin
+        key = s isa VIndex ? VIndex(s.compidx) : EIndex(s.compidx)
+        Cycled(color_cache[key])
+        Cycled(ckey)
+    end
+    getlinestyle = (s) -> Cycled(linestyle_cache[s.subidx])
+
+
+    fig, ax = with_theme(apptheme()) do
+        fig = Figure()
+        ax = Axis(fig[1, 1])
+        fig, ax
+    end
+    Main.axref[] = ax
+
+    # set axis limits according to time range
+    onany(app.tmin, app.tmax, update=true) do _tmin, _tmax
+        @debug "TS: tim/tmax => update ax limits"
+        xlims!(ax, (_tmin, _tmax))
+        nothing
+    end
+
+    ts = Observable(range(app.sol[].t[begin], app.sol[].t[end], length=1000))
+    # last update of ts range
+    lastupdate = Ref(time())
+    on(ax.finallimits) do lims
+        lastupdate[] = time()
+        nothing
+    end
+    # every 0.5 seconds trigger resampling
+    # timer = Timer(.5; interval=.5) do _
+    #     if time() > lastupdate[] + 0.5
+    #         lims = ax.finallimits[]
+    #         tmin = max(app.sol[].t[begin], lims.origin[1])
+    #         tmax = min(app.sol[].t[end], tmin + lims.widths[1])
+    #         ts[] = range(tmin, tmax, length=1000)
+    #         lastupdate[] = Inf
+    #     end
+    # end
+    on(session.on_close) do _
+        @info "Session closed, time to clean up"
+        # close(timer)
+    end
+
+    # collect all the states wie might want to plot
+    valid_idxs = Observable(
+        Union{VIndex{Int,Symbol},EIndex{Int,Symbol}}[]
+    )
+    onany(app.tsplot.selcomp, app.tsplot.states; update=true) do _selcomp, _states
+        @debug "TS: sel comp/states => update valid_idxs"
+        isvalid(s) = SII.is_variable(app.sol[], s) || SII.is_parameter(app.sol[], s) || SII.is_observed(app.sol[], s)
+        empty!(valid_idxs[])
+        for c in _selcomp, s in _states
+            idx = c isa VIndex ? VIndex(c.compidx, s) : EIndex(c.compidx, s)
+            isvalid(idx) && push!(valid_idxs[], idx)
+        end
+        notify(valid_idxs)
+    end
+
+    # extract the data
+    data = Observable{Vector{Vector{Float32}}}(Vector{Float32}[])
+    onany(ts, valid_idxs, app.tsplot.rel, app.sol; update=true) do _ts, _valid_idxs, _rel, _sol
+        @debug "TS: t, valid_idx, rel, sol => update data"
+        _dat = _sol(_ts, idxs=_valid_idxs)
+        if _rel
+            u0 = _sol(sol.t[begin], idxs=_valid_idxs)
+            for row in _dat
+                row .-= u0
+            end
+        end
+        resize!(data[], length(_valid_idxs))
+        for i in 1:length(_valid_idxs)
+            data.val[i] = _dat[i,:]
+        end
+        @info "Data updated" data[]
+        notify(data)
+    end
+
+    # plot the thing
+    on(data; update=true) do _dat
+        @debug "TS: Data => Plotting"
+        println("befor empty")
+        empty!(ax)
+        println("after empty")
+        # vlines!(ax, app.t; color=:black)
+        # for (idx, y) in zip(valid_idxs[], data[])
+        for i in 1:length(valid_idxs[])
+            # @info "plot $idx" y
+            # lines!(ax, ts[], y; label=string(idx), color=getcolor(idx), linestyle=getlinestyle(idx))
+            # lines!(ax, ts[], y; label=string(idx))
+            lines!(ax, rand(3))
+        end
+        @debug "End of plotting"
+        nothing
+    end
+
+    ####
+    #### Click interaction to set time
+    ####
+    set_time_interaction = (event::MouseEvent, axis) -> begin
+        if event.type === MouseEventTypes.leftclick
+            @debug "TS: click on axis => update t"
+            pos = mouseposition(axis.scene)[1]
+            app.t[] = pos
+            return Consume(true)
+        end
+        return Consume(false)
+    end
+    register_interaction!(set_time_interaction, ax, :set_time)
+
     Card(
         Grid(
             comp_sel_dom,
             state_sel_dom,
+            fig
         )
     )
 end
 function _sidx_to_str(s)
     (s isa VIndex ? "v" : "e") * string(s.compidx)
 end
+function _smallest_free(d::Dict)
+    vals = values(d)
+    i = 1
+    while i ∈ vals
+        i += 1
+    end
+    return i
+end
+
+
 function clear_obs!(nt::NamedTuple)
     for v in values(nt)
         clear_obs!(v)
