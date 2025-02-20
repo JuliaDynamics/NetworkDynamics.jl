@@ -560,30 +560,26 @@ function _selection_to_jsselection(options, selection)
     end
 end
 
-struct ToggleSwitch
-    value::Observable{Bool}
+@kwdef struct ToggleSwitch
+    value::Observable{Bool} = Observable{Bool}()
+    height::Int = 24
+    width::Int = 35
+    inset::Int = 3
+    checked_color::String = "#2196F3"
+    background_color::String = "#ccc"
+    thumb_color::String = "white"
+    transition_time::Float64 = 0.4
+    label::String = ""
 end
 
-function Bonito.jsrender(session::Session, slider::ToggleSwitch)
-    # main properties
-    height = 24
-    width = 35
-    inset = 3
-    checked_color = "#2196F3"
-    background_color = "#ccc"
-    thumb_color = "white"
-    transition_time = 0.4
-    label = "rel to u0"
+function Bonito.jsrender(session::Session, toggle::ToggleSwitch)
+    thumb_diameter = toggle.height - 2 * toggle.inset
+    translate = toggle.width - thumb_diameter - 2*toggle.inset
 
-    thumb_diameter = height - 2 * inset
-    translate = width - thumb_diameter - 2*inset
-
-
-    switch_style = Styles(
+    domlabel_style = Styles(
         "position" => "relative",
         "display" => "inline-block",
-        "width" => "$(width)px",
-        "height" => "$(height)px",
+        "cursor" => "pointer",
     )
 
     input_style = Styles(
@@ -591,33 +587,38 @@ function Bonito.jsrender(session::Session, slider::ToggleSwitch)
             "opacity" => "0",
             "width" => "0",
             "height" => "0",
+            "position" => "absolute",
         ),
-        CSS(":checked + .slider",
-            "background-color" => checked_color,
+        CSS(":checked + .switch-label-grid .slider",
+            "background-color" => toggle.checked_color,
         ),
-        CSS(":focus + .slider",
-            "box-shadow" => "0 0 1px $(checked_color)",
+        CSS(":focus + .switch-label-grid .slider",
+            "box-shadow" => "0 0 1px $(toggle.checked_color)",
         ),
-        CSS(":checked + .slider:before",
+        CSS(":checked + .switch-label-grid .slider:before",
             "-webkit-transform" => "translateX($(translate)px)",
             "-ms-transform" => "translateX($(translate)px)",
             "transform" => "translateX($(translate)px)",
         ),
     )
 
+    slider_grid_style = Styles(
+        "position" => "relative",
+        "display" => "inline-grid",
+        "grid-template-columns" => "auto auto",
+        "align-items" => "center",
+        "grid-gap" => "10px",
+    )
+
     slider_style = Styles(
         CSS(
-            "position" => "absolute",
-            "cursor" => "pointer",
-            "top" => "0",
-            "left" => "0",
-            "right" => "0",
-            # "width" => "$(width)px",
+            "width" => "$(toggle.width)px",
+            "height" => "$(toggle.height)px",
             "bottom" => "0",
-            "background-color" => background_color,
-            "-webkit-transition" => "$(transition_time)s",
-            "transition" => "$(transition_time)s",
-            "border-radius" => "$(height/2)px",
+            "background-color" => toggle.background_color,
+            "-webkit-transition" => "$(toggle.transition_time)s",
+            "transition" => "$(toggle.transition_time)s",
+            "border-radius" => "$(toggle.height/2)px",
         ),
         CSS(":hover",
             # "background-color" => "#2196F3",
@@ -627,31 +628,41 @@ function Bonito.jsrender(session::Session, slider::ToggleSwitch)
             "content" => "''",
             "height" => "$(thumb_diameter)px",
             "width" => "$(thumb_diameter)px",
-            "left" => "$(inset)px",
-            "bottom" => "$(inset)px",
+            "left" => "$(toggle.inset)px",
+            "bottom" => "$(toggle.inset)px",
             "background-color" => "white",
-            "-webkit-transition" => "$(transition_time)s",
-            "transition" => "$(transition_time)s",
+            "-webkit-transition" => "$(toggle.transition_time)s",
+            "transition" => "$(toggle.transition_time)s",
             "border-radius" => "50%",
         )
     )
 
-    container = DOM.div(
-        DOM.label(
-            DOM.input(
-                type="checkbox",
-                checked=slider.value[],
-                onchange=js"""
-                (e) => {
-                    $(slider.value).notify(e.target.checked);
-                }
-                """;
-                style=input_style
-            ),
-            DOM.span(; class="slider", style=slider_style),
-            DOM.span(label; class="sliederlabel");
-            class="switch", style=switch_style
-        )
+    jscode = js"""
+    (input) => {
+        input.onchange = function() {
+            $(toggle.value).notify(this.checked);
+        }
+        $(toggle.value).on(val => {
+            input.checked = val
+        });
+    }
+    """
+
+    inputdom = DOM.input(
+        type="checkbox",
+        checked=toggle.value[],
+        style=input_style
+    )
+    onload(session, inputdom, jscode)
+
+    container = DOM.label(
+        inputdom,
+        DOM.div(
+            DOM.div(; class="slider", style=slider_style),
+            DOM.div(toggle.label; class="sliederlabel");
+            class="switch-label-grid", style=slider_grid_style
+        );
+        style=domlabel_style
     )
     jsrender(session, container)
 end
