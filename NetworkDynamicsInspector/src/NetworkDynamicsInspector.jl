@@ -22,6 +22,12 @@ include("utils.jl")
 function apptheme()
     Theme(
         fontsize=10,
+        palette = (;
+           linestyle = [:solid, :dot, :dash, :dashdot, :dashdotdot],
+        ),
+        Lines = (;
+            cycle = Cycle([:color, :linestyle], covary=true)
+        )
     )
 end
 
@@ -60,7 +66,7 @@ function graphplot_card(app; kwargs...)
     end;
 
     edge_state = Observable(Vector{Float32}(undef, NE))
-    onany(app.sol, app.t, app.graphplot.estate, app.graphplot.nstate_rel) do _sol, _t, _state, _rel
+    onany(app.sol, app.t, app.graphplot.estate, app.graphplot.estate_rel) do _sol, _t, _state, _rel
         @debug "GP: app.sol, app.t, app.gp.estate, app.gp.estate_rel => edge_state"
         if length(_state) == 0
             fill!(edge_state[], NaN)
@@ -229,10 +235,12 @@ function gpstate_control_card(app, type)
         nothing
     end
     multisel = MultiSelect(options, stateobs; placeholder="Select state for coloring", multi=false, T=Symbol)
+    reltoggle = ToggleSwitch(value=stateobs_rel, label="Rel to u0")
     selector = Grid(
         DOM.span(label),
-        multisel;
-        columns = "70px 1fr",
+        multisel,
+        reltoggle;
+        columns = "70px 1fr auto",
         align_items = "center"
     )
 
@@ -345,12 +353,17 @@ function timeseries_card(app, session)
         multi=true,
         option_to_string=_sidx_to_str,
         T=SymbolicIndex)
-    comp_sel_dom = Grid(DOM.span("States"), comp_sel; columns = "70px 1fr", align_items = "center")
+    # comp_sel_dom = Grid(DOM.span("Components"), comp_sel; columns = "70px 1fr", align_items = "center")
     state_sel = MultiSelect(state_options, app.tsplot.states;
         placeholder="Select states",
         multi=true,
         T=Symbol)
-    state_sel_dom = Grid(DOM.span("Components"), state_sel; columns = "70px 1fr", align_items = "center")
+
+    comp_state_sel_dom = Grid(
+        DOM.span("Components"), comp_sel,
+        DOM.span("States"), state_sel;
+        columns = "auto 1fr", align_items = "center"
+    )
 
     # hl choice of elements in graphplot
     on(app.tsplot.selcomp; update=true) do _sel
@@ -366,7 +379,7 @@ function timeseries_card(app, session)
     ####
     color_cache = Dict{Union{EIndex{Int,Nothing},VIndex{Int,Nothing}}, Int}()
     linestyle_cache = Dict{Symbol,Int}()
-    on(app.tsplot.selcomp) do _sel
+    on(app.tsplot.selcomp; update=true) do _sel
         @debug "TS: comp selection => update color_cache"
         for unused in setdiff(keys(color_cache), _sel)
             delete!(color_cache, unused)
@@ -377,7 +390,7 @@ function timeseries_card(app, session)
         end
         nothing
     end
-    on(app.tsplot.states) do _states
+    on(app.tsplot.states; update=true) do _states
         @debug "TS: state selection => update linestyle_cache"
         for unused in setdiff(keys(linestyle_cache), _states)
             delete!(linestyle_cache, unused)
@@ -388,12 +401,6 @@ function timeseries_card(app, session)
         end
         nothing
     end
-    getcolor = (s) -> begin
-        key = s isa VIndex ? VIndex(s.compidx) : EIndex(s.compidx)
-        Cycled(color_cache[key])
-        Cycled(ckey)
-    end
-    getlinestyle = (s) -> Cycled(linestyle_cache[s.subidx])
 
 
     fig, ax = with_theme(apptheme()) do
@@ -401,7 +408,6 @@ function timeseries_card(app, session)
         ax = Axis(fig[1, 1])
         fig, ax
     end
-    Main.axref[] = ax
 
     # set axis limits according to time range
     onany(app.tmin, app.tmax, update=true) do _tmin, _tmax
@@ -462,25 +468,27 @@ function timeseries_card(app, session)
         for i in 1:length(_valid_idxs)
             data.val[i] = _dat[i,:]
         end
-        @info "Data updated" data[]
         notify(data)
     end
 
     # plot the thing
     on(data; update=true) do _dat
-        @debug "TS: Data => Plotting"
-        println("befor empty")
-        empty!(ax)
-        println("after empty")
-        # vlines!(ax, app.t; color=:black)
-        # for (idx, y) in zip(valid_idxs[], data[])
-        for i in 1:length(valid_idxs[])
-            # @info "plot $idx" y
-            # lines!(ax, ts[], y; label=string(idx), color=getcolor(idx), linestyle=getlinestyle(idx))
-            # lines!(ax, ts[], y; label=string(idx))
-            lines!(ax, rand(3))
+        @async begin
+            try
+                empty!(ax)
+                vlines!(ax, app.t; color=:black)
+                for (idx, y) in zip(valid_idxs[], data[])
+                    color = begin
+                        key = idx isa VIndex ? VIndex(idx.compidx) : EIndex(idx.compidx)
+                        Cycled(color_cache[key])
+                    end
+                    linestyle = Cycled(linestyle_cache[idx.subidx])
+                    lines!(ax, ts[], y; label=string(idx), color, linestyle)
+                end
+            catch e
+                @error "Plotting failed" e
+            end
         end
-        @debug "End of plotting"
         nothing
     end
 
@@ -500,8 +508,7 @@ function timeseries_card(app, session)
 
     Card(
         Grid(
-            comp_sel_dom,
-            state_sel_dom,
+            comp_state_sel_dom,
             fig
         )
     )
