@@ -637,6 +637,13 @@ function Bonito.jsrender(session::Session, toggle::ToggleSwitch)
         )
     )
 
+    # wrap slider and slider::before in another div with rel pos
+    # otherwise the slider::before will be positioned relative to
+    # slider_grid
+    slider_and_thumb_container_style = Styles(
+        "position" => "relative",
+    )
+
     jscode = js"""
     (input) => {
         input.onchange = function() {
@@ -658,7 +665,11 @@ function Bonito.jsrender(session::Session, toggle::ToggleSwitch)
     container = DOM.label(
         inputdom,
         DOM.div(
-            DOM.div(; class="slider", style=slider_style),
+            DOM.div(
+                DOM.div(; class="slider", style=slider_style);
+                class="slider-and-thumb-container",
+                style=slider_and_thumb_container_style
+            ),
             DOM.div(toggle.label; class="sliederlabel");
             class="switch-label-grid", style=slider_grid_style
         );
