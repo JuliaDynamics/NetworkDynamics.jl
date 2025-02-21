@@ -146,13 +146,15 @@ function graphplot_card(app; kwargs...)
             node_attr=(;colorrange=app.graphplot.ncolorrange, colormap=app.graphplot.ncolorscheme),
             edge_attr=(;colorrange=app.graphplot.ncolorrange, colormap=app.graphplot.ncolorscheme))
 
-        # hidespines!(ax)
-        # hidedecorations!(ax)
+        hidespines!(ax)
+        hidedecorations!(ax)
         fig, ax
     end
+    xratio = Ref{Float64}(1.0)
+    yratio = Ref{Float64}(1.0)
     on(ax.scene.viewport) do lims
         @debug "GP: viewport => adapt xy scaling"
-        adapt_xy_scaling!(ax)
+        adapt_xy_scaling!(xratio, yratio, ax)
         nothing
     end
     Card(fig; class="graphplot-card", kwargs...)
@@ -168,21 +170,41 @@ function _gracefully_extract_states!(vec, sol, t, idxs, rel)
         vec[mask] .= only(sol([t]; idxs=idxs[mask]).u)
     end
 end
-function adapt_xy_scaling!(ax)
+function adapt_xy_scaling!(xratio, yratio, ax)
+    # in theory, this should work without autolimits, but it doesnt
     autolimits!(ax)
+
     vp = ax.scene.viewport[]
     fl = ax.finallimits[]
-    vp_aspect = reduce(/, vp.widths)
-    fl_aspect = reduce(/, fl.widths)
+    vp_aspect = reduce(/, Float64.(vp.widths))
+    fl_aspect = reduce(/, Float64.(fl.widths))
     ratio = vp_aspect/fl_aspect
 
-    if ratio > 1 # need to increase x limits
-        low = ax.finallimits[].origin[1]
-        hi = low + ax.finallimits[].widths[1]
+    potential_x_factor = xratio[]*ratio
+    potential_y_factor = yratio[]/ratio
+
+    if potential_x_factor >= 1 && potential_y_factor >= 1
+        # both valid, pick smaller
+        resize = potential_x_factor < potential_y_factor ? :x : :y
+    elseif potential_x_factor > 1
+        resize = :x
+    elseif potential_y_factor > 1
+        resize = :y
+    else
+        resize = potential_x_factor > potential_y_factor ? :x : :y
+        @warn "No valid scaling factor found, chose $resize"
+    end
+    @info "Resizing $resize"
+
+    if resize == :x
+        xratio[] = potential_x_factor
+        low = Float64(ax.finallimits[].origin[1])
+        hi = Float64(low + ax.finallimits[].widths[1])
         xlims!(ax, ratio*low, ratio*hi)
-    else # need to increast y limits
-        low = ax.finallimits[].origin[2]
-        hi = low + ax.finallimits[].widths[2]
+    else
+        yratio[] = potential_y_factor
+        low = Float64(ax.finallimits[].origin[2])
+        hi = Float64(low + ax.finallimits[].widths[2])
         ylims!(ax, low/ratio, hi/ratio)
     end
 end

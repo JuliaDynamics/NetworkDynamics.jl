@@ -82,6 +82,7 @@ app = (;
 );
 
 let
+    isfile(WGLMakie.WGL.bundle_file) && rm(WGLMakie.WGL.bundle_file)
     _app = App() do session
         @info "start new session"
         WGLMakie.activate!(resize_to=:parent)
@@ -109,12 +110,12 @@ let
             styleTag.innerHTML = `.resize-with-gp { width: ${graphplotWidth} !important; }`;
 
             // Manually trigger the resize event on the window
-            const resizeEvent = new Event('resize');
-            window.dispatchEvent(resizeEvent);
+            // const resizeEvent = new Event('resize');
+            // window.dispatchEvent(resizeEvent);
         };
 
         // Use ResizeObserver for live resizing feedback
-        const updateResizeWithGpWidth_throttled = Bonito.throttle_function(updateResizeWithGpWidth, 1);
+        const updateResizeWithGpWidth_throttled = Bonito.throttle_function(updateResizeWithGpWidth, 10);
         const resizeObserver = new ResizeObserver(updateResizeWithGpWidth_throttled);
         resizeObserver.observe(graphplotCard);
 

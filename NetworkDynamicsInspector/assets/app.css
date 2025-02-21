@@ -9,12 +9,12 @@ html, body {
 .select2-container .select2-selection--single .select2-selection__rendered,
 .select2-container .select2-results__option{
     font-family: monospace;
-    //font-size: 20px;
+    /* font-size: 20px; */
 }
 .select2-results__group {
     font-family: sans-serif;
-    //font-size: 12px;
-    //color: blue;
+    /* font-size: 12px; */
+    /* color: blue; */
 }
 
 .maingrid {
@@ -28,16 +28,19 @@ html, body {
     display: flex;
     flex-direction: column;
     gap: 5px;
+    /* to keep shadows visible */
+    /* https://stackoverflow.com/questions/70802682/parents-overflowhidden-doesnt-show-childs-box-shadow */
     overflow: hidden; /* otherwise it won't shrink */
+    margin:-10px;
+    padding:10px
 }
 
 .graphplot-card {
-    heigth:400px; /* initial widht and height */
+    height:400px; /* initial widht and height */
     width: 400px;
     min-width:250px;
     resize: both;
     overflow: hidden;
-    /* grid-column: 1; */
 }
 
 .gpstate-control-card {
@@ -55,6 +58,7 @@ html, body {
 .timeseries-card-container{
     display: flex;
     flex-direction: column;
+    overflow: hidden;
     height: 100%;  /* otherwise it won't shrink */
 }
 .timeseries-card-container .comp-state-sel-grid {
