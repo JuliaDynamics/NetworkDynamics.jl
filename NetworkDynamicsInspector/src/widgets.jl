@@ -477,7 +477,7 @@ function Bonito.jsrender(session::Session, multiselect::MultiSelect)
 
             const sortedElements = new_order.map(i => jq_tags.eq(i));
             jq_tags_ul.append(sortedElements);
-            console.log("Rendered selection")
+            // console.log("Rendered selection")
         }
         function selectionHandler(e){
             const jq_select2  = $esc(this);
@@ -571,7 +571,7 @@ end
     height::Int = 24
     width::Int = 35
     inset::Int = 3
-    checked_color::String = "#2196F3"
+    checked_color::String = "#0072B2FF"
     background_color::String = "#ccc"
     thumb_color::String = "white"
     transition_time::Float64 = 0.4
