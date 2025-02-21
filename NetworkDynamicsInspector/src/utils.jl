@@ -77,3 +77,43 @@ end
 
 getcycled(v::AbstractVector, i) = v[mod1(i, length(v))]
 gendomid(s::String) = replace(string(gensym("selectbox")), "#"=>"")
+
+mutable struct Throttle{F}
+    f::F
+    delay::Float64
+    @atomic prev::Float64
+    @atomic future_task::Union{Timer,Nothing}
+end
+function Throttle(f, delay)
+    Throttle(f, Float64(delay), 0.0, nothing)
+end
+
+function (tr::Throttle)(args...)
+    now = time()
+    if !isnothing(tr.future_task)
+        close(tr.future_task)
+        @atomic tr.future_task = nothing
+    end
+    if now - tr.prev > tr.delay
+        @atomic tr.prev = now
+        return tr.f(args...)
+    else
+        waitfor = tr.delay - (now - tr.prev) + 1e-3
+        @atomic tr.future_task = Timer(waitfor) do _
+            tr(args...)
+        end
+    end
+end
+
+function on_throttled(f, obs; update=false, delay)
+    tr = Throttle(f, delay)
+    on(obs; update) do args...
+        tr(args...)
+    end
+end
+function onany_throttled(f, obs...; update=false, delay)
+    tr = Throttle(f, delay)
+    onany(obs; update) do args...
+        tr(args...)
+    end
+end
