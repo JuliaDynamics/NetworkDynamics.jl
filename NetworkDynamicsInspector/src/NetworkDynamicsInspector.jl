@@ -109,7 +109,7 @@ function graphplot_card(app; kwargs...)
     THICK = 6
     edge_width = Observable(fill(THIN, NE))
 
-    onany(app.graphplot.selcomp) do selcomp
+    onany(app.graphplot.selcomp; update=true) do selcomp
         @debug "GP: Sel comp => node_size, edge_width"
         fill!(node_size[], SMALL)
         fill!(edge_width[], THIN)
@@ -146,8 +146,8 @@ function graphplot_card(app; kwargs...)
             node_attr=(;colorrange=app.graphplot.ncolorrange, colormap=app.graphplot.ncolorscheme),
             edge_attr=(;colorrange=app.graphplot.ncolorrange, colormap=app.graphplot.ncolorscheme))
 
-        hidespines!(ax)
-        hidedecorations!(ax)
+        # hidespines!(ax)
+        # hidedecorations!(ax)
         fig, ax
     end
     on(ax.scene.viewport) do lims
@@ -207,7 +207,7 @@ function timeslider_card(app)
             RoundedLabel(tw_slider.value_l; style=Styles("text-align"=>"right")),
             tw_slider,
             RoundedLabel(tw_slider.value_r; style=Styles("text-align"=>"left"));
-            columns="70px 1fr 70px",
+            columns="70px auto 70px",
             justify_content="begin",
             align_items="center",
         );
@@ -223,6 +223,7 @@ function gpstate_control_card(app, type)
     colorrange = type == :vertex ? app.graphplot.ncolorrange : app.graphplot.ecolorrange
     colorscheme = type == :vertex ? app.graphplot.ncolorscheme : app.graphplot.ecolorscheme
     class = type == :vertex ? "gpstate-control-card vertex" : "gpstate-control-card edge"
+    class *= " resize-with-gp"
 
     ####
     #### State selection
@@ -294,7 +295,7 @@ function gpstate_control_card(app, type)
     end
 
     fig = with_theme(apptheme()) do
-        fig = Figure(; figure_padding=10)
+        fig = Figure(size=(400,40); figure_padding=10)
         Colorbar(fig[1,1];
             colormap=colorscheme,
             colorrange=colorrange,
@@ -305,13 +306,14 @@ function gpstate_control_card(app, type)
     cslider = ContinuousSlider(maxrange, thumb_l, thumb_r)
 
     Card(
-        Grid(
+        DOM.div(
             selector,
             DOM.div(fig; style=Styles("height" => "40px")),
+            # fig,
             # RoundedLabel(@lift $maxrange[1]; style=Styles("text-align"=>"right")),
             cslider,
             # RoundedLabel(@lift $maxrange[2]; style=Styles("text-align"=>"left"));
-            columns="100%",
+            class="gpstate-control-card-content",
         );
         class
     )
@@ -374,7 +376,9 @@ function timeseries_card(app, session)
     comp_state_sel_dom = Grid(
         DOM.span("Components"), comp_sel, reset_button,
         DOM.span("States"), state_sel, rel_toggle;
-        columns = "auto 1fr auto", align_items = "center"
+        columns = "min-content auto min-content",
+        align_items = "center",
+        class = "comp-state-sel-grid"
     )
 
     # hl choice of elements in graphplot
@@ -449,7 +453,7 @@ function timeseries_card(app, session)
             styleContent += `#$(comp_ms_id) +span li[title='${title}']::after {
                 content: 'xx';
                 display: inline-block;
-                padding-left: 0px 4px;
+                padding: 0px 4px;
                 background-color: ${color} !important;
                 color: ${color} !important;
                 border-left: 1px solid #aaa;
@@ -487,8 +491,7 @@ function timeseries_card(app, session)
                 styleContent += `#$(state_ms_id) +span li[title='${title}']::after {
                     content: '${linestyle}';
                     display: inline-block;
-                    padding-left: 5px;
-                    padding-right: 5px;
+                    padding: 0px 4px;
                     color: inherit;
                     border-left: 1px solid #aaa;
                     font-size: smaller;
@@ -563,7 +566,7 @@ function timeseries_card(app, session)
         @debug "TS: t, valid_idx, rel, sol => update data"
         _dat = _sol(_ts, idxs=_valid_idxs)
         if _rel
-            u0 = _sol(sol.t[begin], idxs=_valid_idxs)
+            u0 = _sol(_sol.t[begin], idxs=_valid_idxs)
             for row in _dat
                 row .-= u0
             end
@@ -611,10 +614,12 @@ function timeseries_card(app, session)
     register_interaction!(set_time_interaction, ax, :set_time)
 
     Card(
-        Grid(
+        DOM.div(
             comp_state_sel_dom,
-            fig
-        )
+            DOM.div(fig; class="timeseries-axis-container");
+            class="timeseries-card-container"
+        );
+        class="timeseries-card"
     )
 end
 function _sidx_to_str(s)

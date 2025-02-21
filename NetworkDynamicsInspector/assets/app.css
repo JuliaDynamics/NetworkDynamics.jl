@@ -19,31 +19,48 @@ html, body {
 
 .maingrid {
     display: grid;
-    grid-template-columns: 25% 75%;
+    grid-template-columns: min-content auto;
     width: 100%;
+    gap: 5px;
 }
-.graphplot-col {
-    display: grid;
-    grid-template-columns: 100%;
-}
-.timeseries-col{
-    display: grid;
-    grid-template-columns: 100%;
+
+.graphplot-col, .timeseries-col, .timeseries-stack{
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    overflow: hidden; /* otherwise it won't shrink */
 }
 
 .graphplot-card {
-    heigth:400px;
+    heigth:400px; /* initial widht and height */
+    width: 400px;
+    min-width:250px;
+    resize: both;
+    overflow: hidden;
     /* grid-column: 1; */
 }
-.gpstate-control-card.vertex {
-    height:min-content;
-    /* grid-column: 1; */
-}
-.gpstate-control-card.edge {
-    height:min-content;
-    /* grid-column: 1; */
+
+.gpstate-control-card {
 }
 
 .timeslider-card {
     height:min-content;
+}
+
+.timeseries-card {
+    resize: vertical;
+    overflow: hidden;
+    /* grid-column: 2; */
+}
+.timeseries-card-container{
+    display: flex;
+    flex-direction: column;
+    height: 100%;  /* otherwise it won't shrink */
+}
+.timeseries-card-container .comp-state-sel-grid {
+    height: min-content;  /* otherwise it won't shrink */
+}
+.timeseries-axis-container{
+    flex-grow: 1;
+    overflow:hidden;
 }

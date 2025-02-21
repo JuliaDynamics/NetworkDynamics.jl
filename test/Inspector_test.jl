@@ -86,6 +86,43 @@ let
         @info "start new session"
         WGLMakie.activate!(resize_to=:parent)
         NetworkDynamicsInspector.clear_obs!(app)
+
+        resize_gp = js"""
+        const graphplotCard = document.querySelector(".graphplot-card");
+
+        // Function to update the width dynamically
+        function updateResizeWithGpWidth() {
+            const graphplotWidth = getComputedStyle(graphplotCard).width;  // Get the computed width of .graphplot-card
+            const resizeWithGpElements = document.querySelectorAll(".resize-with-gp");
+
+            // Dynamically update the styles for .resize-with-gp elements
+            let styleTag = document.getElementById("dynamic-resize-style");
+
+            // Create the <style> tag if it doesn't exist
+            if (!styleTag) {
+                styleTag = document.createElement("style");
+                styleTag.id = "dynamic-resize-style";
+                document.head.appendChild(styleTag);
+            }
+
+            // Generate new CSS rule based on the width of .graphplot-card
+            styleTag.innerHTML = `.resize-with-gp { width: ${graphplotWidth} !important; }`;
+
+            // Manually trigger the resize event on the window
+            const resizeEvent = new Event('resize');
+            window.dispatchEvent(resizeEvent);
+        };
+
+        // Use ResizeObserver for live resizing feedback
+        const updateResizeWithGpWidth_throttled = Bonito.throttle_function(updateResizeWithGpWidth, 1);
+        const resizeObserver = new ResizeObserver(updateResizeWithGpWidth_throttled);
+        resizeObserver.observe(graphplotCard);
+
+        // Initial update
+        updateResizeWithGpWidth();
+        """
+        Bonito.evaljs(session, resize_gp)
+
         DOM.div(
             DOM.div(
                 NetworkDynamicsInspector.graphplot_card(app),
@@ -95,7 +132,12 @@ let
             ),
             DOM.div(
                 NetworkDynamicsInspector.timeslider_card(app),
-                NetworkDynamicsInspector.timeseries_card(app, session),
+                DOM.div(
+                    NetworkDynamicsInspector.timeseries_card(app, session),
+                    Card("foo"),
+                    Card("bar"),
+                    class="timeseries-stack"
+                ),
                 class="timeseries-col"
             ),
             class="maingrid"
