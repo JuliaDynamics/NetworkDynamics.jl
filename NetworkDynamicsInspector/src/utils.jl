@@ -27,12 +27,20 @@ function gen_state_options(nw::Network, sidxs)
     options
 end
 
-function clear_obs!(nt::NamedTuple)
-    for v in values(nt)
+function clear_obs!(x::Union{NamedTuple, AbstractDict})
+    for v in values(x)
         clear_obs!(v)
     end
 end
-clear_obs!(obs::Observable) = empty!(obs.listeners)
+function clear_obs!(obs::Observable)
+    empty!(obs.listeners)
+    clear_obs!(obs.val)
+end
+function clear_obs!(v::AbstractVector)
+    for el in v
+        clear_obs!(el)
+    end
+end
 clear_obs!(x) = x
 
 # TODO: move to grpahmakie
