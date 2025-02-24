@@ -1,19 +1,3 @@
-
-function wrap_assets(appdom)
-    jquery = Asset("https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js")
-    select2_css = Asset("https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css")
-    select2_js = Asset("https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js")
-    css = Asset(joinpath(pkgdir(NetworkDynamicsInspector), "assets", "app.css"))
-
-    DOM.body(
-        jquery,
-        select2_css,
-        select2_js,
-        css,
-        appdom;
-    )
-end
-
 function gen_state_options(nw::Network, sidxs)
     options = OptionGroup{Symbol}[]
     isempty(sidxs) && return options

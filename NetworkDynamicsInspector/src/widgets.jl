@@ -398,9 +398,9 @@ function Bonito.jsrender(session::Session, multiselect::MultiSelect)
     )
 
     container = DOM.div(
-        # jquery,
-        # select2_css,
-        # select2_js,
+        JQUERY,
+        SELECT2_CSS,
+        SELECT2_JS,
         select
     )
 

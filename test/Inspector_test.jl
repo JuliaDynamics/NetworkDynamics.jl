@@ -83,6 +83,8 @@ app = (;
 
 let
     isfile(WGLMakie.WGL.bundle_file) && rm(WGLMakie.WGL.bundle_file)
+    bonitobundle = joinpath(pkgdir(Bonito), "js_dependencies", "Bonito.bundled.js")
+    ispath(bonitobundle) && rm(bonitobundle)
     _app = App() do session
         @info "start new session"
         WGLMakie.activate!(resize_to=:parent)
@@ -125,6 +127,7 @@ let
         Bonito.evaljs(session, resize_gp)
 
         DOM.div(
+            NetworkDynamicsInspector.APP_CSS,
             DOM.div(
                 NetworkDynamicsInspector.graphplot_card(app),
                 NetworkDynamicsInspector.gpstate_control_card(app, :vertex),
@@ -142,7 +145,7 @@ let
                 class="timeseries-col"
             ),
             class="maingrid"
-        ) |> wrap_assets
+        )
     end;
     serve_app(_app)
 end
