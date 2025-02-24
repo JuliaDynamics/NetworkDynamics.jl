@@ -218,7 +218,6 @@ function Bonito.jsrender(session::Session, slider::ContinuousSlider)
             return pos;
         }
 
-        //const move_thumb_throttled = Bonito.throttle_function(thumb_event, 100);
         const controller = new AbortController();
         document.addEventListener('mousedown', function (e) {
             if (e.target === thumb_r){
@@ -247,11 +246,12 @@ function Bonito.jsrender(session::Session, slider::ContinuousSlider)
             isDragging_r = false;
             isDragging_l = false;
         }, { signal: controller.signal });
+        const thumb_event_throttled = Bonito.throttle_function(thumb_event, 10);
         document.addEventListener('mousemove', function (e) {
             if (isDragging_r) {
-                thumb_event(e, 'r');
+                thumb_event_throttled(e, 'r');
             } else if (isDragging_l) {
-                thumb_event(e, 'l');
+                thumb_event_throttled(e, 'l');
             }
         }, { signal: controller.signal });
         set_thumb_val($(slider.value_l).value, 'l');
