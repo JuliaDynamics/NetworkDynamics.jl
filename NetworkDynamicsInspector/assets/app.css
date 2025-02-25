@@ -85,3 +85,22 @@ html, body {
     display: none; /* Initially hidden */
     transform: translate(12px, 12px); /* Offset from cursor */
 }
+
+#element-info-box {
+    font-family: monospace;
+    overflow: scroll;
+    border: 2px solid #dbdbdb;
+    border-radius: 4px;
+    background-color: #f5f5f5;
+    color: #222;
+    padding: 1px 10px;
+}
+.element-info-card {
+    /* overflow:hidden; */
+    /* resize:vertical; */
+}
+
+.julia-prompt {
+    color: #066f00;
+    font-weight: bolder;
+}

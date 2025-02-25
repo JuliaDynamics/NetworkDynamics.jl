@@ -489,6 +489,8 @@ insym(c::EdgeModel)::@NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}} = c.in
 
 insym_all(c::VertexModel) = c.insym
 insym_all(c::EdgeModel) = Iterators.flatten(values(c.insym))
+insym_flat(c::VertexModel) = insym_all(c)
+insym_flat(c::EdgeModel) = collect(insym_all(c))
 
 """
     indim(c::VertexModel)::Int

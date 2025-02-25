@@ -105,7 +105,7 @@ function on_throttled(f, obs; update=false, delay)
 end
 function onany_throttled(f, obs...; update=false, delay)
     tr = Throttle(f, delay)
-    onany(obs; update) do args...
+    onany(obs...; update) do args...
         tr(args...)
     end
 end

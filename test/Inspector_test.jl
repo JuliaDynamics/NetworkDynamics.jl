@@ -142,6 +142,7 @@ let
                 NetworkDynamicsInspector.graphplot_card(app, session),
                 NetworkDynamicsInspector.gpstate_control_card(app, :vertex),
                 NetworkDynamicsInspector.gpstate_control_card(app, :edge),
+                NetworkDynamicsInspector.element_info_card(app, session),
                 class="graphplot-col"
             ),
             DOM.div(

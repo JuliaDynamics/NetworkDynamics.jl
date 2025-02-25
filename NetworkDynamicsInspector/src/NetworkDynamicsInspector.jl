@@ -15,6 +15,9 @@ using GraphMakie.NetworkLayout
 using Bonito.Hyperscript
 using Bonito.Tables.OrderedCollections
 
+# defined based on the julia version
+using NetworkDynamics: AnnotatedIOBuffer, AnnotatedString
+
 const JQUERY = Asset("https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js")
 const SELECT2_CSS = Asset("https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css")
 const SELECT2_JS = Asset("https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js")
@@ -113,7 +116,7 @@ function graphplot_card(app, session)
     BIG = 50
     node_size = Observable(fill(SMALL, NV))
     THIN = 5
-    THICK = 8
+    THICK = 10
     edge_width = Observable(fill(THIN, NE))
 
     onany(app.graphplot._selcomp; update=true) do selcomp
@@ -228,19 +231,24 @@ function graphplot_card(app, session)
     end
 
     # interactions
-    clickaction = (i, type) -> begin
+    clickaction = (i, ax, type) -> begin
+        shift_pressed = Makie.Keyboard.left_shift ∈ events(ax).keyboardstate ||
+                        Makie.Keyboard.right_shift ∈ events(ax).keyboardstate
+
         idx = type == :vertex ? VIndex(i) : EIndex(i)
-        selcomp = app.tsplots[][app.active_tsplot[]].selcomp
-        if idx ∉ selcomp[]
-            push!(selcomp[], idx)
-        else
-            filter!(x -> x != idx, selcomp[])
+        if !shift_pressed # only update info window when click + shift
+            selcomp = app.tsplots[][app.active_tsplot[]].selcomp
+            if idx ∉ selcomp[]
+                push!(selcomp[], idx)
+            else
+                filter!(x -> x != idx, selcomp[])
+            end
+            notify(selcomp)
         end
         app.graphplot._lastclickel[] = idx
-        notify(selcomp)
     end
-    nch = NodeClickHandler((i, _, _) -> clickaction(i, :vertex))
-    ech = EdgeClickHandler((i, _, _) -> clickaction(i, :edge))
+    nch = NodeClickHandler((i, _, ax) -> clickaction(i, ax, :vertex))
+    ech = EdgeClickHandler((i, _, ax) -> clickaction(i, ax, :edge))
 
     register_interaction!(ax, :nodeclick, nch)
     register_interaction!(ax, :nodehover, nhh)
@@ -808,6 +816,44 @@ function _smallest_free(d::Dict)
         i += 1
     end
     return i
+end
+
+function element_info_card(app, session)
+    eltext = Observable{AnnotatedString}("")
+    onany_throttled(app.graphplot._lastclickel, app.t; update=true, delay=0.1) do el, t
+        if isnothing(el)
+            eltext[] = ""
+        else
+            buf = AnnotatedIOBuffer()
+            NetworkDynamics.dump_state(buf, app.sol[], t, el)
+            s = read(seekstart(buf), AnnotatedString)
+            htmlbuf = IOBuffer()
+            show(htmlbuf, MIME"text/html"(), s)
+            html = replace(String(take!(htmlbuf)), r"\n" => "<br>")
+
+            t = NetworkDynamics.str_significant(app.t[]; sigdigits=3)
+            fake_prompt = "<span class=julia-prompt>julia&gt; </span><span class=julia-command>dump_state(sol, $t, $(repr(el)))</span>"
+            eltext[] = "<pre>$fake_prompt<br><br>$html</pre>"
+        end
+    end
+
+    js = js"""
+        const div = document.getElementById("element-info-box");
+
+        function replaceDivContentWithHTML(htmlString) {
+            if (!div) return;
+            div.innerHTML = htmlString;
+        }
+
+        $(eltext).on(replaceDivContentWithHTML);
+        replaceDivContentWithHTML($(eltext).value);
+    """
+    evaljs(session, js)
+
+    Card(
+        DOM.div(;id="element-info-box");
+        class="element-info-card resize-with-gp"
+    )
 end
 
 end # module NetworkDynamicsInspector
