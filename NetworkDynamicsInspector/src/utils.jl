@@ -109,3 +109,16 @@ function onany_throttled(f, obs...; update=false, delay)
         tr(args...)
     end
 end
+
+function onany_delayed(f, obs...; delay)
+    future = nothing
+
+    onany(obs...) do args...
+        if !isnothing(future)
+            close(future)
+        end
+        future = Timer(delay) do _
+            f(args...)
+        end
+    end
+end

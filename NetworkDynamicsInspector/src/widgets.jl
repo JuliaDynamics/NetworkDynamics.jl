@@ -586,6 +586,7 @@ function Bonito.jsrender(session::Session, toggle::ToggleSwitch)
         "position" => "relative",
         "display" => "inline-block",
         "cursor" => "pointer",
+        "margin" => "0.25rem",
     )
 
     input_style = Styles(

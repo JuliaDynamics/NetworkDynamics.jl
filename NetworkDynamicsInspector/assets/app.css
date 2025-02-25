@@ -104,3 +104,9 @@ html, body {
     color: #066f00;
     font-weight: bolder;
 }
+
+button{
+    font-size: 12px !important;
+    font-weight: normal !important;
+    font-family: sans-serif !important;;
+}

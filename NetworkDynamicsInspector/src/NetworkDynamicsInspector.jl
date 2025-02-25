@@ -36,7 +36,8 @@ function apptheme()
            linestyle = [:solid, :dot, :dash, :dashdot, :dashdotdot],
         ),
         Lines = (;
-            cycle = Cycle([:color, :linestyle], covary=true)
+            cycle = Cycle([:color, :linestyle], covary=true),
+            linewidth = 3,
         )
     )
 end
@@ -518,19 +519,22 @@ function timeseries_card(app, key, session)
         T=Symbol,
         id=gendomid("statesel"))
 
-    reset_button = Bonito.Button("Reset Color", style=Styles("margin-left"=>"10px"))
-    on(reset_button.value) do _
+    reset_color_button = Bonito.Button("Reset Color", style=Styles("margin-left"=>"10px"))
+    on(reset_color_button.value) do _
         empty!(color_cache)
         empty!(linestyle_cache)
         notify(tsplot.selcomp)
         notify(tsplot.states)
     end
 
+    reset_axis_button = Bonito.Button("Reset Axis", style=Styles("margin-left"=>"10px"))
+
     rel_toggle = ToggleSwitch(value=tsplot.rel, label="Rel to u0")
 
     comp_state_sel_dom = Grid(
-        DOM.span("Components"), comp_sel, reset_button,
-        DOM.span("States"), state_sel, rel_toggle;
+        DOM.span("Components"), comp_sel,
+        DOM.div(reset_color_button, reset_axis_button, rel_toggle; style=Styles("grid-row"=>"1/3", "grid-column"=>"3")),
+        DOM.span("States"), state_sel;
         columns = "min-content auto min-content",
         align_items = "center",
         class = "comp-state-sel-grid"
@@ -548,7 +552,7 @@ function timeseries_card(app, key, session)
     ####
     COLORS = Makie.wong_colors()
     LINESTYLES = [:solid, :dot, :dash, :dashdot, :dashdotdot]
-    LINESTYLES = ["─", "⋯", "--", "-⋅-", "-⋅⋅"]
+    LINESTYLES_STR = ["─", "⋯", "--", "-⋅-", "-⋅⋅"]
     color_cache = Dict{Union{EIndex{Int,Nothing},VIndex{Int,Nothing}}, Int}()
     linestyle_cache = Dict{Symbol,Int}()
 
@@ -578,7 +582,7 @@ function timeseries_card(app, key, session)
             i = _smallest_free(linestyle_cache)
             linestyle_cache[new] = i
         end
-        lstylepairs[] = [(; title=repr(s), linestyle=getcycled(LINESTYLES, i))
+        lstylepairs[] = [(; title=repr(s), linestyle=getcycled(LINESTYLES_STR, i))
                          for (s,i) in linestyle_cache]
         nothing
     end
@@ -606,7 +610,7 @@ function timeseries_card(app, key, session)
             styleContent += `#$(comp_ms_id) +span li[title='${title}']::after {
                 content: 'xx';
                 display: inline-block;
-                padding: 0px 4px;
+                padding: 0px 1px;
                 background-color: ${color} !important;
                 color: ${color} !important;
                 border-left: 1px solid #aaa;
@@ -644,7 +648,7 @@ function timeseries_card(app, key, session)
                 styleContent += `#$(state_ms_id) +span li[title='${title}']::after {
                     content: '${linestyle}';
                     display: inline-block;
-                    padding: 0px 4px;
+                    padding: 0px 1px;
                     color: inherit;
                     border-left: 1px solid #aaa;
                     font-size: smaller;
@@ -676,27 +680,18 @@ function timeseries_card(app, key, session)
         nothing
     end
 
-    ts = Observable(range(app.sol[].t[begin], app.sol[].t[end], length=1000))
-    # last update of ts range
-    lastupdate = Ref(time())
-    on(ax.finallimits) do lims
-        lastupdate[] = time()
+    ts = Observable(collect(range(app.sol[].t[begin], app.sol[].t[end], length=1000)))
+    refined_xlims = Ref((NaN, NaN))
+    onany_delayed(ax.finallimits; delay=0.5) do axlims
+        sollims = (app.sol[].t[begin], app.sol[].t[end])
+        xlims = (axlims.origin[1], axlims.origin[1] + axlims.widths[1])
+        if xlims != refined_xlims[]
+            refined_xlims[] = xlims
+            refine_time_limits!(ts[], sollims, xlims)
+            notify(ts)
+        end
         nothing
     end
-    # every 0.5 seconds trigger resampling
-    # timer = Timer(.5; interval=.5) do _
-    #     if time() > lastupdate[] + 0.5
-    #         lims = ax.finallimits[]
-    #         tmin = max(app.sol[].t[begin], lims.origin[1])
-    #         tmax = min(app.sol[].t[end], tmin + lims.widths[1])
-    #         ts[] = range(tmin, tmax, length=1000)
-    #         lastupdate[] = Inf
-    #     end
-    # end
-    # on(session.on_close) do _
-    #     @info "Session closed, time to clean up"
-    #     # close(timer)
-    # end
 
     # collect all the states wie might want to plot
     valid_idxs = Observable(
@@ -731,25 +726,39 @@ function timeseries_card(app, key, session)
         notify(data)
     end
 
+    replot = Observable{Nothing}(nothing)
+
+    # store the idxs for which the autolmits where last set
+    last_autolimits = Ref((eltype(valid_idxs)(), tsplot.rel[]))
     # plot the thing
-    on(data; update=true) do _dat
+    onany(data, replot) do _dat, _
         @async begin
             try
                 empty!(ax)
-                vlines!(ax, app.t; color=:black)
+                vlines!(ax.scene, app.t; color=:black)
                 for (idx, y) in zip(valid_idxs[], data[])
                     color = begin
                         key = idx isa VIndex ? VIndex(idx.compidx) : EIndex(idx.compidx)
-                        Cycled(color_cache[key])
+                        getcycled(COLORS, color_cache[key])
                     end
-                    linestyle = Cycled(linestyle_cache[idx.subidx])
-                    lines!(ax, ts[], y; label=string(idx), color, linestyle)
+                    linestyle = getcycled(LINESTYLES, linestyle_cache[idx.subidx])
+                    lines!(ax.scene, ts[], y; label=string(idx), color, linestyle)
+                    # scatterlines!(ax, ts[], y; label=string(idx), color, linestyle)
+                end
+                # if last_autolimits[][1] != valid_idxs[] || last_autolimits[][2] != tsplot.rel[]
+                if last_autolimits[] != (valid_idxs[], tsplot.rel[])
+                    autolimits!(ax)
+                    last_autolimits[] = (copy(valid_idxs[]), tsplot.rel[])
                 end
             catch e
                 @error "Plotting failed" e
             end
         end
         nothing
+    end
+
+    on(reset_axis_button.value) do _
+        autolimits!(ax)
     end
 
     ####
@@ -780,8 +789,20 @@ function timeseries_card(app, key, session)
         class=cardclass
     )
 
+
+    # trigger plot on document ready
+    jqdocument = Bonito.JSString(raw"$(document)")
+    trigger_plot = js"""
+    $(jqdocument).ready(function(){
+        console.log("Document ready, trigger plot");
+        // $(data).notify();
+        $(replot).notify();
+    });
+    """
+    Bonito.evaljs(session, trigger_plot)
+
     # on click set active-tseries class
-    click = js"""
+    onload_js = js"""
     (card) => {
         card.addEventListener("click", function(event) {
             $(app.active_tsplot).notify($(key));
@@ -795,9 +816,44 @@ function timeseries_card(app, key, session)
         }, { capture: true });
     }
     """
-    Bonito.onload(session, card, click)
+    Bonito.onload(session, card, onload_js)
 
     return card
+end
+
+function refine_time_limits!(ts, sollims, axlims)
+    FOCUS = 900
+    UNFOCUS = 100
+    if length(ts) !== FOCUS + UNFOCUS
+        @warn "Resize ts, lenght $(length(ts)) != $(FOCUS + UNFOCUS)"
+        resize!(ts, FOCUS + UNFOCUS)
+    end
+    # never plot outside of solution
+    axlims = (max(axlims[1], sollims[1]), min(axlims[2], sollims[2]))
+
+    axrange = range(axlims[1], axlims[2], length=FOCUS)
+    outer_low =  max(0, axlims[1] - sollims[1])
+    outer_high = max(0, sollims[2] - axlims[2])
+
+    if outer_low == 0
+        high_range = range(sollims[2], axlims[2], length=UNFOCUS+1)[2:end]
+        ts[1:FOCUS] .= axrange
+        ts[FOCUS+1:end] .= high_range
+    elseif outer_high == 0
+        low_range = range(axlims[1], sollims[1], length=UNFOCUS+1)[1:end-1]
+        ts[1:UNFOCUS] .= low_range
+        ts[UNFOCUS+1:end] .= axrange
+    else
+        N_LOW = round(Int, outer_low/(outer_low + outer_high) *UNFOCUS)
+        N_HIGH = UNFOCUS - N_LOW
+        low_range = range(sollims[1], axlims[1], length=N_LOW+1)[1:end-1]
+        high_range = range(axlims[2], sollims[2], length=N_HIGH+1)[2:end]
+        ts[1:N_LOW] .= low_range
+        ts[N_LOW+1:N_LOW+FOCUS] .= axrange
+        ts[N_LOW+FOCUS+1:end] .= high_range
+    end
+    # ts .= range(axlims[1], axlims[2], length=1000)
+    nothing
 end
 
 function _sidx_to_str(s, app)
