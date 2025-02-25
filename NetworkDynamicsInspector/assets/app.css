@@ -71,3 +71,17 @@ html, body {
     flex-grow: 1;
     overflow:hidden;
 }
+
+.tooltip {
+    position: absolute;
+    background-color: black;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-size: 12px;
+    font-family: monospace;
+    pointer-events: none;
+    white-space: nowrap;
+    display: none; /* Initially hidden */
+    transform: translate(12px, 12px); /* Offset from cursor */
+}
