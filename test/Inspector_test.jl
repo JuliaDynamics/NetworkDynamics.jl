@@ -74,14 +74,9 @@ app = (;
         ecolorrange = Observable{Tuple{Float32,Float32}}((-1.0, 1.0)),
         ecolorscheme = Observable{ColorScheme}(ColorSchemes.coolwarm),
         _selcomp = Observable{Vector{SymbolicIndex}}(SymbolicIndex[]),
-        _hoverel = Observable{Union{EIndex{Int,Nothing},VIndex{Int,Nothing},Nothing}}(nothing)
-        _lastclickel = Observable{Union{EIndex{Int,Nothing},VIndex{Int,Nothing},Nothing}}(nothing)
+        _hoverel = Observable{Union{EIndex{Int,Nothing},VIndex{Int,Nothing},Nothing}}(nothing),
+        _lastclickel = Observable{Union{EIndex{Int,Nothing},VIndex{Int,Nothing},Nothing}}(nothing),
     ),
-    # tsplot = (;
-    #     selcomp = Observable{Vector{SymbolicIndex}}(SymbolicIndex[]),
-    #     states = Observable{Vector{Symbol}}(Symbol[]),
-    #     rel = Observable{Bool}(false),
-    # ),
     tsplots = Observable{Any}(OrderedDict(
         "a" => (;
             selcomp = Observable{Vector{SymbolicIndex}}(SymbolicIndex[]),

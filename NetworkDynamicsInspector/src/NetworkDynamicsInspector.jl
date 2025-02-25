@@ -146,7 +146,6 @@ function graphplot_card(app, session)
         Stress(; pin)
     end
 
-    small_hover_text = Observable{String}("")
     fig, ax = with_theme(apptheme()) do
         fig = Figure(; figure_padding=0)
         ax = Axis(fig[1,1])
@@ -156,11 +155,6 @@ function graphplot_card(app, session)
 
         hidespines!(ax)
         hidedecorations!(ax)
-
-        fig[1,1] = Label(fig, small_hover_text,
-            tellwidth=false, tellheight=false,
-            justification=:left, halign=:left, valign=:bottom)
-
         fig, ax
     end
     xratio = Ref{Float64}(1.0)
@@ -174,31 +168,63 @@ function graphplot_card(app, session)
     ####
     #### Interactions
     ####
-    hoverstate = Observable(false)
+    tooltip_text = Observable{String}("")
 
     js = js"""
     const gpcard = document.querySelector(".graphplot-card");
-    $(hoverstate).on((state) => {
-        if (state) {
+
+    // Create tooltip element
+    const tooltip = document.createElement("div");
+    tooltip.classList.add("tooltip"); // Apply styles from CSS
+    document.body.appendChild(tooltip);
+
+    // let tooltipTimeout; // Store timeout reference
+    let latestX = 0, latestY = 0; // Store latest cursor position
+    let isUpdating = false;
+
+    gpcard.addEventListener("mousemove", (event) => {
+        latestX = event.clientX;
+        latestY = event.clientY;
+
+        if (!isUpdating && tooltip.style.display === "block") {
+            isUpdating = true;
+            requestAnimationFrame(() => {
+                tooltip.style.left = `${latestX}px`;
+                tooltip.style.top = `${latestY}px`;
+                isUpdating = false;
+            });
+        }
+    });
+
+    // Show tooltip after delay when idx > 0
+    $(tooltip_text).on((text) => {
+        // clearTimeout(tooltipTimeout); // Prevent multiple pending tooltips
+
+        if (text.length > 0) {
             gpcard.style.cursor = "pointer";
+
+            // tooltipTimeout = setTimeout(() => { // Delay tooltip display
+                tooltip.textContent = text;
+                tooltip.style.display = "block";
+                tooltip.style.left = `${latestX}px`;
+                tooltip.style.top = `${latestY}px`;
+            // }, 300); // 0.3s delay
         } else {
             gpcard.style.cursor = "default";
+            tooltip.style.display = "none"; // Hide tooltip immediately
+            // clearTimeout(tooltipTimeout); // Cancel any pending tooltip show
         }
     });
     """
     evaljs(session, js)
 
     nhh = NodeHoverHandler() do hstate, idx, event, axis
-        hoverstate[] = hstate
+        tooltip_text[] = hstate ? _sidx_to_str(VIndex(idx), app) : ""
         app.graphplot._hoverel[] = hstate ? VIndex(idx) : nothing
     end
     ehh = EdgeHoverHandler() do hstate, idx, event, axis
-        hoverstate[] = hstate
+        tooltip_text[] = hstate ? _sidx_to_str(EIndex(idx), app) : ""
         app.graphplot._hoverel[] = hstate ? EIndex(idx) : nothing
-    end
-
-    on(app.graphplot._hoverel) do el
-        small_hover_text[] = isnothing(el) ? "" : repr(el)
     end
 
     # interactions
@@ -259,7 +285,6 @@ function adapt_xy_scaling!(xratio, yratio, ax)
         resize = potential_x_factor > potential_y_factor ? :x : :y
         @warn "No valid scaling factor found, chose $resize"
     end
-    @info "Resizing $resize"
 
     if resize == :x
         xratio[] = potential_x_factor
@@ -475,7 +500,7 @@ function timeseries_card(app, key, session)
     comp_sel = MultiSelect(comp_options, tsplot.selcomp;
         placeholder="Select components",
         multi=true,
-        option_to_string=_sidx_to_str,
+        option_to_string=s -> _sidx_to_str(s, app),
         T=SymbolicIndex,
         id=gendomid("compsel"))
     # comp_sel_dom = Grid(DOM.span("Components"), comp_sel; columns = "70px 1fr", align_items = "center")
@@ -531,7 +556,7 @@ function timeseries_card(app, key, session)
             i = _smallest_free(color_cache)
             color_cache[new] = i
         end
-        colorpairs[] = [(; title=_sidx_to_str(k),
+        colorpairs[] = [(; title=_sidx_to_str(k, app),
                          color="#"*Colors.hex(getcycled(COLORS, v)))
                         for (k,v) in color_cache]
         nothing
@@ -766,8 +791,15 @@ function timeseries_card(app, key, session)
 
     return card
 end
-function _sidx_to_str(s)
-    (s isa VIndex ? "v" : "e") * string(s.compidx)
+
+function _sidx_to_str(s, app)
+    if s isa VIndex
+        "v$(s.compidx)"
+    else
+        edge = extract_nw(app.sol[]).im.edgevec[s.compidx]
+        src, dst = edge.src, edge.dst
+        "e$(s.compidx): $src→$dst"
+    end
 end
 function _smallest_free(d::Dict)
     vals = values(d)
