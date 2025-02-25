@@ -508,6 +508,15 @@ function Bonito.jsrender(session::Session, multiselect::MultiSelect)
             $(jsselection).notify(order.map(Number));
         }
         $jqselect.on('select2:select select2:unselect', selectionHandler);
+
+        // prevent dropdown on unselect
+        // https://github.com/select2/select2/issues/3209#issuecomment-149663474
+        $jqselect.on("select2:unselect", function (evt) {
+            if (!evt.params.originalEvent) {
+                return;
+            }
+            evt.params.originalEvent.stopPropagation();
+        });
     }
     """
     Bonito.onload(session, select, js_onload)
