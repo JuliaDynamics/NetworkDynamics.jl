@@ -12,6 +12,8 @@ using NetworkDynamics: SII
 using Graphs: nv, ne
 using GraphMakie
 using GraphMakie.NetworkLayout
+using Bonito.Hyperscript
+using Bonito.Tables.OrderedCollections
 
 const JQUERY = Asset("https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js")
 const SELECT2_CSS = Asset("https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css")
@@ -36,7 +38,7 @@ function apptheme()
     )
 end
 
-function graphplot_card(app; kwargs...)
+function graphplot_card(app, session)
     nw = map!(extract_nw, Observable{Network}(), app.sol)
     NV = nv(nw[])
     NE = ne(nw[])
@@ -110,11 +112,11 @@ function graphplot_card(app; kwargs...)
     SMALL = 30
     BIG = 50
     node_size = Observable(fill(SMALL, NV))
-    THIN = 3
-    THICK = 6
+    THIN = 5
+    THICK = 8
     edge_width = Observable(fill(THIN, NE))
 
-    onany(app.graphplot.selcomp; update=true) do selcomp
+    onany(app.graphplot._selcomp; update=true) do selcomp
         @debug "GP: Sel comp => node_size, edge_width"
         fill!(node_size[], SMALL)
         fill!(edge_width[], THIN)
@@ -144,6 +146,7 @@ function graphplot_card(app; kwargs...)
         Stress(; pin)
     end
 
+    small_hover_text = Observable{String}("")
     fig, ax = with_theme(apptheme()) do
         fig = Figure(; figure_padding=0)
         ax = Axis(fig[1,1])
@@ -153,6 +156,11 @@ function graphplot_card(app; kwargs...)
 
         hidespines!(ax)
         hidedecorations!(ax)
+
+        fig[1,1] = Label(fig, small_hover_text,
+            tellwidth=false, tellheight=false,
+            justification=:left, halign=:left, valign=:bottom)
+
         fig, ax
     end
     xratio = Ref{Float64}(1.0)
@@ -162,7 +170,59 @@ function graphplot_card(app; kwargs...)
         adapt_xy_scaling!(xratio, yratio, ax)
         nothing
     end
-    Card(fig; class="graphplot-card", kwargs...)
+
+    ####
+    #### Interactions
+    ####
+    hoverstate = Observable(false)
+
+    js = js"""
+    const gpcard = document.querySelector(".graphplot-card");
+    $(hoverstate).on((state) => {
+        if (state) {
+            gpcard.style.cursor = "pointer";
+        } else {
+            gpcard.style.cursor = "default";
+        }
+    });
+    """
+    evaljs(session, js)
+
+    nhh = NodeHoverHandler() do hstate, idx, event, axis
+        hoverstate[] = hstate
+        app.graphplot._hoverel[] = hstate ? VIndex(idx) : nothing
+    end
+    ehh = EdgeHoverHandler() do hstate, idx, event, axis
+        hoverstate[] = hstate
+        app.graphplot._hoverel[] = hstate ? EIndex(idx) : nothing
+    end
+
+    on(app.graphplot._hoverel) do el
+        small_hover_text[] = isnothing(el) ? "" : repr(el)
+    end
+
+    # interactions
+    clickaction = (i, type) -> begin
+        idx = type == :vertex ? VIndex(i) : EIndex(i)
+        selcomp = app.tsplots[][app.active_tsplot[]].selcomp
+        if idx ∉ selcomp[]
+            push!(selcomp[], idx)
+        else
+            filter!(x -> x != idx, selcomp[])
+        end
+        app.graphplot._lastclickel[] = idx
+        notify(selcomp)
+    end
+    nch = NodeClickHandler((i, _, _) -> clickaction(i, :vertex))
+    ech = EdgeClickHandler((i, _, _) -> clickaction(i, :edge))
+
+    register_interaction!(ax, :nodeclick, nch)
+    register_interaction!(ax, :nodehover, nhh)
+    register_interaction!(ax, :edgeclick, ech)
+    register_interaction!(ax, :edgehover, ehh)
+
+
+    Card(fig; class="graphplot-card")
 end
 function _gracefully_extract_states!(vec, sol, t, idxs, rel)
     isvalid(s) = SII.is_variable(sol, s) || SII.is_parameter(sol, s) || SII.is_observed(sol, s)
@@ -358,7 +418,42 @@ function _maxrange(sol, idxs, rel)
     extrema(Iterators.flatten(u_for_t))
 end
 
-function timeseries_card(app, session)
+function timeseries_cards(app, session)
+    cards = OrderedDict{String,Hyperscript.Node{Hyperscript.HTMLSVG}}()
+    container = Observable{Hyperscript.Node{Hyperscript.HTMLSVG}}()
+
+    on(app.tsplots; update=true) do _tsplots
+        @debug "TS: app.tsplots => update timeseries cards"
+        newkeys = keys(_tsplots)
+        knownkeys = keys(cards)
+
+        for delkey in setdiff(knownkeys, newkeys)
+            delete!(cards, delkey)
+        end
+        for newkey in setdiff(newkeys, knownkeys)
+            cards[newkey] = timeseries_card(app, newkey, session)
+            # cards[newkey] = DOM.div(scatter(rand(100)))
+        end
+        if keys(cards) != keys(_tsplots)
+            @warn "The keys do not match: $(keys(cards)) vs $(keys(_tsplots))"
+        end
+
+        container[] = DOM.div(values(cards)...; class="timeseries-stack")
+
+        nothing
+    end
+
+    on(app.active_tsplot; update=true) do active
+        activesel = app.tsplots[][active].selcomp[]
+        app.graphplot._selcomp[] = activesel
+    end
+
+    return container[]
+end
+
+function timeseries_card(app, key, session)
+    tsplot = app.tsplots[][key]
+
     comp_options = Observable{Vector{OptionGroup{SymbolicIndex}}}()
     on(app.sol; update=true) do _sol
         @debug "TS: app.sol => comp_options"
@@ -370,21 +465,21 @@ function timeseries_card(app, session)
     end
 
     state_options = Observable{Vector{OptionGroup{Symbol}}}()
-    onany(app.sol, app.tsplot.selcomp; update=true) do _sol, _sel
-        @debug "TS: app.sol, app.tsplot.selcomp => state_options"
+    onany(app.sol, tsplot.selcomp; update=true) do _sol, _sel
+        @debug "TS: app.sol, tsplot.selcomp => state_options"
         _nw = extract_nw(_sol)
         state_options[] = gen_state_options(_nw, _sel)
         nothing
     end
 
-    comp_sel = MultiSelect(comp_options, app.tsplot.selcomp;
+    comp_sel = MultiSelect(comp_options, tsplot.selcomp;
         placeholder="Select components",
         multi=true,
         option_to_string=_sidx_to_str,
         T=SymbolicIndex,
         id=gendomid("compsel"))
     # comp_sel_dom = Grid(DOM.span("Components"), comp_sel; columns = "70px 1fr", align_items = "center")
-    state_sel = MultiSelect(state_options, app.tsplot.states;
+    state_sel = MultiSelect(state_options, tsplot.states;
         placeholder="Select states",
         multi=true,
         T=Symbol,
@@ -394,11 +489,11 @@ function timeseries_card(app, session)
     on(reset_button.value) do _
         empty!(color_cache)
         empty!(linestyle_cache)
-        notify(app.tsplot.selcomp)
-        notify(app.tsplot.states)
+        notify(tsplot.selcomp)
+        notify(tsplot.states)
     end
 
-    rel_toggle = ToggleSwitch(value=app.tsplot.rel, label="Rel to u0")
+    rel_toggle = ToggleSwitch(value=tsplot.rel, label="Rel to u0")
 
     comp_state_sel_dom = Grid(
         DOM.span("Components"), comp_sel, reset_button,
@@ -409,11 +504,9 @@ function timeseries_card(app, session)
     )
 
     # hl choice of elements in graphplot
-    on(app.tsplot.selcomp; update=true) do _sel
+    on(tsplot.selcomp; update=true) do _sel
         @debug "TS: comp selection => graphplot selection"
-        if app.graphplot.selcomp[] != _sel
-            app.graphplot.selcomp[] = _sel
-        end
+        app.graphplot._selcomp[] = _sel
         nothing
     end
 
@@ -429,7 +522,7 @@ function timeseries_card(app, session)
     colorpairs = Observable{Vector{@NamedTuple{title::String,color::String}}}()
     lstylepairs = Observable{Vector{@NamedTuple{title::String,linestyle::String}}}()
 
-    on(app.tsplot.selcomp; update=true) do _sel
+    on(tsplot.selcomp; update=true) do _sel
         @debug "TS: comp selection => update color_cache"
         for unused in setdiff(keys(color_cache), _sel)
             delete!(color_cache, unused)
@@ -443,7 +536,7 @@ function timeseries_card(app, session)
                         for (k,v) in color_cache]
         nothing
     end
-    on(app.tsplot.states; update=true) do _states
+    on(tsplot.states; update=true) do _states
         @debug "TS: state selection => update linestyle_cache"
         for unused in setdiff(keys(linestyle_cache), _states)
             delete!(linestyle_cache, unused)
@@ -567,16 +660,16 @@ function timeseries_card(app, session)
     #         lastupdate[] = Inf
     #     end
     # end
-    on(session.on_close) do _
-        @info "Session closed, time to clean up"
-        # close(timer)
-    end
+    # on(session.on_close) do _
+    #     @info "Session closed, time to clean up"
+    #     # close(timer)
+    # end
 
     # collect all the states wie might want to plot
     valid_idxs = Observable(
         Union{VIndex{Int,Symbol},EIndex{Int,Symbol}}[]
     )
-    onany(app.tsplot.selcomp, app.tsplot.states; update=true) do _selcomp, _states
+    onany(tsplot.selcomp, tsplot.states; update=true) do _selcomp, _states
         @debug "TS: sel comp/states => update valid_idxs"
         isvalid(s) = SII.is_variable(app.sol[], s) || SII.is_parameter(app.sol[], s) || SII.is_observed(app.sol[], s)
         empty!(valid_idxs[])
@@ -589,7 +682,7 @@ function timeseries_card(app, session)
 
     # extract the data
     data = Observable{Vector{Vector{Float32}}}(Vector{Float32}[])
-    onany(ts, valid_idxs, app.tsplot.rel, app.sol; update=true) do _ts, _valid_idxs, _rel, _sol
+    onany(ts, valid_idxs, tsplot.rel, app.sol; update=true) do _ts, _valid_idxs, _rel, _sol
         @debug "TS: t, valid_idx, rel, sol => update data"
         _dat = _sol(_ts, idxs=_valid_idxs)
         if _rel
@@ -640,14 +733,38 @@ function timeseries_card(app, session)
     end
     register_interaction!(set_time_interaction, ax, :set_time)
 
-    Card(
+    cardclass = "timeseries-card"
+    if key == app.active_tsplot[]
+        cardclass *= " active-tseries"
+    end
+
+    card = Card(
         DOM.div(
             comp_state_sel_dom,
             DOM.div(fig; class="timeseries-axis-container");
             class="timeseries-card-container"
         );
-        class="timeseries-card"
+        class=cardclass
     )
+
+    # on click set active-tseries class
+    click = js"""
+    (card) => {
+        card.addEventListener("click", function(event) {
+            $(app.active_tsplot).notify($(key));
+
+            document.querySelectorAll(".timeseries-card").forEach(element => {
+                element.classList.remove("active-tseries");
+            });
+
+            // Add "active-tseries" to the given target element
+            card.classList.add("active-tseries");
+        }, { capture: true });
+    }
+    """
+    Bonito.onload(session, card, click)
+
+    return card
 end
 function _sidx_to_str(s)
     (s isa VIndex ? "v" : "e") * string(s.compidx)

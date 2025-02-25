@@ -8,6 +8,7 @@ using GraphMakie
 using Graphs: SimpleGraph
 using OrdinaryDiffEqTsit5
 using Graphs: Graphs
+using OrderedCollections
 include(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl"))
 
 sol = let
@@ -62,9 +63,8 @@ app = (;
     t = Observable{Float64}(0.0),
     tmin = Observable{Float64}(sol.t[begin]),
     tmax = Observable{Float64}(sol.t[end]),
-    active_tsplot = Observable{Int}(1),
+    active_tsplot = Observable{String}("a"),
     graphplot = (;
-        selcomp = Observable{Vector{SymbolicIndex}}(SymbolicIndex[]),
         nstate = Observable{Vector{Symbol}}([:θ]),
         estate = Observable{Vector{Symbol}}([:P]),
         nstate_rel = Observable{Bool}(false),
@@ -73,12 +73,27 @@ app = (;
         ncolorscheme = Observable{ColorScheme}(ColorSchemes.coolwarm),
         ecolorrange = Observable{Tuple{Float32,Float32}}((-1.0, 1.0)),
         ecolorscheme = Observable{ColorScheme}(ColorSchemes.coolwarm),
+        _selcomp = Observable{Vector{SymbolicIndex}}(SymbolicIndex[]),
+        _hoverel = Observable{Union{EIndex{Int,Nothing},VIndex{Int,Nothing},Nothing}}(nothing)
+        _lastclickel = Observable{Union{EIndex{Int,Nothing},VIndex{Int,Nothing},Nothing}}(nothing)
     ),
-    tsplot = (;
-        selcomp = Observable{Vector{SymbolicIndex}}(SymbolicIndex[]),
-        states = Observable{Vector{Symbol}}(Symbol[]),
-        rel = Observable{Bool}(false),
-    )
+    # tsplot = (;
+    #     selcomp = Observable{Vector{SymbolicIndex}}(SymbolicIndex[]),
+    #     states = Observable{Vector{Symbol}}(Symbol[]),
+    #     rel = Observable{Bool}(false),
+    # ),
+    tsplots = Observable{Any}(OrderedDict(
+        "a" => (;
+            selcomp = Observable{Vector{SymbolicIndex}}(SymbolicIndex[]),
+            states = Observable{Vector{Symbol}}(Symbol[]),
+            rel = Observable{Bool}(false),
+        ),
+        "b" => (;
+            selcomp = Observable{Vector{SymbolicIndex}}(SymbolicIndex[]),
+            states = Observable{Vector{Symbol}}(Symbol[]),
+            rel = Observable{Bool}(false),
+        ),
+    ))
 );
 
 let
@@ -129,19 +144,14 @@ let
         DOM.div(
             NetworkDynamicsInspector.APP_CSS,
             DOM.div(
-                NetworkDynamicsInspector.graphplot_card(app),
+                NetworkDynamicsInspector.graphplot_card(app, session),
                 NetworkDynamicsInspector.gpstate_control_card(app, :vertex),
                 NetworkDynamicsInspector.gpstate_control_card(app, :edge),
                 class="graphplot-col"
             ),
             DOM.div(
                 NetworkDynamicsInspector.timeslider_card(app),
-                DOM.div(
-                    NetworkDynamicsInspector.timeseries_card(app, session),
-                    Card("foo"),
-                    Card("bar"),
-                    class="timeseries-stack"
-                ),
+                NetworkDynamicsInspector.timeseries_cards(app, session),
                 class="timeseries-col"
             ),
             class="maingrid"

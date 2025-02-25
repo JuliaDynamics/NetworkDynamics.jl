@@ -68,7 +68,7 @@ function NetworkDynamics.extract_nw(o::NamedTuple)
 end
 
 getcycled(v::AbstractVector, i) = v[mod1(i, length(v))]
-gendomid(s::String) = replace(string(gensym("selectbox")), "#"=>"")
+gendomid(s::String) = replace(string(gensym(s)), "#"=>"")
 
 mutable struct Throttle{F}
     f::F
