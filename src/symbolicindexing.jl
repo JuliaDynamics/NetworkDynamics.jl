@@ -85,6 +85,9 @@ end
 const SymbolicEdgeIndex{C,S} = Union{EIndex{C,S}, EPIndex{C,S}}
 const SymbolicVertexIndex{C,S} = Union{VIndex{C,S}, VPIndex{C,S}}
 
+idxtype(s::VIndex) = VIndex
+idxtype(s::EIndex) = EIndex
+
 #=
 SciMLBase gets the index provider from ODEFunction.sys which defaults to f.sys so we provide it...
 SSI Maintainer assured that f.sys is really only used for symbolic indexig so method seems legit
@@ -417,6 +420,8 @@ function SII.observed(nw::Network, snis)
 
     # mapping i -> index in state
     stateidx = Dict{Int, Int}()
+    # mapping i -> index in p
+    paraidx = Dict{Int, Int}()
     # mapping i -> index in output
     outidx = Dict{Int, Int}()
     # mapping i -> index in aggbuf
@@ -426,6 +431,8 @@ function SII.observed(nw::Network, snis)
     for (i, sni) in enumerate(_snis)
         if SII.is_variable(nw, sni)
             stateidx[i] = SII.variable_index(nw, sni)
+        elseif SII.is_parameter(nw, sni)
+            paraidx[i] = SII.parameter_index(nw, sni)
         else
             cf = getcomp(nw, sni)
 
@@ -467,6 +474,9 @@ function SII.observed(nw::Network, snis)
             if !isempty(stateidx)
                 idx = only(stateidx).second
                 u[idx]
+            elseif !isempty(paraidx)
+                idx = only(paraidx).second
+                p[idx]
             elseif !isempty(outidx)
                 idx = only(outidx).second
                 outbuf[idx]
@@ -488,6 +498,9 @@ function SII.observed(nw::Network, snis)
 
             for (i, statei) in stateidx
                 out[i] = u[statei]
+            end
+            for (i, parai) in paraidx
+                out[i] = p[parai]
             end
             for (i, outi) in outidx
                 out[i] = outbuf[outi]
