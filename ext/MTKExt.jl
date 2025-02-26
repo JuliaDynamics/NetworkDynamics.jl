@@ -3,7 +3,7 @@ module MTKExt
 using ModelingToolkit: Symbolic, iscall, operation, arguments, build_function
 using ModelingToolkit: ModelingToolkit, Equation, ODESystem, Differential
 using ModelingToolkit: full_equations, get_variables, structural_simplify, getname, unwrap
-using ModelingToolkit: full_parameters, unknowns, independent_variables, observed, defaults
+using ModelingToolkit: parameters, unknowns, independent_variables, observed, defaults
 using Symbolics: Symbolics, fixpoint_sub, substitute
 using RecursiveArrayTools: RecursiveArrayTools
 using ArgCheck: @argcheck
@@ -277,7 +277,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     sys = if ModelingToolkit.iscomplete(_sys)
         deepcopy(_sys)
     else
-        _openinputs = setdiff(allinputs, Set(full_parameters(_sys)))
+        _openinputs = setdiff(allinputs, Set(parameters(_sys)))
         all_eq_vars = mapreduce(get_variables, union, full_equations(_sys), init=Set{Symbolic}())
         if !(_openinputs ⊆ all_eq_vars)
             missing_inputs = setdiff(_openinputs, all_eq_vars)
@@ -288,7 +288,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     end
 
     states = unknowns(sys)
-    allparams = full_parameters(sys) # contains inputs!
+    allparams = parameters(sys) # contains inputs!
     @argcheck allinputs ⊆ Set(allparams) ∪ missing_inputs
     params = setdiff(allparams, Set(allinputs))
 
