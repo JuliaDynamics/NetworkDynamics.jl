@@ -361,6 +361,14 @@ function timeseries_card(app, key, session)
             // Add "active-tseries" to the given target element
             card.classList.add("active-tseries");
         }, { capture: true });
+
+
+        function triggerWindowResize() {
+            window.dispatchEvent(new Event('resize'));
+        }
+        const triggerWindowResize_throttled = Bonito.throttle_function(triggerWindowResize, 100);
+        const resizeObserver = new ResizeObserver(triggerWindowResize_throttled);
+        resizeObserver.observe(card);
     }
     """
     Bonito.onload(session, card, onload_js)

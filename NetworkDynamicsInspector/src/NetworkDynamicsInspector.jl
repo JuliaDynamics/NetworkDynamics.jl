@@ -179,12 +179,11 @@ function start_server!(restart=true)
             styleTag.innerHTML = `.resize-with-gp { width: ${graphplotWidth} !important; }`;
 
             // Manually trigger the resize event on the window
-            // const resizeEvent = new Event('resize');
-            // window.dispatchEvent(resizeEvent);
+            window.dispatchEvent(new Event('resize'));
         };
 
         // Use ResizeObserver for live resizing feedback
-        const updateResizeWithGpWidth_throttled = Bonito.throttle_function(updateResizeWithGpWidth, 10);
+        const updateResizeWithGpWidth_throttled = Bonito.throttle_function(updateResizeWithGpWidth, 100);
         const resizeObserver = new ResizeObserver(updateResizeWithGpWidth_throttled);
         resizeObserver.observe(graphplotCard);
 
