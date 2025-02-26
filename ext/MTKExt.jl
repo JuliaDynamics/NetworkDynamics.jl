@@ -274,6 +274,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     alloutputs = reduce(union, outputss)
 
     missing_inputs = Set{Symbolic}()
+    implicit_outputs = Set{Symbolic}() # fully implicit outputs which do not appear in the equations
     sys = if ModelingToolkit.iscomplete(_sys)
         deepcopy(_sys)
     else
@@ -281,13 +282,17 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         all_eq_vars = mapreduce(get_variables, union, full_equations(_sys), init=Set{Symbolic}())
         if !(_openinputs ⊆ all_eq_vars)
             missing_inputs = setdiff(_openinputs, all_eq_vars)
-            @warn "The specified inputs ($missing_inputs) do not appear in the equations of the system!"
+            verbose && @warn "The specified inputs ($missing_inputs) do not appear in the equations of the system!"
             _openinputs = setdiff(_openinputs, missing_inputs)
         end
-        structural_simplify(_sys, (_openinputs, alloutputs); simplify=false)[1]
+        _definedoutputs = alloutputs ∩ all_eq_vars
+        if !(Set(_definedoutputs) == Set(alloutputs))
+            implicit_outputs = setdiff(alloutputs, _definedoutputs)
+            verbose && @warn "The specified outputs $implicit_outputs do not appear in the equations of the system!"
+        end
+        structural_simplify(_sys, (_openinputs, _definedoutputs); simplify=false)[1]
     end
 
-    states = unknowns(sys)
     allparams = parameters(sys) # contains inputs!
     @argcheck allinputs ⊆ Set(allparams) ∪ missing_inputs
     params = setdiff(allparams, Set(allinputs))
@@ -295,6 +300,15 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     # extract the main equations and observed equations
     eqs::Vector{Equation} = full_equations(sys)
     fix_metadata!(eqs, sys);
+
+    # assert the ordering of states and equations
+    explicit_states = Symbolic[eq_type(eq)[2] for eq in eqs if !isnothing(eq_type(eq)[2])]
+    implicit_states = setdiff(unknowns(sys), explicit_states) ∪ implicit_outputs
+    states = map(eqs) do eq
+        type = eq_type(eq)
+        isnothing(type[2]) ? pop!(implicit_states) : type[2]
+    end
+
     # check hat there are no rhs differentials in the equations
     if !isempty(rhs_differentials(eqs))
         diffs = rhs_differentials(eqs)
@@ -389,7 +403,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     # filter out unnecessary parameters
     var_deps = _all_rhs_symbols(eqs)
     unused_params = Set(setdiff(params, (var_deps ∪ out_deps))) # do not exclud obs_deps
-    if verbose && !isempth(unused_params)
+    if verbose && !isempty(unused_params)
         @info "Parameters $(unused_params) do not appear in equations of f and g and will be marked as unused."
     end
 

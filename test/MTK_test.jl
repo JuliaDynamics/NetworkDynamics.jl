@@ -233,3 +233,27 @@ v = VertexModel(nestedswing, [:i_r, :i_i], [:u_r, :u_i])
 data = NetworkDynamics.rand_inputs_fg(v)
 b = @b $(NetworkDynamics.compfg(v))($data...)
 @test b.allocs == 0
+
+
+# test fully implicit outputs
+@mtkmodel FullyImplicit begin
+    @variables begin
+        u(t), [description = "Input Variable", input=true]
+        x(t), [description = "Explicit Variable"]
+        y(t), [description = "Implicit Variable, present in equations"]
+        z(t), [description = "fully implicit variable, not present but output", output=true]
+    end
+    @equations begin
+        Dt(x) ~ -x
+        0 ~ sqrt(y+x)
+        0 ~ u # implicitly forces z becaus u(z)
+    end
+end
+@named fullyimplicit = FullyImplicit()
+v = VertexModel(fullyimplicit, [:u], [:z])
+@test v.mass_matrix == LinearAlgebra.Diagonal([1,0,0])
+@test v.sym == [:x, :z, :y]
+
+data = NetworkDynamics.rand_inputs_fg(v)
+b = @b $(NetworkDynamics.compfg(v))($data...)
+@test b.allocs == 0
