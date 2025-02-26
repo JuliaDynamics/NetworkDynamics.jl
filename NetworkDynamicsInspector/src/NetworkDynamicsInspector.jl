@@ -7,7 +7,12 @@ using NetworkDynamics: NetworkDynamics, SII, EIndex, VIndex, Network,
                        obssym, psym, sym, extract_nw
 
 using Graphs: nv, ne
-using WGLMakie.Makie: @lift, MouseEvent
+using WGLMakie: WGLMakie
+using WGLMakie.Makie: Makie, @lift, MouseEvent, Point2f, with_theme,
+                      Cycle, lines!, vlines!, Theme, Figure, Colorbar, Axis,
+                      xlims!, ylims!, autolimits!, hidespines!, hidedecorations!,
+                      register_interaction!, MouseEventTypes, Consume, events,
+                      mouseposition
 
 using GraphMakie: GraphMakie, EdgeClickHandler, EdgeHoverHandler,
                   NodeClickHandler, NodeHoverHandler, graphplot!
@@ -49,8 +54,8 @@ function wrapsol(sol)
         tmax = Observable{Float64}(sol.t[end]),
         active_tsplot = Observable{String}("ts-1"),
         graphplot = (;
-            nstate = Observable{Vector{Symbol}}([:θ]),
-            estate = Observable{Vector{Symbol}}([:P]),
+            nstate = Observable{Vector{Symbol}}([]),
+            estate = Observable{Vector{Symbol}}([]),
             nstate_rel = Observable{Bool}(false),
             estate_rel = Observable{Bool}(false),
             ncolorrange = Observable{Tuple{Float32,Float32}}((-1.0, 1.0)),
@@ -67,11 +72,11 @@ function wrapsol(sol)
                 states = Observable{Vector{Symbol}}(Symbol[]),
                 rel = Observable{Bool}(false),
             ),
-            # "b" => (;
-            #     selcomp = Observable{Vector{SymbolicCompIndex}}(SymbolicCompIndex[]),
-            #     states = Observable{Vector{Symbol}}(Symbol[]),
-            #     rel = Observable{Bool}(false),
-            # ),
+            "ts-2" => (;
+                selcomp = Observable{Vector{SymbolicCompIndex}}(SymbolicCompIndex[]),
+                states = Observable{Vector{Symbol}}(Symbol[]),
+                rel = Observable{Bool}(false),
+            ),
         ))
     );
 end
@@ -138,6 +143,7 @@ function inspect(app::NamedTuple)
         )
     end;
     serve_app(_app)
+    return app
 end
 
 
@@ -155,6 +161,11 @@ function apptheme()
 end
 
 function timeslider_card(app)
+    on(app.sol) do _sol
+        app.tmin[] = _sol.t[begin]
+        app.tmax[] = _sol.t[end]
+    end
+
     trange_sol = @lift ($(app.sol).t[begin], $(app.sol).t[end])
     tw_slider = ContinuousSlider(trange_sol, app.tmin, app.tmax)
     twindow = @lift ($(app.tmin), $(app.tmax))

@@ -294,6 +294,7 @@ function timeseries_card(app, key, session)
                 # if last_autolimits[][1] != valid_idxs[] || last_autolimits[][2] != tsplot.rel[]
                 if last_autolimits[] != (valid_idxs[], tsplot.rel[])
                     autolimits!(ax)
+                    xlims!(ax, (app.tmin[], app.tmax[]))
                     last_autolimits[] = (copy(valid_idxs[]), tsplot.rel[])
                 end
             catch e
@@ -305,6 +306,7 @@ function timeseries_card(app, key, session)
 
     on(reset_axis_button.value) do _
         autolimits!(ax)
+        xlims!(ax, (app.tmin[], app.tmax[]))
     end
 
     ####

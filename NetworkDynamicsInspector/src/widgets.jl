@@ -303,7 +303,7 @@ function Bonito.jsrender(session::Session, slider::ContinuousSlider)
     """
     Bonito.onload(session, container, jscode)
 
-    return jsrender(session, container)
+    return Bonito.jsrender(session, container)
 end
 
 
@@ -521,7 +521,7 @@ function Bonito.jsrender(session::Session, multiselect::MultiSelect)
     """
     Bonito.onload(session, select, js_onload)
 
-    return jsrender(session, container)
+    return Bonito.jsrender(session, container)
 end
 
 function options_to_jsoptions(options; option_to_string=repr)
@@ -691,5 +691,5 @@ function Bonito.jsrender(session::Session, toggle::ToggleSwitch)
         );
         style=domlabel_style
     )
-    jsrender(session, container)
+    Bonito.jsrender(session, container)
 end

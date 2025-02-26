@@ -124,12 +124,14 @@ function onany_delayed(f, obs...; delay)
 end
 
 function sidx_to_str(s, app)
+    nw = extract_nw(app.sol[])
+    name = nw[s].name
     if s isa VIndex
-        "v$(s.compidx)"
+        "v$(s.compidx) ($name)"
     else
-        edge = extract_nw(app.sol[]).im.edgevec[s.compidx]
+        edge = nw.im.edgevec[s.compidx]
         src, dst = edge.src, edge.dst
-        "e$(s.compidx): $src→$dst"
+        "e$(s.compidx): $src→$dst ($name)"
     end
 end
 
