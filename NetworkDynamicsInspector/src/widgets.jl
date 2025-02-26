@@ -301,7 +301,7 @@ function Bonito.jsrender(session::Session, slider::ContinuousSlider)
         observer.observe(container);
     }
     """
-    onload(session, container, jscode)
+    Bonito.onload(session, container, jscode)
 
     return jsrender(session, container)
 end
@@ -676,7 +676,7 @@ function Bonito.jsrender(session::Session, toggle::ToggleSwitch)
         checked=toggle.value[],
         style=input_style
     )
-    onload(session, inputdom, jscode)
+    Bonito.onload(session, inputdom, jscode)
 
     container = DOM.label(
         inputdom,

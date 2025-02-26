@@ -15,3 +15,8 @@ benchmark/*.txt
 /benchmark/*.pdf
 /docs/src/generated/
 /docs/src/assets/.auctex-auto/
+
+# ignore downloadable assets
+/NetworkDynamicsInspector/assets/jquery.js
+/NetworkDynamicsInspector/assets/select2.css
+/NetworkDynamicsInspector/assets/select2.js

@@ -43,9 +43,6 @@ function clear_obs!(v::AbstractVector)
 end
 clear_obs!(x) = x
 
-# TODO: move to grpahmakie
-GraphMakie._dimensionality(obs::Observable, g) = GraphMakie._dimensionality(obs[], g)
-
 
 SERVER = Ref{Any}(nothing)
 export serve_app
@@ -55,6 +52,9 @@ function serve_app(newapp)
         close(SERVER[])
     end
     SERVER[] = Bonito.Server(newapp, "0.0.0.0", 8080)
+    url = SERVER[].url
+    port = SERVER[].port
+    @info "Visit $url:$port to launch App"
 end
 
 
@@ -120,5 +120,31 @@ function onany_delayed(f, obs...; delay)
         future = Timer(delay) do _
             f(args...)
         end
+    end
+end
+
+function sidx_to_str(s, app)
+    if s isa VIndex
+        "v$(s.compidx)"
+    else
+        edge = extract_nw(app.sol[]).im.edgevec[s.compidx]
+        src, dst = edge.src, edge.dst
+        "e$(s.compidx): $src→$dst"
+    end
+end
+
+function download_assets()
+    assets = Dict(
+       "jquery.js" => "https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js",
+       "select2.css" => "https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css",
+       "select2.js" => "https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js",
+    )
+    to_download = filter(x -> !isfile(joinpath(ASSETS, x.first)), assets)
+
+    isempty(to_download) && return
+
+    for (name, url) in to_download
+        @info "Downloading Assets: $name.."
+        download(url, joinpath(ASSETS, name))
     end
 end
