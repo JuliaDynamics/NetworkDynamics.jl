@@ -1,6 +1,6 @@
 module NetworkDynamicsInspector
 
-using Bonito: Bonito, @js_str, App, Asset, CSS, Styles,
+using Bonito: Bonito, @js_str, Asset, CSS, Styles,
               Grid, Card, DOM, Session
 using NetworkDynamics: NetworkDynamics, SII, EIndex, VIndex, Network,
                        get_metadata, has_metadata, get_position, has_position,
@@ -45,47 +45,115 @@ const SymbolicCompIndex = Union{VIndex{Int,Nothing}, EIndex{Int,Nothing}}
 
 export inspect
 
-function wrapsol(sol)
-    @assert extract_nw(sol) isa Network "sol must be a NetworkDynamics solution"
-    (;
-        sol = Observable{Any}(sol),
-        t = Observable{Float64}(sol.t[begin]),
-        tmin = Observable{Float64}(sol.t[begin]),
-        tmax = Observable{Float64}(sol.t[end]),
-        active_tsplot = Observable{String}("ts-1"),
-        graphplot = (;
-            nstate = Observable{Vector{Symbol}}([]),
-            estate = Observable{Vector{Symbol}}([]),
-            nstate_rel = Observable{Bool}(false),
-            estate_rel = Observable{Bool}(false),
-            ncolorrange = Observable{Tuple{Float32,Float32}}((-1.0, 1.0)),
-            ncolorscheme = Observable{ColorScheme}(ColorSchemes.coolwarm),
-            ecolorrange = Observable{Tuple{Float32,Float32}}((-1.0, 1.0)),
-            ecolorscheme = Observable{ColorScheme}(ColorSchemes.coolwarm),
-            _selcomp = Observable{Vector{SymbolicCompIndex}}(SymbolicCompIndex[]),
-            _hoverel = Observable{Union{SymbolicCompIndex,Nothing}}(nothing),
-            _lastclickel = Observable{Union{SymbolicCompIndex,Nothing}}(nothing),
-        ),
-        tsplots = Observable{Any}(OrderedDict(
-            "ts-1" => (;
-                selcomp = Observable{Vector{SymbolicCompIndex}}(SymbolicCompIndex[]),
-                states = Observable{Vector{Symbol}}(Symbol[]),
-                rel = Observable{Bool}(false),
-            ),
-            "ts-2" => (;
-                selcomp = Observable{Vector{SymbolicCompIndex}}(SymbolicCompIndex[]),
-                states = Observable{Vector{Symbol}}(Symbol[]),
-                rel = Observable{Bool}(false),
-            ),
-        ))
-    );
+@kwdef struct GraphPlot
+    nstate::Observable{Vector{Symbol}} = [:nothing]
+    estate::Observable{Vector{Symbol}} = [:nothing]
+    nstate_rel::Observable{Bool} = false
+    estate_rel::Observable{Bool} = false
+    ncolorrange::Observable{Tuple{Float32,Float32}} = (-1.0, 1.0)
+    ncolorscheme::Observable{ColorScheme} = ColorSchemes.coolwarm
+    ecolorrange::Observable{Tuple{Float32,Float32}} = (-1.0, 1.0)
+    ecolorscheme::Observable{ColorScheme} = ColorSchemes.coolwarm
+    _selcomp::Observable{Vector{SymbolicCompIndex}} = SymbolicCompIndex[]
+    _hoverel::Observable{Union{SymbolicCompIndex,Nothing}} = nothing
+    _lastclickel::Observable{Union{SymbolicCompIndex,Nothing}} = nothing
+end
+function GraphPlot(sol)
+    nw = extract_nw(sol)
+    estate = [_most_common_output_state(nw.im.edgem)]
+    nstate = [_most_common_output_state(nw.im.vertexm)]
+    GraphPlot(; nstate, estate)
+end
+function _most_common_output_state(models)
+    states = mapreduce(NetworkDynamics.outsym_flat, vcat, models)
+    unique_states = unique(states)
+    counts = map(unique_states) do s
+        count(isequal(s), states)
+    end
+    unique_states[argmax(counts)]
 end
 
-inspect(sol::SciMLBase.AbstractODESolution) = inspect(wrapsol(sol))
+@kwdef struct TimeseriesPlot
+    selcomp::Observable{Vector{SymbolicCompIndex}} = SymbolicCompIndex[]
+    states::Observable{Vector{Symbol}} = Symbol[]
+    rel::Observable{Bool} = false
+end
 
-function inspect(app::NamedTuple)
-    _app = App() do session
-        @info "start new session"
+struct AppState
+    sol::Observable{Any}
+    t::Observable{Float64}
+    tmin::Observable{Float64}
+    tmax::Observable{Float64}
+    active_tsplot::Observable{String}
+    graphplot::GraphPlot
+    tsplots::Observable{OrderedDict{String, TimeseriesPlot}}
+end
+function AppState(sol::SciMLBase.AbstractODESolution)
+    t = sol.t[begin]
+    tmin = sol.t[begin]
+    tmax = sol.t[end]
+    graphplot = GraphPlot(sol)
+    tsplots = OrderedDict(
+        "ts-1" => TimeseriesPlot(),
+        "ts-2" => TimeseriesPlot()
+    )
+    active_tsplot = "ts-1"
+    AppState(sol, t, tmin, tmax, active_tsplot, graphplot, tsplots)
+end
+
+const APPSTATE = Ref{Union{Nothing,AppState}}(nothing)
+const SERVER = Ref{Any}(nothing)
+const SESSION = Ref{Union{Nothing,Session}}(nothing)
+
+function reset!(sol=nothing)
+    if isnothing(APPSTATE[]) && isnothing(sol)
+        error("No appstate to reset")
+    else
+        clear_obs!(APPSTATE[])
+        if isnothing(sol)
+            APPSTATE[] = AppState(APPSTATE[].sol[])
+        else
+            APPSTATE[] = AppState(sol)
+        end
+    end
+end
+
+server_running() = !isnothing(SERVER[]) && Bonito.HTTPServer.isrunning(SERVER[])
+
+function stop_server!()
+    if !isnothing(SESSION[])
+        if Base.isopen(SESSION[])
+            @info "Close running session..."
+            close(SESSION[])
+        end
+        SESSION[] = nothing
+    end
+    if server_running()
+        @info "Stop running server..."
+        close(SERVER[])
+    end
+end
+
+function start_server!(restart=true)
+    if server_running() && !restart
+        error("Server already running")
+    end
+    stop_server!()
+
+    if isnothing(APPSTATE[])
+        error("No appstate to restart")
+    end
+
+    app = APPSTATE[]
+
+    webapp = Bonito.App() do session
+        @info "New GUI Session started"
+        if !isnothing(SESSION[]) && Base.isopen(SESSION[])
+            @info "Close previous session..."
+            close(SESSION[])
+        end
+        SESSION[] = session
+
         WGLMakie.activate!(resize_to=:parent)
         clear_obs!(app)
 
@@ -142,10 +210,39 @@ function inspect(app::NamedTuple)
             class="maingrid"
         )
     end;
-    serve_app(_app)
-    return app
+
+    SERVER[] = Bonito.Server(webapp, "localhost", 8080)
+    url = SERVER[].url
+    port = SERVER[].port
+    @info "Visit $url:$port to launch App"
 end
 
+"""
+    inspect(sol; restart=false, reset=false)
+
+Main entry point for gui. Starts the server and serves the app for
+soution `sol`.
+
+- `restart`: If `true`, stop the server if it is running and start a new one.
+- `reset`: If `true`, reset the appstate with the new solution `sol`.
+"""
+function inspect(sol; restart=false, reset=false)
+    if restart && server_running()
+        stop_server!()
+    end
+    if isnothing(APPSTATE[]) || reset
+        reset!(sol)
+    else
+        APPSTATE[].sol[] = sol
+    end
+
+    if !server_running()
+        start_server!()
+    else
+        @info "App still served at $(SERVER[].url):$(SERVER[].port)"
+    end
+    nothing
+end
 
 function apptheme()
     Theme(

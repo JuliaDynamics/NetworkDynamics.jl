@@ -41,22 +41,14 @@ function clear_obs!(v::AbstractVector)
         clear_obs!(el)
     end
 end
-clear_obs!(x) = x
-
-
-SERVER = Ref{Any}(nothing)
-export serve_app
-function serve_app(newapp)
-    if !isnothing(SERVER[]) && Bonito.HTTPServer.isrunning(SERVER[])
-        @info "Stop running server..."
-        close(SERVER[])
+function clear_obs!(x::T) where {T}
+    if T <: Union{GraphPlot, TimeseriesPlot, AppState}
+        for f in fieldnames(T)
+            clear_obs!(getfield(x, f))
+        end
     end
-    SERVER[] = Bonito.Server(newapp, "0.0.0.0", 8080)
-    url = SERVER[].url
-    port = SERVER[].port
-    @info "Visit $url:$port to launch App"
+    x
 end
-
 
 NetworkDynamics.extract_nw(o::Observable) = extract_nw(o.val)
 function NetworkDynamics.extract_nw(o::NamedTuple)

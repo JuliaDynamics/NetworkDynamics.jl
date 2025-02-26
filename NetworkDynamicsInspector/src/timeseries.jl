@@ -4,7 +4,7 @@ function timeseries_cards(app, session)
 
     on(app.tsplots; update=true) do _tsplots
         @debug "TS: app.tsplots => update timeseries cards"
-        newkeys = keys(_tsplots)
+        newkeys = collect(keys(_tsplots)) # collect to preserv order on setdiff
         knownkeys = keys(cards)
 
         for delkey in setdiff(knownkeys, newkeys)
@@ -12,7 +12,6 @@ function timeseries_cards(app, session)
         end
         for newkey in setdiff(newkeys, knownkeys)
             cards[newkey] = timeseries_card(app, newkey, session)
-            # cards[newkey] = DOM.div(scatter(rand(100)))
         end
         if keys(cards) != keys(_tsplots)
             @warn "The keys do not match: $(keys(cards)) vs $(keys(_tsplots))"

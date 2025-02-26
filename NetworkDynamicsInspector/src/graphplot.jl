@@ -212,7 +212,6 @@ function graphplot_card(app, session)
     register_interaction!(ax, :edgeclick, ech)
     register_interaction!(ax, :edgehover, ehh)
 
-
     Card(fig; class="graphplot-card")
 end
 function _gracefully_extract_states!(vec, sol, t, idxs, rel)
