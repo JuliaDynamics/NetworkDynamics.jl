@@ -296,12 +296,12 @@ function _get_initial_observed(cf)
 end
 
 """
-    dump_initial_state(cf::ComponentModel; sigdigits=5, p=true, obs=true)
+    dump_initial_state([IO=stdout], cf::ComponentModel; sigdigits=5, p=true, obs=true)
 
-Prints the initial state of the component model `cf` to the console. Optionally
+Prints the initial state of the component model `cf` to `IO` (defaults to stdout). Optionally
 contains parameters and observed.
 
-See also: [`get_initial_state`](@ref).
+See also: [`get_initial_state`](@ref) and [`dump_state`](@ref).
 """
 dump_initial_state(cf::ComponentModel; kwargs...) = dump_initial_state(stdout, cf; kwargs...)
 function dump_initial_state(io, cf::ComponentModel; sigdigits=5, p=true, obs=true)
@@ -408,7 +408,20 @@ function _printlines(io, aligned, range; newline=true)
     end
 end
 
-dump_state(sol, idx, t; kwargs...) = dump_state(stdout, sol, idx, t; kwargs...)
+"""
+    dump_state([IO=stdout], sol, t, idx; sigdigits=5)
+
+Takes a Network solution `sol` and prints the state at `t` as well as the initial
+state of the specified component model to `IO` (defaults to `stdout`).
+
+`idx` musst a valid component index, i.e. `VIndex` or `EIndex` without symbol specification.
+
+    dump_state(sol, 1.0, VIndex(4))
+    dump_state(sol, 1.0, EIndex(2))
+
+See also: [`dump_initial_state`](@ref).
+"""
+dump_state(sol, t, idx; kwargs...) = dump_state(stdout, sol, t, idx; kwargs...)
 function dump_state(io, sol, t, idx; sigdigits=3)
     cf = extract_nw(sol)[idx]
     _sym = sort(sym(cf))

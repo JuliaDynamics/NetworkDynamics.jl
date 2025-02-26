@@ -93,6 +93,11 @@ vpidxs
 epidxs
 ```
 
+### Solution Inspection
+```@docs
+dump_state
+```
+
 ## Metadata API
 ### Component Metadata API
 ```@docs
