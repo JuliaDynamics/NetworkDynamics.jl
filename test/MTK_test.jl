@@ -171,3 +171,65 @@ end
 
 @named piline = DQPiLine()
 l = EdgeModel(piline, [:src_u_r, :src_u_i], [:dst_u_r, :dst_u_i], [:src_i_r, :src_i_i], [:dst_i_r, :dst_i_i])
+
+## test nested model
+@mtkmodel Shaft begin
+    @variables begin
+        θ(t), [description = "Shaft angle"]
+        ω(t), [description = "Shaft speed"]
+        Pmech(t), [description = "Mechanical Power"]
+        Pel(t), [description = "Electrical Power"]
+    end
+    @parameters begin
+        M = 1, [description = "Inertia"]
+        D = 0.1, [description = "Friction Damping"]
+    end
+    @equations begin
+        Dt(θ) ~ ω
+        Dt(ω) ~ 1/M * (Pmech - D*ω + Pel)
+    end
+end
+
+@mtkmodel Gov begin
+    @variables begin
+        Pmech(t), [description = "Mechanical Power"]
+        ω_meas(t),[description = "Measured Rotor Frequency"]
+    end
+    @parameters begin
+        D = 0.1, [description = "Governor Droop"]
+        Pref = 1.0, [description = "Reference Power"]
+    end
+    @equations begin
+        Pmech ~ Pref - D*ω_meas
+    end
+end
+
+@mtkmodel NestedSwing begin
+    @components begin
+        shaft = Shaft()
+        gov = Gov()
+    end
+    @variables begin
+        u_r(t), [description = "d-voltage", output=true]
+        u_i(t), [description = "q-voltage", output=true]
+        i_r(t), [description = "d-current", input=true]
+        i_i(t), [description = "d-current", input=true]
+    end
+    @parameters begin
+        V = 1.0, [description = "Voltage magnitude"]
+    end
+    @equations begin
+        shaft.Pel ~ real((u_r + im*u_i) * (i_r - im*i_i))
+        gov.ω_meas ~ shaft.ω
+        gov.Pmech ~ shaft.Pmech
+        u_r ~ V*cos(shaft.θ)
+        u_i ~ V*sin(shaft.θ)
+    end
+end
+
+@named nestedswing = NestedSwing()
+v = VertexModel(nestedswing, [:i_r, :i_i], [:u_r, :u_i])
+@test v.mass_matrix == Diagonal([1,1])
+data = NetworkDynamics.rand_inputs_fg(v)
+b = @b $(NetworkDynamics.compfg(v))($data...)
+@test b.allocs == 0
