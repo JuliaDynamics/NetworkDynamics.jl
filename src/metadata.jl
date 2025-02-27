@@ -59,8 +59,8 @@ for md in [:default, :guess, :init, :bounds]
 
 
         """
-            set_$($(QuoteNode(md)))(c::ComponentModel, sym::Symbol, value)
-            set_$($(QuoteNode(md)))(nw::Network, sni::SymbolicIndex, value)
+            set_$($(QuoteNode(md)))!(c::ComponentModel, sym::Symbol, value)
+            set_$($(QuoteNode(md)))!(nw::Network, sni::SymbolicIndex, value)
 
         Sets the `$($(QuoteNode(md)))` value for symbol `sym` to `value`.
 
@@ -246,13 +246,40 @@ function get_defaults_or_inits(c::ComponentModel, syms; missing_val=nothing)
     [has_default_or_init(c, sym) ? get_default_or_init(c, sym) : missing_val for sym in syms]
 end
 
-has_position(c::ComponentModel) = has_metadata(c, :position)
-get_position(c::ComponentModel) = get_metadata(c, :position)
-set_position!(c::ComponentModel, pos) = set_metadata!(c, :position, pos)
+# generate methods and docstrings for position and marker
+for md in [:position, :marker]
+    fname_has = Symbol(:has_, md)
+    fname_get = Symbol(:get_, md)
+    fname_set = Symbol(:set_, md, :!)
+    @eval begin
+        """
+            has_$($(QuoteNode(md)))(v::VertexModel)
 
-has_marker(c::ComponentModel) = has_metadata(c, :marker)
-get_marker(c::ComponentModel)::Symbol = get_metadata(c, :marker)
-set_marker!(c::ComponentModel, marker::Symbol) = set_metadata!(c, :marker, marker)
+        Checks if vertex `v` has `$($(QuoteNode(md)))` metadata.
+
+        See also: [`get_$($(QuoteNode(md)))`](@ref), [`set_$($(QuoteNode(md)))!`](@ref).
+        """
+        $fname_has(c::VertexModel) = has_metadata(c, $(QuoteNode(md)))
+
+        """
+            get_$($(QuoteNode(md)))(v::VertexModel)
+
+        Returns the `$($(QuoteNode(md)))` metadata of vertex `v`. Might error if not present.
+
+        See also: [`has_$($(QuoteNode(md)))`](@ref), [`set_$($(QuoteNode(md)))!`](@ref).
+        """
+        $fname_get(c::VertexModel) = get_metadata(c, $(QuoteNode(md)))
+
+        """
+            set_$($(QuoteNode(md)))!(v::VertexModel, val)
+
+        Sets the `$($(QuoteNode(md)))` metadata of vertex `v` to `val`.
+
+        See also: [`has_$($(QuoteNode(md)))`](@ref), [`get_$($(QuoteNode(md)))`](@ref).
+        """
+        $fname_set(c::VertexModel, val) = set_metadata!(c, $(QuoteNode(md)), val)
+    end
+end
 
 ####
 #### Extract initial state from component
