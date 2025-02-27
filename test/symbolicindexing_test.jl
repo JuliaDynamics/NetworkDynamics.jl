@@ -308,7 +308,7 @@ for idx in idxtypes
         println(idx, " => ", b.allocs, " allocations")
     end
     if VERSION ≥ v"1.11"
-        @test b.allocs <= 13
+        @test b.allocs <= 7
     end
 end
 
@@ -319,7 +319,7 @@ for idx in idxtypes
     getter = SII.getu(s, _idx)
     b = @b $(SII.getu)($s, $_idx)
     if b.allocs != 0
-        println(idx, "\t=> ", b.allocs, " allocations to generate getter")
+        println(rpad(idx,21), "=> ", b.allocs, " allocations to generate getter")
     end
     b = @b $getter($s)
     v = getter(s)
@@ -525,22 +525,22 @@ end
     idxs1 = [VIndex(1,:δ), VIndex(2, :Pdamping), EIndex(1,:P), VIndex(2,:P)]
     idxs2 = [VIndex(1,:δ), VIndex(2,:θ)]
     # full call
-    # @b $s[$idxs1] # 134 106
-    # @b $s[$idxs2] # 31  31
+    # @b $s[$idxs1] # 134 106 94
+    # @b $s[$idxs2] # 31  31 34
 
     # scalar call
-    # @b $s[$(VIndex(2,:Pdamping))]
+    # @b $s[$(VIndex(2,:Pdamping))] # 28
 
     # @b SII.observed($nw, $(VIndex(2,:Pdamping))) # 15
-    # @b SII.observed($nw, $(VIndex(2,:θ))) # 7
+    # @b SII.observed($nw, $(VIndex(2,:θ))) # 7 5
 
-    b = @b SII.observed($nw, $idxs1) # 69 36 42
+    b = @b SII.observed($nw, $idxs1) # 69 36 42 30
     if VERSION ≥ v"1.11"
-        @test b.allocs <= 42
+        @test b.allocs <= 30
     end
-    b = @b SII.observed($nw, $idxs2) # 12 7  10
+    b = @b SII.observed($nw, $idxs2) # 12 7 10 5
     if VERSION ≥ v"1.11"
-        @test b.allocs <= 10
+        @test b.allocs <= 5
     end
 
     obsf1 = SII.observed(nw, idxs1)

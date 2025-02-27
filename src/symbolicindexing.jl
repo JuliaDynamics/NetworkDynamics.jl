@@ -412,6 +412,11 @@ function observed_symbols(nw::Network)
     return syms
 end
 
+const U_TYPE = 1
+const P_TYPE = 2
+const OUT_TYPE = 3
+const AGG_TYPE = 4
+const OBS_TYPE = 5
 function SII.observed(nw::Network, snis)
     if (snis isa AbstractVector || snis isa Tuple) && any(sni -> sni isa ObservableExpression, snis)
         throw(ArgumentError("Cannot mix normal symbolic indices with @obsex currently!"))
@@ -422,38 +427,40 @@ function SII.observed(nw::Network, snis)
     isscalar = snis isa SymbolicIndex
     _snis = isscalar ? (snis,) : snis
 
-    # mapping i -> (:u, j) / (:p, j) / (:out, j) / (:agg, j)
-    arraymapping = Dict{Int, Tuple{Symbol, Int}}()
-    # mapping i -> f(fullstate, p, t) (component observables)
-    obsfuns = Dict{Int, Function}()
+    # mapping i -> (U_TYPE, j) / (P_TYPE, j) / (OUT_TYPE, j) / (AGG_TYPE, j) / (OBS_TYPE, j in obsfuns)
+    arraymapping = Vector{Tuple{Int, Int}}(undef, length(_snis))
+    # vector of obs functions
+    obsfuns = Vector{Function}()
 
     for (i, sni) in enumerate(_snis)
         if SII.is_variable(nw, sni)
-            arraymapping[i] = (:u, SII.variable_index(nw, sni))
+            arraymapping[i] = (U_TYPE, SII.variable_index(nw, sni))
         elseif SII.is_parameter(nw, sni)
-            arraymapping[i] = (:p, SII.parameter_index(nw, sni))
+            arraymapping[i] = (P_TYPE, SII.parameter_index(nw, sni))
         else
             cf = getcomp(nw, sni)
 
             @argcheck sni.subidx isa Symbol "Observed musst be referenced by symbol, got $sni"
             if (idx=findfirst(isequal(sni.subidx), outsym_flat(cf))) != nothing # output
                 _range = getcompoutrange(nw, sni)
-                arraymapping[i] = (:out, _range[idx])
+                arraymapping[i] = (OUT_TYPE, _range[idx])
             elseif (idx=findfirst(isequal(sni.subidx), obssym(cf))) != nothing #found in observed
                 _obsf = _get_observed_f(nw, cf, resolvecompidx(nw, sni))
-                obsfuns[i] = let obsidx = idx # otherwise $idx is boxed everywhere in function
+                _newobsfun = let obsidx = idx # otherwise $idx is boxed everywhere in function
                     (u, outbuf, aggbuf, extbuf, p, t) -> _obsf(u, outbuf, aggbuf, extbuf, p, t)[obsidx]
                 end
+                push!(obsfuns, _newobsfun)
+                arraymapping[i] = (OBS_TYPE, length(obsfuns))
             elseif hasinsym(cf) && sni.subidx ∈ insym_all(cf) # found in input
                 if sni isa SymbolicVertexIndex
                     idx = findfirst(isequal(sni.subidx), insym_all(cf))
-                    arraymapping[i] = (:agg, nw.im.v_aggr[resolvecompidx(nw, sni)][idx])
+                    arraymapping[i] = (AGG_TYPE, nw.im.v_aggr[resolvecompidx(nw, sni)][idx])
                 elseif sni isa SymbolicEdgeIndex
                     edge = nw.im.edgevec[resolvecompidx(nw, sni)]
                     if (idx = findfirst(isequal(sni.subidx), insym(cf).src)) != nothing
-                        arraymapping[i] = (:out, nw.im.v_out[edge.src][idx])
+                        arraymapping[i] = (OUT_TYPE, nw.im.v_out[edge.src][idx])
                     elseif (idx = findfirst(isequal(sni.subidx), insym(cf).dst)) != nothing
-                        arraymapping[i] = (:out, nw.im.v_out[edge.dst][idx])
+                        arraymapping[i] = (OUT_TYPE, nw.im.v_out[edge.dst][idx])
                     else
                         error()
                     end
@@ -465,45 +472,39 @@ function SII.observed(nw::Network, snis)
             end
         end
     end
-    needsbuf = any(m -> m[1] ∈ (:out, :agg), arraymapping) || !isempty(obsfuns)
+    needsbuf = any(m -> m[1] ∈ (OUT_TYPE, AGG_TYPE, OBS_TYPE), arraymapping)
+    obsfunstup = Tuple(obsfuns) # make obsfuns concretely typed
 
     if isscalar
         (u, p, t) -> begin
             if needsbuf
                 outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs=true)
             end
-            if !isempty(arraymapping)
-                type, idx = only(arraymapping)
-                type == :u   && return u[idx]
-                type == :p   && return p[idx]
-                type == :out && return outbuf[idx]
-                type == :agg && return aggbuf[idx]
-            else
-                obsf = only(obsfuns).second
-                return obsf(u, outbuf, aggbuf, extbuf, p, t)::eltype(u)
-            end
+            type, idx = only(arraymapping)
+            type == U_TYPE   && return u[idx]
+            type == P_TYPE   && return p[idx]
+            type == OUT_TYPE && return outbuf[idx]
+            type == AGG_TYPE && return aggbuf[idx]
+            type == OBS_TYPE && return only(obsfunstup)(u, outbuf, aggbuf, extbuf, p, t)::eltype(u)
         end
     else
-        # make tuple to have concretely typed obsf
-        obsfunstup = zip(keys(obsfuns), values(obsfuns)) |> Tuple
         (u, p, t, out=similar(u, length(_snis))) -> begin
             if needsbuf
                 outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs=true)
             end
 
-            for (i, (type, idx)) in arraymapping
-                if type == :u
+            for (i, (type, idx)) in pairs(arraymapping)
+                if type == U_TYPE
                     out[i] = u[idx]
-                elseif type == :p
+                elseif type == P_TYPE
                     out[i] = p[idx]
-                elseif type == :out
+                elseif type == OUT_TYPE
                     out[i] = outbuf[idx]
-                elseif type == :agg
+                elseif type == AGG_TYPE
                     out[i] = aggbuf[idx]
+                elseif type == OBS_TYPE
+                    out[i] = obsfunstup[idx](u, outbuf, aggbuf, extbuf, p, t)::eltype(u)
                 end
-            end
-            for (i, obsf) in obsfunstup
-                out[i] = obsf(u, outbuf, aggbuf, extbuf, p, t)::eltype(u)
             end
             return out
         end
