@@ -103,11 +103,12 @@ _uflat = copy(sol(t))
 _pflat = copy(sol.prob.p)
 s = NWState(nw, _uflat, _pflat)
 
-SII.getu(s, EIndex(1,:e_dst))(s)
-SII.getp(s, VPIndex(1,:M))(s)
+@test SII.getu(s, EIndex(1,:e_dst))(s) == uflat(s)[7]
+@test SII.getp(s, VPIndex(1,:M))(s) ==pflat(s)[1]
+@test SII.getp(s, VIndex(1,:M))(s) ==pflat(s)[1]
 
-SII.is_variable(nw, EIndex(1,:e_dst))
-SII.variable_index(nw, EIndex(1,:e_dst))
+@test SII.is_variable(nw, EIndex(1,:e_dst))
+@test SII.variable_index(nw, EIndex(1,:e_dst)) == 7
 
 @test map(idx->s[idx], SII.variable_symbols(nw)) == _uflat
 @test map(idx->s[idx], SII.parameter_symbols(nw)) == _pflat
@@ -185,10 +186,10 @@ for et in [VIndex, EIndex, VPIndex, EPIndex]
     repr.(et(1,:δ))
 end
 
-@test s[[VIndex(1,1), VPIndex(1,2)]] == [s[VIndex(1,1)], s[VPIndex(1,2)]]
-@test s[(VIndex(1,1), VPIndex(1,2))] == (s[VIndex(1,1)], s[VPIndex(1,2)])
-@test s[[VIndex(1,1), VIndex(1,2)]] == [s[VIndex(1,1)], s[VIndex(1,2)]]
-@test s[(VIndex(1,1), VIndex(1,2))] == (s[VIndex(1,1)], s[VIndex(1,2)])
+@test s[[VIndex(1,1), VPIndex(1,2)]] == [s[VIndex(1,1)], s[VPIndex(1,2)]] == [uflat(s)[1], pflat(s)[2]]
+@test s[(VIndex(1,1), VPIndex(1,2))] == (s[VIndex(1,1)], s[VPIndex(1,2)]) == (uflat(s)[1], pflat(s)[2])
+@test s[[VIndex(1,1), VIndex(1,2)]] == [s[VIndex(1,1)], s[VIndex(1,2)]] == [uflat(s)[1], uflat(s)[2]]
+@test s[(VIndex(1,1), VIndex(1,2))] == (s[VIndex(1,1)], s[VIndex(1,2)]) == (uflat(s)[1], uflat(s)[2])
 
 @test s[VIndex(:,1)] == s[VIndex(1:4,1)]
 @test_broken s[EIndex(:,1)] == s[EIndex(1:6,1)]
@@ -307,7 +308,7 @@ for idx in idxtypes
         println(idx, " => ", b.allocs, " allocations")
     end
     if VERSION ≥ v"1.11"
-        @test b.allocs <= 13
+        @test b.allocs <= 7
     end
 end
 
@@ -318,7 +319,7 @@ for idx in idxtypes
     getter = SII.getu(s, _idx)
     b = @b $(SII.getu)($s, $_idx)
     if b.allocs != 0
-        println(idx, "\t=> ", b.allocs, " allocations to generate getter")
+        println(rpad(idx,21), "=> ", b.allocs, " allocations to generate getter")
     end
     b = @b $getter($s)
     v = getter(s)
@@ -524,22 +525,22 @@ end
     idxs1 = [VIndex(1,:δ), VIndex(2, :Pdamping), EIndex(1,:P), VIndex(2,:P)]
     idxs2 = [VIndex(1,:δ), VIndex(2,:θ)]
     # full call
-    # @b $s[$idxs1] # 134 106
-    # @b $s[$idxs2] # 31  31
+    # @b $s[$idxs1] # 134 106 94
+    # @b $s[$idxs2] # 31  31 34
 
     # scalar call
-    # @b $s[$(VIndex(2,:Pdamping))]
+    # @b $s[$(VIndex(2,:Pdamping))] # 28
 
     # @b SII.observed($nw, $(VIndex(2,:Pdamping))) # 15
-    # @b SII.observed($nw, $(VIndex(2,:θ))) # 7
+    # @b SII.observed($nw, $(VIndex(2,:θ))) # 7 5
 
-    b = @b SII.observed($nw, $idxs1) # 69 36 42
+    b = @b SII.observed($nw, $idxs1) # 69 36 42 30
     if VERSION ≥ v"1.11"
-        @test b.allocs <= 42
+        @test b.allocs <= 30
     end
-    b = @b SII.observed($nw, $idxs2) # 12 7  10
+    b = @b SII.observed($nw, $idxs2) # 12 7 10 5
     if VERSION ≥ v"1.11"
-        @test b.allocs <= 10
+        @test b.allocs <= 5
     end
 
     obsf1 = SII.observed(nw, idxs1)

@@ -59,8 +59,8 @@ for md in [:default, :guess, :init, :bounds]
 
 
         """
-            set_$($(QuoteNode(md)))(c::ComponentModel, sym::Symbol, value)
-            set_$($(QuoteNode(md)))(nw::Network, sni::SymbolicIndex, value)
+            set_$($(QuoteNode(md)))!(c::ComponentModel, sym::Symbol, value)
+            set_$($(QuoteNode(md)))!(nw::Network, sni::SymbolicIndex, value)
 
         Sets the `$($(QuoteNode(md)))` value for symbol `sym` to `value`.
 
@@ -246,6 +246,41 @@ function get_defaults_or_inits(c::ComponentModel, syms; missing_val=nothing)
     [has_default_or_init(c, sym) ? get_default_or_init(c, sym) : missing_val for sym in syms]
 end
 
+# generate methods and docstrings for position and marker
+for md in [:position, :marker]
+    fname_has = Symbol(:has_, md)
+    fname_get = Symbol(:get_, md)
+    fname_set = Symbol(:set_, md, :!)
+    @eval begin
+        """
+            has_$($(QuoteNode(md)))(v::VertexModel)
+
+        Checks if vertex `v` has `$($(QuoteNode(md)))` metadata.
+
+        See also: [`get_$($(QuoteNode(md)))`](@ref), [`set_$($(QuoteNode(md)))!`](@ref).
+        """
+        $fname_has(c::VertexModel) = has_metadata(c, $(QuoteNode(md)))
+
+        """
+            get_$($(QuoteNode(md)))(v::VertexModel)
+
+        Returns the `$($(QuoteNode(md)))` metadata of vertex `v`. Might error if not present.
+
+        See also: [`has_$($(QuoteNode(md)))`](@ref), [`set_$($(QuoteNode(md)))!`](@ref).
+        """
+        $fname_get(c::VertexModel) = get_metadata(c, $(QuoteNode(md)))
+
+        """
+            set_$($(QuoteNode(md)))!(v::VertexModel, val)
+
+        Sets the `$($(QuoteNode(md)))` metadata of vertex `v` to `val`.
+
+        See also: [`has_$($(QuoteNode(md)))`](@ref), [`get_$($(QuoteNode(md)))`](@ref).
+        """
+        $fname_set(c::VertexModel, val) = set_metadata!(c, $(QuoteNode(md)), val)
+    end
+end
+
 ####
 #### Extract initial state from component
 ####
@@ -288,14 +323,15 @@ function _get_initial_observed(cf)
 end
 
 """
-    dump_initial_state(cf::ComponentModel; sigdigits=5, p=true, obs=true)
+    dump_initial_state([IO=stdout], cf::ComponentModel; sigdigits=5, p=true, obs=true)
 
-Prints the initial state of the component model `cf` to the console. Optionally
+Prints the initial state of the component model `cf` to `IO` (defaults to stdout). Optionally
 contains parameters and observed.
 
-See also: [`get_initial_state`](@ref).
+See also: [`get_initial_state`](@ref) and [`dump_state`](@ref).
 """
-function dump_initial_state(cf::ComponentModel; sigdigits=5, p=true, obs=true)
+dump_initial_state(cf::ComponentModel; kwargs...) = dump_initial_state(stdout, cf; kwargs...)
+function dump_initial_state(io, cf::ComponentModel; sigdigits=5, p=true, obs=true)
     lns = AnnotatedString[]
     symidx  = _append_states!(lns, cf, sort(sym(cf)); sigdigits)
     psymidx = _append_states!(lns, cf, sort(psym(cf)); sigdigits)
@@ -305,26 +341,26 @@ function dump_initial_state(cf::ComponentModel; sigdigits=5, p=true, obs=true)
     obsidx = _append_observed!(lns, cf; sigdigits)
     aligned = align_strings(lns)
 
-    printstyled("Inputs:\n", bold=true)
-    _printlines(aligned, insymidx)
-    printstyled("States:\n", bold=true)
-    _printlines(aligned, symidx)
-    printstyled("Outputs:\n", bold=true)
-    _printlines(aligned, outsymidx)
+    printstyled(io, "Inputs:\n", bold=true)
+    _printlines(io, aligned, insymidx)
+    printstyled(io, "States:\n", bold=true)
+    _printlines(io, aligned, symidx)
+    printstyled(io, "Outputs:\n", bold=true)
+    _printlines(io, aligned, outsymidx)
     if p
-        printstyled("Parameters:\n", bold=true)
-        _printlines(aligned, psymidx)
+        printstyled(io, "Parameters:\n", bold=true)
+        _printlines(io, aligned, psymidx)
     end
     if obs
         if length(obsidx) == 0
-            printstyled("$(length(obssym(cf))) Observed symbols uninitialized.", bold=true)
+            printstyled(io, "$(length(obssym(cf))) Observed symbols uninitialized.", bold=true)
         elseif length(obsidx) == length(obssym(cf))
-            printstyled("Observed:\n", bold=true)
+            printstyled(io, "Observed:\n", bold=true)
         else
             diff = length(obssym(cf)) - length(obsidx)
-            printstyled("Observed ($diff additional uninitialized):\n", bold=true)
+            printstyled(io, "Observed ($diff additional uninitialized):\n", bold=true)
         end
-        _printlines(aligned, obsidx; newline=false)
+        _printlines(io, aligned, obsidx; newline=false)
     end
 end
 function _append_states!(lns, cf, syms; sigdigits)
@@ -388,13 +424,89 @@ function _append_observed!(lns, cf; sigdigits)
     end
     fidx:length(lns)
 end
-function _printlines(aligned, range; newline=true)
+function _printlines(io, aligned, range; newline=true)
     lines = @views aligned[range]
     for i in eachindex(lines)
         if newline == false && i == lastindex(lines)
-            print(lines[i])
+            print(io, lines[i])
         else
-            println(lines[i])
+            println(io, lines[i])
+        end
+    end
+end
+
+"""
+    dump_state([IO=stdout], sol, t, idx; sigdigits=5)
+
+Takes a Network solution `sol` and prints the state at `t` as well as the initial
+state of the specified component model to `IO` (defaults to `stdout`).
+
+`idx` musst a valid component index, i.e. `VIndex` or `EIndex` without symbol specification.
+
+    dump_state(sol, 1.0, VIndex(4))
+    dump_state(sol, 1.0, EIndex(2))
+
+See also: [`dump_initial_state`](@ref).
+"""
+dump_state(sol, t, idx; kwargs...) = dump_state(stdout, sol, t, idx; kwargs...)
+function dump_state(io, sol, t, idx; sigdigits=3)
+    cf = extract_nw(sol)[idx]
+    _sym = sort(sym(cf))
+    _outsym = sort(outsym_flat(cf))
+    _insym = sort(insym_flat(cf))
+    _psym = sort(psym(cf))
+    _obssym = sort(obssym(cf))
+
+    groups = [("Outputs", _outsym), ("States", _sym), ("Inputs", _insym), ("Parameters", _psym), ("Observables", _obssym)]
+    filter!(g -> !isempty(g[2]), groups)
+    allsym = reduce(vcat, g[2] for g in groups)
+    nwidxs = idxtype(idx).(idx.compidx, allsym)
+    u0s, uts = sol([sol.t[begin], t]; idxs=nwidxs)
+    guesses = [has_guess(cf, sym) ? get_guess(cf, sym) : nothing for sym in allsym]
+    inits = [has_init(cf, sym) ? get_init(cf, sym) : nothing for sym in allsym]
+    defaults = [has_default(cf, sym) ? get_default(cf, sym) : nothing for sym in allsym]
+
+    t_str = str_significant(t; sigdigits)
+    t0_str = str_significant(sol.t[begin]; sigdigits)
+    strings = AnnotatedString[styled"{bold:& &&  t=$t_str &&  t=$t0_str &&  Default/Init}"]
+    for (sym, g, d, i, u0, ut) in zip(allsym, guesses, defaults, inits, u0s, uts)
+        buf = AnnotatedIOBuffer()
+        print(buf, " &"*string(sym)*" && ")
+
+        if !isnothing(ut)
+            print(buf, str_significant(ut; sigdigits, phantom_minus=true))
+        end
+        print(buf, " && ")
+
+        if !isnothing(u0)
+            print(buf, str_significant(u0; sigdigits, phantom_minus=true))
+        end
+        print(buf, " && ")
+
+        if !isnothing(d)
+            print(buf, str_significant(d; sigdigits, phantom_minus=true))
+        elseif !isnothing(i)
+            ival = str_significant(i; sigdigits, phantom_minus=true)
+            print(buf, styled"{blue: $ival}")
+            if !isnothing(g)
+                gval = str_significant(i; sigdigits, phantom_minus=true)
+                print(buf, " (from $gval)")
+            end
+        end
+
+        s = read(seekstart(buf), AnnotatedString)
+        push!(strings, s)
+    end
+    aligned = align_strings(strings)
+
+    let i = 2
+        println(io, aligned[1])
+        for (label, syms) in groups
+            println(io, styled"{bold:$label}")
+            for sym in syms
+                println(io, aligned[i])
+                i += 1
+            end
         end
     end
 end

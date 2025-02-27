@@ -93,6 +93,11 @@ vpidxs
 epidxs
 ```
 
+### Solution Inspection
+```@docs
+dump_state
+```
+
 ## Metadata API
 ### Component Metadata API
 ```@docs
@@ -103,6 +108,12 @@ set_metadata!(::NetworkDynamics.ComponentModel, ::Symbol, ::Any)
 has_graphelement
 get_graphelement
 set_graphelement!
+has_position
+get_position
+set_position!
+has_marker
+get_marker
+set_marker!
 ```
 ### Per-Symbol Metadata API
 ```@docs

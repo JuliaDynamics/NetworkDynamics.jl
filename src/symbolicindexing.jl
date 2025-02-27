@@ -82,8 +82,11 @@ struct EPIndex{C,S} <: SymbolicParameterIndex{C,S}
     compidx::C
     subidx::S
 end
-const SymbolicEdgeIndex = Union{EIndex, EPIndex}
-const SymbolicVertexIndex = Union{VIndex, VPIndex}
+const SymbolicEdgeIndex{C,S} = Union{EIndex{C,S}, EPIndex{C,S}}
+const SymbolicVertexIndex{C,S} = Union{VIndex{C,S}, VPIndex{C,S}}
+
+idxtype(s::VIndex) = VIndex
+idxtype(s::EIndex) = EIndex
 
 #=
 SciMLBase gets the index provider from ODEFunction.sys which defaults to f.sys so we provide it...
@@ -128,8 +131,8 @@ getcompoutrange(nw::Network, sni) = getcompoutrange(nw.im, sni)
 getcompoutrange(im::IndexManager, sni::VIndex{<:Union{Symbol,Int}}) = im.v_out[resolvecompidx(im, sni)]
 getcompoutrange(im::IndexManager, sni::EIndex{<:Union{Symbol,Int}}) = flatrange(im.e_out[resolvecompidx(im, sni)])
 
-getcompprange(nw::Network, sni::VPIndex{<:Union{Symbol,Int}}) = nw.im.v_para[resolvecompidx(nw, sni)]
-getcompprange(nw::Network, sni::EPIndex{<:Union{Symbol,Int}}) = nw.im.e_para[resolvecompidx(nw, sni)]
+getcompprange(nw::Network, sni::SymbolicVertexIndex{<:Union{Symbol,Int}}) = nw.im.v_para[resolvecompidx(nw, sni)]
+getcompprange(nw::Network, sni::SymbolicEdgeIndex{<:Union{Symbol,Int}}) = nw.im.e_para[resolvecompidx(nw, sni)]
 
 subsym_has_idx(sym::Symbol, syms) = sym ∈ syms
 subsym_has_idx(idx::Int, syms) = 1 ≤ idx ≤ length(syms)
@@ -217,6 +220,7 @@ SII.all_symbols(nw::Network) = vcat(SII.all_variable_symbols(nw), SII.parameter_
 ####
 #### variable indexing
 ####
+const POTENTIAL_SCALAR_SIDX = Union{SymbolicStateIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}}}
 function SII.is_variable(nw::Network, sni)
     if _hascolon(sni)
         SII.is_variable(nw, _resolve_colon(nw,sni))
@@ -227,7 +231,7 @@ function SII.is_variable(nw::Network, sni)
     end
 end
 _is_variable(nw::Network, sni) = false
-function _is_variable(nw::Network, sni::SymbolicStateIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}})
+function _is_variable(nw::Network, sni::POTENTIAL_SCALAR_SIDX)
     cf = getcomp(nw, sni)
     return subsym_has_idx(sni.subidx, sym(cf))
 end
@@ -241,7 +245,7 @@ function SII.variable_index(nw::Network, sni)
         _variable_index(nw, sni)
     end
 end
-function _variable_index(nw::Network, sni::SymbolicStateIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}})
+function _variable_index(nw::Network, sni::POTENTIAL_SCALAR_SIDX)
     cf = getcomp(nw, sni)
     range = getcomprange(nw, sni)
     range[subsym_to_idx(sni.subidx, sym(cf))]
@@ -262,6 +266,11 @@ end
 ####
 #### parameter indexing
 ####
+# when using an number instead of symbol only PIndex is valid
+const POTENTIAL_SCALAR_PIDX = Union{
+    SymbolicParameterIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}},
+    SymbolicIndex{<:Union{Symbol,Int},Symbol}
+}
 function SII.is_parameter(nw::Network, sni)
     if _hascolon(sni)
         SII.is_parameter(nw, _resolve_colon(nw,sni))
@@ -272,8 +281,7 @@ function SII.is_parameter(nw::Network, sni)
     end
 end
 _is_parameter(nw::Network, sni) = false
-function _is_parameter(nw::Network,
-                          sni::SymbolicParameterIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}})
+function _is_parameter(nw::Network, sni::POTENTIAL_SCALAR_PIDX)
     cf = getcomp(nw, sni)
     return subsym_has_idx(sni.subidx, psym(cf))
 end
@@ -287,8 +295,7 @@ function SII.parameter_index(nw::Network, sni)
         _parameter_index(nw, sni)
     end
 end
-function _parameter_index(nw::Network,
-                             sni::SymbolicParameterIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}})
+function _parameter_index(nw::Network, sni::POTENTIAL_SCALAR_PIDX)
     cf = getcomp(nw, sni)
     range = getcompprange(nw, sni)
     range[subsym_to_idx(sni.subidx, psym(cf))]
@@ -385,7 +392,7 @@ function SII.is_observed(nw::Network, sni)
     end
 end
 _is_observed(nw::Network, _) = false
-function _is_observed(nw::Network, sni::SymbolicStateIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}})
+function _is_observed(nw::Network, sni::SymbolicStateIndex{<:Union{Symbol,Int},Symbol})
     cf = getcomp(nw, sni)
     return sni.subidx ∈ obssym_all(cf)
 end
@@ -405,6 +412,11 @@ function observed_symbols(nw::Network)
     return syms
 end
 
+const U_TYPE = 1
+const P_TYPE = 2
+const OUT_TYPE = 3
+const AGG_TYPE = 4
+const OBS_TYPE = 5
 function SII.observed(nw::Network, snis)
     if (snis isa AbstractVector || snis isa Tuple) && any(sni -> sni isa ObservableExpression, snis)
         throw(ArgumentError("Cannot mix normal symbolic indices with @obsex currently!"))
@@ -415,39 +427,40 @@ function SII.observed(nw::Network, snis)
     isscalar = snis isa SymbolicIndex
     _snis = isscalar ? (snis,) : snis
 
-    # mapping i -> index in state
-    stateidx = Dict{Int, Int}()
-    # mapping i -> index in output
-    outidx = Dict{Int, Int}()
-    # mapping i -> index in aggbuf
-    aggidx = Dict{Int, Int}()
-    # mapping i -> f(fullstate, p, t) (component observables)
-    obsfuns = Dict{Int, Function}()
+    # mapping i -> (U_TYPE, j) / (P_TYPE, j) / (OUT_TYPE, j) / (AGG_TYPE, j) / (OBS_TYPE, j in obsfuns)
+    arraymapping = Vector{Tuple{Int, Int}}(undef, length(_snis))
+    # vector of obs functions
+    obsfuns = Vector{Function}()
+
     for (i, sni) in enumerate(_snis)
         if SII.is_variable(nw, sni)
-            stateidx[i] = SII.variable_index(nw, sni)
+            arraymapping[i] = (U_TYPE, SII.variable_index(nw, sni))
+        elseif SII.is_parameter(nw, sni)
+            arraymapping[i] = (P_TYPE, SII.parameter_index(nw, sni))
         else
             cf = getcomp(nw, sni)
 
             @argcheck sni.subidx isa Symbol "Observed musst be referenced by symbol, got $sni"
             if (idx=findfirst(isequal(sni.subidx), outsym_flat(cf))) != nothing # output
                 _range = getcompoutrange(nw, sni)
-                outidx[i] = _range[idx]
+                arraymapping[i] = (OUT_TYPE, _range[idx])
             elseif (idx=findfirst(isequal(sni.subidx), obssym(cf))) != nothing #found in observed
                 _obsf = _get_observed_f(nw, cf, resolvecompidx(nw, sni))
-                obsfuns[i] = let obsidx = idx # otherwise $idx is boxed everywhere in function
+                _newobsfun = let obsidx = idx # otherwise $idx is boxed everywhere in function
                     (u, outbuf, aggbuf, extbuf, p, t) -> _obsf(u, outbuf, aggbuf, extbuf, p, t)[obsidx]
                 end
+                push!(obsfuns, _newobsfun)
+                arraymapping[i] = (OBS_TYPE, length(obsfuns))
             elseif hasinsym(cf) && sni.subidx ∈ insym_all(cf) # found in input
                 if sni isa SymbolicVertexIndex
                     idx = findfirst(isequal(sni.subidx), insym_all(cf))
-                    aggidx[i] = nw.im.v_aggr[resolvecompidx(nw, sni)][idx]
+                    arraymapping[i] = (AGG_TYPE, nw.im.v_aggr[resolvecompidx(nw, sni)][idx])
                 elseif sni isa SymbolicEdgeIndex
                     edge = nw.im.edgevec[resolvecompidx(nw, sni)]
                     if (idx = findfirst(isequal(sni.subidx), insym(cf).src)) != nothing
-                        outidx[i] = nw.im.v_out[edge.src][idx]
+                        arraymapping[i] = (OUT_TYPE, nw.im.v_out[edge.src][idx])
                     elseif (idx = findfirst(isequal(sni.subidx), insym(cf).dst)) != nothing
-                        outidx[i] = nw.im.v_out[edge.dst][idx]
+                        arraymapping[i] = (OUT_TYPE, nw.im.v_out[edge.dst][idx])
                     else
                         error()
                     end
@@ -459,46 +472,41 @@ function SII.observed(nw::Network, snis)
             end
         end
     end
-    initbufs = !isempty(outidx) || !isempty(aggidx) || !isempty(obsfuns)
+    needsbuf = any(m -> m[1] ∈ (OUT_TYPE, AGG_TYPE, OBS_TYPE), arraymapping)
+    obsfunstup = Tuple(obsfuns) # make obsfuns concretely typed
 
     if isscalar
         (u, p, t) -> begin
-            outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs)
-            if !isempty(stateidx)
-                idx = only(stateidx).second
-                u[idx]
-            elseif !isempty(outidx)
-                idx = only(outidx).second
-                outbuf[idx]
-            elseif !isempty(aggidx)
-                idx = only(aggidx).second
-                aggbuf[idx]
-            else
-                obsf = only(obsfuns).second
-                obsf(u, outbuf, aggbuf, extbuf, p, t)::eltype(u)
+            if needsbuf
+                outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs=true)
             end
+            type, idx = only(arraymapping)
+            type == U_TYPE   && return u[idx]
+            type == P_TYPE   && return p[idx]
+            type == OUT_TYPE && return outbuf[idx]
+            type == AGG_TYPE && return aggbuf[idx]
+            type == OBS_TYPE && return only(obsfunstup)(u, outbuf, aggbuf, extbuf, p, t)::eltype(u)
         end
     else
-        # make tuple to have concretely typed obsf
-        obsfunstup = zip(keys(obsfuns), values(obsfuns)) |> Tuple
         (u, p, t, out=similar(u, length(_snis))) -> begin
-            if any(!isempty, (outidx, aggidx, obsfuns))
-                outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs)
+            if needsbuf
+                outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs=true)
             end
 
-            for (i, statei) in stateidx
-                out[i] = u[statei]
+            for (i, (type, idx)) in pairs(arraymapping)
+                if type == U_TYPE
+                    out[i] = u[idx]
+                elseif type == P_TYPE
+                    out[i] = p[idx]
+                elseif type == OUT_TYPE
+                    out[i] = outbuf[idx]
+                elseif type == AGG_TYPE
+                    out[i] = aggbuf[idx]
+                elseif type == OBS_TYPE
+                    out[i] = obsfunstup[idx](u, outbuf, aggbuf, extbuf, p, t)::eltype(u)
+                end
             end
-            for (i, outi) in outidx
-                out[i] = outbuf[outi]
-            end
-            for (i, aggi) in aggidx
-                out[i] = aggbuf[aggi]
-            end
-            for (i, obsf) in obsfunstup
-                out[i] = obsf(u, outbuf, aggbuf, extbuf, p, t)::eltype(u)
-            end
-            out
+            return out
         end
     end
 end

@@ -1,0 +1,112 @@
+html, body {
+    font-family: sans-serif;
+    font-size: 12px;
+    height: 100%;
+    /* width: 100%; */
+}
+
+.select2-container .select2-selection .select2-selection__rendered,
+.select2-container .select2-selection--single .select2-selection__rendered,
+.select2-container .select2-results__option{
+    font-family: monospace;
+    /* font-size: 20px; */
+}
+.select2-results__group {
+    font-family: sans-serif;
+    /* font-size: 12px; */
+    /* color: blue; */
+}
+
+.maingrid {
+    display: grid;
+    grid-template-columns: min-content auto;
+    width: 100%;
+    gap: 5px;
+}
+
+.graphplot-col, .timeseries-col, .timeseries-stack{
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    /* to keep shadows visible */
+    /* https://stackoverflow.com/questions/70802682/parents-overflowhidden-doesnt-show-childs-box-shadow */
+    overflow: hidden; /* otherwise it won't shrink */
+    margin:-10px;
+    padding:10px
+}
+
+.graphplot-card {
+    height:400px; /* initial widht and height */
+    width: 400px;
+    min-width:250px;
+    resize: both;
+    overflow: hidden;
+}
+
+.gpstate-control-card {
+}
+
+.timeslider-card {
+    height:min-content;
+}
+
+.timeseries-card {
+    resize: vertical;
+    overflow: hidden;
+    /* grid-column: 2; */
+}
+.timeseries-card.active-tseries {
+    box-shadow: 0 4px 8px rgba(0.0, 0.0, 51.0, 0.65);
+}
+.timeseries-card-container{
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    height: 100%;  /* otherwise it won't shrink */
+}
+.timeseries-card-container .comp-state-sel-grid {
+    height: min-content;  /* otherwise it won't shrink */
+}
+.timeseries-axis-container{
+    flex-grow: 1;
+    overflow:hidden;
+}
+
+.tooltip {
+    position: absolute;
+    background-color: black;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-size: 12px;
+    font-family: monospace;
+    pointer-events: none;
+    white-space: nowrap;
+    display: none; /* Initially hidden */
+    transform: translate(12px, 12px); /* Offset from cursor */
+}
+
+#element-info-box {
+    font-family: monospace;
+    overflow: scroll;
+    border: 2px solid #dbdbdb;
+    border-radius: 4px;
+    background-color: #f5f5f5;
+    color: #222;
+    padding: 1px 10px;
+}
+.element-info-card {
+    /* overflow:hidden; */
+    /* resize:vertical; */
+}
+
+.julia-prompt {
+    color: #066f00;
+    font-weight: bolder;
+}
+
+button{
+    font-size: 12px !important;
+    font-weight: normal !important;
+    font-family: sans-serif !important;;
+}

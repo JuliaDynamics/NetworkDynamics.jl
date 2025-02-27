@@ -45,6 +45,31 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
 
+  Inspector-tests:
+    name: NetworkDynamicsInspector.jl Tests
+    runs-on: ubuntu-latest
+    permissions: # needed to allow julia-actions/cache to proactively delete old caches that it has created
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: 1
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/julia-buildpkg@v1
+        with:
+          project: NetworkDynamicsInspector
+      - uses: julia-actions/julia-runtest@v1
+        with:
+          project: NetworkDynamicsInspector
+      # - uses: julia-actions/julia-processcoverage@v1
+      # - uses: codecov/codecov-action@v4
+      #   with:
+      #     files: lcov.info
+      #     token: ${{ secrets.CODECOV_TOKEN }}
+      #     fail_ci_if_error: false
+
   pd-test:
     name: PowerDynamics.jl test - Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }}
     runs-on: ${{ matrix.os }}
