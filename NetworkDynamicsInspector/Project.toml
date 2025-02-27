@@ -24,6 +24,9 @@ OrdinaryDiffEqTsit5 = "b1df2697-797e-41e3-8120-5422d3b24e4a"
 [sources]
 NetworkDynamics = {path = ".."}
 
+[targets]
+test = ["Aqua", "ExplicitImports", "ModelingToolkit", "OrdinaryDiffEqTsit5"]
+
 [compat]
 Aqua = "0.8.9"
 Bonito = "4.0.0"
