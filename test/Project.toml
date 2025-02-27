@@ -24,7 +24,6 @@ LinearInterpolations = "b20c7882-2490-4592-a606-fbbfe9e745e8"
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
 ModelingToolkit = "961ee093-0014-501f-94e3-6117800e7a78"
 NetworkDynamics = "22e9dc34-2a0d-11e9-0de0-8588d035468b"
-NetworkDynamicsInspector = "0a4713f2-d58f-43f2-b63b-1b5d5ee4e65a"
 OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
 OrdinaryDiffEqNonlinearSolve = "127b3ac7-2247-4354-8eb6-78cf4e7c58e8"
 OrdinaryDiffEqRosenbrock = "43230ef6-c299-4910-a778-202eb28ce4ce"
@@ -50,7 +49,6 @@ WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"
 
 [sources]
 NetworkDynamics = {path = ".."}
-NetworkDynamicsInspector = {path = "../NetworkDynamicsInspector"}
 
 [compat]
 Adapt = "≥0.0.1"
