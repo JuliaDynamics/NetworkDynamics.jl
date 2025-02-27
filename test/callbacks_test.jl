@@ -202,7 +202,8 @@ end
     cb = ContinousComponentCallback(cond, affect)
     set_callback!.(nw.im.edgem, Ref(cb); check=false);
     cbb = only(NetworkDynamics.wrap_component_callbacks(nw));
-    @test_throws ArgumentError NetworkDynamics._batch_condition(cbb)
+    # oserved can handle parameters now!
+    # @test_throws ArgumentError NetworkDynamics._batch_condition(cbb)
     @test_throws ArgumentError NetworkDynamics._batch_affect(cbb)
 
     # invalid state in condition p
