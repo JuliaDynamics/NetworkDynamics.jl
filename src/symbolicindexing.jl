@@ -220,6 +220,7 @@ SII.all_symbols(nw::Network) = vcat(SII.all_variable_symbols(nw), SII.parameter_
 ####
 #### variable indexing
 ####
+const POTENTIAL_SCALAR_SIDX = Union{SymbolicStateIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}}}
 function SII.is_variable(nw::Network, sni)
     if _hascolon(sni)
         SII.is_variable(nw, _resolve_colon(nw,sni))
@@ -230,7 +231,7 @@ function SII.is_variable(nw::Network, sni)
     end
 end
 _is_variable(nw::Network, sni) = false
-function _is_variable(nw::Network, sni::SymbolicStateIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}})
+function _is_variable(nw::Network, sni::POTENTIAL_SCALAR_SIDX)
     cf = getcomp(nw, sni)
     return subsym_has_idx(sni.subidx, sym(cf))
 end
@@ -244,7 +245,7 @@ function SII.variable_index(nw::Network, sni)
         _variable_index(nw, sni)
     end
 end
-function _variable_index(nw::Network, sni::SymbolicStateIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}})
+function _variable_index(nw::Network, sni::POTENTIAL_SCALAR_SIDX)
     cf = getcomp(nw, sni)
     range = getcomprange(nw, sni)
     range[subsym_to_idx(sni.subidx, sym(cf))]
@@ -265,6 +266,11 @@ end
 ####
 #### parameter indexing
 ####
+# when using an number instead of symbol only PIndex is valid
+const POTENTIAL_SCALAR_PIDX = Union{
+    SymbolicParameterIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}},
+    SymbolicIndex{<:Union{Symbol,Int},Symbol}
+}
 function SII.is_parameter(nw::Network, sni)
     if _hascolon(sni)
         SII.is_parameter(nw, _resolve_colon(nw,sni))
@@ -275,8 +281,7 @@ function SII.is_parameter(nw::Network, sni)
     end
 end
 _is_parameter(nw::Network, sni) = false
-function _is_parameter(nw::Network,
-                          sni::SymbolicIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}})
+function _is_parameter(nw::Network, sni::POTENTIAL_SCALAR_PIDX)
     cf = getcomp(nw, sni)
     return subsym_has_idx(sni.subidx, psym(cf))
 end
@@ -290,15 +295,14 @@ function SII.parameter_index(nw::Network, sni)
         _parameter_index(nw, sni)
     end
 end
-function _parameter_index(nw::Network,
-                             sni::SymbolicIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}})
+function _parameter_index(nw::Network, sni::POTENTIAL_SCALAR_PIDX)
     cf = getcomp(nw, sni)
     range = getcompprange(nw, sni)
     range[subsym_to_idx(sni.subidx, psym(cf))]
 end
 
 function SII.parameter_symbols(nw::Network)
-    syms = Vector{SymbolicIndex{Int,Symbol}}(undef, pdim(nw))
+    syms = Vector{SymbolicParameterIndex{Int,Symbol}}(undef, pdim(nw))
     for (ci, cf) in pairs(nw.im.vertexm)
         syms[nw.im.v_para[ci]] .= VPIndex.(ci, psym(cf))
     end
@@ -388,7 +392,7 @@ function SII.is_observed(nw::Network, sni)
     end
 end
 _is_observed(nw::Network, _) = false
-function _is_observed(nw::Network, sni::SymbolicStateIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}})
+function _is_observed(nw::Network, sni::SymbolicStateIndex{<:Union{Symbol,Int},Symbol})
     cf = getcomp(nw, sni)
     return sni.subidx ∈ obssym_all(cf)
 end

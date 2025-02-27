@@ -103,11 +103,12 @@ _uflat = copy(sol(t))
 _pflat = copy(sol.prob.p)
 s = NWState(nw, _uflat, _pflat)
 
-SII.getu(s, EIndex(1,:e_dst))(s)
-SII.getp(s, VPIndex(1,:M))(s)
+@test SII.getu(s, EIndex(1,:e_dst))(s) == uflat(s)[7]
+@test SII.getp(s, VPIndex(1,:M))(s) ==pflat(s)[1]
+@test SII.getp(s, VIndex(1,:M))(s) ==pflat(s)[1]
 
-SII.is_variable(nw, EIndex(1,:e_dst))
-SII.variable_index(nw, EIndex(1,:e_dst))
+@test SII.is_variable(nw, EIndex(1,:e_dst))
+@test SII.variable_index(nw, EIndex(1,:e_dst)) == 7
 
 @test map(idx->s[idx], SII.variable_symbols(nw)) == _uflat
 @test map(idx->s[idx], SII.parameter_symbols(nw)) == _pflat
@@ -185,10 +186,10 @@ for et in [VIndex, EIndex, VPIndex, EPIndex]
     repr.(et(1,:δ))
 end
 
-@test s[[VIndex(1,1), VPIndex(1,2)]] == [s[VIndex(1,1)], s[VPIndex(1,2)]]
-@test s[(VIndex(1,1), VPIndex(1,2))] == (s[VIndex(1,1)], s[VPIndex(1,2)])
-@test s[[VIndex(1,1), VIndex(1,2)]] == [s[VIndex(1,1)], s[VIndex(1,2)]]
-@test s[(VIndex(1,1), VIndex(1,2))] == (s[VIndex(1,1)], s[VIndex(1,2)])
+@test s[[VIndex(1,1), VPIndex(1,2)]] == [s[VIndex(1,1)], s[VPIndex(1,2)]] == [uflat(s)[1], pflat(s)[2]]
+@test s[(VIndex(1,1), VPIndex(1,2))] == (s[VIndex(1,1)], s[VPIndex(1,2)]) == (uflat(s)[1], pflat(s)[2])
+@test s[[VIndex(1,1), VIndex(1,2)]] == [s[VIndex(1,1)], s[VIndex(1,2)]] == [uflat(s)[1], uflat(s)[2]]
+@test s[(VIndex(1,1), VIndex(1,2))] == (s[VIndex(1,1)], s[VIndex(1,2)]) == (uflat(s)[1], uflat(s)[2])
 
 @test s[VIndex(:,1)] == s[VIndex(1:4,1)]
 @test_broken s[EIndex(:,1)] == s[EIndex(1:6,1)]
