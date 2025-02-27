@@ -15,17 +15,8 @@ OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
 SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
 WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"
 
-[extras]
-Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
-ExplicitImports = "7d51a73a-1435-4ff3-83d9-f097790105c7"
-ModelingToolkit = "961ee093-0014-501f-94e3-6117800e7a78"
-OrdinaryDiffEqTsit5 = "b1df2697-797e-41e3-8120-5422d3b24e4a"
-
 [sources]
 NetworkDynamics = {path = ".."}
-
-[targets]
-test = ["Aqua", "ExplicitImports", "ModelingToolkit", "OrdinaryDiffEqTsit5"]
 
 [compat]
 Aqua = "0.8.9"
@@ -38,7 +29,14 @@ Graphs = "1.12.0"
 NetworkDynamics = "0.9.13"
 Observables = "0.5.5"
 OrderedCollections = "1.8.0"
-OrdinaryDiffEqTsit5 = "1.1.0"
 SciMLBase = "2.75.1"
 WGLMakie = "0.11"
 julia = "1.10"
+
+[extras]
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
+ExplicitImports = "7d51a73a-1435-4ff3-83d9-f097790105c7"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Aqua", "ExplicitImports", "Test"]
