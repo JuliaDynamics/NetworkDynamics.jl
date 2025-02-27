@@ -72,7 +72,7 @@ export has_guess, get_guess, set_guess!
 export has_init, get_init, set_init!
 export has_bounds, get_bounds, set_bounds!
 export has_graphelement, get_graphelement, set_graphelement!
-export get_initial_state, dump_initial_state
+export get_initial_state, dump_initial_state, dump_state
 export has_callback, get_callbacks, set_callback!, add_callback!
 export has_position, get_position, set_position!
 export has_marker, get_marker, set_marker!
