@@ -145,8 +145,25 @@ function start_server!(restart=true)
         error("No appstate to restart")
     end
 
-    app = APPSTATE[]
+    webapp = get_webapp()
 
+    SERVER[] = Bonito.Server(webapp, "localhost", 8080)
+    url = SERVER[].url
+    port = SERVER[].port
+    @info "Visit $url:$port to launch App"
+end
+
+function start_electron()
+    if isempty(methods(display_electron_app))
+        @error "Electron.jl not available. Please install Electron.jl and `using Electron` before calling this function."
+    else
+        display_electron_app()
+    end
+end
+function display_electron_app end
+
+function get_webapp()
+    app = APPSTATE[]
     webapp = Bonito.App() do session
         @info "New GUI Session started"
         if !isnothing(SESSION[]) && Base.isopen(SESSION[])
@@ -210,24 +227,20 @@ function start_server!(restart=true)
             class="maingrid"
         )
     end;
-
-    SERVER[] = Bonito.Server(webapp, "localhost", 8080)
-    url = SERVER[].url
-    port = SERVER[].port
-    @info "Visit $url:$port to launch App"
 end
 
 """
-    inspect(sol; restart=false, reset=false)
+    inspect(sol; restart=false, reset=false, electron=false)
 
 Main entry point for gui. Starts the server and serves the app for
 soution `sol`.
 
 - `restart`: If `true`, stop the server if it is running and start a new one.
 - `reset`: If `true`, reset the appstate with the new solution `sol`.
+- `electron`: If `true`, start the app in an electron window (only possible after `using Electron`).
 """
-function inspect(sol; restart=false, reset=false)
-    if restart && server_running()
+function inspect(sol; restart=false, reset=false, electron=false)
+    if (restart || electron) && server_running()
         stop_server!()
     end
     if isnothing(APPSTATE[]) || reset
@@ -236,10 +249,14 @@ function inspect(sol; restart=false, reset=false)
         APPSTATE[].sol[] = sol
     end
 
-    if !server_running()
-        start_server!()
+    if electron
+        start_electron()
     else
-        @info "App still served at $(SERVER[].url):$(SERVER[].port)"
+        if !server_running()
+            start_server!()
+        else
+            @info "App still served at $(SERVER[].url):$(SERVER[].port)"
+        end
     end
     nothing
 end
