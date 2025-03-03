@@ -264,6 +264,7 @@ function _adapt_xy_scaling!(xratio, yratio, ax)
 end
 
 function gpstate_control_card(app, type)
+    NEL = type == :vertex ? nv : ne
     VEIndex = type == :vertex ? VIndex : EIndex
     label = type == :vertex ? "Node state:" : "Edge state:"
     stateobs = type == :vertex ? app.graphplot.nstate : app.graphplot.estate
@@ -279,7 +280,7 @@ function gpstate_control_card(app, type)
     options = Observable{Vector{OptionGroup{Symbol}}}()
     on(app.sol; update=true) do _sol
         _nw = extract_nw(_sol)
-        idxs = VEIndex.(1:nv(_nw))
+        idxs = VEIndex.(1:NEL(_nw))
         options[] = gen_state_options(_nw, idxs)
         nothing
     end
@@ -310,7 +311,7 @@ function gpstate_control_card(app, type)
         if length(_state) == 0
             maxrange[] = (-1.0, 1.0)
         elseif length(_state) == 1
-            idxs = VEIndex.(1:nv(extract_nw(_sol)), only(_state))
+            idxs = VEIndex.(1:NEL(extract_nw(_sol)), only(_state))
             r = Float32.(_maxrange(_sol, idxs, _rel))
 
             if r[1] == r[2]
