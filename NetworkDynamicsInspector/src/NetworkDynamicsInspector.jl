@@ -323,10 +323,10 @@ To automaticially create commands see [`dump_app_state()`](@ref).
 function set_timeseries!(key; selcomp = NotSpecified(),
                               states = NotSpecified(),
                               rel = NotSpecified())
-    if !haskey(appstate().tsplots, key)
-        appstate().tsplots[key] = TimeseriesPlot()
+    if !haskey(appstate().tsplots[], key)
+        appstate().tsplots[][key] = TimeseriesPlot()
     end
-    tsplot = appstate().tsplots[key]
+    tsplot = appstate().tsplots[][key]
     set_maybe!(tsplot.selcomp, selcomp)
     set_maybe!(tsplot.states, states)
     set_maybe!(tsplot.rel, rel)
@@ -349,8 +349,8 @@ function define_timeseries!(tsarray)
     else
         tskeys = keys(appstate().tsplots[])
     end
-    for (key, ts) in zip(tskeys, tsarray)
-        set_timeseries!(key; pop!(tsargs)...)
+    for (key, tsargs) in zip(tskeys, tsarray)
+        set_timeseries!(key; tsargs...)
     end
     nothing
 end
