@@ -75,5 +75,3 @@ end
         inspect(sol; electron=true)
     end
 end
-
-end

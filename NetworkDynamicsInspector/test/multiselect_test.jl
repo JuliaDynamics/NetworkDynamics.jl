@@ -1,6 +1,8 @@
 using Bonito
+using Electron
 using NetworkDynamicsInspector
 using NetworkDynamicsInspector: OptionGroup, MultiSelect
+using NetworkDynamicsInspector: NetworkDynamicsInspector as NDI
 
 gui = (;
     options = Observable{Vector{Union{Symbol,OptionGroup{Symbol}}}}([
@@ -14,15 +16,17 @@ gui = (;
 )
 
 let
+    close.(Electron.applications())
     app = App(;) do session
         NetworkDynamicsInspector.clear_obs!(gui)
 
         ms1 = MultiSelect(gui.options, gui.selection; placeholder="multi", T=Symbol)
         ms2 = MultiSelect(gui.options, gui.selection_single; placeholder="single", multi=false, T=Symbol)
 
-        return wrap_assets(Grid(ms1, ms2; columns="100%", width="500px"))
+        return Grid(ms1, ms2; columns="100%", width="500px")
     end;
-    serve_app(app)
+    disp = Bonito.use_electron_display(devtools = true); display(disp, app)
+    # disp = Bonito.browser_display(); display(app)
 end
 
 @test gui.selection[] == [:Rust, :French]
