@@ -440,7 +440,7 @@ function timeslider_card(app)
             justify_content="begin",
             align_items="center",
         );
-        class="timeslider-card"
+        class="bonito-card timeslider-card"
     );
 end
 
@@ -478,7 +478,7 @@ function element_info_card(app, session)
 
     Card(
         DOM.div(;id="element-info-box");
-        class="element-info-card resize-with-gp"
+        class="bonito-card element-info-card resize-with-gp"
     )
 end
 

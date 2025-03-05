@@ -1,8 +1,16 @@
-html, body {
+html {
+    margin:0px;
+    padding:0px;
+    height: 100%;
+    width:100%;
+}
+body {
     font-family: sans-serif;
     font-size: 12px;
     height: 100%;
-    /* width: 100%; */
+    margin:0px;
+    padding:5px;
+    box-sizing: border-box;
 }
 
 .select2-container .select2-selection .select2-selection__rendered,
@@ -21,18 +29,31 @@ html, body {
     display: grid;
     grid-template-columns: min-content auto;
     width: 100%;
-    gap: 5px;
+    gap: 0px;
+}
+
+/* to keep shadows visible  at overflow hidden*/
+/* https://stackoverflow.com/questions/70802682/parents-overflowhidden-doesnt-show-childs-box-shadow */
+/* to the sides we only go +- 5 px (padding of body)*/
+.graphplot-col{
+    overflow: hidden; /* otherwise axis won't shrink */
+    margin:-10px -10px -10px -5px; /* t r b l */
+    padding:10px  10px  10px  5px;
+}
+.timeseries-col{
+    overflow: hidden; /* otherwise axis won't shrink */
+    margin:-10px -5px -10px -10px; /* t r b l */
+    padding:10px  5px  10px  10px;
 }
 
 .graphplot-col, .timeseries-col, .timeseries-stack{
     display: flex;
     flex-direction: column;
-    gap: 5px;
-    /* to keep shadows visible */
-    /* https://stackoverflow.com/questions/70802682/parents-overflowhidden-doesnt-show-childs-box-shadow */
-    overflow: hidden; /* otherwise it won't shrink */
-    margin:-10px;
-    padding:10px
+    gap: 0px;
+}
+
+.bonito-card {
+    margin: 5px !important;
 }
 
 .graphplot-card {

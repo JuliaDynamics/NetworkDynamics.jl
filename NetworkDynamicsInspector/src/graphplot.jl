@@ -212,7 +212,7 @@ function graphplot_card(app, session)
     register_interaction!(ax, :edgeclick, ech)
     register_interaction!(ax, :edgehover, ehh)
 
-    Card(fig; class="graphplot-card")
+    Card(fig; class="bonito-card graphplot-card")
 end
 function _gracefully_extract_states!(vec, sol, t, idxs, rel)
     isvalid(s) = SII.is_variable(sol, s) || SII.is_parameter(sol, s) || SII.is_observed(sol, s)
@@ -272,7 +272,7 @@ function gpstate_control_card(app, type)
     colorrange = type == :vertex ? app.graphplot.ncolorrange : app.graphplot.ecolorrange
     colorscheme = type == :vertex ? app.graphplot.ncolorscheme : app.graphplot.ecolorscheme
     class = type == :vertex ? "gpstate-control-card vertex" : "gpstate-control-card edge"
-    class *= " resize-with-gp"
+    class *= " resize-with-gp bonito-card"
 
     ####
     #### State selection

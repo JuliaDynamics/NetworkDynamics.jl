@@ -322,7 +322,7 @@ function timeseries_card(app, key, session)
     end
     register_interaction!(set_time_interaction, ax, :set_time)
 
-    cardclass = "timeseries-card"
+    cardclass = "bonito-card timeseries-card"
     if key == app.active_tsplot[]
         cardclass *= " active-tseries"
     end
