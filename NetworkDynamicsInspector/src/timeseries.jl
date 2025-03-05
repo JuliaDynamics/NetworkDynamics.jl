@@ -1,3 +1,48 @@
+function timeseries_col(app, session)
+    col = DOM.div(
+        timeslider_card(app),
+        timeseries_cards(app, session),
+        add_timeseries_button(app),
+        class="timeseries-col"
+    )
+
+    # add js to update the active ts plot
+    onload_js = js"""
+    (tscol) => {
+        tscol.addEventListener("click", function(event) {
+            // Find the closest .timeseries-card ancestor of the clicked element
+            const clickedCard = event.target.closest('.timeseries-card');
+
+            // If a .timeseries-card was found, handle the click
+            if (clickedCard) {
+                // console.log("click on timeseries card", clickedCard.id);
+
+                // Notify the app with the id of the clicked card
+                $(app.active_tsplot).notify(clickedCard.id);
+
+                // Remove "active-tseries" class from all .timeseries-card elements
+                document.querySelectorAll(".timeseries-card").forEach(element => {
+                    element.classList.remove("active-tseries");
+                });
+
+                // Add "active-tseries" class to the clicked card
+                clickedCard.classList.add("active-tseries");
+            }
+        }, { capture: true });
+
+        function triggerWindowResize() {
+            window.dispatchEvent(new Event('resize'));
+        }
+        const triggerWindowResize_throttled = Bonito.throttle_function(triggerWindowResize, 100);
+        const resizeObserver = new ResizeObserver(triggerWindowResize_throttled);
+        resizeObserver.observe(tscol);
+    }
+    """
+    Bonito.onload(session, col, onload_js)
+
+    return col
+end
+
 function timeseries_cards(app, session)
     cards = OrderedDict{String,Bonito.Hyperscript.Node{Bonito.Hyperscript.HTMLSVG}}()
     container = Observable{Bonito.Hyperscript.Node{Bonito.Hyperscript.HTMLSVG}}()
@@ -27,7 +72,18 @@ function timeseries_cards(app, session)
         app.graphplot._selcomp[] = activesel
     end
 
-    return container[]
+    return container
+end
+
+function add_timeseries_button(app)
+    button = Bonito.Button("Add Timeseries", class="add-ts-button")
+    on(button.value) do _
+        newkey = free_ts_key()
+        @info "TS: Add Timeseries button clicked. Add $newkey"
+        app.tsplots[][newkey] = TimeseriesPlot()
+        notify(app.tsplots)
+    end
+    return button
 end
 
 function timeseries_card(app, key, session)
@@ -213,7 +269,7 @@ function timeseries_card(app, key, session)
     Bonito.evaljs(session, js)
 
     fig, ax = with_theme(apptheme()) do
-        fig = Figure()
+        fig = Figure(size=(100, 400))
         ax = Axis(fig[1, 1])
         fig, ax
     end
@@ -333,9 +389,9 @@ function timeseries_card(app, key, session)
             DOM.div(fig; class="timeseries-axis-container");
             class="timeseries-card-container"
         );
-        class=cardclass
+        class=cardclass,
+        id=key
     )
-
 
     # trigger plot on document ready
     jqdocument = Bonito.JSString(raw"$(document)")
@@ -347,31 +403,6 @@ function timeseries_card(app, key, session)
     });
     """
     Bonito.evaljs(session, trigger_plot)
-
-    # on click set active-tseries class
-    onload_js = js"""
-    (card) => {
-        card.addEventListener("click", function(event) {
-            $(app.active_tsplot).notify($(key));
-
-            document.querySelectorAll(".timeseries-card").forEach(element => {
-                element.classList.remove("active-tseries");
-            });
-
-            // Add "active-tseries" to the given target element
-            card.classList.add("active-tseries");
-        }, { capture: true });
-
-
-        function triggerWindowResize() {
-            window.dispatchEvent(new Event('resize'));
-        }
-        const triggerWindowResize_throttled = Bonito.throttle_function(triggerWindowResize, 100);
-        const resizeObserver = new ResizeObserver(triggerWindowResize_throttled);
-        resizeObserver.observe(card);
-    }
-    """
-    Bonito.onload(session, card, onload_js)
 
     return card
 end

@@ -99,11 +99,21 @@ function AppState(sol::SciMLBase.AbstractODESolution)
     graphplot = GraphPlot(sol)
     tsplots = OrderedDict(
         "ts-1" => TimeseriesPlot(),
-        "ts-2" => TimeseriesPlot()
     )
     active_tsplot = "ts-1"
     AppState(sol, t, tmin, tmax, active_tsplot, graphplot, tsplots)
 end
+
+function free_ts_key()
+    tskeys = keys(APPSTATE[].tsplots[])
+    used = Int[parse(Int, s[4:end]) for s in tskeys]
+    i = 1
+    while i ∈ used
+        i += 1
+    end
+    return "ts-$i"
+end
+
 
 const APPSTATE = Ref{Union{Nothing,AppState}}(nothing)
 const SERVER = Ref{Any}(nothing)
@@ -222,11 +232,7 @@ function get_webapp()
                 element_info_card(app, session),
                 class="graphplot-col"
             ),
-            DOM.div(
-                timeslider_card(app),
-                timeseries_cards(app, session),
-                class="timeseries-col"
-            ),
+            timeseries_col(app, session),
             class="maingrid"
         )
     end;
