@@ -156,11 +156,11 @@ function start_server!(restart=true)
     @info "Visit $url:$port to launch App"
 end
 
-function start_electron()
+function _display_electron_app(restart)
     if isempty(methods(display_electron_app))
         @error "Electron.jl not available. Please install Electron.jl and `using Electron` before calling this function."
     else
-        display_electron_app()
+        display_electron_app(restart)
     end
 end
 function display_electron_app end
@@ -253,7 +253,7 @@ function inspect(sol; restart=false, reset=false, electron=false)
     end
 
     if electron
-        start_electron()
+        _display_electron_app(restart)
     else
         if !server_running()
             start_server!()

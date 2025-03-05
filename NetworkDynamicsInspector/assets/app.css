@@ -57,9 +57,9 @@ body {
 }
 
 .graphplot-card {
-    height:400px; /* initial widht and height */
-    width: 400px;
-    min-width:250px;
+    height:350px; /* initial widht and height */
+    width: 350px;
+    min-width:200px;
     resize: both;
     overflow: hidden;
 }

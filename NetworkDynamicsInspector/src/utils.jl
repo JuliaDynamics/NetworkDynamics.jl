@@ -142,3 +142,6 @@ function download_assets()
         download(url, joinpath(ASSETS, name))
     end
 end
+
+# function extended by ElectronExt
+function toggle_devtools end
