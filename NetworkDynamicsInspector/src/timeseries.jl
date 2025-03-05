@@ -40,6 +40,28 @@ function timeseries_col(app, session)
     """
     Bonito.onload(session, col, onload_js)
 
+    # HACK: sometimes, the select2 lib is not available after a tsplots change, in that case, trigger again
+    # from js we trigger recreate_dom which notifies the tsplots
+    recreate_dom = Observable{Bool}(true)
+    on(_->notify(app.tsplots), recreate_dom)
+    jqdocument = Bonito.JSString(raw"$(document)")
+    esc = Bonito.JSString(raw"$")
+    rebuild_dom_hack = js"""
+    (tscol) => {
+        function dom_changed() {
+            // wait for ready then check if defined and recreate
+            if (typeof $(esc).fn.select2 !== 'function') {
+                console.warn('Select2 is not defined. Calling replot...');
+                $(recreate_dom).notify(true);
+            }
+        }
+
+        const observer = new MutationObserver(dom_changed);
+        observer.observe(tscol, {childList: true, subtree: true});
+    }
+    """
+    Bonito.onload(session, col, rebuild_dom_hack)
+
     return col
 end
 
@@ -79,7 +101,7 @@ function add_timeseries_button(app)
     button = Bonito.Button("Add Timeseries", class="add-ts-button")
     on(button.value) do _
         newkey = free_ts_key()
-        @info "TS: Add Timeseries button clicked. Add $newkey"
+        @debug "TS: Add Timeseries button clicked. Add $newkey"
         app.tsplots[][newkey] = TimeseriesPlot()
         notify(app.tsplots)
     end
@@ -386,7 +408,8 @@ function timeseries_card(app, key, session)
     card = Card(
         DOM.div(
             comp_state_sel_dom,
-            DOM.div(fig; class="timeseries-axis-container");
+            DOM.div(fig; class="timeseries-axis-container"),
+            closebutton(app, key);
             class="timeseries-card-container"
         );
         class=cardclass,
@@ -405,6 +428,15 @@ function timeseries_card(app, key, session)
     Bonito.evaljs(session, trigger_plot)
 
     return card
+end
+function closebutton(app, key)
+    button = Bonito.Button("×", class="close-button")
+    on(button.value) do _
+        @debug "TS: Close button clicked. Remove $key"
+        delete!(app.tsplots[], key)
+        notify(app.tsplots)
+    end
+    button
 end
 
 function _refine_time_limits!(ts, sollims, axlims)

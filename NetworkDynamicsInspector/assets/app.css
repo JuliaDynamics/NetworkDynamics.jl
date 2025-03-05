@@ -74,7 +74,7 @@ body {
 .timeseries-card {
     resize: vertical;
     overflow: hidden;
-    /* grid-column: 2; */
+    position: relative; /* for close button */
 }
 .timeseries-card.active-tseries {
     box-shadow: 0 4px 8px rgba(0.0, 0.0, 51.0, 0.65);
@@ -91,6 +91,25 @@ body {
 .timeseries-axis-container{
     flex-grow: 1;
     overflow:hidden;
+}
+button.close-button {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 20px;
+    height: 20px;
+    min-width: 0;
+    min-height: 0;
+    border-width: 0;
+    box-shadow: none;
+    background-color: transparent;
+    padding: 0;
+    margin: 0;
+}
+button.close-button:hover{
+    box-shadow: none;
+    background-color: transparent;
+    text-shadow: 0 0 1px #000;
 }
 
 .tooltip {
