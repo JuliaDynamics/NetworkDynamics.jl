@@ -397,10 +397,13 @@ function Bonito.jsrender(session::Session, multiselect::MultiSelect)
         id=multiselect.id,
     )
 
+    # node fence see https://github.com/electron/electron/issues/254
     container = DOM.div(
+        NODE_FENCE,
         JQUERY,
-        SELECT2_CSS,
         SELECT2_JS,
+        NODE_UNFENCE,
+        SELECT2_CSS,
         select
     )
 

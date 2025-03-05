@@ -36,6 +36,9 @@ const JQUERY = Asset(joinpath(ASSETS, "jquery.js"))
 const SELECT2_CSS = Asset(joinpath(ASSETS, "select2.css"))
 const SELECT2_JS = Asset(joinpath(ASSETS, "select2.js"))
 const APP_CSS = Asset(joinpath(ASSETS, "app.css"))
+# node fence see https://github.com/electron/electron/issues/254
+const NODE_FENCE = Asset(joinpath(ASSETS, "node_fence.js"))
+const NODE_UNFENCE = Asset(joinpath(ASSETS, "node_unfence.js"))
 
 include("widgets.jl")
 include("graphplot.jl")
