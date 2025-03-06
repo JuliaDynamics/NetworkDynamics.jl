@@ -70,8 +70,28 @@ end
         @test_broken isempty(Docs.undocumented_names(NetworkDynamicsInspector))
     end
 
-    @testset "Test simple app creation" begin
+    @testset "Test simple app creation and add + remove of timeseries" begin
         sol = get_sol()
-        inspect(sol; electron=true)
+
+        inspect(sol; restart=true, reset=true, electron=true)
+
+        delete!(NDI.APPSTATE[].tsplots[], "ts-1")
+        notify(NDI.APPSTATE[].tsplots)
+
+        NDI.APPSTATE[].tsplots[]["ts-2"] = NDI.TimeseriesPlot(selcomp=[VIndex(3), VIndex(2), VIndex(1)], states=[:ω])
+        notify(NDI.APPSTATE[].tsplots)
+
+        notify(NDI.APPSTATE[].tsplots[]["ts-2"].selcomp)
+
+        notify(NDI.APPSTATE[].tsplots[]["ts-2"].states)
+
+        NDI.APPSTATE[].tsplots[]["ts-1"].selcomp[]
+
+        NDI.APPSTATE[].tsplots[]["ts-2"] = NDI.TimeseriesPlot(selcomp=[VIndex(2)], states=[:θ])
+        notify(NDI.APPSTATE[].tsplots)
+
+        empty!(NDI.APPSTATE[].tsplots[])
+        notify(NDI.APPSTATE[].tsplots)
     end
 end
+

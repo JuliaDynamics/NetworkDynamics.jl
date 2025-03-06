@@ -358,7 +358,6 @@ function Bonito.jsrender(session::Session, multiselect::MultiSelect)
 
     onany(jsselection) do _jssel
         sel = jsselection_to_selection(multiselect.options[], _jssel)
-        # @info "New jsselection triggers new selection:" _jssel sel
         if sel != multiselect.selection[]
             multiselect.selection[] = sel
         end
@@ -577,6 +576,210 @@ function _selection_to_jsselection(options, selection)
         end
     end
 end
+
+struct TomSelect{T}
+    options::Observable{Vector{Union{T, OptionGroup{T}}}}
+    selection::Observable{Vector{T}}
+    placeholder::String
+    multi::Bool
+    option_to_string::Any
+    class::String
+    id::String
+    function TomSelect(_options, _selection=nothing; T=Any, placeholder="", multi=true, option_to_string=repr, class="", id="")
+        options = _options isa Observable ? _options : Observable{Vector{T}}(_options)
+        selection = if isnothing(_selection)
+            Observable(T[])
+        elseif _selection isa Observable
+            @assert _selection isa Observable{Vector{T}}
+            _selection
+        else
+            Observable{Vector{T}}(_selection)
+        end
+        _class = multi ? "bonito-tomselect-multi" : "bonito-tomselect-single"
+        if class != ""
+            _class *= " " * class
+        end
+        if id == ""
+            id = gendomid("tomselect")
+        end
+        new{T}(options, selection, placeholder, multi, option_to_string, _class, id)
+    end
+end
+
+function Bonito.jsrender(session::Session, tomselect::TomSelect{T}) where {T}
+    # generate internal observables of js representation of options and selection
+    tsoptions = Observable{Any}()
+    tsselection = Observable{Vector{String}}(String[])
+
+    onany(tsselection) do _tssel
+        sel = tsselection_to_selection(tomselect, _tssel)
+        if sel != tomselect.selection[]
+            @debug "MS \"$(tomselect.placeholder)\": New tsselection triggers new selection:" _tssel sel
+            tomselect.selection[] = sel
+        end
+        nothing
+    end
+
+    on(tomselect.selection; update=true) do _sel
+        # check validity of selection
+        if !tomselect.multi && length(_sel) > 1
+            deleteat!(_sel, firstindex(_sel)+1:lastindex(_sel))
+        end
+        _tssel = selection_to_tsselection(tomselect, _sel)
+        _validsel = tsselection_to_selection(tomselect, _tssel)
+        tomselect.selection.val = _validsel
+        _validtssel = selection_to_tsselection(tomselect, _validsel)
+
+        @debug "MS \"$(tomselect.placeholder)\": New selection trigger tsselection" _sel _validsel _validtssel
+        # musst update tsselection because options may have changed
+        tsselection[] = _validtssel
+
+        nothing
+    end
+
+    on(tomselect.options, update=true) do _opts
+        # update options on js side
+        @debug "MS \"$(tomselect.placeholder)\": New options" _opts
+        tsoptions[] = options_to_tsoptions(tomselect, _opts)
+        notify(tomselect.selection)
+        nothing
+    end
+
+
+    # Create a multi-select element
+    style = Styles(
+        "width" => "100%",
+    )
+
+    domtype = tomselect.multi ?  DOM.input : DOM.select
+    tom_dom = domtype(;
+        class=tomselect.class,
+        style,
+        id=tomselect.id,
+    )
+
+    # node fence see https://github.com/electron/electron/issues/254
+    container = DOM.div(
+        TOMSELECT_ESS,
+        TOMSELECT_CSS,
+        tom_dom
+    )
+
+    js_init = js"""
+    ($TOMSELECT_ESS).then((ts) => {
+        const tom_dom = document.getElementById($(tomselect.id));
+        if (!tom_dom) {
+            console.error("TomSelect not found for id $(tomselect.id)");
+        }
+
+        const settings = {
+            options: $(tsoptions).value.opts,
+            optgroups: $(tsoptions).value.groups,
+            hideSelected: false,
+            items: Array.from($(tsselection).value),
+            optgroupField: 'class',
+            placeholder: $(tomselect.placeholder),
+            plugins: {},
+        };
+        // push remove button to plugins when multi
+        if ($(tomselect.multi)) {
+            settings.plugins.remove_button = {
+                title: 'Remove this item'
+            }
+        }
+        const tomselect = new TomSelect(tom_dom, settings);
+
+        function selEvent(){
+            const newsel = Array.from(tomselect.items);
+            console.log("Change event, update tsselection", newsel);
+            $(tsselection).notify(newsel);
+        }
+        //tomselect.on('item_add', selEvent);
+        //tomselect.on('item_remove', selEvent);
+        tomselect.on('change', selEvent);
+        // tomselect.on('item_select', selEvent); // click on tag?
+
+        $(tsoptions).on(val => {
+            console.log("Got new options", val);
+            tomselect.clear(true); // false -> silent
+            tomselect.clearOptions();
+            tomselect.clearOptionGroups();
+            tomselect.addOptions(val.opts);
+            val.groups.forEach(group => {
+                tomselect.addOptionGroup(group.value, {label: group.label});
+            });
+            tomselect.refreshOptions(false); // false -> dont open
+            console.log("Finished update of options")
+            // seting value will update the tsselection
+            // which triggers check in julia
+            //console.log("Setting value in option update", $(tsselection).value);
+            //tomselect.setValue($(tsselection).value);
+            //tomselect.refreshItems();
+        });
+
+        function array_equal(a1, a2) {
+            if (a1 === a2) return true; // If both are the same reference
+            if (a1 == null || a2 == null) return false; // If one is null or undefined
+            if (a1.length !== a2.length) return false; // If lengths are different
+
+            return a1.every(function(val, i){return val === a2[i];})
+        }
+
+        $(tsselection).on(val => {
+            const current_items = Array.from(tomselect.items);
+            if (!array_equal(val, current_items)) {
+                console.log("Update displayed value of tomselect", val, current_items);
+                tomselect.setValue(val, true); // do not notify
+                //tomselect.refreshItems();
+            }
+        });
+    });
+    """
+    Bonito.evaljs(session, js_init)
+
+    return Bonito.jsrender(session, container)
+end
+
+function options_to_tsoptions(tomselect, options)
+    to_string = tomselect.option_to_string
+    tsoptions = []
+    jsgroups = []
+    for option in options
+        if option isa OptionGroup
+            class = option.label
+            push!(jsgroups, (;value=option.label, label=option.label))
+            for suboption in option.options
+                text = to_string(suboption)
+                push!(tsoptions, (;class, value=text, text=text))
+            end
+        else
+            text = to_string(option)
+            push!(tsoptions, (;value=text, text=text))
+        end
+    end
+    (; opts=tsoptions, groups=jsgroups)
+end
+
+function tsselection_to_selection(tomselect::TomSelect{T}, jsselection) where {T}
+    isempty(jsselection) && return T[]
+    newsel = _tsselection_to_selection.(Ref(tomselect.options[]), jsselection, tomselect.option_to_string)
+    filter(!isnothing, newsel)
+end
+function _tsselection_to_selection(options, tsselection::String, tostring)
+    for option in options
+        if option isa OptionGroup
+            for suboption in option.options
+                tostring(suboption) == tsselection && return suboption
+            end
+        else
+            tostring(option) == tsselection && return option
+        end
+    end
+end
+function selection_to_tsselection(tomselect, selection)
+    tomselect.option_to_string.(selection)
+end
+
 
 @kwdef struct ToggleSwitch
     value::Observable{Bool} = Observable{Bool}()

@@ -1,7 +1,7 @@
 module NetworkDynamicsInspector
 
 using Bonito: Bonito, @js_str, Asset, CSS, Styles,
-              Grid, Card, DOM, Session
+              Grid, Card, DOM, Session, ES6Module
 using NetworkDynamics: NetworkDynamics, SII, EIndex, VIndex, Network,
                        get_metadata, has_metadata, get_position, has_position,
                        obssym, psym, sym, extract_nw
@@ -39,6 +39,8 @@ const APP_CSS = Asset(joinpath(ASSETS, "app.css"))
 # node fence see https://github.com/electron/electron/issues/254
 const NODE_FENCE = Asset(joinpath(ASSETS, "node_fence.js"))
 const NODE_UNFENCE = Asset(joinpath(ASSETS, "node_unfence.js"))
+const TOMSELECT_ESS = ES6Module(joinpath(ASSETS, "tomselect.js"))
+const TOMSELECT_CSS = Asset(joinpath(ASSETS, "tomselect.css"))
 
 include("widgets.jl")
 include("graphplot.jl")

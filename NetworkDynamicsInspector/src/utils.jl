@@ -129,9 +129,11 @@ end
 
 function download_assets()
     assets = Dict(
-       "jquery.js" => "https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js",
-       "select2.css" => "https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css",
-       "select2.js" => "https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js",
+        "jquery.js" => "https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js",
+        "select2.css" => "https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css",
+        "select2.js" => "https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js",
+        "tomselect.css" => "https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/css/tom-select.css",
+        "tomselect.js" => "https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/js/tom-select.complete.min.js",
     )
     to_download = filter(x -> !isfile(joinpath(ASSETS, x.first)), assets)
 
