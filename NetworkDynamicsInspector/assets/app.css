@@ -13,6 +13,16 @@ body {
     box-sizing: border-box;
 }
 
+.ts-dropdown .optgroup-header{
+    font-weight: bolder;
+}
+.ts-dropdown .option{
+    font-family: monospace !important;
+}
+.ts-dropdown .option.selected{
+    background-color: #dddd;
+}
+
 .select2-container .select2-selection .select2-selection__rendered,
 .select2-container .select2-selection--single .select2-selection__rendered,
 .select2-container .select2-results__option{

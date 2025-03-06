@@ -284,7 +284,7 @@ function gpstate_control_card(app, type)
         options[] = gen_state_options(_nw, idxs)
         nothing
     end
-    multisel = MultiSelect(options, stateobs; placeholder="Select state for coloring", multi=false, T=Symbol)
+    multisel = TomSelect(options, stateobs; placeholder="Select state for coloring", multi=false, T=Symbol)
     reltoggle = ToggleSwitch(value=stateobs_rel, label="Rel to u0")
     selector = Grid(
         DOM.span(label),
