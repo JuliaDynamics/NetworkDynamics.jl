@@ -41,6 +41,7 @@ const NODE_FENCE = Asset(joinpath(ASSETS, "node_fence.js"))
 const NODE_UNFENCE = Asset(joinpath(ASSETS, "node_unfence.js"))
 const TOMSELECT_ESS = ES6Module(joinpath(ASSETS, "tomselect.js"))
 const TOMSELECT_CSS = Asset(joinpath(ASSETS, "tomselect.css"))
+const ELECTRON_JS = Asset(joinpath(ASSETS, "electron.js"))
 
 include("widgets.jl")
 include("graphplot.jl")
@@ -227,6 +228,7 @@ function get_webapp()
 
         DOM.div(
             APP_CSS,
+            ELECTRON_JS,
             DOM.div(
                 graphplot_card(app, session),
                 gpstate_control_card(app, :vertex),
