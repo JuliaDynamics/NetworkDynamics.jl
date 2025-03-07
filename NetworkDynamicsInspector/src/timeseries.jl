@@ -143,7 +143,7 @@ function timeseries_card(app, key, session)
         notify(tsplot.states)
     end |> track_obsf
 
-    reset_axis_button = Bonito.Button("Reset Axis", style=Styles("margin-left"=>"10px"))
+    reset_axis_button = Bonito.Button("Auto Axlimits", style=Styles("margin-left"=>"10px"))
 
     rel_toggle = ToggleSwitch(value=tsplot.rel, label="Rel to u0")
 
@@ -191,6 +191,12 @@ function timeseries_card(app, key, session)
     end |> track_obsf
     on(tsplot.states; update=true) do _states
         @debug "TS: state selection => update linestyle_cache"
+
+        # when going from x->1 states allways go back to solid
+        if length(linestyle_cache) > 1 && length(_states) == 1
+            empty!(linestyle_cache)
+        end
+
         for unused in setdiff(keys(linestyle_cache), _states)
             delete!(linestyle_cache, unused)
         end
