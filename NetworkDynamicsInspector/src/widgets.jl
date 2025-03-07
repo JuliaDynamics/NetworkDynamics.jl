@@ -730,6 +730,19 @@ function Bonito.jsrender(session::Session, tomselect::TomSelect{T}) where {T}
                 //tomselect.refreshItems();
             }
         });
+
+        /*
+         * handle click on already selected option in dropdown
+         */
+        const dropdown = tom_dom.parentElement.querySelector('.ts-dropdown');
+        dropdown.addEventListener('click', function(event) {
+            if (event.target.classList.contains('option') && event.target.classList.contains('selected')) {
+                const selectedValue = event.target.getAttribute('data-value');
+                tomselect.removeItem(selectedValue);
+                event.target.classList.remove('selected'); // otherwise needs update of options
+                event.stopPropagation(); // dont reselect directly
+            }
+        }, true);
     });
     """
     Bonito.evaljs(session, js_init)
