@@ -8,6 +8,7 @@ using Electron
 using Bonito
 using OrdinaryDiffEqTsit5
 using NetworkDynamics.Graphs
+using SafeTestsets
 
 include(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl"))
 
@@ -72,7 +73,6 @@ end
 
     @testset "Test simple app creation and add + remove of timeseries" begin
         sol = get_sol()
-
         inspect(sol; restart=true, reset=true, electron=true)
 
         delete!(NDI.APPSTATE[].tsplots[], "ts-1")
@@ -81,17 +81,19 @@ end
         NDI.APPSTATE[].tsplots[]["ts-2"] = NDI.TimeseriesPlot(selcomp=[VIndex(3), VIndex(2), VIndex(1)], states=[:ω])
         notify(NDI.APPSTATE[].tsplots)
 
-        notify(NDI.APPSTATE[].tsplots[]["ts-2"].selcomp)
-
-        notify(NDI.APPSTATE[].tsplots[]["ts-2"].states)
-
-        NDI.APPSTATE[].tsplots[]["ts-1"].selcomp[]
+        NDI.APPSTATE[].tsplots[]["ts-1"] = NDI.TimeseriesPlot(selcomp=[EIndex(3), EIndex(2), EIndex(1)], states=[:P])
+        notify(NDI.APPSTATE[].tsplots)
 
         NDI.APPSTATE[].tsplots[]["ts-2"] = NDI.TimeseriesPlot(selcomp=[VIndex(2)], states=[:θ])
         notify(NDI.APPSTATE[].tsplots)
 
         empty!(NDI.APPSTATE[].tsplots[])
         notify(NDI.APPSTATE[].tsplots)
+    end
+
+    @testset "Widget Tests" begin
+        @safetestset "Multiselect Tests" begin include("multiselect_test.jl") end
+        @safetestset "Slider Tests" begin include("slider_test.jl") end
     end
 end
 

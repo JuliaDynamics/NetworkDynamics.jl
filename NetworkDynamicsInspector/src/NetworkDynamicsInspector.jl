@@ -32,13 +32,7 @@ include("utils.jl")
 const ASSETS = joinpath(dirname(@__DIR__),"assets")
 download_assets() # download assets if not present
 
-const JQUERY = Asset(joinpath(ASSETS, "jquery.js"))
-const SELECT2_CSS = Asset(joinpath(ASSETS, "select2.css"))
-const SELECT2_JS = Asset(joinpath(ASSETS, "select2.js"))
 const APP_CSS = Asset(joinpath(ASSETS, "app.css"))
-# node fence see https://github.com/electron/electron/issues/254
-const NODE_FENCE = Asset(joinpath(ASSETS, "node_fence.js"))
-const NODE_UNFENCE = Asset(joinpath(ASSETS, "node_unfence.js"))
 const TOMSELECT_ESS = ES6Module(joinpath(ASSETS, "tomselect.js"))
 const TOMSELECT_CSS = Asset(joinpath(ASSETS, "tomselect.css"))
 const ELECTRON_JS = Asset(joinpath(ASSETS, "electron.js"))
