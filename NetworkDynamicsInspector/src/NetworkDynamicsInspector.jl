@@ -141,13 +141,48 @@ function stop_server!()
     if !isnothing(SESSION[])
         if Base.isopen(SESSION[])
             @info "Close running session..."
-            close(SESSION[])
+            close_session(SESSION[])
         end
         SESSION[] = nothing
     end
     if server_running()
         @info "Stop running server..."
         close(SERVER[])
+    end
+end
+
+function close_session(session)
+    if Base.isopen(session)
+        on_session_close = js"""
+            // Create a semi-transparent overlay
+            const overlay = document.createElement('div');
+            overlay.style.position = 'fixed';
+            overlay.style.top = '0';
+            overlay.style.left = '0';
+            overlay.style.width = '100%';
+            overlay.style.height = '100%';
+            overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.7)'; // Semi-transparent black
+            overlay.style.zIndex = '1000'; // Ensure it's on top of everything
+            document.body.appendChild(overlay);
+
+            // Create the message element
+            const message = document.createElement('div');
+            message.textContent = 'Session Closed';
+            message.style.position = 'fixed';
+            message.style.top = '50%';
+            message.style.left = '50%';
+            message.style.transform = 'translate(-50%, -50%)';
+            message.style.color = 'white';
+            message.style.fontSize = '2em';
+            message.style.zIndex = '1001'; // Ensure it's on top of the overlay
+            message.style.textAlign = 'center';
+            overlay.appendChild(message);
+
+            // Optionally, prevent any interaction with the underlying elements
+            overlay.style.pointerEvents = 'auto';
+        """
+        Bonito.evaljs(session, on_session_close)
+        close(session)
     end
 end
 
@@ -184,7 +219,7 @@ function get_webapp()
         @info "New GUI Session started"
         if !isnothing(SESSION[]) && Base.isopen(SESSION[])
             @info "Close previous session..."
-            close(SESSION[])
+            close_session(SESSION[])
         end
         SESSION[] = session
 
