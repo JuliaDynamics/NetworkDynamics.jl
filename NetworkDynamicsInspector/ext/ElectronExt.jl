@@ -5,18 +5,34 @@ using Electron: Electron, windows
 using Bonito: Bonito, HTTPServer
 
 const ELECTRON_APP = Ref{Any}(nothing)
+const ELECTRON_DISP = Ref{Any}(nothing)
 
-function NDI.display_electron_app(restart)
-    restart && close_windows()
-    webapp = NDI.get_webapp()
+function NDI.serve_app(::NDI.ElectronDisp, app)
     disp = get_electron_display()
-    display(disp, webapp)
+    display(disp, app)
     nothing
+end
+
+function NDI.close_display(::NDI.ElectronDisp; strict)
+    if haswindow()
+        @info "Close existing Windows"
+        close.(windows(ELECTRON_APP[]))
+    end
+    if strict
+        close_application()
+    end
 end
 
 function get_electron_display()
     window = get_electron_window()
-    disp = HTTPServer.ElectronDisplay(window, HTTPServer.BrowserDisplay(; open_browser=false))
+    # BUG: Electron display cannot be reused
+    # if isnothing(ELECTRON_DISP[]) || window != ELECTRON_DISP[].window
+    #     disp = HTTPServer.ElectronDisplay(window, HTTPServer.BrowserDisplay(; open_browser=false))
+    #     ELECTRON_DISP[] = disp
+    # else
+    #     ELECTRON_DISP[]
+    # end
+    return HTTPServer.ElectronDisplay(window, HTTPServer.BrowserDisplay(; open_browser=false))
 end
 
 function get_electron_window()
@@ -49,13 +65,6 @@ function get_electron_app()
     ELECTRON_APP[]
 end
 hasapp() = !isnothing(ELECTRON_APP[]) && ELECTRON_APP[].exists
-
-function close_windows()
-    if haswindow()
-        @info "Close existing Windows"
-        close.(windows(ELECTRON_APP[]))
-    end
-end
 
 function close_application()
     if hasapp()

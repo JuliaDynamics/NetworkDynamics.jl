@@ -12,7 +12,7 @@ using SafeTestsets
 
 include(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl"))
 
-function get_sol()
+function get_sol(;limit=1.0)
     g = SimpleGraph([0 1 1 0 1;
                      1 0 1 1 0;
                      1 1 0 1 0;
@@ -52,6 +52,8 @@ function get_sol()
 
     nwcb = NetworkDynamics.get_callbacks(nw);
     s0 = NWState(nw)
+    s0.p.e[:, :limit] .= limit
+
     prob = ODEProblem(nw, uflat(s0), (0,6), copy(pflat(s0)), callback=nwcb)
     sol = solve(prob, Tsit5())
 end
@@ -89,6 +91,44 @@ end
 
         empty!(NDI.APPSTATE[].tsplots[])
         notify(NDI.APPSTATE[].tsplots)
+    end
+
+    @testset "track changes in tsplots" begin
+        sol = get_sol()
+        inspect(sol)
+        NDI.APPSTATE[].tsplots[]["ts-1"] = NDI.TimeseriesPlot(selcomp=[EIndex(3), EIndex(2), EIndex(1)], states=[:P])
+        notify(NDI.APPSTATE[].tsplots)
+        # does not change because i thinks i knows the key!
+        @test false
+    end
+
+    @testest "Test different display types" begin
+        sol1 = get_sol()
+        sol2 = get_sol(; limit = 1.2)
+
+        inspect(sol1; display=BrowserDisp(), restart=true, reset=true)
+        # change observable
+        empty!(NDI.APPSTATE[].tsplots[]); notify(NDI.APPSTATE[].tsplots)
+        NDI.APPSTATE[].tsplots[]["ts-1"] = NDI.TimeseriesPlot(selcomp=[EIndex(i) for i in 1:7], states=[:P])
+        notify(NDI.APPSTATE[].tsplots)
+        inspect(sol2) # this should update the plot
+        inspect(sol2, reset=true)
+
+        # switch to electron
+        inspect(sol1; display=ElectronDisp())
+        @test NDI.BROWSER_STATE[:handler] == nothing
+        empty!(NDI.APPSTATE[].tsplots[]); notify(NDI.APPSTATE[].tsplots)
+        NDI.APPSTATE[].tsplots[]["ts-1"] = NDI.TimeseriesPlot(selcomp=[EIndex(i) for i in 1:7], states=[:P])
+        notify(NDI.APPSTATE[].tsplots)
+        inspect(sol2) # this should update the plot
+
+        # switch to server
+        inspect(sol1; display=ServerDisp())
+        @test NDI.BROWSER_STATE[:handler] == nothing
+        empty!(NDI.APPSTATE[].tsplots[]); notify(NDI.APPSTATE[].tsplots)
+        NDI.APPSTATE[].tsplots[]["ts-1"] = NDI.TimeseriesPlot(selcomp=[EIndex(i) for i in 1:7], states=[:P])
+        notify(NDI.APPSTATE[].tsplots)
+        inspect(sol2) # this should update the plot
     end
 
     @testset "Widget Tests" begin

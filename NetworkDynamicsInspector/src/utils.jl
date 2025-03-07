@@ -142,5 +142,6 @@ function download_assets()
     end
 end
 
+
 # function extended by ElectronExt
 function toggle_devtools end
