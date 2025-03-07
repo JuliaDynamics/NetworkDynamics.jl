@@ -13,28 +13,6 @@ body {
     box-sizing: border-box;
 }
 
-.ts-dropdown .optgroup-header{
-    font-weight: bolder;
-}
-.ts-dropdown .option{
-    font-family: monospace !important;
-}
-.ts-dropdown .option.selected{
-    background-color: #dddd;
-}
-
-.select2-container .select2-selection .select2-selection__rendered,
-.select2-container .select2-selection--single .select2-selection__rendered,
-.select2-container .select2-results__option{
-    font-family: monospace;
-    /* font-size: 20px; */
-}
-.select2-results__group {
-    font-family: sans-serif;
-    /* font-size: 12px; */
-    /* color: blue; */
-}
-
 .maingrid {
     display: grid;
     grid-template-columns: min-content auto;
@@ -159,4 +137,29 @@ button{
     font-size: 12px !important;
     font-weight: normal !important;
     font-family: sans-serif !important;;
+}
+
+
+/* Style for TomSelect elements */
+.ts-dropdown .optgroup-header{
+    font-weight: bolder;
+}
+.ts-dropdown .option{
+    font-family: monospace !important;
+}
+.ts-dropdown .option.selected{
+    background-color: #dddd;
+}
+.ts-control .item {
+    font-family: monospace;
+}
+
+.ts-control .item::before {
+    display: inline-block;
+    margin-right: 6px;
+}
+
+.ts-control {
+    padding: 5px !important;
+    padding-bottom: 3px !important;
 }

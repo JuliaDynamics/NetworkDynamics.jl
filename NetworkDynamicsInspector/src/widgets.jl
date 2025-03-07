@@ -679,6 +679,7 @@ function Bonito.jsrender(session::Session, tomselect::TomSelect{T}) where {T}
             items: Array.from($(tsselection).value),
             optgroupField: 'class',
             placeholder: $(tomselect.placeholder),
+            hidePlaceholder: true,
             plugins: {},
         };
         // push remove button to plugins when multi
@@ -686,12 +687,13 @@ function Bonito.jsrender(session::Session, tomselect::TomSelect{T}) where {T}
             settings.plugins.remove_button = {
                 title: 'Remove this item'
             }
+            settings.plugins.drag_drop = {}
         }
         const tomselect = new TomSelect(tom_dom, settings);
 
         function selEvent(){
             const newsel = Array.from(tomselect.items);
-            console.log("Change event, update tsselection", newsel);
+            //console.log("Change event, update tsselection", newsel);
             $(tsselection).notify(newsel);
         }
         //tomselect.on('item_add', selEvent);
@@ -700,7 +702,7 @@ function Bonito.jsrender(session::Session, tomselect::TomSelect{T}) where {T}
         // tomselect.on('item_select', selEvent); // click on tag?
 
         $(tsoptions).on(val => {
-            console.log("Got new options", val);
+            //console.log("Got new options", val);
             tomselect.clear(true); // false -> silent
             tomselect.clearOptions();
             tomselect.clearOptionGroups();
@@ -709,12 +711,7 @@ function Bonito.jsrender(session::Session, tomselect::TomSelect{T}) where {T}
                 tomselect.addOptionGroup(group.value, {label: group.label});
             });
             tomselect.refreshOptions(false); // false -> dont open
-            console.log("Finished update of options")
-            // seting value will update the tsselection
-            // which triggers check in julia
-            //console.log("Setting value in option update", $(tsselection).value);
-            //tomselect.setValue($(tsselection).value);
-            //tomselect.refreshItems();
+            //console.log("Finished update of options")
         });
 
         function array_equal(a1, a2) {
@@ -728,7 +725,7 @@ function Bonito.jsrender(session::Session, tomselect::TomSelect{T}) where {T}
         $(tsselection).on(val => {
             const current_items = Array.from(tomselect.items);
             if (!array_equal(val, current_items)) {
-                console.log("Update displayed value of tomselect", val, current_items);
+                //console.log("Update displayed value of tomselect", val, current_items);
                 tomselect.setValue(val, true); // do not notify
                 //tomselect.refreshItems();
             }

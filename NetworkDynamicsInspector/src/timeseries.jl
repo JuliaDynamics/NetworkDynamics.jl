@@ -40,28 +40,6 @@ function timeseries_col(app, session)
     """
     Bonito.onload(session, col, onload_js)
 
-    # HACK: sometimes, the select2 lib is not available after a tsplots change, in that case, trigger again
-    # from js we trigger recreate_dom which notifies the tsplots
-    recreate_dom = Observable{Bool}(true)
-    on(_->notify(app.tsplots), recreate_dom)
-    jqdocument = Bonito.JSString(raw"$(document)")
-    esc = Bonito.JSString(raw"$")
-    rebuild_dom_hack = js"""
-    (tscol) => {
-        function dom_changed() {
-            // wait for ready then check if defined and recreate
-            if (typeof $(esc).fn.select2 !== 'function') {
-                console.warn('Select2 is not defined. Calling replot...');
-                $(recreate_dom).notify(true);
-            }
-        }
-
-        const observer = new MutationObserver(dom_changed);
-        observer.observe(tscol, {childList: true, subtree: true});
-    }
-    """
-    Bonito.onload(session, col, rebuild_dom_hack)
-
     return col
 end
 
@@ -129,14 +107,14 @@ function timeseries_card(app, key, session)
         nothing
     end
 
-    comp_sel = MultiSelect(comp_options, tsplot.selcomp;
+    comp_sel = TomSelect(comp_options, tsplot.selcomp;
         placeholder="Select components",
         multi=true,
         option_to_string=s -> sidx_to_str(s, app),
         T=SymbolicCompIndex,
         id=gendomid("compsel"))
     # comp_sel_dom = Grid(DOM.span("Components"), comp_sel; columns = "70px 1fr", align_items = "center")
-    state_sel = MultiSelect(state_options, tsplot.states;
+    state_sel = TomSelect(state_options, tsplot.states;
         placeholder="Select states",
         multi=true,
         T=Symbol,
@@ -230,14 +208,12 @@ function timeseries_card(app, key, session)
         // Generate new styles
         let styleContent = "";
         items.forEach(({ title, color }) => {
-            styleContent += `#$(comp_ms_id) +span li[title='${title}']::after {
-                content: 'xx';
-                display: inline-block;
-                padding: 0px 1px;
-                background-color: ${color} !important;
-                color: ${color} !important;
-                border-left: 1px solid #aaa;
-                cursor: default;
+            styleContent += `#$(comp_ms_id) +div div[data-value='${title}']::before {
+                content: '';
+                background-color: ${color};
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
             }\n`;
         });
 
@@ -268,14 +244,11 @@ function timeseries_card(app, key, session)
 
         if(items.length > 1) {
             items.forEach(({ title, linestyle }) => {
-                styleContent += `#$(state_ms_id) +span li[title='${title}']::after {
+                styleContent += `#$(state_ms_id) +div div[data-value='${title}']::before {
                     content: '${linestyle}';
-                    display: inline-block;
-                    padding: 0px 1px;
                     color: inherit;
-                    border-left: 1px solid #aaa;
-                    font-size: smaller;
-                    cursor: default;
+                    border-right: 1px solid #d0d0d0;
+                    padding-right: 5px;
                 }\n`;
             });
 
@@ -417,11 +390,9 @@ function timeseries_card(app, key, session)
     )
 
     # trigger plot on document ready
-    jqdocument = Bonito.JSString(raw"$(document)")
     trigger_plot = js"""
-    $(jqdocument).ready(function(){
+    window.addEventListener('load', function() {
         console.log("Document ready, trigger plot");
-        // $(data).notify();
         $(replot).notify();
     });
     """
