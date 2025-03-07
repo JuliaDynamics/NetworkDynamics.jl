@@ -321,7 +321,13 @@ function timeseries_card(app, key, session)
 
     # extract the data
     data = Observable{Vector{Vector{Float32}}}(Vector{Float32}[])
+    datahash = Ref{UInt64}()
     onany(ts, valid_idxs, tsplot.rel, app.sol; update=true) do _ts, _valid_idxs, _rel, _sol
+        # only replot if the data has actually changed
+        newhash = hash((_ts, _valid_idxs, _rel, _sol))
+        newhash == datahash[] && return
+        datahash[] = newhash
+
         @debug "TS: t, valid_idx, rel, sol => update data"
         _dat = _sol(_ts, idxs=_valid_idxs)
         if _rel
@@ -342,7 +348,7 @@ function timeseries_card(app, key, session)
     # store the idxs for which the autolmits where last set
     last_autolimits = Ref((eltype(valid_idxs)(), tsplot.rel[]))
     # plot the thing
-    onany(data, replot) do _dat, _
+    onany(data, replot; update=true) do _dat, _
         @async begin
             try
                 empty!(ax)
@@ -404,16 +410,7 @@ function timeseries_card(app, key, session)
         id=key
     )
 
-    # trigger plot on document ready
-    trigger_plot = js"""
-    window.addEventListener('load', function() {
-        console.log("Document ready, trigger plot");
-        $(replot).notify();
-    });
-    """
-    Bonito.evaljs(session, trigger_plot)
-
-    return card
+    return card, obsf
 end
 function closebutton(app, key)
     button = Bonito.Button("×", class="close-button")
