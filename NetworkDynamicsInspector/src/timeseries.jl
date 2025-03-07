@@ -44,27 +44,30 @@ function timeseries_col(app, session)
 end
 
 function timeseries_cards(app, session)
-    cards = OrderedDict{String,Bonito.Hyperscript.Node{Bonito.Hyperscript.HTMLSVG}}()
-    observables = OrderedDict{String, Vector{Observables.ObserverFunction}}()
+    # we store the cards based on objid of TSPlot, otherwise overwrite with same key
+    # leads to problems
+    cards = OrderedDict{UInt, Bonito.Hyperscript.Node{Bonito.Hyperscript.HTMLSVG}}()
+    observables = OrderedDict{UInt, Vector{Observables.ObserverFunction}}()
     container = Observable{Bonito.Hyperscript.Node{Bonito.Hyperscript.HTMLSVG}}()
 
     on(app.tsplots; update=true) do _tsplots
         @debug "TS: app.tsplots => update timeseries cards"
-        newkeys = collect(keys(_tsplots)) # collect to preserv order on setdiff
-        knownkeys = keys(cards)
+        id_to_key = Dict(Base.objectid(val) => key for (key, val) in _tsplots)
+        newids = Base.objectid.(values(_tsplots)) # collect to preserv order on setdiff
+        knownids = keys(cards)
 
-        for delkey in setdiff(knownkeys, newkeys)
-            Observables.off.(observables[delkey]) # deactivate allobservables from card
-            delete!(observables, delkey)
-            delete!(cards, delkey)
+        for delid in setdiff(knownids, newids)
+            Observables.off.(observables[delid]) # deactivate allobservables from card
+            delete!(observables, delid)
+            delete!(cards, delid)
         end
-        for newkey in setdiff(newkeys, knownkeys)
-            card, obsf = timeseries_card(app, newkey, session)
-            cards[newkey] = card
-            observables[newkey] = obsf
+        for newid in setdiff(newids, knownids)
+            card, obsf = timeseries_card(app, id_to_key[newid], session)
+            cards[newid] = card
+            observables[newid] = obsf
         end
-        if keys(cards) != keys(_tsplots)
-            @warn "The keys do not match: $(keys(cards)) vs $(keys(_tsplots))"
+        if collect(keys(cards)) != newids
+            @warn "The keys do not match: $(keys(cards)) vs $(newids)"
         end
 
         container[] = DOM.div(values(cards)...; class="timeseries-stack")

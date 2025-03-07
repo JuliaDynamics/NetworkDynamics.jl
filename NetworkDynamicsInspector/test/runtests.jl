@@ -95,11 +95,9 @@ end
 
     @testset "track changes in tsplots" begin
         sol = get_sol()
-        inspect(sol)
+        inspect(sol; display=BrowserDisp())
         NDI.APPSTATE[].tsplots[]["ts-1"] = NDI.TimeseriesPlot(selcomp=[EIndex(3), EIndex(2), EIndex(1)], states=[:P])
-        notify(NDI.APPSTATE[].tsplots)
-        # does not change because i thinks i knows the key!
-        @test false
+        notify(NDI.APPSTATE[].tsplots) # should update
     end
 
     @testest "Test different display types" begin
