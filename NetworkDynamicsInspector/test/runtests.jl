@@ -75,7 +75,7 @@ end
 
     @testset "Test simple app creation and add + remove of timeseries" begin
         sol = get_sol()
-        inspect(sol; restart=true, reset=true, electron=true)
+        inspect(sol; restart=true, reset=true, display=ElectronDisp())
 
         delete!(NDI.APPSTATE[].tsplots[], "ts-1")
         notify(NDI.APPSTATE[].tsplots)
@@ -100,7 +100,7 @@ end
         notify(NDI.APPSTATE[].tsplots) # should update
     end
 
-    @testest "Test different display types" begin
+    @testset "Test different display types" begin
         sol1 = get_sol()
         sol2 = get_sol(; limit = 1.2)
 
@@ -108,7 +108,7 @@ end
         # change observable
         empty!(NDI.APPSTATE[].tsplots[]); notify(NDI.APPSTATE[].tsplots)
         NDI.APPSTATE[].tsplots[]["ts-1"] = NDI.TimeseriesPlot(selcomp=[EIndex(i) for i in 1:7], states=[:P])
-        notify(NDI.APPSTATE[].tsplots)
+        # notify(NDI.APPSTATE[].tsplots) # does not work wihtout display
         inspect(sol2) # this should update the plot
         inspect(sol2, reset=true)
 
@@ -121,11 +121,11 @@ end
         inspect(sol2) # this should update the plot
 
         # switch to server
-        inspect(sol1; display=ServerDisp())
+        inspect(sol1; display=ServerDisp(), restart=true)
         @test NDI.BROWSER_STATE[:handler] == nothing
         empty!(NDI.APPSTATE[].tsplots[]); notify(NDI.APPSTATE[].tsplots)
         NDI.APPSTATE[].tsplots[]["ts-1"] = NDI.TimeseriesPlot(selcomp=[EIndex(i) for i in 1:7], states=[:P])
-        notify(NDI.APPSTATE[].tsplots)
+        # notify(NDI.APPSTATE[].tsplots) # does not work without session open
         inspect(sol2) # this should update the plot
     end
 
@@ -134,4 +134,3 @@ end
         @safetestset "Slider Tests" begin include("slider_test.jl") end
     end
 end
-

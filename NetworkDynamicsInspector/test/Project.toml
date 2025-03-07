@@ -21,7 +21,7 @@ NetworkDynamicsInspector = {path = ".."}
 [compat]
 Aqua = "0.8.9"
 Bonito = "≥0.0.1"
-Electron = "6"
+Electron = "≥0.0.1"
 ExplicitImports = "1.10.1"
 Graphs = "≥0.0.1"
 NetworkDynamics = "≥0.0.1"

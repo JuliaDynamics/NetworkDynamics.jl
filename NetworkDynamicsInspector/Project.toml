@@ -28,6 +28,7 @@ ElectronExt = ["Electron"]
 Bonito = "4.0.0"
 ColorSchemes = "3.29.0"
 Colors = "0.13.0"
+Electron = "6"
 GraphMakie = "0.5.14"
 Graphs = "1.12.0"
 NetworkDynamics = "0.9.13"

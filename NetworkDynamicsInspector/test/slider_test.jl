@@ -4,7 +4,10 @@ using NetworkDynamicsInspector
 using NetworkDynamicsInspector: ContinuousSlider, RoundedLabel
 
 function electron(app)
-    close.(Electron.applications())
+    try
+        close.(Electron.applications())
+    catch
+    end
     disp = Bonito.use_electron_display(devtools = true)
     display(disp, app)
 end

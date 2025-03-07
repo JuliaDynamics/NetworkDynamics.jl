@@ -9,7 +9,7 @@ using NetworkDynamics: NetworkDynamics, SII, EIndex, VIndex, Network,
 using Graphs: nv, ne
 using WGLMakie: WGLMakie
 using WGLMakie.Makie: Makie, @lift, MouseEvent, Point2f, with_theme,
-                      Cycle, lines!, vlines!, Theme, Figure, Colorbar, Axis,
+                      lines!, vlines!, Theme, Figure, Colorbar, Axis,
                       xlims!, ylims!, autolimits!, hidespines!, hidedecorations!,
                       register_interaction!, MouseEventTypes, Consume, events,
                       mouseposition

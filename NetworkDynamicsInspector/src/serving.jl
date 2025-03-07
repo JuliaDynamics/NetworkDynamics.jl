@@ -44,7 +44,7 @@ function serve_app(s::ServerDisp, app)
     served_app = get(SERVER_STATE, :app, nothing)
 
     if served_app !== app
-        close_display(server)
+        close_display(s)
     end
 
     new_server = false
