@@ -135,8 +135,8 @@ function timeseries_card(app, key, session)
         T=Symbol,
         id=gendomid("statesel"))
 
-    reset_color_button = Bonito.Button("Reset Color", style=Styles("margin-left"=>"10px"))
-    on(reset_color_button.value) do _
+    reset_style_button = Bonito.Button("Reset Styles", style=Styles("margin-left"=>"10px"))
+    on(reset_style_button.value) do _
         empty!(color_cache)
         empty!(linestyle_cache)
         notify(tsplot.selcomp)
@@ -149,7 +149,7 @@ function timeseries_card(app, key, session)
 
     comp_state_sel_dom = Grid(
         DOM.span("Components"), comp_sel,
-        DOM.div(reset_color_button, reset_axis_button, rel_toggle; style=Styles("grid-row"=>"1/3", "grid-column"=>"3")),
+        DOM.div(reset_style_button, reset_axis_button, rel_toggle; style=Styles("grid-row"=>"1/3", "grid-column"=>"3")),
         DOM.span("States"), state_sel;
         columns = "min-content auto min-content",
         align_items = "center",
@@ -324,7 +324,7 @@ function timeseries_card(app, key, session)
     datahash = Ref{UInt64}()
     onany(ts, valid_idxs, tsplot.rel, app.sol; update=true) do _ts, _valid_idxs, _rel, _sol
         # only replot if the data has actually changed
-        newhash = hash((_ts, _valid_idxs, _rel, _sol))
+        newhash = hash((_ts, _valid_idxs, _rel, _sol, linestyle_cache, color_cache))
         newhash == datahash[] && return
         datahash[] = newhash
 
@@ -399,13 +399,25 @@ function timeseries_card(app, key, session)
         cardclass *= " active-tseries"
     end
 
+    help = HoverHelp(html"""
+    Select the components and states to plot.
+    <ul>
+    <li><strong>Click</strong> on the plot to set the time.</li>
+    <li><strong>Click and Drag</strong> to zoom in.</li>
+    <li><strong>Ctrl + Click</strong> to reset zoom.</li>
+    <li>Use timeslider to change the x-axis limits.</li>
+    <li>Toggle "Rel to u0" to plot the difference to the initial value.</li>
+    <li>Click "Reset Styles" to pick colors and linestyles in order of apperance.</li>
+    </ul>
+    """)
+
     card = Card(
-        DOM.div(
+        [DOM.div(
             comp_state_sel_dom,
             DOM.div(fig; class="timeseries-axis-container"),
             closebutton(app, key);
             class="timeseries-card-container"
-        );
+        ), help];
         class=cardclass,
         id=key
     )

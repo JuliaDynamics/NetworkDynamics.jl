@@ -63,7 +63,7 @@ export set_sol!, set_state!, set_graphplot!, set_timeseries!, define_timeseries!
     ecolorscheme::Observable{ColorScheme} = ColorSchemes.coolwarm
     _selcomp::Observable{Vector{SymbolicCompIndex}} = SymbolicCompIndex[]
     _hoverel::Observable{Union{SymbolicCompIndex,Nothing}} = nothing
-    _lastclickel::Observable{Union{SymbolicCompIndex,Nothing}} = nothing
+    _lastclickel::Observable{Union{SymbolicCompIndex,Nothing}} = VIndex(1)
 end
 function GraphPlot(sol)
     nw = extract_nw(sol)
@@ -475,8 +475,18 @@ function timeslider_card(app)
         nothing
     end
     t_slider = ContinuousSlider(twindow, app.t; arrowkeys=true)
+
+    help = HoverHelp(html"""
+    <ul>
+    <li>Adjust the time for the graph coloring.</li>
+    <li>Use <strong>Arrow Keys</strong> to adjust the time in small increments.</li>
+    <li>Use <strong>Shift + Arrow Keys</strong> to adjust the time in larger increments.</li>
+    <li>Use second slider to adjust the time window (i.e. to focus on a specific timeframe in the plots below)</li>
+    <ul>
+    """)
+
     Card(
-        Grid(
+        [Grid(
             DOM.span("Time"), t_slider, RoundedLabel(t_slider.value_r),
             RoundedLabel(tw_slider.value_l; style=Styles("text-align"=>"right")),
             tw_slider,
@@ -484,7 +494,7 @@ function timeslider_card(app)
             columns="70px auto 70px",
             justify_content="begin",
             align_items="center",
-        );
+        ), help];
         class="bonito-card timeslider-card"
     );
 end
@@ -521,8 +531,14 @@ function element_info_card(app, session)
     """
     Bonito.evaljs(session, js)
 
+    help = HoverHelp(html"""
+    Show details on last clicked element.
+    <strong>Shift + Click</strong> element in graphplot to update details pane
+    without adding/removing timeseries.
+    """)
+
     Card(
-        DOM.div(;id="element-info-box");
+        [DOM.div(;id="element-info-box"), help];
         class="bonito-card element-info-card resize-with-gp"
     )
 end

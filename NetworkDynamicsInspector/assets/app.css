@@ -13,6 +13,10 @@ body {
     box-sizing: border-box;
 }
 
+span {
+    font-size: 12px;
+}
+
 .maingrid {
     display: grid;
     grid-template-columns: min-content auto;
@@ -24,7 +28,7 @@ body {
 /* https://stackoverflow.com/questions/70802682/parents-overflowhidden-doesnt-show-childs-box-shadow */
 /* to the sides we only go +- 5 px (padding of body)*/
 .graphplot-col{
-    overflow: hidden; /* otherwise axis won't shrink */
+    /* overflow: hidden; /\* otherwise axis won't shrink *\/ */
     margin:-10px -10px -10px -5px; /* t r b l */
     padding:10px  10px  10px  5px;
 }
@@ -42,6 +46,7 @@ body {
 
 .bonito-card {
     margin: 5px !important;
+    position:relative;
 }
 
 .graphplot-card {
@@ -162,4 +167,76 @@ button{
 .ts-control {
     padding: 5px !important;
     padding-bottom: 3px !important;
+}
+
+
+.help-icon {
+    position: absolute;
+    /* text-shadow: 0 0 1px #999999; */
+    color: #999999;
+    top: 0px;
+    left: 0px;
+    width: 20px;
+    height: 20px;
+    min-width: 0;
+    min-height: 0;
+    border-width: 0;
+    box-shadow: none;
+    /* background-color: #333; */
+    padding: 0;
+    margin: 0;
+    text-align: center;
+    font-size: 10px;
+    cursor: pointer;
+    display: flex; /* Use flexbox for centering */
+    align-items: center; /* Vertically center */
+    justify-content: center; /* Horizontally center */
+}
+
+.timeseries-card .help-icon {
+    display:none;
+}
+.timeseries-card.active-tseries .help-icon {
+    display:flex;
+}
+
+.tooltip.help-text {
+    position: absolute;
+    top: 5px; /* Adjust based on the size of the icon */
+    left: 5px;
+    width: 200px; /* Adjust as needed */
+    white-space: normal; /* Allow text to wrap */
+    word-wrap: break-word; /* Break long words if necessary */
+}
+
+.tooltip {
+    display: none; /* Initially hidden */
+    position: absolute;
+    background-color: rgba(51, 51, 51, 0.99); /* Slightly transparent */
+    color: white;
+    padding: 5px 5px;
+    border-radius: 5px;
+    font-size: 12px;
+    white-space: normal; /* Allow text to wrap */
+    z-index: 1000; /* Ensure it's above other elements */
+}
+
+.tooltip ul {
+    margin: 0; /* Remove extra padding for list items */
+    padding-left: 10px; /* Adjust as needed for bullet alignment */
+}
+
+.tooltip li {
+    padding-left: 0; /* Remove extra padding for list items */
+}
+
+.tooltip.gp-tooltip {
+    font-family: monospace;
+    pointer-events: none;
+    transform: translate(12px, 12px); /* Offset from cursor */
+    white-space: normal; /* Allow text to wrap */
+}
+
+.help-icon:hover + .help-text {
+    display: block; /* Show on hover */
 }

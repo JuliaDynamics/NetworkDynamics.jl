@@ -896,3 +896,8 @@ function Bonito.jsrender(session::Session, toggle::ToggleSwitch)
     )
     Bonito.jsrender(session, container)
 end
+
+function HoverHelp(help)
+    [DOM.div("?", class="help-icon"),
+     DOM.div(help, class="help-text tooltip")]
+end
