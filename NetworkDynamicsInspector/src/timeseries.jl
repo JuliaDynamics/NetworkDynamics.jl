@@ -45,6 +45,7 @@ end
 
 function timeseries_cards(app, session)
     cards = OrderedDict{String,Bonito.Hyperscript.Node{Bonito.Hyperscript.HTMLSVG}}()
+    observables = OrderedDict{String, Vector{Observables.ObserverFunction}}()
     container = Observable{Bonito.Hyperscript.Node{Bonito.Hyperscript.HTMLSVG}}()
 
     on(app.tsplots; update=true) do _tsplots
@@ -53,10 +54,14 @@ function timeseries_cards(app, session)
         knownkeys = keys(cards)
 
         for delkey in setdiff(knownkeys, newkeys)
+            Observables.off.(observables[delkey]) # deactivate allobservables from card
+            delete!(observables, delkey)
             delete!(cards, delkey)
         end
         for newkey in setdiff(newkeys, knownkeys)
-            cards[newkey] = timeseries_card(app, newkey, session)
+            card, obsf = timeseries_card(app, newkey, session)
+            cards[newkey] = card
+            observables[newkey] = obsf
         end
         if keys(cards) != keys(_tsplots)
             @warn "The keys do not match: $(keys(cards)) vs $(keys(_tsplots))"
@@ -87,6 +92,16 @@ function add_timeseries_button(app)
 end
 
 function timeseries_card(app, key, session)
+    # store all observer functions to be able to remove them later
+    obsf = Observables.ObserverFunction[]
+    track_obsf = function (f)
+        if f isa AbstractVector
+            append!(obsf, f)
+        else
+            push!(obsf, f)
+        end
+    end
+
     tsplot = app.tsplots[][key]
 
     comp_options = Observable{Vector{OptionGroup{SymbolicCompIndex}}}()
@@ -97,7 +112,7 @@ function timeseries_card(app, key, session)
         eg = OptionGroup{SymbolicCompIndex}("Edges", EIndex.(1:ne(g)))
         comp_options[] = [vg, eg]
         nothing
-    end
+    end |> track_obsf
 
     state_options = Observable{Vector{OptionGroup{Symbol}}}()
     onany(app.sol, tsplot.selcomp; update=true) do _sol, _sel
@@ -105,7 +120,7 @@ function timeseries_card(app, key, session)
         _nw = extract_nw(_sol)
         state_options[] = gen_state_options(_nw, _sel)
         nothing
-    end
+    end |> track_obsf
 
     comp_sel = TomSelect(comp_options, tsplot.selcomp;
         placeholder="Select components",
@@ -126,7 +141,7 @@ function timeseries_card(app, key, session)
         empty!(linestyle_cache)
         notify(tsplot.selcomp)
         notify(tsplot.states)
-    end
+    end |> track_obsf
 
     reset_axis_button = Bonito.Button("Reset Axis", style=Styles("margin-left"=>"10px"))
 
@@ -146,7 +161,7 @@ function timeseries_card(app, key, session)
         @debug "TS: comp selection => graphplot selection"
         app.graphplot._selcomp[] = _sel
         nothing
-    end
+    end |> track_obsf
 
     ####
     #### actual plot
@@ -173,7 +188,7 @@ function timeseries_card(app, key, session)
                          color="#"*Colors.hex(getcycled(COLORS, v)))
                         for (k,v) in color_cache]
         nothing
-    end
+    end |> track_obsf
     on(tsplot.states; update=true) do _states
         @debug "TS: state selection => update linestyle_cache"
         for unused in setdiff(keys(linestyle_cache), _states)
@@ -186,7 +201,7 @@ function timeseries_card(app, key, session)
         lstylepairs[] = [(; title=repr(s), linestyle=getcycled(LINESTYLES_STR, i))
                          for (s,i) in linestyle_cache]
         nothing
-    end
+    end |> track_obsf
 
     comp_ms_id = Bonito.JSString(comp_sel.id)
     state_ms_id = Bonito.JSString(state_sel.id)
@@ -274,7 +289,7 @@ function timeseries_card(app, key, session)
         @debug "TS: tim/tmax => update ax limits"
         xlims!(ax, (_tmin, _tmax))
         nothing
-    end
+    end |> track_obsf
 
     ts = Observable(collect(range(app.sol[].t[begin], app.sol[].t[end], length=1000)))
     refined_xlims = Ref((NaN, NaN))
@@ -287,7 +302,7 @@ function timeseries_card(app, key, session)
             notify(ts)
         end
         nothing
-    end
+    end |> track_obsf
 
     # collect all the states wie might want to plot
     valid_idxs = Observable(
@@ -302,7 +317,7 @@ function timeseries_card(app, key, session)
             isvalid(idx) && push!(valid_idxs[], idx)
         end
         notify(valid_idxs)
-    end
+    end |> track_obsf
 
     # extract the data
     data = Observable{Vector{Vector{Float32}}}(Vector{Float32}[])
@@ -320,7 +335,7 @@ function timeseries_card(app, key, session)
             data.val[i] = _dat[i,:]
         end
         notify(data)
-    end
+    end |> track_obsf
 
     replot = Observable{Nothing}(nothing)
 
@@ -352,12 +367,12 @@ function timeseries_card(app, key, session)
             end
         end
         nothing
-    end
+    end |> track_obsf
 
     on(reset_axis_button.value) do _
         autolimits!(ax)
         xlims!(ax, (app.tmin[], app.tmax[]))
-    end
+    end |> track_obsf
 
     ####
     #### Click interaction to set time

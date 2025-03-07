@@ -19,7 +19,7 @@ using GraphMakie: GraphMakie, EdgeClickHandler, EdgeHoverHandler,
 using GraphMakie.NetworkLayout: Stress
 
 using OrderedCollections: OrderedDict
-using Observables: Observable, on, onany
+using Observables: Observables, Observable, on, onany
 using Colors: Colors, @colorant_str, RGB, color
 using ColorSchemes: ColorSchemes, ColorScheme
 using SciMLBase: SciMLBase
