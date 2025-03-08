@@ -318,7 +318,7 @@ struct OptionGroup{T}
     options::Vector{T}
 end
 
-struct MultiSelect{T}
+struct TomSelect{T}
     options::Observable{Vector{Union{T, OptionGroup{T}}}}
     selection::Observable{Vector{T}}
     placeholder::String
@@ -326,7 +326,7 @@ struct MultiSelect{T}
     option_to_string::Any
     class::String
     id::String
-    function MultiSelect(_options, _selection=nothing; T=Any, placeholder="", multi=true, option_to_string=repr, class="", id="")
+    function TomSelect(_options, _selection=nothing; T=Any, placeholder="", multi=true, option_to_string=repr, class="", id="")
         options = _options isa Observable ? _options : Observable{Vector{T}}(_options)
         selection = if isnothing(_selection)
             Observable(T[])
@@ -336,244 +336,201 @@ struct MultiSelect{T}
         else
             Observable{Vector{T}}(_selection)
         end
-        _class = multi ? "bonito-select2-multi" : "bonito-select2-single"
+        _class = multi ? "bonito-tomselect-multi" : "bonito-tomselect-single"
         if class != ""
             _class *= " " * class
         end
         if id == ""
-            id = gendomid("selectbox")
+            id = gendomid("tomselect")
         end
         new{T}(options, selection, placeholder, multi, option_to_string, _class, id)
     end
 end
 
-function Bonito.jsrender(session::Session, multiselect::MultiSelect)
-    # jquery = Asset("https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js")
-    # select2_css = Asset("https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css")
-    # select2_js = Asset("https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js")
-
+function Bonito.jsrender(session::Session, tomselect::TomSelect{T}) where {T}
     # generate internal observables of js representation of options and selection
-    jsoptions = @lift options_to_jsoptions($(multiselect.options); option_to_string=multiselect.option_to_string)
-    jsselection = Observable{Vector{Int}}()
+    tsoptions = Observable{Any}()
+    tsselection = Observable{Vector{String}}(String[])
 
-    onany(jsselection) do _jssel
-        sel = jsselection_to_selection(multiselect.options[], _jssel)
-        # @info "New jsselection triggers new selection:" _jssel sel
-        if sel != multiselect.selection[]
-            multiselect.selection[] = sel
+    onany(tsselection) do _tssel
+        sel = tsselection_to_selection(tomselect, _tssel)
+        if sel != tomselect.selection[]
+            @debug "MS \"$(tomselect.placeholder)\": New tsselection triggers new selection:" _tssel sel
+            tomselect.selection[] = sel
         end
         nothing
     end
 
-    onany(multiselect.options, multiselect.selection; update=true) do _opts, _sel
-        if !multiselect.multi && length(_sel) > 1
+    on(tomselect.selection; update=true) do _sel
+        # check validity of selection
+        if !tomselect.multi && length(_sel) > 1
             deleteat!(_sel, firstindex(_sel)+1:lastindex(_sel))
         end
-        jssel = selection_to_jsselection(_opts, _sel)
-        @debug "MS \"$(multiselect.placeholder)\": New opts or sel triggers new jsselection:" _opts _sel jssel
+        _tssel = selection_to_tsselection(tomselect, _sel)
+        _validsel = tsselection_to_selection(tomselect, _tssel)
+        tomselect.selection.val = _validsel
+        _validtssel = selection_to_tsselection(tomselect, _validsel)
 
-        # filter out invalid selections
-        if any(isnothing, jssel)
-            invalid = findall(isnothing, jssel)
-            deleteat!(_sel, invalid)
-            filter!(!isnothing, jssel)
-        end
+        @debug "MS \"$(tomselect.placeholder)\": New selection trigger tsselection" _sel _validsel _validtssel
+        # musst update tsselection because options may have changed
+        tsselection[] = _validtssel
 
-        jsselection[] = jssel
         nothing
     end
+
+    on(tomselect.options, update=true) do _opts
+        # update options on js side
+        @debug "MS \"$(tomselect.placeholder)\": New options" _opts
+        tsoptions[] = options_to_tsoptions(tomselect, _opts)
+        notify(tomselect.selection)
+        nothing
+    end
+
 
     # Create a multi-select element
     style = Styles(
         "width" => "100%",
     )
 
-    select = DOM.select(
-        DOM.option();
-        multiple = multiselect.multi,
-        class=multiselect.class,
-        # name = "states[]",
+    domtype = tomselect.multi ?  DOM.input : DOM.select
+    tom_dom = domtype(;
+        class=tomselect.class,
         style,
-        id=multiselect.id,
+        id=tomselect.id,
     )
 
+    # node fence see https://github.com/electron/electron/issues/254
     container = DOM.div(
-        JQUERY,
-        SELECT2_CSS,
-        SELECT2_JS,
-        select
+        TOMSELECT_ESS,
+        TOMSELECT_CSS,
+        tom_dom
     )
 
-    jqdocument = Bonito.JSString(raw"$(document)")
-    jqselect = Bonito.JSString(raw"$('#"* multiselect.id * raw"')")
+    js_init = js"""
+    ($TOMSELECT_ESS).then((ts) => {
+        const tom_dom = document.getElementById($(tomselect.id));
+        if (!tom_dom) {
+            console.error("TomSelect not found for id $(tomselect.id)");
+        }
 
-    esc = Bonito.JSString(raw"$")
-    js_onload = js"""
-    (select) => {
-        $(jqdocument).ready(function(){
-            $jqselect.select2({
-                width: '100%',
-                placeholder: $(multiselect.placeholder)
+        const settings = {
+            options: $(tsoptions).value.opts,
+            optgroups: $(tsoptions).value.groups,
+            hideSelected: false,
+            items: Array.from($(tsselection).value),
+            optgroupField: 'class',
+            placeholder: $(tomselect.placeholder),
+            hidePlaceholder: true,
+            plugins: {},
+        };
+        // push remove button to plugins when multi
+        if ($(tomselect.multi)) {
+            settings.plugins.remove_button = {
+                title: 'Remove this item'
+            }
+            settings.plugins.drag_drop = {}
+        }
+        const tomselect = new TomSelect(tom_dom, settings);
+
+        function selEvent(){
+            const newsel = Array.from(tomselect.items);
+            //console.log("Change event, update tsselection", newsel);
+            $(tsselection).notify(newsel);
+        }
+        //tomselect.on('item_add', selEvent);
+        //tomselect.on('item_remove', selEvent);
+        tomselect.on('change', selEvent);
+        // tomselect.on('item_select', selEvent); // click on tag?
+
+        $(tsoptions).on(val => {
+            //console.log("Got new options", val);
+            tomselect.clear(true); // false -> silent
+            tomselect.clearOptions();
+            tomselect.clearOptionGroups();
+            tomselect.addOptions(val.opts);
+            val.groups.forEach(group => {
+                tomselect.addOptionGroup(group.value, {label: group.label});
             });
+            tomselect.refreshOptions(false); // false -> dont open
+            //console.log("Finished update of options")
         });
 
-        function array_equal(a1, a2){
-            return a1.length === a2.length &&
-                    a1.every(function(val, i) { return val == a2[i]})
+        function array_equal(a1, a2) {
+            if (a1 === a2) return true; // If both are the same reference
+            if (a1 == null || a2 == null) return false; // If one is null or undefined
+            if (a1.length !== a2.length) return false; // If lengths are different
+
+            return a1.every(function(val, i){return val === a2[i];})
         }
 
-        function updateDisplayedOptions(new_options) {
-            const jq_select = $jqselect;
-
-            // Clear previous options
-            jq_select.empty();
-
-            // Loop through each group and create optgroups
-            new_options.forEach(opt_or_group => {
-                if (opt_or_group.options === undefined) {
-                    let newOption = new Option(opt_or_group.text, opt_or_group.id, false, false);
-                    jq_select.append(newOption);
-                } else {
-                    let jq_optgroup = $esc('<optgroup>', { label: opt_or_group.label });
-
-                    opt_or_group.options.forEach(option => {
-                        let newOption = new Option(option.text, option.id, false, false);
-                        jq_optgroup.append(newOption);
-                    });
-
-                    jq_select.append(jq_optgroup);
-                }
-            });
-        }
-        updateDisplayedOptions($(jsoptions).value);
-        $(jsoptions).on(updateDisplayedOptions);
-
-        function updateDisplayedSelection(new_sel_nr) {
-            const jq_select = $jqselect
-            const new_sel = new_sel_nr.map(String);
-
-            jq_select.data('preserved-order', new_sel);
-            jq_select.val(new_sel).trigger('change');
-            select2_renderSelections();
-        }
-        updateDisplayedSelection($(jsselection).value)
-        $(jsselection).on(updateDisplayedSelection)
-
-        // Trigger update for Select2 to recognize new options
-        $jqselect.trigger('change');
-
-        // Don't reorder
-        // https://github.com/select2/select2/issues/3106#issuecomment-333341636
-        function select2_renderSelections(){
-            jq_select2 = $jqselect
-            const def_order  = jq_select2.val();
-            const pre_order  = jq_select2.data('preserved-order') || [];
-            const jq_tags    = jq_select2.next('.select2-container').find('li.select2-selection__choice');
-            const jq_tags_ul = jq_tags.first().parent()
-
-            const new_order = pre_order.map(val=>{
-                return def_order.indexOf(val);
-            });
-
-            const sortedElements = new_order.map(i => jq_tags.eq(i));
-            jq_tags_ul.append(sortedElements);
-            // console.log("Rendered selection")
-        }
-        function selectionHandler(e){
-            const jq_select2  = $esc(this);
-            const val         = e.params.data.id;
-
-            let order;
-            if ($(multiselect.multi)){
-                order = jq_select2.data('preserved-order') || [];
-            } else {
-                order = [];
+        $(tsselection).on(val => {
+            const current_items = Array.from(tomselect.items);
+            if (!array_equal(val, current_items)) {
+                //console.log("Update displayed value of tomselect", val, current_items);
+                tomselect.setValue(val, true); // do not notify
+                //tomselect.refreshItems();
             }
-
-            switch (e.type){
-                case 'select2:select':
-                    order[ order.length ] = val;
-                    break;
-                case 'select2:unselect':
-                    let found_index = order.indexOf(val);
-                    if (found_index >= 0 )
-                        order.splice(found_index,1);
-                    break;
-            }
-
-            jq_select2.data('preserved-order', order); // store it for later
-            select2_renderSelections();
-
-            // notify julia about changed selection
-            $(jsselection).notify(order.map(Number));
-        }
-        $jqselect.on('select2:select select2:unselect', selectionHandler);
-
-        // prevent dropdown on unselect
-        // https://github.com/select2/select2/issues/3209#issuecomment-149663474
-        $jqselect.on("select2:unselect", function (evt) {
-            if (!evt.params.originalEvent) {
-                return;
-            }
-            evt.params.originalEvent.stopPropagation();
         });
-    }
+
+        /*
+         * handle click on already selected option in dropdown
+         */
+        const dropdown = tom_dom.parentElement.querySelector('.ts-dropdown');
+        dropdown.addEventListener('click', function(event) {
+            if (event.target.classList.contains('option') && event.target.classList.contains('selected')) {
+                const selectedValue = event.target.getAttribute('data-value');
+                tomselect.removeItem(selectedValue);
+                event.target.classList.remove('selected'); // otherwise needs update of options
+                event.stopPropagation(); // dont reselect directly
+            }
+        }, true);
+    });
     """
-    Bonito.onload(session, select, js_onload)
+    Bonito.evaljs(session, js_init)
 
     return Bonito.jsrender(session, container)
 end
 
-function options_to_jsoptions(options; option_to_string=repr)
-    jsoptions = []
-    id = 1
+function options_to_tsoptions(tomselect, options)
+    to_string = tomselect.option_to_string
+    tsoptions = []
+    jsgroups = []
     for option in options
         if option isa OptionGroup
-            jssuboptions = []
+            class = option.label
+            push!(jsgroups, (;value=option.label, label=option.label))
             for suboption in option.options
-                push!(jssuboptions, (;text=option_to_string(suboption), id=id))
-                id += 1
+                text = to_string(suboption)
+                push!(tsoptions, (;class, value=text, text=text))
             end
-            push!(jsoptions, (;label=option.label, options=jssuboptions))
         else
-            push!(jsoptions, (;text=option_to_string(option), id=id))
-            id += 1
+            text = to_string(option)
+            push!(tsoptions, (;value=text, text=text))
         end
     end
-    jsoptions
+    (; opts=tsoptions, groups=jsgroups)
 end
 
-jsselection_to_selection(options, jsselection) = _jsselection_to_selection.(Ref(options), jsselection)
-function _jsselection_to_selection(options, jsselection::Int)
-    id = 1
+function tsselection_to_selection(tomselect::TomSelect{T}, jsselection) where {T}
+    isempty(jsselection) && return T[]
+    newsel = _tsselection_to_selection.(Ref(tomselect.options[]), jsselection, tomselect.option_to_string)
+    filter(!isnothing, newsel)
+end
+function _tsselection_to_selection(options, tsselection::String, tostring)
     for option in options
         if option isa OptionGroup
             for suboption in option.options
-                id == jsselection && return suboption
-                id += 1
+                tostring(suboption) == tsselection && return suboption
             end
         else
-            id == jsselection && return option
-            id += 1
+            tostring(option) == tsselection && return option
         end
     end
+end
+function selection_to_tsselection(tomselect, selection)
+    tomselect.option_to_string.(selection)
 end
 
-selection_to_jsselection(options, selection) = _selection_to_jsselection.(Ref(options), selection)
-function _selection_to_jsselection(options, selection)
-    id = 1
-    for option in options
-        if option isa OptionGroup
-            for suboption in option.options
-                suboption == selection && return id
-                id += 1
-            end
-        else
-            option == selection && return id
-            id += 1
-        end
-    end
-end
 
 @kwdef struct ToggleSwitch
     value::Observable{Bool} = Observable{Bool}()
@@ -692,4 +649,9 @@ function Bonito.jsrender(session::Session, toggle::ToggleSwitch)
         style=domlabel_style
     )
     Bonito.jsrender(session, container)
+end
+
+function HoverHelp(help)
+    [DOM.div("?", class="help-icon"),
+     DOM.div(help, class="help-text tooltip")]
 end

@@ -1,44 +1,58 @@
-html, body {
+html {
+    margin:0px;
+    padding:0px;
+    height: 100%;
+    width:100%;
+}
+body {
     font-family: sans-serif;
     font-size: 12px;
     height: 100%;
-    /* width: 100%; */
+    margin:0px;
+    padding:5px;
+    box-sizing: border-box;
 }
 
-.select2-container .select2-selection .select2-selection__rendered,
-.select2-container .select2-selection--single .select2-selection__rendered,
-.select2-container .select2-results__option{
-    font-family: monospace;
-    /* font-size: 20px; */
-}
-.select2-results__group {
-    font-family: sans-serif;
-    /* font-size: 12px; */
-    /* color: blue; */
+span {
+    font-size: 12px;
 }
 
 .maingrid {
     display: grid;
     grid-template-columns: min-content auto;
     width: 100%;
-    gap: 5px;
+    gap: 0px;
+}
+
+/* to keep shadows visible  at overflow hidden*/
+/* https://stackoverflow.com/questions/70802682/parents-overflowhidden-doesnt-show-childs-box-shadow */
+/* to the sides we only go +- 5 px (padding of body)*/
+.graphplot-col{
+    /* overflow: hidden; /\* otherwise axis won't shrink *\/ */
+    margin:-10px -10px -10px -5px; /* t r b l */
+    padding:10px  10px  10px  5px;
+}
+.timeseries-col{
+    overflow: hidden; /* otherwise axis won't shrink */
+    margin:-10px -5px -10px -10px; /* t r b l */
+    padding:10px  5px  10px  10px;
 }
 
 .graphplot-col, .timeseries-col, .timeseries-stack{
     display: flex;
     flex-direction: column;
-    gap: 5px;
-    /* to keep shadows visible */
-    /* https://stackoverflow.com/questions/70802682/parents-overflowhidden-doesnt-show-childs-box-shadow */
-    overflow: hidden; /* otherwise it won't shrink */
-    margin:-10px;
-    padding:10px
+    gap: 0px;
+}
+
+.bonito-card {
+    margin: 5px !important;
+    position:relative;
 }
 
 .graphplot-card {
-    height:400px; /* initial widht and height */
-    width: 400px;
-    min-width:250px;
+    height:350px; /* initial widht and height */
+    width: 350px;
+    min-width:200px;
     resize: both;
     overflow: hidden;
 }
@@ -53,7 +67,7 @@ html, body {
 .timeseries-card {
     resize: vertical;
     overflow: hidden;
-    /* grid-column: 2; */
+    position: relative; /* for close button */
 }
 .timeseries-card.active-tseries {
     box-shadow: 0 4px 8px rgba(0.0, 0.0, 51.0, 0.65);
@@ -70,6 +84,25 @@ html, body {
 .timeseries-axis-container{
     flex-grow: 1;
     overflow:hidden;
+}
+button.close-button {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 20px;
+    height: 20px;
+    min-width: 0;
+    min-height: 0;
+    border-width: 0;
+    box-shadow: none;
+    background-color: transparent;
+    padding: 0;
+    margin: 0;
+}
+button.close-button:hover{
+    box-shadow: none;
+    background-color: transparent;
+    text-shadow: 0 0 1px #000;
 }
 
 .tooltip {
@@ -109,4 +142,101 @@ button{
     font-size: 12px !important;
     font-weight: normal !important;
     font-family: sans-serif !important;;
+}
+
+
+/* Style for TomSelect elements */
+.ts-dropdown .optgroup-header{
+    font-weight: bolder;
+}
+.ts-dropdown .option{
+    font-family: monospace !important;
+}
+.ts-dropdown .option.selected{
+    background-color: #dddd;
+}
+.ts-control .item {
+    font-family: monospace;
+}
+
+.ts-control .item::before {
+    display: inline-block;
+    margin-right: 6px;
+}
+
+.ts-control {
+    padding: 5px !important;
+    padding-bottom: 3px !important;
+}
+
+
+.help-icon {
+    position: absolute;
+    /* text-shadow: 0 0 1px #999999; */
+    color: #999999;
+    top: 0px;
+    left: 0px;
+    width: 20px;
+    height: 20px;
+    min-width: 0;
+    min-height: 0;
+    border-width: 0;
+    box-shadow: none;
+    /* background-color: #333; */
+    padding: 0;
+    margin: 0;
+    text-align: center;
+    font-size: 10px;
+    cursor: pointer;
+    display: flex; /* Use flexbox for centering */
+    align-items: center; /* Vertically center */
+    justify-content: center; /* Horizontally center */
+}
+
+.timeseries-card .help-icon {
+    display:none;
+}
+.timeseries-card.active-tseries .help-icon {
+    display:flex;
+}
+
+.tooltip.help-text {
+    position: absolute;
+    top: 5px; /* Adjust based on the size of the icon */
+    left: 5px;
+    width: 200px; /* Adjust as needed */
+    white-space: normal; /* Allow text to wrap */
+    word-wrap: break-word; /* Break long words if necessary */
+}
+
+.tooltip {
+    display: none; /* Initially hidden */
+    position: absolute;
+    background-color: rgba(51, 51, 51, 0.99); /* Slightly transparent */
+    color: white;
+    padding: 5px 5px;
+    border-radius: 5px;
+    font-size: 12px;
+    white-space: normal; /* Allow text to wrap */
+    z-index: 1000; /* Ensure it's above other elements */
+}
+
+.tooltip ul {
+    margin: 0; /* Remove extra padding for list items */
+    padding-left: 10px; /* Adjust as needed for bullet alignment */
+}
+
+.tooltip li {
+    padding-left: 0; /* Remove extra padding for list items */
+}
+
+.tooltip.gp-tooltip {
+    font-family: monospace;
+    pointer-events: none;
+    transform: translate(12px, 12px); /* Offset from cursor */
+    white-space: normal; /* Allow text to wrap */
+}
+
+.help-icon:hover + .help-text {
+    display: block; /* Show on hover */
 }

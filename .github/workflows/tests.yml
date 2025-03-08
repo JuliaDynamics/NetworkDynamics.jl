@@ -60,9 +60,11 @@ jobs:
       - uses: julia-actions/julia-buildpkg@v1
         with:
           project: NetworkDynamicsInspector
-      - uses: julia-actions/julia-runtest@v1
+      - name: Run headless test
+        uses: GabrielBB/xvfb-action@v1
         with:
-          project: NetworkDynamicsInspector
+          run: |
+            julia --project=NetworkDynamicsInspector -e "using Pkg; Pkg.test(coverage=false)"
       # - uses: julia-actions/julia-processcoverage@v1
       # - uses: codecov/codecov-action@v4
       #   with:
