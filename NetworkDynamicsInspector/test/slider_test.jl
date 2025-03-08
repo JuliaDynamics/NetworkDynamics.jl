@@ -10,6 +10,7 @@ function electron(app)
     end
     disp = Bonito.use_electron_display(devtools = true)
     display(disp, app)
+    disp
 end
 
 @testset "Test Slider" begin
@@ -20,7 +21,7 @@ end
            val = Observable{Float64}(0.0)
     )
 
-    App(;) do session
+    disp = App(;) do session
         NetworkDynamicsInspector.clear_obs!(gui)
         sl1 = ContinuousSlider(gui.range, gui.val1, gui.val2)
         sl2 = ContinuousSlider(gui.range, gui.val; arrowkeys=true)
@@ -39,4 +40,5 @@ end
 
     gui.range[] = (-0.5, 0.5)
     gui.range[] = (-1, 1)
+    close(disp)
 end

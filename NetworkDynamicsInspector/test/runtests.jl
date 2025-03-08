@@ -133,4 +133,10 @@ end
         @safetestset "Multiselect Tests" begin include("multiselect_test.jl") end
         @safetestset "Slider Tests" begin include("slider_test.jl") end
     end
+
+    # close all open electron windows
+    try
+        close.(Electron.applications())
+    catch
+    end
 end

@@ -11,6 +11,7 @@ function electron(app)
     end
     disp = Bonito.use_electron_display(devtools = true)
     display(disp, app)
+    disp
 end
 
 @testset "Test TomSelect" begin
@@ -26,7 +27,7 @@ end
         selection = Observable{Vector{Symbol}}(Symbol[:Rust, :French]),
         selection_single = Observable{Vector{Symbol}}(Symbol[:Julia])
     )
-    app = App(;) do session
+    disp = App(;) do session
         NetworkDynamicsInspector.clear_obs!(gui)
 
         ms1 = TomSelect(gui.options, gui.selection; placeholder="multi", T=Symbol)
@@ -65,5 +66,5 @@ end
     ]
     @test gui.selection[] == [:French]
     @test gui.selection_single[] == [:French]
-    close.(Electron.applications())
+    close(disp)
 end
