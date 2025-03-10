@@ -1,7 +1,8 @@
-ENV["GKSwstype"] = "100" # needed for plotting with GitHub Actions and GR (?)
+# ENV["GKSwstype"] = "100" # needed for plotting with GitHub Actions and GR (?)
 
 using Documenter
 using NetworkDynamics
+using NetworkDynamicsInspector
 using SciMLBase
 using Literate
 using ModelingToolkit
@@ -29,7 +30,7 @@ mtkext = Base.get_extension(NetworkDynamics, :MTKExt)
 kwargs = (;
     root=joinpath(pkgdir(NetworkDynamics), "docs"),
     sitename="NetworkDynamics",
-    modules=[NetworkDynamics, mtkext],
+    modules=[NetworkDynamics, mtkext, NetworkDynamicsInspector],
     linkcheck=true, # checks if external links resolve
     pagesonly=true,
     plugins=[links],
@@ -44,6 +45,7 @@ kwargs = (;
             "callbacks.md",
             "mtk_integration.md",
             "external_inputs.md",
+            "inspector.md",
         ],
         "API.md",
         "Tutorials" => [

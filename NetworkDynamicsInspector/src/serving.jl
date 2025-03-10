@@ -34,6 +34,7 @@ function serve_app(display, app)
     end
 end
 close_display(::Nothing; kwargs...) = nothing
+close_display() = close_display(CURRENT_DISPLAY[]; strict=true)
 
 ####
 #### Server Display
@@ -132,8 +133,9 @@ function get_electron_app end
 function get_electron_window end
 
 function save_electron_screenshot(path=joinpath(@__DIR__, "screenshot.png"))
+    path = isabspath(path) ? path : joinpath(pwd(), path)
     has_electron_window()|| error("No Electron window exists!")
-    winid = NDI.get_electron_window().id
+    winid = get_electron_window().id
     js = """
     let win = BrowserWindow.fromId($winid)
     win.webContents.capturePage().then(image => {
@@ -142,6 +144,7 @@ function save_electron_screenshot(path=joinpath(@__DIR__, "screenshot.png"))
         console.log('Screenshot saved to ', screenshotPath);
     });
     """
-    d = run(NDI.get_electron_app(), js)
-    path
+    wait_for()
+    d = run(get_electron_app(), js)
+    nothing
 end
