@@ -141,3 +141,12 @@ function download_assets()
         download(url, joinpath(ASSETS, name))
     end
 end
+
+function wait_for()
+    isnothing(APPSTATE[]) && return
+    queue = APPSTATE[]._plotqueue
+    while !isempty(queue)
+        wait(take!(queue))
+    end
+    nothing
+end

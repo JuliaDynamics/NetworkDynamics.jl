@@ -358,7 +358,7 @@ function timeseries_card(app, key, session)
     last_autolimits = Ref((eltype(valid_idxs)(), tsplot.rel[]))
     # plot the thing
     onany(data, replot; update=true) do _dat, _
-        @async begin
+        task = @async begin
             try
                 empty!(ax)
                 vlines!(ax.scene, app.t; color=:black)
@@ -381,6 +381,7 @@ function timeseries_card(app, key, session)
                 @error "Plotting failed" e
             end
         end
+        push!(app._plotqueue, task)
         nothing
     end |> track_obsf
 

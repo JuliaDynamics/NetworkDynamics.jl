@@ -40,6 +40,7 @@ struct AppState
     active_tsplot::Observable{String}
     graphplot::GraphPlot
     tsplots::Observable{OrderedDict{String, TimeseriesPlot}}
+    _plotqueue::Channel{Task}
 end
 function AppState(sol::SciMLBase.AbstractODESolution)
     t = sol.t[begin]
@@ -50,7 +51,8 @@ function AppState(sol::SciMLBase.AbstractODESolution)
         "ts-1" => TimeseriesPlot(),
     )
     active_tsplot = "ts-1"
-    AppState(sol, t, tmin, tmax, active_tsplot, graphplot, tsplots)
+    _plotqueue = Channel{Task}(Inf)
+    AppState(sol, t, tmin, tmax, active_tsplot, graphplot, tsplots, _plotqueue)
 end
 
 function free_ts_key()
