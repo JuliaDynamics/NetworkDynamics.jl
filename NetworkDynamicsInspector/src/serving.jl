@@ -124,3 +124,24 @@ function close_session(session)
         close(session)
     end
 end
+
+# functions defined in extension
+function toggle_devtools end
+function has_electron_window end
+function get_electron_app end
+function get_electron_window end
+
+function save_electron_screenshot(path=joinpath(@__DIR__, "screenshot.png"))
+    has_electron_window()|| error("No Electron window exists!")
+    winid = NDI.get_electron_window().id
+    js = """
+    let win = BrowserWindow.fromId($winid)
+    win.webContents.capturePage().then(image => {
+        const screenshotPath = '$path';
+        require('fs').writeFileSync(screenshotPath, image.toPNG());
+        console.log('Screenshot saved to ', screenshotPath);
+    });
+    """
+    d = run(NDI.get_electron_app(), js)
+    path
+end

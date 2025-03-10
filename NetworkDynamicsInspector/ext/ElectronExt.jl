@@ -26,7 +26,7 @@ function NDI.close_display(::NDI.ElectronDisp; strict)
 end
 
 function get_electron_display()
-    window = get_electron_window()
+    window = NDI.get_electron_window()
     # BUG: Electron display cannot be reused
     # if isnothing(ELECTRON_DISP[]) || window != ELECTRON_DISP[].window
     #     disp = HTTPServer.ElectronDisplay(window, HTTPServer.BrowserDisplay(; open_browser=false))
@@ -37,23 +37,32 @@ function get_electron_display()
     return HTTPServer.ElectronDisplay(window, HTTPServer.BrowserDisplay(; open_browser=false))
 end
 
-function get_electron_window()
-    app = get_electron_app()
+function NDI.get_electron_window()
+    app = NDI.get_electron_app()
 
     any(w -> !w.exists, windows(app)) && @warn "App contains reference to nonexistent window(s)"
 
     window = if isempty(windows(app))
-        opts = Dict(:width => 1200, :height => 800)
+        x, y = NDI.CURRENT_DISPLAY[] isa NDI.ElectronDisp ? NDI.CURRENT_DISPLAY[].resolution : (1200, 800)
+        opts = Dict(:width => x, :height => y, :webPreferences => Dict(:enableRemoteModule => true))
+        @info "Create new Electron Window with $opts"
         Electron.Window(app, opts)
     else
         length(windows(app)) != 1 && @warn "App contains multiple windows"
         first(windows(app))
     end
+    # check window size
+    if NDI.CURRENT_DISPLAY[] isa NDI.ElectronDisp
+        x, y = NDI.CURRENT_DISPLAY[].resolution
+        run(NDI.get_electron_app(),
+            "BrowserWindow.fromId($(window.id)).setSize($x, $y)")
+    end
+
     return window
 end
 haswindow() = hasapp() && !isempty(windows(ELECTRON_APP[]))
 
-function get_electron_app()
+function NDI.get_electron_app()
     if !hasapp()
         ELECTRON_APP[] = Electron.Application(;
             additional_electron_args=[
@@ -77,10 +86,12 @@ end
 
 function NDI.toggle_devtools()
     if haswindow()
-        Electron.toggle_devtools(get_electron_window())
+        Electron.toggle_devtools(NDI.get_electron_window())
     else
         error("No window to toggle devtools!")
     end
 end
+NDI.has_electron_window() = haswindow()
+
 
 end
