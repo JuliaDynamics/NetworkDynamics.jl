@@ -48,6 +48,11 @@ jobs:
   Inspector-tests:
     name: NetworkDynamicsInspector.jl Tests
     runs-on: ubuntu-latest
+    env:
+      DISPLAY: ":99"
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      MESA_GL_VERSION_OVERRIDE: "4.5"
+      MESA_GLSL_VERSION_OVERRIDE: "450"
     permissions: # needed to allow julia-actions/cache to proactively delete old caches that it has created
       actions: write
       contents: read
