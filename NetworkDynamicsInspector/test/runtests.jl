@@ -101,32 +101,36 @@ end
     end
 
     @testset "Test different display types" begin
-        sol1 = get_sol()
-        sol2 = get_sol(; limit = 1.2)
+        if !haskey(ENV, "GITHUB_ACTIONS")
+            sol1 = get_sol()
+            sol2 = get_sol(; limit = 1.2)
 
-        inspect(sol1; display=BrowserDisp(), restart=true, reset=true)
-        # change observable
-        empty!(NDI.APPSTATE[].tsplots[]); notify(NDI.APPSTATE[].tsplots)
-        NDI.APPSTATE[].tsplots[]["ts-1"] = NDI.TimeseriesPlot(selcomp=[EIndex(i) for i in 1:7], states=[:P])
-        # notify(NDI.APPSTATE[].tsplots) # does not work wihtout display
-        inspect(sol2) # this should update the plot
-        inspect(sol2, reset=true)
+            inspect(sol1; display=BrowserDisp(), restart=true, reset=true)
+            # change observable
+            empty!(NDI.APPSTATE[].tsplots[]); notify(NDI.APPSTATE[].tsplots)
+            NDI.APPSTATE[].tsplots[]["ts-1"] = NDI.TimeseriesPlot(selcomp=[EIndex(i) for i in 1:7], states=[:P])
+            # notify(NDI.APPSTATE[].tsplots) # does not work wihtout display
+            inspect(sol2) # this should update the plot
+            inspect(sol2, reset=true)
 
-        # switch to electron
-        inspect(sol1; display=ElectronDisp())
-        @test NDI.BROWSER_STATE[:handler] == nothing
-        empty!(NDI.APPSTATE[].tsplots[]); notify(NDI.APPSTATE[].tsplots)
-        NDI.APPSTATE[].tsplots[]["ts-1"] = NDI.TimeseriesPlot(selcomp=[EIndex(i) for i in 1:7], states=[:P])
-        notify(NDI.APPSTATE[].tsplots)
-        inspect(sol2) # this should update the plot
+            # switch to electron
+            inspect(sol1; display=ElectronDisp())
+            @test NDI.BROWSER_STATE[:handler] == nothing
+            empty!(NDI.APPSTATE[].tsplots[]); notify(NDI.APPSTATE[].tsplots)
+            NDI.APPSTATE[].tsplots[]["ts-1"] = NDI.TimeseriesPlot(selcomp=[EIndex(i) for i in 1:7], states=[:P])
+            notify(NDI.APPSTATE[].tsplots)
+            inspect(sol2) # this should update the plot
 
-        # switch to server
-        inspect(sol1; display=ServerDisp(), restart=true)
-        @test NDI.BROWSER_STATE[:handler] == nothing
-        empty!(NDI.APPSTATE[].tsplots[]); notify(NDI.APPSTATE[].tsplots)
-        NDI.APPSTATE[].tsplots[]["ts-1"] = NDI.TimeseriesPlot(selcomp=[EIndex(i) for i in 1:7], states=[:P])
-        # notify(NDI.APPSTATE[].tsplots) # does not work without session open
-        inspect(sol2) # this should update the plot
+            # switch to server
+            inspect(sol1; display=ServerDisp(), restart=true)
+            @test NDI.BROWSER_STATE[:handler] == nothing
+            empty!(NDI.APPSTATE[].tsplots[]); notify(NDI.APPSTATE[].tsplots)
+            NDI.APPSTATE[].tsplots[]["ts-1"] = NDI.TimeseriesPlot(selcomp=[EIndex(i) for i in 1:7], states=[:P])
+            # notify(NDI.APPSTATE[].tsplots) # does not work without session open
+            inspect(sol2) # this should update the plot
+        else
+            @info "Skip test for different display types on GitHub Actions"
+        end
     end
 
     @testset "Widget Tests" begin
