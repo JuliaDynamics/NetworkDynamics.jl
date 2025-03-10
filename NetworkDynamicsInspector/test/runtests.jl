@@ -95,7 +95,7 @@ end
 
     @testset "track changes in tsplots" begin
         sol = get_sol()
-        inspect(sol; display=BrowserDisp())
+        inspect(sol; display=ElectronDisp(), restart=true, reset=true)
         NDI.APPSTATE[].tsplots[]["ts-1"] = NDI.TimeseriesPlot(selcomp=[EIndex(3), EIndex(2), EIndex(1)], states=[:P])
         notify(NDI.APPSTATE[].tsplots) # should update
     end
@@ -136,7 +136,9 @@ end
 
     # close all open electron windows
     try
-        close.(Electron.applications())
+        while !isempty(Electron.applications())
+            close(first(Electron.applications()))
+        end
     catch
     end
 end

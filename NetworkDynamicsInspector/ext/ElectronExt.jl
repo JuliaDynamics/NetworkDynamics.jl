@@ -16,7 +16,9 @@ end
 function NDI.close_display(::NDI.ElectronDisp; strict)
     if haswindow()
         @info "Close existing Windows"
-        close.(windows(ELECTRON_APP[]))
+        while length(windows(ELECTRON_APP[]))>0
+            close(first(windows(ELECTRON_APP[])))
+        end
     end
     if strict
         close_application()

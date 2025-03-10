@@ -52,6 +52,16 @@ jobs:
       actions: write
       contents: read
     steps:
+      - name: Install Dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y xvfb mesa-utils mesa-vulkan-drivers dbus
+      - name: Start Virtual Display
+        run: |
+          Xvfb :99 -screen 0 1920x1080x24 &
+          eval $(dbus-launch)
+          export DBUS_SESSION_BUS_ADDRESS
+          export DBUS_SESSION_BUS_PID
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
@@ -64,7 +74,7 @@ jobs:
         uses: GabrielBB/xvfb-action@v1
         with:
           run: |
-            julia --project=NetworkDynamicsInspector -e "using Pkg; Pkg.test(coverage=false)"
+            julia --project=NetworkDynamicsInspector  --color=yes -e "using Pkg; Pkg.test(coverage=false)"
       # - uses: julia-actions/julia-processcoverage@v1
       # - uses: codecov/codecov-action@v4
       #   with:
