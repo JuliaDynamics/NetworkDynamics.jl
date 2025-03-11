@@ -43,7 +43,7 @@ jobs:
           MESA_GL_VERSION_OVERRIDE: "4.5"
           MESA_GLSL_VERSION_OVERRIDE: "450"
         with:
-          prefix: xvfb-run
+          prefix: xvfb-run -a
       - name: Run doctests
         shell: julia --project=docs --color=yes {0}
         run: |
