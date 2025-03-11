@@ -138,7 +138,7 @@ function download_assets()
 
     for (name, url) in to_download
         # @info "Downloading Assets: $name.."
-        download(url, joinpath(ASSETS, name))
+        Downloads.download(url, joinpath(ASSETS, name))
     end
 end
 

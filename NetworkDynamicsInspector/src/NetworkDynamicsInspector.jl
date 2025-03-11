@@ -23,6 +23,7 @@ using Observables: Observables, Observable, on, onany
 using Colors: Colors, @colorant_str, RGB, color
 using ColorSchemes: ColorSchemes, ColorScheme
 using SciMLBase: SciMLBase
+using Downloads: Downloads
 
 # defined based on the julia version
 using NetworkDynamics: AnnotatedIOBuffer, AnnotatedString, @styled_str
