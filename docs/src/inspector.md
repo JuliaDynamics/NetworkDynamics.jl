@@ -1,4 +1,7 @@
-# NetworkDynamicsInspector
+# Interactive Solution Inspection
+
+Interactive solution inspection tool based on [WGLMakie](https://makie.org/website/) and [Bonito](https://github.com/SimonDanisch/Bonito.jl) are provided through the helper package `NetworkDynamicsInspector`.
+
 
 ```@example ndi
 using NetworkDynamics
@@ -56,13 +59,12 @@ function get_sol(;limit=1.0)
 end
 
 sol = get_sol()
-
-
-
-NDI.CURRENT_DISPLAY[] = ElectronDisp(resolution=(1000,1000)) # hide
-@info "open gui"
-inspect(sol)
-NDI.save_electron_screenshot("screenshot.png")
-NDI.close_display()
+inspect(sol; restart=false, reset=true)
+NDI.wait_for()
+define_timeseries!([
+    (; selcomp=[EIndex(i) for i in 1:7], states=[:P])
+])
+NDI.save_electron_screenshot("screenshot.png") #hide #md
+nothing #hide #md
 ```
-![screenshot](screenshot.png)
+![screenshot](../screenshot.png)

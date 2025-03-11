@@ -3,10 +3,17 @@
 using Documenter
 using NetworkDynamics
 using NetworkDynamicsInspector
+using NetworkDynamicsInspector: NetworkDynamicsInspector as NDI
 using SciMLBase
 using Literate
 using ModelingToolkit
 using DocumenterInterLinks
+using Electron
+
+
+@info "Create global electron window"
+NDI.CURRENT_DISPLAY[] = ElectronDisp(resolution=(1200,1020)) # hide
+NDI.get_electron_window()
 
 links = InterLinks(
     "DiffEq" => "https://docs.sciml.ai/DiffEqDocs/stable/",
@@ -84,6 +91,9 @@ if haskey(ENV,"GITHUB_ACTIONS")
 else # local build
     makedocs(; kwargs_warnonly...)
 end
+
+@info "Close global electron window"
+NDI.close_display()
 
 
 # warnonly options

@@ -145,6 +145,7 @@ function save_electron_screenshot(path=joinpath(@__DIR__, "screenshot.png"))
     });
     """
     wait_for()
+    sleep(1) # make sure that axis updates and so on
     d = run(get_electron_app(), js)
     nothing
 end
