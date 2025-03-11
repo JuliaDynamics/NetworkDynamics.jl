@@ -88,11 +88,13 @@ set_maybe!(obs::Observable, ::NotSpecified) = nothing
 Set the solution of the current appstate to `sol`.
 """
 function set_sol!(sol)
+    wait_for()
     if isnothing(APPSTATE[])
         APPSTATE[] = AppState(sol)
     else
         APPSTATE[].sol[] = sol
     end
+    wait_for()
     nothing
 end
 
@@ -107,10 +109,12 @@ function set_state!(; sol = NotSpecified(),
                       t = NotSpecified(),
                       tmin = NotSpecified(),
                       tmax = NotSpecified())
+    wait_for()
     sol != NotSpecified() && set_sol!(sol)
     set_maybe!(appstate().t, t)
     set_maybe!(appstate().tmin, tmin)
     set_maybe!(appstate().tmax, tmax)
+    wait_for()
     nothing
 end
 
@@ -127,6 +131,7 @@ function set_graphplot!(; nstate = NotSpecified(),
                           estate_rel = NotSpecified(),
                           ncolorrange = NotSpecified(),
                           ecolorrange = NotSpecified())
+    wait_for()
     gp = appstate().graphplot
     set_maybe!(gp.nstate, nstate)
     set_maybe!(gp.estate, estate)
@@ -134,6 +139,7 @@ function set_graphplot!(; nstate = NotSpecified(),
     set_maybe!(gp.estate_rel, estate_rel)
     set_maybe!(gp.ncolorrange, ncolorrange)
     set_maybe!(gp.ecolorrange, ecolorrange)
+    wait_for()
     nothing
 end
 
@@ -147,6 +153,7 @@ To automaticially create commands see [`dump_app_state()`](@ref).
 function set_timeseries!(key; selcomp = NotSpecified(),
                               states = NotSpecified(),
                               rel = NotSpecified())
+    wait_for()
     if !haskey(appstate().tsplots[], key)
         appstate().tsplots[][key] = TimeseriesPlot()
     end
@@ -154,6 +161,7 @@ function set_timeseries!(key; selcomp = NotSpecified(),
     set_maybe!(tsplot.selcomp, selcomp)
     set_maybe!(tsplot.states, states)
     set_maybe!(tsplot.rel, rel)
+    wait_for()
     nothing
 end
 
@@ -166,8 +174,8 @@ Defines timeseries, where `tsarray` is an array of timeseries keyword arguments
 To automaticially create commands see [`dump_app_state()`](@ref).
 """
 function define_timeseries!(tsarray)
+    wait_for()
     if length(tsarray) != length(appstate().tsplots[])
-        @warn "Due to current limitations, you need to reload the page if the number of timeseries plots changes"
         empty!(appstate().tsplots[])
         tskeys = [gendomid("ts") for _ in tsarray]
     else
@@ -176,6 +184,8 @@ function define_timeseries!(tsarray)
     for (key, tsargs) in zip(tskeys, tsarray)
         set_timeseries!(key; tsargs...)
     end
+    notify(appstate().tsplots)
+    wait_for()
     nothing
 end
 
@@ -186,18 +196,18 @@ Generate a list of [`set_sol!`](@ref), [`set_state!`](@ref), [`set_graphplot!`](
 commands to recreate the current appstate.
 The intended usecase is to quickly recreate "starting points" for interactive exploration.
 """
-function dump_app_state()
-    appstate()
-    println("To recreate the current state, run the following commands:\n")
-    println(styled"set_sol!({red:sol}) # optional if after inspect(sol)")
-    println("set_state!(; t=$(appstate().t[]), tmin=$(appstate().tmin[]), tmax=$(appstate().tmax[]))")
+function dump_app_state(io=stdout)
+    wait_for()
+    println(io, "# To recreate the current state, run the following commands:\n")
+    println(io, styled"set_sol!({red:sol}) # optional if after inspect(sol)")
+    println(io, "set_state!(; t=$(appstate().t[]), tmin=$(appstate().tmin[]), tmax=$(appstate().tmax[]))")
     gp = appstate().graphplot
-    println("set_graphplot!(; nstate=$(gp.nstate[]), estate=$(gp.estate[]), nstate_rel=$(gp.nstate_rel[]), estate_rel=$(gp.estate_rel[]), ncolorrange=$(gp.ncolorrange[]), ecolorrange=$(gp.ecolorrange[]))")
-    println("define_timeseries!([")
+    println(io, "set_graphplot!(; nstate=$(gp.nstate[]), estate=$(gp.estate[]), nstate_rel=$(gp.nstate_rel[]), estate_rel=$(gp.estate_rel[]), ncolorrange=$(gp.ncolorrange[]), ecolorrange=$(gp.ecolorrange[]))")
+    println(io, "define_timeseries!([")
     for ts in values(appstate().tsplots[])
         selstr = replace(repr(ts.selcomp[]), r"^.*\["=>"[")
-        println("    (; selcomp=$(selstr), states=$(ts.states[]), rel=$(ts.rel[])),")
+        println(io, "    (; selcomp=$(selstr), states=$(ts.states[]), rel=$(ts.rel[])),")
     end
-    println("])")
+    println(io, "])")
     nothing
 end

@@ -157,6 +157,7 @@ function inspect(sol; restart=false, reset=false, display=CURRENT_DISPLAY[])
     APPSTATE[] = appstate
     CURRENT_WEBAPP[] = webapp
 
+    wait_for()
     nothing
 end
 

@@ -60,11 +60,32 @@ end
 
 sol = get_sol()
 inspect(sol; restart=false, reset=true)
-NDI.wait_for()
 define_timeseries!([
     (; selcomp=[EIndex(i) for i in 1:7], states=[:P])
 ])
-NDI.save_electron_screenshot("screenshot.png") #hide #md
-nothing #hide #md
+NDI.save_electron_screenshot("screenshot.png") #hide
+nothing #hide
 ```
-![screenshot](../screenshot.png)
+![screenshot](screenshot.png)
+
+## Programmatric Acces and GUI State manipulation
+```@example ndi
+set_state!(; t=2.0) #hide
+define_timeseries!([ #hide
+    (; selcomp=[VIndex(i) for i in 1:5], states=[:θ, :ω]) #hide
+    (; selcomp=[EIndex(i) for i in 1:7], states=[:P]) #hide
+]) #hide
+dump_app_state()
+```
+
+```@example ndi
+buf = IOBuffer() #hide
+dump_app_state(buf) #hide
+code = String(take!(buf)) #hide
+inspect(sol; reset=true) #hide
+eval(Meta.parse("begin;"*code*"end;")) #hide
+NDI.save_electron_screenshot("screenshot2.png") #hide
+nothing #hide
+```
+![screenshot](screenshot2.png)
+
