@@ -75,6 +75,7 @@ define_timeseries!([ #hide
     (; selcomp=[VIndex(i) for i in 1:5], states=[:θ, :ω]) #hide
     (; selcomp=[EIndex(i) for i in 1:7], states=[:P]) #hide
 ]) #hide
+sleep(1) #hide
 dump_app_state()
 ```
 
@@ -82,10 +83,12 @@ dump_app_state()
 buf = IOBuffer() #hide
 dump_app_state(buf) #hide
 code = String(take!(buf)) #hide
+sleep(1) #hide
 inspect(sol; reset=true) #hide
+sleep(1) #hide
 eval(Meta.parse("begin;"*code*"end;")) #hide
+sleep(1) #hide
 NDI.save_electron_screenshot("screenshot2.png") #hide
 nothing #hide
 ```
 ![screenshot](screenshot2.png)
-
