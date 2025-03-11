@@ -23,6 +23,10 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y xvfb mesa-utils mesa-vulkan-drivers dbus x11-xserver-utils
+      - name: Set up aliases
+        run: |
+          echo "alias autoxvfb='xvfb-run -a'" >> ~/.bashrc
+          source ~/.bashrc
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
@@ -43,7 +47,7 @@ jobs:
           MESA_GL_VERSION_OVERRIDE: "4.5"
           MESA_GLSL_VERSION_OVERRIDE: "450"
         with:
-          prefix: xvfb-run -a
+          prefix: autoxvfb
       - name: Run doctests
         shell: julia --project=docs --color=yes {0}
         run: |
