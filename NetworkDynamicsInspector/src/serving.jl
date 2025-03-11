@@ -132,7 +132,9 @@ function has_electron_window end
 function get_electron_app end
 function get_electron_window end
 
-function save_electron_screenshot(path=joinpath(@__DIR__, "screenshot.png"))
+function save_electron_screenshot(path=joinpath(@__DIR__, "screenshot.png"), resize=true)
+    resize && _resize_electron_to_content()
+
     path = isabspath(path) ? path : joinpath(pwd(), path)
     has_electron_window()|| error("No Electron window exists!")
     winid = get_electron_window().id
@@ -151,4 +153,29 @@ function save_electron_screenshot(path=joinpath(@__DIR__, "screenshot.png"))
         sleep(0.1)
     end
     nothing
+end
+
+function _resize_electron_to_content()
+    window = get_electron_window()
+    js_max_h = """
+    {
+        let maxHeight = 0;
+        Array.from(document.querySelectorAll('.graphplot-col, .timeseries-col')).forEach(el => {
+            const height = el.offsetHeight;
+            console.log(height)
+            if (height > maxHeight) {
+                maxHeight = height;
+            }
+        })
+        maxHeight
+    }
+    """
+    y = run(window, js_max_h)
+
+    run(get_electron_app(), """
+    {
+        let win = BrowserWindow.fromId($(window.id))
+        win.setSize(win.getSize()[0], $y)
+    }
+    """)
 end
