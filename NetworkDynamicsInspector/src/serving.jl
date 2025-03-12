@@ -172,10 +172,8 @@ function _resize_electron_to_content()
     """
     y = run(window, js_max_h)
 
-    run(get_electron_app(), """
-    {
-        let win = BrowserWindow.fromId($(window.id))
-        win.setSize(win.getSize()[0], $y)
-    }
-    """)
+    oldres = CURRENT_DISPLAY[].resolution
+    resolution = (oldres[1], y)
+    CURRENT_DISPLAY[] = ElectronDisp(; resolution)
+    get_electron_window() # trigger resize
 end

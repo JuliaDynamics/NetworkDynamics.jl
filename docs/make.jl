@@ -12,7 +12,7 @@ using Electron
 
 
 @info "Create global electron window"
-NDI.CURRENT_DISPLAY[] = ElectronDisp(resolution=(1200,1020)) # hide
+NDI.CURRENT_DISPLAY[] = ElectronDisp(resolution=(1200,800)) # hide
 NDI.get_electron_window()
 
 links = InterLinks(
