@@ -59,23 +59,29 @@ function get_sol(;limit=1.0)
 end
 
 sol = get_sol()
+sleep(1) # hide
 inspect(sol; restart=false, reset=true)
+sleep(1) # hide
 define_timeseries!([
     (; selcomp=[EIndex(i) for i in 1:7], states=[:P])
 ])
 NDI.save_electron_screenshot("screenshot.png") #hide
+
+
+set_state!(; t=2.0) #hide
+sleep(1) # hide
+define_timeseries!([ #hide
+    (; selcomp=[VIndex(i) for i in 1:5], states=[:θ, :ω]) #hide
+    (; selcomp=[EIndex(i) for i in 1:7], states=[:P]) #hide
+]) #hide
+sleep(1) #hide
+
 nothing #hide
 ```
 ![screenshot](screenshot.png)
 
 ## Programmatric Acces and GUI State manipulation
 ```@example ndi
-set_state!(; t=2.0) #hide
-define_timeseries!([ #hide
-    (; selcomp=[VIndex(i) for i in 1:5], states=[:θ, :ω]) #hide
-    (; selcomp=[EIndex(i) for i in 1:7], states=[:P]) #hide
-]) #hide
-sleep(1) #hide
 dump_app_state()
 ```
 
