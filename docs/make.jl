@@ -1,11 +1,19 @@
-ENV["GKSwstype"] = "100" # needed for plotting with GitHub Actions and GR (?)
+# ENV["GKSwstype"] = "100" # needed for plotting with GitHub Actions and GR (?)
 
 using Documenter
 using NetworkDynamics
+using NetworkDynamicsInspector
+using NetworkDynamicsInspector: NetworkDynamicsInspector as NDI
 using SciMLBase
 using Literate
 using ModelingToolkit
 using DocumenterInterLinks
+using Electron
+
+
+@info "Create global electron window"
+NDI.CURRENT_DISPLAY[] = ElectronDisp(resolution=(1200,800)) # hide
+NDI.get_electron_window()
 
 links = InterLinks(
     "DiffEq" => "https://docs.sciml.ai/DiffEqDocs/stable/",
@@ -29,7 +37,7 @@ mtkext = Base.get_extension(NetworkDynamics, :MTKExt)
 kwargs = (;
     root=joinpath(pkgdir(NetworkDynamics), "docs"),
     sitename="NetworkDynamics",
-    modules=[NetworkDynamics, mtkext],
+    modules=[NetworkDynamics, mtkext, NetworkDynamicsInspector],
     linkcheck=true, # checks if external links resolve
     pagesonly=true,
     plugins=[links],
@@ -44,6 +52,7 @@ kwargs = (;
             "callbacks.md",
             "mtk_integration.md",
             "external_inputs.md",
+            "inspector.md",
         ],
         "API.md",
         "Tutorials" => [
@@ -82,6 +91,9 @@ if haskey(ENV,"GITHUB_ACTIONS")
 else # local build
     makedocs(; kwargs_warnonly...)
 end
+
+@info "Close global electron window"
+NDI.close_display()
 
 
 # warnonly options

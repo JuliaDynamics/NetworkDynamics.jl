@@ -136,6 +136,7 @@ function graphplot_card(app, session)
     // Create tooltip element
     const tooltip = document.createElement("div");
     tooltip.classList.add("tooltip"); // Apply styles from CSS
+    tooltip.classList.add("gp-tooltip"); // Apply styles from CSS
     document.body.appendChild(tooltip);
 
     // let tooltipTimeout; // Store timeout reference
@@ -212,7 +213,14 @@ function graphplot_card(app, session)
     register_interaction!(ax, :edgeclick, ech)
     register_interaction!(ax, :edgehover, ehh)
 
-    Card(fig; class="graphplot-card")
+    help = HoverHelp(html"""
+    <ul>
+    <li><strong>Click</strong> on a node or edge to select it for timeseries plotting (highlighted plot).</li>
+    <li><strong>Shift + Click</strong>. only update the element info pane.</li>
+    <li><strong>Ctrl + Click</strong> resets axis after zoom</li>
+    </ul>
+    """)
+    Card([fig, help]; class="bonito-card graphplot-card")
 end
 function _gracefully_extract_states!(vec, sol, t, idxs, rel)
     isvalid(s) = SII.is_variable(sol, s) || SII.is_parameter(sol, s) || SII.is_observed(sol, s)
@@ -272,7 +280,7 @@ function gpstate_control_card(app, type)
     colorrange = type == :vertex ? app.graphplot.ncolorrange : app.graphplot.ecolorrange
     colorscheme = type == :vertex ? app.graphplot.ncolorscheme : app.graphplot.ecolorscheme
     class = type == :vertex ? "gpstate-control-card vertex" : "gpstate-control-card edge"
-    class *= " resize-with-gp"
+    class *= " resize-with-gp bonito-card"
 
     ####
     #### State selection
@@ -284,7 +292,7 @@ function gpstate_control_card(app, type)
         options[] = gen_state_options(_nw, idxs)
         nothing
     end
-    multisel = MultiSelect(options, stateobs; placeholder="Select state for coloring", multi=false, T=Symbol)
+    multisel = TomSelect(options, stateobs; placeholder="Select state for coloring", multi=false, T=Symbol)
     reltoggle = ToggleSwitch(value=stateobs_rel, label="Rel to u0")
     selector = Grid(
         DOM.span(label),
@@ -354,18 +362,26 @@ function gpstate_control_card(app, type)
 
     cslider = ContinuousSlider(maxrange, thumb_l, thumb_r)
 
-    Card(
-        DOM.div(
-            selector,
-            DOM.div(fig; style=Styles("height" => "40px")),
-            # fig,
-            # RoundedLabel(@lift $maxrange[1]; style=Styles("text-align"=>"right")),
-            cslider,
-            # RoundedLabel(@lift $maxrange[2]; style=Styles("text-align"=>"left"));
-            class="gpstate-control-card-content",
-        );
-        class
-    )
+    childs = Any[DOM.div(
+        selector,
+        DOM.div(fig; style=Styles("height" => "40px")),
+        # fig,
+        # RoundedLabel(@lift $maxrange[1]; style=Styles("text-align"=>"right")),
+        cslider,
+        # RoundedLabel(@lift $maxrange[2]; style=Styles("text-align"=>"left"));
+        class="gpstate-control-card-content",
+    )]
+    if type == :vertex
+        help = HoverHelp(html"""
+        Select the state to color the graphplot.
+        <ul>
+        <li>Use slider to adjust the color range. <strong>Shift</strong> while draggin the knobs to scale symmetricly</li>
+        <li>Toggle <strong>Rel to u0</strong> to color by the difference to the initial state.</li>
+        </ul>
+        """)
+        push!(childs, help)
+    end
+    Card(childs; class)
 end
 
 function _maxrange(sol, idxs, rel)

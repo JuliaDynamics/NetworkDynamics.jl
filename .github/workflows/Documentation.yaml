@@ -19,6 +19,10 @@ jobs:
       contents: write
       statuses: write
     steps:
+      - name: Install xvfb
+        run: |
+          sudo apt update
+          sudo apt install -y xvfb mesa-utils mesa-vulkan-drivers dbus x11-xserver-utils
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
@@ -31,10 +35,26 @@ jobs:
           Pkg.develop(PackageSpec(path=pwd()))
           Pkg.instantiate()
       - uses: julia-actions/julia-buildpkg@v1
-      - uses: julia-actions/julia-docdeploy@v1
+      # - uses: julia-actions/julia-docdeploy@v1
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #     DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
+      #     LIBGL_ALWAYS_SOFTWARE: "1"
+      #     MESA_GL_VERSION_OVERRIDE: "4.5"
+      #     MESA_GLSL_VERSION_OVERRIDE: "450"
+      #   with:
+      #     prefix: xvfb-run
+      - name: Build docs
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          MESA_GL_VERSION_OVERRIDE: "4.5"
+          MESA_GLSL_VERSION_OVERRIDE: "450"
+        shell: xvfb-run -a julia --project=docs --color=yes {0}
+        run: |
+          using NetworkDynamics
+          include(pkgdir(NetworkDynamics)*"/docs/make.jl")
       - name: Run doctests
         shell: julia --project=docs --color=yes {0}
         run: |

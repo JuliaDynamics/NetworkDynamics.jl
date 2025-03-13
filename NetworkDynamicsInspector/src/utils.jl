@@ -129,16 +129,29 @@ end
 
 function download_assets()
     assets = Dict(
-       "jquery.js" => "https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js",
-       "select2.css" => "https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css",
-       "select2.js" => "https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js",
+        "tomselect.css" => "https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/css/tom-select.css",
+        "tomselect.js" => "https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/js/tom-select.complete.min.js",
     )
     to_download = filter(x -> !isfile(joinpath(ASSETS, x.first)), assets)
 
     isempty(to_download) && return
 
     for (name, url) in to_download
-        @info "Downloading Assets: $name.."
-        download(url, joinpath(ASSETS, name))
+        # @info "Downloading Assets: $name.."
+        Downloads.download(url, joinpath(ASSETS, name))
+    end
+end
+
+function sync()
+    isnothing(APPSTATE[]) && return
+    for cache in values(APPSTATE[]._tsplotscache)
+        wait_for(cache.plotqueue)
+    end
+    nothing
+end
+
+function wait_for(queue)
+    while isopen(queue) && !isempty(queue)
+        sleep(0.01)
     end
 end

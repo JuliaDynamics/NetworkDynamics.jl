@@ -1,36 +1,119 @@
+function timeseries_col(app, session)
+    col = DOM.div(
+        timeslider_card(app),
+        timeseries_cards(app, session),
+        add_timeseries_button(app),
+        class="timeseries-col"
+    )
+
+    # add js to update the active ts plot
+    onload_js = js"""
+    (tscol) => {
+        tscol.addEventListener("click", function(event) {
+            // Find the closest .timeseries-card ancestor of the clicked element
+            const clickedCard = event.target.closest('.timeseries-card');
+
+            // If a .timeseries-card was found, handle the click
+            if (clickedCard) {
+                // console.log("click on timeseries card", clickedCard.id);
+
+                // Notify the app with the id of the clicked card
+                $(app.active_tsplot).notify(clickedCard.id);
+
+                // Remove "active-tseries" class from all .timeseries-card elements
+                document.querySelectorAll(".timeseries-card").forEach(element => {
+                    element.classList.remove("active-tseries");
+                });
+
+                // Add "active-tseries" class to the clicked card
+                clickedCard.classList.add("active-tseries");
+            }
+        }, { capture: true });
+
+        function triggerWindowResize() {
+            window.dispatchEvent(new Event('resize'));
+        }
+        const triggerWindowResize_throttled = Bonito.throttle_function(triggerWindowResize, 100);
+        const resizeObserver = new ResizeObserver(triggerWindowResize_throttled);
+        resizeObserver.observe(tscol);
+    }
+    """
+    Bonito.onload(session, col, onload_js)
+
+    return col
+end
+
 function timeseries_cards(app, session)
-    cards = OrderedDict{String,Bonito.Hyperscript.Node{Bonito.Hyperscript.HTMLSVG}}()
     container = Observable{Bonito.Hyperscript.Node{Bonito.Hyperscript.HTMLSVG}}()
 
+    # update the timeseries-sstacke based on the tsplots in appstate
     on(app.tsplots; update=true) do _tsplots
         @debug "TS: app.tsplots => update timeseries cards"
-        newkeys = collect(keys(_tsplots)) # collect to preserv order on setdiff
-        knownkeys = keys(cards)
+        # this cache contains all the card, the observer functions and the plotqueue
+        cache = app._tsplotscache
 
-        for delkey in setdiff(knownkeys, newkeys)
-            delete!(cards, delkey)
+        known_tsplots = collect(keys(cache))
+        current_tsplots = collect(values(_tsplots))
+
+        # do nothing if the TSPlots objects themselve did not change
+        Set(known_tsplots) == Set(current_tsplots) && return
+
+        # del_tsplots = setdiff(known_tsplots, current_tsplots)
+        # new_tsplots = setdiff(current_tsplots, known_tsplots)
+        # FIXME: it is not possible to redisplay the same tsplot, recreate all
+        del_tsplots = known_tsplots
+        new_tsplots = current_tsplots
+
+        for del in del_tsplots
+            (; card, observerfunctions, plotqueue) = cache[del]
+            close(plotqueue) # close plotqueue
+            Observables.off.(observerfunctions) # disable all observer functions
+            delete!(cache, del) # delete from cache
         end
-        for newkey in setdiff(newkeys, knownkeys)
-            cards[newkey] = timeseries_card(app, newkey, session)
-        end
-        if keys(cards) != keys(_tsplots)
-            @warn "The keys do not match: $(keys(cards)) vs $(keys(_tsplots))"
+        for new in new_tsplots
+            key = only([key for (key, value) in _tsplots if value == new])
+            ntup = timeseries_card(app, key, session)
+            cache[new] = ntup
         end
 
-        container[] = DOM.div(values(cards)...; class="timeseries-stack")
+        cards = [cache[ts].card for ts in values(_tsplots)]
+        # update the display by notifying the content
+        container[] = DOM.div(cards; class="timeseries-stack")
 
         nothing
     end
 
+    # update the selected components in the graphplot when the active tsplot changes
     on(app.active_tsplot; update=true) do active
         activesel = app.tsplots[][active].selcomp[]
         app.graphplot._selcomp[] = activesel
     end
 
-    return container[]
+    return container
+end
+
+function add_timeseries_button(app)
+    button = Bonito.Button("Add Timeseries", class="add-ts-button")
+    on(button.value) do _
+        newkey = free_ts_key()
+        @debug "TS: Add Timeseries button clicked. Add $newkey"
+        app.tsplots[][newkey] = TimeseriesPlot()
+        notify(app.tsplots)
+    end
+    return button
 end
 
 function timeseries_card(app, key, session)
+    # store all observer functions to be able to remove them later
+    obsf = Observables.ObserverFunction[]
+    track_obsf = function (f)
+        if f isa AbstractVector
+            append!(obsf, f)
+        else
+            push!(obsf, f)
+        end
+    end
+
     tsplot = app.tsplots[][key]
 
     comp_options = Observable{Vector{OptionGroup{SymbolicCompIndex}}}()
@@ -41,7 +124,7 @@ function timeseries_card(app, key, session)
         eg = OptionGroup{SymbolicCompIndex}("Edges", EIndex.(1:ne(g)))
         comp_options[] = [vg, eg]
         nothing
-    end
+    end |> track_obsf
 
     state_options = Observable{Vector{OptionGroup{Symbol}}}()
     onany(app.sol, tsplot.selcomp; update=true) do _sol, _sel
@@ -49,36 +132,36 @@ function timeseries_card(app, key, session)
         _nw = extract_nw(_sol)
         state_options[] = gen_state_options(_nw, _sel)
         nothing
-    end
+    end |> track_obsf
 
-    comp_sel = MultiSelect(comp_options, tsplot.selcomp;
+    comp_sel = TomSelect(comp_options, tsplot.selcomp;
         placeholder="Select components",
         multi=true,
         option_to_string=s -> sidx_to_str(s, app),
         T=SymbolicCompIndex,
         id=gendomid("compsel"))
     # comp_sel_dom = Grid(DOM.span("Components"), comp_sel; columns = "70px 1fr", align_items = "center")
-    state_sel = MultiSelect(state_options, tsplot.states;
+    state_sel = TomSelect(state_options, tsplot.states;
         placeholder="Select states",
         multi=true,
         T=Symbol,
         id=gendomid("statesel"))
 
-    reset_color_button = Bonito.Button("Reset Color", style=Styles("margin-left"=>"10px"))
-    on(reset_color_button.value) do _
+    reset_style_button = Bonito.Button("Reset Styles", style=Styles("margin-left"=>"10px"))
+    on(reset_style_button.value) do _
         empty!(color_cache)
         empty!(linestyle_cache)
         notify(tsplot.selcomp)
         notify(tsplot.states)
-    end
+    end |> track_obsf
 
-    reset_axis_button = Bonito.Button("Reset Axis", style=Styles("margin-left"=>"10px"))
+    reset_axis_button = Bonito.Button("Auto Axlimits", style=Styles("margin-left"=>"10px"))
 
     rel_toggle = ToggleSwitch(value=tsplot.rel, label="Rel to u0")
 
     comp_state_sel_dom = Grid(
         DOM.span("Components"), comp_sel,
-        DOM.div(reset_color_button, reset_axis_button, rel_toggle; style=Styles("grid-row"=>"1/3", "grid-column"=>"3")),
+        DOM.div(reset_style_button, reset_axis_button, rel_toggle; style=Styles("grid-row"=>"1/3", "grid-column"=>"3")),
         DOM.span("States"), state_sel;
         columns = "min-content auto min-content",
         align_items = "center",
@@ -90,7 +173,7 @@ function timeseries_card(app, key, session)
         @debug "TS: comp selection => graphplot selection"
         app.graphplot._selcomp[] = _sel
         nothing
-    end
+    end |> track_obsf
 
     ####
     #### actual plot
@@ -117,9 +200,15 @@ function timeseries_card(app, key, session)
                          color="#"*Colors.hex(getcycled(COLORS, v)))
                         for (k,v) in color_cache]
         nothing
-    end
+    end |> track_obsf
     on(tsplot.states; update=true) do _states
         @debug "TS: state selection => update linestyle_cache"
+
+        # when going from x->1 states allways go back to solid
+        if length(linestyle_cache) > 1 && length(_states) == 1
+            empty!(linestyle_cache)
+        end
+
         for unused in setdiff(keys(linestyle_cache), _states)
             delete!(linestyle_cache, unused)
         end
@@ -130,7 +219,7 @@ function timeseries_card(app, key, session)
         lstylepairs[] = [(; title=repr(s), linestyle=getcycled(LINESTYLES_STR, i))
                          for (s,i) in linestyle_cache]
         nothing
-    end
+    end |> track_obsf
 
     comp_ms_id = Bonito.JSString(comp_sel.id)
     state_ms_id = Bonito.JSString(state_sel.id)
@@ -152,14 +241,12 @@ function timeseries_card(app, key, session)
         // Generate new styles
         let styleContent = "";
         items.forEach(({ title, color }) => {
-            styleContent += `#$(comp_ms_id) +span li[title='${title}']::after {
-                content: 'xx';
-                display: inline-block;
-                padding: 0px 1px;
-                background-color: ${color} !important;
-                color: ${color} !important;
-                border-left: 1px solid #aaa;
-                cursor: default;
+            styleContent += `#$(comp_ms_id) +div div[data-value='${title}']::before {
+                content: '';
+                background-color: ${color};
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
             }\n`;
         });
 
@@ -190,14 +277,11 @@ function timeseries_card(app, key, session)
 
         if(items.length > 1) {
             items.forEach(({ title, linestyle }) => {
-                styleContent += `#$(state_ms_id) +span li[title='${title}']::after {
+                styleContent += `#$(state_ms_id) +div div[data-value='${title}']::before {
                     content: '${linestyle}';
-                    display: inline-block;
-                    padding: 0px 1px;
                     color: inherit;
-                    border-left: 1px solid #aaa;
-                    font-size: smaller;
-                    cursor: default;
+                    border-right: 1px solid #d0d0d0;
+                    padding-right: 5px;
                 }\n`;
             });
 
@@ -213,7 +297,7 @@ function timeseries_card(app, key, session)
     Bonito.evaljs(session, js)
 
     fig, ax = with_theme(apptheme()) do
-        fig = Figure()
+        fig = Figure(size=(100, 400))
         ax = Axis(fig[1, 1])
         fig, ax
     end
@@ -223,11 +307,12 @@ function timeseries_card(app, key, session)
         @debug "TS: tim/tmax => update ax limits"
         xlims!(ax, (_tmin, _tmax))
         nothing
-    end
+    end |> track_obsf
 
     ts = Observable(collect(range(app.sol[].t[begin], app.sol[].t[end], length=1000)))
     refined_xlims = Ref((NaN, NaN))
     onany_delayed(ax.finallimits; delay=0.5) do axlims
+        @debug "$key: Adapt ts vector"
         sollims = (app.sol[].t[begin], app.sol[].t[end])
         xlims = (axlims.origin[1], axlims.origin[1] + axlims.widths[1])
         if xlims != refined_xlims[]
@@ -236,7 +321,7 @@ function timeseries_card(app, key, session)
             notify(ts)
         end
         nothing
-    end
+    end |> track_obsf
 
     # collect all the states wie might want to plot
     valid_idxs = Observable(
@@ -251,11 +336,17 @@ function timeseries_card(app, key, session)
             isvalid(idx) && push!(valid_idxs[], idx)
         end
         notify(valid_idxs)
-    end
+    end |> track_obsf
 
     # extract the data
     data = Observable{Vector{Vector{Float32}}}(Vector{Float32}[])
+    datahash = Ref{UInt64}()
     onany(ts, valid_idxs, tsplot.rel, app.sol; update=true) do _ts, _valid_idxs, _rel, _sol
+        # only replot if the data has actually changed
+        newhash = hash((_ts, _valid_idxs, _rel, _sol, linestyle_cache, color_cache))
+        newhash == datahash[] && return
+        datahash[] = newhash
+
         @debug "TS: t, valid_idx, rel, sol => update data"
         _dat = _sol(_ts, idxs=_valid_idxs)
         if _rel
@@ -269,44 +360,48 @@ function timeseries_card(app, key, session)
             data.val[i] = _dat[i,:]
         end
         notify(data)
-    end
+    end |> track_obsf
 
     replot = Observable{Nothing}(nothing)
+
+    # create queue for async plot updates
+    plotqueue = _plot_queue(key)
 
     # store the idxs for which the autolmits where last set
     last_autolimits = Ref((eltype(valid_idxs)(), tsplot.rel[]))
     # plot the thing
-    onany(data, replot) do _dat, _
-        @async begin
+    onany(data, replot; update=true) do _dat, _
+        task = @task begin
+            @debug "$key: Launch plot for valid_idxs[]"
             try
                 empty!(ax)
                 vlines!(ax.scene, app.t; color=:black)
                 for (idx, y) in zip(valid_idxs[], data[])
                     color = begin
-                        key = idx isa VIndex ? VIndex(idx.compidx) : EIndex(idx.compidx)
-                        getcycled(COLORS, color_cache[key])
+                        idxkey = idx isa VIndex ? VIndex(idx.compidx) : EIndex(idx.compidx)
+                        getcycled(COLORS, color_cache[idxkey])
                     end
                     linestyle = getcycled(LINESTYLES, linestyle_cache[idx.subidx])
                     lines!(ax.scene, ts[], y; label=string(idx), color, linestyle)
                     # scatterlines!(ax, ts[], y; label=string(idx), color, linestyle)
                 end
-                # if last_autolimits[][1] != valid_idxs[] || last_autolimits[][2] != tsplot.rel[]
                 if last_autolimits[] != (valid_idxs[], tsplot.rel[])
                     autolimits!(ax)
                     xlims!(ax, (app.tmin[], app.tmax[]))
                     last_autolimits[] = (copy(valid_idxs[]), tsplot.rel[])
                 end
             catch e
-                @error "Plotting failed" e
+                @error "$key: Plotting failed for idx $(valid_idxs[])" e
             end
         end
+        put!(plotqueue, task)
         nothing
-    end
+    end |> track_obsf
 
     on(reset_axis_button.value) do _
         autolimits!(ax)
         xlims!(ax, (app.tmin[], app.tmax[]))
-    end
+    end |> track_obsf
 
     ####
     #### Click interaction to set time
@@ -322,58 +417,67 @@ function timeseries_card(app, key, session)
     end
     register_interaction!(set_time_interaction, ax, :set_time)
 
-    cardclass = "timeseries-card"
+    cardclass = "bonito-card timeseries-card"
     if key == app.active_tsplot[]
         cardclass *= " active-tseries"
     end
 
+    help = HoverHelp(html"""
+    Select the components and states to plot.
+    <ul>
+    <li><strong>Click</strong> on the plot to set the time.</li>
+    <li><strong>Click and Drag</strong> to zoom in.</li>
+    <li><strong>Ctrl + Click</strong> to reset zoom.</li>
+    <li>Use timeslider to change the x-axis limits.</li>
+    <li>Toggle "Rel to u0" to plot the difference to the initial value.</li>
+    <li>Click "Reset Styles" to pick colors and linestyles in order of apperance.</li>
+    </ul>
+    """)
+
     card = Card(
-        DOM.div(
+        [DOM.div(
             comp_state_sel_dom,
-            DOM.div(fig; class="timeseries-axis-container");
+            DOM.div(fig; class="timeseries-axis-container"),
+            closebutton(app, key);
             class="timeseries-card-container"
-        );
-        class=cardclass
+        ), help];
+        class=cardclass,
+        id=key
     )
 
+    return (card, observerfunctions=obsf, plotqueue)
+end
+function _plot_queue(key)
+    ch = Channel{Task}(Inf; spawn=true) do ch
+        while isopen(ch)
+            t = try
+                fetch(ch)
+            catch e
+                if !e isa InvalidStateException && e.msg == "Channel is closed."
+                    @error "$key: Error while waiting for Task: $e"
+                end
+                break
+            end
+            try
+                wait(schedule(t))
+            catch e
+                @warn "$key: Error in task: $e"
+            end
+            rmt = take!(ch) # remove the executed task
+            @assert istaskdone(rmt)
+        end
+        @info "Plot queue for $key closed"
+    end
+end
 
-    # trigger plot on document ready
-    jqdocument = Bonito.JSString(raw"$(document)")
-    trigger_plot = js"""
-    $(jqdocument).ready(function(){
-        console.log("Document ready, trigger plot");
-        // $(data).notify();
-        $(replot).notify();
-    });
-    """
-    Bonito.evaljs(session, trigger_plot)
-
-    # on click set active-tseries class
-    onload_js = js"""
-    (card) => {
-        card.addEventListener("click", function(event) {
-            $(app.active_tsplot).notify($(key));
-
-            document.querySelectorAll(".timeseries-card").forEach(element => {
-                element.classList.remove("active-tseries");
-            });
-
-            // Add "active-tseries" to the given target element
-            card.classList.add("active-tseries");
-        }, { capture: true });
-
-
-        function triggerWindowResize() {
-            window.dispatchEvent(new Event('resize'));
-        }
-        const triggerWindowResize_throttled = Bonito.throttle_function(triggerWindowResize, 100);
-        const resizeObserver = new ResizeObserver(triggerWindowResize_throttled);
-        resizeObserver.observe(card);
-    }
-    """
-    Bonito.onload(session, card, onload_js)
-
-    return card
+function closebutton(app, key)
+    button = Bonito.Button("×", class="close-button")
+    on(button.value) do _
+        @debug "TS: Close button clicked. Remove $key"
+        delete!(app.tsplots[], key)
+        notify(app.tsplots)
+    end
+    button
 end
 
 function _refine_time_limits!(ts, sollims, axlims)

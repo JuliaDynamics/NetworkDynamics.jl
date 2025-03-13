@@ -191,3 +191,14 @@ save_parameters!
 ff_to_constraint
 Base.copy(::NetworkDynamics.ComponentModel)
 ```
+
+## NetworkDynamicsInspector API
+```@docs
+inspect
+dump_app_state
+set_sol!
+set_state!
+set_graphplot!
+set_timeseries!
+define_timeseries!
+```

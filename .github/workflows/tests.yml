@@ -48,10 +48,25 @@ jobs:
   Inspector-tests:
     name: NetworkDynamicsInspector.jl Tests
     runs-on: ubuntu-latest
+    env:
+      DISPLAY: ":99"
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      MESA_GL_VERSION_OVERRIDE: "4.5"
+      MESA_GLSL_VERSION_OVERRIDE: "450"
     permissions: # needed to allow julia-actions/cache to proactively delete old caches that it has created
       actions: write
       contents: read
     steps:
+      - name: Install Dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y xvfb mesa-utils mesa-vulkan-drivers dbus
+      - name: Start Virtual Display
+        run: |
+          Xvfb :99 -screen 0 1920x1080x24 &
+          eval $(dbus-launch)
+          export DBUS_SESSION_BUS_ADDRESS
+          export DBUS_SESSION_BUS_PID
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
@@ -60,9 +75,11 @@ jobs:
       - uses: julia-actions/julia-buildpkg@v1
         with:
           project: NetworkDynamicsInspector
-      - uses: julia-actions/julia-runtest@v1
+      - name: Run headless test
+        uses: GabrielBB/xvfb-action@v1
         with:
-          project: NetworkDynamicsInspector
+          run: |
+            julia --project=NetworkDynamicsInspector  --color=yes -e "using Pkg; Pkg.test(coverage=false)"
       # - uses: julia-actions/julia-processcoverage@v1
       # - uses: codecov/codecov-action@v4
       #   with:
