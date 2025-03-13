@@ -51,84 +51,16 @@ function get_sol(;limit=1.0)
     sol = solve(prob, Tsit5())
 end
 
-sol = get_sol()</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">retcode: Success
-Interpolation: specialized 4th order &quot;free&quot; interpolation
-t: 43-element Vector{Float64}:
- 0.0
- 9.999999999999999e-5
- 0.0010999999999999998
- 0.011099999999999997
- 0.11109999999999996
- 1.0
- 1.0
- 1.0035893264883828
- 1.0332670504851433
- 1.0896477130701643
- ⋮
- 3.4042696460569273
- 3.476812351015631
- 3.6671649841214284
- 3.927087217327518
- 4.238587527819185
- 4.622470925430577
- 5.0838143859265825
- 5.620851847750335
- 6.0
-u: 43-element Vector{Vector{Float64}}:
- [0.8031776440871194, 0.0, 1.076515586764153, 0.0, 0.6863392710509373, 0.0, 0.8031776440871194, 0.0, 1.28131103515625, 0.0]
- [0.8031776440871194, -6.661304841171222e-20, 1.076515586764153, 6.661304841171222e-20, 0.6863392710509373, 8.881739788228295e-20, 0.8031776440871194, -6.661304841171222e-20, 1.28131103515625, 0.0]
- [0.8031776440871194, -7.3270689663447525e-19, 1.076515586764153, 7.3270689663447525e-19, 0.6863392710509373, 9.76942528845967e-19, 0.8031776440871194, -7.3270689663447525e-19, 1.28131103515625, 0.0]
- [0.8031776440871194, -7.389983144591786e-18, 1.076515586764153, 7.389983144591786e-18, 0.6863392710509373, 9.853310859455713e-18, 0.8031776440871194, -7.389983144591786e-18, 1.28131103515625, 0.0]
- [0.8031776440871194, -7.359787360684268e-17, 1.076515586764153, 7.359787360684268e-17, 0.6863392710509373, 9.813049814245694e-17, 0.8031776440871194, -7.359787360684268e-17, 1.28131103515625, 0.0]
- [0.8031776440871192, -6.233558158713861e-16, 1.0765155867641532, 5.10577117329782e-16, 0.6863392710509375, 1.079601976160401e-15, 0.8031776440871192, -6.233558158713861e-16, 1.28131103515625, 1.3760840435627303e-16]
- [0.8031776440871192, -6.233558158713861e-16, 1.0765155867641532, 5.10577117329782e-16, 0.6863392710509375, 1.079601976160401e-15, 0.8031776440871192, -6.233558158713861e-16, 1.28131103515625, 1.3760840435627303e-16]
- [0.8031776440918945, 5.321457862766087e-9, 1.0765184208211391, 0.0015790584133668396, 0.6863392710505986, -3.776871173833124e-10, 0.8031748100301002, -0.0015790584502818634, 1.2813110351518469, -4.906855242162275e-9]
- [0.8031776792704255, 4.228281886442723e-6, 1.076758728756498, 0.014605339576742742, 0.6863392685548744, -2.999140673911367e-7, 0.8029345018512326, -0.014605368813503326, 1.2813110027125487, -3.899131057995352e-6]
- [0.8031794912340318, 8.223944934097706e-5, 1.0782748196556398, 0.039108350020411936, 0.6863391403505672, -5.810237443075813e-6, 0.8014183985842892, -0.03910890698948361, 1.281309331321051, -7.587224282582711e-5]
- ⋮
- [0.9629669757597258, -0.11823859512304935, 1.7692107334524136, 0.8819411486440494, 0.3024857665417176, -0.7763673076809039, -0.06204006000630218, -0.8037751154628251, 1.677897765398025, 0.816439869622729]
- [0.9517957933336278, -0.18966418183914327, 1.8368949383311008, 0.9839867855942362, 0.24221896231131068, -0.8850353750513213, -0.12123603638956164, -0.8282461799484484, 1.740847523559102, 0.9189589512446767]
- [0.8980315096770685, -0.3746403865792849, 2.0494319562628625, 1.2482620334597565, 0.0471026602403116, -1.16261593413468, -0.2851683343861827, -0.8954660270699227, 1.9411233893515203, 1.1844603143241312]
- [0.768419772083104, -0.6216014460259781, 2.419936213839575, 1.6010949575112199, -0.3009942328447594, -1.5074764457065348, -0.5320983991498512, -1.0109472861253734, 2.2952578272175126, 1.5389302203466666]
- [0.5297590726713243, -0.9092356865764671, 2.983014454834265, 2.0120375991492514, -0.8249403557210285, -1.8397093560839544, -0.8765822163617225, -1.2148720027224738, 2.839270225722742, 1.9517794462336442]
- [0.11458386660834818, -1.2516015635815618, 3.849888869609289, 2.5011752540888375, -1.5872359704942969, -2.106108941983059, -1.4101664947593706, -1.5866512227290626, 3.6834509101816097, 2.4431864742048464]
- [-0.554518485466294, -1.646034788870103, 5.1347787428886615, 3.064701457504908, -2.600409630784589, -2.266374682126567, -2.271525213215248, -2.1616191657029478, 4.9421957677230495, 3.0093271791947105]
- [-1.5568409835359682, -2.082840000886888, 6.949710647758816, 3.6887644597535214, -3.8539788919429667, -2.4137788311921216, -3.6165436198395255, -2.8284311735066328, 6.728174028705224, 3.6362855458321213]
- [-2.402739396979623, -2.3773983117921875, 8.428582417733413, 4.109599511130559, -4.802590360966993, -2.6089439303098616, -4.760252472663099, -3.1823303467034627, 8.187520994021881, 4.059073077674953]</code></pre></div></details><p>Now that we have an <code>ODESolution</code> <code>sol</code>, we can call <a href="../API/#NetworkDynamicsInspector.inspect"><code>inspect</code></a> to open the inspector GUI. The docstring provides several options to customize how the app is displayed.</p><pre><code class="language-julia hljs">inspect(sol; reset=true)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr36"><span class="sgr1">[ Info: </span></span>New GUI Session started
-An exception was thrown in JS: TypeError: Failed to execute &#39;observe&#39; on &#39;ResizeObserver&#39;: parameter 1 is not of type &#39;Element&#39;.
-Additional message: Error while processing message {&quot;msg_type&quot;:&quot;2&quot;}
-Stack trace:
-    TypeError: Failed to execute &#39;observe&#39; on &#39;ResizeObserver&#39;: parameter 1 is not of type &#39;Element&#39;.
-        at eval (eval at &lt;anonymous&gt; (http://localhost:9384/assets/9dadd17416d91edd6e5e6fe1518eb194fd92e14b-Bonito.bundled.js?24e5bb698d3515692e8d1ca1847ec2dca56f448f:3575:27), &lt;anonymous&gt;:30:16)
-        at Object.payload (http://localhost:9384/assets/9dadd17416d91edd6e5e6fe1518eb194fd92e14b-Bonito.bundled.js?24e5bb698d3515692e8d1ca1847ec2dca56f448f:3578:24)
-        at process_message (http://localhost:9384/assets/9dadd17416d91edd6e5e6fe1518eb194fd92e14b-Bonito.bundled.js?24e5bb698d3515692e8d1ca1847ec2dca56f448f:3668:22)
-        at Array.forEach (&lt;anonymous&gt;)
-        at process_message (http://localhost:9384/assets/9dadd17416d91edd6e5e6fe1518eb194fd92e14b-Bonito.bundled.js?24e5bb698d3515692e8d1ca1847ec2dca56f448f:3671:30)
-        at Object.init_session (http://localhost:9384/assets/9dadd17416d91edd6e5e6fe1518eb194fd92e14b-Bonito.bundled.js?24e5bb698d3515692e8d1ca1847ec2dca56f448f:3849:13)
-        at http://localhost:9384/browser-display:63:153
-An exception was thrown in JS: TypeError: Cannot read properties of null (reading &#39;addEventListener&#39;)
-Additional message: Error while processing message {&quot;msg_type&quot;:&quot;2&quot;}
-Stack trace:
-    TypeError: Cannot read properties of null (reading &#39;addEventListener&#39;)
-        at eval (eval at &lt;anonymous&gt; (http://localhost:9384/assets/9dadd17416d91edd6e5e6fe1518eb194fd92e14b-Bonito.bundled.js?24e5bb698d3515692e8d1ca1847ec2dca56f448f:3575:27), &lt;anonymous&gt;:15:8)
-        at Object.payload (http://localhost:9384/assets/9dadd17416d91edd6e5e6fe1518eb194fd92e14b-Bonito.bundled.js?24e5bb698d3515692e8d1ca1847ec2dca56f448f:3578:24)
-        at process_message (http://localhost:9384/assets/9dadd17416d91edd6e5e6fe1518eb194fd92e14b-Bonito.bundled.js?24e5bb698d3515692e8d1ca1847ec2dca56f448f:3668:22)
-        at Array.forEach (&lt;anonymous&gt;)
-        at process_message (http://localhost:9384/assets/9dadd17416d91edd6e5e6fe1518eb194fd92e14b-Bonito.bundled.js?24e5bb698d3515692e8d1ca1847ec2dca56f448f:3671:30)
-        at Object.init_session (http://localhost:9384/assets/9dadd17416d91edd6e5e6fe1518eb194fd92e14b-Bonito.bundled.js?24e5bb698d3515692e8d1ca1847ec2dca56f448f:3849:13)
-        at http://localhost:9384/browser-display:63:153
-An exception was thrown in JS: TypeError: Cannot read properties of null (reading &#39;addEventListener&#39;)
-Additional message: Error while processing message {&quot;msg_type&quot;:&quot;2&quot;}
-Stack trace:
-    TypeError: Cannot read properties of null (reading &#39;addEventListener&#39;)
-        at eval (eval at &lt;anonymous&gt; (http://localhost:9384/assets/9dadd17416d91edd6e5e6fe1518eb194fd92e14b-Bonito.bundled.js?24e5bb698d3515692e8d1ca1847ec2dca56f448f:3575:27), &lt;anonymous&gt;:4:11)
-        at eval (eval at &lt;anonymous&gt; (http://localhost:9384/assets/9dadd17416d91edd6e5e6fe1518eb194fd92e14b-Bonito.bundled.js?24e5bb698d3515692e8d1ca1847ec2dca56f448f:3575:27), &lt;anonymous&gt;:32:2)
-        at Object.payload (http://localhost:9384/assets/9dadd17416d91edd6e5e6fe1518eb194fd92e14b-Bonito.bundled.js?24e5bb698d3515692e8d1ca1847ec2dca56f448f:3578:24)
-        at process_message (http://localhost:9384/assets/9dadd17416d91edd6e5e6fe1518eb194fd92e14b-Bonito.bundled.js?24e5bb698d3515692e8d1ca1847ec2dca56f448f:3668:22)
-        at Array.forEach (&lt;anonymous&gt;)
-        at process_message (http://localhost:9384/assets/9dadd17416d91edd6e5e6fe1518eb194fd92e14b-Bonito.bundled.js?24e5bb698d3515692e8d1ca1847ec2dca56f448f:3671:30)
-        at Object.init_session (http://localhost:9384/assets/9dadd17416d91edd6e5e6fe1518eb194fd92e14b-Bonito.bundled.js?24e5bb698d3515692e8d1ca1847ec2dca56f448f:3849:13)
-        at http://localhost:9384/browser-display:63:153</code></pre><p><img src="../screenshot.png" alt="screenshot"/></p><h2 id="Programmatic-Access-and-GUI-State-Manipulation"><a class="docs-heading-anchor" href="#Programmatic-Access-and-GUI-State-Manipulation">Programmatic Access and GUI State Manipulation</a><a id="Programmatic-Access-and-GUI-State-Manipulation-1"></a><a class="docs-heading-anchor-permalink" href="#Programmatic-Access-and-GUI-State-Manipulation" title="Permalink"></a></h2><p>Internally, the <code>NetworkDynamicsInspector</code> maintains a global reference to an <code>AppState</code> object. This AppState reflects changes made to the GUI by the user and can also be modified programmatically.</p><p>See the <a href="../API/#NetworkDynamicsInspector-API">NetworkDynamicsInspector API</a> for a complete list of available functions. A good starting point is the <a href="../API/#NetworkDynamicsInspector.dump_app_state"><code>dump_app_state</code></a> function, which helps you recreate a GUI state that was previously configured manually.</p><p>Let&#39;s say we&#39;ve adjusted the AppState to include an additional time series plot for the node states.</p><p>We can dump the code which helps us to recreate the app state:</p><pre><code class="language-julia hljs">dump_app_state()</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"># To recreate the current state, run the following commands:
+sol = get_sol()</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr36"><span class="sgr1">[ Info: </span></span>Trip line 5 between 2 and 4 at t=1.0
+<span class="sgr36"><span class="sgr1">[ Info: </span></span>Trip line 7 between 4 and 5 at t=2.2476763961551507
+<span class="sgr36"><span class="sgr1">[ Info: </span></span>Trip line 4 between 2 and 3 at t=2.5025231920055906
+<span class="sgr36"><span class="sgr1">[ Info: </span></span>Trip line 1 between 1 and 2 at t=3.1947647110555066
+<span class="sgr36"><span class="sgr1">[ Info: </span></span>Trip line 3 between 1 and 5 at t=3.338052868196457
+<span class="sgr36"><span class="sgr1">[ Info: </span></span>Trip line 2 between 1 and 3 at t=3.4042696460569273</code></pre></div></details><p>Now that we have an <code>ODESolution</code> <code>sol</code>, we can call <a href="../API/#NetworkDynamicsInspector.inspect"><code>inspect</code></a> to open the inspector GUI. The docstring provides several options to customize how the app is displayed.</p><pre><code class="language-julia hljs">inspect(sol; reset=true)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr36"><span class="sgr1">[ Info: </span></span>New GUI Session started</code></pre><p><img src="../screenshot.png" alt="screenshot"/></p><h2 id="Programmatic-Access-and-GUI-State-Manipulation"><a class="docs-heading-anchor" href="#Programmatic-Access-and-GUI-State-Manipulation">Programmatic Access and GUI State Manipulation</a><a id="Programmatic-Access-and-GUI-State-Manipulation-1"></a><a class="docs-heading-anchor-permalink" href="#Programmatic-Access-and-GUI-State-Manipulation" title="Permalink"></a></h2><p>Internally, the <code>NetworkDynamicsInspector</code> maintains a global reference to an <code>AppState</code> object. This AppState reflects changes made to the GUI by the user and can also be modified programmatically.</p><p>See the <a href="../API/#NetworkDynamicsInspector-API">NetworkDynamicsInspector API</a> for a complete list of available functions. A good starting point is the <a href="../API/#NetworkDynamicsInspector.dump_app_state"><code>dump_app_state</code></a> function, which helps you recreate a GUI state that was previously configured manually.</p><p>Let&#39;s say we&#39;ve adjusted the AppState to include an additional time series plot for the node states.</p><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr91"><span class="sgr1">┌ Error: </span></span>ts1126: Plotting failed for idx Union{EIndex{Int64, Symbol}, VIndex{Int64, Symbol}}[VIndex(1, :θ), VIndex(1, :ω), VIndex(2, :θ), VIndex(2, :ω), VIndex(3, :θ), VIndex(3, :ω), VIndex(4, :θ), VIndex(4, :ω), VIndex(5, :θ), VIndex(5, :ω)]
+<span class="sgr91"><span class="sgr1">│ </span></span>  e =
+<span class="sgr91"><span class="sgr1">│ </span></span>   Can&#39;t get three: Screen Session uninitialized. Not yet displayed? Session status: UNINITIALIZED, id: 90f9f493-8d6f-4b43-afc2-27bdc149f7ce
+<span class="sgr91"><span class="sgr1">│ </span></span>   Plot needs to be displayed to insert additional plots
+<span class="sgr91"><span class="sgr1">└ </span></span><span class="sgr90">@ NetworkDynamicsInspector ~/work/NetworkDynamics.jl/NetworkDynamics.jl/NetworkDynamicsInspector/src/timeseries.jl:401</span></code></pre><p>We can dump the code which helps us to recreate the app state:</p><pre><code class="language-julia hljs">dump_app_state()</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"># To recreate the current state, run the following commands:
 
 set_sol!(<span class="sgr31">sol</span>) # optional if after inspect(sol)
 set_state!(; t=1.75, tmin=0.0, tmax=6.0)
@@ -136,4 +68,4 @@ set_graphplot!(; nstate=[:θ], estate=[:₋P], nstate_rel=false, estate_rel=fals
 define_timeseries!([
     (; selcomp=[VIndex(1), VIndex(2), VIndex(3), VIndex(4), VIndex(5)], states=[:θ, :ω], rel=false),
     (; selcomp=[EIndex(1), EIndex(2), EIndex(3), EIndex(4), EIndex(5), EIndex(6), EIndex(7)], states=[:P], rel=false),
-])</code></pre><p>Now we can use this code to recreate the app state even though we&#39;ve reseted it.</p><pre><code class="language-julia hljs">inspect(sol; reset=true)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&quot;copy-paste and execute code returned by `dump_app_state` here&quot;</code></pre><p><img src="../screenshot2.png" alt="screenshot"/></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../external_inputs/">« External Inputs</a><a class="docs-footer-nextpage" href="../API/">API »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.1 on <span class="colophon-date" title="Thursday 13 March 2025 13:17">Thursday 13 March 2025</span>. Using Julia version 1.11.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+])</code></pre><p>Now we can use this code to recreate the app state even though we&#39;ve reseted it.</p><pre><code class="language-julia hljs">inspect(sol; reset=true)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&quot;copy-paste and execute code returned by `dump_app_state` here&quot;</code></pre><p><img src="../screenshot2.png" alt="screenshot"/></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../external_inputs/">« External Inputs</a><a class="docs-footer-nextpage" href="../API/">API »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.1 on <span class="colophon-date" title="Thursday 13 March 2025 15:53">Thursday 13 March 2025</span>. Using Julia version 1.11.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
