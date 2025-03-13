@@ -372,6 +372,13 @@ function timeseries_card(app, key, session)
     # plot the thing
     onany(data, replot; update=true) do _dat, _
         task = @task begin
+            while session.status == Bonito.UNINITIALIZED
+                sleep(0.1)
+            end
+            if session.status == Bonito.CLOSED
+                @debug "$key: Session closed, aborting plot"
+                return
+            end
             @debug "$key: Launch plot for valid_idxs[]"
             try
                 empty!(ax)
