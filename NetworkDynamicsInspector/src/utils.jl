@@ -142,7 +142,7 @@ function download_assets()
     end
 end
 
-function wait_for()
+function sync()
     isnothing(APPSTATE[]) && return
     for cache in values(APPSTATE[]._tsplotscache)
         wait_for(cache.plotqueue)

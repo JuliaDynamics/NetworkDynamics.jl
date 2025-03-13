@@ -96,13 +96,13 @@ set_maybe!(obs::Observable, ::NotSpecified) = nothing
 Set the solution of the current appstate to `sol`.
 """
 function set_sol!(sol)
-    wait_for()
+    sync()
     if isnothing(APPSTATE[])
         APPSTATE[] = AppState(sol)
     else
         APPSTATE[].sol[] = sol
     end
-    wait_for()
+    sync()
     nothing
 end
 
@@ -117,12 +117,12 @@ function set_state!(; sol = NotSpecified(),
                       t = NotSpecified(),
                       tmin = NotSpecified(),
                       tmax = NotSpecified())
-    wait_for()
+    sync()
     sol != NotSpecified() && set_sol!(sol)
     set_maybe!(appstate().t, t)
     set_maybe!(appstate().tmin, tmin)
     set_maybe!(appstate().tmax, tmax)
-    wait_for()
+    sync()
     nothing
 end
 
@@ -139,7 +139,7 @@ function set_graphplot!(; nstate = NotSpecified(),
                           estate_rel = NotSpecified(),
                           ncolorrange = NotSpecified(),
                           ecolorrange = NotSpecified())
-    wait_for()
+    sync()
     gp = appstate().graphplot
     set_maybe!(gp.nstate, nstate)
     set_maybe!(gp.estate, estate)
@@ -147,7 +147,7 @@ function set_graphplot!(; nstate = NotSpecified(),
     set_maybe!(gp.estate_rel, estate_rel)
     set_maybe!(gp.ncolorrange, ncolorrange)
     set_maybe!(gp.ecolorrange, ecolorrange)
-    wait_for()
+    sync()
     nothing
 end
 
@@ -161,7 +161,7 @@ To automaticially create commands see [`dump_app_state()`](@ref).
 function set_timeseries!(key; selcomp = NotSpecified(),
                               states = NotSpecified(),
                               rel = NotSpecified())
-    wait_for()
+    sync()
     if !haskey(appstate().tsplots[], key)
         appstate().tsplots[][key] = TimeseriesPlot()
     end
@@ -169,7 +169,7 @@ function set_timeseries!(key; selcomp = NotSpecified(),
     set_maybe!(tsplot.selcomp, selcomp)
     set_maybe!(tsplot.states, states)
     set_maybe!(tsplot.rel, rel)
-    wait_for()
+    sync()
     nothing
 end
 
@@ -182,7 +182,7 @@ Defines timeseries, where `tsarray` is an array of timeseries keyword arguments
 To automaticially create commands see [`dump_app_state()`](@ref).
 """
 function define_timeseries!(tsarray)
-    wait_for()
+    sync()
     if length(tsarray) != length(appstate().tsplots[])
         empty!(appstate().tsplots[])
         tskeys = [gendomid("ts") for _ in tsarray]
@@ -193,7 +193,7 @@ function define_timeseries!(tsarray)
         set_timeseries!(key; tsargs...)
     end
     notify(appstate().tsplots)
-    wait_for()
+    sync()
     nothing
 end
 
@@ -205,7 +205,7 @@ commands to recreate the current appstate.
 The intended usecase is to quickly recreate "starting points" for interactive exploration.
 """
 function dump_app_state(io=stdout)
-    wait_for()
+    sync()
     println(io, "# To recreate the current state, run the following commands:\n")
     println(io, styled"set_sol!({red:sol}) # optional if after inspect(sol)")
     println(io, "set_state!(; t=$(appstate().t[]), tmin=$(appstate().tmin[]), tmax=$(appstate().tmax[]))")

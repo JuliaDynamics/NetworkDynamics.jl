@@ -133,6 +133,7 @@ function get_electron_app end
 function get_electron_window end
 
 function save_electron_screenshot(path=joinpath(@__DIR__, "screenshot.png"), resize=true)
+    sync()
     resize && _resize_electron_to_content()
 
     path = isabspath(path) ? path : joinpath(pwd(), path)
@@ -146,7 +147,7 @@ function save_electron_screenshot(path=joinpath(@__DIR__, "screenshot.png"), res
         console.log('Screenshot saved to ', screenshotPath);
     });
     """
-    wait_for()
+    sync()
     sleep(3) # make sure that axis updates and so on
     d = run(get_electron_app(), js)
     while !(isfile(path))
@@ -162,7 +163,7 @@ function _resize_electron_to_content()
         let maxHeight = 0;
         Array.from(document.querySelectorAll('.graphplot-col, .timeseries-col')).forEach(el => {
             const height = el.offsetHeight;
-            console.log(height)
+            // console.log("Set new height", height)
             if (height > maxHeight) {
                 maxHeight = height;
             }
@@ -176,4 +177,5 @@ function _resize_electron_to_content()
     resolution = (oldres[1], y)
     CURRENT_DISPLAY[] = ElectronDisp(; resolution)
     get_electron_window() # trigger resize
+    sleep(3)
 end
