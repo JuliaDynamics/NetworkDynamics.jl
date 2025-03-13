@@ -1,8 +1,8 @@
 # Interactive Solution Inspection
 
-Interactive solution inspection tool based on [WGLMakie](https://makie.org/website/) and [Bonito](https://github.com/SimonDanisch/Bonito.jl) are provided through the helper package `NetworkDynamicsInspector`.
+An interactive solution inspection tool based on [WGLMakie](https://makie.org/website/) and [Bonito](https://github.com/SimonDanisch/Bonito.jl) is provided through the helper package `NetworkDynamicsInspector`.
 
-Firstoff, we need to define the system we want to interactively inspect.
+First, we need to define the system we want to inspect.
 
 !!! details "Define some network, simulate it and get a solution object"
     ```@example ndi
@@ -63,7 +63,7 @@ Firstoff, we need to define the system we want to interactively inspect.
     sol = get_sol()
     ```
 
-No that we have and `ODESolution` `sol`, we can call [`inspect`](@ref) to open the inspector gui. In the docstring you can find several options to chose how the app is displayed.
+Now that we have an `ODESolution` `sol`, we can call [`inspect`](@ref) to open the inspector GUI. The docstring provides several options to customize how the app is displayed.
 
 ```@example ndi
 inspect(sol; reset=true)
@@ -77,14 +77,13 @@ NDI.save_electron_screenshot("screenshot.png") #hide
 ![screenshot](screenshot.png)
 
 
-## Programmatric Acces and GUI State manipulation
-Internally, the `NetworkDynamicsInspector` holds a global reference to an object `AppState`. This AppState reflects the changes the user made to the GUI and can be also altered programmaticially.
+## Programmatic Access and GUI State Manipulation
+Internally, the `NetworkDynamicsInspector` maintains a global reference to an `AppState` object. This AppState reflects changes made to the GUI by the user and can also be modified programmatically.
 
-See [NetworkDynamicsInspector API](@ref) for a list of all available function.
-As a good starting point, there is a function [`dump_app_state`](@ref)
-which helps you to recreate the GUI state which was previously adjusted by hand.
+See the [NetworkDynamicsInspector API](@ref) for a complete list of available functions.
+A good starting point is the [`dump_app_state`](@ref) function, which helps you recreate a GUI state that was previously configured manually.
 
-Lets say we've adjuste the appstate to include another timeseries plot for the node states.
+Let's say we've adjusted the AppState to include an additional time series plot for the node states.
 
 ```@example ndi
 set_state!(; t=1.75) #hide
@@ -111,6 +110,6 @@ sleep(1) #hide
 eval(Meta.parse("begin;"*code*"end;")) #hide
 sleep(3) #hide
 NDI.save_electron_screenshot("screenshot2.png") #hide
-"copy-paste and execute code returned by `dump_app_state` here"
+"copy-paste and execute code returned by `dump_app_state` here" #hide
 ```
 ![screenshot](screenshot2.png)
