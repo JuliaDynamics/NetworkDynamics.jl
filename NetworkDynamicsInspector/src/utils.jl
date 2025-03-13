@@ -144,9 +144,14 @@ end
 
 function wait_for()
     isnothing(APPSTATE[]) && return
-    queue = APPSTATE[]._plotqueue
-    while !isempty(queue)
-        wait(take!(queue))
+    for cache in values(APPSTATE[]._tsplotscache)
+        wait_for(cache.plotqueue)
     end
     nothing
+end
+
+function wait_for(queue)
+    while isopen(queue) && !isempty(queue)
+        sleep(0.01)
+    end
 end

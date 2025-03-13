@@ -44,37 +44,46 @@ function timeseries_col(app, session)
 end
 
 function timeseries_cards(app, session)
-    # we store the cards based on objid of TSPlot, otherwise overwrite with same key
-    # leads to problems
-    cards = OrderedDict{UInt, Bonito.Hyperscript.Node{Bonito.Hyperscript.HTMLSVG}}()
-    observables = OrderedDict{UInt, Vector{Observables.ObserverFunction}}()
     container = Observable{Bonito.Hyperscript.Node{Bonito.Hyperscript.HTMLSVG}}()
 
+    # update the timeseries-sstacke based on the tsplots in appstate
     on(app.tsplots; update=true) do _tsplots
         @debug "TS: app.tsplots => update timeseries cards"
-        id_to_key = Dict(Base.objectid(val) => key for (key, val) in _tsplots)
-        newids = Base.objectid.(values(_tsplots)) # collect to preserv order on setdiff
-        knownids = keys(cards)
+        # this cache contains all the card, the observer functions and the plotqueue
+        cache = app._tsplotscache
 
-        for delid in setdiff(knownids, newids)
-            Observables.off.(observables[delid]) # deactivate allobservables from card
-            delete!(observables, delid)
-            delete!(cards, delid)
+        known_tsplots = collect(keys(cache))
+        current_tsplots = collect(values(_tsplots))
+
+        # do nothing if the TSPlots objects themselve did not change
+        Set(known_tsplots) == Set(current_tsplots) && return
+
+        # del_tsplots = setdiff(known_tsplots, current_tsplots)
+        # new_tsplots = setdiff(current_tsplots, known_tsplots)
+        # FIXME: it is not possible to redisplay the same tsplot, recreate all
+        del_tsplots = known_tsplots
+        new_tsplots = current_tsplots
+
+        for del in del_tsplots
+            (; card, observerfunctions, plotqueue) = cache[del]
+            close(plotqueue) # close plotqueue
+            Observables.off.(observerfunctions) # disable all observer functions
+            delete!(cache, del) # delete from cache
         end
-        for newid in setdiff(newids, knownids)
-            card, obsf = timeseries_card(app, id_to_key[newid], session)
-            cards[newid] = card
-            observables[newid] = obsf
-        end
-        if collect(keys(cards)) != newids
-            @warn "The keys do not match: $(keys(cards)) vs $(newids)"
+        for new in new_tsplots
+            key = only([key for (key, value) in _tsplots if value == new])
+            ntup = timeseries_card(app, key, session)
+            cache[new] = ntup
         end
 
-        container[] = DOM.div(values(cards)...; class="timeseries-stack")
+        cards = [cache[ts].card for ts in values(_tsplots)]
+        # update the display by notifying the content
+        container[] = DOM.div(cards; class="timeseries-stack")
 
         nothing
     end
 
+    # update the selected components in the graphplot when the active tsplot changes
     on(app.active_tsplot; update=true) do active
         activesel = app.tsplots[][active].selcomp[]
         app.graphplot._selcomp[] = activesel
@@ -303,6 +312,7 @@ function timeseries_card(app, key, session)
     ts = Observable(collect(range(app.sol[].t[begin], app.sol[].t[end], length=1000)))
     refined_xlims = Ref((NaN, NaN))
     onany_delayed(ax.finallimits; delay=0.5) do axlims
+        @debug "$key: Adapt ts vector"
         sollims = (app.sol[].t[begin], app.sol[].t[end])
         xlims = (axlims.origin[1], axlims.origin[1] + axlims.widths[1])
         if xlims != refined_xlims[]
@@ -354,34 +364,37 @@ function timeseries_card(app, key, session)
 
     replot = Observable{Nothing}(nothing)
 
+    # create queue for async plot updates
+    plotqueue = _plot_queue(key)
+
     # store the idxs for which the autolmits where last set
     last_autolimits = Ref((eltype(valid_idxs)(), tsplot.rel[]))
     # plot the thing
     onany(data, replot; update=true) do _dat, _
-        task = @async begin
+        task = @task begin
+            @debug "$key: Launch plot for valid_idxs[]"
             try
                 empty!(ax)
                 vlines!(ax.scene, app.t; color=:black)
                 for (idx, y) in zip(valid_idxs[], data[])
                     color = begin
-                        key = idx isa VIndex ? VIndex(idx.compidx) : EIndex(idx.compidx)
-                        getcycled(COLORS, color_cache[key])
+                        idxkey = idx isa VIndex ? VIndex(idx.compidx) : EIndex(idx.compidx)
+                        getcycled(COLORS, color_cache[idxkey])
                     end
                     linestyle = getcycled(LINESTYLES, linestyle_cache[idx.subidx])
                     lines!(ax.scene, ts[], y; label=string(idx), color, linestyle)
                     # scatterlines!(ax, ts[], y; label=string(idx), color, linestyle)
                 end
-                # if last_autolimits[][1] != valid_idxs[] || last_autolimits[][2] != tsplot.rel[]
                 if last_autolimits[] != (valid_idxs[], tsplot.rel[])
                     autolimits!(ax)
                     xlims!(ax, (app.tmin[], app.tmax[]))
                     last_autolimits[] = (copy(valid_idxs[]), tsplot.rel[])
                 end
             catch e
-                @error "Plotting failed" e
+                @error "$key: Plotting failed for idx $(valid_idxs[])" e
             end
         end
-        push!(app._plotqueue, task)
+        put!(plotqueue, task)
         nothing
     end |> track_obsf
 
@@ -432,8 +445,31 @@ function timeseries_card(app, key, session)
         id=key
     )
 
-    return card, obsf
+    return (card, observerfunctions=obsf, plotqueue)
 end
+function _plot_queue(key)
+    ch = Channel{Task}(Inf; spawn=true) do ch
+        while isopen(ch)
+            t = try
+                fetch(ch)
+            catch e
+                if !e isa InvalidStateException && e.msg == "Channel is closed."
+                    @error "$key: Error while waiting for Task: $e"
+                end
+                break
+            end
+            try
+                wait(schedule(t))
+            catch e
+                @warn "$key: Error in task: $e"
+            end
+            rmt = take!(ch) # remove the executed task
+            @assert istaskdone(rmt)
+        end
+        @info "Plot queue for $key closed"
+    end
+end
+
 function closebutton(app, key)
     button = Bonito.Button("×", class="close-button")
     on(button.value) do _

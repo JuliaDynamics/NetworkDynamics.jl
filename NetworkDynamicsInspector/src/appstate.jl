@@ -40,7 +40,11 @@ struct AppState
     active_tsplot::Observable{String}
     graphplot::GraphPlot
     tsplots::Observable{OrderedDict{String, TimeseriesPlot}}
-    _plotqueue::Channel{Task}
+    _tsplotscache::IdDict{TimeseriesPlot,@NamedTuple{
+        card::Bonito.Hyperscript.Node{Bonito.Hyperscript.HTMLSVG},
+        observerfunctions::Vector{Observables.ObserverFunction},
+        plotqueue::Channel{Task}
+    }}
 end
 function AppState(sol::SciMLBase.AbstractODESolution)
     t = sol.t[begin]
@@ -51,8 +55,12 @@ function AppState(sol::SciMLBase.AbstractODESolution)
         "ts-1" => TimeseriesPlot(),
     )
     active_tsplot = "ts-1"
-    _plotqueue = Channel{Task}(Inf)
-    AppState(sol, t, tmin, tmax, active_tsplot, graphplot, tsplots, _plotqueue)
+    _tsplotscache = IdDict{TimeseriesPlot,@NamedTuple{
+        card::Bonito.Hyperscript.Node{Bonito.Hyperscript.HTMLSVG},
+        observerfunctions::Vector{Observables.ObserverFunction},
+        plotqueue::Channel{Task}
+    }}()
+    AppState(sol, t, tmin, tmax, active_tsplot, graphplot, tsplots, _tsplotscache)
 end
 
 function free_ts_key()
