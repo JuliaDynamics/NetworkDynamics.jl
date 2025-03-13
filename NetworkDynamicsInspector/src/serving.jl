@@ -134,6 +134,10 @@ function get_electron_window end
 
 function save_electron_screenshot(path=joinpath(@__DIR__, "screenshot.png"), resize=true)
     sync()
+    if isempty(run(get_electron_window(),
+        "Array.from(document.querySelectorAll('.graphplot-col, .timeseries-col'))"))
+        error("No content to screenshot!")
+    end
     resize && _resize_electron_to_content()
 
     path = isabspath(path) ? path : joinpath(pwd(), path)
@@ -173,9 +177,15 @@ function _resize_electron_to_content()
     """
     y = run(window, js_max_h)
 
-    oldres = CURRENT_DISPLAY[].resolution
-    resolution = (oldres[1], y)
-    CURRENT_DISPLAY[] = ElectronDisp(; resolution)
-    get_electron_window() # trigger resize
+    # set size
+    app = get_electron_app()
+    resize_js = """
+    {
+        let window = BrowserWindow.fromId($(window.id));
+        let size = window.getSize();
+        window.setSize(size[0], $y);
+    }
+    """
+    run(app, resize_js)
     sleep(3)
 end

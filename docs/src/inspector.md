@@ -61,6 +61,7 @@ First, we need to define the system we want to inspect.
     end
 
     sol = get_sol()
+    nothing #hide
     ```
 
 Now that we have an `ODESolution` `sol`, we can call [`inspect`](@ref) to open the inspector GUI. The docstring provides several options to customize how the app is displayed.

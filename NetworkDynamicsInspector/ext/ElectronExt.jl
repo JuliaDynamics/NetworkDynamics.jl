@@ -51,16 +51,6 @@ function NDI.get_electron_window()
         length(windows(app)) != 1 && @warn "App contains multiple windows"
         first(windows(app))
     end
-    # check window size
-    if NDI.CURRENT_DISPLAY[] isa NDI.ElectronDisp
-        x, y = NDI.CURRENT_DISPLAY[].resolution
-        try
-            run(NDI.get_electron_app(),
-                "BrowserWindow.fromId($(window.id)).setSize($x, $y)")
-        catch e
-            @warn "Could not resize window: $e"
-        end
-    end
 
     return window
 end
