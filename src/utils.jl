@@ -51,7 +51,10 @@ end
 @inline unrolled_foreach(f::F1, filter::F2, t::Tuple{}) where {F1,F2} = nothing
 # Abstract Vector, no unrolling
 @inline function unrolled_foreach(f::F1, filter::F2, t::AbstractVector) where {F1,F2}
-    @inline foreach(f, Iterators.filter(filter, t))
+    for el in t
+        filter(el) && @noinline f(el) #noinline as function barrier for unknown batch type
+    end
+    nothing
 end
 # no filter
 @inline unrolled_foreach(f, t) = unrolled_foreach(f, nofilt, t)
