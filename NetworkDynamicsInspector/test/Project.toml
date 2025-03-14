@@ -14,9 +14,11 @@ SafeTestsets = "1bc83da4-3b8d-516f-aca4-4fe02f6d838f"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"
 
-[sources]
-NetworkDynamics = {path = "../.."}
-NetworkDynamicsInspector = {path = ".."}
+[sources.NetworkDynamics]
+path = "../.."
+
+[sources.NetworkDynamicsInspector]
+path = ".."
 
 [compat]
 Aqua = "0.8.9"
@@ -26,6 +28,7 @@ ExplicitImports = "1.10.1"
 Graphs = "≥0.0.1"
 NetworkDynamics = "≥0.0.1"
 NetworkDynamicsInspector = "≥0.0.1"
+OrdinaryDiffEqTsit5 = "1"
 SafeTestsets = "0.1.0"
 Test = "1"
 WGLMakie = "≥0.0.1"
