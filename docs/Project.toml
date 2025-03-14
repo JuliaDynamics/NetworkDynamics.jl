@@ -31,10 +31,15 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 StyledStrings = "f489334b-da3d-4c2e-b8f0-e476e12c162b"
 SymbolicIndexingInterface = "2efcf032-c050-4f8e-a9bb-153293bab1f5"
 
-[sources]
-Bonito = {url = "https://github.com/SimonDanisch/Bonito.jl", rev = "master"}
-NetworkDynamics = {path = ".."}
-NetworkDynamicsInspector = {path = "../NetworkDynamicsInspector"}
+[sources.Bonito]
+rev = "master"
+url = "https://github.com/SimonDanisch/Bonito.jl"
+
+[sources.NetworkDynamics]
+path = ".."
+
+[sources.NetworkDynamicsInspector]
+path = "../NetworkDynamicsInspector"
 
 [compat]
 Bonito = "≥0.0.1"
@@ -44,6 +49,7 @@ Distributions = "0.25.117"
 Documenter = "1.8.0"
 DocumenterInterLinks = "1"
 DynamicQuantities = "1.4.0"
+Electron = "6"
 GraphMakie = "0.5.13"
 Graphs = "≥0.0.1"
 LaTeXStrings = "1.4.0"
