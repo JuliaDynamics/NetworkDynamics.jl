@@ -89,38 +89,28 @@ end
 end
 
 @inline function process_batches!(ex::ThreadedExecution, fg, filt::F, batches, inbufs, duopt) where {F}
-    # unrolled_foreach(filt, batches) do batch
-    #     (du, u, o, p, t) = duopt
-    #     Threads.@threads for i in 1:length(batch)
-    #         _type = dispatchT(batch)
-    #         apply_comp!(_type, fg, batch, i, du, u, o, inbufs, p, t)
-    #     end
-    # end
-    # return
-
     Nchunks = Threads.nthreads()
-    # Nchunks = 8
+
     # chunking is kinda expensive, so we cache it
     key = hash((Base.objectid(batches), filt, fg, Nchunks))
     chunks = get!(ex.chunk_cache, key) do
         _chunk_batches(batches, filt, fg, Nchunks)
     end
 
-    _eval_batchportion = function (batch, idxs)
-        (du, u, o, p, t) = duopt
-        _type = dispatchT(batch)
-        for i in idxs
-            apply_comp!(_type, fg, batch, i, du, u, o, inbufs, p, t)
+    # each chunk consists of array or tuple [(batch, idxs), ...]
+    _eval_chunk = function(chunk)
+        unrolled_foreach(chunk) do ch
+            (; batch, idxs) = ch
+            (du, u, o, p, t) = duopt
+            _type = dispatchT(batch)
+            for i in idxs
+                apply_comp!(_type, fg, batch, i, du, u, o, inbufs, p, t)
+            end
         end
     end
-
     Threads.@sync for chunk in chunks
-        isempty(chunk) && continue
         Threads.@spawn begin
-            for (; bi, idxs) in chunk
-                batch = batches[bi] # filtering don in chunks
-                @noinline _eval_batchportion(batch, idxs)
-            end
+            @noinline _eval_chunk(chunk)
         end
     end
 end
@@ -131,7 +121,7 @@ function _chunk_batches(batches, filt, fg, workers)
         Ncomp += length(batch)::Int
         total_eqs += length(batch)::Int * _N_eqs(fg, batch)::Int
     end
-    chunks = Vector{Vector{@NamedTuple{bi::Int,idxs::UnitRange{Int64}}}}(undef, workers)
+    chunks = Vector{Any}(undef, workers)
 
     eqs_per_worker = total_eqs / workers
     bi = 1
@@ -139,7 +129,7 @@ function _chunk_batches(batches, filt, fg, workers)
     assigned = 0
     eqs_assigned = 0
     for w in 1:workers
-        chunk = @NamedTuple{bi::Int,idxs::UnitRange{Int64}}[]
+        chunk = Vector{Any}()
         ci_start = ci
         eqs_in_worker = 0
         assigned_in_worker = 0
@@ -170,7 +160,7 @@ function _chunk_batches(batches, filt, fg, workers)
                     ci += 1
                 end
                 if ci > ci_start # don't push empty chunks
-                    push!(chunk, (; bi, idxs=ci_start:ci-1))
+                    push!(chunk, (; batch, idxs=ci_start:ci-1))
                 end
                 stop_collecting && break
             end
@@ -178,7 +168,13 @@ function _chunk_batches(batches, filt, fg, workers)
             bi += 1
             ci = 1
         end
-        chunks[w] = chunk
+
+        # narrow down type / make tuple
+        chunks[w] = if length(chunk) < 10
+            Tuple(chunk)
+        else
+            [c for c in chunk] # narrow down type
+        end
 
         # update eqs per worker estimate for the other workders
         eqs_per_worker = (total_eqs - eqs_assigned) / (workers - w)
