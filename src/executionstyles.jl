@@ -41,7 +41,9 @@ struct PolyesterExecution{buffered} <: ExecutionStyle{buffered} end
 Parallel execution using Julia threads.
 For `buffered` see [`ExecutionStyle`](@ref).
 """
-struct ThreadedExecution{buffered} <: ExecutionStyle{buffered} end
+@kwdef struct ThreadedExecution{buffered} <: ExecutionStyle{buffered}
+    chunk_cache::Dict{UInt, Vector} = Dict{UInt, Vector}()
+end
 
 usebuffer(::ExecutionStyle{buffered}) where {buffered} = buffered
 usebuffer(::Type{<:ExecutionStyle{buffered}}) where {buffered} = buffered
