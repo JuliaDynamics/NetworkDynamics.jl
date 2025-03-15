@@ -99,37 +99,27 @@ end
     # return
 
     Nchunks = Threads.nthreads()
-    # Nchunks = 4
+    # Nchunks = 8
     # chunking is kinda expensive, so we cache it
     key = hash((Base.objectid(batches), filt, fg, Nchunks))
     chunks = get!(ex.chunk_cache, key) do
         _chunk_batches(batches, filt, fg, Nchunks)
     end
 
-    _progress_in_batch = function(batch, ci, processed, N)
+    _eval_batchportion = function (batch, idxs)
         (du, u, o, p, t) = duopt
         _type = dispatchT(batch)
-        while ci ≤ length(batch) && processed < N
-            apply_comp!(_type, fg, batch, ci, du, u, o, inbufs, p, t)
-            ci += 1
-            processed += 1
+        for i in idxs
+            apply_comp!(_type, fg, batch, i, du, u, o, inbufs, p, t)
         end
-        processed, ci
     end
 
     Threads.@sync for chunk in chunks
-        chunk.N == 0 && continue
+        isempty(chunk) && continue
         Threads.@spawn begin
-            local N = chunk.N
-            local bi = chunk.batch_i
-            local ci = chunk.comp_i
-            local processed = 0
-            while processed < N
-                batch = batches[bi]
-                filt(batch) || continue
-                processed, ci = @noinline _progress_in_batch(batch, ci, processed, N)
-                bi += 1
-                ci = 1
+            for (; bi, idxs) in chunk
+                batch = batches[bi] # filtering don in chunks
+                @noinline _eval_batchportion(batch, idxs)
             end
         end
     end
@@ -141,7 +131,7 @@ function _chunk_batches(batches, filt, fg, workers)
         Ncomp += length(batch)::Int
         total_eqs += length(batch)::Int * _N_eqs(fg, batch)::Int
     end
-    chunks = Vector{@NamedTuple{batch_i::Int, comp_i::Int, N::Int}}(undef, workers)
+    chunks = Vector{Vector{@NamedTuple{bi::Int,idxs::UnitRange{Int64}}}}(undef, workers)
 
     eqs_per_worker = total_eqs / workers
     bi = 1
@@ -149,43 +139,45 @@ function _chunk_batches(batches, filt, fg, workers)
     assigned = 0
     eqs_assigned = 0
     for w in 1:workers
+        chunk = @NamedTuple{bi::Int,idxs::UnitRange{Int64}}[]
         ci_start = ci
-        bi_start = bi
         eqs_in_worker = 0
         assigned_in_worker = 0
         while assigned < Ncomp
             batch = batches[bi]
-            filt(batch) || continue
 
-            Neqs = _N_eqs(fg, batch)
-            stop_collecting = false
-            while true
-                if ci > length(batch)
-                    break
+            if filt(batch) #only process if the batch is not filtered out
+                Neqs = _N_eqs(fg, batch)
+                stop_collecting = false
+                while true
+                    if ci > length(batch)
+                        break
+                    end
+
+                    # compare, whether adding the new component helps to come closer to eqs_per_worker
+                    diff_now  = abs(eqs_in_worker - eqs_per_worker)
+                    diff_next = abs(eqs_in_worker + Neqs - eqs_per_worker)
+                    stop_collecting = assigned == Ncomp || diff_now ≤ diff_next
+                    if stop_collecting
+                        break
+                    end
+
+                    # add component to worker
+                    eqs_assigned += Neqs
+                    eqs_in_worker += Neqs
+                    assigned_in_worker += 1
+                    assigned += 1
+                    ci += 1
                 end
-
-                # compare, whether adding the new component helps to come closer to eqs_per_worker
-                diff_now  = abs(eqs_in_worker - eqs_per_worker)
-                diff_next = abs(eqs_in_worker + Neqs - eqs_per_worker)
-                stop_collecting = assigned == Ncomp || diff_now ≤ diff_next
-                if stop_collecting
-                    break
+                if ci > ci_start # don't push empty chunks
+                    push!(chunk, (; bi, idxs=ci_start:ci-1))
                 end
-
-                # add component to worker
-                eqs_assigned += Neqs
-                eqs_in_worker += Neqs
-                assigned_in_worker += 1
-                assigned += 1
-                ci += 1
+                stop_collecting && break
             end
-            # if the hard stop collection is reached, break, otherwise jump to next batch and continue
-            stop_collecting && break
 
             bi += 1
             ci = 1
         end
-        chunk = (; batch_i=bi_start, comp_i=ci_start, N=assigned_in_worker)
         chunks[w] = chunk
 
         # update eqs per worker estimate for the other workders
