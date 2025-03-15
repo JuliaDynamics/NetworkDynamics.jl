@@ -83,8 +83,10 @@ struct Network{EX<:ExecutionStyle,G,NL,VTup,MM,CT,GBT,EM}
     gbufprovider::GBT
     "map to gather external inputs"
     extmap::EM
+    "execution style"
+    executionstyle::EX
 end
-executionstyle(::Network{ex}) where {ex} = ex()
+executionstyle(nw::Network) = nw.executionstyle
 nvbatches(::Network) = length(vertexbatches)
 
 """
@@ -164,6 +166,8 @@ end
 @inline compf(b::ComponentBatch) = b.compf
 @inline compg(b::ComponentBatch) = b.compg
 @inline fftype(b::ComponentBatch) = b.ff
+@inline dim(b::ComponentBatch) = sum(b.statestride.strides)
+@inline outdim(b::ComponentBatch) = sum(b.outbufstride.strides)
 @inline pdim(b::ComponentBatch) = b.pstride.strides
 @inline extdim(b::ComponentBatch) = b.extbufstride.strides
 
