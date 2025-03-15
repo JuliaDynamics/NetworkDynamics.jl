@@ -42,8 +42,8 @@ Parallel execution using Julia threads.
 For `buffered` see [`ExecutionStyle`](@ref).
 """
 @kwdef struct ThreadedExecution{buffered} <: ExecutionStyle{buffered}
-    chunk_cache::Dict{UInt, Vector{@NamedTuple{batch_i::Int, comp_i::Int, N::Int}}}=
-        Dict{UInt, Vector{@NamedTuple{batch_i::Int, comp_i::Int, N::Int}}}()
+    chunk_cache::Dict{UInt, Vector{Vector{@NamedTuple{bi::Int,idxs::UnitRange{Int64}}}}} =
+        Dict{UInt, Vector{Vector{@NamedTuple{bi::Int,idxs::UnitRange{Int64}}}}}()
 end
 
 usebuffer(::ExecutionStyle{buffered}) where {buffered} = buffered
