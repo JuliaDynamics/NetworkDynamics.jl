@@ -124,11 +124,13 @@ function _chunk_batches(batches, filt, fg, workers)
     chunks = Vector{Any}(undef, workers)
 
     eqs_per_worker = total_eqs / workers
+    # println("Total eqs: $total_eqs in $Ncomp components, eqs per worker: $eqs_per_worker ($fg)")
     bi = 1
     ci = 1
     assigned = 0
     eqs_assigned = 0
     for w in 1:workers
+        # println("Assign worker $w: goal: $eqs_per_worker")
         chunk = Vector{Any}()
         ci_start = ci
         eqs_in_worker = 0
@@ -147,12 +149,13 @@ function _chunk_batches(batches, filt, fg, workers)
                     # compare, whether adding the new component helps to come closer to eqs_per_worker
                     diff_now  = abs(eqs_in_worker - eqs_per_worker)
                     diff_next = abs(eqs_in_worker + Neqs - eqs_per_worker)
-                    stop_collecting = assigned == Ncomp || diff_now ≤ diff_next
+                    stop_collecting = assigned == Ncomp || diff_now < diff_next
                     if stop_collecting
                         break
                     end
 
                     # add component to worker
+                    # println("  - Assign component $ci ($Neqs eqs)")
                     eqs_assigned += Neqs
                     eqs_in_worker += Neqs
                     assigned_in_worker += 1
@@ -160,9 +163,14 @@ function _chunk_batches(batches, filt, fg, workers)
                     ci += 1
                 end
                 if ci > ci_start # don't push empty chunks
-                    push!(chunk, (; batch, idxs=ci_start:ci-1))
+                    # println("  - Assign batch $(bi) -> $(ci_start:(ci-1)) $(length(ci_start:(ci-1))*Neqs) eqs)")
+                    push!(chunk, (; batch, idxs=ci_start:(ci-1)))
+                else
+                    # println("  - Skip empty batch $(bi) -> $(ci_start:(ci-1))")
                 end
                 stop_collecting && break
+            else
+                # println("  - Skip batch $(bi)")
             end
 
             bi += 1
