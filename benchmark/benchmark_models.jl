@@ -109,3 +109,15 @@ Base.@propagate_inbounds function gen!(dv, v, isum, p, T)
 end
 generator() = VertexModel(; f=gen!, sym=[:u_r, :u_i, :θ, :ω], g=StateMask(1:2),
             psym=[:H, :P, :D, :Ω, :E_f, :T_d_dash, :T_q_dash, :X_d_dash, :X_q_dash, :X_d, :X_q])
+
+function pqnode_inhomogeneous(P, Q)
+    Base.@propagate_inbounds function pq!(du, u, isum, _, t)
+        ic = Complex(isum[1], isum[2])
+        S = Complex(P, Q)
+        uc = S/conj(ic)
+        du[1] = real(uc)
+        du[2] = imag(uc)
+        nothing
+    end
+    VertexModel(; f=pq!, sym=[:u_r, :u_i], g=StateMask(1:2), psym=[], mass_matrix=0)
+end

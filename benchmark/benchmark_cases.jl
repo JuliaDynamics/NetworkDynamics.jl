@@ -77,5 +77,29 @@ BENCHMARK_CASES = [
         # [10,20],
         [100, 1_000, 10_000, 100_000],
         "Power grid network with PQ nodes and generators"
+    ),
+
+    BenchmarkCase(
+        "powergrid_inhomogeneous_pq",
+        N -> begin
+            g = watts_strogatz(N, 3, 0.8; rng=StableRNG(1))
+            rng = StableRNG(1)
+
+            # Create fixed P/Q values for half the nodes
+            pq_count = N ÷ 2
+            P_vals = -1*rand(rng, pq_count)
+            Q_vals = -1*rand(rng, pq_count)
+
+            # Create vertex models with baked-in P/Q values
+            pq_vertices = [pqnode_inhomogeneous(P_vals[i], Q_vals[i]) for i in 1:pq_count]
+            gen_vertices = [generator() for _ in 1:(N-pq_count)]
+
+            # Shuffle the vertex types
+            vertices = shuffle(rng, vcat(pq_vertices, gen_vertices))
+
+            Network(g, vertices, piline())
+        end,
+        [100, 1_000, 10_000, 100_000],
+        "Power grid with heterogeneous PQ nodes having fixed P/Q values"
     )
 ]
