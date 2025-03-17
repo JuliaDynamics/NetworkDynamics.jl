@@ -244,10 +244,11 @@ function plot_over_N(target, baseline=nothing)
         comp = target
     end
 
-    fig = Makie.Figure(size=(2000,2000))
+    fig = Makie.Figure(size=(2000,2500))
 
     bmkeys = [
         "powergrid",
+        "powergrid_inhomogeneous_pq",
         "diffusion_static_edge",
         "diffusion_ode_edge",
         "kuramoto_homogeneous",
