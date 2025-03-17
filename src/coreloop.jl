@@ -124,7 +124,7 @@ function _chunk_batches(batches, filt, fg, workers)
     chunks = Vector{Any}(undef, workers)
 
     eqs_per_worker = total_eqs / workers
-    # println("Total eqs: $total_eqs in $Ncomp components, eqs per worker: $eqs_per_worker ($fg)")
+    # println("\nTotal eqs: $total_eqs in $Ncomp components, eqs per worker: $eqs_per_worker ($fg)")
     bi = 1
     ci = 1
     assigned = 0
@@ -132,13 +132,13 @@ function _chunk_batches(batches, filt, fg, workers)
     for w in 1:workers
         # println("Assign worker $w: goal: $eqs_per_worker")
         chunk = Vector{Any}()
-        ci_start = ci
         eqs_in_worker = 0
         assigned_in_worker = 0
         while assigned < Ncomp
             batch = batches[bi]
 
             if filt(batch) #only process if the batch is not filtered out
+                ci_start = ci
                 Neqs = _N_eqs(fg, batch)
                 stop_collecting = false
                 while true
