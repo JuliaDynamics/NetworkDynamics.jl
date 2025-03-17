@@ -72,7 +72,7 @@ BENCHMARK_CASES = [
             rng = StableRNG(1)
             vtypes = [pqnode(), generator()]
             vertices = vtypes[shuffle(rng, vcat([1 for _ in 1:N÷2], [2 for _ in 1:N÷2]))]
-            Network(g, vertices, piline())
+            (g, vertices, piline())
         end,
         # [10,20],
         [100, 1_000, 10_000, 100_000],
