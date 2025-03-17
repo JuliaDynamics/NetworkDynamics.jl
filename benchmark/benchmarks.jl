@@ -18,13 +18,7 @@ using CUDA: adapt
 using ThreadPinning
 pinthreads(:cores)
 
-if pkgversion(NetworkDynamics) < v"0.9.0"
-    (isinteractive() ? includet : include)("benchmark_models_v0.8.jl")
-elseif pkgversion(NetworkDynamics) < v"0.9.1"
-    (isinteractive() ? includet : include)("benchmark_models_v0.9.jl")
-else
-    (isinteractive() ? includet : include)("benchmark_models.jl")
-end
+(isinteractive() ? includet : include)("benchmark_models.jl")
 
 @info "Benchmark with $(Threads.nthreads()) threads"
 
@@ -116,7 +110,7 @@ for k in keys(edges)
             @test dx ≈ _dx
 
             b = @be $nd($dx, $_x0, nothing, 0.0) seconds=SECONDS
-            br = BenchmarkResult(b, legacy_order(nd, dx))
+            br = BenchmarkResult(b, dx)
             bd["diffusion_"*k, exname, aggname, N] = br
 
             if CUDA.functional() && iscudacompatible(execution) && iscudacompatible(nd.layer.aggregator)
@@ -134,7 +128,7 @@ for k in keys(edges)
                 b = @be $nd_d($dx_d, $x0_d, nothing, 0.0) seconds=SECONDS
                 # we store the original _dx in the benchmarks results because we know
                 # our dx_d does not have the precision
-                br = BenchmarkResult(b, legacy_order(nd, _dx))
+                br = BenchmarkResult(b, _dx)
                 bd["diffusion_"*k, exname*"_cuda32", aggname*"_cuda32", N] = br
 
                 to = CuArray{Float64}
@@ -146,7 +140,7 @@ for k in keys(edges)
                 @test Vector(dx_d) ≈ _dx
 
                 b = @be $nd_d($dx_d, $x0_d, nothing, 0.0) seconds=SECONDS
-                br = BenchmarkResult(b, legacy_order(nd, Vector(dx_d)))
+                br = BenchmarkResult(b, Vector(dx_d))
                 bd["diffusion_"*k, exname*"_cuda64", aggname*"_cuda64", N] = br
             end
         end
@@ -213,7 +207,7 @@ for f in [homogeneous, heterogeneous]
             @test dx ≈ _dx
 
             b = @be $nd($dx, $_x0, $p, 0.0) seconds=SECONDS
-            br = BenchmarkResult(b, legacy_order(nd, dx))
+            br = BenchmarkResult(b, dx)
             bd["kuramoto_"*name, exname, aggname, N] = br
 
             if CUDA.functional() && iscudacompatible(execution) && iscudacompatible(nd.layer.aggregator)
@@ -232,7 +226,7 @@ for f in [homogeneous, heterogeneous]
                 b = @be $nd_d($dx_d, $x0_d, $p_d, 0.0) seconds=SECONDS
                 # we store the original _dx in the benchmarks results because we know
                 # our dx_d does not have the precision
-                br = BenchmarkResult(b, legacy_order(nd, _dx))
+                br = BenchmarkResult(b, _dx)
                 bd["kuramoto_"*name, exname*"_cuda32", aggname*"_cuda32", N] = br
 
                 to = CuArray{Float64}
@@ -245,7 +239,7 @@ for f in [homogeneous, heterogeneous]
                 @test Vector(dx_d) ≈ _dx
 
                 b = @be $nd_d($dx_d, $x0_d, $p_d, 0.0) seconds=SECONDS
-                br = BenchmarkResult(b, legacy_order(nd, Vector(dx_d)))
+                br = BenchmarkResult(b, Vector(dx_d))
                 bd["kuramoto_"*name, exname*"_cuda64", aggname*"_cuda64", N] = br
             end
         end
@@ -305,7 +299,7 @@ for N in Ns
         @test dx ≈ _dx
 
         b = @be $nd($dx, $_x0, $p, 0.0) seconds=SECONDS
-        br = BenchmarkResult(b, legacy_order(nd, dx))
+        br = BenchmarkResult(b, dx)
         bd["powergrid", exname, aggname, N] = br
 
         if CUDA.functional() && iscudacompatible(execution) && iscudacompatible(nd.layer.aggregator)
@@ -324,7 +318,7 @@ for N in Ns
             b = @be $nd_d($dx_d, $x0_d, $p_d, 0.0) seconds=SECONDS
             # we store the original _dx in the benchmarks results because we know
             # our dx_d does not have the precision
-            br = BenchmarkResult(b, legacy_order(nd, _dx))
+            br = BenchmarkResult(b, _dx)
             bd["powergrid", exname*"_cuda32", aggname*"_cuda32", N] = br
 
             to = CuArray{Float64}
@@ -337,7 +331,7 @@ for N in Ns
             @test Vector(dx_d) ≈ _dx
 
             b = @be $nd_d($dx_d, $x0_d, $p_d, 0.0) seconds=SECONDS
-            br = BenchmarkResult(b, legacy_order(nd, Vector(dx_d)))
+            br = BenchmarkResult(b, Vector(dx_d))
             bd["powergrid", exname*"_cuda64", aggname*"_cuda64", N] = br
         end
     end
