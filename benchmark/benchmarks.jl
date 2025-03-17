@@ -18,8 +18,8 @@ using CUDA: adapt
 (isinteractive() ? includet : include)("benchmark_models.jl")
 (isinteractive() ? includet : include)("benchmark_cases.jl")
 
-using ThreadPinning
-pinthreads(:cores)
+# using ThreadPinning
+# pinthreads(:cores)
 
 @info "Benchmark with $(Threads.nthreads()) threads"
 
