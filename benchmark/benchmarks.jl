@@ -73,12 +73,15 @@ for case in BENCHMARK_CASES
                        enabled=!haskey(ENV,"GITHUB_ACTIONS"))
 
     for N in case.Ns
-        # Create network
-        _nd = case.constructor(N)
+        # Create network components
+        (g, vertices, edges) = case.constructor(N)
         
         # Benchmark network construction
-        b = @be $(case.constructor)($N) evals=1 samples=10 seconds=SECONDS  
+        b = @be Network($g, $vertices, $edges) evals=1 samples=10 seconds=SECONDS  
         bd[case.name, "assemble", N] = BenchmarkResult(b)
+
+        # Create network instance
+        _nd = Network(g, vertices, edges)
 
         # Setup initial conditions
         _x0 = randx0(_nd)

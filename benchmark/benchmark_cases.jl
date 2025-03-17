@@ -22,7 +22,7 @@ BENCHMARK_CASES = [
         "diffusion_static_edge",
         N -> begin
             g = watts_strogatz(N, N ÷ 2, 0.0; rng=StableRNG(1))
-            Network(g, diffusion_vertex(), diffusion_edge())
+            (g, diffusion_vertex(), diffusion_edge())
         end,
         # [10,20],
         [100, 300, 1000, 3000],
@@ -33,7 +33,7 @@ BENCHMARK_CASES = [
         "diffusion_ode_edge",
         N -> begin
             g = watts_strogatz(N, N ÷ 2, 0.0; rng=StableRNG(1))
-            Network(g, diffusion_vertex(), diffusion_dedge())
+            (g, diffusion_vertex(), diffusion_dedge())
         end,
         # [10,20],
         [100, 300, 1000, 3000],
@@ -44,7 +44,7 @@ BENCHMARK_CASES = [
         "kuramoto_homogeneous",
         N -> begin
             g = watts_strogatz(N, 3, 0.8; rng=StableRNG(1))
-            Network(g, kuramoto_vertex_2d(), static_kuramoto_edge())
+            (g, kuramoto_vertex_2d(), static_kuramoto_edge())
         end,
         # [10,20],
         [100, 1_000, 10_000, 100_000],
@@ -58,7 +58,7 @@ BENCHMARK_CASES = [
             rng = StableRNG(1)
             vtypes = [kuramoto_vertex_1d(), kuramoto_vertex_2d()]
             vertices = vtypes[shuffle(rng, vcat([1 for _ in 1:N÷2], [2 for _ in 1:N÷2]))]
-            Network(g, vertices, static_kuramoto_edge())
+            (g, vertices, static_kuramoto_edge())
         end,
         # [10,20],
         [100, 1_000, 10_000, 100_000],
@@ -97,7 +97,7 @@ BENCHMARK_CASES = [
             # Shuffle the vertex types
             vertices = shuffle(rng, vcat(pq_vertices, gen_vertices))
 
-            Network(g, vertices, piline())
+            (g, vertices, piline())
         end,
         [100, 1_000, 10_000, 100_000],
         "Power grid with heterogeneous PQ nodes having fixed P/Q values"
