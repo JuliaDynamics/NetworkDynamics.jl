@@ -41,7 +41,7 @@ Base.show(io::IO, s::KAAggregator) = print(io, "KAAggregator($(repr(s.f)))")
 Base.show(io::IO, s::SequentialAggregator) = print(io, "SequentialAggregator($(repr(s.f)))")
 Base.show(io::IO, s::PolyesterAggregator) = print(io, "PolyesterAggregator($(repr(s.f)))")
 
-function Base.show(io::IO, ::MIME"text/plain", @nospecialize(c::ComponentModel))
+function Base.show(io::IO, ::MIME"text/plain", c::ComponentModel)
     type = match(r"^(.*?)\{", string(typeof(c)))[1]
     print(io, type, styled" {NetworkDynamics_name::$(c.name)}")
     print(io, styled" {NetworkDynamics_fftype:$(fftype(c))}")
@@ -101,14 +101,14 @@ function print_states_params(io, @nospecialize(c::ComponentModel), styling)
 
     print_treelike(io, align_strings(info))
 end
-function _inout_string(@nospecialize(c::VertexModel), f, name)
+function _inout_string(c::VertexModel, f, name)
     sym = f(c)
     num, word = maybe_plural(length(sym), name)
     defs = get_defaults_or_inits(c, sym)
     guesses = get_guesses(c, sym)
     styled"$num &$word: &&$(stylesymbolarray(sym, defs, guesses))"
 end
-function _inout_string(@nospecialize(c::EdgeModel), f, name)
+function _inout_string(c::EdgeModel, f, name)
     sym = f(c)
     word = name*"s"
     srcnum = length(sym.src)

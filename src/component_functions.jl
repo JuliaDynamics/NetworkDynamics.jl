@@ -247,22 +247,22 @@ Directed(s::AbstractVector{<:Symbol}) = AnnotatedSym(Directed, s)
 
 abstract type ComponentModel end
 
-struct VertexModel{F,G,FFT,OF,MM,EX<:Union{Nothing,Vector{<:SymbolicIndex}}} <: ComponentModel
+struct VertexModel <: ComponentModel
     name::Symbol
     # main function
-    f::F
+    f::Any
     sym::Vector{Symbol}
-    mass_matrix::MM
+    mass_matrix::Any
     # outputs
-    g::G
+    g::Any
     outsym::Vector{Symbol}
-    ff::FFT
+    ff::FeedForwardType
     # parameters, optional input sym and optional external inputs
     psym::Vector{Symbol}
     insym::Union{Nothing, Vector{Symbol}}
-    extin::EX
+    extin::Union{Nothing, Vector{<:SymbolicIndex}}
     # observed
-    obsf::OF
+    obsf::Any
     obssym::Vector{Symbol}
     # metadata
     symmetadata::Dict{Symbol,Dict{Symbol, Any}}
@@ -302,22 +302,22 @@ All Symbol arguments can be used to set default values, i.e. `psym=[:K=>1, :p]`.
 VertexModel(; kwargs...) = _construct_comp(VertexModel, Base.inferencebarrier(kwargs))
 VertexModel(v::VertexModel; kwargs...) = _reconstruct_comp(VertexModel, v, Base.inferencebarrier(kwargs))
 
-struct EdgeModel{F,G,FFT,OF,MM,EX<:Union{Nothing,Vector{<:SymbolicIndex}}} <: ComponentModel
+struct EdgeModel <: ComponentModel
     name::Symbol
     # main function
-    f::F
+    f::Any
     sym::Vector{Symbol}
-    mass_matrix::MM
+    mass_matrix::Any
     # outputs
-    g::G
+    g::Any
     outsym::@NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}}
-    ff::FFT
+    ff::FeedForwardType
     # parameters, optional input sym and optional external inputs
     psym::Vector{Symbol}
     insym::Union{Nothing, @NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}}}
-    extin::EX
+    extin::Union{Nothing, Vector{<:SymbolicIndex}}
     # observed
-    obsf::OF
+    obsf::Any
     obssym::Vector{Symbol}
     # metadata
     symmetadata::Dict{Symbol,Dict{Symbol, Any}}
@@ -576,8 +576,8 @@ Fills up type parameters with `nothing` to ensure `Core.Compiler.isconstType`
 for GPU compatibility.
 """
 dispatchT(::T) where {T<:ComponentModel} = dispatchT(T)
-dispatchT(T::Type{<:VertexModel}) = VertexModel{nothing,nothing,nothing,nothing,nothing,Nothing}
-dispatchT(T::Type{<:EdgeModel}) = EdgeModel{nothing,nothing,nothing,nothing,nothing,Nothing}
+dispatchT(T::Type{<:VertexModel}) = VertexModel
+dispatchT(T::Type{<:EdgeModel}) = EdgeModel
 
 # TODO: introduce batchequal hash for faster batching of component models
 batchequal(a, b) = false
