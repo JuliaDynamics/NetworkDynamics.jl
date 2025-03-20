@@ -34,12 +34,10 @@ function Adapt.adapt_structure(to, n::Network)
     caches = (;output = _adapt_diffcache(to, n.caches.output),
               aggregation = _adapt_diffcache(to, n.caches.aggregation),
               external = _adapt_diffcache(to, n.caches.external))
-    exT = typeof(executionstyle(n))
-    gT = typeof(n.im.g)
+    ex = executionstyle(n)
     extmap = adapt(to, n.extmap)
 
-    Network{exT,gT,typeof(layer),typeof(vb),typeof(mm),eltype(caches),typeof(gbp),typeof(extmap)}(
-        vb, layer, n.im, caches, mm, gbp, extmap)
+    Network(vb, layer, n.im, caches, mm, gbp, extmap, ex)
 end
 
 Adapt.@adapt_structure NetworkLayer

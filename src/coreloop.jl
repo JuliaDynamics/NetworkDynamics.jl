@@ -88,15 +88,112 @@ end
     end
 end
 
-@inline function process_batches!(::ThreadedExecution, fg, filt::F, batches, inbufs, duopt) where {F}
-    unrolled_foreach(filt, batches) do batch
-        (du, u, o, p, t) = duopt
-        Threads.@threads for i in 1:length(batch)
+@inline function process_batches!(ex::ThreadedExecution, fg, filt::F, batches, inbufs, duopt) where {F}
+    Nchunks = Threads.nthreads()
+
+    # chunking is kinda expensive, so we cache it
+    key = hash((Base.objectid(batches), filt, fg, Nchunks))
+    chunks = get!(ex.chunk_cache, key) do
+        _chunk_batches(batches, filt, fg, Nchunks)
+    end
+
+    # each chunk consists of array or tuple [(batch, idxs), ...]
+    _eval_chunk = function(chunk)
+        unrolled_foreach(chunk) do ch
+            (; batch, idxs) = ch
+            (du, u, o, p, t) = duopt
             _type = dispatchT(batch)
-            apply_comp!(_type, fg, batch, i, du, u, o, inbufs, p, t)
+            for i in idxs
+                apply_comp!(_type, fg, batch, i, du, u, o, inbufs, p, t)
+            end
+        end
+    end
+    Threads.@sync for chunk in chunks
+        Threads.@spawn begin
+            @noinline _eval_chunk(chunk)
         end
     end
 end
+function _chunk_batches(batches, filt, fg, workers)
+    Ncomp = 0
+    total_eqs = 0
+    unrolled_foreach(filt, batches) do batch
+        Ncomp += length(batch)::Int
+        total_eqs += length(batch)::Int * _N_eqs(fg, batch)::Int
+    end
+    chunks = Vector{Any}(undef, workers)
+
+    eqs_per_worker = total_eqs / workers
+    # println("\nTotal eqs: $total_eqs in $Ncomp components, eqs per worker: $eqs_per_worker ($fg)")
+    bi = 1
+    ci = 1
+    assigned = 0
+    eqs_assigned = 0
+    for w in 1:workers
+        # println("Assign worker $w: goal: $eqs_per_worker")
+        chunk = Vector{Any}()
+        eqs_in_worker = 0
+        assigned_in_worker = 0
+        while assigned < Ncomp
+            batch = batches[bi]
+
+            if filt(batch) #only process if the batch is not filtered out
+                ci_start = ci
+                Neqs = _N_eqs(fg, batch)
+                stop_collecting = false
+                while true
+                    if ci > length(batch)
+                        break
+                    end
+
+                    # compare, whether adding the new component helps to come closer to eqs_per_worker
+                    diff_now  = abs(eqs_in_worker - eqs_per_worker)
+                    diff_next = abs(eqs_in_worker + Neqs - eqs_per_worker)
+                    stop_collecting = assigned == Ncomp || diff_now < diff_next
+                    if stop_collecting
+                        break
+                    end
+
+                    # add component to worker
+                    # println("  - Assign component $ci ($Neqs eqs)")
+                    eqs_assigned += Neqs
+                    eqs_in_worker += Neqs
+                    assigned_in_worker += 1
+                    assigned += 1
+                    ci += 1
+                end
+                if ci > ci_start # don't push empty chunks
+                    # println("  - Assign batch $(bi) -> $(ci_start:(ci-1)) $(length(ci_start:(ci-1))*Neqs) eqs)")
+                    push!(chunk, (; batch, idxs=ci_start:(ci-1)))
+                else
+                    # println("  - Skip empty batch $(bi) -> $(ci_start:(ci-1))")
+                end
+                stop_collecting && break
+            else
+                # println("  - Skip batch $(bi)")
+            end
+
+            bi += 1
+            ci = 1
+        end
+
+        # narrow down type / make tuple
+        chunks[w] = if length(chunk) < 10
+            Tuple(chunk)
+        else
+            [c for c in chunk] # narrow down type
+        end
+
+        # update eqs per worker estimate for the other workders
+        eqs_per_worker = (total_eqs - eqs_assigned) / (workers - w)
+    end
+    @assert assigned == Ncomp
+    return chunks
+end
+_N_eqs(::Val{:f}, batch) = Int(dim(batch))
+_N_eqs(::Val{:g}, batch) = Int(outdim(batch))
+_N_eqs(::Val{:fg}, batch) = Int(dim(batch)) + Int(outdim(batch))
+
 
 @inline function process_batches!(::PolyesterExecution, fg, filt::F, batches, inbufs, duopt) where {F}
     unrolled_foreach(filt, batches) do batch
