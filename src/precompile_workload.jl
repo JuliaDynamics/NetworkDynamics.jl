@@ -1,6 +1,3 @@
-is_precompiling() = ccall(:jl_generating_output, Cint, ()) == 1
-
-using TimerOutputs: TimerOutput, @timeit, print_timer
 using NetworkDynamics
 using Graphs: complete_graph
 
@@ -13,21 +10,11 @@ Base.@propagate_inbounds function diffusionvertex!(dv, _, acc, _, _)
     nothing
 end
 
-to = TimerOutput();
-@timeit to "precompile workload" begin
-    @timeit to "create graph" begin
-        g = complete_graph(3)
-    end
-    @timeit to "create network" begin
-        edge = EdgeModel(g=AntiSymmetric(diffusionedge!), outdim=1, pdim=1, pdef=[1])
-        vert = VertexModel(f=diffusionvertex!, g=1, dim=1, pdim=0)
-        nd = Network(g, vert, edge)
-    end
-    u = rand(dim(nd))
-    du = similar(u)
-    p = rand(pdim(nd))
-    @timeit to "coreloop" begin
-        nd(du,u,p,0.0)
-    end
-end
-is_precompiling() || print_timer(to)
+g = complete_graph(3)
+edge = EdgeModel(g=AntiSymmetric(diffusionedge!), outdim=1, pdim=1, pdef=[1])
+vert = VertexModel(f=diffusionvertex!, g=1, dim=1, pdim=0)
+nd = Network(g, vert, edge)
+u = rand(dim(nd))
+du = similar(u)
+p = rand(pdim(nd))
+nd(du,u,p,0.0)
