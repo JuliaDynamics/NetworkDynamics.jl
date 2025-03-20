@@ -220,8 +220,8 @@ Julia code from the symbolic reepresentation all units will be stripped.
     However since we know the times exactly, we can handle this by simply giving a list of explicit
     tstops to the solve command, to make sure those are hit exactly.
 =#
-load2 = (t) -> LinearInterpolation(-1*Float64[20, 30, 10, 30, 20], [0, 4, 12, 20, 24]*3600.0; extrapolation=ExtrapolationType.Constant)(t)
-load3 = (t) -> LinearInterpolation(-1*Float64[40, 50, 30, 50, 40], [0, 4, 12, 20, 24]*3600.0; extrapolation=ExtrapolationType.Constant)(t)
+load2 = LinearInterpolation(-1*Float64[20, 30, 10, 30, 20], [0, 4, 12, 20, 24]*3600.0; extrapolation=ExtrapolationType.Constant)
+load3 = LinearInterpolation(-1*Float64[40, 50, 30, 50, 40], [0, 4, 12, 20, 24]*3600.0; extrapolation=ExtrapolationType.Constant)
 ModelingToolkit.get_unit(op::typeof(load2), _) = u"m^3/s"
 ModelingToolkit.get_unit(op::typeof(load3), _) = u"m^3/s"
 nothing #hide
