@@ -42,7 +42,7 @@ Base.show(io::IO, s::SequentialAggregator) = print(io, "SequentialAggregator($(r
 Base.show(io::IO, s::PolyesterAggregator) = print(io, "PolyesterAggregator($(repr(s.f)))")
 
 function Base.show(io::IO, ::MIME"text/plain", c::ComponentModel)
-    type = match(r"^(.*?)\{", string(typeof(c)))[1]
+    type = string(typeof(c))
     print(io, type, styled" {NetworkDynamics_name::$(c.name)}")
     print(io, styled" {NetworkDynamics_fftype:$(fftype(c))}")
     if has_graphelement(c)

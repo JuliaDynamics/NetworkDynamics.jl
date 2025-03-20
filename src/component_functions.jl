@@ -1121,11 +1121,12 @@ function Base.:(==)(cf1::ComponentModel, cf2::ComponentModel)
     typeof(cf1) == typeof(cf2) && equal_fields(cf1, cf2)
 end
 
-function compfg(c)
+# force specialization on f, g, fft
+compfg(c) = _compfg(compf(c), compg(c), fftype(c))
+function _compfg(f::F, g::G, fft::FFT) where {F, G, FFT}
     (outs, du, u, ins, p, t) -> begin
-        f = compf(c)
         isnothing(f) || f(du, u, ins..., p, t)
-        compg(c)(_gargs(fftype(c), outs, du, u, ins, p, t)...)
+        g(_gargs(fft, outs, du, u, ins, p, t)...)
         nothing
     end
 end

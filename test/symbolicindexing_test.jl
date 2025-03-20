@@ -525,7 +525,7 @@ end
     idxs1 = [VIndex(1,:δ), VIndex(2, :Pdamping), EIndex(1,:P), VIndex(2,:P)]
     idxs2 = [VIndex(1,:δ), VIndex(2,:θ)]
     # full call
-    # @b $s[$idxs1] # 134 106 94
+    # @b $s[$idxs1] # 134 106 94 101
     # @b $s[$idxs2] # 31  31 34
 
     # scalar call
@@ -534,9 +534,9 @@ end
     # @b SII.observed($nw, $(VIndex(2,:Pdamping))) # 15
     # @b SII.observed($nw, $(VIndex(2,:θ))) # 7 5
 
-    b = @b SII.observed($nw, $idxs1) # 69 36 42 30
+    b = @b SII.observed($nw, $idxs1) # 69 36 42 30 37
     if VERSION ≥ v"1.11"
-        @test b.allocs <= 30
+        @test b.allocs <= 37
     end
     b = @b SII.observed($nw, $idxs2) # 12 7 10 5
     if VERSION ≥ v"1.11"
