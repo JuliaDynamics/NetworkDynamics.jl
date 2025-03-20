@@ -325,9 +325,9 @@ function batch_by_idxs(v::AbstractVector, batches::Vector{Vector{Int}})
 end
 
 _find_identical(v::ComponentModel, indices) = [collect(indices)]
-function _find_identical(v::Vector, indices)
+function _find_identical(v::Vector{T}, indices) where {T<:ComponentModel}
     idxs_per_type = Vector{Int}[]
-    unique_comp = []
+    unique_comp = T[]
     for i in eachindex(v)
         found = false
         for j in eachindex(unique_comp)
