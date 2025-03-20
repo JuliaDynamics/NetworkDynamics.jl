@@ -299,8 +299,8 @@ Optional Arguments:
 
 All Symbol arguments can be used to set default values, i.e. `psym=[:K=>1, :p]`.
 """
-VertexModel(; kwargs...) = _construct_comp(VertexModel, Base.inferencebarrier(kwargs))
-VertexModel(v::VertexModel; kwargs...) = _reconstruct_comp(VertexModel, v, Base.inferencebarrier(kwargs))
+VertexModel(; kwargs...) = _construct_comp(VertexModel, kwargs)
+VertexModel(v::VertexModel; kwargs...) = _reconstruct_comp(VertexModel, v, kwargs)
 
 struct EdgeModel <: ComponentModel
     name::Symbol
@@ -357,8 +357,8 @@ Optional Arguments:
 
 All Symbol arguments can be used to set default values, i.e. `psym=[:K=>1, :p]`.
 """
-EdgeModel(; kwargs...) = _construct_comp(EdgeModel, Base.inferencebarrier(kwargs))
-EdgeModel(v::EdgeModel; kwargs...) = _reconstruct_comp(EdgeModel, v, Base.inferencebarrier(kwargs))
+EdgeModel(; kwargs...) = _construct_comp(EdgeModel, kwargs)
+EdgeModel(v::EdgeModel; kwargs...) = _reconstruct_comp(EdgeModel, v, kwargs)
 
 """
     compf(c::ComponentModel)
@@ -598,8 +598,8 @@ end
 Internal function to construct a component model from keyword arguments.
 Fills up kw arguments with default values and performs sanity checks.
 """
-function _construct_comp(::Type{T}, @nospecialize(kwargs)) where {T}
-    dict = _fill_defaults(T, Base.inferencebarrier(kwargs))
+Base.@nospecializeinfer function _construct_comp(::Type{T}, @nospecialize(kwargs)) where {T}
+    dict = _fill_defaults(T, kwargs)
 
     # check signature of f
     # if !_valid_signature(T, dict[:f])
@@ -625,7 +625,7 @@ function _construct_comp(::Type{T}, @nospecialize(kwargs)) where {T}
     return c
 end
 
-function _reconstruct_comp(::Type{T}, cf::ComponentModel, kwargs) where {T}
+Base.@nospecializeinfer function _reconstruct_comp(::Type{T}, cf::ComponentModel, @nospecialize(kwargs)) where {T}
     fields = fieldnames(T)
     dict = Dict{Symbol, Any}()
     for f in fields
@@ -643,7 +643,7 @@ end
 Fill up keyword arguments `kwargs` for type T with default values.
 Also perfoms sanity check some properties like mass matrix, depth, ...
 """
-function _fill_defaults(T, @nospecialize(kwargs))
+Base.@nospecializeinfer function _fill_defaults(T, @nospecialize(kwargs))
     dict = Dict{Symbol, Any}(kwargs)
     allow_output_sym_clash = pop!(dict, :allow_output_sym_clash, false)
 
