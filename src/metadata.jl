@@ -335,7 +335,7 @@ function dump_initial_state(io, cf::ComponentModel; sigdigits=5, p=true, obs=tru
     lns = AnnotatedString[]
     symidx  = _append_states!(lns, cf, sort(sym(cf)); sigdigits)
     psymidx = _append_states!(lns, cf, sort(psym(cf)); sigdigits)
-    insymidx = _append_states!(lns, cf, sort(insym_all(cf)); sigdigits)
+    insymidx = _append_states!(lns, cf, sort(insym_flat(cf)); sigdigits)
     outsymidx = _append_states!(lns, cf, sort(outsym_flat(cf)); sigdigits)
 
     obsidx = _append_observed!(lns, cf; sigdigits)
