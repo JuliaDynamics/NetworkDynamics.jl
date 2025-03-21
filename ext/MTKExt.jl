@@ -298,7 +298,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     params = setdiff(allparams, Set(allinputs))
 
     # extract the main equations and observed equations
-    eqs::Vector{Equation} = full_equations(sys)
+    eqs::Vector{Equation} = ModelingToolkit.subs_constants(full_equations(sys))
     fix_metadata!(eqs, sys);
 
     # assert the ordering of states and equations
@@ -325,7 +325,8 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     # extract observed equations. They might depend on eachother so resolve them
     obs_subs = Dict(eq.lhs => eq.rhs for eq in observed(sys))
     obseqs = map(observed(sys)) do eq
-        eq.lhs ~ fixpoint_sub(eq.rhs, obs_subs)
+        expanded_rhs = fixpoint_sub(eq.rhs, obs_subs)
+        eq.lhs ~ ModelingToolkit.subs_constants(expanded_rhs)
     end
     fix_metadata!(obseqs, sys);
     # obs can only depend on parameters (including allinputs) or states
