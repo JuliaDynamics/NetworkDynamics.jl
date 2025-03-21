@@ -247,22 +247,22 @@ Directed(s::AbstractVector{<:Symbol}) = AnnotatedSym(Directed, s)
 
 abstract type ComponentModel end
 
-struct VertexModel{F,G,FFT,OF,MM,EX<:Union{Nothing,Vector{<:SymbolicIndex}}} <: ComponentModel
+struct VertexModel <: ComponentModel
     name::Symbol
     # main function
-    f::F
+    f::Any
     sym::Vector{Symbol}
-    mass_matrix::MM
+    mass_matrix::Any
     # outputs
-    g::G
+    g::Any
     outsym::Vector{Symbol}
-    ff::FFT
+    ff::FeedForwardType
     # parameters, optional input sym and optional external inputs
     psym::Vector{Symbol}
     insym::Union{Nothing, Vector{Symbol}}
-    extin::EX
+    extin::Union{Nothing, Vector{<:SymbolicIndex}}
     # observed
-    obsf::OF
+    obsf::Any
     obssym::Vector{Symbol}
     # metadata
     symmetadata::Dict{Symbol,Dict{Symbol, Any}}
@@ -299,25 +299,25 @@ Optional Arguments:
 
 All Symbol arguments can be used to set default values, i.e. `psym=[:K=>1, :p]`.
 """
-VertexModel(; kwargs...) = _construct_comp(VertexModel, Base.inferencebarrier(kwargs))
-VertexModel(v::VertexModel; kwargs...) = _reconstruct_comp(VertexModel, v, Base.inferencebarrier(kwargs))
+VertexModel(; kwargs...) = _construct_comp(VertexModel, kwargs)
+VertexModel(v::VertexModel; kwargs...) = _reconstruct_comp(VertexModel, v, kwargs)
 
-struct EdgeModel{F,G,FFT,OF,MM,EX<:Union{Nothing,Vector{<:SymbolicIndex}}} <: ComponentModel
+struct EdgeModel <: ComponentModel
     name::Symbol
     # main function
-    f::F
+    f::Any
     sym::Vector{Symbol}
-    mass_matrix::MM
+    mass_matrix::Any
     # outputs
-    g::G
+    g::Any
     outsym::@NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}}
-    ff::FFT
+    ff::FeedForwardType
     # parameters, optional input sym and optional external inputs
     psym::Vector{Symbol}
     insym::Union{Nothing, @NamedTuple{src::Vector{Symbol},dst::Vector{Symbol}}}
-    extin::EX
+    extin::Union{Nothing, Vector{<:SymbolicIndex}}
     # observed
-    obsf::OF
+    obsf::Any
     obssym::Vector{Symbol}
     # metadata
     symmetadata::Dict{Symbol,Dict{Symbol, Any}}
@@ -357,8 +357,8 @@ Optional Arguments:
 
 All Symbol arguments can be used to set default values, i.e. `psym=[:K=>1, :p]`.
 """
-EdgeModel(; kwargs...) = _construct_comp(EdgeModel, Base.inferencebarrier(kwargs))
-EdgeModel(v::EdgeModel; kwargs...) = _reconstruct_comp(EdgeModel, v, Base.inferencebarrier(kwargs))
+EdgeModel(; kwargs...) = _construct_comp(EdgeModel, kwargs)
+EdgeModel(v::EdgeModel; kwargs...) = _reconstruct_comp(EdgeModel, v, kwargs)
 
 """
     compf(c::ComponentModel)
@@ -576,21 +576,8 @@ Fills up type parameters with `nothing` to ensure `Core.Compiler.isconstType`
 for GPU compatibility.
 """
 dispatchT(::T) where {T<:ComponentModel} = dispatchT(T)
-dispatchT(T::Type{<:VertexModel}) = VertexModel{nothing,nothing,nothing,nothing,nothing,Nothing}
-dispatchT(T::Type{<:EdgeModel}) = EdgeModel{nothing,nothing,nothing,nothing,nothing,Nothing}
-
-# TODO: introduce batchequal hash for faster batching of component models
-batchequal(a, b) = false
-function batchequal(a::ComponentModel, b::ComponentModel)
-    compf(a)  == compf(b)  || return false
-    compg(a)  == compg(b)  || return false
-    fftype(a) == fftype(b) || return false
-    dim(a)    == dim(b)    || return false
-    outdim(a) == outdim(b) || return false
-    pdim(a)   == pdim(b)   || return false
-    extdim(a) == extdim(b) || return false
-    return true
-end
+dispatchT(T::Type{<:VertexModel}) = VertexModel
+dispatchT(T::Type{<:EdgeModel}) = EdgeModel
 
 """
     _construct_comp(::Type{T}, kwargs) where {T}
@@ -598,8 +585,8 @@ end
 Internal function to construct a component model from keyword arguments.
 Fills up kw arguments with default values and performs sanity checks.
 """
-function _construct_comp(::Type{T}, @nospecialize(kwargs)) where {T}
-    dict = _fill_defaults(T, Base.inferencebarrier(kwargs))
+Base.@nospecializeinfer function _construct_comp(::Type{T}, @nospecialize(kwargs)) where {T}
+    dict = _fill_defaults(T, kwargs)
 
     # check signature of f
     # if !_valid_signature(T, dict[:f])
@@ -625,7 +612,7 @@ function _construct_comp(::Type{T}, @nospecialize(kwargs)) where {T}
     return c
 end
 
-function _reconstruct_comp(::Type{T}, cf::ComponentModel, kwargs) where {T}
+Base.@nospecializeinfer function _reconstruct_comp(::Type{T}, cf::ComponentModel, @nospecialize(kwargs)) where {T}
     fields = fieldnames(T)
     dict = Dict{Symbol, Any}()
     for f in fields
@@ -643,7 +630,7 @@ end
 Fill up keyword arguments `kwargs` for type T with default values.
 Also perfoms sanity check some properties like mass matrix, depth, ...
 """
-function _fill_defaults(T, @nospecialize(kwargs))
+Base.@nospecializeinfer function _fill_defaults(T, @nospecialize(kwargs))
     dict = Dict{Symbol, Any}(kwargs)
     allow_output_sym_clash = pop!(dict, :allow_output_sym_clash, false)
 
@@ -1121,11 +1108,12 @@ function Base.:(==)(cf1::ComponentModel, cf2::ComponentModel)
     typeof(cf1) == typeof(cf2) && equal_fields(cf1, cf2)
 end
 
-function compfg(c)
+# force specialization on f, g, fft
+compfg(c) = _compfg(compf(c), compg(c), fftype(c))
+function _compfg(f::F, g::G, fft::FFT) where {F, G, FFT}
     (outs, du, u, ins, p, t) -> begin
-        f = compf(c)
         isnothing(f) || f(du, u, ins..., p, t)
-        compg(c)(_gargs(fftype(c), outs, du, u, ins, p, t)...)
+        g(_gargs(fft, outs, du, u, ins, p, t)...)
         nothing
     end
 end

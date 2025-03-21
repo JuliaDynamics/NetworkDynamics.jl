@@ -318,7 +318,7 @@ function _get_initial_observed(cf)
         (get_defaults_or_inits(cf, insym(cf); missing_val), )
     end
     p = get_defaults_or_inits(cf, psym(cf); missing_val)
-    cf.obsf(obs, u, ins..., p, NaN)
+    obsf(cf)(obs, u, ins..., p, NaN)
     obs
 end
 

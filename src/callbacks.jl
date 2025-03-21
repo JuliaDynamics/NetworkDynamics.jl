@@ -235,7 +235,7 @@ function wrap_component_callbacks(nw)
     end
     # group the callbacks such that they are in groups which are "batchequal"
     # batchequal groups can be wrapped into a single callback
-    idx_per_type = _find_identical(callbacks, 1:length(components))
+    idx_per_type = find_identical(callbacks; equality=_batchequal)
     batches = []
     for typeidx in idx_per_type
         batchcomps = components[typeidx]
@@ -251,21 +251,22 @@ function wrap_component_callbacks(nw)
     end
     return batches
 end
-function batchequal(a::ContinousComponentCallback, b::ContinousComponentCallback)
-    batchequal(a.condition, b.condition) || return false
-    batchequal(a.kwargs, b.kwargs)       || return false
+_batchequal(a, b) = false
+function _batchequal(a::ContinousComponentCallback, b::ContinousComponentCallback)
+    _batchequal(a.condition, b.condition) || return false
+    _batchequal(a.kwargs, b.kwargs)       || return false
     return true
 end
-function batchequal(a::VectorContinousComponentCallback, b::VectorContinousComponentCallback)
-    batchequal(a.condition, b.condition) || return false
-    batchequal(a.kwargs, b.kwargs)       || return false
+function _batchequal(a::VectorContinousComponentCallback, b::VectorContinousComponentCallback)
+    _batchequal(a.condition, b.condition) || return false
+    _batchequal(a.kwargs, b.kwargs)       || return false
     a.len == b.len                       || return false
     return true
 end
-function batchequal(a::T, b::T) where {T <: Union{ComponentCondition, ComponentAffect}}
+function _batchequal(a::T, b::T) where {T <: Union{ComponentCondition, ComponentAffect}}
     typeof(a) == typeof(b)
 end
-function batchequal(a::NamedTuple, b::NamedTuple)
+function _batchequal(a::NamedTuple, b::NamedTuple)
     length(a) == length(b) || return false
     for (k, v) in a
         haskey(b, k) || return false

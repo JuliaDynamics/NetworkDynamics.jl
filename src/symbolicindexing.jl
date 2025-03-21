@@ -531,40 +531,44 @@ function _is_normalized(snis)
 end
 _is_normalized(snis::SymbolicIndex) = SII.symbolic_type(snis) === SII.ScalarSymbolic()
 
-function _get_observed_f(nw::Network, cf::VertexModel, vidx)
+# function barrier for obsf
+_get_observed_f(nw, cf, vidx) = _get_observed_f(nw.im, cf, vidx, obsf(cf))
+function _get_observed_f(im::IndexManager, cf::VertexModel, vidx, _obsf::O) where {O}
     N = length(cf.obssym)
-    ur   = nw.im.v_data[vidx]
-    aggr = nw.im.v_aggr[vidx]
-    extr = nw.im.v_out[vidx]
-    pr   = nw.im.v_para[vidx]
+    ur   = im.v_data[vidx]
+    aggr = im.v_aggr[vidx]
+    extr = im.v_out[vidx]
+    pr   = im.v_para[vidx]
     ret = Vector{Float64}(undef, N)
+    _hasext = has_external_input(cf)
 
-    @closure (u, outbuf, aggbuf, extbuf, p, t) -> begin
-        ins = if has_external_input(cf)
+    (u, outbuf, aggbuf, extbuf, p, t) -> begin
+        ins = if _hasext
             (view(aggbuf, aggr), view(extbuf, extr))
         else
             (view(aggbuf, aggr), )
         end
-        cf.obsf(ret, view(u, ur), ins..., view(p, pr), t)
+        _obsf(ret, view(u, ur), ins..., view(p, pr), t)
         ret
     end
 end
-
-function _get_observed_f(nw::Network, cf::EdgeModel, eidx)
+function _get_observed_f(im::IndexManager, cf::EdgeModel, eidx, _obsf::O) where {O}
     N = length(cf.obssym)
-    ur    = nw.im.e_data[eidx]
-    esrcr = nw.im.v_out[nw.im.edgevec[eidx].src]
-    edstr = nw.im.v_out[nw.im.edgevec[eidx].dst]
-    extr = nw.im.e_out[eidx]
-    pr   =  nw.im.e_para[eidx]
+    ur    = im.e_data[eidx]
+    esrcr = im.v_out[im.edgevec[eidx].src]
+    edstr = im.v_out[im.edgevec[eidx].dst]
+    extr  = im.e_out[eidx]
+    pr    = im.e_para[eidx]
     ret = Vector{Float64}(undef, N)
+    _hasext = has_external_input(cf)
 
-    @closure (u, outbuf, aggbuf, extbuf, p, t) -> begin
-        ins = (view(outbuf, esrcr), view(outbuf, edstr))
-        if has_external_input(cf)
-            (ins..., view(extbuf, extr))
+    (u, outbuf, aggbuf, extbuf, p, t) -> begin
+        ins = if _hasext
+            (view(outbuf, esrcr), view(outbuf, edstr), view(extbuf, extr))
+        else
+            (view(outbuf, esrcr), view(outbuf, edstr))
         end
-        cf.obsf(ret, view(u, ur), ins..., view(p, pr), t)
+        _obsf(ret, view(u, ur), ins..., view(p, pr), t)
         ret
     end
 end
@@ -778,9 +782,9 @@ function NWState(sol::SciMLBase.AbstractODESolution, t::Number)
 
     tidx = findfirst(_t -> _t > t, para_ts.t)
     p = if isnothing(tidx)
-        para_ts[end]
+        para_ts.u[end]
     else
-        para_ts[tidx-1]
+        para_ts.u[tidx-1]
     end
 
     NWState(sol, u, p, t)

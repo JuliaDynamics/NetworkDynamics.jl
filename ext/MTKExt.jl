@@ -475,11 +475,9 @@ end
 
 _all_rhs_symbols(eqs) = mapreduce(eq->get_variables(eq.rhs), ∪, eqs, init=Set{Symbolic}())
 
-using PrecompileTools: @setup_workload, @compile_workload
-@setup_workload begin
-    @compile_workload begin
-        # include("precompile_workload.jl")
-    end
+using PrecompileTools: @compile_workload
+@compile_workload begin
+    include("precompile_workload.jl")
 end
 
 end
