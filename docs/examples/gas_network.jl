@@ -1,13 +1,13 @@
 #=
-# Dynamic Flow in simple Gas Network
+# Dynamic Flow in Simple Gas Network
 
-This Example is based on the paper
+This example is based on the paper
 
 > Albertus J. Malan, Lukas Rausche, Felix Strehle, Sören Hohmann,
 > Port-Hamiltonian Modelling for Analysis and Control of Gas Networks,
 > IFAC-PapersOnLine, Volume 56, Issue 2, 2023, https://doi.org/10.1016/j.ifacol.2023.10.193.
 
-and tries replicate a simple simulation of flow in a 3-node gas network.
+and tries to replicate a simple simulation of flow in a 3-node gas network.
 
 This example can be dowloaded as a normal Julia script [here](@__NAME__.jl). #md
 
@@ -27,13 +27,13 @@ CairoMakie.activate!(type="svg") #hide
 #=
 ## Node Models
 
-In this example, we use the equation based modeling using `ModelingToolkit.jl`.
-To verify the equations on a basic level we also provide units to eveything to
+In this example, we use equation-based modeling using `ModelingToolkit.jl`.
+To verify the equations on a basic level, we also provide units to everything to
 perform dimensionality checks.
 
 There are 2 node models used in the paper. The first node type has a constant
 pressure.
-Additionally, we ad some "internal" state `q̃_inj` which we want to plot later (see also [Observables](@ref)).
+Additionally, we add some "internal" state `q̃_inj` which we want to plot later (see also [Observables](@ref)).
 =#
 @mtkmodel ConstantPressureNode begin
     @parameters begin
@@ -55,7 +55,7 @@ nothing #hide
 The second node model is a variable pressure node. It has one output state (the pressure) and one input state,
 the aggregated flows from the connected pipes.
 As an internal state we have the injected flow from our source/load.
-The source/load behaviour itself is provided via a time dependent function.
+The source/load behavior itself is provided via a time-dependent function.
 =#
 @mtkmodel VariablePressureNode begin
     @structural_parameters begin
@@ -79,10 +79,10 @@ nothing #hide
 #=
 ## Pipe Model
 
-The pipe is modeld as a first order ODE for the volumetric flow at the `dst` end. It has two inputs:
-the pressure at the source and and the pressure at the destination end.
+The pipe is modeled as a first-order ODE for the volumetric flow at the `dst` end. It has two inputs:
+the pressure at the source and the pressure at the destination end.
 Later on, we'll specify the model to be antisymmetric, thus the flow is calculated explicitly for the
-destination end, but the source end will just recive just that times (-1).
+destination end, but the source end will just receive that times (-1).
 =#
 @mtkmodel Pipe begin
     @parameters begin
@@ -157,7 +157,6 @@ T  = 278u"K"           # simulation temperature
 r  = 0.012u"mm"        # pipe roughness
 D  = 0.6u"m"           # pipe diameter
 
-## TODO: here is switched the lenths l12 and l13. The results are better. Is this a mistake in the paper?
 L₁₂ = 90u"km"
 L₁₃ = 80u"km"
 L₂₃ = 100u"km"
@@ -175,7 +174,7 @@ sinθ₂₃ = 0.0
 nothing # hide
 
 #=
-Lastly, we need to calculate the compressibility factor, the speed of sound and
+Lastly, we need to calculate the compressibility factor, the speed of sound, and
 the density at standard conditions:
 =#
 Z̃ = 1 - 3.52 * p̃/pc * exp(-2.26*(T̃/Tc)) + 0.274 * (p̃/pc)^2 * exp(-1.878*(T̃/Tc)) # (5)
@@ -188,16 +187,16 @@ nothing # hide
 The equivalent "pressure capacity" at the nodes is calculated as a sum of the connected
 pipe parameters according to (28).
 
-Here use defintions based on the speed and "standard" conditions.
+Here we use definitions based on the speed and "standard" conditions.
 =#
 C₂ = L₁₂*A/(2*ρ̃*c̃^2) + L₂₃*A/(2*ρ̃*c̃^2) # (28)
 C₃ = L₁₃*A/(2*ρ̃*c̃^2) + L₂₃*A/(2*ρ̃*c̃^2) # (28)
 nothing #hide
 
 #=
-Alternatively, we could calculate `Z2` and `Z3` based on the actuel pressure and simulation temperature.
-Then we could calculated the speed of sound for the "correct" conditions at the node.
-It seems to have very little effect on the actual results so I kept it simple.
+Alternatively, we could calculate `Z2` and `Z3` based on the actual pressure and simulation temperature.
+Then we could calculate the speed of sound for the "correct" conditions at the node.
+It seems to have very little effect on the actual results, so I kept it simple.
 =#
 nothing #hide
 
@@ -212,12 +211,12 @@ from tracing it. To do so, we use `@register_symbolic` to declare it as a symbol
 as a blackbox.
 
 Additionally, we need to tell ModelingToolkit about the units of this object. This is just used
-for the static unit check during construction of the model. Later one, when we generate the
-Julia code from the symbolic reepresentation all units will be stripped.
+for the static unit check during construction of the model. Later on, when we generate the
+Julia code from the symbolic representation, all units will be stripped.
 
 !!! note "Discontinuities in RHS"
-    The picewise linear interpolated function creates discontinuities in the RHS of the system.
-    However since we know the times exactly, we can handle this by simply giving a list of explicit
+    The piecewise linear interpolated function creates discontinuities in the RHS of the system.
+    However, since we know the times exactly, we can handle this by simply giving a list of explicit
     tstops to the solve command, to make sure those are hit exactly.
 =#
 load2 = LinearInterpolation(-1*Float64[20, 30, 10, 30, 20], [0, 4, 12, 20, 24]*3600.0; extrapolation=ExtrapolationType.Constant)
@@ -229,13 +228,13 @@ nothing #hide
 #=
 ## Building the Network
 
-To bild the Network we first need to define the components. This is a two step process:
+To build the network, we first need to define the components. This is a two-step process:
 
 - first create the symbolic `ODESystem` using ModelingToolkit
 - secondly build a NetworkDynamics component model ([`VertexModel`](@ref)/[`EdgeModel`](@ref)) based on the symbolic system.
 
 In the first step we can use the keyword arguments to pass "default" values for our parameters and states.
-Those values will be automaticially transfered to the metadata of the component model the second step.
+Those values will be automatically transferred to the metadata of the component model in the second step.
 
 The second step requires to define the interface variables, i.e. what are the "input" states of your
 component model and what are the "output" states.
@@ -253,10 +252,10 @@ v2 = VertexModel(v2_mtk, [:q̃_nw], [:p]; name=:v2, vidx=2)
 v3 = VertexModel(v3_mtk, [:q̃_nw], [:p]; name=:v3, vidx=3)
 
 #=
-For the edge Model we have two inputs: the pressure on both source and destination end.
-There is a single output state: the volumetric flow. However we also need to tell
+For the edge model we have two inputs: the pressure on both source and destination end.
+There is a single output state: the volumetric flow. However, we also need to tell
 NetworkDynamics about the coupling type. In this case we use `AntiSymmetric`, which
-meas that the source end will recieve the same flow, just inverted sign.
+means that the source end will receive the same flow, just with inverted sign.
 =#
 @named e12_mtk = Pipe(; L=L₁₂, sinθ=sinθ₁₂, D, A, γ, η, r, g, T, Tc, pc, Rs, c̃, ρ̃, p̃)
 @named e13_mtk = Pipe(; L=L₁₃, sinθ=sinθ₁₃, D, A, γ, η, r, g, T, Tc, pc, Rs, c̃, ρ̃, p̃)
@@ -269,10 +268,10 @@ e23 = EdgeModel(e23_mtk, [:p_src], [:p_dst], AntiSymmetric([:q̃]); name=:e23, s
 #=
 To build the network object we just need to pass the vertices and edges to the constructor.
 
-Note that we've used the `vidx` and `src`/`dst` keywords in the constructors to define for
-each component to which "part" of the network it belongs.
+Note that we've used the `vidx` and `src`/`dst` keywords in the constructors to define
+for each component to which "part" of the network it belongs.
 
-This means, the constructor can automaticially construct a graph based on those informations and
+This means the constructor can automatically construct a graph based on that information and
 we don't need to pass it explicitly.
 =#
 
@@ -284,7 +283,7 @@ structurally different, because both functions capure a unique loadprofile funct
 
 ## Finding a Steady State
 
-To simulate the systme, we first need to find a steadystate. As a "guess" for that
+To simulate the system, we first need to find a steady state. As a "guess" for that,
 we create a `NWState` object from the network.
 This will allocate flat arrays for states `u` and parameters `p` and fill them with the
 default values.
@@ -292,9 +291,9 @@ default values.
 uguess = NWState(nw)
 
 #=
-This is not a steadystate of the system however. To find a true steadystate we want to ensure
-that the lhs of the system is zero.
-We can solve for a steady state numerically by defining a Nonlinear Rootfind problem.
+This is not a steady state of the system however. To find a true steady state, we want to ensure
+that the LHS of the system is zero.
+We can solve for a steady state numerically by defining a Nonlinear Rootfinding problem.
 
 To do so, we need to wrap the Network object in a closure.
 =#
@@ -307,7 +306,7 @@ initsol = solve(initprob)
 
 #=
 We can create a new `NWState` object by wrapping the solution from the nonlinear problem and the
-original prameters in a new `NWState` object.
+original parameters in a new `NWState` object.
 =#
 u0 = NWState(nw, initsol.u, uguess.p)
 
@@ -315,7 +314,7 @@ u0 = NWState(nw, initsol.u, uguess.p)
 ## Solving the ODE
 
 Using this as our initial state we can create the actual `ODEProblem`.
-Since the ode allways operates on flat state and aprameter arrays we use `uflat` and `pflat` to extract them.
+Since the ODE always operates on flat state and parameter arrays, we use `uflat` and `pflat` to extract them.
 =#
 prob = ODEProblem(nw, uflat(u0), (0.0,24*3600), copy(pflat(u0)))
 sol = solve(prob, Tsit5(), tstops=[0,4,12,20,24]*3600)
@@ -356,8 +355,8 @@ Notably, the "internal" states defined in the symbolic models are not "states" i
 For example, we captured the load profile in the `q̃_inj` state of the `VariablePressureNode`.
 The only dynamic state of the model however is `p`.
 Using the "observables" mechanism from SciML, which is implemented by NetworkDynamics, we can reconstruct
-those "optimized" states which have been removed symbolicially.
-Here we plot the reconstructed load profile of nodes 2 and 3. Also, we know that node 1 is infinetly stiff,
+those "optimized" states which have been removed symbolically.
+Here we plot the reconstructed load profile of nodes 2 and 3. Also, we know that node 1 is infinitely stiff,
 acting as an infinite source of volumetric flow. We can reconstruct this flow too.
 =#
 fig = begin
