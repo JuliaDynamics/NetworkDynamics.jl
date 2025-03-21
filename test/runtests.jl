@@ -55,7 +55,7 @@ haskey(ENV, "BUILDKITE") && @test CUDA.functional() # fail early in buildkite if
 
     # check on the precompile files
     @safetestset "Precompile workload" begin include("../src/precompile_workload.jl") end
-    @safetestset "MTK precompile workload" begin include("../ext/precompile_workload.jl") end
+    @safetestset "MTK precompile workload" begin include("../ext/MTKExt_precomp_workload.jl") end
 end
 
 @testset "Test Doc Examples" begin

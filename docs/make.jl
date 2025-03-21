@@ -33,7 +33,7 @@ for example in filter(contains(r".jl$"), readdir(example_dir, join=true))
     Literate.script(example, outdir; keep_comments=true)
 end
 
-mtkext = Base.get_extension(NetworkDynamics, :MTKExt)
+mtkext = Base.get_extension(NetworkDynamics, :NetworkDynamicsMTKExt)
 kwargs = (;
     root=joinpath(pkgdir(NetworkDynamics), "docs"),
     sitename="NetworkDynamics",
