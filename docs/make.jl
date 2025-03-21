@@ -64,6 +64,7 @@ kwargs = (;
             "Cascading Failure" => "generated/cascading_failure.md",
             "Stress on Truss" => "generated/stress_on_truss.md",
             "Gas Network" => "generated/gas_network.md",
+            "Initialization" => "generated/initialization.md",
         ]
     ],
     draft=false,
