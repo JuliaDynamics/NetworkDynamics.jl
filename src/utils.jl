@@ -140,3 +140,31 @@ abstract type SymbolicParameterIndex{C,S} <: SymbolicIndex{C,S} end
 
 flatten_sym(v::NamedTuple) = reduce(vcat, values(v))
 flatten_sym(v::AbstractVector{Symbol}) = v
+
+"""
+    find_identical(v::Vector;; equality)
+
+Find identical elements in a vector `v` using the `equality` function.
+Returns a vector of vectors where each vector contains the indices of identical elements.
+"""
+function find_identical(v::Vector{T}; equality=isequal) where {T}
+    indices = eachindex(v)
+    idxs_per_type = Vector{Int}[]
+    unique_comp = T[]
+    for i in eachindex(v)
+        found = false
+        for j in eachindex(unique_comp)
+            if equality(v[i], unique_comp[j])
+                found = true
+                push!(idxs_per_type[j], indices[i])
+                break
+            end
+        end
+        if !found
+            push!(unique_comp, v[i])
+            push!(idxs_per_type, [indices[i]])
+        end
+    end
+    @assert length(unique_comp) == length(idxs_per_type)
+    return idxs_per_type
+end

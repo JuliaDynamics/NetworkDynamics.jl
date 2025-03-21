@@ -37,23 +37,23 @@ using NetworkDynamics
     end
 
     @testset "find_identical" begin
-        using NetworkDynamics: _find_identical
+        using NetworkDynamics: _find_identical_components
 
         v1 = Lib.kuramoto_second()
-        @test _find_identical(v1, 1:10) == [collect(1:10)]
+        @test _find_identical_components([v1 for _ in 1:10]) == [collect(1:10)]
         v2 = Lib.diffusion_vertex()
         v3 = Lib.kuramoto_first()
 
         # v2 and v3 are equal when it comes to the function!!
         vs = [v1,v2,v3,v2,v2,v1,v1,v3]
 
-        @test _find_identical(vs, eachindex(vs)) == [[1,6,7],[2,4,5],[3,8]]
+        @test _find_identical_components(vs) == [[1,6,7],[2,4,5],[3,8]]
 
         es = [Lib.diffusion_edge(),
               Lib.diffusion_edge_closure(),
               Lib.diffusion_edge_closure(),
               Lib.diffusion_edge_fid()]
-        @test _find_identical(es, eachindex(es)) == [[1], [2], [3], [4]]
+        @test _find_identical_components(es) == [[1], [2], [3], [4]]
     end
 
     @testset "algin strings" begin

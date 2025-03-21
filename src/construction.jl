@@ -128,10 +128,18 @@ function Network(g::AbstractGraph,
 
         # batch identical edge and vertex model
         @timeit_debug "batch identical vertexes" begin
-            vidxs = _find_identical(vertexm, 1:nv(g))
+            vidxs = if all_same_v
+                [collect(1:nv(g))]
+            else
+                _find_identical_components(_vertexm)
+            end
         end
         @timeit_debug "batch identical edges" begin
-            eidxs = _find_identical(edgem, 1:ne(g))
+            eidxs = if all_same_e
+                [collect(1:ne(g))]
+            else
+                _find_identical_components(_edgem)
+            end
         end
 
         # create vertex batches and initialize with index manager
@@ -196,6 +204,26 @@ function Network(g::AbstractGraph,
     end
     # TimerOutputs.print_timer()
     return nw
+end
+
+function _find_identical_components(models)
+    # identical components are based on identical _component_hash
+    # those can have different metadata but are considered identical when in comes to batching
+    hashs = _component_hash.(models)
+    find_identical(hashs)
+end
+# hash condition: components with same hash will end up in the same batch
+function _component_hash(c::ComponentModel)
+    hash((
+        typeof(c), # same type
+        compf(c),  # same f-function
+        compg(c),  # same g-function
+        fftype(c), # same feedforward type
+        dim(c),    # same state dimension
+        outdim(c), # same output dimension
+        pdim(c),   # same parameter dimension
+        extdim(c), # same external input dimension
+    ))
 end
 
 function Network(vertexfs, edgefs; kwargs...)
@@ -322,28 +350,6 @@ batch_by_idxs(v, idxs::Vector{Vector{Int}}) = [v for batch in idxs]
 function batch_by_idxs(v::AbstractVector, batches::Vector{Vector{Int}})
     @assert length(v) == sum(length.(batches))
     [v[batch] for batch in batches]
-end
-
-_find_identical(v::ComponentModel, indices) = [collect(indices)]
-function _find_identical(v::Vector{T}, indices) where {T<:ComponentModel}
-    idxs_per_type = Vector{Int}[]
-    unique_comp = T[]
-    for i in eachindex(v)
-        found = false
-        for j in eachindex(unique_comp)
-            if batchequal(v[i], unique_comp[j])
-                found = true
-                push!(idxs_per_type[j], indices[i])
-                break
-            end
-        end
-        if !found
-            push!(unique_comp, v[i])
-            push!(idxs_per_type, [indices[i]])
-        end
-    end
-    @assert length(unique_comp) == length(idxs_per_type)
-    return idxs_per_type
 end
 
 function construct_mass_matrix(im; type=nothing)

@@ -579,19 +579,6 @@ dispatchT(::T) where {T<:ComponentModel} = dispatchT(T)
 dispatchT(T::Type{<:VertexModel}) = VertexModel
 dispatchT(T::Type{<:EdgeModel}) = EdgeModel
 
-# TODO: introduce batchequal hash for faster batching of component models
-batchequal(a, b) = false
-function batchequal(a::ComponentModel, b::ComponentModel)
-    compf(a) === compf(b)  || return false
-    compg(a) === compg(b)  || return false
-    fftype(a) == fftype(b) || return false
-    dim(a)    == dim(b)    || return false
-    outdim(a) == outdim(b) || return false
-    pdim(a)   == pdim(b)   || return false
-    extdim(a) == extdim(b) || return false
-    return true
-end
-
 """
     _construct_comp(::Type{T}, kwargs) where {T}
 
