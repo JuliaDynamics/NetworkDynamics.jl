@@ -61,6 +61,9 @@ The source/load behavior itself is provided via a time-dependent function.
     @structural_parameters begin
         load_profile # time dependent load profile
     end
+    @constants begin
+        load_unit = 1, [description="unit of the load profile", unit=u"m^3/s"]
+    end
     @parameters begin
         C, [description="Lumped capacitance of connected pipes", unit=u"m^4 * s^2 / kg"]
     end
@@ -70,7 +73,7 @@ The source/load behavior itself is provided via a time-dependent function.
         q̃_nw(t), [description="aggregated flow from pipes into node", unit=u"m^3/s", input=true]
     end
     @equations begin
-        q̃_inj ~ load_profile(t)
+        q̃_inj ~ load_profile(t) * load_unit
         C * Dt(p) ~ q̃_inj + q̃_nw # (30)
     end
 end
@@ -203,16 +206,15 @@ nothing #hide
 #=
 ## Load Profile
 
-The paper specifies the load profile at two nodes. We use the package [`LinearInterpolations.jl`](https://github.com/jw3126/LinearInterpolations.jl)
-to get a callable object which represents this picewise linear interpolation.
+The paper specifies the load profile at two nodes. We use the package [`DataInterpolations.jl`](https://github.com/SciML/DataInterpolations.jl)
+to get a callable object which represents this piecewise linear interpolation.
 
-However, this function is not Symbolics.jl compatible, so we need to stop Symbolics.jl/ModelingToolkit.jl
-from tracing it. To do so, we use `@register_symbolic` to declare it as a symbolic function which is treated
-as a blackbox.
+Currently, the linear interpolation does not support any units yet. To satisfy the static unit check,
+we multipy the interpolation output by a constant 1 of that unit.
 
-Additionally, we need to tell ModelingToolkit about the units of this object. This is just used
-for the static unit check during construction of the model. Later on, when we generate the
-Julia code from the symbolic representation, all units will be stripped.
+Note however, that the unit check is only performed at the construction of the
+model. Later on, when the nummeric code will be generated from the symbolic
+representation, all units will be stripped.
 
 !!! note "Discontinuities in RHS"
     The piecewise linear interpolated function creates discontinuities in the RHS of the system.
@@ -221,11 +223,12 @@ Julia code from the symbolic representation, all units will be stripped.
 =#
 load2 = LinearInterpolation(-1*Float64[20, 30, 10, 30, 20], [0, 4, 12, 20, 24]*3600.0; extrapolation=ExtrapolationType.Constant)
 load3 = LinearInterpolation(-1*Float64[40, 50, 30, 50, 40], [0, 4, 12, 20, 24]*3600.0; extrapolation=ExtrapolationType.Constant)
-ModelingToolkit.get_unit(op::typeof(load2), _) = u"m^3/s"
-ModelingToolkit.get_unit(op::typeof(load3), _) = u"m^3/s"
+ModelingToolkit.get_unit(::LinearInterpolation, _ ) = 1.0 # type piracy!
 nothing #hide
 
 #=
+As a workaround we had to explicitly define `LinearInterpolations` as unitless, which is type piracy! Don't to this in any package code!
+
 ## Building the Network
 
 To build the network, we first need to define the components. This is a two-step process:
@@ -293,22 +296,12 @@ uguess = NWState(nw)
 #=
 This is not a steady state of the system however. To find a true steady state, we want to ensure
 that the LHS of the system is zero.
-We can solve for a steady state numerically by defining a Nonlinear Rootfinding problem.
 
-To do so, we need to wrap the Network object in a closure.
+We can use the [`find_fixpoint`](@ref) from `NetworkDynamics.jl` to initialize the system.
+Internally, this uses a nummerical solve for the rootfind problem `0 = rhs`.
+The result is automaticially wrapped as a [`NWState`](@ref) object.
 =#
-nwwrap = (du, u, p) -> begin
-    nw(du, u, p, 0)
-    nothing
-end
-initprob = NonlinearProblem(nwwrap, uflat(uguess), pflat(uguess))
-initsol = solve(initprob)
-
-#=
-We can create a new `NWState` object by wrapping the solution from the nonlinear problem and the
-original parameters in a new `NWState` object.
-=#
-u0 = NWState(nw, initsol.u, uguess.p)
+u0 = find_fixpoint(nw, uguess)
 
 #=
 ## Solving the ODE
