@@ -782,9 +782,9 @@ function NWState(sol::SciMLBase.AbstractODESolution, t::Number)
 
     tidx = findfirst(_t -> _t > t, para_ts.t)
     p = if isnothing(tidx)
-        para_ts[end]
+        para_ts.u[end]
     else
-        para_ts[tidx-1]
+        para_ts.u[tidx-1]
     end
 
     NWState(sol, u, p, t)

@@ -402,7 +402,11 @@ end
         u2 = vcat(u, out)
         # compfg(v2)((out2,), du2, u2, (in,), p, NaN)
         b = @b $(compfg(v2))($(out2,), $du2, $u2, $(in,), $p, NaN)
-        @test b.allocs == 0
+        if haskey(ENV, "JULIA_COVERAGE")
+            @test b.allocs ≤ 6 # decreased performacen due to coverage sideeffects
+        else
+            @test b.allocs == 0
+        end
         @test out ≈ out2
         @test du2 ≈ vcat(du, zeros(length(out)))
     end

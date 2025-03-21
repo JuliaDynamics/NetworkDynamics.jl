@@ -245,8 +245,8 @@ prob = ODEProblem(nw, uflat(u0), (0,6), pflat(u0); callback=cbset)
 Main.test_execution_styles(prob) # testing all ex styles #src
 sol2 = solve(prob, Tsit5());
 ## we want to test the reconstruction of the observables # hide
-@test all(!iszero, sol2(sol2.t; idxs=eidxs(sol2,:,:P))[begin]) # hide
-@test all(iszero, sol2(sol2.t; idxs=eidxs(sol2,:,:P))[end][[1:5...,7]]) # hide
+@test all(!iszero, sol2(sol2.t; idxs=eidxs(sol2,:,:P)).u[begin]) # hide
+@test all(iszero, sol2(sol2.t; idxs=eidxs(sol2,:,:P)).u[end][[1:5...,7]]) # hide
 nothing #hide
 
 # Then again we plot the solution:
