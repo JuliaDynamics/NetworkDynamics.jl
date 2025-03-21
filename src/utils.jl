@@ -118,7 +118,7 @@ end
 
 function rand_inputs_fg(rng, cf)
     @argcheck hasindim(cf) "ComponentModel has no specified input dimensions/syms"
-    du = rand(rng, dim(cf))
+    du = [NaN for _ in 1:dim(cf)]
     u = rand(rng, dim(cf))
     p = rand(rng, pdim(cf))
     ins = Tuple(rand(rng, l) for l in values(indim(cf)))
@@ -126,11 +126,19 @@ function rand_inputs_fg(rng, cf)
         ext = rand(rng, extdim(cf))
         ins = (ins..., ext)
     end
-    outs = Tuple(rand(rng, l) for l in values(outdim(cf)))
+    outs = Tuple([NaN for _ in 1:l] for l in values(outdim(cf)))
     t = NaN
-    (outs, du, u, ins, p, t)
+    (outs, du, u, ins, p, t) # fg extrancs outs and ints internally!
 end
 rand_inputs_fg(cf) = rand_inputs_fg(Random.default_rng(), cf)
+
+function rand_inputs_obsf(rng, cf)
+    (_, u, p, ins, p, t) = rand_inputs_fg(rng, cf)
+    N = length(cf.obssym)
+    outs = [NaN for _ in 1:N]
+    (outs, u, ins..., p, t)
+end
+rand_inputs_obsf(cf) = rand_inputs_obsf(Random.default_rng(), cf)
 
 
 # abstract symbolic index types
