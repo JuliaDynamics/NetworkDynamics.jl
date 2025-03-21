@@ -290,6 +290,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
             implicit_outputs = setdiff(alloutputs, _definedoutputs)
             verbose && @warn "The specified outputs $implicit_outputs do not appear in the equations of the system!"
         end
+        verbose && @info "Simplifying system with inputs $_openinputs and outputs $_definedoutputs"
         structural_simplify(_sys, (_openinputs, _definedoutputs); simplify=false)[1]
     end
 
