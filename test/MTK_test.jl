@@ -257,3 +257,38 @@ v = VertexModel(fullyimplicit, [:u], [:z])
 data = NetworkDynamics.rand_inputs_fg(v)
 b = @b $(NetworkDynamics.compfg(v))($data...)
 @test b.allocs == 0
+
+@testset "Test constants in MTK models" begin
+    @mtkmodel DQSwing_Constants begin
+        @extend DQBus()
+        @variables begin
+            ω(t) = 0.0, [description = "Rotor frequency"]
+            θ(t) = 0.0, [description = "Rotor angle"]
+            Pel(t), [description = "Electrical Power"]
+        end
+        @constants begin
+            V = 1, [description = "Voltage magnitude"]
+            useless = 0
+        end
+        @parameters begin
+            M = 1, [description = "Inertia"]
+            D = 0.1, [description = "Damping"]
+            Pmech, [description = "Mechanical Power"]
+        end
+        @equations begin
+            Dt(θ) ~ ω
+            Dt(ω) ~ 1/M * (Pmech - D*ω + Pel)
+            Pel ~ real((u_r + im*u_i) * (i_r - im*i_i)) + useless
+            u_r ~ V*cos(θ)
+            u_i ~ V*sin(θ)
+        end
+    end
+    @named withconst = DQSwing_Constants()
+    v = VertexModel(withconst, [:i_r, :i_i], [:u_r, :u_i])
+
+    data = NetworkDynamics.rand_inputs_fg(v)
+    NetworkDynamics.compfg(v)(data...) # no error
+
+    data = NetworkDynamics.rand_inputs_obsf(v)
+    v.obsf(data...) # no error
+end
