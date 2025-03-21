@@ -183,6 +183,7 @@ function fix_metadata!(invalid_eqs, sys)
 
     metadatasubs = Dict()
     allsyms = ModelingToolkit.all_symbols(sys)
+    filter!(s->!contains(repr(s), "Initial"), allsyms)
     allnames = string.(ModelingToolkit.getname.(allsyms))
 
     for invalids in missingmetadata
