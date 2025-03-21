@@ -1,4 +1,4 @@
-module CUDAExt
+module NetworkDynamicsCUDAExt
 using NetworkDynamics: Network, NetworkLayer, ComponentBatch,
                        KAAggregator, AggregationMap, SparseAggregator,
                        LazyGBufProvider, EagerGBufProvider, LazyGBuf,

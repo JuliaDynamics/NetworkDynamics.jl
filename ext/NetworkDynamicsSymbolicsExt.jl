@@ -1,4 +1,4 @@
-module SymbolicsExt
+module NetworkDynamicsSymbolicsExt
 
 using Symbolics: Symbolics, @variables, Num
 using MacroTools: postwalk, @capture
