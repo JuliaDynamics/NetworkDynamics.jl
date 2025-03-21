@@ -1,4 +1,4 @@
-module MTKExt
+module NetworkDynamicsMTKExt
 
 using ModelingToolkit: Symbolic, iscall, operation, arguments, build_function
 using ModelingToolkit: ModelingToolkit, Equation, ODESystem, Differential
@@ -13,7 +13,7 @@ using NetworkDynamics: NetworkDynamics, set_metadata!,
                        PureFeedForward, FeedForward, NoFeedForward, PureStateMap
 import NetworkDynamics: VertexModel, EdgeModel, AnnotatedSym
 
-include("MTKUtils.jl")
+include("MTKExt_utils.jl")
 
 """
     VertexModel(sys::ODESystem, inputs, outputs;
@@ -477,7 +477,7 @@ _all_rhs_symbols(eqs) = mapreduce(eq->get_variables(eq.rhs), ∪, eqs, init=Set{
 
 using PrecompileTools: @compile_workload
 @compile_workload begin
-    include("precompile_workload.jl")
+    include("MTKExt_precomp_workload.jl")
 end
 
 end
