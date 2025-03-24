@@ -44,7 +44,7 @@ nothing #hide
 #=
 Now we'll define three specific node types:
 
-1. A constant pressure node that forces pressure to maintain a specific value
+**A) A constant pressure node that forces pressure to maintain a specific value**
 =#
 @mtkmodel ConstantPressureNode begin
     @extend GasNode()
@@ -58,7 +58,7 @@ end
 nothing #hide
 
 #=
-2. A static prosumer node which forces a certain flow (pressure is fully implicit)
+**B) A static prosumer node which forces a certain flow (pressure is fully implicit)**
 =#
 @mtkmodel StaticProsumerNode begin
     @extend GasNode()
@@ -72,7 +72,7 @@ end
 nothing #hide
 
 #=
-3. A dynamic prosumer node with compliance, which adds dynamics to the pressure state
+**C) A dynamic prosumer node with compliance, which adds dynamics to the pressure state**
 =#
 @mtkmodel DynamicProsumerNode begin
     @extend GasNode()
@@ -87,7 +87,7 @@ end
 nothing #hide
 
 #=
-4. A pressure control node that tries to maintain a set pressure by adjusting its injection
+**D) A pressure control node that tries to maintain a set pressure by adjusting its injection**
 =#
 @mtkmodel PressureControlNode begin
     @extend GasNode()
@@ -206,7 +206,7 @@ u_static = find_fixpoint(nw_static, u_static_guess)
 
 Now we'll define our dynamic model using more complex components:
 =#
-@named v1_mod_dyn = PressureControlNode(;p_set=1)
+@named v1_mod_dyn = PressureControlNode()
 v1_dyn = VertexModel(v1_mod_dyn, [:q̃_nw], [:p], vidx=1)
 
 @named v2_mod_dyn = DynamicProsumerNode(q̃_prosumer=-0.6)
@@ -236,37 +236,62 @@ nw_dyn = Network([v1_dyn, v2_dyn, v3_dyn], [p12_dyn, p13_dyn, p23_dyn])
 Now comes the important part: we need to initialize the interface values (pressures and flows)
 of the dynamic model with the results from the static model.
 
-First, let's handle node 1 (the pressure control node):
+We can do this manually:
 =#
-
+## Vertex 1: output
 set_default!(nw_dyn[VIndex(1)], :p, u_static.v[1, :p])
+## Vertex 1: input
 set_default!(nw_dyn[VIndex(1)], :q̃_nw, u_static.v[1, :q̃_nw])
-v1_dyn # hide
-#=
-In the output, you can see that state ξ is "approx" 1 (guess value) while the rest is fixed.
-Now we can initialize the dynamic model's internal states:
-=#
-initialize_component!(v1_dyn)
-v1_dyn #hide
-
-#=
-For the other two vertices (which are simpler), we just need to set the default values:
-=#
-set_default!(nw_dyn[VIndex(2)], :p, u_static.v[2, :p])
-set_default!(nw_dyn[VIndex(3)], :p, u_static.v[3, :p])
 nothing #hide
 
 #=
-For the pipe models, we manually initialize the flow state of the dynamic line model:
+But there is also a built in method [`set_interface_defaults!`](@ref) which we can use
+automaticially:
 =#
-set_default!(nw_dyn[EIndex(1)], :q̃, u_static.e[1, :q̃])
-set_default!(nw_dyn[EIndex(2)], :q̃, u_static.e[2, :q̃])
-set_default!(nw_dyn[EIndex(3)], :q̃, u_static.e[3, :q̃])
+set_interface_defaults!(nw_dyn, u_static; verbose=true)
 nothing #hide
 
 #=
-Now that we've set all the "default" values for all the states, we can call `NWState` on the
-network to get a fully initialized state vector:
+With the interfaces all set, we can "initialize" the internal states of the dynamic models.
+
+For example, let's inspect the state of our first vertex:
+=#
+nw_dyn[VIndex(1)]
+
+#=
+We observe, that both the initial state `ξ` as well as the pressure setpoint `p_set`
+is left "free". Using [`initialize_component!`](@ref), we can try to find values for the
+"free" states and parameters such that the interface constraints are fulfilled.
+=#
+initialize_component!(nw_dyn[VIndex(1)])
+#=
+We may also use [`dump_initial_state`](@ref) to get a more detailed view of the state:
+=#
+dump_initial_state(nw_dyn[VIndex(1)])
+nothing #hide
+
+#=
+We can also initialize the other two vertices, however it is a bit useless
+since their state is allready completely determined by the fixed input/output:
+=#
+initialize_component!(nw_dyn[VIndex(2)])
+initialize_component!(nw_dyn[VIndex(3)])
+nothing #hide
+
+#=
+Similarily, we can initialize the dynamic pipe models. However since their dynamic state
+equals the output, once again there is nothing to initialize.
+=#
+initialize_component!(nw_dyn[EIndex(1)])
+initialize_component!(nw_dyn[EIndex(2)])
+initialize_component!(nw_dyn[EIndex(3)])
+nothing #hide
+
+#=
+Now, everything is initialized, which means every input, output, state and parameter
+either has a `default` metadata or a `init` metadate. When constructing the `NWState`
+for this network, it will be filled with all those values which should now correspond
+to a steady state of the system:
 =#
 u0_dyn = NWState(nw_dyn)
 

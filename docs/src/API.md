@@ -164,6 +164,7 @@ init_residual
 get_initial_state
 dump_initial_state
 set_defaults!
+set_interface_defaults!
 ```
 
 ## Execution Types
