@@ -1,5 +1,5 @@
 #=
-# Tutorial on Stepwise Initialization of a Complex Model
+# [Tutorial on Stepwise Initialization of a Complex Model](@id init-tutorial)
 
 This example demonstrates how to initialize a complex network model with both static
 and dynamic components. We'll create a simple gas network model with three nodes

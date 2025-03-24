@@ -1,19 +1,27 @@
 # Initialization
 Initialization of the system describes the process of finding valid initial conditions, mostly a fixpoint of the system.
-We distinguish between two types of initialization: full system initialziation and component initialization.
+We distinguish between two types of initialization: full system initialization and component initialization.
 
 ## Full-System Initialization
-Full system initialization describs the process of finding a fixpoint/steady state of th entire system.
+Full system initialization describes the process of finding a fixpoint/steady state of the entire system.
 
-To do so, you can use [`find_fixpoint`](@ref), which creates a `SteadyStateProblem` of the whole network and tries do solve it. 
+To do so, you can use [`find_fixpoint`](@ref), which creates a `SteadyStateProblem` of the whole network and tries to solve it. 
 
 ## Component-wise Initialization
 In contrast to full-system initialization the goal of component-wise initialization is to find a valid initial condition for a single component first, given a network coupling.
 
-This can be usefull in cases, where there are nontrivial internal dynamics and states within a single vertex or edge.
-The idea of component-wise initialisation is to find internal states which match a given "network coupling" (fixed inputs and outputs).
+This can be useful in cases, where there are nontrivial internal dynamics and states within a single vertex or edge.
+The idea of component-wise initialization is to find internal states which match a given "network coupling" (fixed inputs and outputs).
 
-Lets consider the following example of a Swing-equation generator model.
+The following initialization workflow (as used in the [Tutorial on Initialization](@ref init-tutorial)) is quite common for complex dynamics:
+
+  1. Define simple, quasistatic models with the same input-output structure as the dynamic models.
+  2. Find a solution of the static model using [`find_fixpoint`](@ref).
+  3. Define elaborate, dynamical models. Define dynamical network on same graph topology.
+  4. Use [`set_interface_defaults!`](@ref) to "copy" the inputs and outputs of all components from the static solution to the dynamical network.
+  5. Use [`initialize_component!`](@ref) to fix "free" states and parameters within the dynamical models to find a steady state while satisfying the constraints on inputs/output.
+
+Let's consider the following example of a Swing-equation generator model.
 ```@example compinit
 using NetworkDynamics, ModelingToolkit
 using ModelingToolkit: t_nounits as t, D_nounits as Dt
@@ -47,7 +55,7 @@ sys = Swing(name=:swing)
 vf = VertexModel(sys, [:i_r, :i_i], [:u_r, :u_i])
 ```
 You can see in the provided [metadata](@ref), that we've set `default` values for the node outputs `u_r`, `u_i`, the node inputs `i_r`, `i_i` and most parameters.
-For some states and parameters, we've onlye provided a `guess` rather than a default.
+For some states and parameters, we've only provided a `guess` rather than a default.
 Variables which only have `guess`es are considered "tunable" for the initialization algorithm.
 
 In order to initialize the remaining variables we use [`initialize_component!`](@ref), which is a mutating function which tries to solve the nonlinear initialization problem and store the found values for the "free" variables as `init` metadata.
@@ -60,10 +68,10 @@ nothing #hide
 vf #hide
 ```
 
-Which lead to a successfull initialization of states `:θ` and `:ω` as well as parameter `:Pm`.
+Which led to a successful initialization of states `:θ` and `:ω` as well as parameter `:Pm`.
 To retrieve the residual you can use [`init_residual`](@ref).
 
-As a quick test we can ensure that the angle indeed matches the voltag angel:
+As a quick test we can ensure that the angle indeed matches the voltage angle:
 ```@example compinit
 get_init(vf, :θ) ≈ atan(get_default(vf, :u_i), get_default(vf, :u_r))
 ```
