@@ -47,8 +47,8 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"
 
-[sources]
-NetworkDynamics = {path = ".."}
+[sources.NetworkDynamics]
+path = ".."
 
 [compat]
 Adapt = "≥0.0.1"
@@ -57,7 +57,7 @@ Bonito = "≥0.0.1"
 CUDA = "≥0.0.1"
 CairoMakie = "0.13.1"
 Chairmarks = "1.3.1"
-DataInterpolations = "7"
+DataInterpolations = "7, 8"
 DelimitedFiles = "1.9.1"
 DiffEqCallbacks = "4.1.0"
 DifferentiationInterface = "0.6.32"
