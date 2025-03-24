@@ -245,8 +245,8 @@ set_default!(nw_dyn[VIndex(1)], :q̃_nw, u_static.v[1, :q̃_nw])
 nothing #hide
 
 #=
-But there is also a built in method [`set_interface_defaults!`](@ref) which we can use
-automaticially:
+But there is also a built-in method [`set_interface_defaults!`](@ref) which we can use
+automatically:
 =#
 set_interface_defaults!(nw_dyn, u_static; verbose=true)
 nothing #hide
@@ -259,8 +259,8 @@ For example, let's inspect the state of our first vertex:
 nw_dyn[VIndex(1)]
 
 #=
-We observe, that both the initial state `ξ` as well as the pressure setpoint `p_set`
-is left "free". Using [`initialize_component!`](@ref), we can try to find values for the
+We observe that both the initial state `ξ` as well as the pressure setpoint `p_set`
+are left "free". Using [`initialize_component!`](@ref), we can try to find values for the
 "free" states and parameters such that the interface constraints are fulfilled.
 =#
 initialize_component!(nw_dyn[VIndex(1)])
@@ -271,15 +271,15 @@ dump_initial_state(nw_dyn[VIndex(1)])
 nothing #hide
 
 #=
-We can also initialize the other two vertices, however it is a bit useless
-since their state is allready completely determined by the fixed input/output:
+We can also initialize the other two vertices, however it is unnecessary
+since their state is already completely determined by the fixed input/output:
 =#
 initialize_component!(nw_dyn[VIndex(2)])
 initialize_component!(nw_dyn[VIndex(3)])
 nothing #hide
 
 #=
-Similarily, we can initialize the dynamic pipe models. However since their dynamic state
+Similarly, we can initialize the dynamic pipe models. However, since their dynamic state
 equals the output, once again there is nothing to initialize.
 =#
 initialize_component!(nw_dyn[EIndex(1)])
@@ -289,7 +289,7 @@ nothing #hide
 
 #=
 Now, everything is initialized, which means every input, output, state and parameter
-either has a `default` metadata or a `init` metadate. When constructing the `NWState`
+either has a `default` metadata or an `init` metadata. When constructing the `NWState`
 for this network, it will be filled with all those values which should now correspond
 to a steady state of the system:
 =#
