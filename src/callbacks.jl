@@ -69,7 +69,7 @@ Creates a callback condition for a [`ComponentCallback`].
        - `ctx.model`: a referenc to the ocmponent model
        - `ctx.vidx`/`ctx.eidx`: The index of the vertex/edge model.
        - `ctx.src`/`ctx.dst`: src and dst indices (only for edge models).
-       - `ctx.integrator`: The integrator object.
+       - `ctx.integrator`: The integrator object. Use [`extract_nw`](@ref) to obtain the network.
        - `ctx.t=ctx.integrator.t`: The current simulation time.
 - `sym`: A vector or tuple of symbols, which represent **states** (**excluding**
   inputs, outputs, observed) of the component model. Determines, which states will

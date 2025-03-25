@@ -1,13 +1,11 @@
 # Data Structure
 
 A [`Network`](@ref) contains a list of vertex and edge models along with a graph.
-
 However, in tight numerical loops, it will never access these lists of models directly.
 Instead, the network maintains an internal representation that tracks all symbolic indices, defining the precise ordering of states and parameters in a flat array representation. To optimize performance, especially for heterogeneous networks, the network employs specialized data structures that batch identical models together.
 
 This disconnect between the explicit lists and the internal data structures
 can be confusing.
-
 
 ## Flat Parameter and State Arrays
 
@@ -66,3 +64,6 @@ nothing #hide
     nw = Network(complete_graph(3), [v1,v2,v1], e; dealias=true)
     nw[VIndex(1)] === nw[VIndex(3)] # neither of them === v1
     ```
+
+## Extracting `Network`-object from Containers
+`NetworkDynamics.jl` provides a [`extract_nw`](@ref) function, to get a reference to the wrapped `Network` object from different containers, such as solution objects or integrator objects.
