@@ -28,7 +28,7 @@ Special cases for symbol metadata are:
 - `default`: Stores default values for states/parameters. In initialization, those are considered fixed.
 - `guess`: Stores a guess for a state/parameter which needs to solved during initialization ("free" variables).
 - `bounds`: Store bounds for variables/parameters
-- `init`: Stores the solution of the "free" variables, this is rarely set manual but instead when calling [`initialize_component`](@ref).
+- `init`: Stores the solution of the "free" variables, this is rarely set manual but instead when calling [`initialize_component!`](@ref).
 
 Fore those, there are special functions `has_*`, `get_*` and `set_*!`. See [Per Symbol Metadata API](@ref).
 

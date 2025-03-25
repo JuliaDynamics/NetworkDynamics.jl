@@ -36,7 +36,7 @@ as tearing of thousands of equations.
 
 ## RC-Circuit Example
 In good [MTK tradition](https://docs.sciml.ai/ModelingToolkit/stable/tutorials/acausal_components/), this feature will be explained along a simple RC circuit example.
-The [Dynamic Flow in Simple Gas Network](@ref) example is another showcase of the MTK constructors.
+The [Gas Network Example](@ref gas-example) or [Initialization Tutorial](@ref init-tutorial) also showcase the MTK constructors.
 
 The system to model is 2 node, 1 edge network. The node output states are the voltage (to ground), the edge output sates are the currents at both ends.
 ```
