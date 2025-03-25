@@ -239,7 +239,7 @@ end
 function SII.variable_index(nw::Network, sni)
     if _hascolon(sni)
         SII.variable_index(nw, _resolve_colon(nw,sni))
-    elseif SII.symbolic_type(sni) === SII.ArraySymbolic()
+    elseif sni isa AbstractVector || SII.symbolic_type(sni) === SII.ArraySymbolic()
         SII.variable_index.(nw, sni)
     else
         _variable_index(nw, sni)
@@ -289,7 +289,7 @@ end
 function SII.parameter_index(nw::Network, sni)
     if _hascolon(sni)
         SII.parameter_index(nw, _resolve_colon(nw,sni))
-    elseif SII.symbolic_type(sni) === SII.ArraySymbolic()
+    elseif sni isa AbstractVector || SII.symbolic_type(sni) === SII.ArraySymbolic()
         SII.parameter_index.(nw, sni)
     else
         _parameter_index(nw, sni)
