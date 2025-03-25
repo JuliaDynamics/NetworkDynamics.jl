@@ -45,6 +45,7 @@ kwargs = (;
         "General" => "index.md",
         "mathematical_model.md",
         "network_construction.md",
+        "data_structure.md",
         "Features" => [
             "symbolic_indexing.md",
             "metadata.md",
