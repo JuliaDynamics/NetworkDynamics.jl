@@ -66,6 +66,10 @@ function initialization_problem(cf::T; t=NaN, apply_bound_transformation, verbos
 
     # count free variables and equations
     Nfree = mapreduce(sum, +, outfree_ms) + sum(ufree_m) + mapreduce(sum, +, infree_ms) + sum(pfree_m)
+
+    # return "fake NonlinearProblem" if no free variables
+    iszero(Nfree) && return ((; u0=[]), identity)
+
     Neqs = dim(cf)  + mapreduce(length, +, outfree_ms)
 
 
@@ -269,7 +273,11 @@ function initialize_component!(cf; verbose=true, apply_bound_transformation=true
         resid = sol.resid
     else
         resid = init_residual(cf; recalc=true)
+        if resid < 1e-10
         verbose && @info "No free variables! Residual $(LinearAlgebra.norm(resid))"
+        else
+            @warn "No free variables! However model does not appear to be initialized in steady state. Residual $(LinearAlgebra.norm(resid))"
+        end
     end
 
     set_metadata!(cf, :init_residual, resid)
@@ -321,7 +329,7 @@ function init_residual(cf::T; t=NaN, recalc=false) where {T<:ComponentModel}
 end
 
 function broken_bounds(cf)
-    allsyms = vcat(sym(cf), psym(cf), insym_all(cf), outsym_flat(cf), obssym(cf))
+    allsyms = vcat(sym(cf), psym(cf), insym_flat(cf), outsym_flat(cf), obssym(cf))
     boundsyms = filter(s -> has_bounds(cf, s), allsyms)
     bounds = get_bounds.(Ref(cf), boundsyms)
     vals = get_initial_state(cf, boundsyms)
@@ -346,6 +354,53 @@ function set_defaults!(nw::Network, s::NWState)
     end
     for (sni, val) in zip(SII.parameter_symbols(nw), pflat(s))
         set_default!(nw, sni, val)
+    end
+    nw
+end
+
+"""
+    set_interface_defaults!(nw::Network, s::NWState; verbose=false)
+
+Sets the **interface** (i.e. node and edge inputs/outputs) defaults of a given
+network to the ones defined by the given state. Notably, while the graph
+topology and interface dimensions of the target network `nw` and the source
+network of `s` musst be identicaly, the systems may differ in the dynamical
+components.
+
+This is mainly inteded for initialization purposes: solve the interface values
+with a simpler -- possible static -- network and "transfer" the steady state
+interface values to the full network.
+"""
+function set_interface_defaults!(nw::Network, s::NWState; verbose=false)
+    @argcheck s.nw.im.g == nw.im.g "Graphs musst have the same structure!"
+    verbose && println("Setting the interface defaults:")
+    values = Dict{SymbolicIndex, Float64}()
+    for (idxs, _Index, comp) in ((1:nv(nw), VIndex, "Vertex"), (1:ne(nw), EIndex, "Edge"))
+        for i in idxs
+            target = nw[_Index(i)]
+            source = s.nw[_Index(i)]
+
+            tsyms = _Index(i, outsym_flat(target)) |> collect
+            svals = s[_Index(i, outsym_flat(source))]
+            @assert length(tsyms) == length(svals) "$comp $i: Source network has $(length(svals)) outputs, but target network has $(length(tsyms)) outputs!"
+            for (tsym, sval) in zip(tsyms, svals)
+                values[tsym] = sval
+                verbose && println("  $comp $(lpad(i, length(repr(idxs[end])))) \
+                                    output: $(tsym.subidx) => $sval")
+            end
+
+            tsyms = _Index(i, insym_flat(target)) |> collect
+            svals = s[_Index(i, insym_flat(source))]
+            @assert length(tsyms) == length(svals) "$comp $i: Source network has $(length(svals)) inputs, but target network has $(length(tsyms)) inputs!"
+            for (tsym, sval) in zip(tsyms, svals)
+                values[tsym] = sval
+                verbose && println("  $comp $(lpad(i, length(repr(idxs[end])))) \
+                                    input:  $(tsym.subidx) => $sval")
+            end
+        end
+    end
+    for (sym, val) in values
+        set_default!(nw, sym, val)
     end
     nw
 end
