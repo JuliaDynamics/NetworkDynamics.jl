@@ -3,7 +3,7 @@
 
 This example demonstrates how to initialize a complex network model with both static
 and dynamic components.
-The models are closely related to the ones used in the [gas network example](@ref gas-network),
+The models are closely related to the ones used in the [gas network example](@ref gas-example),
 but greatly simplified for the sake of this tutorial.
 We'll create a gas network model with three nodes
 and pipes connecting them, and show how to:
