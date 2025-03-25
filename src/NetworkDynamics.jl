@@ -62,7 +62,7 @@ include("external_inputs.jl")
 # XXX: have both, s[:] and uflat(s) ?
 export VIndex, EIndex, VPIndex, EPIndex, NWState, NWParameter, uflat, pflat
 export vidxs, eidxs, vpidxs, epidxs
-export save_parameters!
+export save_parameters!, extract_nw
 export @obsex
 include("symbolicindexing.jl")
 

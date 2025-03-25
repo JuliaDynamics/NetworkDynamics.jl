@@ -1088,6 +1088,8 @@ _get_components(::Type{<:SymbolicEdgeIndex}, inpr) = extract_nw(inpr).im.edgem
     extract_nw(thing)
 
 Try to extract the `Network` object from thing.
+
+Thing can by many things, e.g. `ODEProblem`, `ODESolution`, `Integrator`, `NWState`, `NWParameter`, ...
 """
 function extract_nw(inpr)
     sc = SII.symbolic_container(inpr)
