@@ -1,5 +1,5 @@
 #=
-# Dynamic Flow in Simple Gas Network
+# [Dynamic Flow in Simple Gas Network](@id gas-example)
 
 This example is based on the paper
 

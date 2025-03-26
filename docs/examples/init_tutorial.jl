@@ -2,7 +2,10 @@
 # [Tutorial on Stepwise Initialization of a Complex Model](@id init-tutorial)
 
 This example demonstrates how to initialize a complex network model with both static
-and dynamic components. We'll create a simple gas network model with three nodes
+and dynamic components.
+The models are closely related to the ones used in the [gas network example](@ref gas-example),
+but greatly simplified for the sake of this tutorial.
+We'll create a gas network model with three nodes
 and pipes connecting them, and show how to:
 
 1. Create static models for initialization
@@ -361,14 +364,3 @@ let
 
     fig
 end
-
-#=
-## Interactive Visualization
-
-You can also visualize the results interactively using NetworkDynamicsInspector:
-
-```julia
-using NetworkDynamicsInspector
-inspect(sol)
-```
-=#

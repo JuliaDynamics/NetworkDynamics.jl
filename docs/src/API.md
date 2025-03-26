@@ -191,6 +191,7 @@ KAAggregator
 save_parameters!
 ff_to_constraint
 Base.copy(::NetworkDynamics.ComponentModel)
+extract_nw
 ```
 
 ## NetworkDynamicsInspector API

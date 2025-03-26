@@ -45,6 +45,7 @@ kwargs = (;
         "General" => "index.md",
         "mathematical_model.md",
         "network_construction.md",
+        "data_structure.md",
         "Features" => [
             "symbolic_indexing.md",
             "metadata.md",
@@ -57,14 +58,12 @@ kwargs = (;
         "API.md",
         "Tutorials" => [
             "Getting Started" => "generated/getting_started_with_network_dynamics.md",
-            "Directed and Weighted Graphs" => "generated/directed_and_weighted_graphs.md",
             "Heterogeneous Systems" => "generated/heterogeneous_system.md",
-            # "Stochastic differential equations" => "generated/StochasticSystem.md",
-            # "Delay differential equations" => "generated/kuramoto_delay.md",
-            "Cascading Failure" => "generated/cascading_failure.md",
-            "Stress on Truss" => "generated/stress_on_truss.md",
-            "Gas Network" => "generated/gas_network.md",
             "Initialization" => "generated/init_tutorial.md",
+            "Cascading Failure" => "generated/cascading_failure.md",
+            "Gas Network" => "generated/gas_network.md",
+            "Stress on Truss" => "generated/stress_on_truss.md",
+            "Directed and Weighted Graphs" => "generated/directed_and_weighted_graphs.md",
         ]
     ],
     draft=false,
