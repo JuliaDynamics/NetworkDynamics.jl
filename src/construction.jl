@@ -226,7 +226,7 @@ function _component_hash(c::ComponentModel)
     ))
 end
 
-function Network(vertexfs, edgefs; kwargs...)
+function Network(vertexfs, edgefs; warn_order=true, kwargs...)
     vertexfs = vertexfs isa VertexModel ? [vertexfs] : vertexfs
     edgefs   = edgefs isa EdgeModel     ? [edgefs]   : edgefs
     @argcheck all(has_graphelement, vertexfs) "All vertex models must have assigned `graphelement` to implicitly construct graph!"
@@ -268,7 +268,15 @@ function Network(vertexfs, edgefs; kwargs...)
     end
 
     vfs_ordered = [vdict[k] for k in vertices(g)]
+    if vfs_ordered != vertexfs && warn_order
+        @warn "Order of vertex models was changed to match the natural ordering of vertices in graph! \
+               Disable warning with kw `warn_order=false`."
+    end
     efs_ordered = [edict[k] for k in edges(g)]
+    if efs_ordered != edgefs && warn_order
+        @warn "Order of edge models was changed to match the natural ordering edges in graph! \
+               Disable warning with kw `warn_order=false`."
+    end
 
     Network(g, vfs_ordered, efs_ordered; check_graphelement=false, kwargs...)
 end
