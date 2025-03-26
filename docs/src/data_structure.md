@@ -18,11 +18,11 @@ During actual simulation, the state and parameters are handled as **flat arrays*
 
 A typical workflow is:
 
-1. Set default values in the models using the metadata (see [Metadata](@ref))
-2. Create a network
-3. Generate a state `s = NWState(nw)` which will be prefilled with the default values from the component metadata
-4. Change the values of `s`, i.e., `s.v[1,:x] = 1.0`: This changes the **underlying flat array** but not the metadata of the model
-5. Build a problem with the updated flat arrays using `uflat(s)` and `pflat(s)`
+1. Set default values in the models using the metadata (see [Metadata](@ref)).
+2. Create a network (see [Network Construction](@ref)).
+3. Generate a state `s = NWState(nw)` which will be prefilled with the default values from the component metadata (see [SymbolicIndexing](@ref)).
+4. Change the values of `s`, i.e., `s.v[1,:x] = 1.0`: This changes the **underlying flat array** but not the metadata of the models.
+5. Build a problem with the updated flat arrays using `uflat(s)` and `pflat(s)`.
 
 ## Accessing Components
 Per default, the models are not copied on Network construction:
