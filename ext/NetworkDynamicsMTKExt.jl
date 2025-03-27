@@ -413,7 +413,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     # now generate the actual functions
     formulas = [eq.rhs for eq in eqs]
     if !isempty(formulas)
-        _, f_ip = build_function(formulas, states, inputss..., params, iv; cse=true, expression)
+        _, f_ip = build_function(formulas, states, inputss..., params, iv; cse=false, expression)
     else
         f_ip = nothing
     end
@@ -428,7 +428,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     elseif fftype isa PureStateMap
         (states,)
     end
-    _, _g_ip = build_function(gformulas, gformargs...; cse=true, expression)
+    _, _g_ip = build_function(gformulas, gformargs...; cse=false, expression)
     # for more thatn 1 output wrap funktion
     g_ip = if length(outputss) == 1
         _g_ip
@@ -439,7 +439,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     # and the observed functions
     obsstates = [eq.lhs for eq in obseqs]
     obsformulas = [eq.rhs for eq in obseqs]
-    _, obsf_ip = build_function(obsformulas, states, inputss..., params, iv; cse=true, expression)
+    _, obsf_ip = build_function(obsformulas, states, inputss..., params, iv; cse=false, expression)
 
     return (;
         f=f_ip, g=g_ip,
