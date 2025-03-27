@@ -81,9 +81,9 @@ v3 = let
 end
 
 v4 = let
-    @named swing = Swing(; Pmech=2.0, M=1.0, D=1.0)
+    @named swing2 = Swing(; Pmech=2.0, M=1.0, D=1.0)
     @named load = Load(; Pd=-1.0)
-    @named swingload2 = CombinedModel(swing, load)
+    @named swingload2 = CombinedModel(swing2, load)
     VertexModel(swingload2, [:Pel], [:θ], vidx=4)
 end
 
@@ -96,19 +96,36 @@ e2 = let
     EdgeModel(line, [:srcθ], [:dstθ], [:P]; annotation=:AntiSymmetric, src=2, dst=3)
 end
 e3 = let
-    @named line = StaticPowerLine()
-    EdgeModel(line, [:srcθ], [:dstθ], [:P]; annotation=:AntiSymmetric, src=3, dst=4)
+    @named line3 = StaticPowerLine()
+    EdgeModel(line3, [:srcθ], [:dstθ], [:P]; annotation=:AntiSymmetric, src=3, dst=4)
 end
 
-nw = Network([v1,v2,v3,v4],[e1,e2,e3])
+nw1 = Network([v1,v2,v3,v4],[e1,e2,e3])
 
 rng = StableRNG(1)
-u = randn(rng, dim(nw))
-du1 = [NaN for _ in 1:dim(nw)]
-nw(du1, u, pflat(NWState(nw)), NaN)
+u = randn(rng, dim(nw1))
+du1 = [NaN for _ in 1:dim(nw1)]
+nw1(du1, u, pflat(NWState(nw1)), NaN)
 
-data = NetworkDynamics.parse_network("testgrid.yaml")
-data["VertexModels"][1]
+constructors = Dict(
+    "Swing"=>Swing,
+    "VertexModel"=>VertexModel,
+    "Load"=>Load,
+    "CombinedModel"=>CombinedModel,
+    "StaticPowerLine"=>StaticPowerLine,
+    "EdgeModel"=>EdgeModel
+)
+nw2 = NetworkDynamics.load_network(constructors, "testgrid.yaml")
 
-constructors = Dict("Swing"=>Swing, "VertexModel"=>VertexModel, "Load"=>Load)
-NetworkDynamics.build_network(data, constructors)
+du2 = [NaN for _ in 1:dim(nw2)]
+nw2(du2, u, pflat(NWState(nw2)), NaN)
+@test du1 ≈ du2
+
+_getname = x -> getproperty(x, :name)
+@test map(_getname, nw1.im.vertexm) == map(_getname, nw2.im.vertexm)
+@test map(_getname, nw1.im.edgem) == map(_getname, nw2.im.edgem)
+
+s1 = NWState(nw1)
+s2 = NWState(nw2)
+@test uflat(s1) == uflat(s2)
+@test pflat(s1) == pflat(s2)

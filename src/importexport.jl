@@ -46,17 +46,17 @@ Update the property in the parent structure.
 - if key is indexed (i.e. "a[1]"), it will update parent["a"][1]
 """
 function update_parent_property!(parent, key, value)
-    @info "Update $key -> $value"
+    @debug "Update $key -> $value"
     if contains(key, ".")
         key_head, key_tail = split(key, ".", limit=2)
-        @info "Found nested key $key_head -> $key_tail"
+        @debug "Found nested key $key_head -> $key_tail"
         m = match(r"^(.*)\[(.*)\]$", key_head)
         _parent = if !isnothing(m)
             parent[m[1]][parse(Int, m[2])]
         else
             parent[key]
         end
-        @info m
+        @debug m
         update_parent_property!(_parent, key_tail, value)
     else
         m = match(r"^(.*)\[(.*)\]$", key)
@@ -106,14 +106,17 @@ end
 widen_container_type(container::OrderedDict{K}) where {K} = convert(OrderedDict{K,Any}, container)
 widen_container_type(container::Vector) = convert(Vector{Any}, container)
 
-replace_in_template!(template, placeholder, model) = template
-function replace_in_template!(container::Union{OrderedDict,Vector}, placeholder, model)
+function replace_in_template(template, placeholder, model)
+    _replace_in_template!(deepcopy(template), placeholder, model)
+end
+_replace_in_template!(template, placeholder, model) = template
+function _replace_in_template!(container::Union{OrderedDict,Vector}, placeholder, model)
     container = widen_container_type(container)
     for (key, value) in pairs(container)
         if value == placeholder
             container[key] = deepcopy(model)
         else
-            container[key] = replace_in_template!(value, placeholder, model)
+            container[key] = _replace_in_template!(value, placeholder, model)
         end
     end
     container
@@ -126,7 +129,7 @@ function apply_wrappers!(container::Union{OrderedDict,Vector})
     wrapper = container["WRAPPER"]
     delete!(container, "WRAPPER")
     for (key, sub) in pairs(container)
-        container[key] = replace_in_template!(wrapper, "MODEL", sub)
+        container[key] = replace_in_template(wrapper, "MODEL", sub)
     end
     container
 end
@@ -146,13 +149,13 @@ function parse_network(file)
         resolved_something = false
         for (mod, deps) in dependencies
             if deps ⊆ resolved_models
-                @info "Resolving $mod -> $deps"
+                @debug "Resolving $mod -> $deps"
                 recursive_resolve!(data["Models"], data["Models"][mod])
                 delete!(dependencies, mod)
                 push!(resolved_models, mod)
                 resolved_something = true
             else
-                @info "Skip $mod -> $deps"
+                @debug "Skip $mod -> $deps"
             end
         end
         resolved_something && continue
@@ -191,6 +194,7 @@ function _depth_first_construct!(constructors, data::Union{OrderedDict,Vector})
             key ∈ ("CONSTRUCTOR", "ARGS") && continue
             kwargs[Symbol(key)] = value
         end
+        @debug "call: $(data["CONSTRUCTOR"])(args...; $(kwargs))"
         return constructors[data["CONSTRUCTOR"]](args...; kwargs...)
     end
     data
@@ -199,14 +203,16 @@ end
 function build_network(data, constructors)
     vertexm = VertexModel[]
     for (k, v) in data["VertexModels"]
+        @debug "Constructing VertexModel $k"
         vm = recursive_construct(constructors, v)
         set_graphelement!(vm, k)
         push!(vertexm, vm)
     end
 
-    edgem   = EdgeModel[]
-    for (k, v) in data["VertexModels"]
-        vm = recursive_construct(constructors, v)
+    edgem = EdgeModel[]
+    for (k, v) in data["EdgeModels"]
+        @debug "Constructing EdgeModel $k"
+        em = recursive_construct(constructors, v)
 
         m = match(r"^(.*)=>(.*)$", k)
         isnothing(m) && error("Edge key must be of form 'src=>dst', got $k")
@@ -216,9 +222,15 @@ function build_network(data, constructors)
             src = m[1]
         end
         if isnothing(dst)
-            dst = m[1]
+            dst = m[2]
         end
-        set_graphelement!(vm, src, dst)
-        push!(vertexm, vm)
+        set_graphelement!(em, src => dst)
+        push!(edgem, em)
     end
+    Network(vertexm, edgem)
+end
+
+function load_network(constructors, file)
+    data = parse_network(file)
+    build_network(data, constructors)
 end
