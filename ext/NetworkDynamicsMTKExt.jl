@@ -2,12 +2,14 @@ module NetworkDynamicsMTKExt
 
 using ModelingToolkit: Symbolic, iscall, operation, arguments, build_function
 using ModelingToolkit: ModelingToolkit, Equation, ODESystem, Differential
-using ModelingToolkit: full_equations, get_variables, structural_simplify, getname, unwrap
+using ModelingToolkit: equations, full_equations, get_variables, structural_simplify, getname, unwrap
 using ModelingToolkit: parameters, unknowns, independent_variables, observed, defaults
 using Symbolics: Symbolics, fixpoint_sub, substitute
 using RecursiveArrayTools: RecursiveArrayTools
 using ArgCheck: @argcheck
 using LinearAlgebra: Diagonal, I
+using SymbolicUtils.Code: Let, Assignment
+using OrderedCollections: OrderedDict
 
 using NetworkDynamics: NetworkDynamics, set_metadata!,
                        PureFeedForward, FeedForward, NoFeedForward, PureStateMap
@@ -299,8 +301,10 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     params = setdiff(allparams, Set(allinputs))
 
     # extract the main equations and observed equations
-    eqs::Vector{Equation} = ModelingToolkit.subs_constants(full_equations(sys))
+    eqs::Vector{Equation} = ModelingToolkit.subs_constants(equations(sys))
+    obseqs_sorted::Vector{Equation} = ModelingToolkit.subs_constants(observed(sys))
     fix_metadata!(eqs, sys);
+    fix_metadata!(obseqs_sorted, sys);
 
     # assert the ordering of states and equations
     explicit_states = Symbolic[eq_type(eq)[2] for eq in eqs if !isnothing(eq_type(eq)[2])]
@@ -311,8 +315,8 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     end
 
     # check hat there are no rhs differentials in the equations
-    if !isempty(rhs_differentials(eqs))
-        diffs = rhs_differentials(eqs)
+    if !isempty(rhs_differentials(vcat(eqs, obseqs_sorted)))
+        diffs = rhs_differentials(vcat(eqs, obseqs_sorted))
         buf = IOBuffer()
         println(buf, "Equations contain differentials in their rhs: ", diffs)
         # for (i, eqs) in enumerate(eqs)
@@ -323,15 +327,9 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         throw(ArgumentError(String(take!(buf))))
     end
 
-    # extract observed equations. They might depend on eachother so resolve them
-    obs_subs = Dict(eq.lhs => eq.rhs for eq in observed(sys))
-    obseqs = map(observed(sys)) do eq
-        expanded_rhs = fixpoint_sub(eq.rhs, obs_subs)
-        eq.lhs ~ ModelingToolkit.subs_constants(expanded_rhs)
-    end
-    fix_metadata!(obseqs, sys);
     # obs can only depend on parameters (including allinputs) or states
-    obs_deps = _all_rhs_symbols(obseqs)
+    obs_subs = OrderedDict(eq.lhs => eq.rhs for eq in obseqs_sorted)
+    obs_deps = _all_rhs_symbols(fixpoint_sub(obseqs_sorted, obs_subs))
     if !(obs_deps ⊆ Set(allparams) ∪ Set(states) ∪ independent_variables(sys))
         @warn "obs_deps !⊆ parameters ∪ unknowns. Difference: $(setdiff(obs_deps, Set(allparams) ∪ Set(states)))"
     end
@@ -339,7 +337,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     # if some states shadow outputs (out ~ state in observed)
     # switch their names. I.e. prioritize use of name `out`
     renamings = Dict()
-    for eq in obseqs
+    for eq in obseqs_sorted
         if eq.lhs ∈ Set(alloutputs) && iscall(eq.rhs) &&
             operation(eq.rhs) isa Symbolics.BasicSymbolic && eq.rhs ∈ Set(states)
             verbose && @info "Encountered trivial equation $eq. Swap out $(eq.lhs) <=> $(eq.rhs) everywhere."
@@ -349,7 +347,8 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     end
     if !isempty(renamings)
         eqs = map(eq -> substitute(eq, renamings), eqs)
-        obseqs = map(eq -> substitute(eq, renamings), obseqs)
+        obseqs_sorted = map(eq -> substitute(eq, renamings), obseqs_sorted)
+        obs_subs = OrderedDict(eq.lhs => eq.rhs for eq in obseqs_sorted)
         states = map(s -> substitute(s, renamings), states)
         verbose && @info "New States:" states
     end
@@ -360,16 +359,16 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         if out ∈ Set(states)
             push!(outeqs, out ~ out)
         else
-            idx = findfirst(eq -> isequal(eq.lhs, out), obseqs)
+            idx = findfirst(eq -> isequal(eq.lhs, out), obseqs_sorted)
             if isnothing(idx)
                 throw(ArgumentError("Output $out was neither foundin states nor in observed equations."))
             end
-            eq = obseqs[idx]
+            eq = obseqs_sorted[idx]
             if !isempty(rhs_differentials(eq))
                 println(obs_subs[out])
                 throw(ArgumentError("Algebraic FF equation for output $out contains differentials in the RHS: $(rhs_differentials(eq))"))
             end
-            deleteat!(obseqs, idx)
+            deleteat!(obseqs_sorted, idx)
 
             if ff_to_constraint && !isempty(get_variables(eq.rhs) ∩ allinputs)
                 verbose && @info "Output $out would lead to FF in g, promote to state instead."
@@ -381,6 +380,9 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
             end
         end
     end
+
+    # obseqs might have changed in block above
+    obs_subs = OrderedDict(eq.lhs => eq.rhs for eq in obseqs_sorted)
 
     # generate mass matrix (this might change the equations)
     mass_matrix = begin
@@ -399,11 +401,12 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     end
 
     iv = only(independent_variables(sys))
-    out_deps = _all_rhs_symbols(outeqs)
+
+    out_deps = _all_rhs_symbols(fixpoint_sub(outeqs, obs_subs))
     fftype = _determine_fftype(out_deps, states, allinputs, params, iv)
 
     # filter out unnecessary parameters
-    var_deps = _all_rhs_symbols(eqs)
+    var_deps = _all_rhs_symbols(fixpoint_sub(eqs, obs_subs))
     unused_params = Set(setdiff(params, (var_deps ∪ out_deps))) # do not exclud obs_deps
     if verbose && !isempty(unused_params)
         @info "Parameters $(unused_params) do not appear in equations of f and g and will be marked as unused."
@@ -411,14 +414,16 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
 
     # TODO: explore Symbolcs/SymbolicUtils CSE
     # now generate the actual functions
-    formulas = [eq.rhs for eq in eqs]
-    if !isempty(formulas)
+    if !isempty(eqs)
+        formulas = _get_formulas(eqs, obs_subs)
         _, f_ip = build_function(formulas, states, inputss..., params, iv; cse=false, expression)
     else
+        formulas = []
         f_ip = nothing
     end
 
-    gformulas = [eq.rhs for eq in outeqs]
+    # find all observable assigments necessary for outeqs
+    gformulas = _get_formulas(outeqs, obs_subs)
     gformargs = if fftype isa PureFeedForward
         (inputss..., params, iv)
     elseif fftype isa FeedForward
@@ -437,8 +442,8 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     end
 
     # and the observed functions
-    obsstates = [eq.lhs for eq in obseqs]
-    obsformulas = [eq.rhs for eq in obseqs]
+    obsstates = [eq.lhs for eq in obseqs_sorted]
+    obsformulas = [eq.rhs for eq in obseqs_sorted]
     _, obsf_ip = build_function(obsformulas, states, inputss..., params, iv; cse=false, expression)
 
     return (;
@@ -457,6 +462,36 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         params,
         unused_params
     )
+end
+
+function _get_formulas(eqs, obs_subs)
+    rhss = [eq.rhs for eq in eqs]
+    obsdeps = _collect_deps_on_obs(rhss, obs_subs)
+    if isempty(obsdeps)
+        return rhss
+    else
+        # ensure that the ordering is still correct
+        obs_assignments = [Assignment(k, v) for (k,v) in obs_subs if k ∈ obsdeps]
+        return [Let(obs_assignments, rhss[1], false), rhss[2:end]...]
+    end
+end
+function _collect_deps_on_obs(terms, obs_subs)
+    deps = Set{Symbolic}()
+    for term in terms
+        _collect_deps_on_obs!(deps, obs_subs, term)
+    end
+    deps
+end
+function _collect_deps_on_obs!(deps, obs_subs, term)
+    termdeps = get_variables(term)
+    for sym in termdeps
+        if haskey(obs_subs, sym)
+            # check recursively whether the observed depends on other observed
+            _collect_deps_on_obs!(deps, obs_subs, obs_subs[sym])
+            push!(deps, sym)
+        end
+    end
+    deps
 end
 
 function _determine_fftype(deps, states, allinputs, params, t)
