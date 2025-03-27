@@ -103,6 +103,34 @@ function depth_first_flatten!(container::Union{OrderedDict,Vector})
     nothing
 end
 
+widen_container_type(container::OrderedDict{K}) where {K} = convert(OrderedDict{K,Any}, container)
+widen_container_type(container::Vector) = convert(Vector{Any}, container)
+
+replace_in_template!(template, placeholder, model) = template
+function replace_in_template!(container::Union{OrderedDict,Vector}, placeholder, model)
+    container = widen_container_type(container)
+    for (key, value) in pairs(container)
+        if value == placeholder
+            container[key] = deepcopy(model)
+        else
+            container[key] = replace_in_template!(value, placeholder, model)
+        end
+    end
+    container
+end
+
+apply_wrappers!(::Nothing) = nothing
+function apply_wrappers!(container::Union{OrderedDict,Vector})
+    haskey(container, "WRAPPER") || return
+
+    wrapper = container["WRAPPER"]
+    delete!(container, "WRAPPER")
+    for (key, sub) in pairs(container)
+        container[key] = replace_in_template!(wrapper, "MODEL", sub)
+    end
+    container
+end
+
 function parse_network(file)
     data = YAML.load_file(file, dicttype=OrderedDict{Any,Any})
     dependencies = OrderedDict(keys(data["Models"]) .=> map(collect_model_dependencies, values(data["Models"])))
@@ -131,9 +159,13 @@ function parse_network(file)
         error("Could not resolve all dependencies")
     end
 
+    # apply wrappers to all models
+    apply_wrappers!(data["VertexModels"])
+    apply_wrappers!(data["EdgeModels"])
+
     # with all deps resolve, we can replace the models edge and vertex list
-    recursive_resolve!(data["Models"], data["Vertices"])
-    recursive_resolve!(data["Models"], data["Edges"])
+    recursive_resolve!(data["Models"], data["VertexModels"])
+    recursive_resolve!(data["Models"], data["EdgeModels"])
 
     # traverses the tree and flattens the model properties, i.e. merges
     # the local given properties with the parent/template model properties
@@ -144,24 +176,12 @@ end
 recursive_construct(constructors, data) = _depth_first_construct!(constructors, deepcopy(data))
 _depth_first_construct!(_, data) = data
 _depth_first_construct!(_, s::String) = startswith(s, ":") ? Symbol(s[2:end]) : s
-function _depth_first_construct!(constructors, data::Vector)
-    if data isa Vector && eltype(data) !== Any
-        data = convert(Vector{Any}, data)
-    end
+function _depth_first_construct!(constructors, data::Union{OrderedDict,Vector})
+    data = widen_container_type(data)
     for (key, value) in pairs(data)
         data[key] = _depth_first_construct!(constructors, value)
     end
-    data
-end
-function _depth_first_construct!(constructors, data::OrderedDict)
-    if data isa OrderedDict && eltype(values(data)) !== Any
-        data = convert(OrderedDict{eltype(keys(data)), Any}, data)
-    end
-
-    for (key, value) in pairs(data)
-        data[key] = _depth_first_construct!(constructors, value)
-    end
-    if haskey(data, "CONSTRUCTOR")
+    if data isa OrderedDict && haskey(data, "CONSTRUCTOR")
         if !haskey(constructors, data["CONSTRUCTOR"])
             error("No constructor found for $(data["CONSTRUCTOR"])")
         end
@@ -178,21 +198,26 @@ end
 
 function build_network(data, constructors)
     vertexm = VertexModel[]
-    for (k, v) in data["Vertices"]
+    for (k, v) in data["VertexModels"]
         vm = recursive_construct(constructors, v)
         set_graphelement!(vm, k)
         push!(vertexm, vm)
     end
+
     edgem   = EdgeModel[]
-    for (k, v) in data["Vertices"]
+    for (k, v) in data["VertexModels"]
         vm = recursive_construct(constructors, v)
 
         m = match(r"^(.*)=>(.*)$", k)
         isnothing(m) && error("Edge key must be of form 'src=>dst', got $k")
         src = tryparse(Int, m[1])
         dst = tryparse(Int, m[2])
-        isnothing(src) && src = m[1]
-        isnothing(dst) && src = m[1]
+        if isnothing(src)
+            src = m[1]
+        end
+        if isnothing(dst)
+            dst = m[1]
+        end
         set_graphelement!(vm, src, dst)
         push!(vertexm, vm)
     end
