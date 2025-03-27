@@ -117,7 +117,7 @@ See also [`Symmetric`](@ref), [`Directed`](@ref), [`Fiducial`](@ref) and [`State
 struct AntiSymmetric{G} <: SingleSidedOutputWrapper
     g::G
 end
-AntiSymmetric(g::Union{AbstractVector,Number}) = AntiSymmetric(StateMask(g))
+AntiSymmetric(g::Union{AbstractVector{<:Number},Number}) = AntiSymmetric(StateMask(g))
 @inline function (c::AntiSymmetric)(osrc, odst, args...)
     @inline c.g(odst, args...)
     @inbounds for i in 1:length(osrc)
@@ -142,7 +142,7 @@ See also [`AntiSymmetric`](@ref), [`Directed`](@ref), [`Fiducial`](@ref) and [`S
 struct Symmetric{G} <: SingleSidedOutputWrapper
     g::G
 end
-Symmetric(g::Union{AbstractVector,Number}) = Symmetric(StateMask(g))
+Symmetric(g::Union{AbstractVector{<:Number},Number}) = Symmetric(StateMask(g))
 @inline function (c::Symmetric)(osrc, odst, args...)
     @inline c.g(odst, args...)
     @inbounds for i in 1:length(osrc)
@@ -167,7 +167,7 @@ See also [`AntiSymmetric`](@ref), [`Symmetric`](@ref), [`Fiducial`](@ref) and [`
 struct Directed{G} <: SingleSidedOutputWrapper
     g::G
 end
-Directed(g::Union{AbstractVector,Number}) = Directed(StateMask(g))
+Directed(g::Union{AbstractVector{<:Number},Number}) = Directed(StateMask(g))
 @inline function (c::Directed)(osrc, odst, args...)
     @inline c.g(odst, args...)
     nothing
@@ -226,7 +226,7 @@ Annotate a vector of output-symbols as `AntiSymmetric`, used when creating `Edge
 single-sided MTK models.
 """
 AntiSymmetric(s::Symbol) = AntiSymmetric([s])
-AntiSymmetric(s::AbstractVector{<:Symbol}) = AnnotatedSym(AntiSymmetric, s)
+AntiSymmetric(s::AbstractVector) = AnnotatedSym(AntiSymmetric, convert(Vector{Symbol}, s))
 """
     Symmetric(s::AbstractVector{<:Symbol})
 
@@ -234,7 +234,7 @@ Annotate a vector of output-symbols as `Symmetric`, used when creating `EdgeMode
 single-sided MTK models.
 """
 Symmetric(s::Symbol) = Symmetric([s])
-Symmetric(s::AbstractVector{<:Symbol}) = AnnotatedSym(Symmetric, s)
+Symmetric(s::AbstractVector) = AnnotatedSym(Symmetric, convert(Vector{Symbol}, s))
 """
     Directed(s::AbstractVector{<:Symbol})
 
@@ -242,7 +242,7 @@ Annotate a vector of output-symbols as `Directed`, used when creating `EdgeModel
 single-sided MTK models.
 """
 Directed(s::Symbol) = Directed([s])
-Directed(s::AbstractVector{<:Symbol}) = AnnotatedSym(Directed, s)
+Directed(s::AbstractVector) = AnnotatedSym(Directed, convert(Vector{Symbol}, s))
 
 
 abstract type ComponentModel end
