@@ -268,12 +268,12 @@ function Network(vertexfs, edgefs; warn_order=true, kwargs...)
     end
 
     vfs_ordered = [vdict[k] for k in vertices(g)]
-    if vfs_ordered != vertexfs && warn_order
-        @warn "Order of vertex models was changed to match the natural ordering of vertices in graph! \
+    efs_ordered = [edict[k] for k in edges(g)]
+    if warn_order && any(vfs_ordered .!== vertexfs)
+        @warn "Order of vertex models was changed to match the natural ordering of vertices in graph!\
                Disable warning with kw `warn_order=false`."
     end
-    efs_ordered = [edict[k] for k in edges(g)]
-    if efs_ordered != edgefs && warn_order
+    if warn_order && any(efs_ordered .!== edgefs)
         @warn "Order of edge models was changed to match the natural ordering edges in graph! \
                Disable warning with kw `warn_order=false`."
     end
