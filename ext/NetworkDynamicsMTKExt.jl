@@ -353,36 +353,34 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         verbose && @info "New States:" states
     end
 
-    # find the output equations, this might remove them from obseqs!
+    # find the output equations, this might remove them from obseqs_sorted (obs_subs stays intact)
     outeqs = Equation[]
     for out in Iterators.flatten(outputss)
         if out ∈ Set(states)
             push!(outeqs, out ~ out)
-        else
-            idx = findfirst(eq -> isequal(eq.lhs, out), obseqs_sorted)
-            if isnothing(idx)
-                throw(ArgumentError("Output $out was neither foundin states nor in observed equations."))
-            end
-            eq = obseqs_sorted[idx]
-            if !isempty(rhs_differentials(eq))
-                println(obs_subs[out])
-                throw(ArgumentError("Algebraic FF equation for output $out contains differentials in the RHS: $(rhs_differentials(eq))"))
-            end
-            deleteat!(obseqs_sorted, idx)
-
-            if ff_to_constraint && !isempty(get_variables(eq.rhs) ∩ allinputs)
+        elseif out ∈ keys(obs_subs)
+            # if its a observed, we need to check for ff behavior
+            fulleq = out ~ fixpoint_sub(obs_subs[out], obs_subs)
+            if ff_to_constraint && !isempty(get_variables(fulleq.rhs) ∩ allinputs)
                 verbose && @info "Output $out would lead to FF in g, promote to state instead."
-                push!(eqs, 0 ~ eq.lhs - eq.rhs)
+                # not observed anymore, delete from observed and put in equations
+                push!(eqs, 0 ~ out - obs_subs[out])
                 push!(states, eq.lhs)
-                push!(outeqs, eq.lhs ~ eq.lhs)
-            else
-                push!(outeqs, eq)
+                push!(outeqs, out ~ out)
+
+                deleteat!(obseqs_sorted, findfirst(eq -> isequal(eq.lhs, out), obseqs_sorted))
+                delete!(obs_subs, out)
+                push!(outeqs, out ~ out)
+            else # "normal" observed state
+                push!(outeqs, out ~ obs_subs[out])
+                # delete from obs equations but *not* from obs_subs (otherwise can't be reference)
+                # in equations
+                deleteat!(obseqs_sorted, findfirst(eq -> isequal(eq.lhs, out), obseqs_sorted))
             end
+        else
+            throw(ArgumentError("Output $out was neither foundin states nor in observed equations."))
         end
     end
-
-    # obseqs might have changed in block above
-    obs_subs = OrderedDict(eq.lhs => eq.rhs for eq in obseqs_sorted)
 
     # generate mass matrix (this might change the equations)
     mass_matrix = begin
@@ -418,7 +416,6 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         formulas = _get_formulas(eqs, obs_subs)
         _, f_ip = build_function(formulas, states, inputss..., params, iv; cse=false, expression)
     else
-        formulas = []
         f_ip = nothing
     end
 
@@ -441,10 +438,13 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         MultipleOutputWrapper{fftype, length(outputss), typeof(_g_ip)}(_g_ip)
     end
 
-    # and the observed functions
     obsstates = [eq.lhs for eq in obseqs_sorted]
-    obsformulas = [eq.rhs for eq in obseqs_sorted]
-    _, obsf_ip = build_function(obsformulas, states, inputss..., params, iv; cse=false, expression)
+    if !isempty(obsstates)
+        obsformulas = _get_formulas([s ~ s for s in obsstates], obs_subs)
+        _, obsf_ip = build_function(obsformulas, states, inputss..., params, iv; cse=false, expression)
+    else
+        obsf_ip = nothing
+    end
 
     return (;
         f=f_ip, g=g_ip,
@@ -455,9 +455,9 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         obsstates,
         fftype,
         obsf = obsf_ip,
-        equations=formulas,
-        outputeqs=Dict(Iterators.flatten(outputss) .=> gformulas),
-        observed=Dict(getname.(obsstates) .=> obsformulas),
+        equations=eqs,
+        outputeqs=outeqs,
+        observed=obseqs_sorted,
         odesystem=sys,
         params,
         unused_params
@@ -465,15 +465,30 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
 end
 
 function _get_formulas(eqs, obs_subs)
-    rhss = [eq.rhs for eq in eqs]
-    obsdeps = _collect_deps_on_obs(rhss, obs_subs)
-    if isempty(obsdeps)
-        return rhss
-    else
-        # ensure that the ordering is still correct
-        obs_assignments = [Assignment(k, v) for (k,v) in obs_subs if k ∈ obsdeps]
-        return [Let(obs_assignments, rhss[1], false), rhss[2:end]...]
-    end
+    # Bit hacky, were building a function like this,
+    # where all (necessary) obs and eqs are contained in the bgin block of the first output
+    # out[1] = begin
+    #     obs1   = ...
+    #     obs2   = ...
+    #     ...
+    #     state1 = ...
+    #     state2 = ...
+    #     ...
+    #     state1 # ens up in out[1]
+    # end
+    # out[2] = state2
+    # ...
+    isempty(eqs) && return []
+    obsdeps = _collect_deps_on_obs([eq.rhs for eq in eqs], obs_subs)
+    obs_assignments = [Assignment(k, v) for (k,v) in obs_subs if k ∈ obsdeps]
+
+    # implicit equations are not use via assigments, so we filter for e
+    eqs_assignments = [Assignment(eq.lhs, eq.rhs) for eq in eqs
+                          if !isequal(eq.lhs, eq.rhs) && !isequal(eq.lhs, 0)]
+    # since implicit eqs did not end up in assighmets, we use the rhs
+    out = [isequal(eq.lhs, 0) ? eq.rhs : eq.lhs for eq in eqs]
+
+    [Let(vcat(obs_assignments, eqs_assignments), out[1], false), out[2:end]...]
 end
 function _collect_deps_on_obs(terms, obs_subs)
     deps = Set{Symbolic}()
