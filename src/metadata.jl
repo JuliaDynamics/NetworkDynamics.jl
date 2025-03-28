@@ -551,3 +551,7 @@ function _has_changed_hash(aliased_cfs)
     end
     changed
 end
+
+
+function describe_vertices end
+function describe_edges end
