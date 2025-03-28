@@ -238,8 +238,12 @@ function _get_metadata(sys, name)
         if def isa Symbolic
             def = fixpoint_sub(def, alldefaults)
         end
-        def isa Symbolic && error("Could not resolve default $(ModelingToolkit.getdefault(sym)) for $name")
-        nt = (; nt..., default=def)
+
+        if def isa Symbolic
+            @warn "Could not resolve default term $(ModelingToolkit.getdefault(sym)) for $name, leave free."
+        else
+            nt = (; nt..., default=def)
+        end
     end
 
     # check for guess both in symbol metadata and in guesses of system
