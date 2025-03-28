@@ -42,7 +42,7 @@ Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 
 [extensions]
 NetworkDynamicsCUDAExt = ["CUDA", "Adapt"]
-NetworkDynamicsMTKExt = ["ModelingToolkit", "Symbolics"]
+NetworkDynamicsMTKExt = ["ModelingToolkit", "SymbolicUtils", "Symbolics"]
 NetworkDynamicsSymbolicsExt = ["Symbolics", "MacroTools"]
 
 [compat]
