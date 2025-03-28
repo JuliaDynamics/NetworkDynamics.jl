@@ -365,12 +365,11 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
                 verbose && @info "Output $out would lead to FF in g, promote to state instead."
                 # not observed anymore, delete from observed and put in equations
                 push!(eqs, 0 ~ out - obs_subs[out])
-                push!(states, eq.lhs)
+                push!(states, out)
                 push!(outeqs, out ~ out)
 
                 deleteat!(obseqs_sorted, findfirst(eq -> isequal(eq.lhs, out), obseqs_sorted))
                 delete!(obs_subs, out)
-                push!(outeqs, out ~ out)
             else # "normal" observed state
                 push!(outeqs, out ~ obs_subs[out])
                 # delete from obs equations but *not* from obs_subs (otherwise can't be reference)
