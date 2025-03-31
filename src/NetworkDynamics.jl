@@ -35,6 +35,8 @@ using InteractiveUtils: subtypes
 
 import SymbolicIndexingInterface as SII
 using StaticArrays: StaticArrays, SVector
+using YAML: YAML
+using OrderedCollections: OrderedDict
 
 include("utils.jl")
 
@@ -96,6 +98,12 @@ const CHECK_COMPONENT = Ref(true)
 export chk_component
 include("doctor.jl")
 
+export load_network
+include("importexport.jl")
+
+export describe_vertices, describe_edges
+function describe_vertices end
+function describe_edges end
 #=
 using StyledStrings
 s1 = styled"{bright_red:brred} {bright_green:brgreen} {bright_yellow:bryellow} {bright_blue:brblue} {bright_magenta:brmagenta} {bright_cyan:brcyan} {bright_black:brblack} {bright_white:brwhite}";
@@ -114,7 +122,20 @@ const ND_FACES = [
     :NetworkDynamics_fftype => StyledStrings.Face(foreground=:bright_blue),
 ]
 
-__init__() = foreach(StyledStrings.addface!, ND_FACES)
+function __init__()
+    if isdefined(Base.Experimental, :register_error_hint)
+        Base.Experimental.register_error_hint(MethodError) do io, exc, argtypes, kwargs
+            if exc.f ∈ (describe_vertices, describe_edges)
+                ext = Base.get_extension(NetworkDynamics, :NetworkDynamicsDataFramesExt)
+                if isnothing(ext)
+                    printstyled(io, "\nLoad `DataFrames` in order to use `describe_vertices` and `describe_edges`."; bold=true)
+                end
+            end
+        end
+    end
+
+    foreach(StyledStrings.addface!, ND_FACES)
+end
 
 function reloadfaces!()
     StyledStrings.resetfaces!()

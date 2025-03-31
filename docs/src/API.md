@@ -19,7 +19,7 @@ EdgeModel()
 ```@docs
 VertexModel(::ModelingToolkit.ODESystem, ::Any, ::Any)
 EdgeModel(::ModelingToolkit.ODESystem, ::Any, ::Any, ::Any, ::Any)
-EdgeModel(::ModelingToolkit.ODESystem, ::Any, ::Any, ::Any)
+EdgeModel(::ModelingToolkit.ODESystem, ::Any, ::Any, ::NetworkDynamics.AnnotatedSym)
 ```
 
 ### Output Function Helpers/Wrappers 

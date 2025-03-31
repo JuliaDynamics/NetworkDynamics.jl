@@ -99,8 +99,26 @@ the symbol vector in
 - `Directed(dstout)`.
 
 Additional `kwargs` are the same as for the double-sided EdgeModel MTK constructor.
+
+Instead of wrapping, you can also provide the annotation as keyword argument like `annotation=:AntiSymmetric`.
 """
-EdgeModel(sys::ODESystem, srcin, dstin, dstout; kwargs...) = EdgeModel(sys, srcin, dstin, nothing, dstout; kwargs...)
+function EdgeModel(sys::ODESystem, srcin, dstin, dstout::AnnotatedSym; kwargs...)
+    EdgeModel(sys, srcin, dstin, nothing, dstout; kwargs...)
+end
+function EdgeModel(sys::ODESystem, srcin, dstin, dstout; annotation=nothing, kwargs...)
+    _dstout = if annotation==:AntiSymmetric
+        AntiSymmetric(dstout)
+    elseif annotation==:Symmetric
+        Symmetric(dstout)
+    elseif annotation==:Directed
+        Directed(dstout)
+    else
+        throw(ArgumentError("When constructing single sided EdgeModel, you must either wrap \
+            the output syms (e.g. AntiSymmetric(dstout)) orprovide the annotation as keyword \
+            argument."))
+    end
+    EdgeModel(sys, srcin, dstin, nothing, _dstout; kwargs...)
+end
 
 """
     EdgeModel(sys::ODESystem, srcin, srcout, dstin, dstout;
@@ -220,8 +238,12 @@ function _get_metadata(sys, name)
         if def isa Symbolic
             def = fixpoint_sub(def, alldefaults)
         end
-        def isa Symbolic && error("Could not resolve default $(ModelingToolkit.getdefault(sym)) for $name")
-        nt = (; nt..., default=def)
+
+        if def isa Symbolic
+            @warn "Could not resolve default term $(ModelingToolkit.getdefault(sym)) for $name, leave free."
+        else
+            nt = (; nt..., default=def)
+        end
     end
 
     # check for guess both in symbol metadata and in guesses of system

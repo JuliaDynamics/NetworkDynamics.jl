@@ -1,0 +1,76 @@
+title: Power Grid Example
+version: "1.0"
+description: 4 Bus Powergrid Test Network
+
+# special words are "MODEL", "CONSTRUCTOR", "ARGS", "WRAPPER"
+Models:
+  Swing:
+    CONSTRUCTOR: Swing
+    Pmech: 1.0
+    M: 1.0
+    D: 1.0
+    name: :swing
+
+  Load:
+    CONSTRUCTOR: Load
+    Pd: -42.0
+    name: :load
+
+  SwingLoad:
+    CONSTRUCTOR: CombinedModel
+    ARGS:
+      - MODEL: Models.Swing
+      - MODEL: Models.Load
+        Pd: -2.0
+    name: :swingload
+
+  SwingLoad2:
+    CONSTRUCTOR: CombinedModel
+    ARGS:
+      - MODEL: Models.Swing
+        Pmech: 2.0
+      - MODEL: Models.Load
+        Pd: -1.0
+
+  StaticPowerLine:
+    CONSTRUCTOR: StaticPowerLine
+    K: 1.63
+    name: :line
+
+  StaticPowerLineK05:
+    MODEL: Models.StaticPowerLine
+    K: 0.5
+
+VertexModels:
+  WRAPPER:
+    CONSTRUCTOR: VertexModel
+    ARGS:
+      - MODEL
+      - [":Pel"]
+      - [":θ"]
+  1: Models.Swing
+  2:
+    MODEL: Models.Load
+    Pd: -1.0
+  3: Models.SwingLoad
+  4:
+    MODEL: Models.SwingLoad2
+    name: :swingload2
+    ARGS[1].name: :swing2
+
+EdgeModels:
+  WRAPPER:
+    CONSTRUCTOR: EdgeModel
+    ARGS:
+      - MODEL
+      - [":srcθ"] 
+      - [":dstθ"]
+      - [":P"]
+    annotation: :AntiSymmetric
+  "1=>2": Models.StaticPowerLineK05
+  "2=>3":
+    MODEL: Models.StaticPowerLine
+    K: 1.0
+  "3=>4":
+    MODEL: Models.StaticPowerLine
+    name: :line3
