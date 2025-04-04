@@ -1,33 +1,55 @@
 ####
 #### per sym metadata
 ####
+function _assert_symbol_exists(c::ComponentModel, s::Symbol)
+    contains = s ∈ sym(c) ||
+               s ∈ psym(c) ||
+               s ∈ insym_all(c) ||
+               s ∈ outsym_all(c) ||
+               s ∈ obssym(c)
+    contains || throw(ArgumentError("Symbol $sym does not exist in component model."))
+    return nothing
+end
+
 """
     has_metadata(c::ComponentModel, sym::Symbol, key::Symbol)
 
 Checks if symbol metadata `key` is present for symbol `sym`.
+Throws an error if the symbol does not exist in the component model.
 """
 function has_metadata(c::ComponentModel, sym::Symbol, key::Symbol)
+    _assert_symbol_exists(c, sym)
     md = symmetadata(c)
     haskey(md, sym) && haskey(md[sym], key)
 end
+
 """
     get_metadata(c::ComponentModel, sym::Symbol, key::Symbol)
 
-Retrievs the metadata `key` for symbol `sym`.
+Retrieves the metadata `key` for symbol `sym`.
+Throws an error if the symbol does not exist in the component model.
 """
-get_metadata(c::ComponentModel, sym::Symbol, key::Symbol) = symmetadata(c)[sym][key]
+function get_metadata(c::ComponentModel, sym::Symbol, key::Symbol)
+    _assert_symbol_exists(c, sym)
+    symmetadata(c)[sym][key]
+end
 
 """
     set_metadata!(c::ComponentModel, sym::Symbol, key::Symbol, value)
     set_metadata!(c::ComponentModel, sym::Symbol, pair)
 
 Sets the metadata `key` for symbol `sym` to `value`.
+Throws an error if the symbol does not exist in the component model.
 """
 function set_metadata!(c::ComponentModel, sym::Symbol, key::Symbol, value)
+    _assert_symbol_exists(c, sym)
     d = get!(symmetadata(c), sym, Dict{Symbol,Any}())
     d[key] = value
 end
-set_metadata!(c::ComponentModel, sym::Symbol, pair::Pair) = set_metadata!(c, sym, pair.first, pair.second)
+function set_metadata!(c::ComponentModel, sym::Symbol, pair::Pair)
+    _assert_symbol_exists(c, sym)
+    set_metadata!(c, sym, pair.first, pair.second)
+end
 
 # generate default methods for some per-symbol metadata fields
 for md in [:default, :guess, :init, :bounds]
