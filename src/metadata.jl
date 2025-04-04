@@ -5,19 +5,27 @@ function _assert_symbol_exists(c::ComponentModel, s::Symbol)
     contains = s ∈ sym(c) ||
                s ∈ psym(c) ||
                s ∈ insym_all(c) ||
-               s ∈ outsym_all(c) ||
+               s ∈ outsym_flat(c) ||
                s ∈ obssym(c)
     contains || throw(ArgumentError("Symbol $sym does not exist in component model."))
     return nothing
 end
 
+const Comp_or_NW = Union{ComponentModel, Network}
+
+_get_comp_and_sym(c::ComponentModel, sym::Symbol) = (c, sym)
+_get_comp_and_sym(nw::Network, sni::SymbolicIndex) = (getcomp(nw, sni), sni.subidx)
+
 """
     has_metadata(c::ComponentModel, sym::Symbol, key::Symbol)
+    has_metadata(c::Network, sni::SymbolicIndex, key::Symbol)
 
-Checks if symbol metadata `key` is present for symbol `sym`.
+Checks if symbol metadata `key` is present for symbol `sym` in a component model,
+or for a symbol referenced by `sni` in a network.
 Throws an error if the symbol does not exist in the component model.
 """
-function has_metadata(c::ComponentModel, sym::Symbol, key::Symbol)
+function has_metadata(_c::Comp_or_NW, _sym, key::Symbol)
+    c, sym = _get_comp_and_sym(_c, _sym)
     _assert_symbol_exists(c, sym)
     md = symmetadata(c)
     haskey(md, sym) && haskey(md[sym], key)
@@ -25,28 +33,36 @@ end
 
 """
     get_metadata(c::ComponentModel, sym::Symbol, key::Symbol)
+    get_metadata(c::Network, sni::SymbolicIndex, key::Symbol)
 
-Retrieves the metadata `key` for symbol `sym`.
+Retrieves the metadata `key` for symbol `sym` in a component model,
+or for a symbol referenced by `sni` in a network.
 Throws an error if the symbol does not exist in the component model.
 """
-function get_metadata(c::ComponentModel, sym::Symbol, key::Symbol)
+function get_metadata(_c::Comp_or_NW, _sym, key::Symbol)
+    c, sym = _get_comp_and_sym(_c, _sym)
     _assert_symbol_exists(c, sym)
     symmetadata(c)[sym][key]
 end
 
 """
     set_metadata!(c::ComponentModel, sym::Symbol, key::Symbol, value)
-    set_metadata!(c::ComponentModel, sym::Symbol, pair)
+    set_metadata!(c::Network, sni::SymbolicIndex, key::Symbol, value)
+    set_metadata!(c::ComponentModel, sym::Symbol, pair::Pair)
+    set_metadata!(c::Network, sni::SymbolicIndex, pair::Pair)
 
-Sets the metadata `key` for symbol `sym` to `value`.
+Sets the metadata `key` for symbol `sym` to `value` in a component model,
+or for a symbol referenced by `sni` in a network.
 Throws an error if the symbol does not exist in the component model.
 """
-function set_metadata!(c::ComponentModel, sym::Symbol, key::Symbol, value)
+function set_metadata!(_c::Comp_or_NW, _sym, key::Symbol, value)
+    c, sym = _get_comp_and_sym(_c, _sym)
     _assert_symbol_exists(c, sym)
     d = get!(symmetadata(c), sym, Dict{Symbol,Any}())
     d[key] = value
 end
-function set_metadata!(c::ComponentModel, sym::Symbol, pair::Pair)
+function set_metadata!(_c::Comp_or_NW, _sym, pair::Pair)
+    c, sym = _get_comp_and_sym(_c, _sym)
     _assert_symbol_exists(c, sym)
     set_metadata!(c, sym, pair.first, pair.second)
 end
@@ -59,47 +75,48 @@ for md in [:default, :guess, :init, :bounds]
     @eval begin
         """
             has_$($(QuoteNode(md)))(c::ComponentModel, sym::Symbol)
-            has_$($(QuoteNode(md)))(nw::Network, sni::SymbolicIndex)
+            has_$($(QuoteNode(md)))(c::Network, sni::SymbolicIndex)
 
-        Checks if a `$($(QuoteNode(md)))` value is present for symbol `sym`.
+        Checks if a `$($(QuoteNode(md)))` value is present for symbol `sym` in a component model,
+        or for a symbol referenced by `sni` in a network.
 
         See also [`get_$($(QuoteNode(md)))`](@ref), [`set_$($(QuoteNode(md)))!`](@ref).
         """
-        $fname_has(c::ComponentModel, sym::Symbol) = has_metadata(c, sym, $(QuoteNode(md)))
-        $fname_has(nw::Network, sni::SymbolicIndex) = $fname_has(getcomp(nw, sni), sni.subidx)
+        $fname_has(c::Comp_or_NW, sym) = has_metadata(c, sym, $(QuoteNode(md)))
 
         """
             get_$($(QuoteNode(md)))(c::ComponentModel, sym::Symbol)
-            get_$($(QuoteNode(md)))(nw::Network, sni::SymbolicIndex)
+            get_$($(QuoteNode(md)))(c::Network, sni::SymbolicIndex)
 
-        Returns the `$($(QuoteNode(md)))` value for symbol `sym`.
+        Returns the `$($(QuoteNode(md)))` value for symbol `sym` in a component model,
+        or for a symbol referenced by `sni` in a network.
 
         See also [`has_$($(QuoteNode(md)))`](@ref), [`set_$($(QuoteNode(md)))!`](@ref).
         """
-        $fname_get(c::ComponentModel, sym::Symbol) = get_metadata(c, sym, $(QuoteNode(md)))
-        $fname_get(nw::Network, sni::SymbolicIndex) = $fname_get(getcomp(nw, sni), sni.subidx)
-
+        $fname_get(c::Comp_or_NW, sym) = get_metadata(c, sym, $(QuoteNode(md)))
 
         """
             set_$($(QuoteNode(md)))!(c::ComponentModel, sym::Symbol, value)
-            set_$($(QuoteNode(md)))!(nw::Network, sni::SymbolicIndex, value)
+            set_$($(QuoteNode(md)))!(c::Network, sni::SymbolicIndex, value)
 
-        Sets the `$($(QuoteNode(md)))` value for symbol `sym` to `value`.
+        Sets the `$($(QuoteNode(md)))` value for symbol `sym` to `value` in a component model,
+        or for a symbol referenced by `sni` in a network.
 
         See also [`has_$($(QuoteNode(md)))`](@ref), [`get_$($(QuoteNode(md)))`](@ref).
         """
-        $fname_set(c::ComponentModel, sym::Symbol, val) = set_metadata!(c, sym, $(QuoteNode(md)), val)
-        $fname_set(nw::Network, sni::SymbolicIndex, val) = $fname_set(getcomp(nw, sni), sni.subidx, val)
+        $fname_set(c::Comp_or_NW, sym, val) = set_metadata!(c, sym, $(QuoteNode(md)), val)
     end
 end
 set_graphelement!(c::EdgeModel, p::Pair) = set_graphelement!(c, (;src=p.first, dst=p.second))
 
 """
     is_unused(c::ComponentModel, sym::Symbol)
+    is_unused(c::Network, sni::SymbolicIndex)
 
-Checks if symbol `sym` is marked as unused (i.e. it does not appear in the equations of f and g explicitly).
+Checks if symbol `sym` is marked as unused (i.e. it does not appear in the equations of f and g explicitly)
+in a component model, or if a symbol referenced by `sni` is marked as unused in a network.
 """
-function is_unused(c::ComponentModel, sym::Symbol)
+function is_unused(c::Comp_or_NW, sym)
     if has_metadata(c, sym, :unused)
         get_metadata(c, sym, :unused)
     else
@@ -110,38 +127,40 @@ end
 #### default or init
 """
     has_default_or_init(c::ComponentModel, sym::Symbol)
-    has_default_or_init(nw::Network, sni::SymbolicIndex)
+    has_default_or_init(c::Network, sni::SymbolicIndex)
 
-Checks if a `default` or `init` value is present for symbol `sym`.
+Checks if a `default` or `init` value is present for symbol `sym` in a component model,
+or for a symbol referenced by `sni` in a network.
 """
-has_default_or_init(c::ComponentModel, sym::Symbol) = has_default(c, sym) || has_init(c, sym)
-has_default_or_init(nw::Network, sni::SymbolicIndex) = has_default_or_init(getcomp(nw, sni), sni.subidx)
+has_default_or_init(c::Comp_or_NW, sym) = has_default(c, sym) || has_init(c, sym)
+
 """
     get_default_or_init(c::ComponentModel, sym::Symbol)
-    get_default_or_init(nw::Network, sni::SymbolicIndex)
+    get_default_or_init(c::Network, sni::SymbolicIndex)
 
-Returns if a `default` value if available, otherwise returns `init` value for symbol `sym`.
+Returns if a `default` value if available, otherwise returns `init` value for symbol `sym` in a component model,
+or for a symbol referenced by `sni` in a network.
 """
-get_default_or_init(c::ComponentModel, sym::Symbol) = has_default(c, sym) ? get_default(c, sym) : get_init(c, sym)
-get_default_or_init(nw::Network, sni::SymbolicIndex) = get_default_or_init(getcomp(nw, sni), sni.subidx)
+get_default_or_init(c::Comp_or_NW, sym) = has_default(c, sym) ? get_default(c, sym) : get_init(c, sym)
 
 #### default or guess
 """
     has_default_or_guess(c::ComponentModel, sym::Symbol)
-    has_default_or_guess(nw::Network, sni::SymbolicIndex)
+    has_default_or_guess(c::Network, sni::SymbolicIndex)
 
-Checks if a `default` or `guess` value is present for symbol `sym`.
+Checks if a `default` or `guess` value is present for symbol `sym` in a component model,
+or for a symbol referenced by `sni` in a network.
 """
-has_default_or_guess(c::ComponentModel, sym::Symbol) = has_default(c, sym) || has_guess(c, sym)
-has_default_or_guess(nw::Network, sni::SymbolicIndex) = has_default_or_guess(getcomp(nw, sni), sni.subidx)
+has_default_or_guess(c::Comp_or_NW, sym) = has_default(c, sym) || has_guess(c, sym)
+
 """
     get_default_or_guess(c::ComponentModel, sym::Symbol)
-    get_default_or_guess(nw::Network, sni::SymbolicIndex)
+    get_default_or_guess(c::Network, sni::SymbolicIndex)
 
-Returns if a `default` value if available, otherwise returns `guess` value for symbol `sym`.
+Returns if a `default` value if available, otherwise returns `guess` value for symbol `sym` in a component model,
+or for a symbol referenced by `sni` in a network.
 """
-get_default_or_guess(c::ComponentModel, sym::Symbol) = has_default(c, sym) ? get_default(c, sym) : get_guess(c, sym)
-get_default_or_guess(nw::Network, sni::SymbolicIndex) = get_default_or_guess(getcomp(nw, sni), sni.subidx)
+get_default_or_guess(c::Comp_or_NW, sym) = has_default(c, sym) ? get_default(c, sym) : get_guess(c, sym)
 
 
 # TODO: legacy, only used within show methods

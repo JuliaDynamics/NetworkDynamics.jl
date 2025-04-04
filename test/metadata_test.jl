@@ -68,6 +68,38 @@ end
     @test_throws ArgumentError set_bounds!(vm, :nonexistent, (0.0, 1.0))
 end
 
+@testset "Network metadata access" begin
+    # Create a test network
+    nw = basenetwork()
+
+    # Test metadata access using SymbolicIndex
+    vidx = VIndex(1, :θ)
+
+    # Test setting metadata on a network element
+    @test_nowarn set_metadata!(nw, vidx, :test_key, "test_value")
+    @test has_metadata(nw, vidx, :test_key)
+    @test get_metadata(nw, vidx, :test_key) == "test_value"
+
+    # Test the pair version
+    @test_nowarn set_metadata!(nw, vidx, :another_key => "another_value")
+    @test get_metadata(nw, vidx, :another_key) == "another_value"
+
+    # Test auto-generated metadata methods with network
+    @test_nowarn set_default!(nw, vidx, 2.0)
+    @test has_default(nw, vidx)
+    @test get_default(nw, vidx) == 2.0
+
+    # Test combined metadata accessors
+    @test NetworkDynamics.has_default_or_init(nw, vidx)
+    @test NetworkDynamics.get_default_or_init(nw, vidx) == 2.0
+
+    # Test with non-existent symbol
+    invalid_idx = VIndex(1, :nonexistent)
+    @test_throws ArgumentError set_metadata!(nw, invalid_idx, :test_key, "test_value")
+    @test_throws ArgumentError get_metadata(nw, invalid_idx, :test_key)
+    @test_throws ArgumentError has_metadata(nw, invalid_idx, :test_key)
+end
+
 @testset "describe_ functions" begin
     nw = basenetwork()
     # Test describe_vertices
