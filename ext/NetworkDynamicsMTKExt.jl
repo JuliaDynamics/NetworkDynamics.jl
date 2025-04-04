@@ -222,7 +222,9 @@ function _get_metadata(sys, name)
         end
 
         if def isa Symbolic
-            @warn "Could not resolve default term $(ModelingToolkit.getdefault(sym)) for $name, leave free."
+            @warn "Could not resolve rhs for default term $name = $(ModelingToolkit.getdefault(sym)). Some rhs symbols might not have default values. Leave free."
+        elseif def == ModelingToolkit.NoValue || def isa ModelingToolkit.NoValue
+            # skip NoValue thing
         else
             nt = (; nt..., default=def)
         end
