@@ -306,6 +306,7 @@ function get_initial_state(cf::ComponentModel, syms; missing_val=nothing)
         end
     end
 end
+get_initial_state(nw::Network, sni::SymbolicIndex; kwargs...) = get_initial_state(getcomp(nw, sni), sni.subidx; kwargs...)
 
 function _get_initial_observed(cf)
     missing_val = NaN
