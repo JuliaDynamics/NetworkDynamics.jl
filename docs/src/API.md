@@ -93,11 +93,6 @@ vpidxs
 epidxs
 ```
 
-### Solution Inspection
-```@docs
-dump_state
-```
-
 ## Metadata API
 ### Component Metadata API
 ```@docs
@@ -133,6 +128,24 @@ set_init!
 has_bounds
 get_bounds
 set_bounds!
+set_defaults!
+set_interface_defaults!
+```
+
+### Metadata and Inspection Utils
+```@docs
+dump_state
+dump_initial_state
+get_initial_state
+describe_vertices
+describe_edges
+```
+
+## Initialization
+```@docs
+find_fixpoint
+initialize_component!
+init_residual
 ```
 
 ## Callbacks API
@@ -154,17 +167,6 @@ has_callback
 get_callbacks(::NetworkDynamics.ComponentModel)
 set_callback!
 add_callback!
-```
-
-## Initialization
-```@docs
-find_fixpoint
-initialize_component!
-init_residual
-get_initial_state
-dump_initial_state
-set_defaults!
-set_interface_defaults!
 ```
 
 ## Execution Types

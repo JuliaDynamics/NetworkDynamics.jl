@@ -30,6 +30,23 @@ function _df_from_pair(list, pair)
     df
 end
 
+"""
+    describe_vertices(nw::Network, extras...; parameters=true, states=true, batch=nothing)
+
+Creates a DataFrame containing information about the vertices in a Network.
+
+# Arguments
+- `nw::Network`: The network to describe
+- `extras...`: Additional pairs of (key, function) to include as columns,
+   where the function gets the [`VertexModel`](@ref) as its only parameter
+   to extract a custom metadata field for example..
+- `parameters=true`: Whether to include parameter values
+- `states=true`: Whether to include state values
+- `batch=nothing`: Optionally filter by specific batches
+
+# Returns
+A DataFrame with columns for vertex indices, names, batch numbers, and any parameter/state values.
+"""
 function NetworkDynamics.describe_vertices(nw::Network, extras...; parameters=true, states=true, batch=nothing)
     pairs = enumerate(nw.im.vertexm);
     batches = map(idx -> findfirst(batch -> idx ∈ batch.indices, nw.vertexbatches), first.(pairs))
@@ -61,6 +78,23 @@ function NetworkDynamics.describe_vertices(nw::Network, extras...; parameters=tr
     foldl((a,b) -> DataFrames.leftjoin(a,b; on=:idx), dfs)
 end
 
+"""
+    describe_edges(nw::Network, extras...; parameters=true, states=true, batch=nothing)
+
+Creates a DataFrame containing information about the edges in a Network.
+
+# Arguments
+- `nw::Network`: The network to describe
+- `extras...`: Additional pairs of (key, function) to include as columns,
+   where the function gets the [`EdgeModel`](@ref) as its only parameter
+   to extract a custom metadata field for example..
+- `parameters=true`: Whether to include parameter values
+- `states=true`: Whether to include state values
+- `batch=nothing`: Optionally filter by specific batches
+
+# Returns
+A DataFrame with columns for edge indices, source-destination pairs, names, batch numbers, and any parameter/state values.
+"""
 function NetworkDynamics.describe_edges(nw::Network, extras...; parameters=true, states=true, batch=nothing)
     pairs = enumerate(nw.im.edgem);
     batches = map(idx -> findfirst(batch -> idx ∈ batch.indices, nw.layer.edgebatches), first.(pairs))
