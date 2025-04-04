@@ -34,3 +34,13 @@ Fore those, there are special functions `has_*`, `get_*` and `set_*!`. See [Per 
 
 
 Those are closely aligned to the [metadata use in ModelingToolkit](https://docs.sciml.ai/ModelingToolkit/stable/basics/Variable_metadata/). They are automatically copied from the `ODESystem` if you use MTK models to create NetworkDynamics models.
+
+## Metadata Utils
+Accessing metadata (especially defaults) of states and parameters is a very
+common task. We provide several helper methods to do so. Please check out their docstrings for further explaination:
+
+- [dump_state](@ref)
+- [dump_initial_state](@ref)
+- [get_initial_state](@ref)
+- [describe_vertices](@ref) (needs `DataFrames.jl` loaded)
+- [describe_edges](@ref) (needs `DataFrames.jl` loaded)

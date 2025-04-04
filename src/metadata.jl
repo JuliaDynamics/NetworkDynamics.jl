@@ -286,8 +286,9 @@ end
 ####
 """
     get_initial_state(c::ComponentModel, syms; missing_val=nothing)
+    get_initial_state(nw::Network, sni::SymbilicIndex; missing_val=nothing)
 
-Returns the initial state for symbol `sym` (single symbol of vector) of the component model `c`.
+Returns the initial state for symbol `sym` (single symbol or vector) of the component model `c`.
 Returns `missing_val` if the symbol is not initialized. Also works for observed symbols.
 
 See also: [`dump_initial_state`](@ref).
@@ -306,6 +307,7 @@ function get_initial_state(cf::ComponentModel, syms; missing_val=nothing)
         end
     end
 end
+get_initial_state(nw::Network, sni::SymbolicIndex; kwargs...) = get_initial_state(getcomp(nw, sni), sni.subidx; kwargs...)
 
 function _get_initial_observed(cf)
     missing_val = NaN
@@ -551,3 +553,7 @@ function _has_changed_hash(aliased_cfs)
     end
     changed
 end
+
+
+function describe_vertices end
+function describe_edges end
