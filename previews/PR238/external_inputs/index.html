@@ -57,7 +57,20 @@ sol = solve(prob, Tsit5())
 
 fig, ax, p = lines(sol, idxs=VIndex(:load, :V), label=&quot;Voltage @ load&quot;);
 lines!(ax, sol, idxs=VPIndex(:source, :Vref), label=&quot;Reference&quot;, color=Cycled(2));
-axislegend(ax; position=:rb);</code></pre><img src="53aea94e.png" alt="Example block output"/><h3 id="MTK-Models"><a class="docs-heading-anchor" href="#MTK-Models">MTK Models</a><a id="MTK-Models-1"></a><a class="docs-heading-anchor-permalink" href="#MTK-Models" title="Permalink"></a></h3><p>First we define the resistor:</p><pre><code class="language-julia hljs">using NetworkDynamics
+axislegend(ax; position=:rb);</code></pre><div class="bonito-fragment" id="5fc7be81-443c-40e3-afa6-7ac3fd6c7a5e" data-jscall-id="subsession-application-dom">
+  <div>
+    <style></style>
+  </div>
+  <div>
+    <script type="module">    Bonito.lock_loading(() => {
+        return Bonito.fetch_binary('bonito/bin/df9c5a6054ab15890848698ff236ede18cc092e9-11447342141090952550.bin').then(msgs=> Bonito.init_session('5fc7be81-443c-40e3-afa6-7ac3fd6c7a5e', msgs, 'sub', false));
+    })
+</script>
+    <div style="width: 100%; height: 100%" data-jscall-id="3">
+      <canvas data-jp-suppress-context-menu style="display: block" data-jscall-id="4" data-lm-suppress-shortcuts="true" tabindex="0"></canvas>
+    </div>
+  </div>
+</div><h3 id="MTK-Models"><a class="docs-heading-anchor" href="#MTK-Models">MTK Models</a><a id="MTK-Models-1"></a><a class="docs-heading-anchor-permalink" href="#MTK-Models" title="Permalink"></a></h3><p>First we define the resistor:</p><pre><code class="language-julia hljs">using NetworkDynamics
 using OrdinaryDiffEqTsit5
 using ModelingToolkit
 using ModelingToolkit: t_nounits as t, D_nounits as Dt
@@ -145,4 +158,17 @@ let
     lines!(ax2, sol, idxs=VIndex(:source, :i_source), label=&quot;source current&quot;, color=Cycled(2));
     axislegend(ax2);
     fig
-end</code></pre><img src="105b0980.png" alt="Example block output"/><p>Using MTK for modeling, we can also inspect the currents <code>i_load</code> and <code>i_source</code> the MTK interface preserves the <a href="../symbolic_indexing/#Observables">Observables</a>.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../mtk_integration/">« ModelingToolkit Integration</a><a class="docs-footer-nextpage" href="../inspector/">Interactive Solution Inspection »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.10.1 on <span class="colophon-date" title="Friday 4 April 2025 12:02">Friday 4 April 2025</span>. Using Julia version 1.11.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+end</code></pre><div class="bonito-fragment" id="ae78d8c2-715a-40ac-9df9-edd7af588275" data-jscall-id="subsession-application-dom">
+  <div>
+    <style></style>
+  </div>
+  <div>
+    <script type="module">    Bonito.lock_loading(() => {
+        return Bonito.fetch_binary('bonito/bin/e57952b8cec884057c7231e7db47f3f8bedddff6-5284438566555973327.bin').then(msgs=> Bonito.init_session('ae78d8c2-715a-40ac-9df9-edd7af588275', msgs, 'sub', false));
+    })
+</script>
+    <div style="width: 100%; height: 100%" data-jscall-id="5">
+      <canvas data-jp-suppress-context-menu style="display: block" data-jscall-id="6" data-lm-suppress-shortcuts="true" tabindex="0"></canvas>
+    </div>
+  </div>
+</div><p>Using MTK for modeling, we can also inspect the currents <code>i_load</code> and <code>i_source</code> the MTK interface preserves the <a href="../symbolic_indexing/#Observables">Observables</a>.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../mtk_integration/">« ModelingToolkit Integration</a><a class="docs-footer-nextpage" href="../inspector/">Interactive Solution Inspection »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.10.1 on <span class="colophon-date" title="Friday 4 April 2025 12:25">Friday 4 April 2025</span>. Using Julia version 1.11.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
