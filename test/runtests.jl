@@ -44,6 +44,7 @@ haskey(ENV, "BUILDKITE") && @test CUDA.functional() # fail early in buildkite if
     @safetestset "inhomogeneous test" begin include("inhomogeneous_test.jl") end
     @safetestset "initialization test" begin include("initialization_test.jl") end
     @safetestset "Callbacks test" begin include("callbacks_test.jl") end
+    @safetestset "Metadata test" begin include("metadata_test.jl") end
 
     @safetestset "AD test" begin include("AD_test.jl") end
 

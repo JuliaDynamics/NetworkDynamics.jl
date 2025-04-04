@@ -110,7 +110,7 @@ function NetworkDynamics.describe_edges(nw::Network, extras...; parameters=true,
         idx = first.(pairs),
         srcdst = map(idx -> nw.im.edgevec[idx].src => nw.im.edgevec[idx].dst, first.(pairs)),
         name = map(v->last(v).name, pairs),
-        batch = map(idx -> findfirst(batch -> idx ∈ batch.indices, nw.vertexbatches), first.(pairs)),
+        batch = map(idx -> findfirst(batch -> idx ∈ batch.indices, nw.layer.edgebatches), first.(pairs)),
     )
 
     dfs = [basedf,]
