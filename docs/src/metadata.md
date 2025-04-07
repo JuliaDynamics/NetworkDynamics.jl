@@ -38,8 +38,8 @@ These are closely aligned with the [metadata use in ModelingToolkit](https://doc
 Accessing metadata (especially defaults) of states and parameters is a very
 common task. We provide several helper methods to do so. Please check out their docstrings for further explanation:
 
-- [dump_state](@ref)
-- [dump_initial_state](@ref)
-- [get_initial_state](@ref)
-- [describe_vertices](@ref) (needs `DataFrames.jl` loaded)
-- [describe_edges](@ref) (needs `DataFrames.jl` loaded)
+- [`dump_state`](@ref)
+- [`dump_initial_state`](@ref)
+- [`get_initial_state`](@ref)
+- [`describe_vertices`](@ref) (needs `DataFrames.jl` loaded)
+- [`describe_edges`](@ref) (needs `DataFrames.jl` loaded)
