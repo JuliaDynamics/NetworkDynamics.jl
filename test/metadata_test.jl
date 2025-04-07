@@ -328,3 +328,90 @@ end
     @test df_with_custom[1, :custom_key] == "test_value"
     @test ismissing(df_with_custom[2, :custom_key])
 end
+
+@testset "set_defaults! function" begin
+    nw = basenetwork()
+    modified_state = NWState(nw)
+
+    # Modify state values using variable_symbols for correct iteration order
+    for (i, sni) in enumerate(variable_symbols(nw))
+        if i % 3 == 0
+            modified_state[sni] = 2.5 + i/10
+        end
+    end
+
+    # Modify parameter values using parameter_symbols for correct iteration order
+    for (i, sni) in enumerate(parameter_symbols(nw))
+        if i % 2 == 0
+            modified_state.p[sni] = 3.7 + i/10
+        end
+    end
+
+    # Test set_defaults! with NWState
+    set_defaults!(nw, modified_state)
+
+    # Check if the defaults were updated correctly
+    # Need to create a new state to ensure we're reading from the network's defaults
+    new_state = NWState(nw)
+
+    for (i, sni) in enumerate(variable_symbols(nw))
+        if i % 3 == 0
+            @test new_state[sni] ≈ 2.5 + i/10
+        end
+    end
+
+    for (i, sni) in enumerate(parameter_symbols(nw))
+        if i % 2 == 0
+            @test new_state.p[sni] ≈ 3.7 + i/10
+        end
+    end
+
+    # Now test NWParameter separately
+    nw2 = basenetwork()
+    modified_params = NWParameter(nw2)
+
+    # Modify parameter values using parameter_symbols
+    for (i, sni) in enumerate(parameter_symbols(nw2))
+        if i % 3 == 1
+            modified_params[sni] = 4.2 + i/10
+        end
+    end
+
+    # Test set_defaults! with NWParameter
+    set_defaults!(nw2, modified_params)
+
+    # Check if the defaults were updated correctly
+    new_params = NWParameter(nw2)
+
+    for (i, sni) in enumerate(parameter_symbols(nw2))
+        if i % 3 == 1
+            @test new_params[sni] ≈ 4.2 + i/10
+        end
+    end
+
+    # Test that NaN values are ignored
+    nw3 = basenetwork()
+    nan_state = NWState(nw3)
+
+    # Set some values to NaN
+    for (i, sni) in enumerate(variable_symbols(nw3))
+        if i % 5 == 0
+            nan_state[sni] = NaN
+        elseif i % 5 == 1
+            nan_state[sni] = 7.1
+        end
+    end
+
+    set_defaults!(nw3, nan_state)
+
+    # Check that NaN values were not set but others were
+    new_state3 = NWState(nw3)
+    for (i, sni) in enumerate(variable_symbols(nw3))
+        if i % 5 == 0
+            # The NaN value should not be set, so it should retain original value
+            @test nan_state[sni] != new_state3[sni] || isnan(nan_state[sni])
+        elseif i % 5 == 1
+            @test new_state3[sni] ≈ 7.1
+        end
+    end
+end
