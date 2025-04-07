@@ -226,6 +226,41 @@ function pguess(c::ComponentModel)::Vector{Union{Nothing,Float64}}
     end
 end
 
+
+"""
+    set_defaults!(nw::Network, s::NWState)
+
+Set the default values of the network to the values of the given state.
+Can be used to "store" the found fixpoint in the network metadata.
+
+Values of `missing`, `nothing` or `NaN` are ignored.
+"""
+function set_defaults!(nw::Network, s::NWState)
+    for (sni, val) in zip(SII.variable_symbols(nw), uflat(s))
+        val isa Number || continue
+        isnan(val) && continue
+        set_default!(nw, sni, val)
+    end
+    set_defaults!(nw, s.p)
+    nw
+end
+
+"""
+    set_defaults!(nw::Network, p::NWParameter)
+
+Set the parameter default values of the network to the values of the given parameter object.
+
+Values of `missing`, `nothing` or `NaN` are ignored.
+"""
+function set_defaults!(nw::Network, p::NWParameter)
+    for (sni, val) in zip(SII.parameter_symbols(nw), pflat(p))
+        val isa Number || continue
+        isnan(val) && continue
+        set_default!(nw, sni, val)
+    end
+    nw
+end
+
 ####
 #### Component metadata
 ####
