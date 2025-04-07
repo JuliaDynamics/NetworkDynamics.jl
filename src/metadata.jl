@@ -301,6 +301,26 @@ set_metadata!(c::ComponentModel, key::Symbol, val) = setindex!(metadata(c), val,
 set_metadata!(nw::Network, idx::VCIndex, key::Symbol, val) = set_metadata!(getcomp(nw, idx), key, val)
 set_metadata!(nw::Network, idx::ECIndex, key::Symbol, val) = set_metadata!(getcomp(nw, idx), key, val)
 
+"""
+    delete_metadata!(c::ComponentModel, key::Symbol)
+    delete_metadata!(nw::Network, idx::Union{VIndex,EIndex}, key::Symbol)
+
+Removes the component-wide metadata `key` from the component model,
+or from a component referenced by `idx` in a network.
+Returns `true` if the metadata existed and was removed, `false` otherwise.
+"""
+function delete_metadata!(c::ComponentModel, key::Symbol, val)
+    md = metadata(c)
+    if haskey(md, key)
+        delete!(md, key)
+        return true
+    end
+    return false
+end
+delete_metadata!(nw::Network, idx::VCIndex, key::Symbol) = delete_metadata!(getcomp(nw, idx), key)
+delete_metadata!(nw::Network, idx::ECIndex, key::Symbol) = delete_metadata!(getcomp(nw, idx), key)
+
+
 #### graphelement field for edges and vertices
 """
     has_graphelement(c::ComponentModel)

@@ -198,6 +198,12 @@ end
     @test has_metadata(nw, VIndex(1), :test_comp_key)
     @test get_metadata(nw, VIndex(1), :test_comp_key) == "test_comp_value"
 
+    # Test delete_metadata! for component-wide metadata
+    @test delete_metadata!(nw, VIndex(1), :test_comp_key)
+    @test !has_metadata(nw, VIndex(1), :test_comp_key)
+    # Test deleting non-existent metadata
+    @test !delete_metadata!(nw, VIndex(1), :nonexistent_key)
+
     # Test graphelement functions
     set_position!(nw, VIndex(1), (0.5, 0.5))
     @test has_position(nw, VIndex(1))

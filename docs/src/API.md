@@ -102,6 +102,7 @@ metadata
 has_metadata(::NetworkDynamics.ComponentModel, ::Symbol)
 get_metadata(::NetworkDynamics.ComponentModel, ::Symbol)
 set_metadata!(::NetworkDynamics.ComponentModel, ::Symbol, ::Any)
+delete_metadata!(::NetworkDynamics.ComponentModel, ::Symbol)
 has_graphelement
 get_graphelement
 set_graphelement!
@@ -118,7 +119,7 @@ symmetadata
 get_metadata(::NetworkDynamics.ComponentModel, ::Symbol, ::Symbol)
 has_metadata(::NetworkDynamics.ComponentModel, ::Symbol, ::Symbol)
 set_metadata!(::NetworkDynamics.ComponentModel, ::Symbol, ::Symbol, ::Any)
-delete_metadata!
+delete_metadata!(::NetworkDynamics.ComponentModel, ::Symbol, ::Symbol)
 has_default
 get_default
 set_default!
