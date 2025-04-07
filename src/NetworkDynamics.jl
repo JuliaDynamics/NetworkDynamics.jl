@@ -66,11 +66,11 @@ export save_parameters!, extract_nw
 export @obsex
 include("symbolicindexing.jl")
 
-export has_metadata, get_metadata, set_metadata!
-export has_default, get_default, set_default!, set_defaults!
-export has_guess, get_guess, set_guess!
-export has_init, get_init, set_init!
-export has_bounds, get_bounds, set_bounds!
+export has_metadata, get_metadata, set_metadata!, delete_metadata!
+export has_default, get_default, set_default!, delete_default!, set_defaults!
+export has_guess, get_guess, set_guess!, delete_guess!
+export has_init, get_init, set_init!, delete_init!
+export has_bounds, get_bounds, set_bounds!, delete_bounds!
 export has_graphelement, get_graphelement, set_graphelement!
 export get_initial_state, dump_initial_state, dump_state
 export has_callback, get_callbacks, set_callback!, add_callback!

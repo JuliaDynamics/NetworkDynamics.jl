@@ -1,6 +1,7 @@
 using NetworkDynamics
 using DataFrames
 using Graphs
+using Test
 
 (isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
 
@@ -24,6 +25,95 @@ function basenetwork()
     s0 = find_fixpoint(nw)
     set_defaults!(nw, s0)
     nw
+end
+
+@testset "Graphelement functions for edges" begin
+    # Create edge model
+    em = Lib.line_mtk()
+
+    # Set graphelement on edge model directly
+    set_graphelement!(em, (;src=1, dst=2))
+    @test has_graphelement(em)
+    @test get_graphelement(em) == (;src=1, dst=2)
+
+    # Test using symbolically named vertices
+    set_graphelement!(em, (;src=:source, dst=:target))
+    @test get_graphelement(em) == (;src=:source, dst=:target)
+
+    # Test alternative pair syntax
+    set_graphelement!(em, 3 => 4)
+    @test get_graphelement(em) == (;src=3, dst=4)
+
+    # Test with Network access
+    nw = basenetwork()
+    eidx = EIndex(1)
+
+    set_graphelement!(nw, eidx, 5 => 6)
+    @test has_graphelement(nw, eidx)
+    @test get_graphelement(nw, eidx) == (;src=5, dst=6)
+end
+
+@testset "Initial state retrieval" begin
+    # Test direct ComponentModel access
+    vm = Lib.swing_mtk()
+    set_default!(vm, :θ, 0.5)
+    set_init!(vm, :ω, 0.0)
+
+    # Test get_initial_state for a single symbol
+    @test get_initial_state(vm, :θ) == 0.5
+    @test get_initial_state(vm, :ω) == 0.0
+
+    # Test get_initial_state for multiple symbols
+    states = get_initial_state(vm, [:θ, :ω])
+    @test states == [0.5, 0.0]
+
+    # Test with missing value
+    @test get_initial_state(vm, :Pmech, missing_val=:missing) == :missing
+
+    # Test with Network access
+    nw = basenetwork()
+    vidx = VIndex(1, :θ)
+    eidx = EIndex(1, :P)
+    set_default!(nw, vidx, 0.3)
+    @test get_initial_state(nw, vidx) == 0.3
+    set_init!(nw, eidx, 0.2)
+    @test get_initial_state(nw, eidx) == 0.2
+end
+
+@testset "Aliased component detection" begin
+    # Create network with aliased components
+    g = SimpleGraph(3)
+    add_edge!(g, 1, 2)
+    add_edge!(g, 2, 3)
+
+    vm = Lib.swing_mtk()
+    em = Lib.line_mtk()
+
+    # Create network with same component used multiple times (aliased)
+    nw = Network(g, [vm, vm, vm], [em, em])
+
+    # Initially no changes
+    @test !NetworkDynamics.aliased_changed(nw; warn=false)
+
+    # Make a change to the aliased component
+    set_default!(vm, :θ, 0.5)
+
+    # Should detect the change
+    @test NetworkDynamics.aliased_changed(nw; warn=false)
+
+    # Test with edges
+    g2 = SimpleGraph(3)
+    add_edge!(g2, 1, 2)
+    add_edge!(g2, 2, 3)
+
+    em_shared = Lib.line_mtk()
+    nw2 = Network(g2, [Lib.swing_mtk() for _ in 1:3], em_shared)
+
+    # Make a change to the aliased edge component
+    set_default!(em_shared, :K, 0.3)
+
+    # Should detect the change
+    @test NetworkDynamics.aliased_changed(nw2; warn=false)
 end
 
 @testset "Symbol existence checks in metadata functions" begin
@@ -138,6 +228,52 @@ end
     @test length(NetworkDynamics.get_defaults(nw, VIndex(1), syms)) == 2
     @test length(NetworkDynamics.get_guesses(nw, VIndex(1), syms)) == 2
     @test length(NetworkDynamics.get_defaults_or_inits(nw, VIndex(1), syms)) == 2
+end
+
+@testset "Bulk metadata retrieval functions" begin
+    # Create a test ComponentModel
+    vm = Lib.swing_mtk()
+
+    # Set up some test data
+    set_default!(vm, :θ, 0.5)
+    set_init!(vm, :ω, 0.1)
+    set_guess!(vm, :M, 5.0)
+    delete_default!(vm, :ω)
+
+    # Test get_defaults for multiple symbols
+    syms = [:θ, :ω, :Pmech]
+    defaults = NetworkDynamics.get_defaults(vm, syms)
+    @test defaults[1] == 0.5  # θ has default
+    @test defaults[2] === nothing  # ω has no default
+    @test defaults[3] === nothing  # Pmech has no default
+
+    # Test get_guesses
+    syms = [:θ, :M, :D]
+    guesses = NetworkDynamics.get_guesses(vm, syms)
+    @test guesses[1] === nothing  # θ has no guess
+    @test guesses[2] == 5.0  # M has guess
+    @test guesses[3] === nothing  # D has no guess
+
+    # Test get_defaults_or_inits
+    syms = [:θ, :ω, :Pmech]
+    values = NetworkDynamics.get_defaults_or_inits(vm, syms)
+    @test values[1] == 0.5  # θ has default
+    @test values[2] == 0.1  # ω has init
+    @test values[3] === nothing  # Pmech has neither
+
+    # Test with Network access
+    nw = basenetwork()
+    syms = [:θ, :ω, :Pmech]
+    # Set up test data
+    set_default!(nw, VIndex(1, :θ), 0.5)
+    delete_default!(nw, VIndex(1,:ω))
+    delete_default!(nw, VIndex(1,:Pmech))
+    set_init!(nw, VIndex(1, :ω), 0.1)
+    # Test with alternate missing_val
+    defaults = NetworkDynamics.get_defaults(nw, VIndex(1), syms; missing_val=:MISSING)
+    @test defaults[1] == 0.5  # θ has default
+    @test defaults[2] === :MISSING  # ω has no default
+    @test defaults[3] === :MISSING  # Pmech has no default
 end
 
 @testset "describe_ functions" begin

@@ -7,7 +7,7 @@ function _assert_symbol_exists(c::ComponentModel, s::Symbol)
                s ∈ insym_all(c) ||
                s ∈ outsym_flat(c) ||
                s ∈ obssym(c)
-    contains || throw(ArgumentError("Symbol $sym does not exist in component model."))
+    contains || throw(ArgumentError("Symbol $s does not exist in component model."))
     return nothing
 end
 
@@ -74,11 +74,35 @@ function set_metadata!(nw::Network, sym::SymbolicIndex, pair::Pair)
     set_metadata!(getcomp(nw, sym), sym.subidx, pair)
 end
 
+"""
+    delete_metadata!(c::ComponentModel, sym::Symbol, key::Symbol)
+    delete_metadata!(nw::Network, sni::SymbolicIndex, key::Symbol)
+
+Removes the metadata `key` for symbol `sym` in a component model,
+or for a symbol referenced by `sni` in a network.
+Returns `true` if the metadata existed and was removed, `false` otherwise.
+Throws an error if the symbol does not exist in the component model.
+"""
+function delete_metadata!(c::ComponentModel, sym::Symbol, key::Symbol)
+    _assert_symbol_exists(c, sym)
+    md = symmetadata(c)
+    if haskey(md, sym) && haskey(md[sym], key)
+        delete!(md[sym], key)
+        if isempty(md[sym])
+            delete!(md, sym)
+        end
+        return true
+    end
+    return false
+end
+delete_metadata!(nw::Network, sym::SymbolicIndex, key::Symbol) = delete_metadata!(getcomp(nw, sym), sym.subidx, key)
+
 # generate default methods for some per-symbol metadata fields
 for md in [:default, :guess, :init, :bounds]
     fname_has = Symbol(:has_, md)
     fname_get = Symbol(:get_, md)
     fname_set = Symbol(:set_, md, :!)
+    fname_del = Symbol(:delete_, md, :!)
     @eval begin
         """
             has_$($(QuoteNode(md)))(c::ComponentModel, sym::Symbol)
@@ -112,6 +136,17 @@ for md in [:default, :guess, :init, :bounds]
         See also [`has_$($(QuoteNode(md)))`](@ref), [`get_$($(QuoteNode(md)))`](@ref).
         """
         $fname_set(c::Comp_or_NW, sym, val) = set_metadata!(c, sym, $(QuoteNode(md)), val)
+
+        """
+            delete_$($(QuoteNode(md)))!(c::ComponentModel, sym::Symbol)
+            delete_$($(QuoteNode(md)))!(nw::Network, sni::SymbolicIndex)
+
+        Removes the `$($(QuoteNode(md)))` value for symbol `sym` in a component model,
+        or for a symbol referenced by `sni` in a network.
+
+        See also [`has_$($(QuoteNode(md)))`](@ref), [`set_$($(QuoteNode(md)))!`](@ref).
+        """
+        $fname_del(c::Comp_or_NW, sym) = delete_metadata!(c, sym, $(QuoteNode(md)))
     end
 end
 
@@ -433,8 +468,7 @@ function get_initial_state(cf::ComponentModel, syms; missing_val=nothing)
         end
     end
 end
-get_initial_state(nw::Network, sni::VCIndex; kw...) = get_initial_state(getcomp(nw, sni), sni.subidx; kw...)
-get_initial_state(nw::Network, sni::ECIndex; kw...) = get_initial_state(getcomp(nw, sni), sni.subidx; kw...)
+get_initial_state(nw::Network, sni; kw...) = get_initial_state(getcomp(nw, sni), sni.subidx; kw...)
 
 function _get_initial_observed(cf)
     missing_val = NaN

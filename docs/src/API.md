@@ -116,18 +116,23 @@ symmetadata
 get_metadata(::NetworkDynamics.ComponentModel, ::Symbol, ::Symbol)
 has_metadata(::NetworkDynamics.ComponentModel, ::Symbol, ::Symbol)
 set_metadata!(::NetworkDynamics.ComponentModel, ::Symbol, ::Symbol, ::Any)
+delete_metadata!
 has_default
 get_default
 set_default!
+delete_default!
 has_guess
 get_guess
 set_guess!
+delete_guess!
 has_init
 get_init
 set_init!
+delete_init!
 has_bounds
 get_bounds
 set_bounds!
+delete_bounds!
 set_defaults!
 set_interface_defaults!
 ```
