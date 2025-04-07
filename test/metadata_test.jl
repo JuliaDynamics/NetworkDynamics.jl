@@ -31,9 +31,9 @@ end
     vm = Lib.swing_mtk()
 
     # Test with existing symbols (should not throw)
-    @test_nowarn set_metadata!(vm, :θ, :test_key, "test_value")
-    @test_nowarn get_metadata(vm, :θ, :test_key)
-    @test_nowarn has_metadata(vm, :θ, :test_key)
+    set_metadata!(vm, :θ, :test_key, "test_value")
+    @test get_metadata(vm, :θ, :test_key) == "test_value"
+    @test has_metadata(vm, :θ, :test_key)
 
     # Test with non-existing symbols (should throw ArgumentError)
     @test_throws ArgumentError set_metadata!(vm, :nonexistent, :test_key, "test_value")
@@ -42,29 +42,29 @@ end
 
     # Test with different types of symbols
     # State symbol
-    @test_nowarn set_metadata!(vm, :ω, :test_key, "test_value")
+    set_metadata!(vm, :ω, :test_key, "test_value")
     # Parameter symbol
-    @test_nowarn set_metadata!(vm, :M, :test_key, "test_value")
+    set_metadata!(vm, :M, :test_key, "test_value")
     # Input symbol
-    @test_nowarn set_metadata!(vm, :P, :test_key, "test_value")
+    set_metadata!(vm, :P, :test_key, "test_value")
     # Output symbol
-    @test_nowarn set_metadata!(vm, :θ, :test_key, "test_value")
+    set_metadata!(vm, :θ, :test_key, "test_value")
     # Observed symbol
-    @test_nowarn set_metadata!(vm, :Pdamping, :test_key, "test_value")
+    set_metadata!(vm, :Pdamping, :test_key, "test_value")
 
     # Test the pair version of set_metadata!
-    @test_nowarn set_metadata!(vm, :θ, :test_key => "new_value")
+    set_metadata!(vm, :θ, :test_key => "new_value")
     @test get_metadata(vm, :θ, :test_key) == "new_value"
     @test_throws ArgumentError set_metadata!(vm, :nonexistent, :test_key => "value")
 
     # Test auto-generated metadata methods
-    @test_nowarn set_default!(vm, :θ, 1.0)
+    set_default!(vm, :θ, 1.0)
     @test_throws ArgumentError set_default!(vm, :nonexistent, 1.0)
-    @test_nowarn set_guess!(vm, :M, 2.0)
+    set_guess!(vm, :M, 2.0)
     @test_throws ArgumentError set_guess!(vm, :nonexistent, 2.0)
-    @test_nowarn set_init!(vm, :ω, 0.5)
+    set_init!(vm, :ω, 0.5)
     @test_throws ArgumentError set_init!(vm, :nonexistent, 0.5)
-    @test_nowarn set_bounds!(vm, :D, (0.0, 1.0))
+    set_bounds!(vm, :D, (0.0, 1.0))
     @test_throws ArgumentError set_bounds!(vm, :nonexistent, (0.0, 1.0))
 end
 
@@ -76,16 +76,16 @@ end
     vidx = VIndex(1, :θ)
 
     # Test setting metadata on a network element
-    @test_nowarn set_metadata!(nw, vidx, :test_key, "test_value")
+    set_metadata!(nw, vidx, :test_key, "test_value")
     @test has_metadata(nw, vidx, :test_key)
     @test get_metadata(nw, vidx, :test_key) == "test_value"
 
     # Test the pair version
-    @test_nowarn set_metadata!(nw, vidx, :another_key => "another_value")
+    set_metadata!(nw, vidx, :another_key => "another_value")
     @test get_metadata(nw, vidx, :another_key) == "another_value"
 
     # Test auto-generated metadata methods with network
-    @test_nowarn set_default!(nw, vidx, 2.0)
+    set_default!(nw, vidx, 2.0)
     @test has_default(nw, vidx)
     @test get_default(nw, vidx) == 2.0
 
@@ -98,6 +98,46 @@ end
     @test_throws ArgumentError set_metadata!(nw, invalid_idx, :test_key, "test_value")
     @test_throws ArgumentError get_metadata(nw, invalid_idx, :test_key)
     @test_throws ArgumentError has_metadata(nw, invalid_idx, :test_key)
+end
+
+@testset "Component-level metadata with network access" begin
+    nw = basenetwork()
+
+    # Test setting component metadata
+    set_metadata!(nw, VIndex(1), :test_comp_key, "test_comp_value")
+    @test has_metadata(nw, VIndex(1), :test_comp_key)
+    @test get_metadata(nw, VIndex(1), :test_comp_key) == "test_comp_value"
+
+    # Test graphelement functions
+    set_position!(nw, VIndex(1), (0.5, 0.5))
+    @test has_position(nw, VIndex(1))
+    @test get_position(nw, VIndex(1)) == (0.5, 0.5)
+
+    set_marker!(nw, VIndex(1), :circle)
+    @test has_marker(nw, VIndex(1))
+    @test get_marker(nw, VIndex(1)) == :circle
+
+    # Test callbacks
+    cb = ContinousComponentCallback(
+        ComponentCondition(nothing, [], []),
+        ComponentAffect(nothing, [], [])
+    )
+    set_callback!(nw, VIndex(1), cb)
+    @test has_callback(nw, VIndex(1))
+    @test get_callbacks(nw, VIndex(1)) == (cb,)
+
+    cb2 = ContinousComponentCallback(
+        ComponentCondition(nothing, [], []),
+        ComponentAffect(nothing, [], [])
+    )
+    add_callback!(nw, VIndex(1), cb2)
+    @test length(get_callbacks(nw, VIndex(1))) == 2
+
+    # Test bulk metadata retrieval functions
+    syms = [:θ, :ω]
+    @test length(NetworkDynamics.get_defaults(nw, VIndex(1), syms)) == 2
+    @test length(NetworkDynamics.get_guesses(nw, VIndex(1), syms)) == 2
+    @test length(NetworkDynamics.get_defaults_or_inits(nw, VIndex(1), syms)) == 2
 end
 
 @testset "describe_ functions" begin

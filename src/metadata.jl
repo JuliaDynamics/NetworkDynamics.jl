@@ -11,60 +11,67 @@ function _assert_symbol_exists(c::ComponentModel, s::Symbol)
     return nothing
 end
 
+# to account for both _metadata(::ComponentModel, ::Symbol) and _metadata(::Network, ::SymbolicIndex)
 const Comp_or_NW = Union{ComponentModel, Network}
-
-_get_comp_and_sym(c::ComponentModel, sym::Symbol) = (c, sym)
-_get_comp_and_sym(nw::Network, sni::SymbolicIndex) = (getcomp(nw, sni), sni.subidx)
 
 """
     has_metadata(c::ComponentModel, sym::Symbol, key::Symbol)
-    has_metadata(c::Network, sni::SymbolicIndex, key::Symbol)
+    has_metadata(nw::Network, sni::SymbolicIndex, key::Symbol)
 
 Checks if symbol metadata `key` is present for symbol `sym` in a component model,
 or for a symbol referenced by `sni` in a network.
 Throws an error if the symbol does not exist in the component model.
 """
-function has_metadata(_c::Comp_or_NW, _sym, key::Symbol)
-    c, sym = _get_comp_and_sym(_c, _sym)
+function has_metadata(c::ComponentModel, sym::Symbol, key::Symbol)
     _assert_symbol_exists(c, sym)
     md = symmetadata(c)
     haskey(md, sym) && haskey(md[sym], key)
 end
+function has_metadata(nw::Network, sym::SymbolicIndex, key::Symbol)
+    has_metadata(getcomp(nw, sym), sym.subidx, key)
+end
 
 """
     get_metadata(c::ComponentModel, sym::Symbol, key::Symbol)
-    get_metadata(c::Network, sni::SymbolicIndex, key::Symbol)
+    get_metadata(nw::Network, sni::SymbolicIndex, key::Symbol)
 
 Retrieves the metadata `key` for symbol `sym` in a component model,
 or for a symbol referenced by `sni` in a network.
 Throws an error if the symbol does not exist in the component model.
 """
-function get_metadata(_c::Comp_or_NW, _sym, key::Symbol)
-    c, sym = _get_comp_and_sym(_c, _sym)
+function get_metadata(c::ComponentModel, sym::Symbol, key::Symbol)
     _assert_symbol_exists(c, sym)
     symmetadata(c)[sym][key]
+end
+function get_metadata(nw::Network, sym::SymbolicIndex, key::Symbol)
+    get_metadata(getcomp(nw, sym), sym.subidx, key)
 end
 
 """
     set_metadata!(c::ComponentModel, sym::Symbol, key::Symbol, value)
-    set_metadata!(c::Network, sni::SymbolicIndex, key::Symbol, value)
+    set_metadata!(nw::Network, sni::SymbolicIndex, key::Symbol, value)
     set_metadata!(c::ComponentModel, sym::Symbol, pair::Pair)
-    set_metadata!(c::Network, sni::SymbolicIndex, pair::Pair)
+    set_metadata!(nw::Network, sni::SymbolicIndex, pair::Pair)
 
 Sets the metadata `key` for symbol `sym` to `value` in a component model,
 or for a symbol referenced by `sni` in a network.
 Throws an error if the symbol does not exist in the component model.
 """
-function set_metadata!(_c::Comp_or_NW, _sym, key::Symbol, value)
-    c, sym = _get_comp_and_sym(_c, _sym)
+function set_metadata!(c::ComponentModel, sym::Symbol, key::Symbol, value)
     _assert_symbol_exists(c, sym)
     d = get!(symmetadata(c), sym, Dict{Symbol,Any}())
     d[key] = value
 end
-function set_metadata!(_c::Comp_or_NW, _sym, pair::Pair)
-    c, sym = _get_comp_and_sym(_c, _sym)
+function set_metadata!(nw::Network, sym::SymbolicIndex, key::Symbol, value)
+    set_metadata!(getcomp(nw, sym), sym.subidx, key, value)
+end
+
+function set_metadata!(c::ComponentModel, sym::Symbol, pair::Pair)
     _assert_symbol_exists(c, sym)
     set_metadata!(c, sym, pair.first, pair.second)
+end
+function set_metadata!(nw::Network, sym::SymbolicIndex, pair::Pair)
+    set_metadata!(getcomp(nw, sym), sym.subidx, pair)
 end
 
 # generate default methods for some per-symbol metadata fields
@@ -75,7 +82,7 @@ for md in [:default, :guess, :init, :bounds]
     @eval begin
         """
             has_$($(QuoteNode(md)))(c::ComponentModel, sym::Symbol)
-            has_$($(QuoteNode(md)))(c::Network, sni::SymbolicIndex)
+            has_$($(QuoteNode(md)))(nw::Network, sni::SymbolicIndex)
 
         Checks if a `$($(QuoteNode(md)))` value is present for symbol `sym` in a component model,
         or for a symbol referenced by `sni` in a network.
@@ -86,7 +93,7 @@ for md in [:default, :guess, :init, :bounds]
 
         """
             get_$($(QuoteNode(md)))(c::ComponentModel, sym::Symbol)
-            get_$($(QuoteNode(md)))(c::Network, sni::SymbolicIndex)
+            get_$($(QuoteNode(md)))(nw::Network, sni::SymbolicIndex)
 
         Returns the `$($(QuoteNode(md)))` value for symbol `sym` in a component model,
         or for a symbol referenced by `sni` in a network.
@@ -97,7 +104,7 @@ for md in [:default, :guess, :init, :bounds]
 
         """
             set_$($(QuoteNode(md)))!(c::ComponentModel, sym::Symbol, value)
-            set_$($(QuoteNode(md)))!(c::Network, sni::SymbolicIndex, value)
+            set_$($(QuoteNode(md)))!(nw::Network, sni::SymbolicIndex, value)
 
         Sets the `$($(QuoteNode(md)))` value for symbol `sym` to `value` in a component model,
         or for a symbol referenced by `sni` in a network.
@@ -107,11 +114,10 @@ for md in [:default, :guess, :init, :bounds]
         $fname_set(c::Comp_or_NW, sym, val) = set_metadata!(c, sym, $(QuoteNode(md)), val)
     end
 end
-set_graphelement!(c::EdgeModel, p::Pair) = set_graphelement!(c, (;src=p.first, dst=p.second))
 
 """
     is_unused(c::ComponentModel, sym::Symbol)
-    is_unused(c::Network, sni::SymbolicIndex)
+    is_unused(nw::Network, sni::SymbolicIndex)
 
 Checks if symbol `sym` is marked as unused (i.e. it does not appear in the equations of f and g explicitly)
 in a component model, or if a symbol referenced by `sni` is marked as unused in a network.
@@ -127,7 +133,7 @@ end
 #### default or init
 """
     has_default_or_init(c::ComponentModel, sym::Symbol)
-    has_default_or_init(c::Network, sni::SymbolicIndex)
+    has_default_or_init(nw::Network, sni::SymbolicIndex)
 
 Checks if a `default` or `init` value is present for symbol `sym` in a component model,
 or for a symbol referenced by `sni` in a network.
@@ -136,7 +142,7 @@ has_default_or_init(c::Comp_or_NW, sym) = has_default(c, sym) || has_init(c, sym
 
 """
     get_default_or_init(c::ComponentModel, sym::Symbol)
-    get_default_or_init(c::Network, sni::SymbolicIndex)
+    get_default_or_init(nw::Network, sni::SymbolicIndex)
 
 Returns if a `default` value if available, otherwise returns `init` value for symbol `sym` in a component model,
 or for a symbol referenced by `sni` in a network.
@@ -146,7 +152,7 @@ get_default_or_init(c::Comp_or_NW, sym) = has_default(c, sym) ? get_default(c, s
 #### default or guess
 """
     has_default_or_guess(c::ComponentModel, sym::Symbol)
-    has_default_or_guess(c::Network, sni::SymbolicIndex)
+    has_default_or_guess(nw::Network, sni::SymbolicIndex)
 
 Checks if a `default` or `guess` value is present for symbol `sym` in a component model,
 or for a symbol referenced by `sni` in a network.
@@ -155,7 +161,7 @@ has_default_or_guess(c::Comp_or_NW, sym) = has_default(c, sym) || has_guess(c, s
 
 """
     get_default_or_guess(c::ComponentModel, sym::Symbol)
-    get_default_or_guess(c::Network, sni::SymbolicIndex)
+    get_default_or_guess(nw::Network, sni::SymbolicIndex)
 
 Returns if a `default` value if available, otherwise returns `guess` value for symbol `sym` in a component model,
 or for a symbol referenced by `sni` in a network.
@@ -188,63 +194,97 @@ end
 ####
 #### Component metadata
 ####
+# types for for referencing a single component
+# not union to resolve dispatch ambiguity
+const VCIndex = VIndex{<:Any, Nothing}
+const ECIndex = EIndex{<:Any, Nothing}
+
 """
     has_metadata(c::ComponentModel, key::Symbol)
+    has_metadata(nw::Network, idx::Union{VIndex,EIndex}, key::Symbol)
 
 Checks if metadata `key` is present for the component.
 """
 function has_metadata(c::ComponentModel, key)
     haskey(metadata(c), key)
 end
+has_metadata(nw::Network, idx::VCIndex, key::Symbol) = has_metadata(getcomp(nw, idx), key)
+has_metadata(nw::Network, idx::ECIndex, key::Symbol) = has_metadata(getcomp(nw, idx), key)
+
 """
     get_metadata(c::ComponentModel, key::Symbol)
+    get_metadata(nw::Network, idx::Union{VIndex,EIndex}, key::Symbol)
 
 Retrieves the metadata `key` for the component.
 """
 get_metadata(c::ComponentModel, key::Symbol) = metadata(c)[key]
+get_metadata(nw::Network, idx::VCIndex, key::Symbol) = get_metadata(getcomp(nw, idx), key)
+get_metadata(nw::Network, idx::ECIndex, key::Symbol) = get_metadata(getcomp(nw, idx), key)
+
 """
     set_metadata!(c::ComponentModel, key::Symbol, value)
+    set_metadata!(nw::Network, idx::Union{VIndex,EIndex}, key::Symbol, value)
 
 Sets the metadata `key` for the component to `value`.
 """
 set_metadata!(c::ComponentModel, key::Symbol, val) = setindex!(metadata(c), val, key)
+set_metadata!(nw::Network, idx::VCIndex, key::Symbol, val) = set_metadata!(getcomp(nw, idx), key, val)
+set_metadata!(nw::Network, idx::ECIndex, key::Symbol, val) = set_metadata!(getcomp(nw, idx), key, val)
 
 #### graphelement field for edges and vertices
 """
-    has_graphelement(c)
+    has_graphelement(c::ComponentModel)
+    has_graphelement(nw::Network, idx::Union{VIndex,EIndex})
 
-Checks if the edge or vetex function function has the `graphelement` metadata.
+Checks if the edge or vertex function has the `graphelement` metadata.
 """
 has_graphelement(c::ComponentModel) = has_metadata(c, :graphelement)
+has_graphelement(nw::Network, idx::VCIndex) = has_graphelement(getcomp(nw, idx))
+has_graphelement(nw::Network, idx::ECIndex) = has_graphelement(getcomp(nw, idx))
+
 """
     get_graphelement(c::EdgeModel)::@NamedTuple{src::T, dst::T}
     get_graphelement(c::VertexModel)::Int
+    get_graphelement(nw::Network, idx::Union{VIndex,EIndex})
 
 Retrieves the `graphelement` metadata for the component model. For edges this
-returns a named tupe `(;src, dst)` where both are either integers (vertex index)
+returns a named tuple `(;src, dst)` where both are either integers (vertex index)
 or symbols (vertex name).
 """
 get_graphelement(c::EdgeModel) = get_metadata(c, :graphelement)::@NamedTuple{src::T, dst::T} where {T<:Union{Int,Symbol}}
 get_graphelement(c::VertexModel) = get_metadata(c, :graphelement)::Int
-"""
-    set_graphelement!(c::EdgeModel, src, dst)
-    set_graphelement!(c::VertexModel, vidx)
+get_graphelement(nw::Network, idx::VCIndex) = get_graphelement(getcomp(nw, idx))
+get_graphelement(nw::Network, idx::ECIndex) = get_graphelement(getcomp(nw, idx))
 
-Sets the `graphelement` metadata for the edge model. For edges this takes two
-arguments `src` and `dst` which are either integer (vertex index) or symbol
+"""
+    set_graphelement!(c::EdgeModel, nt::@NamedTuple{src::T, dst::T})
+    set_graphelement!(c::EdgeModel, p::Pair)
+    set_graphelement!(c::VertexModel, vidx::Int)
+    set_graphelement!(nw::Network, idx::Union{VIndex,EIndex}, value)
+
+Sets the `graphelement` metadata for the component. For edges this takes a
+named tuple `(;src, dst)` where both are either integer (vertex index) or symbol
 (vertex name). For vertices it takes a single integer `vidx`.
 """
 set_graphelement!(c::EdgeModel, nt::@NamedTuple{src::T, dst::T}) where {T<:Union{Int,Symbol}} = set_metadata!(c, :graphelement, nt)
+set_graphelement!(c::EdgeModel, p::Pair) = set_graphelement!(c, (;src=p.first, dst=p.second))
 set_graphelement!(c::VertexModel, vidx::Int) = set_metadata!(c, :graphelement, vidx)
+set_graphelement!(nw::Network, idx::VCIndex, value) = set_graphelement!(getcomp(nw, idx), value)
+set_graphelement!(nw::Network, idx::ECIndex, value) = set_graphelement!(getcomp(nw, idx), value)
 
 """
     has_callback(c::ComponentModel)
+    has_callback(nw::Network, idx::Union{VIndex,EIndex})
 
 Checks if the component has a callback function in metadata.
 """
 has_callback(c::ComponentModel) = has_metadata(c, :callback)
+has_callback(nw::Network, idx::VCIndex) = has_callback(getcomp(nw, idx))
+has_callback(nw::Network, idx::ECIndex) = has_callback(getcomp(nw, idx))
+
 """
-    get_callback(c::ComponentModel)
+    get_callbacks(c::ComponentModel)
+    get_callbacks(nw::Network, idx::Union{VIndex,EIndex})
 
 Gets all callback functions for the component. Wraps in tuple, even if there is only a single one.
 """
@@ -252,8 +292,12 @@ function get_callbacks(c::ComponentModel)
     cb = get_metadata(c, :callback)
     cb isa ComponentCallback ? (cb,) : cb
 end
+get_callbacks(nw::Network, idx::VCIndex) = get_callbacks(getcomp(nw, idx))
+get_callbacks(nw::Network, idx::ECIndex) = get_callbacks(getcomp(nw, idx))
+
 """
-    set_callback!(c::ComponentModel, cb)
+    set_callback!(c::ComponentModel, cb; check=true)
+    set_callback!(nw::Network, idx::Union{VIndex,EIndex}, cb; check=true)
 
 Sets the callback function for the component. Overwrites any existing callback.
 See also [`add_callback!`](@ref).
@@ -265,8 +309,12 @@ function set_callback!(c::ComponentModel, cb; check=true)
     check && assert_cb_compat(c, cb)
     set_metadata!(c, :callback, cb)
 end
+set_callback!(nw::Network, idx::VCIndex, cb; kw...) = set_callback!(getcomp(nw, idx), cb; kw...)
+set_callback!(nw::Network, idx::ECIndex, cb; kw...) = set_callback!(getcomp(nw, idx), cb; kw...)
+
 """
-    add_callback!(c::ComponentModel, cb)
+    add_callback!(c::ComponentModel, cb; check=true)
+    add_callback!(nw::Network, idx::Union{VIndex,EIndex}, cb; check=true)
 
 Adds a callback function to the component. Does not overwrite existing callbacks.
 See also [`set_callback!`](@ref).
@@ -276,16 +324,47 @@ function add_callback!(c::ComponentModel, cb; check=true)
     newcb = has_callback(c) ? (get_callbacks(c)..., cb) : (cb, )
     set_metadata!(c, :callback, newcb)
 end
+add_callback!(nw::Network, idx::VCIndex, cb; kw...) = add_callback!(getcomp(nw, idx), cb; kw...)
+add_callback!(nw::Network, idx::ECIndex, cb; kw...) = add_callback!(getcomp(nw, idx), cb; kw...)
 
+"""
+    get_defaults(c::ComponentModel, syms; missing_val=nothing)
+    get_defaults(nw::Network, idx::Union{VIndex,EIndex}, syms; missing_val=nothing)
+
+Gets all default values for the specified symbols in the component.
+Returns `missing_val` for symbols without default values.
+"""
 function get_defaults(c::ComponentModel, syms; missing_val=nothing)
     [has_default(c, sym) ? get_default(c, sym) : missing_val for sym in syms]
 end
+get_defaults(nw::Network, idx::VCIndex, syms; kw...) = get_defaults(getcomp(nw, idx), syms; kw...)
+get_defaults(nw::Network, idx::ECIndex, syms; kw...) = get_defaults(getcomp(nw, idx), syms; kw...)
+
+"""
+    get_guesses(c::ComponentModel, syms; missing_val=nothing)
+    get_guesses(nw::Network, idx::Union{VIndex,EIndex}, syms; missing_val=nothing)
+
+Gets all guess values for the specified symbols in the component.
+Returns `missing_val` for symbols without guess values.
+"""
 function get_guesses(c::ComponentModel, syms; missing_val=nothing)
     [has_guess(c, sym) ? get_guess(c, sym) : missing_val for sym in syms]
 end
+get_guesses(nw::Network, idx::VCIndex, syms; kw...) = get_guesses(getcomp(nw, idx), syms; kw...)
+get_guesses(nw::Network, idx::ECIndex, syms; kw...) = get_guesses(getcomp(nw, idx), syms; kw...)
+
+"""
+    get_defaults_or_inits(c::ComponentModel, syms; missing_val=nothing)
+    get_defaults_or_inits(nw::Network, idx::Union{VIndex,EIndex}, syms; missing_val=nothing)
+
+Gets all default or init values for the specified symbols in the component.
+Returns `missing_val` for symbols without default or init values.
+"""
 function get_defaults_or_inits(c::ComponentModel, syms; missing_val=nothing)
     [has_default_or_init(c, sym) ? get_default_or_init(c, sym) : missing_val for sym in syms]
 end
+get_defaults_or_inits(nw::Network, idx::VCIndex, syms; kw...) = get_defaults_or_inits(getcomp(nw, idx), syms; kw...)
+get_defaults_or_inits(nw::Network, idx::ECIndex, syms; kw...) = get_defaults_or_inits(getcomp(nw, idx), syms; kw...)
 
 # generate methods and docstrings for position and marker
 for md in [:position, :marker]
@@ -295,30 +374,36 @@ for md in [:position, :marker]
     @eval begin
         """
             has_$($(QuoteNode(md)))(v::VertexModel)
+            has_$($(QuoteNode(md)))(nw::Network, vidx::VIndex)
 
         Checks if vertex `v` has `$($(QuoteNode(md)))` metadata.
 
         See also: [`get_$($(QuoteNode(md)))`](@ref), [`set_$($(QuoteNode(md)))!`](@ref).
         """
         $fname_has(c::VertexModel) = has_metadata(c, $(QuoteNode(md)))
+        $fname_has(nw::Network, idx::VCIndex) = $fname_has(getcomp(nw, idx))
 
         """
             get_$($(QuoteNode(md)))(v::VertexModel)
+            get_$($(QuoteNode(md)))(nw::Network, vidx::VIndex)
 
         Returns the `$($(QuoteNode(md)))` metadata of vertex `v`. Might error if not present.
 
         See also: [`has_$($(QuoteNode(md)))`](@ref), [`set_$($(QuoteNode(md)))!`](@ref).
         """
         $fname_get(c::VertexModel) = get_metadata(c, $(QuoteNode(md)))
+        $fname_get(nw::Network, idx::VCIndex) = $fname_get(getcomp(nw, idx))
 
         """
             set_$($(QuoteNode(md)))!(v::VertexModel, val)
+            set_$($(QuoteNode(md)))!(nw::Network, vidx::VIndex, val)
 
         Sets the `$($(QuoteNode(md)))` metadata of vertex `v` to `val`.
 
         See also: [`has_$($(QuoteNode(md)))`](@ref), [`get_$($(QuoteNode(md)))`](@ref).
         """
         $fname_set(c::VertexModel, val) = set_metadata!(c, $(QuoteNode(md)), val)
+        $fname_set(nw::Network, idx::VCIndex, val) = $fname_set(getcomp(nw, idx), val)
     end
 end
 
@@ -327,7 +412,7 @@ end
 ####
 """
     get_initial_state(c::ComponentModel, syms; missing_val=nothing)
-    get_initial_state(nw::Network, sni::SymbilicIndex; missing_val=nothing)
+    get_initial_state(nw::Network, sni::SymbolicIndex; missing_val=nothing)
 
 Returns the initial state for symbol `sym` (single symbol or vector) of the component model `c`.
 Returns `missing_val` if the symbol is not initialized. Also works for observed symbols.
@@ -348,7 +433,8 @@ function get_initial_state(cf::ComponentModel, syms; missing_val=nothing)
         end
     end
 end
-get_initial_state(nw::Network, sni::SymbolicIndex; kwargs...) = get_initial_state(getcomp(nw, sni), sni.subidx; kwargs...)
+get_initial_state(nw::Network, sni::VCIndex; kw...) = get_initial_state(getcomp(nw, sni), sni.subidx; kw...)
+get_initial_state(nw::Network, sni::ECIndex; kw...) = get_initial_state(getcomp(nw, sni), sni.subidx; kw...)
 
 function _get_initial_observed(cf)
     missing_val = NaN
