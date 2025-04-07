@@ -1189,8 +1189,8 @@ Base.getindex(s::NWParameter, idx::ObservableExpression) = SII.getp(s, idx)(s)
 
 # using getindex to access component models
 function Base.getindex(nw::Network, i::EIndex{<:Union{Symbol,Int}, Nothing})
-    return nw.im.edgem[resolvecompidx(nw,i)]
+    return getcomp(nw, i)
 end
 function Base.getindex(nw::Network, i::VIndex{<:Union{Symbol,Int}, Nothing})
-    return nw.im.vertexm[resolvecompidx(nw,i)]
+    return getcomp(nw, i)
 end
