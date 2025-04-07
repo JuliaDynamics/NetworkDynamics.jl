@@ -251,6 +251,14 @@ function _variable_index(nw::Network, sni::POTENTIAL_SCALAR_SIDX)
     range[subsym_to_idx(sni.subidx, sym(cf))]
 end
 
+"""
+    SymbolicIndexingInterface.variable_symbols(nw::Network)
+
+Returns a vector of all symbolic network indices which in the same order as
+the flat state vector.
+
+See also: [`NWState`](@ref), [`uflat`](@ref).
+"""
 function SII.variable_symbols(nw::Network)
     syms = Vector{SymbolicStateIndex{Int,Symbol}}(undef, dim(nw))
     for (ci, cf) in pairs(nw.im.vertexm)
@@ -301,6 +309,14 @@ function _parameter_index(nw::Network, sni::POTENTIAL_SCALAR_PIDX)
     range[subsym_to_idx(sni.subidx, psym(cf))]
 end
 
+"""
+    SymbolicIndexingInterface.parameter_symbols(nw::Network)
+
+Returns a vector of all symbolic network indices which in the same order as
+the flat parameter vector.
+
+See also: [`NWParameter`](@ref), [`NWState`](@ref), [`pflat`](@ref).
+"""
 function SII.parameter_symbols(nw::Network)
     syms = Vector{SymbolicParameterIndex{Int,Symbol}}(undef, pdim(nw))
     for (ci, cf) in pairs(nw.im.vertexm)
@@ -621,7 +637,8 @@ p.e[idx, :sym] # get parameter :sym of edge idx
 p[s::Union{VPIndex, EPIndex}] # get parameter for specific index
 ```
 
-Get flat array representation using `pflat(p)`.
+Get flat array representation using [`pflat`](@ref). The order of parameters in the flat
+representation corresponds to the order given by [`parameter_symbols`](@ref).
 """
 struct NWParameter{P,NW<:Network}
     nw::NW
@@ -688,7 +705,9 @@ s.p.e[idx, :sym] # get parameter :sym of edge idx
 s[s::Union{VIndex, EIndex, EPIndex, VPIndex}] # get parameter for specific index
 ```
 
-Get flat array representation using `uflat(s)` and `pflat(s)`.
+Get flat array representation using [`uflat`](@ref) and [`pflat`](@ref). The order of states in the flat
+representation corresponds to the order given by [`variable_symbols`](@ref), and the order of parameters
+corresponds to [`parameter_symbols`](@ref).
 """
 struct NWState{U,P,T,NW<:Network}
     nw::NW
@@ -827,14 +846,16 @@ Base.length(s::NWState) = length(s.uflat)
 """
     uflat(s::NWState)
 
-Retrieve the wrapped flat array representation of the state.
+Retrieve the wrapped flat array representation of the state. The order of states in this
+flat representation corresponds exactly to the order given by [`variable_symbols`](@ref).
 """
 uflat(s::NWState) = s.uflat
 """
     pflat(p::NWParameter)
     pflat(s::NWState)
 
-Retrieve the wrapped flat array representation of the parameters.
+Retrieve the wrapped flat array representation of the parameters. The order of parameters in this
+flat representation corresponds exactly to the order given by [`parameter_symbols`](@ref).
 """
 pflat(s::NWState) = pflat(s.p)
 pflat(p::NWParameter) = p.pflat

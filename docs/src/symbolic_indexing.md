@@ -92,7 +92,9 @@ For both `NWState` and `NWParameter` objects, there is a more convenient way to 
 ```
 
 The `NWState` and `NWParameter` objects are mutable, thus changing them will also change the underlying wrapped flat arrays.
-You can always access the flat representations by calling [`uflat`](@ref) and [`pflat`](@ref).
+You can always access the flat representations by calling [`uflat`](@ref) and [`pflat`](@ref). The ordering of elements 
+in these flat arrays corresponds exactly to the order returned by [`variable_symbols`](@ref) and 
+[`parameter_symbols`](@ref) respectively.
 
 !!! note
     The `NWState` and `NWParameter` wrappers can be constructed from various objects.
@@ -156,4 +158,8 @@ and
 ```@example si
 SII.parameter_symbols(nw)
 ```
+These functions return the symbolic indices in the exact order they appear in the flat arrays
+returned by [`uflat`](@ref) and [`pflat`](@ref), making them essential when you need to map
+between flat array indices and symbolic representations.
+
 All above examples also work on other "symbolic containers", e.g. `SII.variable_symbols(::NWState)`.

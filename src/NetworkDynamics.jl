@@ -34,6 +34,7 @@ using Base: @propagate_inbounds
 using InteractiveUtils: subtypes
 
 import SymbolicIndexingInterface as SII
+using SymbolicIndexingInterface: variable_symbols, parameter_symbols
 using StaticArrays: StaticArrays, SVector
 
 include("utils.jl")
@@ -64,6 +65,7 @@ export VIndex, EIndex, VPIndex, EPIndex, NWState, NWParameter, uflat, pflat
 export vidxs, eidxs, vpidxs, epidxs
 export save_parameters!, extract_nw
 export @obsex
+export variable_symbols, parameter_symbols
 include("symbolicindexing.jl")
 
 export has_metadata, get_metadata, set_metadata!, delete_metadata!

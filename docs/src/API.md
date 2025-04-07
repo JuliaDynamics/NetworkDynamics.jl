@@ -63,6 +63,8 @@ NWParameter
 NWParameter(::Any)
 NWParameter(::NWParameter)
 NWParameter(::SciMLBase.DEIntegrator)
+pflat
+parameter_symbols
 ```
 
 ### Network State Object
@@ -73,7 +75,7 @@ NWState(::NWState)
 NWState(::NWParameter)
 NWState(::SciMLBase.DEIntegrator)
 uflat
-pflat
+variable_symbols
 ```
 
 ### Symbolic Indices
