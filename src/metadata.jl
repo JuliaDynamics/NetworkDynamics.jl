@@ -4,7 +4,7 @@
 function _assert_symbol_exists(c::ComponentModel, s::Symbol)
     contains = s ∈ sym(c) ||
                s ∈ psym(c) ||
-               s ∈ insym_all(c) ||
+               (hasinsym(c) && s ∈ insym_all(c)) ||
                s ∈ outsym_flat(c) ||
                s ∈ obssym(c)
     contains || throw(ArgumentError("Symbol $s does not exist in component model."))

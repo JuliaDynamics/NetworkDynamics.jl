@@ -319,13 +319,14 @@ end
     s1 = NWState(nw)
 
     # test copy
+    f = (dv, v, ein, p, t) -> nothing
     g = (out, in, p, t) -> nothing
-    v = VertexModel(; g, outdim=2, metadata=Dict(:graphelement=>1), name=:v1, symmetadata=Dict(:x=>Dict(:default=>1)))
+    v = VertexModel(; f, g, sym=[:x=>(;default=1)], outdim=2, metadata=Dict(:graphelement=>1), name=:v1)
     v2 = copy(v)
     @test v !== v2
     @test v == v2
     @test isequal(v, v2)
-    @test get_default(v, :x) == get_default(v2, :x)
+    @test get_default(v, :x) == get_default(v2, :x) == 1
     set_default!(v, :x, 99)
     @test get_default(v, :x) == 99
     @test get_default(v2, :x) == 1
