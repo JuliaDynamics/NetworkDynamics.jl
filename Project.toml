@@ -1,7 +1,7 @@
 name = "NetworkDynamics"
 uuid = "22e9dc34-2a0d-11e9-0de0-8588d035468b"
 authors = ["Frank Hellmann <hellmann@pik-potsdam.de>, Michael Lindner <michaellindner@pik-potsdam.de>, Hans Würfel <git@wuerfel.io"]
-version = "0.9.16"
+version = "0.9.17"
 
 [deps]
 ArgCheck = "dce04be8-c92d-5529-be00-80e4d2c0e197"
@@ -36,6 +36,7 @@ TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 [weakdeps]
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 MacroTools = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
 ModelingToolkit = "961ee093-0014-501f-94e3-6117800e7a78"
 SymbolicUtils = "d1185830-fcd6-423d-90d6-eec64667417b"
@@ -43,6 +44,7 @@ Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 
 [extensions]
 NetworkDynamicsCUDAExt = ["CUDA", "Adapt"]
+NetworkDynamicsDataFramesExt = ["DataFrames"]
 NetworkDynamicsMTKExt = ["ModelingToolkit", "SymbolicUtils", "Symbolics"]
 NetworkDynamicsSymbolicsExt = ["Symbolics", "MacroTools"]
 
@@ -51,6 +53,7 @@ Adapt = "4.0.4"
 ArgCheck = "2.3.0"
 Atomix = "1"
 CUDA = "5.5.2"
+DataFrames = "1"
 DiffEqCallbacks = "4.2.2"
 DocStringExtensions = "0.9.3"
 FastClosures = "0.3.2"

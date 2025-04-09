@@ -34,6 +34,7 @@ using Base: @propagate_inbounds
 using InteractiveUtils: subtypes
 
 import SymbolicIndexingInterface as SII
+using SymbolicIndexingInterface: variable_symbols, parameter_symbols
 using StaticArrays: StaticArrays, SVector
 
 include("utils.jl")
@@ -64,13 +65,14 @@ export VIndex, EIndex, VPIndex, EPIndex, NWState, NWParameter, uflat, pflat
 export vidxs, eidxs, vpidxs, epidxs
 export save_parameters!, extract_nw
 export @obsex
+export variable_symbols, parameter_symbols
 include("symbolicindexing.jl")
 
-export has_metadata, get_metadata, set_metadata!
-export has_default, get_default, set_default!, set_defaults!
-export has_guess, get_guess, set_guess!
-export has_init, get_init, set_init!
-export has_bounds, get_bounds, set_bounds!
+export has_metadata, get_metadata, set_metadata!, delete_metadata!
+export has_default, get_default, set_default!, delete_default!, set_defaults!
+export has_guess, get_guess, set_guess!, delete_guess!
+export has_init, get_init, set_init!, delete_init!
+export has_bounds, get_bounds, set_bounds!, delete_bounds!
 export has_graphelement, get_graphelement, set_graphelement!
 export get_initial_state, dump_initial_state, dump_state
 export has_callback, get_callbacks, set_callback!, add_callback!
@@ -96,6 +98,9 @@ const CHECK_COMPONENT = Ref(true)
 export chk_component
 include("doctor.jl")
 
+export describe_vertices, describe_edges
+function describe_vertices end
+function describe_edges end
 #=
 using StyledStrings
 s1 = styled"{bright_red:brred} {bright_green:brgreen} {bright_yellow:bryellow} {bright_blue:brblue} {bright_magenta:brmagenta} {bright_cyan:brcyan} {bright_black:brblack} {bright_white:brwhite}";
@@ -114,7 +119,20 @@ const ND_FACES = [
     :NetworkDynamics_fftype => StyledStrings.Face(foreground=:bright_blue),
 ]
 
-__init__() = foreach(StyledStrings.addface!, ND_FACES)
+function __init__()
+    if isdefined(Base.Experimental, :register_error_hint)
+        Base.Experimental.register_error_hint(MethodError) do io, exc, argtypes, kwargs
+            if exc.f ∈ (describe_vertices, describe_edges)
+                ext = Base.get_extension(NetworkDynamics, :NetworkDynamicsDataFramesExt)
+                if isnothing(ext)
+                    printstyled(io, "\nLoad `DataFrames` in order to use `describe_vertices` and `describe_edges`."; bold=true)
+                end
+            end
+        end
+    end
+
+    foreach(StyledStrings.addface!, ND_FACES)
+end
 
 function reloadfaces!()
     StyledStrings.resetfaces!()

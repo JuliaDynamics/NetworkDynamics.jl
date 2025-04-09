@@ -220,8 +220,15 @@ function _get_metadata(sys, name)
         if def isa Symbolic
             def = fixpoint_sub(def, alldefaults)
         end
-        def isa Symbolic && error("Could not resolve default $(ModelingToolkit.getdefault(sym)) for $name")
-        nt = (; nt..., default=def)
+
+        if def isa Symbolic
+            # do nothing, as the warning can get annoying
+            # @warn "Could not resolve rhs for default term $name = $(ModelingToolkit.getdefault(sym)). Some rhs symbols might not have default values. Leave free."
+        elseif def == ModelingToolkit.NoValue || def isa ModelingToolkit.NoValue
+            # skip NoValue thing
+        else
+            nt = (; nt..., default=def)
+        end
     end
 
     # check for guess both in symbol metadata and in guesses of system

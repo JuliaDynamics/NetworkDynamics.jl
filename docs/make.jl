@@ -7,6 +7,7 @@ using NetworkDynamicsInspector: NetworkDynamicsInspector as NDI
 using SciMLBase
 using Literate
 using ModelingToolkit
+using DataFrames: DataFrames
 using DocumenterInterLinks
 using Electron
 
@@ -34,10 +35,11 @@ for example in filter(contains(r".jl$"), readdir(example_dir, join=true))
 end
 
 mtkext = Base.get_extension(NetworkDynamics, :NetworkDynamicsMTKExt)
+dfext = Base.get_extension(NetworkDynamics, :NetworkDynamicsDataFramesExt)
 kwargs = (;
     root=joinpath(pkgdir(NetworkDynamics), "docs"),
     sitename="NetworkDynamics",
-    modules=[NetworkDynamics, mtkext, NetworkDynamicsInspector],
+    modules=[NetworkDynamics, mtkext, dfext, NetworkDynamicsInspector],
     linkcheck=true, # checks if external links resolve
     pagesonly=true,
     plugins=[links],

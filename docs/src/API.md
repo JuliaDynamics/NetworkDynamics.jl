@@ -63,6 +63,8 @@ NWParameter
 NWParameter(::Any)
 NWParameter(::NWParameter)
 NWParameter(::SciMLBase.DEIntegrator)
+pflat
+parameter_symbols
 ```
 
 ### Network State Object
@@ -73,7 +75,7 @@ NWState(::NWState)
 NWState(::NWParameter)
 NWState(::SciMLBase.DEIntegrator)
 uflat
-pflat
+variable_symbols
 ```
 
 ### Symbolic Indices
@@ -93,11 +95,6 @@ vpidxs
 epidxs
 ```
 
-### Solution Inspection
-```@docs
-dump_state
-```
-
 ## Metadata API
 ### Component Metadata API
 ```@docs
@@ -105,6 +102,7 @@ metadata
 has_metadata(::NetworkDynamics.ComponentModel, ::Symbol)
 get_metadata(::NetworkDynamics.ComponentModel, ::Symbol)
 set_metadata!(::NetworkDynamics.ComponentModel, ::Symbol, ::Any)
+delete_metadata!(::NetworkDynamics.ComponentModel, ::Symbol)
 has_graphelement
 get_graphelement
 set_graphelement!
@@ -121,18 +119,41 @@ symmetadata
 get_metadata(::NetworkDynamics.ComponentModel, ::Symbol, ::Symbol)
 has_metadata(::NetworkDynamics.ComponentModel, ::Symbol, ::Symbol)
 set_metadata!(::NetworkDynamics.ComponentModel, ::Symbol, ::Symbol, ::Any)
+delete_metadata!(::NetworkDynamics.ComponentModel, ::Symbol, ::Symbol)
 has_default
 get_default
 set_default!
+delete_default!
 has_guess
 get_guess
 set_guess!
+delete_guess!
 has_init
 get_init
 set_init!
+delete_init!
 has_bounds
 get_bounds
 set_bounds!
+delete_bounds!
+set_defaults!
+set_interface_defaults!
+```
+
+### Metadata and Inspection Utils
+```@docs
+dump_state
+dump_initial_state
+get_initial_state
+describe_vertices
+describe_edges
+```
+
+## Initialization
+```@docs
+find_fixpoint
+initialize_component!
+init_residual
 ```
 
 ## Callbacks API
@@ -154,17 +175,6 @@ has_callback
 get_callbacks(::NetworkDynamics.ComponentModel)
 set_callback!
 add_callback!
-```
-
-## Initialization
-```@docs
-find_fixpoint
-initialize_component!
-init_residual
-get_initial_state
-dump_initial_state
-set_defaults!
-set_interface_defaults!
 ```
 
 ## Execution Types
