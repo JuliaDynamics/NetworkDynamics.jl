@@ -38,7 +38,7 @@ Creates a DataFrame containing information about the vertices in a Network.
 # Arguments
 - `nw::Network`: The network to describe
 - `extras...`: Additional pairs of (key, function) to include as columns,
-   where the function gets the [`VertexModel`](@ref) as its only parameter
+   where the function gets the [`VertexModel`](@ref NetworkDynamics.VertexModel) as its only parameter
    to extract a custom metadata field for example..
 - `parameters=true`: Whether to include parameter values
 - `states=true`: Whether to include state values
@@ -86,7 +86,7 @@ Creates a DataFrame containing information about the edges in a Network.
 # Arguments
 - `nw::Network`: The network to describe
 - `extras...`: Additional pairs of (key, function) to include as columns,
-   where the function gets the [`EdgeModel`](@ref) as its only parameter
+   where the function gets the [`EdgeModel`](@ref NetworkDynamics.EdgeModel) as its only parameter
    to extract a custom metadata field for example..
 - `parameters=true`: Whether to include parameter values
 - `states=true`: Whether to include state values
