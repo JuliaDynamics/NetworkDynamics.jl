@@ -323,20 +323,35 @@ function gpstate_control_card(app, type)
             r = Float32.(_maxrange(_sol, idxs, _rel))
 
             if r[1] == r[2]
-                r = r[1] < 0 ? (r[1], 0.0f0) : (0.0f0, r[2])
+                r = if r[1] < 0
+                    (r[1], 0.0f0)
+                elseif r[2] > 0
+                    (0.0f0, r[2])
+                else # both zero
+                    (0.0f0, 1.0f0)
+                end
                 colorscheme[] = ColorScheme([colorant"gray"])
             elseif r[1] < 0 && r[2] > 0
                 r = (-maximum(abs.(r)), maximum(abs.(r)))
                 colorscheme[] = ColorSchemes.coolwarm
             elseif r[1] ≥ 0
                 r = (0.0f0, r[2])
-                colorscheme.val = ColorSchemes.thermal
+                colorscheme[] = ColorSchemes.thermal
+            elseif r[2] ≤ 0
+                r = (r[1], 0.0f0)
+                colorscheme[] = reverse(ColorSchemes.thermal)
             end
 
             maxrange[] = r
             # adjust thumb position
             new_thumbs = get(thumb_pos_cache, thumb_pos_key(), r)
-            thumb_l[], thumb_r[] = new_thumbs
+            # first set both without notify, otherwise they might be set to the same value
+            # which leads to invalid color range
+            thumb_l.val = max(r[1], new_thumbs[1])
+            thumb_r.val = min(r[2], new_thumbs[2])
+            # we need to notify both for gui, even if this leads to multi update on colorrange
+            notify(thumb_l); notify(thumb_r)
+            # thumb_r[] = new_thumbs # update both for slider
         else
             error("More than one state for maxrange calculation...")
         end
@@ -390,10 +405,12 @@ function _maxrange(sol, idxs, rel)
 
     u_for_t = sol(sol.t; idxs=idxs[mask]).u
     if rel
+        u0 = copy(u_for_t[1])
         for u in u_for_t
-            u .-= u_for_t[1]
+            u .-= u0
         end
     end
+
     extrema(Iterators.flatten(u_for_t))
 end
 

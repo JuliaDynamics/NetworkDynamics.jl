@@ -140,6 +140,8 @@ function set_graphplot!(; nstate = NotSpecified(),
                           ncolorrange = NotSpecified(),
                           ecolorrange = NotSpecified())
     sync()
+    estate = estate isa Symbol ? [estate] : estate
+    nstate = nstate isa Symbol ? [nstate] : nstate
     gp = appstate().graphplot
     set_maybe!(gp.nstate, nstate)
     set_maybe!(gp.estate, estate)
