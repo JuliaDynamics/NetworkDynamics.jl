@@ -444,7 +444,7 @@ function timeseries_card(app, key, session)
     card = Card(
         [DOM.div(
             comp_state_sel_dom,
-            DOM.div(fig; class="timeseries-axis-container"),
+            DOM.div(WithConfig(fig; resize_to=:parent); class="timeseries-axis-container"),
             closebutton(app, key);
             class="timeseries-card-container"
         ), help];
