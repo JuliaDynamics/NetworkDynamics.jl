@@ -133,6 +133,20 @@ end
         end
     end
 
+    @testset "change colorscheme" begin
+        sol = get_sol()
+        inspect(sol; display=ElectronDisp(), restart=true, reset=true)
+
+        @test NetworkDynamicsInspector._maxrange(sol, vidxs(sol, :, :M), false) == (1.0, 1.0)
+        @test NetworkDynamicsInspector._maxrange(sol, vidxs(sol, :, :M), true) == (0.0, 0.0)
+        @test NetworkDynamicsInspector._maxrange(sol, eidxs(sol, :, :active), false) == (0.0, 1.0)
+        @test NetworkDynamicsInspector._maxrange(sol, eidxs(sol, :, :active), true) == (-1.0, 0.0)
+
+        set_graphplot!(; estate=:active)
+        set_graphplot!(; estate_rel=true)
+        set_graphplot!(; estate_rel=false)
+    end
+
     @testset "Widget Tests" begin
         @safetestset "Multiselect Tests" begin include("multiselect_test.jl") end
         @safetestset "Slider Tests" begin include("slider_test.jl") end
