@@ -393,7 +393,7 @@ Sets the callback function for the component. Overwrites any existing callback.
 See also [`add_callback!`](@ref).
 """
 function set_callback!(c::ComponentModel, cb; check=true)
-    if !(cb isa ComponentCallback) && !(cb isa NTuple{N, <:ComponentCallback} where N)
+    if !(cb isa ComponentCallback) && !(cb isa Tuple && all(c -> c isa ComponentCallback, cb))
         throw(ArgumentError("Callback must be a ComponentCallback or a tuple of ComponentCallbacks, got $(typeof(cb))."))
     end
     check && assert_cb_compat(c, cb)

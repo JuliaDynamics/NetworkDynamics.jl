@@ -6,6 +6,8 @@ using Chairmarks
 using InteractiveUtils
 using Test
 using StableRNGs
+using ForwardDiff: Dual
+using Symbolics
 
 (isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
 
@@ -60,4 +62,15 @@ using StableRNGs
         end
         @test issame
     end
+end
+
+@testset "Test _appropriate_zero" begin
+    @test NetworkDynamics._appropriate_zero([1,2,3]) isa Int
+    @test NetworkDynamics._appropriate_zero([1,2,3]) == 0
+    @test NetworkDynamics._appropriate_zero([1.0,2,3]) isa Float64
+    @test NetworkDynamics._appropriate_zero([1.0,2,3]) == 0.0
+    @test NetworkDynamics._appropriate_zero([Dual(1.0), 2, 3]) == Dual(0.0)
+    @variables x, y, z
+    @test NetworkDynamics._appropriate_zero([x,y,z]) isa Num
+    @test NetworkDynamics._appropriate_zero(Any[x,y,z]) isa Float64
 end

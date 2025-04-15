@@ -220,7 +220,7 @@ function graphplot_card(app, session)
     <li><strong>Ctrl + Click</strong> resets axis after zoom</li>
     </ul>
     """)
-    Card([fig, help]; class="bonito-card graphplot-card")
+    Card([WithConfig(fig; resize_to=:parent), help]; class="bonito-card graphplot-card")
 end
 function _gracefully_extract_states!(vec, sol, t, idxs, rel)
     isvalid(s) = SII.is_variable(sol, s) || SII.is_parameter(sol, s) || SII.is_observed(sol, s)
@@ -379,7 +379,7 @@ function gpstate_control_card(app, type)
 
     childs = Any[DOM.div(
         selector,
-        DOM.div(fig; style=Styles("height" => "40px")),
+        DOM.div(WithConfig(fig; resize_to=:parent); style=Styles("height" => "40px")),
         # fig,
         # RoundedLabel(@lift $maxrange[1]; style=Styles("text-align"=>"right")),
         cslider,

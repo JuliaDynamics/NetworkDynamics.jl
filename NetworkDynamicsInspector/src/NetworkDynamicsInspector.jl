@@ -7,7 +7,7 @@ using NetworkDynamics: NetworkDynamics, SII, EIndex, VIndex, Network,
                        obssym, psym, sym, extract_nw
 
 using Graphs: nv, ne
-using WGLMakie: WGLMakie
+using WGLMakie: WGLMakie, WithConfig
 using WGLMakie.Makie: Makie, @lift, MouseEvent, Point2f, with_theme,
                       lines!, vlines!, Theme, Figure, Colorbar, Axis,
                       xlims!, ylims!, autolimits!, hidespines!, hidedecorations!,
@@ -65,7 +65,6 @@ function get_webapp(app)
             @info "GUI Session updated"
         end
 
-        WGLMakie.activate!(resize_to=:parent)
         clear_obs!(app)
 
         resize_gp = js"""

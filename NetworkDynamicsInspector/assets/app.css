@@ -20,6 +20,7 @@ span {
 .maingrid {
     display: grid;
     grid-template-columns: min-content auto;
+    align-items: start; /* make sure ts col is as short as possible for resize event */
     width: 100%;
     gap: 0px;
 }

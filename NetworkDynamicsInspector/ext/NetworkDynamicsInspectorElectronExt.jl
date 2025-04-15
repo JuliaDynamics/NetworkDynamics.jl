@@ -1,4 +1,4 @@
-module ElectronExt
+module NetworkDynamicsInspectorElectronExt
 
 using NetworkDynamicsInspector: NetworkDynamicsInspector as NDI
 using Electron: Electron, windows
