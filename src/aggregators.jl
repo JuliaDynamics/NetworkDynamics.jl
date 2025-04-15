@@ -27,7 +27,7 @@ end
 NaiveAggregator(f) = (im, batches) -> NaiveAggregator(im, batches, f)
 
 function aggregate!(a::NaiveAggregator, aggbuf, data)
-    fill!(aggbuf, zero(eltype(aggbuf)))
+    fill!(aggbuf, _appropriate_zero(aggbuf))
     _aggregate!(a, a.batches, aggbuf, data)
 end
 function _aggregate!(a::NaiveAggregator, batches, aggbuf, data)
@@ -101,7 +101,7 @@ KAAggregator(im, batches, f) = KAAggregator(f, AggregationMap(im, batches))
 
 function aggregate!(a::KAAggregator, aggbuf, data)
     am = a.m
-    fill!(aggbuf, zero(eltype(aggbuf)))
+    fill!(aggbuf, _appropriate_zero(aggbuf))
     _backend = get_backend(data)
     # kernel = agg_kernel!(_backend, 1024, length(am.map))
     # kernel(a.f, aggbuf, view(data, am.range), am.map)
@@ -140,7 +140,7 @@ SequentialAggregator(f) = (im, batches) -> SequentialAggregator(im, batches, f)
 SequentialAggregator(im, batches, f) = SequentialAggregator(f, AggregationMap(im, batches))
 
 function aggregate!(a::SequentialAggregator, aggbuf, data)
-    fill!(aggbuf, zero(eltype(aggbuf)))
+    fill!(aggbuf, _appropriate_zero(aggbuf))
 
     am = a.m
     @inbounds begin
@@ -169,7 +169,7 @@ PolyesterAggregator(im, batches, f) = PolyesterAggregator(f, _inv_aggregation_ma
 
 function aggregate!(a::PolyesterAggregator, aggbuf, data)
     length(a.m) == length(aggbuf) || throw(DimensionMismatch("length of aggbuf and a.m must be equal"))
-    fill!(aggbuf, zero(eltype(aggbuf)))
+    fill!(aggbuf, _appropriate_zero(aggbuf))
 
     maxdepth = mapreduce(x -> length(x[2]), max, a.m)
 
@@ -196,7 +196,7 @@ ThreadedAggregator(im, batches, f) = ThreadedAggregator(f, _inv_aggregation_map(
 
 function aggregate!(a::ThreadedAggregator, aggbuf, data)
     length(a.m) == length(aggbuf) || throw(DimensionMismatch("length of aggbuf and a.m must be equal"))
-    fill!(aggbuf, zero(eltype(aggbuf)))
+    fill!(aggbuf, _appropriate_zero(aggbuf))
 
     Threads.@threads for (dstidx, srcidxs) in a.m
        @inbounds for srcidx in srcidxs
@@ -299,3 +299,11 @@ get_aggr_constructor(a::SparseAggregator) = SparseAggregator(+)
 
 iscudacompatible(::Type{<:KAAggregator}) = true
 iscudacompatible(::Type{<:SparseAggregator}) = true
+
+function _appropriate_zero(x)
+    if isconcretetype(eltype(x))
+        zero(eltype(x))
+    else
+        0.0 # hopefully that casts to what is needed
+    end
+end
