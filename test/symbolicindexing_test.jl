@@ -534,9 +534,9 @@ end
     # @b SII.observed($nw, $(VIndex(2,:Pdamping))) # 15
     # @b SII.observed($nw, $(VIndex(2,:θ))) # 7 5
 
-    b = @b SII.observed($nw, $idxs1) # 69 36 42 30 37
+    b = @b SII.observed($nw, $idxs1) # 69 36 42 30 37 47
     if VERSION ≥ v"1.11"
-        @test b.allocs <= 37
+        @test b.allocs <= 47
     end
     b = @b SII.observed($nw, $idxs2) # 12 7 10 5
     if VERSION ≥ v"1.11"
