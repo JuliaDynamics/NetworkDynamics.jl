@@ -117,11 +117,12 @@ function Bonito.jsrender(session::Session, slider::ContinuousSlider)
     thumb_r = DOM.div(; style=thumb_style)
     track = DOM.div(; style=track_style)
     track_active = DOM.div(; style=track_active_style)
-    container = DOM.div(track, track_active, thumb_l, thumb_r; style=container_style)
+
+    containerid = gendomid("slider")
 
     # JavaScript for interactivity
     jscode = js"""
-    (container)=> {
+        const container = document.getElementById($(containerid));
         const thumb_r = $(thumb_r);
         const thumb_l = $(thumb_l);
         const track_active = $(track_active);
@@ -140,6 +141,8 @@ function Bonito.jsrender(session::Session, slider::ContinuousSlider)
         function thumb_event(e, thumb) {
             let new_pos = e.clientX - container.getBoundingClientRect().left;
             const width = track.offsetWidth;
+            let llim;
+            let rlim;
             if (thumb==='r') {
                 llim = (e.shiftKey) ? (Math.ceil(width/2)+1) : thumbpos_l+1;
                 rlim = width;
@@ -299,9 +302,9 @@ function Bonito.jsrender(session::Session, slider::ContinuousSlider)
             track_active.style.width = (thumbpos_r-thumbpos_l) + 'px';  // Update the active track
         });
         observer.observe(container);
-    }
     """
-    Bonito.onload(session, container, jscode)
+    container = DOM.div(track, track_active, thumb_l, thumb_r, jscode;
+        style=container_style, id=containerid)
 
     return Bonito.jsrender(session, container)
 end
@@ -399,13 +402,6 @@ function Bonito.jsrender(session::Session, tomselect::TomSelect{T}) where {T}
         id=tomselect.id,
     )
 
-    # node fence see https://github.com/electron/electron/issues/254
-    container = DOM.div(
-        TOMSELECT_ESS,
-        TOMSELECT_CSS,
-        tom_dom
-    )
-
     js_init = js"""
     ($TOMSELECT_ESS).then((ts) => {
         const tom_dom = document.getElementById($(tomselect.id));
@@ -487,6 +483,11 @@ function Bonito.jsrender(session::Session, tomselect::TomSelect{T}) where {T}
     });
     """
     Bonito.evaljs(session, js_init)
+    container = DOM.div(
+        TOMSELECT_ESS,
+        TOMSELECT_CSS,
+        tom_dom,
+    )
 
     return Bonito.jsrender(session, container)
 end
@@ -617,23 +618,25 @@ function Bonito.jsrender(session::Session, toggle::ToggleSwitch)
         "position" => "relative",
     )
 
-    jscode = js"""
-    (input) => {
-        input.onchange = function() {
-            $(toggle.value).notify(this.checked);
-        }
-        $(toggle.value).on(val => {
-            input.checked = val
-        });
-    }
-    """
-
+    id = gendomid("toggle")
     inputdom = DOM.input(
         type="checkbox",
         checked=toggle.value[],
-        style=input_style
+        style=input_style,
+        id=id,
     )
-    Bonito.onload(session, inputdom, jscode)
+
+    jscode = js"""
+    const input = document.getElementById($(id));
+    input.onchange = function() {
+        $(toggle.value).notify(input.checked);
+    }
+
+    $(toggle.value).on(val => {
+        console.log("callback toogle switch", val, input)
+        input.checked = val
+    });
+    """
 
     container = DOM.label(
         inputdom,
@@ -645,7 +648,8 @@ function Bonito.jsrender(session::Session, toggle::ToggleSwitch)
             ),
             DOM.div(toggle.label; class="sliederlabel");
             class="switch-label-grid", style=slider_grid_style
-        );
+        ),
+        jscode;
         style=domlabel_style
     )
     Bonito.jsrender(session, container)

@@ -67,7 +67,7 @@ function get_webapp(app)
 
         clear_obs!(app)
 
-        resize_gp = js"""
+        resize_with_gp = js"""
         const graphplotCard = document.querySelector(".graphplot-card");
 
         // Function to update the width dynamically
@@ -100,7 +100,6 @@ function get_webapp(app)
         // Initial update
         updateResizeWithGpWidth();
         """
-        Bonito.evaljs(session, resize_gp)
 
         DOM.div(
             APP_CSS,
@@ -110,6 +109,7 @@ function get_webapp(app)
                 gpstate_control_card(app, :vertex),
                 gpstate_control_card(app, :edge),
                 element_info_card(app, session),
+                resize_with_gp;
                 class="graphplot-col"
             ),
             timeseries_col(app, session),
@@ -139,6 +139,7 @@ function inspect(sol; restart=false, reset=false, display=CURRENT_DISPLAY[])
     CURRENT_DISPLAY[] = display
 
     appstate = if reset || isnothing(APPSTATE[])
+        isnothing(APPSTATE[]) || clear_obs!(APPSTATE[])
         AppState(sol)
     else
         APPSTATE[].sol[] = sol
@@ -242,7 +243,6 @@ function element_info_card(app, session)
         $(eltext).on(replaceDivContentWithHTML);
         replaceDivContentWithHTML($(eltext).value);
     """
-    Bonito.evaljs(session, js)
 
     help = HoverHelp(html"""
     Show details on last clicked element.
@@ -251,7 +251,7 @@ function element_info_card(app, session)
     """)
 
     Card(
-        [DOM.div(;id="element-info-box"), help];
+        [DOM.div(;id="element-info-box"), help, js];
         class="bonito-card element-info-card resize-with-gp"
     )
 end

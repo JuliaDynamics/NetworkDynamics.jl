@@ -130,7 +130,7 @@ function graphplot_card(app, session)
     ####
     tooltip_text = Observable{String}("")
 
-    js = js"""
+    gp_tooltip_js = js"""
     const gpcard = document.querySelector(".graphplot-card");
 
     // Create tooltip element
@@ -177,7 +177,6 @@ function graphplot_card(app, session)
         }
     });
     """
-    Bonito.evaljs(session, js)
 
     nhh = NodeHoverHandler() do hstate, idx, event, axis
         tooltip_text[] = hstate ? sidx_to_str(VIndex(idx), app) : ""
@@ -220,7 +219,8 @@ function graphplot_card(app, session)
     <li><strong>Ctrl + Click</strong> resets axis after zoom</li>
     </ul>
     """)
-    Card([WithConfig(fig; resize_to=:parent), help]; class="bonito-card graphplot-card")
+    Card([WithConfig(fig; resize_to=:parent), help, gp_tooltip_js];
+        class="bonito-card graphplot-card")
 end
 function _gracefully_extract_states!(vec, sol, t, idxs, rel)
     isvalid(s) = SII.is_variable(sol, s) || SII.is_parameter(sol, s) || SII.is_observed(sol, s)

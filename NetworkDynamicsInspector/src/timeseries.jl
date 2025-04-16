@@ -1,14 +1,7 @@
 function timeseries_col(app, session)
-    col = DOM.div(
-        timeslider_card(app),
-        timeseries_cards(app, session),
-        add_timeseries_button(app),
-        class="timeseries-col"
-    )
-
     # add js to update the active ts plot
     onload_js = js"""
-    (tscol) => {
+        const tscol = document.querySelector(".timeseries-col");
         tscol.addEventListener("click", function(event) {
             // Find the closest .timeseries-card ancestor of the clicked element
             const clickedCard = event.target.closest('.timeseries-card');
@@ -36,11 +29,15 @@ function timeseries_col(app, session)
         const triggerWindowResize_throttled = Bonito.throttle_function(triggerWindowResize, 100);
         const resizeObserver = new ResizeObserver(triggerWindowResize_throttled);
         resizeObserver.observe(tscol);
-    }
     """
-    Bonito.onload(session, col, onload_js)
 
-    return col
+    DOM.div(
+        timeslider_card(app),
+        timeseries_cards(app, session),
+        add_timeseries_button(app),
+        onload_js;
+        class="timeseries-col"
+    )
 end
 
 function timeseries_cards(app, session)
@@ -224,7 +221,7 @@ function timeseries_card(app, key, session)
     comp_ms_id = Bonito.JSString(comp_sel.id)
     state_ms_id = Bonito.JSString(state_sel.id)
 
-    js = js"""
+    legendlike_style_js = js"""
     function colorListItems(items) {
         let styleTag = document.getElementById("dynamic-style-$(comp_ms_id)");
 
@@ -294,7 +291,6 @@ function timeseries_card(app, key, session)
         linestyleListItems(c);
     });
     """
-    Bonito.evaljs(session, js)
 
     fig, ax = with_theme(apptheme()) do
         fig = Figure(size=(100, 400))
@@ -444,6 +440,7 @@ function timeseries_card(app, key, session)
     card = Card(
         [DOM.div(
             comp_state_sel_dom,
+            legendlike_style_js,
             DOM.div(WithConfig(fig; resize_to=:parent); class="timeseries-axis-container"),
             closebutton(app, key);
             class="timeseries-card-container"
