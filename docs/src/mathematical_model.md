@@ -1,5 +1,5 @@
 # Mathematical Model
-The basic mathematical model of `NetworkDynamics.jl` splits up the system it two parts: vertex and edge components.
+The basic mathematical model of `NetworkDynamics.jl` splits up the system into two parts: vertex and edge components.
 
 The main goal of `NetworkDynamics.jl` is, to express the overall network dynamics as a Differential-Algebraic-Equation (DAE)
 ```math

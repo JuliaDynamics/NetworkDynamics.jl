@@ -1,6 +1,6 @@
 # ModelingToolkit Integration
 
-NetworkDynamics.jl is compatible with [`ModelingTookit.jl`](https://github.com/SciML/ModelingToolkit.jl) (MTK).
+NetworkDynamics.jl is compatible with [`ModelingToolkit.jl`](https://github.com/SciML/ModelingToolkit.jl) (MTK).
 The general idea is to use MTK to define *component models* (i.e. edge and vertex dynamics)
 which are then connected on network scale using NetworkDynamics.
 
@@ -12,8 +12,8 @@ EdgeModel(::ODESystem, srcin, dstin, [srscout], dstout)
 whose docstrings can be found in the [Component Models with MTK](@ref) section in the API.
 
 These constructors will:
-- transforming the states marked as input to parameters and `structural_simplify`ing the system,
-- generating the `f` and `g` functions,
+- transform the states marked as input to parameters and `structural_simplify`ing the system,
+- generate the `f` and `g` functions,
 - generate code for observables,
 - port all supported [Metadata](@ref) from MTK symbols to component symbols and
 - output a `Vertex-`/`EdgeModel` function compatible with NetworkDynamics.jl.

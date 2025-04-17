@@ -1,7 +1,7 @@
 # Network Construction
 
 ## Building a Network
-The main type of `NetworkDyanmics.jl` is a [`Network`](@ref).
+The main type of `NetworkDynamics.jl` is a [`Network`](@ref).
 A network bundles various component models (edge and vertex models) together with a graph to form a callable object which represents the RHS of the overall dynamical system, see [Mathematical Model](@ref).
 
 A `Network` is build by passing a graph `g`, vertex models `vertexm` and edge models `edgem`.
@@ -20,7 +20,7 @@ Two important keywords for the [`Network`](@ref) constructor are:
     Tells the backend how to aggregate and which aggregation function to use.
     Aggregation is the process of creating a single vertex input by reducing over
     the outputs of adjecent edges of said vertex. The `aggregator` contains both the
-    function and the algorith. E.g. `SequentialAggregator(+)` is a sequential
+    function and the algorithm. E.g. `SequentialAggregator(+)` is a sequential
     aggregation by summation. A list of availabe Aggregators can be found under
     [`Aggregators`](@ref) in the API.
 
