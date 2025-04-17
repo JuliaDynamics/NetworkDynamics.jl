@@ -258,7 +258,7 @@ function element_info_card(app, session)
 end
 
 @compile_workload begin
-    using NetworkDynamics: EdgeModel, VertexModel, AntiSymmetric, Network, dim, pdim
+    using NetworkDynamics: EdgeModel, VertexModel, AntiSymmetric 
     using Graphs: complete_graph
     Base.@propagate_inbounds function diffusionedge!(e, v_s, v_d, (p,), _)
         e .= p * (v_s[1] .- v_d[1])
@@ -272,10 +272,12 @@ end
 
     g = complete_graph(3)
     nw = Network(g, v, e)
-    prob = SciMLBase.ODEProblem(nw, zeros(dim(nw)), (0, 0.1), zeros(pdim(nw)))
+    prob = SciMLBase.ODEProblem(nw,
+        zeros(NetworkDynamics.dim(nw)), (0, 0.1),
+        zeros(NetworkDynamics.pdim(nw)))
 
     t = [0, 0.1]
-    u = [zeros(dim(nw)) for _ in t]
+    u = [zeros(NetworkDynamics.dim(nw)) for _ in t]
     sol = SciMLBase.build_solution(prob, nothing, t, u)
 
     app = NetworkDynamicsInspector.AppState(sol);
