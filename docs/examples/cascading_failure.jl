@@ -2,7 +2,7 @@
 # Cascading Failure
 This script reimplements the minimal example of a dynamic cascading failure
 described in Schäfer et al. (2018) [1].
-In is an example how to use callback functions to change network parameters. In
+This is an example how to use callback functions to change network parameters. In
 this case to disable certain lines.
 This script can be dowloaded as a normal Julia script [here](@__NAME__.jl). #md
 

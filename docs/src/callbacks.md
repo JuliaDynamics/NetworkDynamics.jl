@@ -8,7 +8,7 @@ Within the affect function, it is safe to modify the integrator, e.g. changing s
 Since `NetworkDynamics.jl` provides nothing more than a RHS for DifferentialEquations.jl, please check
 [their docs on event handling](https://docs.sciml.ai/DiffEqDocs/stable/features/callback_functions/)
 as a general reference.
-This page at introducing the general concepts, for a hands on example of a simulation with callbacks
+This page is introducing the general concepts, for a hands on example of a simulation with callbacks
 refer to the [Cascading Failure](@ref) example.
 
 
@@ -67,7 +67,7 @@ vectoraffect = ComponentAffect([:u], [:p]) do u, p, event_idx, ctx
 end
 ```
 Notably, the `syms` (here `:u`) can *exclusivly* refer to "ordinary" states, since they are now writable.
-However the affect gets passed a `ctx` "context" object, which is a named tuple which holds additional context like the integrator object, the component model, the index of the component model, the current time and so on. Please refere to the [`ComponentAffect`](@ref) docstring for a detailed list.
+However the affect gets passed a `ctx` "context" object, which is a named tuple which holds additional context like the integrator object, the component model, the index of the component model, the current time and so on. Please refer to the [`ComponentAffect`](@ref) docstring for a detailed list.
 
 Lastly we need to define the actuall callback object using [`ContinousComponentCallback`](@ref)/[`VectorContinousComponentCallback`](@ref):
 ```julia
@@ -116,7 +116,7 @@ condition = let getvalue = SII.getsym(nw, VIndex(1:5, :some_state))
     end
 end
 ```
-Please not a few important things here:
+Please note a few important things here:
  - Symbolic indexing can be costly, and the condition function gets called very
    often. By using [`SII.getsym`](@extref `SymbolicIndexingInterface.getsym`) we did
    some of the work *before* the callback by creating the accessor function.

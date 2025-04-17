@@ -69,7 +69,7 @@ To access the state or parameters of a network, you can use the [`NWState`](@ref
 p = NWParameter(nw)
 ```
 creates a `NWParameter` object for the network `nw`.
-It essentially creates a new flat parameter array and fills it with the default parameter values define in the component.
+It essentially creates a new flat parameter array and fills it with the default parameter values defined in the component.
 The parameters in the `NWParameter` object can be accessed using symbolic indices.
 ```@example si
 p[EPIndex(5, :K)] = 2.0 # change the parameter K of the 5th edge
