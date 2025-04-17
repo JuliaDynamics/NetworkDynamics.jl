@@ -65,7 +65,7 @@ function get_webapp(app)
             @info "GUI Session updated"
         end
 
-        clear_obs!(app)
+        clear_obs_and_close!(app)
 
         resize_with_gp = js"""
         const graphplotCard = document.querySelector(".graphplot-card");
@@ -139,7 +139,7 @@ function inspect(sol; restart=false, reset=false, display=CURRENT_DISPLAY[])
     CURRENT_DISPLAY[] = display
 
     appstate = if reset || isnothing(APPSTATE[])
-        isnothing(APPSTATE[]) || clear_obs!(APPSTATE[])
+        isnothing(APPSTATE[]) || clear_obs_and_close!(APPSTATE[])
         AppState(sol)
     else
         APPSTATE[].sol[] = sol

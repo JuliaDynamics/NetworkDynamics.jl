@@ -27,27 +27,33 @@ function gen_state_options(nw::Network, sidxs)
     options
 end
 
-function clear_obs!(x::Union{NamedTuple, AbstractDict})
+function clear_obs_and_close!(x::Union{NamedTuple, AbstractDict})
     for v in values(x)
-        clear_obs!(v)
+        clear_obs_and_close!(v)
     end
 end
-function clear_obs!(obs::Observable)
+function clear_obs_and_close!(obs::Observable)
     empty!(obs.listeners)
-    clear_obs!(obs.val)
+    clear_obs_and_close!(obs.val)
 end
-function clear_obs!(v::AbstractVector)
+function clear_obs_and_close!(v::AbstractVector)
     for el in v
-        clear_obs!(el)
+        clear_obs_and_close!(el)
     end
 end
-function clear_obs!(x::T) where {T}
+function clear_obs_and_close!(x::T) where {T}
     if T <: Union{GraphPlot, TimeseriesPlot, AppState}
         for f in fieldnames(T)
-            clear_obs!(getfield(x, f))
+            clear_obs_and_close!(getfield(x, f))
         end
     end
     x
+end
+function clear_obs_and_close!(of::Observables.ObserverFunction)
+    Observables.off(of)
+end
+function clear_obs_and_close!(ch::Channel)
+    close(ch)
 end
 
 NetworkDynamics.extract_nw(o::Observable) = extract_nw(o.val)

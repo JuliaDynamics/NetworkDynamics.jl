@@ -22,7 +22,7 @@ end
     )
 
     disp = App(;) do session
-        NetworkDynamicsInspector.clear_obs!(gui)
+        NetworkDynamicsInspector.clear_obs_and_close!(gui)
         sl1 = ContinuousSlider(gui.range, gui.val1, gui.val2)
         sl2 = ContinuousSlider(gui.range, gui.val; arrowkeys=true)
 
