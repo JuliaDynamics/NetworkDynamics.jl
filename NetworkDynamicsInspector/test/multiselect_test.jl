@@ -28,7 +28,7 @@ end
         selection_single = Observable{Vector{Symbol}}(Symbol[:Julia])
     )
     disp = App(;) do session
-        NetworkDynamicsInspector.clear_obs!(gui)
+        NetworkDynamicsInspector.clear_obs_and_close!(gui)
 
         ms1 = TomSelect(gui.options, gui.selection; placeholder="multi", T=Symbol)
         ms2 = TomSelect(gui.options, gui.selection_single; placeholder="single", multi=false, T=Symbol)

@@ -24,6 +24,7 @@ using Colors: Colors, @colorant_str, RGB, color
 using ColorSchemes: ColorSchemes, ColorScheme
 using SciMLBase: SciMLBase
 using Downloads: Downloads
+using PrecompileTools: @compile_workload
 
 # defined based on the julia version
 using NetworkDynamics: AnnotatedIOBuffer, AnnotatedString, @styled_str
@@ -65,9 +66,9 @@ function get_webapp(app)
             @info "GUI Session updated"
         end
 
-        clear_obs!(app)
+        clear_obs_and_close!(app)
 
-        resize_gp = js"""
+        resize_with_gp = js"""
         const graphplotCard = document.querySelector(".graphplot-card");
 
         // Function to update the width dynamically
@@ -100,7 +101,6 @@ function get_webapp(app)
         // Initial update
         updateResizeWithGpWidth();
         """
-        Bonito.evaljs(session, resize_gp)
 
         DOM.div(
             APP_CSS,
@@ -110,6 +110,7 @@ function get_webapp(app)
                 gpstate_control_card(app, :vertex),
                 gpstate_control_card(app, :edge),
                 element_info_card(app, session),
+                resize_with_gp;
                 class="graphplot-col"
             ),
             timeseries_col(app, session),
@@ -139,6 +140,7 @@ function inspect(sol; restart=false, reset=false, display=CURRENT_DISPLAY[])
     CURRENT_DISPLAY[] = display
 
     appstate = if reset || isnothing(APPSTATE[])
+        isnothing(APPSTATE[]) || clear_obs_and_close!(APPSTATE[])
         AppState(sol)
     else
         APPSTATE[].sol[] = sol
@@ -242,7 +244,6 @@ function element_info_card(app, session)
         $(eltext).on(replaceDivContentWithHTML);
         replaceDivContentWithHTML($(eltext).value);
     """
-    Bonito.evaljs(session, js)
 
     help = HoverHelp(html"""
     Show details on last clicked element.
@@ -251,11 +252,41 @@ function element_info_card(app, session)
     """)
 
     Card(
-        [DOM.div(;id="element-info-box"), help];
+        [DOM.div(;id="element-info-box"), help, js];
         class="bonito-card element-info-card resize-with-gp"
     )
 end
 
+@compile_workload begin
+    using NetworkDynamics: EdgeModel, VertexModel, AntiSymmetric 
+    using Graphs: complete_graph
+    Base.@propagate_inbounds function diffusionedge!(e, v_s, v_d, (p,), _)
+        e .= p * (v_s[1] .- v_d[1])
+    end
+    e = EdgeModel(g=AntiSymmetric(diffusionedge!), outdim=1, pdim=1, pdef=[1], name=:diff_edge, indim=1)
+    Base.@propagate_inbounds function diffusionvertex!(dv, _, acc, _, _)
+        dv[1] = acc[1]
+        nothing
+    end
+    v = VertexModel(f=diffusionvertex!, dim=1, g=1:1, indim=1)
 
+    g = complete_graph(3)
+    nw = Network(g, v, e)
+    prob = SciMLBase.ODEProblem(nw,
+        zeros(NetworkDynamics.dim(nw)), (0, 0.1),
+        zeros(NetworkDynamics.pdim(nw)))
+
+    t = [0, 0.1]
+    u = [zeros(NetworkDynamics.dim(nw)) for _ in t]
+    sol = SciMLBase.build_solution(prob, nothing, t, u)
+
+    app = NetworkDynamicsInspector.AppState(sol);
+    session = Bonito.Session()
+    NetworkDynamicsInspector.graphplot_card(app, session);
+    NetworkDynamicsInspector.gpstate_control_card(app, :vertex);
+    NetworkDynamicsInspector.element_info_card(app, session);
+    NetworkDynamicsInspector.timeseries_col(app, session);
+    NetworkDynamicsInspector.clear_obs_and_close!(app);
+end
 
 end # module NetworkDynamicsInspector

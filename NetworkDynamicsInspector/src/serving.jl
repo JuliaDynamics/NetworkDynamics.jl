@@ -85,9 +85,11 @@ function serve_app(::BrowserDisp, app)
     nothing
 end
 function close_display(::BrowserDisp; kwargs...)
+    if haskey(BROWSER_STATE, :handler) && BROWSER_STATE[:handler] isa Bonito.HTTPServer.BrowserDisplay
+        close(BROWSER_STATE[:handler])
+    end
     BROWSER_STATE[:handler] = nothing
 end
-
 
 
 function close_session(session)

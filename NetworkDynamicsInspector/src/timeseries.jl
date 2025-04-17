@@ -1,14 +1,7 @@
 function timeseries_col(app, session)
-    col = DOM.div(
-        timeslider_card(app),
-        timeseries_cards(app, session),
-        add_timeseries_button(app),
-        class="timeseries-col"
-    )
-
     # add js to update the active ts plot
     onload_js = js"""
-    (tscol) => {
+        const tscol = document.querySelector(".timeseries-col");
         tscol.addEventListener("click", function(event) {
             // Find the closest .timeseries-card ancestor of the clicked element
             const clickedCard = event.target.closest('.timeseries-card');
@@ -36,11 +29,15 @@ function timeseries_col(app, session)
         const triggerWindowResize_throttled = Bonito.throttle_function(triggerWindowResize, 100);
         const resizeObserver = new ResizeObserver(triggerWindowResize_throttled);
         resizeObserver.observe(tscol);
-    }
     """
-    Bonito.onload(session, col, onload_js)
 
-    return col
+    DOM.div(
+        timeslider_card(app),
+        timeseries_cards(app, session),
+        add_timeseries_button(app),
+        onload_js;
+        class="timeseries-col"
+    )
 end
 
 function timeseries_cards(app, session)
@@ -55,38 +52,42 @@ function timeseries_cards(app, session)
         known_tsplots = collect(keys(cache))
         current_tsplots = collect(values(_tsplots))
 
-        # do nothing if the TSPlots objects themselve did not change
-        Set(known_tsplots) == Set(current_tsplots) && return
+        # do nothing if the TSPlots objects themselve did not change unless on update!
+        if !isdefined(container, 0) || Set(known_tsplots) != Set(current_tsplots)
+            # del_tsplots = setdiff(known_tsplots, current_tsplots)
+            # new_tsplots = setdiff(current_tsplots, known_tsplots)
+            # FIXME: it is not possible to redisplay the same tsplot, recreate all
+            del_tsplots = known_tsplots
+            new_tsplots = current_tsplots
 
-        # del_tsplots = setdiff(known_tsplots, current_tsplots)
-        # new_tsplots = setdiff(current_tsplots, known_tsplots)
-        # FIXME: it is not possible to redisplay the same tsplot, recreate all
-        del_tsplots = known_tsplots
-        new_tsplots = current_tsplots
+            for del in del_tsplots
+                (; card, observerfunctions, plotqueue) = cache[del]
+                close(plotqueue) # close plotqueue
+                Observables.off.(observerfunctions) # disable all observer functions
+                delete!(cache, del) # delete from cache
+            end
+            for new in new_tsplots
+                key = only([key for (key, value) in _tsplots if value == new])
+                ntup = timeseries_card(app, key, session)
+                cache[new] = ntup
+            end
 
-        for del in del_tsplots
-            (; card, observerfunctions, plotqueue) = cache[del]
-            close(plotqueue) # close plotqueue
-            Observables.off.(observerfunctions) # disable all observer functions
-            delete!(cache, del) # delete from cache
+            cards = [cache[ts].card for ts in values(_tsplots)]
+            # update the display by notifying the content
+            container[] = DOM.div(cards; class="timeseries-stack")
         end
-        for new in new_tsplots
-            key = only([key for (key, value) in _tsplots if value == new])
-            ntup = timeseries_card(app, key, session)
-            cache[new] = ntup
-        end
-
-        cards = [cache[ts].card for ts in values(_tsplots)]
-        # update the display by notifying the content
-        container[] = DOM.div(cards; class="timeseries-stack")
 
         nothing
     end
 
     # update the selected components in the graphplot when the active tsplot changes
     on(app.active_tsplot; update=true) do active
-        activesel = app.tsplots[][active].selcomp[]
-        app.graphplot._selcomp[] = activesel
+        if haskey(app.tsplots[], active)
+            activesel = app.tsplots[][active].selcomp[]
+            app.graphplot._selcomp[] = activesel
+        else
+            app.active_tsplot[] = first(keys(app.tsplots[]))
+        end
     end
 
     return container
@@ -224,7 +225,7 @@ function timeseries_card(app, key, session)
     comp_ms_id = Bonito.JSString(comp_sel.id)
     state_ms_id = Bonito.JSString(state_sel.id)
 
-    js = js"""
+    legendlike_style_js = js"""
     function colorListItems(items) {
         let styleTag = document.getElementById("dynamic-style-$(comp_ms_id)");
 
@@ -294,7 +295,6 @@ function timeseries_card(app, key, session)
         linestyleListItems(c);
     });
     """
-    Bonito.evaljs(session, js)
 
     fig, ax = with_theme(apptheme()) do
         fig = Figure(size=(100, 400))
@@ -401,7 +401,9 @@ function timeseries_card(app, key, session)
                 @error "$key: Plotting failed for idx $(valid_idxs[])" e
             end
         end
-        put!(plotqueue, task)
+        if !is_precompiling()
+            put!(plotqueue, task)
+        end
         nothing
     end |> track_obsf
 
@@ -444,6 +446,7 @@ function timeseries_card(app, key, session)
     card = Card(
         [DOM.div(
             comp_state_sel_dom,
+            legendlike_style_js,
             DOM.div(WithConfig(fig; resize_to=:parent); class="timeseries-axis-container"),
             closebutton(app, key);
             class="timeseries-card-container"
@@ -473,7 +476,7 @@ function _plot_queue(key)
             rmt = take!(ch) # remove the executed task
             @assert istaskdone(rmt)
         end
-        @info "Plot queue for $key closed"
+        @debug "Plot queue for $key closed"
     end
 end
 
