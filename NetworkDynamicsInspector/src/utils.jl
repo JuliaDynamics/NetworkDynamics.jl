@@ -161,3 +161,5 @@ function wait_for(queue)
         sleep(0.01)
     end
 end
+
+is_precompiling() = ccall(:jl_generating_output, Cint, ()) == 1

@@ -401,7 +401,9 @@ function timeseries_card(app, key, session)
                 @error "$key: Plotting failed for idx $(valid_idxs[])" e
             end
         end
-        put!(plotqueue, task)
+        if !is_precompiling()
+            put!(plotqueue, task)
+        end
         nothing
     end |> track_obsf
 
@@ -474,7 +476,7 @@ function _plot_queue(key)
             rmt = take!(ch) # remove the executed task
             @assert istaskdone(rmt)
         end
-        @info "Plot queue for $key closed"
+        @debug "Plot queue for $key closed"
     end
 end
 
