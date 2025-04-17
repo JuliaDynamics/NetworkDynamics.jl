@@ -1,7 +1,7 @@
 name = "NetworkDynamicsInspector"
 uuid = "0a4713f2-d58f-43f2-b63b-1b5d5ee4e65a"
 authors = ["Hans Würfel <git@wuerfel.io>"]
-version = "0.1.5"
+version = "0.1.6"
 
 [deps]
 Bonito = "824d6782-a2ef-11e9-3a09-e5662e0c26f8"
