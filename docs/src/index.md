@@ -4,7 +4,7 @@
 
 ***Complex network systems are composed by the entities that comprise them (the nodes) and the relationships that connect each entity with one another (the edges). The graphical depictions of such networks are called graphs. The simplest network (which can be seen in Figure 1) is composed of two entities (so two nodes) who are only connected to each other. This connection between the two is the edge of the system. Complex networks are composed of multiple nodes and edges, with most nodes connected to multiple other nodes with multiple edges*** *(@Hans: can you created the graph of such a network and place in here?)*
 
-The behavior of a node or an edge can be described by algebraic equations, by differential algebraic equation (DAEs) in mass matrix form or by ordinary differential equations (ODE). 
+The behavior of a node or an edge can be described ~~by~~ ***through the use of*** a) algebraic equations, b) ~~by~~ differential algebraic equation (DAEs) in mass matrix form ~~or~~ c) ~~by~~ ordinary differential equations (ODE). 
 
 The central construction is the function [`Network`](@ref) that receives functions describing the local dynamics on the edges and nodes of
 a graph `g` as inputs, and returns a composite function compatible with the
