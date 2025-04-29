@@ -1,7 +1,8 @@
 # NetworkDynamics
 
-A package for working with dynamical systems on complex networks. NetworkDynamics.jl provides an interface between [Graphs.jl](https://github.com/JuliaGraphs/Graphs.jl) and [DifferentialEquations.jl](https://github.com/SciML/DifferentialEquations.jl).
-It allows for high performant simulation of dynamic networks by describing the local dynamics on the edges and vertices of the graph.
+***NetworkDynamics.jl*** is a package ~~for working with~~ ***to simulate*** dynamical systems ~~on~~ ***within*** complex networks. ~~NetworkDynamics.jl~~ ***It*** provides an interface between ***the*** [Graphs.jl](https://github.com/JuliaGraphs/Graphs.jl) and ***the*** [DifferentialEquations.jl](https://github.com/SciML/DifferentialEquations.jl) ***packages*** ~~.~~ ***and*** ~~it allows for high performant  simulation of~~ ***faciliates the simulation of highly efficient*** dynamic networks by describing the local dynamics on the edges and vertices of the graph.
+
+***Complex network systems are composed by the entities that comprise them (the nodes) and the relationships that connect each entity with one another (the edges). The graphical depictions of such networks are called graphs. The simplest network (which can be seen in Figure 1) is composed of two entities (so two nodes) who are only connected to each other. This connection between the two is the edge of the system. Complex networks are composed of multiple nodes and edges, with most nodes connected to multiple other nodes with multiple edges*** *(@Hans: can you created the graph of such a network and place in here?)*
 
 The behavior of a node or an edge can be described by algebraic equations, by differential algebraic equation (DAEs) in mass matrix form or by ordinary differential equations (ODE). 
 
