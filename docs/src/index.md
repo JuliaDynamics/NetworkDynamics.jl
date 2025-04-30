@@ -18,11 +18,13 @@ Main features:
 - High performance when working with heterogeneous models *:* ~~(which means heaving~~ *you can have* different local dynamics in different parts of your network~~)~~.
 - [Symbolic Indexing](@ref) into solutions and states: NetworkDynamics keeps track of the states of ~~the~~ *each* individual subsystem~~s~~.
 - ~~Different~~ *Diverse* execution schemes: NetworkDynamics exploits the known inter-dependencies between components to auto parallelize execution, even on GPUs!
-- Equation based models: ~~use [ModelingToolkit.jl](https://docs.sciml.ai/ModelingToolkit/dev/) to define local dynamics, use `NetworkDynamics.jl` to combine them into large networks!~~ you can model local dynamics using [ModelingToolkit.jl](https://docs.sciml.ai/ModelingToolkit/dev/) and them combine them into larger networks by using `NetworkDynamics.jl`!
+- Equation based models: ~~use [ModelingToolkit.jl](https://docs.sciml.ai/ModelingToolkit/dev/) to define local dynamics, use `NetworkDynamics.jl` to combine them into large networks!~~ *you can model local dynamics using [ModelingToolkit.jl](https://docs.sciml.ai/ModelingToolkit/dev/) and them combine them into larger networks by using `NetworkDynamics.jl`!*
 
 
 ## Where to begin?
-Check out the [Mathematical Model](@ref) to understand the underlying modelling ideas of NetworkDynamics followed by the page on [Network Construction](@ref) to learn how to implement you own models.
+~~Check out the [Mathematical Model](@ref) to understand the underlying modelling ideas of NetworkDynamics followed by the page on [Network Construction](@ref) to learn how to implement you own models.~~
+
+*To learn how to implement your own models and understand the underlying modelling ideas of NetworkDynamics you should first read the [Mathematical Model](@ref) section, followed by section [Network Construction](@ref).*
 
 If you prefer to look at some concrete code first check out the [Getting Started](@ref) tutorial!
 
