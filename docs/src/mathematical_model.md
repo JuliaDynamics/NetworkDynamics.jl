@@ -1,7 +1,8 @@
 # Mathematical Model
-The basic mathematical model of `NetworkDynamics.jl` splits up the system it two parts: vertex and edge components.
+The basic mathematical model of `NetworkDynamics.jl` splits ~~up~~ the system ~~it~~ *in* two parts: vertex and edge components.
 
-The main goal of `NetworkDynamics.jl` is, to express the overall network dynamics as a Differential-Algebraic-Equation (DAE)
+The main goal of `NetworkDynamics.jl` is ~~,~~ to express the overall network dynamics as a Differential-Algebraic-Equation (DAE) [DAE](https://mathworld.wolfram.com/Differential-AlgebraicEquation.html)
+
 ```math
 M\,\frac{\mathrm{d}}{\mathrm{d}t}u = f^{\mathrm{nw}}(u, p, t)
 ```
