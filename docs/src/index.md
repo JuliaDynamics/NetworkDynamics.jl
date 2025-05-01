@@ -40,6 +40,17 @@ Install NetworkDynamics.jl with Julia's package manager:
 (v1.11) pkg> add NetworkDynamics
 ```
 
+Next you need to install the Julia package Revise:
+```julia-repl
+import Pkg; Pkg.add("Revise")
+```
+
+Last you need to install the Julia package LiveServer:
+```julia-repl
+import Pkg; Pkg.add("LiveServer")
+```
+
+
 
 ## Reproducibility
 
