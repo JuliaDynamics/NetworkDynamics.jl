@@ -1,5 +1,5 @@
 # Mathematical Model
-The basic mathematical model of `NetworkDynamics.jl` splits ~~up~~ the system ~~it~~ *in* two parts: vertex and edge components.
+The basic mathematical model of `NetworkDynamics.jl` splits ~~up~~ the system ~~it~~ *in* two parts: *the* vertex and *the* edge components.
 
 The main goal of `NetworkDynamics.jl` is ~~,~~ to express the overall network dynamics as a [Differential-Algebraic-Equation (DAE)](https://mathworld.wolfram.com/Differential-AlgebraicEquation.html)
 
@@ -7,14 +7,16 @@ The main goal of `NetworkDynamics.jl` is ~~,~~ to express the overall network dy
 M\,\frac{\mathrm{d}}{\mathrm{d}t}u = f^{\mathrm{nw}}(u, p, t)
 ```
 where M is a (possibly singular) mass matrix, $u$ is the internal state vector of the system, $p$ are the parameters and $t$ is the time.
-To make this compatible with the solvers for `OrdinaryDiffEq.jl`, the created [`Network`](@ref) object is a callable object
+To make this compatible with the solvers ~~for~~ *used in* `OrdinaryDiffEq.jl`, the ~~created~~ *generated* [`Network`](@ref) object is a callable object
 ```
 nw(du, u, p, t) # mutates du
 ```
-with stored mass matrix information to build an `ODEProblem` based on the `Network`.
+*where the matrix information necessary to build the simulated `Network` and by extension the (`ODEProblem`) is stored.*
+~~with stored mass matrix information to build an `ODEProblem` based on the `Network`.~~
+(@Hans: what is the definition of the ODEProblem? what is it? it is not clear to me)
 
-Instead of defining $f^{\mathrm{nw}}$ by hand, `ND.jl` helps you to build it automatically based on a list of decentralized nodal and edge dynamics, so-called `VertexModel` and `EdgeModel` objects.
-Each component model $\mathrm c$ is modeled as general input-output-system
+Instead of defining $f^{\mathrm{nw}}$ by hand, `ND.jl` helps you to build it automatically based on a list of decentralized nodal and edge dynamics, *the* so-called `VertexModel` and `EdgeModel` objects.
+Each component model $\mathrm c$ is modeled as *a* general input-output-system:
 
 ```math
 \begin{aligned}
@@ -23,9 +25,12 @@ y^{\mathrm c} &= g^{\mathrm c}(x^\mathrm{c}, i_{\mathrm c}, p_{\mathrm c}, t)
 \end{aligned}
 ```
 
-where $M_{\mathrm{c}}$ is the component mass matrix, $x^{\mathrm c}$ are the component states, $i^{\mathrm c}$ are the *inputs* of the component and $y^{\mathrm c}$ is the *output* of the component. It is possible to have $\mathrm{dim}(x^{\mathrm{c}}) = 0$ and thus no internal states.
+where $M_{\mathrm{c}}$ is the component mass matrix, $x^{\mathrm c}$ are the component states, $i^{\mathrm c}$ are the *inputs* of the component and $y^{\mathrm c}$ is the *output* of the component. ~~It is possible to have $\mathrm{dim}(x^{\mathrm{c}}) = 0$ and thus no internal states.~~ *If $\mathrm{dim}(x^{\mathrm{c}}) = 0$, the number of internal states is 0.*
 
-In the network context, the **output of the edges are flow variables**. The **outputs of vertices are potential variables**. In interconnection, the *flow* on the edges depends on the *potentials* at both ends as inputs. The *potentials* of the nodes depend on the incoming *flows* from all connected edges as an input. (Here, flow and potentials are meant in a conceptional and not necessarily physical way.)
+In the ~~network~~ context *of the network*, the **output of the edges are flow variables** ~~.~~ *and* ~~The~~ *the* **outputs of vertices are potential variables**. In interconnection (@Hans: what do you mean here?), the *flow* on the edges depends on the *potentials* at both ends as inputs. The *potentials* of the nodes depend on the incoming *flows* from all connected edges as an input. (Here, flow and potentials are meant in a conceptional and not necessarily physical way.)
+
+*
+*
 ```@raw html
 <img src="../assets/mathmodel.svg" width="100%"/>
 ``` 
