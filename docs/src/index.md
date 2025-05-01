@@ -15,7 +15,7 @@ nd(dx, x, p, t)
 
 Main features:
 - Clear separation of local dynamics and topology: you can easily change *the* topology of your system or switch~~ing~~ out dynamic~~al~~ components.
-- High performance when working with heterogeneous models *:* ~~(which means heaving~~ *you can have* different local dynamics in different parts of your network~~)~~.
+- High performance when working with heterogeneous models *:* ~~(which means heaving~~ *you can have* different local dynamics in different parts of your network ~~)~~.
 - [Symbolic Indexing](@ref) into solutions and states: NetworkDynamics keeps track of the states of ~~the~~ *each* individual subsystem~~s~~.
 - ~~Different~~ *Diverse* execution schemes: NetworkDynamics exploits the known inter-dependencies between components to auto parallelize execution, even on GPUs!
 - Equation based models: ~~use [ModelingToolkit.jl](https://docs.sciml.ai/ModelingToolkit/dev/) to define local dynamics, use `NetworkDynamics.jl` to combine them into large networks!~~ *you can model local dynamics using [ModelingToolkit.jl](https://docs.sciml.ai/ModelingToolkit/dev/) and them combine them into larger networks by using `NetworkDynamics.jl`!*
@@ -31,8 +31,11 @@ If you prefer to look at some concrete code first check out the [Getting Started
 
 ## Installation
 
-Installation is straightforward with Julia's package manager.
+Install Julia:
+-   https://julialang.org/install/
+-   Find your OS and follow the instructions for the installation
 
+Install NetworkDynamics.jl with Julia's package manager:
 ```julia-repl
 (v1.11) pkg> add NetworkDynamics
 ```
