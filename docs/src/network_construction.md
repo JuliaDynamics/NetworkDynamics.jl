@@ -2,9 +2,11 @@
 
 ## Building a Network
 The main type of `NetworkDynamics.jl` is a [`Network`](@ref).
-A network bundles various component models (edge and vertex models) together with a graph to form a callable object which represents the RHS of the overall dynamical system, see [Mathematical Model](@ref).
+A network bundles various component models (edge and vertex models) together with a graph to form a callable object which represents the RHS of the overall dynamical system, see [Mathematical Model](@ref). 
+(@Hans: I cannot find what RHS stands for. please add it).
 
 A `Network` is build by passing a graph `g`, vertex models `vertexm` and edge models `edgem`.
+(@Hans: What are we passing the graph, vertex and edge models to? Please fix)
 ```julia
 nw = Network(g, vertexm, edgem; kwargs...)
 ```
@@ -13,20 +15,16 @@ Two important keywords for the [`Network`](@ref) constructor are:
 
 - `execution`: 
     Defines the [`ExecutionStyle`](@ref) of the coreloop, e.g. `SequentialExecution{true}()`.
-    A execution style is a special struct which tells the backend how to parallelize for example.
+    A execution style is a special composite type Julia keyword called struct, which tells the backend how to parallelize for example. (@Hans I think this sentense is unfinished. You seem to have wanted to add an example but you never did. An exaple should be added or the "for example" removed)
     A list of available executions styles can be found under [Execution Types](@ref) in the API.
 
 - `aggregator`: 
-    Tells the backend how to aggregate and which aggregation function to use.
-    Aggregation is the process of creating a single vertex input by reducing over
-    the outputs of adjecent edges of said vertex. The `aggregator` contains both the
-    function and the algorithm. E.g. `SequentialAggregator(+)` is a sequential
-    aggregation by summation. A list of availabe Aggregators can be found under
-    [`Aggregators`](@ref) in the API.
+    Tells the backend how to perform the aggregation and which aggregation function to use.
+    Aggregation is the process of creating a single vertex input by reducing over the outputs of adjecent edges of said vertex. The `aggregator` contains both the function and the algorithm. E.g. `SequentialAggregator(+)` is a sequential aggregation by summation. A list of availabe Aggregators can be found under [`Aggregators`](@ref) in the API.
 
 ## Building `VertexModel`s
-This chapter walks through the most important aspects when defining custom vertex model. For a list of all keyword arguments please check out the docstring of [`VertexModel`](@ref).
-As an example, we'll construct an second order kuramoto model, because that's what we do.
+This chapter will walk you through the most important aspects when defining a custom vertex model. For a list of all keyword arguments please check out the docstring of [`VertexModel`](@ref).
+As an example, we'll construct an second order kuramoto model, because that is what the package does.
 ```@example construction
 using NetworkDynamics #hide
 function kuramoto_f!(dv, v, esum, p, t)
@@ -51,7 +49,8 @@ function kuramoto_g_noff!(y, v, p, t)
 end
 VertexModel(; f=kuramoto_f!, g=kuramoto_g_noff!, dim=2, pdim=3, outdim=1)
 ```
-It is still annoying to explicitly write this trivial output function. You can prevent this by using [`StateMask`](@ref).
+
+To simplify your programming and to avoid explicitly writing the above trivial output function you can use [`StateMask`](@ref).
 By writing
 ```@example construction
 VertexModel(; f=kuramoto_f!, g=StateMask(1:1), dim=2, pdim=3)
