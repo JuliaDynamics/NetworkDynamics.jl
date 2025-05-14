@@ -71,7 +71,7 @@ vertf = VertexModel(; f=fᵥ, g=gᵥ, mass_matrix=Mᵥ, ...)
 (@Hans: I think a depiction of an edge model is needed here)
 In contrast to vertex models, edge models in general have *two* inputs and *two* outputs, for both the source and the destination end of the edge. We commonly use `src` and `dst` to describe the source and destination end of an edge respectively. 
 
-`NOTE:`
+!!! note "On the directionality of edges"
 Mathematically, in a system defined on an undirected graph there is no difference between ~~the~~ edge $(1,2)$ and *edge* $(2,1)$, because the edge has no direction. However, from an implementation point of view we always need to have some kind of ordering for function arguments, state order and so on. (@Hans I am not sure what "for function arguments, state order and so on" means)
 For undirected graphs, `Graphs.jl` chooses the direction of an edge `v1->v2` such that `v1 < v2`.
 
@@ -146,7 +146,7 @@ NetworkDynamics cannot couple two components with feed forward to each other.
 But, it is always possible to transform feed forward behavior to an internal state `x` with mass matrix entry zero to circumvent this problem. This transformation can be performed automatically by using [`ff_to_constraint`](@ref).
 
 
-`WARNING: "Feed Forward Vertices"`
+!!! warning "Feed Forward Vertices"
 As of 11/2024, vertices with feed forward are not supported at all. Use [`ff_to_constraint`](@ref) to transform them into vertex model without FF.
 
 Concretely, NetworkDynamics distinguishes between 4 types of feed forward behaviors of `g` functions based on the [`FeedForwardType`](@ref) trait.
