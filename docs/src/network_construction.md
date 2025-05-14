@@ -18,12 +18,13 @@ Two important keywords for the [`Network`](@ref) constructor are:
     A execution style is a special composite type Julia keyword called struct, which tells the backend how to parallelize for example. (@Hans I think this sentense is unfinished. You seem to have wanted to add an example but you never did. An exaple should be added or the "for example" removed)
     A list of available executions styles can be found under [Execution Types](@ref) in the API.
 
-- `aggregator`: 
-    Tells the backend how to perform the aggregation and which aggregation function to use.
+- `aggregator`:
+    Instructs the backend how to perform the aggregation and which aggregation function to use.
     Aggregation is the process of creating a single vertex input by reducing over the outputs of adjecent edges of said vertex. The `aggregator` contains both the function and the algorithm. E.g. `SequentialAggregator(+)` is a sequential aggregation by summation. A list of availabe Aggregators can be found under [`Aggregators`](@ref) in the API.
 
 ## Building `VertexModel`s
-This chapter will walk you through the most important aspects when defining a custom vertex model. For a list of all keyword arguments please check out the docstring of [`VertexModel`](@ref).
+This chapter will walk you through the most important aspects of defining a custom vertex model. For a list of all keyword arguments please check out the docstring of [`VertexModel`](@ref).
+
 As an example, we'll construct an second order kuramoto model, because that is what the package does.
 ```@example construction
 using NetworkDynamics #hide
@@ -50,20 +51,20 @@ end
 VertexModel(; f=kuramoto_f!, g=kuramoto_g_noff!, dim=2, pdim=3, outdim=1)
 ```
 
-To simplify your programming and to avoid explicitly writing the above trivial output function you can use [`StateMask`](@ref).
+To simplify your programming and avoid explicitly writing the above trivial output function you can use [`StateMask`](@ref).
 By writing
 ```@example construction
 VertexModel(; f=kuramoto_f!, g=StateMask(1:1), dim=2, pdim=3)
 ```
-we told the vertex model, that the output is part of the states `x[1:1]`.
-This enables a few things:
-- `outdim` is not needed anymore, can be inferred from `StateMask`
+we are instructing the vertex model, that the output is part of the states `x[1:1]`.
+This results in the following changes:
+- `outdim` is removed because it can be inferred from `StateMask`
 - `outsym` is not a generic `:o` any more but inferred from the state symbols.
 
 We can be even less verbose by writing `g=1:1` or just `g=1`.
 
-In a last we define better names for our states and parameters as well as assigning a position in the graph to enable the graphless network construction.
-Whenever you provide `sym` keyword the corresponding `dim` keyword is not neccessary anymore. We end up with a relatively short definition
+Lastly, we define improved names for our states and parameters as well as assigning a position in the graph to enable the graphless network construction.
+Whenever you provide a `sym` keyword the corresponding `dim` keyword stops being neccessary. So, we end up with a relatively short definition
 ```@example construction
 VertexModel(; f=kuramoto_f!, g=1,
               sym=[:θ, :ω], psym=[:M=>1, :P=>0.1, :D=>0], 
@@ -71,9 +72,9 @@ VertexModel(; f=kuramoto_f!, g=1,
 ```
 
 ## Building `EdgeModel`s
-This chapter walks through the most important aspects when defining custom edge models. For a list of all keyword arguments please check out the docstring of [`EdgeModel`](@ref).
+This chapter walks you through the most important aspects when defining custom edge models. For a list of all keyword arguments please check the docstring of [`EdgeModel`](@ref).
 
-As an example edge model we want to define standard sinusoidal coupling between the vertices in our network. The full definition looks like this:
+As an example edge model we define a standard sinusoidal coupling between the vertices in our network. The full definition is:
 
 ```@example construction
 function edge_f!(de, e, vsrc, vdst, p, t)
@@ -94,15 +95,15 @@ function edge_g_ff!(ysrc, ydst, vsrc, vdst, p, t)
 end
 EdgeModel(;g=edge_g_ff!, pdim=1, outdim=1)
 ```
-which no classifies as a `PureFeedForward` edge.
-In cases like this, where the edge is actually anti symmetric we can alternatively define a single sided output function and wrapping it in an `AntiSymmetric` object
+which no classifies as a `PureFeedForward` edge. (@Hans: the no seems out of place here. Can you review and edit it accordingly?)
+In cases like this, where the edge is actually anti-symmetrical we can define a single sided output function and wrap it in an `AntiSymmetric` object:
 ```@example construction
 function edge_g_s!(ydst, vsrc, vdst, p, t)
     ydst[1] = p[1] * sin(vsrc[1] - vdst[1])
 end
 EdgeModel(;g=AntiSymmetric(edge_g_ff!), pdim=1, outdim=1)
 ```
-which can also lead to briefer output naming. Available single sided wrappers are
+This can also lead to briefer output naming. Available single sided wrappers are:
 - [`Directed`](@ref) (no coupling at `src`), 
 - [`AntiSymmetric`](@ref) (same coupling at `src` and `dst`),
 - [`Symmetric`](@ref) (inverse coupling at `dst`) and
