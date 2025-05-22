@@ -109,8 +109,8 @@ jobs:
       #     token: ${{ secrets.CODECOV_TOKEN }}
       #     fail_ci_if_error: false
 
-  pd-test:
-    name: PowerDynamics.jl test - Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }}
+  OpPoDyn-test:
+    name: OpPoDyn.jl test - Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }}
     runs-on: ${{ matrix.os }}
     permissions:
       actions: write # needed to allow julia-actions/cache to proactively delete old caches that it has created
@@ -131,19 +131,20 @@ jobs:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
       - uses: julia-actions/julia-buildpkg@v1
+      - uses: julia-actions/cache@v2
       - uses: actions/checkout@v4
         with:
-          repository: JuliaEnergy/PowerDynamics.jl
-          path: PowerDynamics.jl
-      - name: Run PD tests
-        shell: julia --project=PowerDynamics.jl {0}
+          repository: JuliaEnergy/OpPoDyn.jl
+          path: OpPoDyn
+      - name: Run OpPoDyn tests
+        shell: julia --project=testenv --color=yes {0}
         run: |
-            import Pkg
+            using Pkg
             try
-              Pkg.develop(path=".")
-              Pkg.update()
-              Pkg.precompile()
-              Pkg.test()
+              pkg"dev ."
+              pkg"dev ./OpPoDyn"
+              pkg"dev ./OpPoDyn/OpPoDynTesting"
+              Pkg.test("OpPoDyn"; coverage=false)
             catch e
               if e isa Pkg.Resolve.ResolverError
                 @info "Resolve error! No need to test a breaking release..." e
