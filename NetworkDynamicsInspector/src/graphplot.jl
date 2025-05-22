@@ -215,8 +215,10 @@ function graphplot_card(app, session)
     help = HoverHelp(html"""
     <ul>
     <li><strong>Click</strong> on a node or edge to select it for timeseries plotting (highlighted plot).</li>
-    <li><strong>Shift + Click</strong>. only update the element info pane.</li>
-    <li><strong>Ctrl + Click</strong> resets axis after zoom</li>
+    <li><strong>Shift+click</strong>: update info pane below.</li>
+    <li><strong>Ctrl+click</strong>: resets axis after zoom.</li>
+    <li><strong>Click+drag</strong> or <strong>mousewheel</strong>: zoom in/out.</li>
+    <li><strong>Rightclick+drag</strong>: pan the graph.</li>
     </ul>
     """)
     Card([WithConfig(fig; resize_to=:parent), help, gp_tooltip_js];
