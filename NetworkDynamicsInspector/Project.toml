@@ -27,7 +27,7 @@ NetworkDynamics = {path = ".."}
 NetworkDynamicsInspectorElectronExt = ["Electron"]
 
 [compat]
-Bonito = "4.0.0"
+Bonito = "4.0.4"
 ColorSchemes = "3.29.0"
 Colors = "0.13.0"
 Downloads = "1.6.0"
