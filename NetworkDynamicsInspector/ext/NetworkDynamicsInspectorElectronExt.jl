@@ -26,6 +26,7 @@ function NDI.close_display(::NDI.ElectronDisp; strict)
 end
 
 function get_electron_display()
+    app = NDI.get_electron_app()
     window = NDI.get_electron_window()
     # BUG: Electron display cannot be reused
     # if isnothing(ELECTRON_DISP[]) || window != ELECTRON_DISP[].window
@@ -34,7 +35,10 @@ function get_electron_display()
     # else
     #     ELECTRON_DISP[]
     # end
-    return HTTPServer.ElectronDisplay(window, HTTPServer.BrowserDisplay(; open_browser=false))
+    return HTTPServer.ElectronDisplay(
+        HTTPServer.EWindow(app, window),
+        HTTPServer.BrowserDisplay(; open_browser=false)
+    )
 end
 
 function NDI.get_electron_window()
@@ -58,14 +62,20 @@ haswindow() = hasapp() && !isempty(windows(ELECTRON_APP[]))
 
 function NDI.get_electron_app()
     if !hasapp()
-        ELECTRON_APP[] = Electron.Application(;
-            additional_electron_args=[
-                "--disable-logging",
-                "--no-sandbox",
-                "--user-data-dir=$(mktempdir())",
-                "--disable-features=AccessibilityObjectModel",
-            ],
-        )
+        additional_electron_args = [
+            "--disable-logging",
+            "--no-sandbox",
+            "--user-data-dir=$(mktempdir())",
+            "--disable-features=AccessibilityObjectModel",
+            "--enable-unsafe-swiftshader",        # ← allow SwiftShader fallback
+        ]
+        if haskey(ENV, "GITHUB_ACTIONS")
+            append!(additional_electron_args, [
+                "--use-gl=swiftshader",               # ← explicitly request software GL
+                "--disable-gpu",                      # ← disable GPU to avoid GPU errors
+            ])
+        end
+        ELECTRON_APP[] = Electron.Application(; additional_electron_args)
     end
     ELECTRON_APP[]
 end

@@ -274,7 +274,7 @@ function initialize_component!(cf; verbose=true, apply_bound_transformation=true
     else
         resid = init_residual(cf; recalc=true)
         if resid < 1e-10
-        verbose && @info "No free variables! Residual $(LinearAlgebra.norm(resid))"
+            verbose && @info "No free variables! Residual $(LinearAlgebra.norm(resid))"
         else
             @warn "No free variables! However model does not appear to be initialized in steady state. Residual $(LinearAlgebra.norm(resid))"
         end
