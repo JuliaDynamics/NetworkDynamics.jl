@@ -417,6 +417,7 @@ function Bonito.jsrender(session::Session, tomselect::TomSelect{T}) where {T}
             optgroupField: 'class',
             placeholder: $(tomselect.placeholder),
             hidePlaceholder: true,
+            maxOptions: null,
             plugins: {},
         };
         // push remove button to plugins when multi
