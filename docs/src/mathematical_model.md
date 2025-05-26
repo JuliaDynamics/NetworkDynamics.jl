@@ -79,10 +79,11 @@ destination end of the edge. We commonly use `src` and `dst` to describe the sou
 respectively. 
 
 !!! note "On the directionality of edges"
-Mathematically, in a system defined on an undirected graph there is no difference between ~~the~~ edge $(1,2)$ and 
-*edge* $(2,1)$, because the edge has no direction. However, from an implementation point of view we always need to have 
-some kind of ordering for function arguments, state order and so on. (@Hans I am not sure what "for function arguments, 
-state order and so on" means)
+    Mathematically, in a system defined on an undirected graph there is no difference between ~~the~~ edge $(1,2)$ and 
+    *edge* $(2,1)$, because the edge has no direction. However, from an implementation point of view we always need to have 
+    some kind of ordering for function arguments, state order and so on. (@Hans I am not sure what "for function arguments, 
+    state order and so on" means).
+
 For undirected graphs, `Graphs.jl` chooses the direction of an edge `v1->v2` such that `v1 < v2`.
 
 The *inputs* of the edge are the outputs of the two nodes at both their ends. The output is split into two parts:

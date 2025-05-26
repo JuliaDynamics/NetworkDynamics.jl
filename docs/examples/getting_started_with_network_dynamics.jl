@@ -4,14 +4,17 @@
 This introductory example explains the use of the basic types and constructors
 in NetworkDynamics.jl by modeling a simple diffusion on an undirected network.
 
-This example can be dowloaded as a normal Julia script [here](@__NAME__.jl). #md
+!!! note
+    An Undirected Network is a network where the connections between the nodes are all bidirectional.
+
+This example can be dowloaded as a normal Julia script [here](@__NAME__.jl).
 
 ## Theoretical background
 
 Diffusion processes are relevant for phenomena as diverse as heat conduction, electrical currents, and random walks.
-    Generally speaking they describe the tendency of systems to evolve towards a state of equally distributed heat,
-    charge or concentration. In such system the local temperature (or concentration) changes according to its
-    difference with its neighborhood, i.e. the temperature gradient.
+Generally speaking they describe the tendency of systems to evolve towards a state of equally distributed heat,
+charge or concentration. In such system the local temperature (or concentration) changes according to its
+difference with its neighborhood, i.e. the temperature gradient.
 
 Let $g$ be a graph with $N$ nodes and adjacency matrix $A$. Let $v = (v_1, \dots, v_n)$ be a vector of (abstract)
 temperatures or concentrations at each node $i = 1, \dots, N$. Then the rate of change of state $v_i$ is described by
@@ -25,7 +28,19 @@ The sum on the right hand side plays the role of a (discrete) gradient. If the t
 at its neighboring node $j$ it will decrease along that edge.
 
 ## Modeling diffusion in NetworkDynamics.jl
-We begin by loading the necessary packages.
+Install Julia from the Julia website and the following packages:
+```julia-repl
+import Pkg; Pkg.add("Revise")
+import Pkg; Pkg.add("LiveServer")
+pkg> add NetworkDynamics
+
+import Pkg; Pkg.add("Graphs")
+import Pkg; Pkg.add("OrdinaryDiffEqTsit5")
+import Pkg; Pkg.add("StableRNGs")
+import Pkg; Pkg.add("Plots")
+```
+
+Then begin by loading the necessary packages:
 =#
 using Graphs
 using NetworkDynamics
@@ -35,15 +50,19 @@ using Plots
 nothing #hide
 #=
 
-From the above considerations we see that in this model the nodes do not have any internal dynamics - if a node was
-disconnected from the rest of the network its state would never change, since then $A_{ji} = 0 \; \forall j$ and hence
-$\dot v_i = 0$. This means that the evolution of a node depends only on the interaction with its neighbors.
-In NetworkDynamics.jl, interactions with neighbors are described by equations for the edges.
+
+
+From the theoretical background we can see that in this model the nodes do not have any internal dynamics - if a node
+was disconnected from the rest of the network its state would never change, since $A_{ji} = 0 \; \forall j$ and hence
+$\dot v_i = 0$. This means that the evolution of a node will depend only on its interaction with its neighbors.
+In NetworkDynamics.jl, interactions between a node and its neighbors are described using edge equations.
 
 In order to bring this equation into the form required by NetworkDynamics.jl we need split the dynamics into edge and
 vertex parts and bring them into the correct input-output formulation.
-The vertices have one internal state $v$ which is also the output. The input is
-the sum over all flows of connected edges. This directly correspons to the component model definition outlined in
+
+Vertex Dynamics:
+All vertices have one internal state $v$. This state is also the vertex output. It is the sum over all incoming flows
+of edges connected to the vertex. This directly corresponds to the component model definition outlined in
 [Mathematical Model](@ref):
 ```math
 \begin{aligned}
@@ -51,9 +70,8 @@ the sum over all flows of connected edges. This directly correspons to the compo
 y^\mathrm{v} &= g^{\mathrm v}(u^{\mathrm v}, \sum_k^{\text{incident}} y^{\mathrm e}_k, p^{\mathrm v}, t) &&= x^\mathrm{v}
 \end{aligned}
 ```
-The edge dynamics on the other hand do not have any internal states. Thus we
-only define the output as the difference between the source and destination
-vertex:
+The edge dynamics on the other hand do not have any internal states. Thus we can define the edge output as the
+difference between the source and destination vertex:
 ```math
 \begin{aligned}
 y^{\mathrm e}_{\mathrm{dst}} &= g_\mathrm{dst}^{\mathrm e}(u^{\mathrm e}, y^{\mathrm v}_{\mathrm{src}}, y^{\mathrm v}_{\mathrm{dst}}, p^{\mathrm e}, t) &&= y^{\mathrm v}_{\mathrm{src}} - y^{\mathrm v}_{\mathrm{dst}}\\
@@ -61,7 +79,7 @@ y^{\mathrm e}_{\mathrm{src}} &= g_\mathrm{src}^{\mathrm e}(u^{\mathrm e}, y^{\ma
 \end{aligned}
 ```
 
-### Definition of `EdgeModel`
+### Defining an `EdgeModel`:
 =#
 function diffusionedge_g!(e_dst, v_src, v_dst, p, t)
     ## e_dst, v_src, v_dst are arrays, hence we use the broadcasting operator
@@ -72,9 +90,9 @@ nothing #hide #md
 
 #=
 The function `diffusionedge_g!` takes as inputs the current state of the edge `e`, its source vertex `v_src`,
-    its destination vertex `v_dst`, a vector of parameters `p` and the time `t`. In order to comply with the syntax of
-    NetworkDynamics.jl we always have to define functions for edges with exactly these arguments, even though we do not
-    need `p` and `t` for the diffusion example.
+its destination vertex `v_dst`, a vector of parameters `p` and the time `t`. In order to comply with the syntax of
+NetworkDynamics.jl we must always define functions for edges with exactly these arguments. (In the case of this
+example, the values for `p` and `t` are not used).
 
 `diffusionedge_g!` is called a **mutating** function, since it modifies (or *mutates*) one of its inputs, namely the
 edge state `e`. As a convention in Julia names of mutating functions end with an `!`. The use of mutating functions
@@ -123,7 +141,7 @@ g = barabasi_albert(N, k) # a little more exciting than a bare random graph
 nothing #hide #md
 
 # The [Barabási–Albert model](https://en.wikipedia.org/wiki/Barab%C3%A1si%E2%80%93Albert_model) generates a scale-free
-random graph.
+# random graph.
 
 nd = Network(g, nd_diffusion_vertex, nd_diffusion_edge)
 
