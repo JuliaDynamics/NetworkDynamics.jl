@@ -2,7 +2,7 @@
 
 # overload to reduce excessive printing
 function Base.show(io::IO, @nospecialize(nw::Network))
-    print(io, "Network($(nv(nw.im.g)) vertices, $(ne(nw.im.g)) edges")
+    print(io, "Network($(nv(nw.im.g)) vertices, $(ne(nw.im.g)) edges)")
 end
 
 function Base.show(io::IO, ::MIME"text/plain", @nospecialize(nw::Network))
@@ -304,11 +304,12 @@ function align_strings(_vecofstr::AbstractVector{<:AbstractString}; padding=:alt
         end
     end
     alig = align_strings(splitted; padding)
-    if !isempty(newlines)
-        for i in newlines
-            alig[i] = alig[i] * "\n" * alig[i+1]
-        end
-        deleteat!(alig, newlines .+1 )
+
+    @assert issorted(newlines)
+    while !isempty(newlines)
+        i = pop!(newlines)
+        alig[i] = alig[i] * "\n" * alig[i+1]
+        deleteat!(alig, i+1)
     end
     alig
 end
