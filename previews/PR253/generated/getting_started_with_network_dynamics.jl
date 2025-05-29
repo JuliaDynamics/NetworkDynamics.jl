@@ -12,9 +12,10 @@
 # >
 # > An Undirected Network is a network where the connections between the nodes are all bidirectional.
 #
-# (@Hans: this creates a copy of this Julia file. I am assuming you would only want the commands rather than the text)
-#
-#
+# (@Hans: this creates a copy of this Julia file. I am assuming you would only want the commands rather than the text.
+# I have created a file with just the code and minimal documentation and placed it in the subfolder /examples_code. The
+# name of the file is simple_diffusion_on_an_undirected_network.jl)
+
 # ## Theoretical background
 #
 # Diffusion processes appear in phenomena as diverse as heat conduction, electrical currents, and random walks.
@@ -42,7 +43,7 @@
 #
 # In order to bring this equation into the form required by NetworkDynamics.jl we need split the dynamics into edge and
 # vertex parts and bring them into the correct input-output formulation.
-#
+
 # #### Vertex Dynamics:
 # All vertices have one internal state $v$. This state is also the vertex output. It is the sum over all incoming flows
 # of edges connected to the vertex. This directly corresponds to the component model definition outlined in
@@ -53,7 +54,7 @@
 # y^\mathrm{v} &= g^{\mathrm v}(u^{\mathrm v}, \sum_k^{\text{incident}} y^{\mathrm e}_k, p^{\mathrm v}, t) &&= x^\mathrm{v}
 # \end{aligned}
 # ```
-#
+
 # #### Edge Dynamics:
 # The edge dynamics on the other hand do not have any internal states. Thus we can define the edge output as the
 # difference between the source and destination vertex:
@@ -63,13 +64,25 @@
 # y^{\mathrm e}_{\mathrm{src}} &= g_\mathrm{src}^{\mathrm e}(u^{\mathrm e}, y^{\mathrm v}_{\mathrm{src}}, y^{\mathrm v}_{\mathrm{dst}}, p^{\mathrm e}, t) &&= y^{\mathrm v}_{\mathrm{dst}} - y^{\mathrm v}_{\mathrm{src}}
 # \end{aligned}
 # ```
-#
+
 # ### Modelling dynamics in NetworkDynamics.jl
 # To model the vertex dynamics we need to create an `VertexModel` and to model the edge dynamics we need to create an
 # `EdgeModel`.
 #
+# First we need to have Julia and the necessary packages installed
+# Then we need to load the necessary packages
+
+using Graphs
+using NetworkDynamics
+using OrdinaryDiffEqTsit5
+using StableRNGs
+using Plots
+nothing #hide
+
 # #### Defining an `EdgeModel`
-# To define an Edgemodel we use the function `diffusionedge_g!`. It takes as as inputs the current state of the edge `e`,
+#
+# Then we define the `EdgeModel`.
+# To it we use the function `diffusionedge_g!`. It takes as as inputs the current state of the edge `e`,
 # its source vertex `v_src`, its destination vertex `v_dst`, a vector of parameters `p` and the time `t`.
 # In order to comply with the syntax of NetworkDynamics.jl we must always define functions for edges with exactly
 # these arguments. (In the case of this example, the values for `p` and `t` are not used). (@Hans Why are they not used?)
@@ -94,6 +107,7 @@ end
 nd_diffusion_edge = EdgeModel(; g=AntiSymmetric(diffusionedge_g!), outsym=[:flow])
 
 # #### Definition of `VertexModel`
+# Next we need to define the `VertexModel`
 # For undirected graphs, the `edgefunction!` specifies the coupling from a source- to a destination vertex.
 # The contributions of the connected edges to a single vertex are "aggregated". Default aggregation is the summation of
 # all incident edge states. The aggregated edge state is made available via the `esum` argument of the vertex function.
@@ -212,5 +226,50 @@ using OrdinaryDiffEqTsit5
 using StableRNGs
 using Plots
 nothing #hide
+
+using Graphs
+using NetworkDynamics
+using OrdinaryDiffEqTsit5
+using StableRNGs
+using Plots
+nothing #hide
+
+function diffusionedge_g!(e_dst, v_src, v_dst, p, t)
+    # e_dst, v_src, v_dst are arrays, hence we use the broadcasting operator
+    e_dst .= v_src .- v_dst
+    nothing
+end
+
+nd_diffusion_edge = EdgeModel(; g=AntiSymmetric(diffusionedge_g!), outsym=[:flow])
+
+function diffusionvertex_f!(dv, v, esum, p, t)
+    # dv, v and esum are arrays, hence we use the broadcasting operator .
+    dv .= esum
+    nothing
+end
+
+nd_diffusion_vertex = VertexModel(; f=diffusionvertex_f!, g=StateMask(1:1), dim=1)
+
+N = 20 # number of nodes
+k = 4  # average degree
+g = barabasi_albert(N, k) # a little more exciting than a bare random graph
+
+nd = Network(g, nd_diffusion_vertex, nd_diffusion_edge)
+rng = StableRNG(1)
+x0 = randn(rng, N) # random initial conditions
+ode_prob = ODEProblem(nd, x0, (0.0, 2.0))
+sol = solve(ode_prob, Tsit5());
+plot(sol; idxs=vidxs(nd, :, :), fmt=:png)
+N = 10 # number of nodes
+k = 4  # average degree
+g = barabasi_albert(N, k) # a little more exciting than a bare random graph
+nd_diffusion_vertex_2 = VertexModel(; f=diffusionvertex_f!, g=1:2, dim=2, sym=[:x, :ϕ])
+nd_diffusion_edge_2 = EdgeModel(; g=AntiSymmetric(diffusionedge_g!), outsym=[:flow_x, :flow_ϕ])
+nd_2 = Network(g, nd_diffusion_vertex_2, nd_diffusion_edge_2)
+x0_2 = vec(transpose([randn(rng, N) .^ 2 randn(rng, N)])) # x ~ N(0,1)^2; ϕ ~ N(0,1)
+ode_prob_2 = ODEProblem(nd_2, x0_2, (0.0, 3.0))
+sol_2 = solve(ode_prob_2, Tsit5());
+plot(sol_2; idxs=vidxs(nd_2, :, :x), fmt=:png)
+plot(sol_2; idxs=eidxs(nd_2, :, :flow_x), fmt=:png)
 
 # This file was generated using Literate.jl, https://github.com/fredrikekre/Literate.jl
