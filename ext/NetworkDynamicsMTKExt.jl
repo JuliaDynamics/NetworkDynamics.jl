@@ -103,7 +103,7 @@ Additional `kwargs` are the same as for the double-sided EdgeModel MTK construct
 EdgeModel(sys::ODESystem, srcin, dstin, dstout; kwargs...) = EdgeModel(sys, srcin, dstin, nothing, dstout; kwargs...)
 
 """
-    EdgeModel(sys::ODESystem, srcin, srcout, dstin, dstout;
+    EdgeModel(sys::ODESystem, srcin, dstin, srcout, dstout;
               verbose=false, name=getname(sys), extin=nothing, ff_to_constraint=false, kwargs...)
 
 Create a `EdgeModel` object from a given `ODESystem` created with ModelingToolkit.
