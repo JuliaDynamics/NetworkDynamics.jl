@@ -96,3 +96,8 @@ function diffusionedge_g!(e_dst, v_src, v_dst, p, t)
     nothing
 end
 nothing #hide #md
+
+#=
+Notably, this function only models $g_\mathrm{dst}$. However we can wrap this single-sided output function in an
+[`AntiSymmetric`](@ref) output wrapper to construct the [`EdgeModel`](@ref):
+=#
