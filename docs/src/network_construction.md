@@ -2,11 +2,9 @@
 
 ## Building a Network
 The main type of `NetworkDynamics.jl` is a [`Network`](@ref).
-A network bundles various component models (edge and vertex models) together with a graph to form a callable object which represents the RHS of the overall dynamical system, see [Mathematical Model](@ref). 
-(@Hans: I cannot find what RHS stands for. please add it).
+A network bundles various component models (edge and vertex models) together with a graph to form a callable object which represents the right hand side (RHS) of the overall dynamical system, see [Mathematical Model](@ref). 
 
-A `Network` is build by passing a graph `g`, vertex models `vertexm` and edge models `edgem`.
-(@Hans: What are we passing the graph, vertex and edge models to? Please fix)
+A `Network` is build by passing a graph `g`, vertex models `vertexm` and edge models `edgem` to the [`Network`](@ref) constructor:.
 ```julia
 nw = Network(g, vertexm, edgem; kwargs...)
 ```
@@ -15,7 +13,7 @@ Two important keywords for the [`Network`](@ref) constructor are:
 
 - `execution`: 
     Defines the [`ExecutionStyle`](@ref) of the coreloop, e.g. `SequentialExecution{true}()`.
-    A execution style is a special composite type Julia keyword called struct, which tells the backend how to parallelize for example. (@Hans I think this sentense is unfinished. You seem to have wanted to add an example but you never did. An exaple should be added or the "for example" removed)
+    A execution style is a special Julia object, which tells the backend how to parallelize (e.g. `ThreadedExecution{true}()` will use native Julia threads to parallelize the RHS call). 
     A list of available executions styles can be found under [Execution Types](@ref) in the API.
 
 - `aggregator`:
@@ -95,7 +93,7 @@ function edge_g_ff!(ysrc, ydst, vsrc, vdst, p, t)
 end
 EdgeModel(;g=edge_g_ff!, pdim=1, outdim=1)
 ```
-which no classifies as a `PureFeedForward` edge. (@Hans: the no seems out of place here. Can you review and edit it accordingly?)
+which classifies as a `PureFeedForward` edge.
 In cases like this, where the edge is actually anti-symmetrical we can define a single sided output function and wrap it in an `AntiSymmetric` object:
 ```@example construction
 function edge_g_s!(ydst, vsrc, vdst, p, t)

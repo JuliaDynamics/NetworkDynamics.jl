@@ -64,4 +64,4 @@ nothing #hide
     ```
 
 ## Extracting a `Network`-object from Containers
-`NetworkDynamics.jl` provides a [`extract_nw`](@ref) function, to get a reference to the wrapped `Network` object from different containers, such as solution objects or integrator objects. (@Hans: can you add a definition for integrator objects?)
+`NetworkDynamics.jl` provides a [`extract_nw`](@ref) function, to get a reference to the wrapped `Network` object from different containers, such as solution objects or [integrator objects](@extref DiffEq.integrator). 
