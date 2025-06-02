@@ -31,8 +31,11 @@ vertexf = VertexModel(f=_vertexf!, g=1, sym=[:storage])
 ## Fundamental Symbolic Indices
 The default types for this access are the types [`VIndex`](@ref), [`EIndex`](@ref), [`VPIndex`](@ref) and [`EPIndex`](@ref).
 Each of those symbolic indices consists of 2 elements: a reference to the network component and a reference to the symbol within that component.
-As such, `VIndex(2, :x)` refers to variable with symbolic name `:x` in vertex number 2.
-`EPIndex(4, 2)` would refer to the *second* parameter of the edge component for the 4th edge.
+As such: 
+- `VIndex(2, :x)` refers to variable with symbolic name `:x` in vertex number 2.
+- `EPIndex(4, 2)` refers to the *second* parameter of the edge component for the 4th edge.
+- `VPIndex`() refers to (@Hans please fill in this with an example)
+- `EPIndex`() refers to (@Hans please fill in this with an example)
 
 !!! details "Setup code to make following examples work"
     ```@example si
@@ -47,13 +50,12 @@ As such, `VIndex(2, :x)` refers to variable with symbolic name `:x` in vertex nu
 
 Those fundamental indices can be used in a lot of scenarios. Most importantly you can use them to
 ```@example si
-sol(sol.t; idxs=VIndex(1, :storage))   # extract timeseries out ouf solution object
+sol(sol.t; idxs=VIndex(1, :storage))   # extract timeseries out of a solution object
 plot(sol; idxs=[VIndex(1, :storage), VIndex(5,:storage)]) # plot storage of two nodes
 ```
 
 ## Generate Symbolic Indices
-Often, you need many individual symbolic indices. For that there are the helper methods [`vidxs`](@ref), [`eidxs`](@ref), [`vpidxs`](@ref) and [`epidxs`](@ref).
-With the help of those methods you can generate arrays of symbolic indices:
+Often, you need many individual symbolic indices. To achieve this you can use the helper methods [`vidxs`](@ref), [`eidxs`](@ref), [`vpidxs`](@ref) and [`epidxs`](@ref). With their help you can generate arrays of symbolic indices:
 
 ```@example si
 vidxs(nw, :, :storage) # get variable "storage" for all vertices
@@ -98,7 +100,7 @@ in these flat arrays corresponds exactly to the order returned by [`variable_sym
 
 !!! note
     The `NWState` and `NWParameter` wrappers can be constructed from various objects.
-    Fore example, within a callback you might construct `p = NWParameter(integrator)` to then change the parameters of the network within the callback.
+    For example, within a callback you might construct `p = NWParameter(integrator)` to then change the parameters of the network within the callback.
 
 
 ## Observables
@@ -109,10 +111,10 @@ the `SciML` ecosystem, these values are called Observables.
 A prime example of Observables are edge/vertex-outputs, such as the `flow` in the edge model defined above.
 It is also possible to define additional Observables manually by using the `obssym` and `obsf` keyword
 on the `EdgeModel`/`VertexModel` constructors.
-When building models using ModelingToolkit, the reduced algebraic states will be preserved as observables automatically.
+When building models using ModelingToolkit, the reduced algebraic states will be preserved automatically as observables.
 
-Observables can be accessed like any other state, for example, the flows in the network don't show up in the state array but can be accessed in all the ways discussed above, for example
-
+Observables can be accessed like any other state. For example, the flows in the network don't show up in the state array but can be accessed in all the ways discussed above. 
+For example:
 ```@example si
 plot(sol; idxs=eidxs(nw, :, :flow))
 ```
@@ -150,7 +152,7 @@ idxs = SII.parameter_index(nw, eidxs(1:2, :K))
 pflat(s)[idxs] == s.p.e[1:2, :K]
 ```
 
-If you need the symbols of all the states/parameters in order, you can use
+If you need the symbols of all the states/parameters in order, you can use:
 ```@example si
 SII.variable_symbols(nw)
 ```
