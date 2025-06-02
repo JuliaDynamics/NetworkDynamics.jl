@@ -1,7 +1,7 @@
 #=
 # [Network Diffusion](@id Getting Started)
 
-This example explains the use of the basic types (@Hans: basic types of what?) and constructors
+This example explains the use of the basic functions and constructors
 in NetworkDynamics.jl by modeling a simple diffusion on an undirected network.
 
 This page will walk you through:
@@ -90,11 +90,12 @@ nothing #hide
 
 Then we define the `EdgeModel`.
 To define it we use the function `diffusionedge_g!`. The function takes as inputs the current state of the edge `e`,
-    its source vertex `v_src`, its destination vertex `v_dst`, a vector of parameters `p` and the time `t`. In order to
-    comply with the syntax of NetworkDynamics.jl we must always define functions for edges with exactly these arguments.
-    (In the case of this example, the values for `p` and `t` are not used). (@Hans Why are they not used?).
-    After the function call the edge's output value `e` equals the difference between its source and its destination
-        vertex (i.e. the discrete gradient along that edge).
+its source vertex `v_src`, its destination vertex `v_dst`, a vector of parameters `p` and the time `t`. In order to
+comply with the syntax of NetworkDynamics.jl we must always define functions for edges with exactly these arguments.
+(In the case of this example, the values for `p` and `t` are not used since there are no parameters and ther is no
+#explicit time dependency in the system).
+After the function call the edge's output value `e` equals the difference between its source and its destination
+    vertex (i.e. the discrete gradient along that edge).
 
 !!! note
     `diffusionedge_g!` is called a **mutating** function, because it mutates (modifies) the edge state `e` (which is the
@@ -136,7 +137,7 @@ Just like above, the input arguments `v, esum, p, t` are mandatory for the synta
     input `dv` corresponding to the derivative of the vertex' state is mandatory for vertices described by ordinary
     differential equations.
 
-The output function `g` is just taking part of the internal states (@Hans: what do you mean here?). For that we can use the [`StateMask`](@ref) helper
+The outputs of the vertex function are just a subset of the internal states. For that we can use the [`StateMask`](@ref) helper
     function `g = StateMaks(1:1)`
 =#
 
