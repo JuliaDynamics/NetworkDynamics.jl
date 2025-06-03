@@ -308,8 +308,8 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     params = setdiff(allparams, Set(allinputs))
 
     # extract the main equations and observed equations
-    eqs::Vector{Equation} = ModelingToolkit.subs_constants(equations(sys))
-    obseqs_sorted::Vector{Equation} = ModelingToolkit.subs_constants(observed(sys))
+    eqs::Vector{Equation} = equations(sys)
+    obseqs_sorted::Vector{Equation} = observed(sys)
     fix_metadata!(eqs, sys);
     fix_metadata!(obseqs_sorted, sys);
 
