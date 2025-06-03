@@ -6,13 +6,13 @@ which are then connected on network scale using NetworkDynamics.
 
 The main entry point for this interop are the constructors
 ```julia
-VertexModel(::ODESystem, inputs, outputs)
-EdgeModel(::ODESystem, srcin, dstin, [srscout], dstout)
+VertexModel(::System, inputs, outputs)
+EdgeModel(::System, srcin, dstin, [srscout], dstout)
 ```
 whose docstrings can be found in the [Component Models with MTK](@ref) section in the API.
 
 These constructors will:
-- transform the states marked as input to parameters and `structural_simplify`ing the system,
+- transform the states marked as input to parameters and `mtkcompile`ing the system,
 - generate the `f` and `g` functions,
 - generate code for observables,
 - port all supported [Metadata](@ref) from MTK symbols to component symbols and
@@ -76,7 +76,7 @@ An ideal voltage source is just a model which pins its output voltage to a fixed
 The source ejects whatever current is necessary. We introduce another variable `i(t)`
 to "capture" this current. This variable will be removed during structural simplify, but will
 be available for plotting through the [Observables](@ref) mechanism.
-The `VertexModel` can be generated from an `ODESystem` by providing names of the input and output states:
+The `VertexModel` can be generated from an `System` by providing names of the input and output states:
 
 ```@example mtk
 @mtkmodel VoltageSource begin
