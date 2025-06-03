@@ -11,53 +11,61 @@ use the updated `*.md` and source files. This way the Julia session keeps alive 
 individual builds are much faster.
 =#
 
-#=
+PORT = isempty(ARGS) ? 8000 : parse(Int, ARGS[1])
+@assert 8000 ≤ PORT ≤ 9000 "PORT has to be in range 8000..9000!"
+
+print("Do you want to update docs environment? [y/n] (default: n) ")
+answer = readline()
+UPDATE_ENV = if !isempty(answer) && answer[1] == 'y'
+    true
+else
+    false
+end
+
+print("Do you want to build docs continously on file change? This will enable the `draft=true` flag, and the examples will not run. [y/n] (default: n)")
+answer = readline()
+SERVEDOCS_DRAFT = if !isempty(answer) && answer[1] == 'y'
+    true
+else
+    false
+end
+
+
 using Pkg
 Pkg.activate(@__DIR__)
 Pkg.instantiate()
-print("Do you want to update docs environment? [y/n] ")
-answer = readline()
-if !isempty(answer) && answer[1] == 'y'
+
+if UPDATE_ENV
     Pkg.update()
 end
 
 using Revise
 using LiveServer
-using REPL.TerminalMenus
-
-port = isempty(ARGS) ? 8000 : parse(Int, ARGS[1])
-@assert 8000 ≤ port ≤ 9000 "port has to be in range 8000..9000!"
-
-@info "Start server..."
-@async serve(;dir=joinpath(@__DIR__, "build"), port)
-
-menu = RadioMenu(["Run again!", "Quit!"])
-while true
-    revise()
-    @info "Start building docs..."
-    try
-        include("make.jl")
-    catch e
-        @info "make.jl error" e
-    end
-
-    println("\nDocs are served at http://localhost:$port")
-
-    if request("What now?", menu) != 1
-        break
-    end
-end
-=#
-
-
-using Pkg
-Pkg.activate(@__DIR__)
 using NetworkDynamics
-using LiveServer
-
 cd(pkgdir(NetworkDynamics))
 
-servedocs(
-    literate_dir = joinpath("docs", "examples"),
-    skip_dir = joinpath("docs", "src", "generated")
-)
+
+if SERVEDOCS_DRAFT
+    servedocs(
+        literate_dir = joinpath("docs", "examples"),
+        skip_dir = joinpath("docs", "src", "generated")
+    )
+else
+    @info "Start server..."
+    @async serve(;dir=joinpath(@__DIR__, "build"), PORT)
+
+    while true
+        revise()
+        @info "Start building docs..."
+        try
+            include("make.jl")
+        catch e
+            @info "make.jl error" e
+        end
+
+        println("\nDocs are served at http://localhost:$port")
+
+        println("Press [Enter] to rerun the make process or [Ctrl+C] to exit.")
+        readline()
+    end
+end
