@@ -205,6 +205,92 @@ get_default_or_guess(c::Comp_or_NW, sym) = has_default(c, sym) ? get_default(c, 
 
 
 """
+    get_defaults(c::ComponentModel, syms; missing_val=nothing)
+    get_defaults(nw::Network, idx::Union{VIndex,EIndex}, syms; missing_val=nothing)
+
+Gets all default values for the specified symbols in the component.
+Returns `missing_val` for symbols without default values.
+"""
+function get_defaults(c::ComponentModel, syms; missing_val=nothing)
+    [has_default(c, sym) ? get_default(c, sym) : missing_val for sym in syms]
+end
+get_defaults(nw::Network, idx::VCIndex, syms; kw...) = get_defaults(getcomp(nw, idx), syms; kw...)
+get_defaults(nw::Network, idx::ECIndex, syms; kw...) = get_defaults(getcomp(nw, idx), syms; kw...)
+
+"""
+    get_guesses(c::ComponentModel, syms; missing_val=nothing)
+    get_guesses(nw::Network, idx::Union{VIndex,EIndex}, syms; missing_val=nothing)
+
+Gets all guess values for the specified symbols in the component.
+Returns `missing_val` for symbols without guess values.
+"""
+function get_guesses(c::ComponentModel, syms; missing_val=nothing)
+    [has_guess(c, sym) ? get_guess(c, sym) : missing_val for sym in syms]
+end
+get_guesses(nw::Network, idx::VCIndex, syms; kw...) = get_guesses(getcomp(nw, idx), syms; kw...)
+get_guesses(nw::Network, idx::ECIndex, syms; kw...) = get_guesses(getcomp(nw, idx), syms; kw...)
+
+"""
+    get_defaults_or_inits(c::ComponentModel, syms; missing_val=nothing)
+    get_defaults_or_inits(nw::Network, idx::Union{VIndex,EIndex}, syms; missing_val=nothing)
+
+Gets all default or init values for the specified symbols in the component.
+Returns `missing_val` for symbols without default or init values.
+"""
+function get_defaults_or_inits(c::ComponentModel, syms; missing_val=nothing)
+    [has_default_or_init(c, sym) ? get_default_or_init(c, sym) : missing_val for sym in syms]
+end
+get_defaults_or_inits(nw::Network, idx::VCIndex, syms; kw...) = get_defaults_or_inits(getcomp(nw, idx), syms; kw...)
+get_defaults_or_inits(nw::Network, idx::ECIndex, syms; kw...) = get_defaults_or_inits(getcomp(nw, idx), syms; kw...)
+
+# extract varmaps
+function _get_metadata_dict(c::ComponentModel, key; T=Any)
+    dict = Dict{Symbol, T}()
+    for (sym, smd) in c.symmetadata
+        if haskey(smd, key)
+            dict[sym] = smd[key]
+        end
+    end
+    dict
+end
+"""
+    get_defaults_dict(c::ComponentModel)
+
+Returns a dictionary mapping symbols to their default values.
+Only includes symbols that have default values set.
+
+See also: [`get_guesses_dict`](@ref), [`get_inits_dict`](@ref)
+"""
+get_defaults_dict(c::ComponentModel) = _get_metadata_dict(c, :default, Float64)
+"""
+    get_guesses_dict(c::ComponentModel)
+
+Returns a dictionary mapping symbols to their guess values.
+Only includes symbols that have guess values set.
+
+See also: [`get_defaults_dict`](@ref), [`get_inits_dict`](@ref)
+"""
+get_guesses_dict(c::ComponentModel) = _get_metadata_dict(c, :guess, Float64)
+"""
+    get_inits_dict(c::ComponentModel)
+
+Returns a dictionary mapping symbols to their initialization values.
+Only includes symbols that have initialization values set.
+
+See also: [`get_defaults_dict`](@ref), [`get_guesses_dict`](@ref)
+"""
+get_inits_dict(c::ComponentModel) = _get_metadata_dict(c, :init, Float64)
+"""
+    get_bounds_dict(c::ComponentModel)
+
+Returns a dictionary mapping symbols to their bounds values.
+Only includes symbols that have bounds values set.
+
+See also: [`get_defaults_dict`](@ref), [`get_guesses_dict`](@ref), [`get_inits_dict`](@ref)
+"""
+get_bounds_dict(c::ComponentModel) = _get_metadata_dict(c, :bounds, Tuple{Float64,Float64})
+
+"""
     set_defaults!(nw::Network, s::NWState)
 
 Set the default values of the network to the values of the given state.
@@ -393,45 +479,6 @@ function add_callback!(c::ComponentModel, cb; check=true)
 end
 add_callback!(nw::Network, idx::VCIndex, cb; kw...) = add_callback!(getcomp(nw, idx), cb; kw...)
 add_callback!(nw::Network, idx::ECIndex, cb; kw...) = add_callback!(getcomp(nw, idx), cb; kw...)
-
-"""
-    get_defaults(c::ComponentModel, syms; missing_val=nothing)
-    get_defaults(nw::Network, idx::Union{VIndex,EIndex}, syms; missing_val=nothing)
-
-Gets all default values for the specified symbols in the component.
-Returns `missing_val` for symbols without default values.
-"""
-function get_defaults(c::ComponentModel, syms; missing_val=nothing)
-    [has_default(c, sym) ? get_default(c, sym) : missing_val for sym in syms]
-end
-get_defaults(nw::Network, idx::VCIndex, syms; kw...) = get_defaults(getcomp(nw, idx), syms; kw...)
-get_defaults(nw::Network, idx::ECIndex, syms; kw...) = get_defaults(getcomp(nw, idx), syms; kw...)
-
-"""
-    get_guesses(c::ComponentModel, syms; missing_val=nothing)
-    get_guesses(nw::Network, idx::Union{VIndex,EIndex}, syms; missing_val=nothing)
-
-Gets all guess values for the specified symbols in the component.
-Returns `missing_val` for symbols without guess values.
-"""
-function get_guesses(c::ComponentModel, syms; missing_val=nothing)
-    [has_guess(c, sym) ? get_guess(c, sym) : missing_val for sym in syms]
-end
-get_guesses(nw::Network, idx::VCIndex, syms; kw...) = get_guesses(getcomp(nw, idx), syms; kw...)
-get_guesses(nw::Network, idx::ECIndex, syms; kw...) = get_guesses(getcomp(nw, idx), syms; kw...)
-
-"""
-    get_defaults_or_inits(c::ComponentModel, syms; missing_val=nothing)
-    get_defaults_or_inits(nw::Network, idx::Union{VIndex,EIndex}, syms; missing_val=nothing)
-
-Gets all default or init values for the specified symbols in the component.
-Returns `missing_val` for symbols without default or init values.
-"""
-function get_defaults_or_inits(c::ComponentModel, syms; missing_val=nothing)
-    [has_default_or_init(c, sym) ? get_default_or_init(c, sym) : missing_val for sym in syms]
-end
-get_defaults_or_inits(nw::Network, idx::VCIndex, syms; kw...) = get_defaults_or_inits(getcomp(nw, idx), syms; kw...)
-get_defaults_or_inits(nw::Network, idx::ECIndex, syms; kw...) = get_defaults_or_inits(getcomp(nw, idx), syms; kw...)
 
 # generate methods and docstrings for position and marker
 for md in [:position, :marker]

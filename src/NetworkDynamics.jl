@@ -78,6 +78,7 @@ export get_initial_state, dump_initial_state, dump_state
 export has_callback, get_callbacks, set_callback!, add_callback!
 export has_position, get_position, set_position!
 export has_marker, get_marker, set_marker!
+export get_defaults_dict, get_guesses_dict, get_inits_dict
 include("metadata.jl")
 
 export ComponentCondition, ComponentAffect
