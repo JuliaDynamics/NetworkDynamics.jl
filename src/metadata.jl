@@ -204,29 +204,6 @@ or for a symbol referenced by `sni` in a network.
 get_default_or_guess(c::Comp_or_NW, sym) = has_default(c, sym) ? get_default(c, sym) : get_guess(c, sym)
 
 
-# TODO: legacy, only used within show methods
-function def(c::ComponentModel)::Vector{Union{Nothing,Float64}}
-    map(c.sym) do s
-        has_default_or_init(c, s) ? get_default_or_init(c, s) : nothing
-    end
-end
-function guess(c::ComponentModel)::Vector{Union{Nothing,Float64}}
-    map(c.sym) do s
-        has_guess(c, s) ? get_guess(c, s) : nothing
-    end
-end
-function pdef(c::ComponentModel)::Vector{Union{Nothing,Float64}}
-    map(c.psym) do s
-        has_default_or_init(c, s) ? get_default_or_init(c, s) : nothing
-    end
-end
-function pguess(c::ComponentModel)::Vector{Union{Nothing,Float64}}
-    map(c.psym) do s
-        has_guess(c, s) ? get_guess(c, s) : nothing
-    end
-end
-
-
 """
     set_defaults!(nw::Network, s::NWState)
 
