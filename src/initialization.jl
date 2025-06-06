@@ -48,21 +48,43 @@ function _solve_fixpoint(prob, alg::SteadyStateDiffEqAlgorithm; kwargs...)
     sol = SciMLBase.solve(prob, alg; kwargs...)
 end
 
-function initialization_problem(cf::T; t=NaN, apply_bound_transformation, verbose=true) where {T<:ComponentModel}
+function initialization_problem(cf::T;
+    t=NaN ,
+    defaults=get_defaults_dict(cf),
+    guesses=get_guesses_dict(cf),
+    bounds=get_bounds_dict(cf),
+    apply_bound_transformation,
+    verbose=true) where {T<:ComponentModel}
     hasinsym(cf) || throw(ArgumentError("Component model musst have `insym`!"))
 
-    outfree_ms = Tuple((!).(map(s -> has_default(cf, s), sv)) for sv in outsym_normalized(cf))
-    outfixs = Tuple(Float64[has_default(cf, s) ? get_default(cf, s) : NaN for s in sv] for sv in outsym_normalized(cf))
+    # The _m[s] suffix means a bitmask which indicate the free variables
+    # the _fix[s] suffix means an array of same length as the symbols, which contains the fixed values
+    # the [s] only appears for multiple masks, i.e. (out1, out2, ..) and (in1, in2, ...)
 
-    ufree_m = (!).(map(Base.Fix1(has_default, cf), sym(cf)))
-    ufix = Float64[has_default(cf, s) ? get_default(cf, s) : NaN for s in sym(cf)]
+    outfree_ms = Tuple(
+        [!haskey(defaults, s) for s in sv]
+        for sv in outsym_normalized(cf)
+    )
+    outfixs = Tuple(
+        Float64[haskey(defaults, s) ? defaults[s] : NaN for s in sv]
+        for sv in outsym_normalized(cf)
+    )
 
-    infree_ms = Tuple((!).(map(s -> has_default(cf, s), sv)) for sv in insym_normalized(cf))
-    infixs = Tuple(Float64[has_default(cf, s) ? get_default(cf, s) : NaN for s in sv] for sv in insym_normalized(cf))
+    ufree_m = [!haskey(defaults, s) for s in sym(cf)]
+    ufix = Float64[haskey(defaults, s) ? defaults[s] : NaN for s in sym(cf)]
 
-    is_free_p = s -> !is_unused(cf, s) && !has_default(cf, s) # free p are not unused and have no default
-    pfree_m = map(is_free_p, psym(cf))
-    pfix = Float64[has_default(cf, s) ? get_default(cf, s) : NaN for s in psym(cf)]
+    infree_ms = Tuple(
+        [!haskey(defaults, s) for s in sv]
+        for sv in insym_normalized(cf)
+    )
+    infixs = Tuple(
+        Float64[haskey(defaults, s) ? defaults[s] : NaN for s in sv]
+        for sv in insym_normalized(cf)
+    )
+
+    is_free_p = s -> !is_unused(cf, s) && !haskey(defaults, s) # free p are not unused and have no default
+    pfree_m = [is_free_p(s) for s in psym(cf)]
+    pfix = Float64[haskey(defaults, s) ? defaults[s] : NaN for s in psym(cf)]
 
     # count free variables and equations
     Nfree = mapreduce(sum, +, outfree_ms) + sum(ufree_m) + mapreduce(sum, +, infree_ms) + sum(pfree_m)
@@ -98,9 +120,9 @@ function initialization_problem(cf::T; t=NaN, apply_bound_transformation, verbos
     @assert vcat(unl_range_outs..., unl_range_u, unl_range_ins..., unl_range_p) == 1:Nfree
 
     # check for positivity and negativity constraints
-    bounds = map(freesym) do sym
-        if has_bounds(cf, sym)
-            bound = get_bounds(cf, sym)
+    bound_types = map(freesym) do sym
+        if haskey(bounds, sym)
+            bound = bounds[sym]
             if bound[1] >= 0 && bound[2] > bound[1]
                 return :pos
             elseif bound[1] < bound[2]  && bound[2] <= 0
@@ -109,29 +131,29 @@ function initialization_problem(cf::T; t=NaN, apply_bound_transformation, verbos
         end
         :none
     end
-    if !apply_bound_transformation || all(isequal(:none), bounds)
+    if !apply_bound_transformation || all(isequal(:none), bound_types)
         boundT! = identity
         inv_boundT! = identity
     else
         if verbose
-            idxs = findall(!isequal(:none), bounds)
+            idxs = findall(!isequal(:none), bound_types)
             @info "Apply positivity/negativity conserving variable transformation on $(freesym[idxs]) to satisfy bounds."
         end
         boundT! = (u) -> begin
-            for i in eachindex(u, bounds)
-                if bounds[i] == :pos
+            for i in eachindex(u, bound_types)
+                if bound_types[i] == :pos
                     u[i] = u[i]^2
-                elseif bounds[i] == :neg
+                elseif bound_types[i] == :neg
                     u[i] = -u[i]^2
                 end
             end
             return u
         end
         inv_boundT! = (u) -> begin
-            for i in eachindex(u, bounds)
-                if bounds[i] == :pos
+            for i in eachindex(u, bound_types)
+                if bound_types[i] == :pos
                     u[i] = sqrt(u[i])
-                elseif bounds[i] == :neg
+                elseif bound_types[i] == :neg
                     u[i] = sqrt(-u[i])
                 end
             end
@@ -139,11 +161,11 @@ function initialization_problem(cf::T; t=NaN, apply_bound_transformation, verbos
         end
     end
 
-    # check for missin guesses
+    # check for missing guesses
     missing_guesses = Symbol[]
     uguess = map(freesym) do s
-        if has_guess(cf, s)
-            Float64(get_guess(cf, s))
+        if haskey(guesses, s)
+            Float64(guesses[s])
         else
             push!(missing_guesses, s)
         end
@@ -153,9 +175,10 @@ function initialization_problem(cf::T; t=NaN, apply_bound_transformation, verbos
     # apply bound conserving transformation to initial state
     try
         inv_boundT!(uguess)
-    catch
-        throw(ArgumentError("Initial guess violates bounds. Check the docstring on `NetworkDynamics.initialize_component!`\
-                             about bound satisfying transformations!"))
+    catch e
+        throw(ArgumentError("Failed to apply bound-conserving transformation to initial guess. \
+                             This typically happens when a guess has the wrong sign for its bounds \
+                             (e.g., negative guess for a positively-bounded variable). Original error: $(e)"))
     end
 
     N = ForwardDiff.pickchunksize(Nfree)
