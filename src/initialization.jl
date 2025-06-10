@@ -256,59 +256,150 @@ function _overwrite_at_mask!(target, mask, source, range)
 end
 
 """
-    initialize_component!(cf::ComponentModel; verbose=true, apply_bound_transformation=true, kwargs...)
+    initialize_component(cf;
+                         defaults=get_defaults_dict(cf),
+                         guesses=get_guesses_dict(cf),
+                         bounds=get_bounds_dict(cf),
+                         verbose=true,
+                         apply_bound_transformation=true,
+                         t=NaN,
+                         kwargs...)
 
-Initialize a `ComponentModel` by solving the corresponding `NonlinearLeastSquaresProblem`.
-During initialization, everyting which has a `default` value (see [Metadata](@ref)) is considered
-"fixed". All other variables are considered "free" and are solved for. The initial guess for each
-variable depends on the `guess` value in the [Metadata](@ref).
+The function solves a nonlinear problem to find values for all free variables/parameters
+(those without defaults) that satisfy the component equations in steady state
+(i.e. RHS equals 0). The initial guess for each variable depends on the provided
+`guesses` parameter (defaults to the metadata `guess` values).
 
-The result is stored in the `ComponentModel` itself. The values of the free variables are stored
-in the metadata field `init`.
+## Parameters
+- `cf`: ComponentModel to initialize
+- `defaults`: Dictionary of default values (defaults to metadata defaults)
+- `guesses`: Dictionary of initial guesses (defaults to metadata guesses)
+- `bounds`: Dictionary of bounds (defaults to metadata bounds)
+- `verbose`: Whether to print information during initialization
+- `apply_bound_transformation`: Whether to apply bound-conserving transformations
+- `t`: Time at which to solve for steady state. Only relevant for components with explicit time dependency.
+- `kwargs...`: Additional arguments passed to the nonlinear solver
 
-The `kwargs` are passed to the nonlinear solver.
+## Returns
+- Dictionary mapping symbols to their values (complete state including defaults and initialized values)
 
 ## Bounds of free variables
 When encountering any bounds in the free variables, NetworkDynamics will try to conserve them
-by applying a coordinate transforamtion. This behavior can be supressed by setting `apply_bound_transformation`.
+by applying a coordinate transformation. This behavior can be suppressed by setting `apply_bound_transformation=false`.
 The following transformations are used:
 - (a, b) intervals where both a and b are positive are transformed to `u^2`/`sqrt(u)`
 - (a, b) intervals where both a and b are negative are transformed to `-u^2`/`sqrt(-u)`
 """
-function initialize_component!(cf; verbose=true, apply_bound_transformation=true, kwargs...)
-    prob, boundT! = initialization_problem(cf; verbose, apply_bound_transformation)
+function initialize_component(cf;
+                             defaults=get_defaults_dict(cf),
+                             guesses=get_guesses_dict(cf),
+                             bounds=get_bounds_dict(cf),
+                             verbose=true,
+                             apply_bound_transformation=true,
+                             t=NaN,
+                             kwargs...)
+
+    prob, boundT! = initialization_problem(cf; defaults, guesses, bounds, verbose, apply_bound_transformation)
+
+    # Dictionary for complete state (defaults + initialized values)
+    init_state = Dict{Symbol, Float64}()
+    observable_defaults = Dict{Symbol, Float64}()
+    _obssym = obssym(cf)
+    for (sym, val) in defaults
+        if sym in _obssym
+            observable_defaults[sym] = val
+        else
+            init_state[sym] = val
+        end
+    end
 
     if !isempty(prob.u0)
         sol = SciMLBase.solve(prob; verbose, kwargs...)
 
         if sol.prob isa NonlinearLeastSquaresProblem && sol.retcode == SciMLBase.ReturnCode.Stalled
-            # https://github.com/SciML/NonlinearSolve.jl/issues/459
             res = LinearAlgebra.norm(sol.resid)
-            @warn "Initialization for componend stalled with residual $(res)"
+            @warn "Initialization for component stalled with residual $(res)"
         elseif !SciMLBase.successful_retcode(sol.retcode)
             throw(ArgumentError("Initialization failed. Solver returned $(sol.retcode)"))
         else
             verbose && @info "Initialization successful with residual $(LinearAlgebra.norm(sol.resid))"
         end
-        # transform back to original space
+
+        # Transform back to original space
         u = boundT!(copy(sol.u))
-        set_init!.(Ref(cf), SII.variable_symbols(sol), u)
-        resid = sol.resid
+
+        # Add solved values to the complete dictionary
+        free_symbols = SII.variable_symbols(sol)
+        for (sym, val) in zip(free_symbols, u)
+            init_state[sym] = val
+        end
     else
-        resid = init_residual(cf; recalc=true)
-        if resid < 1e-10
-            verbose && @info "No free variables! Residual $(LinearAlgebra.norm(resid))"
-        else
-            @warn "No free variables! However model does not appear to be initialized in steady state. Residual $(LinearAlgebra.norm(resid))"
+        if verbose
+            residual = init_residual(cf, init_state, t=NaN)
+            if residual < 1e-10
+                @info "No free variables! Residual $(LinearAlgebra.norm(residual))"
+            else
+                @warn "No free variables! However model does not appear to be initialized in steady state. Residual $(LinearAlgebra.norm(residual))"
+            end
         end
     end
 
-    set_metadata!(cf, :init_residual, resid)
-
-    broken = broken_bounds(cf)
+    # Check for broken bounds using the complete state
+    broken = broken_bounds(cf, init_state, bounds)
     if !isempty(broken)
-        @warn "Initialized model has broken bounds for $(broken). Use `dump_initial_state(mode)` \
-        to inspect further and try to adapt the initial guesses!"
+        @warn "Initialized model has broken bounds for $(broken). Try to adapt the initial guesses!"
+    end
+
+    # Check for broken observable defaults
+    if !isempty(observable_defaults)
+        broken = broken_observable_defaults(cf, init_state, observable_defaults)
+        if !isempty(broken)
+            @warn "Initialized model has values for observables $(broken) that differ from their specified defaults."
+        end
+    end
+
+    # Check residual if verbose
+    if verbose
+        residual = init_residual(cf, init_state, t=NaN)
+        @info "Initialization complete with residual norm: $(LinearAlgebra.norm(residual))"
+    end
+
+    return init_state
+end
+
+"""
+    initialize_component!(cf::ComponentModel; kwargs...)
+
+Mutating version of [`initialize_component`](@ref). See this docstring for all details.
+In contrast to the non mutating version, this function reads in defaults and guesses from the
+symbolic metadata and writes the initialized values back in to the metadata.
+
+All `kwargs` are passed to `initialize_component`.
+"""
+function initialize_component!(cf; kwargs...)
+    init_state = initialize_component(
+        cf;
+        kwargs...
+    )
+    resid = init_residual(cf, init_state; t=haskey(kwargs, :t) ? kwargs[:t] : NaN)
+
+    for (sym, val) in init_state
+        has_default(cf, sym) && continue
+        set_init!(cf, sym, val)
+    end
+
+    same_state = true
+    from_metadata = get_defaults_or_inits_dict(cf)
+    for (sym, val) in init_state
+        if !haskye(from_metadata, sym) || from_metadata[sym] != val
+            same_state = false
+            break
+        end
+    end
+    if !same_state
+        @warn "Something went wrong with writing the init values to the component. \
+               Did you pass `defaults` to `initialize_component!` which are in conflict with \
+               the stored defaults metadata?"
     end
     cf
 end
@@ -318,51 +409,68 @@ function isinitialized(cf::ComponentModel)
 end
 
 """
-    init_residual(cf::T; t=NaN, recalc=false)
+    init_residual(cf::ComponentModel, [state=get_defaults_or_inits_dict(cf)]; t=NaN)
 
-Calculates the residual |du| for the given component model for the values
-provided via `default` and `init` [Metadata](@ref).
+Calculates the residual |du| for the given component model using the values provided.
+If no state dictionary is provided, it uses the values from default/init [Metadata](@ref).
 
-If recalc=false just return the residual determined in the actual initialization process.
-
-See also [`initialize_component!`](@ref).
+See also [`initialize_component`](@ref).
 """
-function init_residual(cf::T; t=NaN, recalc=false) where {T<:ComponentModel}
-    if !isinitialized(cf)
-        throw(ArgumentError("Component is not initialized."))
+function init_residual(cf::ComponentModel, state=get_defaults_or_inits_dict(cf); t=NaN)
+    # Check that all necessary symbols are present in the state dictionary
+    needed_symbols = Set(vcat(
+        sym(c),                               # states
+        filter(s->is_unused(cf, s), psym(c)), # used parameters
+        insym_flat(c),                        # inputs
+        outsym_flat(c)                        # outputs
+    ))
+
+    if keys(state) ⊆ needed_symbols
+        missing = setdiff(needed_symbols, keys(state))
+        throw(ArgumentError("State dictionary is missing required symbols: $missing. \
+                             These symbols need values to calculate the residual."))
     end
 
-    if recalc || !has_metadata(cf, :init_residual)
-        outs = Tuple(Float64[get_default_or_init(cf, s) for s in sv] for sv in outsym_normalized(cf))
-        u = Float64[get_default_or_init(cf, s) for s in sym(cf)]
-        ins = Tuple(Float64[get_default_or_init(cf, s) for s in sv] for sv in insym_normalized(cf))
-        p = Float64[is_unused(cf, s) ? NaN : get_default_or_init(cf, s) for s in psym(cf)]
-        res = zeros(dim(cf) + sum(outdim_normalized(cf)))
+    outs = Tuple(Float64[get(state, s, NaN) for s in sv] for sv in outsym_normalized(cf))
+    u = Float64[get(state, s, NaN) for s in sym(cf)]
+    ins = Tuple(Float64[get(state, s, NaN) for s in sv] for sv in insym_normalized(cf))
+    p = Float64[is_unused(cf, s) ? NaN : get(state, s, NaN) for s in psym(cf)]
 
-        res_fg  = @views res[1:dim(cf)]
-        res_out = @views res[dim(cf)+1:end]
-        res_out .= RecursiveArrayTools.ArrayPartition(outs...)
-        compfg(cf)(outs, res_fg, u, ins, p, t)
-        res_out .= res_out .- RecursiveArrayTools.ArrayPartition(outs...)
+    res = zeros(dim(cf) + sum(outdim_normalized(cf)))
 
-        LinearAlgebra.norm(res)
-    else
-        LinearAlgebra.norm(get_metadata(cf, :init_residual))
+    res_fg = @views res[1:dim(cf)]
+    res_out = @views res[dim(cf)+1:end]
+    res_out .= RecursiveArrayTools.ArrayPartition(outs...)
+    compfg(cf)(outs, res_fg, u, ins, p, t)
+    res_out .= res_out .- RecursiveArrayTools.ArrayPartition(outs...)
+
+    return LinearAlgebra.norm(res)
+end
+
+function broken_bounds(cf; state=get_defaults_or_inits_dict(cf), bounds=get_bounds_dict(cf))
+    bounds = get_bound_dict(cf)
+    vals = get_initial_state(cf, state, keys(bounds))
+
+    broken = Symbol[]
+    for (val, sym, bound) in zip(vals, keys(bounds), values(bounds))
+        _bounds_satisfied(val, bound) || push!(broken, sym)
     end
+    broken
 end
-
-function broken_bounds(cf)
-    allsyms = vcat(sym(cf), psym(cf), insym_flat(cf), outsym_flat(cf), obssym(cf))
-    boundsyms = filter(s -> has_bounds(cf, s), allsyms)
-    bounds = get_bounds.(Ref(cf), boundsyms)
-    vals = get_initial_state(cf, boundsyms)
-    broken = filter(i -> !bounds_satisfied(vals[i], bounds[i]), 1:length(bounds))
-    boundsyms[broken]
-end
-
-function bounds_satisfied(val, bounds)
+function _bounds_satisfied(val, bounds)
     @assert length(bounds) == 2
     !isnothing(val) && !isnan(val) && first(bounds) ≤ val ≤ last(bounds)
+end
+
+function broken_observable_defaults(cf; state=get_defaults_or_inits_dict(cf), defaults=get_defaults_dict(cf))
+    obs_defaults = filter(p -> p.first ∈ obssym(cf), pairs(defaults))
+    vals = get_initial_state(cf, state, keys(obs_defaults))
+
+    broken = Symbol[]
+    for (val, sym, def) in zip(vals, keys(obs_defaults), values(obs_defaults))
+        val ≈ def || push!(broken, sym)
+    end
+    broken
 end
 
 """

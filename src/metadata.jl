@@ -289,6 +289,20 @@ Only includes symbols that have bounds values set.
 See also: [`get_defaults_dict`](@ref), [`get_guesses_dict`](@ref), [`get_inits_dict`](@ref)
 """
 get_bounds_dict(c::ComponentModel) = _get_metadata_dict(c, :bounds, Tuple{Float64,Float64})
+"""
+    get_defaults_or_inits_dict(c::ComponentModel)
+
+Returns a dictionary mapping symbols to their default values or initialization values (if no default exists).
+Only includes symbols that have either default or init values set.
+
+See also: [`get_defaults_dict`](@ref), [`get_guesses_dict`](@ref), [`get_inits_dict`](@ref)
+"""
+function get_defaults_or_inits_dict(c::ComponentModel)
+    inits = get_inits_dict(c)
+    defaults = get_defaults_dict(c)
+    merge!(inits, defaults) # add defaults to inits, overwriting existing inits
+end
+
 
 """
     set_defaults!(nw::Network, s::NWState)
