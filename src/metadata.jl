@@ -539,7 +539,7 @@ end
 #### Extract initial state from component
 ####
 """
-    get_initial_state(c::ComponentModel, syms; missing_val=nothing)
+    get_initial_state(c::ComponentModel, [state=get_defaults_or_inits_dict(c)], syms; missing_val=nothing)
     get_initial_state(nw::Network, sni::SymbolicIndex; missing_val=nothing)
 
 Returns the initial state for symbol `sym` (single symbol or vector) of the component model `c`.
@@ -547,33 +547,38 @@ Returns `missing_val` if the symbol is not initialized. Also works for observed 
 
 See also: [`dump_initial_state`](@ref).
 """
+get_initial_state(c::ComponentModel, state, s::Symbol; kw...) = only(get_initial_state(c, state, (s,); kw...))
 get_initial_state(c::ComponentModel, s::Symbol; kw...) = only(get_initial_state(c, (s,); kw...))
-function get_initial_state(cf::ComponentModel, syms; missing_val=nothing)
-    obsbuf = any(in(syms), obssym(cf)) ? _get_initial_observed(cf) : nothing
+function get_initial_state(cf::ComponentModel, syms; kw...)
+    get_initial_state(cf, get_defaults_or_inits_dict(), syms; kw...)
+end
+function get_initial_state(cf::ComponentModel, state, syms; missing_val=nothing)
+    obsbuf = if any(in(syms), obssym(cf))
+        _get_component_observed(cf, state; missing_val)
+    else
+        nothing
+    end
     map(syms) do sym
         if (idx = findfirst(isequal(sym), obssym(cf))) !== nothing
             obs = obsbuf[idx]
             isnan(obs) ? missing_val : obs
-        elseif has_default_or_init(cf, sym)
-            Float64(get_default_or_init(cf, sym))
-        else
-            missing_val
+        else haskey(state, sym)
+            Float64(get(state, sym, missing_val))
         end
     end
 end
 get_initial_state(nw::Network, sni; kw...) = get_initial_state(getcomp(nw, sni), sni.subidx; kw...)
 
-function _get_initial_observed(cf)
-    missing_val = NaN
+function _get_component_observed(cf, state)
     obs = Vector{Float64}(undef, length(obssym(cf)))
-    u = get_defaults_or_inits(cf, sym(cf); missing_val)
+    u = get.(Ref(state), sym(cf), NaN)
     ins = if cf isa EdgeModel
-        (get_defaults_or_inits(cf, insym(cf).src; missing_val),
-         get_defaults_or_inits(cf, insym(cf).dst; missing_val))
+        (get.(Ref(state), insym(cf).src, NaN),
+         get.(Ref(state), insym(cf).dst, NaN))
     else
-        (get_defaults_or_inits(cf, insym(cf); missing_val), )
+        (get.(Ref(state), insym(cf), NaN), )
     end
-    p = get_defaults_or_inits(cf, psym(cf); missing_val)
+    p = get.(Ref(state), psym(cf), NaN)
     obsf(cf)(obs, u, ins..., p, NaN)
     obs
 end
@@ -662,7 +667,7 @@ end
 function _append_observed!(lns, cf; sigdigits)
     fidx = length(lns)+1
     syms = obssym(cf)
-    obs = _get_initial_observed(cf)
+    obs = _get_component_observed(cf)
     perm = sortperm(syms)
     for (sym, val) in zip(syms[perm], obs[perm])
         isnan(val) && continue
