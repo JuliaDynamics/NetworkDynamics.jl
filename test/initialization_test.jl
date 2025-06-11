@@ -72,15 +72,23 @@ end
 
     NetworkDynamics.initialize_component!(vf; verbose=true)
     @test NetworkDynamics.init_residual(vf) < 1e-8
-    @test init_residual(vf) ≈ init_residual(vf; recalc=true)
 
     # make empty problem
-    set_default!(vf, :Pm, get_init(vf, :Pm))
-    set_default!(vf, :θ, get_init(vf, :θ))
-    set_default!(vf, :ω, get_init(vf, :ω))
+    vf_comp = copy(vf)
+    set_default!(vf_comp, :Pm, get_init(vf_comp, :Pm))
+    set_default!(vf_comp, :θ, get_init(vf_comp, :θ))
+    set_default!(vf_comp, :ω, get_init(vf_comp, :ω))
 
-    NetworkDynamics.initialize_component!(vf; verbose=true)
+    NetworkDynamics.initialize_component!(vf_comp; verbose=true)
     dump_initial_state(vf)
+    dump_initial_state(vf_comp)
+
+    # check with wrong default/ on observed
+    vf_def = copy(vf)
+    set_default!(vf_def, :Pel, -100)
+    set_bounds!(vf_def, :Pel, (-Inf, 0))
+    @test_logs (:warn, r"has broken bounds") match_mode=:any NetworkDynamics.initialize_component!(vf_def; verbose=false)
+    @test_logs (:warn, r"has observables that differ") match_mode=:any NetworkDynamics.initialize_component!(vf_def; verbose=false)
 end
 
 @testset "test component initialization with bounds" begin

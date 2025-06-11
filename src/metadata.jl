@@ -1,3 +1,10 @@
+# to account for both _metadata(::ComponentModel, ::Symbol) and _metadata(::Network, ::SymbolicIndex)
+const Comp_or_NW = Union{ComponentModel, Network}
+# types for for referencing a single component
+# not union to resolve dispatch ambiguity
+const VCIndex = VIndex{<:Any, Nothing}
+const ECIndex = EIndex{<:Any, Nothing}
+
 ####
 #### per sym metadata
 ####
@@ -10,9 +17,6 @@ function _assert_symbol_exists(c::ComponentModel, s::Symbol)
     contains || throw(ArgumentError("Symbol $s does not exist in component model."))
     return nothing
 end
-
-# to account for both _metadata(::ComponentModel, ::Symbol) and _metadata(::Network, ::SymbolicIndex)
-const Comp_or_NW = Union{ComponentModel, Network}
 
 """
     has_metadata(c::ComponentModel, sym::Symbol, key::Symbol)
@@ -244,11 +248,11 @@ get_defaults_or_inits(nw::Network, idx::VCIndex, syms; kw...) = get_defaults_or_
 get_defaults_or_inits(nw::Network, idx::ECIndex, syms; kw...) = get_defaults_or_inits(getcomp(nw, idx), syms; kw...)
 
 # extract varmaps
-function _get_metadata_dict(c::ComponentModel, key; T=Any)
+function _get_metadata_dict(c::ComponentModel, key, T; conv=identity)
     dict = Dict{Symbol, T}()
     for (sym, smd) in c.symmetadata
         if haskey(smd, key)
-            dict[sym] = smd[key]
+            dict[sym] = conv(smd[key])
         end
     end
     dict
@@ -288,7 +292,7 @@ Only includes symbols that have bounds values set.
 
 See also: [`get_defaults_dict`](@ref), [`get_guesses_dict`](@ref), [`get_inits_dict`](@ref)
 """
-get_bounds_dict(c::ComponentModel) = _get_metadata_dict(c, :bounds, Tuple{Float64,Float64})
+get_bounds_dict(c::ComponentModel) = _get_metadata_dict(c, :bounds, Tuple{Float64,Float64}, conv=Tuple)
 """
     get_defaults_or_inits_dict(c::ComponentModel)
 
@@ -341,11 +345,6 @@ end
 ####
 #### Component metadata
 ####
-# types for for referencing a single component
-# not union to resolve dispatch ambiguity
-const VCIndex = VIndex{<:Any, Nothing}
-const ECIndex = EIndex{<:Any, Nothing}
-
 """
     has_metadata(c::ComponentModel, key::Symbol)
     has_metadata(nw::Network, idx::Union{VIndex,EIndex}, key::Symbol)
@@ -554,22 +553,24 @@ function get_initial_state(cf::ComponentModel, syms; kw...)
 end
 function get_initial_state(cf::ComponentModel, state, syms; missing_val=nothing)
     obsbuf = if any(in(syms), obssym(cf))
-        _get_component_observed(cf, state; missing_val)
+        _get_component_observed(cf, state)
     else
         nothing
     end
-    map(syms) do sym
+    ret = Vector{Union{Float64, typeof(missing_val)}}(undef, length(syms))
+    for (i, sym) in enumerate(syms)
         if (idx = findfirst(isequal(sym), obssym(cf))) !== nothing
             obs = obsbuf[idx]
-            isnan(obs) ? missing_val : obs
+            ret[i] = isnan(obs) ? missing_val : obs
         else haskey(state, sym)
-            Float64(get(state, sym, missing_val))
+            ret[i] = Float64(get(state, sym, missing_val))
         end
     end
+    ret
 end
 get_initial_state(nw::Network, sni; kw...) = get_initial_state(getcomp(nw, sni), sni.subidx; kw...)
 
-function _get_component_observed(cf, state)
+function _get_component_observed(cf, state=get_defaults_or_inits_dict(cf))
     obs = Vector{Float64}(undef, length(obssym(cf)))
     u = get.(Ref(state), sym(cf), NaN)
     ins = if cf isa EdgeModel

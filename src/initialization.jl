@@ -345,23 +345,21 @@ function initialize_component(cf;
     end
 
     # Check for broken bounds using the complete state
-    broken = broken_bounds(cf, init_state, bounds)
-    if !isempty(broken)
-        @warn "Initialized model has broken bounds for $(broken). Try to adapt the initial guesses!"
+    broken_bnds = broken_bounds(cf, init_state, bounds)
+    if !isempty(broken_bnds)
+        broken_msgs = ["$sym = $val (bounds: $lb..$ub)" for (sym, val, (lb, ub)) in broken_bnds]
+        @warn "Initialized model has broken bounds. Try to adapt the initial guesses!" *
+              "\n" * join(broken_msgs, "\n")
     end
 
     # Check for broken observable defaults
     if !isempty(observable_defaults)
-        broken = broken_observable_defaults(cf, init_state, observable_defaults)
-        if !isempty(broken)
-            @warn "Initialized model has values for observables $(broken) that differ from their specified defaults."
+        broken_obs = broken_observable_defaults(cf, init_state, observable_defaults)
+        if !isempty(broken_obs)
+            broken_msgs = ["$sym = $val (default: $def)" for (sym, def, val) in broken_obs]
+            @warn "Initialized model has observables that differ from their specified defaults:" *
+                  "\n" * join(broken_msgs, "\n")
         end
-    end
-
-    # Check residual if verbose
-    if verbose
-        residual = init_residual(cf, init_state, t=NaN)
-        @info "Initialization complete with residual norm: $(LinearAlgebra.norm(residual))"
     end
 
     return init_state
@@ -391,7 +389,7 @@ function initialize_component!(cf; kwargs...)
     same_state = true
     from_metadata = get_defaults_or_inits_dict(cf)
     for (sym, val) in init_state
-        if !haskye(from_metadata, sym) || from_metadata[sym] != val
+        if !haskey(from_metadata, sym) || from_metadata[sym] != val
             same_state = false
             break
         end
@@ -419,10 +417,10 @@ See also [`initialize_component`](@ref).
 function init_residual(cf::ComponentModel, state=get_defaults_or_inits_dict(cf); t=NaN)
     # Check that all necessary symbols are present in the state dictionary
     needed_symbols = Set(vcat(
-        sym(c),                               # states
-        filter(s->is_unused(cf, s), psym(c)), # used parameters
-        insym_flat(c),                        # inputs
-        outsym_flat(c)                        # outputs
+        sym(cf),                               # states
+        filter(s->is_unused(cf, s), psym(cf)), # used parameters
+        insym_flat(cf),                        # inputs
+        outsym_flat(cf)                        # outputs
     ))
 
     if keys(state) ⊆ needed_symbols
@@ -447,28 +445,31 @@ function init_residual(cf::ComponentModel, state=get_defaults_or_inits_dict(cf);
     return LinearAlgebra.norm(res)
 end
 
-function broken_bounds(cf; state=get_defaults_or_inits_dict(cf), bounds=get_bounds_dict(cf))
-    bounds = get_bound_dict(cf)
+function broken_bounds(cf, state=get_defaults_or_inits_dict(cf), bounds=get_bounds_dict(cf))
     vals = get_initial_state(cf, state, keys(bounds))
 
-    broken = Symbol[]
+    broken = []
     for (val, sym, bound) in zip(vals, keys(bounds), values(bounds))
-        _bounds_satisfied(val, bound) || push!(broken, sym)
+        if !bounds_satisfied(val, bound)
+            push!(broken, (sym, val, bound))
+        end
     end
     broken
 end
-function _bounds_satisfied(val, bounds)
+function bounds_satisfied(val, bounds)
     @assert length(bounds) == 2
     !isnothing(val) && !isnan(val) && first(bounds) ≤ val ≤ last(bounds)
 end
 
-function broken_observable_defaults(cf; state=get_defaults_or_inits_dict(cf), defaults=get_defaults_dict(cf))
+function broken_observable_defaults(cf, state=get_defaults_or_inits_dict(cf), defaults=get_defaults_dict(cf))
     obs_defaults = filter(p -> p.first ∈ obssym(cf), pairs(defaults))
-    vals = get_initial_state(cf, state, keys(obs_defaults))
+    vals = get_initial_state(cf, state, keys(obs_defaults); missing_val=NaN)
 
-    broken = Symbol[]
+    broken = []
     for (val, sym, def) in zip(vals, keys(obs_defaults), values(obs_defaults))
-        val ≈ def || push!(broken, sym)
+        if !(val ≈ def)
+            push!(broken, (sym, def, val))
+        end
     end
     broken
 end
