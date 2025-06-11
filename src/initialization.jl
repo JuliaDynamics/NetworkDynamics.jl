@@ -260,9 +260,9 @@ end
                          defaults=get_defaults_dict(cf),
                          guesses=get_guesses_dict(cf),
                          bounds=get_bounds_dict(cf),
-                         additional_defaults=nothing,
-                         additional_guesses=nothing,
-                         additional_bounds=nothing,
+                         default_overrides=nothing,
+                         guess_overrides=nothing,
+                         bound_overrides=nothing,
                          verbose=true,
                          apply_bound_transformation=true,
                          t=NaN,
@@ -279,7 +279,7 @@ The function solves a nonlinear problem to find values for all free variables/pa
 - `defaults`: Dictionary of default values (defaults to metadata defaults)
 - `guesses`: Dictionary of initial guesses (defaults to metadata guesses)
 - `bounds`: Dictionary of bounds (defaults to metadata bounds)
-- `additional_defaults/guesses/bounds`: Dictionary to merge with `defaults`/`guesses`/`bounds`
+- `default/guess/bound_overrides`: Dictionary to merge with `defaults`/`guesses`/`bounds`.
 - `verbose`: Whether to print information during initialization
 - `apply_bound_transformation`: Whether to apply bound-conserving transformations
 - `t`: Time at which to solve for steady state. Only relevant for components with explicit time dependency.
@@ -300,18 +300,18 @@ function initialize_component(cf;
                              defaults=get_defaults_dict(cf),
                              guesses=get_guesses_dict(cf),
                              bounds=get_bounds_dict(cf),
-                             additional_defaults=nothing,
-                             additional_guesses=nothing,
-                             additional_bounds=nothing,
+                             default_overrides=nothing,
+                             guess_overrides=nothing,
+                             bound_overrides=nothing,
                              verbose=true,
                              apply_bound_transformation=true,
                              t=NaN,
                              tol=1e-10,
                              kwargs...)
 
-    defaults = isnothing(additional_defaults) ? defaults : merge(defaults, additional_defaults)
-    guesses  = isnothing(additional_guesses)  ? guesses  : merge(guesses, additional_guesses)
-    bounds   = isnothing(additional_bounds)   ? bounds   : merge(bounds, additional_bounds)
+    defaults = isnothing(default_overrides) ? defaults : merge(defaults, default_overrides)
+    guesses  = isnothing(guess_overrides)   ? guesses  : merge(guesses, guess_overrides)
+    bounds   = isnothing(bound_overrides)   ? bounds   : merge(bounds, bound_overrides)
 
     prob, boundT! = initialization_problem(cf; defaults, guesses, bounds, verbose, apply_bound_transformation)
 
@@ -384,9 +384,9 @@ end
                           defaults=nothing,
                           guesses=nothing,
                           bounds=nothing,
-                          additional_defaults=nothing,
-                          additional_guesses=nothing,
-                          additional_bounds=nothing,
+                          default_overrides=nothing,
+                          guess_overrides=nothing,
+                          bound_overrides=nothing,
                           verbose=true,
                           t=NaN,
                           kwargs...)
@@ -400,8 +400,8 @@ symbolic metadata and writes the initialized values back in to the metadata.
 - `defaults`: Optional dictionary to replace all metadata defaults
 - `guesses`: Optional dictionary to replace all metadata guesses
 - `bounds`: Optional dictionary to replace all metadata bounds
-- `additional_defaults/guesses/bounds`: Dict of additional defaults/guesses/bounds,
-   which can be used to update existing default/guess/bound metadata.
+- `default/guess/bound_overrides`: Dict of values that override existing
+   default/guess/bound metadata.
 - `verbose`: Whether to print information during initialization
 - `t`: Time at which to solve for steady state. Only relevant for components with explicit time dependency.
 - All other `kwargs` are passed to `initialize_component`
@@ -414,9 +414,9 @@ function initialize_component!(cf;
                               defaults=nothing,
                               guesses=nothing,
                               bounds=nothing,
-                              additional_defaults=nothing,
-                              additional_guesses=nothing,
-                              additional_bounds=nothing,
+                              default_overrides=nothing,
+                              guess_overrides=nothing,
+                              bound_overrides=nothing,
                               verbose=true,
                               t=NaN,
                               kwargs...)
@@ -426,9 +426,9 @@ function initialize_component!(cf;
     _sync_metadata!(cf, guesses,  get_guesses_dict,  set_guess!,   delete_guess!,   "guess",   verbose)
     _sync_metadata!(cf, bounds,   get_bounds_dict,   set_bounds!,  delete_bounds!,  "bounds",  verbose)
 
-    for (name, set_fn!, dict) in (("default", set_default!, additional_defaults),
-                                  ("guess", set_guess!, additional_guesses),
-                                  ("bound", set_bounds!, additional_bounds))
+    for (name, set_fn!, dict) in (("default", set_default!, default_overrides),
+                                  ("guess", set_guess!, guess_overrides),
+                                  ("bound", set_bounds!, bound_overrides))
         isnothing(dict) && continue
         for (sym, val) in dict
             set_fn!(cf, sym, val)

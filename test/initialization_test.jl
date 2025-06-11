@@ -292,16 +292,16 @@ end
     @test iszero(init_residual(em, state))
 
     state2 = initialize_component(em;
-        additional_defaults=Dict(:srcθ=>0.0, :dstθ=>0.1),
-        additional_guesses=Dict(:P=>0.0, :₋P=>0.0),
+        default_overrides=Dict(:srcθ=>0.0, :dstθ=>0.1),
+        guess_overrides=Dict(:P=>0.0, :₋P=>0.0),
         verbose=true)
     @test state2[:P]  == -state[:P]
     @test state2[:₋P] == -state[:₋P]
 
     em_mut = copy(em)
     initialize_component!(em_mut;
-        additional_defaults=Dict(:srcθ=>0.0, :dstθ=>0.1),
-        additional_guesses=Dict(:P=>0.0, :₋P=>0.0),
+        default_overrides=Dict(:srcθ=>0.0, :dstθ=>0.1),
+        guess_overrides=Dict(:P=>0.0, :₋P=>0.0),
         verbose=true)
     @test get_guess(em_mut, :P) == 0.0
     @test get_guess(em_mut, :₋P) == 0.0

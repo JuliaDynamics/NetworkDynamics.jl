@@ -60,7 +60,7 @@ Both options take guesses and defaults from metadata by default; however, it is 
 The non-mutating version [`initialize_component`](@ref) is useful when you don't want to modify the metadata, for a more "stateless" approach:
 ```julia
 # Get initialization results as a dictionary
-init_state = initialize_component(vf; additional_defaults=Dict(:x => 4))
+init_state = initialize_component(vf; default_overrides=Dict(:x => 4))
 ```
 It will return a `Dict{Symbol,Float64}` which contains values for **all** symbols in the model.
 
