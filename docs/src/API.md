@@ -152,6 +152,7 @@ describe_edges
 ## Initialization
 ```@docs
 find_fixpoint
+initialize_component
 initialize_component!
 init_residual
 ```

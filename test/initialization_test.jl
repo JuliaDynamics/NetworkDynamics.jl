@@ -73,6 +73,8 @@ end
     NetworkDynamics.initialize_component!(vf; verbose=true)
     @test NetworkDynamics.init_residual(vf) < 1e-8
 
+    @test_throws ErrorException NetworkDynamics.initialize_component!(vf, tol=0.0; verbose=true)
+
     # make empty problem
     vf_comp = copy(vf)
     set_default!(vf_comp, :Pm, get_init(vf_comp, :Pm))
@@ -288,4 +290,11 @@ end
 
     @test iszero(sum(get_initial_state(em, state, [:P, :₋P])))
     @test iszero(init_residual(em, state))
+
+    state2 = initialize_component(em;
+        additional_defaults=Dict(:srcθ=>0.0, :dstθ=>0.1),
+        additional_guesses=Dict(:P=>0.0, :₋P=>0.0),
+        verbose=true)
+    @test state2[:P]  == -state[:P]
+    @test state2[:₋P] == -state[:₋P]
 end

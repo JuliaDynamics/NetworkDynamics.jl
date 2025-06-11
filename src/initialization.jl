@@ -260,9 +260,13 @@ end
                          defaults=get_defaults_dict(cf),
                          guesses=get_guesses_dict(cf),
                          bounds=get_bounds_dict(cf),
+                         additional_defaults=nothing,
+                         additional_guesses=nothing,
+                         additional_bounds=nothing,
                          verbose=true,
                          apply_bound_transformation=true,
                          t=NaN,
+                         tol=1e-10,
                          kwargs...)
 
 The function solves a nonlinear problem to find values for all free variables/parameters
@@ -275,9 +279,11 @@ The function solves a nonlinear problem to find values for all free variables/pa
 - `defaults`: Dictionary of default values (defaults to metadata defaults)
 - `guesses`: Dictionary of initial guesses (defaults to metadata guesses)
 - `bounds`: Dictionary of bounds (defaults to metadata bounds)
+- `additional_defaults/guesses/bounds`: Dictionary to merge with `defaults`/`guesses`/`bounds`
 - `verbose`: Whether to print information during initialization
 - `apply_bound_transformation`: Whether to apply bound-conserving transformations
 - `t`: Time at which to solve for steady state. Only relevant for components with explicit time dependency.
+- `tol`: Tolerance for the residual of the initialized model (defaults to `1e-10`). Init throws error if resid < tol.
 - `kwargs...`: Additional arguments passed to the nonlinear solver
 
 ## Returns
@@ -294,10 +300,18 @@ function initialize_component(cf;
                              defaults=get_defaults_dict(cf),
                              guesses=get_guesses_dict(cf),
                              bounds=get_bounds_dict(cf),
+                             additional_defaults=nothing,
+                             additional_guesses=nothing,
+                             additional_bounds=nothing,
                              verbose=true,
                              apply_bound_transformation=true,
                              t=NaN,
+                             tol=1e-10,
                              kwargs...)
+
+    defaults = isnothing(additional_defaults) ? defaults : merge(defaults, additional_defaults)
+    guesses  = isnothing(additional_guesses)  ? guesses  : merge(guesses, additional_guesses)
+    bounds   = isnothing(additional_bounds)   ? bounds   : merge(bounds, additional_bounds)
 
     prob, boundT! = initialization_problem(cf; defaults, guesses, bounds, verbose, apply_bound_transformation)
 
@@ -322,7 +336,8 @@ function initialize_component(cf;
         elseif !SciMLBase.successful_retcode(sol.retcode)
             throw(ArgumentError("Initialization failed. Solver returned $(sol.retcode)"))
         else
-            verbose && @info "Initialization successful with residual $(LinearAlgebra.norm(sol.resid))"
+            res = LinearAlgebra.norm(sol.resid)
+            verbose && @info "Initialization successful with residual $(res)"
         end
 
         # Transform back to original space
@@ -334,15 +349,14 @@ function initialize_component(cf;
             init_state[sym] = val
         end
     else
-        if verbose
-            residual = init_residual(cf, init_state, t=NaN)
-            if residual < 1e-10
-                @info "No free variables! Residual $(LinearAlgebra.norm(residual))"
-            else
-                @warn "No free variables! However model does not appear to be initialized in steady state. Residual $(LinearAlgebra.norm(residual))"
-            end
-        end
+        res = init_residual(cf, init_state, t=NaN)
+        verbose && @info "No free variables! Residual $(LinearAlgebra.norm(residual))"
     end
+    if res > tol
+        error("Initialized model has a residual larger then specified tolerance $(res) > $(tol)! \
+               Fix initialization or increase tolerance to supress error.")
+    end
+
 
     # Check for broken bounds using the complete state
     broken_bnds = broken_bounds(cf, init_state, bounds)
