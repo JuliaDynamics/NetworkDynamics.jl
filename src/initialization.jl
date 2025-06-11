@@ -94,14 +94,14 @@ function initialization_problem(cf::T;
 
     Neqs = dim(cf)  + mapreduce(length, +, outfree_ms)
 
-
     freesym = vcat(mapreduce((syms, map) -> syms[map], vcat, outsym_normalized(cf), outfree_ms),
                    sym(cf)[ufree_m],
-                   mapreduce((syms, map) -> syms[map], vcat, insym_normalized(cf), outfree_ms),
+                   mapreduce((syms, map) -> syms[map], vcat, insym_normalized(cf), infree_ms),
                    psym(cf)[pfree_m])
+
     @assert length(freesym) == Nfree
     if Neqs < Nfree
-        throw(ArgumentError("Initialization problem underconstraint. $(Neqs) Equations and  $(Nfree) variables: $freesym"))
+        throw(ArgumentError("Initialization problem underconstraint. $(Neqs) Equations for $(Nfree) free variables: $freesym"))
     end
 
     # which parts of the nonlinear u (unl) correspond to which free parameters
@@ -366,41 +366,101 @@ function initialize_component(cf;
 end
 
 """
-    initialize_component!(cf::ComponentModel; kwargs...)
+    initialize_component!(cf::ComponentModel;
+                          defaults=nothing,
+                          guesses=nothing,
+                          bounds=nothing,
+                          verbose=true,
+                          t=NaN,
+                          kwargs...)
 
 Mutating version of [`initialize_component`](@ref). See this docstring for all details.
 In contrast to the non mutating version, this function reads in defaults and guesses from the
 symbolic metadata and writes the initialized values back in to the metadata.
 
-All `kwargs` are passed to `initialize_component`.
+## Parameters
+- `cf`: ComponentModel to initialize
+- `defaults`: Optional dictionary to replace metadata defaults
+- `guesses`: Optional dictionary to replace metadata guesses
+- `bounds`: Optional dictionary to replace metadata bounds
+- `verbose`: Whether to print information during initialization
+- `t`: Time at which to solve for steady state. Only relevant for components with explicit time dependency.
+- All other `kwargs` are passed to `initialize_component`
+
+When `defaults`, `guesses`, or `bounds` are provided, they replace the corresponding
+metadata in the component model. Any keys in the original metadata that are not in
+the provided dictionaries will be removed, and new keys will be added.
 """
-function initialize_component!(cf; kwargs...)
+function initialize_component!(cf;
+                              defaults=nothing,
+                              guesses=nothing,
+                              bounds=nothing,
+                              verbose=true,
+                              t=NaN,
+                              kwargs...)
+
+    # Synchronize defaults, guesses, and bounds
+    _sync_metadata!(cf, defaults, get_defaults_dict, set_default!, delete_default!, "default", verbose)
+    _sync_metadata!(cf, guesses,  get_guesses_dict,  set_guess!,   delete_guess!,   "guess",   verbose)
+    _sync_metadata!(cf, bounds,   get_bounds_dict,   set_bounds!,  delete_bounds!,  "bounds",  verbose)
+
+    # Now proceed with initialization using the updated metadata
     init_state = initialize_component(
         cf;
-        kwargs...
+        verbose=verbose,
+        t=t,
+        kwargs...  # Only pass the remaining kwargs
     )
-    resid = init_residual(cf, init_state; t=haskey(kwargs, :t) ? kwargs[:t] : NaN)
 
+    # Calculate residual for validation
+    resid = init_residual(cf, init_state; t=t)
+
+    # delete all inits
+    for s in keys(get_inits_dict(cf))
+        delete_init!(cf, s)
+    end
+
+    # Write back the initialized values to the component metadata
     for (sym, val) in init_state
         has_default(cf, sym) && continue
         set_init!(cf, sym, val)
     end
 
-    same_state = true
-    from_metadata = get_defaults_or_inits_dict(cf)
-    for (sym, val) in init_state
-        if !haskey(from_metadata, sym) || from_metadata[sym] != val
-            same_state = false
-            break
-        end
-    end
-    if !same_state
-        @warn "Something went wrong with writing the init values to the component. \
-               Did you pass `defaults` to `initialize_component!` which are in conflict with \
-               the stored defaults metadata?"
-    end
     cf
 end
+function _sync_metadata!(cf, provided, get_orig_fn, set_fn!, remove_fn!, type_name, verbose)
+    isnothing(provided) && return
+
+    original = get_orig_fn(cf)
+
+    # Identify keys to be added/updated/removed
+    provided_keys = Set(keys(provided))
+    original_keys = Set(keys(original))
+
+    missing_keys = setdiff(original_keys, provided_keys)
+    new_keys = setdiff(provided_keys, original_keys)
+    common_keys = intersect(provided_keys, original_keys)
+    changed_keys = filter(k -> provided[k] != original[k], collect(common_keys))
+
+    # Remove missing keys
+    for sym in missing_keys
+        remove_fn!(cf, sym)
+        verbose && println("Removed $type_name for $sym (was $(original[sym]))")
+    end
+
+    # Add new keys
+    for sym in new_keys
+        set_fn!(cf, sym, provided[sym])
+        verbose && println("Added $type_name for $sym: $(provided[sym])")
+    end
+
+    # Update changed keys
+    for sym in changed_keys
+        set_fn!(cf, sym, provided[sym])
+        verbose && println("Updated $type_name for $sym: $(original[sym]) → $(provided[sym])")
+    end
+end
+
 
 function isinitialized(cf::ComponentModel)
     all(has_default_or_init(cf, s) || is_unused(cf, s) for s in vcat(sym(cf), psym(cf)))

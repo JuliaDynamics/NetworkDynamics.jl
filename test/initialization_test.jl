@@ -87,8 +87,57 @@ end
     vf_def = copy(vf)
     set_default!(vf_def, :Pel, -100)
     set_bounds!(vf_def, :Pel, (-Inf, 0))
-    @test_logs (:warn, r"has broken bounds") match_mode=:any NetworkDynamics.initialize_component!(vf_def; verbose=false)
-    @test_logs (:warn, r"has observables that differ") match_mode=:any NetworkDynamics.initialize_component!(vf_def; verbose=false)
+    @test_logs (:warn, r"has broken bounds") match_mode=:any begin
+        NetworkDynamics.initialize_component!(vf_def; verbose=false)
+    end
+    @test_logs (:warn, r"has observables that differ") match_mode=:any begin
+        NetworkDynamics.initialize_component!(vf_def; verbose=false)
+    end
+
+    vf_conflict = copy(vf)
+    defaults = NetworkDynamics.get_defaults_dict(vf_conflict)
+    # Modify the defaults dictionary to create conflicting values
+    defaults[:u_r] = 0.0
+    defaults[:u_i] = 1.0
+
+    # Test that the metadata synchronization works with conflicting defaults
+    NetworkDynamics.initialize_component!(vf_conflict;
+        defaults=defaults,
+        verbose=false)
+
+    # Verify the metadata was updated and values were applied correctly
+    @test get_default(vf_conflict, :u_r) == 0.0
+    @test get_default(vf_conflict, :u_i) == 1.0
+
+    # change metadtaa by providing custom input
+    vf_sync = copy(vf)
+    custom_defaults = NetworkDynamics.get_defaults_dict(vf_sync)
+    custom_guesses = NetworkDynamics.get_guesses_dict(vf_sync)
+    custom_bounds = NetworkDynamics.get_bounds_dict(vf_sync)
+
+    delete!(custom_defaults, :u_r) # removed
+    custom_defaults[:θ] = 0.0      # additional
+    custom_defaults[:M] = 0.1      # changed
+
+    delete!(custom_guesses, :θ)    # removed
+    custom_guesses[:u_r] = 0.1     # additional
+    custom_guesses[:ω] = 1.1       # changed
+
+    delete!(custom_bounds, :θ)       # removed
+    custom_bounds[:u_r] = (0.0, 1.1) # additional
+
+    # Initialize with custom metadata
+    NetworkDynamics.initialize_component!(vf_sync;
+        defaults=custom_defaults,
+        guesses=custom_guesses,
+        bounds=custom_bounds,
+        verbose=true
+    )
+
+    # Direct comparison to verify metadata synchronization
+    @test NetworkDynamics.get_defaults_dict(vf_sync) == custom_defaults
+    @test NetworkDynamics.get_guesses_dict(vf_sync) == custom_guesses
+    @test NetworkDynamics.get_bounds_dict(vf_sync) == custom_bounds
 end
 
 @testset "test component initialization with bounds" begin
@@ -192,7 +241,9 @@ end
     set_guess!(vf, :ψ″_d,   0.50574)
     set_guess!(vf, :ψ″_q,   1.353)
     set_guess!(vf, :ω,     -1.55)
-    NetworkDynamics.initialize_component!(vf; verbose=true, apply_bound_transformation=false)
+    @test_logs (:warn, r"broken bounds") match_mode=:any begin
+        NetworkDynamics.initialize_component!(vf; verbose=true, apply_bound_transformation=false)
+    end
     @test get_initial_state(vf, :vf) < 1 # does not conserve
     NetworkDynamics.initialize_component!(vf; verbose=true, apply_bound_transformation=true)
     @test get_initial_state(vf, :vf) > 1 # conserves
@@ -204,9 +255,37 @@ end
     @test get_initial_state(vf, :vf) < 1
 
     # check performance
-
     prob, _ = NetworkDynamics.initialization_problem(vf; apply_bound_transformation=true);
     du = zeros(length(prob.f.resid_prototype));
     b = @b $(prob.f)($du, $(prob.u0), nothing)
     @test iszero(b.allocs)
+end
+
+@testset "Test edge initialization" begin
+    @mtkmodel StaticPowerLine begin
+        @variables begin
+            srcθ(t), [description = "voltage angle at src end", input=true]
+            dstθ(t), [description = "voltage angle at dst end", input=true]
+            P(t), [description = "flow towards node at dst end", output=true]
+            Δθ(t)
+        end
+        @parameters begin
+            active = 1, [description = "line active"]
+            K = 1.63, [description = "Line conductance"]
+            limit = 1, [description = "Line limit"]
+        end
+        @equations begin
+            Δθ ~ srcθ - dstθ
+            P ~ active*K*sin(Δθ)
+        end
+    end
+    em = EdgeModel(StaticPowerLine(name=:line_mtk), [:srcθ], [:dstθ], AntiSymmetric([:P]))
+
+    state = initialize_component(em;
+        defaults=Dict(:K=>1.63, :active=>1, :srcθ=>0.1, :dstθ=>0),
+        guesses=Dict(:P=>0.0, :₋P=>0.0),
+        verbose=true)
+
+    @test iszero(sum(get_initial_state(em, state, [:P, :₋P])))
+    @test iszero(init_residual(em, state))
 end

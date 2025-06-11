@@ -90,7 +90,8 @@ include("callbacks.jl")
 using NonlinearSolve: AbstractNonlinearSolveAlgorithm, NonlinearFunction
 using NonlinearSolve: NonlinearLeastSquaresProblem, NonlinearProblem
 using SteadyStateDiffEq: SteadyStateProblem, SteadyStateDiffEqAlgorithm, SSRootfind
-export find_fixpoint, initialize_component!, init_residual, set_interface_defaults!
+export find_fixpoint, set_interface_defaults!
+export initialize_component, initialize_component!, init_residual
 include("initialization.jl")
 
 include("show.jl")

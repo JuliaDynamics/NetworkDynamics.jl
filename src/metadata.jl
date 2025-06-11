@@ -549,7 +549,7 @@ See also: [`dump_initial_state`](@ref).
 get_initial_state(c::ComponentModel, state, s::Symbol; kw...) = only(get_initial_state(c, state, (s,); kw...))
 get_initial_state(c::ComponentModel, s::Symbol; kw...) = only(get_initial_state(c, (s,); kw...))
 function get_initial_state(cf::ComponentModel, syms; kw...)
-    get_initial_state(cf, get_defaults_or_inits_dict(), syms; kw...)
+    get_initial_state(cf, get_defaults_or_inits_dict(cf), syms; kw...)
 end
 function get_initial_state(cf::ComponentModel, state, syms; missing_val=nothing)
     obsbuf = if any(in(syms), obssym(cf))
@@ -563,7 +563,7 @@ function get_initial_state(cf::ComponentModel, state, syms; missing_val=nothing)
             obs = obsbuf[idx]
             ret[i] = isnan(obs) ? missing_val : obs
         else haskey(state, sym)
-            ret[i] = Float64(get(state, sym, missing_val))
+            ret[i] = get(state, sym, missing_val)
         end
     end
     ret
