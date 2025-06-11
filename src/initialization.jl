@@ -384,6 +384,9 @@ end
                           defaults=nothing,
                           guesses=nothing,
                           bounds=nothing,
+                          additional_defaults=nothing,
+                          additional_guesses=nothing,
+                          additional_bounds=nothing,
                           verbose=true,
                           t=NaN,
                           kwargs...)
@@ -394,9 +397,11 @@ symbolic metadata and writes the initialized values back in to the metadata.
 
 ## Parameters
 - `cf`: ComponentModel to initialize
-- `defaults`: Optional dictionary to replace metadata defaults
-- `guesses`: Optional dictionary to replace metadata guesses
-- `bounds`: Optional dictionary to replace metadata bounds
+- `defaults`: Optional dictionary to replace all metadata defaults
+- `guesses`: Optional dictionary to replace all metadata guesses
+- `bounds`: Optional dictionary to replace all metadata bounds
+- `additional_defaults/guesses/bounds`: Dict of additional defaults/guesses/bounds,
+   which can be used to update existing default/guess/bound metadata.
 - `verbose`: Whether to print information during initialization
 - `t`: Time at which to solve for steady state. Only relevant for components with explicit time dependency.
 - All other `kwargs` are passed to `initialize_component`
@@ -409,6 +414,9 @@ function initialize_component!(cf;
                               defaults=nothing,
                               guesses=nothing,
                               bounds=nothing,
+                              additional_defaults=nothing,
+                              additional_guesses=nothing,
+                              additional_bounds=nothing,
                               verbose=true,
                               t=NaN,
                               kwargs...)
@@ -417,6 +425,16 @@ function initialize_component!(cf;
     _sync_metadata!(cf, defaults, get_defaults_dict, set_default!, delete_default!, "default", verbose)
     _sync_metadata!(cf, guesses,  get_guesses_dict,  set_guess!,   delete_guess!,   "guess",   verbose)
     _sync_metadata!(cf, bounds,   get_bounds_dict,   set_bounds!,  delete_bounds!,  "bounds",  verbose)
+
+    for (name, set_fn!, dict) in (("default", set_default!, additional_defaults),
+                                  ("guess", set_guess!, additional_guesses),
+                                  ("bound", set_bounds!, additional_bounds))
+        isnothing(dict) && continue
+        for (sym, val) in dict
+            set_fn!(cf, sym, val)
+            verbose && println("Set additional $name for $sym: $val")
+        end
+    end
 
     # Now proceed with initialization using the updated metadata
     init_state = initialize_component(
