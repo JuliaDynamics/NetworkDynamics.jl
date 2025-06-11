@@ -350,7 +350,7 @@ function initialize_component(cf;
         end
     else
         res = init_residual(cf, init_state, t=NaN)
-        verbose && @info "No free variables! Residual $(LinearAlgebra.norm(residual))"
+        verbose && @info "No free variables! Residual $(res)"
     end
     if res > tol
         error("Initialized model has a residual larger then specified tolerance $(res) > $(tol)! \

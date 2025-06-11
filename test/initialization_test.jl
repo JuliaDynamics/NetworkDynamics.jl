@@ -45,7 +45,7 @@ end
         @parameters begin
             M=0.005, [description="Inertia"]
             D=0.1, [description="Damping"]
-            V=sqrt(u_r^2 + u_i^2), [description="Voltage magnitude"]
+            V, [description="Voltage magnitude", guess=1]
             ω_ref=0, [description="Reference frequency"]
             Pm, [guess=0.1,description="Mechanical Power"]
             aux, [description="Auxiliary, unused parameter"]
@@ -105,11 +105,12 @@ end
     # Test that the metadata synchronization works with conflicting defaults
     NetworkDynamics.initialize_component!(vf_conflict;
         defaults=defaults,
-        verbose=false)
+        verbose=true)
 
     # Verify the metadata was updated and values were applied correctly
     @test get_default(vf_conflict, :u_r) == 0.0
     @test get_default(vf_conflict, :u_i) == 1.0
+    @test get_init(vf_conflict, :θ) ≈ pi/2
 
     # change metadtaa by providing custom input
     vf_sync = copy(vf)
@@ -119,7 +120,7 @@ end
 
     delete!(custom_defaults, :u_r) # removed
     custom_defaults[:θ] = 0.0      # additional
-    custom_defaults[:M] = 0.1      # changed
+    custom_defaults[:u_i] = 0.0      # changed
 
     delete!(custom_guesses, :θ)    # removed
     custom_guesses[:u_r] = 0.1     # additional
