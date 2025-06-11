@@ -585,22 +585,34 @@ function _get_component_observed(cf, state=get_defaults_or_inits_dict(cf))
 end
 
 """
-    dump_initial_state([IO=stdout], cf::ComponentModel; sigdigits=5, p=true, obs=true)
+    dump_initial_state([IO=stdout], cf::ComponentModel,
+                       [defaults=get_defaults_dict(cf)],
+                       [inits=get_inits_dict(cf)],
+                       [guesses=get_guesses_dict(cf)],
+                       [bounds=get_bounds_dict(cf)];
+                       sigdigits=5, p=true, obs=true)
 
 Prints the initial state of the component model `cf` to `IO` (defaults to stdout). Optionally
 contains parameters and observed.
 
 See also: [`get_initial_state`](@ref) and [`dump_state`](@ref).
 """
-dump_initial_state(cf::ComponentModel; kwargs...) = dump_initial_state(stdout, cf; kwargs...)
-function dump_initial_state(io, cf::ComponentModel; sigdigits=5, p=true, obs=true)
+dump_initial_state(cf::ComponentModel, args...; kwargs...) = dump_initial_state(stdout, cf, args...; kwargs...)
+function dump_initial_state(io, cf::ComponentModel,
+                            defaults=get_defaults_dict(cf),
+                            inits=get_inits_dict(cf),
+                            guesses=get_guesses_dict(cf),
+                            bounds=get_bounds_dict(cf);
+                            sigdigits=5, p=true, obs=true)
+    # Create combined state dict for observed calculation
+    dicts = (; defaults, inits, guesses, bounds)
     lns = AnnotatedString[]
-    symidx  = _append_states!(lns, cf, sort(sym(cf)); sigdigits)
-    psymidx = _append_states!(lns, cf, sort(psym(cf)); sigdigits)
-    insymidx = _append_states!(lns, cf, sort(insym_flat(cf)); sigdigits)
-    outsymidx = _append_states!(lns, cf, sort(outsym_flat(cf)); sigdigits)
+    symidx  = _append_states!(lns, cf, sort(sym(cf)), dicts; sigdigits)
+    psymidx = _append_states!(lns, cf, sort(psym(cf)), dicts; sigdigits)
+    insymidx = _append_states!(lns, cf, sort(insym_flat(cf)), dicts; sigdigits)
+    outsymidx = _append_states!(lns, cf, sort(outsym_flat(cf)), dicts; sigdigits)
 
-    obsidx = _append_observed!(lns, cf; sigdigits)
+    obsidx = _append_observed!(lns, cf, dicts; sigdigits)
     aligned = align_strings(lns)
 
     printstyled(io, "Inputs:\n", bold=true)
@@ -625,7 +637,7 @@ function dump_initial_state(io, cf::ComponentModel; sigdigits=5, p=true, obs=tru
         _printlines(io, aligned, obsidx; newline=false)
     end
 end
-function _append_states!(lns, cf, syms; sigdigits)
+function _append_states!(lns, cf, syms, dicts; sigdigits)
     fidx = length(lns)+1
     for sym in syms
         str = "  &"
@@ -635,26 +647,26 @@ function _append_states!(lns, cf, syms; sigdigits)
             str *= string(sym)
         end
         str *= " &&= "
-        if has_default_or_init(cf, sym)
-            val = get_default_or_init(cf, sym)
+        if haskey(dicts.defaults, sym)
+            val = dicts.defaults[sym]
             val_str = str_significant(val; sigdigits, phantom_minus=true)
-            if has_default(cf, sym)
-                str*= styled"{blue:$(val_str)}"
-            else
-                str *= styled"{yellow:$(val_str)}"
-            end
+            str *= styled"{blue:$(val_str)}"
+        elseif haskey(dicts.inits, sym)
+            val = dicts.inits[sym]
+            val_str = str_significant(val; sigdigits, phantom_minus=true)
+            str *= styled"{yellow:$(val_str)}"
         else
             val = nothing
             str *= styled"{red: uninitialized}"
         end
         str *= "&&"
-        if has_guess(cf, sym)
-            guess = str_significant(get_guess(cf, sym); sigdigits, phantom_minus=true)
+        if haskey(dicts.guesses, sym)
+            guess = str_significant(dicts.guesses[sym]; sigdigits, phantom_minus=true)
             str *= " (guess $guess)"
         end
         str *= "&&"
-        if has_bounds(cf, sym)
-            lb, ub = get_bounds(cf, sym)
+        if haskey(dicts.bounds, sym)
+            lb, ub = dicts.bounds[sym]
             if isnothing(val) || bounds_satisfied(val, (lb, ub))
                 str *= " (bounds $lb..$ub)"
             else
@@ -665,17 +677,17 @@ function _append_states!(lns, cf, syms; sigdigits)
     end
     fidx:length(lns)
 end
-function _append_observed!(lns, cf; sigdigits)
+function _append_observed!(lns, cf, dicts; sigdigits)
     fidx = length(lns)+1
     syms = obssym(cf)
-    obs = _get_component_observed(cf)
+    obs = _get_component_observed(cf, merge(dicts.inits, dicts.defaults))
     perm = sortperm(syms)
     for (sym, val) in zip(syms[perm], obs[perm])
         isnan(val) && continue
         str = "  &" * string(sym) * " &&= " * str_significant(val; sigdigits, phantom_minus=true)
         str *= "&& &&"
-        if has_bounds(cf, sym)
-            lb, ub = get_bounds(cf, sym)
+        if haskey(dicts.bounds, sym)
+            lb, ub = dicts.bounds[sym]
             if bounds_satisfied(val, (lb, ub))
                 str *= " (bounds $lb..$ub)"
             else
