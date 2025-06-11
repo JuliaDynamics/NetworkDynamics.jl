@@ -1,5 +1,5 @@
 # Initialization
-Initialization of the system describes the process of finding valid initial conditions, mostly a fixpoint of the system.
+Initialization of the system describes the process of finding valid initial conditions, mostly a fixed point of the system.
 We distinguish between two types of initialization: full system initialization and component initialization.
 
 ## Full-System Initialization
@@ -10,8 +10,8 @@ To do so, you can use [`find_fixpoint`](@ref), which creates a `SteadyStateProbl
 ## Component-wise Initialization
 In contrast to full-system initialization the goal of component-wise initialization is to find a valid initial condition for a single component first, given a network coupling.
 
-This can be useful in cases, where there are nontrivial internal dynamics and states within a single vertex or edge.
-The idea of component-wise initialization is to find internal states which match a given "network coupling" (fixed inputs and outputs).
+This can be useful in cases where there are nontrivial internal dynamics and states within a single vertex or edge.
+The idea of component-wise initialization is to find internal states that match a given "network coupling" (fixed inputs and outputs).
 
 ### Mathematical Meaning
 According to the [Mathematical Model](@ref) of NetworkDynamics.jl, a component forms an "input-output-system" of the form
@@ -22,7 +22,7 @@ M\,\frac{\mathrm{d}}{\mathrm{d}t}x &= f(x, i, p, t)\\
 y &= g(x, i, p, t)
 \end{aligned}
 ```
-where $x$ are the internal states, $i$ are the inputs, $y$ are the outputs, and $p$ are the parmeters.
+where $x$ are the internal states, $i$ are the inputs, $y$ are the outputs, and $p$ are the parameters.
 To initialize at a fixpoint, we require the RHS to be zero,
 ```math
 \begin{aligned}
@@ -32,7 +32,7 @@ To initialize at a fixpoint, we require the RHS to be zero,
 ```
 forming a nonlinear least squares problem for the residual.
 Each variable in $x$, $i$, $y$ and $p$ is either considered **free** or **fixed** with respect to the nonlinear problem stated above.
-Symbols, which have a **default** value (see [Metadata](@ref)) are considered *fixed*.
+Symbols that have a **default** value (see [Metadata](@ref)) are considered *fixed*.
 All other symbols are considered *free* and must provide a **guess** value as an initial starting point for the nonlinear solver.
 
 The **defaults** and **guesses** can be either obtained from the [Metadata](@ref) directly, or provided as arguments.
@@ -55,9 +55,9 @@ NetworkDynamics provides two approaches for component-wise initialization:
 1. **Non-mutating approach** using [`initialize_component`](@ref): Returns a dictionary of values without modifying the component.
 2. **Mutating approach** using [`initialize_component!`](@ref): Directly updates the component metadata with initialization results.
 
-Both options take guesses and defaults from metadata per default, however it is possible to specify otherwise (see method documentation).
+Both options take guesses and defaults from metadata by default; however, it is possible to specify otherwise (see method documentation).
 
-The non-mutating version [`initialize_component`](@ref) is useful when you don't want to modify the metadata for a more "stateless" approach:
+The non-mutating version [`initialize_component`](@ref) is useful when you don't want to modify the metadata, for a more "stateless" approach:
 ```julia
 # Get initialization results as a dictionary
 init_state = initialize_component(vf; additional_defaults=Dict(:x => 4))
@@ -105,9 +105,9 @@ end
 sys = Swing(name=:swing)
 vf = VertexModel(sys, [:i_r, :i_i], [:u_r, :u_i])
 ```
-You can see in the provided [metadata](@ref), that we've set `default` values for the node outputs `u_r`, `u_i`, the node inputs `i_r`, `i_i` and most parameters.
+You can see in the provided [metadata](@ref) that we've set `default` values for the node outputs `u_r`, `u_i`, the node inputs `i_r`, `i_i`, and most parameters.
 For some states and parameters, we've only provided a `guess` rather than a default.
-Variables which only have `guess`es are considered "tunable" for the initialization algorithm.
+Variables that only have `guess`es are considered "tunable" for the initialization algorithm.
 
 ### Using the non-mutating initialization
 
