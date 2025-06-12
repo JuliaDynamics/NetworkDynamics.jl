@@ -113,7 +113,7 @@ Variables that only have `guess`es are considered "tunable" for the initializati
 
 We can use [`initialize_component`](@ref) to get the initialized values without modifying the component:
 ```@example compinit
-init_values = initialize_component(vf; additional_defaults=Dict(:u_i=>0), verbose=true)
+init_values = initialize_component(vf; default_overrides=Dict(:u_i=>0), verbose=true)
 ```
 The code returns a dictionary which pins *all* the variables of the component to some values which satisfy the initialization condition.
 
