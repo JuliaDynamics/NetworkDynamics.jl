@@ -20,8 +20,8 @@ WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"
 [weakdeps]
 Electron = "a1bb12fb-d4d1-54b4-b10a-ee7951ef7ad3"
 
-[sources]
-NetworkDynamics = {path = ".."}
+[sources.NetworkDynamics]
+path = ".."
 
 [extensions]
 NetworkDynamicsInspectorElectronExt = ["Electron"]
@@ -39,5 +39,5 @@ Observables = "0.5.5"
 OrderedCollections = "1.8.0"
 PrecompileTools = "1.2.1"
 SciMLBase = "2.75.1"
-WGLMakie = "0.11"
+WGLMakie = "0.11, 0.12"
 julia = "1.10"
