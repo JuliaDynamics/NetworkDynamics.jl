@@ -5,6 +5,7 @@ using ModelingToolkit: t_nounits as t, D_nounits as Dt
 using SymbolicIndexingInterface: SymbolicIndexingInterface as SII
 using Chairmarks
 
+(isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
 
 @testset "test find_fixpoint" begin
     function swing_equation!(dv, v, esum, (M, P, D), t)
@@ -45,7 +46,7 @@ end
         @parameters begin
             M=0.005, [description="Inertia"]
             D=0.1, [description="Damping"]
-            V=sqrt(u_r^2 + u_i^2), [description="Voltage magnitude"]
+            V, [description="Voltage magnitude", guess=1]
             ω_ref=0, [description="Reference frequency"]
             Pm, [guess=0.1,description="Mechanical Power"]
             aux, [description="Auxiliary, unused parameter"]
@@ -72,15 +73,75 @@ end
 
     NetworkDynamics.initialize_component!(vf; verbose=true)
     @test NetworkDynamics.init_residual(vf) < 1e-8
-    @test init_residual(vf) ≈ init_residual(vf; recalc=true)
+
+    @test_throws ErrorException NetworkDynamics.initialize_component!(vf, tol=0.0; verbose=true)
 
     # make empty problem
-    set_default!(vf, :Pm, get_init(vf, :Pm))
-    set_default!(vf, :θ, get_init(vf, :θ))
-    set_default!(vf, :ω, get_init(vf, :ω))
+    vf_comp = copy(vf)
+    set_default!(vf_comp, :Pm, get_init(vf_comp, :Pm))
+    set_default!(vf_comp, :θ, get_init(vf_comp, :θ))
+    set_default!(vf_comp, :ω, get_init(vf_comp, :ω))
 
-    NetworkDynamics.initialize_component!(vf; verbose=true)
+    NetworkDynamics.initialize_component!(vf_comp; verbose=true)
     dump_initial_state(vf)
+    dump_initial_state(vf_comp)
+
+    # check with wrong default/ on observed
+    vf_def = copy(vf)
+    set_default!(vf_def, :Pel, -100)
+    set_bounds!(vf_def, :Pel, (-Inf, 0))
+    @test_logs (:warn, r"has broken bounds") match_mode=:any begin
+        NetworkDynamics.initialize_component!(vf_def; verbose=false)
+    end
+    @test_logs (:warn, r"has observables that differ") match_mode=:any begin
+        NetworkDynamics.initialize_component!(vf_def; verbose=false)
+    end
+
+    vf_conflict = copy(vf)
+    defaults = NetworkDynamics.get_defaults_dict(vf_conflict)
+    # Modify the defaults dictionary to create conflicting values
+    defaults[:u_r] = 0.0
+    defaults[:u_i] = 1.0
+
+    # Test that the metadata synchronization works with conflicting defaults
+    NetworkDynamics.initialize_component!(vf_conflict;
+        defaults=defaults,
+        verbose=true)
+
+    # Verify the metadata was updated and values were applied correctly
+    @test get_default(vf_conflict, :u_r) == 0.0
+    @test get_default(vf_conflict, :u_i) == 1.0
+    @test get_init(vf_conflict, :θ) ≈ pi/2
+
+    # change metadtaa by providing custom input
+    vf_sync = copy(vf)
+    custom_defaults = NetworkDynamics.get_defaults_dict(vf_sync)
+    custom_guesses = NetworkDynamics.get_guesses_dict(vf_sync)
+    custom_bounds = NetworkDynamics.get_bounds_dict(vf_sync)
+
+    delete!(custom_defaults, :u_r) # removed
+    custom_defaults[:θ] = 0.0      # additional
+    custom_defaults[:u_i] = 0.0      # changed
+
+    delete!(custom_guesses, :θ)    # removed
+    custom_guesses[:u_r] = 0.1     # additional
+    custom_guesses[:ω] = 1.1       # changed
+
+    delete!(custom_bounds, :θ)       # removed
+    custom_bounds[:u_r] = (0.0, 1.1) # additional
+
+    # Initialize with custom metadata
+    NetworkDynamics.initialize_component!(vf_sync;
+        defaults=custom_defaults,
+        guesses=custom_guesses,
+        bounds=custom_bounds,
+        verbose=true
+    )
+
+    # Direct comparison to verify metadata synchronization
+    @test NetworkDynamics.get_defaults_dict(vf_sync) == custom_defaults
+    @test NetworkDynamics.get_guesses_dict(vf_sync) == custom_guesses
+    @test NetworkDynamics.get_bounds_dict(vf_sync) == custom_bounds
 end
 
 @testset "test component initialization with bounds" begin
@@ -184,7 +245,9 @@ end
     set_guess!(vf, :ψ″_d,   0.50574)
     set_guess!(vf, :ψ″_q,   1.353)
     set_guess!(vf, :ω,     -1.55)
-    NetworkDynamics.initialize_component!(vf; verbose=true, apply_bound_transformation=false)
+    @test_logs (:warn, r"broken bounds") match_mode=:any begin
+        NetworkDynamics.initialize_component!(vf; verbose=true, apply_bound_transformation=false)
+    end
     @test get_initial_state(vf, :vf) < 1 # does not conserve
     NetworkDynamics.initialize_component!(vf; verbose=true, apply_bound_transformation=true)
     @test get_initial_state(vf, :vf) > 1 # conserves
@@ -196,9 +259,183 @@ end
     @test get_initial_state(vf, :vf) < 1
 
     # check performance
-
     prob, _ = NetworkDynamics.initialization_problem(vf; apply_bound_transformation=true);
     du = zeros(length(prob.f.resid_prototype));
     b = @b $(prob.f)($du, $(prob.u0), nothing)
     @test iszero(b.allocs)
+end
+
+@testset "Test edge initialization" begin
+    @mtkmodel StaticPowerLine begin
+        @variables begin
+            srcθ(t), [description = "voltage angle at src end", input=true]
+            dstθ(t), [description = "voltage angle at dst end", input=true]
+            P(t), [description = "flow towards node at dst end", output=true]
+            Δθ(t)
+        end
+        @parameters begin
+            active = 1, [description = "line active"]
+            K = 1.63, [description = "Line conductance"]
+            limit = 1, [description = "Line limit"]
+        end
+        @equations begin
+            Δθ ~ srcθ - dstθ
+            P ~ active*K*sin(Δθ)
+        end
+    end
+    em = EdgeModel(StaticPowerLine(name=:line_mtk), [:srcθ], [:dstθ], AntiSymmetric([:P]))
+
+    state = initialize_component(em;
+        defaults=Dict(:K=>1.63, :active=>1, :srcθ=>0.1, :dstθ=>0),
+        guesses=Dict(:P=>0.0, :₋P=>0.0),
+        verbose=true)
+
+    @test iszero(sum(get_initial_state(em, state, [:P, :₋P])))
+    @test iszero(init_residual(em, state))
+
+    # test init_residual with missing state:
+    state_minimal = Dict(
+        :P => state[:P],
+        :₋P =>state[:₋P],
+        :K => state[:K],
+        :active => state[:active],
+        :dstθ => state[:dstθ],
+        :srcθ=> state[:srcθ],
+    )
+    @test init_residual(em, state_minimal) == 0
+    delete!(state_minimal, :P)
+    @test_throws ArgumentError init_residual(em, state_minimal)
+
+    state2 = initialize_component(em;
+        default_overrides=Dict(:srcθ=>0.0, :dstθ=>0.1),
+        guess_overrides=Dict(:P=>0.0, :₋P=>0.0),
+        verbose=true)
+    @test state2[:P]  == -state[:P]
+    @test state2[:₋P] == -state[:₋P]
+
+    em_mut = copy(em)
+    initialize_component!(em_mut;
+        default_overrides=Dict(:srcθ=>0.0, :dstθ=>0.1),
+        guess_overrides=Dict(:P=>0.0, :₋P=>0.0),
+        verbose=true)
+    @test get_guess(em_mut, :P) == 0.0
+    @test get_guess(em_mut, :₋P) == 0.0
+    @test get_default(em_mut, :srcθ) == 0.0
+    @test get_default(em_mut, :dstθ) == 0.1
+end
+
+@testset "Initialization constraint construction" begin
+    using NetworkDynamics: @initconstraint, InitConstraint
+    ic1 = @initconstraint :x + :y
+    ic2 = InitConstraint([:x, :y], 1) do out, u
+        out[1] = u[:x] + u[:y]
+    end
+    out1 = [0.0]
+    out2 = [0.0]
+    u = rand(2)
+    ic1(out1, u)
+    ic2(out2, u)
+    @test out1 == out2
+
+    ic1 = @initconstraint begin
+        :x + :y
+        :z^2
+    end
+    ic2 = InitConstraint([:x, :y, :z], 2) do out, u
+        out[1] = u[:x] + u[:y]
+        out[2] = u[:z]^2
+    end
+    out1 = [0.0, 0.0]
+    out2 = [0.0, 0.0]
+    u = rand(3)
+    ic1(out1, u)
+    ic2(out2, u)
+    @test out1 == out2
+end
+
+@testset "test input mapping" begin
+    vm = Lib.swing_mtk()
+    c = @initconstraint begin
+        :Pdamping # observable
+        :P # input
+        :θ # output
+        :ω # state
+        :Pmech # parameter
+    end
+    mapping! = NetworkDynamics.generate_init_input_mapping(vm, c)
+    syms = zeros(5)
+    mapping!(syms, ([3],), [NaN, 4], ([2],), [NaN, 5, NaN], [1])
+    @test syms == 1:5
+
+    em = Lib.line_mtk()
+    c = @initconstraint begin
+        :P # output
+        :dstθ # input
+        :active #param
+        :Δθ # obs
+    end
+    mapping! = NetworkDynamics.generate_init_input_mapping(em, c)
+    syms = zeros(4)
+    mapping!(syms, ([NaN],[1]), [], ([NaN],[2]), [NaN, NaN, 3], [4])
+    @test syms == 1:4
+end
+
+@testset "init with additonal contraints" begin
+    @mtkmodel InitSwing begin
+        @variables begin
+            u_r(t), [description="bus d-voltage", output=true, guess=1]
+            u_i(t)=1, [description="bus q-voltage", output=true, guess=1]
+            i_r(t)=1, [description="bus d-current (flowing into bus)", input=true]
+            i_i(t)=0.1, [description="bus d-current (flowing into bus)", input=true]
+            u_mag(t), [description="bus voltage magnitude"]
+            ω(t), [guess=0.0, description="Rotor frequency"]
+            θ(t), [guess=0.0, bounds=[-π, π], description="Rotor angle"]
+            Pel(t), [guess=1, description="Electrical Power injected into the grid"]
+        end
+        @parameters begin
+            M=0.005, [description="Inertia"]
+            D=0.1, [description="Damping"]
+            V, [description="Voltage magnitude", guess=1]
+            ω_ref=0, [description="Reference frequency"]
+            Pm, [guess=0.1,description="Mechanical Power"]
+            aux, [description="Auxiliary, unused parameter"]
+        end
+        @equations begin
+            Dt(θ) ~ ω - ω_ref
+            Dt(ω) ~ 1/M * (Pm - D*ω - Pel)
+            Pel ~ u_r*i_r + u_i*i_i
+            u_r ~ V*cos(θ)
+            u_i ~ V*sin(θ)
+            u_mag ~ sqrt(u_r^2 + u_i^2)
+        end
+    end
+    vm = VertexModel(InitSwing(name=:swing), [:i_r, :i_i], [:u_r, :u_i])
+    set_initconstraint!(vm, @initconstraint begin
+        :u_mag - 1
+        :Pel - 0.1
+    end)
+    initialize_component!(vm)
+    @test get_initial_state(vm, :u_mag) ≈ 1
+    @test get_initial_state(vm, :Pel) ≈ 0.1
+
+    # test if the whole observable stuff is allocation free
+    prob, _ = NetworkDynamics.initialization_problem(vm; apply_bound_transformation=true);
+    du = zeros(length(prob.f.resid_prototype));
+    b = @b $(prob.f)($du, $(prob.u0), nothing)
+    @test iszero(b.allocs)
+
+    @test_throws ArgumentError set_initconstraint!(vm, @initconstraint :wrong_symbol)
+
+    em = Lib.line_mtk()
+    delete_default!(em, :active)
+    set_initconstraint!(em, @initconstraint begin
+        :Δθ - 1 # observable
+        :srcθ
+        :P # force P to zero
+    end)
+    initialize_component!(em, guess_overrides=Dict(:P=>0,:₋P=>0,:srcθ=>π,:dstθ=>-π,:active=>1.0), verbose=true)
+    @test get_initial_state(em, :Δθ) ≈ 1
+    @test get_initial_state(em, :dstθ) ≈ -1
+    @test get_initial_state(em, :P) ≈ 0 atol=1e-10
+    @test get_initial_state(em, :active) ≈ 0 atol=1e-10
 end

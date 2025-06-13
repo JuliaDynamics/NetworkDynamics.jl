@@ -35,7 +35,7 @@ Additional kw arguments:
 """
 function VertexModel(sys::ODESystem, inputs, outputs; verbose=false, name=getname(sys),
                      ff_to_constraint=true, extin=nothing, kwargs...)
-    warn_events(sys)
+    warn_missing_features(sys)
     inputs = inputs isa AbstractVector ? inputs : [inputs]
     outputs = outputs isa AbstractVector ? outputs : [outputs]
 
@@ -122,7 +122,7 @@ Additional kw arguments:
 """
 function EdgeModel(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=false, name=getname(sys),
                    ff_to_constraint=false, extin=nothing, kwargs...)
-    warn_events(sys)
+    warn_missing_features(sys)
     srcin = srcin isa AbstractVector ? srcin : [srcin]
     dstin = dstin isa AbstractVector ? dstin : [dstin]
 
@@ -316,6 +316,16 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     # assert the ordering of states and equations
     explicit_states = Symbolic[eq_type(eq)[2] for eq in eqs if !isnothing(eq_type(eq)[2])]
     implicit_states = setdiff(unknowns(sys), explicit_states) ∪ implicit_outputs
+
+    if length(explicit_states) + length(implicit_states) !== length(eqs)
+        buf = IOBuffer()
+        println(buf, "The number of states does not match the number of equations.")
+        println(buf, "Explicit states: ", explicit_states)
+        println(buf, "Implicit states: ", implicit_states)
+        println(buf, "$(length(eqs)) Equations.")
+        throw(ArgumentError(String(take!(buf))))
+    end
+
     states = map(eqs) do eq
         type = eq_type(eq)
         isnothing(type[2]) ? pop!(implicit_states) : type[2]

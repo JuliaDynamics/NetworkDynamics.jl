@@ -48,21 +48,43 @@ function _solve_fixpoint(prob, alg::SteadyStateDiffEqAlgorithm; kwargs...)
     sol = SciMLBase.solve(prob, alg; kwargs...)
 end
 
-function initialization_problem(cf::T; t=NaN, apply_bound_transformation, verbose=true) where {T<:ComponentModel}
+function initialization_problem(cf::T;
+    t=NaN ,
+    defaults=get_defaults_dict(cf),
+    guesses=get_guesses_dict(cf),
+    bounds=get_bounds_dict(cf),
+    apply_bound_transformation,
+    verbose=true) where {T<:ComponentModel}
     hasinsym(cf) || throw(ArgumentError("Component model musst have `insym`!"))
 
-    outfree_ms = Tuple((!).(map(s -> has_default(cf, s), sv)) for sv in outsym_normalized(cf))
-    outfixs = Tuple(Float64[has_default(cf, s) ? get_default(cf, s) : NaN for s in sv] for sv in outsym_normalized(cf))
+    # The _m[s] suffix means a bitmask which indicate the free variables
+    # the _fix[s] suffix means an array of same length as the symbols, which contains the fixed values
+    # the [s] only appears for multiple masks, i.e. (out1, out2, ..) and (in1, in2, ...)
 
-    ufree_m = (!).(map(Base.Fix1(has_default, cf), sym(cf)))
-    ufix = Float64[has_default(cf, s) ? get_default(cf, s) : NaN for s in sym(cf)]
+    outfree_ms = Tuple(
+        [!haskey(defaults, s) for s in sv]
+        for sv in outsym_normalized(cf)
+    )
+    outfixs = Tuple(
+        Float64[haskey(defaults, s) ? defaults[s] : NaN for s in sv]
+        for sv in outsym_normalized(cf)
+    )
 
-    infree_ms = Tuple((!).(map(s -> has_default(cf, s), sv)) for sv in insym_normalized(cf))
-    infixs = Tuple(Float64[has_default(cf, s) ? get_default(cf, s) : NaN for s in sv] for sv in insym_normalized(cf))
+    ufree_m = [!haskey(defaults, s) for s in sym(cf)]
+    ufix = Float64[haskey(defaults, s) ? defaults[s] : NaN for s in sym(cf)]
 
-    is_free_p = s -> !is_unused(cf, s) && !has_default(cf, s) # free p are not unused and have no default
-    pfree_m = map(is_free_p, psym(cf))
-    pfix = Float64[has_default(cf, s) ? get_default(cf, s) : NaN for s in psym(cf)]
+    infree_ms = Tuple(
+        [!haskey(defaults, s) for s in sv]
+        for sv in insym_normalized(cf)
+    )
+    infixs = Tuple(
+        Float64[haskey(defaults, s) ? defaults[s] : NaN for s in sv]
+        for sv in insym_normalized(cf)
+    )
+
+    is_free_p = s -> !is_unused(cf, s) && !haskey(defaults, s) # free p are not unused and have no default
+    pfree_m = [is_free_p(s) for s in psym(cf)]
+    pfix = Float64[haskey(defaults, s) ? defaults[s] : NaN for s in psym(cf)]
 
     # count free variables and equations
     Nfree = mapreduce(sum, +, outfree_ms) + sum(ufree_m) + mapreduce(sum, +, infree_ms) + sum(pfree_m)
@@ -70,16 +92,25 @@ function initialization_problem(cf::T; t=NaN, apply_bound_transformation, verbos
     # return "fake NonlinearProblem" if no free variables
     iszero(Nfree) && return ((; u0=[]), identity)
 
-    Neqs = dim(cf)  + mapreduce(length, +, outfree_ms)
+    # check for additonal equations
+    additional_constraint = has_initconstraint(cf) ? get_initconstraint(cf) : nothing
+    additional_Neqs = isnothing(additional_constraint) ? 0 : dim(additional_constraint)
 
+    Neqs = dim(cf) + mapreduce(length, +, outfree_ms) + additional_Neqs
 
     freesym = vcat(mapreduce((syms, map) -> syms[map], vcat, outsym_normalized(cf), outfree_ms),
                    sym(cf)[ufree_m],
-                   mapreduce((syms, map) -> syms[map], vcat, insym_normalized(cf), outfree_ms),
+                   mapreduce((syms, map) -> syms[map], vcat, insym_normalized(cf), infree_ms),
                    psym(cf)[pfree_m])
+
     @assert length(freesym) == Nfree
     if Neqs < Nfree
-        throw(ArgumentError("Initialization problem underconstraint. $(Neqs) Equations and  $(Nfree) variables: $freesym"))
+        throw(
+            ArgumentError("Initialization problem underconstraint. \
+                           $(Neqs) Equations for $(Nfree) free variables: $freesym. Consider \
+                           passing additional constraints using InitConstraint().")
+        )
+
     end
 
     # which parts of the nonlinear u (unl) correspond to which free parameters
@@ -98,9 +129,9 @@ function initialization_problem(cf::T; t=NaN, apply_bound_transformation, verbos
     @assert vcat(unl_range_outs..., unl_range_u, unl_range_ins..., unl_range_p) == 1:Nfree
 
     # check for positivity and negativity constraints
-    bounds = map(freesym) do sym
-        if has_bounds(cf, sym)
-            bound = get_bounds(cf, sym)
+    bound_types = map(freesym) do sym
+        if haskey(bounds, sym)
+            bound = bounds[sym]
             if bound[1] >= 0 && bound[2] > bound[1]
                 return :pos
             elseif bound[1] < bound[2]  && bound[2] <= 0
@@ -109,29 +140,29 @@ function initialization_problem(cf::T; t=NaN, apply_bound_transformation, verbos
         end
         :none
     end
-    if !apply_bound_transformation || all(isequal(:none), bounds)
+    if !apply_bound_transformation || all(isequal(:none), bound_types)
         boundT! = identity
         inv_boundT! = identity
     else
         if verbose
-            idxs = findall(!isequal(:none), bounds)
+            idxs = findall(!isequal(:none), bound_types)
             @info "Apply positivity/negativity conserving variable transformation on $(freesym[idxs]) to satisfy bounds."
         end
         boundT! = (u) -> begin
-            for i in eachindex(u, bounds)
-                if bounds[i] == :pos
+            for i in eachindex(u, bound_types)
+                if bound_types[i] == :pos
                     u[i] = u[i]^2
-                elseif bounds[i] == :neg
+                elseif bound_types[i] == :neg
                     u[i] = -u[i]^2
                 end
             end
             return u
         end
         inv_boundT! = (u) -> begin
-            for i in eachindex(u, bounds)
-                if bounds[i] == :pos
+            for i in eachindex(u, bound_types)
+                if bound_types[i] == :pos
                     u[i] = sqrt(u[i])
-                elseif bounds[i] == :neg
+                elseif bound_types[i] == :neg
                     u[i] = sqrt(-u[i])
                 end
             end
@@ -139,11 +170,11 @@ function initialization_problem(cf::T; t=NaN, apply_bound_transformation, verbos
         end
     end
 
-    # check for missin guesses
+    # check for missing guesses
     missing_guesses = Symbol[]
     uguess = map(freesym) do s
-        if has_guess(cf, s)
-            Float64(get_guess(cf, s))
+        if haskey(guesses, s)
+            Float64(guesses[s])
         else
             push!(missing_guesses, s)
         end
@@ -153,18 +184,22 @@ function initialization_problem(cf::T; t=NaN, apply_bound_transformation, verbos
     # apply bound conserving transformation to initial state
     try
         inv_boundT!(uguess)
-    catch
-        throw(ArgumentError("Initial guess violates bounds. Check the docstring on `NetworkDynamics.initialize_component!`\
-                             about bound satisfying transformations!"))
+    catch e
+        throw(ArgumentError("Failed to apply bound-conserving transformation to initial guess. \
+                             This typically happens when a guess has the wrong sign for its bounds \
+                             (e.g., negative guess for a positively-bounded variable). Original error: $(e)"))
     end
 
-    N = ForwardDiff.pickchunksize(Nfree)
+    chunksize = ForwardDiff.pickchunksize(Nfree)
     fg = compfg(cf)
-    unlcache = map(d->DiffCache(zeros(d), N), length(freesym))
-    outcaches = map(d->DiffCache(zeros(d), N), outdim_normalized(cf))
-    ucache = DiffCache(zeros(dim(cf)), N)
-    incaches = map(d->DiffCache(zeros(d), N), indim_normalized(cf))
-    pcache = DiffCache(zeros(pdim(cf)))
+    unlcache = map(d->DiffCache(zeros(d), chunksize), length(freesym))
+    outcaches = map(d->DiffCache(zeros(d), chunksize), outdim_normalized(cf))
+    ucache = DiffCache(zeros(dim(cf)), chunksize)
+    incaches = map(d->DiffCache(zeros(d), chunksize), indim_normalized(cf))
+    pcache = DiffCache(zeros(pdim(cf)), chunksize)
+
+    # generate a function to apply the additional constraints
+    additional_cf = prep_initiconstraint(cf, additional_constraint, chunksize) #is noop for add_c == nothing
 
     fz = (dunl, unl, _) -> begin
         # apply the bound conserving transformation
@@ -200,15 +235,18 @@ function initialization_problem(cf::T; t=NaN, apply_bound_transformation, verbos
         # view into du buffer for the fg funtion
         @views dunl_fg = dunl[1:dim(cf)]
         # view into the output buffer for the outputs
-        @views dunl_out = dunl[dim(cf)+1:end]
+        @views dunl_out = dunl[dim(cf)+1:dim(cf)+reduce(+,outdim(cf))]
+        # view into the output buffer to the additional constraints
+        @views dunl_additional = dunl[dim(cf)+reduce(+,outdim(cf))+1:end]
 
         # this fills the second half of the du buffer with the fixed and current outputs
         dunl_out .= RecursiveArrayTools.ArrayPartition(outbufs...)
         # execute fg to fill dunl and outputs
         fg(outbufs, dunl_fg, ubuf, inbufs, pbuf, t)
-
         # calculate the residual for the second half ov the dunl buf, the outputs
         dunl_out .= dunl_out .- RecursiveArrayTools.ArrayPartition(outbufs...)
+        # execute the additonal constraints
+        additional_cf(dunl_additional, outbufs, ubuf, inbufs, pbuf, t)
         nothing
     end
 
@@ -233,126 +271,337 @@ function _overwrite_at_mask!(target, mask, source, range)
 end
 
 """
-    initialize_component!(cf::ComponentModel; verbose=true, apply_bound_transformation=true, kwargs...)
+    initialize_component(cf;
+                         defaults=get_defaults_dict(cf),
+                         guesses=get_guesses_dict(cf),
+                         bounds=get_bounds_dict(cf),
+                         default_overrides=nothing,
+                         guess_overrides=nothing,
+                         bound_overrides=nothing,
+                         verbose=true,
+                         apply_bound_transformation=true,
+                         t=NaN,
+                         tol=1e-10,
+                         kwargs...)
 
-Initialize a `ComponentModel` by solving the corresponding `NonlinearLeastSquaresProblem`.
-During initialization, everyting which has a `default` value (see [Metadata](@ref)) is considered
-"fixed". All other variables are considered "free" and are solved for. The initial guess for each
-variable depends on the `guess` value in the [Metadata](@ref).
+The function solves a nonlinear problem to find values for all free variables/parameters
+(those without defaults) that satisfy the component equations in steady state
+(i.e. RHS equals 0). The initial guess for each variable depends on the provided
+`guesses` parameter (defaults to the metadata `guess` values).
 
-The result is stored in the `ComponentModel` itself. The values of the free variables are stored
-in the metadata field `init`.
+## Parameters
+- `cf`: ComponentModel to initialize
+- `defaults`: Dictionary of default values (defaults to metadata defaults)
+- `guesses`: Dictionary of initial guesses (defaults to metadata guesses)
+- `bounds`: Dictionary of bounds (defaults to metadata bounds)
+- `default/guess/bound_overrides`: Dictionary to merge with `defaults`/`guesses`/`bounds`.
+- `verbose`: Whether to print information during initialization
+- `apply_bound_transformation`: Whether to apply bound-conserving transformations
+- `t`: Time at which to solve for steady state. Only relevant for components with explicit time dependency.
+- `tol`: Tolerance for the residual of the initialized model (defaults to `1e-10`). Init throws error if resid < tol.
+- `kwargs...`: Additional arguments passed to the nonlinear solver
 
-The `kwargs` are passed to the nonlinear solver.
+## Returns
+- Dictionary mapping symbols to their values (complete state including defaults and initialized values)
 
 ## Bounds of free variables
 When encountering any bounds in the free variables, NetworkDynamics will try to conserve them
-by applying a coordinate transforamtion. This behavior can be supressed by setting `apply_bound_transformation`.
+by applying a coordinate transformation. This behavior can be suppressed by setting `apply_bound_transformation=false`.
 The following transformations are used:
 - (a, b) intervals where both a and b are positive are transformed to `u^2`/`sqrt(u)`
 - (a, b) intervals where both a and b are negative are transformed to `-u^2`/`sqrt(-u)`
 """
-function initialize_component!(cf; verbose=true, apply_bound_transformation=true, kwargs...)
-    prob, boundT! = initialization_problem(cf; verbose, apply_bound_transformation)
+function initialize_component(cf;
+                             defaults=get_defaults_dict(cf),
+                             guesses=get_guesses_dict(cf),
+                             bounds=get_bounds_dict(cf),
+                             default_overrides=nothing,
+                             guess_overrides=nothing,
+                             bound_overrides=nothing,
+                             verbose=true,
+                             apply_bound_transformation=true,
+                             t=NaN,
+                             tol=1e-10,
+                             kwargs...)
+
+    defaults = isnothing(default_overrides) ? defaults : merge(defaults, default_overrides)
+    guesses  = isnothing(guess_overrides)   ? guesses  : merge(guesses, guess_overrides)
+    bounds   = isnothing(bound_overrides)   ? bounds   : merge(bounds, bound_overrides)
+
+    prob, boundT! = initialization_problem(cf; defaults, guesses, bounds, verbose, apply_bound_transformation)
+
+    # Dictionary for complete state (defaults + initialized values)
+    init_state = Dict{Symbol, Float64}()
+    observable_defaults = Dict{Symbol, Float64}()
+    _obssym = obssym(cf)
+    for (sym, val) in defaults
+        if sym in _obssym
+            observable_defaults[sym] = val
+        else
+            init_state[sym] = val
+        end
+    end
 
     if !isempty(prob.u0)
         sol = SciMLBase.solve(prob; verbose, kwargs...)
 
         if sol.prob isa NonlinearLeastSquaresProblem && sol.retcode == SciMLBase.ReturnCode.Stalled
-            # https://github.com/SciML/NonlinearSolve.jl/issues/459
             res = LinearAlgebra.norm(sol.resid)
-            @warn "Initialization for componend stalled with residual $(res)"
+            @warn "Initialization for component stalled with residual $(res)"
         elseif !SciMLBase.successful_retcode(sol.retcode)
             throw(ArgumentError("Initialization failed. Solver returned $(sol.retcode)"))
         else
-            verbose && @info "Initialization successful with residual $(LinearAlgebra.norm(sol.resid))"
+            res = LinearAlgebra.norm(sol.resid)
+            verbose && @info "Initialization successful with residual $(res)"
         end
-        # transform back to original space
+
+        # Transform back to original space
         u = boundT!(copy(sol.u))
-        set_init!.(Ref(cf), SII.variable_symbols(sol), u)
-        resid = sol.resid
+
+        # Add solved values to the complete dictionary
+        free_symbols = SII.variable_symbols(sol)
+        for (sym, val) in zip(free_symbols, u)
+            init_state[sym] = val
+        end
     else
-        resid = init_residual(cf; recalc=true)
-        if resid < 1e-10
-            verbose && @info "No free variables! Residual $(LinearAlgebra.norm(resid))"
-        else
-            @warn "No free variables! However model does not appear to be initialized in steady state. Residual $(LinearAlgebra.norm(resid))"
+        res = init_residual(cf, init_state, t=NaN)
+        verbose && @info "No free variables! Residual $(res)"
+    end
+    if res > tol
+        error("Initialized model has a residual larger then specified tolerance $(res) > $(tol)! \
+               Fix initialization or increase tolerance to supress error.")
+    end
+
+
+    # Check for broken bounds using the complete state
+    broken_bnds = broken_bounds(cf, init_state, bounds)
+    if !isempty(broken_bnds)
+        broken_msgs = ["$sym = $val (bounds: $lb..$ub)" for (sym, val, (lb, ub)) in broken_bnds]
+        @warn "Initialized model has broken bounds. Try to adapt the initial guesses!" *
+              "\n" * join(broken_msgs, "\n")
+    end
+
+    # Check for broken observable defaults
+    if !isempty(observable_defaults)
+        broken_obs = broken_observable_defaults(cf, init_state, observable_defaults)
+        if !isempty(broken_obs)
+            broken_msgs = ["$sym = $val (default: $def)" for (sym, def, val) in broken_obs]
+            @warn "Initialized model has observables that differ from their specified defaults:" *
+                  "\n" * join(broken_msgs, "\n")
         end
     end
 
-    set_metadata!(cf, :init_residual, resid)
+    return init_state
+end
 
-    broken = broken_bounds(cf)
-    if !isempty(broken)
-        @warn "Initialized model has broken bounds for $(broken). Use `dump_initial_state(mode)` \
-        to inspect further and try to adapt the initial guesses!"
+"""
+    initialize_component!(cf::ComponentModel;
+                          defaults=nothing,
+                          guesses=nothing,
+                          bounds=nothing,
+                          default_overrides=nothing,
+                          guess_overrides=nothing,
+                          bound_overrides=nothing,
+                          verbose=true,
+                          t=NaN,
+                          kwargs...)
+
+Mutating version of [`initialize_component`](@ref). See this docstring for all details.
+In contrast to the non mutating version, this function reads in defaults and guesses from the
+symbolic metadata and writes the initialized values back in to the metadata.
+
+## Parameters
+- `cf`: ComponentModel to initialize
+- `defaults`: Optional dictionary to replace all metadata defaults
+- `guesses`: Optional dictionary to replace all metadata guesses
+- `bounds`: Optional dictionary to replace all metadata bounds
+- `default/guess/bound_overrides`: Dict of values that override existing
+   default/guess/bound metadata.
+- `verbose`: Whether to print information during initialization
+- `t`: Time at which to solve for steady state. Only relevant for components with explicit time dependency.
+- All other `kwargs` are passed to `initialize_component`
+
+When `defaults`, `guesses`, or `bounds` are provided, they replace the corresponding
+metadata in the component model. Any keys in the original metadata that are not in
+the provided dictionaries will be removed, and new keys will be added.
+"""
+function initialize_component!(cf;
+                              defaults=nothing,
+                              guesses=nothing,
+                              bounds=nothing,
+                              default_overrides=nothing,
+                              guess_overrides=nothing,
+                              bound_overrides=nothing,
+                              verbose=true,
+                              t=NaN,
+                              kwargs...)
+
+    # Synchronize defaults, guesses, and bounds
+    _sync_metadata!(cf, defaults, get_defaults_dict, set_default!, delete_default!, "default", verbose)
+    _sync_metadata!(cf, guesses,  get_guesses_dict,  set_guess!,   delete_guess!,   "guess",   verbose)
+    _sync_metadata!(cf, bounds,   get_bounds_dict,   set_bounds!,  delete_bounds!,  "bounds",  verbose)
+
+    for (name, set_fn!, dict) in (("default", set_default!, default_overrides),
+                                  ("guess", set_guess!, guess_overrides),
+                                  ("bound", set_bounds!, bound_overrides))
+        isnothing(dict) && continue
+        for (sym, val) in dict
+            set_fn!(cf, sym, val)
+            verbose && println("Set additional $name for $sym: $val")
+        end
     end
+
+    # Now proceed with initialization using the updated metadata
+    init_state = initialize_component(
+        cf;
+        verbose=verbose,
+        t=t,
+        kwargs...  # Only pass the remaining kwargs
+    )
+
+    # Calculate residual for validation
+    resid = init_residual(cf, init_state; t=t)
+
+    # delete all inits
+    for s in keys(get_inits_dict(cf))
+        delete_init!(cf, s)
+    end
+
+    # Write back the initialized values to the component metadata
+    for (sym, val) in init_state
+        has_default(cf, sym) && continue
+        set_init!(cf, sym, val)
+    end
+
     cf
 end
+function _sync_metadata!(cf, provided, get_orig_fn, set_fn!, remove_fn!, type_name, verbose)
+    isnothing(provided) && return
+
+    original = get_orig_fn(cf)
+
+    # Identify keys to be added/updated/removed
+    provided_keys = Set(keys(provided))
+    original_keys = Set(keys(original))
+
+    missing_keys = setdiff(original_keys, provided_keys)
+    new_keys = setdiff(provided_keys, original_keys)
+    common_keys = intersect(provided_keys, original_keys)
+    changed_keys = filter(k -> provided[k] != original[k], collect(common_keys))
+
+    # Remove missing keys
+    for sym in missing_keys
+        remove_fn!(cf, sym)
+        verbose && println("Removed $type_name for $sym (was $(original[sym]))")
+    end
+
+    # Add new keys
+    for sym in new_keys
+        set_fn!(cf, sym, provided[sym])
+        verbose && println("Added $type_name for $sym: $(provided[sym])")
+    end
+
+    # Update changed keys
+    for sym in changed_keys
+        set_fn!(cf, sym, provided[sym])
+        verbose && println("Updated $type_name for $sym: $(original[sym]) → $(provided[sym])")
+    end
+end
+
 
 function isinitialized(cf::ComponentModel)
     all(has_default_or_init(cf, s) || is_unused(cf, s) for s in vcat(sym(cf), psym(cf)))
 end
 
 """
-    init_residual(cf::T; t=NaN, recalc=false)
+    init_residual(cf::ComponentModel, [state=get_defaults_or_inits_dict(cf)]; t=NaN)
 
-Calculates the residual |du| for the given component model for the values
-provided via `default` and `init` [Metadata](@ref).
+Calculates the residual |du| for the given component model using the values provided.
+If no state dictionary is provided, it uses the values from default/init [Metadata](@ref).
 
-If recalc=false just return the residual determined in the actual initialization process.
-
-See also [`initialize_component!`](@ref).
+See also [`initialize_component`](@ref).
 """
-function init_residual(cf::T; t=NaN, recalc=false) where {T<:ComponentModel}
-    if !isinitialized(cf)
-        throw(ArgumentError("Component is not initialized."))
+function init_residual(cf::ComponentModel, state=get_defaults_or_inits_dict(cf); t=NaN)
+    # Check that all necessary symbols are present in the state dictionary
+    needed_symbols = Set(vcat(
+        sym(cf),                                # states
+        filter(s->!is_unused(cf, s), psym(cf)), # used parameters
+        insym_flat(cf),                         # inputs
+        outsym_flat(cf)                         # outputs
+    ))
+
+    missing = setdiff(needed_symbols, keys(state))
+    if !isempty(missing)
+        throw(ArgumentError("State dictionary is missing required symbols: $missing. \
+                             These symbols need values to calculate the residual."))
     end
 
-    if recalc || !has_metadata(cf, :init_residual)
-        outs = Tuple(Float64[get_default_or_init(cf, s) for s in sv] for sv in outsym_normalized(cf))
-        u = Float64[get_default_or_init(cf, s) for s in sym(cf)]
-        ins = Tuple(Float64[get_default_or_init(cf, s) for s in sv] for sv in insym_normalized(cf))
-        p = Float64[is_unused(cf, s) ? NaN : get_default_or_init(cf, s) for s in psym(cf)]
-        res = zeros(dim(cf) + sum(outdim_normalized(cf)))
+    outs = Tuple(Float64[get(state, s, NaN) for s in sv] for sv in outsym_normalized(cf))
+    u = Float64[get(state, s, NaN) for s in sym(cf)]
+    ins = Tuple(Float64[get(state, s, NaN) for s in sv] for sv in insym_normalized(cf))
+    p = Float64[is_unused(cf, s) ? NaN : get(state, s, NaN) for s in psym(cf)]
 
-        res_fg  = @views res[1:dim(cf)]
-        res_out = @views res[dim(cf)+1:end]
-        res_out .= RecursiveArrayTools.ArrayPartition(outs...)
-        compfg(cf)(outs, res_fg, u, ins, p, t)
-        res_out .= res_out .- RecursiveArrayTools.ArrayPartition(outs...)
+    # collect additional constraints
+    additional_constraint = has_initconstraint(cf) ? get_initconstraint(cf) : nothing
+    additional_Neqs = isnothing(additional_constraint) ? 0 : dim(additional_constraint)
+    additional_cf = prep_initiconstraint(cf, additional_constraint, 0) #is noop for add_c == nothing
 
-        LinearAlgebra.norm(res)
-    else
-        LinearAlgebra.norm(get_metadata(cf, :init_residual))
+    Nout = reduce(+, outdim(cf))
+    res = zeros(dim(cf) + Nout + additional_Neqs)
+
+    res_fg = @views res[1:dim(cf)]
+    res_out = @views res[dim(cf)+1:dim(cf)+Nout]
+    res_add = @views res[dim(cf)+Nout+1:end]
+
+    res_out .= RecursiveArrayTools.ArrayPartition(outs...) # fill with provided outputs
+    compfg(cf)(outs, res_fg, u, ins, p, t)
+    res_out .= res_out .- RecursiveArrayTools.ArrayPartition(outs...) # compare to calculated ouputs
+
+    additional_cf(res_add, outs, u, ins, p, t) # apply additional constraints
+
+    return LinearAlgebra.norm(res)
+end
+
+function broken_bounds(cf, state=get_defaults_or_inits_dict(cf), bounds=get_bounds_dict(cf))
+    vals = get_initial_state(cf, state, keys(bounds))
+
+    broken = []
+    for (val, sym, bound) in zip(vals, keys(bounds), values(bounds))
+        if !bounds_satisfied(val, bound)
+            push!(broken, (sym, val, bound))
+        end
     end
+    broken
 end
-
-function broken_bounds(cf)
-    allsyms = vcat(sym(cf), psym(cf), insym_flat(cf), outsym_flat(cf), obssym(cf))
-    boundsyms = filter(s -> has_bounds(cf, s), allsyms)
-    bounds = get_bounds.(Ref(cf), boundsyms)
-    vals = get_initial_state(cf, boundsyms)
-    broken = filter(i -> !bounds_satisfied(vals[i], bounds[i]), 1:length(bounds))
-    boundsyms[broken]
-end
-
 function bounds_satisfied(val, bounds)
     @assert length(bounds) == 2
     !isnothing(val) && !isnan(val) && first(bounds) ≤ val ≤ last(bounds)
 end
 
+function broken_observable_defaults(cf, state=get_defaults_or_inits_dict(cf), defaults=get_defaults_dict(cf))
+    obs_defaults = filter(p -> p.first ∈ obssym(cf), pairs(defaults))
+    vals = get_initial_state(cf, state, keys(obs_defaults); missing_val=NaN)
+
+    broken = []
+    for (val, sym, def) in zip(vals, keys(obs_defaults), values(obs_defaults))
+        if !(val ≈ def)
+            push!(broken, (sym, def, val))
+        end
+    end
+    broken
+end
+
 """
     set_interface_defaults!(nw::Network, s::NWState; verbose=false)
 
-Sets the **interface** (i.e. node and edge inputs/outputs) defaults of a given
+Sets the **interface** (i.e., node and edge inputs/outputs) defaults of a given
 network to the ones defined by the given state. Notably, while the graph
 topology and interface dimensions of the target network `nw` and the source
-network of `s` musst be identicaly, the systems may differ in the dynamical
+network of `s` must be identical, the systems may differ in the dynamical
 components.
 
-This is mainly inteded for initialization purposes: solve the interface values
-with a simpler -- possible static -- network and "transfer" the steady state
+This is mainly intended for initialization purposes: solve the interface values
+with a simpler -- possibly static -- network and "transfer" the steady state
 interface values to the full network.
 """
 function set_interface_defaults!(nw::Network, s::NWState; verbose=false)
@@ -387,4 +636,169 @@ function set_interface_defaults!(nw::Network, s::NWState; verbose=false)
         set_default!(nw, sym, val)
     end
     nw
+end
+
+"""
+   @initconstraint
+
+Generate an [`InitConstraint`](@ref) from an expression using symbols.
+
+    @initconstraint begin
+        :x + :y
+        :z^2
+    end
+
+is equal to
+
+    InitConstraint([:x, :y, :z], 2) do out, u
+        out[1] = u[:x] + u[:y]
+        out[2] = u[:z]^2
+    end
+"""
+macro initconstraint(ex)
+    if ex isa QuoteNode || ex.head != :block
+        ex = Base.remove_linenums!(Expr(:block, ex))
+    end
+
+    sym = Symbol[]
+    out = gensym(:out)
+    u = gensym(:u)
+    body = Expr[]
+
+    dim = 0
+    for constraint in ex.args
+        constraint isa Union{Expr, QuoteNode} || continue # skip line number nodes
+        dim += 1
+        wrapped = _wrap_symbols!(constraint, sym, u)
+        push!(body, :($(esc(out))[$dim] = $wrapped))
+    end
+    unique!(sym)
+
+    s = join(string.(body), "\n")
+    s = replace(s, "(\$(Expr(:escape, Symbol(\"$(string(out))\"))))" => "    out")
+    s = replace(s, "(\$(Expr(:escape, Symbol(\"$(string(u))\"))))" => "u")
+    s = "InitConstraint($sym, $dim) do out, u\n" * s * "\nend"
+
+    quote
+        InitConstraint($sym, $dim, $s) do $(esc(out)), $(esc(u))
+            $(body...)
+            nothing
+        end
+    end
+end
+function _wrap_symbols!(ex, sym, u)
+    postwalk(ex) do x
+        if x isa QuoteNode && x.value isa Symbol
+            push!(sym, x.value)
+            :($(esc(u))[$x])
+        else
+            x
+        end
+    end
+end
+
+# for metadata check, just passes down the
+function assert_initconstraint_compat(cf::ComponentModel, c::InitConstraint)
+    allowed_symbols = Set(vcat(
+        sym(cf),
+        psym(cf),
+        insym_flat(cf),
+        outsym_flat(cf),
+        obssym(cf)
+    ))
+    missmatch = setdiff(c.sym, allowed_symbols)
+    if !isempty(missmatch)
+        throw(ArgumentError("InitConstraint requires symbols that are not part of the component model: $missmatch"))
+    end
+    c
+end
+
+"""
+prep_initconstrasint allocates all the buffers and so on in order to be called
+within the NonlienarProblem during initialization.
+"""
+function prep_initiconstraint(cm::ComponentModel, c::InitConstraint, chunksize)
+    obscache = if !isempty(c.sym ∩ obssym(cm))
+        DiffCache(zeros(length(obssym(cm))), chunksize)
+    else
+        nothing
+    end
+    symcache = DiffCache(zeros(length(c.sym)), chunksize)
+    symtup = Tuple(c.sym)
+    obsf! = obsf(cm)
+
+    mapping! = generate_init_input_mapping(cm, c)
+    initf! = c.f
+
+    (res, outbufs, ubuf, inbufs, pbuf, t) -> begin
+        if !isnothing(obscache)
+            obsbuf = PreallocationTools.get_tmp(obscache, res)
+            obsf!(obsbuf, ubuf, inbufs..., pbuf, t)
+            obsf!
+        else
+            obsbuf = nothing
+        end
+
+        symbuf = PreallocationTools.get_tmp(symcache, res)
+        mapping!(symbuf, outbufs, ubuf, inbufs, pbuf, obsbuf)
+
+        symv = SymbolicView(symbuf, symtup)
+        initf!(res, symv)
+
+        nothing
+    end
+end
+prep_initiconstraint(cm::ComponentModel, c::Nothing, _) = (args...) -> nothing
+
+"""
+Returns a function, which collects all the symbols required for InitConstraint.
+For each symbol, it checks if it should be copied from flat outputs, inputs, parameters, or state
+buffers.
+"""
+function generate_init_input_mapping(cm::ComponentModel, c::InitConstraint)
+    outmapping = NTuple{3,Int}[]
+    umapping   = NTuple{2,Int}[]
+    inmapping  = NTuple{3,Int}[]
+    pmapping   = NTuple{2,Int}[]
+    obsmapping = NTuple{2,Int}[]
+    for (iidx, s) in enumerate(c.sym)
+        if s in outsym_flat(cm)
+            candidates = findfirst.(Ref(isequal(s)), outsym_normalized(cm))
+            candidx = findfirst(!isnothing, candidates)
+            push!(outmapping, (iidx, candidx, candidates[candidx]))
+        elseif s in sym(cm)
+            unidx = findfirst(isequal(s), sym(cm))
+            push!(umapping, (iidx, unidx))
+        elseif s in insym_flat(cm)
+            candidates = findfirst.(Ref(isequal(s)), insym_normalized(cm))
+            candidx = findfirst(!isnothing, candidates)
+            push!(inmapping, (iidx, candidx, candidates[candidx]))
+        elseif s in psym(cm)
+            pnidx = findfirst(isequal(s), psym(cm))
+            push!(pmapping, (iidx, pnidx))
+        elseif s in obssym(cm)
+            obsidx = findfirst(isequal(s), obssym(cm))
+            push!(obsmapping, (iidx, obsidx))
+        else
+            error("Could not locate symbol $s needed for constraint.")
+        end
+    end
+
+    (syms, outs, u, ins, p, obs) -> begin
+        for (iidx, outnr, outidx) in outmapping
+            syms[iidx] = outs[outnr][outidx]
+        end
+        for (iidx, unidx) in umapping
+            syms[iidx] = u[unidx]
+        end
+        for (iidx, inr, inidx) in inmapping
+            syms[iidx] = ins[inr][inidx]
+        end
+        for (iidx, pnidx) in pmapping
+            syms[iidx] = p[pnidx]
+        end
+        for (iidx, obsidx) in obsmapping
+            syms[iidx] = obs[obsidx]
+        end
+    end
 end
