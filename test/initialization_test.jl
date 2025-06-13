@@ -423,5 +423,21 @@ end
     du = zeros(length(prob.f.resid_prototype));
     b = @b $(prob.f)($du, $(prob.u0), nothing)
     @test iszero(b.allocs)
-end
 
+    @test_throws ArgumentError set_initconstraint!(vm, @initconstraint :wrong_symbol)
+
+    em = Lib.line_mtk()
+    delete_default!(em, :active)
+    set_initconstraint!(em, @initconstraint begin
+        :Δθ - 1 # observable
+        :srcθ
+        :P # force P to zero
+    end)
+    initialize_component!(em, guess_overrides=Dict(:P=>0,:₋P=>0,:srcθ=>π,:dstθ=>-π,:active=>1.0), verbose=true)
+    @test get_initial_state(em, :Δθ) ≈ 1
+    @test get_initial_state(em, :dstθ) ≈ -1
+    @test get_initial_state(em, :P) ≈ 0 atol=1e-10
+    @test get_initial_state(em, :active) ≈ 0 atol=1e-10
+
+    sys =vm.metadata[:odesystem]
+end

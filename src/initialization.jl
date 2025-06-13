@@ -656,7 +656,7 @@ is equal to
     end
 """
 macro initconstraint(ex)
-    if ex.head != :block
+    if ex isa QuoteNode || ex.head != :block
         ex = Base.remove_linenums!(Expr(:block, ex))
     end
 
@@ -708,7 +708,7 @@ function assert_initconstraint_compat(cf::ComponentModel, c::InitConstraint)
     ))
     missmatch = setdiff(c.sym, allowed_symbols)
     if !isempty(missmatch)
-        throw(ArgumentError("InitConstraint $(c) requires symbols that are not part of the component model: $missmatch"))
+        throw(ArgumentError("InitConstraint requires symbols that are not part of the component model: $missmatch"))
     end
     c
 end
