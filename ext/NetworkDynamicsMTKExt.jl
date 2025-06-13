@@ -35,7 +35,7 @@ Additional kw arguments:
 """
 function VertexModel(sys::ODESystem, inputs, outputs; verbose=false, name=getname(sys),
                      ff_to_constraint=true, extin=nothing, kwargs...)
-    warn_events(sys)
+    warn_missing_features(sys)
     inputs = inputs isa AbstractVector ? inputs : [inputs]
     outputs = outputs isa AbstractVector ? outputs : [outputs]
 
@@ -122,7 +122,7 @@ Additional kw arguments:
 """
 function EdgeModel(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=false, name=getname(sys),
                    ff_to_constraint=false, extin=nothing, kwargs...)
-    warn_events(sys)
+    warn_missing_features(sys)
     srcin = srcin isa AbstractVector ? srcin : [srcin]
     dstin = dstin isa AbstractVector ? dstin : [dstin]
 

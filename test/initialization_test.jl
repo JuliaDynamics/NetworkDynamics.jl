@@ -438,6 +438,4 @@ end
     @test get_initial_state(em, :dstθ) ≈ -1
     @test get_initial_state(em, :P) ≈ 0 atol=1e-10
     @test get_initial_state(em, :active) ≈ 0 atol=1e-10
-
-    sys =vm.metadata[:odesystem]
 end
