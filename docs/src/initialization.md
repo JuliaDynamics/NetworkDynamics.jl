@@ -1,14 +1,14 @@
 # Initialization
-Initialization of the system describes the process of finding valid initial conditions, mostly a fixed point of the system.
+Initialization of the system describes the process of finding valid initial conditions, primarily a fixed point of the system.
 We distinguish between two types of initialization: full system initialization and component initialization.
 
 ## Full-System Initialization
-Full system initialization describes the process of finding a fixpoint/steady state of the entire system.
+Full system initialization describes the process of finding a fixed point/steady state of the entire system.
 
-To do so, you can use [`find_fixpoint`](@ref), which creates a `SteadyStateProblem` of the whole network and tries to solve it.
+To do so, you can use [`find_fixpoint`](@ref), which creates a `SteadyStateProblem` of the whole network and attempts to solve it.
 
 ## Component-wise Initialization
-In contrast to full-system initialization the goal of component-wise initialization is to find a valid initial condition for a single component first, given a network coupling.
+In contrast to full-system initialization, the goal of component-wise initialization is to find a valid initial condition for a single component first, given a network coupling.
 
 This can be useful in cases where there are nontrivial internal dynamics and states within a single vertex or edge.
 The idea of component-wise initialization is to find internal states that match a given "network coupling" (fixed inputs and outputs).
@@ -23,7 +23,7 @@ y &= g(x, i, p, t)
 \end{aligned}
 ```
 where $x$ are the internal states, $i$ are the inputs, $y$ are the outputs, and $p$ are the parameters.
-To initialize at a fixpoint, we require the RHS to be zero,
+To initialize at a fixed point, we require the RHS to be zero,
 ```math
 \begin{aligned}
 0 &= f(x, i, p, t)\\
@@ -35,17 +35,17 @@ Each variable in $x$, $i$, $y$ and $p$ is either considered **free** or **fixed*
 Symbols that have a **default** value (see [Metadata](@ref)) are considered *fixed*.
 All other symbols are considered *free* and must provide a **guess** value as an initial starting point for the nonlinear solver.
 
-The **defaults** and **guesses** can be either obtained from the [Metadata](@ref) directly, or provided as arguments.
+The **defaults** and **guesses** can be either obtained from the [Metadata](@ref) directly or provided as arguments.
 
 
 ### Typical Workflow
 The following initialization workflow (as used in the [Tutorial on Initialization](@ref init-tutorial)) is quite common for complex dynamics:
 
-  1. Define simple, quasistatic models with the same input-output structure as the dynamic models.
+  1. Define simple, quasi-static models with the same input-output structure as the dynamic models.
   2. Find a solution of the static model using [`find_fixpoint`](@ref).
-  3. Define elaborate, dynamical models. Define dynamical network on same graph topology.
+  3. Define elaborate, dynamical models. Define dynamical network on the same graph topology.
   4. Use [`set_interface_defaults!`](@ref) to "copy" the inputs and outputs of all components from the static solution to the dynamical network.
-  5. Use [`initialize_component!`](@ref) to determine "free" states and parameters within the dynamical models to reach a steady state while satisfying the constraints on inputs/output.
+  5. Use [`initialize_component!`](@ref) to determine "free" states and parameters within the dynamical models to reach a steady state while satisfying the constraints on inputs/outputs.
 
 
 ### Non-mutating vs Mutating Initialization
@@ -136,4 +136,36 @@ get_initial_state(vf, :θ) ≈ atan(get_initial_state(vf, :u_i), get_initial_sta
 You can print out the whole state using [`dump_initial_state`](@ref).
 ```@example compinit
 dump_initial_state(vf)
+```
+
+### Additional Initialization Constraints
+Sometimes it is required to add additional initialization constraints for components. This is done by using [`set_initconstraint!`](@ref) in combination with an [`InitConstraint`](@ref) object.
+
+In a nutshell, an additional initialization constraint is a function of states/inputs/... whose residual should be zero at the initial state:
+```math
+0 = f_\mathrm{additional}(x, i, p, t)
+```
+Such a function is constructed using [`InitConstraint`](@ref) constructor:
+```@example compinit
+additional_constraint = InitConstraint([:Pel, :u_r, :u_i], 2) do out, u
+    out[1] = u[:Pel] - 1.0
+    out[2] = sqrt(u[:u_r] ^ 2 + u[:u_i] ^ 2) - 1
+end
+nothing #hide
+```
+We need to pass a list of symbols we want to access, the number of additional equations (2 in this case), and a function which modifies the residual in-place.
+You can access inputs, states, outputs, and observables within the constraint function.
+
+For convenience, there is the [`@initconstraint`](@ref) macro to generate such constraints with less overhead. The definition below is equivalent to the definition above.
+```@example compinit
+additional_constraint = @initconstraint begin
+    :Pel - 1.0
+    sqrt(:u_r^2 + :u_i^2) - 1
+end
+nothing #hide
+```
+Once we attach the additional constraint to the component model, it is also indicated in the printout:
+```@example compinit
+set_initconstraint!(vf, additional_constraint)
+vf
 ```

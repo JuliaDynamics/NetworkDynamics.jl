@@ -155,6 +155,12 @@ find_fixpoint
 initialize_component
 initialize_component!
 init_residual
+InitConstraint
+@initconstraint
+set_initconstraint!
+delete_initconstraint!
+has_initconstraint
+get_initconstraint
 ```
 
 ## Callbacks API
