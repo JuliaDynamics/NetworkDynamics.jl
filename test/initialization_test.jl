@@ -5,6 +5,7 @@ using ModelingToolkit: t_nounits as t, D_nounits as Dt
 using SymbolicIndexingInterface: SymbolicIndexingInterface as SII
 using Chairmarks
 
+(isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
 
 @testset "test find_fixpoint" begin
     function swing_equation!(dv, v, esum, (M, P, D), t)
@@ -351,3 +352,76 @@ end
     ic2(out2, u)
     @test out1 == out2
 end
+
+@testset "test input mapping" begin
+    vm = Lib.swing_mtk()
+    c = @initconstraint begin
+        :Pdamping # observable
+        :P # input
+        :θ # output
+        :ω # state
+        :Pmech # parameter
+    end
+    mapping! = NetworkDynamics.generate_init_input_mapping(vm, c)
+    syms = zeros(5)
+    mapping!(syms, ([3],), [NaN, 4], ([2],), [NaN, 5, NaN], [1])
+    @test syms == 1:5
+
+    em = Lib.line_mtk()
+    c = @initconstraint begin
+        :P # output
+        :dstθ # input
+        :active #param
+        :Δθ # obs
+    end
+    mapping! = NetworkDynamics.generate_init_input_mapping(em, c)
+    syms = zeros(4)
+    mapping!(syms, ([NaN],[1]), [], ([NaN],[2]), [NaN, NaN, 3], [4])
+    @test syms == 1:4
+end
+
+@testset "init with additonal contraints" begin
+    @mtkmodel InitSwing begin
+        @variables begin
+            u_r(t), [description="bus d-voltage", output=true, guess=1]
+            u_i(t)=1, [description="bus q-voltage", output=true, guess=1]
+            i_r(t)=1, [description="bus d-current (flowing into bus)", input=true]
+            i_i(t)=0.1, [description="bus d-current (flowing into bus)", input=true]
+            u_mag(t), [description="bus voltage magnitude"]
+            ω(t), [guess=0.0, description="Rotor frequency"]
+            θ(t), [guess=0.0, bounds=[-π, π], description="Rotor angle"]
+            Pel(t), [guess=1, description="Electrical Power injected into the grid"]
+        end
+        @parameters begin
+            M=0.005, [description="Inertia"]
+            D=0.1, [description="Damping"]
+            V, [description="Voltage magnitude", guess=1]
+            ω_ref=0, [description="Reference frequency"]
+            Pm, [guess=0.1,description="Mechanical Power"]
+            aux, [description="Auxiliary, unused parameter"]
+        end
+        @equations begin
+            Dt(θ) ~ ω - ω_ref
+            Dt(ω) ~ 1/M * (Pm - D*ω - Pel)
+            Pel ~ u_r*i_r + u_i*i_i
+            u_r ~ V*cos(θ)
+            u_i ~ V*sin(θ)
+            u_mag ~ sqrt(u_r^2 + u_i^2)
+        end
+    end
+    vm = VertexModel(InitSwing(name=:swing), [:i_r, :i_i], [:u_r, :u_i])
+    set_initconstraint!(vm, @initconstraint begin
+        :u_mag - 1
+        :Pel - 0.1
+    end)
+    initialize_component!(vm)
+    @test get_initial_state(vm, :u_mag) ≈ 1
+    @test get_initial_state(vm, :Pel) ≈ 0.1
+
+    # test if the whole observable stuff is allocation free
+    prob, _ = NetworkDynamics.initialization_problem(vm; apply_bound_transformation=true);
+    du = zeros(length(prob.f.resid_prototype));
+    b = @b $(prob.f)($du, $(prob.u0), nothing)
+    @test iszero(b.allocs)
+end
+

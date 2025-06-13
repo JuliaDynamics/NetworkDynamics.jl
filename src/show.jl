@@ -88,6 +88,13 @@ function print_states_params(io, @nospecialize(c::ComponentModel), styling)
         push!(info, styled"$num &ext in: &&$arr")
     end
 
+    if has_initconstraint(c)
+        constraint = get_initconstraint(c)
+        num, word = maybe_plural(constraint.dim, "eq.", "eqs.")
+        str = "$num &add. init $word for $(constraint.sym)"
+        push!(info, str)
+    end
+
     if has_callback(c)
         cbs = get_callbacks(c)
         num, word = maybe_plural(length(cbs), "callback")

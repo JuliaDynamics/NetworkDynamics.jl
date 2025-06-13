@@ -105,7 +105,12 @@ function initialization_problem(cf::T;
 
     @assert length(freesym) == Nfree
     if Neqs < Nfree
-        throw(ArgumentError("Initialization problem underconstraint. $(Neqs) Equations for $(Nfree) free variables: $freesym"))
+        throw(
+            ArgumentError("Initialization problem underconstraint. \
+                           $(Neqs) Equations for $(Nfree) free variables: $freesym. Consider \
+                           passing additional constraints using InitConstraint().")
+        )
+
     end
 
     # which parts of the nonlinear u (unl) correspond to which free parameters
@@ -185,16 +190,16 @@ function initialization_problem(cf::T;
                              (e.g., negative guess for a positively-bounded variable). Original error: $(e)"))
     end
 
-    N = ForwardDiff.pickchunksize(Nfree)
+    chunksize = ForwardDiff.pickchunksize(Nfree)
     fg = compfg(cf)
-    unlcache = map(d->DiffCache(zeros(d), N), length(freesym))
-    outcaches = map(d->DiffCache(zeros(d), N), outdim_normalized(cf))
-    ucache = DiffCache(zeros(dim(cf)), N)
-    incaches = map(d->DiffCache(zeros(d), N), indim_normalized(cf))
-    pcache = DiffCache(zeros(pdim(cf)))
+    unlcache = map(d->DiffCache(zeros(d), chunksize), length(freesym))
+    outcaches = map(d->DiffCache(zeros(d), chunksize), outdim_normalized(cf))
+    ucache = DiffCache(zeros(dim(cf)), chunksize)
+    incaches = map(d->DiffCache(zeros(d), chunksize), indim_normalized(cf))
+    pcache = DiffCache(zeros(pdim(cf)), chunksize)
 
     # generate a function to apply the additional constraints
-    additional_cf = prep_initconstraint(cm, additional_constraint, N) #is noop for add_c == nothing
+    additional_cf = prep_initiconstraint(cf, additional_constraint, chunksize) #is noop for add_c == nothing
 
     fz = (dunl, unl, _) -> begin
         # apply the bound conserving transformation
@@ -536,13 +541,23 @@ function init_residual(cf::ComponentModel, state=get_defaults_or_inits_dict(cf);
     ins = Tuple(Float64[get(state, s, NaN) for s in sv] for sv in insym_normalized(cf))
     p = Float64[is_unused(cf, s) ? NaN : get(state, s, NaN) for s in psym(cf)]
 
-    res = zeros(dim(cf) + sum(outdim_normalized(cf)))
+    # collect additional constraints
+    additional_constraint = has_initconstraint(cf) ? get_initconstraint(cf) : nothing
+    additional_Neqs = isnothing(additional_constraint) ? 0 : dim(additional_constraint)
+    additional_cf = prep_initiconstraint(cf, additional_constraint, 0) #is noop for add_c == nothing
+
+    Nout = reduce(+, outdim(cf))
+    res = zeros(dim(cf) + Nout + additional_Neqs)
 
     res_fg = @views res[1:dim(cf)]
-    res_out = @views res[dim(cf)+1:end]
-    res_out .= RecursiveArrayTools.ArrayPartition(outs...)
+    res_out = @views res[dim(cf)+1:dim(cf)+Nout]
+    res_add = @views res[dim(cf)+Nout+1:end]
+
+    res_out .= RecursiveArrayTools.ArrayPartition(outs...) # fill with provided outputs
     compfg(cf)(outs, res_fg, u, ins, p, t)
-    res_out .= res_out .- RecursiveArrayTools.ArrayPartition(outs...)
+    res_out .= res_out .- RecursiveArrayTools.ArrayPartition(outs...) # compare to calculated ouputs
+
+    additional_cf(res_add, outs, u, ins, p, t) # apply additional constraints
 
     return LinearAlgebra.norm(res)
 end
@@ -652,7 +667,7 @@ macro initconstraint(ex)
 
     dim = 0
     for constraint in ex.args
-        constraint isa Expr || continue # skip line number nodes
+        constraint isa Union{Expr, QuoteNode} || continue # skip line number nodes
         dim += 1
         wrapped = _wrap_symbols!(constraint, sym, u)
         push!(body, :($(esc(out))[$dim] = $wrapped))
@@ -671,7 +686,7 @@ macro initconstraint(ex)
         end
     end
 end
-function _wrap_symbols!(ex::Expr, sym, u)
+function _wrap_symbols!(ex, sym, u)
     postwalk(ex) do x
         if x isa QuoteNode && x.value isa Symbol
             push!(sym, x.value)
@@ -683,7 +698,7 @@ function _wrap_symbols!(ex::Expr, sym, u)
 end
 
 # for metadata check, just passes down the
-function assert_constraint_compat(cm::ComponentModel, c::InitConstraint)
+function assert_initconstraint_compat(cf::ComponentModel, c::InitConstraint)
     allowed_symbols = Set(vcat(
         sym(cf),
         psym(cf),
@@ -693,7 +708,7 @@ function assert_constraint_compat(cm::ComponentModel, c::InitConstraint)
     ))
     missmatch = setdiff(c.sym, allowed_symbols)
     if !isempty(missmatch)
-        throw(ArgumentError("InitConstraint $(c) contains symbols that are not part of the component model $(cm): $missmatch"))
+        throw(ArgumentError("InitConstraint $(c) requires symbols that are not part of the component model: $missmatch"))
     end
     c
 end
@@ -703,10 +718,12 @@ prep_initconstrasint allocates all the buffers and so on in order to be called
 within the NonlienarProblem during initialization.
 """
 function prep_initiconstraint(cm::ComponentModel, c::InitConstraint, chunksize)
-    hasobs = !isempty(setdiff(c.sym, obssym(cm)))
-
-    obscache = DiffCache(zeros(obsdim(cf)), N)
-    symcache = DiffCache(zeros(length(c.sym)), N)
+    obscache = if !isempty(c.sym ∩ obssym(cm))
+        DiffCache(zeros(length(obssym(cm))), chunksize)
+    else
+        nothing
+    end
+    symcache = DiffCache(zeros(length(c.sym)), chunksize)
     symtup = Tuple(c.sym)
     obsf! = obsf(cm)
 
@@ -714,14 +731,20 @@ function prep_initiconstraint(cm::ComponentModel, c::InitConstraint, chunksize)
     initf! = c.f
 
     (res, outbufs, ubuf, inbufs, pbuf, t) -> begin
-        obsbuf = PreallocationTools.get_tmp(ucache, res)
-        hasobs && obsf!(obsbuf, outbufs..., ubuf, inbufs..., pbuf, t)
+        if !isnothing(obscache)
+            obsbuf = PreallocationTools.get_tmp(obscache, res)
+            obsf!(obsbuf, ubuf, inbufs..., pbuf, t)
+            obsf!
+        else
+            obsbuf = nothing
+        end
 
         symbuf = PreallocationTools.get_tmp(symcache, res)
         mapping!(symbuf, outbufs, ubuf, inbufs, pbuf, obsbuf)
 
         symv = SymbolicView(symbuf, symtup)
-        _initf!(res, symv)
+        initf!(res, symv)
+
         nothing
     end
 end
@@ -738,28 +761,26 @@ function generate_init_input_mapping(cm::ComponentModel, c::InitConstraint)
     inmapping  = NTuple{3,Int}[]
     pmapping   = NTuple{2,Int}[]
     obsmapping = NTuple{2,Int}[]
-    for (iidx, sym) in enumerate(c.sym)
-        if sym in outsym_flat(cm)
-            candidates = findfirst.(Ref(isequal(sym)), outsym_normalized(cm))
+    for (iidx, s) in enumerate(c.sym)
+        if s in outsym_flat(cm)
+            candidates = findfirst.(Ref(isequal(s)), outsym_normalized(cm))
             candidx = findfirst(!isnothing, candidates)
             push!(outmapping, (iidx, candidx, candidates[candidx]))
-        end
-        if sym in sym(cm)
-            unidx = findfirst(isequal(sym), sym(cm))
+        elseif s in sym(cm)
+            unidx = findfirst(isequal(s), sym(cm))
             push!(umapping, (iidx, unidx))
-        end
-        if sym in insym_flat(cm)
-            candidates = findfirst.(Ref(isequal(sym)), insym_normalized(cm))
+        elseif s in insym_flat(cm)
+            candidates = findfirst.(Ref(isequal(s)), insym_normalized(cm))
             candidx = findfirst(!isnothing, candidates)
             push!(inmapping, (iidx, candidx, candidates[candidx]))
-        end
-        if sym in psym(cm)
-            pnidx = findfirst(isequal(sym), psym(cm))
+        elseif s in psym(cm)
+            pnidx = findfirst(isequal(s), psym(cm))
             push!(pmapping, (iidx, pnidx))
-        end
-        if sym in obssym(cm)
-            obsidx = findfirst(isequal(sym), obssym(cm))
+        elseif s in obssym(cm)
+            obsidx = findfirst(isequal(s), obssym(cm))
             push!(obsmapping, (iidx, obsidx))
+        else
+            error("Could not locate symbol $s needed for constraint.")
         end
     end
 
@@ -767,13 +788,13 @@ function generate_init_input_mapping(cm::ComponentModel, c::InitConstraint)
         for (iidx, outnr, outidx) in outmapping
             syms[iidx] = outs[outnr][outidx]
         end
-        for (iidx, unidx) in unmapping
+        for (iidx, unidx) in umapping
             syms[iidx] = u[unidx]
         end
         for (iidx, inr, inidx) in inmapping
             syms[iidx] = ins[inr][inidx]
         end
-        for (iidx, pnidx) in pnmapping
+        for (iidx, pnidx) in pmapping
             syms[iidx] = p[pnidx]
         end
         for (iidx, obsidx) in obsmapping
