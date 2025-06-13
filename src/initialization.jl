@@ -92,7 +92,11 @@ function initialization_problem(cf::T;
     # return "fake NonlinearProblem" if no free variables
     iszero(Nfree) && return ((; u0=[]), identity)
 
-    Neqs = dim(cf)  + mapreduce(length, +, outfree_ms)
+    # check for additonal equations
+    additional_constraint = has_initconstraint(cf) ? get_initconstraint(cf) : nothing
+    additional_Neqs = isnothing(additional_constraint) ? 0 : dim(additional_constraint)
+
+    Neqs = dim(cf) + mapreduce(length, +, outfree_ms) + additional_Neqs
 
     freesym = vcat(mapreduce((syms, map) -> syms[map], vcat, outsym_normalized(cf), outfree_ms),
                    sym(cf)[ufree_m],
@@ -189,6 +193,9 @@ function initialization_problem(cf::T;
     incaches = map(d->DiffCache(zeros(d), N), indim_normalized(cf))
     pcache = DiffCache(zeros(pdim(cf)))
 
+    # generate a function to apply the additional constraints
+    additional_cf = prep_initconstraint(cm, additional_constraint, N) #is noop for add_c == nothing
+
     fz = (dunl, unl, _) -> begin
         # apply the bound conserving transformation
         unlbuf = PreallocationTools.get_tmp(unlcache, unl)
@@ -223,15 +230,18 @@ function initialization_problem(cf::T;
         # view into du buffer for the fg funtion
         @views dunl_fg = dunl[1:dim(cf)]
         # view into the output buffer for the outputs
-        @views dunl_out = dunl[dim(cf)+1:end]
+        @views dunl_out = dunl[dim(cf)+1:dim(cf)+reduce(+,outdim(cf))]
+        # view into the output buffer to the additional constraints
+        @views dunl_additional = dunl[dim(cf)+reduce(+,outdim(cf))+1:end]
 
         # this fills the second half of the du buffer with the fixed and current outputs
         dunl_out .= RecursiveArrayTools.ArrayPartition(outbufs...)
         # execute fg to fill dunl and outputs
         fg(outbufs, dunl_fg, ubuf, inbufs, pbuf, t)
-
         # calculate the residual for the second half ov the dunl buf, the outputs
         dunl_out .= dunl_out .- RecursiveArrayTools.ArrayPartition(outbufs...)
+        # execute the additonal constraints
+        additional_cf(dunl_additional, outbufs, ubuf, inbufs, pbuf, t)
         nothing
     end
 
@@ -686,4 +696,88 @@ function assert_constraint_compat(cm::ComponentModel, c::InitConstraint)
         throw(ArgumentError("InitConstraint $(c) contains symbols that are not part of the component model $(cm): $missmatch"))
     end
     c
+end
+
+"""
+prep_initconstrasint allocates all the buffers and so on in order to be called
+within the NonlienarProblem during initialization.
+"""
+function prep_initiconstraint(cm::ComponentModel, c::InitConstraint, chunksize)
+    hasobs = !isempty(setdiff(c.sym, obssym(cm)))
+
+    obscache = DiffCache(zeros(obsdim(cf)), N)
+    symcache = DiffCache(zeros(length(c.sym)), N)
+    symtup = Tuple(c.sym)
+    obsf! = obsf(cm)
+
+    mapping! = generate_init_input_mapping(cm, c)
+    initf! = c.f
+
+    (res, outbufs, ubuf, inbufs, pbuf, t) -> begin
+        obsbuf = PreallocationTools.get_tmp(ucache, res)
+        hasobs && obsf!(obsbuf, outbufs..., ubuf, inbufs..., pbuf, t)
+
+        symbuf = PreallocationTools.get_tmp(symcache, res)
+        mapping!(symbuf, outbufs, ubuf, inbufs, pbuf, obsbuf)
+
+        symv = SymbolicView(symbuf, symtup)
+        _initf!(res, symv)
+        nothing
+    end
+end
+prep_initiconstraint(cm::ComponentModel, c::Nothing, _) = (args...) -> nothing
+
+"""
+Returns a function, which collects all the symbols required for InitConstraint.
+For each symbol, it checks if it should be copied from flat outputs, inputs, parameters, or state
+buffers.
+"""
+function generate_init_input_mapping(cm::ComponentModel, c::InitConstraint)
+    outmapping = NTuple{3,Int}[]
+    umapping   = NTuple{2,Int}[]
+    inmapping  = NTuple{3,Int}[]
+    pmapping   = NTuple{2,Int}[]
+    obsmapping = NTuple{2,Int}[]
+    for (iidx, sym) in enumerate(c.sym)
+        if sym in outsym_flat(cm)
+            candidates = findfirst.(Ref(isequal(sym)), outsym_normalized(cm))
+            candidx = findfirst(!isnothing, candidates)
+            push!(outmapping, (iidx, candidx, candidates[candidx]))
+        end
+        if sym in sym(cm)
+            unidx = findfirst(isequal(sym), sym(cm))
+            push!(umapping, (iidx, unidx))
+        end
+        if sym in insym_flat(cm)
+            candidates = findfirst.(Ref(isequal(sym)), insym_normalized(cm))
+            candidx = findfirst(!isnothing, candidates)
+            push!(inmapping, (iidx, candidx, candidates[candidx]))
+        end
+        if sym in psym(cm)
+            pnidx = findfirst(isequal(sym), psym(cm))
+            push!(pmapping, (iidx, pnidx))
+        end
+        if sym in obssym(cm)
+            obsidx = findfirst(isequal(sym), obssym(cm))
+            push!(obsmapping, (iidx, obsidx))
+        end
+    end
+
+    (syms, outs, u, ins, p, obs) -> begin
+        for (iidx, outnr, outidx) in outmapping
+            syms[iidx] = outs[outnr][outidx]
+        end
+        for (iidx, unidx) in unmapping
+            syms[iidx] = u[unidx]
+        end
+        for (iidx, inr, inidx) in inmapping
+            syms[iidx] = ins[inr][inidx]
+        end
+        for (iidx, pnidx) in pnmapping
+            syms[iidx] = p[pnidx]
+        end
+        for (iidx, obsidx) in obsmapping
+            syms[iidx] = obs[obsidx]
+        end
+    end
 end

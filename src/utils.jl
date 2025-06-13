@@ -240,6 +240,7 @@ struct InitConstraint{F}
     prettyprint::Union{Nothing,String}
 end
 InitConstraint(f, sym, dim) = InitConstraint(f, sym, dim, nothing)
+dim(c::InitConstraint) = c.dim
 
 (c::InitConstraint)(res, u) = c.f(res, SymbolicView(u, c.sym))
 
