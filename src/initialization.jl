@@ -509,14 +509,14 @@ See also [`initialize_component`](@ref).
 function init_residual(cf::ComponentModel, state=get_defaults_or_inits_dict(cf); t=NaN)
     # Check that all necessary symbols are present in the state dictionary
     needed_symbols = Set(vcat(
-        sym(cf),                               # states
-        filter(s->is_unused(cf, s), psym(cf)), # used parameters
-        insym_flat(cf),                        # inputs
-        outsym_flat(cf)                        # outputs
+        sym(cf),                                # states
+        filter(s->!is_unused(cf, s), psym(cf)), # used parameters
+        insym_flat(cf),                         # inputs
+        outsym_flat(cf)                         # outputs
     ))
 
-    if keys(state) ⊆ needed_symbols
-        missing = setdiff(needed_symbols, keys(state))
+    missing = setdiff(needed_symbols, keys(state))
+    if !isempty(missing)
         throw(ArgumentError("State dictionary is missing required symbols: $missing. \
                              These symbols need values to calculate the residual."))
     end

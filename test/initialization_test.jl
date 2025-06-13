@@ -292,6 +292,19 @@ end
     @test iszero(sum(get_initial_state(em, state, [:P, :₋P])))
     @test iszero(init_residual(em, state))
 
+    # test init_residual with missing state:
+    state_minimal = Dict(
+        :P => state[:P],
+        :₋P =>state[:₋P],
+        :K => state[:K],
+        :active => state[:active],
+        :dstθ => state[:dstθ],
+        :srcθ=> state[:srcθ],
+    )
+    @test init_residual(em, state_minimal) == 0
+    delete!(state_minimal, :P)
+    @test_throws ArgumentError init_residual(em, state_minimal)
+
     state2 = initialize_component(em;
         default_overrides=Dict(:srcθ=>0.0, :dstθ=>0.1),
         guess_overrides=Dict(:P=>0.0, :₋P=>0.0),
