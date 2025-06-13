@@ -82,7 +82,7 @@ nothing #hide #md
 #=
 Just like above the input arguments `v, esum, p, t` are mandatory for the syntax of vertex functions. The additional input `dv` corresponding to the derivative of the vertex' state is mandatory for vertices described by ordinary differential equations.
 
-The output function `g` is just taking part of the internal states. For that we can use the [`StateMask`](@ref) helper function `g = StateMaks(1:1)`
+The output function `g` is just taking part of the internal states. For that we can use the [`StateMask`](@ref) helper function `g = StateMask(1:1)`
 =#
 nd_diffusion_vertex = VertexModel(; f=diffusionvertex_f!, g=StateMask(1:1), dim=1)
 
