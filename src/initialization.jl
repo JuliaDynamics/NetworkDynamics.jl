@@ -612,3 +612,78 @@ function set_interface_defaults!(nw::Network, s::NWState; verbose=false)
     end
     nw
 end
+
+"""
+   @initconstraint
+
+Generate an [`InitConstraint`](@ref) from an expression using symbols.
+
+    @initconstraint begin
+        :x + :y
+        :z^2
+    end
+
+is equal to
+
+    InitConstraint([:x, :y, :z], 2) do out, u
+        out[1] = u[:x] + u[:y]
+        out[2] = u[:z]^2
+    end
+"""
+macro initconstraint(ex)
+    if ex.head != :block
+        ex = Base.remove_linenums!(Expr(:block, ex))
+    end
+
+    sym = Symbol[]
+    out = gensym(:out)
+    u = gensym(:u)
+    body = Expr[]
+
+    dim = 0
+    for constraint in ex.args
+        constraint isa Expr || continue # skip line number nodes
+        dim += 1
+        wrapped = _wrap_symbols!(constraint, sym, u)
+        push!(body, :($(esc(out))[$dim] = $wrapped))
+    end
+    unique!(sym)
+
+    s = join(string.(body), "\n")
+    s = replace(s, "(\$(Expr(:escape, Symbol(\"$(string(out))\"))))" => "    out")
+    s = replace(s, "(\$(Expr(:escape, Symbol(\"$(string(u))\"))))" => "u")
+    s = "InitConstraint($sym, $dim) do out, u\n" * s * "\nend"
+
+    quote
+        InitConstraint($sym, $dim, $s) do $(esc(out)), $(esc(u))
+            $(body...)
+            nothing
+        end
+    end
+end
+function _wrap_symbols!(ex::Expr, sym, u)
+    postwalk(ex) do x
+        if x isa QuoteNode && x.value isa Symbol
+            push!(sym, x.value)
+            :($(esc(u))[$x])
+        else
+            x
+        end
+    end
+end
+
+# for metadata check, just passes down the
+function assert_constraint_compat(cm::ComponentModel, c::InitConstraint)
+    allowed_symbols = Set(vcat(
+        sym(cf),
+        psym(cf),
+        insym_flat(cf),
+        outsym_flat(cf),
+        obssym(cf)
+    ))
+    missmatch = setdiff(c.sym, allowed_symbols)
+    if !isempty(missmatch)
+        throw(ArgumentError("InitConstraint $(c) contains symbols that are not part of the component model $(cm): $missmatch"))
+    end
+    c
+end

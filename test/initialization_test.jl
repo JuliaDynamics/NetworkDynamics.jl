@@ -322,3 +322,32 @@ end
     @test get_default(em_mut, :srcθ) == 0.0
     @test get_default(em_mut, :dstθ) == 0.1
 end
+
+@testset "Initialization constraint construction" begin
+    using NetworkDynamics: @initconstraint, InitConstraint
+    ic1 = @initconstraint :x + :y
+    ic2 = InitConstraint([:x, :y], 1) do out, u
+        out[1] = u[:x] + u[:y]
+    end
+    out1 = [0.0]
+    out2 = [0.0]
+    u = rand(2)
+    ic1(out1, u)
+    ic2(out2, u)
+    @test out1 == out2
+
+    ic1 = @initconstraint begin
+        :x + :y
+        :z^2
+    end
+    ic2 = InitConstraint([:x, :y, :z], 2) do out, u
+        out[1] = u[:x] + u[:y]
+        out[2] = u[:z]^2
+    end
+    out1 = [0.0, 0.0]
+    out2 = [0.0, 0.0]
+    u = rand(3)
+    ic1(out1, u)
+    ic2(out2, u)
+    @test out1 == out2
+end

@@ -438,6 +438,10 @@ set_graphelement!(c::VertexModel, vidx::Int) = set_metadata!(c, :graphelement, v
 set_graphelement!(nw::Network, idx::VCIndex, value) = set_graphelement!(getcomp(nw, idx), value)
 set_graphelement!(nw::Network, idx::ECIndex, value) = set_graphelement!(getcomp(nw, idx), value)
 
+####
+#### Callbacks
+####
+
 """
     has_callback(c::ComponentModel)
     has_callback(nw::Network, idx::Union{VIndex,EIndex})
@@ -492,6 +496,63 @@ function add_callback!(c::ComponentModel, cb; check=true)
 end
 add_callback!(nw::Network, idx::VCIndex, cb; kw...) = add_callback!(getcomp(nw, idx), cb; kw...)
 add_callback!(nw::Network, idx::ECIndex, cb; kw...) = add_callback!(getcomp(nw, idx), cb; kw...)
+
+####
+#### Init constraints
+####
+
+"""
+    has_initconstraint(c::ComponentModel)
+    has_initconstraint(nw::Network, idx::Union{VIndex,EIndex})
+
+Checks if the component has an initialization constraint in metadata.
+
+See also: [`get_initconstraint`](@ref), [`set_initconstraint`](@ref).
+"""
+has_initconstraint(c::ComponentModel) = has_metadata(c, :initconstraint)
+has_initconstraint(nw::Network, idx::VCIndex) = has_initconstraint(getcomp(nw, idx))
+has_initconstraint(nw::Network, idx::ECIndex) = has_initconstraint(getcomp(nw, idx))
+
+"""
+    get_initconstraint(c::ComponentModel)
+    get_initconstraint(nw::Network, idx::Union{VIndex,EIndex})
+
+Retrieves the initialization constraint for the component model.
+May error if no constraint is present. Use `has_initconstraint` to check first.
+
+See also: [`has_initconstraint`](@ref), [`set_initconstraint`](@ref).
+"""
+get_initconstraint(c::ComponentModel) = get_metadata(c, :initconstraint)::InitConstraint
+get_initconstraint(nw::Network, idx::VCIndex) = get_initconstraint(getcomp(nw, idx))
+get_initconstraint(nw::Network, idx::ECIndex) = get_initconstraint(getcomp(nw, idx))
+
+"""
+    set_initconstraint!(c::ComponentModel, constraint::InitConstraint; check=true)
+    set_initconstraint!(nw::Network, idx::Union{VIndex,EIndex}, constraint; check=true)
+
+Sets the initialization constraint for the component. Overwrites any existing constraints.
+See also [`delete_initconstraint!`](@ref).
+"""
+function set_initconstraint!(c::ComponentModel, constraint::InitConstraint; check=true)
+    check && assert_initconstraint_compat(c, constraint)
+    set_metadata!(c, :initconstraint, constraint)
+end
+set_initconstraint!(nw::Network, idx::VCIndex, constraint; kw...) = set_initconstraint(getcomp(nw, idx), constraint; kw...)
+
+"""
+    delete_initconstraint!(c::ComponentModel)
+    delete_initconstraint!(nw::Network, idx::Union{VIndex,EIndex})
+
+Removes the initialization constraint from the component model,
+or from a component referenced by `idx` in a network.
+Returns `true` if the constraint existed and was removed, `false` otherwise.
+
+See also: [`set_initconstraint`](@ref).
+"""
+delete_initconstraint!(c::ComponentModel) = delete_metadata!(c, :initconstraint)
+delete_initconstraint!(nw::Network, idx::VCIndex) = delete_initconstraint!(getcomp(nw, idx))
+delete_initconstraint!(nw::Network, idx::ECIndex) = delete_initconstraint!(getcomp(nw, idx))
+
 
 # generate methods and docstrings for position and marker
 for md in [:position, :marker]
