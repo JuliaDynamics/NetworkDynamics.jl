@@ -466,7 +466,7 @@ end
     nw = Network(g, [v1, v2, v3, v4, v5], e; dealias=true)
 
     s_nmut = initialize_componentwise(nw; subverbose=true, verbose=true, default_overrides=interface_values(pf))
-    s_mut = initialize_componentwise!(nw; subverbose=true, verbose=true, default_overrides=interface_values(pf))
+    s_mut = initialize_componentwise!(nw; subverbose=false, verbose=true, default_overrides=interface_values(pf))
     s_meta = NWState(nw)
 
     for (k, v) in interface_values(pf)

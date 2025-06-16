@@ -584,7 +584,7 @@ function broken_observable_defaults(cf, state=get_defaults_or_inits_dict(cf), de
 
     broken = []
     for (val, sym, def) in zip(vals, keys(obs_defaults), values(obs_defaults))
-        if !(val ≈ def)
+        if !(isapprox(val, def, atol=1e-10))
             push!(broken, (sym, def, val))
         end
     end
@@ -675,6 +675,7 @@ function _initialize_componentwise(
         _default_overrides = _filter_overrides(nw, VIndex(vi), default_overrides)
         _guess_overrides = _filter_overrides(nw, VIndex(vi), guess_overrides)
         _bound_overrides = _filter_overrides(nw, VIndex(vi), bound_overrides)
+        verbose && subverbose && vi != 1 && println()
         verbose && println("Initializing vertex $(vi)...")
         substate = initfun(
             nw[VIndex(vi)],
@@ -691,6 +692,7 @@ function _initialize_componentwise(
         _default_overrides = _filter_overrides(nw, EIndex(ei), default_overrides)
         _guess_overrides = _filter_overrides(nw, EIndex(ei), guess_overrides)
         _bound_overrides = _filter_overrides(nw, EIndex(ei), bound_overrides)
+        verbose && subverbose && ei != 1 && println()
         verbose && println("Initializing edge $(ei)...")
         substate = initfun(
             nw[EIndex(ei)],
