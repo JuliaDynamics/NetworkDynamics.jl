@@ -75,7 +75,7 @@ end
 nothing #hide
 
 #=
-**C) A dynamic prosumer node with compliance, which adds dynamics to the pressure state**
+**C) A dynamic prosumer node with compliance, which introduces dynamic behavior to the pressure state**
 =#
 @mtkmodel DynamicProsumerNode begin
     @extend GasNode()
@@ -144,8 +144,8 @@ end
 nothing #hide
 
 #=
-And finally a quasistatic pipe model for initialization purposes. This equals the 
-dynamic model in steady state, making it ideal for finding initial conditions:
+And finally, a quasistatic pipe model for initialization purposes. This model equals the
+dynamic model at steady state, making it ideal for finding initial conditions:
 =#
 @mtkmodel QuasistaticPipe begin
     @extend GasPipe()
@@ -236,11 +236,11 @@ nw_dyn = Network([v1_dyn, v2_dyn, v3_dyn], [p12_dyn, p13_dyn, p23_dyn])
 #=
 ## Initializing the Dynamic Model with the Static Solution
 
-Now comes the important part: we need to initialize the dynamic model with the results from 
-the static model. To do so, we need to make use of 2 functions:
+Now comes the important part: we need to initialize the dynamic model with the results from
+the static model. To do so, we need to make use of two functions:
 
-1. [`interface_states`](@ref): Extracts all interface values (inputs and outputs) from a network state
-2. [`initialize_componentwise`](@ref): Initializes all components in a network one by one.
+1. [`interface_values`](@ref): Extracts all interface values (inputs and outputs) from a network state
+2. [`initialize_componentwise!`](@ref): Initializes all components in a network one by one
 
 First, we extract all interface values from our static solution:
 =#
@@ -253,8 +253,8 @@ u0_dyn = initialize_componentwise!(nw_dyn, default_overrides=interface_vals, ver
 
 #=
 Internally, this function uses [`initialize_component!`](@ref) on every single component.
-For each component, it overwrites the `default`s to be consisten with the interface values
-of the static model. Therefore, we make sure to initialize the dynamic model at around the
+For each component, it overwrites the `default`s to be consistent with the interface values
+of the static model. Therefore, we ensure that the dynamic model is initialized near the
 steady state of the static model.
 
 We can inspect individual components if needed:
@@ -272,9 +272,12 @@ extrema(du .- zeros(dim(nw_dyn))) # very close to zero, confirming we have a ste
 #=
 ## Simulating the Dynamic Model
 
-Now we can solve the dynamic model and add a disturbance to see how the system responds.
-For the initial disturbance, we make use of a callback, see the docs on [callbacs](@ref) for.
-further explaination.
+With our properly initialized model, we can now simulate the system to observe its behavior.
+To make the simulation more interesting, we'll introduce a disturbance to see how the system
+responds from its steady state.
+
+We'll use a callback to increase consumer demand at a specific time. For more information on
+callbacks, see the documentation on [callbacks](@ref).
 =#
 affect = ComponentAffect([], [:q̃_prosumer]) do u, p, ctx
     @info "Increase consumer demand at t=$(ctx.t)"
@@ -285,7 +288,8 @@ set_callback!(nw_dyn[VIndex(2)], cb) # attach disturbance to second node
 nothing #hide
 
 #=
-Create and solve the ODE problem with the callback:
+Create and solve the ODE problem with the callback. Note that we're using the flat
+representation of our initialized state (via `uflat` and `pflat`) as input to the ODE solver:
 =#
 prob = ODEProblem(nw_dyn, copy(uflat(u0_dyn)), (0, 7), copy(pflat(u0_dyn));
     callback=get_callbacks(nw_dyn))
@@ -302,7 +306,7 @@ The plots show how our gas network responds to the increased consumer demand at 
 
 2. **Injection by producer**: Node 1 increases its injection to compensate for the higher demand.
 
-3. **Draw by consumers**: The solid lines show the actual flows at nodes 2 and 3, while the dashed lines show the set consumer demands. At t=1, we see the step change in consumer demand at node 2.
+3. **Consumption by consumers**: The solid lines show the actual flows at nodes 2 and 3, while the dashed lines show the set consumer demands. At t=1, we see the step change in consumer demand at node 2.
 
 4. **Flows through pipes**: Shows how the flows in all pipes adjust to the new demand pattern.
 =#
@@ -317,7 +321,7 @@ let
     ax = Axis(fig[2, 1]; title="Injection by producer")
     lines!(ax, sol; idxs=VIndex(1, :q̃_inj), label="Node 1", color=Cycled(1))
 
-    ax = Axis(fig[3, 1]; title="Draw by consumers")
+    ax = Axis(fig[3, 1]; title="Consumption by consumers")
     for i in 2:3
         lines!(ax, sol; idxs=@obsex(-1*VIndex(i, :q̃_inj)), label="Node $i", color=Cycled(i))
         lines!(ax, sol; idxs=@obsex(-1*VIndex(i, :q̃_prosumer)), label="Node $i", linestyle=:dash, color=Cycled(i))
