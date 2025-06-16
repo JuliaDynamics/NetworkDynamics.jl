@@ -236,67 +236,31 @@ nw_dyn = Network([v1_dyn, v2_dyn, v3_dyn], [p12_dyn, p13_dyn, p23_dyn])
 #=
 ## Initializing the Dynamic Model with the Static Solution
 
-Now comes the important part: we need to initialize the interface values (pressures and flows)
-of the dynamic model with the results from the static model.
+Now comes the important part: we need to initialize the dynamic model with the results from 
+the static model. To do so, we need to make use of 2 functions:
 
-We can do this manually:
+1. [`interface_states`](@ref): Extracts all interface values (inputs and outputs) from a network state
+2. [`initialize_componentwise`](@ref): Initializes all components in a network one by one.
+
+First, we extract all interface values from our static solution:
 =#
-## Vertex 1: output
-set_default!(nw_dyn[VIndex(1)], :p, u_static.v[1, :p])
-## Vertex 1: input
-set_default!(nw_dyn[VIndex(1)], :q̃_nw, u_static.v[1, :q̃_nw])
-nothing #hide
+interface_vals = interface_values(u_static)
 
 #=
-But there is also a built-in method [`set_interface_defaults!`](@ref) which we can use
-automatically:
+Next, we initialize the dynamic model using these interface values as defaults:
 =#
-set_interface_defaults!(nw_dyn, u_static; verbose=true)
-nothing #hide
+u0_dyn = initialize_componentwise!(nw_dyn, default_overrides=interface_vals, verbose=true)
 
 #=
-With the interfaces all set, we can "initialize" the internal states of the dynamic models.
+Internally, this function uses [`initialize_component!`](@ref) on every single component.
+For each component, it overwrites the `default`s to be consisten with the interface values
+of the static model. Therefore, we make sure to initialize the dynamic model at around the
+steady state of the static model.
 
-For example, let's inspect the state of our first vertex:
-=#
-nw_dyn[VIndex(1)]
-
-#=
-We observe that both the initial state `ξ` as well as the pressure setpoint `p_set`
-are left "free". Using [`initialize_component!`](@ref), we can try to find values for the
-"free" states and parameters such that the interface constraints are fulfilled.
-=#
-initialize_component!(nw_dyn[VIndex(1)])
-#=
-We may also use [`dump_initial_state`](@ref) to get a more detailed view of the state:
+We can inspect individual components if needed:
 =#
 dump_initial_state(nw_dyn[VIndex(1)])
 nothing #hide
-
-#=
-We can also initialize the other two vertices, however it is unnecessary
-since their state is already completely determined by the fixed input/output:
-=#
-initialize_component!(nw_dyn[VIndex(2)])
-initialize_component!(nw_dyn[VIndex(3)])
-nothing #hide
-
-#=
-Similarly, we can initialize the dynamic pipe models. However, since their dynamic state
-equals the output, once again there is nothing to initialize.
-=#
-initialize_component!(nw_dyn[EIndex(1)])
-initialize_component!(nw_dyn[EIndex(2)])
-initialize_component!(nw_dyn[EIndex(3)])
-nothing #hide
-
-#=
-Now, everything is initialized, which means every input, output, state and parameter
-either has a `default` metadata or an `init` metadata. When constructing the `NWState`
-for this network, it will be filled with all those values which should now correspond
-to a steady state of the system:
-=#
-u0_dyn = NWState(nw_dyn)
 
 #=
 Let's verify that our initialization is correct by checking that the derivatives are close to zero:
@@ -308,7 +272,9 @@ extrema(du .- zeros(dim(nw_dyn))) # very close to zero, confirming we have a ste
 #=
 ## Simulating the Dynamic Model
 
-Now we can solve the dynamic model and add a disturbance to see how the system responds:
+Now we can solve the dynamic model and add a disturbance to see how the system responds.
+For the initial disturbance, we make use of a callback, see the docs on [callbacs](@ref) for.
+further explaination.
 =#
 affect = ComponentAffect([], [:q̃_prosumer]) do u, p, ctx
     @info "Increase consumer demand at t=$(ctx.t)"

@@ -592,8 +592,8 @@ function broken_observable_defaults(cf, state=get_defaults_or_inits_dict(cf), de
 end
 
 
-"""
-    initialize_componentwise(
+initialize_docstring = raw"""
+    initialize_componentwise[!](
         nw::Network;
         default_overrides=nothing,
         guess_overrides=nothing,
@@ -607,6 +607,11 @@ end
 
 Initialize a network by solving initialization problems for each component individually, 
 then verifying the combined solution works for the full network.
+
+There are two version of that function: a mutating one (!-at the end of name) and a non-mutating version.
+The mutationg version uses `initialize_component!` internally, the non-mutating one `initialize_component`.
+When the mutating version is used, `NWState(nw)` after initialization will return the same initialized
+state again, as it is stored in the metadata.
 
 ## Parameters
 - `nw`: The network to initialize
@@ -640,7 +645,12 @@ sol = solve(prob)
 
 See also: [`initialize_component`](@ref), [`interface_states`](@ref), [`find_fixpoint`](@ref)
 """
-function initialize_componentwise(
+@doc initialize_docstring
+initialize_componentwise!(nw; kwargs...) = _initialize_componentwise(Val(true), nw; kwargs...)
+@doc initialize_docstring
+initialize_componentwise(nw; kwargs...) = _initialize_componentwise(Val(false), nw; kwargs...)
+function _initialize_componentwise(
+    mutating,
     nw::Network;
     default_overrides=nothing,
     guess_overrides=nothing,
@@ -651,62 +661,78 @@ function initialize_componentwise(
     nwtol=1e-10,
     t=NaN
 )
-    fullstate = Dict{Symbol, Float64}()
+    initfun = if mutating == Val(true)
+        initialize_component!
+    else
+        initialize_component
+    end
+    fullstate = if mutating == Val(true)
+        nothing
+    else
+        Dict{SymbolicIndex, Float64}()
+    end
     for vi in 1:nv(nw)
         _default_overrides = _filter_overrides(nw, VIndex(vi), default_overrides)
         _guess_overrides = _filter_overrides(nw, VIndex(vi), guess_overrides)
         _bound_overrides = _filter_overrides(nw, VIndex(vi), bound_overrides)
         verbose && println("Initializing vertex $(vi)...")
-        init_state = initialize_component(
+        substate = initfun(
             nw[VIndex(vi)],
             default_overrides=_default_overrides,
             guess_overrides=_guess_overrides,
             bound_overrides=_bound_overrides,
             verbose=subverbose,
-            t
+            t=t,
+            tol=tol
         )
-        _merge_wrapped!(fullstate, substate)
+        _merge_wrapped!(fullstate, substate, VIndex(vi))
     end
     for ei in 1:ne(nw)
         _default_overrides = _filter_overrides(nw, EIndex(ei), default_overrides)
         _guess_overrides = _filter_overrides(nw, EIndex(ei), guess_overrides)
         _bound_overrides = _filter_overrides(nw, EIndex(ei), bound_overrides)
         verbose && println("Initializing edge $(ei)...")
-        init_state = initialize_component(
+        substate = initialize_component(
             nw[EIndex(ei)],
             default_overrides=_default_overrides,
             guess_overrides=_guess_overrides,
             bound_overrides=_bound_overrides,
             verbose=subverbose,
-            t
+            t=t,
+            tol=tol
         )
-        _merge_wrapped!(fullstate, substate)
+        _merge_wrapped!(fullstate, substate, EIndex(ei))
     end
 
-    usyms = SII.variable_symbols(nw)
-    psyms = map(_XPIndex_to_XIndex, SII.parameter_symbols(nw))
-    uflat = [full_state[s] for s in usyms]
-    pflat = [full_state[s] for s in psyms]
+    s0 = if mutating == Val(true)
+        NWState(nw)
+    else
+        usyms = SII.variable_symbols(nw)
+        psyms = map(_XPIndex_to_XIndex, SII.parameter_symbols(nw))
+        _uflat = [fullstate[s] for s in usyms]
+        _pflat = [fullstate[s] for s in psyms]
+        NWState(nw, _uflat, _pflat)
+    end
 
     # Calculate the residual for the initialized state
-    du = ones(length(uflat))
-    nw(du, uflat, pflat, t)
+    du = ones(length(uflat(s0)))
+    nw(du, uflat(s0), pflat(s0), t)
     resid = LinearAlgebra.norm(du)
+
     if resid > nwtol
         error("Initialized network has a residual larger than $nwtol: $(resid)! \
                Fix initialization or increase tolerance to suppress error.")
     end
     verbose && println("Initialized network with residual $(resid)!")
-
-    NWState(nw, uflat, pflat, t)
+    s0
 end
 _XPIndex_to_XIndex(idx::VPIndex) = VIndex(idx.compidx, idx.subidx)
 _XPIndex_to_XIndex(idx::EPIndex) = EIndex(idx.compidx, idx.subidx)
 _filter_overrides(_, _, ::Nothing) = nothing
-function _filter_overrides(nw, filteridx::SymbolicIndex, dict)
-    filtered = Dict{Symbol, valtype(d)}()
+function _filter_overrides(nw, filteridx::SymbolicIndex{Int,Nothing}, dict::AbstractDict)
+    filtered = Dict{Symbol, valtype(dict)}()
     for (key, val) in dict
-        if resolvecompidx(nw, filteridx) == resolvecompidx(nw, key)
+        if filteridx == _baseT(key)(resolvecompidx(nw, key))
             if !(key.subidx isa Symbol)
                 error("Overwrites musst be provided as SymbolicIndex{...,Symbol}! Got $key instead.")
             end
@@ -716,15 +742,16 @@ function _filter_overrides(nw, filteridx::SymbolicIndex, dict)
     filtered
 end
 function _merge_wrapped!(fullstate, substate, wrapper)
-    idxconstruktor = _baseT(wrapper)
+    idxconstructor = _baseT(wrapper)
     for (key, val) in substate
         fullstate[idxconstructor(wrapper.compidx, key)] = val
     end
     fullstate
 end
+_merge_wrapped!(::Nothing, _, _) = nothing
 
 """
-    interface_states(s::NWState) :: Dict{SymbolicIndex, Float64}
+    interface_values(s::NWState) :: OrderedDict{SymbolicIndex, Float64}
 
 Extract all interface values (inputs and outputs) from a network state and return them as 
 a dictionary mapping symbolic indices to their values.
@@ -733,26 +760,26 @@ This function is particularly useful in two-step initialization workflows where 
 1. Solve a simplified static model first (using [`find_fixpoint`](@ref))
 2. Use the resulting interface values to initialize a more complex dynamic model componentwise.
 
-In that scenario, use `interface_states` to for the `default_overrides` argument of
+In that scenario, use `interface_values` to for the `default_overrides` argument of
 [`initialize_componentwise`](@ref).
 
 See also: [`initialize_componentwise`](@ref), [`find_fixpoint`](@ref) and [`initialize_component`](@ref).
 """
-function interface_states(s::NWState)
+function interface_values(s::NWState)
     nw = extract_nw(s)
     interface_syms = SymbolicIndex[]
     for vi in 1:nv(nw)
         cm = nw[VIndex(vi)]
-        syms  = VIndex.(vi, Iterators.flatten((nsym_flat(cm), outsyms_flat(cm))))
+        syms  = VIndex.(vi, Iterators.flatten((insym_flat(cm), outsym_flat(cm))))
         append!(interface_syms, syms)
     end
     for ei in 1:ne(nw)
         cm = nw[EIndex(ei)]
-        syms = EIndex.(ei, Iterators.flatten((nsym_flat(cm), outsyms_flat(cm))))
+        syms = EIndex.(ei, Iterators.flatten((insym_flat(cm), outsym_flat(cm))))
         append!(interface_syms, syms)
     end
     @assert allunique(interface_syms) "Interface symbols should be unique!"
-    Dict(interface_syms .=> s[interface_syms])
+    OrderedDict(interface_syms .=> s[interface_syms])
 end
 
 """

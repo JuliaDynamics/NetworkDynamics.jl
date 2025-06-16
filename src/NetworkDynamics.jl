@@ -92,8 +92,10 @@ using NonlinearSolve: AbstractNonlinearSolveAlgorithm, NonlinearFunction
 using NonlinearSolve: NonlinearLeastSquaresProblem, NonlinearProblem
 using SteadyStateDiffEq: SteadyStateProblem, SteadyStateDiffEqAlgorithm, SSRootfind
 using MacroTools: postwalk
+using OrderedCollections: OrderedDict
 export find_fixpoint, set_interface_defaults!
 export initialize_component, initialize_component!, init_residual
+export initialize_componentwise, initialize_componentwise!, interface_values
 export @initconstraint, InitConstraint
 include("initialization.jl")
 
