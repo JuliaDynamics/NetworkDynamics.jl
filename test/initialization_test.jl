@@ -462,11 +462,14 @@ end
     v3 = Lib.dqbus_pq()
     v4 = Lib.dqbus_pq()
     v5 = Lib.dqbus_pq()
-    delete_default!(e, :active)
     nw = Network(g, [v1, v2, v3, v4, v5], e; dealias=true)
 
-    s_nmut = initialize_componentwise(nw; subverbose=true, verbose=true, default_overrides=interface_values(pf))
-    s_mut = initialize_componentwise!(nw; subverbose=false, verbose=true, default_overrides=interface_values(pf))
+    default_overrides = merge(
+        interface_values(pf),
+        Dict(eidxs(1:5, :active) .=> nothing))
+
+    s_nmut = initialize_componentwise(nw; subverbose=true, verbose=true, default_overrides)
+    s_mut = initialize_componentwise!(nw; subverbose=true, verbose=true, default_overrides)
     s_meta = NWState(nw)
 
     for (k, v) in interface_values(pf)

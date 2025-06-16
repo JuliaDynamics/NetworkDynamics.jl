@@ -295,6 +295,7 @@ The function solves a nonlinear problem to find values for all free variables/pa
 - `guesses`: Dictionary of initial guesses (defaults to metadata guesses)
 - `bounds`: Dictionary of bounds (defaults to metadata bounds)
 - `default/guess/bound_overrides`: Dictionary to merge with `defaults`/`guesses`/`bounds`.
+  You can use `nothing` as a value for any key to remove that entry from the respective dictionary.
 - `verbose`: Whether to print information during initialization
 - `apply_bound_transformation`: Whether to apply bound-conserving transformations
 - `t`: Time at which to solve for steady state. Only relevant for components with explicit time dependency.
@@ -327,6 +328,11 @@ function initialize_component(cf;
     defaults = isnothing(default_overrides) ? defaults : merge(defaults, default_overrides)
     guesses  = isnothing(guess_overrides)   ? guesses  : merge(guesses, guess_overrides)
     bounds   = isnothing(bound_overrides)   ? bounds   : merge(bounds, bound_overrides)
+
+    # filter out nothing values
+    defaults = filter(p -> !isnothing(p.second), defaults)
+    guesses = filter(p -> !isnothing(p.second), guesses)
+    bounds = filter(p -> !isnothing(p.second), bounds)
 
     prob, boundT! = initialization_problem(cf; defaults, guesses, bounds, verbose, apply_bound_transformation)
 
@@ -416,7 +422,8 @@ symbolic metadata and writes the initialized values back in to the metadata.
 - `guesses`: Optional dictionary to replace all metadata guesses
 - `bounds`: Optional dictionary to replace all metadata bounds
 - `default/guess/bound_overrides`: Dict of values that override existing
-   default/guess/bound metadata.
+   default/guess/bound metadata. Use `nothing` as a value for any key to remove
+   that metadata entry from the component model.
 - `verbose`: Whether to print information during initialization
 - `t`: Time at which to solve for steady state. Only relevant for components with explicit time dependency.
 - All other `kwargs` are passed to `initialize_component`
@@ -441,13 +448,20 @@ function initialize_component!(cf;
     _sync_metadata!(cf, guesses,  get_guesses_dict,  set_guess!,   delete_guess!,   "guess",   verbose)
     _sync_metadata!(cf, bounds,   get_bounds_dict,   set_bounds!,  delete_bounds!,  "bounds",  verbose)
 
-    for (name, set_fn!, dict) in (("default", set_default!, default_overrides),
-                                  ("guess", set_guess!, guess_overrides),
-                                  ("bound", set_bounds!, bound_overrides))
+    for (name, set_fn!, rm_fn!, dict) in (
+        ("default", set_default!, delete_default!, default_overrides),
+        ("guess", set_guess!, delete_guess!, guess_overrides),
+        ("bound", set_bounds!, delete_bounds!, bound_overrides)
+    )
         isnothing(dict) && continue
         for (sym, val) in dict
-            set_fn!(cf, sym, val)
-            verbose && println("Set additional $name for $sym: $val")
+            if !isnothing(val)
+                set_fn!(cf, sym, val)
+                verbose && println("Set additional $name for $sym: $val")
+            else
+                rm_fn!(cf, sym)
+                verbose && println("Remove $name for $sym")
+            end
         end
     end
 
@@ -615,9 +629,12 @@ state again, as it is stored in the metadata.
 
 ## Parameters
 - `nw`: The network to initialize
-- `default_overrides`: Dictionary mapping symbolic indices to values that should be used as defaults
-- `guess_overrides`: Dictionary mapping symbolic indices to values to use as initial guesses
-- `bound_overrides`: Dictionary mapping symbolic indices to bounds for constrained variables
+- `default_overrides`: Dictionary mapping symbolic indices to values that should be used as defaults.
+  Use `nothing` as a value for any key to remove that default.
+- `guess_overrides`: Dictionary mapping symbolic indices to values to use as initial guesses.
+  Use `nothing` as a value for any key to remove that guess.
+- `bound_overrides`: Dictionary mapping symbolic indices to bounds for constrained variables.
+  Use `nothing` as a value for any key to remove those bounds.
 - `verbose`: Whether to print information about each component initialization
 - `subverbose`: Whether to print detailed information within component initialization
 - `tol`: Tolerance for individual component residuals
@@ -692,7 +709,7 @@ function _initialize_componentwise(
         _default_overrides = _filter_overrides(nw, EIndex(ei), default_overrides)
         _guess_overrides = _filter_overrides(nw, EIndex(ei), guess_overrides)
         _bound_overrides = _filter_overrides(nw, EIndex(ei), bound_overrides)
-        verbose && subverbose && ei != 1 && println()
+        verbose && subverbose && println()
         verbose && println("Initializing edge $(ei)...")
         substate = initfun(
             nw[EIndex(ei)],
