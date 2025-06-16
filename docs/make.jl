@@ -68,7 +68,7 @@ kwargs = (;
             "Directed and Weighted Graphs" => "generated/directed_and_weighted_graphs.md",
         ]
     ],
-    draft=false,
+    draft = isdefined(Main, :SERVEDOCS_DRAFT) ? Main.SERVEDOCS_PREVIEW : false,
     format = Documenter.HTML(ansicolor = true),
     warnonly=[:missing_docs],
 )
