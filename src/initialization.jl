@@ -591,6 +591,107 @@ function broken_observable_defaults(cf, state=get_defaults_or_inits_dict(cf), de
     broken
 end
 
+
+function initialize_componentwise(
+    nw::Network;
+    default_overrides=nothing,
+    guess_overrides=nothing,
+    bound_overrides=nothing,
+    verbose=false,
+    subverbose=false,
+    tol=1e-10,
+    nwtol=1e-10,
+    t=NaN
+)
+    fullstate = Dict{Symbol, Float64}()
+    for vi in 1:nv(nw)
+        _default_overrides = _filter_overrides(nw, VIndex(vi), default_overrides)
+        _guess_overrides = _filter_overrides(nw, VIndex(vi), guess_overrides)
+        _bound_overrides = _filter_overrides(nw, VIndex(vi), bound_overrides)
+        verbose && println("Initializing vertex $(vi)...")
+        init_state = initialize_component(
+            nw[VIndex(vi)],
+            default_overrides=_default_overrides,
+            guess_overrides=_guess_overrides,
+            bound_overrides=_bound_overrides,
+            verbose=subverbose,
+            t
+        )
+        _merge_wrapped!(fullstate, substate)
+    end
+    for ei in 1:ne(nw)
+        _default_overrides = _filter_overrides(nw, EIndex(ei), default_overrides)
+        _guess_overrides = _filter_overrides(nw, EIndex(ei), guess_overrides)
+        _bound_overrides = _filter_overrides(nw, EIndex(ei), bound_overrides)
+        verbose && println("Initializing edge $(ei)...")
+        init_state = initialize_component(
+            nw[EIndex(ei)],
+            default_overrides=_default_overrides,
+            guess_overrides=_guess_overrides,
+            bound_overrides=_bound_overrides,
+            verbose=subverbose,
+            t
+        )
+        _merge_wrapped!(fullstate, substate)
+    end
+
+    usyms = SII.variable_symbols(nw)
+    psyms = map(_XPIndex_to_XIndex, SII.parameter_symbols(nw))
+    uflat = [full_state[s] for s in usyms]
+    pflat = [full_state[s] for s in psyms]
+
+    # Calculate the residual for the initialized state
+    du = ones(length(uflat))
+    nw(du, uflat, pflat, t)
+    resid = LinearAlgebra.norm(du)
+    if resid > nwtol
+        error("Initialized network has a residual larger than $nwtol: $(resid)! \
+               Fix initialization or increase tolerance to suppress error.")
+    end
+    verbose && println("Initialized network with residual $(resid)!")
+
+    NWState(nw, uflat, pflat, t)
+end
+_XPIndex_to_XIndex(idx::VPIndex) = VIndex(idx.compidx, idx.subidx)
+_XPIndex_to_XIndex(idx::EPIndex) = EIndex(idx.compidx, idx.subidx)
+_filter_overrides(_, _, ::Nothing) = nothing
+function _filter_overrides(nw, filteridx::SymbolicIndex, dict)
+    filtered = Dict{Symbol, valtype(d)}()
+    for (key, val) in dict
+        if resolvecompidx(nw, filteridx) == resolvecompidx(nw, key)
+            if !(key.subidx isa Symbol)
+                error("Overwrites musst be provided as SymbolicIndex{...,Symbol}! Got $key instead.")
+            end
+            filtered[key.subidx] = val
+        end
+    end
+    filtered
+end
+function _merge_wrapped!(fullstate, substate, wrapper)
+    idxconstruktor = _baseT(wrapper)
+    for (key, val) in substate
+        fullstate[idxconstructor(wrapper.compidx, key)] = val
+    end
+    fullstate
+end
+
+function interface_states(s::NWState)
+    nw = extract_nw(s)
+    interface_syms = SymbolicIndex[]
+    for vi in 1:nv(nw)
+        cm = nw[VIndex(vi)]
+        syms  = VIndex.(vi, Iterators.flatten((nsym_flat(cm), outsyms_flat(cm))))
+        append!(interface_syms, syms)
+    end
+    for ei in 1:ne(nw)
+        cm = nw[EIndex(ei)]
+        syms = EIndex.(ei, Iterators.flatten((nsym_flat(cm), outsyms_flat(cm))))
+        append!(interface_syms, syms)
+    end
+    @assert allunique(interface_syms) "Interface symbols should be unique!"
+    Dict(interface_syms .=> s[interface_syms])
+end
+
 """
     set_interface_defaults!(nw::Network, s::NWState; verbose=false)
 
