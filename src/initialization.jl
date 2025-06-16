@@ -634,16 +634,16 @@ static_model = create_static_network(...)
 static_state = find_fixpoint(static_model)
 
 # Extract interface values and use them to initialize dynamic model
-interface_values = interface_states(static_state)
+interface_vals = interface_values(static_state)
 dynamic_model = create_dynamic_network(...)
-dyn_state = initialize_componentwise(dynamic_model, default_overrides=interface_values)
+dyn_state = initialize_componentwise(dynamic_model, default_overrides=interface_vals)
 
 # Simulate the dynamic model from this initialized state
 prob = ODEProblem(dynamic_model, uflat(dyn_state), tspan, pflat(dyn_state))
 sol = solve(prob)
 ```
 
-See also: [`initialize_component`](@ref), [`interface_states`](@ref), [`find_fixpoint`](@ref)
+See also: [`initialize_component`](@ref), [`interface_values`](@ref), [`find_fixpoint`](@ref)
 """
 @doc initialize_docstring
 initialize_componentwise!(nw; kwargs...) = _initialize_componentwise(Val(true), nw; kwargs...)
