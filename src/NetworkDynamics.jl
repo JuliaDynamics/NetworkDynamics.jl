@@ -49,7 +49,7 @@ include("component_functions.jl")
 export ExecutionStyle, SequentialExecution, KAExecution, ThreadedExecution, PolyesterExecution
 include("executionstyles.jl")
 
-export Network
+export Network, get_graph
 include("network_structure.jl")
 
 export Aggregator, KAAggregator, SequentialAggregator, PolyesterAggregator, ThreadedAggregator, SparseAggregator
