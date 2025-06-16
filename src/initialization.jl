@@ -592,6 +592,54 @@ function broken_observable_defaults(cf, state=get_defaults_or_inits_dict(cf), de
 end
 
 
+"""
+    initialize_componentwise(
+        nw::Network;
+        default_overrides=nothing,
+        guess_overrides=nothing,
+        bound_overrides=nothing,
+        verbose=false,
+        subverbose=false,
+        tol=1e-10,
+        nwtol=1e-10,
+        t=NaN
+    ) :: NWState
+
+Initialize a network by solving initialization problems for each component individually, 
+then verifying the combined solution works for the full network.
+
+## Parameters
+- `nw`: The network to initialize
+- `default_overrides`: Dictionary mapping symbolic indices to values that should be used as defaults
+- `guess_overrides`: Dictionary mapping symbolic indices to values to use as initial guesses
+- `bound_overrides`: Dictionary mapping symbolic indices to bounds for constrained variables
+- `verbose`: Whether to print information about each component initialization
+- `subverbose`: Whether to print detailed information within component initialization
+- `tol`: Tolerance for individual component residuals
+- `nwtol`: Tolerance for the full network residual
+- `t`: Time at which to evaluate the system
+
+## Returns
+- `NWState`: A fully initialized network state that can be used for simulation
+
+## Example of two-step initialization
+```julia
+# First solve a static model
+static_model = create_static_network(...)
+static_state = find_fixpoint(static_model)
+
+# Extract interface values and use them to initialize dynamic model
+interface_values = interface_states(static_state)
+dynamic_model = create_dynamic_network(...)
+dyn_state = initialize_componentwise(dynamic_model, default_overrides=interface_values)
+
+# Simulate the dynamic model from this initialized state
+prob = ODEProblem(dynamic_model, uflat(dyn_state), tspan, pflat(dyn_state))
+sol = solve(prob)
+```
+
+See also: [`initialize_component`](@ref), [`interface_states`](@ref), [`find_fixpoint`](@ref)
+"""
 function initialize_componentwise(
     nw::Network;
     default_overrides=nothing,
@@ -675,6 +723,21 @@ function _merge_wrapped!(fullstate, substate, wrapper)
     fullstate
 end
 
+"""
+    interface_states(s::NWState) :: Dict{SymbolicIndex, Float64}
+
+Extract all interface values (inputs and outputs) from a network state and return them as 
+a dictionary mapping symbolic indices to their values.
+
+This function is particularly useful in two-step initialization workflows where you want to:
+1. Solve a simplified static model first (using [`find_fixpoint`](@ref))
+2. Use the resulting interface values to initialize a more complex dynamic model componentwise.
+
+In that scenario, use `interface_states` to for the `default_overrides` argument of
+[`initialize_componentwise`](@ref).
+
+See also: [`initialize_componentwise`](@ref), [`find_fixpoint`](@ref) and [`initialize_component`](@ref).
+"""
 function interface_states(s::NWState)
     nw = extract_nw(s)
     interface_syms = SymbolicIndex[]
