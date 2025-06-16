@@ -367,7 +367,7 @@ function initialize_component(cf;
         res = init_residual(cf, init_state, t=NaN)
         verbose && @info "No free variables! Residual $(res)"
     end
-    if res > tol
+    if !(res < tol)
         error("Initialized model has a residual larger then specified tolerance $(res) > $(tol)! \
                Fix initialization or increase tolerance to supress error.")
     end
@@ -692,7 +692,7 @@ function _initialize_componentwise(
         _guess_overrides = _filter_overrides(nw, EIndex(ei), guess_overrides)
         _bound_overrides = _filter_overrides(nw, EIndex(ei), bound_overrides)
         verbose && println("Initializing edge $(ei)...")
-        substate = initialize_component(
+        substate = initfun(
             nw[EIndex(ei)],
             default_overrides=_default_overrides,
             guess_overrides=_guess_overrides,
@@ -719,7 +719,7 @@ function _initialize_componentwise(
     nw(du, uflat(s0), pflat(s0), t)
     resid = LinearAlgebra.norm(du)
 
-    if resid > nwtol
+    if !(resid < nwtol)
         error("Initialized network has a residual larger than $nwtol: $(resid)! \
                Fix initialization or increase tolerance to suppress error.")
     end

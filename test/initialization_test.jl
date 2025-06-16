@@ -439,3 +439,39 @@ end
     @test get_initial_state(em, :P) ≈ 0 atol=1e-10
     @test get_initial_state(em, :active) ≈ 0 atol=1e-10
 end
+
+@testset "multistep init of powergrid like network" begin
+    # Create a simple network with Kuramoto oscillators
+    g = cycle_graph(5) # 5-node cycle graph
+    v1s = Lib.dqbus_slack()
+    v2s = Lib.dqbus_pv(Pset=1.5, Vset=1.0)
+    v3s = Lib.dqbus_pq(Pset=-1.0, Qset=-0.1)
+    v4s = Lib.dqbus_pq(Pset=-1.0, Qset=-0.1)
+    v5s = Lib.dqbus_pq(Pset=-1.0, Qset=-0.1)
+    e = Lib.dqline(X=0.1, R=0.01)
+
+    nws = Network(g, [v1s, v2s, v3s, v4s, v5s], e)
+    pf = find_fixpoint(nws)
+
+    v1 = Lib.dqbus_swing_and_load()
+    set_initconstraint!(v1, @initconstraint begin
+        :load₊Pinj + 1.0
+        - :u_r^2 - :u_i^2 + :swing₊V^2
+    end)
+    v2 = Lib.dqbus_swing()
+    v3 = Lib.dqbus_pq()
+    v4 = Lib.dqbus_pq()
+    v5 = Lib.dqbus_pq()
+    delete_default!(e, :active)
+    nw = Network(g, [v1, v2, v3, v4, v5], e; dealias=true)
+
+    s_nmut = initialize_componentwise(nw; subverbose=true, verbose=true, default_overrides=interface_values(pf))
+    s_mut = initialize_componentwise!(nw; subverbose=true, verbose=true, default_overrides=interface_values(pf))
+    s_meta = NWState(nw)
+
+    for (k, v) in interface_values(pf)
+        @test s_nmut[k] ≈ v atol=1e-10
+    end
+    @test s_meta[VIndex(1, :swing₊V)] ≈ s_meta[VIndex(1, :u_mag)]
+    @test s_meta[VIndex(1, :load₊Pset)] ≈ -1.0
+end
