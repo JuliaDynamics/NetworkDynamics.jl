@@ -1,17 +1,71 @@
 # Initialization
-Initialization of the system describes the process of finding valid initial conditions, primarily a fixed point of the system.
-We distinguish between two types of initialization: full system initialization and component initialization.
+
+Initialization is a critical step in simulation dynamical systems on networks, involving finding valid initial conditions that satisfy the system's constraints. NetworkDynamics provides several layers of initialization tools, from individual component initialization to full network initialization.
+
+## Initialization Hierarchy
+
+NetworkDynamics offers a tiered approach to initialization:
+
+1. **Full-System Initialization**: Finding a steady state for the entire network at once
+2. **Component-wise Network Initialization**: Initializing each component individually while respecting network coupling
+3. **Single Component Initialization**: Finding valid internal states for a single component
 
 ## Full-System Initialization
-Full system initialization describes the process of finding a fixed point/steady state of the entire system.
 
-To do so, you can use [`find_fixpoint`](@ref), which creates a `SteadyStateProblem` of the whole network and attempts to solve it.
+Full system initialization aims to find a fixed point/steady state of the entire system simultaneously.
 
-## Component-wise Initialization
-In contrast to full-system initialization, the goal of component-wise initialization is to find a valid initial condition for a single component first, given a network coupling.
+To do so, you can use [`find_fixpoint`](@ref), which creates a `SteadyStateProblem` of the whole network and attempts to solve it:
 
-This can be useful in cases where there are nontrivial internal dynamics and states within a single vertex or edge.
-The idea of component-wise initialization is to find internal states that match a given "network coupling" (fixed inputs and outputs).
+```julia
+# Create a network
+nw = Network(vertices, edges)
+
+# Find a fixed point for the entire system
+state = find_fixpoint(nw)
+```
+
+This approach works well for simpler systems but may face convergence challenges for complex networks with many interacting components.
+
+## Component-wise Network Initialization
+
+For more complex networks, a component-by-component approach is often more robust. NetworkDynamics provides [`initialize_componentwise`](@ref) and [`initialize_componentwise!`](@ref) functions that:
+
+1. Initialize each component individually
+2. Verify the combined solution works for the entire network
+
+```julia
+# Initialize each component in the network individually
+state = initialize_componentwise(nw)
+
+# Or using the mutating version that updates component metadata
+state = initialize_componentwise!(nw)
+```
+
+### Two-Step Initialization Pattern
+
+A common initialization pattern for complex networks involves:
+
+1. Solving a simplified static model first
+2. Using those results to initialize a more complex dynamic model
+
+```julia
+# 1. Solve a static/simplified model
+static_model = create_static_network(...)
+static_state = find_fixpoint(static_model)
+
+# 2. Extract interface values
+interface_vals = interface_values(static_state)
+
+# 3. Use them to initialize a dynamic model
+dynamic_model = create_dynamic_network(...)
+dyn_state = initialize_componentwise(dynamic_model, default_overrides=interface_vals)
+```
+
+See the [Tutorial on Initialization](@ref init-tutorial) for a complete example of this approach.
+
+## Single Component Initialization
+
+At the lowest level, NetworkDynamics provides tools for initializing individual components based on their internal dynamics and interface constraints.
 
 ### Mathematical Meaning
 According to the [Mathematical Model](@ref) of NetworkDynamics.jl, a component forms an "input-output-system" of the form
@@ -37,23 +91,12 @@ All other symbols are considered *free* and must provide a **guess** value as an
 
 The **defaults** and **guesses** can be either obtained from the [Metadata](@ref) directly or provided as arguments.
 
-
-### Typical Workflow
-The following initialization workflow (as used in the [Tutorial on Initialization](@ref init-tutorial)) is quite common for complex dynamics:
-
-  1. Define simple, quasi-static models with the same input-output structure as the dynamic models.
-  2. Find a solution of the static model using [`find_fixpoint`](@ref).
-  3. Define elaborate, dynamical models. Define dynamical network on the same graph topology.
-  4. Use [`set_interface_defaults!`](@ref) to "copy" the inputs and outputs of all components from the static solution to the dynamical network.
-  5. Use [`initialize_component!`](@ref) to determine "free" states and parameters within the dynamical models to reach a steady state while satisfying the constraints on inputs/outputs.
-
-
 ### Non-mutating vs Mutating Initialization
 
 NetworkDynamics provides two approaches for component-wise initialization:
 
-1. **Non-mutating approach** using [`initialize_component`](@ref): Returns a dictionary of values without modifying the component.
-2. **Mutating approach** using [`initialize_component!`](@ref): Directly updates the component metadata with initialization results.
+1. **Non-mutating approach** using [`initialize_component`](@ref): Returns a dictionary of values without modifying the component
+2. **Mutating approach** using [`initialize_component!`](@ref): Directly updates the component metadata with initialization results
 
 Both options take guesses and defaults from metadata by default; however, it is possible to specify otherwise (see method documentation).
 
@@ -64,12 +107,13 @@ init_state = initialize_component(vf; default_overrides=Dict(:x => 4))
 ```
 It will return a `Dict{Symbol,Float64}` which contains values for **all** symbols in the model.
 
-
 The mutating version [`initialize_component!`](@ref) directly updates the component's metadata with initialization results:
 
 ```julia
 initialize_component!(vf; verbose=true) # set `init` metadata for free symbols
 ```
+
+The same pattern applies at the network level with [`initialize_componentwise`](@ref) and [`initialize_componentwise!`](@ref).
 
 ### Example
 Let's consider the following example of a Swing-equation generator model.
@@ -143,7 +187,7 @@ Sometimes it is required to add additional initialization constraints for compon
 
 In a nutshell, an additional initialization constraint is a function of states/inputs/... whose residual should be zero at the initial state:
 ```math
-0 = f_\mathrm{additional}(x, i, p, t)
+0 = f_\mathrm{additional}(x, y, i, p, t)
 ```
 Such a function is constructed using [`InitConstraint`](@ref) constructor:
 ```@example compinit
