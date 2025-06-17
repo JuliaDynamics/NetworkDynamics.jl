@@ -33,7 +33,7 @@ Special cases for symbol metadata are:
 For those, there are special functions `has_*`, `get_*`, `set_*!` and `delete_*!`. See [Per Symbol Metadata API](@ref).
 
 
-These are closely aligned with the [metadata use in ModelingToolkit](https://docs.sciml.ai/ModelingToolkit/stable/basics/Variable_metadata/). They are automatically copied from the `ODESystem` if you use MTK models to create NetworkDynamics models.
+These are closely aligned with the [metadata use in ModelingToolkit](https://docs.sciml.ai/ModelingToolkit/stable/API/variables/). They are automatically copied from the `ODESystem` if you use MTK models to create NetworkDynamics models.
 
 ## Metadata Utils
 Accessing metadata (especially defaults) of states and parameters is a very
