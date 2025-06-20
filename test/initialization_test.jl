@@ -769,3 +769,115 @@ end
         @test sorted[1].outsym != sorted[2].outsym
     end
 end
+
+@testset "apply_init_formulas! tests" begin
+    using NetworkDynamics: apply_init_formulas!, topological_sort_formulas
+
+    @testset "Basic formula application" begin
+        # Test basic functionality with independent formulas
+        f1 = @initformula :voltage_mag = sqrt(:u_r^2 + :u_i^2)
+        f2 = @initformula :power = :u_r * :i_r + :u_i * :i_i
+
+        defaults = Dict(:u_r => 3.0, :u_i => 4.0, :i_r => 2.0, :i_i => 1.0)
+
+        result = apply_init_formulas!(defaults, [f1, f2]; verbose=true)
+
+        @test result[:voltage_mag] ≈ 5.0  # sqrt(3^2 + 4^2)
+        @test result[:power] ≈ 10.0       # 3*2 + 4*1
+        @test result[:u_r] == 3.0         # original values preserved
+        @test result[:u_i] == 4.0
+        @test result[:i_r] == 2.0
+        @test result[:i_i] == 1.0
+    end
+
+    @testset "Overwriting existing defaults" begin
+        # Test that formulas can overwrite existing defaults
+        f1 = @initformula :existing = :new_value * 3
+
+        defaults = Dict(:existing => 100.0, :new_value => 7.0)
+
+        # Test with verbose output
+        result = apply_init_formulas!(defaults, [f1]; verbose=true)
+
+        @test result[:existing] ≈ 21.0  # 7 * 3, overwrites original 100.0
+        @test result[:new_value] == 7.0
+    end
+
+    @testset "Multiple output formula" begin
+        # Test formula with multiple outputs
+        f_multi = @initformula begin
+            :mag = sqrt(:x^2 + :y^2)
+            :angle = atan(:y, :x)
+        end
+
+        defaults = Dict(:x => 1.0, :y => 1.0)
+
+        result = apply_init_formulas!(defaults, [f_multi]; verbose=true)
+
+        @test result[:mag] ≈ sqrt(2.0)
+        @test result[:angle] ≈ π/4
+    end
+
+    @testset "Error handling" begin
+        # Test missing input symbol
+        f_missing = @initformula :output = :missing_symbol + 1
+        defaults = Dict(:other => 5.0)
+
+        @test_throws ArgumentError apply_init_formulas!(defaults, [f_missing]; verbose=false)
+
+        # Test NaN input
+        f_nan = @initformula :output = :input + 1
+        defaults_nan = Dict(:input => NaN)
+
+        @test_throws ArgumentError apply_init_formulas!(defaults_nan, [f_nan]; verbose=false)
+
+        # Test missing input
+        f_missing_val = @initformula :output = :input + 1
+        defaults_missing = Dict(:input => missing)
+
+        @test_throws ArgumentError apply_init_formulas!(defaults_missing, [f_missing_val]; verbose=false)
+
+        # Test nothing input
+        f_nothing = @initformula :output = :input + 1
+        defaults_nothing = Dict(:input => nothing)
+
+        @test_throws ArgumentError apply_init_formulas!(defaults_nothing, [f_nothing]; verbose=false)
+    end
+
+    @testset "Complex dependency chain" begin
+        # Test more complex dependencies: root → branch1, root → branch2 → final
+        f_root = @initformula :shared = :input * 2
+        f_branch1 = @initformula :result1 = :shared + 1
+        f_branch2 = @initformula :temp = :shared - 1
+        f_final = @initformula :result2 = :temp * 3
+
+        defaults = Dict(:input => 4.0)
+
+        # Mix up the order to test topological sorting
+        result = apply_init_formulas!(defaults, [f_final, f_branch1, f_root, f_branch2]; verbose=false)
+
+        @test result[:shared] ≈ 8.0      # 4 * 2
+        @test result[:result1] ≈ 9.0     # 8 + 1
+        @test result[:temp] ≈ 7.0        # 8 - 1
+        @test result[:result2] ≈ 21.0    # 7 * 3
+    end
+
+    @testset "Empty formulas list" begin
+        # Test with empty formulas list
+        defaults = Dict(:x => 1.0, :y => 2.0)
+        original = copy(defaults)
+
+        result = apply_init_formulas!(defaults, []; verbose=false)
+
+        @test result == original  # Should be unchanged
+    end
+
+    @testset "Circular dependency detection" begin
+        # This should fail during topological sorting
+        f1 = @initformula :a = :b + 1
+        f2 = @initformula :b = :a + 1
+        defaults = Dict(:start => 1.0)
+
+        @test_throws ArgumentError apply_init_formulas!(defaults, [f1, f2]; verbose=false)
+    end
+end

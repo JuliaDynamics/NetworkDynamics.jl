@@ -423,7 +423,7 @@ available before it executes.
 A formula B depends on formula A if any of B's input symbols are produced by A's output symbols.
 The function returns the formulas reordered such that dependencies are satisfied.
 """
-function topological_sort_formulas(formulas::Vector{<:InitFormula})
+function topological_sort_formulas(formulas)
     n = length(formulas)
     n <= 1 && return copy(formulas)
 
@@ -470,4 +470,40 @@ function topological_sort_formulas(formulas::Vector{<:InitFormula})
             rethrow(e)
         end
     end
+end
+
+function apply_init_formulas!(defaults, formulas_unsorted; verbose=false)
+    formulas = topological_sort_formulas(formulas_unsorted)
+
+    for f in formulas
+        out = SymbolicView(zeros(length(f.outsym)), f.outsym)
+        # ensure all input symbols are in defaults
+        invals = map(f.sym) do s
+            if !haskey(defaults, s)
+                throw(ArgumentError("InitFormula requires input symbol $s to be defined in defaults"))
+            end
+            defaults[s]
+        end
+        if any(v -> ismissing(v) || isnothing(v) || isnan(v), invals)
+            throw(ArgumentError("InitFormula requires all input symbols to be initialized, but found NaN/missing/nothing in inputs: $(f.sym .=> invals)"))
+        end
+        in = SymbolicView(invals, f.sym)
+        f(out, in)
+        for s in f.outsym
+            val = out[s]
+            if verbose
+                if haskey(defaults, s)
+                    if defaults[s] ≈ val
+                        println("InitFomula: keeping default for :$s at $(val)")
+                    else
+                        println("InitFomula: updating default for :$s from $(defaults[s]) to $(val)")
+                    end
+                else
+                    println("InitFomula: setting default for :$s to $(val)")
+                end
+            end
+            defaults[s] = val
+        end
+    end
+    return defaults
 end
