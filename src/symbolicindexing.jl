@@ -559,7 +559,7 @@ function _get_observed_f(im::IndexManager, cf::VertexModel, vidx, _obsf::O) wher
     _hasext = has_external_input(cf)
 
     (u, outbuf, aggbuf, extbuf, p, t) -> begin
-        ret = PreallocationTools.get_tmp(retcache, first(u)*first(p)*first(t))
+        ret = PreallocationTools.get_tmp(retcache, first(u))
         ins = if _hasext
             (view(aggbuf, aggr), view(extbuf, extr))
         else

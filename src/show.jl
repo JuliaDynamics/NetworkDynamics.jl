@@ -67,7 +67,7 @@ function print_states_params(io, @nospecialize(c::ComponentModel), styling)
     end
 
     num, word = maybe_plural(dim(c), "state")
-    push!(info, styled"$num &$word: &&$(stylesymbolarray(c.sym, def(c), guess(c), styling))")
+    push!(info, styled"$num &$word: &&$(stylesymbolarray(c.sym, _def(c), _guess(c), styling))")
 
     if hasproperty(c, :mass_matrix) && c.mass_matrix != LinearAlgebra.I
         if LinearAlgebra.isdiag(c.mass_matrix) && !(c.mass_matrix isa UniformScaling)
@@ -80,12 +80,19 @@ function print_states_params(io, @nospecialize(c::ComponentModel), styling)
     push!(info, _inout_string(c, outsym, "output"))
 
     num, word = maybe_plural(pdim(c), "param")
-    pdim(c) > 0 && push!(info, styled"$num &$word: &&$(stylesymbolarray(c.psym, pdef(c), pguess(c)))")
+    pdim(c) > 0 && push!(info, styled"$num &$word: &&$(stylesymbolarray(c.psym, _pdef(c), _pguess(c)))")
 
     if has_external_input(c)
         num = extdim(c)
         arr = match(r"(\[.*\])", repr(extin(c)))[1]
         push!(info, styled"$num &ext in: &&$arr")
+    end
+
+    if has_initconstraint(c)
+        constraint = get_initconstraint(c)
+        num, word = maybe_plural(constraint.dim, "eq.", "eqs.")
+        str = "$num &add. init $word for $(constraint.sym)"
+        push!(info, str)
     end
 
     if has_callback(c)
@@ -119,6 +126,26 @@ function _inout_string(c::EdgeModel, f, name)
     dstguesses = get_guesses(c, sym.dst)
     styled"$srcnum/$dstnum &$word: &&src=&$(stylesymbolarray(sym.src, srcdefs, srcguesses)) \
             dst=$(stylesymbolarray(sym.dst, dstdefs, dstguesses))"
+end
+function _def(c::ComponentModel)::Vector{Union{Nothing,Float64}}
+    map(c.sym) do s
+        has_default_or_init(c, s) ? get_default_or_init(c, s) : nothing
+    end
+end
+function _guess(c::ComponentModel)::Vector{Union{Nothing,Float64}}
+    map(c.sym) do s
+        has_guess(c, s) ? get_guess(c, s) : nothing
+    end
+end
+function _pdef(c::ComponentModel)::Vector{Union{Nothing,Float64}}
+    map(c.psym) do s
+        has_default_or_init(c, s) ? get_default_or_init(c, s) : nothing
+    end
+end
+function _pguess(c::ComponentModel)::Vector{Union{Nothing,Float64}}
+    map(c.psym) do s
+        has_guess(c, s) ? get_guess(c, s) : nothing
+    end
 end
 
 function stylesymbolarray(syms, defaults, guesses, symstyles=Dict{Int,Symbol}())
