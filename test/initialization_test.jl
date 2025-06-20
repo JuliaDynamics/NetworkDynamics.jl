@@ -378,7 +378,7 @@ end
     @test res_combined[2] ≈ 8.0  # z^2 - 1 = 9 - 1
 
     # check perfomance
-    u_sview = SymbolicView(u, combined_alloc.sym)
+    u_sview = SymbolicView(u, combined.sym)
     b = @b $(combined.f)($res_combined, $u_sview)
     @test b.allocs == 0
 
