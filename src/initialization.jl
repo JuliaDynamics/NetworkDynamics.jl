@@ -53,9 +53,22 @@ function initialization_problem(cf::T;
     defaults=get_defaults_dict(cf),
     guesses=get_guesses_dict(cf),
     bounds=get_bounds_dict(cf),
+    additional_initformula=nothing,
+    additional_initconstraint=nothing,
     apply_bound_transformation,
     verbose=true) where {T<:ComponentModel}
     hasinsym(cf) || throw(ArgumentError("Component model musst have `insym`!"))
+
+    # extract and apply InitFormulas
+    metadata_initformulas = has_initformula(cf) ? get_initformula(cf) : nothing
+    extra_initformulas = collect_initformulas(metadata_initformula, additional_initformula)
+    if !isnothing(extra_initformulas)
+        apply_init_formulas!(defaults, extra_initformulas; verbose)
+    end
+
+    # extract InitConstraints
+    metadata_constraint = has_initconstraint(cf) ? get_initconstraint(cf) : nothing
+    extra_constraint = merge_initconstraints(metadata_constraint, additional_initconstraint)
 
     # The _m[s] suffix means a bitmask which indicate the free variables
     # the _fix[s] suffix means an array of same length as the symbols, which contains the fixed values
@@ -93,8 +106,7 @@ function initialization_problem(cf::T;
     iszero(Nfree) && return ((; u0=[]), identity)
 
     # check for additonal equations
-    additional_constraint = has_initconstraint(cf) ? get_initconstraint(cf) : nothing
-    additional_Neqs = isnothing(additional_constraint) ? 0 : dim(additional_constraint)
+    additional_Neqs = isnothing(extra_constraint) ? 0 : dim(extra_constraint)
 
     Neqs = dim(cf) + mapreduce(length, +, outfree_ms) + additional_Neqs
 
@@ -199,7 +211,7 @@ function initialization_problem(cf::T;
     pcache = DiffCache(zeros(pdim(cf)), chunksize)
 
     # generate a function to apply the additional constraints
-    additional_cf = prep_initiconstraint(cf, additional_constraint, chunksize) #is noop for add_c == nothing
+    additional_cf = prep_initiconstraint(cf, extra_constraint, chunksize) #is noop for add_c == nothing
 
     fz = (dunl, unl, _) -> begin
         # apply the bound conserving transformation
@@ -619,7 +631,7 @@ initialize_docstring = raw"""
         t=NaN
     ) :: NWState
 
-Initialize a network by solving initialization problems for each component individually, 
+Initialize a network by solving initialization problems for each component individually,
 then verifying the combined solution works for the full network.
 
 There are two version of that function: a mutating one (!-at the end of name) and a non-mutating version.
@@ -772,7 +784,7 @@ _merge_wrapped!(::Nothing, _, _) = nothing
 """
     interface_values(s::NWState) :: OrderedDict{SymbolicIndex, Float64}
 
-Extract all interface values (inputs and outputs) from a network state and return them as 
+Extract all interface values (inputs and outputs) from a network state and return them as
 a dictionary mapping symbolic indices to their values.
 
 This function is particularly useful in two-step initialization workflows where you want to:

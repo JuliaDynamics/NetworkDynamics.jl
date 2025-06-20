@@ -507,3 +507,27 @@ function apply_init_formulas!(defaults, formulas_unsorted; verbose=false)
     end
     return defaults
 end
+
+collect_initformulas(::Nothing, ::Nothing) = nothing
+collect_initformulas(::Nothing, f::InitFormula) = [f]
+collect_initformulas(::Nothing, fs) = fs
+
+collect_initformulas(f ::InitFormula, ::Nothing) = [f]
+collect_initformulas(fA::InitFormula, fB::InitFormula) = [fA, fB]
+collect_initformulas(f ::InitFormula, fs) = [f, fs...]
+
+collect_initformulas(fs, ::Nothing) = fs
+collect_initformulas(fs, f::InitFormula) = [fs..., f]
+collect_initformulas(fsA, fsB) = vcat(fsA, fsB)
+
+merge_initconstraints(::Nothing, ::Nothing) = nothing
+merge_initconstraints(::Nothing, c::InitConstraint) = c
+merge_initconstraints(::Nothing, cs) = InitConstraint(cs...)
+
+merge_initconstraints(c ::InitConstraint, ::Nothing) = c
+merge_initconstraints(cA::InitConstraint, cB::InitConstraint) = InitConstraint(cA, cB)
+merge_initconstraints(c ::InitConstraint, cs) = InitConstraint(c, cs...)
+
+merge_initconstraints(cs, ::Nothing) = InitConstraint(cs...)
+merge_initconstraints(cs, c::InitConstraint) = InitConstraint(cs..., c)
+merge_initconstraints(csA, csB) = InitConstraint(csA..., csB...)
