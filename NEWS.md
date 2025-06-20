@@ -3,6 +3,8 @@
 ## v0.10 Changelog
 - BREAKING: the interface initialization of components has changed: it is now split up in two versions, mutating and non mutating version. Also it errors now if the tolerance bounds are violated. See docs on initialization for more details.
 
+- new `get_graph(::Network)` method to extract graph object from nw
+
 ## v0.9 Changelog
 ### Main changes in this release
 NetworkDynamics v0.9 is a complete overhaul of the previous releases of NetworkDynamics.
