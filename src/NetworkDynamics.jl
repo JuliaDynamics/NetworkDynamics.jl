@@ -76,6 +76,7 @@ include("callbacks.jl")
 
 using MacroTools: postwalk
 export @initconstraint, InitConstraint
+export @initformula, InitFormula
 include("init_constraints.jl")
 
 using OrderedCollections: OrderedDict

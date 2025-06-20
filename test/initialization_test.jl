@@ -561,3 +561,211 @@ end
     @test s_meta[VIndex(1, :swing₊V)] ≈ s_meta[VIndex(1, :u_mag)]
     @test s_meta[VIndex(1, :load₊Pset)] ≈ -1.0
 end
+
+@testset "InitFormula tests" begin
+    @testset "InitFormula construction and basic functionality" begin
+        # Test basic macro functionality
+        if1 = @initformula begin
+            :Vset = sqrt(:u_r^2 + :u_i^2)
+        end
+
+        @test if1.outsym == [:Vset]
+        @test if1.sym == [:u_r, :u_i]
+        @test NetworkDynamics.dim(if1) == 1
+
+        # Test multiple assignments
+        if2 = @initformula begin
+            :Vset = sqrt(:u_r^2 + :u_i^2)
+            :Pset = :u_r * :i_r + :u_i * :i_i
+        end
+
+        @test if2.outsym == [:Vset, :Pset]
+        @test if2.sym == [:u_r, :u_i, :i_r, :i_i]
+        @test NetworkDynamics.dim(if2) == 2
+
+        # Test function call
+        out = Dict{Symbol,Float64}()
+        u_vals = [1.0, 2.0, 3.0, 4.0]  # values for u_r, u_i, i_r, i_i
+        u_view = NetworkDynamics.SymbolicView(u_vals, [:u_r, :u_i, :i_r, :i_i])
+        if2(out, u_view)
+
+        @test out[:Vset] ≈ sqrt(1.0^2 + 2.0^2)
+        @test out[:Pset] ≈ 1.0 * 3.0 + 2.0 * 4.0
+    end
+
+    @testset "InitFormula error handling" begin
+        # Test invalid syntax (missing assignment)
+        @test_throws LoadError try
+            @eval @initformula begin
+                sqrt(:u_r^2 + :u_i^2)
+            end
+        catch e
+            rethrow(e)
+        end
+
+        # Test invalid LHS (not a quoted symbol)
+        @test_throws LoadError try
+            @eval @initformula begin
+                Vset = sqrt(:u_r^2 + :u_i^2)
+            end
+        catch e
+            rethrow(e)
+        end
+    end
+
+    @testset "InitFormula with complex expressions" begin
+        # Test with more complex mathematical expressions
+        if_complex = @initformula begin
+            :magnitude = sqrt(:x^2 + :y^2)
+            :angle = atan(:y, :x)
+            :power = :voltage * :current * cos(:phase_diff)
+        end
+
+        @test if_complex.outsym == [:magnitude, :angle, :power]
+        @test Set(if_complex.sym) == Set([:x, :y, :voltage, :current, :phase_diff])
+        @test NetworkDynamics.dim(if_complex) == 3
+
+        # Test evaluation
+        out = Dict{Symbol,Float64}()
+        vals = [3.0, 4.0, 230.0, 10.0, π/6]  # x, y, voltage, current, phase_diff
+        u_view = NetworkDynamics.SymbolicView(vals, [:x, :y, :voltage, :current, :phase_diff])
+        if_complex(out, u_view)
+
+        @test out[:magnitude] ≈ 5.0
+        @test out[:angle] ≈ atan(4.0, 3.0)
+        @test out[:power] ≈ 230.0 * 10.0 * cos(π/6)
+    end
+
+    @testset "InitFormula validation" begin
+        # Use ComponentLibrary model for testing
+        swing_model = Lib.swing_mtk()
+
+        # Test valid formula - input symbols exist in component, output symbols are new
+        valid_formula = @initformula :V_magnitude = sqrt(:θ^2 + :ω^2)
+        @test NetworkDynamics.assert_initformula_compat(swing_model, valid_formula) == valid_formula
+
+        # Test another valid formula with parameters
+        valid_param_formula = @initformula :scaled_inertia = 2 * :M + :D
+        @test NetworkDynamics.assert_initformula_compat(swing_model, valid_param_formula) == valid_param_formula
+
+        # Test invalid input symbols (symbol doesn't exist in component)
+        invalid_input = @initformula :new_var = :nonexistent_symbol + 1
+        @test_throws ArgumentError NetworkDynamics.assert_initformula_compat(swing_model, invalid_input)
+
+        # Test conflicting output symbols (output symbol already exists in component)
+        conflicting_output = @initformula :θ = :ω + 1  # θ already exists in swing_model
+        @test_throws ArgumentError NetworkDynamics.assert_initformula_compat(swing_model, conflicting_output)
+
+        # Test multiple output conflicts
+        multi_conflict = @initformula begin
+            :θ = :ω * 2     # θ conflicts
+            :M = :D + 1     # M conflicts
+            :new_var = :ω   # new_var is fine
+        end
+        @test_throws ArgumentError NetworkDynamics.assert_initformula_compat(swing_model, multi_conflict)
+    end
+end
+
+@testset "Topological sorting of InitFormulas" begin
+    using NetworkDynamics: topological_sort_formulas
+
+    @testset "Independent formulas" begin
+        # Test formulas with no dependencies - order should be preserved
+        f1 = @initformula :a = :x + 1
+        f2 = @initformula :b = :y + 2
+        f3 = @initformula :c = :z * 3
+
+        formulas = [f1, f2, f3]
+        sorted = topological_sort_formulas(formulas)
+
+        @test [f.outsym for f in sorted] == [[:c], [:b], [:a]]
+    end
+
+    @testset "Linear dependency chain" begin
+        # A depends on B, B depends on C: C → B → A
+        f_a = @initformula :final = :intermediate + 10    # depends on B
+        f_b = @initformula :intermediate = :base * 2      # depends on C
+        f_c = @initformula :base = :input + 1             # independent
+
+        formulas = [f_a, f_b, f_c]  # wrong order
+        sorted = topological_sort_formulas(formulas)
+
+        # Should be reordered as C, B, A
+        @test [f.outsym[1] for f in sorted] == [:base, :intermediate, :final]
+    end
+
+    @testset "Tree dependencies" begin
+        # Multiple formulas depend on root formula
+        f_root = @initformula :shared = :input * 2
+        f_branch1 = @initformula :result1 = :shared + 1
+        f_branch2 = @initformula :result2 = :shared - 1
+        f_branch3 = @initformula :result3 = :shared * 3
+
+        formulas = [f_branch2, f_branch1, f_root, f_branch3]  # mixed order
+        sorted = topological_sort_formulas(formulas)
+
+        # Root should come first
+        @test sorted[1].outsym == [:shared]
+        # Other three can be in any order after root
+        rest_outputs = Set([f.outsym[1] for f in sorted[2:end]])
+        @test rest_outputs == Set([:result1, :result2, :result3])
+    end
+
+    @testset "Complex dependency graph" begin
+        # More complex: A→B→D, A→C→D
+        f_a = @initformula :start = :input
+        f_b = @initformula :path1 = :start + 1
+        f_c = @initformula :path2 = :start * 2
+        f_d = @initformula :end = :path1 + :path2
+
+        formulas = [f_d, f_c, f_b, f_a]  # reverse order
+        sorted = topological_sort_formulas(formulas)
+
+        # A must come first, D must come last
+        @test sorted[1].outsym == [:start]
+        @test sorted[end].outsym == [:end]
+
+        # B and C must come after A but before D
+        middle_outputs = Set([f.outsym[1] for f in sorted[2:end-1]])
+        @test middle_outputs == Set([:path1, :path2])
+    end
+
+    @testset "Error cases" begin
+        # Test output symbol conflicts
+        f1 = @initformula :conflict = :x + 1
+        f2 = @initformula :conflict = :y + 2  # Same output symbol
+        @test_throws ArgumentError topological_sort_formulas([f1, f2])
+
+        # Test self-dependency - should fail at construction time
+        @test_throws ArgumentError @initformula :self = :self + 1
+
+        # Test circular dependency
+        f_cycle1 = @initformula :a = :b + 1
+        f_cycle2 = @initformula :b = :a + 1
+        @test_throws ArgumentError topological_sort_formulas([f_cycle1, f_cycle2])
+
+        # Test longer cycle A→B→C→A
+        f_a = @initformula :a = :c + 1
+        f_b = @initformula :b = :a + 1
+        f_c = @initformula :c = :b + 1
+        @test_throws ArgumentError topological_sort_formulas([f_a, f_b, f_c])
+    end
+
+    @testset "Edge cases" begin
+        # Empty vector
+        @test topological_sort_formulas(InitFormula[]) == InitFormula[]
+
+        # Single formula
+        f = @initformula :single = :input
+        @test topological_sort_formulas([f]) == [f]
+
+        # Two independent formulas
+        f1 = @initformula :first = :x
+        f2 = @initformula :second = :y
+        sorted = topological_sort_formulas([f1, f2])
+        @test length(sorted) == 2
+        @test sorted[1].outsym ∈ [[:first], [:second]]
+        @test sorted[2].outsym ∈ [[:first], [:second]]
+        @test sorted[1].outsym != sorted[2].outsym
+    end
+end

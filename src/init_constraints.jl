@@ -272,3 +272,202 @@ function generate_init_input_mapping(cm::ComponentModel, c::InitConstraint)
         end
     end
 end
+
+####
+#### InitFormula
+####
+"""
+    InitFormula(f, outsym, sym)
+
+A representation of initialization formulas that are applied during the initialization phase of a component.
+InitFormulas act earlier in the initialization pipeline than InitConstraints - they essentially set additional
+defaults rather than adding equations to the nonlinear system.
+
+It contains a function `f` that defines the formulas, a vector of output symbols `outsym` that will be set by the formulas,
+a vector of input symbols `sym` that are used in the formulas, and an optional pretty-print string.
+
+    InitFormula([:Vset], [:u_r, :u_i]) do out, u
+        out[:Vset] = sqrt(u[:u_r]^2 + u[:u_i]^2)
+    end
+
+See also [`@initformula`](@ref) for a macro to create such formulas.
+"""
+struct InitFormula{F}
+    f::F
+    outsym::Vector{Symbol}   # output symbols (from LHS of assignments)
+    sym::Vector{Symbol}      # input symbols (from RHS of assignments)
+    prettyprint::Union{Nothing,String}
+
+    function InitFormula(f::F, outsym::Vector{Symbol}, sym::Vector{Symbol}, prettyprint::Union{Nothing,String}) where F
+        # Check for self-dependencies (formula depending on its own output)
+        self_deps = intersect(sym, outsym)
+        if !isempty(self_deps)
+            throw(ArgumentError("InitFormula cannot depend on its own output symbols: $self_deps"))
+        end
+        new{F}(f, outsym, sym, prettyprint)
+    end
+end
+InitFormula(f, outsym, sym) = InitFormula(f, outsym, sym, nothing)
+
+dim(c::InitFormula) = length(c.outsym)
+
+(c::InitFormula)(out, u) = c.f(out, SymbolicView(u, c.sym))
+
+function Base.show(io::IO, ::MIME"text/plain", @nospecialize(c::InitFormula))
+    if c.prettyprint === nothing
+        r = repr(c)
+        s = replace(r, ", nothing)"=>")")
+        print(io, s)
+    else
+        print(io, c.prettyprint)
+    end
+end
+
+"""
+   @initformula
+
+Generate an [`InitFormula`](@ref) from an expression using symbols.
+
+    @initformula begin
+        :Vset = sqrt(:u_r^2 + :u_i^2)
+        :Pset = :u_r * :i_r + :u_i * :i_i
+    end
+
+is equal to
+
+    InitFormula([:Vset, :Pset], [:u_r, :u_i, :i_r, :i_i]) do out, u
+        out[:Vset] = sqrt(u[:u_r]^2 + u[:u_i]^2)
+        out[:Pset] = u[:u_r] * u[:i_r] + u[:u_i] * u[:i_i]
+    end
+"""
+macro initformula(ex)
+    if ex isa QuoteNode || ex.head != :block
+        ex = Base.remove_linenums!(Expr(:block, ex))
+    end
+
+    input_syms = Symbol[]    # RHS symbols
+    output_syms = Symbol[]   # LHS symbols
+    out_var = gensym(:out)
+    u = gensym(:u)
+    body = Expr[]
+
+    for formula in ex.args
+        formula isa Union{Expr, QuoteNode} || continue # skip line number nodes
+        if formula isa Expr && formula.head == :(=)
+            lhs = formula.args[1]
+            rhs = formula.args[2]
+
+            # Extract the target symbol from the LHS (should be a QuoteNode)
+            if !(lhs isa QuoteNode && lhs.value isa Symbol)
+                throw(ArgumentError("Left-hand side of InitFormula assignment must be a quoted symbol like :Vset"))
+            end
+            target_sym = lhs.value
+            push!(output_syms, target_sym)
+
+            # Wrap symbols in the RHS
+            wrapped_rhs = _wrap_symbols!(rhs, input_syms, u)
+            push!(body, :($(esc(out_var))[$(QuoteNode(target_sym))] = $wrapped_rhs))
+        else
+            throw(ArgumentError("InitFormula expressions must be assignments like :Vset = sqrt(:u_r^2 + :u_i^2)"))
+        end
+    end
+    unique!(input_syms)
+
+    # Generate pretty print string
+    s = join(string.(body), "\n")
+    s = replace(s, "(\$(Expr(:escape, Symbol(\"$(string(out_var))\"))))" => "    out")
+    s = replace(s, "(\$(Expr(:escape, Symbol(\"$(string(u))\"))))" => "u")
+    s = "InitFormula($output_syms, $input_syms) do out, u\n" * s * "\nend"
+
+    quote
+        InitFormula($output_syms, $input_syms, $s) do $(esc(out_var)), $(esc(u))
+            $(body...)
+            nothing
+        end
+    end
+end
+
+# for metadata check, validates both input and output symbols
+function assert_initformula_compat(cf::ComponentModel, c::InitFormula)
+    # Get all existing symbols in the component
+    existing_symbols = Set(vcat(
+        sym(cf),
+        psym(cf),
+        insym_flat(cf),
+        outsym_flat(cf),
+        obssym(cf)
+    ))
+
+    # Validate input symbols (RHS of assignments) - should exist in component
+    input_mismatch = setdiff(c.sym, existing_symbols)
+    if !isempty(input_mismatch)
+        throw(ArgumentError("InitFormula uses input symbols not part of component model: $input_mismatch"))
+    end
+
+    # Validate output symbols (LHS of assignments) - should NOT conflict with existing symbols
+    output_conflicts = intersect(c.outsym, existing_symbols)
+    if !isempty(output_conflicts)
+        throw(ArgumentError("InitFormula output symbols conflict with existing component symbols: $output_conflicts"))
+    end
+
+    c
+end
+
+"""
+    topological_sort_formulas(formulas::Vector{InitFormula}) -> Vector{InitFormula}
+
+Sort InitFormulas in topological order based on their dependencies. This ensures that
+formulas are applied in the correct order, where each formula's input symbols are
+available before it executes.
+
+A formula B depends on formula A if any of B's input symbols are produced by A's output symbols.
+The function returns the formulas reordered such that dependencies are satisfied.
+"""
+function topological_sort_formulas(formulas::Vector{<:InitFormula})
+    n = length(formulas)
+    n <= 1 && return copy(formulas)
+
+    # Check for output symbol conflicts
+    all_outputs = Symbol[]
+    for formula in formulas
+        append!(all_outputs, formula.outsym)
+    end
+
+    if !allunique(all_outputs)
+        conflicts = [s for s in unique(all_outputs) if count(==(s), all_outputs) > 1]
+        throw(ArgumentError("Multiple InitFormulas set the same symbol(s): $conflicts"))
+    end
+
+
+    # Build dependency graph using Graphs.jl
+    g = SimpleDiGraph(n)
+
+    # Add edges: i → j means formula j depends on formula i
+    # (formula j must run after formula i)
+    for i in 1:n, j in 1:n
+        if i != j
+            # Check if formula j depends on formula i
+            # i.e., j's input symbols intersect with i's output symbols
+            if !isdisjoint(formulas[j].sym, formulas[i].outsym)
+                add_edge!(g, i, j)
+            end
+        end
+    end
+
+    # Perform topological sort
+    try
+        sorted_indices = Graphs.topological_sort(g)
+        if length(sorted_indices) != n
+            # This shouldn't happen with a proper topological sort implementation,
+            # but let's be safe
+            throw(ArgumentError("Circular dependency detected in InitFormulas"))
+        end
+        return formulas[sorted_indices]
+    catch e
+        if e isa ErrorException && occursin("graph contains at least one loop", string(e))
+            throw(ArgumentError("Circular dependency detected in InitFormulas"))
+        else
+            rethrow(e)
+        end
+    end
+end
