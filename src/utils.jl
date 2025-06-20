@@ -282,7 +282,7 @@ function InitConstraint(subconstraints::InitConstraint...)
     function combined_f(res, u)
         offset = 0
         unrolled_foreach(f_range_tup) do (cf, cr)
-            res_view = view(res, cr) 
+            res_view = view(res, cr)
             cf(res_view, u)
         end
         nothing
@@ -303,8 +303,25 @@ function InitConstraint(subconstraints::InitConstraint...)
             rethrow(e)
         end
     end
-    
-    InitConstraint(combined_f, all_syms, total_dim, nothing)
+
+    if any(isnothing, c.prettyprint for c in subconstraints)
+        prettyprint = nothing
+    else
+        header = "InitConstraint($all_syms) do out, u"
+        footer = "end"
+        bodylines = mapreduce(vcat, subconstraints) do c
+            full = c.prettyprint
+            split(full, '\n')[2:end-1] # remove header and footer
+        end
+        outidx = 1
+        for i in eachindex(bodylines)
+            bodylines[i] = replace(bodylines[i], r"out\[.*?\]" => "out[$(outidx)]")
+            outidx += 1
+        end
+        prettyprint = join([header, join(bodylines, "\n"), footer], "\n")
+    end
+
+    InitConstraint(combined_f, all_syms, total_dim, prettyprint)
 end
 
 dim(c::InitConstraint) = c.dim
