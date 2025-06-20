@@ -353,6 +353,89 @@ end
     @test out1 == out2
 end
 
+@testset "InitConstraint combining constructor" begin
+    using NetworkDynamics: @initconstraint, InitConstraint, dim
+
+    # Test basic combining of two constraints
+    c1 = @initconstraint :x + :y
+    c2 = @initconstraint :z^2 - 1
+    combined = InitConstraint(c1, c2)
+
+    @test dim(combined) == 2
+    @test Set(combined.sym) == Set([:x, :y, :z])
+
+    # Test that combined constraint works correctly
+    u = [1.0, 2.0, 3.0]  # x=1, y=2, z=3
+    res_combined = zeros(2)
+    res_individual = zeros(2)
+
+    combined(res_combined, u)
+    c1(view(res_individual, 1:1), u[1:2])
+    c2(view(res_individual, 2:2), u[3])
+
+    @test res_combined == res_individual
+    @test res_combined[1] ≈ 3.0  # x + y = 1 + 2
+    @test res_combined[2] ≈ 8.0  # z^2 - 1 = 9 - 1
+
+    # check perfomance
+    u_sview = SymbolicView(u, combined_alloc.sym)
+    b = @b $(combined.f)($res_combined, $u_sview)
+    @test b.allocs == 0
+
+    # Test combining constraints with overlapping symbols
+    c3 = @initconstraint :x - :y
+    c4 = @initconstraint :x^2 + :w
+    combined2 = InitConstraint(c3, c4)
+
+    @test dim(combined2) == 2
+    @test Set(combined2.sym) == Set([:x, :y, :w])
+
+    # Test combining constraints with different dimensions
+    c5 = @initconstraint begin
+        :a + :b
+        :c - :d
+    end
+    c6 = @initconstraint :e^2
+    combined3 = InitConstraint(c5, c6)
+
+    @test dim(combined3) == 3
+    @test Set(combined3.sym) == Set([:a, :b, :c, :d, :e])
+
+    u2 = [1.0, 2.0, 3.0, 4.0, 5.0]  # a=1, b=2, c=3, d=4, e=5
+    res = zeros(3)
+    combined3(res, u2)
+    @test res[1] ≈ 3.0   # a + b = 1 + 2
+    @test res[2] ≈ -1.0  # c - d = 3 - 4
+    @test res[3] ≈ 25.0  # e^2 = 25
+
+    # Test error case: empty varargs
+    @test_throws ArgumentError InitConstraint()
+
+    # Test single constraint (should work)
+    single = InitConstraint(c1)
+    @test single === c1
+
+    # Test combining multiple constraints
+    c7 = @initconstraint :p
+    c8 = @initconstraint :q
+    c9 = @initconstraint :r
+    multi_combined = InitConstraint(c7, c8, c9)
+
+    @test dim(multi_combined) == 3
+    @test Set(multi_combined.sym) == Set([:p, :q, :r])
+    u = [-1, 2, 5]
+    res = zeros(3)
+    multi_combined(res, u)
+    @test res == u
+
+    # test error on int indices
+    c10 = InitConstraint([:z, :x, :y], 1) do out, u
+        out[1] = u[1] + 2*u[2] + 3*u[3]  # u[1]=z, u[2]=x, u[3]=y
+    end
+    c11 = @initconstraint :z
+    @test_throws ArgumentError InitConstraint(c10, c11)
+end
+
 @testset "test input mapping" begin
     vm = Lib.swing_mtk()
     c = @initconstraint begin

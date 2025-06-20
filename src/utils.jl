@@ -193,8 +193,13 @@ acces `u[:x]` and `u[:y]` inside the condition function.
 struct SymbolicView{N,VT} <: AbstractVector{VT}
     v::VT
     syms::NTuple{N,Symbol}
+    allow_int_indexing::Bool
 end
-SymbolicView(v, syms::Vector) = SymbolicView(v, Tuple(syms))
+
+struct IllegalIntIndexingError <: Exception end
+
+SymbolicView(v, syms) = SymbolicView(v, syms, true)
+SymbolicView(v, syms::Vector, allow) = SymbolicView(v, Tuple(syms), allow)
 Base.IteratorSize(::Type{SymbolicView}) = IteratorSize(x.v)
 Base.IteratorEltype(::Type{SymbolicView}) = IteratorEltype(x.v)
 Base.eltype(::Type{SymbolicView}) = eltype(x.v)
@@ -212,8 +217,12 @@ function _sym_to_int(x::SymbolicView, sym::Symbol)
     isnothing(idx) && throw(ArgumentError("SymbolError: try to access SymbolicView($(x.syms)) with symbol $sym"))
     idx
 end
-_sym_to_int(x::SymbolicView, idx::Int) = idx
+function _sym_to_int(x::SymbolicView, idx::Int)
+    x.allow_int_indexing || throw(IllegalIntIndexingError())
+    idx
+end
 _sym_to_int(x::SymbolicView, idx) = _sym_to_int.(Ref(x), idx)
+
 
 
 ####
@@ -240,6 +249,64 @@ struct InitConstraint{F}
     prettyprint::Union{Nothing,String}
 end
 InitConstraint(f, sym, dim) = InitConstraint(f, sym, dim, nothing)
+
+"""
+    InitConstraint(subconstraints::InitConstraint...)
+
+Combine multiple `InitConstraint` objects into a single constraint.
+
+The resulting constraint will have:
+- Combined symbols from all subconstraints (deduplicated)
+- Total dimension equal to sum of individual dimensions
+- Function that evaluates all subconstraints sequentially
+
+Limitation: All subconstraints need to use `Symbol` indices internally, i.e. u[:x] rather than u[2]!
+"""
+function InitConstraint(subconstraints::InitConstraint...)
+    isempty(subconstraints) && throw(ArgumentError("At least one subconstraint must be provided"))
+    if length(subconstraints) == 1
+        return only(subconstraints)
+    end
+
+    all_syms = unique!(reduce(vcat, c.sym for c in subconstraints))
+    total_dim = sum(dim(c) for c in subconstraints)
+    f_range = []
+    offset = 0
+    for c in subconstraints
+        tup = (f=c.f, range=(offset+1):(offset+dim(c)))
+        offset += dim(c)
+        push!(f_range, tup)
+    end
+
+    f_range_tup = Tuple(f_range)
+    function combined_f(res, u)
+        offset = 0
+        unrolled_foreach(f_range_tup) do (cf, cr)
+            res_view = view(res, cr) 
+            cf(res_view, u)
+        end
+        nothing
+    end
+
+    try
+        su = SymbolicView(zeros(length(all_syms)), all_syms, false)
+        res = zeros(total_dim)
+        combined_f(res, su)
+    catch e
+        if e isa IllegalIntIndexingError
+            throw(ArgumentError(
+                "Cannot combine multiple init constraints, because at least \
+                 on of them uses `u[::Int]` indexing internally. Use `u[::Symbol]` \
+                 within the `InitConstraint` to fix this error."
+            ))
+        else
+            rethrow(e)
+        end
+    end
+    
+    InitConstraint(combined_f, all_syms, total_dim, nothing)
+end
+
 dim(c::InitConstraint) = c.dim
 
 (c::InitConstraint)(res, u) = c.f(res, SymbolicView(u, c.sym))
