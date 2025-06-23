@@ -11,10 +11,6 @@
 # > **Note**
 # >
 # > An Undirected Network is a network where all the connections between the nodes are bidirectional.
-#
-# (@Hans: this creates a copy of this Julia file. I am assuming you would only want the commands rather than the text.
-# I have created a file with just the code and minimal documentation and placed it in
-# `/examples_code/simple_diffusion_on_an_undirected_network.jl)`
 
 # ## Theoretical background
 #
