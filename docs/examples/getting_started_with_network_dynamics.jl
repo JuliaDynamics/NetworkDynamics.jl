@@ -12,7 +12,7 @@ This page will walk you through:
 !!! note
     An Undirected Network is a network where all the connections between the nodes are bidirectional.
 
-This example can be dowloaded as a normal Julia script [here](@__NAME__.jl). #md
+This example can be downloaded as a normal Julia script [here](@__NAME__.jl). #md
 =#
 
 #=
