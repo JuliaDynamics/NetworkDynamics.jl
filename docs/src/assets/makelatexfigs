@@ -18,4 +18,6 @@ if ! command_exists pdf2svg; then
 fi
 
 latexmk -pdflua -shell-escape mathmodel.tex
+latexmk -pdflua -shell-escape edgemodel.tex
+latexmk -pdflua -shell-escape nodemodel.tex
 latexmk -C
