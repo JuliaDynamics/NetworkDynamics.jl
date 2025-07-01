@@ -43,8 +43,7 @@ necessarily physical way.)
 
 ```@raw html
 <img src="../assets/mathmodel.svg" width="100%"/>
-``` 
-@Hans: the image seems to be missing here
+```
 
 ## Vertex Models
 ```@raw html
