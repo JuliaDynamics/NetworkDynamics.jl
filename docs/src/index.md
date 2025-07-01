@@ -8,10 +8,27 @@ highly efficient dynamic networks by describing the local dynamics on the edges 
 !!! note
     Complex network systems are composed by the entities that comprise them (the nodes) and the relationships that connect
     each entity with one another (the edges). The graphical depictions of such networks are called graphs. The simplest
-    network (which can be seen in Figure 1) is composed of two entities (so two nodes) who are only connected to each other.
+    The mathematical structure (used more or less interchangeably with Network) is also called [Graph](https://en.wikipedia.org/wiki/Graph_theory).
+    The network (which can be seen in the figure below) is composed of two entities (so two nodes) who are only connected to each other.
     This connection between the two is the edge of the system. Complex networks are composed of multiple nodes and edges,
     with most nodes connected to multiple other nodes with multiple edges *(@Hans: can you created the graph of such a
     network and place in here?)*
+
+```
+    @example
+    using Graphs, NetworkDynamics, OrdinaryDiffEqTsit5, StableRNGs, GraphMakie, Plots, CairoMakie #hide
+    using GraphMakie.NetworkLayout #hide
+    CairoMakie.activate!(type="svg") #hide
+    g = smallgraph(:bull) #hide
+    fig, ax, p = graphplot(g; ilabels=["v$i" for i in 1:nv(g)], #hide
+                              elabels=["e$i: $(e.src) ↦ $(e.dst)" for (i, e) in enumerate(edges(g))], #hide
+                              layout=Align(Stress()), figure=(;resolution=(400,200))) #hide
+    ymin, ymax = extrema(last.(p[:node_pos][])) #hide
+    ylims!(ax, (ymin-0.11*(ymax-ymin), ymax+0.11*(ymax-ymin)))#hide
+    hidespines!(ax) #hide
+    hidedecorations!(ax) #hide
+    fig #hide
+```
 
 The behavior of a node or an edge can be described through the use of a) algebraic equations, b) differential algebraic 
 equation (DAEs) in mass matrix form or c) ordinary differential equations (ODE). 
@@ -48,25 +65,21 @@ If you prefer to look at some concrete code first check out the [Getting Started
 
 ## Installation
 
-Install Julia:
--   https://julialang.org/install/
+1. Install Julia:
+-   [Julia Installation](https://julialang.org/install/)
 -   Find your OS and follow the instructions for the installation
 
-Install NetworkDynamics.jl with Julia's package manager:
+2. Install NetworkDynamics.jl with Julia's package manager:
 ```julia-repl
 (v1.11) pkg> add NetworkDynamics
 ```
 
-Next you need to install the Julia package Revise:
-```julia-repl
-import Pkg; Pkg.add("Revise")
-```
-
-Last you need to install the Julia package LiveServer:
+3. Install the Julia package LiveServer:
 ```julia-repl
 import Pkg; Pkg.add("LiveServer")
 ```
 
+To learn more about how to use Julia you can visit: [Modern Julia Workflows](https://modernjuliaworkflows.org/)
 
 
 ## Reproducibility
