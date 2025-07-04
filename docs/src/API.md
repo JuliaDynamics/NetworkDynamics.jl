@@ -162,7 +162,8 @@ InitConstraint
 set_initconstraint!
 delete_initconstraint!
 has_initconstraint
-get_initconstraint
+get_initconstraints
+add_initconstraint!
 InitFormula
 @initformula
 has_initformula

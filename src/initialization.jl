@@ -350,7 +350,7 @@ function initialize_component(cf;
         apply_init_formulas!(defaults, combined_initformulas; verbose)
     end
 
-    metadata_constraint = has_initconstraint(cf) ? get_initconstraint(cf) : nothing
+    metadata_constraint = has_initconstraint(cf) ? get_initconstraints(cf) : nothing
     combined_constraint = merge_initconstraints(metadata_constraint, additional_initconstraint)
 
     prob, boundT! = initialization_problem(cf, defaults, guesses, bounds,

@@ -90,16 +90,21 @@ function print_states_params(io, @nospecialize(c::ComponentModel), styling)
 
     if has_initformula(c)
         formulas = get_initformulas(c)
-        num, word = maybe_plural(length(formulas), "formula", "formulas")
+        total_eqs = sum(length(formula.outsym) for formula in formulas)
+        num, word = maybe_plural(total_eqs, "eq.", "eqs.")
         all_outsyms = reduce(vcat, [f.outsym for f in formulas])
-        str = "$num &init $word setting $(all_outsyms)"
+        formula_word = length(formulas) == 1 ? "formula" : "formulas"
+        str = "$num &init $word from $(length(formulas)) $formula_word setting $(all_outsyms)"
         push!(info, str)
     end
 
     if has_initconstraint(c)
-        constraint = get_initconstraint(c)
-        num, word = maybe_plural(constraint.dim, "eq.", "eqs.")
-        str = "$num &add. init $word for $(constraint.sym)"
+        constraints = get_initconstraints(c)
+        total_eqs = sum(constraint.dim for constraint in constraints)
+        num, word = maybe_plural(total_eqs, "eq.", "eqs.")
+        all_syms = unique(reduce(vcat, [constraint.sym for constraint in constraints]))
+        constraint_word = length(constraints) == 1 ? "constraint" : "constraints"
+        str = "$num &add. init $word from $(length(constraints)) $constraint_word for $(all_syms)"
         push!(info, str)
     end
 

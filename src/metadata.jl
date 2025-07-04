@@ -514,30 +514,66 @@ has_initconstraint(nw::Network, idx::VCIndex) = has_initconstraint(getcomp(nw, i
 has_initconstraint(nw::Network, idx::ECIndex) = has_initconstraint(getcomp(nw, idx))
 
 """
-    get_initconstraint(c::ComponentModel)
-    get_initconstraint(nw::Network, idx::Union{VIndex,EIndex})
+    get_initconstraints(c::ComponentModel)
+    get_initconstraints(nw::Network, idx::Union{VIndex,EIndex})
 
-Retrieves the initialization constraint for the component model.
-May error if no constraint is present. Use `has_initconstraint` to check first.
+Gets all initialization constraints for the component. Returns a tuple, even if there is only a single constraint.
 
-See also: [`has_initconstraint`](@ref), [`set_initconstraint!`](@ref).
+See also: [`has_initconstraint`](@ref), [`set_initconstraint!`](@ref), [`add_initconstraint!`](@ref).
 """
-get_initconstraint(c::ComponentModel) = get_metadata(c, :initconstraint)::InitConstraint
-get_initconstraint(nw::Network, idx::VCIndex) = get_initconstraint(getcomp(nw, idx))
-get_initconstraint(nw::Network, idx::ECIndex) = get_initconstraint(getcomp(nw, idx))
+function get_initconstraints(c::ComponentModel)
+    constraint = get_metadata(c, :initconstraint)
+    constraint isa InitConstraint ? (constraint,) : constraint
+end
+get_initconstraints(nw::Network, idx::VCIndex) = get_initconstraints(getcomp(nw, idx))
+get_initconstraints(nw::Network, idx::ECIndex) = get_initconstraints(getcomp(nw, idx))
 
 """
-    set_initconstraint!(c::ComponentModel, constraint::InitConstraint; check=true)
+    set_initconstraint!(c::ComponentModel, constraint; check=true)
     set_initconstraint!(nw::Network, idx::Union{VIndex,EIndex}, constraint; check=true)
 
-Sets the initialization constraint for the component. Overwrites any existing constraints.
-See also [`delete_initconstraint!`](@ref).
+Sets the initialization constraint(s) for the component. Overwrites any existing constraints.
+`constraint` can be a single `InitConstraint` or a tuple of `InitConstraint` objects.
+
+See also: [`add_initconstraint!`](@ref), [`get_initconstraints`](@ref), [`delete_initconstraint!`](@ref).
 """
-function set_initconstraint!(c::ComponentModel, constraint::InitConstraint; check=true)
-    check && assert_initconstraint_compat(c, constraint)
+function set_initconstraint!(c::ComponentModel, constraint; check=true)
+    if !(constraint isa InitConstraint) && !(constraint isa Tuple && all(c -> c isa InitConstraint, constraint))
+        throw(ArgumentError("Constraint must be an InitConstraint or a tuple of InitConstraint objects, got $(typeof(constraint))."))
+    end
+    if check
+        if constraint isa InitConstraint
+            assert_initconstraint_compat(c, constraint)
+        else
+            for constr in constraint
+                assert_initconstraint_compat(c, constr)
+            end
+        end
+    end
     set_metadata!(c, :initconstraint, constraint)
 end
-set_initconstraint!(nw::Network, idx::VCIndex, constraint; kw...) = set_initconstraint(getcomp(nw, idx), constraint; kw...)
+set_initconstraint!(nw::Network, idx::VCIndex, constraint; kw...) = set_initconstraint!(getcomp(nw, idx), constraint; kw...)
+set_initconstraint!(nw::Network, idx::ECIndex, constraint; kw...) = set_initconstraint!(getcomp(nw, idx), constraint; kw...)
+
+"""
+    add_initconstraint!(c::ComponentModel, constraint; check=true)
+    add_initconstraint!(nw::Network, idx::Union{VIndex,EIndex}, constraint; check=true)
+
+Adds an initialization constraint to the component. Does not overwrite existing constraints.
+`constraint` should be a single `InitConstraint` object.
+
+See also: [`set_initconstraint!`](@ref), [`get_initconstraints`](@ref).
+"""
+function add_initconstraint!(c::ComponentModel, constraint; check=true)
+    if !(constraint isa InitConstraint)
+        throw(ArgumentError("Constraint must be an InitConstraint, got $(typeof(constraint))."))
+    end
+    check && assert_initconstraint_compat(c, constraint)
+    new_constraint = has_initconstraint(c) ? (get_initconstraints(c)..., constraint) : (constraint,)
+    set_metadata!(c, :initconstraint, new_constraint)
+end
+add_initconstraint!(nw::Network, idx::VCIndex, constraint; kw...) = add_initconstraint!(getcomp(nw, idx), constraint; kw...)
+add_initconstraint!(nw::Network, idx::ECIndex, constraint; kw...) = add_initconstraint!(getcomp(nw, idx), constraint; kw...)
 
 """
     delete_initconstraint!(c::ComponentModel)
@@ -573,7 +609,7 @@ has_initformula(nw::Network, idx::ECIndex) = has_initformula(getcomp(nw, idx))
     get_initformulas(c::ComponentModel)
     get_initformulas(nw::Network, idx::Union{VIndex,EIndex})
 
-Gets all initialization formulas for the component. Returns a vector, even if there is only a single formula.
+Gets all initialization formulas for the component. Returns a tuple, even if there is only a single formula.
 
 See also: [`has_initformula`](@ref), [`set_initformula!`](@ref), [`add_initformula!`](@ref).
 """
@@ -589,13 +625,13 @@ get_initformulas(nw::Network, idx::ECIndex) = get_initformulas(getcomp(nw, idx))
     set_initformula!(nw::Network, idx::Union{VIndex,EIndex}, formula; check=true)
 
 Sets the initialization formula(s) for the component. Overwrites any existing formulas.
-`formula` can be a single `InitFormula` or a vector/tuple of `InitFormula` objects.
+`formula` can be a single `InitFormula` or a tuple of `InitFormula` objects.
 
 See also: [`add_initformula!`](@ref), [`get_initformulas`](@ref), [`delete_initformula!`](@ref).
 """
 function set_initformula!(c::ComponentModel, formula; check=true)
-    if !(formula isa InitFormula) && !(formula isa AbstractVector && all(f -> f isa InitFormula, formula)) && !(formula isa Tuple && all(f -> f isa InitFormula, formula))
-        throw(ArgumentError("Formula must be an InitFormula or a vector/tuple of InitFormula objects, got $(typeof(formula))."))
+    if !(formula isa InitFormula) && !(formula isa Tuple && all(f -> f isa InitFormula, formula))
+        throw(ArgumentError("Formula must be an InitFormula or a tuple of InitFormula objects, got $(typeof(formula))."))
     end
     if check
         if formula isa InitFormula
@@ -625,7 +661,7 @@ function add_initformula!(c::ComponentModel, formula; check=true)
         throw(ArgumentError("Formula must be an InitFormula, got $(typeof(formula))."))
     end
     check && assert_initformula_compat(c, formula)
-    new_formula = has_initformula(c) ? vcat(get_initformulas(c), formula) : [formula]
+    new_formula = has_initformula(c) ? (get_initformulas(c)..., formula) : (formula,)
     set_metadata!(c, :initformula, new_formula)
 end
 add_initformula!(nw::Network, idx::VCIndex, formula; kw...) = add_initformula!(getcomp(nw, idx), formula; kw...)
