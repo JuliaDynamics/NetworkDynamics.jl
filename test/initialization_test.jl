@@ -895,3 +895,63 @@ end
         @test_throws ArgumentError apply_init_formulas!(defaults, [f1, f2]; verbose=false)
     end
 end
+
+@testset "Metadata vs additional arguments consistency" begin
+    # Create a component model for testing
+    @mtkmodel TestMergeModel begin
+        @variables begin
+            u_r(t)=1, [description="d-voltage", output=true]
+            u_i(t)=0, [description="q-voltage", output=true]
+            i_r(t)=1, [description="d-current", input=true]
+            i_i(t)=0.1, [description="q-current", input=true]
+            θ(t), [guess=0.0, description="angle"]
+            ω(t), [guess=0.0, description="frequency"]
+            V_calc(t), [description="calculated voltage magnitude"]
+            P_calc(t), [description="calculated power"]
+        end
+        @parameters begin
+            M=0.005, [description="inertia"]
+            D=0.1, [description="damping"]
+            P_target=0.5, [guess=0.5, description="target power"]
+            V_target=1.0, [description="target voltage"]
+        end
+        @equations begin
+            Dt(θ) ~ ω
+            Dt(ω) ~ 1/M * (P_target - D*ω)
+            u_r ~ cos(θ)
+            u_i ~ sin(θ)
+            V_calc ~ sqrt(u_r^2 + u_i^2)
+            P_calc ~ u_r*i_r + u_i*i_i
+        end
+    end
+
+    vm = VertexModel(TestMergeModel(name=:test), [:i_r, :i_i], [:u_r, :u_i])
+
+    # Set initial metadata: 1 formula + 1 constraint
+    # InitFormula can only override states, parameters, inputs, or outputs - not observables
+    initial_formula = @initformula :V_target = 2.0
+    initial_constraint = @initconstraint :u_i
+    set_initformula!(vm, initial_formula)
+    set_initconstraint!(vm, initial_constraint)
+
+    # Create additional formula and constraint to pass as arguments
+    # Override existing parameter and add constraint for observable
+    additional_formula = @initformula :P_target = 1 
+    additional_constraint = @initconstraint :θ - 0.1
+
+    # First initialization: some from metadata, some from arguments
+    result1 = initialize_component(vm;
+        additional_initformula=additional_formula,
+        additional_initconstraint=additional_constraint,
+        verbose=false,
+        tol=Inf)
+
+    # Now add the additional items to metadata using add functions
+    add_initformula!(vm, additional_formula)
+    add_initconstraint!(vm, additional_constraint)
+
+    # Second initialization: everything from metadata, no additional arguments
+    result2 = initialize_component(vm; verbose=false, tol=Inf)
+
+    @test result1 == result2
+end

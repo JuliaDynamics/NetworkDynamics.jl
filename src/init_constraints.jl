@@ -435,7 +435,6 @@ function topological_sort_formulas(formulas)
         throw(ArgumentError("Multiple InitFormulas set the same symbol(s): $conflicts"))
     end
 
-
     # Build dependency graph using Graphs.jl
     g = SimpleDiGraph(n)
 
