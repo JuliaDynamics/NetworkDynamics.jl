@@ -650,29 +650,33 @@ end
         # Use ComponentLibrary model for testing
         swing_model = Lib.swing_mtk()
 
-        # Test valid formula - input symbols exist in component, output symbols are new
-        valid_formula = @initformula :V_magnitude = sqrt(:θ^2 + :ω^2)
-        @test NetworkDynamics.assert_initformula_compat(swing_model, valid_formula) == valid_formula
+        # Test valid formula - overriding existing state symbol
+        valid_state_formula = @initformula :θ = :ω + 1
+        @test NetworkDynamics.assert_initformula_compat(swing_model, valid_state_formula) == valid_state_formula
 
-        # Test another valid formula with parameters
-        valid_param_formula = @initformula :scaled_inertia = 2 * :M + :D
+        # Test another valid formula - overriding existing parameter
+        valid_param_formula = @initformula :Pmech = 2 * :M + :D
         @test NetworkDynamics.assert_initformula_compat(swing_model, valid_param_formula) == valid_param_formula
 
         # Test invalid input symbols (symbol doesn't exist in component)
-        invalid_input = @initformula :new_var = :nonexistent_symbol + 1
+        invalid_input = @initformula :θ = :nonexistent_symbol + 1
         @test_throws ArgumentError NetworkDynamics.assert_initformula_compat(swing_model, invalid_input)
 
-        # Test conflicting output symbols (output symbol already exists in component)
-        conflicting_output = @initformula :θ = :ω + 1  # θ already exists in swing_model
-        @test_throws ArgumentError NetworkDynamics.assert_initformula_compat(swing_model, conflicting_output)
+        # Test invalid output symbols (symbol doesn't exist in component)
+        invalid_output = @initformula :nonexistent_output = :ω + 1
+        @test_throws ArgumentError NetworkDynamics.assert_initformula_compat(swing_model, invalid_output)
 
-        # Test multiple output conflicts
-        multi_conflict = @initformula begin
-            :θ = :ω * 2     # θ conflicts
-            :M = :D + 1     # M conflicts
-            :new_var = :ω   # new_var is fine
+        # Test setting observable symbols (not allowed)
+        observable_conflict = @initformula :Pdamping = 1.0  # Pdamping is observable
+        @test_throws ArgumentError NetworkDynamics.assert_initformula_compat(swing_model, observable_conflict)
+
+        # Test multiple valid overrides
+        multi_valid = @initformula begin
+            :θ =  2     # θ override is valid
+            :M = :D + 1     # M override is valid
+            :ω =  0.1   # ω override is valid
         end
-        @test_throws ArgumentError NetworkDynamics.assert_initformula_compat(swing_model, multi_conflict)
+        @test NetworkDynamics.assert_initformula_compat(swing_model, multi_valid) == multi_valid
     end
 end
 

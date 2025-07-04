@@ -389,25 +389,22 @@ end
 
 # for metadata check, validates both input and output symbols
 function assert_initformula_compat(cf::ComponentModel, c::InitFormula)
-    # Get all existing symbols in the component
-    existing_symbols = Set(vcat(
+    settable_symbols = Set(vcat(
         sym(cf),
         psym(cf),
         insym_flat(cf),
-        outsym_flat(cf),
-        obssym(cf)
+        outsym_flat(cf)
     ))
+    input_symbols = settable_symbols ∪ obssym(cf)
 
-    # Validate input symbols (RHS of assignments) - should exist in component
-    input_mismatch = setdiff(c.sym, existing_symbols)
+    input_mismatch = setdiff(c.sym, input_symbols)
     if !isempty(input_mismatch)
         throw(ArgumentError("InitFormula uses input symbols not part of component model: $input_mismatch"))
     end
 
-    # Validate output symbols (LHS of assignments) - should NOT conflict with existing symbols
-    output_conflicts = intersect(c.outsym, existing_symbols)
-    if !isempty(output_conflicts)
-        throw(ArgumentError("InitFormula output symbols conflict with existing component symbols: $output_conflicts"))
+    missing_symbols = setdiff(c.outsym, settable_symbols)
+    if !isempty(missing_symbols)
+        throw(ArgumentError("InitFormula output symbols must be existing component symbols (not observables), but these are not: $missing_symbols"))
     end
 
     c
@@ -473,7 +470,9 @@ function topological_sort_formulas(formulas)
 end
 
 function apply_init_formulas!(defaults, formulas_unsorted; verbose=false)
-    formulas = topological_sort_formulas(formulas_unsorted)
+    # Convert tuple to vector if necessary
+    formulas_vec = formulas_unsorted isa Tuple ? collect(formulas_unsorted) : formulas_unsorted
+    formulas = topological_sort_formulas(formulas_vec)
 
     for f in formulas
         out = SymbolicView(zeros(length(f.outsym)), f.outsym)
