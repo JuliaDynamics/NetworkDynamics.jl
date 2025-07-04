@@ -48,27 +48,16 @@ function _solve_fixpoint(prob, alg::SteadyStateDiffEqAlgorithm; kwargs...)
     sol = SciMLBase.solve(prob, alg; kwargs...)
 end
 
-function initialization_problem(cf::T;
-    t=NaN ,
-    defaults=get_defaults_dict(cf),
-    guesses=get_guesses_dict(cf),
-    bounds=get_bounds_dict(cf),
-    additional_initformula=nothing,
-    additional_initconstraint=nothing,
-    apply_bound_transformation,
-    verbose=true) where {T<:ComponentModel}
+function initialization_problem(cf::T,
+    defaults,
+    guesses,
+    bounds,
+    initconstraint=nothing;
+    t=NaN,
+    apply_bound_transformation=true,
+    verbose=true
+) where {T<:ComponentModel}
     hasinsym(cf) || throw(ArgumentError("Component model musst have `insym`!"))
-
-    # extract and apply InitFormulas
-    metadata_initformulas = has_initformula(cf) ? get_initformula(cf) : nothing
-    extra_initformulas = collect_initformulas(metadata_initformula, additional_initformula)
-    if !isnothing(extra_initformulas)
-        apply_init_formulas!(defaults, extra_initformulas; verbose)
-    end
-
-    # extract InitConstraints
-    metadata_constraint = has_initconstraint(cf) ? get_initconstraint(cf) : nothing
-    extra_constraint = merge_initconstraints(metadata_constraint, additional_initconstraint)
 
     # The _m[s] suffix means a bitmask which indicate the free variables
     # the _fix[s] suffix means an array of same length as the symbols, which contains the fixed values
@@ -106,7 +95,7 @@ function initialization_problem(cf::T;
     iszero(Nfree) && return ((; u0=[]), identity)
 
     # check for additonal equations
-    additional_Neqs = isnothing(extra_constraint) ? 0 : dim(extra_constraint)
+    additional_Neqs = isnothing(initconstraint) ? 0 : dim(initconstraint)
 
     Neqs = dim(cf) + mapreduce(length, +, outfree_ms) + additional_Neqs
 
@@ -211,7 +200,7 @@ function initialization_problem(cf::T;
     pcache = DiffCache(zeros(pdim(cf)), chunksize)
 
     # generate a function to apply the additional constraints
-    additional_cf = prep_initiconstraint(cf, extra_constraint, chunksize) #is noop for add_c == nothing
+    additional_cf = prep_initiconstraint(cf, initconstraint, chunksize) #is noop for add_c == nothing
 
     fz = (dunl, unl, _) -> begin
         # apply the bound conserving transformation
@@ -290,6 +279,8 @@ end
                          default_overrides=nothing,
                          guess_overrides=nothing,
                          bound_overrides=nothing,
+                         additional_initformula=nothing,
+                         additional_initconstraint=nothing,
                          verbose=true,
                          apply_bound_transformation=true,
                          t=NaN,
@@ -308,6 +299,8 @@ The function solves a nonlinear problem to find values for all free variables/pa
 - `bounds`: Dictionary of bounds (defaults to metadata bounds)
 - `default/guess/bound_overrides`: Dictionary to merge with `defaults`/`guesses`/`bounds`.
   You can use `nothing` as a value for any key to remove that entry from the respective dictionary.
+- `additional_initformula`: Additional initialization formulas to apply beyond those in component metadata
+- `additional_initconstraint`: Additional initialization constraints to apply beyond those in component metadata
 - `verbose`: Whether to print information during initialization
 - `apply_bound_transformation`: Whether to apply bound-conserving transformations
 - `t`: Time at which to solve for steady state. Only relevant for components with explicit time dependency.
@@ -331,6 +324,8 @@ function initialize_component(cf;
                              default_overrides=nothing,
                              guess_overrides=nothing,
                              bound_overrides=nothing,
+                             additional_initformula=nothing,
+                             additional_initconstraint=nothing,
                              verbose=true,
                              apply_bound_transformation=true,
                              t=NaN,
@@ -346,7 +341,21 @@ function initialize_component(cf;
     guesses = filter(p -> !isnothing(p.second), guesses)
     bounds = filter(p -> !isnothing(p.second), bounds)
 
-    prob, boundT! = initialization_problem(cf; defaults, guesses, bounds, verbose, apply_bound_transformation)
+    # Extract metadata and merge with additional constraints/formulas
+    metadata_initformulas = has_initformula(cf) ? get_initformula(cf) : nothing
+    combined_initformulas = collect_initformulas(metadata_initformulas, additional_initformula)
+
+    # Apply initialization formulas to defaults
+    if !isnothing(combined_initformulas)
+        apply_init_formulas!(defaults, combined_initformulas; verbose)
+    end
+
+    metadata_constraint = has_initconstraint(cf) ? get_initconstraint(cf) : nothing
+    combined_constraint = merge_initconstraints(metadata_constraint, additional_initconstraint)
+
+    prob, boundT! = initialization_problem(cf, defaults, guesses, bounds,
+                                          combined_constraint;
+                                          verbose, apply_bound_transformation, t)
 
     # Dictionary for complete state (defaults + initialized values)
     init_state = Dict{Symbol, Float64}()
