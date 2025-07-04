@@ -553,6 +553,98 @@ delete_initconstraint!(c::ComponentModel) = delete_metadata!(c, :initconstraint)
 delete_initconstraint!(nw::Network, idx::VCIndex) = delete_initconstraint!(getcomp(nw, idx))
 delete_initconstraint!(nw::Network, idx::ECIndex) = delete_initconstraint!(getcomp(nw, idx))
 
+####
+#### Init formulas
+####
+
+"""
+    has_initformula(c::ComponentModel)
+    has_initformula(nw::Network, idx::Union{VIndex,EIndex})
+
+Checks if the component has initialization formulas in metadata.
+
+See also: [`get_initformulas`](@ref), [`set_initformula!`](@ref), [`add_initformula!`](@ref).
+"""
+has_initformula(c::ComponentModel) = has_metadata(c, :initformula)
+has_initformula(nw::Network, idx::VCIndex) = has_initformula(getcomp(nw, idx))
+has_initformula(nw::Network, idx::ECIndex) = has_initformula(getcomp(nw, idx))
+
+"""
+    get_initformulas(c::ComponentModel)
+    get_initformulas(nw::Network, idx::Union{VIndex,EIndex})
+
+Gets all initialization formulas for the component. Returns a vector, even if there is only a single formula.
+
+See also: [`has_initformula`](@ref), [`set_initformula!`](@ref), [`add_initformula!`](@ref).
+"""
+function get_initformulas(c::ComponentModel)
+    formula = get_metadata(c, :initformula)
+    formula isa InitFormula ? (formula,) : formula
+end
+get_initformulas(nw::Network, idx::VCIndex) = get_initformulas(getcomp(nw, idx))
+get_initformulas(nw::Network, idx::ECIndex) = get_initformulas(getcomp(nw, idx))
+
+"""
+    set_initformula!(c::ComponentModel, formula; check=true)
+    set_initformula!(nw::Network, idx::Union{VIndex,EIndex}, formula; check=true)
+
+Sets the initialization formula(s) for the component. Overwrites any existing formulas.
+`formula` can be a single `InitFormula` or a vector/tuple of `InitFormula` objects.
+
+See also: [`add_initformula!`](@ref), [`get_initformulas`](@ref), [`delete_initformula!`](@ref).
+"""
+function set_initformula!(c::ComponentModel, formula; check=true)
+    if !(formula isa InitFormula) && !(formula isa AbstractVector && all(f -> f isa InitFormula, formula)) && !(formula isa Tuple && all(f -> f isa InitFormula, formula))
+        throw(ArgumentError("Formula must be an InitFormula or a vector/tuple of InitFormula objects, got $(typeof(formula))."))
+    end
+    if check
+        if formula isa InitFormula
+            assert_initformula_compat(c, formula)
+        else
+            for f in formula
+                assert_initformula_compat(c, f)
+            end
+        end
+    end
+    set_metadata!(c, :initformula, formula)
+end
+set_initformula!(nw::Network, idx::VCIndex, formula; kw...) = set_initformula!(getcomp(nw, idx), formula; kw...)
+set_initformula!(nw::Network, idx::ECIndex, formula; kw...) = set_initformula!(getcomp(nw, idx), formula; kw...)
+
+"""
+    add_initformula!(c::ComponentModel, formula; check=true)
+    add_initformula!(nw::Network, idx::Union{VIndex,EIndex}, formula; check=true)
+
+Adds an initialization formula to the component. Does not overwrite existing formulas.
+`formula` should be a single `InitFormula` object.
+
+See also: [`set_initformula!`](@ref), [`get_initformulas`](@ref).
+"""
+function add_initformula!(c::ComponentModel, formula; check=true)
+    if !(formula isa InitFormula)
+        throw(ArgumentError("Formula must be an InitFormula, got $(typeof(formula))."))
+    end
+    check && assert_initformula_compat(c, formula)
+    new_formula = has_initformula(c) ? vcat(get_initformulas(c), formula) : [formula]
+    set_metadata!(c, :initformula, new_formula)
+end
+add_initformula!(nw::Network, idx::VCIndex, formula; kw...) = add_initformula!(getcomp(nw, idx), formula; kw...)
+add_initformula!(nw::Network, idx::ECIndex, formula; kw...) = add_initformula!(getcomp(nw, idx), formula; kw...)
+
+"""
+    delete_initformula!(c::ComponentModel)
+    delete_initformula!(nw::Network, idx::Union{VIndex,EIndex})
+
+Removes all initialization formulas from the component model,
+or from a component referenced by `idx` in a network.
+Returns `true` if formulas existed and were removed, `false` otherwise.
+
+See also: [`set_initformula!`](@ref), [`add_initformula!`](@ref).
+"""
+delete_initformula!(c::ComponentModel) = delete_metadata!(c, :initformula)
+delete_initformula!(nw::Network, idx::VCIndex) = delete_initformula!(getcomp(nw, idx))
+delete_initformula!(nw::Network, idx::ECIndex) = delete_initformula!(getcomp(nw, idx))
+
 
 # generate methods and docstrings for position and marker
 for md in [:position, :marker]

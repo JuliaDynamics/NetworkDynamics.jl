@@ -342,7 +342,7 @@ function initialize_component(cf;
     bounds = filter(p -> !isnothing(p.second), bounds)
 
     # Extract metadata and merge with additional constraints/formulas
-    metadata_initformulas = has_initformula(cf) ? get_initformula(cf) : nothing
+    metadata_initformulas = has_initformula(cf) ? get_initformulas(cf) : nothing
     combined_initformulas = collect_initformulas(metadata_initformulas, additional_initformula)
 
     # Apply initialization formulas to defaults

@@ -163,6 +163,13 @@ set_initconstraint!
 delete_initconstraint!
 has_initconstraint
 get_initconstraint
+InitFormula
+@initformula
+has_initformula
+get_initformulas
+set_initformula!
+add_initformula!
+delete_initformula!
 interface_values
 ```
 
