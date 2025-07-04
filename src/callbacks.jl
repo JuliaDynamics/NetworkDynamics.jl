@@ -508,43 +508,6 @@ function get_ctx(integrator, sym::EIndex)
 end
 
 ####
-#### SymbolicView helper type
-####
-"""
-    SymbolicView{N,VT} <: AbstractVetor{VT}
-
-Is a (smallish) fixed size vector type with named dimensions.
-Its main purpose is to allow named acces to variables in
-[`ComponentCondition`](@ref) and [`ComponentAffect`](@ref) functions.
-
-I.e. when the `ComponentAffect` declared `sym=[:x, :y]`, you can
-acces `u[:x]` and `u[:y]` inside the condition function.
-"""
-struct SymbolicView{N,VT} <: AbstractVector{VT}
-    v::VT
-    syms::NTuple{N,Symbol}
-end
-Base.IteratorSize(::Type{SymbolicView}) = IteratorSize(x.v)
-Base.IteratorEltype(::Type{SymbolicView}) = IteratorEltype(x.v)
-Base.eltype(::Type{SymbolicView}) = eltype(x.v)
-Base.size(x::SymbolicView) = size(x.v)
-Base.firstindex(x::SymbolicView) = firstindex(x.v)
-Base.lastindex(x::SymbolicView) = lastindex(x.v)
-Base.iterate(x::SymbolicView) = iterate(x.v)
-Base.iterate(x::SymbolicView, state) = iterate(x.v, state)
-Base.length(x::SymbolicView{N}) where {N} = N
-Base.IndexStyle(::Type{SymbolicView}) = IndexLinear()
-Base.getindex(x::SymbolicView, index) = x.v[_sym_to_int(x, index)]
-Base.setindex!(x::SymbolicView, value, index) = x.v[_sym_to_int(x, index)] = value
-function _sym_to_int(x::SymbolicView, sym::Symbol)
-    idx = findfirst(isequal(sym), x.syms)
-    isnothing(idx) && throw(ArgumentError("SymbolError: try to access SymbolicView($(x.syms)) with symbol $sym"))
-    idx
-end
-_sym_to_int(x::SymbolicView, idx::Int) = idx
-_sym_to_int(x::SymbolicView, idx) = _sym_to_int.(Ref(x), idx)
-
-####
 #### Internal function to check cb compat when added as metadata
 ####
 assert_cb_compat(comp::ComponentModel, t::Tuple) = assert_cb_compat.(Ref(comp), t)

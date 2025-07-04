@@ -152,8 +152,26 @@ describe_edges
 ## Initialization
 ```@docs
 find_fixpoint
+initialize_componentwise
+initialize_componentwise!
+initialize_component
 initialize_component!
 init_residual
+InitConstraint
+@initconstraint
+set_initconstraint!
+delete_initconstraint!
+has_initconstraint
+get_initconstraints
+add_initconstraint!
+InitFormula
+@initformula
+has_initformula
+get_initformulas
+set_initformula!
+add_initformula!
+delete_initformula!
+interface_values
 ```
 
 ## Callbacks API

@@ -148,11 +148,15 @@ function generate_massmatrix(eqs::AbstractVector{Equation})
     return M==I ? I : M
 end
 
-function warn_events(sys)
+function warn_missing_features(sys)
     cev = ModelingToolkit.get_continuous_events(sys)
     dev = ModelingToolkit.get_discrete_events(sys)
     if !isempty(cev) || !isempty(dev)
         @warn "Model has attached events, which is not supportet."
+    end
+
+    if !isempty(ModelingToolkit.initialization_equations(sys))
+        @warn "Model has explicit init equation. Those are currently ignored by NetworkDynamics.jl."
     end
 end
 

@@ -49,7 +49,7 @@ include("component_functions.jl")
 export ExecutionStyle, SequentialExecution, KAExecution, ThreadedExecution, PolyesterExecution
 include("executionstyles.jl")
 
-export Network
+export Network, get_graph
 include("network_structure.jl")
 
 export Aggregator, KAAggregator, SequentialAggregator, PolyesterAggregator, ThreadedAggregator, SparseAggregator
@@ -68,6 +68,26 @@ export @obsex
 export variable_symbols, parameter_symbols
 include("symbolicindexing.jl")
 
+export ComponentCondition, ComponentAffect
+export ContinousComponentCallback, VectorContinousComponentCallback
+export DiscreteComponentCallback, PresetTimeComponentCallback
+export SymbolicView
+include("callbacks.jl")
+
+using MacroTools: postwalk
+export @initconstraint, InitConstraint
+export @initformula, InitFormula
+include("init_constraints.jl")
+
+using OrderedCollections: OrderedDict
+using NonlinearSolve: AbstractNonlinearSolveAlgorithm, NonlinearFunction
+using NonlinearSolve: NonlinearLeastSquaresProblem, NonlinearProblem
+using SteadyStateDiffEq: SteadyStateProblem, SteadyStateDiffEqAlgorithm, SSRootfind
+export find_fixpoint, set_interface_defaults!
+export initialize_component, initialize_component!, init_residual
+export initialize_componentwise, initialize_componentwise!, interface_values
+include("initialization.jl")
+
 export has_metadata, get_metadata, set_metadata!, delete_metadata!
 export has_default, get_default, set_default!, delete_default!, set_defaults!
 export has_guess, get_guess, set_guess!, delete_guess!
@@ -76,21 +96,12 @@ export has_bounds, get_bounds, set_bounds!, delete_bounds!
 export has_graphelement, get_graphelement, set_graphelement!
 export get_initial_state, dump_initial_state, dump_state
 export has_callback, get_callbacks, set_callback!, add_callback!
+export has_initconstraint, get_initconstraints, set_initconstraint!, add_initconstraint!, delete_initconstraint!
+export has_initformula, get_initformulas, set_initformula!, add_initformula!, delete_initformula!
 export has_position, get_position, set_position!
 export has_marker, get_marker, set_marker!
+export get_defaults_dict, get_guesses_dict, get_bounds_dict, get_inits_dict
 include("metadata.jl")
-
-export ComponentCondition, ComponentAffect
-export ContinousComponentCallback, VectorContinousComponentCallback
-export DiscreteComponentCallback, PresetTimeComponentCallback
-export SymbolicView
-include("callbacks.jl")
-
-using NonlinearSolve: AbstractNonlinearSolveAlgorithm, NonlinearFunction
-using NonlinearSolve: NonlinearLeastSquaresProblem, NonlinearProblem
-using SteadyStateDiffEq: SteadyStateProblem, SteadyStateDiffEqAlgorithm, SSRootfind
-export find_fixpoint, initialize_component!, init_residual, set_interface_defaults!
-include("initialization.jl")
 
 include("show.jl")
 
