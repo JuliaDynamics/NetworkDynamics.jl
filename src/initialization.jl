@@ -577,7 +577,12 @@ function init_residual(cf::ComponentModel, state=get_defaults_or_inits_dict(cf);
     p = Float64[is_unused(cf, s) ? NaN : get(state, s, NaN) for s in psym(cf)]
 
     # collect additional constraints
-    additional_constraint = has_initconstraint(cf) ? get_initconstraint(cf) : nothing
+    additional_constraint = if has_initconstraint(cf)
+        _c = get_initconstraints(cf)
+        length(_c) == 1 ? only(_c) : InitConstraint(_c...)
+    else
+        nothing
+    end
     additional_Neqs = isnothing(additional_constraint) ? 0 : dim(additional_constraint)
     additional_cf = prep_initiconstraint(cf, additional_constraint, 0) #is noop for add_c == nothing
 

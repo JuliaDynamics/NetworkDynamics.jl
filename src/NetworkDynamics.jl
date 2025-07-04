@@ -100,7 +100,7 @@ export has_initconstraint, get_initconstraints, set_initconstraint!, add_initcon
 export has_initformula, get_initformulas, set_initformula!, add_initformula!, delete_initformula!
 export has_position, get_position, set_position!
 export has_marker, get_marker, set_marker!
-export get_defaults_dict, get_guesses_dict, get_inits_dict
+export get_defaults_dict, get_guesses_dict, get_bounds_dict, get_inits_dict
 include("metadata.jl")
 
 include("show.jl")

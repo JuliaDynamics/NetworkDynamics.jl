@@ -259,7 +259,9 @@ end
     @test get_initial_state(vf, :vf) < 1
 
     # check performance
-    prob, _ = NetworkDynamics.initialization_problem(vf; apply_bound_transformation=true);
+    prob, _ = NetworkDynamics.initialization_problem(vf,
+        get_defaults_dict(vf), get_guesses_dict(vf), get_bounds_dict(vf);
+        apply_bound_transformation=true);
     du = zeros(length(prob.f.resid_prototype));
     b = @b $(prob.f)($du, $(prob.u0), nothing)
     @test iszero(b.allocs)
@@ -493,16 +495,24 @@ end
         end
     end
     vm = VertexModel(InitSwing(name=:swing), [:i_r, :i_i], [:u_r, :u_i])
-    set_initconstraint!(vm, @initconstraint begin
+    ic = @initconstraint begin
         :u_mag - 1
         :Pel - 0.1
-    end)
+    end
+    res1 = initialize_component(vm, additional_initconstraint=ic, verbose=false)
+    set_initconstraint!(vm, ic)
+    res2 = initialize_component(vm, verbose=false)
+    @test res1 == res2
+
     initialize_component!(vm)
     @test get_initial_state(vm, :u_mag) ≈ 1
     @test get_initial_state(vm, :Pel) ≈ 0.1
 
     # test if the whole observable stuff is allocation free
-    prob, _ = NetworkDynamics.initialization_problem(vm; apply_bound_transformation=true);
+    prob, _ = NetworkDynamics.initialization_problem(
+        vm, get_guesses_dict(vm), get_defaults_dict(vm), get_bounds_dict(vm),
+        InitConstraint(get_initconstraints(vm)...);
+        apply_bound_transformation=true);
     du = zeros(length(prob.f.resid_prototype));
     b = @b $(prob.f)($du, $(prob.u0), nothing)
     @test iszero(b.allocs)
