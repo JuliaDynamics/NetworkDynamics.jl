@@ -88,6 +88,14 @@ function print_states_params(io, @nospecialize(c::ComponentModel), styling)
         push!(info, styled"$num &ext in: &&$arr")
     end
 
+    if has_initformula(c)
+        formulas = get_initformulas(c)
+        num, word = maybe_plural(length(formulas), "formula", "formulas")
+        all_outsyms = reduce(vcat, [f.outsym for f in formulas])
+        str = "$num &init $word setting $(all_outsyms)"
+        push!(info, str)
+    end
+
     if has_initconstraint(c)
         constraint = get_initconstraint(c)
         num, word = maybe_plural(constraint.dim, "eq.", "eqs.")
