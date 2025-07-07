@@ -182,34 +182,48 @@ You can print out the whole state using [`dump_initial_state`](@ref).
 dump_initial_state(vf)
 ```
 
-### Additional Initialization Constraints
-Sometimes it is required to add additional initialization constraints for components. This is done by using [`set_initconstraint!`](@ref) in combination with an [`InitConstraint`](@ref) object.
+### Advanced Component Initialization: Formulas and Constraints
 
-In a nutshell, an additional initialization constraint is a function of states/inputs/... whose residual should be zero at the initial state:
-```math
-0 = f_\mathrm{additional}(x, y, i, p, t)
-```
-Such a function is constructed using [`InitConstraint`](@ref) constructor:
+NetworkDynamics provides two complementary mechanisms for customizing component initialization beyond the basic defaults and guesses: **initialization formulas** and **initialization constraints**. These operate at different stages of the initialization pipeline and serve distinct purposes.
+Both can help to resolve underconstrained initialization problems: while init formulas **reduce the number of free variables** (by setting additional defaults), init constraints **increase the number of equations**.
+
+#### Initialization Formulas (InitFormulas)
+
+Initialization formulas act early in the initialization pipeline to compute and set default values based on other known values. They are particularly useful for deriving dependent quantities or ensuring consistency between related variables.
+
+Each formula can only reference symbols that are already available - it cannot use intermediate values computed within the same formula.
+
+**Basic Usage**: Use the [`@initformula`](@ref) macro to define formulas with assignment syntax:
+
 ```@example compinit
-additional_constraint = InitConstraint([:Pel, :u_r, :u_i], 2) do out, u
-    out[1] = u[:Pel] - 1.0
-    out[2] = sqrt(u[:u_r] ^ 2 + u[:u_i] ^ 2) - 1
+# Example: Set voltage magnitude and electrical power based on voltage components
+voltage_formula = @initformula begin
+    :V = sqrt(:u_r^2 + :u_i^2)     # Voltage magnitude from components
+    :Pel = :u_r * :i_r + :u_i * :i_i # Electrical power calculation
 end
 nothing #hide
 ```
-We need to pass a list of symbols we want to access, the number of additional equations (2 in this case), and a function which modifies the residual in-place.
-You can access inputs, states, outputs, and observables within the constraint function.
 
-For convenience, there is the [`@initconstraint`](@ref) macro to generate such constraints with less overhead. The definition below is equivalent to the definition above.
+**Applying Formulas**: Formulas can be either added to the metadata of components ([`set_initformula`](@ref), [`add_initformula`](@ref)) or passed as `additional_initformula` to the
+[`initialize_component[!]`](@ref `initialize_component`) functions.
+
+**Dependency Resolution**: When applying multiple separate formulas, NetworkDynamics automatically sorts them topologically to ensure correct evaluation order.
+
+
+#### Initialization Constraints (InitConstraints)
+
+Initialization constraints add equations to the nonlinear system that must be satisfied during the initialization solve. Unlike formulas, they don't directly set values but impose mathematical relationships.
+
+**Basic Usage**: Use the [`@initconstraint`](@ref) macro to define constraint equations:
+
 ```@example compinit
-additional_constraint = @initconstraint begin
-    :Pel - 1.0
-    sqrt(:u_r^2 + :u_i^2) - 1
+# Example: Constrain electrical power and voltage magnitude
+power_constraint = @initconstraint begin
+    :Pel - 1.0                        # Electrical power must equal 1.0
+    sqrt(:u_r^2 + :u_i^2) - 1.0      # Voltage magnitude must equal 1.0
 end
 nothing #hide
 ```
-Once we attach the additional constraint to the component model, it is also indicated in the printout:
-```@example compinit
-set_initconstraint!(vf, additional_constraint)
-vf
-```
+
+**Applying Constraints**: Constraints can be either added to the metadata of components ([`set_initconstraint`](@ref), [`add_initconstraint`](@ref)) or passed as `additional_initconstraint` to the
+[`initialize_component[!]`](@ref `initialize_component`) functions.

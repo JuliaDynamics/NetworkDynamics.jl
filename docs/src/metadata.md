@@ -16,6 +16,7 @@ Special metadata:
 - `:marker`: Store a `Symbol` for the graph plot. Possible values could be `:circle`, `:rect`, `:utriangle`, `:cross`, `:diamond`, `:dtriangle`, `:pentagon`, `:xcross` or anything which works as a `marker` keyword argument in Makie.
 - `:initconstraint`: Store additional initialization constrains. Has special `has_/get_/set_/delete_initconstraint` accessors. See [Initialization](@ref) for further
 details.
+- `:initformula`: Similar to initconstraint, but is a straight forward explicit mapping to initialize some variables.
 
 
 ## Symbol Metadata
