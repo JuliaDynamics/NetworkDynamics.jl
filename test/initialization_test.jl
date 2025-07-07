@@ -896,8 +896,8 @@ end
     end
 end
 
-@testset "Metadata vs additional arguments consistency" begin
-    # Create a component model for testing
+@testset "test initialization with additional initformula and initconstraint" begin
+    # Create a component model for testing both mutating and non-mutating versions
     @mtkmodel TestMergeModel begin
         @variables begin
             u_r(t)=1, [description="d-voltage", output=true]
@@ -925,33 +925,50 @@ end
         end
     end
 
-    vm = VertexModel(TestMergeModel(name=:test), [:i_r, :i_i], [:u_r, :u_i])
-
-    # Set initial metadata: 1 formula + 1 constraint
-    # InitFormula can only override states, parameters, inputs, or outputs - not observables
+    # Set up test data
     initial_formula = @initformula :V_target = 2.0
     initial_constraint = @initconstraint :u_i
-    set_initformula!(vm, initial_formula)
-    set_initconstraint!(vm, initial_constraint)
-
-    # Create additional formula and constraint to pass as arguments
-    # Override existing parameter and add constraint for observable
     additional_formula = @initformula :P_target = 1 
     additional_constraint = @initconstraint :θ - 0.1
 
-    # First initialization: some from metadata, some from arguments
-    result1 = initialize_component(vm;
+    # Test 1: Non-mutating version - additional parameters work same as metadata
+    vm_nonmut = VertexModel(TestMergeModel(name=:test_nonmut), [:i_r, :i_i], [:u_r, :u_i])
+    set_initformula!(vm_nonmut, initial_formula)
+    set_initconstraint!(vm_nonmut, initial_constraint)
+
+    result1 = initialize_component(vm_nonmut;
         additional_initformula=additional_formula,
         additional_initconstraint=additional_constraint,
-        verbose=false,
-        tol=Inf)
+        verbose=false, tol=Inf)
 
-    # Now add the additional items to metadata using add functions
-    add_initformula!(vm, additional_formula)
-    add_initconstraint!(vm, additional_constraint)
-
-    # Second initialization: everything from metadata, no additional arguments
-    result2 = initialize_component(vm; verbose=false, tol=Inf)
+    add_initformula!(vm_nonmut, additional_formula)
+    add_initconstraint!(vm_nonmut, additional_constraint)
+    result2 = initialize_component(vm_nonmut; verbose=false, tol=Inf)
 
     @test result1 == result2
+
+    # Test 2: Both versions produce identical results with additional parameters
+    vm_mut = VertexModel(TestMergeModel(name=:test_mut), [:i_r, :i_i], [:u_r, :u_i])
+    vm_nonmut_compare = VertexModel(TestMergeModel(name=:test_nonmut_compare), [:i_r, :i_i], [:u_r, :u_i])
+    
+    for vm in [vm_mut, vm_nonmut_compare]
+        set_initformula!(vm, initial_formula)
+        set_initconstraint!(vm, initial_constraint)
+    end
+
+    result_nonmut = initialize_component(vm_nonmut_compare;
+        additional_initformula=additional_formula,
+        additional_initconstraint=additional_constraint,
+        verbose=false, tol=Inf)
+
+    initialize_component!(vm_mut;
+        additional_initformula=additional_formula,
+        additional_initconstraint=additional_constraint,
+        verbose=false, tol=Inf)
+
+    # Compare results - validates both functionality and bug fix
+    @test result_nonmut[:V_target] ≈ get_initial_state(vm_mut, :V_target)
+    @test result_nonmut[:P_target] ≈ get_initial_state(vm_mut, :P_target)
+    @test result_nonmut[:θ] ≈ get_initial_state(vm_mut, :θ)
+    @test result_nonmut[:u_i] ≈ get_initial_state(vm_mut, :u_i)
 end

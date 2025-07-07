@@ -429,6 +429,8 @@ end
                           default_overrides=nothing,
                           guess_overrides=nothing,
                           bound_overrides=nothing,
+                          additional_initformula=nothing,
+                          additional_initconstraint=nothing,
                           verbose=true,
                           t=NaN,
                           kwargs...)
@@ -445,6 +447,8 @@ symbolic metadata and writes the initialized values back in to the metadata.
 - `default/guess/bound_overrides`: Dict of values that override existing
    default/guess/bound metadata. Use `nothing` as a value for any key to remove
    that metadata entry from the component model.
+- `additional_initformula`: Additional initialization formulas to apply beyond those in component metadata
+- `additional_initconstraint`: Additional initialization constraints to apply beyond those in component metadata
 - `verbose`: Whether to print information during initialization
 - `t`: Time at which to solve for steady state. Only relevant for components with explicit time dependency.
 - All other `kwargs` are passed to `initialize_component`
@@ -460,6 +464,8 @@ function initialize_component!(cf;
                               default_overrides=nothing,
                               guess_overrides=nothing,
                               bound_overrides=nothing,
+                              additional_initformula=nothing,
+                              additional_initconstraint=nothing,
                               verbose=true,
                               t=NaN,
                               kwargs...)
@@ -489,6 +495,8 @@ function initialize_component!(cf;
     # Now proceed with initialization using the updated metadata
     init_state = initialize_component(
         cf;
+        additional_initformula=additional_initformula,
+        additional_initconstraint=additional_initconstraint,
         verbose=verbose,
         t=t,
         kwargs...  # Only pass the remaining kwargs
@@ -504,8 +512,14 @@ function initialize_component!(cf;
 
     # Write back the initialized values to the component metadata
     for (sym, val) in init_state
-        has_default(cf, sym) && continue
-        set_init!(cf, sym, val)
+        if has_default(cf, sym)
+            # Check if initialized value differs from existing default
+            # This can happen when init formulas override default values
+            get_default(cf, sym) != val && set_default!(cf, sym, val)
+        else
+            # No default exists, store as init value
+            set_init!(cf, sym, val)
+        end
     end
 
     cf
