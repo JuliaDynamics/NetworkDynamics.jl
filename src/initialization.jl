@@ -652,6 +652,8 @@ initialize_docstring = raw"""
         default_overrides=nothing,
         guess_overrides=nothing,
         bound_overrides=nothing,
+        additional_initformula=nothing,
+        additional_initconstraint=nothing,
         verbose=false,
         subverbose=false,
         tol=1e-10,
@@ -675,6 +677,8 @@ state again, as it is stored in the metadata.
   Use `nothing` as a value for any key to remove that guess.
 - `bound_overrides`: Dictionary mapping symbolic indices to bounds for constrained variables.
   Use `nothing` as a value for any key to remove those bounds.
+- `additional_initformula`: Dictionary mapping component indices (VIndex/EIndex) to additional initialization formulas.
+- `additional_initconstraint`: Dictionary mapping component indices (VIndex/EIndex) to additional initialization constraints.
 - `verbose`: Whether to print information about each component initialization
 - `subverbose`: Whether to print detailed information within component initialization
 - `tol`: Tolerance for individual component residuals
@@ -712,6 +716,8 @@ function _initialize_componentwise(
     default_overrides=nothing,
     guess_overrides=nothing,
     bound_overrides=nothing,
+    additional_initformula=nothing,
+    additional_initconstraint=nothing,
     verbose=false,
     subverbose=false,
     tol=1e-10,
@@ -739,6 +745,8 @@ function _initialize_componentwise(
             default_overrides=_default_overrides,
             guess_overrides=_guess_overrides,
             bound_overrides=_bound_overrides,
+            additional_initformula=isnothing(additional_initformula) ? nothing : get(additional_initformula, VIndex(vi), nothing),
+            additional_initconstraint=isnothing(additional_initconstraint) ? nothing : get(additional_initconstraint, VIndex(vi), nothing),
             verbose=subverbose,
             t=t,
             tol=tol
@@ -756,6 +764,8 @@ function _initialize_componentwise(
             default_overrides=_default_overrides,
             guess_overrides=_guess_overrides,
             bound_overrides=_bound_overrides,
+            additional_initformula=isnothing(additional_initformula) ? nothing : get(additional_initformula, EIndex(ei), nothing),
+            additional_initconstraint=isnothing(additional_initconstraint) ? nothing : get(additional_initconstraint, EIndex(ei), nothing),
             verbose=subverbose,
             t=t,
             tol=tol
