@@ -20,8 +20,8 @@ WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"
 [weakdeps]
 Electron = "a1bb12fb-d4d1-54b4-b10a-ee7951ef7ad3"
 
-[sources]
-NetworkDynamics = {path = ".."}
+[sources.NetworkDynamics]
+path = ".."
 
 [extensions]
 NetworkDynamicsInspectorElectronExt = ["Electron"]
@@ -32,7 +32,7 @@ ColorSchemes = "3.29.0"
 Colors = "0.13.0"
 Downloads = "1.6.0"
 Electron = "6"
-GraphMakie = "0.5.14"
+GraphMakie = "0.5.14, 0.6"
 Graphs = "1.12.0"
 NetworkDynamics = "0.9.13"
 Observables = "0.5.5"
