@@ -20,6 +20,34 @@ function find_fixpoint(nw::Network,
 end
 function find_fixpoint(nw::Network, x0::AbstractVector, p::AbstractVector;
                        alg=SSRootfind(), kwargs...)
+    if any(isnan, x0) || any(isnan, p)
+        missing_vars = String[]
+        missing_params = String[]
+
+        if any(isnan, x0)
+            nan_indices = findall(isnan, x0)
+            variable_symbols = NetworkDynamics.SII.variable_symbols(nw)
+            missing_vars = [string(variable_symbols[i]) for i in nan_indices]
+        end
+
+        if any(isnan, p)
+            nan_indices = findall(isnan, p)
+            parameter_symbols = NetworkDynamics.SII.parameter_symbols(nw)
+            missing_params = [string(parameter_symbols[i]) for i in nan_indices]
+        end
+
+        if !isempty(missing_vars) || !isempty(missing_params)
+            error_msg = "find_fixpoint inputs contain NaNs, indicating missing default values:\n"
+            if !isempty(missing_vars)
+                error_msg *= "  Variables:  " * join(missing_vars, ", ") * "\n"
+            end
+            if !isempty(missing_params)
+                error_msg *= "  Parameters: " * join(missing_params, ", ") * "\n"
+            end
+            error_msg *= "This may indicate missing default values in component metadata or explicitly passed inputs with NaNs."
+            throw(ArgumentError(error_msg))
+        end
+    end
     prob = SteadyStateProblem(nw, x0, p)
     sol = _solve_fixpoint(prob, alg; kwargs...)
     if !SciMLBase.successful_retcode(sol.retcode)
