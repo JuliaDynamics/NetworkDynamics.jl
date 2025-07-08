@@ -680,7 +680,7 @@ state again, as it is stored in the metadata.
 - `additional_initformula`: Dictionary mapping component indices (VIndex/EIndex) to additional initialization formulas.
 - `additional_initconstraint`: Dictionary mapping component indices (VIndex/EIndex) to additional initialization constraints.
 - `verbose`: Whether to print information about each component initialization
-- `subverbose`: Whether to print detailed information within component initialization
+- `subverbose`: Whether to print detailed information within component initialization. Can be Vector [VIndex(1), EIndex(3), ...] for selective output
 - `tol`: Tolerance for individual component residuals
 - `nwtol`: Tolerance for the full network residual
 - `t`: Time at which to evaluate the system
@@ -738,7 +738,7 @@ function _initialize_componentwise(
         _default_overrides = _filter_overrides(nw, VIndex(vi), default_overrides)
         _guess_overrides = _filter_overrides(nw, VIndex(vi), guess_overrides)
         _bound_overrides = _filter_overrides(nw, VIndex(vi), bound_overrides)
-        verbose && subverbose && vi != 1 && println()
+        _subverbose = _determine_subverbose(subverbose, VIndex(vi))
         verbose && println("Initializing vertex $(vi)...")
         substate = initfun(
             nw[VIndex(vi)],
@@ -747,17 +747,18 @@ function _initialize_componentwise(
             bound_overrides=_bound_overrides,
             additional_initformula=isnothing(additional_initformula) ? nothing : get(additional_initformula, VIndex(vi), nothing),
             additional_initconstraint=isnothing(additional_initconstraint) ? nothing : get(additional_initconstraint, VIndex(vi), nothing),
-            verbose=subverbose,
+            verbose=_subverbose,
             t=t,
             tol=tol
         )
+        verbose && _subverbose && println()
         _merge_wrapped!(fullstate, substate, VIndex(vi))
     end
     for ei in 1:ne(nw)
         _default_overrides = _filter_overrides(nw, EIndex(ei), default_overrides)
         _guess_overrides = _filter_overrides(nw, EIndex(ei), guess_overrides)
         _bound_overrides = _filter_overrides(nw, EIndex(ei), bound_overrides)
-        verbose && subverbose && println()
+        _subverbose = _determine_subverbose(subverbose, EIndex(ei))
         verbose && println("Initializing edge $(ei)...")
         substate = initfun(
             nw[EIndex(ei)],
@@ -766,10 +767,11 @@ function _initialize_componentwise(
             bound_overrides=_bound_overrides,
             additional_initformula=isnothing(additional_initformula) ? nothing : get(additional_initformula, EIndex(ei), nothing),
             additional_initconstraint=isnothing(additional_initconstraint) ? nothing : get(additional_initconstraint, EIndex(ei), nothing),
-            verbose=subverbose,
+            verbose=_subverbose,
             t=t,
             tol=tol
         )
+        verbose && _subverbose && ei != ne(nw) && println()
         _merge_wrapped!(fullstate, substate, EIndex(ei))
     end
 
@@ -818,6 +820,9 @@ function _merge_wrapped!(fullstate, substate, wrapper)
     fullstate
 end
 _merge_wrapped!(::Nothing, _, _) = nothing
+_determine_subverbose(subverbose::Bool, _) = subverbose
+_determine_subverbose(subverbose::AbstractVector, idx) = idx ∈ subverbose
+_determine_subverbose(subverbose, idx) = idx == subverbose
 
 """
     interface_values(s::NWState) :: OrderedDict{SymbolicIndex, Float64}
