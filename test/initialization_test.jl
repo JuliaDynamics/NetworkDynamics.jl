@@ -928,7 +928,7 @@ end
     # Set up test data
     initial_formula = @initformula :V_target = 2.0
     initial_constraint = @initconstraint :u_i
-    additional_formula = @initformula :P_target = 1 
+    additional_formula = @initformula :P_target = 1
     additional_constraint = @initconstraint :θ - 0.1
 
     # Test 1: Non-mutating version - additional parameters work same as metadata
@@ -950,7 +950,7 @@ end
     # Test 2: Both versions produce identical results with additional parameters
     vm_mut = VertexModel(TestMergeModel(name=:test_mut), [:i_r, :i_i], [:u_r, :u_i])
     vm_nonmut_compare = VertexModel(TestMergeModel(name=:test_nonmut_compare), [:i_r, :i_i], [:u_r, :u_i])
-    
+
     for vm in [vm_mut, vm_nonmut_compare]
         set_initformula!(vm, initial_formula)
         set_initconstraint!(vm, initial_constraint)
@@ -971,4 +971,51 @@ end
     @test result_nonmut[:P_target] ≈ get_initial_state(vm_mut, :P_target)
     @test result_nonmut[:θ] ≈ get_initial_state(vm_mut, :θ)
     @test result_nonmut[:u_i] ≈ get_initial_state(vm_mut, :u_i)
+end
+
+@testset "test duplicate detection for add_initconstraint! and add_initformula!" begin
+    # Create a component model for testing
+    swing_model = Lib.swing_mtk()
+
+    @testset "add_initconstraint! duplicate detection" begin
+        # Create test constraints
+        c1 = @initconstraint :θ - 0.1
+        c2 = @initconstraint :ω + 0.5
+
+        # Test adding first constraint returns true
+        @test add_initconstraint!(swing_model, c1)
+        @test has_initconstraint(swing_model)
+
+        # Test adding second constraint returns true
+        @test add_initconstraint!(swing_model, c2)
+        constraints = get_initconstraints(swing_model)
+        @test length(constraints) == 2
+
+        # Test adding duplicate constraint returns false
+        @test !add_initconstraint!(swing_model, c1)
+        @test !add_initconstraint!(swing_model, c2)
+        constraints_after = get_initconstraints(swing_model)
+        @test length(constraints_after) == 2  # Should still be 2
+    end
+
+    @testset "add_initformula! duplicate detection" begin
+        # Create test formulas
+        f1 = @initformula :θ = :ω + 1
+        f2 = @initformula :Pmech = 2 * :M + :D
+
+        # Test adding first formula returns true
+        @test add_initformula!(swing_model, f1)
+        @test has_initformula(swing_model)
+
+        # Test adding second formula returns true
+        @test add_initformula!(swing_model, f2)
+        formulas = get_initformulas(swing_model)
+        @test length(formulas) == 2
+
+        # Test adding duplicate formula returns false
+        @test !add_initformula!(swing_model, f1)
+        @test !add_initformula!(swing_model, f2)
+        formulas_after = get_initformulas(swing_model)
+        @test length(formulas_after) == 2  # Should still be 2
+    end
 end

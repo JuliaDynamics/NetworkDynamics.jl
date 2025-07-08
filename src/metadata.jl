@@ -569,8 +569,18 @@ function add_initconstraint!(c::ComponentModel, constraint; check=true)
         throw(ArgumentError("Constraint must be an InitConstraint, got $(typeof(constraint))."))
     end
     check && assert_initconstraint_compat(c, constraint)
-    new_constraint = has_initconstraint(c) ? (get_initconstraints(c)..., constraint) : (constraint,)
-    set_metadata!(c, :initconstraint, new_constraint)
+
+    if has_initconstraint(c)
+        existing_constraints = get_initconstraints(c)
+
+        constraint ∈ existing_constraints && return false
+
+        new_constraints = (existing_constraints..., constraint)
+        set_metadata!(c, :initconstraint, new_constraints)
+    else
+        set_metadata!(c, :initconstraint, (constraint,))
+    end
+    return true
 end
 add_initconstraint!(nw::Network, idx::VCIndex, constraint; kw...) = add_initconstraint!(getcomp(nw, idx), constraint; kw...)
 add_initconstraint!(nw::Network, idx::ECIndex, constraint; kw...) = add_initconstraint!(getcomp(nw, idx), constraint; kw...)
@@ -661,8 +671,18 @@ function add_initformula!(c::ComponentModel, formula; check=true)
         throw(ArgumentError("Formula must be an InitFormula, got $(typeof(formula))."))
     end
     check && assert_initformula_compat(c, formula)
-    new_formula = has_initformula(c) ? (get_initformulas(c)..., formula) : (formula,)
-    set_metadata!(c, :initformula, new_formula)
+
+    if has_initformula(c)
+        existing_formulas = get_initformulas(c)
+
+        formula ∈ existing_formulas && return false
+
+        new_formulas = (existing_formulas..., formula)
+        set_metadata!(c, :initformula, new_formulas)
+    else
+        set_metadata!(c, :initformula, (formula,))
+    end
+    return true
 end
 add_initformula!(nw::Network, idx::VCIndex, formula; kw...) = add_initformula!(getcomp(nw, idx), formula; kw...)
 add_initformula!(nw::Network, idx::ECIndex, formula; kw...) = add_initformula!(getcomp(nw, idx), formula; kw...)
