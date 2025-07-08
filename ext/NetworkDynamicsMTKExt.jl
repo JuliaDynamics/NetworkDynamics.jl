@@ -351,15 +351,27 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         @warn "obs_deps !⊆ parameters ∪ unknowns. Difference: $(setdiff(obs_deps, Set(allparams) ∪ Set(states)))"
     end
 
-    # if some states shadow outputs (out ~ state in observed)
+    # if some outputs are direct aliases for states
     # switch their names. I.e. prioritize use of name `out`
+    function state_alias(output)
+        if output ∈ keys(obs_subs) &&
+           iscall(obs_subs[output]) &&
+           operation(obs_subs[output]) isa Symbolics.BasicSymbolic
+            return state_alias(obs_subs[output])
+        elseif output ∈ Set(states)
+            return output
+        else
+            return nothing
+        end
+    end
+
     renamings = Dict()
-    for eq in obseqs_sorted
-        if eq.lhs ∈ Set(alloutputs) && iscall(eq.rhs) &&
-            operation(eq.rhs) isa Symbolics.BasicSymbolic && eq.rhs ∈ Set(states)
-            verbose && @info "Encountered trivial equation $eq. Swap out $(eq.lhs) <=> $(eq.rhs) everywhere."
-            renamings[eq.lhs] = eq.rhs
-            renamings[eq.rhs] = eq.lhs
+    for output in alloutputs
+        sa = state_alias(output)
+        if !isnothing(sa)
+            verbose && @info "Output $output ≙ $sa, prioritize output name over state name."
+            renamings[output] = sa
+            renamings[sa] = output
         end
     end
     if !isempty(renamings)
@@ -367,7 +379,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         obseqs_sorted = map(eq -> substitute(eq, renamings), obseqs_sorted)
         obs_subs = OrderedDict(eq.lhs => eq.rhs for eq in obseqs_sorted)
         states = map(s -> substitute(s, renamings), states)
-        verbose && @info "New States:" states
+        verbose && @info "New states with applied output aliases:" states
     end
 
     # find the output equations, this might remove them from obseqs_sorted (obs_subs stays intact)
