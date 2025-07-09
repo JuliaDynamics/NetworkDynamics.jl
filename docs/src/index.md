@@ -2,7 +2,7 @@
 
 *NetworkDynamics.jl* is a package to simulate dynamical systems within complex networks. It provides an interface 
 between the [Graphs.jl](https://github.com/JuliaGraphs/Graphs.jl) and the 
-[DifferentialEquations.jl](https://github.com/SciML/DifferentialEquations.jl) packages and faciliates the simulation of 
+[DifferentialEquations.jl](https://github.com/SciML/DifferentialEquations.jl) packages and facilitates the simulation of 
 highly efficient dynamic networks by describing the local dynamics on the edges and vertices of the graph.
 
 !!! note
@@ -11,26 +11,24 @@ highly efficient dynamic networks by describing the local dynamics on the edges 
     The mathematical structure (used more or less interchangeably with Network) is also called [Graph](https://en.wikipedia.org/wiki/Graph_theory).
     The network (which can be seen in the figure below) is composed of two entities (so two nodes) who are only connected to each other.
     This connection between the two is the edge of the system. Complex networks are composed of multiple nodes and edges,
-    with most nodes connected to multiple other nodes with multiple edges *(@Hans: can you created the graph of such a
-    network and place in here?)*
+    with most nodes connected to multiple other nodes with multiple edges
 
-```
-    @example
-    using Graphs, NetworkDynamics, OrdinaryDiffEqTsit5, StableRNGs, GraphMakie, Plots, CairoMakie #hide
-    using GraphMakie.NetworkLayout #hide
-    CairoMakie.activate!(type="svg") #hide
-    g = smallgraph(:bull) #hide
-    fig, ax, p = graphplot(g; ilabels=["v$i" for i in 1:nv(g)], #hide
-                              elabels=["e$i: $(e.src) ↦ $(e.dst)" for (i, e) in enumerate(edges(g))], #hide
-                              layout=Align(Stress()), figure=(;resolution=(400,200))) #hide
-    ymin, ymax = extrema(last.(p[:node_pos][])) #hide
-    ylims!(ax, (ymin-0.11*(ymax-ymin), ymax+0.11*(ymax-ymin)))#hide
-    hidespines!(ax) #hide
-    hidedecorations!(ax) #hide
-    fig #hide
+```@example
+using Graphs, GraphMakie, CairoMakie #hide
+using GraphMakie.NetworkLayout #hide
+CairoMakie.activate!(type="svg") #hide
+g = smallgraph(:bull) #hide
+fig, ax, p = graphplot(g; ilabels=["v$i" for i in 1:nv(g)], #hide
+                          elabels=["e$i: $(e.src) ↦ $(e.dst)" for (i, e) in enumerate(edges(g))], #hide
+                          layout=Align(Stress()), figure=(;resolution=(830,450))) #hide
+ymin, ymax = extrema(last.(p[:node_pos][])) #hide
+ylims!(ax, (ymin-0.11*(ymax-ymin), ymax+0.11*(ymax-ymin)))#hide
+hidespines!(ax) #hide
+hidedecorations!(ax) #hide
+fig #hide
 ```
 
-The behavior of a node or an edge can be described through the use of a) algebraic equations, b) differential algebraic 
+The behavior of a node or an edge can be described through the use of (a) algebraic equations, (b) differential algebraic 
 equation (DAEs) in mass matrix form or c) ordinary differential equations (ODE). 
 
 The core of the package is the function [`Network`](@ref). It accepts the functions describing the local dynamics on the
@@ -49,7 +47,7 @@ Main features:
 - your network.
 - [Symbolic Indexing](@ref) into solutions and states: NetworkDynamics keeps track of the states of each individual 
 - subsystem.
-- Diverse execution schemes: NetworkDynamics exploits the known inter-dependencies between components to auto 
+- Diverse execution schemes: NetworkDynamics exploits the known interdependencies between components to auto 
 - parallelize execution, even on GPUs!
 - Equation based models: you can model local dynamics using 
 - [ModelingToolkit.jl](https://docs.sciml.ai/ModelingToolkit/dev/) and them combine them into larger networks by using 
