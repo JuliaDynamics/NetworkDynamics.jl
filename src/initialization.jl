@@ -313,6 +313,7 @@ end
                          apply_bound_transformation=true,
                          t=NaN,
                          tol=1e-10,
+                         residual=nothing,
                          kwargs...)
 
 The function solves a nonlinear problem to find values for all free variables/parameters
@@ -333,6 +334,7 @@ The function solves a nonlinear problem to find values for all free variables/pa
 - `apply_bound_transformation`: Whether to apply bound-conserving transformations
 - `t`: Time at which to solve for steady state. Only relevant for components with explicit time dependency.
 - `tol`: Tolerance for the residual of the initialized model (defaults to `1e-10`). Init throws error if resid < tol.
+- `residual`: Optional `Ref{Float64}` which gets the final residual of the initialized model.
 - `kwargs...`: Additional arguments passed to the nonlinear solver
 
 ## Returns
@@ -358,6 +360,7 @@ function initialize_component(cf;
                              apply_bound_transformation=true,
                              t=NaN,
                              tol=1e-10,
+                             residual=nothing,
                              kwargs...)
 
     defaults = isnothing(default_overrides) ? defaults : merge(defaults, default_overrides)
@@ -421,6 +424,9 @@ function initialize_component(cf;
     else
         res = init_residual(cf, init_state, t=NaN)
         verbose && @info "No free variables! Residual $(res)"
+    end
+    if residual isa Ref
+        residual[] = res
     end
     if !(res < tol)
         error("Initialized model has a residual larger then specified tolerance $(res) > $(tol)! \
@@ -529,9 +535,6 @@ function initialize_component!(cf;
         t=t,
         kwargs...  # Only pass the remaining kwargs
     )
-
-    # Calculate residual for validation
-    resid = init_residual(cf, init_state; t=t)
 
     # delete all inits
     for s in keys(get_inits_dict(cf))
@@ -767,7 +770,9 @@ function _initialize_componentwise(
         _guess_overrides = _filter_overrides(nw, VIndex(vi), guess_overrides)
         _bound_overrides = _filter_overrides(nw, VIndex(vi), bound_overrides)
         _subverbose = _determine_subverbose(subverbose, VIndex(vi))
-        verbose && println("Initializing vertex $(vi)...")
+        verbose && print("Initializing vertex $(vi)...")
+        _subverbose && println()
+        rescapture = Ref{Float64}(NaN) # residual for the component
         substate = initfun(
             nw[VIndex(vi)],
             default_overrides=_default_overrides,
@@ -777,8 +782,10 @@ function _initialize_componentwise(
             additional_initconstraint=isnothing(additional_initconstraint) ? nothing : get(additional_initconstraint, VIndex(vi), nothing),
             verbose=_subverbose,
             t=t,
-            tol=tol
+            tol=tol,
+            residual=rescapture,
         )
+        !_subverbose && verbose && println("\b\b\b => residual $(rescapture[])")
         verbose && _subverbose && println()
         _merge_wrapped!(fullstate, substate, VIndex(vi))
     end
@@ -787,7 +794,9 @@ function _initialize_componentwise(
         _guess_overrides = _filter_overrides(nw, EIndex(ei), guess_overrides)
         _bound_overrides = _filter_overrides(nw, EIndex(ei), bound_overrides)
         _subverbose = _determine_subverbose(subverbose, EIndex(ei))
-        verbose && println("Initializing edge $(ei)...")
+        verbose && print("Initializing edge $(ei)...")
+        _subverbose && println()
+        rescapture = Ref{Float64}(NaN) # residual for the component
         substate = initfun(
             nw[EIndex(ei)],
             default_overrides=_default_overrides,
@@ -797,9 +806,11 @@ function _initialize_componentwise(
             additional_initconstraint=isnothing(additional_initconstraint) ? nothing : get(additional_initconstraint, EIndex(ei), nothing),
             verbose=_subverbose,
             t=t,
-            tol=tol
+            tol=tol,
+            residual=rescapture,
         )
-        verbose && _subverbose && ei != ne(nw) && println()
+        !_subverbose && verbose && println("\b\b\b => residual $(rescapture[])")
+        verbose && _subverbose && println()
         _merge_wrapped!(fullstate, substate, EIndex(ei))
     end
 
