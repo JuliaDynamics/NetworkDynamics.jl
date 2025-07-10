@@ -6,7 +6,7 @@ Component metadata is a `Dict{Symbol,Any}` attached to each component to store v
 
 To access the data, you can use the methods `has_metadata`, `get_metadata`, `set_metadata!` and `delete_metadata!` (see [Component Metadata API](@ref)).
 
-Special metadata: 
+Special metadata:
 
 - `:graphelement`: optional field to specialize the graphelement for each
   component (`vidx`) for vertices, `(;src,dst)` named tuple of either vertex
@@ -14,7 +14,7 @@ Special metadata:
 - `:callback`: optional field to define callback functions on the component level. See [Callbacks](@ref) and [Callbacks API](@ref) for more information.
 - `:position`: Store a tuple `(x, y)` with position of the node for plotting. Has special accessors `has_/get_/set_position`.
 - `:marker`: Store a `Symbol` for the graph plot. Possible values could be `:circle`, `:rect`, `:utriangle`, `:cross`, `:diamond`, `:dtriangle`, `:pentagon`, `:xcross` or anything which works as a `marker` keyword argument in Makie.
-- `:initconstraint`: Store additional initialization constrains. Has special `has_/get_/set_/delete_initconstraint` accessors. See [Initialization](@ref) for further
+- `:initconstraint`: Store additional initialization constrains. Has special `has_/get_/set_/delete_initconstraint` accessors. See [Initialization](@ref initialization-guide) for further
 details.
 - `:initformula`: Similar to initconstraint, but is a straight forward explicit mapping to initialize some variables.
 

@@ -1,4 +1,4 @@
-# Initialization
+# [Initialization](@id initialization-guide)
 
 Initialization is a critical step in simulation dynamical systems on networks, involving finding valid initial conditions that satisfy the system's constraints. NetworkDynamics provides several layers of initialization tools, from individual component initialization to full network initialization.
 
