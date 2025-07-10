@@ -452,9 +452,9 @@ function SII.observed(nw::Network, snis)
 
     for (i, sni) in enumerate(_snis)
         if SII.is_variable(nw, sni)
-            arraymapping[i] = (U_TYPE, SII.variable_index(nw, sni))
+            arraymapping[i] = (U_TYPE, SII.variable_index(nw, sni)::Int)
         elseif SII.is_parameter(nw, sni)
-            arraymapping[i] = (P_TYPE, SII.parameter_index(nw, sni))
+            arraymapping[i] = (P_TYPE, SII.parameter_index(nw, sni)::Int)
         else
             cf = getcomp(nw, sni)
 
