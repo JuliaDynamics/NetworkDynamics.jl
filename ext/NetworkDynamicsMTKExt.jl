@@ -35,7 +35,7 @@ Additional kw arguments:
 """
 function VertexModel(sys::ODESystem, inputs, outputs; verbose=false, name=getname(sys),
                      ff_to_constraint=true, extin=nothing, kwargs...)
-    warn_events(sys)
+    warn_missing_features(sys)
     inputs = inputs isa AbstractVector ? inputs : [inputs]
     outputs = outputs isa AbstractVector ? outputs : [outputs]
 
@@ -122,7 +122,7 @@ Additional kw arguments:
 """
 function EdgeModel(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=false, name=getname(sys),
                    ff_to_constraint=false, extin=nothing, kwargs...)
-    warn_events(sys)
+    warn_missing_features(sys)
     srcin = srcin isa AbstractVector ? srcin : [srcin]
     dstin = dstin isa AbstractVector ? dstin : [dstin]
 
@@ -316,6 +316,16 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     # assert the ordering of states and equations
     explicit_states = Symbolic[eq_type(eq)[2] for eq in eqs if !isnothing(eq_type(eq)[2])]
     implicit_states = setdiff(unknowns(sys), explicit_states) ∪ implicit_outputs
+
+    if length(explicit_states) + length(implicit_states) !== length(eqs)
+        buf = IOBuffer()
+        println(buf, "The number of states does not match the number of equations.")
+        println(buf, "Explicit states: ", explicit_states)
+        println(buf, "Implicit states: ", implicit_states)
+        println(buf, "$(length(eqs)) Equations.")
+        throw(ArgumentError(String(take!(buf))))
+    end
+
     states = map(eqs) do eq
         type = eq_type(eq)
         isnothing(type[2]) ? pop!(implicit_states) : type[2]
@@ -341,15 +351,27 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         @warn "obs_deps !⊆ parameters ∪ unknowns. Difference: $(setdiff(obs_deps, Set(allparams) ∪ Set(states)))"
     end
 
-    # if some states shadow outputs (out ~ state in observed)
+    # if some outputs are direct aliases for states
     # switch their names. I.e. prioritize use of name `out`
+    function state_alias(output)
+        if output ∈ keys(obs_subs) &&
+           iscall(obs_subs[output]) &&
+           operation(obs_subs[output]) isa Symbolics.BasicSymbolic
+            return state_alias(obs_subs[output])
+        elseif output ∈ Set(states)
+            return output
+        else
+            return nothing
+        end
+    end
+
     renamings = Dict()
-    for eq in obseqs_sorted
-        if eq.lhs ∈ Set(alloutputs) && iscall(eq.rhs) &&
-            operation(eq.rhs) isa Symbolics.BasicSymbolic && eq.rhs ∈ Set(states)
-            verbose && @info "Encountered trivial equation $eq. Swap out $(eq.lhs) <=> $(eq.rhs) everywhere."
-            renamings[eq.lhs] = eq.rhs
-            renamings[eq.rhs] = eq.lhs
+    for output in alloutputs
+        sa = state_alias(output)
+        if !isnothing(sa)
+            verbose && @info "Output $output ≙ $sa, prioritize output name over state name."
+            renamings[output] = sa
+            renamings[sa] = output
         end
     end
     if !isempty(renamings)
@@ -357,7 +379,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         obseqs_sorted = map(eq -> substitute(eq, renamings), obseqs_sorted)
         obs_subs = OrderedDict(eq.lhs => eq.rhs for eq in obseqs_sorted)
         states = map(s -> substitute(s, renamings), states)
-        verbose && @info "New States:" states
+        verbose && @info "New states with applied output aliases:" states
     end
 
     # find the output equations, this might remove them from obseqs_sorted (obs_subs stays intact)

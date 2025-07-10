@@ -1,3 +1,10 @@
+# to account for both _metadata(::ComponentModel, ::Symbol) and _metadata(::Network, ::SymbolicIndex)
+const Comp_or_NW = Union{ComponentModel, Network}
+# types for for referencing a single component
+# not union to resolve dispatch ambiguity
+const VCIndex = VIndex{<:Any, Nothing}
+const ECIndex = EIndex{<:Any, Nothing}
+
 ####
 #### per sym metadata
 ####
@@ -10,9 +17,6 @@ function _assert_symbol_exists(c::ComponentModel, s::Symbol)
     contains || throw(ArgumentError("Symbol $s does not exist in component model."))
     return nothing
 end
-
-# to account for both _metadata(::ComponentModel, ::Symbol) and _metadata(::Network, ::SymbolicIndex)
-const Comp_or_NW = Union{ComponentModel, Network}
 
 """
     has_metadata(c::ComponentModel, sym::Symbol, key::Symbol)
@@ -204,26 +208,103 @@ or for a symbol referenced by `sni` in a network.
 get_default_or_guess(c::Comp_or_NW, sym) = has_default(c, sym) ? get_default(c, sym) : get_guess(c, sym)
 
 
-# TODO: legacy, only used within show methods
-function def(c::ComponentModel)::Vector{Union{Nothing,Float64}}
-    map(c.sym) do s
-        has_default_or_init(c, s) ? get_default_or_init(c, s) : nothing
-    end
+"""
+    get_defaults(c::ComponentModel, syms; missing_val=nothing)
+    get_defaults(nw::Network, idx::Union{VIndex,EIndex}, syms; missing_val=nothing)
+
+Gets all default values for the specified symbols in the component.
+Returns `missing_val` for symbols without default values.
+"""
+function get_defaults(c::ComponentModel, syms; missing_val=nothing)
+    [has_default(c, sym) ? get_default(c, sym) : missing_val for sym in syms]
 end
-function guess(c::ComponentModel)::Vector{Union{Nothing,Float64}}
-    map(c.sym) do s
-        has_guess(c, s) ? get_guess(c, s) : nothing
-    end
+get_defaults(nw::Network, idx::VCIndex, syms; kw...) = get_defaults(getcomp(nw, idx), syms; kw...)
+get_defaults(nw::Network, idx::ECIndex, syms; kw...) = get_defaults(getcomp(nw, idx), syms; kw...)
+
+"""
+    get_guesses(c::ComponentModel, syms; missing_val=nothing)
+    get_guesses(nw::Network, idx::Union{VIndex,EIndex}, syms; missing_val=nothing)
+
+Gets all guess values for the specified symbols in the component.
+Returns `missing_val` for symbols without guess values.
+"""
+function get_guesses(c::ComponentModel, syms; missing_val=nothing)
+    [has_guess(c, sym) ? get_guess(c, sym) : missing_val for sym in syms]
 end
-function pdef(c::ComponentModel)::Vector{Union{Nothing,Float64}}
-    map(c.psym) do s
-        has_default_or_init(c, s) ? get_default_or_init(c, s) : nothing
-    end
+get_guesses(nw::Network, idx::VCIndex, syms; kw...) = get_guesses(getcomp(nw, idx), syms; kw...)
+get_guesses(nw::Network, idx::ECIndex, syms; kw...) = get_guesses(getcomp(nw, idx), syms; kw...)
+
+"""
+    get_defaults_or_inits(c::ComponentModel, syms; missing_val=nothing)
+    get_defaults_or_inits(nw::Network, idx::Union{VIndex,EIndex}, syms; missing_val=nothing)
+
+Gets all default or init values for the specified symbols in the component.
+Returns `missing_val` for symbols without default or init values.
+"""
+function get_defaults_or_inits(c::ComponentModel, syms; missing_val=nothing)
+    [has_default_or_init(c, sym) ? get_default_or_init(c, sym) : missing_val for sym in syms]
 end
-function pguess(c::ComponentModel)::Vector{Union{Nothing,Float64}}
-    map(c.psym) do s
-        has_guess(c, s) ? get_guess(c, s) : nothing
+get_defaults_or_inits(nw::Network, idx::VCIndex, syms; kw...) = get_defaults_or_inits(getcomp(nw, idx), syms; kw...)
+get_defaults_or_inits(nw::Network, idx::ECIndex, syms; kw...) = get_defaults_or_inits(getcomp(nw, idx), syms; kw...)
+
+# extract varmaps
+function _get_metadata_dict(c::ComponentModel, key, T; conv=identity)
+    dict = Dict{Symbol, T}()
+    for (sym, smd) in c.symmetadata
+        if haskey(smd, key)
+            dict[sym] = conv(smd[key])
+        end
     end
+    dict
+end
+"""
+    get_defaults_dict(c::ComponentModel)
+
+Returns a dictionary mapping symbols to their default values.
+Only includes symbols that have default values set.
+
+See also: [`get_guesses_dict`](@ref), [`get_inits_dict`](@ref)
+"""
+get_defaults_dict(c::ComponentModel) = _get_metadata_dict(c, :default, Float64)
+"""
+    get_guesses_dict(c::ComponentModel)
+
+Returns a dictionary mapping symbols to their guess values.
+Only includes symbols that have guess values set.
+
+See also: [`get_defaults_dict`](@ref), [`get_inits_dict`](@ref)
+"""
+get_guesses_dict(c::ComponentModel) = _get_metadata_dict(c, :guess, Float64)
+"""
+    get_inits_dict(c::ComponentModel)
+
+Returns a dictionary mapping symbols to their initialization values.
+Only includes symbols that have initialization values set.
+
+See also: [`get_defaults_dict`](@ref), [`get_guesses_dict`](@ref)
+"""
+get_inits_dict(c::ComponentModel) = _get_metadata_dict(c, :init, Float64)
+"""
+    get_bounds_dict(c::ComponentModel)
+
+Returns a dictionary mapping symbols to their bounds values.
+Only includes symbols that have bounds values set.
+
+See also: [`get_defaults_dict`](@ref), [`get_guesses_dict`](@ref), [`get_inits_dict`](@ref)
+"""
+get_bounds_dict(c::ComponentModel) = _get_metadata_dict(c, :bounds, Tuple{Float64,Float64}, conv=Tuple)
+"""
+    get_defaults_or_inits_dict(c::ComponentModel)
+
+Returns a dictionary mapping symbols to their default values or initialization values (if no default exists).
+Only includes symbols that have either default or init values set.
+
+See also: [`get_defaults_dict`](@ref), [`get_guesses_dict`](@ref), [`get_inits_dict`](@ref)
+"""
+function get_defaults_or_inits_dict(c::ComponentModel)
+    inits = get_inits_dict(c)
+    defaults = get_defaults_dict(c)
+    merge!(inits, defaults) # add defaults to inits, overwriting existing inits
 end
 
 
@@ -264,11 +345,6 @@ end
 ####
 #### Component metadata
 ####
-# types for for referencing a single component
-# not union to resolve dispatch ambiguity
-const VCIndex = VIndex{<:Any, Nothing}
-const ECIndex = EIndex{<:Any, Nothing}
-
 """
     has_metadata(c::ComponentModel, key::Symbol)
     has_metadata(nw::Network, idx::Union{VIndex,EIndex}, key::Symbol)
@@ -362,6 +438,10 @@ set_graphelement!(c::VertexModel, vidx::Int) = set_metadata!(c, :graphelement, v
 set_graphelement!(nw::Network, idx::VCIndex, value) = set_graphelement!(getcomp(nw, idx), value)
 set_graphelement!(nw::Network, idx::ECIndex, value) = set_graphelement!(getcomp(nw, idx), value)
 
+####
+#### Callbacks
+####
+
 """
     has_callback(c::ComponentModel)
     has_callback(nw::Network, idx::Union{VIndex,EIndex})
@@ -417,44 +497,210 @@ end
 add_callback!(nw::Network, idx::VCIndex, cb; kw...) = add_callback!(getcomp(nw, idx), cb; kw...)
 add_callback!(nw::Network, idx::ECIndex, cb; kw...) = add_callback!(getcomp(nw, idx), cb; kw...)
 
-"""
-    get_defaults(c::ComponentModel, syms; missing_val=nothing)
-    get_defaults(nw::Network, idx::Union{VIndex,EIndex}, syms; missing_val=nothing)
+####
+#### Init constraints
+####
 
-Gets all default values for the specified symbols in the component.
-Returns `missing_val` for symbols without default values.
 """
-function get_defaults(c::ComponentModel, syms; missing_val=nothing)
-    [has_default(c, sym) ? get_default(c, sym) : missing_val for sym in syms]
+    has_initconstraint(c::ComponentModel)
+    has_initconstraint(nw::Network, idx::Union{VIndex,EIndex})
+
+Checks if the component has an initialization constraint in metadata.
+
+See also: [`get_initconstraints`](@ref), [`set_initconstraint!`](@ref).
+"""
+has_initconstraint(c::ComponentModel) = has_metadata(c, :initconstraint)
+has_initconstraint(nw::Network, idx::VCIndex) = has_initconstraint(getcomp(nw, idx))
+has_initconstraint(nw::Network, idx::ECIndex) = has_initconstraint(getcomp(nw, idx))
+
+"""
+    get_initconstraints(c::ComponentModel)
+    get_initconstraints(nw::Network, idx::Union{VIndex,EIndex})
+
+Gets all initialization constraints for the component. Returns a tuple, even if there is only a single constraint.
+
+See also: [`has_initconstraint`](@ref), [`set_initconstraint!`](@ref), [`add_initconstraint!`](@ref).
+"""
+function get_initconstraints(c::ComponentModel)
+    constraint = get_metadata(c, :initconstraint)
+    constraint isa InitConstraint ? (constraint,) : constraint
 end
-get_defaults(nw::Network, idx::VCIndex, syms; kw...) = get_defaults(getcomp(nw, idx), syms; kw...)
-get_defaults(nw::Network, idx::ECIndex, syms; kw...) = get_defaults(getcomp(nw, idx), syms; kw...)
+get_initconstraints(nw::Network, idx::VCIndex) = get_initconstraints(getcomp(nw, idx))
+get_initconstraints(nw::Network, idx::ECIndex) = get_initconstraints(getcomp(nw, idx))
 
 """
-    get_guesses(c::ComponentModel, syms; missing_val=nothing)
-    get_guesses(nw::Network, idx::Union{VIndex,EIndex}, syms; missing_val=nothing)
+    set_initconstraint!(c::ComponentModel, constraint; check=true)
+    set_initconstraint!(nw::Network, idx::Union{VIndex,EIndex}, constraint; check=true)
 
-Gets all guess values for the specified symbols in the component.
-Returns `missing_val` for symbols without guess values.
+Sets the initialization constraint(s) for the component. Overwrites any existing constraints.
+`constraint` can be a single `InitConstraint` or a tuple of `InitConstraint` objects.
+
+See also: [`add_initconstraint!`](@ref), [`get_initconstraints`](@ref), [`delete_initconstraint!`](@ref).
 """
-function get_guesses(c::ComponentModel, syms; missing_val=nothing)
-    [has_guess(c, sym) ? get_guess(c, sym) : missing_val for sym in syms]
+function set_initconstraint!(c::ComponentModel, constraint; check=true)
+    if !(constraint isa InitConstraint) && !(constraint isa Tuple && all(c -> c isa InitConstraint, constraint))
+        throw(ArgumentError("Constraint must be an InitConstraint or a tuple of InitConstraint objects, got $(typeof(constraint))."))
+    end
+    if check
+        if constraint isa InitConstraint
+            assert_initconstraint_compat(c, constraint)
+        else
+            for constr in constraint
+                assert_initconstraint_compat(c, constr)
+            end
+        end
+    end
+    set_metadata!(c, :initconstraint, constraint)
 end
-get_guesses(nw::Network, idx::VCIndex, syms; kw...) = get_guesses(getcomp(nw, idx), syms; kw...)
-get_guesses(nw::Network, idx::ECIndex, syms; kw...) = get_guesses(getcomp(nw, idx), syms; kw...)
+set_initconstraint!(nw::Network, idx::VCIndex, constraint; kw...) = set_initconstraint!(getcomp(nw, idx), constraint; kw...)
+set_initconstraint!(nw::Network, idx::ECIndex, constraint; kw...) = set_initconstraint!(getcomp(nw, idx), constraint; kw...)
 
 """
-    get_defaults_or_inits(c::ComponentModel, syms; missing_val=nothing)
-    get_defaults_or_inits(nw::Network, idx::Union{VIndex,EIndex}, syms; missing_val=nothing)
+    add_initconstraint!(c::ComponentModel, constraint; check=true)
+    add_initconstraint!(nw::Network, idx::Union{VIndex,EIndex}, constraint; check=true)
 
-Gets all default or init values for the specified symbols in the component.
-Returns `missing_val` for symbols without default or init values.
+Adds an initialization constraint to the component. Does not overwrite existing constraints.
+`constraint` should be a single `InitConstraint` object.
+
+See also: [`set_initconstraint!`](@ref), [`get_initconstraints`](@ref).
 """
-function get_defaults_or_inits(c::ComponentModel, syms; missing_val=nothing)
-    [has_default_or_init(c, sym) ? get_default_or_init(c, sym) : missing_val for sym in syms]
+function add_initconstraint!(c::ComponentModel, constraint; check=true)
+    if !(constraint isa InitConstraint)
+        throw(ArgumentError("Constraint must be an InitConstraint, got $(typeof(constraint))."))
+    end
+    check && assert_initconstraint_compat(c, constraint)
+
+    if has_initconstraint(c)
+        existing_constraints = get_initconstraints(c)
+
+        constraint ∈ existing_constraints && return false
+
+        new_constraints = (existing_constraints..., constraint)
+        set_metadata!(c, :initconstraint, new_constraints)
+    else
+        set_metadata!(c, :initconstraint, (constraint,))
+    end
+    return true
 end
-get_defaults_or_inits(nw::Network, idx::VCIndex, syms; kw...) = get_defaults_or_inits(getcomp(nw, idx), syms; kw...)
-get_defaults_or_inits(nw::Network, idx::ECIndex, syms; kw...) = get_defaults_or_inits(getcomp(nw, idx), syms; kw...)
+add_initconstraint!(nw::Network, idx::VCIndex, constraint; kw...) = add_initconstraint!(getcomp(nw, idx), constraint; kw...)
+add_initconstraint!(nw::Network, idx::ECIndex, constraint; kw...) = add_initconstraint!(getcomp(nw, idx), constraint; kw...)
+
+"""
+    delete_initconstraint!(c::ComponentModel)
+    delete_initconstraint!(nw::Network, idx::Union{VIndex,EIndex})
+
+Removes the initialization constraint from the component model,
+or from a component referenced by `idx` in a network.
+Returns `true` if the constraint existed and was removed, `false` otherwise.
+
+See also: [`set_initconstraint!`](@ref).
+"""
+delete_initconstraint!(c::ComponentModel) = delete_metadata!(c, :initconstraint)
+delete_initconstraint!(nw::Network, idx::VCIndex) = delete_initconstraint!(getcomp(nw, idx))
+delete_initconstraint!(nw::Network, idx::ECIndex) = delete_initconstraint!(getcomp(nw, idx))
+
+####
+#### Init formulas
+####
+
+"""
+    has_initformula(c::ComponentModel)
+    has_initformula(nw::Network, idx::Union{VIndex,EIndex})
+
+Checks if the component has initialization formulas in metadata.
+
+See also: [`get_initformulas`](@ref), [`set_initformula!`](@ref), [`add_initformula!`](@ref).
+"""
+has_initformula(c::ComponentModel) = has_metadata(c, :initformula)
+has_initformula(nw::Network, idx::VCIndex) = has_initformula(getcomp(nw, idx))
+has_initformula(nw::Network, idx::ECIndex) = has_initformula(getcomp(nw, idx))
+
+"""
+    get_initformulas(c::ComponentModel)
+    get_initformulas(nw::Network, idx::Union{VIndex,EIndex})
+
+Gets all initialization formulas for the component. Returns a tuple, even if there is only a single formula.
+
+See also: [`has_initformula`](@ref), [`set_initformula!`](@ref), [`add_initformula!`](@ref).
+"""
+function get_initformulas(c::ComponentModel)
+    formula = get_metadata(c, :initformula)
+    formula isa InitFormula ? (formula,) : formula
+end
+get_initformulas(nw::Network, idx::VCIndex) = get_initformulas(getcomp(nw, idx))
+get_initformulas(nw::Network, idx::ECIndex) = get_initformulas(getcomp(nw, idx))
+
+"""
+    set_initformula!(c::ComponentModel, formula; check=true)
+    set_initformula!(nw::Network, idx::Union{VIndex,EIndex}, formula; check=true)
+
+Sets the initialization formula(s) for the component. Overwrites any existing formulas.
+`formula` can be a single `InitFormula` or a tuple of `InitFormula` objects.
+
+See also: [`add_initformula!`](@ref), [`get_initformulas`](@ref), [`delete_initformula!`](@ref).
+"""
+function set_initformula!(c::ComponentModel, formula; check=true)
+    if !(formula isa InitFormula) && !(formula isa Tuple && all(f -> f isa InitFormula, formula))
+        throw(ArgumentError("Formula must be an InitFormula or a tuple of InitFormula objects, got $(typeof(formula))."))
+    end
+    if check
+        if formula isa InitFormula
+            assert_initformula_compat(c, formula)
+        else
+            for f in formula
+                assert_initformula_compat(c, f)
+            end
+        end
+    end
+    set_metadata!(c, :initformula, formula)
+end
+set_initformula!(nw::Network, idx::VCIndex, formula; kw...) = set_initformula!(getcomp(nw, idx), formula; kw...)
+set_initformula!(nw::Network, idx::ECIndex, formula; kw...) = set_initformula!(getcomp(nw, idx), formula; kw...)
+
+"""
+    add_initformula!(c::ComponentModel, formula; check=true)
+    add_initformula!(nw::Network, idx::Union{VIndex,EIndex}, formula; check=true)
+
+Adds an initialization formula to the component. Does not overwrite existing formulas.
+`formula` should be a single `InitFormula` object.
+
+See also: [`set_initformula!`](@ref), [`get_initformulas`](@ref).
+"""
+function add_initformula!(c::ComponentModel, formula; check=true)
+    if !(formula isa InitFormula)
+        throw(ArgumentError("Formula must be an InitFormula, got $(typeof(formula))."))
+    end
+    check && assert_initformula_compat(c, formula)
+
+    if has_initformula(c)
+        existing_formulas = get_initformulas(c)
+
+        formula ∈ existing_formulas && return false
+
+        new_formulas = (existing_formulas..., formula)
+        set_metadata!(c, :initformula, new_formulas)
+    else
+        set_metadata!(c, :initformula, (formula,))
+    end
+    return true
+end
+add_initformula!(nw::Network, idx::VCIndex, formula; kw...) = add_initformula!(getcomp(nw, idx), formula; kw...)
+add_initformula!(nw::Network, idx::ECIndex, formula; kw...) = add_initformula!(getcomp(nw, idx), formula; kw...)
+
+"""
+    delete_initformula!(c::ComponentModel)
+    delete_initformula!(nw::Network, idx::Union{VIndex,EIndex})
+
+Removes all initialization formulas from the component model,
+or from a component referenced by `idx` in a network.
+Returns `true` if formulas existed and were removed, `false` otherwise.
+
+See also: [`set_initformula!`](@ref), [`add_initformula!`](@ref).
+"""
+delete_initformula!(c::ComponentModel) = delete_metadata!(c, :initformula)
+delete_initformula!(nw::Network, idx::VCIndex) = delete_initformula!(getcomp(nw, idx))
+delete_initformula!(nw::Network, idx::ECIndex) = delete_initformula!(getcomp(nw, idx))
+
 
 # generate methods and docstrings for position and marker
 for md in [:position, :marker]
@@ -501,7 +747,7 @@ end
 #### Extract initial state from component
 ####
 """
-    get_initial_state(c::ComponentModel, syms; missing_val=nothing)
+    get_initial_state(c::ComponentModel, [state=get_defaults_or_inits_dict(c)], syms; missing_val=nothing)
     get_initial_state(nw::Network, sni::SymbolicIndex; missing_val=nothing)
 
 Returns the initial state for symbol `sym` (single symbol or vector) of the component model `c`.
@@ -509,54 +755,73 @@ Returns `missing_val` if the symbol is not initialized. Also works for observed 
 
 See also: [`dump_initial_state`](@ref).
 """
+get_initial_state(c::ComponentModel, state, s::Symbol; kw...) = only(get_initial_state(c, state, (s,); kw...))
 get_initial_state(c::ComponentModel, s::Symbol; kw...) = only(get_initial_state(c, (s,); kw...))
-function get_initial_state(cf::ComponentModel, syms; missing_val=nothing)
-    obsbuf = any(in(syms), obssym(cf)) ? _get_initial_observed(cf) : nothing
-    map(syms) do sym
+function get_initial_state(cf::ComponentModel, syms; kw...)
+    get_initial_state(cf, get_defaults_or_inits_dict(cf), syms; kw...)
+end
+function get_initial_state(cf::ComponentModel, state, syms; missing_val=nothing)
+    obsbuf = if any(in(syms), obssym(cf))
+        _get_component_observed(cf, state)
+    else
+        nothing
+    end
+    ret = Vector{Union{Float64, typeof(missing_val)}}(undef, length(syms))
+    for (i, sym) in enumerate(syms)
         if (idx = findfirst(isequal(sym), obssym(cf))) !== nothing
             obs = obsbuf[idx]
-            isnan(obs) ? missing_val : obs
-        elseif has_default_or_init(cf, sym)
-            Float64(get_default_or_init(cf, sym))
-        else
-            missing_val
+            ret[i] = isnan(obs) ? missing_val : obs
+        else haskey(state, sym)
+            ret[i] = get(state, sym, missing_val)
         end
     end
+    ret
 end
 get_initial_state(nw::Network, sni; kw...) = get_initial_state(getcomp(nw, sni), sni.subidx; kw...)
 
-function _get_initial_observed(cf)
-    missing_val = NaN
+function _get_component_observed(cf, state=get_defaults_or_inits_dict(cf))
     obs = Vector{Float64}(undef, length(obssym(cf)))
-    u = get_defaults_or_inits(cf, sym(cf); missing_val)
+    u = get.(Ref(state), sym(cf), NaN)
     ins = if cf isa EdgeModel
-        (get_defaults_or_inits(cf, insym(cf).src; missing_val),
-         get_defaults_or_inits(cf, insym(cf).dst; missing_val))
+        (get.(Ref(state), insym(cf).src, NaN),
+         get.(Ref(state), insym(cf).dst, NaN))
     else
-        (get_defaults_or_inits(cf, insym(cf); missing_val), )
+        (get.(Ref(state), insym(cf), NaN), )
     end
-    p = get_defaults_or_inits(cf, psym(cf); missing_val)
+    p = get.(Ref(state), psym(cf), NaN)
     obsf(cf)(obs, u, ins..., p, NaN)
     obs
 end
 
 """
-    dump_initial_state([IO=stdout], cf::ComponentModel; sigdigits=5, p=true, obs=true)
+    dump_initial_state([IO=stdout], cf::ComponentModel,
+                       [defaults=get_defaults_dict(cf)],
+                       [inits=get_inits_dict(cf)],
+                       [guesses=get_guesses_dict(cf)],
+                       [bounds=get_bounds_dict(cf)];
+                       sigdigits=5, p=true, obs=true)
 
 Prints the initial state of the component model `cf` to `IO` (defaults to stdout). Optionally
 contains parameters and observed.
 
 See also: [`get_initial_state`](@ref) and [`dump_state`](@ref).
 """
-dump_initial_state(cf::ComponentModel; kwargs...) = dump_initial_state(stdout, cf; kwargs...)
-function dump_initial_state(io, cf::ComponentModel; sigdigits=5, p=true, obs=true)
+dump_initial_state(cf::ComponentModel, args...; kwargs...) = dump_initial_state(stdout, cf, args...; kwargs...)
+function dump_initial_state(io, cf::ComponentModel,
+                            defaults=get_defaults_dict(cf),
+                            inits=get_inits_dict(cf),
+                            guesses=get_guesses_dict(cf),
+                            bounds=get_bounds_dict(cf);
+                            sigdigits=5, p=true, obs=true)
+    # Create combined state dict for observed calculation
+    dicts = (; defaults, inits, guesses, bounds)
     lns = AnnotatedString[]
-    symidx  = _append_states!(lns, cf, sort(sym(cf)); sigdigits)
-    psymidx = _append_states!(lns, cf, sort(psym(cf)); sigdigits)
-    insymidx = _append_states!(lns, cf, sort(insym_flat(cf)); sigdigits)
-    outsymidx = _append_states!(lns, cf, sort(outsym_flat(cf)); sigdigits)
+    symidx  = _append_states!(lns, cf, sort(sym(cf)), dicts; sigdigits)
+    psymidx = _append_states!(lns, cf, sort(psym(cf)), dicts; sigdigits)
+    insymidx = _append_states!(lns, cf, sort(insym_flat(cf)), dicts; sigdigits)
+    outsymidx = _append_states!(lns, cf, sort(outsym_flat(cf)), dicts; sigdigits)
 
-    obsidx = _append_observed!(lns, cf; sigdigits)
+    obsidx = _append_observed!(lns, cf, dicts; sigdigits)
     aligned = align_strings(lns)
 
     printstyled(io, "Inputs:\n", bold=true)
@@ -581,7 +846,7 @@ function dump_initial_state(io, cf::ComponentModel; sigdigits=5, p=true, obs=tru
         _printlines(io, aligned, obsidx; newline=false)
     end
 end
-function _append_states!(lns, cf, syms; sigdigits)
+function _append_states!(lns, cf, syms, dicts; sigdigits)
     fidx = length(lns)+1
     for sym in syms
         str = "  &"
@@ -591,26 +856,26 @@ function _append_states!(lns, cf, syms; sigdigits)
             str *= string(sym)
         end
         str *= " &&= "
-        if has_default_or_init(cf, sym)
-            val = get_default_or_init(cf, sym)
+        if haskey(dicts.defaults, sym)
+            val = dicts.defaults[sym]
             val_str = str_significant(val; sigdigits, phantom_minus=true)
-            if has_default(cf, sym)
-                str*= styled"{blue:$(val_str)}"
-            else
-                str *= styled"{yellow:$(val_str)}"
-            end
+            str *= styled"{blue:$(val_str)}"
+        elseif haskey(dicts.inits, sym)
+            val = dicts.inits[sym]
+            val_str = str_significant(val; sigdigits, phantom_minus=true)
+            str *= styled"{yellow:$(val_str)}"
         else
             val = nothing
             str *= styled"{red: uninitialized}"
         end
         str *= "&&"
-        if has_guess(cf, sym)
-            guess = str_significant(get_guess(cf, sym); sigdigits, phantom_minus=true)
+        if haskey(dicts.guesses, sym)
+            guess = str_significant(dicts.guesses[sym]; sigdigits, phantom_minus=true)
             str *= " (guess $guess)"
         end
         str *= "&&"
-        if has_bounds(cf, sym)
-            lb, ub = get_bounds(cf, sym)
+        if haskey(dicts.bounds, sym)
+            lb, ub = dicts.bounds[sym]
             if isnothing(val) || bounds_satisfied(val, (lb, ub))
                 str *= " (bounds $lb..$ub)"
             else
@@ -621,17 +886,17 @@ function _append_states!(lns, cf, syms; sigdigits)
     end
     fidx:length(lns)
 end
-function _append_observed!(lns, cf; sigdigits)
+function _append_observed!(lns, cf, dicts; sigdigits)
     fidx = length(lns)+1
     syms = obssym(cf)
-    obs = _get_initial_observed(cf)
+    obs = _get_component_observed(cf, merge(dicts.inits, dicts.defaults))
     perm = sortperm(syms)
     for (sym, val) in zip(syms[perm], obs[perm])
         isnan(val) && continue
         str = "  &" * string(sym) * " &&= " * str_significant(val; sigdigits, phantom_minus=true)
         str *= "&& &&"
-        if has_bounds(cf, sym)
-            lb, ub = get_bounds(cf, sym)
+        if haskey(dicts.bounds, sym)
+            lb, ub = dicts.bounds[sym]
             if bounds_satisfied(val, (lb, ub))
                 str *= " (bounds $lb..$ub)"
             else

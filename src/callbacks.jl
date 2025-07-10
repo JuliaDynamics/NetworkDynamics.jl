@@ -351,6 +351,12 @@ function _batch_condition(ccw::ContinousCallbackWrapper)
     obsf = SII.observed(ccw.nw, usymidxs)
     pidxs = SII.parameter_index.(Ref(ccw.nw), psymidxs)
 
+    if any(isnothing, pidxs)
+        nidxs = findall(isnothing, pidxs)
+        missing_p = psymidxs[nidxs]
+        throw(ArgumentError("Cannot build callback as it contains refrences to undefined parameters $(missing_p)"))
+    end
+
     (out, u, t, integrator) -> begin
         us = PreallocationTools.get_tmp(ucache, u)
         obsf(u, integrator.p, t, us) # fills us inplace
@@ -384,6 +390,24 @@ function _batch_affect(ccw::ContinousCallbackWrapper)
 
     uidxs = SII.variable_index.(Ref(ccw.nw), usymidxs)
     pidxs = SII.parameter_index.(Ref(ccw.nw), psymidxs)
+
+    if any(isnothing, uidxs) || any(isnothing, pidxs)
+        missing_u = []
+        if any(isnothing, uidxs)
+            nidxs = findall(isnothing, uidxs)
+            append!(missing_u, usymidxs[nidxs])
+        end
+        missing_p = []
+        if any(isnothing, pidxs)
+            nidxs = findall(isnothing, pidxs)
+            append!(missing_p, psymidxs[nidxs])
+        end
+        throw(ArgumentError(
+            "Cannot build callback as it contains refrences to undefined symbols:\n"*
+            (isempty(missing_u) ? "" : "Missing state symbols: $(missing_u)\n")*
+            (isempty(missing_p) ? "" : "Missing param symbols: $(missing_p)\n")
+        ))
+    end
 
     (integrator, outidx) -> begin
         i = cbidx_from_outidx(ccw, outidx)
@@ -455,6 +479,12 @@ function _batch_condition(dcw::DiscreteCallbackWrapper)
     obsf = SII.observed(dcw.nw, usymidxs)
     pidxs = SII.parameter_index.(Ref(dcw.nw), psymidxs)
 
+    if any(isnothing, pidxs)
+        nidxs = findall(isnothing, pidxs)
+        missing_p = psymidxs[nidxs]
+        throw(ArgumentError("Cannot build callback as it contains refrences to undefined parameters $(missing_p)"))
+    end
+
     (u, t, integrator) -> begin
         us = PreallocationTools.get_tmp(ucache, u)
         obsf(u, integrator.p, t, us) # fills us inplace
@@ -506,43 +536,6 @@ function get_ctx(integrator, sym::EIndex)
     edge = nw.im.edgevec[idx]
     (; integrator, t=integrator.t, model=nw[sym], eidx=idx, src=edge.src, dst=edge.dst)
 end
-
-####
-#### SymbolicView helper type
-####
-"""
-    SymbolicView{N,VT} <: AbstractVetor{VT}
-
-Is a (smallish) fixed size vector type with named dimensions.
-Its main purpose is to allow named acces to variables in
-[`ComponentCondition`](@ref) and [`ComponentAffect`](@ref) functions.
-
-I.e. when the `ComponentAffect` declared `sym=[:x, :y]`, you can
-acces `u[:x]` and `u[:y]` inside the condition function.
-"""
-struct SymbolicView{N,VT} <: AbstractVector{VT}
-    v::VT
-    syms::NTuple{N,Symbol}
-end
-Base.IteratorSize(::Type{SymbolicView}) = IteratorSize(x.v)
-Base.IteratorEltype(::Type{SymbolicView}) = IteratorEltype(x.v)
-Base.eltype(::Type{SymbolicView}) = eltype(x.v)
-Base.size(x::SymbolicView) = size(x.v)
-Base.firstindex(x::SymbolicView) = firstindex(x.v)
-Base.lastindex(x::SymbolicView) = lastindex(x.v)
-Base.iterate(x::SymbolicView) = iterate(x.v)
-Base.iterate(x::SymbolicView, state) = iterate(x.v, state)
-Base.length(x::SymbolicView{N}) where {N} = N
-Base.IndexStyle(::Type{SymbolicView}) = IndexLinear()
-Base.getindex(x::SymbolicView, index) = x.v[_sym_to_int(x, index)]
-Base.setindex!(x::SymbolicView, value, index) = x.v[_sym_to_int(x, index)] = value
-function _sym_to_int(x::SymbolicView, sym::Symbol)
-    idx = findfirst(isequal(sym), x.syms)
-    isnothing(idx) && throw(ArgumentError("SymbolError: try to access SymbolicView($(x.syms)) with symbol $sym"))
-    idx
-end
-_sym_to_int(x::SymbolicView, idx::Int) = idx
-_sym_to_int(x::SymbolicView, idx) = _sym_to_int.(Ref(x), idx)
 
 ####
 #### Internal function to check cb compat when added as metadata

@@ -5,6 +5,7 @@ The following functions are designed for public use.
 ## Network Construction API
 ```@docs
 Network
+get_graph
 dim(::Network)
 pdim(::Network)
 ```
@@ -138,6 +139,10 @@ set_bounds!
 delete_bounds!
 set_defaults!
 set_interface_defaults!
+get_defaults_dict
+get_guesses_dict
+get_bounds_dict
+get_inits_dict
 ```
 
 ### Metadata and Inspection Utils
@@ -152,8 +157,26 @@ describe_edges
 ## Initialization
 ```@docs
 find_fixpoint
+initialize_componentwise
+initialize_componentwise!
+initialize_component
 initialize_component!
 init_residual
+InitConstraint
+@initconstraint
+set_initconstraint!
+delete_initconstraint!
+has_initconstraint
+get_initconstraints
+add_initconstraint!
+InitFormula
+@initformula
+has_initformula
+get_initformulas
+set_initformula!
+add_initformula!
+delete_initformula!
+interface_values
 ```
 
 ## Callbacks API

@@ -1,7 +1,7 @@
 name = "NetworkDynamicsInspector"
 uuid = "0a4713f2-d58f-43f2-b63b-1b5d5ee4e65a"
 authors = ["Hans Würfel <git@wuerfel.io>"]
-version = "0.1.6"
+version = "0.1.7"
 
 [deps]
 Bonito = "824d6782-a2ef-11e9-3a09-e5662e0c26f8"
@@ -34,7 +34,7 @@ Downloads = "1.6.0"
 Electron = "6"
 GraphMakie = "0.5.14"
 Graphs = "1.12.0"
-NetworkDynamics = "0.9.13"
+NetworkDynamics = "0.9.13, 0.10"
 Observables = "0.5.5"
 OrderedCollections = "1.8.0"
 PrecompileTools = "1.2.1"

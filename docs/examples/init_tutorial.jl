@@ -75,7 +75,7 @@ end
 nothing #hide
 
 #=
-**C) A dynamic prosumer node with compliance, which adds dynamics to the pressure state**
+**C) A dynamic prosumer node with compliance, which introduces dynamic behavior to the pressure state**
 =#
 @mtkmodel DynamicProsumerNode begin
     @extend GasNode()
@@ -144,8 +144,8 @@ end
 nothing #hide
 
 #=
-And finally a quasistatic pipe model for initialization purposes. This equals the 
-dynamic model in steady state, making it ideal for finding initial conditions:
+And finally, a quasistatic pipe model for initialization purposes. This model equals the
+dynamic model at steady state, making it ideal for finding initial conditions:
 =#
 @mtkmodel QuasistaticPipe begin
     @extend GasPipe()
@@ -236,67 +236,31 @@ nw_dyn = Network([v1_dyn, v2_dyn, v3_dyn], [p12_dyn, p13_dyn, p23_dyn])
 #=
 ## Initializing the Dynamic Model with the Static Solution
 
-Now comes the important part: we need to initialize the interface values (pressures and flows)
-of the dynamic model with the results from the static model.
+Now comes the important part: we need to initialize the dynamic model with the results from
+the static model. To do so, we need to make use of two functions:
 
-We can do this manually:
+1. [`interface_values`](@ref): Extracts all interface values (inputs and outputs) from a network state
+2. [`initialize_componentwise!`](@ref): Initializes all components in a network one by one
+
+First, we extract all interface values from our static solution:
 =#
-## Vertex 1: output
-set_default!(nw_dyn[VIndex(1)], :p, u_static.v[1, :p])
-## Vertex 1: input
-set_default!(nw_dyn[VIndex(1)], :q̃_nw, u_static.v[1, :q̃_nw])
-nothing #hide
+interface_vals = interface_values(u_static)
 
 #=
-But there is also a built-in method [`set_interface_defaults!`](@ref) which we can use
-automatically:
+Next, we initialize the dynamic model using these interface values as defaults:
 =#
-set_interface_defaults!(nw_dyn, u_static; verbose=true)
-nothing #hide
+u0_dyn = initialize_componentwise!(nw_dyn, default_overrides=interface_vals, verbose=true)
 
 #=
-With the interfaces all set, we can "initialize" the internal states of the dynamic models.
+Internally, this function uses [`initialize_component!`](@ref) on every single component.
+For each component, it overwrites the `default`s to be consistent with the interface values
+of the static model. Therefore, we ensure that the dynamic model is initialized near the
+steady state of the static model.
 
-For example, let's inspect the state of our first vertex:
-=#
-nw_dyn[VIndex(1)]
-
-#=
-We observe that both the initial state `ξ` as well as the pressure setpoint `p_set`
-are left "free". Using [`initialize_component!`](@ref), we can try to find values for the
-"free" states and parameters such that the interface constraints are fulfilled.
-=#
-initialize_component!(nw_dyn[VIndex(1)])
-#=
-We may also use [`dump_initial_state`](@ref) to get a more detailed view of the state:
+We can inspect individual components if needed:
 =#
 dump_initial_state(nw_dyn[VIndex(1)])
 nothing #hide
-
-#=
-We can also initialize the other two vertices, however it is unnecessary
-since their state is already completely determined by the fixed input/output:
-=#
-initialize_component!(nw_dyn[VIndex(2)])
-initialize_component!(nw_dyn[VIndex(3)])
-nothing #hide
-
-#=
-Similarly, we can initialize the dynamic pipe models. However, since their dynamic state
-equals the output, once again there is nothing to initialize.
-=#
-initialize_component!(nw_dyn[EIndex(1)])
-initialize_component!(nw_dyn[EIndex(2)])
-initialize_component!(nw_dyn[EIndex(3)])
-nothing #hide
-
-#=
-Now, everything is initialized, which means every input, output, state and parameter
-either has a `default` metadata or an `init` metadata. When constructing the `NWState`
-for this network, it will be filled with all those values which should now correspond
-to a steady state of the system:
-=#
-u0_dyn = NWState(nw_dyn)
 
 #=
 Let's verify that our initialization is correct by checking that the derivatives are close to zero:
@@ -308,7 +272,12 @@ extrema(du .- zeros(dim(nw_dyn))) # very close to zero, confirming we have a ste
 #=
 ## Simulating the Dynamic Model
 
-Now we can solve the dynamic model and add a disturbance to see how the system responds:
+With our properly initialized model, we can now simulate the system to observe its behavior.
+To make the simulation more interesting, we'll introduce a disturbance to see how the system
+responds from its steady state.
+
+We'll use a callback to increase consumer demand at a specific time. For more information on
+callbacks, see the documentation on [Callbacks](@ref).
 =#
 affect = ComponentAffect([], [:q̃_prosumer]) do u, p, ctx
     @info "Increase consumer demand at t=$(ctx.t)"
@@ -319,7 +288,8 @@ set_callback!(nw_dyn[VIndex(2)], cb) # attach disturbance to second node
 nothing #hide
 
 #=
-Create and solve the ODE problem with the callback:
+Create and solve the ODE problem with the callback. Note that we're using the flat
+representation of our initialized state (via `uflat` and `pflat`) as input to the ODE solver:
 =#
 prob = ODEProblem(nw_dyn, copy(uflat(u0_dyn)), (0, 7), copy(pflat(u0_dyn));
     callback=get_callbacks(nw_dyn))
@@ -336,7 +306,7 @@ The plots show how our gas network responds to the increased consumer demand at 
 
 2. **Injection by producer**: Node 1 increases its injection to compensate for the higher demand.
 
-3. **Draw by consumers**: The solid lines show the actual flows at nodes 2 and 3, while the dashed lines show the set consumer demands. At t=1, we see the step change in consumer demand at node 2.
+3. **Consumption by consumers**: The solid lines show the actual flows at nodes 2 and 3, while the dashed lines show the set consumer demands. At t=1, we see the step change in consumer demand at node 2.
 
 4. **Flows through pipes**: Shows how the flows in all pipes adjust to the new demand pattern.
 =#
@@ -351,7 +321,7 @@ let
     ax = Axis(fig[2, 1]; title="Injection by producer")
     lines!(ax, sol; idxs=VIndex(1, :q̃_inj), label="Node 1", color=Cycled(1))
 
-    ax = Axis(fig[3, 1]; title="Draw by consumers")
+    ax = Axis(fig[3, 1]; title="Consumption by consumers")
     for i in 2:3
         lines!(ax, sol; idxs=@obsex(-1*VIndex(i, :q̃_inj)), label="Node $i", color=Cycled(i))
         lines!(ax, sol; idxs=@obsex(-1*VIndex(i, :q̃_prosumer)), label="Node $i", linestyle=:dash, color=Cycled(i))

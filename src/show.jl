@@ -67,7 +67,7 @@ function print_states_params(io, @nospecialize(c::ComponentModel), styling)
     end
 
     num, word = maybe_plural(dim(c), "state")
-    push!(info, styled"$num &$word: &&$(stylesymbolarray(c.sym, def(c), guess(c), styling))")
+    push!(info, styled"$num &$word: &&$(stylesymbolarray(c.sym, _def(c), _guess(c), styling))")
 
     if hasproperty(c, :mass_matrix) && c.mass_matrix != LinearAlgebra.I
         if LinearAlgebra.isdiag(c.mass_matrix) && !(c.mass_matrix isa UniformScaling)
@@ -80,12 +80,57 @@ function print_states_params(io, @nospecialize(c::ComponentModel), styling)
     push!(info, _inout_string(c, outsym, "output"))
 
     num, word = maybe_plural(pdim(c), "param")
-    pdim(c) > 0 && push!(info, styled"$num &$word: &&$(stylesymbolarray(c.psym, pdef(c), pguess(c)))")
+    pdim(c) > 0 && push!(info, styled"$num &$word: &&$(stylesymbolarray(c.psym, _pdef(c), _pguess(c)))")
 
     if has_external_input(c)
         num = extdim(c)
         arr = match(r"(\[.*\])", repr(extin(c)))[1]
         push!(info, styled"$num &ext in: &&$arr")
+    end
+
+    if has_initformula(c)
+        formulas = get_initformulas(c)
+        total_eqs = sum(length(formula.outsym) for formula in formulas)
+        num, word = maybe_plural(total_eqs, "eq.", "eqs.")
+        all_outsyms = reduce(vcat, [f.outsym for f in formulas])
+        formula_word = length(formulas) == 1 ? "formula" : "formulas"
+        str = "$num &add. init $word from $(length(formulas)) $formula_word setting $(all_outsyms)"
+        push!(info, str)
+    end
+
+    if has_initconstraint(c)
+        constraints = get_initconstraints(c)
+        total_eqs = sum(constraint.dim for constraint in constraints)
+        num, word = maybe_plural(total_eqs, "eq.", "eqs.")
+        all_syms = unique(reduce(vcat, [constraint.sym for constraint in constraints]))
+        constraint_word = length(constraints) == 1 ? "constraint" : "constraints"
+        str = "$num &add. init $word from $(length(constraints)) $constraint_word for $(all_syms)"
+        push!(info, str)
+    end
+
+    # PowerDynamics metadata display
+    if has_metadata(c, :pfinitformula)
+        formulas = get_metadata(c, :pfinitformula)
+        formulas_tuple = formulas isa Tuple ? formulas : (formulas,)
+        total_eqs = sum(length(formula.outsym) for formula in formulas_tuple)
+        num, word = maybe_plural(total_eqs, "pf init eq.", "pf init eqs.")
+        formula_word = length(formulas_tuple) == 1 ? "formula" : "formulas"
+        all_outsyms = unique(reduce(vcat, [formula.outsym for formula in formulas_tuple]))
+        all_pfsyms = unique(reduce(vcat, [formula.pfsym for formula in formulas_tuple]))
+        str = "$num &add. $word from $(length(formulas_tuple)) $formula_word setting $(all_outsyms) using @pf($(all_pfsyms))"
+        push!(info, str)
+    end
+
+    if has_metadata(c, :pfinitconstraint)
+        constraints = get_metadata(c, :pfinitconstraint)
+        constraints_tuple = constraints isa Tuple ? constraints : (constraints,)
+        total_eqs = sum(constraint.dim for constraint in constraints_tuple)
+        num, word = maybe_plural(total_eqs, "add. pf init eq.", "add. pf init eqs.")
+        constraint_word = length(constraints_tuple) == 1 ? "constraint" : "constraints"
+        all_syms = unique(reduce(vcat, [constraint.sym for constraint in constraints_tuple]))
+        all_pfsyms = unique(reduce(vcat, [constraint.pfsym for constraint in constraints_tuple]))
+        str = "$num &add. $word from $(length(constraints_tuple)) $constraint_word for $(all_syms) using @pf($(all_pfsyms))"
+        push!(info, str)
     end
 
     if has_callback(c)
@@ -119,6 +164,26 @@ function _inout_string(c::EdgeModel, f, name)
     dstguesses = get_guesses(c, sym.dst)
     styled"$srcnum/$dstnum &$word: &&src=&$(stylesymbolarray(sym.src, srcdefs, srcguesses)) \
             dst=$(stylesymbolarray(sym.dst, dstdefs, dstguesses))"
+end
+function _def(c::ComponentModel)::Vector{Union{Nothing,Float64}}
+    map(c.sym) do s
+        has_default_or_init(c, s) ? get_default_or_init(c, s) : nothing
+    end
+end
+function _guess(c::ComponentModel)::Vector{Union{Nothing,Float64}}
+    map(c.sym) do s
+        has_guess(c, s) ? get_guess(c, s) : nothing
+    end
+end
+function _pdef(c::ComponentModel)::Vector{Union{Nothing,Float64}}
+    map(c.psym) do s
+        has_default_or_init(c, s) ? get_default_or_init(c, s) : nothing
+    end
+end
+function _pguess(c::ComponentModel)::Vector{Union{Nothing,Float64}}
+    map(c.psym) do s
+        has_guess(c, s) ? get_guess(c, s) : nothing
+    end
 end
 
 function stylesymbolarray(syms, defaults, guesses, symstyles=Dict{Int,Symbol}())

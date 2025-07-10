@@ -248,7 +248,8 @@ end
 function _variable_index(nw::Network, sni::POTENTIAL_SCALAR_SIDX)
     cf = getcomp(nw, sni)
     range = getcomprange(nw, sni)
-    range[subsym_to_idx(sni.subidx, sym(cf))]
+    idx = subsym_to_idx(sni.subidx, sym(cf))
+    isnothing(idx) ? nothing : range[idx]
 end
 
 """
@@ -306,7 +307,8 @@ end
 function _parameter_index(nw::Network, sni::POTENTIAL_SCALAR_PIDX)
     cf = getcomp(nw, sni)
     range = getcompprange(nw, sni)
-    range[subsym_to_idx(sni.subidx, psym(cf))]
+    idx = subsym_to_idx(sni.subidx, psym(cf))
+    isnothing(idx) ? nothing : range[idx]
 end
 
 """
@@ -450,9 +452,9 @@ function SII.observed(nw::Network, snis)
 
     for (i, sni) in enumerate(_snis)
         if SII.is_variable(nw, sni)
-            arraymapping[i] = (U_TYPE, SII.variable_index(nw, sni))
+            arraymapping[i] = (U_TYPE, SII.variable_index(nw, sni)::Int)
         elseif SII.is_parameter(nw, sni)
-            arraymapping[i] = (P_TYPE, SII.parameter_index(nw, sni))
+            arraymapping[i] = (P_TYPE, SII.parameter_index(nw, sni)::Int)
         else
             cf = getcomp(nw, sni)
 
@@ -559,7 +561,7 @@ function _get_observed_f(im::IndexManager, cf::VertexModel, vidx, _obsf::O) wher
     _hasext = has_external_input(cf)
 
     (u, outbuf, aggbuf, extbuf, p, t) -> begin
-        ret = PreallocationTools.get_tmp(retcache, first(u)*first(p)*first(t))
+        ret = PreallocationTools.get_tmp(retcache, first(u))
         ins = if _hasext
             (view(aggbuf, aggr), view(extbuf, extr))
         else

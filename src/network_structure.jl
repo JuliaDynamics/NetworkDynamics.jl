@@ -106,6 +106,13 @@ Graphs.nv(nw::Network) = nv(nw.im.g)
 Graphs.ne(nw::Network) = ne(nw.im.g)
 Base.broadcastable(nw::Network) = Ref(nw)
 
+"""
+    get_graph(nw::Network)
+
+Extracts the underlying graph of the network.
+"""
+get_graph(nw::Network) = nw.im.g
+
 function get_output_cache(nw::Network, T)
     if eltype(T) <: AbstractFloat && eltype(nw.caches.output.du) != eltype(T)
         throw(ArgumentError("Network caches are initialized with $(eltype(nw.caches.output.du)) \
