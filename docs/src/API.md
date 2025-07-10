@@ -5,6 +5,7 @@ The following functions are designed for public use.
 ## Network Construction API
 ```@docs
 Network
+get_graph
 dim(::Network)
 pdim(::Network)
 ```
@@ -138,6 +139,10 @@ set_bounds!
 delete_bounds!
 set_defaults!
 set_interface_defaults!
+get_defaults_dict
+get_guesses_dict
+get_bounds_dict
+get_inits_dict
 ```
 
 ### Metadata and Inspection Utils
