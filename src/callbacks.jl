@@ -351,6 +351,12 @@ function _batch_condition(ccw::ContinousCallbackWrapper)
     obsf = SII.observed(ccw.nw, usymidxs)
     pidxs = SII.parameter_index.(Ref(ccw.nw), psymidxs)
 
+    if any(isnothing, pidxs)
+        nidxs = findall(isnothing, pidxs)
+        missing_p = psymidxs[nidxs]
+        throw(ArgumentError("Cannot build callback as it contains refrences to undefined parameters $(missing_p)"))
+    end
+
     (out, u, t, integrator) -> begin
         us = PreallocationTools.get_tmp(ucache, u)
         obsf(u, integrator.p, t, us) # fills us inplace
@@ -384,6 +390,24 @@ function _batch_affect(ccw::ContinousCallbackWrapper)
 
     uidxs = SII.variable_index.(Ref(ccw.nw), usymidxs)
     pidxs = SII.parameter_index.(Ref(ccw.nw), psymidxs)
+
+    if any(isnothing, uidxs) || any(isnothing, pidxs)
+        missing_u = []
+        if any(isnothing, uidxs)
+            nidxs = findall(isnothing, uidxs)
+            append!(missing_u, usymidxs[nidxs])
+        end
+        missing_p = []
+        if any(isnothing, pidxs)
+            nidxs = findall(isnothing, pidxs)
+            append!(missing_p, psymidxs[nidxs])
+        end
+        throw(ArgumentError(
+            "Cannot build callback as it contains refrences to undefined symbols:\n"*
+            (isempty(missing_u) ? "" : "Missing state symbols: $(missing_u)\n")*
+            (isempty(missing_p) ? "" : "Missing param symbols: $(missing_p)\n")
+        ))
+    end
 
     (integrator, outidx) -> begin
         i = cbidx_from_outidx(ccw, outidx)
@@ -454,6 +478,12 @@ function _batch_condition(dcw::DiscreteCallbackWrapper)
 
     obsf = SII.observed(dcw.nw, usymidxs)
     pidxs = SII.parameter_index.(Ref(dcw.nw), psymidxs)
+
+    if any(isnothing, pidxs)
+        nidxs = findall(isnothing, pidxs)
+        missing_p = psymidxs[nidxs]
+        throw(ArgumentError("Cannot build callback as it contains refrences to undefined parameters $(missing_p)"))
+    end
 
     (u, t, integrator) -> begin
         us = PreallocationTools.get_tmp(ucache, u)
