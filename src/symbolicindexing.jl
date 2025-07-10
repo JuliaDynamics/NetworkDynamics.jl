@@ -95,11 +95,11 @@ SSI Maintainer assured that f.sys is really only used for symbolic indexig so me
 SciMLBase.__has_sys(nw::Network) = true
 Base.getproperty(nw::Network, s::Symbol) = s===:sys ? nw : getfield(nw, s)
 
-SII.symbolic_type(::Type{<:SymbolicIndex{<:Union{Symbol,Int},<:Union{Symbol,Int}}}) = SII.ScalarSymbolic()
+SII.symbolic_type(::Type{<:SymbolicIndex{<:Union{<:Pair,Symbol,Int},<:Union{Symbol,Int}}}) = SII.ScalarSymbolic()
 SII.symbolic_type(::Type{<:SymbolicIndex}) = SII.ArraySymbolic()
 
 SII.hasname(::SymbolicIndex) = false
-SII.hasname(::SymbolicIndex{<:Union{Symbol,Int},<:Union{Symbol,Int}}) = true
+SII.hasname(::SymbolicIndex{<:Union{<:Pair,Symbol,Int},<:Union{Symbol,Int}}) = true
 function SII.getname(x::SymbolicVertexIndex)
     prefix = x.compidx isa Int ? :v : Symbol()
     Symbol(prefix, Symbol(x.compidx), :₊, Symbol(x.subidx))
@@ -119,20 +119,49 @@ function resolvecompidx(im::IndexManager, sni::SymbolicIndex{Symbol})
         throw(ArgumentError("Could not resolve component index for $sni, the name might not be unique?"))
     end
 end
+function resolvecompidx(im::IndexManager, sni::SymbolicEdgeIndex{<:Pair})
+    src, dst = sni.compidx
+
+    src_i = try
+        resolvecompidx(im, VIndex(src))
+    catch
+        throw(ArgumentError("Could not resolve edge source $src!"))
+    end
+    dst_i = try
+        resolvecompidx(im, VIndex(dst))
+    catch
+        throw(ArgumentError("Could not resolve edge destination $src!"))
+    end
+
+    eidx = findfirst(im.edgevec) do e
+        e.src = src_i && e.dst == dst_i
+    end
+    if isnothing(eidx)
+        reverse = findfirst(im.edgevec) do e
+            e.src == dst_i && e.dst == src_i
+        end
+        err = "Invalid Index: Network does not contain edge from $src => $dst!"
+        if !isnothing(reverse)
+            err *= " Maybe you meant the reverse edge from $dst => $src?"
+        end
+        throw(ArgumentError(err))
+    end
+    return eidx
+end
 getcomp(nw::Network, sni) = getcomp(nw.im, sni)
 getcomp(im::IndexManager, sni::SymbolicEdgeIndex) = im.edgem[resolvecompidx(im, sni)]
 getcomp(im::IndexManager, sni::SymbolicVertexIndex) = im.vertexm[resolvecompidx(im, sni)]
 
 getcomprange(nw::Network, sni) = getcomprange(nw.im, sni)
 getcomprange(im::IndexManager, sni::VIndex{<:Union{Symbol,Int}}) = im.v_data[resolvecompidx(im, sni)]
-getcomprange(im::IndexManager, sni::EIndex{<:Union{Symbol,Int}}) = im.e_data[resolvecompidx(im, sni)]
+getcomprange(im::IndexManager, sni::EIndex{<:Union{<:Pair,Symbol,Int}}) = im.e_data[resolvecompidx(im, sni)]
 
 getcompoutrange(nw::Network, sni) = getcompoutrange(nw.im, sni)
 getcompoutrange(im::IndexManager, sni::VIndex{<:Union{Symbol,Int}}) = im.v_out[resolvecompidx(im, sni)]
-getcompoutrange(im::IndexManager, sni::EIndex{<:Union{Symbol,Int}}) = flatrange(im.e_out[resolvecompidx(im, sni)])
+getcompoutrange(im::IndexManager, sni::EIndex{<:Union{<:Pair,Symbol,Int}}) = flatrange(im.e_out[resolvecompidx(im, sni)])
 
 getcompprange(nw::Network, sni::SymbolicVertexIndex{<:Union{Symbol,Int}}) = nw.im.v_para[resolvecompidx(nw, sni)]
-getcompprange(nw::Network, sni::SymbolicEdgeIndex{<:Union{Symbol,Int}}) = nw.im.e_para[resolvecompidx(nw, sni)]
+getcompprange(nw::Network, sni::SymbolicEdgeIndex{<:Union{<:Pair,Symbol,Int}}) = nw.im.e_para[resolvecompidx(nw, sni)]
 
 subsym_has_idx(sym::Symbol, syms) = sym ∈ syms
 subsym_has_idx(idx::Int, syms) = 1 ≤ idx ≤ length(syms)
@@ -143,7 +172,7 @@ subsym_to_idx(idx::Int, _) = idx
 #### Iterator/Broadcast interface for ArraySymbolic types
 ####
 # TODO: not broadcasting over idx with colon is weird
-Base.broadcastable(si::SymbolicIndex{<:Union{Int,Symbol,Colon},<:Union{Int,Symbol,Colon}}) = Ref(si)
+Base.broadcastable(si::SymbolicIndex{<:Union{Int,Symbol,<:Pair,Colon},<:Union{Int,Symbol,Colon}}) = Ref(si)
 
 const _IterableComponent = SymbolicIndex{<:Union{AbstractVector,Tuple},<:Union{Int,Symbol}}
 Base.length(si::_IterableComponent) = length(si.compidx)
@@ -166,7 +195,7 @@ function Base.iterate(si::_IterableComponent, state=nothing)
     _similar(si, it[1], si.subidx), it[2]
 end
 
-const _IterableSubcomponent = SymbolicIndex{<:Union{Symbol,Int},<:Union{AbstractVector,Tuple}}
+const _IterableSubcomponent = SymbolicIndex{<:Union{<:Pair,Symbol,Int},<:Union{AbstractVector,Tuple}}
 Base.length(si::_IterableSubcomponent) = length(si.subidx)
 Base.size(si::_IterableSubcomponent) = (length(si),)
 Base.IteratorSize(si::_IterableSubcomponent) = Base.HasShape{1}()
@@ -200,9 +229,9 @@ _resolve_colon(nw::Network, sni::EIndex{Colon}) = EIndex(1:ne(nw), sni.subidx)
 _resolve_colon(nw::Network, sni::VPIndex{Colon}) = VPIndex(1:nv(nw), sni.subidx)
 _resolve_colon(nw::Network, sni::EPIndex{Colon}) = EPIndex(1:ne(nw), sni.subidx)
 _resolve_colon(nw::Network, sni::VIndex{<:Union{Symbol,Int},Colon}) = VIndex{Int, UnitRange{Int}}(sni.compidx, 1:dim(getcomp(nw,sni)))
-_resolve_colon(nw::Network, sni::EIndex{<:Union{Symbol,Int},Colon}) = EIndex{Int, UnitRange{Int}}(sni.compidx, 1:dim(getcomp(nw,sni)))
+_resolve_colon(nw::Network, sni::EIndex{<:Union{<:Pair,Symbol,Int},Colon}) = EIndex{Int, UnitRange{Int}}(sni.compidx, 1:dim(getcomp(nw,sni)))
 _resolve_colon(nw::Network, sni::VPIndex{<:Union{Symbol,Int},Colon}) = VPIndex{Int, UnitRange{Int}}(sni.compidx, 1:pdim(getcomp(nw,sni)))
-_resolve_colon(nw::Network, sni::EPIndex{<:Union{Symbol,Int},Colon}) = EPIndex{Int, UnitRange{Int}}(sni.compidx, 1:pdim(getcomp(nw,sni)))
+_resolve_colon(nw::Network, sni::EPIndex{<:Union{<:Pair,Symbol,Int},Colon}) = EPIndex{Int, UnitRange{Int}}(sni.compidx, 1:pdim(getcomp(nw,sni)))
 
 
 #### Implmentation of index provider interface
@@ -220,7 +249,7 @@ SII.all_symbols(nw::Network) = vcat(SII.all_variable_symbols(nw), SII.parameter_
 ####
 #### variable indexing
 ####
-const POTENTIAL_SCALAR_SIDX = Union{SymbolicStateIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}}}
+const POTENTIAL_SCALAR_SIDX = Union{SymbolicStateIndex{<:Union{<:Pair,Symbol,Int},<:Union{Int,Symbol}}}
 function SII.is_variable(nw::Network, sni)
     if _hascolon(sni)
         SII.is_variable(nw, _resolve_colon(nw,sni))
@@ -277,8 +306,8 @@ end
 ####
 # when using an number instead of symbol only PIndex is valid
 const POTENTIAL_SCALAR_PIDX = Union{
-    SymbolicParameterIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}},
-    SymbolicIndex{<:Union{Symbol,Int},Symbol}
+    SymbolicParameterIndex{<:Union{<:Pair,Symbol,Int},<:Union{Int,Symbol}},
+    SymbolicIndex{<:Union{<:Pair,Symbol,Int},Symbol}
 }
 function SII.is_parameter(nw::Network, sni)
     if _hascolon(sni)
@@ -410,7 +439,7 @@ function SII.is_observed(nw::Network, sni)
     end
 end
 _is_observed(nw::Network, _) = false
-function _is_observed(nw::Network, sni::SymbolicStateIndex{<:Union{Symbol,Int},Symbol})
+function _is_observed(nw::Network, sni::SymbolicStateIndex{<:Union{<:Pair,Symbol,Int},Symbol})
     cf = getcomp(nw, sni)
     return sni.subidx ∈ obssym_all(cf)
 end
@@ -1212,7 +1241,7 @@ Base.getindex(s::NWState, idx::ObservableExpression) = SII.getu(s, idx)(s)
 Base.getindex(s::NWParameter, idx::ObservableExpression) = SII.getp(s, idx)(s)
 
 # using getindex to access component models
-function Base.getindex(nw::Network, i::EIndex{<:Union{Symbol,Int}, Nothing})
+function Base.getindex(nw::Network, i::EIndex{<:Union{<:Pair,Symbol,Int}, Nothing})
     return getcomp(nw, i)
 end
 function Base.getindex(nw::Network, i::VIndex{<:Union{Symbol,Int}, Nothing})
