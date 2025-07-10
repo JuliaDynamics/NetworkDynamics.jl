@@ -507,7 +507,7 @@ add_callback!(nw::Network, idx::ECIndex, cb; kw...) = add_callback!(getcomp(nw, 
 
 Checks if the component has an initialization constraint in metadata.
 
-See also: [`get_initconstraint`](@ref), [`set_initconstraint!`](@ref).
+See also: [`get_initconstraints`](@ref), [`set_initconstraint!`](@ref).
 """
 has_initconstraint(c::ComponentModel) = has_metadata(c, :initconstraint)
 has_initconstraint(nw::Network, idx::VCIndex) = has_initconstraint(getcomp(nw, idx))

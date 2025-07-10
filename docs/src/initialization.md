@@ -205,7 +205,7 @@ nothing #hide
 ```
 
 **Applying Formulas**: Formulas can be either added to the metadata of components ([`set_initformula!`](@ref), [`add_initformula!`](@ref)) or passed as `additional_initformula` to the
-[`initialize_component[!]`](@ref `initialize_component`) functions.
+[`initialize_component[!]`](@ref NetworkDynamics.initialize_component) functions.
 
 **Dependency Resolution**: When applying multiple separate formulas, NetworkDynamics automatically sorts them topologically to ensure correct evaluation order.
 
@@ -226,4 +226,4 @@ nothing #hide
 ```
 
 **Applying Constraints**: Constraints can be either added to the metadata of components ([`set_initconstraint!`](@ref), [`add_initconstraint!`](@ref)) or passed as `additional_initconstraint` to the
-[`initialize_component[!]`](@ref `initialize_component`) functions.
+[`initialize_component[!]`](@ref NetworkDynamics.initialize_component) functions.

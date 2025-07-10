@@ -277,7 +277,7 @@ To make the simulation more interesting, we'll introduce a disturbance to see ho
 responds from its steady state.
 
 We'll use a callback to increase consumer demand at a specific time. For more information on
-callbacks, see the documentation on [callbacks](@ref).
+callbacks, see the documentation on [Callbacks](@ref).
 =#
 affect = ComponentAffect([], [:q̃_prosumer]) do u, p, ctx
     @info "Increase consumer demand at t=$(ctx.t)"
