@@ -94,7 +94,7 @@ function print_states_params(io, @nospecialize(c::ComponentModel), styling)
         num, word = maybe_plural(total_eqs, "eq.", "eqs.")
         all_outsyms = reduce(vcat, [f.outsym for f in formulas])
         formula_word = length(formulas) == 1 ? "formula" : "formulas"
-        str = "$num &init $word from $(length(formulas)) $formula_word setting $(all_outsyms)"
+        str = "$num &add. init $word from $(length(formulas)) $formula_word setting $(all_outsyms)"
         push!(info, str)
     end
 
@@ -105,6 +105,31 @@ function print_states_params(io, @nospecialize(c::ComponentModel), styling)
         all_syms = unique(reduce(vcat, [constraint.sym for constraint in constraints]))
         constraint_word = length(constraints) == 1 ? "constraint" : "constraints"
         str = "$num &add. init $word from $(length(constraints)) $constraint_word for $(all_syms)"
+        push!(info, str)
+    end
+
+    # PowerDynamics metadata display
+    if has_metadata(c, :pfinitformula)
+        formulas = get_metadata(c, :pfinitformula)
+        formulas_tuple = formulas isa Tuple ? formulas : (formulas,)
+        total_eqs = sum(length(formula.outsym) for formula in formulas_tuple)
+        num, word = maybe_plural(total_eqs, "pf init eq.", "pf init eqs.")
+        formula_word = length(formulas_tuple) == 1 ? "formula" : "formulas"
+        all_outsyms = unique(reduce(vcat, [formula.outsym for formula in formulas_tuple]))
+        all_pfsyms = unique(reduce(vcat, [formula.pfsym for formula in formulas_tuple]))
+        str = "$num &add. $word from $(length(formulas_tuple)) $formula_word setting $(all_outsyms) using @pf($(all_pfsyms))"
+        push!(info, str)
+    end
+
+    if has_metadata(c, :pfinitconstraint)
+        constraints = get_metadata(c, :pfinitconstraint)
+        constraints_tuple = constraints isa Tuple ? constraints : (constraints,)
+        total_eqs = sum(constraint.dim for constraint in constraints_tuple)
+        num, word = maybe_plural(total_eqs, "add. pf init eq.", "add. pf init eqs.")
+        constraint_word = length(constraints_tuple) == 1 ? "constraint" : "constraints"
+        all_syms = unique(reduce(vcat, [constraint.sym for constraint in constraints_tuple]))
+        all_pfsyms = unique(reduce(vcat, [constraint.pfsym for constraint in constraints_tuple]))
+        str = "$num &add. $word from $(length(constraints_tuple)) $constraint_word for $(all_syms) using @pf($(all_pfsyms))"
         push!(info, str)
     end
 
