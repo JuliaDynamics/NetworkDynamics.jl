@@ -85,7 +85,7 @@ function initialization_problem(cf::T,
     apply_bound_transformation=true,
     verbose=true
 ) where {T<:ComponentModel}
-    hasinsym(cf) || throw(ArgumentError("Component model musst have `insym`!"))
+    hasinsym(cf) || throw(ArgumentError("Component model must have `insym`!"))
 
     # The _m[s] suffix means a bitmask which indicate the free variables
     # the _fix[s] suffix means an array of same length as the symbols, which contains the fixed values
@@ -695,8 +695,8 @@ initialize_docstring = raw"""
 Initialize a network by solving initialization problems for each component individually,
 then verifying the combined solution works for the full network.
 
-There are two version of that function: a mutating one (!-at the end of name) and a non-mutating version.
-The mutationg version uses `initialize_component!` internally, the non-mutating one `initialize_component`.
+There are two versions of that function: a mutating one (!-at the end of name) and a non-mutating version.
+The mutating version uses `initialize_component!` internally, the non-mutating one `initialize_component`.
 When the mutating version is used, `NWState(nw)` after initialization will return the same initialized
 state again, as it is stored in the metadata.
 
@@ -844,7 +844,7 @@ function _filter_overrides(nw, filteridx::SymbolicIndex{Int,Nothing}, dict::Abst
     for (key, val) in dict
         if filteridx == _baseT(key)(resolvecompidx(nw, key))
             if !(key.subidx isa Symbol)
-                error("Overwrites musst be provided as SymbolicIndex{...,Symbol}! Got $key instead.")
+                error("Overwrites must be provided as SymbolicIndex{...,Symbol}! Got $key instead.")
             end
             filtered[key.subidx] = val
         end

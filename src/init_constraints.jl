@@ -2,7 +2,7 @@
     struct InitConstraint{F}
     InitConstraint(f, sym, dim)
 
-A representation of an additionalconstraint that is applied during the initialization phase of a component.
+A representation of an additional constraint that is applied during the initialization phase of a component.
 It contains a function `f` that defines the constraint, a vector of symbols `sym` that are involved in the constraint,
 and the dimension `dim` of the constraint.
 
