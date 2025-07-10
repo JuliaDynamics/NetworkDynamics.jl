@@ -293,56 +293,56 @@ b = @b $(NetworkDynamics.compfg(v))($data...)
     v.obsf(data...) # no error
 end
 
+# Recreate OpPoDyn's Terminal connector
+@connector Terminal begin
+    u_r(t), [description="d-voltage"]
+    u_i(t), [description="q-voltage"]
+    i_r(t), [guess=0, description="d-current", connect=Flow]
+    i_i(t), [guess=0, description="q-current", connect=Flow]
+end
+
+# Recreate OpPoDyn's PVConstraint model
+@mtkmodel PVConstraint begin
+    @components begin
+        terminal = Terminal()
+    end
+    @parameters begin
+        P
+        V
+    end
+    @equations begin
+        P ~ terminal.u_r*terminal.i_r + terminal.u_i*terminal.i_i
+        V^2 ~ terminal.u_r^2 + terminal.u_i^2
+    end
+end
+
+# Recreate OpPoDyn's BusBase model
+@mtkmodel BusBase begin
+    @variables begin
+        u_r(t)=1, [description="bus d-voltage", output=true]
+        u_i(t)=0, [description="bus q-voltage", output=true]
+        i_r(t), [description="bus d-current (flowing into bus)", input=true]
+        i_i(t), [description="bus d-current (flowing into bus)", input=true]
+        P(t), [description="bus active power (flowing into network)"]
+        Q(t), [description="bus reactive power (flowing into network)"]
+        u_mag(t), [description="bus voltage magnitude"]
+        u_arg(t), [description="bus voltage argument"]
+        i_mag(t), [description="bus current magnitude"]
+        i_arg(t), [description="bus current argument"]
+    end
+    @equations begin
+        # Observed equations - flipped sign in P and Q, flow direction opposite to i
+        P ~ u_r * (-i_r) + u_i * (-i_i)
+        Q ~ u_i * (-i_r) - u_r * (-i_i)
+        u_mag ~ sqrt(u_r^2 + u_i^2)
+        u_arg ~ atan(u_i, u_r)
+        i_mag ~ sqrt(i_r^2 + i_i^2)
+        i_arg ~ atan(i_i, i_r)
+    end
+end
+
 @testset "Test transitive output->internal->state alias" begin
-    # Recreate OpPoDyn's Terminal connector
-    @connector Terminal begin
-        u_r(t), [description="d-voltage"]
-        u_i(t), [description="q-voltage"]
-        i_r(t), [guess=0, description="d-current", connect=Flow]
-        i_i(t), [guess=0, description="q-current", connect=Flow]
-    end
-
-    # Recreate OpPoDyn's PVConstraint model
-    @mtkmodel PVConstraint begin
-        @components begin
-            terminal = Terminal()
-        end
-        @parameters begin
-            P
-            V
-        end
-        @equations begin
-            P ~ terminal.u_r*terminal.i_r + terminal.u_i*terminal.i_i
-            V^2 ~ terminal.u_r^2 + terminal.u_i^2
-        end
-    end
-
-    # Recreate OpPoDyn's BusBase model
-    @mtkmodel BusBase begin
-        @variables begin
-            u_r(t)=1, [description="bus d-voltage", output=true]
-            u_i(t)=0, [description="bus q-voltage", output=true]
-            i_r(t), [description="bus d-current (flowing into bus)", input=true]
-            i_i(t), [description="bus d-current (flowing into bus)", input=true]
-            P(t), [description="bus active power (flowing into network)"]
-            Q(t), [description="bus reactive power (flowing into network)"]
-            u_mag(t), [description="bus voltage magnitude"]
-            u_arg(t), [description="bus voltage argument"]
-            i_mag(t), [description="bus current magnitude"]
-            i_arg(t), [description="bus current argument"]
-        end
-        @equations begin
-            # Observed equations - flipped sign in P and Q, flow direction opposite to i
-            P ~ u_r * (-i_r) + u_i * (-i_i)
-            Q ~ u_i * (-i_r) - u_r * (-i_i)
-            u_mag ~ sqrt(u_r^2 + u_i^2)
-            u_arg ~ atan(u_i, u_r)
-            i_mag ~ sqrt(i_r^2 + i_i^2)
-            i_arg ~ atan(i_i, i_r)
-        end
-    end
-
-    # Recreate OpPoDyn's BusBar model  
+    # Recreate OpPoDyn's BusBar model
     @mtkmodel BusBar begin
         @extend BusBase()
         @components begin
