@@ -248,7 +248,8 @@ end
 function _variable_index(nw::Network, sni::POTENTIAL_SCALAR_SIDX)
     cf = getcomp(nw, sni)
     range = getcomprange(nw, sni)
-    range[subsym_to_idx(sni.subidx, sym(cf))]
+    idx = subsym_to_idx(sni.subidx, sym(cf))
+    isnothing(idx) ? nothing : range[idx]
 end
 
 """
@@ -306,7 +307,8 @@ end
 function _parameter_index(nw::Network, sni::POTENTIAL_SCALAR_PIDX)
     cf = getcomp(nw, sni)
     range = getcompprange(nw, sni)
-    range[subsym_to_idx(sni.subidx, psym(cf))]
+    idx = subsym_to_idx(sni.subidx, psym(cf))
+    isnothing(idx) ? nothing : range[idx]
 end
 
 """
