@@ -5,6 +5,33 @@ using NetworkDynamics: Network, NWState, uflat, pflat, resolvecompidx, Component
                        EIndex, VIndex, EdgeModel, VertexModel,
                        StateMask, Symmetric, AntiSymmetric, Directed, Fiducial
 
+"""
+    get_jac_prototype(nw::Network; dense=false)
+
+Compute the sparsity pattern of the Jacobian matrix for a NetworkDynamics network.
+
+This function uses `SparseConnectivityTracer.jl` to detect the sparsity pattern of the Jacobian 
+matrix of the network's dynamics function. The resulting sparsity pattern can be used to 
+improve the performance of ODE solvers by providing structural information about the system.
+The `dense` option is useful when certain components have complex sparsity patterns that
+are difficult to detect automatically
+The resulting prototype can significantly improve ODE solver performance for large networks
+
+# Arguments
+- `nw::Network`: The NetworkDynamics network for which to compute the Jacobian prototype
+- `dense=false`: Controls which components should be treated as dense during sparsity detection:
+  - `false`: Use actual component functions (default)
+  - `true`: Replace all components with dense equivalents
+  - `Vector{Union{VIndex, EIndex}}`: Replace only the specified vertex/edge components with dense equivalents
+
+# Example Usage
+```julia
+nw = Network(...)
+f_ode = ODEFunction(nw; jac_prototype=get_jac_prototype(nw))
+prob = ODEProblem(f_ode, x0, (0.0, 1.0), p0)
+sol = solve(prob, Rodas5P())
+```
+"""
 function NetworkDynamics.get_jac_prototype(nw::Network; dense=false)
     if dense == true
         nw = replace_dense(nw, eachindex(nw.im.vertexm), eachindex(nw.im.edgem))
