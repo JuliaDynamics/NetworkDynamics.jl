@@ -40,6 +40,7 @@ Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 ModelingToolkit = "961ee093-0014-501f-94e3-6117800e7a78"
+RuntimeGeneratedFunctions = "7e49a35a-f44a-4d26-94aa-eba1b4ca6b47"
 SymbolicUtils = "d1185830-fcd6-423d-90d6-eec64667417b"
 Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 
@@ -47,8 +48,8 @@ Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 NetworkDynamicsCUDAExt = ["CUDA", "Adapt"]
 NetworkDynamicsDataFramesExt = ["DataFrames"]
 NetworkDynamicsMTKExt = ["ModelingToolkit", "SymbolicUtils", "Symbolics"]
+NetworkDynamicsSparsityExt = ["SparseConnectivityTracer", "RuntimeGeneratedFunctions"]
 NetworkDynamicsSymbolicsExt = ["Symbolics", "MacroTools"]
-NetworkDynamicsSparsityExt = ["SparseConnectivityTracer"]
 
 [compat]
 Adapt = "4.0.4"
@@ -76,6 +77,7 @@ PrecompileTools = "1.2.1"
 Printf = "1.10.0"
 Random = "1"
 RecursiveArrayTools = "3.27.0"
+RuntimeGeneratedFunctions = "0.5.15"
 SciMLBase = "2"
 SparseArrays = "1"
 SparseConnectivityTracer = "0.6"
