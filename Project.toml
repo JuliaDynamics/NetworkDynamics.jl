@@ -27,6 +27,7 @@ Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 RecursiveArrayTools = "731186ca-8d62-57ce-b412-fbd966d074cd"
 SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+SparseConnectivityTracer = "9f842d2f-2579-4b1d-911e-f412cf18a3f5"
 Static = "aedffcd0-7271-4cad-89d0-dc628f76c6d3"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 SteadyStateDiffEq = "9672c7b4-1e72-59bd-8a11-6ac3964bc41f"
@@ -47,6 +48,7 @@ NetworkDynamicsCUDAExt = ["CUDA", "Adapt"]
 NetworkDynamicsDataFramesExt = ["DataFrames"]
 NetworkDynamicsMTKExt = ["ModelingToolkit", "SymbolicUtils", "Symbolics"]
 NetworkDynamicsSymbolicsExt = ["Symbolics", "MacroTools"]
+NetworkDynamicsSparsityExt = ["SparseConnectivityTracer"]
 
 [compat]
 Adapt = "4.0.4"
@@ -76,6 +78,7 @@ Random = "1"
 RecursiveArrayTools = "3.27.0"
 SciMLBase = "2"
 SparseArrays = "1"
+SparseConnectivityTracer = "0.6"
 Static = "1.1.1"
 StaticArrays = "1.9.4"
 SteadyStateDiffEq = "2.2.0"

@@ -37,6 +37,7 @@ import SymbolicIndexingInterface as SII
 using SymbolicIndexingInterface: variable_symbols, parameter_symbols
 using StaticArrays: StaticArrays, SVector
 
+export get_jac_prototype
 include("utils.jl")
 
 export VertexModel, EdgeModel
@@ -109,9 +110,10 @@ const CHECK_COMPONENT = Ref(true)
 export chk_component
 include("doctor.jl")
 
-export describe_vertices, describe_edges
+export describe_vertices, describe_edges, get_jac_prototyp
 function describe_vertices end
 function describe_edges end
+function get_jac_prototype end
 #=
 using StyledStrings
 s1 = styled"{bright_red:brred} {bright_green:brgreen} {bright_yellow:bryellow} {bright_blue:brblue} {bright_magenta:brmagenta} {bright_cyan:brcyan} {bright_black:brblack} {bright_white:brwhite}";
@@ -136,7 +138,12 @@ function __init__()
             if exc.f ∈ (describe_vertices, describe_edges)
                 ext = Base.get_extension(NetworkDynamics, :NetworkDynamicsDataFramesExt)
                 if isnothing(ext)
-                    printstyled(io, "\nLoad `DataFrames` in order to use `describe_vertices` and `describe_edges`."; bold=true)
+                    printstyled(io, "\nLoad `DataFrames` in order to use `describe_vertices` and `describe_edges`."; bold=true, color=:red)
+                end
+            elseif exc.f ∈ (get_jac_prototype,)
+                ext = Base.get_extension(NetworkDynamics, :NetworkDynamicsSparsityExt)
+                if isnothing(ext)
+                    printstyled(io, "\nLoad `SparseConnectivityTracer` in order to use `get_jac_prototype`."; bold=true, color=:red)
                 end
             end
         end
