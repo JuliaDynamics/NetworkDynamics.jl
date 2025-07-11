@@ -557,7 +557,7 @@ _all_rhs_symbols(eqs) = mapreduce(eq->get_variables(eq.rhs), ∪, eqs, init=Set{
 
 using PrecompileTools: @compile_workload
 @compile_workload begin
-    include("MTKExt_precomp_workload.jl")
+    # include("MTKExt_precomp_workload.jl")
 end
 
 end

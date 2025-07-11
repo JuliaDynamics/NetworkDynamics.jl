@@ -91,12 +91,6 @@ const SymbolicVertexIndex{C,S} = Union{VIndex{C,S}, VPIndex{C,S}}
 idxtype(s::VIndex) = VIndex
 idxtype(s::EIndex) = EIndex
 
-#=
-SciMLBase gets the index provider from ODEFunction.sys which defaults to f.sys so we provide it...
-SSI Maintainer assured that f.sys is really only used for symbolic indexig so method seems legit
-=#
-SciMLBase.__has_sys(nw::Network) = true
-Base.getproperty(nw::Network, s::Symbol) = s===:sys ? nw : getfield(nw, s)
 
 SII.symbolic_type(::Type{<:SymbolicIndex{<:Union{<:Pair,Symbol,Int},<:Union{Symbol,Int}}}) = SII.ScalarSymbolic()
 SII.symbolic_type(::Type{<:SymbolicIndex}) = SII.ArraySymbolic()

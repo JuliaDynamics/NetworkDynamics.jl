@@ -54,6 +54,7 @@ kwargs = (;
             "initialization.md",
             "callbacks.md",
             "mtk_integration.md",
+            "sparsity_detection.md",
             "external_inputs.md",
             "inspector.md",
         ],
