@@ -38,7 +38,7 @@ EIndex(1:5, 1)     # first state of edges 1 to 5
 EIndex(7, (:x,:y)) # states :x and :y of edge 7
 EIndex(2)          # references the second edge model
 EIndex(1=>2)       # references edge from v1 to v2
-EIndex(:a=>:b)     # references edge from (uniquli named) vertex :a to :b
+EIndex(:a=>:b)     # references edge from (uniquely named) vertex :a to :b
 ```
 
 Can be used to index into objects supporting the `SymbolicIndexingInterface`,
@@ -72,7 +72,7 @@ end
     EPIndex{C,S} <: SymbolicStateIndex{C,S}
     idx = VEIndex(comp, sub)
 
-A symbolic index into the parameter a vertex:
+A symbolic index into the parameter of an edge:
 - `comp`: the component index, either int, symbol, pair or a collection
 - `sub`: the subindex, either int, symbol or a collection of those.
 
