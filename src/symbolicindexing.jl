@@ -105,8 +105,15 @@ function SII.getname(x::SymbolicVertexIndex)
     Symbol(prefix, Symbol(x.compidx), :₊, Symbol(x.subidx))
 end
 function SII.getname(x::SymbolicEdgeIndex)
-    prefix = x.compidx isa Int ? :e : Symbol()
-    Symbol(prefix, Symbol(x.compidx), :₊, Symbol(x.subidx))
+    if x.compidx isa Pair
+        src, dst = x.compidx
+        _src = src isa Int ? Symbol(:v, src) : Symbol(src)
+        _dst = dst isa Int ? Symbol(:v, dst) : Symbol(dst)
+        Symbol(_src, "ₜₒ", _dst, :₊, Symbol(x.subidx))
+    else
+        prefix = x.compidx isa Int ? :e : Symbol()
+        Symbol(prefix, Symbol(x.compidx), :₊, Symbol(x.subidx))
+    end
 end
 
 resolvecompidx(nw::Network, sni) = resolvecompidx(nw.im, sni)
@@ -125,24 +132,24 @@ function resolvecompidx(im::IndexManager, sni::SymbolicEdgeIndex{<:Pair})
     src_i = try
         resolvecompidx(im, VIndex(src))
     catch
-        throw(ArgumentError("Could not resolve edge source $src!"))
+        throw(ArgumentError("Could not resolve edge source $src"))
     end
     dst_i = try
         resolvecompidx(im, VIndex(dst))
     catch
-        throw(ArgumentError("Could not resolve edge destination $src!"))
+        throw(ArgumentError("Could not resolve edge destination $dst"))
     end
 
     eidx = findfirst(im.edgevec) do e
-        e.src = src_i && e.dst == dst_i
+        e.src == src_i && e.dst == dst_i
     end
     if isnothing(eidx)
         reverse = findfirst(im.edgevec) do e
             e.src == dst_i && e.dst == src_i
         end
-        err = "Invalid Index: Network does not contain edge from $src => $dst!"
+        err = "Invalid Index: Network does not contain edge from $(src) => $(dst)!"
         if !isnothing(reverse)
-            err *= " Maybe you meant the reverse edge from $dst => $src?"
+            err *= " Maybe you meant the reverse edge from $(dst) => $(src)?"
         end
         throw(ArgumentError(err))
     end
