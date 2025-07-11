@@ -1,4 +1,5 @@
 using NetworkDynamics
+using SparseArrays
 using SparseConnectivityTracer
 using Graphs
 using OrdinaryDiffEqRosenbrock
@@ -88,6 +89,13 @@ end
     @test_throws ErrorException get_jac_prototype(nw) # fails because of the conditional!
     get_jac_prototype(nw; remove_conditions=true) # should work now
     get_jac_prototype(nw; dense=true) # should work now
+
+    nw_sparse = Network(nw)
+    set_jac_prototype!(nw_sparse; remove_conditions=true)
+
+    s0 = NWState(nw_sparse)
+    prob = ODEProblem(nw_sparse, uflat(s0), (0,10), pflat(s0))
+    @test prob.f.jac_prototype === nw_sparse.jac_prototype # should be the same prototype
 end
 
 

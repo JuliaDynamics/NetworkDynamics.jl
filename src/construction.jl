@@ -199,6 +199,7 @@ function Network(g::AbstractGraph,
             mass_matrix,
             gbufprovider,
             extmap,
+            Ref{Union{Nothing,SparseMatrixCSC{Bool,Int}}}(nothing),
         )
 
     end

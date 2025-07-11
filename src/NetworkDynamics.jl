@@ -13,7 +13,7 @@ using Atomix: Atomix
 using Polyester: Polyester
 using Mixers: Mixers
 using LinearAlgebra: LinearAlgebra, UniformScaling
-using SparseArrays: sparse
+using SparseArrays: SparseArrays, sparse, SparseMatrixCSC
 using StyledStrings: StyledStrings, @styled_str
 using RecursiveArrayTools: RecursiveArrayTools, DiffEqArray
 using FastClosures: @closure
@@ -50,7 +50,7 @@ include("component_functions.jl")
 export ExecutionStyle, SequentialExecution, KAExecution, ThreadedExecution, PolyesterExecution
 include("executionstyles.jl")
 
-export Network, get_graph
+export Network, get_graph, set_jac_prototype!
 include("network_structure.jl")
 
 export Aggregator, KAAggregator, SequentialAggregator, PolyesterAggregator, ThreadedAggregator, SparseAggregator

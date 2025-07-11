@@ -83,6 +83,8 @@ struct Network{EX<:ExecutionStyle,G,NL,VTup,MM,CT,GBT,EM}
     gbufprovider::GBT
     "map to gather external inputs"
     extmap::EM
+    "sparsity pattern"
+    jac_prototype::Ref{Union{Nothing,SparseMatrixCSC{Bool,Int}}}
 end
 executionstyle(::Network{ex}) where {ex} = ex()
 nvbatches(::Network) = length(vertexbatches)
@@ -285,4 +287,57 @@ function isdense(im::IndexManager)
     @assert outidxs == 1:im.lastidx_out
     @assert extidxs == 1:im.lastidx_extbuf
     return true
+end
+
+#=
+SciMLBase gets the index provider from ODEFunction.sys which defaults to f.sys so we provide it...
+SSI Maintainer assured that f.sys is really only used for symbolic indexig so method seems legit
+=#
+SciMLBase.__has_sys(nw::Network) = true
+SciMLBase.__has_jac_prototype(nw::Network) = !isnothing(nw.jac_prototype)
+function Base.getproperty(nw::Network, s::Symbol)
+    if s===:sys
+        nw
+    elseif s===:jac_prototype
+        getfield(nw, :jac_prototype)[]
+    else
+        getfield(nw, s)
+    end
+end
+
+"""
+    set_jac_prototype!(nw::Network, jac::SparseMatrixCSC{Bool,Int})
+
+Set the Jacobian prototype for a NetworkDynamics network.
+
+This function stores a pre-computed Jacobian sparsity pattern in the network object,
+which can be used by ODE solvers to improve performance during integration.
+
+# Arguments
+- `nw::Network`: The NetworkDynamics network to modify
+- `jac::SparseMatrixCSC{Bool,Int}`: A sparse matrix representing the Jacobian sparsity pattern
+"""
+function set_jac_prototype!(nw::Network, jac::SparseMatrixCSC{Bool,Int})
+    getfield(nw,:jac_prototype)[] = jac
+    nw
+end
+
+"""
+    set_jac_prototype!(nw::Network; kwargs...)
+
+Compute and set the Jacobian prototype for a NetworkDynamics network.
+
+This is a convenience function that automatically computes the Jacobian sparsity pattern
+using `get_jac_prototype` and stores it in the network object.
+Needs `SparseConnectivityTracer` to be loaded!
+
+# Arguments
+- `nw::Network`: The NetworkDynamics network to modify
+- `kwargs...`: Keyword arguments passed to `get_jac_prototype` (e.g., `dense`, `remove_conditions`)
+
+See also: [`get_jac_prototype`](@ref)
+"""
+function set_jac_prototype!(nw::Network; kwargs...)
+    jac = get_jac_prototype(nw; kwargs...)
+    set_jac_prototype!(nw, jac)
 end
