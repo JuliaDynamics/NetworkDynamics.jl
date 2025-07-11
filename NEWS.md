@@ -7,6 +7,7 @@
 - **improved Initialization System**: Added comprehensive initialization formulas and constraints system:
   - added `@initformula` to add explicit algebraic init equations for specific variables
   - added `@initconstraint` to add additional constraints for the component initialization
+- allow access edges via Pairs, i.e. `EIndex(1=>2,:a)` references variable `:a` in edge from vertex 1 to 2. Works also with unique names of vertices like `EIndex(:a=>:b")` [#281](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/281).
 
 ## v0.9 Changelog
 ### Main changes in this release

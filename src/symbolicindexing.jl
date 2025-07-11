@@ -3,7 +3,7 @@
     idx = VIndex(comp, sub)
 
 A symbolic index for a vertex state variable.
-- `comp`: the component index, either int or a collection of ints
+- `comp`: the component index, either int, symbol or a collection
 - `sub`: the subindex, either int, symbol or a collection of those.
 
 ```
@@ -11,6 +11,7 @@ VIndex(1, :P)      # vertex 1, variable :P
 VIndex(1:5, 1)     # first state of vertices 1 to 5
 VIndex(7, (:x,:y)) # states :x and :y of vertex 7
 VIndex(2)          # references the second vertex model
+VIndex(:a)         # references vertex with unique name :a
 ```
 
 Can be used to index into objects supporting the `SymbolicIndexingInterface`,
@@ -28,7 +29,7 @@ VIndex(ci::Union{Symbol,Int}) = VIndex(ci, nothing)
     idx = EIndex(comp, sub)
 
 A symbolic index for an edge state variable.
-- `comp`: the component index, either int or a collection of ints
+- `comp`: the component index, either int, symbol, pair or a collection
 - `sub`: the subindex, either int, symbol or a collection of those.
 
 ```
@@ -36,6 +37,8 @@ EIndex(1, :P)      # edge 1, variable :P
 EIndex(1:5, 1)     # first state of edges 1 to 5
 EIndex(7, (:x,:y)) # states :x and :y of edge 7
 EIndex(2)          # references the second edge model
+EIndex(1=>2)       # references edge from v1 to v2
+EIndex(:a=>:b)     # references edge from (uniquli named) vertex :a to :b
 ```
 
 Can be used to index into objects supporting the `SymbolicIndexingInterface`,
@@ -53,7 +56,7 @@ EIndex(ci::Union{Symbol,Int}) = EIndex(ci, nothing)
     idx = VPIndex(comp, sub)
 
 A symbolic index into the parameter a vertex:
-- `comp`: the component index, either int or a collection of ints
+- `comp`: the component index, either int, symbol or a collection
 - `sub`: the subindex, either int, symbol or a collection of those.
 
 Can be used to index into objects supporting the `SymbolicIndexingInterface`,
@@ -70,7 +73,7 @@ end
     idx = VEIndex(comp, sub)
 
 A symbolic index into the parameter a vertex:
-- `comp`: the component index, either int or a collection of ints
+- `comp`: the component index, either int, symbol, pair or a collection
 - `sub`: the subindex, either int, symbol or a collection of those.
 
 Can be used to index into objects supporting the `SymbolicIndexingInterface`,
