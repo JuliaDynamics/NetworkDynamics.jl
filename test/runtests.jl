@@ -22,7 +22,7 @@ haskey(ENV, "BUILDKITE") && @test CUDA.functional() # fail early in buildkite if
         @test check_no_stale_explicit_imports(NetworkDynamics, ignore=(:Symbolics,)) === nothing
         Aqua.test_all(NetworkDynamics;
             ambiguities=false,
-            stale_deps=(; ignore=[:Symbolics]),
+            stale_deps=true,
             persistent_tasks=false)
         @test_broken isempty(Docs.undocumented_names(NetworkDynamics))
     end
@@ -48,6 +48,7 @@ haskey(ENV, "BUILDKITE") && @test CUDA.functional() # fail early in buildkite if
     @safetestset "Show-methods test" begin include("show_test.jl") end
 
     @safetestset "AD test" begin include("AD_test.jl") end
+    @safetestset "sparsity test" begin include("sparsity_test.jl") end
 
     if CUDA.functional()
         @safetestset "GPU test" begin include("GPU_test.jl") end

@@ -200,6 +200,12 @@ set_callback!
 add_callback!
 ```
 
+## Sparsity Detection
+```@docs
+get_jac_prototype
+set_jac_prototype!
+```
+
 ## Execution Types
 ```@docs
 ExecutionStyle

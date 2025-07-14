@@ -24,6 +24,13 @@ function Base.show(io::IO, ::MIME"text/plain", @nospecialize(nw::Network))
         # print(io, "\n ├─ vertex output dimension: $(nw.im.vdepth)")
         # print(io, "\n └─   edge output dimension: $(nw.im.edepth)")
 
+        if !isnothing(nw.jac_prototype)
+            jac = nw.jac_prototype
+            rate = SparseArrays.nnz(jac) / dim(nw)^2
+            print(io, "\nJacobian prototype defined: ")
+            printstyled(io, (round(rate*100, digits=2)), "% sparsity", color=:blue)
+        end
+
         Ncb = length(wrap_component_callbacks(nw))
         if Ncb ≥ 1
             nvert = mapreduce(has_callback, +, nw.im.vertexm)

@@ -1,5 +1,8 @@
 # NetworkDynamics Release Notes
 
+## v0.10.1 Changelog
+- [#283](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/283) add automatic sparsity detection using `get_jac_prototype` and `set_jac_prototype!`
+
 ## v0.10 Changelog
 - **BREAKING**: the interface initialization of components has changed: it is now split up in two versions, mutating and non mutating version. Also it errors now if the tolerance bounds are violated. See docs on initialization for more details.
 

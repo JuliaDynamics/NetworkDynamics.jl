@@ -199,6 +199,7 @@ function Network(g::AbstractGraph,
             mass_matrix,
             gbufprovider,
             extmap,
+            Ref{Union{Nothing,SparseMatrixCSC{Bool,Int}}}(nothing),
         )
 
     end
@@ -270,11 +271,15 @@ function Network(vertexfs, edgefs; warn_order=true, kwargs...)
     vfs_ordered = [vdict[k] for k in vertices(g)]
     efs_ordered = [edict[k] for k in edges(g)]
     if warn_order && any(vfs_ordered .!== vertexfs)
-        @warn "Order of vertex models was changed to match the natural ordering of vertices in graph!\
+        @warn "Order of vertex models was changed to match the natural ordering of vertices in graph (as in `vertices(g)`)! \
+               Concretely, this means that `nw[VIndex(1)]` referencs the vertex with `vidxs=1` \
+               **and not necessarily the first vertex model in the provided list**. \
                Disable warning with kw `warn_order=false`."
     end
     if warn_order && any(efs_ordered .!== edgefs)
-        @warn "Order of edge models was changed to match the natural ordering edges in graph! \
+        @warn "Order of edge models was changed to match the natural ordering of edges in graph (as in `edges(g)`)! \
+               Concretely, this means that `nw[EIndex(1)]` references the first edge from `edges(g)` \
+               **and not necessarily the first edge model in the provided list**. \
                Disable warning with kw `warn_order=false`."
     end
 
