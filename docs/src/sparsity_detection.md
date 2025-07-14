@@ -10,11 +10,7 @@ The sparsity detection is particularly beneficial for:
 
 ## Core Function
 
-The main interface is the [`get_jac_prototype`](@ref) function:
-
-```@docs
-get_jac_prototype
-```
+The main interface is the [`get_jac_prototype`](@ref) function, which take the a `Network` object as an argument and returns a sparse boolean matrix containing the sparsity pattern.
 
 The sparsity pattern can be passed to ODE solvers to improve performance:
 
