@@ -73,6 +73,7 @@ end
         C*Dt(p) ~ q_ext + q_nw
     end
 end
+nothing # hide
 ```
 
 ```@example sparsity
@@ -169,4 +170,4 @@ For this network, we see a substantial speedup due to the sparse solver!
 - Dense networks or small systems may not see significant speedup
 - Ensure you're using a solver that can exploit sparsity (e.g., `Rodas5P`, `FBDF`)
 
-The sparsity detection feature requires the `SparseConnectivityTracer.jl` package, which is automatically loaded as a conditional dependency when needed.
+The sparsity detection feature requires the `SparseConnectivityTracer.jl` package, which needs to be loaded manually! 
