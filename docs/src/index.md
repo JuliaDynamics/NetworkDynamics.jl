@@ -6,15 +6,11 @@ between the [Graphs.jl](https://github.com/JuliaGraphs/Graphs.jl) and the
 highly efficient dynamic networks by describing the local dynamics on the edges and vertices of the network graph.
 
 !!! note
-    ** Complex Networks in a glance **
+    **Complex Networks in a glance**
     Complex network systems are composed by the entities that comprise them (the nodes) and the relationships that connect
     each entity with one another (the edges). The mathematical structure (used more or less interchangeably with 
     Network) is called [Graph](https://en.wikipedia.org/wiki/Graph_theory). The graphical depictions of such 
     networks are also called graphs. You will see both usages in this guide.
-    A network (which can be seen in the figure below) is composed of nodes (v1 to v5) who are connected to each other. 
-    The lines connecting the nodes with each other ( e1: 1-->2, e2: 1-->3, e3: 2-->3, e4: 2-->4, e5: 3-->5) are called 
-    edges. Complex networks are composed of multiple nodes and edges, with most nodes connected to multiple other nodes
-    with multiple edges
 
 ```@example
 using Graphs, GraphMakie, CairoMakie #hide
@@ -30,6 +26,11 @@ hidespines!(ax) #hide
 hidedecorations!(ax) #hide
 fig #hide
 ```
+Figure 1: A network (which can be seen in the figure below) is composed of nodes (v1 to v5) who are connected to each 
+other. The lines connecting the nodes with each other ( e1: 1-->2, e2: 1-->3, e3: 2-->3, e4: 2-->4, e5: 3-->5) are called 
+edges. Complex networks are composed of multiple nodes and edges, with most nodes connected to multiple other nodes
+with multiple edges
+
 (@Hans after rereading the text I realised that the information about the core of the package and the behaviours of the 
 nodes and edges does not belong in the introduction but rather in the mathematical model, so I moved it. If you are ok)
 with this just delete this comment)

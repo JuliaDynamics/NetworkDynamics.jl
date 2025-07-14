@@ -10,8 +10,10 @@ nd(dx, x, p, t)
 ```
 
 The local dynamics on the edges and nodes of the graph can be described through the use of (a) algebraic equations, 
-(b) differential algebraic equation (DAEs) in mass matrix form or (c) ordinary differential equations (ODE). The 
-`NetworkDynamics.jl` package uses [Differential-Algebraic-Equation (DAE)](https://mathworld.wolfram.com/Differential-AlgebraicEquation.html)
+(b) differential algebraic equation (DAEs) in mass matrix form or (c) ordinary differential equations (ODE). 
+
+The `NetworkDynamics.jl` package uses 
+[Differential-Algebraic-Equation (DAE)](https://mathworld.wolfram.com/Differential-AlgebraicEquation.html)
 to express the overall network dynamics:
 ```math
 M\,\frac{\mathrm{d}}{\mathrm{d}t}u = f^{\mathrm{nw}}(u, p, t)
@@ -33,39 +35,42 @@ y^{\mathrm c} &= g^{\mathrm c}(x^\mathrm{c}, i_{\mathrm c}, p_{\mathrm c}, t)
 \end{aligned}
 ```
 where $M_{\mathrm{c}}$ is the component mass matrix, $x^{\mathrm c}$ are the component states, $i^{\mathrm c}$ are the
-***inputs*** of the component and $y^{\mathrm c}$ is the ***output*** of the component. If
+inputs of the component and $y^{\mathrm c}$ is the output of the component. If 
 $\mathrm{dim}(x^{\mathrm{c}}) = 0$, the number of internal states is 0.
 
 The mathematical model of `NetworkDynamics.jl` splits the network system in two parts: the vertex and
 the edge components (the nodes and edges, respectively). Instead of defining the $f^{\mathrm{nw}}$ by hand, `ND.jl`
-builds it automatically based on a list of decentralized nodal and edge dynamics that you need to provide, 
-the so-called `VertexModel` and `EdgeModel` objects.
+builds it automatically based on a list of decentralized nodal and edge dynamics that the user provides ( 
+the so-called `VertexModel` and `EdgeModel` objects).
 
 In the context of the network, the **output of the edges are flow variables** and the **outputs of vertices are 
-potential variables**. When the node and edge models are placed on a graph, the inputs and outputs ware connected: 
-the nodes receive the output of the adjacent edges as inputs and the edges receive the output of the adjecent nodes as 
-inputs.
-
-Thus, the *flow* on the edges depends on the *potentials* at both ends as inputs. The *potentials* of the nodes depend on the 
-incoming *flows* from all connected edges as an input. (Here, flow and potentials are meant in a conceptional and not 
-necessarily physical way.)
+potential variables**. When the node and edge models are placed on a graph, the inputs and outputs are connected: 
+the nodes receive the output of the adjacent edges as inputs and the edges receive the output of the adjacent nodes as 
+inputs. Thus, the *flow* on the edges depends on the *potentials* at both ends as inputs. The *potentials* of the nodes 
+depend on the incoming *flows* from all connected edges as an input. (Here, flow and potentials are meant in a 
+conceptional and not necessarily physical way.)
 
 ```@raw html
-<img src="../assets/mathmodel.svg" width="100%"/>
+<img src="../assets/mathmodel.svg" width="100% height="100%"/>
 ```
-
-
+Figure 2: Here part of a network is shown. Three nodes are visible (node1, node 2 and node3) as well as the edges
+connecting node1 and node2 ($e_12$, $e_21$). Above the network, the mass matrix equations on node1 and node2 
+($M_{\mathrm{c}}x^{\mathrm c}$), the equations on the connecting edges ($e_12$, $e_21$), as well as the internal 
+state vector equations of node1 and node2($u_1$ and $u_2$) are also shown.
+(@Hans: this graphic looks black with dark letter for the most part in some browsers. It may be a better idea to add
+a white background to it)
 
 ## Vertex Models
-```@raw html
-<img src="../assets/nodemodel.svg" width="100%"/>
-``` 
 A (single-layer) vertex model has one input, and one output.
-The input is an aggregation/reduction over all of the *incident edge outputs*,
+The input is an aggregation/reduction over all of the *incident edge outputs*:
 ```math
 i^{\mathrm v} = \mathop{\mathrm{agg}}\limits_k^{\text{incident}} y^{\mathrm e}_k \qquad\text{often}\qquad
 i^{\mathrm v} = \sum_k^{\text{incident}} y^{\mathrm e}_k
 ```
+```@raw html
+<img src="../assets/nodemodel.svg" width="100% style="red"/>
+``` 
+
 The full vertex model
 ```math
 \begin{aligned}
@@ -87,23 +92,25 @@ vertf = VertexModel(; f=fᵥ, g=gᵥ, mass_matrix=Mᵥ, ...)
 ```
 
 ## Edge Models
-```@raw html
-<img src="../assets/edgemodel.svg" width="100%"/>
-``` 
-In contrast to vertex models, edge models in general have *two* inputs and *two* outputs, for both the source and the 
-destination end of the edge. We commonly use `src` and `dst` to describe the source and destination end of an edge 
-respectively. 
+In contrast to vertex models, edge models in general have *two* inputs and *two* outputs, for both the source and the
+destination end of the edge. We commonly use `src` and `dst` to describe the source and destination end of an edge,
+respectively.
+
+The *inputs* of the edge are the outputs of the two nodes at both their ends. The output is split into two parts:
+the `dst` output goes to the input of the vertex at the destination end, the `src` output goes to the input of the
+vertex at the `src` end.
+
+For undirected graphs, `Graphs.jl` chooses the direction of an edge `v1->v2` such that `v1 < v2`, i.e. the edge between
+vertices 16 and 12 will be always an edge with source `src=12` and destination `dst=16`.
 
 !!! note "On the directionality of edges"
     Mathematically, in a system defined on an undirected graph there is no difference between edge $(1,2)$ and 
     edge $(2,1)$, because the edge has no direction. However, from an implementation point of view we always need to have 
     some kind of ordering, which is why we introduce the source and destination terminology. 
 
-For undirected graphs, `Graphs.jl` chooses the direction of an edge `v1->v2` such that `v1 < v2`, i.e. the edge between vertices 16 and 12 will be always and edge with `src=12` and `dst=16`.
-
-The *inputs* of the edge are the outputs of the two nodes at both their ends. The output is split into two parts:
-the `dst` output goes to the input of the vertex at the destination end, the `src` output goes to the input of the 
-vertex at the `src` end.
+```@raw html
+<img src="../assets/edgemodel.svg" width="100%"/>
+```
 
 The full model of an edge
 ```math
@@ -128,7 +135,7 @@ vertf = EdgeModel(; f=fₑ, g=gₑ, mass_matrix=Mₑ, ...)
 
 The sign convention for both outputs of an edge must be identical, so typically, a positive flow represents a flow 
 *into* the connected vertex. This is important, because the vertex only receives the flows, it does not know whether 
-the flow was produce by the source or the destination end of an edge.
+the flow was produced by the source or the destination end of an edge.
 ```
           y_src     y_dst 
   V_src o───←─────────→───o V_dst
