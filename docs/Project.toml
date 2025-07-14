@@ -32,9 +32,9 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 StyledStrings = "f489334b-da3d-4c2e-b8f0-e476e12c162b"
 SymbolicIndexingInterface = "2efcf032-c050-4f8e-a9bb-153293bab1f5"
 
-[sources.Bonito]
-rev = "master"
-url = "https://github.com/SimonDanisch/Bonito.jl"
+[sources.DocumenterInterLinks]
+rev = "14-opt-in-fallback"
+url = "https://github.com/JuliaDocs/DocumenterInterLinks.jl"
 
 [sources.NetworkDynamics]
 path = ".."

@@ -11,7 +11,7 @@ Special metadata:
 - `:graphelement`: optional field to specialize the graphelement for each
   component (`vidx`) for vertices, `(;src,dst)` named tuple of either vertex
   names or vertex indices for edges. Has special accessors `has_/get_/set_graphelement`.
-- `:callback`: optional field to define callback functions on the component level. See [Callbacks](@ref) and [Callbacks API](@ref) for more information.
+- `:callback`: optional field to define callback functions on the component level. See [callbacks](@ref) and [Callbacks API](@ref) for more information.
 - `:position`: Store a tuple `(x, y)` with position of the node for plotting. Has special accessors `has_/get_/set_position`.
 - `:marker`: Store a `Symbol` for the graph plot. Possible values could be `:circle`, `:rect`, `:utriangle`, `:cross`, `:diamond`, `:dtriangle`, `:pentagon`, `:xcross` or anything which works as a `marker` keyword argument in Makie.
 - `:initconstraint`: Store additional initialization constrains. Has special `has_/get_/set_/delete_initconstraint` accessors. See [Initialization](@ref initialization-guide) for further
