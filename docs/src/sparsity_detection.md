@@ -42,7 +42,7 @@ SparseConnectivityTracer.jl.
 !!! details "Setup code"
     ```@example sparsity
     using NetworkDynamics, ModelingToolkit, Graphs
-    using SparseArrays, OrdinaryDiffEq
+    using SparseArrays, OrdinaryDiffEqRosenbrock, OrdinaryDiffEqNonlinearSolve
     using ModelingToolkit: D_nounits as Dt, t_nounits as t
     nothing #hide
     ```
