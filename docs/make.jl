@@ -10,6 +10,7 @@ using ModelingToolkit
 using DataFrames: DataFrames
 using DocumenterInterLinks
 using Electron
+using SparseConnectivityTracer
 
 
 @info "Create global electron window"
