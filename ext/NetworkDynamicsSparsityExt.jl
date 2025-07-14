@@ -56,8 +56,6 @@ set_jac_prototype!(nw; jac_prototype) # attach pattern to network
 prob = ODEProblem(nw, x0, (0.0, 1.0), p0) # uses jac prototype from network
 sol = solve(prob, Rodas5P())
 ```
-
-See also: [`set_jac_prototype!`](@ref)
 """
 function NetworkDynamics.get_jac_prototype(nw::Network; dense=false, remove_conditions=false, check=true)
     nw_original = nw
