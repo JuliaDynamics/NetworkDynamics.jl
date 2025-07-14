@@ -1,24 +1,21 @@
 # Symbolic Indexing
 
-Using SciML's [`SymbolicIndexingInterface.jl`](https://github.com/SciML/SymbolicIndexingInterface.jl), `ND.jl` provides numerous methods to access and change variables and parameters.
-
-!!! details "Setup code to make following examples work"
-    ```@example si
-    using NetworkDynamics
-    using Graphs
-    using OrdinaryDiffEqTsit5
-    using Plots
-    ```
+By using SciML's [`SymbolicIndexingInterface.jl`](https://github.com/SciML/SymbolicIndexingInterface.jl), `ND.jl` 
+provides numerous methods to access and change variables and parameters.
 
 ## Provide Symbol Names
 When constructing component models, you can pass symbolic names using the `sym` and `psym` keywords.
 ```@example si
+using NetworkDynamics
+using Graphs
+using OrdinaryDiffEqTsit5
+using Plots
 function _edgef!(e, v_s, v_d, (K,), t)
     e .= K * (v_s[1] .- v_d[1])
 end
 edgef = EdgeModel(;g=AntiSymmetric(_edgef!), outsym=[:flow], psym=[:K=>1])
 ```
-Here we created a static diffusion edge with suitable variable and parameter names.
+Here we create a static diffusion edge with suitable variable and parameter names.
 Similarly, we define the diffusion vertex with symbolic names.
 ```@example si
 function _vertexf!(dv, v, esum, p, t)
@@ -30,12 +27,11 @@ vertexf = VertexModel(f=_vertexf!, g=1, sym=[:storage])
 
 ## Fundamental Symbolic Indices
 The default types for this access are the types [`VIndex`](@ref), [`EIndex`](@ref), [`VPIndex`](@ref) and [`EPIndex`](@ref).
-Each of those symbolic indices consists of 2 elements: a reference to the network component and a reference to the symbol within that component.
+Each of those symbolic indices consists of 2 elements: a reference to the network component and a reference to the 
+symbol within that component.
 As such: 
 - `VIndex(2, :x)` refers to variable with symbolic name `:x` in vertex number 2.
 - `EPIndex(4, 2)` refers to the *second* parameter of the edge component for the 4th edge.
-- `VPIndex`() refers to (@Hans please fill in this with an example)
-- `EPIndex`() refers to (@Hans please fill in this with an example)
 
 !!! details "Setup code to make following examples work"
     ```@example si
@@ -55,7 +51,8 @@ plot(sol; idxs=[VIndex(1, :storage), VIndex(5,:storage)]) # plot storage of two 
 ```
 
 ## Generate Symbolic Indices
-Often, you need many individual symbolic indices. To achieve this you can use the helper methods [`vidxs`](@ref), [`eidxs`](@ref), [`vpidxs`](@ref) and [`epidxs`](@ref). With their help you can generate arrays of symbolic indices:
+Often, you need many individual symbolic indices. To achieve this you can use the helper methods [`vidxs`](@ref), 
+[`eidxs`](@ref), [`vpidxs`](@ref) and [`epidxs`](@ref). With their help you can generate arrays of symbolic indices:
 
 ```@example si
 vidxs(nw, :, :storage) # get variable "storage" for all vertices
@@ -100,7 +97,8 @@ in these flat arrays corresponds exactly to the order returned by [`variable_sym
 
 !!! note
     The `NWState` and `NWParameter` wrappers can be constructed from various objects.
-    For example, within a callback you might construct `p = NWParameter(integrator)` to then change the parameters of the network within the callback.
+    For example, within a callback you might construct `p = NWParameter(integrator)` to then change the parameters of 
+the network within the callback.
 
 
 ## Observables
@@ -113,7 +111,8 @@ It is also possible to define additional Observables manually by using the `obss
 on the `EdgeModel`/`VertexModel` constructors.
 When building models using ModelingToolkit, the reduced algebraic states will be preserved automatically as observables.
 
-Observables can be accessed like any other state. For example, the flows in the network don't show up in the state array but can be accessed in all the ways discussed above. 
+Observables can be accessed like any other state. For example, the flows in the network don't show up in the state array 
+but can be accessed in all the ways discussed above. 
 For example:
 ```@example si
 plot(sol; idxs=eidxs(nw, :, :flow))
@@ -130,7 +129,8 @@ For example, we can directly plot the storage difference with respect to storage
 plot(sol; idxs=@obsex(vidxs(nw,:,:storage) .- VIndex(1,:storage)))
 ```
 
-Other examples include calculating the magnitude and argument of complex values that are modeled using real and imaginary parts.
+Other examples include calculating the magnitude and argument of complex values that are modeled using real and 
+imaginary parts.
 ```
 @obsex mag = sqrt(VIndex(1, :u_r)^2 + VIndex(2, :u_i)^2)
 ```

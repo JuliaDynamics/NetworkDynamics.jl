@@ -175,8 +175,9 @@ by the authors of `DifferentialEquations.jl` for most non-stiff problems.
 =#
 ode_prob = ODEProblem(nd, x0, (0.0, 2.0))
 
-# We test all ex styles #src (@Hans: can you write here what this means?)
-Main.test_execution_styles(ode_prob)
+# We test all ex styles #src
+Main.test_execution_styles(ode_prob) #src
+
 
 # Solve the simulation commend
 sol = solve(ode_prob, Tsit5());
@@ -216,7 +217,7 @@ nd_2 = Network(g, nd_diffusion_vertex_2, nd_diffusion_edge_2)
 # x ~ N(0,1)^2; ϕ ~ N(0,1)
 x0_2 = vec(transpose([randn(rng, N) .^ 2 randn(rng, N)]))
 ode_prob_2 = ODEProblem(nd_2, x0_2, (0.0, 3.0))
-Main.test_execution_styles(ode_prob_2)
+Main.test_execution_styles(ode_prob_2) #src
 sol_2 = solve(ode_prob_2, Tsit5());
 
 
@@ -253,7 +254,6 @@ To study the asymptotic behaviour of the system it suffices to analyze the eigen
 
 #=
 # Putting it all together
-We begin by loading the necessary packages.
 =#
 
 using Graphs
@@ -297,7 +297,7 @@ nd = Network(g, nd_diffusion_vertex, nd_diffusion_edge)
 rng = StableRNG(1)
 x0 = randn(rng, N)
 ode_prob = ODEProblem(nd, x0, (0.0, 2.0))
-Main.test_execution_styles(ode_prob)
+Main.test_execution_styles(ode_prob) #src
 sol = solve(ode_prob, Tsit5());
 nothing #hide #md
 plot(sol; idxs=vidxs(nd, :, :), fmt=:png)
@@ -309,7 +309,7 @@ nd_diffusion_edge_2 = EdgeModel(; g=AntiSymmetric(diffusionedge_g!), outsym=[:fl
 nd_2 = Network(g, nd_diffusion_vertex_2, nd_diffusion_edge_2)
 x0_2 = vec(transpose([randn(rng, N) .^ 2 randn(rng, N)]))
 ode_prob_2 = ODEProblem(nd_2, x0_2, (0.0, 3.0))
-Main.test_execution_styles(ode_prob_2)
+Main.test_execution_styles(ode_prob_2) #src
 sol_2 = solve(ode_prob_2, Tsit5());
 plot(sol_2; idxs=vidxs(nd_2, :, :x), fmt=:png)
 plot(sol_2; idxs=eidxs(nd_2, :, :flow_x), fmt=:png)

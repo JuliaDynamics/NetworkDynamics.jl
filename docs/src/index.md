@@ -1,17 +1,20 @@
 # NetworkDynamics
 
-*NetworkDynamics.jl* is a package to simulate dynamical systems within complex networks. It provides an interface 
+The *NetworkDynamics.jl* package simulates dynamical systems within complex networks. It provides an interface 
 between the [Graphs.jl](https://github.com/JuliaGraphs/Graphs.jl) and the 
 [DifferentialEquations.jl](https://github.com/SciML/DifferentialEquations.jl) packages and facilitates the simulation of 
-highly efficient dynamic networks by describing the local dynamics on the edges and vertices of the graph.
+highly efficient dynamic networks by describing the local dynamics on the edges and vertices of the network graph.
 
 !!! note
+    ** Complex Networks in a glance **
     Complex network systems are composed by the entities that comprise them (the nodes) and the relationships that connect
-    each entity with one another (the edges). The graphical depictions of such networks are called graphs. The simplest
-    The mathematical structure (used more or less interchangeably with Network) is also called [Graph](https://en.wikipedia.org/wiki/Graph_theory).
-    The network (which can be seen in the figure below) is composed of two entities (so two nodes) who are only connected to each other.
-    This connection between the two is the edge of the system. Complex networks are composed of multiple nodes and edges,
-    with most nodes connected to multiple other nodes with multiple edges
+    each entity with one another (the edges). The mathematical structure (used more or less interchangeably with 
+    Network) is called [Graph](https://en.wikipedia.org/wiki/Graph_theory). The graphical depictions of such 
+    networks are also called graphs. You will see both usages in this guide.
+    A network (which can be seen in the figure below) is composed of nodes (v1 to v5) who are connected to each other. 
+    The lines connecting the nodes with each other ( e1: 1-->2, e2: 1-->3, e3: 2-->3, e4: 2-->4, e5: 3-->5) are called 
+    edges. Complex networks are composed of multiple nodes and edges, with most nodes connected to multiple other nodes
+    with multiple edges
 
 ```@example
 using Graphs, GraphMakie, CairoMakie #hide
@@ -27,31 +30,22 @@ hidespines!(ax) #hide
 hidedecorations!(ax) #hide
 fig #hide
 ```
-
-The behavior of a node or an edge can be described through the use of (a) algebraic equations, (b) differential algebraic 
-equation (DAEs) in mass matrix form or c) ordinary differential equations (ODE). 
-
-The core of the package is the function [`Network`](@ref). It accepts the functions describing the local dynamics on the
-edges and nodes of the graph `g` as inputs, and returns a composite function compatible with the 
-DifferentialEquations.jl calling syntax.
-
-```julia
-nd = Network(g, vertex_dynamics,  edge_dynamics)
-nd(dx, x, p, t)
-```
+(@Hans after rereading the text I realised that the information about the core of the package and the behaviours of the 
+nodes and edges does not belong in the introduction but rather in the mathematical model, so I moved it. If you are ok)
+with this just delete this comment)
 
 Main features:
 - Clear separation of local dynamics and topology: you can easily change the topology of your system or switch out 
-- dynamic components.
+  dynamic components)
 - High performance when working with heterogeneous models: you can have different local dynamics in different parts of 
-- your network.
+  your network)
 - [Symbolic Indexing](@ref) into solutions and states: NetworkDynamics keeps track of the states of each individual 
-- subsystem.
+  subsystem.
 - Diverse execution schemes: NetworkDynamics exploits the known interdependencies between components to auto 
-- parallelize execution, even on GPUs!
+  parallelize execution, even on GPUs!
 - Equation based models: you can model local dynamics using 
-- [ModelingToolkit.jl](https://docs.sciml.ai/ModelingToolkit/dev/) and them combine them into larger networks by using 
-- `NetworkDynamics.jl`!
+  [ModelingToolkit.jl](https://docs.sciml.ai/ModelingToolkit/dev/) and them combine them into larger networks using 
+  `NetworkDynamics.jl`!
 
 
 ## Where to begin?

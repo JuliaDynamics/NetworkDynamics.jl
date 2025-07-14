@@ -1,41 +1,50 @@
 # Mathematical Model
-The basic mathematical model of `NetworkDynamics.jl` splits the system in two parts: the vertex and
-the edge components.
 
-The main goal of `NetworkDynamics.jl` is to express the overall network dynamics as a
-[Differential-Algebraic-Equation (DAE)](https://mathworld.wolfram.com/Differential-AlgebraicEquation.html)
+The core of the `NetworkDynamics.jl` package is the [`Network`](@ref) function. It accepts the functions describing the 
+local dynamics on the edges and nodes of the graph `g` as inputs, and returns a composite function compatible with the 
+DifferentialEquations.jl syntax.
 
+```julia
+nd = Network(g, vertex_dynamics,  edge_dynamics)
+nd(dx, x, p, t)
+```
+
+The local dynamics on the edges and nodes of the graph can be described through the use of (a) algebraic equations, 
+(b) differential algebraic equation (DAEs) in mass matrix form or (c) ordinary differential equations (ODE). The 
+`NetworkDynamics.jl` package uses [Differential-Algebraic-Equation (DAE)](https://mathworld.wolfram.com/Differential-AlgebraicEquation.html)
+to express the overall network dynamics:
 ```math
 M\,\frac{\mathrm{d}}{\mathrm{d}t}u = f^{\mathrm{nw}}(u, p, t)
 ```
 where $M$ is a (possibly singular) mass matrix, $u$ is the internal state vector of the system, $p$ are the parameters
-and $t$ is the time.
-To make this compatible with the solvers used in `OrdinaryDiffEq.jl`, the generated
-[`Network`](@ref) object is a callable object
+and $t$ is the time. To make this compatible with the solvers used in `OrdinaryDiffEq.jl`, the generated
+[`Network`](@ref) object is a callable object:
 ```
 nw(du, u, p, t) # mutates du as an "output"
 ```
-which represents the right-hand-side (RHS) of the equation above. The mass-matrix $m$ is stored in the `Network` object as well.
+which represents the right-hand-side (RHS) of the equation above. The mass-matrix $m$ is stored in the `Network` object 
+as well.
 
-Instead of defining $f^{\mathrm{nw}}$ by hand, `ND.jl` helps you to build it automatically based on a list of 
-decentralized nodal and edge dynamics, the so-called `VertexModel` and `EdgeModel` objects. Each component model 
-$\mathrm c$ is modeled as a general input-output-system:
-
+Each component model $\mathrm c$ is modeled as a general input-output-system:
 ```math
 \begin{aligned}
 M_{\mathrm c}\,\frac{\mathrm{d}}{\mathrm{d}t}x_{\mathrm c} &= f^{\mathrm c}(x^{\mathrm c}, i_{\mathrm c}, p_{\mathrm c}, t)\\
 y^{\mathrm c} &= g^{\mathrm c}(x^\mathrm{c}, i_{\mathrm c}, p_{\mathrm c}, t)
 \end{aligned}
 ```
-
 where $M_{\mathrm{c}}$ is the component mass matrix, $x^{\mathrm c}$ are the component states, $i^{\mathrm c}$ are the
-***inputs*** of the component and $y^{\mathrm c}$ is the ***output*** of the component.
-If $\mathrm{dim}(x^{\mathrm{c}}) = 0$, the number of internal states is 0.
+***inputs*** of the component and $y^{\mathrm c}$ is the ***output*** of the component. If
+$\mathrm{dim}(x^{\mathrm{c}}) = 0$, the number of internal states is 0.
+
+The mathematical model of `NetworkDynamics.jl` splits the network system in two parts: the vertex and
+the edge components (the nodes and edges, respectively). Instead of defining the $f^{\mathrm{nw}}$ by hand, `ND.jl`
+builds it automatically based on a list of decentralized nodal and edge dynamics that you need to provide, 
+the so-called `VertexModel` and `EdgeModel` objects.
 
 In the context of the network, the **output of the edges are flow variables** and the **outputs of vertices are 
-potential variables**.
-When the node and edge models are placed on a graph, the inputs and outputs ware connected: the nodes receive the output of the
-adjacent edges as inputs and the edges receive the output of the adjecent nodes as inputs.
+potential variables**. When the node and edge models are placed on a graph, the inputs and outputs ware connected: 
+the nodes receive the output of the adjacent edges as inputs and the edges receive the output of the adjecent nodes as 
+inputs.
 
 Thus, the *flow* on the edges depends on the *potentials* at both ends as inputs. The *potentials* of the nodes depend on the 
 incoming *flows* from all connected edges as an input. (Here, flow and potentials are meant in a conceptional and not 
@@ -44,6 +53,8 @@ necessarily physical way.)
 ```@raw html
 <img src="../assets/mathmodel.svg" width="100%"/>
 ```
+
+
 
 ## Vertex Models
 ```@raw html
