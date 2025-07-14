@@ -44,13 +44,20 @@ statements in component functions interfere with sparsity detection.
 # Example Usage
 ```julia
 nw = Network(...)
-f_ode = ODEFunction(nw; jac_prototype=get_jac_prototype(nw))
+jac_prototype = get_jac_prototype(nw) # get the sparsity pattern
+
+# manually set define ODEFunction
+f_ode = ODEFunction(nw; jac_prototype=jac_prototype)
 prob = ODEProblem(f_ode, x0, (0.0, 1.0), p0)
 sol = solve(prob, Rodas5P())
 
-# For networks with problematic conditional statements
-jac_prototype = get_jac_prototype(nw; remove_conditions=true)
+# ALTERNATIVE: use set_jac_prototype!
+set_jac_prototype!(nw; jac_prototype) # attach pattern to network
+prob = ODEProblem(nw, x0, (0.0, 1.0), p0) # uses jac prototype from network
+sol = solve(prob, Rodas5P())
 ```
+
+See also: [`set_jac_prototype!`](@ref)
 """
 function NetworkDynamics.get_jac_prototype(nw::Network; dense=false, remove_conditions=false, check=true)
     nw_original = nw
@@ -87,13 +94,13 @@ function NetworkDynamics.get_jac_prototype(nw::Network; dense=false, remove_cond
     end
 
     s0 = NWState(nw)
-    # to get a "global" patter with respect to the parameters we need to determine
+    # to get a "global" pattern with respect to the parameters we need to determine
     # the jacobian for vcat(x0, p0)!
     detector = TracerSparsityDetector();
     jac = try
         jacobian_sparsity(fx, vcat(uflat(s0), pflat(s0)), detector)
     catch
-        error("Automatic sparsity detection failed. Sometimes, this can be cause by a small \
+        error("Automatic sparsity detection failed. Sometimes, this can be caused by a small \
                subset of components whose sparsity patterns are not detected correctly. You \
                can try the `remove_conditions` and `dense` options to ignore some of the \
                sub-sparsity patterns!")
@@ -128,7 +135,7 @@ function NetworkDynamics.get_jac_prototype(nw::Network; dense=false, remove_cond
             fwjac = _jacobian_at_point(nw_original, s0_orig)
             _assert_conservative_pattern(fwjac, ujac)
         else
-            s0_orig_ones = NWState(nw_original, ufill=1.0, pfill=1.0) # fill with zeros
+            s0_orig_ones = NWState(nw_original, ufill=1.0, pfill=1.0) # fill with ones
             fwjac = _jacobian_at_point(nw_original, s0_orig_ones)
             _assert_conservative_pattern(fwjac, ujac)
         end
@@ -146,7 +153,7 @@ function _assert_conservative_pattern(refjac, pattern)
     @assert size(refjac) == size(pattern) "Reference jacobian and template jacobian must have the same size!"
     for i in eachindex(refjac)
         if !iszero(refjac[i]) && iszero(pattern[i])
-            error("Sparsity pattern mismatch! ForwardDiff returned nonzero entry for default where pattern is zero!")
+            error("Sparsity pattern mismatch! ForwardDiff returned nonzero entry where pattern is zero!")
         end
     end
 end

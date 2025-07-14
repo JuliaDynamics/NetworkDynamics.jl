@@ -335,6 +335,14 @@ Needs `SparseConnectivityTracer` to be loaded!
 - `nw::Network`: The NetworkDynamics network to modify
 - `kwargs...`: Keyword arguments passed to `get_jac_prototype` (e.g., `dense`, `remove_conditions`)
 
+# Example Usage
+```julia
+nw = Network(...)
+set_jac_prototype!(nw) # computs sparsity pattern and stores in network
+prob = ODEProblem(nw, x0, (0.0, 1.0), p0)
+sol = solve(prob, Rodas5P())
+```
+
 See also: [`get_jac_prototype`](@ref)
 """
 function set_jac_prototype!(nw::Network; kwargs...)
