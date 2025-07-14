@@ -5,8 +5,7 @@ using NetworkDynamics: NetworkDynamics, Network, NWState, uflat, pflat, resolvec
                        EIndex, VIndex, EdgeModel, VertexModel, dim, pdim,
                        StateMask, Symmetric, AntiSymmetric, Directed, Fiducial
 using MacroTools: @capture, postwalk
-using RuntimeGeneratedFunctions: RuntimeGeneratedFunctions, RuntimeGeneratedFunction,
-                                 get_expression, @RuntimeGeneratedFunction
+using RuntimeGeneratedFunctions: RuntimeGeneratedFunctions, RuntimeGeneratedFunction, @RuntimeGeneratedFunction
 using SparseArrays: sparse, findnz
 using ForwardDiff: ForwardDiff
 RuntimeGeneratedFunctions.init(@__MODULE__)
