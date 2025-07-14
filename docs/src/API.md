@@ -23,7 +23,7 @@ EdgeModel(::ModelingToolkit.ODESystem, ::Any, ::Any, ::Any, ::Any)
 EdgeModel(::ModelingToolkit.ODESystem, ::Any, ::Any, ::Any)
 ```
 
-### Output Function Helpers/Wrappers 
+### Output Function Helpers/Wrappers
 ```@docs
 StateMask
 Symmetric
@@ -165,7 +165,7 @@ init_residual
 InitConstraint
 @initconstraint
 set_initconstraint!
-delete_initconstraint!
+delete_initconstraints!
 has_initconstraint
 get_initconstraints
 add_initconstraint!
@@ -175,7 +175,7 @@ has_initformula
 get_initformulas
 set_initformula!
 add_initformula!
-delete_initformula!
+delete_initformulas!
 interface_values
 ```
 

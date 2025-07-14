@@ -535,7 +535,7 @@ get_initconstraints(nw::Network, idx::ECIndex) = get_initconstraints(getcomp(nw,
 Sets the initialization constraint(s) for the component. Overwrites any existing constraints.
 `constraint` can be a single `InitConstraint` or a tuple of `InitConstraint` objects.
 
-See also: [`add_initconstraint!`](@ref), [`get_initconstraints`](@ref), [`delete_initconstraint!`](@ref).
+See also: [`add_initconstraint!`](@ref), [`get_initconstraints`](@ref), [`delete_initconstraints!`](@ref).
 """
 function set_initconstraint!(c::ComponentModel, constraint; check=true)
     if !(constraint isa InitConstraint) && !(constraint isa Tuple && all(c -> c isa InitConstraint, constraint))
@@ -586,8 +586,8 @@ add_initconstraint!(nw::Network, idx::VCIndex, constraint; kw...) = add_initcons
 add_initconstraint!(nw::Network, idx::ECIndex, constraint; kw...) = add_initconstraint!(getcomp(nw, idx), constraint; kw...)
 
 """
-    delete_initconstraint!(c::ComponentModel)
-    delete_initconstraint!(nw::Network, idx::Union{VIndex,EIndex})
+    delete_initconstraints!(c::ComponentModel)
+    delete_initconstraints!(nw::Network, idx::Union{VIndex,EIndex})
 
 Removes the initialization constraint from the component model,
 or from a component referenced by `idx` in a network.
@@ -595,9 +595,9 @@ Returns `true` if the constraint existed and was removed, `false` otherwise.
 
 See also: [`set_initconstraint!`](@ref).
 """
-delete_initconstraint!(c::ComponentModel) = delete_metadata!(c, :initconstraint)
-delete_initconstraint!(nw::Network, idx::VCIndex) = delete_initconstraint!(getcomp(nw, idx))
-delete_initconstraint!(nw::Network, idx::ECIndex) = delete_initconstraint!(getcomp(nw, idx))
+delete_initconstraints!(c::ComponentModel) = delete_metadata!(c, :initconstraint)
+delete_initconstraints!(nw::Network, idx::VCIndex) = delete_initconstraints!(getcomp(nw, idx))
+delete_initconstraints!(nw::Network, idx::ECIndex) = delete_initconstraints!(getcomp(nw, idx))
 
 ####
 #### Init formulas
@@ -637,7 +637,7 @@ get_initformulas(nw::Network, idx::ECIndex) = get_initformulas(getcomp(nw, idx))
 Sets the initialization formula(s) for the component. Overwrites any existing formulas.
 `formula` can be a single `InitFormula` or a tuple of `InitFormula` objects.
 
-See also: [`add_initformula!`](@ref), [`get_initformulas`](@ref), [`delete_initformula!`](@ref).
+See also: [`add_initformula!`](@ref), [`get_initformulas`](@ref), [`delete_initformulas!`](@ref).
 """
 function set_initformula!(c::ComponentModel, formula; check=true)
     if !(formula isa InitFormula) && !(formula isa Tuple && all(f -> f isa InitFormula, formula))
@@ -688,8 +688,8 @@ add_initformula!(nw::Network, idx::VCIndex, formula; kw...) = add_initformula!(g
 add_initformula!(nw::Network, idx::ECIndex, formula; kw...) = add_initformula!(getcomp(nw, idx), formula; kw...)
 
 """
-    delete_initformula!(c::ComponentModel)
-    delete_initformula!(nw::Network, idx::Union{VIndex,EIndex})
+    delete_initformulas!(c::ComponentModel)
+    delete_initformulas!(nw::Network, idx::Union{VIndex,EIndex})
 
 Removes all initialization formulas from the component model,
 or from a component referenced by `idx` in a network.
@@ -697,9 +697,13 @@ Returns `true` if formulas existed and were removed, `false` otherwise.
 
 See also: [`set_initformula!`](@ref), [`add_initformula!`](@ref).
 """
-delete_initformula!(c::ComponentModel) = delete_metadata!(c, :initformula)
-delete_initformula!(nw::Network, idx::VCIndex) = delete_initformula!(getcomp(nw, idx))
-delete_initformula!(nw::Network, idx::ECIndex) = delete_initformula!(getcomp(nw, idx))
+delete_initformulas!(c::ComponentModel) = delete_metadata!(c, :initformula)
+delete_initformulas!(nw::Network, idx::VCIndex) = delete_initformulas!(getcomp(nw, idx))
+delete_initformulas!(nw::Network, idx::ECIndex) = delete_initformulas!(getcomp(nw, idx))
+
+# Deprecated backward compatibility
+@deprecate delete_initconstraint!(args...; kwargs...) delete_initconstraints!(args...; kwargs...)
+@deprecate delete_initformula!(args...; kwargs...) delete_initformulas!(args...; kwargs...)
 
 
 # generate methods and docstrings for position and marker
