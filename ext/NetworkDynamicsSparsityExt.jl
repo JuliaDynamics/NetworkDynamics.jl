@@ -37,6 +37,7 @@ statements in component functions interfere with sparsity detection.
   - `false`: Keep conditional statements as-is (default)
   - `true`: Remove conditionals from all components by converting `if-else` to additive form
   - `Vector{Union{VIndex, EIndex}}`: Remove conditionals only from specified vertex/edge components
+- `check=true`: If `true`, the function checks the sparsity pattern against a forward-differentiated Jacobian as a sanity check.
 
 # Returns
 - A sparse matrix representing the sparsity pattern of the Jacobian matrix
@@ -52,7 +53,7 @@ sol = solve(prob, Rodas5P())
 jac_prototype = get_jac_prototype(nw; remove_conditions=true)
 ```
 """
-function NetworkDynamics.get_jac_prototype(nw::Network; dense=false, remove_conditions=false)
+function NetworkDynamics.get_jac_prototype(nw::Network; dense=false, remove_conditions=false, check=true)
     nw_original = nw
     if dense == true
         nw = _replace_dense(nw, eachindex(nw.im.vertexm), eachindex(nw.im.edgem))
@@ -122,19 +123,35 @@ function NetworkDynamics.get_jac_prototype(nw::Network; dense=false, remove_cond
     end
 
     # compare with a forward diff jacobian to ensure sparsity pattern is correct
-    s0_orig = NWState(nw_original)
-    fwjac = ForwardDiff.jacobian(
-        (du, u) -> nw_original(du, u, pflat(s0_orig), NaN),
-        zeros(dim(nw_original)),
-        uflat(s0_orig)
-    )
-    for i in eachindex(fwjac)
-        if fwjac[i] != 0 && ujac[i] == 0
-            error("Sparsity pattern mismatch! ForwardDiff returned nonzero entry where pattern is zero!")
+    if check
+        s0_orig = NWState(nw_original)
+        if all(!isnan, uflat(s0_orig)) && all(!isnan, pflat(s0_orig))
+            fwjac = _jacobian_at_point(nw_original, s0_orig)
+            _assert_conservative_pattern(fwjac, ujac)
+        else
+            s0_orig_ones = NWState(nw_original, ufill=1.0, pfill=1.0) # fill with zeros
+            fwjac = _jacobian_at_point(nw_original, s0_orig_ones)
+            _assert_conservative_pattern(fwjac, ujac)
         end
     end
     return ujac
 end
+function _jacobian_at_point(nw, s0)
+    ForwardDiff.jacobian(
+        (du, u) -> nw(du, u, pflat(s0), NaN),
+        zeros(dim(nw)),
+        uflat(s0)
+    )
+end
+function _assert_conservative_pattern(refjac, pattern)
+    @assert size(refjac) == size(pattern) "Reference jacobian and template jacobian must have the same size!"
+    for i in eachindex(refjac)
+        if !iszero(refjac[i]) && iszero(pattern[i])
+            error("Sparsity pattern mismatch! ForwardDiff returned nonzero entry for default where pattern is zero!")
+        end
+    end
+end
+
 
 function _replace_dense(nw::Network, vidxs, eidxs)
     vertexm = copy(nw.im.vertexm)

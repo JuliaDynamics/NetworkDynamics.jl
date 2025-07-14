@@ -37,7 +37,6 @@ import SymbolicIndexingInterface as SII
 using SymbolicIndexingInterface: variable_symbols, parameter_symbols
 using StaticArrays: StaticArrays, SVector
 
-export get_jac_prototype
 include("utils.jl")
 
 export VertexModel, EdgeModel
@@ -110,7 +109,7 @@ const CHECK_COMPONENT = Ref(true)
 export chk_component
 include("doctor.jl")
 
-export describe_vertices, describe_edges, get_jac_prototyp
+export describe_vertices, describe_edges, get_jac_prototype
 function describe_vertices end
 function describe_edges end
 function get_jac_prototype end

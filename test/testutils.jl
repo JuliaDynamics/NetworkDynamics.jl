@@ -88,5 +88,14 @@ function test_execution_styles(prob)
             end
         end
     end
+
+    @testset "Test sparsity pattern" begin
+        try
+            get_jac_prototype(nw) # throws if the jacobian prototyp mismatches the forward diff one
+            @test true
+        catch
+            @test false
+        end
+    end
     nothing
 end
