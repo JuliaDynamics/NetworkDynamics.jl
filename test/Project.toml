@@ -52,8 +52,8 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"
 
-[sources]
-NetworkDynamics = {path = ".."}
+[sources.NetworkDynamics]
+path = ".."
 
 [compat]
 Adapt = "≥0.0.1"
@@ -69,6 +69,7 @@ DiffEqCallbacks = "4.1.0"
 DifferentiationInterface = "0.6, 0.7"
 DifferentiationInterfaceTest = "0.10"
 DynamicQuantities = "1.4.0"
+Enzyme = "0.13"
 ExplicitImports = "1.10.1"
 FiniteDiff = "2.26.2"
 ForwardDiff = "≥0.0.1"
