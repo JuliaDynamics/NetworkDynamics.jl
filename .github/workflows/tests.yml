@@ -184,12 +184,12 @@ jobs:
               echo "Found OpPoDyn branch specification: $BRANCH_NAME"
               echo "oppodyn_branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
             else
-              echo "No OpPoDyn branch specified, using master"
-              echo "oppodyn_branch=master" >> $GITHUB_OUTPUT
+              echo "No OpPoDyn branch specified, using main"
+              echo "oppodyn_branch=main" >> $GITHUB_OUTPUT
             fi
           else
-            echo "Not a pull request, using master branch"
-            echo "oppodyn_branch=master" >> $GITHUB_OUTPUT
+            echo "Not a pull request, using main branch"
+            echo "oppodyn_branch=main" >> $GITHUB_OUTPUT
           fi
       - uses: actions/checkout@v4
         with:
