@@ -52,8 +52,8 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"
 
-[sources]
-NetworkDynamics = {path = ".."}
+[sources.NetworkDynamics]
+path = ".."
 
 [compat]
 Adapt = "≥0.0.1"
@@ -89,6 +89,7 @@ Pkg = "1"
 Plots = "1.40.9"
 Printf = "≥0.0.1"
 Random = "≥0.0.1"
+ReverseDiff = "1"
 SafeTestsets = "0.1.0"
 SciMLBase = "≥0.0.1"
 SimpleWeightedGraphs = "1.4.0"
