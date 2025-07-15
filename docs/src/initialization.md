@@ -227,3 +227,6 @@ nothing #hide
 
 **Applying Constraints**: Constraints can be either added to the metadata of components ([`set_initconstraint!`](@ref), [`add_initconstraint!`](@ref)) or passed as `additional_initconstraint` to the
 [`initialize_component[!]`](@ref NetworkDynamics.initialize_component) functions.
+
+## Analysing Fixpoints
+In order to analyse fixpoints NetworkDynamis provides the functions [`isfixpoint`](@ref), [`is_linear_stable`](@ref) and [`jacobian_eigenvals`](@ref).

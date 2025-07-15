@@ -179,6 +179,13 @@ delete_initformulas!
 interface_values
 ```
 
+## Linear Stability Analysis
+```@docs
+isfixpoint
+jacobian_eigenvals
+is_linear_stable
+```
+
 ## Callbacks API
 ### Define Callbacks
 ```@docs
