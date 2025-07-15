@@ -39,7 +39,7 @@ function Adapt.adapt_structure(to, n::Network)
     extmap = adapt(to, n.extmap)
 
     Network{exT,gT,typeof(layer),typeof(vb),typeof(mm),eltype(caches),typeof(gbp),typeof(extmap)}(
-        vb, layer, n.im, caches, mm, gbp, extmap)
+        vb, layer, n.im, caches, mm, gbp, extmap, getfield(n, :jac_prototype))
 end
 
 Adapt.@adapt_structure NetworkLayer
