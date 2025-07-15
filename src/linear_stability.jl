@@ -25,12 +25,12 @@ the eigenvalues of the Jacobian matrix (or reduced Jacobian for constrained syst
 A fixpoint is linearly stable if all eigenvalues of the Jacobian have negative
 real parts. For systems with algebraic constraints (non-identity mass matrix),
 the reduced Jacobian is used following the approach in [1].
-See [`linear_eigenvals`](@ref) for more details.
+See [`jacobian_eigenvals`](@ref) for more details.
 
 # Arguments
 - `nw::Network`: The network dynamics object
 - `s0::NWState`: The state to check for linear stability (must be a fixpoint)
-- `kwargs...`: Additional keyword arguments passed to `linear_eigenvals`
+- `kwargs...`: Additional keyword arguments passed to `jacobian_eigenvals`
 
 # Returns
 - `Bool`: `true` if the fixpoint is linearly stable, `false` otherwise
@@ -40,7 +40,7 @@ See [`linear_eigenvals`](@ref) for more details.
 """
 function is_linear_stable(nw::Network, s0; kwargs...)
     isfixpoint(nw, s0) || error("The state s0 is not a fixpoint of the network nw.")
-    λ = linear_eigenvals(nw, s0; kwargs...)
+    λ = jacobian_eigenvals(nw, s0; kwargs...)
     if all(λ -> real(λ) < 0.0, λ)
         return true
     else
@@ -49,7 +49,7 @@ function is_linear_stable(nw::Network, s0; kwargs...)
 end
 
 """
-    linear_eigenvals(nw::Network, s0::NWState; eigvalf=LinearAlgebra.eigvals)
+    jacobian_eigenvals(nw::Network, s0::NWState; eigvalf=LinearAlgebra.eigvals)
 
 Compute the eigenvalues of the Jacobian matrix for linear stability analysis of
 the network dynamics at state `s0`.
@@ -89,7 +89,7 @@ For constrained systems (M ≠ I, differential-algebraic equations):
 # References
 [1] "Power System Modelling and Scripting", F. Milano, Chapter 7.2.
 """
-function linear_eigenvals(nw::Network, s0; eigvalf=LinearAlgebra.eigvals)
+function jacobian_eigenvals(nw::Network, s0; eigvalf=LinearAlgebra.eigvals)
     x0, p, t = uflat(s0), pflat(s0), s0.t # unpack state
     M = nw.mass_matrix
 

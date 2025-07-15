@@ -1,6 +1,7 @@
 # NetworkDynamics Release Notes
 
 ## v0.10.1 Changelog
+- [#294](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/294) add linear stability analysis functions: `isfixpoint`, `jacobian_eigenvals`, and `is_linear_stable` with support for both ODE and DAE systems
 - [#283](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/283) add automatic sparsity detection using `get_jac_prototype` and `set_jac_prototype!`
 - [#285](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/285) rename `delete_initconstraint!` -> `delete_initconstaints!` and `delete_initformula!` -> `delete_initformulas!`
 

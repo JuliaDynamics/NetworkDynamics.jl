@@ -25,14 +25,14 @@ using Test
         s_non_fix.v[1, :s] = 1.0
         @test !isfixpoint(nw, s_non_fix)
 
-        # Test linear_eigenvals function
-        λ = linear_eigenvals(nw, s0)
+        # Test jacobian_eigenvals function
+        λ = jacobian_eigenvals(nw, s0)
         @test length(λ) == 3  # Should have 3 eigenvalues for 3 vertices
         @test all(real.(λ) .≤ 0)  # All eigenvalues should have non-positive real parts
         @test nw.mass_matrix == I  # Verify unconstrained system
 
         # Test custom eigenvalue function
-        λ_custom = linear_eigenvals(nw, s0; eigvalf=eigvals)
+        λ_custom = jacobian_eigenvals(nw, s0; eigvalf=eigvals)
         @test λ ≈ λ_custom
 
         # Test is_linear_stable function
@@ -62,7 +62,7 @@ using Test
         @test isfixpoint(nw, s0)
 
         # Test eigenvalue computation
-        λ = linear_eigenvals(nw, s0)
+        λ = jacobian_eigenvals(nw, s0)
         @test length(λ) == 8  # 4 nodes × 2 states each
 
         # Test stability (should be stable for this configuration)
@@ -92,7 +92,7 @@ using Test
         @test isfixpoint(nw, s0)
 
         # Test eigenvalue computation for DAE system (should use reduced Jacobian)
-        λ = linear_eigenvals(nw, s0)
+        λ = jacobian_eigenvals(nw, s0)
         @test length(λ) == 3  # Should have 3 eigenvalues (differential variables only)
         @test all(real.(λ) .< 0)  # Should be stable
 
