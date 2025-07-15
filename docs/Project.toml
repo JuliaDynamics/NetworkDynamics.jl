@@ -34,9 +34,11 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 StyledStrings = "f489334b-da3d-4c2e-b8f0-e476e12c162b"
 SymbolicIndexingInterface = "2efcf032-c050-4f8e-a9bb-153293bab1f5"
 
-[sources]
-NetworkDynamics = {path = ".."}
-NetworkDynamicsInspector = {path = "../NetworkDynamicsInspector"}
+[sources.NetworkDynamics]
+path = ".."
+
+[sources.NetworkDynamicsInspector]
+path = "../NetworkDynamicsInspector"
 
 [compat]
 Bonito = "≥0.0.1"
@@ -65,6 +67,7 @@ Printf = "≥0.0.1"
 Random = "≥0.0.1"
 SciMLBase = "≥0.0.1"
 SimpleWeightedGraphs = "1.4.0"
+SparseConnectivityTracer = "1"
 StableRNGs = "1.0.2"
 StaticArrays = "≥0.0.1"
 StyledStrings = "≥0.0.1"
