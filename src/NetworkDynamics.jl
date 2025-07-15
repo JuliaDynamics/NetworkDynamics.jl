@@ -103,6 +103,9 @@ export has_marker, get_marker, set_marker!
 export get_defaults_dict, get_guesses_dict, get_bounds_dict, get_inits_dict
 include("metadata.jl")
 
+export isfixpoint, is_linear_stable, linear_eigenvals
+include("linear_stability.jl")
+
 include("show.jl")
 
 const CHECK_COMPONENT = Ref(true)
