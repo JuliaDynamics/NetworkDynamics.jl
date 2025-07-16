@@ -61,7 +61,7 @@ jobs:
                   echo "Delete $preview_dir (PR #$pr_number is $pr_state)"
                   deleted_previews="$deleted_previews $preview_dir"
 
-                  # git rm -rf "$preview_dir"
+                  git rm -rf "$preview_dir"
                 else
                   echo "Keeping $preview_dir (PR #$pr_number is open)"
                 fi
@@ -81,7 +81,7 @@ jobs:
             git commit -m "delete previews"
             git branch gh-pages-new $(echo "delete history" | git commit-tree HEAD^{tree})
             echo "Force push changes to upstream repo"
-            # git push --force origin gh-pages-new:gh-pages
+            git push --force origin gh-pages-new:gh-pages
           else
             echo "No previews to clean up"
           fi
