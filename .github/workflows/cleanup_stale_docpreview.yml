@@ -1,0 +1,87 @@
+name: Cleanup stale doc Previews
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Run daily at 2 AM UTC
+  workflow_dispatch:      # Allow manual trigger
+
+concurrency:
+  group: doc-preview-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup-closed-pr-previews:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - name: Checkout gh-pages branch
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          fetch-depth: 0
+
+      - name: Clean up closed PR previews
+        run: |
+          echo "Starting preview cleanup..."
+
+          deleted_previews=""
+
+          # Find all preview directories
+          if [ -d "previews" ]; then
+            shopt -s nullglob
+            for preview_dir in previews/PR*; do
+              if [ -d "$preview_dir" ]; then
+                # Extract PR number
+                pr_number=$(echo "$preview_dir" | sed 's/previews\/PR//')
+
+                # Validate PR number is numeric
+                if ! [[ "$pr_number" =~ ^[0-9]+$ ]]; then
+                  echo "Skipping invalid directory: $preview_dir"
+                  continue
+                fi
+
+                # Check PR state via GitHub API
+                api_response=$(curl -s -w "%{http_code}" -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                  "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number")
+
+                http_code="${api_response: -3}"
+                json_response="${api_response%???}"
+
+                if [ "$http_code" != "200" ] && [ "$http_code" != "404" ]; then
+                  echo "API error for PR #$pr_number: HTTP $http_code"
+                  echo "Response: $json_response"
+                  exit 1
+                fi
+
+                pr_state=$(echo "$json_response" | jq -r '.state // "not_found"')
+
+                if [ "$pr_state" = "closed" ] || [ "$pr_state" = "not_found" ]; then
+                  echo "Delete $preview_dir (PR #$pr_number is $pr_state)"
+                  deleted_previews="$deleted_previews $preview_dir"
+
+                  # git rm -rf "$preview_dir"
+                else
+                  echo "Keeping $preview_dir (PR #$pr_number is open)"
+                fi
+
+                sleep 1
+              fi
+            done
+            shopt -u nullglob
+          fi
+
+          # Commit and clean history if any previews were deleted
+          if [ -n "$deleted_previews" ]; then
+            echo "Clean up history for:$deleted_previews"
+
+            git config user.name "Documenter.jl"
+            git config user.email "documenter@juliadocs.github.io"
+            git commit -m "delete previews"
+            git branch gh-pages-new $(echo "delete history" | git commit-tree HEAD^{tree})
+            echo "Force push changes to upstream repo"
+            # git push --force origin gh-pages-new:gh-pages
+          else
+            echo "No previews to clean up"
+          fi
