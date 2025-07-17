@@ -10,7 +10,7 @@ highly efficient dynamic networks by describing the local dynamics of the edges 
     Complex network systems are composed by the entities that comprise them (the nodes) and the relationships that 
     connect each entity with one another (the edges). The mathematical structure is called 
     [Graph](https://en.wikipedia.org/wiki/Graph_theory) and it is used more or less interchangeably with the word 
-    Network). The graphical depictions of such networks are also called graphs. You will see both usages in this guide.
+    Network).
 
 In this graph of a simple 5-node network
 ```@example
