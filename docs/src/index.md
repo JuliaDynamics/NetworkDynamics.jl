@@ -1,17 +1,18 @@
 # NetworkDynamics
 
-The *NetworkDynamics.jl* package simulates dynamical systems within complex networks. It provides an interface 
+The *NetworkDynamics.jl* package simulates the dynamics of complex networks. It provides an interface 
 between the [Graphs.jl](https://github.com/JuliaGraphs/Graphs.jl) and the 
 [DifferentialEquations.jl](https://github.com/SciML/DifferentialEquations.jl) packages and facilitates the simulation of 
-highly efficient dynamic networks by describing the local dynamics on the edges and vertices of the network graph.
+highly efficient dynamic networks by describing the local dynamics of the edges and vertices of the network.
 
 !!! note
     **Complex Networks in a glance**
-    Complex network systems are composed by the entities that comprise them (the nodes) and the relationships that connect
-    each entity with one another (the edges). The mathematical structure (used more or less interchangeably with 
-    Network) is called [Graph](https://en.wikipedia.org/wiki/Graph_theory). The graphical depictions of such 
-    networks are also called graphs. You will see both usages in this guide.
+    Complex network systems are composed by the entities that comprise them (the nodes) and the relationships that 
+    connect each entity with one another (the edges). The mathematical structure is called 
+    [Graph](https://en.wikipedia.org/wiki/Graph_theory) and it is used more or less interchangeably with the word 
+    Network). The graphical depictions of such networks are also called graphs. You will see both usages in this guide.
 
+In this graph of a simple 5-node network
 ```@example
 using Graphs, GraphMakie, CairoMakie #hide
 using GraphMakie.NetworkLayout #hide
@@ -26,13 +27,12 @@ hidespines!(ax) #hide
 hidedecorations!(ax) #hide
 fig #hide
 ```
-Figure 1: A network (which can be seen in the figure below) is composed of nodes (v1 to v5) who are connected to each 
-other. The lines connecting the nodes with each other ( e1: 1-->2, e2: 1-->3, e3: 2-->3, e4: 2-->4, e5: 3-->5) are called 
-edges. Complex networks are composed of multiple nodes and edges, with most nodes connected to multiple other nodes
-with multiple edges
+we can see that it is composed of nodes (v1 to v5) who are connected to each other. The lines connecting the nodes with 
+each other ( e1: 1-->2, e2: 1-->3, e3: 2-->3, e4: 2-->4, e5: 3-->5) are called edges. Complex networks are composed of 
+multiple nodes and edges, with most nodes connected to multiple other nodes with multiple edges.
 
 (@Hans after rereading the text I realised that the information about the core of the package and the behaviours of the 
-nodes and edges does not belong in the introduction but rather in the mathematical model, so I moved it. If you are ok)
+nodes and edges does not belong in the introduction but rather in the mathematical model, so I moved it. If you are ok
 with this just delete this comment)
 
 Main features:
