@@ -1,13 +1,13 @@
 #=
 # [Network Diffusion](@id Getting Started)
 
-This example explains the use of the basic functions and constructors
-in NetworkDynamics.jl by modeling a simple diffusion on an undirected network.
+This example explains the use of the basic functions and constructors in NetworkDynamics.jl by modeling a simple
+diffusion on an undirected network.
 
-This page will walk you through:
-  * the theoretical background of a simple diffusion propagating in an undirected network
+This page will:
+  * walk you through the theoretical background of a simple diffusion propagating in an undirected network
   * explain the network dynamics of the system
-  * explain how to program the dynamics
+  * explain how to program them
 
 !!! note
     An Undirected Network is a network where all the connections between the nodes are bidirectional.
@@ -20,12 +20,13 @@ This example can be downloaded as a normal Julia script [here](@__NAME__.jl). #m
 
 Diffusion processes appear in phenomena as diverse as heat conduction, electrical currents, and random walks.
 Generally speaking they describe the tendency of systems to evolve towards a state of equally distributed entropy
-(that entropy being in the form of e.g. heat, charge or concentration). If we assume a thermal system, the temperature
-of a specific spot changes depending on the temperature gradient between itself and its neighborhood.
+(the entropy being in the form of e.g. heat, charge or concentration). If we assume a thermal system, the temperature
+of a specific spot changes depending on the temperature gradient between the temperature of the spot itself and that of
+its neighborhood.
 
-We will build a graph $g$ with $N$ nodes and an adjacency matrix $A$, where $v = (v_1, \dots, v_n)$ is the vector of
+We will build a graph $g$ with $N$ nodes and an adjacency matrix $A$, where $v = (v_1, \dots, v_n)$ is the vector of the
 (abstract) temperatures at each node $i = 1, \dots, N$. The rate of change of state $v_i$ will be described by the
-difference between the temperature of the node and that of its neighbors. For the above we obtain the following ordinary
+difference between the temperature of the node and that of its neighbours. From the above we obtain the following ordinary
 differential equation:
 ```math
 \dot v_i = \sum_{j=1}^N A_{ji} (v_j - v_i).
@@ -44,8 +45,8 @@ In order to bring this equation into the form required by NetworkDynamics.jl we 
 dynamics and vertex dynamics and bring them into the correct input-output formulation.
 
 
-#### Vertex Dynamics:
-All vertices have one internal state $v$. This state is also the vertex output. It is the sum over all incoming edge
+### Vertex Dynamics:
+All vertices have one internal state $v$, which is also the vertex output. It is the sum over all incoming edge
 flows connected to the vertex. This directly corresponds to the component model definition outlined in [Mathematical Model](@ref):
 ```math
 \begin{aligned}
@@ -56,7 +57,7 @@ y^\mathrm{v} &= g^{\mathrm v}(u^{\mathrm v}, \sum_k^{\text{incident}} y^{\mathrm
 =#
 
 #=
-#### Edge Dynamics:
+### Edge Dynamics:
 The edge dynamics on the other hand do not have any internal states. Thus we can define the edge output as the
 difference between the source and destination vertices:
 ```math
@@ -68,10 +69,11 @@ y^{\mathrm e}_{\mathrm{src}} &= g_\mathrm{src}^{\mathrm e}(u^{\mathrm e}, y^{\ma
 =#
 
 #=
-### Modelling dynamics in NetworkDynamics.jl
-To model the vertex dynamics we need to create a `VertexModel` and to model the edge dynamics we need to create an `EdgeModel`.
+## Modelling dynamics in NetworkDynamics.jl
+To model the vertex and edge dynamics we need to create a `VertexModel` and an `EdgeModel`, respectively.
 
-First we need to have Julia and the necessary packages (`Graphs`, `Revise`, `LiveServer`, `NetworkDynamics`, `OrdinaryDiffEqTsit5`, `StableRNGs` and `Plots`) installed. Then we need to load the packages:
+As a first step we need to install Julia and the necessary packages (`Graphs`, NetworkDynamics`, `OrdinaryDiffEqTsit5`,
+`StableRNGs` and `Plots`). Then we need to load them:
 =#
 
 using Graphs
@@ -81,27 +83,28 @@ using StableRNGs
 using Plots
 nothing #hide
 
+
 #=
 
-#### Defining an `EdgeModel`
+### Defining the `EdgeModel`
 
-Then we define the `EdgeModel`.
-To define it we use the function `diffusionedge_g!`. The function takes as inputs the current state of the edge `e`,
-its source vertex `v_src`, its destination vertex `v_dst`, a vector of parameters `p` and the time `t`. In order to
-comply with the syntax of NetworkDynamics.jl we must always define functions for edges with exactly these arguments.
-(In the case of this example, the values for `p` and `t` are not used since there are no parameters and ther is no
-#explicit time dependency in the system).
-After the function call the edge's output value `e` equals the difference between its source and its destination
-    vertex (i.e. the discrete gradient along that edge).
+Then we must define the `EdgeModel`. To define it we use the function `diffusionedge_g!` which takes as inputs
+the current state of the edge `e`, its source vertex `v_src`, its destination vertex `v_dst`, a vector of parameters `p`
+and the time `t`. In order to comply with the syntax of NetworkDynamics.jl we must always define functions for edges
+with exactly these arguments. (In the case of this example, the values for `p` and `t` are not used since there are no
+parameters and there is no explicit time dependency in the system).
+
+After the function call the edge's output value `e` equals the difference between its source and its destination vertex
+    (i.e. the discrete gradient along that edge).
 
 !!! note
     `diffusionedge_g!` is called a **mutating** function, because it mutates (modifies) the edge state `e` (which is the
     first of its inputs). (In Julia, names of mutating functions end with an `!`.) We use mutating functions because
-    they reduce the computational resource allocations and, therefore, speed up the computations.
+    they reduce the computational resource allocations and therefore, speed up the computations.
 =#
 
 function diffusionedge_g!(e_dst, v_src, v_dst, p, t)
-    ## e_dst, v_src, v_dst are arrays, so we use the broadcasting operator
+    ## e_dst, v_src, v_dst are arrays, so we use the broadcasting operator .
     e_dst .= v_src .- v_dst
     nothing
 end
@@ -116,10 +119,11 @@ nd_diffusion_edge = EdgeModel(; g=AntiSymmetric(diffusionedge_g!), outsym=[:flow
 
 
 #=
-#### Defining a `VertexModel`
+### Defining the `VertexModel`
 Next we need to define the `VertexModel`. For undirected graphs, the `edgefunction!` specifies the coupling from a
-source- to a destination vertex. The contributions of the connected edges to a single vertex are "aggregated". By default, the aggregation is the summation of
-all incident edge states. The aggregated edge state is made available via the `esum` argument of the vertex function.
+source to a destination vertex. The contributions of the connected edges to a single vertex are "aggregated".
+By default, the aggregation is the summation of all incident edge states. The aggregated edge state is made available
+via the `esum` argument of the vertex function.
 =#
 
 function diffusionvertex_f!(dv, v, esum, p, t)
@@ -132,68 +136,67 @@ nothing #hide #md
 #=
 Just like above, the input arguments `v, esum, p, t` are mandatory for the syntax of vertex functions. The additional
     input `dv` corresponding to the derivative of the vertex' state is mandatory for vertices described by ordinary
-    differential equations.
-
-The outputs of the vertex function are just a subset of the internal states. For that we can use the [`StateMask`](@ref) helper
-    function `g = StateMaks(1:1)`
+    differential equations. The outputs of the vertex function are just a subset of the internal states. Therefore, we
+    can use the [`StateMask`](@ref) helper function `g = StateMaks(1:1)` to access them.
 =#
 
 nd_diffusion_vertex = VertexModel(; f=diffusionvertex_f!, g=StateMask(1:1), dim=1)
 
 #=
+
 ## Constructing the network
 
-With the components defined, we can define the topology and assemble the network dynamics.
+With the components defined, we can now define the topology and assemble the network dynamics.
 =#
 
-# First we define the number of nodes the network is comprised of:
+# The first step is to define the number of nodes the network is comprised of:
 N = 20 # number of nodes
-k = 4  # average degree
+k = 4  # average degree distribution
+nothing #hide #md
 
-#= we will use the [Barabási–Albert model](https://en.wikipedia.org/wiki/Barab%C3%A1si%E2%80%93Albert_model) generates
-a scale-free random graph.
-=#
+# Then we define the network model. We will use the
+# [Barabási–Albert model](https://en.wikipedia.org/wiki/Barab%C3%A1si%E2%80%93Albert_model) which generates a
+# scale-free random graph.
 g = barabasi_albert(N, k)
 nothing #hide #md
 
 #=
-We then create the network of nodes and edges by using the constructor `Network`. It is combines the component
+We then create the network of nodes and edges by using the constructor `Network`. It combines the component
 model with the topological information contained in the graph **`g`** and returns an `Network` compatible with the
 solvers of `DifferentialEquations.jl`.
 =#
 nd = Network(g, nd_diffusion_vertex, nd_diffusion_edge)
-
-
 rng = StableRNG(1)
 
-# We generate random initial conditions
+# We then generate random initial conditions
 x0 = randn(rng, N)
 
 #=
-We are solving the diffusion problem on the time interval $[0, 2]$ with the `Tsit5()` algorithm, which is recommended
-by the authors of `DifferentialEquations.jl` for most non-stiff problems.
+We then solve the diffusion problem on the time interval $[0, 2]$ with the `Tsit5()` algorithm, which is recommended
+by the authors of `DifferentialEquations.jl` for most non-stiff problems. We first create an `ODEProblem`:
 =#
 ode_prob = ODEProblem(nd, x0, (0.0, 2.0))
 
 # We test all ex styles #src
 Main.test_execution_styles(ode_prob) #src
 
-
-# Solve the simulation commend
+# And then solve the network using ´solve´:
 sol = solve(ode_prob, Tsit5());
 nothing #hide #md
 
 #=
-The plotting of the results using the command `plot` is straightforward. The **`idxs`** keyword allows us to pass a
-list of indices. We can also use "symbolic" indices, which specify components and their symbols directly.
-For example `idxs = VIndex(1, :v)` accesses the state `:v` of vertex 1. See [Symbolic Indexing](@ref) for more details.
+We plot the results using the `plot` command, which takes three parameters as input `sol`, `idxs` and `fmt`.
+The first parameter is the solved network `sol`.
+The second parameter is `idxs`, which provides a set of indices. We can use "symbolic" indices, which specify specific
+components and their symbols directly (see [Symbolic Indexing](@ref) for more details). In order to collect multiple
+indices we can use the helper function [`vidxs`](@ref) and [`eidxs`](@ref), which help us collect all symbolic indices
+matching specific criteria. The third and last parameter is `fmt`, which provides the format of the generated plot, in
+this case that format being .png.
 =#
 plot(sol; idxs=vidxs(nd, :, :), fmt=:png)
 
 #=
-In order to collect multiple indices we can use the helper function [`vidxs`](@ref) and [`eidxs`](@ref), which help to
-    collect all symbolic indices matching specific criteria.
-
+(@Hans can you provide a description of what we see in this plot? The y axis is missing so it is unclear to me.)
 
 ## Two Dimensional Extension
 
@@ -202,66 +205,52 @@ The first diffusion uses the symbol `x` and is initiated with initial conditions
 distribution $N(0,1)$, while the second diffusion uses the symbol `ϕ` with squared standard normal initial conditions.
 
 The symbols have to be passed with the keyword **`sym`** to `VertexModel`.
+
+Once again we define the number of nodes and the type of network we want to generate:
 =#
 
 N = 10 # number of nodes
-k = 4  # average degree
+k = 4  # average degrees distribution
 g = barabasi_albert(N, k)
 
-# We have two independent diffusions on the network, hence dim = 2
-
+# We have two independent diffusions on the network, hence dim = 2. We now define the `VertexModel` and the `EdgeModel`
 nd_diffusion_vertex_2 = VertexModel(; f=diffusionvertex_f!, g=1:2, dim=2, sym=[:x, :ϕ])
 nd_diffusion_edge_2 = EdgeModel(; g=AntiSymmetric(diffusionedge_g!), outsym=[:flow_x, :flow_ϕ])
 nd_2 = Network(g, nd_diffusion_vertex_2, nd_diffusion_edge_2)
 
-# x ~ N(0,1)^2; ϕ ~ N(0,1)
+#= We define the first diffusion as x ~ $N(0,1)^\mathrm{2}$ and the second diffusion as ϕ ~ $N(0,1)$. So the propagation
+of the diffusion from node 0 to node 2 is given by creating a vector:
+=#
 x0_2 = vec(transpose([randn(rng, N) .^ 2 randn(rng, N)]))
+#(@Hans: is my explanation correct?)
+
+# We then define the [ODEProblem](@ref)
 ode_prob_2 = ODEProblem(nd_2, x0_2, (0.0, 3.0))
 Main.test_execution_styles(ode_prob_2) #src
+
+# Then solve the network using:
 sol_2 = solve(ode_prob_2, Tsit5());
 
-
-# To plot the variables ϕ_i yourself use the command:
+# To plot the evolution of variables ϕ_i over time we use the command:
 plot(sol_2; idxs=vidxs(nd_2, :, :x), fmt=:png)
-# [To write ϕ type \phi and press TAB]
+# [To write ϕ in the terminal type \phi and press TAB]
 
-# Using the `eidxs` helper function we can also plot the flow variables
+# Using the `eidxs` helper function we can also plot the evolution of the flow variables over time:
 plot(sol_2; idxs=eidxs(nd_2, :, :flow_x), fmt=:png)
 
-#=
-## Appendix: The network Laplacian $L$
-
-The diffusion equation on a network can be rewritten as:
-```math
-\dot v_i  = \sum_{j=1}^N A_{ji} v_j - d_i v_i =  e_i^T A v - d_i v_i
-```
-where $d_i$ is the degree of node $i$ and $e_i^T$ is the $i$-th standard basis vector.
-
-By introducing the diagonal matrix $D$, that has the degree of node $i$ in its $i$-th row and the Laplacian matrix
-$L = D - A$ we arrive at:
-```math
-\dot v = e_i^T(A - D) v
-```
-and finally
-```math
-\dot v = - L v
-```
-
-This is a linear system of ordinary differential equations (ODEs) and its solution is a matrix exponential.
-To study the asymptotic behaviour of the system it suffices to analyze the eigenspectrum of $L$.
- For this reason $L$ is an important construction in network science.
-=#
 
 #=
-# Putting it all together
-=#
+## Putting it all together
 
-using Graphs
-using NetworkDynamics
-using OrdinaryDiffEqTsit5
-using StableRNGs
-using Plots
-nothing #hide
+(@Hans: when I am trying to run the script in the "Putting it all together" in a separate .jl file I am getting a
+UndefVarError: `AntiSymmetric` not defined in `Main`
+Suggestion: check for spelling errors or missing imports.
+Stacktrace:
+ [1] top-level scope
+   @ REPL[7]:1)
+
+and I have no idea why. Can you please check it? Because if someone copy-pastes it, it will not work for them)
+=#
 
 using Graphs
 using NetworkDynamics
@@ -311,5 +300,31 @@ x0_2 = vec(transpose([randn(rng, N) .^ 2 randn(rng, N)]))
 ode_prob_2 = ODEProblem(nd_2, x0_2, (0.0, 3.0))
 Main.test_execution_styles(ode_prob_2) #src
 sol_2 = solve(ode_prob_2, Tsit5());
-plot(sol_2; idxs=vidxs(nd_2, :, :x), fmt=:png)
+plot(sol_2; idxs=vidxs(nd_2, :, :x), fmt=:png,  xlabel = "x", ylabel = "nd_2",)
 plot(sol_2; idxs=eidxs(nd_2, :, :flow_x), fmt=:png)
+
+
+
+#=
+## Appendix: The network Laplacian $L$
+
+The diffusion equation on a network can be rewritten as:
+```math
+\dot v_i  = \sum_{j=1}^N A_{ji} v_j - d_i v_i =  e_i^T A v - d_i v_i
+```
+where $d_i$ is the degree distribution of node $i$ and $e_i^T$ is the $i$-th standard basis vector.
+
+By introducing the diagonal matrix $D$, that has the degree of node $i$ in its $i$-th row and the Laplacian matrix
+$L = D - A$ we arrive at:
+```math
+\dot v = e_i^T(A - D) v
+```
+and finally
+```math
+\dot v = - L v
+```
+
+This is a linear system of ordinary differential equations (ODEs) and its solution is a matrix exponential.
+To study the asymptotic behaviour of the system it suffices to analyze the eigenspectrum of $L$.
+ For this reason $L$ is an important construction in network science.
+=#
