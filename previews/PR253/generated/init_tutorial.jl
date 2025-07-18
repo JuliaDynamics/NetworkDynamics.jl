@@ -247,6 +247,11 @@ du = ones(dim(nw_dyn))
 nw_dyn(du, uflat(u0_dyn), pflat(u0_dyn), 0.0)
 extrema(du .- zeros(dim(nw_dyn))) # very close to zero, confirming we have a steady state!
 
+# Alternatively, we can used the `isfixpoint` function to check if the state is a fixpoint:
+
+@assert isfixpoint(nw_dyn, u0_dyn)
+nothing #hide
+
 # ## Simulating the Dynamic Model
 #
 # With our properly initialized model, we can now simulate the system to observe its behavior.
