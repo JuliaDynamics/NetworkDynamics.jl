@@ -52,15 +52,15 @@ conceptional and not necessarily physical way.)
 
 In this graphical representation of a partial network graph
 ```@raw html
-<img src="../assets/mathmodel.svg" width="100% height="100%"/>
+<picture>
+  <source srcset="../assets/mathmodel-dark.svg" media="(prefers-color-scheme: dark)">
+  <img src="../assets/mathmodel.svg" width="100%" height="100%"/>
+</picture>
 ```
 three nodes are visible (node 1, node 2 and node 3) as well as the edges connecting node 1 and node 2 ($e_{\mathrm 12}$, 
 $e_{\mathrm 21}$). Above the network, the mass matrix equations on node 1 and node 2 ($M_{\mathrm{c}} x_{\mathrm c}$), 
 the equations on the connecting edges ($e_{\mathrm 12}$, $e_{\mathrm 21}$), as well as the internal state vector 
 equations of node1 and node2 ($u_1$ and $u_2$) are also shown.
-
-(@Hans: the .svg graphics in this page looks black with dark letters for the most part in some browsers (e.g. firefox, 
-duckduckgo). I tried to add a white background to them, but it does not seem to have worked)
 
 ### Vertex Models
 The equations of a (single-layer) full vertex model are: 
@@ -92,7 +92,10 @@ i^{\mathrm v} = \sum_k^{\text{incident}} y^{\mathrm e}_k
 
 The graphical representation of such a model is:
 ```@raw html
-<img src="../assets/nodemodel.svg" width="70% height="70%"/>
+<picture>
+  <source srcset="../assets/nodemodel-dark.svg" media="(prefers-color-scheme: dark)">
+  <img src="../assets/nodemodel.svg" width="70%" height="70%"/>
+</picture>
 ```
 where $y^e_i$ and $y^e_j$ are two of the $n$ incident edge outputs that are aggregated to produce the model input 
 $i^u$ and the model output $y^v$ (the vertex model output).

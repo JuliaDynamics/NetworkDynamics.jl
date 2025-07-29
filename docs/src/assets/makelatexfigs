@@ -17,7 +17,23 @@ if ! command_exists pdf2svg; then
     exit 1
 fi
 
-latexmk -pdflua -shell-escape mathmodel.tex
-latexmk -pdflua -shell-escape edgemodel.tex
-latexmk -pdflua -shell-escape nodemodel.tex
+# List of figures to generate
+figures=(mathmodel edgemodel nodemodel)
+
+# Generate light versions (default)
+echo "Generating light versions..."
+for fig in "${figures[@]}"; do
+    latexmk -pdflua -shell-escape "${fig}.tex"
+done
+
+# Generate dark versions
+echo "Generating dark versions..."
+for fig in "${figures[@]}"; do
+    cp "${fig}.tex" "${fig}-dark.tex"
+    NDTHEME=dark latexmk -pdflua -shell-escape "${fig}-dark.tex"
+    rm "${fig}-dark.tex"
+done
+
 latexmk -C
+# Clean up remaining temp files that latexmk -C might miss
+rm -f *.aux *.fdb_latexmk *.fls *.log *.pdf

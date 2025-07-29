@@ -1,0 +1,60 @@
+% ndtheme.sty - NetworkDynamics figure theming
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{ndtheme}[2024/01/01 NetworkDynamics figure themes]
+
+\RequirePackage{xcolor}
+\RequirePackage{tikz}
+\usetikzlibrary{backgrounds}
+
+% Define NetworkDynamics colors (keeping existing palette)
+\definecolor{wblue}{HTML}{0072b2}
+\definecolor{worange}{HTML}{e69f00}
+\definecolor{wbblue}{HTML}{56b4e9}
+\definecolor{wgreen}{HTML}{009e73}
+\definecolor{wyellow}{HTML}{f0e442}
+
+% Light theme colors
+\definecolor{ndlight-text}{HTML}{000000}
+\definecolor{ndlight-line}{HTML}{000000}
+\definecolor{ndlight-bg}{HTML}{ffffff}
+
+% Dark theme colors  
+\definecolor{nddark-text}{HTML}{ffffff}
+\definecolor{nddark-line}{HTML}{ffffff}
+\definecolor{nddark-bg}{HTML}{000000}
+
+% Theme styles
+\tikzset{
+  ndlight/.style={
+    text=ndlight-text,
+    draw=ndlight-line,
+    every node/.append style={text=ndlight-text},
+    every path/.append style={draw=ndlight-line}
+  },
+  nddark/.style={
+    text=nddark-text,
+    draw=nddark-line, 
+    every node/.append style={text=nddark-text},
+    every path/.append style={draw=nddark-line}
+  }
+}
+
+% Set theme based on environment variable
+\directlua{
+  if os.getenv("NDTHEME") == "dark" then
+    tex.sprint("\\def\\ndtheme{nddark}")
+  else
+    tex.sprint("\\def\\ndtheme{ndlight}")
+  end
+}
+
+% Math color command for preserving existing color usage
+\makeatletter
+\def\mathcolor#1#{\@mathcolor{#1}}
+\def\@mathcolor#1#2#3{%
+  \protect\leavevmode
+  \begingroup
+    \color#1{#2}#3%
+  \endgroup
+}
+\makeatother
