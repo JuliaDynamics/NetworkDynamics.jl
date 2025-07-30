@@ -72,7 +72,7 @@ y^{\mathrm e}_{\mathrm{src}} &= g_\mathrm{src}^{\mathrm e}(u^{\mathrm e}, y^{\ma
 ## Modelling dynamics in NetworkDynamics.jl
 To model the vertex and edge dynamics we need to create a `VertexModel` and an `EdgeModel`, respectively.
 
-As a first step we need to install Julia and the necessary packages (`Graphs`, NetworkDynamics`, `OrdinaryDiffEqTsit5`,
+As a first step we need to install Julia and the necessary packages (`Graphs`, `NetworkDynamics`, `OrdinaryDiffEqTsit5`,
 `StableRNGs` and `Plots`). Then we need to load them:
 =#
 
@@ -137,7 +137,7 @@ nothing #hide #md
 Just like above, the input arguments `v, esum, p, t` are mandatory for the syntax of vertex functions. The additional
     input `dv` corresponding to the derivative of the vertex' state is mandatory for vertices described by ordinary
     differential equations. The outputs of the vertex function are just a subset of the internal states. Therefore, we
-    can use the [`StateMask`](@ref) helper function `g = StateMaks(1:1)` to access them.
+    can use the [`StateMask`](@ref) helper function `g = StateMask(1:1)` to access them.
 =#
 
 nd_diffusion_vertex = VertexModel(; f=diffusionvertex_f!, g=StateMask(1:1), dim=1)
@@ -180,23 +180,25 @@ ode_prob = ODEProblem(nd, x0, (0.0, 2.0))
 # We test all ex styles #src
 Main.test_execution_styles(ode_prob) #src
 
-# And then solve the network using ´solve´:
+# And then solve the network using `solve`:
 sol = solve(ode_prob, Tsit5());
 nothing #hide #md
 
 #=
-We plot the results using the `plot` command, which takes three parameters as input `sol`, `idxs` and `fmt`.
+We plot the results using the `plot` command, which takes two parameters as input `sol` and `idxs`.
 The first parameter is the solved network `sol`.
 The second parameter is `idxs`, which provides a set of indices. We can use "symbolic" indices, which specify specific
 components and their symbols directly (see [Symbolic Indexing](@ref) for more details). In order to collect multiple
 indices we can use the helper function [`vidxs`](@ref) and [`eidxs`](@ref), which help us collect all symbolic indices
-matching specific criteria. The third and last parameter is `fmt`, which provides the format of the generated plot, in
-this case that format being .png.
+matching specific criteria.
+Here, we want to plot **all** vertex states from the network.
 =#
-plot(sol; idxs=vidxs(nd, :, :), fmt=:png)
+plot(sol; idxs=vidxs(nd, :, :))
 
 #=
-(@Hans can you provide a description of what we see in this plot? The y axis is missing so it is unclear to me.)
+In the plot we see, how the individual vertex states evolve over time.
+We start at a random configuration, and then develop towards an equilibrium where
+all nodes have the same state, which is to be expected for a simple diffusion process.
 
 ## Two Dimensional Extension
 
@@ -218,13 +220,13 @@ nd_diffusion_vertex_2 = VertexModel(; f=diffusionvertex_f!, g=1:2, dim=2, sym=[:
 nd_diffusion_edge_2 = EdgeModel(; g=AntiSymmetric(diffusionedge_g!), outsym=[:flow_x, :flow_ϕ])
 nd_2 = Network(g, nd_diffusion_vertex_2, nd_diffusion_edge_2)
 
-#= We define the first diffusion as x ~ $N(0,1)^\mathrm{2}$ and the second diffusion as ϕ ~ $N(0,1)$. So the propagation
+#=
+We define the first diffusion as x ~ $N(0,1)^\mathrm{2}$ and the second diffusion as ϕ ~ $N(0,1)$. So the propagation
 of the diffusion from node 0 to node 2 is given by creating a vector:
 =#
 x0_2 = vec(transpose([randn(rng, N) .^ 2 randn(rng, N)]))
-#(@Hans: is my explanation correct?)
 
-# We then define the [ODEProblem](@ref)
+# We then define the `ODEProblem`:
 ode_prob_2 = ODEProblem(nd_2, x0_2, (0.0, 3.0))
 Main.test_execution_styles(ode_prob_2) #src
 
@@ -232,24 +234,16 @@ Main.test_execution_styles(ode_prob_2) #src
 sol_2 = solve(ode_prob_2, Tsit5());
 
 # To plot the evolution of variables ϕ_i over time we use the command:
-plot(sol_2; idxs=vidxs(nd_2, :, :x), fmt=:png)
+plot(sol_2; idxs=vidxs(nd_2, :, :x))
 # [To write ϕ in the terminal type \phi and press TAB]
 
 # Using the `eidxs` helper function we can also plot the evolution of the flow variables over time:
-plot(sol_2; idxs=eidxs(nd_2, :, :flow_x), fmt=:png)
+plot(sol_2; idxs=eidxs(nd_2, :, :flow_x))
+# As expected, the flows are nonzero first and go towards zero as we reach the equilibrium point.
 
 
 #=
 ## Putting it all together
-
-(@Hans: when I am trying to run the script in the "Putting it all together" in a separate .jl file I am getting a
-UndefVarError: `AntiSymmetric` not defined in `Main`
-Suggestion: check for spelling errors or missing imports.
-Stacktrace:
- [1] top-level scope
-   @ REPL[7]:1)
-
-and I have no idea why. Can you please check it? Because if someone copy-pastes it, it will not work for them)
 =#
 
 using Graphs
@@ -260,7 +254,7 @@ using Plots
 nothing #hide
 
 function diffusionedge_g!(e_dst, v_src, v_dst, p, t)
-    ## e_dst, v_src, v_dst are arrays, hence we use the broadcasting operator
+    ## e_dst, v_src, v_dst are arrays, so we use the broadcasting operator .
     e_dst .= v_src .- v_dst
     nothing
 end
@@ -269,7 +263,7 @@ nothing #hide #md
 nd_diffusion_edge = EdgeModel(; g=AntiSymmetric(diffusionedge_g!), outsym=[:flow])
 
 function diffusionvertex_f!(dv, v, esum, p, t)
-    ## dv, v and esum are arrays, hence we use the broadcasting operator .
+    ## dv, v and esum are arrays, so we use the broadcasting operator .
     dv .= esum
     nothing
 end
@@ -300,8 +294,8 @@ x0_2 = vec(transpose([randn(rng, N) .^ 2 randn(rng, N)]))
 ode_prob_2 = ODEProblem(nd_2, x0_2, (0.0, 3.0))
 Main.test_execution_styles(ode_prob_2) #src
 sol_2 = solve(ode_prob_2, Tsit5());
-plot(sol_2; idxs=vidxs(nd_2, :, :x), fmt=:png,  xlabel = "x", ylabel = "nd_2",)
-plot(sol_2; idxs=eidxs(nd_2, :, :flow_x), fmt=:png)
+plot(sol_2; idxs=vidxs(nd_2, :, :x), xlabel = "x", ylabel = "nd_2",)
+plot(sol_2; idxs=eidxs(nd_2, :, :flow_x))
 
 
 
