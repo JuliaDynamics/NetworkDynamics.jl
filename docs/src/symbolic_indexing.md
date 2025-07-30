@@ -6,10 +6,7 @@ provides numerous methods to access and change variables and parameters.
 ## Provide Symbol Names
 When constructing component models, you can pass symbolic names using the `sym` and `psym` keywords.
 ```@example si
-using NetworkDynamics
-using Graphs
-using OrdinaryDiffEqTsit5
-using Plots
+using NetworkDynamics, Graphs, OrdinaryDiffEqTsit5, Plots
 function _edgef!(e, v_s, v_d, (K,), t)
     e .= K * (v_s[1] .- v_d[1])
 end
