@@ -5,6 +5,7 @@ The following functions are designed for public use.
 ## Network Construction API
 ```@docs
 Network
+get_graph
 dim(::Network)
 pdim(::Network)
 ```
@@ -22,7 +23,7 @@ EdgeModel(::ModelingToolkit.ODESystem, ::Any, ::Any, ::Any, ::Any)
 EdgeModel(::ModelingToolkit.ODESystem, ::Any, ::Any, ::Any)
 ```
 
-### Output Function Helpers/Wrappers 
+### Output Function Helpers/Wrappers
 ```@docs
 StateMask
 Symmetric
@@ -138,6 +139,10 @@ set_bounds!
 delete_bounds!
 set_defaults!
 set_interface_defaults!
+get_defaults_dict
+get_guesses_dict
+get_bounds_dict
+get_inits_dict
 ```
 
 ### Metadata and Inspection Utils
@@ -152,8 +157,33 @@ describe_edges
 ## Initialization
 ```@docs
 find_fixpoint
+initialize_componentwise
+initialize_componentwise!
+initialize_component
 initialize_component!
 init_residual
+InitConstraint
+@initconstraint
+set_initconstraint!
+delete_initconstraints!
+has_initconstraint
+get_initconstraints
+add_initconstraint!
+InitFormula
+@initformula
+has_initformula
+get_initformulas
+set_initformula!
+add_initformula!
+delete_initformulas!
+interface_values
+```
+
+## Linear Stability Analysis
+```@docs
+isfixpoint
+jacobian_eigenvals
+is_linear_stable
 ```
 
 ## Callbacks API
@@ -175,6 +205,12 @@ has_callback
 get_callbacks(::NetworkDynamics.ComponentModel)
 set_callback!
 add_callback!
+```
+
+## Sparsity Detection
+```@docs
+get_jac_prototype
+set_jac_prototype!
 ```
 
 ## Execution Types

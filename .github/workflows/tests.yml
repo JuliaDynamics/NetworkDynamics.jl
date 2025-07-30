@@ -145,6 +145,7 @@ jobs:
     permissions:
       actions: write # needed to allow julia-actions/cache to proactively delete old caches that it has created
       contents: write
+      pull-requests: read
     strategy:
       fail-fast: false
       matrix:
@@ -164,9 +165,36 @@ jobs:
       - name: Load Julia packages from cache
         id: julia-cache
         uses: julia-actions/cache@v2
+      - name: Extract OpPoDyn branch from PR
+        id: extract-branch
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            PR_DATA=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                             -H "Accept: application/vnd.github.v3+json" \
+                             "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}")
+            PR_TITLE=$(echo "$PR_DATA" | jq -r '.title')
+            PR_BODY=$(echo "$PR_DATA" | jq -r '.body')
+            # Combine title and body for searching
+            PR_TEXT="$PR_TITLE $PR_BODY"
+
+            # Look for [oppodyn:branch-name] pattern (case insensitive)
+            BRANCH_MATCH=$(echo "$PR_TEXT" | grep -i -o "\[oppodyn:[^]]*\]" | head -n1)
+            if [[ -n "$BRANCH_MATCH" ]]; then
+              BRANCH_NAME=$(echo "$BRANCH_MATCH" | sed 's/\[[Oo][Pp][Pp][Oo][Dd][Yy][Nn]:\([^]]*\)\]/\1/i')
+              echo "Found OpPoDyn branch specification: $BRANCH_NAME"
+              echo "oppodyn_branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
+            else
+              echo "No OpPoDyn branch specified, using main"
+              echo "oppodyn_branch=main" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "Not a pull request, using main branch"
+            echo "oppodyn_branch=main" >> $GITHUB_OUTPUT
+          fi
       - uses: actions/checkout@v4
         with:
           repository: JuliaEnergy/OpPoDyn.jl
+          ref: ${{ steps.extract-branch.outputs.oppodyn_branch }}
           path: OpPoDyn
       - name: Run OpPoDyn tests
         shell: julia --project=testenv --color=yes {0}

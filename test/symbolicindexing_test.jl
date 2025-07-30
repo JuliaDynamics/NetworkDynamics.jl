@@ -552,3 +552,66 @@ end
     b = @b $obsf2($(rand(dim(nw))), $(rand(pdim(nw))), NaN, $(zeros(length(idxs2)))) # 17ns 0 allocs
     @test b.allocs == 0
 end
+
+@testset "test edge indexing with Pair syntax" begin
+    # Create a simple network with named vertices for testing
+    v1 = Lib.kuramoto_second(name=:v1)
+    v2 = Lib.kuramoto_second(name=:v2)
+    v3 = Lib.kuramoto_second(name=:v3)
+    e12 = Lib.kuramoto_edge(name=:e12)
+    e23 = Lib.kuramoto_edge(name=:e23)
+    g = path_graph(3)
+    nw = Network(g, [v1, v2, v3], [e12, e23])
+
+    # Basic pair syntax tests
+    @test SII.is_observed(nw, EIndex(1=>2, :P))
+    @test SII.is_observed(nw, EIndex(:v1=>:v2, :P))
+    @test SII.is_parameter(nw, EPIndex(1=>2, :K))
+    @test SII.is_parameter(nw, EPIndex(:v1=>:v2, :K))
+
+    # Test that pairs resolve to regular indices
+    @test SII.parameter_index(nw, EPIndex(1=>2, :K)) == SII.parameter_index(nw, EPIndex(1, :K))
+    @test SII.parameter_index(nw, EPIndex(:v1=>:v2, :K)) == SII.parameter_index(nw, EPIndex(1, :K))
+    @test SII.parameter_index(nw, EPIndex(:v1=>2, :K)) == SII.parameter_index(nw, EPIndex(1, :K))
+
+    # Error cases
+    @test_throws ArgumentError SII.parameter_index(nw, EPIndex(1=>3, :K))  # no direct edge
+    @test_throws ArgumentError SII.parameter_index(nw, EPIndex(:nonexistent=>:v2, :K))  # invalid vertex
+
+    # Test with solution and state objects
+    u0 = rand(dim(nw))
+    p = rand(pdim(nw))
+    prob = ODEProblem(nw, u0, (0.0, 1.0), p)
+    sol = solve(prob, Tsit5())
+    s = NWState(nw, u0, p)
+
+    # Solution indexing
+    @test sol([0.1, 0.5], idxs=EIndex(1=>2, :P)).u ≈ sol([0.1, 0.5], idxs=EIndex(1, :P)).u
+    @test sol([0.1, 0.5], idxs=EIndex(:v1=>:v2, :P)).u ≈ sol([0.1, 0.5], idxs=EIndex(1, :P)).u
+
+    # State access
+    @test s[EIndex(1=>2, :P)] == s[EIndex(1, :P)]
+    @test s[EIndex(:v1=>:v2, :P)] == s[EIndex(1, :P)]
+    @test s[EPIndex(1=>2, :K)] == s[EPIndex(1, :K)]
+    @test s[EPIndex(:v1=>:v2, :K)] == s[EPIndex(1, :K)]
+
+    # Proxy syntax
+    @test s.e[1=>2, :P] == s[EIndex(1, :P)]
+    @test s.e[:v1=>:v2, :P] == s[EIndex(1, :P)]
+    s.p.e[1=>2, :K] = 2.71
+    @test s.p.e[1, :K] == 2.71
+    @test s.p[EPIndex(1=>2, :K)] == 2.71
+
+    # Multiple edge access
+    edges_int = [EIndex(1=>2, :P), EIndex(2=>3, :P)]
+    edges_named = [EIndex(:v1=>:v2, :P), EIndex(:v2=>:v3, :P)]
+    edges_regular = [EIndex(1, :P), EIndex(2, :P)]
+    @test s[edges_int] == s[edges_regular]
+    @test s[edges_named] == s[edges_regular]
+
+    # naming
+    @test SII.getname(EIndex(1=>2, :P)) == :v1ₜₒv2₊P
+    @test SII.getname(EIndex(:a=>:b, :P)) == :aₜₒb₊P
+    @test SII.getname(EIndex(:a=>2, :P)) == :aₜₒv2₊P
+    @test SII.getname(EIndex(1=>:b, :P)) == :v1ₜₒb₊P
+end

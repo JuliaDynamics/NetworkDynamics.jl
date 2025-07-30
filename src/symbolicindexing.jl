@@ -3,7 +3,7 @@
     idx = VIndex(comp, sub)
 
 A symbolic index for a vertex state variable.
-- `comp`: the component index, either int or a collection of ints
+- `comp`: the component index, either int, symbol or a collection
 - `sub`: the subindex, either int, symbol or a collection of those.
 
 ```
@@ -11,6 +11,7 @@ VIndex(1, :P)      # vertex 1, variable :P
 VIndex(1:5, 1)     # first state of vertices 1 to 5
 VIndex(7, (:x,:y)) # states :x and :y of vertex 7
 VIndex(2)          # references the second vertex model
+VIndex(:a)         # references vertex with unique name :a
 ```
 
 Can be used to index into objects supporting the `SymbolicIndexingInterface`,
@@ -28,7 +29,7 @@ VIndex(ci::Union{Symbol,Int}) = VIndex(ci, nothing)
     idx = EIndex(comp, sub)
 
 A symbolic index for an edge state variable.
-- `comp`: the component index, either int or a collection of ints
+- `comp`: the component index, either int, symbol, pair or a collection
 - `sub`: the subindex, either int, symbol or a collection of those.
 
 ```
@@ -36,6 +37,8 @@ EIndex(1, :P)      # edge 1, variable :P
 EIndex(1:5, 1)     # first state of edges 1 to 5
 EIndex(7, (:x,:y)) # states :x and :y of edge 7
 EIndex(2)          # references the second edge model
+EIndex(1=>2)       # references edge from v1 to v2
+EIndex(:a=>:b)     # references edge from (uniquely named) vertex :a to :b
 ```
 
 Can be used to index into objects supporting the `SymbolicIndexingInterface`,
@@ -53,7 +56,7 @@ EIndex(ci::Union{Symbol,Int}) = EIndex(ci, nothing)
     idx = VPIndex(comp, sub)
 
 A symbolic index into the parameter a vertex:
-- `comp`: the component index, either int or a collection of ints
+- `comp`: the component index, either int, symbol or a collection
 - `sub`: the subindex, either int, symbol or a collection of those.
 
 Can be used to index into objects supporting the `SymbolicIndexingInterface`,
@@ -69,8 +72,8 @@ end
     EPIndex{C,S} <: SymbolicStateIndex{C,S}
     idx = VEIndex(comp, sub)
 
-A symbolic index into the parameter a vertex:
-- `comp`: the component index, either int or a collection of ints
+A symbolic index into the parameter of an edge:
+- `comp`: the component index, either int, symbol, pair or a collection
 - `sub`: the subindex, either int, symbol or a collection of those.
 
 Can be used to index into objects supporting the `SymbolicIndexingInterface`,
@@ -88,25 +91,26 @@ const SymbolicVertexIndex{C,S} = Union{VIndex{C,S}, VPIndex{C,S}}
 idxtype(s::VIndex) = VIndex
 idxtype(s::EIndex) = EIndex
 
-#=
-SciMLBase gets the index provider from ODEFunction.sys which defaults to f.sys so we provide it...
-SSI Maintainer assured that f.sys is really only used for symbolic indexig so method seems legit
-=#
-SciMLBase.__has_sys(nw::Network) = true
-Base.getproperty(nw::Network, s::Symbol) = s===:sys ? nw : getfield(nw, s)
 
-SII.symbolic_type(::Type{<:SymbolicIndex{<:Union{Symbol,Int},<:Union{Symbol,Int}}}) = SII.ScalarSymbolic()
+SII.symbolic_type(::Type{<:SymbolicIndex{<:Union{<:Pair,Symbol,Int},<:Union{Symbol,Int}}}) = SII.ScalarSymbolic()
 SII.symbolic_type(::Type{<:SymbolicIndex}) = SII.ArraySymbolic()
 
 SII.hasname(::SymbolicIndex) = false
-SII.hasname(::SymbolicIndex{<:Union{Symbol,Int},<:Union{Symbol,Int}}) = true
+SII.hasname(::SymbolicIndex{<:Union{<:Pair,Symbol,Int},<:Union{Symbol,Int}}) = true
 function SII.getname(x::SymbolicVertexIndex)
     prefix = x.compidx isa Int ? :v : Symbol()
     Symbol(prefix, Symbol(x.compidx), :₊, Symbol(x.subidx))
 end
 function SII.getname(x::SymbolicEdgeIndex)
-    prefix = x.compidx isa Int ? :e : Symbol()
-    Symbol(prefix, Symbol(x.compidx), :₊, Symbol(x.subidx))
+    if x.compidx isa Pair
+        src, dst = x.compidx
+        _src = src isa Int ? Symbol(:v, src) : Symbol(src)
+        _dst = dst isa Int ? Symbol(:v, dst) : Symbol(dst)
+        Symbol(_src, "ₜₒ", _dst, :₊, Symbol(x.subidx))
+    else
+        prefix = x.compidx isa Int ? :e : Symbol()
+        Symbol(prefix, Symbol(x.compidx), :₊, Symbol(x.subidx))
+    end
 end
 
 resolvecompidx(nw::Network, sni) = resolvecompidx(nw.im, sni)
@@ -119,20 +123,49 @@ function resolvecompidx(im::IndexManager, sni::SymbolicIndex{Symbol})
         throw(ArgumentError("Could not resolve component index for $sni, the name might not be unique?"))
     end
 end
+function resolvecompidx(im::IndexManager, sni::SymbolicEdgeIndex{<:Pair})
+    src, dst = sni.compidx
+
+    src_i = try
+        resolvecompidx(im, VIndex(src))
+    catch
+        throw(ArgumentError("Could not resolve edge source $src"))
+    end
+    dst_i = try
+        resolvecompidx(im, VIndex(dst))
+    catch
+        throw(ArgumentError("Could not resolve edge destination $dst"))
+    end
+
+    eidx = findfirst(im.edgevec) do e
+        e.src == src_i && e.dst == dst_i
+    end
+    if isnothing(eidx)
+        reverse = findfirst(im.edgevec) do e
+            e.src == dst_i && e.dst == src_i
+        end
+        err = "Invalid Index: Network does not contain edge from $(src) => $(dst)!"
+        if !isnothing(reverse)
+            err *= " Maybe you meant the reverse edge from $(dst) => $(src)?"
+        end
+        throw(ArgumentError(err))
+    end
+    return eidx
+end
 getcomp(nw::Network, sni) = getcomp(nw.im, sni)
 getcomp(im::IndexManager, sni::SymbolicEdgeIndex) = im.edgem[resolvecompidx(im, sni)]
 getcomp(im::IndexManager, sni::SymbolicVertexIndex) = im.vertexm[resolvecompidx(im, sni)]
 
 getcomprange(nw::Network, sni) = getcomprange(nw.im, sni)
 getcomprange(im::IndexManager, sni::VIndex{<:Union{Symbol,Int}}) = im.v_data[resolvecompidx(im, sni)]
-getcomprange(im::IndexManager, sni::EIndex{<:Union{Symbol,Int}}) = im.e_data[resolvecompidx(im, sni)]
+getcomprange(im::IndexManager, sni::EIndex{<:Union{<:Pair,Symbol,Int}}) = im.e_data[resolvecompidx(im, sni)]
 
 getcompoutrange(nw::Network, sni) = getcompoutrange(nw.im, sni)
 getcompoutrange(im::IndexManager, sni::VIndex{<:Union{Symbol,Int}}) = im.v_out[resolvecompidx(im, sni)]
-getcompoutrange(im::IndexManager, sni::EIndex{<:Union{Symbol,Int}}) = flatrange(im.e_out[resolvecompidx(im, sni)])
+getcompoutrange(im::IndexManager, sni::EIndex{<:Union{<:Pair,Symbol,Int}}) = flatrange(im.e_out[resolvecompidx(im, sni)])
 
 getcompprange(nw::Network, sni::SymbolicVertexIndex{<:Union{Symbol,Int}}) = nw.im.v_para[resolvecompidx(nw, sni)]
-getcompprange(nw::Network, sni::SymbolicEdgeIndex{<:Union{Symbol,Int}}) = nw.im.e_para[resolvecompidx(nw, sni)]
+getcompprange(nw::Network, sni::SymbolicEdgeIndex{<:Union{<:Pair,Symbol,Int}}) = nw.im.e_para[resolvecompidx(nw, sni)]
 
 subsym_has_idx(sym::Symbol, syms) = sym ∈ syms
 subsym_has_idx(idx::Int, syms) = 1 ≤ idx ≤ length(syms)
@@ -143,7 +176,7 @@ subsym_to_idx(idx::Int, _) = idx
 #### Iterator/Broadcast interface for ArraySymbolic types
 ####
 # TODO: not broadcasting over idx with colon is weird
-Base.broadcastable(si::SymbolicIndex{<:Union{Int,Symbol,Colon},<:Union{Int,Symbol,Colon}}) = Ref(si)
+Base.broadcastable(si::SymbolicIndex{<:Union{Int,Symbol,<:Pair,Colon},<:Union{Int,Symbol,Colon}}) = Ref(si)
 
 const _IterableComponent = SymbolicIndex{<:Union{AbstractVector,Tuple},<:Union{Int,Symbol}}
 Base.length(si::_IterableComponent) = length(si.compidx)
@@ -166,7 +199,7 @@ function Base.iterate(si::_IterableComponent, state=nothing)
     _similar(si, it[1], si.subidx), it[2]
 end
 
-const _IterableSubcomponent = SymbolicIndex{<:Union{Symbol,Int},<:Union{AbstractVector,Tuple}}
+const _IterableSubcomponent = SymbolicIndex{<:Union{<:Pair,Symbol,Int},<:Union{AbstractVector,Tuple}}
 Base.length(si::_IterableSubcomponent) = length(si.subidx)
 Base.size(si::_IterableSubcomponent) = (length(si),)
 Base.IteratorSize(si::_IterableSubcomponent) = Base.HasShape{1}()
@@ -200,9 +233,9 @@ _resolve_colon(nw::Network, sni::EIndex{Colon}) = EIndex(1:ne(nw), sni.subidx)
 _resolve_colon(nw::Network, sni::VPIndex{Colon}) = VPIndex(1:nv(nw), sni.subidx)
 _resolve_colon(nw::Network, sni::EPIndex{Colon}) = EPIndex(1:ne(nw), sni.subidx)
 _resolve_colon(nw::Network, sni::VIndex{<:Union{Symbol,Int},Colon}) = VIndex{Int, UnitRange{Int}}(sni.compidx, 1:dim(getcomp(nw,sni)))
-_resolve_colon(nw::Network, sni::EIndex{<:Union{Symbol,Int},Colon}) = EIndex{Int, UnitRange{Int}}(sni.compidx, 1:dim(getcomp(nw,sni)))
+_resolve_colon(nw::Network, sni::EIndex{<:Union{<:Pair,Symbol,Int},Colon}) = EIndex{Int, UnitRange{Int}}(sni.compidx, 1:dim(getcomp(nw,sni)))
 _resolve_colon(nw::Network, sni::VPIndex{<:Union{Symbol,Int},Colon}) = VPIndex{Int, UnitRange{Int}}(sni.compidx, 1:pdim(getcomp(nw,sni)))
-_resolve_colon(nw::Network, sni::EPIndex{<:Union{Symbol,Int},Colon}) = EPIndex{Int, UnitRange{Int}}(sni.compidx, 1:pdim(getcomp(nw,sni)))
+_resolve_colon(nw::Network, sni::EPIndex{<:Union{<:Pair,Symbol,Int},Colon}) = EPIndex{Int, UnitRange{Int}}(sni.compidx, 1:pdim(getcomp(nw,sni)))
 
 
 #### Implmentation of index provider interface
@@ -220,7 +253,7 @@ SII.all_symbols(nw::Network) = vcat(SII.all_variable_symbols(nw), SII.parameter_
 ####
 #### variable indexing
 ####
-const POTENTIAL_SCALAR_SIDX = Union{SymbolicStateIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}}}
+const POTENTIAL_SCALAR_SIDX = Union{SymbolicStateIndex{<:Union{<:Pair,Symbol,Int},<:Union{Int,Symbol}}}
 function SII.is_variable(nw::Network, sni)
     if _hascolon(sni)
         SII.is_variable(nw, _resolve_colon(nw,sni))
@@ -248,7 +281,8 @@ end
 function _variable_index(nw::Network, sni::POTENTIAL_SCALAR_SIDX)
     cf = getcomp(nw, sni)
     range = getcomprange(nw, sni)
-    range[subsym_to_idx(sni.subidx, sym(cf))]
+    idx = subsym_to_idx(sni.subidx, sym(cf))
+    isnothing(idx) ? nothing : range[idx]
 end
 
 """
@@ -276,8 +310,8 @@ end
 ####
 # when using an number instead of symbol only PIndex is valid
 const POTENTIAL_SCALAR_PIDX = Union{
-    SymbolicParameterIndex{<:Union{Symbol,Int},<:Union{Int,Symbol}},
-    SymbolicIndex{<:Union{Symbol,Int},Symbol}
+    SymbolicParameterIndex{<:Union{<:Pair,Symbol,Int},<:Union{Int,Symbol}},
+    SymbolicIndex{<:Union{<:Pair,Symbol,Int},Symbol}
 }
 function SII.is_parameter(nw::Network, sni)
     if _hascolon(sni)
@@ -306,7 +340,8 @@ end
 function _parameter_index(nw::Network, sni::POTENTIAL_SCALAR_PIDX)
     cf = getcomp(nw, sni)
     range = getcompprange(nw, sni)
-    range[subsym_to_idx(sni.subidx, psym(cf))]
+    idx = subsym_to_idx(sni.subidx, psym(cf))
+    isnothing(idx) ? nothing : range[idx]
 end
 
 """
@@ -408,7 +443,7 @@ function SII.is_observed(nw::Network, sni)
     end
 end
 _is_observed(nw::Network, _) = false
-function _is_observed(nw::Network, sni::SymbolicStateIndex{<:Union{Symbol,Int},Symbol})
+function _is_observed(nw::Network, sni::SymbolicStateIndex{<:Union{<:Pair,Symbol,Int},Symbol})
     cf = getcomp(nw, sni)
     return sni.subidx ∈ obssym_all(cf)
 end
@@ -450,9 +485,9 @@ function SII.observed(nw::Network, snis)
 
     for (i, sni) in enumerate(_snis)
         if SII.is_variable(nw, sni)
-            arraymapping[i] = (U_TYPE, SII.variable_index(nw, sni))
+            arraymapping[i] = (U_TYPE, SII.variable_index(nw, sni)::Int)
         elseif SII.is_parameter(nw, sni)
-            arraymapping[i] = (P_TYPE, SII.parameter_index(nw, sni))
+            arraymapping[i] = (P_TYPE, SII.parameter_index(nw, sni)::Int)
         else
             cf = getcomp(nw, sni)
 
@@ -559,7 +594,7 @@ function _get_observed_f(im::IndexManager, cf::VertexModel, vidx, _obsf::O) wher
     _hasext = has_external_input(cf)
 
     (u, outbuf, aggbuf, extbuf, p, t) -> begin
-        ret = PreallocationTools.get_tmp(retcache, first(u)*first(p)*first(t))
+        ret = PreallocationTools.get_tmp(retcache, first(u))
         ins = if _hasext
             (view(aggbuf, aggr), view(extbuf, extr))
         else
@@ -1210,7 +1245,7 @@ Base.getindex(s::NWState, idx::ObservableExpression) = SII.getu(s, idx)(s)
 Base.getindex(s::NWParameter, idx::ObservableExpression) = SII.getp(s, idx)(s)
 
 # using getindex to access component models
-function Base.getindex(nw::Network, i::EIndex{<:Union{Symbol,Int}, Nothing})
+function Base.getindex(nw::Network, i::EIndex{<:Union{<:Pair,Symbol,Int}, Nothing})
     return getcomp(nw, i)
 end
 function Base.getindex(nw::Network, i::VIndex{<:Union{Symbol,Int}, Nothing})

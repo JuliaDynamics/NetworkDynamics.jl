@@ -1,7 +1,7 @@
 name = "NetworkDynamics"
 uuid = "22e9dc34-2a0d-11e9-0de0-8588d035468b"
 authors = ["Frank Hellmann <hellmann@pik-potsdam.de>, Michael Lindner <michaellindner@pik-potsdam.de>, Hans Würfel <git@wuerfel.io"]
-version = "0.9.18"
+version = "0.10.1"
 
 [deps]
 ArgCheck = "dce04be8-c92d-5529-be00-80e4d2c0e197"
@@ -14,6 +14,7 @@ Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
 InteractiveUtils = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
 KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+MacroTools = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
 Mixers = "2a8e4939-dab8-5edc-8f64-72a8776f13de"
 NNlib = "872c559c-99b0-510c-b3b7-b6c96a88d5cd"
 NonlinearSolve = "8913a72c-1f9b-4ce2-8d82-65094dcecaec"
@@ -37,8 +38,9 @@ TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
-MacroTools = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
 ModelingToolkit = "961ee093-0014-501f-94e3-6117800e7a78"
+RuntimeGeneratedFunctions = "7e49a35a-f44a-4d26-94aa-eba1b4ca6b47"
+SparseConnectivityTracer = "9f842d2f-2579-4b1d-911e-f412cf18a3f5"
 SymbolicUtils = "d1185830-fcd6-423d-90d6-eec64667417b"
 Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 
@@ -46,6 +48,7 @@ Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 NetworkDynamicsCUDAExt = ["CUDA", "Adapt"]
 NetworkDynamicsDataFramesExt = ["DataFrames"]
 NetworkDynamicsMTKExt = ["ModelingToolkit", "SymbolicUtils", "Symbolics"]
+NetworkDynamicsSparsityExt = ["SparseConnectivityTracer", "RuntimeGeneratedFunctions"]
 NetworkDynamicsSymbolicsExt = ["Symbolics", "MacroTools"]
 
 [compat]
@@ -74,8 +77,10 @@ PrecompileTools = "1.2.1"
 Printf = "1.10.0"
 Random = "1"
 RecursiveArrayTools = "3.27.0"
+RuntimeGeneratedFunctions = "0.5.15"
 SciMLBase = "2"
 SparseArrays = "1"
+SparseConnectivityTracer = "0.6, 1"
 Static = "1.1.1"
 StaticArrays = "1.9.4"
 SteadyStateDiffEq = "2.2.0"

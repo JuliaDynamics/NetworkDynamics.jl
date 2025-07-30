@@ -6,15 +6,17 @@ Component metadata is a `Dict{Symbol,Any}` attached to each component to store v
 
 To access the data, you can use the methods `has_metadata`, `get_metadata`, `set_metadata!` and `delete_metadata!` (see [Component Metadata API](@ref)).
 
-Special metadata: 
+Special metadata:
 
-- `:init_residual`: after [Component-wise Initialization](@ref), this field stores the residual vector of the nonlinear problem.
 - `:graphelement`: optional field to specialize the graphelement for each
   component (`vidx`) for vertices, `(;src,dst)` named tuple of either vertex
   names or vertex indices for edges. Has special accessors `has_/get_/set_graphelement`.
 - `:callback`: optional field to define callback functions on the component level. See [Callbacks](@ref) and [Callbacks API](@ref) for more information.
 - `:position`: Store a tuple `(x, y)` with position of the node for plotting. Has special accessors `has_/get_/set_position`.
 - `:marker`: Store a `Symbol` for the graph plot. Possible values could be `:circle`, `:rect`, `:utriangle`, `:cross`, `:diamond`, `:dtriangle`, `:pentagon`, `:xcross` or anything which works as a `marker` keyword argument in Makie.
+- `:initconstraint`: Store additional initialization constrains. Has special `has_/get_/set_/delete_initconstraint` accessors. See [Initialization](@ref initialization-guide) for further
+details.
+- `:initformula`: Similar to initconstraint, but is a straight forward explicit mapping to initialize some variables.
 
 
 ## Symbol Metadata
@@ -30,7 +32,6 @@ Special cases for symbol metadata are:
 - `init`: Stores the solution of the "free" variables, this is rarely set manually but instead when calling [`initialize_component!`](@ref).
 
 For those, there are special functions `has_*`, `get_*`, `set_*!` and `delete_*!`. See [Per Symbol Metadata API](@ref).
-
 
 These are closely aligned with the [metadata use in ModelingToolkit](@extref ModelingToolkit symbolic_metadata). They are automatically copied from the `ODESystem` if you use MTK models to create NetworkDynamics models.
 

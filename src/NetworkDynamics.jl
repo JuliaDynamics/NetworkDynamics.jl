@@ -13,7 +13,7 @@ using Atomix: Atomix
 using Polyester: Polyester
 using Mixers: Mixers
 using LinearAlgebra: LinearAlgebra, UniformScaling
-using SparseArrays: sparse
+using SparseArrays: SparseArrays, sparse, SparseMatrixCSC
 using StyledStrings: StyledStrings, @styled_str
 using RecursiveArrayTools: RecursiveArrayTools, DiffEqArray
 using FastClosures: @closure
@@ -49,7 +49,7 @@ include("component_functions.jl")
 export ExecutionStyle, SequentialExecution, KAExecution, ThreadedExecution, PolyesterExecution
 include("executionstyles.jl")
 
-export Network
+export Network, get_graph, set_jac_prototype!
 include("network_structure.jl")
 
 export Aggregator, KAAggregator, SequentialAggregator, PolyesterAggregator, ThreadedAggregator, SparseAggregator
@@ -68,6 +68,26 @@ export @obsex
 export variable_symbols, parameter_symbols
 include("symbolicindexing.jl")
 
+export ComponentCondition, ComponentAffect
+export ContinousComponentCallback, VectorContinousComponentCallback
+export DiscreteComponentCallback, PresetTimeComponentCallback
+export SymbolicView
+include("callbacks.jl")
+
+using MacroTools: postwalk
+export @initconstraint, InitConstraint
+export @initformula, InitFormula
+include("init_constraints.jl")
+
+using OrderedCollections: OrderedDict
+using NonlinearSolve: AbstractNonlinearSolveAlgorithm, NonlinearFunction
+using NonlinearSolve: NonlinearLeastSquaresProblem, NonlinearProblem
+using SteadyStateDiffEq: SteadyStateProblem, SteadyStateDiffEqAlgorithm, SSRootfind
+export find_fixpoint, set_interface_defaults!
+export initialize_component, initialize_component!, init_residual
+export initialize_componentwise, initialize_componentwise!, interface_values
+include("initialization.jl")
+
 export has_metadata, get_metadata, set_metadata!, delete_metadata!
 export has_default, get_default, set_default!, delete_default!, set_defaults!
 export has_guess, get_guess, set_guess!, delete_guess!
@@ -76,21 +96,15 @@ export has_bounds, get_bounds, set_bounds!, delete_bounds!
 export has_graphelement, get_graphelement, set_graphelement!
 export get_initial_state, dump_initial_state, dump_state
 export has_callback, get_callbacks, set_callback!, add_callback!
+export has_initconstraint, get_initconstraints, set_initconstraint!, add_initconstraint!, delete_initconstraints!
+export has_initformula, get_initformulas, set_initformula!, add_initformula!, delete_initformulas!
 export has_position, get_position, set_position!
 export has_marker, get_marker, set_marker!
+export get_defaults_dict, get_guesses_dict, get_bounds_dict, get_inits_dict
 include("metadata.jl")
 
-export ComponentCondition, ComponentAffect
-export ContinousComponentCallback, VectorContinousComponentCallback
-export DiscreteComponentCallback, PresetTimeComponentCallback
-export SymbolicView
-include("callbacks.jl")
-
-using NonlinearSolve: AbstractNonlinearSolveAlgorithm, NonlinearFunction
-using NonlinearSolve: NonlinearLeastSquaresProblem, NonlinearProblem
-using SteadyStateDiffEq: SteadyStateProblem, SteadyStateDiffEqAlgorithm, SSRootfind
-export find_fixpoint, initialize_component!, init_residual, set_interface_defaults!
-include("initialization.jl")
+export isfixpoint, is_linear_stable, jacobian_eigenvals
+include("linear_stability.jl")
 
 include("show.jl")
 
@@ -98,9 +112,10 @@ const CHECK_COMPONENT = Ref(true)
 export chk_component
 include("doctor.jl")
 
-export describe_vertices, describe_edges
+export describe_vertices, describe_edges, get_jac_prototype
 function describe_vertices end
 function describe_edges end
+function get_jac_prototype end
 #=
 using StyledStrings
 s1 = styled"{bright_red:brred} {bright_green:brgreen} {bright_yellow:bryellow} {bright_blue:brblue} {bright_magenta:brmagenta} {bright_cyan:brcyan} {bright_black:brblack} {bright_white:brwhite}";
@@ -125,7 +140,12 @@ function __init__()
             if exc.f ∈ (describe_vertices, describe_edges)
                 ext = Base.get_extension(NetworkDynamics, :NetworkDynamicsDataFramesExt)
                 if isnothing(ext)
-                    printstyled(io, "\nLoad `DataFrames` in order to use `describe_vertices` and `describe_edges`."; bold=true)
+                    printstyled(io, "\nLoad `DataFrames` in order to use `describe_vertices` and `describe_edges`."; bold=true, color=:red)
+                end
+            elseif exc.f ∈ (get_jac_prototype,)
+                ext = Base.get_extension(NetworkDynamics, :NetworkDynamicsSparsityExt)
+                if isnothing(ext)
+                    printstyled(io, "\nLoad `SparseConnectivityTracer` in order to use `get_jac_prototype`."; bold=true, color=:red)
                 end
             end
         end

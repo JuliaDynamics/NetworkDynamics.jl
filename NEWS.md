@@ -1,5 +1,19 @@
 # NetworkDynamics Release Notes
 
+## v0.10.1 Changelog
+- [#294](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/294) add linear stability analysis functions: `isfixpoint`, `jacobian_eigenvals`, and `is_linear_stable` with support for both ODE and DAE systems
+- [#283](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/283) add automatic sparsity detection using `get_jac_prototype` and `set_jac_prototype!`
+- [#285](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/285) rename `delete_initconstraint!` -> `delete_initconstaints!` and `delete_initformula!` -> `delete_initformulas!`
+
+## v0.10 Changelog
+- **BREAKING**: the interface initialization of components has changed: it is now split up in two versions, mutating and non mutating version. Also it errors now if the tolerance bounds are violated. See docs on initialization for more details.
+
+- new `get_graph(::Network)` method to extract graph object from nw
+- **improved Initialization System**: Added comprehensive initialization formulas and constraints system:
+  - added `@initformula` to add explicit algebraic init equations for specific variables
+  - added `@initconstraint` to add additional constraints for the component initialization
+- allow access edges via Pairs, i.e. `EIndex(1=>2,:a)` references variable `:a` in edge from vertex 1 to 2. Works also with unique names of vertices like `EIndex(:a=>:b)` [#281](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/281).
+
 ## v0.9 Changelog
 ### Main changes in this release
 NetworkDynamics v0.9 is a complete overhaul of the previous releases of NetworkDynamics.
