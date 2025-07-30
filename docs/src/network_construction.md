@@ -2,7 +2,7 @@
 
 ## Building a Network
 The main type of `NetworkDynamics.jl` is a [`Network`](@ref).
-A network bundles various component models (edge and vertex models) together with a graph to form a callable object which represents the right hand side (RHS) of the overall dynamical system, see [Mathematical Model](@ref). 
+A network bundles various component models (edge and vertex models) together with a graph to form a callable object which represents the right hand side (RHS) of the overall dynamical system, see [Mathematical Model](@ref).
 
 A `Network` is build by passing a graph `g`, vertex models `vertexm` and edge models `edgem` to the [`Network`](@ref) constructor:.
 ```julia
@@ -11,19 +11,31 @@ nw = Network(g, vertexm, edgem; kwargs...)
 
 Two important keywords for the [`Network`](@ref) constructor are:
 
-- `execution`: 
+- `execution`:
     Defines the [`ExecutionStyle`](@ref) of the coreloop, e.g. `SequentialExecution{true}()`.
-    A execution style is a special Julia object, which tells the backend how to parallelize (e.g. `ThreadedExecution{true}()` will use native Julia threads to parallelize the RHS call). 
+    A execution style is a special Julia object, which tells the backend how to parallelize (e.g. `ThreadedExecution{true}()` will use native Julia threads to parallelize the RHS call).
     A list of available executions styles can be found under [Execution Types](@ref) in the API.
 
 - `aggregator`:
     Instructs the backend how to perform the aggregation and which aggregation function to use.
     Aggregation is the process of creating a single vertex input by reducing over the outputs of adjecent edges of said vertex. The `aggregator` contains both the function and the algorithm. E.g. `SequentialAggregator(+)` is a sequential aggregation by summation. A list of availabe Aggregators can be found under [`Aggregators`](@ref) in the API.
 
+### Graphless Constructor
+If each of the network components has a "graphelement" [metadata](@ref Metadata), we may omit the explicit graph.
+```julia
+nw = Network(vertexm, edgem)
+```
+The graphelement metadata can be set using the following syntax:
+```julia
+VertexModel(; ..., vidx=1)         # places vertex at position 1
+EdgeModel(; ..., src=1, dst=2)     # places edge between 1 and 2
+EdgeModel(; ..., src=:v1, dst=:v2) # places edge between vertices with names `:v1` and `:v2`
+```
+
 ## Building `VertexModel`s
 This chapter will walk you through the most important aspects of defining a custom vertex model. For a list of all keyword arguments please check out the docstring of [`VertexModel`](@ref).
 
-As an example, we'll construct an second order kuramoto model, because that is what the package does.
+As an example, we'll construct an second order kuramoto model.
 ```@example construction
 using NetworkDynamics #hide
 function kuramoto_f!(dv, v, esum, p, t)
@@ -65,7 +77,7 @@ Lastly, we define improved names for our states and parameters as well as assign
 Whenever you provide a `sym` keyword the corresponding `dim` keyword stops being neccessary. So, we end up with a relatively short definition
 ```@example construction
 VertexModel(; f=kuramoto_f!, g=1,
-              sym=[:θ, :ω], psym=[:M=>1, :P=>0.1, :D=>0], 
+              sym=[:θ, :ω], psym=[:M=>1, :P=>0.1, :D=>0],
               insym=[:P_nw], name=:swing, vidx=1)
 ```
 
@@ -102,7 +114,7 @@ end
 EdgeModel(;g=AntiSymmetric(edge_g_ff!), pdim=1, outdim=1)
 ```
 This can also lead to briefer output naming. Available single sided wrappers are:
-- [`Directed`](@ref) (no coupling at `src`), 
+- [`Directed`](@ref) (no coupling at `src`),
 - [`AntiSymmetric`](@ref) (same coupling at `src` and `dst`),
 - [`Symmetric`](@ref) (inverse coupling at `dst`) and
 - [`Fiducial`](@ref) (define separate `g` for both ends).
@@ -114,5 +126,3 @@ function edge_g_s!(ydst, vsrc, vdst, p, t)
 end
 EdgeModel(;g=AntiSymmetric(edge_g_ff!), psym=:K=>1, outsym=:P, insym=:θ, src=1, dst=4)
 ```
-
-
