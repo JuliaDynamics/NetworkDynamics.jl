@@ -5,53 +5,22 @@ between the [Graphs.jl](https://github.com/JuliaGraphs/Graphs.jl) and the
 [DifferentialEquations.jl](https://github.com/SciML/DifferentialEquations.jl) packages and facilitates the simulation of 
 highly efficient dynamic networks by describing the local dynamics of the edges and vertices of the network.
 
-!!! note
-    **Complex Networks in a glance**
-    Complex network systems are composed by the entities that comprise them (the nodes) and the relationships that 
-    connect each entity with one another (the edges). The mathematical structure is called 
-    [Graph](https://en.wikipedia.org/wiki/Graph_theory) and it is used more or less interchangeably with the word 
-    Network).
-
-In this graph of a simple 5-node network
-```@example
-using Graphs, GraphMakie, CairoMakie #hide
-using GraphMakie.NetworkLayout #hide
-CairoMakie.activate!(type="svg") #hide
-g = smallgraph(:bull) #hide
-fig, ax, p = graphplot(g; ilabels=["v$i" for i in 1:nv(g)], #hide
-                          elabels=["e$i: $(e.src) ↦ $(e.dst)" for (i, e) in enumerate(edges(g))], #hide
-                          layout=Align(Stress()), figure=(;resolution=(830,450))) #hide
-ymin, ymax = extrema(last.(p[:node_pos][])) #hide
-ylims!(ax, (ymin-0.11*(ymax-ymin), ymax+0.11*(ymax-ymin)))#hide
-hidespines!(ax) #hide
-hidedecorations!(ax) #hide
-fig #hide
-```
-we can see that it is composed of nodes (v1 to v5) who are connected to each other. The lines connecting the nodes with 
-each other ( e1: 1-->2, e2: 1-->3, e3: 2-->3, e4: 2-->4, e5: 3-->5) are called edges. Complex networks are composed of 
-multiple nodes and edges, with most nodes connected to multiple other nodes with multiple edges.
-
-(@Hans after rereading the text I realised that the information about the core of the package and the behaviours of the 
-nodes and edges does not belong in the introduction but rather in the mathematical model, so I moved it. If you are ok
-with this just delete this comment)
+The core idea of this package is to define the **global dynamics** of a complex network in terms of **local dynamics**: each node and each edge exhibits some local dynamics defined as an input-output system.
+The graph topology describes, how the local dynamical systems are interconnected. To learn more check out the docs on the [mathematical model](@ref) behind NetworkDynamics.jl.
+For basic terminology see the Wikipedia article on [Graph Theory](https://en.wikipedia.org/wiki/Graph_theory).
 
 Main features:
-- Clear separation of local dynamics and topology: you can easily change the topology of your system or switch out 
-  dynamic components)
-- High performance when working with heterogeneous models: you can have different local dynamics in different parts of 
-  your network)
-- [Symbolic Indexing](@ref) into solutions and states: NetworkDynamics keeps track of the states of each individual 
-  subsystem.
-- Diverse execution schemes: NetworkDynamics exploits the known interdependencies between components to auto 
-  parallelize execution, even on GPUs!
+- Clear separation of local dynamics and topology: you can easily change the topology of your system or switch out dynamic components.
+- High performance when working with heterogeneous models: you can have different local dynamics in different parts of your network.
+- [Symbolic Indexing](@ref) into solutions and states: NetworkDynamics keeps track of the states of each individual subsystem.
+- Diverse execution schemes: NetworkDynamics exploits the known interdependencies between components to auto parallelize execution, even on GPUs!
 - Equation based models: you can model local dynamics using 
-  [ModelingToolkit.jl](https://docs.sciml.ai/ModelingToolkit/dev/) and them combine them into larger networks using 
-  `NetworkDynamics.jl`!
+  [ModelingToolkit.jl](https://docs.sciml.ai/ModelingToolkit/dev/) and then combine them into larger networks using `NetworkDynamics.jl`!
 
 
 ## Where to begin?
-To learn how to implement your own models and understand the underlying modelling ideas of NetworkDynamics you should 
-first read the [Mathematical Model](@ref) section, followed by section [Network Construction](@ref).
+To learn how to implement your own models and understand the underlying modeling ideas of NetworkDynamics you should 
+first read the [Mathematical Model](@ref) section, followed by the [Network Construction](@ref) section.
 
 If you prefer to look at some concrete code first check out the [Getting Started](@ref) tutorial!
 
@@ -65,11 +34,6 @@ If you prefer to look at some concrete code first check out the [Getting Started
 2. Install NetworkDynamics.jl with Julia's package manager:
 ```julia-repl
 (v1.11) pkg> add NetworkDynamics
-```
-
-3. Install the Julia package LiveServer:
-```julia-repl
-import Pkg; Pkg.add("LiveServer")
 ```
 
 To learn more about how to use Julia you can visit: [Modern Julia Workflows](https://modernjuliaworkflows.org/)
