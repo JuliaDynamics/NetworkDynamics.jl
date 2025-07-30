@@ -23,7 +23,7 @@ and $t$ is the time. To make this compatible with the solvers used in `OrdinaryD
 ```
 nw(du, u, p, t) # mutates du as an "output"
 ```
-and represents the right-hand-side (RHS) of the equation above. The mass-matrix $m$ is stored in the `Network` object 
+and represents the right-hand-side (RHS) of the equation above. The mass-matrix $M$ is stored in the `Network` object 
 as well.
 
 ## Modelling the Dynamics of the System
@@ -48,19 +48,18 @@ potential variables**. When the node and edge models are placed on a graph, the 
 the nodes receive the output of the adjacent edges as inputs and the edges receive the output of the adjacent nodes as 
 inputs. Thus, the *flow* on the edges depends on the *potentials* at both ends as inputs. The *potentials* of the nodes 
 depend on the incoming *flows* from all connected edges as an input. (Here, flow and potentials are meant in a 
-conceptional and not necessarily physical way.)
+conceptual and not necessarily physical way.)
 
-In this graphical representation of a partial network graph
 ```@raw html
 <picture>
   <source srcset="../assets/mathmodel-dark.svg" media="(prefers-color-scheme: dark)">
   <img src="../assets/mathmodel.svg" width="100%" height="100%"/>
 </picture>
 ```
-three nodes are visible (node 1, node 2 and node 3) as well as the edges connecting node 1 and node 2 ($e_{\mathrm 12}$, 
-$e_{\mathrm 21}$). Above the network, the mass matrix equations on node 1 and node 2 ($M_{\mathrm{c}} x_{\mathrm c}$), 
-the equations on the connecting edges ($e_{\mathrm 12}$, $e_{\mathrm 21}$), as well as the internal state vector 
-equations of node1 and node2 ($u_1$ and $u_2$) are also shown.
+In this graphical representation of a partial network graph
+three nodes are visible (node 1, node 2 and node 3) as well as the edge connecting node 1 and node 2 ($e_{\mathrm{12}}$).
+Above the network, you can see the dynamical systems for both nodes 1 and 2 as well as the connecting edge.
+The figure shows, how the outputs of the edge appears as input of the nodes and the output of the nodes appears as input of the edge models.
 
 ### Vertex Models
 The equations of a (single-layer) full vertex model are: 
@@ -106,14 +105,14 @@ In contrast to the vertex models, edge models in general have *two* inputs and *
 the destination end of the edge. We commonly use `src` and `dst` to describe the source and destination end of an edge,
 respectively.
 
-!!! note "Source and Destination definitions                                                                                                      "
-    A source node (`src`) is the node from which the flow exits.
-    A destination node (`dst`) is the node into which the flow enters.
-
 !!! note "On the directionality of edges"
     Mathematically, in a system defined on an undirected graph there is no difference between edge $(1,2)$ and
     edge $(2,1)$, because the edge has no direction. However, from an implementation point of view we always need to
-    have some kind of ordering, which is why we introduce the source (`src`) and destination (`dst`) terminology.
+    have some kind of ordering. For undirected graphs, the edges are allways defined from `src -> dst`  where `src < dst` 
+    (This convention matches the behavior of the `edges` iterator from `Graphs.jl`).
+    I.e. the undirectional edge between nodes 1 and 2 will be always referenced as `1 -> 2`, never `2 -> 1`.
+    The **source** and **destination** naming is related to this notion of directionality, it is not related to the actuall flows, i.e.
+    a system might exists where there is a net flow from destination to source.
 
 The full edge model equations are:
 ```math
@@ -126,52 +125,40 @@ y^{\mathrm e}_{\mathrm{src}} &= g_\mathrm{src}^{\mathrm e}(u^{\mathrm e}, y^{\ma
 and they correspond to the Julia functions:
 ```julia
 function fₑ(dxₑ, xₑ, v_src, v_dst, pₑ, t)
-    # mutate dxᵥ
+    # mutate dxₑ
     nothing
 end
-function gₑ(y_src, y_dst, xᵥ, v_src, v_dst, pₑ, t)
+function gₑ(y_src, y_dst, xₑ, v_src, v_dst, pₑ, t)
     # mutate y_src and y_dst
     nothing
 end
-vertf = EdgeModel(; f=fₑ, g=gₑ, mass_matrix=Mₑ, ...)
+edgef = EdgeModel(; f=fₑ, g=gₑ, mass_matrix=Mₑ, ...)
 ```
 
-The *inputs* of an edge connecting two nodes are the *outputs* of the nodes at both their ends. The output of each node 
-is split into two parts:
-1. the *`dst`* output which is used as the input of the vertex at the destination end
-2. the `src` output which is used as the input of the vertex at the `src` end.
+Each edge has two inputs: the node outputs of the source and destination end of the edge.
+Similarily, they also have two outputs:
+1. the `dst` output which is used as the input of the vertex at the destination end
+2. the `src` output which is used as the input of the vertex at the source end.
 
-Because a Vertex only receives flows from the edges connected to it, it does not know whether the flow it
-received was produced by the source or the destination end of an edge. To solve this problem a sign convention has been
-introduced. A positive flow represents a flow *into* the connected vertex, while a negative flow represents a flow *out*
-of the connected vertex.
+In general, the two edge outputs $y_{\mathrm{src}}$ and $y_{\mathrm{dst}}$ are **completely independent**. There is not implicit conservation law or something like that.
+Examples for such unbalanced systems are power lines with losses, i.e. the power flowing into the line does not match the power flowing out of the line, because some energy is lost as heat. Another example would be a gas pipeline with some internal pressure: it es entirely possible to push in gas from both ends simultaneously, which would just result in increased pressure.
+For the (important) special case where there is a strong correlation between source and destination output see the section on [Single Sided Edge Outputs](@ref) below.
 
-When we consider $n_1$ as the source and $n_2$ as the destination, flows out of $n_1$ and into $n_2$ are negative,
-so $y_dst < 0$. Whereas flows out of $n_2$ and into $n_1$ are positive, so $y_src > 0$.
+The vertex models connected to the edge do not know whether they are at the src or dst end of the edge.
+Therefore, the  sign convention for both outputs of an edge must be identical, typically, a positive flow represents a flow *into* the connected vertex.
 ```
-                 y_dst < 0 
-  n_1 (src) o───────→────────o n_2 (dst)
-                 y_src > 0 
-  n_1 (src) o───────←────────o n_2 (dst)
-```  
-But when we consider $n_2$ as the source and $n_1$ as the destination, flows out of $n_2$ and into $n_1$ are negative, 
-so $y_dst < 0$. Whereas flows out of $n_1$ and into $n_2$ are positive, so $y_src > 0$.
+          y_src ┌───────────────────┐ y_dst 
+  V_src o───←───┤ internal dynamics ├───→───o V_dst
+                └───────────────────┘
 ```
-                y_src > 0
-  $n_1$ (dst) o───────→────────o $n_2$ (src)
-                y_dst < 0
-  $n_1$ (dst) o───────→────────o $n_2$ (src)
-```
-
-For undirected graphs, `Graphs.jl` chooses the direction of an edge (so which node is the `src` and which the `dst`) 
-$v_1->v_2$ such that $v_1 < v_2$, so the edge between vertices 16 and 12 will always be an edge with source 
-`src=12` and destination `dst=16`.
-
-
 
 ### Single Sided Edge Outputs
-To simplify the calculations, we split the output flows of edges into "single sided" edge output functions. That way we
-can split the output flows of edges into "single sided" edge output functions which simplifies the calculations:
+Often, the edge output functions $g_\mathrm{src}$ and $g_\mathrm{dst}$ are not independent, but rather one of them is a function of the other. 
+For example, in a system with a conservation law, the output at the source end is equal to the output at the destination end, i.e. $y_\mathrm{src} = -y_\mathrm{dst}$.
+
+To accommodate such cases, we can use the concept of **single sided edge output functions**.
+A single sided output function only defines a founction for one of the outputs:
+
 ```julia
 function g_single(y, xᵥ, v_src, v_dst, pₑ, t)
     # mutate y
@@ -180,10 +167,10 @@ end
 ```
 
 There are multiple wrappers available to automatically convert them into double-sided edge output functions:
-- `Directed(g_single)` builds a double-sided function *which only couples* to the destination side.
-- `Symmetric(g_single)` builds a double-sided function in which both ends receive `y`.
-- `AntiSymmetric(g_single)` builds a double-sided function where the destination receives `y` and the source receives `-y`.
-- `Fiducial(g_single_src, g_singl_dst)` builds a double-sided edge output function based on two single sided functions.
+- `Directed(g_single)` builds a double-sided function *which only couples* to the destination side (i.e. $y_{dst}=y$ and $y_{src} = 0$).
+- `Symmetric(g_single)` builds a double-sided function in which both ends receive `y` (i.e. $y = y_{src} = y_{dst})$.
+- `AntiSymmetric(g_single)` builds a double-sided function where the destination receives `y` and the source receives `-y` (i.e. $y=y_{dst}=-y{src}$).
+- `Fiducial(g_single_src, g_single_dst)` builds a double-sided edge output function based on two single sided functions.
 
 
 ## Feed Forward Behavior
@@ -214,10 +201,12 @@ transformation can be performed automatically using [`ff_to_constraint`](@ref).
 
 Concretely, NetworkDynamics distinguishes between 4 types of feed forward behaviours of `g` functions based on the 
 [`FeedForwardType`](@ref) trait.
-The feed forward type is inferred automatically based on the provided function `g` (by calculating the signature of the 
-methods used over the number of arguments it is given.)
+The feed forward type is inferred automatically based on the provided function `g` (this is done by inspecting the available
+method signatures for `g`, i.e. network dynamics checks how many arguments you `g` function takes)
+If the automatic inference of feed forward type fails, the user may specify it explicitly using the `ff` keyword 
+argument of the Edge/VertexModel constructor.
 
-The code bloke below presents the different `g` signatures for the different feed forward types:
+The code block below presents the different `g` signatures for the different feed forward types:
 
 **[`PureFeedForward()`](@ref)**
 ```julia
@@ -247,6 +236,3 @@ g!(out_dst,          x) # single-sided edge
 g!(out_src, out_dst, x) # double-sided edge
 g!(v_out,            x) # single layer vertex
 ```
-
-If the automatic inference of feed forward type fails, the user may specify it explicitly using the `ff` keyword 
-argument of the Edge/VertexModel constructor.
