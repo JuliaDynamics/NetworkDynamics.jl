@@ -6,7 +6,7 @@ between the [Graphs.jl](https://github.com/JuliaGraphs/Graphs.jl) and the
 highly efficient dynamic networks by describing the local dynamics of the edges and vertices of the network.
 
 The core idea of this package is to define the **global dynamics** of a complex network in terms of **local dynamics**: each node and each edge exhibits some local dynamics defined as an input-output system.
-The graph topology describes, how the local dynamical systems are interconnected. To learn more check out the docs on the [mathematical model](@ref) behind NetworkDynamics.jl.
+The graph topology describes, how the local dynamical systems are interconnected. To learn more check out the docs on the [Mathematical Model](@ref) behind NetworkDynamics.jl.
 For basic terminology see the Wikipedia article on [Graph Theory](https://en.wikipedia.org/wiki/Graph_theory).
 
 Main features:
