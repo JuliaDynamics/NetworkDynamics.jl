@@ -57,7 +57,7 @@ conceptual and not necessarily physical way.)
 </picture>
 ```
 In this graphical representation of a partial network graph
-three nodes are visible (node 1, node 2 and node 3) as well as the edge connecting node 1 and node 2 ($e_{\mathrm{12}}$).
+three nodes are visible (node 1, node 2 and node 3) as well as the edges connecting node 1 and node 2 ($e_{\mathrm{12}}$).
 Above the network, you can see the dynamical systems for both nodes 1 and 2 as well as the connecting edge.
 The figure shows, how the outputs of the edge appears as input of the nodes and the output of the nodes appears as input of the edge models.
 
@@ -109,10 +109,10 @@ respectively.
     Mathematically, in a system defined on an undirected graph there is no difference between edge $(1,2)$ and
     edge $(2,1)$, because the edge has no direction. However, from an implementation point of view we always need to
     have some kind of ordering. For undirected graphs, the edges are allways defined from `src -> dst`  where `src < dst` 
-    (This convention matches the behavior of the `edges` iterator from `Graphs.jl`).
-    I.e. the undirectional edge between nodes 1 and 2 will be always referenced as `1 -> 2`, never `2 -> 1`.
-    The **source** and **destination** naming is related to this notion of directionality, it is not related to the actuall flows, i.e.
-    a system might exists where there is a net flow from destination to source.
+    (this convention matches the behavior of the `edges` iterator from `Graphs.jl`).
+    Specifically, the undirectional edge between nodes 1 and 2 always be referenced as `1 -> 2`, never `2 -> 1`.
+    The **source** and **destination** naming is related to this notion of directionality, rather than to the actual flows, i.e.
+    a system might exist where there is a net flow from destination to source.
 
 The full edge model equations are:
 ```math
@@ -135,29 +135,38 @@ end
 edgef = EdgeModel(; f=fₑ, g=gₑ, mass_matrix=Mₑ, ...)
 ```
 
-Each edge has two inputs: the node outputs of the source and destination end of the edge.
-Similarily, they also have two outputs:
-1. the `dst` output which is used as the input of the vertex at the destination end
-2. the `src` output which is used as the input of the vertex at the source end.
+Each edge has: 
+1. two inputs: 
+   1. the node outputs of the source
+   2. the destination end of the edge
+2. two outputs:
+   1. the `dst` output (which is used as the input of the vertex at the destination end)
+   2. the `src` output (which is used as the input of the vertex at the source end)
 
-In general, the two edge outputs $y_{\mathrm{src}}$ and $y_{\mathrm{dst}}$ are **completely independent**. There is not implicit conservation law or something like that.
-Examples for such unbalanced systems are power lines with losses, i.e. the power flowing into the line does not match the power flowing out of the line, because some energy is lost as heat. Another example would be a gas pipeline with some internal pressure: it es entirely possible to push in gas from both ends simultaneously, which would just result in increased pressure.
-For the (important) special case where there is a strong correlation between source and destination output see the section on [Single Sided Edge Outputs](@ref) below.
+In general, the two edge outputs $y_{\mathrm{src}}$ and $y_{\mathrm{dst}}$ are **completely independent** because there 
+is no implicit conservation law dictating that their values should be identical.
+An example for such an unbalanced systems is power lines in an energy grid with losses, where the power flowing into a line 
+does not match the power flowing out of it, because some of the energy transported is lost in the form of heat. 
+Another example would be a gas pipeline with some internal pressure: it is entirely possible to push in gas from both 
+ends simultaneously. It would simply result in increased pressure within the pipe. For the (important) special cases 
+where there is a strong correlation between source and destination output see the section on [Single Sided Edge Outputs](@ref) below.
 
-The vertex models connected to the edge do not know whether they are at the src or dst end of the edge.
-Therefore, the  sign convention for both outputs of an edge must be identical, typically, a positive flow represents a flow *into* the connected vertex.
+The vertex models connected to the edge do not know whether they are at the 'src' or the 'dst' end of the edge.
+Therefore, the  sign convention for both outputs of an edge must be identical. Typically, a positive flow represents 
+a flow *into* the connected vertex, whereas a negative flow represents a flow *out of* the connected vertex.
 ```
           y_src ┌───────────────────┐ y_dst 
   V_src o───←───┤ internal dynamics ├───→───o V_dst
                 └───────────────────┘
 ```
 
-### Single Sided Edge Outputs
-Often, the edge output functions $g_\mathrm{src}$ and $g_\mathrm{dst}$ are not independent, but rather one of them is a function of the other. 
-For example, in a system with a conservation law, the output at the source end is equal to the output at the destination end, i.e. $y_\mathrm{src} = -y_\mathrm{dst}$.
+### Single Sided Edge Outputs 
+In cases where a conservation law is present in a system, the edge output functions $g_\mathrm{src}$ and 
+$g_\mathrm{dst}$ are not independent, but rather one of them is a function of the other. For example, in a system with 
+a conservation law, the output at the source end is equal to the output at the destination end, i.e. $y_\mathrm{src} = -y_\mathrm{dst}$.
 
 To accommodate such cases, we can use the concept of **single sided edge output functions**.
-A single sided output function only defines a founction for one of the outputs:
+A single sided output function only defines a function for one of the outputs:
 
 ```julia
 function g_single(y, xᵥ, v_src, v_dst, pₑ, t)
