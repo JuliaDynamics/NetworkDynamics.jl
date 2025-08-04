@@ -15,8 +15,10 @@ using Revise
 using LiveServer
 
 Pkg.activate(@__DIR__)
-Pkg.develop(PackageSpec(path=dirname(@__DIR__))) # adds the package this script is called from
-print("Do you want to update docs environment? [y/n] ")
+if VERSION ≤ v"1.11-"
+    Pkg.develop(PackageSpec(path=dirname(@__DIR__))) # adds the package this script is called from
+end
+print("Do you want to update docs environment? [y/N] ")
 answer = readline()
 if !isempty(answer) && answer[1] == 'y'
     Pkg.update()
