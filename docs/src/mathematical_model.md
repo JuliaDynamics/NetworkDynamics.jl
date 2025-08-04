@@ -1,49 +1,75 @@
 # Mathematical Model
-The basic mathematical model of `NetworkDynamics.jl` splits up the system into two parts: vertex and edge components.
 
-The main goal of `NetworkDynamics.jl` is, to express the overall network dynamics as a Differential-Algebraic-Equation (DAE)
+The core of the `NetworkDynamics.jl` package is the [`Network`](@ref) function. It accepts functions describing the
+local dynamics on the edges and nodes of the graph `g` as inputs, and returns a composite function compatible with the
+DifferentialEquations.jl syntax as output.
+
+```julia
+nd = Network(g, vertex_dynamics,  edge_dynamics)
+nd(dx, x, p, t)
+```
+
+In general, the local dynamics on the edges and nodes of a graph can be described through the use of (a) algebraic
+equations, (b) differential algebraic equations (DAEs) in mass matrix form, or (c) ordinary differential equations (ODEs).
+The `NetworkDynamics.jl` package uses
+[Differential-Algebraic-Equations (DAE)](https://mathworld.wolfram.com/Differential-AlgebraicEquation.html) to express
+the overall network dynamics:
 ```math
 M\,\frac{\mathrm{d}}{\mathrm{d}t}u = f^{\mathrm{nw}}(u, p, t)
 ```
-where M is a (possibly singular) mass matrix, $u$ is the internal state vector of the system, $p$ are the parameters and $t$ is the time.
-To make this compatible with the solvers for `OrdinaryDiffEq.jl`, the created [`Network`](@ref) object is a callable object
+where $M$ is a (possibly singular) mass matrix, $u$ is the internal state vector of the system, $p$ are the parameters,
+and $t$ is the time. To make this compatible with the solvers used in `OrdinaryDiffEq.jl`, the generated
+[`Network`](@ref) object is callable
 ```
-nw(du, u, p, t) # mutates du
+nw(du, u, p, t) # mutates du as an "output"
 ```
-with stored mass matrix information to build an `ODEProblem` based on the `Network`.
+and represents the right-hand-side (RHS) of the equation above. The mass-matrix $M$ is stored in the `Network` object
+as well.
 
-Instead of defining $f^{\mathrm{nw}}$ by hand, `ND.jl` helps you to build it automatically based on a list of decentralized nodal and edge dynamics, so-called `VertexModel` and `EdgeModel` objects.
-Each component model $\mathrm c$ is modeled as general input-output-system
-
+## Modeling the Dynamics of the System
+Each component model $\mathrm c$ is modeled as a general input-output system:
 ```math
 \begin{aligned}
 M_{\mathrm c}\,\frac{\mathrm{d}}{\mathrm{d}t}x_{\mathrm c} &= f^{\mathrm c}(x^{\mathrm c}, i_{\mathrm c}, p_{\mathrm c}, t)\\
 y^{\mathrm c} &= g^{\mathrm c}(x^\mathrm{c}, i_{\mathrm c}, p_{\mathrm c}, t)
 \end{aligned}
 ```
+where $M_{\mathrm{c}}$ is the component mass matrix, $x^{\mathrm c}$ are the component states, $i^{\mathrm c}$ are the
+inputs of the component, and $y^{\mathrm c}$ is the output of the component. If
+$\mathrm{dim}(x^{\mathrm{c}}) = 0$, the number of internal states is 0.
 
-where $M_{\mathrm{c}}$ is the component mass matrix, $x^{\mathrm c}$ are the component states, $i^{\mathrm c}$ are the *inputs* of the component and $y^{\mathrm c}$ is the *output* of the component. It is possible to have $\mathrm{dim}(x^{\mathrm{c}}) = 0$ and thus no internal states.
+The mathematical model of `NetworkDynamics.jl` splits the network system into two parts: the vertex and
+the edge components (the nodes and edges, respectively). Instead of defining the $f^{\mathrm{nw}}$ by hand, `ND.jl`
+builds it automatically based on a list of decentralized nodal and edge dynamics that the user provides (the
+`VertexModel` and `EdgeModel` objects).
 
-In the network context, the **output of the edges are flow variables**. The **outputs of vertices are potential variables**. In interconnection, the *flow* on the edges depends on the *potentials* at both ends as inputs. The *potentials* of the nodes depend on the incoming *flows* from all connected edges as an input. (Here, flow and potentials are meant in a conceptional and not necessarily physical way.)
+In the context of the network, the **output of the edges are flow variables** and the **outputs of vertices are
+potential variables**. When the node and edge models are placed on a graph, the inputs and outputs are connected:
+the nodes receive the output of the adjacent edges as inputs and the edges receive the output of the adjacent nodes as
+inputs. Thus, the *flow* on the edges depends on the *potentials* at both ends as inputs. The *potentials* of the nodes
+depend on the incoming *flows* from all connected edges as an input. (Here, flow and potentials are meant in a
+conceptual and not necessarily physical way.)
+
 ```@raw html
-<img src="../assets/mathmodel.svg" width="100%"/>
-``` 
-
-## Vertex Models
-Specifically, a (single-layer) vertex model has one input, and one output.
-The input is an aggregation/reduction over all *incident edge outputs*,
-```math
-i^{\mathrm v} = \mathop{\mathrm{agg}}\limits_k^{\text{incident}} y^{\mathrm e}_k \qquad\text{often}\qquad
-i^{\mathrm v} = \sum_k^{\text{incident}} y^{\mathrm e}_k
+<picture>
+  <source srcset="../assets/mathmodel-dark.svg" media="(prefers-color-scheme: dark)">
+  <img src="../assets/mathmodel.svg" width="100%" height="100%"/>
+</picture>
 ```
-The full vertex model
+In this graphical representation of a partial network graph,
+three nodes are visible (node 1, node 2, and node 3) as well as the edges connecting node 1 and node 2 ($e_{\mathrm{12}}$).
+Above the network, you can see the dynamical systems for both nodes 1 and 2 as well as the connecting edge.
+The figure shows how the outputs of the edge appear as inputs to the nodes and the outputs of the nodes appear as inputs to the edge models.
+
+### Vertex Models
+The equations of a (single-layer) full vertex model are:
 ```math
 \begin{aligned}
-M^{\mathrm v}\,\frac{\mathrm{d}}{\mathrm{d}t}x^{\mathrm v} &= f^{\mathrm v}(u^{\mathrm v}, i^{\mathrm v}, p^{\mathrm v}, t)\\
-y^{\mathrm v} &= g^{\mathrm v}(u^{\mathrm v}, i^{\mathrm v}, p^{\mathrm v}, t)
+M^{\mathrm v}\,\frac{\mathrm{d}}{\mathrm{d}t}x^{\mathrm v} &= f^{\mathrm v}(x^{\mathrm v}, i^{\mathrm v}, p^{\mathrm v}, t)\\
+y^{\mathrm v} &= g^{\mathrm v}(x^{\mathrm v}, i^{\mathrm v}, p^{\mathrm v}, t)
 \end{aligned}
 ```
-corresponds to the Julia functions
+and they correspond to the Julia functions:
 ```julia
 function fᵥ(dxᵥ, xᵥ, e_aggr, pᵥ, t)
     # mutate dxᵥ
@@ -56,16 +82,39 @@ end
 vertf = VertexModel(; f=fᵥ, g=gᵥ, mass_matrix=Mᵥ, ...)
 ```
 
-## Edge Models
-In contrast to vertex models, edge models in general have *two* inputs and *two* outputs, both for source and destination end of the edge.
-We commonly use `src` and `dst` to describe the source and destination end of an edge respectively. 
+A (single-layer) full vertex model has one input, and one output. Its input is an aggregation/reduction over all the
+*incident edge outputs* which is calculated using:
+```math
+i^{\mathrm v} = \mathop{\mathrm{agg}}\limits_k^{\text{incident}} y^{\mathrm e}_k \qquad\text{often}\qquad
+i^{\mathrm v} = \sum_k^{\text{incident}} y^{\mathrm e}_k
+```
+
+The graphical representation of such a model is:
+```@raw html
+<picture>
+  <source srcset="../assets/nodemodel-dark.svg" media="(prefers-color-scheme: dark)">
+  <img src="../assets/nodemodel.svg" width="70%" height="70%"/>
+</picture>
+```
+where $y^e_i$ and $y^e_j$ are two of the $n$ incident edge outputs that are aggregated to produce the model input
+$i^v$ and the model output $y^v$ (the vertex model output).
+
+
+### Edge Models
+In contrast to vertex models, edge models in general have *two* inputs and *two* outputs, for both the source and
+the destination end of the edge. We commonly use `src` and `dst` to describe the source and destination ends of an edge,
+respectively.
 
 !!! note "On the directionality of edges"
-    Mathematically, in a system defined on an undirected graph there is no difference between the edge $(1,2)$ and $(2,1)$, the edge has no direction. However, from an implementation point of view we always need to have some kind of ordering for function arguments, state order and so on. For undirected graphs, `Graphs.jl` chooses the direction of an edge `v1->v2` such that `v1 < v2`.
+    Mathematically, in a system defined on an undirected graph, there is no difference between edge $(1,2)$ and
+    edge $(2,1)$, because the edge has no direction. However, from an implementation point of view, we always need to
+    have some kind of ordering. For undirected graphs, the edges are always defined from `src -> dst` where `src < dst`
+    (this convention matches the behavior of the `edges` iterator from `Graphs.jl`).
+    I.e., the undirected edge between nodes 1 and 2 will always be referenced as `1 -> 2`, never `2 -> 1`.
+    The **source** and **destination** naming is related to this notion of directionality; it is not related to the actual flows, i.e.,
+    a system might exist where there is a net flow from destination to source.
 
-The *inputs* of the edge are just the outputs of the two nodes at both ends. The output is split into two: the `dst` output goes to the input of the vertex at the destination end, the `src` output goes to the input of the vertex at the `src` end.
-
-The full model of an edge
+The full edge model equations are:
 ```math
 \begin{aligned}
 M^{\mathrm e}\,\frac{\mathrm{d}}{\mathrm{d}t}x^{\mathrm e} &= f^{\mathrm e}(u^{\mathrm e}, y^{\mathrm v}_{\mathrm{src}}, y^{\mathrm v}_{\mathrm{dst}}, p^{\mathrm e}, t)\\
@@ -73,69 +122,100 @@ y^{\mathrm e}_{\mathrm{dst}} &= g_\mathrm{dst}^{\mathrm e}(u^{\mathrm e}, y^{\ma
 y^{\mathrm e}_{\mathrm{src}} &= g_\mathrm{src}^{\mathrm e}(u^{\mathrm e}, y^{\mathrm v}_{\mathrm{src}}, y^{\mathrm v}_{\mathrm{dst}}, p^{\mathrm e}, t)
 \end{aligned}
 ```
-corresponds to the Julia functions
+and they correspond to the Julia functions:
 ```julia
 function fₑ(dxₑ, xₑ, v_src, v_dst, pₑ, t)
-    # mutate dxᵥ
+    # mutate dxₑ
     nothing
 end
-function gₑ(y_src, y_dst, xᵥ, v_src, v_dst, pₑ, t)
+function gₑ(y_src, y_dst, xₑ, v_src, v_dst, pₑ, t)
     # mutate y_src and y_dst
     nothing
 end
-vertf = EdgeModel(; f=fₑ, g=gₑ, mass_matrix=Mₑ, ...)
+edgef = EdgeModel(; f=fₑ, g=gₑ, mass_matrix=Mₑ, ...)
 ```
 
-The sign convention for both outputs of an edge must be identical, 
-typically, a positive flow represents a flow *into* the connected vertex.
-This is important, because the vertex only receives the flows, it does not know whether the flow was produce by the source or destination end of an edge.
-```
-          y_src     y_dst 
-  V_src o───←─────────→───o V_dst
+Each edge has:
+1. two inputs:
+   1. the node outputs of the source
+   2. the node outputs of the destination end of the edge
+2. two outputs:
+   1. the `dst` output (which is used as input for the vertex at the destination end)
+   2. the `src` output (which is used as input for the vertex at the source end)
 
-```
+In general, the two edge outputs $y_{\mathrm{src}}$ and $y_{\mathrm{dst}}$ are **completely independent** because there
+is no implicit conservation law dictating that their values should be identical.
+An example of such unbalanced systems is power lines in an energy grid with losses, where the power flowing into a line
+does not match the power flowing out of it, because some of the energy transported is lost in the form of heat.
+Another example would be a gas pipeline with some internal pressure: it is entirely possible to push in gas from both
+ends simultaneously. It would simply result in increased pressure within the pipe. For the (important) special cases
+where there is a strong correlation between source and destination output, see the section on [Single Sided Edge Outputs](@ref) below.
 
+The vertex models connected to the edge do not know whether they are at the 'src' or the 'dst' end of the edge.
+Therefore, the sign convention for both outputs of an edge must be identical. Typically, a positive flow represents
+a flow *into* the connected vertex, whereas a negative flow represents a flow *out of* the connected vertex.
+```
+          y_src ┌───────────────────┐ y_dst
+  V_src o───←───┤ internal dynamics ├───→───o V_dst
+                └───────────────────┘
+```
 
 ### Single Sided Edge Outputs
-Often, edge outputs will possess some symmetry which makes it more convenient to define "single sided" edge output functions
+Often, the edge output functions $g_\mathrm{src}$ and $g_\mathrm{dst}$ are not independent, but rather one of them is a function of the other.
+For example, in an edge model with flow conservation without internal storage, the flow magnitude at the source end is equal to the flow magnitude at the destination end (what flows in must come out).
+Since the sign convention on both ends must be identical (e.g., positive flow is a flow towards the vertex), we get antisymmetric behavior: $y_\mathrm{src} = -y_\mathrm{dst}$.
+
+To accommodate such cases, we can use the concept of **single-sided edge output functions**.
+A single-sided output function only defines a function for one of the outputs:
+
 ```julia
 function g_single(y, xᵥ, v_src, v_dst, pₑ, t)
     # mutate y
     nothing
 end
 ```
-There are multiple wrappers available to automaticially convert them into double-sided edge output functions:
 
-- `Directed(g_single)` builds a double-sided function *which only couples* to the destination side.
-- `Symmetric(g_single)` builds a double-sided function in which both ends receive `y`.
-- `AntiSymmetric(g_single)` builds a double-sided function where the destination receives `y` and the source receives `-y`.
-- `Fiducial(g_single_src, g_singl_dst)` builds a double-sided edge output function based on two single sided functions.
+There are multiple wrappers available to automatically convert them into double-sided edge output functions:
+- `Directed(g_single)` builds a double-sided function *which only couples* to the destination side (i.e., $y_{dst}=y$ and $y_{src} = 0$).
+- `Symmetric(g_single)` builds a double-sided function in which both ends receive `y` (i.e., $y = y_{src} = y_{dst}$).
+- `AntiSymmetric(g_single)` builds a double-sided function where the destination receives `y` and the source receives `-y` (i.e., $y=y_{dst}=-y_{src}$).
+- `Fiducial(g_single_src, g_single_dst)` builds a double-sided edge output function based on two single-sided functions.
 
 
 ## Feed Forward Behavior
-The most general version of the component models can contain direct feed forwards from the input, i.e. the edge output might depend directly on the connected vertices or the vertex output might depend directly on the aggregated edge input.
+!!! warning "Feed Forward Vertices"
+    As of 11/2024, vertices with feed forward behavior (FF) are not supported at all. Use [`ff_to_constraint`](@ref) to
+    transform them into vertex models without FF.
 
-Whenever possible, you should define output functions without feed forwards, i.e.
+Component models can have a so-called feed forward behavior, which provides a direct link between the input and the
+output.
+
+The most generic version of the component models can contain direct FFs from the input to the output. This means that
+the output function $g$ depends directly on the component inputs $i$ rather than just on the component state $x$.
+
+Whenever possible, you should define output functions without FFs in the following way:
 ```julia
 gᵥ_noff(yᵥ, xᵥ, pᵥ, t)
-gₑ_noff([y_src,] y_dst, xᵥ, pₑ, t)
+gₑ_noff([y_src,] y_dst, xₑ, pₑ, t)
 ```
 instead of the more general
 ```julia
 gᵥ(yᵥ, xᵥ, e_aggr, pᵥ, t)
-gₑ([y_src], y_dst, xᵥ, v_src, v_dst, pₑ, t)
+gₑ([y_src,] y_dst, xₑ, v_src, v_dst, pₑ, t)
 ```
 
-NetworkDynamics cannot couple two components with feed forward to each other.
-It is always possible to transform feed forward behavior to an internal state `x` with mass matrix entry zero to circumvent this problem. This transformation can be performed automatically by using [`ff_to_constraint`](@ref).
+NetworkDynamics cannot couple two components with FFs to each other. However, it is always possible to transform
+feed forward behavior to an internal state `x` with mass matrix entry zero to circumvent this problem. This
+transformation can be performed automatically using [`ff_to_constraint`](@ref).
 
-!!! warning "Feed Forward Vertices"
-    As of 11/2024, vertices with feed forward are not supported at all. Use [`ff_to_constraint`](@ref) to transform them into vertex model without FF.
+Concretely, NetworkDynamics distinguishes between 4 types of feed forward behaviors of `g` functions based on the
+[`FeedForwardType`](@ref) trait.
+The feed forward type is inferred automatically based on the provided function `g` (this is done by inspecting the available
+method signatures for `g`, i.e., NetworkDynamics checks how many arguments your `g` function takes).
+If the automatic inference of feed forward type fails, the user may specify it explicitly using the `ff` keyword
+argument of the Edge/VertexModel constructor.
 
-Concretely, NetworkDynamics distinguishes between 4 types of feed forward behaviors of `g` functions based on the [`FeedForwardType`](@ref) trait.
-The different types the signature of provided function `g`.
-Based on the signatures avaialable, ND.jl will try to find the correct type automaticially. Using the `ff`
-keyword in the constructors, the user can enforce a specific type.
+The code block below presents the different `g` signatures for the different feed forward types:
 
 **[`PureFeedForward()`](@ref)**
 ```julia
@@ -165,4 +245,3 @@ g!(out_dst,          x) # single-sided edge
 g!(out_src, out_dst, x) # double-sided edge
 g!(v_out,            x) # single layer vertex
 ```
-

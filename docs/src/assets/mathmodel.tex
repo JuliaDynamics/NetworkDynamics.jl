@@ -6,27 +6,10 @@
 %   >=stealth',
 % }
 \usepackage{amsmath,amssymb}
-\usepackage{tikz}
-\usepackage{xcolor}
-
-\makeatletter
-\def\mathcolor#1#{\@mathcolor{#1}}
-\def\@mathcolor#1#2#3{%
-  \protect\leavevmode
-  \begingroup
-    \color#1{#2}#3%
-  \endgroup
-}
-\makeatother
-
-\definecolor{wblue}{HTML}{0072b2}
-\definecolor{worange}{HTML}{e69f00}
-\definecolor{wbblue}{HTML}{56b4e9}
-\definecolor{wgreen}{HTML}{009e73}
-\definecolor{wyellow}{HTML}{f0e442}
+\usepackage{ndtheme}
 
 \begin{document}
-\begin{tikzpicture}
+\begin{tikzpicture}[\ndtheme]
   \node[draw, circle](n1){1};
   \node[draw, circle] at (10cm, 1cm)(n2){2};
   \node[draw, circle] at (2.5cm, -1.5cm)(n3){3};
@@ -39,7 +22,6 @@
   \draw[] (n3) --++(1,-1);
   \draw[] (n1) --++(-1,-2.5);
   \draw[] (n2) --++(-2,-3.5);
-
   \node[text width=5cm, xshift=-0.5cm, yshift=1.25cm] at (n1){%
     \small\begin{align*}
     M\,\dot{x} &= f^{\mathrm{v}}_{1}\left(x, \sum_{k} \mathcolor{worange}{e_{k1}}, p, t\right)\\
@@ -52,7 +34,6 @@
     \mathcolor{wblue}{v_{2}} &= g^{\mathrm{v}}_{2}\left(x, p_{\mathrm{v},2}, t\right)\\
     \end{align*}%
   };
-
   \path (n1)--(n2) node[pos=.5,text width=5cm, xshift=0cm, yshift=1.25cm]{%
     \small\begin{align*}
     M\,\dot{x} &= f^{\mathrm{e}}_{12}\left(x, \mathcolor{worange}{v_{\mathrm{src}}}, \mathcolor{wblue}{v_{\mathrm{dst}}}, p, t\right)\\
@@ -60,6 +41,5 @@
     \mathcolor{wblue}{e_{12}} &= g^{\mathrm{e}}_{\mathrm{dst}}\left(x, \mathcolor{worange}{v_{\mathrm{src}}}, \mathcolor{wblue}{v_{\mathrm{dst}}}, p, t\right)\\
     \end{align*}%
   };
-
 \end{tikzpicture}
 \end{document}
