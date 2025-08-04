@@ -137,9 +137,17 @@ for md in [:default, :guess, :init, :bounds]
         Sets the `$($(QuoteNode(md)))` value for symbol `sym` to `value` in a component model,
         or for a symbol referenced by `sni` in a network.
 
+        If `value` is `nothing` or `missing`, the metadata is removed.
+
         See also [`has_$($(QuoteNode(md)))`](@ref), [`get_$($(QuoteNode(md)))`](@ref).
         """
-        $fname_set(c::Comp_or_NW, sym, val) = set_metadata!(c, sym, $(QuoteNode(md)), val)
+        function $fname_set(c::Comp_or_NW, sym, val)
+            if !isnothing(val) && !ismissing(val)
+                set_metadata!(c, sym, $(QuoteNode(md)), val)
+            else
+                delete_metadata!(c, sym, $(QuoteNode(md)))
+            end
+        end
 
         """
             delete_$($(QuoteNode(md)))!(c::ComponentModel, sym::Symbol)
