@@ -1,6 +1,7 @@
 # Mathematical Model
 
-The core of the `NetworkDynamics.jl` package is the [`Network`](@ref) function. It accepts the functions describing the 
+The core of the `NetworkDynamics.jl` package is the [`Network`](
+@ref) function. It accepts the functions describing the 
 local dynamics on the edges and nodes of the graph `g` as inputs, and returns a composite function compatible with the 
 DifferentialEquations.jl syntax as output.
 
@@ -160,10 +161,12 @@ a flow *into* the connected vertex, whereas a negative flow represents a flow *o
                 └───────────────────┘
 ```
 
-### Single Sided Edge Outputs 
-In cases where a conservation law is present in a system, the edge output functions $g_\mathrm{src}$ and 
-$g_\mathrm{dst}$ are not independent, but rather one of them is a function of the other. For example, in a system with 
-a conservation law, the output at the source end is equal to the output at the destination end, i.e. $y_\mathrm{src} = -y_\mathrm{dst}$.
+### Single Sided Edge Outputs
+Systems exist, where the edge output functions $g_\mathrm{src}$ and $g_\mathrm{dst}$ are not independent, but rather one
+is a function of the other. For example, in a system with a flow conservation law, the flow magnitude at the 
+source end is equal to the flow magnitude at the destination end (what flows in, must come out). Since the sign 
+convention on both ends must be identical (e.g. positive flow is a flow towards the vertex) we get antisymmetric 
+behavior:  $y_\mathrm{src} = -y_\mathrm{dst}$.
 
 To accommodate such cases, we can use the concept of **single sided edge output functions**.
 A single sided output function only defines a function for one of the outputs:
