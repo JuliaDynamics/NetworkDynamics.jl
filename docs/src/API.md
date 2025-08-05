@@ -121,28 +121,35 @@ get_metadata(::NetworkDynamics.ComponentModel, ::Symbol, ::Symbol)
 has_metadata(::NetworkDynamics.ComponentModel, ::Symbol, ::Symbol)
 set_metadata!(::NetworkDynamics.ComponentModel, ::Symbol, ::Symbol, ::Any)
 delete_metadata!(::NetworkDynamics.ComponentModel, ::Symbol, ::Symbol)
+strip_metadata!
 has_default
 get_default
 set_default!
 delete_default!
+strip_defaults!
 has_guess
 get_guess
 set_guess!
 delete_guess!
+strip_guesses!
 has_init
 get_init
 set_init!
 delete_init!
+strip_inits!
 has_bounds
 get_bounds
 set_bounds!
 delete_bounds!
+strip_bounds!
 set_defaults!
 set_interface_defaults!
 get_defaults_dict
 get_guesses_dict
 get_bounds_dict
 get_inits_dict
+free_u
+free_p
 ```
 
 ### Metadata and Inspection Utils

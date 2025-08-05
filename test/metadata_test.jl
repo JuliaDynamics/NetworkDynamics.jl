@@ -335,6 +335,42 @@ end
     @test ismissing(df_with_custom[2, :custom_key])
 end
 
+@testset "Pattern matching in metadata functions" begin
+    # Create a test vertex model
+    vm = Lib.swing_mtk()
+
+    # Test happy path - string pattern matching
+    set_metadata!(vm, "θ", :test_key, "test_value")
+    @test get_metadata(vm, :θ, :test_key) == "test_value"
+
+    # Test happy path - regex pattern matching
+    set_default!(vm, r"^ω", 1.5)
+    @test get_default(vm, :ω) == 1.5
+
+    # Test no match - should throw ArgumentError
+    @test_throws ArgumentError set_metadata!(vm, "nonexistent", :test_key, "value")
+    @test_throws ArgumentError set_init!(vm, r"xyz", 2.0)
+
+    set_bounds!(vm, "Pmech", (0.0, 10.0))
+    @test get_bounds(vm, :Pmech) == (0.0, 10.0)
+
+    set_guess!(vm, "M", 5.0)
+    @test get_guess(vm, :M) == 5.0
+
+    @test_throws ArgumentError set_guess!(vm, "", 5.0)
+    @test_throws ArgumentError set_guess!(vm, r"", 5.0)
+
+    # Test basic pattern matching functions
+    @test has_metadata(vm, "θ", :test_key)
+    @test has_metadata(vm, r"^θ", :test_key)
+    @test get_metadata(vm, "θ", :test_key) == "test_value"
+    @test get_metadata(vm, r"^θ", :test_key) == "test_value"
+    @test delete_metadata!(vm, "θ", :test_key)
+    @test !has_metadata(vm, :θ, :test_key)
+    @test_throws ArgumentError has_metadata(vm, "nonexistent", :test_key)
+    @test_throws ArgumentError get_metadata(vm, r"xyz", :test_key)
+end
+
 @testset "set_defaults! function" begin
     nw = basenetwork()
     modified_state = NWState(nw)
@@ -420,4 +456,39 @@ end
             @test new_state3[sni] ≈ 7.1
         end
     end
+end
+
+@testset "strip_metadata! function" begin
+    # Create a test vertex model
+    vm = Lib.swing_mtk()
+
+    # Set up various metadata types
+    set_default!(vm, :θ, 1.0)
+    set_default!(vm, :ω, 2.0)
+    set_guess!(vm, :M, 5.0)
+    set_init!(vm, :Pmech, 3.0)
+    set_metadata!(vm, :θ, :custom, "test_value")
+
+    # Verify metadata was set
+    @test has_default(vm, :θ)
+    @test has_default(vm, :ω)
+    @test has_guess(vm, :M)
+    @test has_init(vm, :Pmech)
+    @test has_metadata(vm, :θ, :custom)
+
+    # Test stripping defaults
+    strip_metadata!(vm, :default)
+    @test !has_default(vm, :θ)
+    @test !has_default(vm, :ω)
+    # Other metadata should remain
+    @test has_guess(vm, :M)
+    @test has_init(vm, :Pmech)
+    @test has_metadata(vm, :θ, :custom)
+
+    # Test stripping custom metadata
+    strip_metadata!(vm, :custom)
+    @test !has_metadata(vm, :θ, :custom)
+    # Other metadata should remain
+    @test has_guess(vm, :M)
+    @test has_init(vm, :Pmech)
 end

@@ -18,18 +18,43 @@ function _assert_symbol_exists(c::ComponentModel, s::Symbol)
     return nothing
 end
 
+function _match_symbol_name(c::ComponentModel, pattern)
+    allsym = Symbol[]
+    append!(allsym, sym(c))
+    append!(allsym, psym(c))
+    hasinsym(c) && append!(allsym, insym_all(c))
+    append!(allsym, outsym_flat(c))
+    append!(allsym, obssym(c))
+    allssym = unique!(allsym)
+
+    fidx = findall(sym -> contains(string(sym), pattern), allsym)
+    if isempty(fidx)
+        throw(ArgumentError("No symbol matching pattern $pattern found in component model."))
+    elseif length(fidx) > 1
+        throw(ArgumentError("Multiple symbols matching pattern $pattern found in component model: $(allsym[fidx]). Please use a more specific pattern."))
+    end
+    return Symbol(allsym[only(fidx)])
+end
+
 """
     has_metadata(c::ComponentModel, sym::Symbol, key::Symbol)
     has_metadata(nw::Network, sni::SymbolicIndex, key::Symbol)
 
 Checks if symbol metadata `key` is present for symbol `sym` in a component model,
 or for a symbol referenced by `sni` in a network.
+
+`sym` can also be a String or Regex, to address the only symbol containing the pattern, see [`set_metadata!`](@ref) for details.
+
 Throws an error if the symbol does not exist in the component model.
 """
 function has_metadata(c::ComponentModel, sym::Symbol, key::Symbol)
     _assert_symbol_exists(c, sym)
     md = symmetadata(c)
     haskey(md, sym) && haskey(md[sym], key)
+end
+function has_metadata(c::ComponentModel, pattern::Union{String,Regex}, key::Symbol)
+    sym = _match_symbol_name(c, pattern)
+    has_metadata(c, sym, key)
 end
 function has_metadata(nw::Network, sym::SymbolicIndex, key::Symbol)
     has_metadata(getcomp(nw, sym), sym.subidx, key)
@@ -41,11 +66,18 @@ end
 
 Retrieves the metadata `key` for symbol `sym` in a component model,
 or for a symbol referenced by `sni` in a network.
+
+`sym` can also be a String or Regex, to address the only symbol containing the pattern, see [`set_metadata!`](@ref) for details.
+
 Throws an error if the symbol does not exist in the component model.
 """
 function get_metadata(c::ComponentModel, sym::Symbol, key::Symbol)
     _assert_symbol_exists(c, sym)
     symmetadata(c)[sym][key]
+end
+function get_metadata(c::ComponentModel, pattern::Union{String,Regex}, key::Symbol)
+    sym = _match_symbol_name(c, pattern)
+    get_metadata(c, sym, key)
 end
 function get_metadata(nw::Network, sym::SymbolicIndex, key::Symbol)
     get_metadata(getcomp(nw, sym), sym.subidx, key)
@@ -59,6 +91,13 @@ end
 
 Sets the metadata `key` for symbol `sym` to `value` in a component model,
 or for a symbol referenced by `sni` in a network.
+
+For component models, you can also use a `String` or `Regex` pattern to match symbol names:
+- String patterns use substring matching (e.g., `"δ"` matches `machine₊δ`)
+- Regex patterns use full regex matching (e.g., `r"P\$"` matches symbols ending with "P")
+This will error if there are none or multiple matches.
+
+If the pattern matches multiple symbols, an error is thrown. Use a more specific pattern.
 Throws an error if the symbol does not exist in the component model.
 """
 function set_metadata!(c::ComponentModel, sym::Symbol, key::Symbol, value)
@@ -66,12 +105,15 @@ function set_metadata!(c::ComponentModel, sym::Symbol, key::Symbol, value)
     d = get!(symmetadata(c), sym, Dict{Symbol,Any}())
     d[key] = value
 end
+function set_metadata!(c::ComponentModel, pattern::Union{String,Regex}, key::Symbol, value)
+    sym = _match_symbol_name(c, pattern)
+    set_metadata!(c, sym, key, value)
+end
 function set_metadata!(nw::Network, sym::SymbolicIndex, key::Symbol, value)
     set_metadata!(getcomp(nw, sym), sym.subidx, key, value)
 end
 
 function set_metadata!(c::ComponentModel, sym::Symbol, pair::Pair)
-    _assert_symbol_exists(c, sym)
     set_metadata!(c, sym, pair.first, pair.second)
 end
 function set_metadata!(nw::Network, sym::SymbolicIndex, pair::Pair)
@@ -84,6 +126,9 @@ end
 
 Removes the metadata `key` for symbol `sym` in a component model,
 or for a symbol referenced by `sni` in a network.
+
+`sym` can also be a String or Regex, to address the only symbol containing the pattern, see [`set_metadata!`](@ref) for details.
+
 Returns `true` if the metadata existed and was removed, `false` otherwise.
 Throws an error if the symbol does not exist in the component model.
 """
@@ -99,7 +144,25 @@ function delete_metadata!(c::ComponentModel, sym::Symbol, key::Symbol)
     end
     return false
 end
+function delete_metadata!(c::ComponentModel, pattern::Union{String,Regex}, key::Symbol)
+    sym = _match_symbol_name(c, pattern)
+    delete_metadata!(c, sym, key)
+end
 delete_metadata!(nw::Network, sym::SymbolicIndex, key::Symbol) = delete_metadata!(getcomp(nw, sym), sym.subidx, key)
+
+"""
+    strip_metadata!(c::ComponentModel, key::Symbol)
+
+Remove all metadata of type `key` from the component.
+"""
+function strip_metadata!(c::ComponentModel, key::Symbol)
+    md_dict = symmetadata(c)
+    for (sym, sym_md) in md_dict
+        delete!(sym_md, key)
+    end
+    return c
+end
+strip_metadata!(nw::Network, sym::SymbolicIndex, key::Symbol) = strip_metadata!(getcomp(nw, sym), key)
 
 # generate default methods for some per-symbol metadata fields
 for md in [:default, :guess, :init, :bounds]
@@ -107,6 +170,13 @@ for md in [:default, :guess, :init, :bounds]
     fname_get = Symbol(:get_, md)
     fname_set = Symbol(:set_, md, :!)
     fname_del = Symbol(:delete_, md, :!)
+    fname_strip = if md == :guess
+        :strip_guesses!
+    elseif md == :bounds
+        :strip_bounds!
+    else
+        Symbol(:strip_, string(md)*"s", :!)
+    end
     @eval begin
         """
             has_$($(QuoteNode(md)))(c::ComponentModel, sym::Symbol)
@@ -114,6 +184,8 @@ for md in [:default, :guess, :init, :bounds]
 
         Checks if a `$($(QuoteNode(md)))` value is present for symbol `sym` in a component model,
         or for a symbol referenced by `sni` in a network.
+
+        `sym` can be a String or Regex, to address the only symbol containing the pattern, see [`set_metadata!`](@ref) for details.
 
         See also [`get_$($(QuoteNode(md)))`](@ref), [`set_$($(QuoteNode(md)))!`](@ref).
         """
@@ -126,6 +198,8 @@ for md in [:default, :guess, :init, :bounds]
         Returns the `$($(QuoteNode(md)))` value for symbol `sym` in a component model,
         or for a symbol referenced by `sni` in a network.
 
+        `sym` can be a String or Regex, to address the only symbol containing the pattern, see [`set_metadata!`](@ref) for details.
+
         See also [`has_$($(QuoteNode(md)))`](@ref), [`set_$($(QuoteNode(md)))!`](@ref).
         """
         $fname_get(c::Comp_or_NW, sym) = get_metadata(c, sym, $(QuoteNode(md)))
@@ -137,9 +211,19 @@ for md in [:default, :guess, :init, :bounds]
         Sets the `$($(QuoteNode(md)))` value for symbol `sym` to `value` in a component model,
         or for a symbol referenced by `sni` in a network.
 
+        If `value` is `nothing` or `missing`, the metadata is removed.
+
+        `sym` can be a String or Regex, to address the only symbol containing the pattern, see [`set_metadata!`](@ref) for details.
+
         See also [`has_$($(QuoteNode(md)))`](@ref), [`get_$($(QuoteNode(md)))`](@ref).
         """
-        $fname_set(c::Comp_or_NW, sym, val) = set_metadata!(c, sym, $(QuoteNode(md)), val)
+        function $fname_set(c::Comp_or_NW, sym, val)
+            if !isnothing(val) && !ismissing(val)
+                set_metadata!(c, sym, $(QuoteNode(md)), val)
+            else
+                delete_metadata!(c, sym, $(QuoteNode(md)))
+            end
+        end
 
         """
             delete_$($(QuoteNode(md)))!(c::ComponentModel, sym::Symbol)
@@ -148,9 +232,22 @@ for md in [:default, :guess, :init, :bounds]
         Removes the `$($(QuoteNode(md)))` value for symbol `sym` in a component model,
         or for a symbol referenced by `sni` in a network.
 
+        `sym` can be a String or Regex, to address the only symbol containing the pattern, see [`set_metadata!`](@ref) for details.
+
         See also [`has_$($(QuoteNode(md)))`](@ref), [`set_$($(QuoteNode(md)))!`](@ref).
         """
         $fname_del(c::Comp_or_NW, sym) = delete_metadata!(c, sym, $(QuoteNode(md)))
+
+        """
+            strip_$($(QuoteNode(md)))!(c::ComponentModel)
+            strip_$($(QuoteNode(md)))!(nw::Network, idx::Union{VIndex,EIndex})
+
+        Removes all `$($(QuoteNode(md)))` values from a component model,
+        or from a component referenced by `idx` in a network.
+
+        See also [`delete_$($(QuoteNode(md)))!`](@ref), [`set_$($(QuoteNode(md)))!`](@ref).
+        """
+        $fname_strip(c::Comp_or_NW) = strip_metadata!(c, $(QuoteNode(md)))
     end
 end
 
@@ -1042,3 +1139,39 @@ end
 
 function describe_vertices end
 function describe_edges end
+
+"""
+    free_p(cf::ComponentModel)
+    free_p(nw::Network)
+
+Returns the "free" parameters (parameters without default values) for the given system.
+
+# Returns
+- Vector of parameter symbols that do not have default values set
+
+See also: [`free_u`](@ref), [`has_default`](@ref), [`set_default!`](@ref)
+"""
+function free_p(cf::NetworkDynamics.ComponentModel)
+    return filter(p -> !NetworkDynamics.has_default(cf, p), NetworkDynamics.psym(cf))
+end
+function free_p(nw::Network)
+    setdiff(NetworkDynamics.SII.parameter_symbols(nw), keys(NetworkDynamics.SII.default_values(nw)))
+end
+
+"""
+    free_u(nw::Network)
+    free_u(cf::ComponentModel)
+
+Returns the "free" variables/states (variables without default values) for the given system.
+
+# Returns
+- Vector of variable/state symbols that do not have default values set
+
+See also: [`free_p`](@ref), [`has_default`](@ref), [`set_default!`](@ref)
+"""
+function free_u(nw::Network)
+    setdiff(NetworkDynamics.SII.variable_symbols(nw), keys(NetworkDynamics.SII.default_values(nw)))
+end
+function free_u(cf::NetworkDynamics.ComponentModel)
+    return filter(u -> !NetworkDynamics.has_default(cf, u), NetworkDynamics.sym(cf))
+end

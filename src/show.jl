@@ -48,7 +48,7 @@ Base.show(io::IO, s::KAAggregator) = print(io, "KAAggregator($(repr(s.f)))")
 Base.show(io::IO, s::SequentialAggregator) = print(io, "SequentialAggregator($(repr(s.f)))")
 Base.show(io::IO, s::PolyesterAggregator) = print(io, "PolyesterAggregator($(repr(s.f)))")
 
-function Base.show(io::IO, ::MIME"text/plain", c::ComponentModel)
+function Base.show(io::IO, mime::MIME"text/plain", c::ComponentModel)
     type = string(typeof(c))
     print(io, type, styled" {NetworkDynamics_name::$(c.name)}")
     print(io, styled" {NetworkDynamics_fftype:$(fftype(c))}")
@@ -64,6 +64,14 @@ function Base.show(io::IO, ::MIME"text/plain", c::ComponentModel)
     styling = Dict{Int,Symbol}()
 
     print_states_params(io, c, styling)
+
+    # special known metadata of PowerDynamics
+    if has_metadata(c, :pfmodel)
+        pfm = get_metadata(c, :pfmodel)
+        printstyled(io, "\nPowerflow model ", color=:blue, bold=true)
+        print(io, ":", pfm.name)
+        pdim(pfm) > 0 && print(io, styled" with $(stylesymbolarray(pfm.psym, _pdef(pfm), _pguess(pfm)))")
+    end
 end
 
 function print_states_params(io, @nospecialize(c::ComponentModel), styling)

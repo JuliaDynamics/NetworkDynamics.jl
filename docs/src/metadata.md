@@ -22,7 +22,7 @@ details.
 ## Symbol Metadata
 Each component stores symbol metadata. The symbol metadata is a `Dict{Symbol, Dict{Symbol, Any}}` which stores a metadata dict per symbol. Symbols are everything that appears in [`sym`](@ref), [`psym`](@ref), [`obssym`](@ref) and [`insym`](@ref).
 
-To access the data, you can use the methods `has_metadata`, `get_metadata`, `set_metadata!` and `delete_metadata!` (see [Per Symbol Metadata API](@ref)).
+To access the data, you can use the methods `has_metadata`, `get_metadata`, `set_metadata!` and `delete_metadata!` (see [Per Symbol Metadata API](@ref)). These functions also support pattern matching using String or Regex patterns to match symbol names, making it easier to work with symbols containing special characters or when you only know part of the symbol name.
 
 Special cases for symbol metadata are:
 
@@ -31,7 +31,7 @@ Special cases for symbol metadata are:
 - `bounds`: Stores bounds for variables/parameters
 - `init`: Stores the solution of the "free" variables, this is rarely set manually but instead when calling [`initialize_component!`](@ref).
 
-For those, there are special functions `has_*`, `get_*`, `set_*!` and `delete_*!`. See [Per Symbol Metadata API](@ref).
+For those, there are special functions `has_*`, `get_*`, `set_*!`, `delete_*!` and `strip_*!`. The `strip_*!` functions remove all metadata of a specific type from all symbols in a component. See [Per Symbol Metadata API](@ref).
 
 These are closely aligned with the [metadata use in ModelingToolkit](@extref ModelingToolkit symbolic_metadata). They are automatically copied from the `ODESystem` if you use MTK models to create NetworkDynamics models.
 
@@ -42,5 +42,7 @@ common task. We provide several helper methods to do so. Please check out their 
 - [`dump_state`](@ref)
 - [`dump_initial_state`](@ref)
 - [`get_initial_state`](@ref)
+- [`free_u`](@ref) - find variables without default values
+- [`free_p`](@ref) - find parameters without default values
 - [`describe_vertices`](@ref) (needs `DataFrames.jl` loaded)
 - [`describe_edges`](@ref) (needs `DataFrames.jl` loaded)
