@@ -421,3 +421,38 @@ end
         end
     end
 end
+
+@testset "strip_metadata! function" begin
+    # Create a test vertex model
+    vm = Lib.swing_mtk()
+
+    # Set up various metadata types
+    set_default!(vm, :θ, 1.0)
+    set_default!(vm, :ω, 2.0)
+    set_guess!(vm, :M, 5.0)
+    set_init!(vm, :Pmech, 3.0)
+    set_metadata!(vm, :θ, :custom, "test_value")
+
+    # Verify metadata was set
+    @test has_default(vm, :θ)
+    @test has_default(vm, :ω)
+    @test has_guess(vm, :M)
+    @test has_init(vm, :Pmech)
+    @test has_metadata(vm, :θ, :custom)
+
+    # Test stripping defaults
+    strip_metadata!(vm, :default)
+    @test !has_default(vm, :θ)
+    @test !has_default(vm, :ω)
+    # Other metadata should remain
+    @test has_guess(vm, :M)
+    @test has_init(vm, :Pmech)
+    @test has_metadata(vm, :θ, :custom)
+
+    # Test stripping custom metadata
+    strip_metadata!(vm, :custom)
+    @test !has_metadata(vm, :θ, :custom)
+    # Other metadata should remain
+    @test has_guess(vm, :M)
+    @test has_init(vm, :Pmech)
+end

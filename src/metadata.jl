@@ -101,12 +101,33 @@ function delete_metadata!(c::ComponentModel, sym::Symbol, key::Symbol)
 end
 delete_metadata!(nw::Network, sym::SymbolicIndex, key::Symbol) = delete_metadata!(getcomp(nw, sym), sym.subidx, key)
 
+"""
+    strip_metadata!(c::ComponentModel, key::Symbol)
+
+Remove all metadata of type `key` from the component.
+"""
+function strip_metadata!(c::ComponentModel, key::Symbol)
+    md_dict = symmetadata(c)
+    for (sym, sym_md) in md_dict
+        delete!(sym_md, key)
+    end
+    return c
+end
+strip_metadata!(nw::Network, sym::SymbolicIndex, key::Symbol) = strip_metadata!(getcomp(nw, sym), key)
+
 # generate default methods for some per-symbol metadata fields
 for md in [:default, :guess, :init, :bounds]
     fname_has = Symbol(:has_, md)
     fname_get = Symbol(:get_, md)
     fname_set = Symbol(:set_, md, :!)
     fname_del = Symbol(:delete_, md, :!)
+    fname_strip = if md == :guess
+        :strip_guesses!
+    elseif md == :bounds
+        :strip_bounds!
+    else
+        Symbol(:strip_, string(md)*"s", :!)
+    end
     @eval begin
         """
             has_$($(QuoteNode(md)))(c::ComponentModel, sym::Symbol)
@@ -159,6 +180,17 @@ for md in [:default, :guess, :init, :bounds]
         See also [`has_$($(QuoteNode(md)))`](@ref), [`set_$($(QuoteNode(md)))!`](@ref).
         """
         $fname_del(c::Comp_or_NW, sym) = delete_metadata!(c, sym, $(QuoteNode(md)))
+
+        """
+            strip_$($(QuoteNode(md)))!(c::ComponentModel)
+            strip_$($(QuoteNode(md)))!(nw::Network, idx::Union{VIndex,EIndex})
+
+        Removes all `$($(QuoteNode(md)))` values from a component model,
+        or from a component referenced by `idx` in a network.
+
+        See also [`delete_$($(QuoteNode(md)))!`](@ref), [`set_$($(QuoteNode(md)))!`](@ref).
+        """
+        $fname_strip(c::Comp_or_NW) = strip_metadata!(c, $(QuoteNode(md)))
     end
 end
 

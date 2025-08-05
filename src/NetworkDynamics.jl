@@ -88,11 +88,11 @@ export initialize_component, initialize_component!, init_residual
 export initialize_componentwise, initialize_componentwise!, interface_values
 include("initialization.jl")
 
-export has_metadata, get_metadata, set_metadata!, delete_metadata!
-export has_default, get_default, set_default!, delete_default!, set_defaults!
-export has_guess, get_guess, set_guess!, delete_guess!
-export has_init, get_init, set_init!, delete_init!
-export has_bounds, get_bounds, set_bounds!, delete_bounds!
+export has_metadata, get_metadata, set_metadata!, delete_metadata!, strip_metadata!
+export has_default, get_default, set_default!, delete_default!, set_defaults!, strip_defaults!
+export has_guess, get_guess, set_guess!, delete_guess!, strip_guesses!
+export has_init, get_init, set_init!, delete_init!, strip_inits!
+export has_bounds, get_bounds, set_bounds!, delete_bounds!, strip_bounds!
 export has_graphelement, get_graphelement, set_graphelement!
 export get_initial_state, dump_initial_state, dump_state
 export has_callback, get_callbacks, set_callback!, add_callback!
