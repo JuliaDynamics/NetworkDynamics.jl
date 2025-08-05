@@ -95,7 +95,7 @@ or for a symbol referenced by `sni` in a network.
 For component models, you can also use a `String` or `Regex` pattern to match symbol names:
 - String patterns use substring matching (e.g., `"δ"` matches `machine₊δ`)
 - Regex patterns use full regex matching (e.g., `r"P\$"` matches symbols ending with "P")
-This will error if there is none or multile matches.
+This will error if there are none or multiple matches.
 
 If the pattern matches multiple symbols, an error is thrown. Use a more specific pattern.
 Throws an error if the symbol does not exist in the component model.

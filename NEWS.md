@@ -1,5 +1,12 @@
 # NetworkDynamics Release Notes
 
+## v0.10.2 Changelog
+- [#299](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/299) enhance metadata system with pattern matching and utility functions:
+  - Add String/Regex pattern matching for all metadata functions (`has_metadata`, `get_metadata`, `set_metadata!`, etc.)
+  - Add `strip_*!` functions to remove all metadata of a specific type from components
+  - Add `free_u()` and `free_p()` functions to identify variables/parameters without default values
+  - Support removing metadata by passing `nothing` or `missing` to `set_*!` functions
+
 ## v0.10.1 Changelog
 - [#294](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/294) add linear stability analysis functions: `isfixpoint`, `jacobian_eigenvals`, and `is_linear_stable` with support for both ODE and DAE systems
 - [#283](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/283) add automatic sparsity detection using `get_jac_prototype` and `set_jac_prototype!`
