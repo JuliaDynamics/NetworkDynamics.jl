@@ -101,6 +101,7 @@ export has_initformula, get_initformulas, set_initformula!, add_initformula!, de
 export has_position, get_position, set_position!
 export has_marker, get_marker, set_marker!
 export get_defaults_dict, get_guesses_dict, get_bounds_dict, get_inits_dict
+export free_p, free_u
 include("metadata.jl")
 
 export isfixpoint, is_linear_stable, jacobian_eigenvals

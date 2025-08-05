@@ -1082,3 +1082,39 @@ end
 
 function describe_vertices end
 function describe_edges end
+
+"""
+    free_p(cf::ComponentModel)
+    free_p(nw::Network)
+
+Returns the "free" parameters (parameters without default values) for the given system.
+
+# Returns
+- Vector of parameter symbols that do not have default values set
+
+See also: [`free_u`](@ref), [`has_default`](@ref), [`set_default!`](@ref)
+"""
+function free_p(cf::NetworkDynamics.ComponentModel)
+    return filter(p -> !NetworkDynamics.has_default(cf, p), NetworkDynamics.psym(cf))
+end
+function free_p(nw::Network)
+    setdiff(NetworkDynamics.SII.parameter_symbols(nw), keys(NetworkDynamics.SII.default_values(nw)))
+end
+
+"""
+    free_u(nw::Network)
+    free_u(cf::ComponentModel)
+
+Returns the "free" variables/states (variables without default values) for the given system.
+
+# Returns
+- Vector of variable/state symbols that do not have default values set
+
+See also: [`free_p`](@ref), [`has_default`](@ref), [`set_default!`](@ref)
+"""
+function free_u(nw::Network)
+    setdiff(NetworkDynamics.SII.variable_symbols(nw), keys(NetworkDynamics.SII.default_values(nw)))
+end
+function free_u(cf::NetworkDynamics.ComponentModel)
+    return filter(u -> !NetworkDynamics.has_default(cf, u), NetworkDynamics.sym(cf))
+end
