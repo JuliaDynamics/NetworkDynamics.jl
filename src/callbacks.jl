@@ -502,7 +502,7 @@ function _batch_condition(dcw::DiscreteCallbackWrapper)
     (u, t, integrator) -> begin
         us = PreallocationTools.get_tmp(ucache, u)
         obsf(u, integrator.p, t, us) # fills us inplace
-        _u = SymbolicView(u, dcw.callback.condition.sym)
+        _u = SymbolicView(us, dcw.callback.condition.sym)
         pv = view(integrator.p, pidxs)
         _p = SymbolicView(pv, dcw.callback.condition.psym)
         dcw.callback.condition.f(_u, _p, t)
