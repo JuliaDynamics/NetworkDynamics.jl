@@ -23,7 +23,7 @@ struct VIndex{C,S} <: SymbolicStateIndex{C,S}
     compidx::C
     subidx::S
 end
-VIndex(ci::Union{Symbol,Int}) = VIndex(ci, nothing)
+VIndex(ci) = VIndex(ci, nothing)
 """
     EIndex{C,S} <: SymbolicStateIndex{C,S}
     idx = EIndex(comp, sub)
@@ -50,7 +50,7 @@ struct EIndex{C,S} <: SymbolicStateIndex{C,S}
     compidx::C
     subidx::S
 end
-EIndex(ci::Union{Symbol,Int}) = EIndex(ci, nothing)
+EIndex(ci) = EIndex(ci, nothing)
 """
     VPIndex{C,S} <: SymbolicStateIndex{C,S}
     idx = VPIndex(comp, sub)
