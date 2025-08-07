@@ -256,8 +256,12 @@ function wrap_component_callbacks(nw)
         batchcbs = callbacks[typeidx]
         if first(batchcbs) isa Union{ContinousComponentCallback, VectorContinousComponentCallback}
             cb = ContinousCallbackWrapper(nw, batchcomps, batchcbs)
-        elseif only(batchcbs) isa Union{DiscreteComponentCallback, PresetTimeComponentCallback}
-            cb = DiscreteCallbackWrapper(nw, only(batchcomps), only(batchcbs))
+        elseif first(batchcbs) isa DiscreteComponentCallback
+            cb = DiscreteCallbackWrapper(nw, batchcomps, batchcbs)
+        elseif first(batchcbs) isa PresetTimeComponentCallback
+            # PresetTimeCallbacks cannot be batched - must be single component
+            @assert length(batchcbs) == 1 "PresetTimeComponentCallback cannot be batched"
+            cb = PresetTimeCallbackWrapper(nw, only(batchcomps), only(batchcbs))
         else
             error("Unknown callback type, should never be reached. Please report this issue.")
         end
@@ -277,6 +281,11 @@ function _batchequal(a::VectorContinousComponentCallback, b::VectorContinousComp
     a.len == b.len                       || return false
     return true
 end
+function _batchequal(a::DiscreteComponentCallback, b::DiscreteComponentCallback)
+    _batchequal(a.condition, b.condition) || return false
+    _batchequal(a.kwargs, b.kwargs)       || return false
+    return true
+end
 function _batchequal(a::T, b::T) where {T <: Union{ComponentCondition, ComponentAffect}}
     typeof(a) == typeof(b)
 end
@@ -293,6 +302,35 @@ end
 # and a component index. It is used for bookkeeping to know to which component
 # each callback belongs to
 abstract type CallbackWrapper end
+
+# Generic functions for all CallbackWrappers with components and callbacks fields
+Base.length(cw::CallbackWrapper) = length(cw.callbacks)
+cbtype(cw::CallbackWrapper) = eltype(cw.callbacks)
+
+condition_dim(cw::CallbackWrapper)  = first(cw.callbacks).condition.sym  |> length
+condition_pdim(cw::CallbackWrapper) = first(cw.callbacks).condition.psym |> length
+affect_dim(cw::CallbackWrapper, i)  = cw.callbacks[i].affect.sym  |> length
+affect_pdim(cw::CallbackWrapper, i) = cw.callbacks[i].affect.psym |> length
+
+condition_urange(cw::CallbackWrapper, i) = (1 + (i-1)*condition_dim(cw))  : i*condition_dim(cw)
+condition_prange(cw::CallbackWrapper, i) = (1 + (i-1)*condition_pdim(cw)) : i*condition_pdim(cw)
+affect_urange(cw::CallbackWrapper, i) = (1 + (i-1)*affect_dim(cw,i) ) : i*affect_dim(cw,i)
+affect_prange(cw::CallbackWrapper, i) = (1 + (i-1)*affect_pdim(cw,i)) : i*affect_pdim(cw,i)
+
+function collect_c_or_a_indices(cw::CallbackWrapper, c_or_a, u_or_p)
+    sidxs = SymbolicIndex[]
+    for (component, cb) in zip(cw.components, cw.callbacks)
+        syms = getproperty(getproperty(cb, c_or_a), u_or_p)
+        symidxtype = if component isa VIndex
+            u_or_p == :sym ? VIndex : VPIndex
+        else
+            u_or_p ==:sym ? EIndex : EPIndex
+        end
+        sidx = collect(symidxtype(component.compidx, syms))
+        append!(sidxs, sidx)
+    end
+    sidxs
+end
 
 ####
 #### wrapping of continous callbacks
@@ -316,38 +354,11 @@ function ContinousCallbackWrapper(nw, components, callbacks)
     ContinousCallbackWrapper(nw, components, callbacks, sublen, condition)
 end
 
-Base.length(ccw::ContinousCallbackWrapper) = length(ccw.callbacks)
-cbtype(ccw::ContinousCallbackWrapper{T}) where {T} = T
+# Continuous-specific functions (for vector callbacks)
+condition_outrange(ccw::ContinousCallbackWrapper, i) = (1 + (i-1)*ccw.sublen) : i*ccw.sublen
 
-condition_dim(ccw)  = first(ccw.callbacks).condition.sym  |> length
-condition_pdim(ccw) = first(ccw.callbacks).condition.psym |> length
-affect_dim(ccw,i)  = ccw.callbacks[i].affect.sym  |> length
-affect_pdim(ccw,i) = ccw.callbacks[i].affect.psym |> length
-
-condition_urange(ccw, i) = (1 + (i-1)*condition_dim(ccw))  : i*condition_dim(ccw)
-condition_prange(ccw, i) = (1 + (i-1)*condition_pdim(ccw)) : i*condition_pdim(ccw)
-affect_urange(ccw, i) = (1 + (i-1)*affect_dim(ccw,i) ) : i*affect_dim(ccw,i)
-affect_prange(ccw, i) = (1 + (i-1)*affect_pdim(ccw,i)) : i*affect_pdim(ccw,i)
-
-condition_outrange(ccw, i) = (1 + (i-1)*ccw.sublen) : i*ccw.sublen
-
-cbidx_from_outidx(ccw, outidx) = div(outidx-1, ccw.sublen) + 1
-subidx_from_outidx(ccw, outidx) = mod(outidx, 1:ccw.sublen)
-
-function collect_c_or_a_indices(ccw::ContinousCallbackWrapper, c_or_a, u_or_p)
-    sidxs = SymbolicIndex[]
-    for (component, cb) in zip(ccw.components, ccw.callbacks)
-        syms = getproperty(getproperty(cb, c_or_a), u_or_p)
-        symidxtype = if component isa VIndex
-            u_or_p == :sym ? VIndex : VPIndex
-        else
-            u_or_p ==:sym ? EIndex : EPIndex
-        end
-        sidx = collect(symidxtype(component.compidx, syms))
-        append!(sidxs, sidx)
-    end
-    sidxs
-end
+cbidx_from_outidx(ccw::ContinousCallbackWrapper, outidx) = div(outidx-1, ccw.sublen) + 1
+subidx_from_outidx(ccw::ContinousCallbackWrapper, outidx) = mod(outidx, 1:ccw.sublen)
 
 # generate VectorContinuousCallback from a ContinousCallbackWrapper
 function to_callback(ccw::ContinousCallbackWrapper)
@@ -457,37 +468,37 @@ end
 ####
 #### wrapping of discrete callbacks
 ####
-struct DiscreteCallbackWrapper{ST,T} <: CallbackWrapper
+struct DiscreteCallbackWrapper{ST,T,C} <: CallbackWrapper
     nw::Network
-    component::ST
-    callback::T
-    function DiscreteCallbackWrapper(nw, component, callback)
-        @assert nw isa Network
-        @assert component isa SymbolicIndex
-        @assert callback isa Union{DiscreteComponentCallback, PresetTimeComponentCallback}
-        new{typeof(component),typeof(callback)}(nw, component, callback)
+    components::Vector{ST}  # Changed to support batching
+    callbacks::Vector{T}    # Changed to support batching
+    condition::C            # Store condition function to avoid dynamic dispatch
+end
+function DiscreteCallbackWrapper(nw, components, callbacks)
+    @assert nw isa Network
+    @assert all(c -> c isa SymbolicIndex, components)
+    @assert all(cb -> cb isa DiscreteComponentCallback, callbacks)  # Only DiscreteComponentCallback
+    if !isconcretetype(eltype(components))
+        components = [c for c in components]
     end
+    if !isconcretetype(eltype(callbacks))
+        callbacks = [cb for cb in callbacks]
+    end
+    # Extract condition function - all callbacks in batch have identical conditions
+    condition = first(callbacks).condition.f
+    DiscreteCallbackWrapper{eltype(components),eltype(callbacks),typeof(condition)}(nw, components, callbacks, condition)
 end
 
 # generate a DiscreteCallback from a DiscreteCallbackWrapper
 function to_callback(dcw::DiscreteCallbackWrapper)
-    kwargs = dcw.callback.kwargs
+    kwargs = first(dcw.callbacks).kwargs
     cond = _batch_condition(dcw)
     affect = _batch_affect(dcw)
     DiscreteCallback(cond, affect; kwargs...)
 end
-# generate a PresetTimeCallback from a DiscreteCallbackWrapper
-function to_callback(dcw::DiscreteCallbackWrapper{<:Any,<:PresetTimeComponentCallback})
-    kwargs = dcw.callback.kwargs
-    affect = _batch_affect(dcw)
-    ts = dcw.callback.ts
-    DiffEqCallbacks.PresetTimeCallback(ts, affect; kwargs...)
-end
 function _batch_condition(dcw::DiscreteCallbackWrapper)
-    uidxtype = dcw.component isa EIndex ? EIndex : VIndex
-    pidxtype = dcw.component isa EIndex ? EPIndex : VPIndex
-    usymidxs = uidxtype(dcw.component.compidx, dcw.callback.condition.sym)
-    psymidxs = pidxtype(dcw.component.compidx, dcw.callback.condition.psym)
+    usymidxs = collect_c_or_a_indices(dcw, :condition, :sym)
+    psymidxs = collect_c_or_a_indices(dcw, :condition, :psym)
     ucache = DiffCache(zeros(length(usymidxs)), 12)
 
     obsf = SII.observed(dcw.nw, usymidxs)
@@ -502,37 +513,154 @@ function _batch_condition(dcw::DiscreteCallbackWrapper)
     (u, t, integrator) -> begin
         us = PreallocationTools.get_tmp(ucache, u)
         obsf(u, integrator.p, t, us) # fills us inplace
-        _u = SymbolicView(us, dcw.callback.condition.sym)
-        pv = view(integrator.p, pidxs)
-        _p = SymbolicView(pv, dcw.callback.condition.psym)
-        dcw.callback.condition.f(_u, _p, t)
+
+        # OR logic: return true if ANY component condition is true
+        for i in 1:length(dcw)
+            # symbolic view into u
+            uv = view(us, condition_urange(dcw, i))
+            _u = SymbolicView(uv, dcw.callbacks[i].condition.sym)
+
+            # symbolic view into p
+            pidxsv = view(pidxs, condition_prange(dcw, i))
+            pv = view(integrator.p, pidxsv)
+            _p = SymbolicView(pv, dcw.callbacks[i].condition.psym)
+
+            # If any condition is true, trigger the callback
+            if dcw.condition(_u, _p, t)
+                return true
+            end
+        end
+        return false
     end
 end
 function _batch_affect(dcw::DiscreteCallbackWrapper)
-    uidxtype = dcw.component isa EIndex ? EIndex : VIndex
-    pidxtype = dcw.component isa EIndex ? EPIndex : VPIndex
-    usymidxs = uidxtype(dcw.component.compidx, dcw.callback.affect.sym)
-    psymidxs = pidxtype(dcw.component.compidx, dcw.callback.affect.psym)
+    # Setup for condition re-evaluation
+    cusymidxs = collect_c_or_a_indices(dcw, :condition, :sym)
+    cpsymidxs = collect_c_or_a_indices(dcw, :condition, :psym)
+    cucache = DiffCache(zeros(length(cusymidxs)), 12)
+    cobsf = SII.observed(dcw.nw, cusymidxs)
+    cpidxs = SII.parameter_index.(Ref(dcw.nw), cpsymidxs)
 
-    uidxs = SII.variable_index.(Ref(dcw.nw), usymidxs)
-    pidxs = SII.parameter_index.(Ref(dcw.nw), psymidxs)
+    # Setup for affect execution
+    ausymidxs = collect_c_or_a_indices(dcw, :affect, :sym)
+    apsymidxs = collect_c_or_a_indices(dcw, :affect, :psym)
+
+    auidxs = SII.variable_index.(Ref(dcw.nw), ausymidxs)
+    apidxs = SII.parameter_index.(Ref(dcw.nw), apsymidxs)
+
+    if any(isnothing, auidxs) || any(isnothing, apidxs)
+        missing_u = []
+        if any(isnothing, auidxs)
+            nidxs = findall(isnothing, auidxs)
+            append!(missing_u, ausymidxs[nidxs])
+        end
+        missing_p = []
+        if any(isnothing, apidxs)
+            nidxs = findall(isnothing, apidxs)
+            append!(missing_p, apsymidxs[nidxs])
+        end
+        throw(ArgumentError(
+            "Cannot build callback as it contains refrences to undefined symbols:\n"*
+            (isempty(missing_u) ? "" : "Missing state symbols: $(missing_u)\n")*
+            (isempty(missing_p) ? "" : "Missing param symbols: $(missing_p)\n")
+        ))
+    end
 
     (integrator) -> begin
+        # Re-evaluate all conditions to determine which affects to execute
+        cus = PreallocationTools.get_tmp(cucache, integrator.u)
+        cobsf(integrator.u, integrator.p, integrator.t, cus)
+
+        any_uchanged = false
+        any_pchanged = false
+
+        for i in 1:length(dcw)
+            # Re-evaluate condition for component i
+            cuv = view(cus, condition_urange(dcw, i))
+            c_u = SymbolicView(cuv, dcw.callbacks[i].condition.sym)
+            cpidxsv = view(cpidxs, condition_prange(dcw, i))
+            cpv = view(integrator.p, cpidxsv)
+            c_p = SymbolicView(cpv, dcw.callbacks[i].condition.psym)
+
+            # Only execute affect if condition is true
+            if dcw.condition(c_u, c_p, integrator.t)
+                # Execute affect for component i
+                auidxsv = view(auidxs, affect_urange(dcw, i))
+                auv = view(integrator.u, auidxsv)
+                a_u = SymbolicView(auv, dcw.callbacks[i].affect.sym)
+
+                apidxsv = view(apidxs, affect_prange(dcw, i))
+                apv = view(integrator.p, apidxsv)
+                a_p = SymbolicView(apv, dcw.callbacks[i].affect.psym)
+
+                ctx = get_ctx(integrator, dcw.components[i])
+
+                uhash = hash(auv)
+                phash = hash(apv)
+                dcw.callbacks[i].affect.f(a_u, a_p, ctx)
+                pchanged = hash(apv) != phash
+                uchanged = hash(auv) != uhash
+
+                any_uchanged = any_uchanged || uchanged
+                any_pchanged = any_pchanged || pchanged
+            end
+        end
+
+        (any_uchanged || any_pchanged) && SciMLBase.auto_dt_reset!(integrator)
+        any_pchanged && save_parameters!(integrator)
+    end
+end
+
+####
+#### wrapping of preset time callbacks
+####
+struct PresetTimeCallbackWrapper{ST,T}
+    nw::Network
+    component::ST   # Single component - PresetTime callbacks cannot be batched
+    callback::T     # Single callback - PresetTime callbacks cannot be batched
+    function PresetTimeCallbackWrapper(nw, component::SymbolicIndex, callback::PresetTimeComponentCallback)
+        @assert nw isa Network
+        @assert component isa SymbolicIndex
+        @assert callback isa PresetTimeComponentCallback
+        # PresetTimeCallbacks cannot be batched, so always single component/callback
+        new{typeof(component), typeof(callback)}(nw, component, callback)
+    end
+end
+
+# generate a PresetTimeCallback from a PresetTimeCallbackWrapper
+function to_callback(ptcw::PresetTimeCallbackWrapper)
+    callback = ptcw.callback
+    component = ptcw.component
+    kwargs = callback.kwargs
+    ts = callback.ts
+
+    # Create affect function for the single component
+    uidxtype = component isa EIndex ? EIndex : VIndex
+    pidxtype = component isa EIndex ? EPIndex : VPIndex
+    usymidxs = uidxtype(component.compidx, callback.affect.sym)
+    psymidxs = pidxtype(component.compidx, callback.affect.psym)
+
+    uidxs = SII.variable_index.(Ref(ptcw.nw), usymidxs)
+    pidxs = SII.parameter_index.(Ref(ptcw.nw), psymidxs)
+
+    affect = (integrator) -> begin
         uv = view(integrator.u, uidxs)
-        _u = SymbolicView(uv, dcw.callback.affect.sym)
+        _u = SymbolicView(uv, callback.affect.sym)
         pv = view(integrator.p, pidxs)
-        _p = SymbolicView(pv, dcw.callback.affect.psym)
-        ctx = get_ctx(integrator, dcw.component)
+        _p = SymbolicView(pv, callback.affect.psym)
+        ctx = get_ctx(integrator, component)
 
         uhash = hash(uv)
         phash = hash(pv)
-        dcw.callback.affect.f(_u, _p, ctx)
+        callback.affect.f(_u, _p, ctx)
         pchanged = hash(pv) != phash
         uchanged = hash(uv) != uhash
 
         (pchanged || uchanged) && SciMLBase.auto_dt_reset!(integrator)
         pchanged && save_parameters!(integrator)
     end
+
+    DiffEqCallbacks.PresetTimeCallback(ts, affect; kwargs...)
 end
 
 
