@@ -10,7 +10,7 @@ On a Network level, you can automatically create network wide `CallbackSet`s usi
 [`get_callbacks`](@ref).
 
 See
-[`ContinousComponentCallback`](@ref) and [`VectorContinousComponentCallback`](@ref) for concrete
+[`ContinuousComponentCallback`](@ref) and [`VectorContinuousComponentCallback`](@ref) for concrete
 implementations of this abstract type.
 """
 abstract type ComponentCallback end
@@ -60,13 +60,13 @@ end
 
 Creates a callback condition for a [`ComponentCallback`].
 - `f`: The affect function. Must be a function of the form `f(u, p, [event_idx], ctx)` where `event_idx`
-  is only available in [`VectorContinousComponentCallback`](@ref).
+  is only available in [`VectorContinuousComponentCallback`](@ref).
   - Arguments of `f`
     - `u`: The current (mutable) value of the selected `sym` states, provided as a [`SymbolicView`](@ref) object.
     - `p`: The current (mutable) value of the selected `psym` parameters.
     - `event_idx`: The current event index, i.e. which `out` element triggered in case of [`VectorContinuousComponentCallback`](@ref).
     - `ctx::NamedTuple` a named tuple with context variables.
-       - `ctx.model`: a referenc to the ocmponent model
+       - `ctx.model`: a reference to the component model
        - `ctx.vidx`/`ctx.eidx`: The index of the vertex/edge model.
        - `ctx.src`/`ctx.dst`: src and dst indices (only for edge models).
        - `ctx.integrator`: The integrator object. Use [`extract_nw`](@ref) to obtain the network.
@@ -145,7 +145,7 @@ function VectorContinuousComponentCallback(condition, affect, len; kwargs...)
     if haskey(kwargs, :affect_neg!)
         throw(ArgumentError("affect_neg! not supported yet. Please raise issue."))
     end
-    VectorContinousComponentCallback(condition, affect, len, NamedTuple(kwargs))
+    VectorContinuousComponentCallback(condition, affect, len, NamedTuple(kwargs))
 end
 
 """
@@ -254,8 +254,8 @@ function wrap_component_callbacks(nw)
     for typeidx in idx_per_type
         batchcomps = components[typeidx]
         batchcbs = callbacks[typeidx]
-        if first(batchcbs) isa Union{ContinousComponentCallback, VectorContinousComponentCallback}
-            cb = ContinousCallbackWrapper(nw, batchcomps, batchcbs)
+        if first(batchcbs) isa Union{ContinuousComponentCallback, VectorContinuousComponentCallback}
+            cb = ContinuousCallbackWrapper(nw, batchcomps, batchcbs)
         elseif first(batchcbs) isa DiscreteComponentCallback
             cb = DiscreteCallbackWrapper(nw, batchcomps, batchcbs)
         elseif first(batchcbs) isa PresetTimeComponentCallback
@@ -270,12 +270,12 @@ function wrap_component_callbacks(nw)
     return batches
 end
 _batchequal(a, b) = false
-function _batchequal(a::ContinousComponentCallback, b::ContinousComponentCallback)
+function _batchequal(a::ContinuousComponentCallback, b::ContinuousComponentCallback)
     _batchequal(a.condition, b.condition) || return false
     _batchequal(a.kwargs, b.kwargs)       || return false
     return true
 end
-function _batchequal(a::VectorContinousComponentCallback, b::VectorContinousComponentCallback)
+function _batchequal(a::VectorContinuousComponentCallback, b::VectorContinuousComponentCallback)
     _batchequal(a.condition, b.condition) || return false
     _batchequal(a.kwargs, b.kwargs)       || return false
     a.len == b.len                       || return false
@@ -335,40 +335,40 @@ end
 ####
 #### wrapping of continuous callbacks
 ####
-struct ContinousCallbackWrapper{T<:ComponentCallback,C,ST<:SymbolicIndex} <: CallbackWrapper
+struct ContinuousCallbackWrapper{T<:ComponentCallback,C,ST<:SymbolicIndex} <: CallbackWrapper
     nw::Network
     components::Vector{ST}
     callbacks::Vector{T}
     sublen::Int # length of each callback
     condition::C
 end
-function ContinousCallbackWrapper(nw, components, callbacks)
+function ContinuousCallbackWrapper(nw, components, callbacks)
     if !isconcretetype(eltype(components))
         components = [c for c in components]
     end
     if !isconcretetype(eltype(callbacks))
         callbacks = [cb for cb in callbacks]
     end
-    sublen = eltype(callbacks) <: ContinousComponentCallback ? 1 : first(callbacks).len
+    sublen = eltype(callbacks) <: ContinuousComponentCallback ? 1 : first(callbacks).len
     condition = first(callbacks).condition.f
-    ContinousCallbackWrapper(nw, components, callbacks, sublen, condition)
+    ContinuousCallbackWrapper(nw, components, callbacks, sublen, condition)
 end
 
 # Continuous-specific functions (for vector callbacks)
-condition_outrange(ccw::ContinousCallbackWrapper, i) = (1 + (i-1)*ccw.sublen) : i*ccw.sublen
+condition_outrange(ccw::ContinuousCallbackWrapper, i) = (1 + (i-1)*ccw.sublen) : i*ccw.sublen
 
-cbidx_from_outidx(ccw::ContinousCallbackWrapper, outidx) = div(outidx-1, ccw.sublen) + 1
-subidx_from_outidx(ccw::ContinousCallbackWrapper, outidx) = mod(outidx, 1:ccw.sublen)
+cbidx_from_outidx(ccw::ContinuousCallbackWrapper, outidx) = div(outidx-1, ccw.sublen) + 1
+subidx_from_outidx(ccw::ContinuousCallbackWrapper, outidx) = mod(outidx, 1:ccw.sublen)
 
-# generate VectorContinuousCallback from a ContinousCallbackWrapper
-function to_callback(ccw::ContinousCallbackWrapper)
+# generate VectorContinuousCallback from a ContinuousCallbackWrapper
+function to_callback(ccw::ContinuousCallbackWrapper)
     kwargs = first(ccw.callbacks).kwargs
     cond = _batch_condition(ccw)
     affect = _batch_affect(ccw)
     len = ccw.sublen * length(ccw.callbacks)
     VectorContinuousCallback(cond, affect, len; kwargs...)
 end
-function _batch_condition(ccw::ContinousCallbackWrapper)
+function _batch_condition(ccw::ContinuousCallbackWrapper)
     usymidxs = collect_c_or_a_indices(ccw, :condition, :sym)
     psymidxs = collect_c_or_a_indices(ccw, :condition, :psym)
     ucache = DiffCache(zeros(length(usymidxs)), 12)
@@ -396,10 +396,10 @@ function _batch_condition(ccw::ContinousCallbackWrapper)
             pv = view(integrator.p, pidxsv)
             _p = SymbolicView(pv, ccw.callbacks[i].condition.psym)
 
-            if cbtype(ccw) <: ContinousComponentCallback
+            if cbtype(ccw) <: ContinuousComponentCallback
                 oidx = only(condition_outrange(ccw, i))
                 out[oidx] = ccw.condition(_u, _p, t)
-            elseif cbtype(ccw) <: VectorContinousComponentCallback
+            elseif cbtype(ccw) <: VectorContinuousComponentCallback
                 @views _out = out[condition_outrange(ccw, i)]
                 ccw.condition(_out, _u, _p, t)
             else
@@ -409,7 +409,7 @@ function _batch_condition(ccw::ContinousCallbackWrapper)
         nothing
     end
 end
-function _batch_affect(ccw::ContinousCallbackWrapper)
+function _batch_affect(ccw::ContinuousCallbackWrapper)
     usymidxs = collect_c_or_a_indices(ccw, :affect, :sym)
     psymidxs = collect_c_or_a_indices(ccw, :affect, :psym)
 
@@ -449,9 +449,9 @@ function _batch_affect(ccw::ContinousCallbackWrapper)
 
         uhash = hash(uv)
         phash = hash(pv)
-        if cbtype(ccw) <: ContinousComponentCallback
+        if cbtype(ccw) <: ContinuousComponentCallback
             ccw.callbacks[i].affect.f(_u, _p, ctx)
-        elseif cbtype(ccw) <: VectorContinousComponentCallback
+        elseif cbtype(ccw) <: VectorContinuousComponentCallback
             num = subidx_from_outidx(ccw, outidx)
             ccw.callbacks[i].affect.f(_u, _p, num, ctx)
         else
@@ -710,3 +710,9 @@ function assert_cb_compat(comp::ComponentModel, cb)
     end
     cb
 end
+
+####
+#### Backward compatibility aliases for old misspellings (deprecated)
+####
+const ContinousComponentCallback = ContinuousComponentCallback
+const VectorContinousComponentCallback = VectorContinuousComponentCallback

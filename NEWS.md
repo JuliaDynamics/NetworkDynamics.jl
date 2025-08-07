@@ -6,6 +6,7 @@
   - Allow `EIndex(1=>2)` as standalone edge index with relaxed type constraints
   - Optimize CallbackSet construction to prevent performance bottlenecks
   - Add important documentation warning about parameter array copying in callbacks
+  - **Fixed spelling**: `ContinousComponentCallback` → `ContinuousComponentCallback` and `VectorContinousComponentCallback` → `VectorContinuousComponentCallback` (old names maintained as deprecated aliases for backward compatibility)
 
 ## v0.10.2 Changelog
 - [#299](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/299) enhance metadata system with pattern matching and utility functions:

@@ -64,7 +64,7 @@ SII.all_variable_symbols(nw)
 @test filter(s->SII.is_parameter(nw,s), SII.all_symbols(nw)) == SII.parameter_symbols(nw)
 @test filter(s->SII.is_variable(nw,s), SII.all_symbols(nw)) == SII.variable_symbols(nw)
 
-# sol[obs] does not work, because obs has two timeseries: Continous and Discrete
+# sol[obs] does not work, because obs has two timeseries: Continuous and Discrete
 # it is unclear, whether it should return onlye discre values or for all sol.t
 @test_broken sol[EIndex(1,:P)]
 @test_broken sol[EIndex(2,:P)]

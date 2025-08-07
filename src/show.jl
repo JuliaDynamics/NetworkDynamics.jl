@@ -443,7 +443,7 @@ function Base.show(io::IO, ::MIME"text/plain", @nospecialize(cb::ComponentCallba
     print(io, basename)
     print(io, "(")
     print(io, shortrepr(cb))
-    if cb isa VectorContinousComponentCallback
+    if cb isa VectorContinuousComponentCallback
         print(io, ", len=", cb.len)
     end
     print(io, ")")

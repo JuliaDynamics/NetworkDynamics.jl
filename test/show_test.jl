@@ -44,7 +44,7 @@ condition = ComponentCondition([:P, :₋P, :srcθ], [:limit, :K]) do u, p, t
 end
 cb1 = PresetTimeComponentCallback(1.0, affect)
 repr("text/plain", cb1)
-cb2 = ContinousComponentCallback(condition, affect)
+cb2 = ContinuousComponentCallback(condition, affect)
 repr("text/plain", cb2)
 cb3 = DiscreteComponentCallback(condition, affect)
 repr("text/plain", cb3)

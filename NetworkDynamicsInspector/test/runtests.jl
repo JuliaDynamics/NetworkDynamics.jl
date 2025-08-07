@@ -44,7 +44,7 @@ function get_sol(;limit=1.0)
         @info "Trip line $(ctx.eidx) between $(ctx.src) and $(ctx.dst) at t=$(ctx.t)"
         p[:active] = 0
     end
-    cb = ContinousComponentCallback(cond, affect)
+    cb = ContinuousComponentCallback(cond, affect)
     set_callback!.(ls, Ref(cb))
 
     tripfirst = PresetTimeComponentCallback(1.0, affect) # reuse the same affect
