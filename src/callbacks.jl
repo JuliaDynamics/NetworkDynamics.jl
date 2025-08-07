@@ -6,12 +6,12 @@ bundles a [`ComponentCondition`](@ref) as well as a [`ComponentAffect`](@ref)
 which can be then tied to a component model using [`add_callback!`](@ref) or
 [`set_callback!`](@ref).
 
-On a Network level, you can automaticially create network wide `CallbackSet`s using
+On a Network level, you can automatically create network wide `CallbackSet`s using
 [`get_callbacks`](@ref).
 
 See
 [`ContinousComponentCallback`](@ref) and [`VectorContinousComponentCallback`](@ref) for concrete
-implemenations of this abstract type.
+implementations of this abstract type.
 """
 abstract type ComponentCallback end
 
@@ -20,17 +20,17 @@ abstract type ComponentCallback end
 
 Creates a callback condition for a [`ComponentCallback`].
 - `f`: The condition function. Must be a function of the form `out=f(u, p, t)`
-  when used for [`ContinousComponentCallback`](@ref) or
+  when used for [`ContinuousComponentCallback`](@ref) or
   [`DiscreteComponentCallback`](@ref) and `f!(out, u, p, t)` when used for
-  [`VectorContinousComponentCallback`](@ref).
+  [`VectorContinuousComponentCallback`](@ref).
   - Arguments of `f`
-    - `u`: The current value of the selecte `sym` states, provided as a [`SymbolicView`](@ref) object.
+    - `u`: The current value of the selected `sym` states, provided as a [`SymbolicView`](@ref) object.
     - `p`: The current value of the selected `psym` parameters.
     - `t`: The current simulation time.
 - `sym`: A vector or tuple of symbols, which represent **states** (including
   inputs, outputs, observed) of the component model. Determines, which states will
-  be available thorugh parameter `u` in the callback condition function `f`.
-- `psym`: A vector or tuple of symbols, which represetn **parameters** of the component mode.
+  be available through parameter `u` in the callback condition function `f`.
+- `psym`: A vector or tuple of symbols, which represent **parameters** of the component mode.
   Determines, which parameters will be available in the condition function `f`
 
 # Example
@@ -38,7 +38,7 @@ Consider a component model with states `[:u1, :u2]`, inputs `[:i]`, outputs
 `[:o]` and parameters `[:p1, :p2]`.
 
     ComponentCondition([:u1, :o], [:p1]) do u, p, t
-        # access states symbolicially or via int index
+        # access states symbolically or via int index
         u[:u1] == u[1]
         u[:o] == u[2]
         p[:p1] == p[1]
@@ -63,8 +63,8 @@ Creates a callback condition for a [`ComponentCallback`].
   is only available in [`VectorContinousComponentCallback`](@ref).
   - Arguments of `f`
     - `u`: The current (mutable) value of the selected `sym` states, provided as a [`SymbolicView`](@ref) object.
-    - `p`: The current (mutalbe) value of the selected `psym` parameters.
-    - `event_idx`: The current event index, i.e. which `out` element triggerd in case of [`VectorContinousComponentCallback`](@ref).
+    - `p`: The current (mutable) value of the selected `psym` parameters.
+    - `event_idx`: The current event index, i.e. which `out` element triggered in case of [`VectorContinuousComponentCallback`](@ref).
     - `ctx::NamedTuple` a named tuple with context variables.
        - `ctx.model`: a referenc to the ocmponent model
        - `ctx.vidx`/`ctx.eidx`: The index of the vertex/edge model.
@@ -73,8 +73,8 @@ Creates a callback condition for a [`ComponentCallback`].
        - `ctx.t=ctx.integrator.t`: The current simulation time.
 - `sym`: A vector or tuple of symbols, which represent **states** (**excluding**
   inputs, outputs, observed) of the component model. Determines, which states will
-  be available thorugh parameter `u` in the callback condition function `f`.
-- `psym`: A vector or tuple of symbols, which represetn **parameters** of the component mode.
+  be available through parameter `u` in the callback condition function `f`.
+- `psym`: A vector or tuple of symbols, which represent **parameters** of the component mode.
   Determines, which parameters will be available in the condition function `f`
 
 # Example
@@ -97,10 +97,10 @@ struct ComponentAffect{A,DIM,PDIM}
 end
 
 """
-    ContinousComponentCallback(condition, affect; kwargs...)
+    ContinuousComponentCallback(condition, affect; kwargs...)
 
-Connect a [`ComponentCondition`](@ref) and a [`ComponentAffect`)[@ref] to a
-continous callback which can be attached to a component model using
+Connect a [`ComponentCondition`](@ref) and a [`ComponentAffect`](@ref) to a
+continuous callback which can be attached to a component model using
 [`add_callback!`](@ref) or [`set_callback!`](@ref).
 
 The `kwargs` will be forwarded to the `VectorContinuousCallback` when the component based
@@ -108,25 +108,25 @@ callbacks are collected for the whole network using `get_callbacks`.
 [`DiffEq.jl docs`](https://docs.sciml.ai/DiffEqDocs/stable/features/callback_functions/)
 for available options.
 """
-struct ContinousComponentCallback{C,A,CDIM,CPDIM,ADIM,APDIM} <: ComponentCallback
+struct ContinuousComponentCallback{C,A,CDIM,CPDIM,ADIM,APDIM} <: ComponentCallback
     condition::ComponentCondition{C,CDIM,CPDIM}
     affect::ComponentAffect{A,ADIM,APDIM}
     kwargs::NamedTuple
 end
-function ContinousComponentCallback(condition, affect; kwargs...)
+function ContinuousComponentCallback(condition, affect; kwargs...)
     if haskey(kwargs, :affect_neg!)
         throw(ArgumentError("affect_neg! not supported yet. Please raise issue."))
     end
-    ContinousComponentCallback(condition, affect, NamedTuple(kwargs))
+    ContinuousComponentCallback(condition, affect, NamedTuple(kwargs))
 end
 
 """
-    VectorContinousComponentCallback(condition, affect, len; kwargs...)
+    VectorContinuousComponentCallback(condition, affect, len; kwargs...)
 
-Connect a [`ComponentCondition`](@ref) and a [`ComponentAffect`)[@ref] to a
-continous callback which can be attached to a component model using
+Connect a [`ComponentCondition`](@ref) and a [`ComponentAffect`](@ref) to a
+continuous callback which can be attached to a component model using
 [`add_callback!`](@ref) or [`set_callback!`](@ref). This vector version allows
-for `condions` which have `len` output dimensions.
+for `conditions` which have `len` output dimensions.
 The `affect` will be triggered with the additional `event_idx` argument to know in which
 dimension the zerocrossing was detected.
 
@@ -135,13 +135,13 @@ callbacks are collected for the whole network using [`get_callbacks(::Network)`]
 [`DiffEq.jl docs`](https://docs.sciml.ai/DiffEqDocs/stable/features/callback_functions/)
 for available options.
 """
-struct VectorContinousComponentCallback{C,A,CDIM,CPDIM,ADIM,APDIM} <: ComponentCallback
+struct VectorContinuousComponentCallback{C,A,CDIM,CPDIM,ADIM,APDIM} <: ComponentCallback
     condition::ComponentCondition{C,CDIM,CPDIM}
     affect::ComponentAffect{A,ADIM,APDIM}
     len::Int
     kwargs::NamedTuple
 end
-function VectorContinousComponentCallback(condition, affect, len; kwargs...)
+function VectorContinuousComponentCallback(condition, affect, len; kwargs...)
     if haskey(kwargs, :affect_neg!)
         throw(ArgumentError("affect_neg! not supported yet. Please raise issue."))
     end
@@ -151,7 +151,7 @@ end
 """
     DiscreteComponentCallback(condition, affect; kwargs...)
 
-Connect a [`ComponentCondition`](@ref) and a [`ComponentAffect`)[@ref] to a
+Connect a [`ComponentCondition`](@ref) and a [`ComponentAffect`](@ref) to a
 discrete callback which can be attached to a component model using
 [`add_callback!`](@ref) or [`set_callback!`](@ref).
 
@@ -175,7 +175,7 @@ end
 """
     PresetTimeComponentCallback(ts, affect; kwargs...)
 
-Tirgger a [`ComponentAffect`](@ref) at given timesteps `ts` in discrete
+Trigger a [`ComponentAffect`](@ref) at given timesteps `ts` in discrete
 callback, which can be attached to a component model using
 [`add_callback!`](@ref) or [`set_callback!`](@ref).
 
@@ -209,21 +209,21 @@ function get_callbacks(nw::Network)
     elseif length(cbbs) == 1
         return to_callback(only(cbbs))
     else
-        # we split in discrete and continous manually, otherwise the CallbackSet
+        # we split in discrete and continuous manually, otherwise the CallbackSet
         # construction can take forever
         discrete_cb = []
-        continous_cb = []
+        continuous_cb = []
         for batch in cbbs
             cb = to_callback(batch)
             if cb isa SciMLBase.AbstractContinuousCallback
-                push!(continous_cb, cb)
+                push!(continuous_cb, cb)
             elseif cb isa SciMLBase.AbstractDiscreteCallback
                 push!(discrete_cb, cb)
             else
                 error("Unknown callback type, should never be reached. Please report this issue.")
             end
         end
-        CallbackSet(Tuple(continous_cb), Tuple(discrete_cb));
+        CallbackSet(Tuple(continuous_cb), Tuple(discrete_cb));
     end
 end
 
@@ -333,7 +333,7 @@ function collect_c_or_a_indices(cw::CallbackWrapper, c_or_a, u_or_p)
 end
 
 ####
-#### wrapping of continous callbacks
+#### wrapping of continuous callbacks
 ####
 struct ContinousCallbackWrapper{T<:ComponentCallback,C,ST<:SymbolicIndex} <: CallbackWrapper
     nw::Network

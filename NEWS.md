@@ -1,5 +1,12 @@
 # NetworkDynamics Release Notes
 
+## v0.10.3 Changelog
+- [#301](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/301) improve callback system performance and flexibility:
+  - Add callback batching for better DiscreteComponentCallback performance 
+  - Allow `EIndex(1=>2)` as standalone edge index with relaxed type constraints
+  - Optimize CallbackSet construction to prevent performance bottlenecks
+  - Add important documentation warning about parameter array copying in callbacks
+
 ## v0.10.2 Changelog
 - [#299](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/299) enhance metadata system with pattern matching and utility functions:
   - Add String/Regex pattern matching for all metadata functions (`has_metadata`, `get_metadata`, `set_metadata!`, etc.)

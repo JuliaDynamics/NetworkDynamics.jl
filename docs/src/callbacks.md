@@ -21,7 +21,7 @@ refer to the [Cascading Failure](@ref) example.
 ## Component-based Callback functions
 In practice, events often act locally, meaning they only depend and act on a
 specific component or type of component. `NetworkDynamics.jl` provides a way of
-defining those callbacks on a component level and automaticially combine them into performant
+defining those callbacks on a component level and automatically combine them into performant
 [`VectorContinuousCallback`](@extref SciMLBase.VectorContinuousCallback) and [`DiscreteCallback`](@extref SciMLBase.DiscreteCallback) for the whole network.
 
 The main entry points are the types [`ContinousComponentCallback`](@ref),
@@ -72,10 +72,10 @@ vectoraffect = ComponentAffect([:u], [:p]) do u, p, event_idx, ctx
     end
 end
 ```
-Notably, the `syms` (here `:u`) can *exclusivly* refer to "ordinary" states, since they are now writable.
+Notably, the `syms` (here `:u`) can *exclusively* refer to "ordinary" states, since they are now writable.
 However the affect gets passed a `ctx` "context" object, which is a named tuple which holds additional context like the integrator object, the component model, the index of the component model, the current time and so on. Please refer to the [`ComponentAffect`](@ref) docstring for a detailed list.
 
-Lastly we need to define the actuall callback object using [`ContinousComponentCallback`](@ref)/[`VectorContinousComponentCallback`](@ref):
+Lastly we need to define the actual callback object using [`ContinuousComponentCallback`](@ref)/[`VectorContinuousComponentCallback`](@ref):
 ```julia
 ccb  = ContinousComponentCallback(condition, affect; kwargs...)
 vccb = VectorContinousComponentCallback(condition, affect; kwargs...)
@@ -101,14 +101,14 @@ prob = ODEProblem(nw, uflat(u0), (0,10), pflat(u0); callback=cbs)
 sol = solve(prob, ...)
 ```
 
-When combining the component based callbacks to a single callback, NetworkDynamics will check whether states and or parameters changed during the affect and automaticially call [`SciMLBase.auto_dt_reset!`](@extref) and [`save_parameters!`](@ref) if necessary.
+When combining the component based callbacks to a single callback, NetworkDynamics will check whether states and or parameters changed during the affect and automatically call [`SciMLBase.auto_dt_reset!`](@extref) and [`save_parameters!`](@ref) if necessary.
 
 
 ## Normal DiffEq Callbacks
 Besides component based callbacks, it is also possible to use "normal" DiffEq
 callbacks together with `NetworkDynamics.jl`.
 It is far more powerful but also more cumbersome compared to the component based callback functions.
-To access states and parameters of specific components, we havily rely on the [Symbolic Indexing](@ref) features.
+To access states and parameters of specific components, we heavily rely on the [Symbolic Indexing](@ref) features.
 
 ```julia
 using SymbolicIndexingInterface as SII
@@ -134,7 +134,7 @@ Please note a few important things here:
 
 ```julia
 function affect!(integrator, vidx)
-    p = NWParameter(integrator) # get symbolicially indexable parameter object
+    p = NWParameter(integrator) # get symbolically indexable parameter object
     p.v[vidx, :some_vertex_parameter] = 0 # change some parameter
     auto_dt_reset!(integrator)
     save_parameters!(integrator)
@@ -159,4 +159,4 @@ Once the `condition` and `affect!` is defined, you can use the [`SciMLBase.Conti
     To extract or plot timeseries of observed states under *time variant
     parameters* (i.e. parameters that are changed in a callback), those changes
     need to be recorded using the [`save_parameters!`](@ref) function whenever `p` is changed.
-    When using [ComponentCallback](@ref NetworkDynamics.ComponentCallback), NetworkDynamics will automaticially check for changes in `p` and save them if necessary.
+    When using [ComponentCallback](@ref NetworkDynamics.ComponentCallback), NetworkDynamics will automatically check for changes in `p` and save them if necessary.

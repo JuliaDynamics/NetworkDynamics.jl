@@ -197,8 +197,8 @@ is_linear_stable
 ### Define Callbacks
 ```@docs
 NetworkDynamics.ComponentCallback
-ContinousComponentCallback
-VectorContinousComponentCallback
+ContinuousComponentCallback
+VectorContinuousComponentCallback
 DiscreteComponentCallback
 PresetTimeComponentCallback
 ComponentCondition
