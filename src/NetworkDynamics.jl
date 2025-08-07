@@ -69,6 +69,7 @@ export variable_symbols, parameter_symbols
 include("symbolicindexing.jl")
 
 export ComponentCondition, ComponentAffect
+export ContinuousComponentCallback, VectorContinuousComponentCallback
 # Export deprecated aliases (constants defined at bottom of callbacks.jl)
 export ContinousComponentCallback, VectorContinousComponentCallback
 export DiscreteComponentCallback, PresetTimeComponentCallback
