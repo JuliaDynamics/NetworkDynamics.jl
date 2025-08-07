@@ -108,7 +108,7 @@ affect = ComponentAffect([], [:K]) do u, p, ctx
     println("Line $(ctx.eidx) tripped at t=$(ctx.integrator.t)")
     p[:K] = 0
 end
-edge_cb = ContinousComponentCallback(cond, affect)
+edge_cb = ContinuousComponentCallback(cond, affect)
 #=
 To enable the callback in simulation, we need to attach them to the individual
 edgemodels/vertexmodels.
@@ -155,14 +155,14 @@ plot(sol; idxs=eidxs(sol, :, :P))
 ## System wide Callbacks
 
 The above solution relies on the `ComponentCallback` features of
-NetworkDyanmics. The "low-level" API would be to use `VectorContinousCallback`
+NetworkDynamics. The "low-level" API would be to use `VectorContinuousCallback`
 and `PresetTimeCallback` directly to achieve the same effect, essentially doing
 manually what [`get_callbacks(::Network)`](@ref) is doing for us.
 
-While not necessary in this case, this method offers more flexiblity then the
-component based appraoch.
+While not necessary in this case, this method offers more flexibility than the
+component based approach.
 
-In order to implement the line failures, we need to create a `VectorContinousCallback`.
+In order to implement the line failures, we need to create a `VectorContinuousCallback`.
 In the callback, we compare the current flow on the line with the limit. If the limit is reached,
 the coupling `K` is set to 0.
 

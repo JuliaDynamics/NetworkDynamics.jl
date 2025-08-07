@@ -214,7 +214,7 @@ end
     @test get_marker(nw, VIndex(1)) == :circle
 
     # Test callbacks
-    cb = ContinousComponentCallback(
+    cb = ContinuousComponentCallback(
         ComponentCondition(nothing, [], []),
         ComponentAffect(nothing, [], [])
     )
@@ -222,7 +222,7 @@ end
     @test has_callback(nw, VIndex(1))
     @test get_callbacks(nw, VIndex(1)) == (cb,)
 
-    cb2 = ContinousComponentCallback(
+    cb2 = ContinuousComponentCallback(
         ComponentCondition(nothing, [], []),
         ComponentAffect(nothing, [], [])
     )

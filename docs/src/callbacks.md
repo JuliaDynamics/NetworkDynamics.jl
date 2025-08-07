@@ -24,10 +24,10 @@ specific component or type of component. `NetworkDynamics.jl` provides a way of
 defining those callbacks on a component level and automatically combine them into performant
 [`VectorContinuousCallback`](@extref SciMLBase.VectorContinuousCallback) and [`DiscreteCallback`](@extref SciMLBase.DiscreteCallback) for the whole network.
 
-The main entry points are the types [`ContinousComponentCallback`](@ref),
-[`VectorContinousComponentCallback`](@ref) and [`DiscreteComponentCallback`](@ref). All of those objects combine a [`ComponentCondition`](@ref) with an [`ComponentAffect`](@ref).
+The main entry points are the types [`ContinuousComponentCallback`](@ref),
+[`VectorContinuousComponentCallback`](@ref) and [`DiscreteComponentCallback`](@ref). All of those objects combine a [`ComponentCondition`](@ref) with an [`ComponentAffect`](@ref).
 
-The "normal" [`ContinousComponentCallback`](@ref) and [`DiscreteComponentCallback`](@ref) have a condition which returns a single value. The corresponding affect is triggered when the return value hits zero.
+The "normal" [`ContinuousComponentCallback`](@ref) and [`DiscreteComponentCallback`](@ref) have a condition which returns a single value. The corresponding affect is triggered when the return value hits zero.
 In contrast, the "vector" version has an in-place condition which writes `len` outputs. When any of those outputs hits zero, the affect is triggered with an additional argument `event_idx` which tells the effect which dimension encountered the zerocrossing.
 
 There is a special type [`PresetTimeComponentCallback`](@ref) which has no explicit condition and triggers the affect at given times.
@@ -43,7 +43,7 @@ condition = ComponentCond([:x, :y], [:p1, :p2]) do u, p, t
     return some_condition(u[:x], u[:y], ...)
 end
 ```
-In case of a `VectorContinousComponentCallback`, the function signature looks slightly different:
+In case of a `VectorContinuousComponentCallback`, the function signature looks slightly different:
 ```julia
 vectorcondition = ComponentCond([:x, :y], [:p1, :p2]) do out, u, p, t
     out[1] = some_condition(u[...], p[...])
@@ -77,8 +77,8 @@ However the affect gets passed a `ctx` "context" object, which is a named tuple 
 
 Lastly we need to define the actual callback object using [`ContinuousComponentCallback`](@ref)/[`VectorContinuousComponentCallback`](@ref):
 ```julia
-ccb  = ContinousComponentCallback(condition, affect; kwargs...)
-vccb = VectorContinousComponentCallback(condition, affect; kwargs...)
+ccb  = ContinuousComponentCallback(condition, affect; kwargs...)
+vccb = VectorContinuousComponentCallback(condition, affect; kwargs...)
 ```
 where the `kwargs` are passed to the underlying [`SciMLBase.VectorContinuousCallback`](@extref) to finetune the zerocrossing-detection.
 

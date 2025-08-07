@@ -30,7 +30,7 @@ function basenetwork()
     nw
 end
 
-@testset "continous callback batch tests" begin
+@testset "continuous callback batch tests" begin
     nw = basenetwork()
 
     tript = Float64[]
@@ -44,7 +44,7 @@ end
         push!(tripi, ctx.eidx)
         p[:active] = 0
     end
-    cb = ContinousComponentCallback(cond, affect)
+    cb = ContinuousComponentCallback(cond, affect)
     set_callback!.(nw.im.edgem, Ref(cb))
 
     batches = NetworkDynamics.wrap_component_callbacks(nw);
@@ -110,12 +110,12 @@ end
 
     cond = ComponentCondition(identity, [:θ, :ω], [])
     affect = ComponentAffect(identity, [:θ, :ω],[])
-    cb = VectorContinousComponentCallback(cond, affect, 2)
+    cb = VectorContinuousComponentCallback(cond, affect, 2)
     add_callback!(v, cb)
     display(v)
     cond = ComponentCondition(identity, [:θ], [])
     affect = ComponentAffect(identity, [],[:M])
-    cb2 = ContinousComponentCallback(cond, affect)
+    cb2 = ContinuousComponentCallback(cond, affect)
     add_callback!(v, cb2)
     display(v)
     display(nw)
@@ -138,7 +138,7 @@ end
         push!(events, (;θ=u[:θ], ω=u[:ω], t=ctx.t, vidx=ctx.vidx, event_idx=event_idx))
         @info "Triggered event_idx $event_idx t=$(ctx.t) on $(ctx.vidx)"
     end
-    ccb = VectorContinousComponentCallback(cond, affect, 2)
+    ccb = VectorContinuousComponentCallback(cond, affect, 2)
     set_callback!(nw.im.vertexm[1], ccb)
     set_callback!(nw.im.vertexm[2], ccb)
 
@@ -199,7 +199,7 @@ end
     # invalid obs in affect u
     cond = ComponentCondition((args...)->nothing, [:P, :₋P, :srcθ, :limit], [:limit, :K])
     affect = ComponentAffect((args...)->nothing, [:₋P],[:active])
-    cb = ContinousComponentCallback(cond, affect)
+    cb = ContinuousComponentCallback(cond, affect)
     set_callback!.(nw.im.edgem, Ref(cb); check=false);
     cbb = only(NetworkDynamics.wrap_component_callbacks(nw));
     # oserved can handle parameters now!
@@ -209,7 +209,7 @@ end
     # invalid state in condition p
     cond = ComponentCondition((args...)->nothing, [:P, :₋P, :srcθ], [:limit, :K, :P])
     affect = ComponentAffect((args...)->nothing, [],[:active, :₋P])
-    cb = ContinousComponentCallback(cond, affect)
+    cb = ContinuousComponentCallback(cond, affect)
     set_callback!.(nw.im.edgem, Ref(cb); check=false);
     cbb = only(NetworkDynamics.wrap_component_callbacks(nw));
     @test_throws ArgumentError NetworkDynamics._batch_condition(cbb)
@@ -218,19 +218,19 @@ end
     # test on set_callback
     cond = ComponentCondition((args...)->nothing, [:P, :₋P, :srcθ, :limit], [:limit, :K])
     affect = ComponentAffect((args...)->nothing, [],[:active])
-    cb = ContinousComponentCallback(cond, affect)
+    cb = ContinuousComponentCallback(cond, affect)
     @test_throws ArgumentError set_callback!(nw.im.edgem[1], cb)
     cond = ComponentCondition((args...)->nothing, [:P, :₋P, :srcθ], [:limit, :K, :P])
     affect = ComponentAffect((args...)->nothing, [],[:active])
-    cb = ContinousComponentCallback(cond, affect)
+    cb = ContinuousComponentCallback(cond, affect)
     @test_throws ArgumentError set_callback!(nw.im.edgem[1], cb)
     cond = ComponentCondition((args...)->nothing, [:P, :₋P, :srcθ], [:limit, :K])
     affect = ComponentAffect((args...)->nothing, [:₋P],[:active])
-    cb = ContinousComponentCallback(cond, affect)
+    cb = ContinuousComponentCallback(cond, affect)
     @test_throws ArgumentError set_callback!(nw.im.edgem[1], cb)
     cond = ComponentCondition((args...)->nothing, [:P, :₋P, :srcθ], [:limit, :K])
     affect = ComponentAffect((args...)->nothing, [],[:active, :P])
-    cb = ContinousComponentCallback(cond, affect)
+    cb = ContinuousComponentCallback(cond, affect)
     @test_throws ArgumentError set_callback!(nw.im.edgem[1], cb)
 end
 
