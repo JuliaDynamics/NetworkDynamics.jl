@@ -11,6 +11,12 @@ as a general reference.
 This page is introducing the general concepts, for a hands on example of a simulation with callbacks
 refer to the [Cascading Failure](@ref) example.
 
+!!! warning
+    The `ODEProblem` contains a reference to exactly one copy of the *flat parameter array*.
+    If you use callbacks to change those parameters (as we often do), it is advised to
+    `copy` the parameter array before passing it to the ODEProblem! 
+    Also, this means you need to be careful when using the same `prob` for multiple subsequent
+    `solve` calls, as the initial state of the `prob` object might have changed!
 
 ## Component-based Callback functions
 In practice, events often act locally, meaning they only depend and act on a

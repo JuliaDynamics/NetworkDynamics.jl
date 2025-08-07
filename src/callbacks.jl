@@ -209,7 +209,21 @@ function get_callbacks(nw::Network)
     elseif length(cbbs) == 1
         return to_callback(only(cbbs))
     else
-        CallbackSet(to_callback.(cbbs)...)
+        # we split in discrete and continous manually, otherwise the CallbackSet
+        # construction can take forever
+        discrete_cb = []
+        continous_cb = []
+        for batch in cbbs
+            cb = to_callback(batch)
+            if cb isa SciMLBase.AbstractContinuousCallback
+                push!(continous_cb, cb)
+            elseif cb isa SciMLBase.AbstractDiscreteCallback
+                push!(discrete_cb, cb)
+            else
+                error("Unknown callback type, should never be reached. Please report this issue.")
+            end
+        end
+        CallbackSet(Tuple(continous_cb), Tuple(discrete_cb));
     end
 end
 
@@ -443,15 +457,15 @@ end
 ####
 #### wrapping of discrete callbacks
 ####
-struct DiscreteCallbackWrapper{N,ST,T} <: CallbackWrapper
-    nw::N
+struct DiscreteCallbackWrapper{ST,T} <: CallbackWrapper
+    nw::Network
     component::ST
     callback::T
     function DiscreteCallbackWrapper(nw, component, callback)
         @assert nw isa Network
         @assert component isa SymbolicIndex
         @assert callback isa Union{DiscreteComponentCallback, PresetTimeComponentCallback}
-        new{typeof(nw),typeof(component),typeof(callback)}(nw, component, callback)
+        new{typeof(component),typeof(callback)}(nw, component, callback)
     end
 end
 
@@ -463,7 +477,7 @@ function to_callback(dcw::DiscreteCallbackWrapper)
     DiscreteCallback(cond, affect; kwargs...)
 end
 # generate a PresetTimeCallback from a DiscreteCallbackWrapper
-function to_callback(dcw::DiscreteCallbackWrapper{<:Any,<:Any,<:PresetTimeComponentCallback})
+function to_callback(dcw::DiscreteCallbackWrapper{<:Any,<:PresetTimeComponentCallback})
     kwargs = dcw.callback.kwargs
     affect = _batch_affect(dcw)
     ts = dcw.callback.ts
