@@ -588,7 +588,8 @@ See also [`set_callback!`](@ref).
 """
 function add_callback!(c::ComponentModel, cb; check=true)
     check && assert_cb_compat(c, cb)
-    newcb = has_callback(c) ? (get_callbacks(c)..., cb) : (cb, )
+    cbs = cb isa ComponentCallback ? (cb,) : cb
+    newcb = has_callback(c) ? (get_callbacks(c)..., cbs...) : cbs
     set_metadata!(c, :callback, newcb)
 end
 add_callback!(nw::Network, idx::VCIndex, cb; kw...) = add_callback!(getcomp(nw, idx), cb; kw...)
