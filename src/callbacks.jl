@@ -569,8 +569,11 @@ function _batch_affect(dcw::DiscreteCallbackWrapper)
 
     (integrator) -> begin
         # Re-evaluate all conditions to determine which affects to execute
+        # the affects might mutate p, therfor we ceate a copy to evaluate all
+        # conditions on the unaltered state!
         cus = PreallocationTools.get_tmp(cucache, integrator.u)
         cobsf(integrator.u, integrator.p, integrator.t, cus)
+        cps = copy(integrator.p)
 
         any_uchanged = false
         any_pchanged = false
@@ -580,7 +583,7 @@ function _batch_affect(dcw::DiscreteCallbackWrapper)
             cuv = view(cus, condition_urange(dcw, i))
             c_u = SymbolicView(cuv, dcw.callbacks[i].condition.sym)
             cpidxsv = view(cpidxs, condition_prange(dcw, i))
-            cpv = view(integrator.p, cpidxsv)
+            cpv = view(cps, cpidxsv)
             c_p = SymbolicView(cpv, dcw.callbacks[i].condition.psym)
 
             # Only execute affect if condition is true
