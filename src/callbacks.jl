@@ -286,8 +286,9 @@ function _batchequal(a::DiscreteComponentCallback, b::DiscreteComponentCallback)
     _batchequal(a.kwargs, b.kwargs)       || return false
     return true
 end
-function _batchequal(a::T, b::T) where {T <: Union{ComponentCondition, ComponentAffect}}
-    typeof(a) == typeof(b)
+function _batchequal(a::ComponentCondition, b::ComponentCondition)
+    typeof(a) == typeof(b) || return false
+    a.f === b.f
 end
 function _batchequal(a::NamedTuple, b::NamedTuple)
     length(a) == length(b) || return false
