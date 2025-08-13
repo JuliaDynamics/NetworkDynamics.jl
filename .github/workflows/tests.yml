@@ -197,19 +197,23 @@ jobs:
           ref: ${{ steps.extract-branch.outputs.powerdynamics_branch }}
           path: PowerDynamics
       - name: Run PowerDynamics tests
-        shell: julia --project=PowerDynamics --color=yes {0}
+        shell: julia --project=PowerDynamics/docs --color=yes {0}
         run: |
             using Pkg
-            try
-              pkg"dev ."
-              Pkg.test(; coverage=false)
-            catch e
-              if e isa Pkg.Resolve.ResolverError
-                @info "Resolve error! No need to test a breaking release..." e
-                exit(0)
-              else
-                rethrow(e)
-              end
+            using Test
+            pkg"dev ."
+            @testset "PowerDynamics Downstream Tests" begin
+                @testset "Normal Package tests" begin
+                    Pkg.test("PowerDynamics"; coverage=false)
+                end
+                @testset "Documentation Example Tests" begin
+                    examples = joinpath("PowerDynamics", "docs", "examples")
+                    for file in readdir(examples; join=true)
+                        endswith(file, ".jl") || continue
+                        @info "Test example $file"
+                        include(file)
+                    end
+                end
             end
       - name: Save Julia depot cache on cancel or failure
         id: julia-cache-save
