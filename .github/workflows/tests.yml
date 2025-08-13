@@ -139,8 +139,8 @@ jobs:
             ${{ steps.julia-cache.outputs.cache-paths }}
           key: ${{ steps.julia-cache.outputs.cache-key }}
 
-  OpPoDyn-test:
-    name: OpPoDyn.jl test - Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }}
+  PowerDynamics-test:
+    name: PowerDynamics.jl test - Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }}
     runs-on: ${{ matrix.os }}
     permissions:
       actions: write # needed to allow julia-actions/cache to proactively delete old caches that it has created
@@ -165,7 +165,7 @@ jobs:
       - name: Load Julia packages from cache
         id: julia-cache
         uses: julia-actions/cache@v2
-      - name: Extract OpPoDyn branch from PR
+      - name: Extract PowerDynamics branch from PR
         id: extract-branch
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
@@ -177,34 +177,34 @@ jobs:
             # Combine title and body for searching
             PR_TEXT="$PR_TITLE $PR_BODY"
 
-            # Look for [oppodyn:branch-name] pattern (case insensitive)
-            BRANCH_MATCH=$(echo "$PR_TEXT" | grep -i -o "\[oppodyn:[^]]*\]" | head -n1)
+            # Look for [powerdynamics:branch-name] pattern (case insensitive)
+            BRANCH_MATCH=$(echo "$PR_TEXT" | grep -i -o "\[powerdynamics:[^]]*\]" | head -n1)
             if [[ -n "$BRANCH_MATCH" ]]; then
-              BRANCH_NAME=$(echo "$BRANCH_MATCH" | sed 's/\[[Oo][Pp][Pp][Oo][Dd][Yy][Nn]:\([^]]*\)\]/\1/i')
-              echo "Found OpPoDyn branch specification: $BRANCH_NAME"
-              echo "oppodyn_branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
+              BRANCH_NAME=$(echo "$BRANCH_MATCH" | sed 's/\[[Pp][Oo][Ww][Ee][Rr][Dd][Yy][Nn][Aa][Mm][Ii][Cc][Ss]:\([^]]*\)\]/\1/i')
+              echo "Found PowerDynamics branch specification: $BRANCH_NAME"
+              echo "powerdynamics_branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
             else
-              echo "No OpPoDyn branch specified, using main"
-              echo "oppodyn_branch=main" >> $GITHUB_OUTPUT
+              echo "No PowerDynamics branch specified, using main"
+              echo "powerdynamics_branch=main" >> $GITHUB_OUTPUT
             fi
           else
             echo "Not a pull request, using main branch"
-            echo "oppodyn_branch=main" >> $GITHUB_OUTPUT
+            echo "powerdynamics_branch=main" >> $GITHUB_OUTPUT
           fi
       - uses: actions/checkout@v4
         with:
-          repository: JuliaEnergy/OpPoDyn.jl
-          ref: ${{ steps.extract-branch.outputs.oppodyn_branch }}
-          path: OpPoDyn
-      - name: Run OpPoDyn tests
+          repository: JuliaEnergy/PowerDynamics.jl
+          ref: ${{ steps.extract-branch.outputs.powerdynamics_branch }}
+          path: PowerDynamics
+      - name: Run PowerDynamics tests
         shell: julia --project=testenv --color=yes {0}
         run: |
             using Pkg
             try
               pkg"dev ."
-              pkg"dev ./OpPoDyn"
-              pkg"dev ./OpPoDyn/OpPoDynTesting"
-              Pkg.test("OpPoDyn"; coverage=false)
+              pkg"dev ./PowerDynamics"
+              pkg"dev ./PowerDynamicsTesting"
+              Pkg.test("PowerDynamics"; coverage=false)
             catch e
               if e isa Pkg.Resolve.ResolverError
                 @info "Resolve error! No need to test a breaking release..." e
