@@ -233,7 +233,7 @@ As a workaround we had to explicitly define `LinearInterpolations` as unitless, 
 
 To build the network, we first need to define the components. This is a two-step process:
 
-- first create the symbolic `ODESystem` using ModelingToolkit
+- first create the symbolic `System` using ModelingToolkit
 - secondly build a NetworkDynamics component model ([`VertexModel`](@ref)/[`EdgeModel`](@ref)) based on the symbolic system.
 
 In the first step we can use the keyword arguments to pass "default" values for our parameters and states.

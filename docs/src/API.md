@@ -18,9 +18,9 @@ EdgeModel()
 
 ## Component Models with MTK
 ```@docs
-VertexModel(::ModelingToolkit.ODESystem, ::Any, ::Any)
-EdgeModel(::ModelingToolkit.ODESystem, ::Any, ::Any, ::Any, ::Any)
-EdgeModel(::ModelingToolkit.ODESystem, ::Any, ::Any, ::Any)
+VertexModel(::ModelingToolkit.System, ::Any, ::Any)
+EdgeModel(::ModelingToolkit.System, ::Any, ::Any, ::Any, ::Any)
+EdgeModel(::ModelingToolkit.System, ::Any, ::Any, ::Any)
 ```
 
 ### Output Function Helpers/Wrappers
