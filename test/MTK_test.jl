@@ -235,30 +235,8 @@ b = @b $(NetworkDynamics.compfg(v))($data...)
 @test b.allocs == 0
 
 
-# test fully implicit outputs
-@mtkmodel FullyImplicit begin
-    @variables begin
-        u(t), [description = "Input Variable", input=true]
-        x(t), [description = "Explicit Variable"]
-        y(t), [description = "Implicit Variable, present in equations"]
-        z(t), [description = "fully implicit variable, not present but output", output=true]
-    end
-    @equations begin
-        Dt(x) ~ -x
-        0 ~ sqrt(y+x)
-        0 ~ u # implicitly forces z becaus u(z)
-    end
-end
-@named fullyimplicit = FullyImplicit()
-v = VertexModel(fullyimplicit, [:u], [:z])
-@test v.mass_matrix == LinearAlgebra.Diagonal([1,0,0])
-@test v.sym == [:x, :z, :y]
-
-data = NetworkDynamics.rand_inputs_fg(v)
-b = @b $(NetworkDynamics.compfg(v))($data...)
-@test b.allocs == 0
-
 @testset "Test constants in MTK models" begin
+    # from MTK@10 onwars, constants are just non-tunable parameters!
     @mtkmodel DQSwing_Constants begin
         @extend DQBus()
         @variables begin
@@ -358,8 +336,82 @@ end
 
     @named pv = PVConstraint(; P=2, V=1)
     @named busbar = BusBar()
-    mtkbus = ODESystem(connect(busbar.terminal, pv.terminal), t; systems=[busbar, pv], name=:pvbus)
+    mtkbus = System(connect(busbar.terminal, pv.terminal), t; systems=[busbar, pv], name=:pvbus)
     vf = VertexModel(mtkbus, [:busbar₊i_r, :busbar₊i_i], [:busbar₊u_r, :busbar₊u_i], verbose=false)
 
     @test vf.sym == [:busbar₊u_r,:busbar₊u_i]
+end
+
+@testset "Test transformation of implicit outputs" begin
+    # first, lets test if the underlying MTK problem still exists
+    # see https://github.com/SciML/ModelingToolkit.jl/pull/3686
+    @mtkmodel ImplicitForcing begin
+        @variables begin
+            u(t), [description = "Input Variable", input=true]
+            y(t), [description = "fully implicit output", output=true]
+        end
+        @equations begin
+            0 ~ sqrt(u) # implicitly forces output y because u=f(y) in  closed loop
+        end
+    end
+    @named implicit = ImplicitForcing()
+    simp = mtkcompile(implicit; inputs = ModelingToolkit.unbound_inputs(implicit))
+    @test isempty(equations(simp)) # the equation was dropped!
+
+    # test fully implicit outputs
+    @mtkmodel FullyImplicit begin
+        @variables begin
+            u(t), [description = "Input Variable", input=true]
+            x(t), [description = "Explicit Variable"]
+            y(t), [description = "Implicit Variable, present in equations"]
+            z(t), [description = "fully implicit variable, not present but output", output=true]
+        end
+        @equations begin
+            Dt(x) ~ -x
+            0 ~ sqrt(y+x)
+            0 ~ u # implicitly forces z becaus u(z)
+        end
+    end
+    @named fullyimplicit = FullyImplicit()
+    @test_throws ArgumentError VertexModel(fullyimplicit, [:u], [:z])
+
+
+    # from init_tutorial
+    @mtkmodel GasNode begin
+        @variables begin
+            p(t), [description="Pressure"] # node output
+            q̃_nw(t), [description="aggregated flow from pipes into node"] # node input
+            q̃_inj(t), [description="flow injected into the network"]
+        end
+        @equations begin
+            q̃_inj ~ -q̃_nw
+        end
+    end
+    @mtkmodel StaticProsumerNode begin
+        @extend GasNode()
+        @parameters begin
+            q̃_prosumer, [description="flow injected by prosumer"]
+        end
+        @equations begin
+            -q̃_nw ~ q̃_prosumer
+        end
+    end
+    @named prosumer = StaticProsumerNode() # consumer
+    @test_throws ArgumentError VertexModel(prosumer, [:q̃_nw], [:p])
+
+    @mtkmodel Wrapper begin
+        @components begin
+            prosumer = StaticProsumerNode()
+        end
+        @variables begin
+            p(t), [description="Pressure at prosumer"]
+            q̃_nw(t), [description="aggregated flow from pipes into node"] # node input
+        end
+        @equations begin
+            p ~ prosumer.p # connect the pressure output of the prosumer to the wrapper
+            q̃_nw ~ prosumer.q̃_nw # connect the flow input of the prosumer to the wrapper
+        end
+    end
+    @named prosumer_wrapped = Wrapper()
+    @test_throws ArgumentError VertexModel(prosumer_wrapped, [:q̃_nw], [:p])
 end

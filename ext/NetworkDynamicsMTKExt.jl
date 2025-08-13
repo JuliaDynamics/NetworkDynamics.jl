@@ -17,6 +17,9 @@ import NetworkDynamics: VertexModel, EdgeModel, AnnotatedSym
 
 include("MTKExt_utils.jl")
 
+import NetworkDynamics: implicit_output
+ModelingToolkit.@register_symbolic implicit_output(x)
+
 """
     VertexModel(sys::System, inputs, outputs;
                 verbose=false, name=getname(sys), extin=nothing, ff_to_constraint=true, kwargs...)
@@ -283,7 +286,6 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     alloutputs = reduce(union, outputss)
 
     missing_inputs = Set{Symbolic}()
-    implicit_outputs = Set{Symbolic}() # fully implicit outputs which do not appear in the equations
     sys = if ModelingToolkit.iscomplete(_sys)
         deepcopy(_sys)
     else
@@ -294,13 +296,30 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
             verbose && @warn "The specified inputs ($missing_inputs) do not appear in the equations of the system!"
             _openinputs = setdiff(_openinputs, missing_inputs)
         end
-        _definedoutputs = alloutputs ∩ all_eq_vars
-        if !(Set(_definedoutputs) == Set(alloutputs))
-            implicit_outputs = setdiff(alloutputs, _definedoutputs)
-            verbose && @warn "The specified outputs $implicit_outputs do not appear in the equations of the system!"
+
+        implicit_outputs = setdiff(alloutputs, all_eq_vars)
+        if !isempty(implicit_outputs)
+            iobuf = IOBuffer()
+            show(iobuf, MIME"text/plain"(), (@doc(implicit_output)))
+            docstring = String(take!(iobuf))
+            throw(
+                ArgumentError("The outputs $(getname.(implicit_outputs)) do not appear in the equations of the system! \
+                    Try to to make them explicit using `implicit_output`\n"*docstring)
+            )
         end
-        verbose && @info "Simplifying system with inputs $_openinputs and outputs $_definedoutputs"
-        structural_simplify(_sys, (_openinputs, _definedoutputs); simplify=false)[1]
+
+        verbose && @info "Simplifying system with inputs $_openinputs and outputs $alloutputs"
+        try
+            mtkcompile(_sys; inputs=_openinputs, outputs=alloutputs, simplify=false)
+        catch e
+            if e isa ModelingToolkit.ExtraEquationsSystemException
+                msg = "The system could not be compiled becaus of extra equations! \
+                       Somtimes, this can be related to fully implicit output equations. \
+                       Check `@doc implicit_output` for more information."
+                throw(ArgumentError(msg))
+            end
+            rethrow(e)
+        end
     end
 
     allparams = parameters(sys) # contains inputs!
@@ -315,7 +334,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
 
     # assert the ordering of states and equations
     explicit_states = Symbolic[eq_type(eq)[2] for eq in eqs if !isnothing(eq_type(eq)[2])]
-    implicit_states = setdiff(unknowns(sys), explicit_states) ∪ implicit_outputs
+    implicit_states = setdiff(unknowns(sys), explicit_states)
 
     if length(explicit_states) + length(implicit_states) !== length(eqs)
         buf = IOBuffer()

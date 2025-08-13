@@ -222,3 +222,29 @@ function _sym_to_int(x::SymbolicView, idx::Int)
     idx
 end
 _sym_to_int(x::SymbolicView, idx) = _sym_to_int.(Ref(x), idx)
+
+"""
+    implicit_output(x) = 0
+
+This is a helper function to define MTK models with **fully implicit outputs**.
+It is sort of a barrier for `Symbolics` to not descent in to the equation. When added to
+an equation, it does nothing (defined as 0), but it tricks MTK/Symbolics into believing the
+equation depends on `x`. This can be necessary to define a model with fully implicit outputs.
+
+    @mtkmodel ImplicitForcing begin
+        @variables begin
+            u(t), [description = "Input Variable", input=true]
+            y(t), [description = "fully implicit output", output=true]
+        end
+        @equations begin
+            # 0 ~ u  # WRONG!
+            0 ~ u + implicit_output(y) # CORRECT!
+        end
+    end
+    VertexModel(ImplicitForcing(name=:implicit), [:u], [:y])
+
+For more information see the NetworkDyanmics docs on [fully implicit outputs](@ref).
+"""
+implicit_output(x) = 0
+
+
