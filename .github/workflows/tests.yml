@@ -197,14 +197,12 @@ jobs:
           ref: ${{ steps.extract-branch.outputs.powerdynamics_branch }}
           path: PowerDynamics
       - name: Run PowerDynamics tests
-        shell: julia --project=testenv --color=yes {0}
+        shell: julia --project=PowerDynamics --color=yes {0}
         run: |
             using Pkg
             try
               pkg"dev ."
-              pkg"dev ./PowerDynamics"
-              pkg"dev ./PowerDynamicsTesting"
-              Pkg.test("PowerDynamics"; coverage=false)
+              Pkg.test(; coverage=false)
             catch e
               if e isa Pkg.Resolve.ResolverError
                 @info "Resolve error! No need to test a breaking release..." e
