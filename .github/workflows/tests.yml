@@ -207,7 +207,7 @@ jobs:
                     Pkg.test("PowerDynamics"; coverage=false)
                 end
                 @testset "Documentation Example Tests" begin
-                    examples = joinpath("PowerDynamics", "docs", "examples")
+                    examples = abspath(joinpath("PowerDynamics", "docs", "examples"))
                     for file in readdir(examples; join=true)
                         endswith(file, ".jl") || continue
                         @info "Test example $file"
