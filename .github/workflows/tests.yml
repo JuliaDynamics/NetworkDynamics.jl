@@ -201,7 +201,7 @@ jobs:
             using Pkg
             using Test
             pkg"dev ."
-            pkg"update
+            pkg"update"
             pkg"instantiate"
             pkg"build"
             @testset "PowerDynamics Downstream Tests" begin
