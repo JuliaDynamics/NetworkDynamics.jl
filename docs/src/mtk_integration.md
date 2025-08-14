@@ -15,7 +15,8 @@ These constructors will:
 - transform the states marked as input to parameters and `mtkcompile`ing the system,
 - generate the `f` and `g` functions,
 - generate code for observables,
-- port all supported [Metadata](@ref) from MTK symbols to component symbols and
+- port all supported [Metadata](@ref) from MTK symbols to component symbols,
+- handle [fully implicit outputs](@ref) using the `implicit_output` function, and
 - output a `Vertex-`/`EdgeModel` function compatible with NetworkDynamics.jl.
 
 The main usecase for this feature is when you want to build relatively complex
@@ -32,7 +33,8 @@ as tearing of thousands of equations.
     ModelingToolkit is a fast paced library with lots of functionality and ever
     growing complexity. As such the provided interface is kinda experimental.
     Some features of MTK are straight up unsupported, for example events within
-    models or delay differential equations.
+    models or delay differential equations. For cases where output variables don't
+    explicitly appear in equations, see the [Fully Implicit Outputs](@ref) section.
 
 ## RC-Circuit Example
 In good [MTK tradition](https://docs.sciml.ai/ModelingToolkit/stable/tutorials/acausal_components/), this feature will be explained along a simple RC circuit example.
@@ -43,7 +45,7 @@ The system to model is 2 node, 1 edge network. The node output states are the vo
 
 ideal v source      Resistor     Capacitor
             v1 o─←────MMM────→─o v2
-               │               ┴ 
+               │               ┴
               (↗)              ┬
                │               │
                ⏚               ⏚
@@ -140,7 +142,7 @@ resistor_edge = EdgeModel(resistor, [:src₊v], [:dst₊v], [:src₊i], [:dst₊
 
 Having all those components defined, we can build the network. We don't need to provide a graph
 object here because we specified the placement in the graph on a per component basis.
- 
+
 ```@example mtk
 nw = Network([vs_vertex, cap_vertex], [resistor_edge])
 ```
@@ -149,7 +151,7 @@ We can see, that NetworkDynamics internally is able to reduce all of the "output
 
 Now we can simulate the system. For that we generate the `u0` object. Since the metadata (such as default values) was automatically transferred, we can straight away construct the `ODEProblem`
 and solve the system.
- 
+
 ```@example mtk
 u0 = NWState(nw) # generate state based on default values
 prob = ODEProblem(nw, uflat(u0), (0, 10.0), pflat(u0))
@@ -164,3 +166,67 @@ axislegend(ax2)
 fig # hide
 ```
 
+## Fully Implicit Outputs
+When working with MTK systems in NetworkDynamics, you may encounter situations where
+your desired output variables don't explicitly appear in the equations. This creates **fully
+implicit outputs** - variables that are determined by the system's constraints but aren't
+directly computed.
+
+!!! tip "tl;dr"
+    Introduce "fake" dependencies to your input-forcing equations `0 ~ in + implicit_output(y)`.
+    Which is mathematically equivalent to `0 ~ in` but helps MTK to reason about dependencies.
+
+Consider a system with a fully implicit output:
+```
+   u┌───────┐y
+  ─→┤ 0 ~ u ├→─
+    └───────┘
+```
+Here, $y$ does not appear in the equations at all. In general, that doesn't make too much sense.
+During simplification, MTK will potentially get rid of the equation as it does not contribute to the system's state.
+
+However, in NetworkDynamics, we're always dealing with **open loop models** on the equation level, which is not exactly what MTK was made for.
+If you build a closed loop between a subsystem A which **has input forcing** and a subsystem
+B which has **input feed forward**, the resulting system can be solved:
+```
+    (system with input forcing)
+          ua┌─────────┐ya
+        ┌──→┤  0 ~ ua ├→──┐
+        │   └─────────┘   │
+        │ yb┌─────────┐ub │
+        └──←┤ yb ~ ub ├←──┘
+            └─────────┘
+(system with input feed forward)
+```
+
+Since MTK does not know about the closed loop (which is only introduced on the NetworkDynamics level once we leave the equation based domain) we need to help MTK to figure out those dependencies.
+We can do so by introducing "fake" dependencies using [`implicit_output`](@ref).
+This function is defined as
+```
+implicit_output(x) = 0
+ModelingToolkit.@register_symbolic implicit_output(x)
+```
+which makes it numerically equivalent to zero (no effect on the simulation) but is
+opaque to the Symbolic Simplification.
+
+### Example
+
+Consider a "Kirchhoff Node" between multiple resistors:
+- the currents through the resistors directly depend on the voltage output of the node (input feed forward) and
+- the Kirchhoff node requires the sum of all inflowing currents to be zero (input forcing).
+
+We can model this type of node like this:
+```@example mtk
+@mtkmodel KirchhoffNode begin
+    @variables begin
+        v(t), [description="Node voltage", output=true]
+        i_sum(t), [description="Sum of incoming currents", input=true]
+    end
+    @equations begin
+        0 ~ i_sum + implicit_output(v)  # Kirchhoff's current law
+    end
+end
+@named kirchhoff = KirchhoffNode()
+VertexModel(kirchhoff, [:i_sum], [:v])
+```
+where we "trick" MTK into believing that the input forcing equation depends on the output too.

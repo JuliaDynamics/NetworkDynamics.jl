@@ -244,9 +244,10 @@ equation depends on `x`. This can be necessary to define a model with fully impl
 """
 """
     implicit_output(x) = 0
+    ModelingToolkit.@register_symbolic implicit_output(x)
 
 $implicit_output_docstring
 
-For more information see the NetworkDyanmics docs on [fully implicit outputs](@ref).
+For more information see the NetworkDyanmics docs on [Fully Implicit Outputs](@ref).
 """
 implicit_output(x) = 0

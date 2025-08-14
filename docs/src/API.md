@@ -245,6 +245,7 @@ save_parameters!
 ff_to_constraint
 Base.copy(::NetworkDynamics.ComponentModel)
 extract_nw
+implicit_output
 ```
 
 ## NetworkDynamicsInspector API
