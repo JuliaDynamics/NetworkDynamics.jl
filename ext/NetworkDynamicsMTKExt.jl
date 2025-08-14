@@ -1,14 +1,15 @@
 module NetworkDynamicsMTKExt
 
 using ModelingToolkit: Symbolic, iscall, operation, arguments, build_function
-using ModelingToolkit: ModelingToolkit, Equation, ODESystem, Differential
-using ModelingToolkit: equations, full_equations, get_variables, structural_simplify, getname, unwrap
+using ModelingToolkit: ModelingToolkit, Equation, System, Differential
+using ModelingToolkit: equations, full_equations, get_variables, mtkcompile, getname, unwrap
 using ModelingToolkit: parameters, unknowns, independent_variables, observed, defaults
 using Symbolics: Symbolics, fixpoint_sub, substitute
 using RecursiveArrayTools: RecursiveArrayTools
 using ArgCheck: @argcheck
 using LinearAlgebra: Diagonal, I
 using SymbolicUtils.Code: Let, Assignment
+using SymbolicUtils: SymbolicUtils
 using OrderedCollections: OrderedDict
 
 using NetworkDynamics: NetworkDynamics, set_metadata!,
@@ -17,23 +18,26 @@ import NetworkDynamics: VertexModel, EdgeModel, AnnotatedSym
 
 include("MTKExt_utils.jl")
 
+import NetworkDynamics: implicit_output
+ModelingToolkit.@register_symbolic implicit_output(x)
+
 """
-    VertexModel(sys::ODESystem, inputs, outputs;
+    VertexModel(sys::System, inputs, outputs;
                 verbose=false, name=getname(sys), extin=nothing, ff_to_constraint=true, kwargs...)
 
-Create a `VertexModel` object from a given `ODESystem` created with ModelingToolkit.
+Create a `VertexModel` object from a given `System` created with ModelingToolkit.
 You need to provide 2 lists of symbolic names (`Symbol` or `Vector{Symbols}`):
 - `inputs`: names of variables in you equation representing the aggregated edge states
 - `outputs`: names of variables in you equation representing the node output
 
 Additional kw arguments:
-- `name`: Set name of the component model. Will be lifted from the ODESystem name.
+- `name`: Set name of the component model. Will be lifted from the System name.
 - `extin=nothing`: Provide external inputs as pairs, i.e. `extin=[:extvar => VIndex(1, :a)]`
    will bound the variable `extvar(t)` in the equations to the state `a` of the first vertex.
-- `ff_to_constraint=true`: Controlls, whether output transformations `g` which depend on inputs should be
+- `ff_to_constraint=true`: Controls, whether output transformations `g` which depend on inputs should be
   transformed into constraints. Defaults to true since ND.jl does not handle vertices with FF yet.
 """
-function VertexModel(sys::ODESystem, inputs, outputs; verbose=false, name=getname(sys),
+function VertexModel(sys::System, inputs, outputs; verbose=false, name=getname(sys),
                      ff_to_constraint=true, extin=nothing, kwargs...)
     warn_missing_features(sys)
     inputs = inputs isa AbstractVector ? inputs : [inputs]
@@ -87,12 +91,12 @@ function VertexModel(sys::ODESystem, inputs, outputs; verbose=false, name=getnam
 end
 
 """
-    EdgeModel(sys::ODESystem, srcin, dstin, AntiSymmetric(dstout); kwargs...)
+    EdgeModel(sys::System, srcin, dstin, AntiSymmetric(dstout); kwargs...)
 
-Create a `EdgeModel` object from a given `ODESystem` created with ModelingToolkit for **single sided models**.
+Create a `EdgeModel` object from a given `System` created with ModelingToolkit for **single sided models**.
 
 Here you only need to provide one list of output symbols: `dstout`.
-To make it clear how to handle the single-sided output definiton, you musst wrap
+To make it clear how to handle the single-sided output definition, you must wrap
 the symbol vector in
 - `AntiSymmetric(dstout)`,
 - `Symmetric(dstout)`, or
@@ -100,13 +104,13 @@ the symbol vector in
 
 Additional `kwargs` are the same as for the double-sided EdgeModel MTK constructor.
 """
-EdgeModel(sys::ODESystem, srcin, dstin, dstout; kwargs...) = EdgeModel(sys, srcin, dstin, nothing, dstout; kwargs...)
+EdgeModel(sys::System, srcin, dstin, dstout; kwargs...) = EdgeModel(sys, srcin, dstin, nothing, dstout; kwargs...)
 
 """
-    EdgeModel(sys::ODESystem, srcin, dstin, srcout, dstout;
+    EdgeModel(sys::System, srcin, dstin, srcout, dstout;
               verbose=false, name=getname(sys), extin=nothing, ff_to_constraint=false, kwargs...)
 
-Create a `EdgeModel` object from a given `ODESystem` created with ModelingToolkit.
+Create a `EdgeModel` object from a given `System` created with ModelingToolkit.
 You need to provide 4 lists of symbolic names (`Symbol` or `Vector{Symbols}`):
 - `srcin`: names of variables in you equation representing the node state at the source
 - `dstin`: names of variables in you equation representing the node state at the destination
@@ -114,13 +118,13 @@ You need to provide 4 lists of symbolic names (`Symbol` or `Vector{Symbols}`):
 - `dstout`: names of variables in you equation representing the output at the destination
 
 Additional kw arguments:
-- `name`: Set name of the component model. Will be lifted from the ODESystem name.
+- `name`: Set name of the component model. Will be lifted from the System name.
 - `extin=nothing`: Provide external inputs as pairs, i.e. `extin=[:extvar => VIndex(1, :a)]`
    will bound the variable `extvar(t)` in the equations to the state `a` of the first vertex.
-- `ff_to_constraint=false`: Controlls, whether output transformations `g` which depend on inputs should be
+- `ff_to_constraint=false`: Controls, whether output transformations `g` which depend on inputs should be
   transformed into constraints.
 """
-function EdgeModel(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=false, name=getname(sys),
+function EdgeModel(sys::System, srcin, dstin, srcout, dstout; verbose=false, name=getname(sys),
                    ff_to_constraint=false, extin=nothing, kwargs...)
     warn_missing_features(sys)
     srcin = srcin isa AbstractVector ? srcin : [srcin]
@@ -137,7 +141,7 @@ function EdgeModel(sys::ODESystem, srcin, dstin, srcout, dstout; verbose=false, 
     singlesided = isnothing(srcout)
     if singlesided && !(dstout isa AnnotatedSym)
         throw(ArgumentError("If you only provide one output (single sided \
-        model), it musst be wrapped either in `AntiSymmetric`, `Symmetric` or \
+        model), it must be wrapped either in `AntiSymmetric`, `Symmetric` or \
         `Directed`!"))
     end
 
@@ -283,7 +287,6 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     alloutputs = reduce(union, outputss)
 
     missing_inputs = Set{Symbolic}()
-    implicit_outputs = Set{Symbolic}() # fully implicit outputs which do not appear in the equations
     sys = if ModelingToolkit.iscomplete(_sys)
         deepcopy(_sys)
     else
@@ -294,13 +297,28 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
             verbose && @warn "The specified inputs ($missing_inputs) do not appear in the equations of the system!"
             _openinputs = setdiff(_openinputs, missing_inputs)
         end
-        _definedoutputs = alloutputs ∩ all_eq_vars
-        if !(Set(_definedoutputs) == Set(alloutputs))
-            implicit_outputs = setdiff(alloutputs, _definedoutputs)
-            verbose && @warn "The specified outputs $implicit_outputs do not appear in the equations of the system!"
+
+        implicit_outputs = setdiff(alloutputs, all_eq_vars)
+        if !isempty(implicit_outputs)
+            throw(
+                ArgumentError("The outputs $(getname.(implicit_outputs)) do not appear in the equations of the system! \
+                    Try to to make them explicit using `implicit_output`\n" *
+                    NetworkDynamics.implicit_output_docstring)
+            )
         end
-        verbose && @info "Simplifying system with inputs $_openinputs and outputs $_definedoutputs"
-        structural_simplify(_sys, (_openinputs, _definedoutputs); simplify=false)[1]
+
+        verbose && @info "Simplifying system with inputs $_openinputs and outputs $alloutputs"
+        try
+            mtkcompile(_sys; inputs=_openinputs, outputs=alloutputs, simplify=false)
+        catch e
+            if e isa ModelingToolkit.ExtraEquationsSystemException
+                msg = "The system could not be compiled because of extra equations! \
+                       Sometimes, this can be related to fully implicit output equations. \
+                       Check `@doc implicit_output` for more information."
+                throw(ArgumentError(msg))
+            end
+            rethrow(e)
+        end
     end
 
     allparams = parameters(sys) # contains inputs!
@@ -308,14 +326,18 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     params = setdiff(allparams, Set(allinputs))
 
     # extract the main equations and observed equations
-    eqs::Vector{Equation} = ModelingToolkit.subs_constants(equations(sys))
-    obseqs_sorted::Vector{Equation} = ModelingToolkit.subs_constants(observed(sys))
+    eqs::Vector{Equation} = equations(sys)
+    obseqs_sorted::Vector{Equation} = observed(sys)
     fix_metadata!(eqs, sys);
     fix_metadata!(obseqs_sorted, sys);
 
+    # get rid of the implicit_output(⋅) terms
+    remove_implicit_output_fn!(eqs)
+    remove_implicit_output_fn!(obseqs_sorted)
+
     # assert the ordering of states and equations
     explicit_states = Symbolic[eq_type(eq)[2] for eq in eqs if !isnothing(eq_type(eq)[2])]
-    implicit_states = setdiff(unknowns(sys), explicit_states) ∪ implicit_outputs
+    implicit_states = setdiff(unknowns(sys), explicit_states)
 
     if length(explicit_states) + length(implicit_states) !== length(eqs)
         buf = IOBuffer()
@@ -420,7 +442,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         end
         verbose && @info "Transformed algebraic eqs" eqs
 
-        # create massmatrix, we don't use the method provided by ODESystem because of reordering
+        # create massmatrix, we don't use the method provided by System because of reordering
         mm = generate_massmatrix(eqs)
         verbose && @info "Generated mass matrix" mm
         mm

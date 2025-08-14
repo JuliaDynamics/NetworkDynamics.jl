@@ -1,7 +1,7 @@
 name = "NetworkDynamics"
 uuid = "22e9dc34-2a0d-11e9-0de0-8588d035468b"
 authors = ["Frank Hellmann <hellmann@pik-potsdam.de>, Michael Lindner <michaellindner@pik-potsdam.de>, Hans Würfel <git@wuerfel.io"]
-version = "0.10.3"
+version = "0.10.4"
 
 [deps]
 ArgCheck = "dce04be8-c92d-5529-be00-80e4d2c0e197"
@@ -67,7 +67,7 @@ KernelAbstractions = "0.9.18"
 LinearAlgebra = "1"
 MacroTools = "0.5.15"
 Mixers = "0.1.2"
-ModelingToolkit = "9.82"
+ModelingToolkit = "10"
 NNlib = "0.9.13"
 NonlinearSolve = "4"
 OrderedCollections = "1.8.0"

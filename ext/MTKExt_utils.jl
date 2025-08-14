@@ -152,7 +152,7 @@ function warn_missing_features(sys)
     cev = ModelingToolkit.get_continuous_events(sys)
     dev = ModelingToolkit.get_discrete_events(sys)
     if !isempty(cev) || !isempty(dev)
-        @warn "Model has attached events, which is not supportet."
+        @warn "Model has attached events, which is not supported."
     end
 
     if !isempty(ModelingToolkit.initialization_equations(sys))
@@ -214,4 +214,17 @@ function fix_metadata!(invalid_eqs, sys)
         @warn "Some transformation droped metadata ($missingmetadata)! Could be fixed."
     end
     invalid_eqs .= fixedeqs
+end
+
+function remove_implicit_output_fn!(eqs)
+    r = SymbolicUtils.@rule implicit_output(~~x) => 0
+    chain = SymbolicUtils.Chain([r])
+    rewriter = SymbolicUtils.Prewalk(chain)
+
+    for i in eachindex(eqs)
+        eq = eqs[i]
+        eqs[i] = rewriter(eq.lhs) ~ rewriter(eq.rhs)
+    end
+
+    eqs
 end

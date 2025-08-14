@@ -37,6 +37,7 @@ import SymbolicIndexingInterface as SII
 using SymbolicIndexingInterface: variable_symbols, parameter_symbols
 using StaticArrays: StaticArrays, SVector
 
+export implicit_output
 include("utils.jl")
 
 export VertexModel, EdgeModel

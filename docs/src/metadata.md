@@ -33,7 +33,7 @@ Special cases for symbol metadata are:
 
 For those, there are special functions `has_*`, `get_*`, `set_*!`, `delete_*!` and `strip_*!`. The `strip_*!` functions remove all metadata of a specific type from all symbols in a component. See [Per Symbol Metadata API](@ref).
 
-These are closely aligned with the [metadata use in ModelingToolkit](@extref ModelingToolkit symbolic_metadata). They are automatically copied from the `ODESystem` if you use MTK models to create NetworkDynamics models.
+These are closely aligned with the [metadata use in ModelingToolkit](@extref ModelingToolkit symbolic_metadata). They are automatically copied from the `System` if you use MTK models to create NetworkDynamics models.
 
 ## Metadata Utils
 Accessing metadata (especially defaults) of states and parameters is a very

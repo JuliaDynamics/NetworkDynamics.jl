@@ -61,7 +61,11 @@ end
 nothing #hide
 
 #=
-**B) A static prosumer node which forces a certain flow (pressure is fully implicit)**
+**B) A static prosumer node which forces a certain flow**
+
+!!! note "Fully Implicit Output"
+    We need to use `implicit_output(p)` to handle the fully implicit pressure
+    output. See [fully implicit outputs](@ref Fully-Implicit-Outputs) for details.
 =#
 @mtkmodel StaticProsumerNode begin
     @extend GasNode()
@@ -69,7 +73,7 @@ nothing #hide
         q̃_prosumer, [description="flow injected by prosumer"]
     end
     @equations begin
-        -q̃_nw ~ q̃_prosumer
+        -q̃_nw ~ q̃_prosumer + implicit_output(p)
     end
 end
 nothing #hide

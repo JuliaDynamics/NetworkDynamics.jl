@@ -76,11 +76,12 @@ end
 
     @test_throws ErrorException NetworkDynamics.initialize_component!(vf, tol=0.0; verbose=true)
 
-    # make empty problem
+    # make empty problem (no free vars)
     vf_comp = copy(vf)
     set_default!(vf_comp, :Pm, get_init(vf_comp, :Pm))
     set_default!(vf_comp, :θ, get_init(vf_comp, :θ))
     set_default!(vf_comp, :ω, get_init(vf_comp, :ω))
+    set_default!(vf_comp, :V, get_init(vf_comp, :V))
 
     NetworkDynamics.initialize_component!(vf_comp; verbose=true)
     dump_initial_state(vf)
@@ -111,7 +112,7 @@ end
     # Verify the metadata was updated and values were applied correctly
     @test get_default(vf_conflict, :u_r) == 0.0
     @test get_default(vf_conflict, :u_i) == 1.0
-    @test get_init(vf_conflict, :θ) ≈ pi/2
+    @test get_init(vf_conflict, :θ) % 2pi ≈ pi/2
 
     # change metadtaa by providing custom input
     vf_sync = copy(vf)
@@ -438,7 +439,10 @@ end
     @test_throws ArgumentError InitConstraint(c10, c11)
 end
 
+_recursive_replace(el::Symbol, dict) = haskey(dict, el) ? dict[el] : NaN
+_recursive_replace(containter, dict) = map(el -> _recursive_replace(el, dict), containter)
 @testset "test input mapping" begin
+    using NetworkDynamics: insym_normalized, outsym_normalized
     vm = Lib.swing_mtk()
     c = @initconstraint begin
         :Pdamping # observable
@@ -447,9 +451,18 @@ end
         :ω # state
         :Pmech # parameter
     end
+    dict = Dict(:Pdamping => 1, :P=> 2, :θ => 3, :ω => 4, :Pmech => 5)
+
+    outdata = _recursive_replace(outsym_normalized(vm), dict)
+    udata   = _recursive_replace(sym(vm), dict)
+    indata  = _recursive_replace(insym_normalized(vm), dict)
+    pdata   = _recursive_replace(psym(vm), dict)
+    obsdata = _recursive_replace(obssym(vm), dict)
+
     mapping! = NetworkDynamics.generate_init_input_mapping(vm, c)
+
     syms = zeros(5)
-    mapping!(syms, ([3],), [NaN, 4], ([2],), [NaN, 5, NaN], [1])
+    mapping!(syms, outdata, udata, indata, pdata, obsdata)
     @test syms == 1:5
 
     em = Lib.line_mtk()
@@ -459,9 +472,17 @@ end
         :active #param
         :Δθ # obs
     end
+    dict = Dict(:P => 1, :dstθ => 2, :active => 3, :Δθ => 4)
+
+    outdata = _recursive_replace(outsym_normalized(em), dict)
+    udata   = _recursive_replace(sym(em), dict)
+    indata  = _recursive_replace(insym_normalized(em), dict)
+    pdata   = _recursive_replace(psym(em), dict)
+    obsdata = _recursive_replace(obssym(em), dict)
+
     mapping! = NetworkDynamics.generate_init_input_mapping(em, c)
     syms = zeros(4)
-    mapping!(syms, ([NaN],[1]), [], ([NaN],[2]), [NaN, NaN, 3], [4])
+    mapping!(syms, outdata, udata, indata, pdata, obsdata)
     @test syms == 1:4
 end
 
