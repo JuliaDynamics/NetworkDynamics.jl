@@ -15,8 +15,7 @@ These constructors will:
 - transform the states marked as input to parameters and `mtkcompile`ing the system,
 - generate the `f` and `g` functions,
 - generate code for observables,
-- port all supported [Metadata](@ref) from MTK symbols to component symbols,
-- handle [fully implicit outputs](@ref) using the `implicit_output` function, and
+- port all supported [Metadata](@ref) from MTK symbols to component symbols and
 - output a `Vertex-`/`EdgeModel` function compatible with NetworkDynamics.jl.
 
 The main usecase for this feature is when you want to build relatively complex
@@ -33,8 +32,7 @@ as tearing of thousands of equations.
     ModelingToolkit is a fast paced library with lots of functionality and ever
     growing complexity. As such the provided interface is kinda experimental.
     Some features of MTK are straight up unsupported, for example events within
-    models or delay differential equations. For cases where output variables don't
-    explicitly appear in equations, see the [Fully Implicit Outputs](@ref) section.
+    models or delay differential equations.
 
 ## RC-Circuit Example
 In good [MTK tradition](https://docs.sciml.ai/ModelingToolkit/stable/tutorials/acausal_components/), this feature will be explained along a simple RC circuit example.

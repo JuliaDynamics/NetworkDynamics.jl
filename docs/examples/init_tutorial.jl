@@ -65,7 +65,7 @@ nothing #hide
 
 !!! note "Fully Implicit Output"
     We need to use `implicit_output(p)` to handle the fully implicit pressure
-    output. See [Fully Implicit Outputs](@ref) for details.
+    output. See [fully implicit outputs](@ref Fully-Implicit-Outputs) for details.
 =#
 @mtkmodel StaticProsumerNode begin
     @extend GasNode()

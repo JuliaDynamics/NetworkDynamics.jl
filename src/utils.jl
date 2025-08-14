@@ -248,6 +248,6 @@ equation depends on `x`. This can be necessary to define a model with fully impl
 
 $implicit_output_docstring
 
-For more information see the NetworkDynamics docs on [Fully Implicit Outputs](@ref).
+For more information see the NetworkDynamics docs on [fully implicit outputs](@ref Fully-Implicit-Outputs).
 """
 implicit_output(x) = 0
