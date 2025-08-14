@@ -202,7 +202,7 @@ B which has **input feed forward**, the resulting system can be solved:
 Since MTK does not know about the closed loop (which is only introduced on the NetworkDynamics level once we leave the equation based domain) we need to help MTK to figure out those dependencies.
 We can do so by introducing "fake" dependencies using [`implicit_output`](@ref).
 This function is defined as
-```
+```julia
 implicit_output(x) = 0
 ModelingToolkit.@register_symbolic implicit_output(x)
 ```
