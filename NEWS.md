@@ -1,8 +1,16 @@
 # NetworkDynamics Release Notes
 
+## v0.10.4 Changelog
+- [#303](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/303) update for ModelingToolkit.jl v10 compatibility:
+  - rename all `ODESystem` -> `System` (follows MTK v10 API)
+  - MTK extension now uses `mtkcompile` instead of `structural_simplify` internally
+  - Add new `implicit_output` function to handle fully implicit output variables in MTK models
+  - Add documentation for handling fully implicit outputs in MTK integration
+  - Update minimum ModelingToolkit.jl requirement from v9.67 to v10
+
 ## v0.10.3 Changelog
 - [#301](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/301) improve callback system performance and flexibility:
-  - Add callback batching for better DiscreteComponentCallback performance 
+  - Add callback batching for better DiscreteComponentCallback performance
   - Allow `EIndex(1=>2)` as standalone edge index with relaxed type constraints
   - Optimize CallbackSet construction to prevent performance bottlenecks
   - Add important documentation warning about parameter array copying in callbacks

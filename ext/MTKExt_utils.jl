@@ -152,7 +152,7 @@ function warn_missing_features(sys)
     cev = ModelingToolkit.get_continuous_events(sys)
     dev = ModelingToolkit.get_discrete_events(sys)
     if !isempty(cev) || !isempty(dev)
-        @warn "Model has attached events, which is not supportet."
+        @warn "Model has attached events, which is not supported."
     end
 
     if !isempty(ModelingToolkit.initialization_equations(sys))

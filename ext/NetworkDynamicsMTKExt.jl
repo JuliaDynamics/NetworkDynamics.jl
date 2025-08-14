@@ -34,7 +34,7 @@ Additional kw arguments:
 - `name`: Set name of the component model. Will be lifted from the System name.
 - `extin=nothing`: Provide external inputs as pairs, i.e. `extin=[:extvar => VIndex(1, :a)]`
    will bound the variable `extvar(t)` in the equations to the state `a` of the first vertex.
-- `ff_to_constraint=true`: Controlls, whether output transformations `g` which depend on inputs should be
+- `ff_to_constraint=true`: Controls, whether output transformations `g` which depend on inputs should be
   transformed into constraints. Defaults to true since ND.jl does not handle vertices with FF yet.
 """
 function VertexModel(sys::System, inputs, outputs; verbose=false, name=getname(sys),
@@ -96,7 +96,7 @@ end
 Create a `EdgeModel` object from a given `System` created with ModelingToolkit for **single sided models**.
 
 Here you only need to provide one list of output symbols: `dstout`.
-To make it clear how to handle the single-sided output definiton, you musst wrap
+To make it clear how to handle the single-sided output definition, you must wrap
 the symbol vector in
 - `AntiSymmetric(dstout)`,
 - `Symmetric(dstout)`, or
@@ -121,7 +121,7 @@ Additional kw arguments:
 - `name`: Set name of the component model. Will be lifted from the System name.
 - `extin=nothing`: Provide external inputs as pairs, i.e. `extin=[:extvar => VIndex(1, :a)]`
    will bound the variable `extvar(t)` in the equations to the state `a` of the first vertex.
-- `ff_to_constraint=false`: Controlls, whether output transformations `g` which depend on inputs should be
+- `ff_to_constraint=false`: Controls, whether output transformations `g` which depend on inputs should be
   transformed into constraints.
 """
 function EdgeModel(sys::System, srcin, dstin, srcout, dstout; verbose=false, name=getname(sys),
@@ -141,7 +141,7 @@ function EdgeModel(sys::System, srcin, dstin, srcout, dstout; verbose=false, nam
     singlesided = isnothing(srcout)
     if singlesided && !(dstout isa AnnotatedSym)
         throw(ArgumentError("If you only provide one output (single sided \
-        model), it musst be wrapped either in `AntiSymmetric`, `Symmetric` or \
+        model), it must be wrapped either in `AntiSymmetric`, `Symmetric` or \
         `Directed`!"))
     end
 
@@ -312,8 +312,8 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
             mtkcompile(_sys; inputs=_openinputs, outputs=alloutputs, simplify=false)
         catch e
             if e isa ModelingToolkit.ExtraEquationsSystemException
-                msg = "The system could not be compiled becaus of extra equations! \
-                       Somtimes, this can be related to fully implicit output equations. \
+                msg = "The system could not be compiled because of extra equations! \
+                       Sometimes, this can be related to fully implicit output equations. \
                        Check `@doc implicit_output` for more information."
                 throw(ArgumentError(msg))
             end
