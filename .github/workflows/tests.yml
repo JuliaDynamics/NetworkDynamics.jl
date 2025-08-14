@@ -161,7 +161,6 @@ jobs:
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
-      - uses: julia-actions/julia-buildpkg@v1
       - name: Load Julia packages from cache
         id: julia-cache
         uses: julia-actions/cache@v2
@@ -202,6 +201,9 @@ jobs:
             using Pkg
             using Test
             pkg"dev ."
+            pkg"update
+            pkg"instantiate"
+            pkg"build"
             @testset "PowerDynamics Downstream Tests" begin
                 @testset "Normal Package tests" begin
                     Pkg.test("PowerDynamics"; coverage=false)
