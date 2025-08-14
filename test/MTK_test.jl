@@ -8,8 +8,6 @@ using Graphs
 using Chairmarks: @b
 using Test
 
-# TODO: Clean up MTK tests
-
 @mtkmodel Bus begin
     @variables begin
         θ(t), [description = "voltage angle", output=true]
@@ -342,6 +340,51 @@ end
     @test vf.sym == [:busbar₊u_r,:busbar₊u_i]
 end
 
+@mtkmodel GasNode begin
+    @variables begin
+        p(t), [description="Pressure"] # node output
+        q̃_nw(t), [description="aggregated flow from pipes into node"] # node input
+        q̃_inj(t), [description="flow injected into the network"]
+    end
+    @equations begin
+        q̃_inj ~ -q̃_nw
+    end
+end
+@mtkmodel StaticProsumerNode begin
+    @extend GasNode()
+    @parameters begin
+        q̃_prosumer, [description="flow injected by prosumer"]
+    end
+    @equations begin
+        -q̃_nw ~ q̃_prosumer
+    end
+end
+@mtkmodel Wrapper begin
+    @components begin
+        prosumer = StaticProsumerNode()
+    end
+    @variables begin
+        p(t), [description="Pressure at prosumer"]
+        q̃_nw(t), [description="aggregated flow from pipes into node"] # node input
+    end
+    @equations begin
+        p ~ prosumer.p # connect the pressure output of the prosumer to the wrapper
+        q̃_nw ~ prosumer.q̃_nw # connect the flow input of the prosumer to the wrapper
+    end
+end
+@mtkmodel WrapperFixed begin
+    @components begin
+        prosumer = StaticProsumerNode()
+    end
+    @variables begin
+        p(t), [description="Pressure at prosumer"]
+        q̃_nw(t), [description="aggregated flow from pipes into node"] # node input
+    end
+    @equations begin
+        p ~ prosumer.p # connect the pressure output of the prosumer to the wrapper
+        q̃_nw + implicit_output(p) ~ prosumer.q̃_nw # connect the flow input of the prosumer to the wrapper
+    end
+end
 @testset "Test transformation of implicit outputs" begin
     # first, lets test if the underlying MTK problem still exists
     # see https://github.com/SciML/ModelingToolkit.jl/pull/3686
@@ -375,43 +418,12 @@ end
     @named fullyimplicit = FullyImplicit()
     @test_throws ArgumentError VertexModel(fullyimplicit, [:u], [:z])
 
-
     # from init_tutorial
-    @mtkmodel GasNode begin
-        @variables begin
-            p(t), [description="Pressure"] # node output
-            q̃_nw(t), [description="aggregated flow from pipes into node"] # node input
-            q̃_inj(t), [description="flow injected into the network"]
-        end
-        @equations begin
-            q̃_inj ~ -q̃_nw
-        end
-    end
-    @mtkmodel StaticProsumerNode begin
-        @extend GasNode()
-        @parameters begin
-            q̃_prosumer, [description="flow injected by prosumer"]
-        end
-        @equations begin
-            -q̃_nw ~ q̃_prosumer
-        end
-    end
+    # dependent MTKModels need to be defined at top level, so they are in front of the testset
     @named prosumer = StaticProsumerNode() # consumer
     @test_throws ArgumentError VertexModel(prosumer, [:q̃_nw], [:p])
-
-    @mtkmodel Wrapper begin
-        @components begin
-            prosumer = StaticProsumerNode()
-        end
-        @variables begin
-            p(t), [description="Pressure at prosumer"]
-            q̃_nw(t), [description="aggregated flow from pipes into node"] # node input
-        end
-        @equations begin
-            p ~ prosumer.p # connect the pressure output of the prosumer to the wrapper
-            q̃_nw ~ prosumer.q̃_nw # connect the flow input of the prosumer to the wrapper
-        end
-    end
     @named prosumer_wrapped = Wrapper()
     @test_throws ArgumentError VertexModel(prosumer_wrapped, [:q̃_nw], [:p])
+    @named prosumer_fixed = WrapperFixed()
+    VertexModel(prosumer_fixed, [:q̃_nw], [:p]) # no throw
 end

@@ -9,6 +9,7 @@ using RecursiveArrayTools: RecursiveArrayTools
 using ArgCheck: @argcheck
 using LinearAlgebra: Diagonal, I
 using SymbolicUtils.Code: Let, Assignment
+using SymbolicUtils: SymbolicUtils
 using OrderedCollections: OrderedDict
 
 using NetworkDynamics: NetworkDynamics, set_metadata!,
@@ -299,12 +300,10 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
 
         implicit_outputs = setdiff(alloutputs, all_eq_vars)
         if !isempty(implicit_outputs)
-            iobuf = IOBuffer()
-            show(iobuf, MIME"text/plain"(), (@doc(implicit_output)))
-            docstring = String(take!(iobuf))
             throw(
                 ArgumentError("The outputs $(getname.(implicit_outputs)) do not appear in the equations of the system! \
-                    Try to to make them explicit using `implicit_output`\n"*docstring)
+                    Try to to make them explicit using `implicit_output`\n" *
+                    NetworkDynamics.implicit_output_docstring)
             )
         end
 
@@ -331,6 +330,10 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     obseqs_sorted::Vector{Equation} = observed(sys)
     fix_metadata!(eqs, sys);
     fix_metadata!(obseqs_sorted, sys);
+
+    # get rid of the implicit_output(⋅) terms
+    remove_implicit_output_fn!(eqs)
+    remove_implicit_output_fn!(obseqs_sorted)
 
     # assert the ordering of states and equations
     explicit_states = Symbolic[eq_type(eq)[2] for eq in eqs if !isnothing(eq_type(eq)[2])]

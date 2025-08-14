@@ -215,3 +215,16 @@ function fix_metadata!(invalid_eqs, sys)
     end
     invalid_eqs .= fixedeqs
 end
+
+function remove_implicit_output_fn!(eqs)
+    r = SymbolicUtils.@rule implicit_output(~~x) => 0
+    chain = SymbolicUtils.Chain([r])
+    rewriter = SymbolicUtils.Prewalk(chain)
+
+    for i in eachindex(eqs)
+        eq = eqs[i]
+        eqs[i] = rewriter(eq.lhs) ~ rewriter(eq.rhs)
+    end
+
+    eqs
+end

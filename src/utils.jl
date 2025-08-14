@@ -223,9 +223,8 @@ function _sym_to_int(x::SymbolicView, idx::Int)
 end
 _sym_to_int(x::SymbolicView, idx) = _sym_to_int.(Ref(x), idx)
 
-"""
-    implicit_output(x) = 0
-
+# temp variable to splice docstring into ArgumentError in MTK Ext
+const implicit_output_docstring = """
 This is a helper function to define MTK models with **fully implicit outputs**.
 It is sort of a barrier for `Symbolics` to not descent in to the equation. When added to
 an equation, it does nothing (defined as 0), but it tricks MTK/Symbolics into believing the
@@ -242,9 +241,12 @@ equation depends on `x`. This can be necessary to define a model with fully impl
         end
     end
     VertexModel(ImplicitForcing(name=:implicit), [:u], [:y])
+"""
+"""
+    implicit_output(x) = 0
+
+$implicit_output_docstring
 
 For more information see the NetworkDyanmics docs on [fully implicit outputs](@ref).
 """
 implicit_output(x) = 0
-
-
