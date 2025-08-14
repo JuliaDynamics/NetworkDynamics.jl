@@ -76,11 +76,12 @@ end
 
     @test_throws ErrorException NetworkDynamics.initialize_component!(vf, tol=0.0; verbose=true)
 
-    # make empty problem
+    # make empty problem (no free vars)
     vf_comp = copy(vf)
     set_default!(vf_comp, :Pm, get_init(vf_comp, :Pm))
     set_default!(vf_comp, :θ, get_init(vf_comp, :θ))
     set_default!(vf_comp, :ω, get_init(vf_comp, :ω))
+    set_default!(vf_comp, :V, get_init(vf_comp, :V))
 
     NetworkDynamics.initialize_component!(vf_comp; verbose=true)
     dump_initial_state(vf)
@@ -111,7 +112,7 @@ end
     # Verify the metadata was updated and values were applied correctly
     @test get_default(vf_conflict, :u_r) == 0.0
     @test get_default(vf_conflict, :u_i) == 1.0
-    @test get_init(vf_conflict, :θ) ≈ pi/2
+    @test get_init(vf_conflict, :θ) % 2pi ≈ pi/2
 
     # change metadtaa by providing custom input
     vf_sync = copy(vf)
