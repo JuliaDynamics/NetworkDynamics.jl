@@ -23,9 +23,6 @@ In our benchmark on the Kuramoto model NetworkDynamics.jl + DifferentialEquation
 
 ## PowerDynamics.jl
 
-> [!IMPORTANT]
-> As of 11/2024, the currently available version of PowerDynamics.jl is quite outdated and builds on an old version of NetworkDynamics. However, PowerDynamics will receive an Substantial update as part of an ongoing project. We expect a pre-release of that in the first half of 2025!
-
 [PowerDynamics.jl](https://juliaenergy.github.io/PowerDynamics.jl/stable/) is an open-source framework for dynamic power grid modeling and analysis build on top of NetworkDynamics.jl.
 
 
