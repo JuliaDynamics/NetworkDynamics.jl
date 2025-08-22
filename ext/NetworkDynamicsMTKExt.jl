@@ -454,8 +454,14 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     fftype = _determine_fftype(out_deps, states, allinputs, params, iv)
 
     # filter out unnecessary parameters
-    var_deps = _all_rhs_symbols(fixpoint_sub(eqs, obs_subs))
-    unused_params = Set(setdiff(params, (var_deps ∪ out_deps))) # do not exclud obs_deps
+    unused_params = let
+        # we need to collect obs and var deps separatly, because replacenment of obs in vars might lead to
+        # symbolic simplifications which we don't have in the actual equations later!
+        # i.e. dt(x) ~ x - x0 and x ~ x0 + y leads to dt(x) ~ y in substitution but is not resolved in actual f
+        var_deps = _all_rhs_symbols(eqs)
+        obs_deps = _all_rhs_symbols(obs_subs)
+        Set(setdiff(params, (var_deps ∪ obs_deps ∪ out_deps))) # do not exclud obs_deps
+    end
     if verbose && !isempty(unused_params)
         @info "Parameters $(unused_params) do not appear in equations of f and g and will be marked as unused."
     end
@@ -575,7 +581,7 @@ function _determine_fftype(deps, states, allinputs, params, t)
     end
 end
 
-_all_rhs_symbols(eqs) = mapreduce(eq->get_variables(eq.rhs), ∪, eqs, init=Set{Symbolic}())
+_all_rhs_symbols(eqs) = mapreduce(eq->get_variables(eq isa Pair ? eq.second : eq.rhs), ∪, eqs, init=Set{Symbolic}())
 
 using PrecompileTools: @compile_workload
 @compile_workload begin
