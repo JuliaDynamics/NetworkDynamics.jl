@@ -422,7 +422,7 @@ function initialize_component(cf;
             init_state[sym] = val
         end
     else
-        res = init_residual(cf, init_state, t=NaN)
+        res = init_residual(cf, init_state; t)
         verbose && @info "No free variables! Residual $(res)"
     end
     if residual isa Ref
@@ -633,18 +633,27 @@ function init_residual(cf::ComponentModel, state=get_defaults_or_inits_dict(cf);
 
     Nout = reduce(+, outdim(cf))
     res = zeros(dim(cf) + Nout + additional_Neqs)
+    fill!(res, NaN)
 
     res_fg = @views res[1:dim(cf)]
     res_out = @views res[dim(cf)+1:dim(cf)+Nout]
     res_add = @views res[dim(cf)+Nout+1:end]
 
-    res_out .= RecursiveArrayTools.ArrayPartition(outs...) # fill with provided outputs
-    compfg(cf)(outs, res_fg, u, ins, p, t)
-    res_out .= res_out .- RecursiveArrayTools.ArrayPartition(outs...) # compare to calculated ouputs
+    # buffer to store the calculated output at point
+    out_calc = map(outs) do out
+        buf = similar(out)
+        fill!(buf, NaN) # fill with NaN
+    end
+    compfg(cf)(out_calc, res_fg, u, ins, p, t)
+
+    # difference between calculated outputs and provided outputs
+    res_out .= RecursiveArrayTools.ArrayPartition(out_calc...) .- RecursiveArrayTools.ArrayPartition(outs...) # compare to calculated ouputs
 
     additional_cf(res_add, outs, u, ins, p, t) # apply additional constraints
 
-    return LinearAlgebra.norm(res)
+    res =  LinearAlgebra.norm(res)
+    isnan(res) && error("Residual is NaN! This shound't happen for an initialized system.")
+    return res
 end
 
 function broken_bounds(cf, state=get_defaults_or_inits_dict(cf), bounds=get_bounds_dict(cf))
