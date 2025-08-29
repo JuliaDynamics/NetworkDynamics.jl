@@ -1040,3 +1040,56 @@ end
         @test length(formulas_after) == 2  # Should still be 2
     end
 end
+
+@testset "Test combining of formulas" begin
+    using NetworkDynamics: collect_initformulas
+    f1 = @initformula :foo = :bar
+    f2 = @initformula :baz = :qux
+    tup = (f1, f2)
+    arr = [f1, f2]
+
+    # test all combinations
+    @test collect_initformulas(nothing, nothing) === nothing
+    @test collect_initformulas(nothing, f1) == [f1]
+    @test collect_initformulas(nothing, tup) == [f1, f2]
+    @test collect_initformulas(nothing, arr) == [f1, f2]
+    @test collect_initformulas(f1, nothing) == [f1]
+    @test collect_initformulas(f1, f1) == [f1, f1]
+    @test collect_initformulas(f1, tup) == [f1, f1, f2]
+    @test collect_initformulas(f1, arr) == [f1, f1, f2]
+    @test collect_initformulas(tup, nothing) == [f1, f2]
+    @test collect_initformulas(tup, f1) == [f1, f2, f1]
+    @test collect_initformulas(tup, tup) == [f1, f2, f1, f2]
+    @test collect_initformulas(tup, arr) == [f1, f2, f1, f2]
+    @test collect_initformulas(arr, nothing) == [f1, f2]
+    @test collect_initformulas(arr, f1) == [f1, f2, f1]
+    @test collect_initformulas(arr, tup) == [f1, f2, f1, f2]
+    @test collect_initformulas(arr, arr) == [f1, f2, f1, f2]
+end
+
+@testset "Test cobining of constraints" begin
+    using NetworkDynamics: merge_initconstraints
+    c1 = @initconstraint :x + :y
+    c2 = @initconstraint :y - :z
+    tup = (c1, c2)
+    arr = [c1, c2]
+
+    similar_enough(a::InitConstraint, b::InitConstraint) =
+        a.sym == b.sym && a.dim == b.dim && a.prettyprint == b.prettyprint
+
+    @test merge_initconstraints(nothing, nothing) === nothing
+    @test merge_initconstraints(nothing, c1) == InitConstraint(c1)
+    @test similar_enough(merge_initconstraints(nothing, arr), InitConstraint(c1, c2))
+    @test similar_enough(merge_initconstraints(c1, nothing), InitConstraint(c1))
+    @test similar_enough(merge_initconstraints(c1, c1), InitConstraint(c1, c1))
+    @test similar_enough(merge_initconstraints(c1, tup), InitConstraint(c1, c1, c2))
+    @test similar_enough(merge_initconstraints(c1, arr), InitConstraint(c1, c1, c2))
+    @test similar_enough(merge_initconstraints(tup, nothing), InitConstraint(c1, c2))
+    @test similar_enough(merge_initconstraints(tup, c1), InitConstraint(c1, c2, c1))
+    @test similar_enough(merge_initconstraints(tup, tup), InitConstraint(c1, c2, c1, c2))
+    @test similar_enough(merge_initconstraints(tup, arr), InitConstraint(c1, c2, c1, c2))
+    @test similar_enough(merge_initconstraints(arr, nothing), InitConstraint(c1, c2))
+    @test similar_enough(merge_initconstraints(arr, c1), InitConstraint(c1, c2, c1))
+    @test similar_enough(merge_initconstraints(arr, tup), InitConstraint(c1, c2, c1, c2))
+    @test similar_enough(merge_initconstraints(arr, arr), InitConstraint(c1, c2, c1, c2))
+end
