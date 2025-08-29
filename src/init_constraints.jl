@@ -506,17 +506,12 @@ function apply_init_formulas!(defaults, formulas_unsorted; verbose=false)
     return defaults
 end
 
+_vcattable(t::Tuple) = collect(t)
+_vcattable(x) = x # Init Formula and Abstractvector
 collect_initformulas(::Nothing, ::Nothing) = nothing
-collect_initformulas(::Nothing, f::InitFormula) = [f]
-collect_initformulas(::Nothing, fs) = fs
-
-collect_initformulas(f ::InitFormula, ::Nothing) = [f]
-collect_initformulas(fA::InitFormula, fB::InitFormula) = [fA, fB]
-collect_initformulas(f ::InitFormula, fs) = [f, fs...]
-
-collect_initformulas(fs, ::Nothing) = fs
-collect_initformulas(fs, f::InitFormula) = [fs..., f]
-collect_initformulas(fsA, fsB) = vcat(fsA, fsB)
+collect_initformulas(::Nothing, f) = vcat(_vcattable(f))
+collect_initformulas(f, ::Nothing) = vcat(_vcattable(f))
+collect_initformulas(a, b) = vcat(_vcattable(a), _vcattable(b))
 
 merge_initconstraints(::Nothing, ::Nothing) = nothing
 merge_initconstraints(::Nothing, c::InitConstraint) = c

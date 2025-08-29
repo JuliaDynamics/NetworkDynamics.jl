@@ -71,7 +71,7 @@ kwargs = (;
             "Directed and Weighted Graphs" => "generated/directed_and_weighted_graphs.md",
         ]
     ],
-    draft=false,
+    draft=haskey(ENV, "DOCUMENTER_DRAFT"),
     format = Documenter.HTML(ansicolor = true, size_threshold=1_000_000),
     warnonly=[:missing_docs],
 )
