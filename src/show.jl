@@ -73,6 +73,19 @@ function Base.show(io::IO, mime::MIME"text/plain", c::ComponentModel)
         pdim(pfm) > 0 && print(io, styled" with $(stylesymbolarray(pfm.psym, _pdef(pfm), _pguess(pfm)))")
     end
 end
+# enable compact printing in lists of component models
+function Base.show(io::IO, c::ComponentModel)
+    type = string(typeof(c))
+    print(io, type, styled" {NetworkDynamics_name::$(c.name)}")
+    if has_graphelement(c)
+        ge = get_graphelement(c)
+        if c isa VertexModel
+            print(io, " @ Vertex $ge")
+        else
+            print(io, " @ Edge $(ge.src)=>$(ge.dst)")
+        end
+    end
+end
 
 function print_states_params(io, @nospecialize(c::ComponentModel), styling)
     info = AnnotatedString{String}[]
