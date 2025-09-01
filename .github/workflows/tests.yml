@@ -38,7 +38,7 @@ jobs:
       - name: Load Julia packages from cache
         id: julia-cache
         uses: julia-actions/cache@v2
-      - uses: julia-actions/julia-buildpkg@v1
+      - uses: hexaeder/julia-buildpkg@main
       - uses: julia-actions/julia-runtest@v1
         with:
           coverage: false
@@ -66,7 +66,7 @@ jobs:
       - name: Load Julia packages from cache
         id: julia-cache
         uses: julia-actions/cache@v2
-      - uses: julia-actions/julia-buildpkg@v1
+      - uses: hexaeder/julia-buildpkg@main
       - uses: julia-actions/julia-runtest@v1
         env:
           JULIA_COVERAGE: true
@@ -116,7 +116,7 @@ jobs:
       - name: Load Julia packages from cache
         id: julia-cache
         uses: julia-actions/cache@v2
-      - uses: julia-actions/julia-buildpkg@v1
+      - uses: hexaeder/julia-buildpkg@main
         with:
           project: NetworkDynamicsInspector
       - name: Run headless test
