@@ -1,5 +1,13 @@
 # NetworkDynamics Release Notes
 
+## v0.10.6 Changelog
+- [#309](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/309) improve error handling in initialization system:
+  - Add custom exception types: `NetworkInitError` and `ComponentInitError` with detailed error messages
+  - Enhanced error detection for NaN values, time-dependent systems, and RHS evaluation failures
+  - Improved `find_fixpoint` function with better input validation and time handling support
+  - Add equality (`==`) and approximate equality (`isapprox`) methods for `NWState` and `NWParameter`
+  - Minor documentation fixes and spelling corrections
+
 ## v0.10.4 Changelog
 - [#303](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/303) update for ModelingToolkit.jl v10 compatibility:
   - rename all `ODESystem` -> `System` (follows MTK v10 API)

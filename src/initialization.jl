@@ -343,7 +343,7 @@ function initialization_problem(cf::T,
             print(io, "\n - Residual contains NaNs!")
             if isnan(t)
                 print(io, " System initialized at t=NaN, maybe your system has explicit \
-                    time dependence? Try specifieng kw argument `t` to decide on time")
+                    time dependence? Try specifying kw argument `t` to decide on time")
             end
         end
         if !isnothing(fn_error)
@@ -497,8 +497,8 @@ function initialize_component(cf;
         residual[] = res
     end
     if !(res < tol)
-        throw(ComponentInitError("Initialized model has a residual larger then specified tolerance $(res) > $(tol)! \
-               Fix initialization or increase tolerance to supress error."))
+        throw(ComponentInitError("Initialized model has a residual larger than specified tolerance $(res) > $(tol)! \
+               Fix initialization or increase tolerance to suppress error."))
     end
 
 
