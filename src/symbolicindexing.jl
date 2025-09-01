@@ -912,7 +912,9 @@ SII.current_time(s::NWParameter) = error("Parameter type does not holde time val
 # NWParameter: getindex
 Base.getindex(p::NWParameter, ::Colon) = pflat(p)
 # HACK: _expand_and_collect to workaround https://github.com/SciML/SymbolicIndexingInterface.jl/issues/94
-Base.getindex(p::NWParameter, idx) = SII.getp(p, _expand_and_collect(p, _paraindex(idx)))(p)
+function Base.getindex(p::NWParameter, idx::Union{SymbolicIndex, AbstractVector, Tuple})
+    SII.getp(p, _expand_and_collect(p, _paraindex(idx)))(p)
+end
 
 # NWParameter: setindex!
 function Base.setindex!(p::NWParameter, val, idx)
@@ -932,7 +934,7 @@ Base.getindex(s::NWState, ::Colon) = uflat(s)
 # HACK: _expand_and_collect to workaround https://github.com/SciML/SymbolicIndexingInterface.jl/issues/94
 Base.getindex(s::NWState, idx::SymbolicParameterIndex) = SII.getp(s, _expand_and_collect(s, idx))(s)
 Base.getindex(s::NWState, idx::SymbolicStateIndex) = SII.getu(s, idx)(s)
-function Base.getindex(s::NWState, idxs)
+function Base.getindex(s::NWState, idxs::Union{AbstractVector, Tuple})
     if all(i -> i isa SymbolicParameterIndex, idxs)
         # HACK: _expand_and_collect to workaround https://github.com/SciML/SymbolicIndexingInterface.jl/issues/94
         SII.getp(s, _expand_and_collect(s, idxs))(s)

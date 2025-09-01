@@ -665,7 +665,7 @@ end
     @test !isapprox(s1, s3; atol=0.005)
 end
 
-@testset "errormsg quality for indexing" begin
+@testset "convenience getindex methods" begin
     g = path_graph(2)
     vf1 = Lib.kuramoto_second()
     vf2 = Lib.kuramoto_first()
