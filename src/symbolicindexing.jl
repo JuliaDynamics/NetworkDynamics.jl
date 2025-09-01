@@ -971,6 +971,33 @@ end
 
 
 ####
+#### Comparison of states/parameters
+####
+function Base.:(==)(s1::NWState, s2::NWState)
+    s1 === s2 && return true
+    SII.variable_symbols(s1) == SII.variable_symbols(s2) || return false
+    uflat(s1) == uflat(s2) || return false
+    s1.p == s2.p
+end
+function Base.:(==)(p1::NWParameter, p2::NWParameter)
+    p1 === p2 && return true
+    SII.parameter_symbols(p1) == SII.parameter_symbols(p2) || return false
+    pflat(p1) == pflat(p2)
+end
+function Base.isapprox(s1::NWState, s2::NWState; kwargs...)
+    s1 === s2 && return true
+    SII.variable_symbols(s1) == SII.variable_symbols(s2) || return false
+    isapprox(uflat(s1), uflat(s2); kwargs...) || return false
+    isapprox(s1.p, s2.p; kwargs...)
+end
+function Base.isapprox(p1::NWParameter, p2::NWParameter; kwargs...)
+    p1 === p2 && return true
+    SII.parameter_symbols(p1) == SII.parameter_symbols(p2) || return false
+    isapprox(pflat(p1), pflat(p2); kwargs...)
+end
+
+
+####
 #### Indexing proxys
 ####
 abstract type IndexingProxy end
