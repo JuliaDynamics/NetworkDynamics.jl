@@ -75,7 +75,7 @@ end
     NetworkDynamics.initialize_component!(vf; verbose=true)
     @test NetworkDynamics.init_residual(vf) < 1e-8
 
-    @test_throws ErrorException NetworkDynamics.initialize_component!(vf, tol=0.0; verbose=true)
+    @test_throws ComponentInitError NetworkDynamics.initialize_component!(vf, tol=0.0; verbose=true)
 
     # make empty problem (no free vars)
     vf_comp = copy(vf)
@@ -1130,7 +1130,7 @@ end
 
     default_overrides = interface_values(s1)
     # if no free variables, errors in init_residual
-    @test_throws ArgumentError initialize_componentwise(nw; subverbose=false, verbose=false, default_overrides)
+    @test_throws ComponentInitError initialize_componentwise(nw; subverbose=false, verbose=false, default_overrides)
     # goes through
     initialize_componentwise(nw; subverbose=false, verbose=false, default_overrides, t=0)
 
