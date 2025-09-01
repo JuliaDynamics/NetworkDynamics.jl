@@ -68,6 +68,7 @@ struct VPIndex{C,S} <: SymbolicParameterIndex{C,S}
     compidx::C
     subidx::S
 end
+VPIndex(ci) = VPIndex(ci, nothing)
 """
     EPIndex{C,S} <: SymbolicStateIndex{C,S}
     idx = VEIndex(comp, sub)
@@ -85,6 +86,7 @@ struct EPIndex{C,S} <: SymbolicParameterIndex{C,S}
     compidx::C
     subidx::S
 end
+EPIndex(ci) = EPIndex(ci, nothing)
 const SymbolicEdgeIndex{C,S} = Union{EIndex{C,S}, EPIndex{C,S}}
 const SymbolicVertexIndex{C,S} = Union{VIndex{C,S}, VPIndex{C,S}}
 
@@ -1272,9 +1274,9 @@ Base.getindex(s::NWState, idx::ObservableExpression) = SII.getu(s, idx)(s)
 Base.getindex(s::NWParameter, idx::ObservableExpression) = SII.getp(s, idx)(s)
 
 # using getindex to access component models
-function Base.getindex(nw::Network, i::EIndex{<:Union{<:Pair,Symbol,Int}, Nothing})
+function Base.getindex(nw::Network, i::SymbolicEdgeIndex{<:Union{<:Pair,Symbol,Int}, Nothing})
     return getcomp(nw, i)
 end
-function Base.getindex(nw::Network, i::VIndex{<:Union{Symbol,Int}, Nothing})
+function Base.getindex(nw::Network, i::SymbolicVertexIndex{<:Union{Symbol,Int}, Nothing})
     return getcomp(nw, i)
 end

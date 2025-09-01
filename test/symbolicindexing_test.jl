@@ -664,3 +664,13 @@ end
     @test isapprox(s1, s3; atol=0.02)
     @test !isapprox(s1, s3; atol=0.005)
 end
+
+@testset "errormsg quality for indexing" begin
+    g = path_graph(2)
+    vf = Lib.kuramoto_second()
+    ef = Lib.kuramoto_edge()
+    nw = Network(g, vf, ef)
+
+    @test nw[VPIndex(1)] === nw[VIndex(1)]
+    @test get_default(nw, VPIndex(1, :M)) == get_default(nw, VIndex(1, :M))
+end
