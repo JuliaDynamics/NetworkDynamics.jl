@@ -266,8 +266,8 @@ function dqbus_pq(; kwargs...)
     VertexModel(pq, [:i_r, :i_i], [:u_r, :u_i])
 end
 function dqbus_timedeppq(; kwargs...)
-    @named pq = TimeDependentPQLoad(; kwargs...)
-    VertexModel(pq, [:i_r, :i_i], [:u_r, :u_i])
+    @named pq_timedep = TimeDependentPQLoad(; kwargs...)
+    VertexModel(pq_timedep, [:i_r, :i_i], [:u_r, :u_i])
 end
 function dqbus_pv(; kwargs...)
     @named pv = PVBus(; kwargs...)

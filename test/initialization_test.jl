@@ -1122,4 +1122,20 @@ end
     nws_error = Network(g, [v1s, v2s, v3s, v4s, v5s_error], e)
     find_fixpoint(nws_error) # no error for t=NaN
     @test_throws NetworkInitError find_fixpoint(nws_error; t=1.0)
+
+    #### Dynamic errors
+    v1 = Lib.dqbus_swing()
+    v2 = Lib.dqbus_swing()
+    nw = Network(g, [v1, v2, v3s, v4s, v5s], e; dealias=true)
+
+    default_overrides = interface_values(s1)
+    # if no free variables, errors in init_residual
+    @test_throws ArgumentError initialize_componentwise(nw; subverbose=false, verbose=false, default_overrides)
+    # goes through
+    initialize_componentwise(nw; subverbose=false, verbose=false, default_overrides, t=0)
+
+    delete_default!(nw[VIndex(5)], :Qset)
+    set_guess!(nw[VIndex(5)], :Qset, -0.2)
+    @test_throws ComponentInitError initialize_componentwise(nw; subverbose=false, verbose=false, default_overrides)
+    initialize_componentwise(nw; subverbose=false, verbose=false, default_overrides, t=0)
 end

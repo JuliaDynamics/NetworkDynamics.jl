@@ -326,6 +326,34 @@ function initialization_problem(cf::T,
     else
         verbose && @info "Initialization problem is overconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for $freesym."
     end
+
+    # check rhs of system for obvious problems
+    resid = zeros(Neqs)
+    fn_error = nothing
+    try
+        nlf(resid, uguess, nothing)
+    catch e
+        fn_error = e
+    end
+    resid_nan = any(isnan, resid)
+    if !isnothing(fn_error) || resid_nan
+        io = IOBuffer()
+        print(io, "Error while constructing initialization problem for $(cf.name):")
+        if resid_nan
+            print(io, "\n - Residual contains NaNs!")
+            if isnan(t)
+                print(io, " System initialized at t=NaN, maybe your system has explicit \
+                    time dependence? Try specifieng kw argument `t` to decide on time")
+            end
+        end
+        if !isnothing(fn_error)
+            print(io, "\n - Error while calling RHS of initialization problem!")
+            print(io, "\n\nOriginal Error:\n")
+            Base.showerror(io, fn_error)
+        end
+        throw(ComponentInitError(String(take!(io))))
+    end
+
     (NonlinearLeastSquaresProblem(nlf, uguess), boundT!)
 end
 function _overwrite_at_mask!(target, mask, source, range)
@@ -692,7 +720,14 @@ function init_residual(cf::ComponentModel, state=get_defaults_or_inits_dict(cf);
     additional_cf(res_add, outs, u, ins, p, t) # apply additional constraints
 
     res =  LinearAlgebra.norm(res)
-    isnan(res) && error("Residual is NaN! This shound't happen for an initialized system.")
+    if isnan(res)
+        if isnan(t)
+            throw(ArgumentError("Residual of component is NaN at t=NaN! Maybe your system has \
+                explicit time dependence? Try specifieng kw argument `t` to decide on time."))
+        else
+            throw(ArgumentError("Residual of component is NaN, which should not happen for an initialized system!"))
+        end
+    end
     return res
 end
 
