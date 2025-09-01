@@ -475,7 +475,7 @@ function initialize_component(cf;
             res = LinearAlgebra.norm(sol.resid)
             @warn "Initialization for component stalled with residual $(res)"
         elseif !SciMLBase.successful_retcode(sol.retcode)
-            throw(ArgumentError("Initialization failed. Solver returned $(sol.retcode)"))
+            throw(ComponentInitError("Initialization failed. Solver returned $(sol.retcode)"))
         else
             res = LinearAlgebra.norm(sol.resid)
             verbose && @info "Initialization successful with residual $(res)"
@@ -497,8 +497,8 @@ function initialize_component(cf;
         residual[] = res
     end
     if !(res < tol)
-        error("Initialized model has a residual larger then specified tolerance $(res) > $(tol)! \
-               Fix initialization or increase tolerance to supress error.")
+        throw(ComponentInitError("Initialized model has a residual larger then specified tolerance $(res) > $(tol)! \
+               Fix initialization or increase tolerance to supress error."))
     end
 
 
@@ -721,12 +721,13 @@ function init_residual(cf::ComponentModel, state=get_defaults_or_inits_dict(cf);
 
     res =  LinearAlgebra.norm(res)
     if isnan(res)
-        if isnan(t)
-            throw(ArgumentError("Residual of component is NaN at t=NaN! Maybe your system has \
-                explicit time dependence? Try specifieng kw argument `t` to decide on time."))
+        err_str = if isnan(t)
+            "Residual of component is NaN at t=NaN! Maybe your system has \
+                explicit time dependence? Try specifying kw argument `t` to decide on time."
         else
-            throw(ArgumentError("Residual of component is NaN, which should not happen for an initialized system!"))
+            "Residual of component is NaN, which should not happen for an initialized system!"
         end
+        throw(ComponentInitError(err_str))
     end
     return res
 end
@@ -914,8 +915,8 @@ function _initialize_componentwise(
     resid = LinearAlgebra.norm(du)
 
     if !(resid < nwtol)
-        error("Initialized network has a residual larger than $nwtol: $(resid)! \
-               Fix initialization or increase tolerance to suppress error.")
+        throw(NetworkInitError("Initialized network has a residual larger than $nwtol: $(resid)! \
+               Fix initialization or increase tolerance to suppress error."))
     end
     verbose && println("Initialized network with residual $(resid)!")
     s0
