@@ -170,6 +170,20 @@ end
     end
 end
 
+@mtkmodel TimeDependentPQLoad begin
+    @extend BusBase()
+    @structural_parameters begin
+        Pfun
+    end
+    @parameters begin
+        Qset, [description = "Reactive Power setpoint", guess=0]
+    end
+    @equations begin
+        0 ~ _no_simplify(u_r*i_r + u_i*i_i + Pfun(t))
+        0 ~ _no_simplify(u_r*i_i - u_i*i_r + Qset)
+    end
+end
+
 _no_simplify(x) = x
 @register_symbolic _no_simplify(x)
 @mtkmodel PVBus begin
@@ -249,6 +263,10 @@ function dqbus_swing(; kwargs...)
 end
 function dqbus_pq(; kwargs...)
     @named pq = PQLoad(; kwargs...)
+    VertexModel(pq, [:i_r, :i_i], [:u_r, :u_i])
+end
+function dqbus_timedeppq(; kwargs...)
+    @named pq = TimeDependentPQLoad(; kwargs...)
     VertexModel(pq, [:i_r, :i_i], [:u_r, :u_i])
 end
 function dqbus_pv(; kwargs...)

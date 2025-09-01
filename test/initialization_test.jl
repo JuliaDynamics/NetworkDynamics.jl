@@ -1,5 +1,6 @@
 using NetworkDynamics, Graphs
 using SteadyStateDiffEq, OrdinaryDiffEqRosenbrock
+using OrdinaryDiffEqNonlinearSolve
 using ModelingToolkit
 using ModelingToolkit: t_nounits as t, D_nounits as Dt
 using SymbolicIndexingInterface: SymbolicIndexingInterface as SII
@@ -1092,4 +1093,33 @@ end
     @test similar_enough(merge_initconstraints(arr, c1), InitConstraint(c1, c2, c1))
     @test similar_enough(merge_initconstraints(arr, tup), InitConstraint(c1, c2, c1, c2))
     @test similar_enough(merge_initconstraints(arr, arr), InitConstraint(c1, c2, c1, c2))
+end
+
+@testset "test error messages while initialization" begin
+    # Create a simple network with Kuramoto oscillators
+    g = cycle_graph(5) # 5-node cycle graph
+    v1s = Lib.dqbus_slack()
+    v2s = Lib.dqbus_pv(Pset=1.5, Vset=1.0)
+    v3s = Lib.dqbus_pq(Pset=-1.0, Qset=-0.1)
+    v4s = Lib.dqbus_pq(Pset=-1.0, Qset=-0.1)
+    v5s = Lib.dqbus_timedeppq(Pfun=t->-1.0+0.1*sin(t), Qset=-0.1)
+    e = Lib.dqline(X=0.1, R=0.01)
+    nws = Network(g, [v1s, v2s, v3s, v4s, v5s], e)
+
+    @test_throws NetworkInitError find_fixpoint(nws; alg=SSRootfind())
+
+    s1 = find_fixpoint(nws; alg=SSRootfind(), t=0)
+    s2 = find_fixpoint(nws; alg=OrdinaryDiffEqNonlinearSolve.NewtonRaphson(), t=0)
+    @test s1 ≈ s2
+
+    u0nan = uflat(NWState(nws))
+    u0nan[1] = NaN
+    @test_throws NetworkInitError find_fixpoint(nws, u0nan)
+
+    Pfun_error(t) = t==1.0 ? error("GOTCHA!") : 0.0
+    @register_symbolic Pfun_error(t)
+    v5s_error = Lib.dqbus_timedeppq(Pfun=Pfun_error, Qset=-0.1)
+    nws_error = Network(g, [v1s, v2s, v3s, v4s, v5s_error], e)
+    find_fixpoint(nws_error) # no error for t=NaN
+    @test_throws NetworkInitError find_fixpoint(nws_error; t=1.0)
 end

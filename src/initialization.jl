@@ -1,13 +1,43 @@
+struct NetworkInitError <: Exception
+    msg::String
+end
+struct ComponentInitError <: Exception
+    msg::String
+end
+Base.showerror(io::IO, e::NetworkInitError) = print(io, "NetworkInitError: ", e.msg)
+Base.showerror(io::IO, e::ComponentInitError) = print(io, "ComponentInitError: ", e.msg)
+
 """
     find_fixpoint(nw::Network, [x0::NWState=NWState(nw)], [p::NWParameter=x0.p]; kwargs...)
     find_fixpoint(nw::Network, x0::AbstractVector, p::AbstractVector; kwargs...)
-    find_fixpoint(nw::Network, x0::AbstractVector; kwargs...)
 
-Convenience wrapper around `SteadyStateProblem` from SciML-ecosystem.
-Constructs and solves the steady state problem, returns found value wrapped as `NWState`.
+Find a steady-state (fixed-point) solution of the network dynamics by solving the nonlinear
+equation `f(u, p, t) = 0`, where `f` represents the network's right-hand side function.
+
+This is a convenience wrapper around `SteadyStateProblem` from the SciML ecosystem that
+constructs and solves the steady state problem, returning the solution as an `NWState`.
+
+## Arguments
+- `nw::Network`: The network dynamics to find a fixed point for
+- `x0`: Initial guess for the state variables. Can be:
+  - `NWState`: Complete network state (default: `NWState(nw; ufill=0)`)
+  - `AbstractVector`: Flat state vector
+- `p`: Network parameters. Can be:
+  - `NWParameter`: Complete parameter object (default: extracted from `x0` or `NWParameter(nw)`)
+  - `AbstractVector`: Flat parameter vector
+
+## Keyword Arguments
+- `alg=SSRootfind()`: Steady state solver algorithm from NonlinearSolve.jl
+- `t=NaN`: Time at which to evaluate the system (for time-dependent networks)
+- Additional `kwargs` are passed to the SciML `solve` function
+
+## Returns
+- `NWState`: Network state at the found fixed point
+
+See also: [`NWState`](@ref), [`NWParameter`](@ref), [`initialize_componentwise`](@ref)
 """
 function find_fixpoint(nw::Network, x0::AbstractVector; kwargs...)
-    find_fixpoint(nw, x0, NWParameter(nw); kwargs...)
+    find_fixpoint(nw, NWState(nw, x0), NWParameter(nw); kwargs...)
 end
 function find_fixpoint(nw::Network, p::NWParameter; kwargs...)
     find_fixpoint(nw, NWState(p; ufill=0), p; kwargs...)
@@ -15,65 +45,75 @@ end
 function find_fixpoint(nw::Network,
                        x0::NWState=NWState(nw; ufill=0),
                        p::NWParameter=x0.p;
+                       t=isnothing(x0.t) ? NaN : x0.t,
                        kwargs...)
-    find_fixpoint(nw, uflat(x0), pflat(p); kwargs...)
+    find_fixpoint(nw, uflat(x0), pflat(p); t, kwargs...)
 end
 function find_fixpoint(nw::Network, x0::AbstractVector, p::AbstractVector;
-                       alg=SSRootfind(), kwargs...)
-    if any(isnan, x0) || any(isnan, p)
-        missing_vars = String[]
-        missing_params = String[]
-
-        if any(isnan, x0)
-            nan_indices = findall(isnan, x0)
-            variable_symbols = NetworkDynamics.SII.variable_symbols(nw)
-            missing_vars = [string(variable_symbols[i]) for i in nan_indices]
-        end
-
-        if any(isnan, p)
-            nan_indices = findall(isnan, p)
-            parameter_symbols = NetworkDynamics.SII.parameter_symbols(nw)
-            missing_params = [string(parameter_symbols[i]) for i in nan_indices]
-        end
-
-        if !isempty(missing_vars) || !isempty(missing_params)
-            error_msg = "find_fixpoint inputs contain NaNs, indicating missing default values:\n"
-            if !isempty(missing_vars)
-                error_msg *= "  Variables:  " * join(missing_vars, ", ") * "\n"
-            end
-            if !isempty(missing_params)
-                error_msg *= "  Parameters: " * join(missing_params, ", ") * "\n"
-            end
-            error_msg *= "This may indicate missing default values in component metadata or explicitly passed inputs with NaNs."
-            throw(ArgumentError(error_msg))
-        end
+                       alg=SSRootfind(), t=NaN, kwargs...)
+    nw_fixed_t = (du, u, p, _) -> nw(du, u, p, t) #fix t
+    du = zeros(length(x0))
+    fn_error = nothing
+    try
+        nw_fixed_t(du, x0, p, nothing)
+    catch e
+        fn_error = e
     end
-    prob = SteadyStateProblem(nw, x0, p)
-    sol = _solve_fixpoint(prob, alg; kwargs...)
+    output_nans = any(isnan, du)
+
+    if !isnothing(fn_error) || output_nans
+        # something bad happened
+        io = IOBuffer()
+        if isnothing(fn_error)
+            print(io, "Evaluation of network rhs at t=$t resulted in NaNs! Probable causes:")
+        else
+            print(io, "Evaluation of network rhs at t=$t led to an error! Probable causes:")
+        end
+
+        if any(isnan, x0) || any(isnan, p)
+            print(io, "\n - Some input states/parameters contained NaN:")
+            if any(isnan, x0)
+                nan_indices = findall(isnan, x0)
+                variable_symbols = NetworkDynamics.SII.variable_symbols(nw)
+                missing_vars = [string(variable_symbols[i]) for i in nan_indices]
+                print(io, "\n   Variables:  ", join(missing_vars, ", "))
+            end
+
+            if any(isnan, p)
+                nan_indices = findall(isnan, p)
+                parameter_symbols = NetworkDynamics.SII.parameter_symbols(nw)
+                missing_params = [string(parameter_symbols[i]) for i in nan_indices]
+                print(io, "\n   Parameters: ", join(missing_params, ", "))
+            end
+        end
+
+        if output_nans && isnan(t)
+            print(io, "\n - Network was evaluated at t=NaN, maybe your system has explicit time dependence? Try specifying kw argument `t` to decide on time")
+        end
+        if !isnothing(fn_error)
+            print(io, "\nCausing ERROR:\n")
+            Base.showerror(io, fn_error)
+        end
+
+        throw(NetworkInitError(String(take!(io))))
+    end
+
+    prob = SteadyStateProblem(nw_fixed_t, x0, p)
+    sol = SciMLBase.solve(prob, alg; kwargs...)
     if !SciMLBase.successful_retcode(sol.retcode)
-        @warn "Solver did not finish retcode = $(sol.retcode) (alg = $alg)!"
-        error("""
-        Could not find fixpoint, solver returned $(sol.retcode)! For debugging, \
+        throw(NetworkInitError("""
+        Could not find fixpoint, solver returned $(sol.retcode) (alg=$(alg))! For debugging, \
         it is advised to manually construct the steady state problem and try \
         different solvers/arguments:
 
-        prob = SteadyStateproblem(nw, uflat(nwstat), pflat(nwpara))
+        prob = SteadyStateProblem(nw, uflat(nwstate), pflat(nwpara))
         sol = solve(prob, alg; kwargs...)
         x0 = NWState(nw, sol.u)
 
         For detail see https://docs.sciml.ai/NonlinearSolve/stable/native/steadystatediffeq/
-        """)
+        """))
     end
     NWState(nw, sol.u, NWParameter(nw, p))
-end
-
-function _solve_fixpoint(prob, alg::AbstractNonlinearSolveAlgorithm; kwargs...)
-    _prob = NonlinearProblem(prob)
-    SciMLBase.solve(_prob, alg; kwargs...)
-end
-
-function _solve_fixpoint(prob, alg::SteadyStateDiffEqAlgorithm; kwargs...)
-    sol = SciMLBase.solve(prob, alg; kwargs...)
 end
 
 function initialization_problem(cf::T,
