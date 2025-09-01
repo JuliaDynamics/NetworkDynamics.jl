@@ -1280,3 +1280,12 @@ end
 function Base.getindex(nw::Network, i::SymbolicVertexIndex{<:Union{Symbol,Int}, Nothing})
     return getcomp(nw, i)
 end
+function Base.getindex(nw::Network, i::SymbolicEdgeIndex{Colon, Nothing})
+    return copy(nw.im.edgem)
+end
+function Base.getindex(nw::Network, i::SymbolicVertexIndex{Colon, Nothing})
+    return copy(nw.im.vertexm)
+end
+function Base.getindex(nw::Network, collection::Union{AbstractArray,Tuple})
+    getindex.(Ref(nw), collection)
+end

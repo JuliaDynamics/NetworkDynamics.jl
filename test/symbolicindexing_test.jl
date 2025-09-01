@@ -667,10 +667,24 @@ end
 
 @testset "errormsg quality for indexing" begin
     g = path_graph(2)
-    vf = Lib.kuramoto_second()
+    vf1 = Lib.kuramoto_second()
+    vf2 = Lib.kuramoto_first()
     ef = Lib.kuramoto_edge()
-    nw = Network(g, vf, ef)
+    nw = Network(g, [vf1, vf2], ef)
 
     @test nw[VPIndex(1)] === nw[VIndex(1)]
     @test get_default(nw, VPIndex(1, :M)) == get_default(nw, VIndex(1, :M))
+
+    @test nw[VIndex(:)] == [nw[VIndex(1)], nw[VIndex(2)]]
+    @test nw[VIndex(:)] !== nw.im.vertexm
+    @test nw[EIndex(:)] == [nw[EIndex(1)]]
+    @test nw[EIndex(:)] !== nw.im.edgem
+    veccopy = nw[VIndex(:)]
+    veccopy[1] = nw[VIndex(2)]
+    @test veccopy[1] != nw[VIndex(1)]
+    set_default!(veccopy[1], :ω, 42)
+    @test get_default(nw[VIndex(2)], :ω) == 42
+
+    @test nw[[VIndex(1), VIndex(2)]] == nw[VIndex(:)]
+    @test nw[[VIndex(2), VIndex(1)]] == reverse(nw[VIndex(:)])
 end
