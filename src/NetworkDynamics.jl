@@ -68,7 +68,7 @@ export vidxs, eidxs, vpidxs, epidxs
 export save_parameters!, extract_nw
 export @obsex
 export variable_symbols, parameter_symbols
-include("symbolicindexing.jl")
+include("symbolicindexing_base.jl")
 
 export ComponentCondition, ComponentAffect
 export ContinuousComponentCallback, VectorContinuousComponentCallback
