@@ -227,7 +227,7 @@ subsym_to_idx(idx::NumericSubIndex{Int}, _) = idx.idx
 # Base.broadcastable(si::SymbolicIndex{<:Union{CONCRETE_COMPIDX,Colon},<:Union{CONCRETE_SUBIDX,Colon}}) = Ref(si)
 Base.broadcastable(si::SymbolicIndex{<:CONCRETE_COMPIDX,<:CONCRETE_SUBIDX}) = Ref(si)
 
-const _IterableComponent = SymbolicIndex{<:Union{AbstractVector,Tuple},<:CONCRETE_SUBIDX}
+const _IterableComponent = SymbolicIndex{<:Union{AbstractVector,Tuple},<:Union{CONCRETE_SUBIDX,Nothing}}
 Base.length(si::_IterableComponent) = length(si.compidx)
 Base.size(si::_IterableComponent) = (length(si),)
 Base.IteratorSize(si::_IterableComponent) = Base.HasShape{1}()

@@ -69,7 +69,7 @@ export variable_symbols, parameter_symbols
 include("symbolicindexing_base.jl")
 
 export NWState, NWParameter, uflat, pflat
-export vidxs, eidxs, vpidxs, epidxs
+export vidxs, eidxs, vpidxs, epidxs, generate_indices
 export @obsex
 include("symbolicindexing.jl")
 

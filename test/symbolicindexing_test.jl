@@ -716,3 +716,56 @@ end
     nw = Network(g, [vf1, vf2], ef)
 
 end
+
+
+@testest "index generation generate_indices" begin
+    g = cycle_graph(5)
+    v1 = Lib.dqbus_swing_and_load()
+    v2 = Lib.dqbus_swing()
+    v3 = Lib.dqbus_pq()
+    v4 = Lib.dqbus_pq()
+    v5 = Lib.dqbus_pq()
+    e = Lib.dqline(X=0.1, R=0.01)
+    nw = Network(g, [v1, v2, v3, v4, v5], e; dealias=true)
+
+    generate_indices(nw, VIndex(:), nothing; return_types=true)
+    generate_indices(nw, [VIndex(:)], nothing)
+    generate_indices(nw, [VIndex(:), EIndex(:)], nothing)
+    generate_indices(nw, [VIndex(:), EIndex(1), EIndex(2)], nothing)
+
+    generate_indices(nw, VIndex(:pq), nothing)
+    generate_indices(nw, VIndex("p"), nothing)
+    generate_indices(nw, VIndex("load"), nothing)
+    generate_indices(nw, VIndex("swing"), nothing)
+
+
+    s = NWState(nw)
+    s.e[1][:R]
+    s.e[1, :R]
+    s.v[1][:swing₊ω]
+
+    NetworkDynamics.VProxy(s)[1, :swing₊ω]
+
+    s.p.v
+
+    fp = FilteringProxy(s)
+    fp.v[1].p
+    fp.v[1]
+    fp.v
+    fp.e
+    fp[VIndex(:)]
+    fp.v[:]
+
+    fp.v.in
+    fp.p
+    fp.v["load"]
+    fp.p
+
+    fp.e[1:10]
+
+    EIndex(1)
+
+    generate_indices(fp)
+
+
+end

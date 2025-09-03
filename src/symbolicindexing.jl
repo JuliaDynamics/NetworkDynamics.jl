@@ -347,9 +347,9 @@ _wrap_proxy_subidx(::IndexingProxy{<:NWParameter}, sub) = wrap_pidx(sub)
 
 function Base.getproperty(s::Union{NWParameter, NWState}, sym::Symbol)
     if sym === :v
-        return VProxy(s)
+        return FilteringProxy(s).v
     elseif sym === :e
-        return EProxy(s)
+        return FilteringProxy(s).e
     else
         return getfield(s, sym)
     end
@@ -497,6 +497,183 @@ end
 
 _get_components(::Union{Type{<:VIndex}, <:typeof(VPIndex)}, inpr) = extract_nw(inpr).im.vertexm
 _get_components(::Union{Type{<:EIndex}, <:typeof(EPIndex)}, inpr) = extract_nw(inpr).im.edgem
+
+
+struct AllVertices end
+struct AllEdges end
+
+struct FilteringProxy{S,CF,VF} <: IndexingProxy{S}
+    s::S # the underlying state/parameter object
+    compfilter::CF
+    varfilter::VF
+    states::Bool
+    parameters::Bool
+    outputs::Bool
+    inputs::Bool
+    observables::Bool
+end
+
+# "copy" constructor
+function FilteringProxy(
+    fp::FilteringProxy;
+    compfilter=fp.compfilter, varfilter=fp.varfilter,
+    states=fp.states, parameters=fp.parameters, outputs=fp.outputs,
+    inputs=fp.inputs, observables=fp.observables
+)
+    FilteringProxy(fp.s, compfilter, varfilter, states, parameters, outputs, inputs, observables)
+end
+FilteringProxy(s::NWState) = FilteringProxy(s, nothing, nothing, true, !isnothing(s.p), false, false, false)
+FilteringProxy(s::NWParameter) = FilteringProxy(s, nothing, nothing, false, true, false, false, false)
+function generate_indices(f::FilteringProxy; kwargs...)
+    generate_indices(f.s, f.compfilter, f.varfilter;
+        states=f.states,
+        parameters=f.parameters,
+        outputs=f.outputs,
+        inputs=f.inputs,
+        observables=f.observables,
+        kwargs...)
+end
+function resolve(f::FilteringProxy)
+    idxs = generate_indices(f)
+    if length(idxs) == 1
+        f.s[only(idxs)]
+    else
+        f.s[idxs]
+    end
+end
+
+Base.getindex(f::FilteringProxy, idx::SymbolicIndex) = getindex(f.s, idx)
+function Base.getindex(f::FilteringProxy, idx::Union{AbstractVector,Tuple})
+    if all(i -> i isa SymbolicIndex, idx)
+        return getindex(f.s, idx)
+    elseif f isa FilteringProxy{<:Any, <:AllVertices}
+        # XXX: vector version for f.v[1:10] for example
+        FilteringProxy(f; compfilter=VIndex(idx))
+    elseif f isa FilteringProxy{<:Any, <:AllEdges}
+        FilteringProxy(f; compfilter=EIndex(idx))
+    elseif f isa FilteringProxy{<:Any, <:SymbolicIndex}
+        # XXX: vector version for f.v[1][1:10] for example
+        resolve(FilteringProxy(f; varfilter=idx))
+    else
+        throw(ArgumentError("Collection $idx is not a SymbolicIndex collection."))
+    end
+end
+function Base.getindex(f::FilteringProxy{<:Any, Nothing}, idx::SymbolicIndex{<:Any, Nothing})
+    FilteringProxy(f; compfilter=idx)
+end
+function Base.getproperty(f::FilteringProxy, sym::Symbol)
+    if sym === :v
+        if f.compfilter == nothing
+            FilteringProxy(f; compfilter=AllVertices())
+        else
+            throw(ArgumentError("Cannot apply filter \".v\": already filtering for $(f.compfilter)."))
+        end
+    elseif sym === :e
+        if f.compfilter == nothing
+            FilteringProxy(f; compfilter=AllEdges())
+        else
+            throw(ArgumentError("Cannot apply filter \".e\": already filtering for $(f.compfilter)."))
+        end
+    elseif sym === :p
+        FilteringProxy(f; parameters=true, states=false, outputs=false, inputs=false, observables=false)
+    elseif sym === :x
+        FilteringProxy(f; parameters=false, states=true, outputs=false, inputs=false, observables=false)
+    elseif sym === :out
+        FilteringProxy(f; parameters=false, states=false, outputs=true, inputs=false, observables=false)
+    elseif sym === :in
+        FilteringProxy(f; parameters=false, states=false, outputs=false, inputs=true, observables=false)
+    elseif sym === :obs
+        FilteringProxy(f; parameters=false, states=false, outputs=false, inputs=false, observables=true)
+    elseif sym === :all
+        FilteringProxy(f; parameters=true, states=true, outputs=true, inputs=true, observables=true)
+    else
+        getfield(f, sym)
+    end
+end
+# unspecific comp idx set
+function Base.getindex(f::FilteringProxy{<:Any, AllVertices}, idx::Union{Colon,Int,Symbol,String,Regex})
+    FilteringProxy(f; compfilter=VIndex(idx))
+end
+function Base.getindex(f::FilteringProxy{<:Any, AllEdges}, idx::Union{Colon,Int,Symbol,String,Regex})
+    FilteringProxy(f; compfilter=EIndex(idx))
+end
+Base.getindex(f::FilteringProxy{<:Any, <:Union{AllVertices,AllEdges}}, compfilter, varfilter) = f[compfilter][varfilter]
+# specific comp idx set
+function Base.getindex(f::FilteringProxy{<:Any, <:SymbolicIndex}, varfilter::Union{StateIdx, ParamIdx, Symbol, String, Regex})
+    resolve(FilteringProxy(f; varfilter=varfilter))
+end
+
+
+
+generate_indices(inpr, s::SymbolicIndex; kwargs...) = generate_indices(inpr, s.compidx, s.state; kwargs...)
+function generate_indices(inpr, compfilter, varfilter; states=true, parameters=true, outputs=true, observables=false, inputs=false, return_types=false)
+    nw = extract_nw(inpr)
+    indices = SymbolicIndex[]
+    types = return_types ? Symbol[] : nothing
+
+    all_comp = vcat(collect(VIndex(1:nv(nw))), collect(EIndex(1:ne(nw))))
+    compidxs = filter(compidx -> match_compfilter(nw, compfilter, compidx), all_comp)
+
+    for cidx in compidxs
+        comp = getcomp(nw, cidx)
+        if states
+            matched = filter(sym -> match_varfilter(comp, varfilter, sym), sym(comp))
+            append!(indices, idxtype(cidx).(cidx.compidx, matched))
+            return_types && append!(types, :State for _ in matched)
+        end
+        if parameters
+            matched = filter(sym -> match_varfilter(comp, varfilter, sym), psym(comp))
+            append!(indices, idxtype(cidx).(cidx.compidx, matched))
+            return_types && append!(types, :Parameter for _ in matched)
+        end
+        if outputs
+            # if states are also requested, do not duplicate
+            _outsym = states ? setdiff(outsym_flat(comp), sym(comp)) : outsym_flat(comp)
+            matched = filter(sym -> match_varfilter(comp, varfilter, sym), _outsym)
+            append!(indices, idxtype(cidx).(cidx.compidx, matched))
+            return_types && append!(types, :Output for _ in matched)
+        end
+        if inputs
+            matched = filter(sym -> match_varfilter(comp, varfilter, sym), insym_flat(comp))
+            append!(indices, idxtype(cidx).(cidx.compidx, matched))
+            return_types && append!(types, :Input for _ in matched)
+        end
+        if observables
+            matched = filter(sym -> match_varfilter(comp, varfilter, sym), obssym(comp))
+            append!(indices, idxtype(cidx).(cidx.compidx, matched))
+            return_types && append!(types, :Observable for _ in matched)
+        end
+    end
+    if return_types
+        return indices, types
+    else
+        return indices
+    end
+end
+match_compfilter(nw, filter::Nothing, idx) = true
+function match_compfilter(nw, filter::Union{AbstractVector, Tuple}, idx)
+    any(f -> match_compfilter(nw, f, idx), filter)
+end
+function match_compfilter(nw, filter::SymbolicIndex{<:Union{AbstractVector, Tuple}}, idx)
+    _comptypematch(idx, filter) && any(f -> match_compfilter(nw, f, idx), filter)
+end
+match_compfilter(nw, filter::AllVertices, idx) = idx isa VIndex
+match_compfilter(nw, filter::AllEdges, idx) = idx isa EIndex
+match_compfilter(nw, filter::SymbolicIndex{Colon}, idx) = _comptypematch(idx, filter)
+match_compfilter(nw, filter::SymbolicIndex{Int}, idx) = _comptypematch(idx, filter) && idx.compidx == filter.compidx
+match_compfilter(nw, filter::SymbolicIndex{Symbol}, idx) = _comptypematch(idx, filter) && getcomp(nw, idx).name == filter.compidx
+function match_compfilter(nw, filter::SymbolicIndex{<:Union{AbstractString,Regex}}, idx)
+    _comptypematch(idx, filter) && occursin(filter.compidx, string(getcomp(nw, idx).name))
+end
+_comptypematch(idx, filter) = idxtype(idx) == idxtype(filter)
+
+match_varfilter(comp, filter::Nothing, sym) = true
+match_varfilter(comp, filter::Union{AbstractVector, Tuple}, sym) = any(f -> match_varfilter(comp, f, sym), filter)
+match_varfilter(comp, filter::Symbol, sym) = sym == filter
+match_varfilter(comp, filter::Union{AbstractString,Regex}, sym) = occursin(filter, string(sym))
+match_varfilter(comp, filter::ParamIdx, sym) = sym == psym(comp)[filter.idx]
+match_varfilter(comp, filter::StateIdx, sym) = sym == sym(comp)[filter.idx]
+
 
 
 """

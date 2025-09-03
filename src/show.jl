@@ -343,8 +343,74 @@ function Base.show(io::IO, mime::MIME"text/plain", p::Union{VProxy,EProxy})
 end
 _proxyname(::VProxy) = "Vertex indexer"
 _proxyname(::EProxy) = "Edge indexer"
-_dimcondition(::VProxy) = sym -> sym isa EIndex || sym isa EPIndex
-_dimcondition(::EProxy) = sym -> sym isa VIndex || sym isa VPIndex
+_dimcondition(::VProxy) = sym -> sym isa EIndex
+_dimcondition(::EProxy) = sym -> sym isa VIndex
+
+function Base.show(io::IO, mime::MIME"text/plain", fp::FilteringProxy)
+    printstyled(io, "FilteringProxy"; bold=true)
+    print(io, " for ")
+    if fp.s isa NWState
+        print(io, "NWState()")
+    elseif fp.s isa NWParameter
+        print(io, "NWParameter()")
+    else
+        print(io, repr(typeof(fp.s)))
+    end
+
+    print(io, "\n  Component filter: ")
+    if isnothing(fp.compfilter)
+        printstyled(io, "none"; color=:light_black)
+        printstyled(io, " <- filter further by obj.v, obj.e, obj[VIndex(..)], ..."; color=:light_black)
+    else
+        show(io, mime, fp.compfilter)
+        if fp.compfilter isa Union{AllVertices, AllEdges}
+            printstyled(io, " <- filter further by obj[1], obj[\"name\"], ..."; color=:light_black)
+        end
+    end
+    print(io, "\n  State filter:     ")
+    if isnothing(fp.varfilter)
+        printstyled(io, "none"; color=:light_black)
+        if fp.compfilter isa SymbolicIndex
+            printstyled(io, " <- filter states by obj[\"δ\"], obj[:x], ..."; color=:light_black)
+        end
+    else
+        show(io, mime, fp.varfilter)
+    end
+    print(io, "\n  Types:")
+    for s in [:states, :parameters, :inputs, :outputs, :observables]
+        if getfield(fp, s)
+            printstyled(io, "  $s ✓", bold=true)
+        else
+            printstyled(io, "  $s ✗", color=:light_black)
+        end
+    end
+
+    indices, types = generate_indices(fp; return_types=true)
+    values = fp[indices]
+    nw = extract_nw(fp)
+    compnames = [string(getcomp(nw,idx).name) for idx in indices]
+
+    value_str = map(values) do v
+        if isnan(v)
+            repr(v) * " (undefined?)"
+        else
+            repr(v)
+        end
+    end
+
+    # align all the printouts
+    strvec = Ref("&") .* repr.(indices) .* Ref(" &&=> ") .* value_str .* " &(" .* compnames .*")"
+    aligned_strvec =  align_strings(strvec)
+
+    for type in unique(types)
+        printstyled(io, "\n", type, "s"; bold=true)
+        typeindices = findall(==(type), types)
+        _aligned = aligned_strvec[typeindices]
+        print_treelike(io, _aligned; prefix="  ")
+    end
+end
+Base.show(io::IO, ::MIME"text/plain", ::AllVertices) = print(io, "AllVertices()")
+Base.show(io::IO, ::MIME"text/plain", ::AllEdges) = print(io, "AllEdges()")
 
 function print_treelike(io, vec; prefix=" ", infix=" ", rowmax=typemax(Int))
     Base.require_one_based_indexing(vec)
