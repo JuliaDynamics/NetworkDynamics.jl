@@ -269,7 +269,15 @@ end
 
 # NWState: getindex
 Base.getindex(s::NWState, ::Colon) = uflat(s)
-Base.getindex(s::NWState, idx) = SII.getu(s, idx)(s)
+function Base.getindex(s::NWState, idx::Union{SymbolicIndex, AbstractVector, Tuple})
+    # for non-vector we can use getu regardless
+    # for vector, SII will dispatch to getp when all are parameters, which requires _exapand_and_collect
+    if SII.symbolic_type(idx) != SII.ScalarSymbolic() && SII.is_parameter(s, idx)
+        getindex(s.p, idx) # this will expand and collect
+    else
+        SII.getu(s, idx)(s)
+    end
+end
 
 # NWState: setindex!
 function Base.setindex!(s::NWState, val, idx)

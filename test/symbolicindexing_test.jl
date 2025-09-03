@@ -79,373 +79,377 @@ end
 ####
 #### more complex problem
 ####
-g = complete_graph(4)
-vf = [Lib.kuramoto_second(), Lib.diffusion_vertex(), Lib.kuramoto_second(), Lib.diffusion_vertex()]
-ef = [Lib.diffusion_odeedge(),
-      Lib.kuramoto_edge(),
-      Lib.kuramoto_edge(),
-      Lib.diffusion_edge_fid(),
-      Lib.diffusion_odeedge(),
-      Lib.diffusion_edge_fid()]
-nw = Network(g, vf, ef)
-prob = ODEProblem(nw, rand(dim(nw)), (0,1), rand(pdim(nw)))
-Main.test_execution_styles(prob) # testing all ex styles #src
-sol = solve(prob, Tsit5())
+@testset "Test more complex problem" begin
+    g = complete_graph(4)
+    vf = [Lib.kuramoto_second(), Lib.diffusion_vertex(), Lib.kuramoto_second(), Lib.diffusion_vertex()]
+    ef = [Lib.diffusion_odeedge(),
+        Lib.kuramoto_edge(),
+        Lib.kuramoto_edge(),
+        Lib.diffusion_edge_fid(),
+        Lib.diffusion_odeedge(),
+        Lib.diffusion_edge_fid()]
+    nw = Network(g, vf, ef)
+    prob = ODEProblem(nw, rand(dim(nw)), (0,1), rand(pdim(nw)))
+    Main.test_execution_styles(prob) # testing all ex styles #src
+    sol = solve(prob, Tsit5())
 
-@test SII.variable_index.(Ref(nw), SII.variable_symbols(nw)) == 1:dim(nw)
-@test SII.parameter_index.(Ref(nw), SII.parameter_symbols(nw)) == 1:pdim(nw)
+    @test SII.variable_index.(Ref(nw), SII.variable_symbols(nw)) == 1:dim(nw)
+    @test SII.parameter_index.(Ref(nw), SII.parameter_symbols(nw)) == 1:pdim(nw)
 
-####
-#### State tests
-####
-using NetworkDynamics: NWState, NWParameter
-t = 1.0
-_uflat = copy(sol(t))
-_pflat = copy(sol.prob.p)
-s = NWState(nw, _uflat, _pflat)
+    using NetworkDynamics: NWState, NWParameter
+    t = 1.0
+    _uflat = copy(sol(t))
+    _pflat = copy(sol.prob.p)
+    s = NWState(nw, _uflat, _pflat)
+    p = s.p
 
-@test SII.getu(s, EIndex(1,:e_dst))(s) == uflat(s)[7]
-@test SII.getp(s, VPIndex(1,:M))(s) ==pflat(s)[1]
-@test SII.getp(s, VIndex(1,:M))(s) ==pflat(s)[1]
+    ####
+    #### State tests
+    ####
+    @testset "State Tests" begin
+        @test SII.getu(s, EIndex(1,:e_dst))(s) == uflat(s)[7]
+        @test SII.getp(s, VPIndex(1,:M))(s) ==pflat(s)[1]
+        @test SII.getp(s, VIndex(1,:M))(s) ==pflat(s)[1]
 
-@test SII.is_variable(nw, EIndex(1,:e_dst))
-@test SII.variable_index(nw, EIndex(1,:e_dst)) == 7
+        @test SII.is_variable(nw, EIndex(1,:e_dst))
+        @test SII.variable_index(nw, EIndex(1,:e_dst)) == 7
 
-@test map(idx->s[idx], SII.variable_symbols(nw)) == _uflat
-@test map(idx->s[idx], SII.parameter_symbols(nw)) == _pflat
-NetworkDynamics.observed_symbols(nw) .=> map(idx->s[idx], NetworkDynamics.observed_symbols(nw))
+        @test map(idx->s[idx], SII.variable_symbols(nw)) == _uflat
+        @test map(idx->s[idx], SII.parameter_symbols(nw)) == _pflat
+        NetworkDynamics.observed_symbols(nw) .=> map(idx->s[idx], NetworkDynamics.observed_symbols(nw))
 
-@test s[VPIndex(1,:M)] != 1.0
-s[VPIndex(1,:M)] = 1
-@test s[VPIndex(1,:M)] == 1.0
+        @test s[VPIndex(1,:M)] != 1.0
+        s[VPIndex(1,:M)] = 1
+        @test s[VPIndex(1,:M)] == 1.0
 
-@test s[VIndex(1,2)] != 1.0
-s[VIndex(1,2)] = 1.0
-@test s[VIndex(1,2)] == 1.0
+        @test s[VIndex(1,2)] != 1.0
+        s[VIndex(1,2)] = 1.0
+        @test s[VIndex(1,2)] == 1.0
 
-@test s.v[1,1] == s[VIndex(1,1)]
-s.v[1,1] = 15
-@test s.v[1,1] == s[VIndex(1,1)] == 15
+        @test s.v[1,1] == s[VIndex(1,1)]
+        s.v[1,1] = 15
+        @test s.v[1,1] == s[VIndex(1,1)] == 15
 
-@test s.e[5,:e_src] == s[EIndex(5,:e_src)]
-s.v[1,1] = 15
-@test s.v[1,1] == s[VIndex(1,1)] == 15
+        @test s.e[5,:e_src] == s[EIndex(5,:e_src)]
+        s.v[1,1] = 15
+        @test s.v[1,1] == s[VIndex(1,1)] == 15
 
-@test s.p.v[1,1] == s[VPIndex(1,1)]
-s.p.v[1,1] = 10
-@test s.p.v[1,1] == s[VPIndex(1,1)] == 10
+        @test s.p.v[1,1] == s[VPIndex(1,1)]
+        s.p.v[1,1] = 10
+        @test s.p.v[1,1] == s[VPIndex(1,1)] == 10
 
-@test s.p.e[1,1] == s[EPIndex(1,1)]
-s.p.e[1,1] = 10
-@test s.p.e[1,1] == s[EPIndex(1,1)] == 10
+        @test s.p.e[1,1] == s[EPIndex(1,1)]
+        s.p.e[1,1] = 10
+        @test s.p.e[1,1] == s[EPIndex(1,1)] == 10
 
-p = s.p
-@test s.v[[1,3],:δ] == s[vidxs(s,:,"δ")]
-@test_throws DimensionMismatch s.v[[1,3],:δ] = 1
-@test_throws DimensionMismatch s.p.e[[1,5], :τ] = 1
+        @test s.v[[1,3],:δ] == s[vidxs(s,:,"δ")]
+        @test_throws DimensionMismatch s.v[[1,3],:δ] = 1
+        @test_throws DimensionMismatch s.p.e[[1,5], :τ] = 1
 
-s.p.e[[1,5], :τ] .= 1
-@test s.p.e[[1,5], :τ] == [1,1]
-s.v[[1,3],:δ] .= (1,2)
-@test s.v[[1,3],:δ] == [1,2]
-@test_throws DimensionMismatch s.v[1,:δ] = (1,2)
-@test_throws DimensionMismatch s.p.e[1,:τ] = [1,2]
-@test_throws DimensionMismatch s[vidxs(s,:,"δ")] = 1
-@test s.p[vpidxs(s,:,"M")] == s.p[[VIndex(1,:M), VIndex(3,:M)]]
+        s.p.e[[1,5], :τ] .= 1
+        @test s.p.e[[1,5], :τ] == [1,1]
+        s.v[[1,3],:δ] .= (1,2)
+        @test s.v[[1,3],:δ] == [1,2]
+        @test_throws DimensionMismatch s.v[1,:δ] = (1,2)
+        @test_throws DimensionMismatch s.p.e[1,:τ] = [1,2]
+        @test_throws DimensionMismatch s[vidxs(s,:,"δ")] = 1
+        @test s.p[vpidxs(s,:,"M")] == s.p[[VIndex(1,:M), VIndex(3,:M)]]
 
-s.p[vpidxs(s,:,"M")] .= 4
-@test s[vpidxs(s,:,"M")] == [4,4]
-s[vpidxs(s,:,"M")] .= 5
-@test s[vpidxs(s,:,"M")] == [5,5]
+        s.p[vpidxs(s,:,"M")] .= 4
+        @test s[vpidxs(s,:,"M")] == [4,4]
+        s[vpidxs(s,:,"M")] .= 5
+        @test s[vpidxs(s,:,"M")] == [5,5]
+    end
 
-####
-#### Tests for index with colon
-####
-@test NetworkDynamics._resolve_colon(nw, VIndex(:, :δ)) == VIndex(1:nv(g), :δ)
-@test NetworkDynamics._resolve_colon(nw, EIndex(:, :δ)) == EIndex(1:ne(g), :δ)
-@test NetworkDynamics._resolve_colon(nw, VPIndex(:, :δ)) == VPIndex(1:nv(g), :δ)
-@test NetworkDynamics._resolve_colon(nw, EPIndex(:, :δ)) == EPIndex(1:ne(g), :δ)
-@test NetworkDynamics._resolve_colon(nw, VIndex(3, :)) == VIndex(3, 1:2)
-@test NetworkDynamics._resolve_colon(nw, VPIndex(3, :)) == VPIndex(3, 1:3)
-@test NetworkDynamics._resolve_colon(nw, EIndex(4, :)) == EIndex(4, 1:0)
-@test NetworkDynamics._resolve_colon(nw, EPIndex(4, :)) == EPIndex(4, 1:1)
+    @testset "Test colon indexing" begin
+        @test NetworkDynamics._resolve_colon(nw, VIndex(:, :δ)) == VIndex(1:nv(g), :δ)
+        @test NetworkDynamics._resolve_colon(nw, EIndex(:, :δ)) == EIndex(1:ne(g), :δ)
+        @test NetworkDynamics._resolve_colon(nw, VPIndex(:, :δ)) == VPIndex(1:nv(g), :δ)
+        @test NetworkDynamics._resolve_colon(nw, EPIndex(:, :δ)) == EPIndex(1:ne(g), :δ)
+        @test NetworkDynamics._resolve_colon(nw, VIndex(3, :)) == VIndex(3, 1:2)
+        @test NetworkDynamics._resolve_colon(nw, VPIndex(3, :)) == VPIndex(3, 1:3)
+        @test NetworkDynamics._resolve_colon(nw, EIndex(4, :)) == EIndex(4, 1:0)
+        @test NetworkDynamics._resolve_colon(nw, EPIndex(4, :)) == EPIndex(4, 1:1)
 
-@inferred NetworkDynamics._resolve_colon(nw, VIndex(:, :δ))
-@inferred NetworkDynamics._resolve_colon(nw, EIndex(:, :δ))
-@inferred NetworkDynamics._resolve_colon(nw, VPIndex(:, :δ))
-@inferred NetworkDynamics._resolve_colon(nw, EPIndex(:, :δ))
-@inferred NetworkDynamics._resolve_colon(nw, VIndex(3, :))
-@inferred NetworkDynamics._resolve_colon(nw, VPIndex(3, :))
-@inferred NetworkDynamics._resolve_colon(nw, EIndex(4, :))
-@inferred NetworkDynamics._resolve_colon(nw, EPIndex(4, :))
+        @inferred NetworkDynamics._resolve_colon(nw, VIndex(:, :δ))
+        @inferred NetworkDynamics._resolve_colon(nw, EIndex(:, :δ))
+        @inferred NetworkDynamics._resolve_colon(nw, VPIndex(:, :δ))
+        @inferred NetworkDynamics._resolve_colon(nw, EPIndex(:, :δ))
+        @inferred NetworkDynamics._resolve_colon(nw, VIndex(3, :))
+        @inferred NetworkDynamics._resolve_colon(nw, VPIndex(3, :))
+        @inferred NetworkDynamics._resolve_colon(nw, EIndex(4, :))
+        @inferred NetworkDynamics._resolve_colon(nw, EPIndex(4, :))
 
-for et in [VIndex, EIndex, VPIndex, EPIndex]
-    collect(et(1:2,:δ))
-    collect(et(1,1:5))
-    collect(et(1,[:foo, :bar]))
-    repr.(et(1:2,:δ))
-    repr.(et(1,:δ))
+        for et in [VIndex, EIndex, VPIndex, EPIndex]
+            collect(et(1:2,:δ))
+            collect(et(1,1:5))
+            collect(et(1,[:foo, :bar]))
+            repr.(et(1:2,:δ))
+            repr.(et(1,:δ))
+        end
+
+        @test s[[VIndex(1,1), VPIndex(1,2)]] == [s[VIndex(1,1)], s[VPIndex(1,2)]] == [uflat(s)[1], pflat(s)[2]]
+        @test s[(VIndex(1,1), VPIndex(1,2))] == (s[VIndex(1,1)], s[VPIndex(1,2)]) == (uflat(s)[1], pflat(s)[2])
+        @test s[[VIndex(1,1), VIndex(1,2)]] == [s[VIndex(1,1)], s[VIndex(1,2)]] == [uflat(s)[1], uflat(s)[2]]
+        @test s[(VIndex(1,1), VIndex(1,2))] == (s[VIndex(1,1)], s[VIndex(1,2)]) == (uflat(s)[1], uflat(s)[2])
+
+        @test s[VIndex(:,1)] == s[VIndex(1:4,1)]
+        @test_broken s[EIndex(:,1)] == s[EIndex(1:6,1)]
+
+                # variable     variable     observed     observed
+        mixedidx = [VIndex(1,1), EIndex(1,1), EIndex(2,:P), EIndex(3,:P)]
+        @test SII.is_observed.(s, mixedidx) == [0,0,1,1]
+        @test SII.is_variable.(s, mixedidx) == [1,1,0,0]
+        s[mixedidx] # -> calls observed for all indices
+
+        mixedidx = [VIndex(1,1), EIndex(1,1), EIndex(2,:P)]
+        @test SII.is_observed.(s, mixedidx) == [0,0,1]
+        @test SII.is_variable.(s, mixedidx) == [1,1,0]
+        s[mixedidx] # -> calls observed for all indices
+
+        @test_broken s[EIndex(:,1)]
+        idx = EIndex(:,1)
+
+        @test !SII.is_variable(s, EIndex(:,1))
+
+        using NetworkDynamics: _expand_and_collect
+        @test _expand_and_collect(nw, VIndex(1,1)) == VIndex(1,1)
+        @test _expand_and_collect(nw, VIndex(:,1)) == collect(VIndex(1:nv(g),1))
+        @test _expand_and_collect(nw, [VIndex(:,1)]) == collect(VIndex(1:nv(g),1))
+        @test _expand_and_collect(nw, [EIndex(4,5), VIndex(:,1)]) == vcat(EIndex(4,5), collect(VIndex(1:nv(g),1)))
+        @test _expand_and_collect(nw, [EIndex(1:2,5), VIndex(:,1)]) == vcat(collect(EIndex(1:2,5)), collect(VIndex(1:nv(g),1)))
+    end
+
+
+    @testset "Test performance of different index types" begin
+        idxtypes = [
+            VIndex(1,1), # variable
+            EIndex(1,1), # variable
+            EIndex(2,:P), # observed
+            VPIndex(1,1), # parameter
+            EPIndex(1,1), # parameter
+            VIndex(1,1:1), # variable bc
+            EIndex(1,1:1), # variable bc
+            EIndex(2,[:P,:₋P]), # observed bc # does not work with ranges anymore
+            VPIndex(1,1:1), # parameter bc
+            EPIndex(1,1:1), # parameter bc
+            VIndex(1,:), # variable bc
+            # EIndex(1,:), # observed bc
+            # EIndex(2,:), # variable bc
+            VPIndex(1,:), # parameter bc
+            EPIndex(1,:), # parameter bc
+            VIndex(:,1), # variable bc first
+            # EIndex(:,1), # observed bc first
+            # EIndex(:,1), # variable bc first
+            # VPIndex(:,1), # parameter bc first
+            EPIndex(:,1), # parameter bc first
+            VIndex(1:3,1), # variable bc first
+            EIndex(2:3,:P), # variable bc first # observables require symbols now
+            VPIndex([1,3],1), # parameter bc first
+            EPIndex(1:3,1), # parameter bc first
+            VIndex(1,[ParamIdx(1), ParamIdx(2)]),
+        ]
+
+        using NetworkDynamics: _is_variable
+        for idx in idxtypes
+            println("Test $idx")
+            s[idx]
+            # @inferred SII.is_variable(s, idx)
+        end
+
+        # is_xxx methods
+        @info "Test is_variable"
+        for idx in idxtypes
+            b = @b SII.is_variable($s,$idx)
+            if b.allocs != 0
+                println(idx, " => ", b.allocs, " allocations")
+            end
+            @test b.allocs==0
+        end
+        @info "Test is_parameter"
+        for idx in idxtypes
+            b = @b SII.is_parameter($s,$idx)
+            if b.allocs != 0
+                println(idx, " => ", b.allocs, " allocations")
+            end
+            @test b.allocs==0
+        end
+        @info "Test is_observed"
+        for idx in idxtypes
+            b = @b SII.is_observed($s,$idx)
+            if b.allocs != 0
+                println(idx, " => ", b.allocs, " allocations")
+            end
+            @test b.allocs==0
+        end
+
+        # index methods
+        @info "Test variable_index"
+        for idx in idxtypes
+            SII.is_variable(s, idx) || continue
+            b = @b SII.variable_index($s,$idx)
+            if b.allocs != 0
+                println(idx, " => ", b.allocs, " allocations")
+            end
+            @test b.allocs <= 2 # 2 are used to create an array
+        end
+        @info "Test parameter_index"
+        for idx in idxtypes
+            SII.is_parameter(s, idx) || continue
+            b = @b SII.parameter_index($s,$idx)
+            if b.allocs != 0
+                println(idx, " => ", b.allocs, " allocations")
+            end
+            @test b.allocs <= 2 # 2 are used to create an array
+        end
+        @info "Test observed"
+        for idx in idxtypes
+            SII.is_observed(s, idx) || continue
+            b = @b SII.observed($s,$idx)
+            if b.allocs != 0
+                println(idx, " => ", b.allocs, " allocations")
+            end
+            if VERSION ≥ v"1.11"
+                @test b.allocs <= 7
+            end
+        end
+
+        @info "Test state getindex call"
+        for idx in idxtypes
+            # HACK: _expand_and_collect to workaround https://github.com/SciML/SymbolicIndexingInterface.jl/issues/94
+            _idx = NetworkDynamics._expand_and_collect(s, idx)
+            getter = SII.getu(s, _idx)
+            b = @b $(SII.getu)($s, $_idx)
+            if b.allocs != 0
+                println(rpad(idx,21), "=> ", b.allocs, " allocations to generate getter")
+            end
+            b = @b $getter($s)
+            v = getter(s)
+            if v isa Number
+                @test b.allocs <= 0
+                b.allocs != 0 && println(idx, " => ", b.allocs, " allocations to call getter")
+            elseif v isa AbstractArray
+                @test b.allocs <= 2
+                b.allocs > 2 && println(idx, " => ", b.allocs, " allocations to call getter")
+            else
+                @test false
+            end
+        end
+    end
+
+    @testset "Test NWState/Parameter Construction" begin
+        # tests for state/parameter constructing/conversion
+        using NetworkDynamics: _init_flat, filltype
+        T = Vector{Float64}
+        @test isequal(_init_flat(T, 10, filltype(T)), [NaN for _ in 1:10])
+        T = Vector{Int64}
+        @test _init_flat(T, 10, filltype(T)) == zeros(10)
+        T = Vector{Union{Int64, Nothing}}
+        @test _init_flat(T, 10, filltype(T)) == [nothing for _ in 1:10]
+        T = Vector{Union{Int64, Missing}}
+        @test isequal(_init_flat(T, 10, filltype(T)), [missing for _ in 1:10])
+        @test isequal(pflat(NWState(nw)), pflat(NWParameter(nw)))
+        @test isequal(pflat(NWState(p; ufill=0)), pflat(p))
+    end
+
+    @testset "Test NWParameter/NWstate access" begin
+        p = NWParameter(nw)
+        p.e[2:3,:K] .= 0
+        @test p.e[2:3,:K] == [0,0]
+        p.e[2:3,:K] = [0,0]
+        @test p.e[2:3,:K] == [0,0]
+
+        @test eltype(p) == Float64
+        p2 = NWParameter(p; ptype=Vector{Union{Float64,Nothing}})
+        @test eltype(p2) == Union{Float64,Nothing}
+
+        p3 = NWParameter(p)
+        p.v[1,:M] = 42
+        @test p3.v[1,:M] != 42
+
+        s = NWState(nw)
+        s[:] .= 1
+        s2 = NWState(s, utype=Vector{Float64})
+        @test eltype(s2) == Float64
+
+        s.p[:] .= 0
+        s3 = NWState(s, utype=Vector{Int}, ptype=Vector{Int})
+        @test eltype(NetworkDynamics.uflat(s3)) == Int
+        @test eltype(NetworkDynamics.uflat(s3)) == Int
+    end
 end
 
-@test s[[VIndex(1,1), VPIndex(1,2)]] == [s[VIndex(1,1)], s[VPIndex(1,2)]] == [uflat(s)[1], pflat(s)[2]]
-@test s[(VIndex(1,1), VPIndex(1,2))] == (s[VIndex(1,1)], s[VPIndex(1,2)]) == (uflat(s)[1], pflat(s)[2])
-@test s[[VIndex(1,1), VIndex(1,2)]] == [s[VIndex(1,1)], s[VIndex(1,2)]] == [uflat(s)[1], uflat(s)[2]]
-@test s[(VIndex(1,1), VIndex(1,2))] == (s[VIndex(1,1)], s[VIndex(1,2)]) == (uflat(s)[1], uflat(s)[2])
+@testset "Test index generator methods" begin
+    using NetworkDynamics: vidxs, eidxs, vpidxs, epidxs
+    fv = (du, u, ein, p, t) -> nothing
+    n1 = VertexModel(; f=fv, g=1:2, sym=[:u, :v], psym=[:p1, :p2], name=:VF)
+    n2 = VertexModel(; f=fv, g=1:2, sym=[:x1, :x2], psym=[:p1, :p2], obsf=identity, obssym=[:obs1, :obs2], name=:VF)
+    n3 = VertexModel(; f=fv, g=1:2, dim=3, name=:Vertex3)
 
-@test s[VIndex(:,1)] == s[VIndex(1:4,1)]
-@test_broken s[EIndex(:,1)] == s[EIndex(1:6,1)]
+    gss = (odst, vsrc, vdst, p, t) -> nothing
+    gfid = (osrc, odst, vsrc, vdst, p ,t) -> nothing
+    e1 = EdgeModel(; g=AntiSymmetric(gss), outsym=[:e1])
+    e2 = EdgeModel(; g=gfid, outsym=(src=:esrc, dst=:edst))
+    g = path_graph(3)
+    nw = Network(g, [n1, n2, n3], [e1, e2])
 
-          # variable     variable     observed     observed
-mixedidx = [VIndex(1,1), EIndex(1,1), EIndex(2,:P), EIndex(3,:P)]
-@test SII.is_observed.(s, mixedidx) == [0,0,1,1]
-@test SII.is_variable.(s, mixedidx) == [1,1,0,0]
-s[mixedidx] # -> calls observed for all indices
+    @test vidxs(nw) == [VIndex(1, :u),
+                        VIndex(1, :v),
+                        VIndex(2, :x1),
+                        VIndex(2, :x2),
+                        VIndex(2, :obs1),
+                        VIndex(2, :obs2),
+                        VIndex(3, :v₁),
+                        VIndex(3, :v₂),
+                        VIndex(3, :v₃)]
+    @test eidxs(nw) == [EIndex(1, :₋e1),
+                        EIndex(1, :e1),
+                        EIndex(2, :esrc),
+                        EIndex(2, :edst)]
 
-mixedidx = [VIndex(1,1), EIndex(1,1), EIndex(2,:P)]
-@test SII.is_observed.(s, mixedidx) == [0,0,1]
-@test SII.is_variable.(s, mixedidx) == [1,1,0]
-s[mixedidx] # -> calls observed for all indices
-
-@test_broken s[EIndex(:,1)]
-idx = EIndex(:,1)
-
-@test !SII.is_variable(s, EIndex(:,1))
-
-using NetworkDynamics: _expand_and_collect
-@test _expand_and_collect(nw, VIndex(1,1)) == VIndex(1,1)
-@test _expand_and_collect(nw, VIndex(:,1)) == collect(VIndex(1:nv(g),1))
-@test _expand_and_collect(nw, [VIndex(:,1)]) == collect(VIndex(1:nv(g),1))
-@test _expand_and_collect(nw, [EIndex(4,5), VIndex(:,1)]) == vcat(EIndex(4,5), collect(VIndex(1:nv(g),1)))
-@test _expand_and_collect(nw, [EIndex(1:2,5), VIndex(:,1)]) == vcat(collect(EIndex(1:2,5)), collect(VIndex(1:nv(g),1)))
-
-####
-#### check on performance
-####
-
-idxtypes = [
-    VIndex(1,1), # variable
-    EIndex(1,1), # variable
-    EIndex(2,:P), # observed
-    VPIndex(1,1), # parameter
-    EPIndex(1,1), # parameter
-    VIndex(1,1:1), # variable bc
-    EIndex(1,1:1), # variable bc
-    EIndex(2,[:P,:₋P]), # observed bc # does not work with ranges anymore
-    VPIndex(1,1:1), # parameter bc
-    EPIndex(1,1:1), # parameter bc
-    VIndex(1,:), # variable bc
-    # EIndex(1,:), # observed bc
-    # EIndex(2,:), # variable bc
-    VPIndex(1,:), # parameter bc
-    EPIndex(1,:), # parameter bc
-    VIndex(:,1), # variable bc first
-    # EIndex(:,1), # observed bc first
-    # EIndex(:,1), # variable bc first
-    # VPIndex(:,1), # parameter bc first
-    EPIndex(:,1), # parameter bc first
-    VIndex(1:3,1), # variable bc first
-    EIndex(2:3,:P), # variable bc first # observables require symbols now
-    VPIndex([1,3],1), # parameter bc first
-    EPIndex(1:3,1), # parameter bc first
-]
-
-using NetworkDynamics: _is_variable
-for idx in idxtypes
-    println("Test $idx")
-    s[idx]
-    # @inferred SII.is_variable(s, idx)
+    @test vidxs(nw, 1) == [VIndex(1, :u), VIndex(1, :v)]
+    @test vidxs(nw, :VF) == [VIndex(1, :u),
+                             VIndex(1, :v),
+                             VIndex(2, :x1),
+                             VIndex(2, :x2),
+                             VIndex(2, :obs1),
+                             VIndex(2, :obs2)]
+    @test vidxs(nw, "3") == [VIndex(3, :v₁),
+                             VIndex(3, :v₂),
+                             VIndex(3, :v₃)]
+    @test vidxs(nw, :, "v") == [VIndex(1, :v),
+                                VIndex(3, :v₁),
+                                VIndex(3, :v₂),
+                                VIndex(3, :v₃)]
+    @test vidxs(nw, 2, "v") == VIndex[]
+    @test vpidxs(nw,:,"p") == vpidxs(nw,:,:) == [VPIndex(1, :p1),
+                                                 VPIndex(1, :p2),
+                                                 VPIndex(2, :p1),
+                                                 VPIndex(2, :p2)]
+    @test epidxs(nw,:,:) == EIndex[]
 end
 
-# is_xxx methods
-@info "Test is_variable"
-for idx in idxtypes
-    b = @b SII.is_variable($s,$idx)
-    if b.allocs != 0
-        println(idx, " => ", b.allocs, " allocations")
-    end
-    @test b.allocs==0
+@testset "Timseries parameter test" begin
+    fv = (du, u, ein, p, t) -> nothing
+    n1 = VertexModel(; f=fv, g=1:2, sym=[:u, :v], psym=[:p1, :p2])
+    n2 = VertexModel(; f=fv, g=1:2, sym=[:x1, :x2], psym=[:p1, :p2], obsf=identity, obssym=[:obs1, :obs2])
+    n3 = VertexModel(; f=fv, g=1:2, dim=3, name=:Vertex3)
+
+    gss = (odst, vsrc, vdst, p, t) -> nothing
+    gfid = (osrc, odst, vsrc, vdst, p ,t) -> nothing
+    e1 = EdgeModel(; g=AntiSymmetric(gss), outsym=[:e1])
+    e2 = EdgeModel(; g=gfid, outsym=(src=:esrc, dst=:edst))
+    g = path_graph(3)
+    nw = Network(g, [n1, n2, n3], [e1, e2])
+
+    @test SII.get_all_timeseries_indexes(nw, :t) == Set([SII.ContinuousTimeseries()])
+    # https://github.com/SciML/SymbolicIndexingInterface.jl/issues/95
+    @test_broken SII.get_all_timeseries_indexes(nw, :x) == Set()
+
+    @test SII.get_all_timeseries_indexes(nw, VIndex(1,:u)) == Set([SII.ContinuousTimeseries()])
+    @test SII.get_all_timeseries_indexes(nw, VPIndex(1,:p1)) == Set([1])
+    @test SII.get_all_timeseries_indexes(nw, [VIndex(1,:u), VPIndex(1,:p1)]) == Set([SII.ContinuousTimeseries(), 1])
 end
-@info "Test is_parameter"
-for idx in idxtypes
-    b = @b SII.is_parameter($s,$idx)
-    if b.allocs != 0
-        println(idx, " => ", b.allocs, " allocations")
-    end
-    @test b.allocs==0
-end
-@info "Test is_observed"
-for idx in idxtypes
-    b = @b SII.is_observed($s,$idx)
-    if b.allocs != 0
-        println(idx, " => ", b.allocs, " allocations")
-    end
-    @test b.allocs==0
-end
-
-# index methods
-@info "Test variable_index"
-for idx in idxtypes
-    SII.is_variable(s, idx) || continue
-    b = @b SII.variable_index($s,$idx)
-    if b.allocs != 0
-        println(idx, " => ", b.allocs, " allocations")
-    end
-    @test b.allocs <= 2 # 2 are used to create an array
-end
-@info "Test parameter_index"
-for idx in idxtypes
-    SII.is_parameter(s, idx) || continue
-    b = @b SII.parameter_index($s,$idx)
-    if b.allocs != 0
-        println(idx, " => ", b.allocs, " allocations")
-    end
-    @test b.allocs <= 2 # 2 are used to create an array
-end
-@info "Test observed"
-for idx in idxtypes
-    SII.is_observed(s, idx) || continue
-    b = @b SII.observed($s,$idx)
-    if b.allocs != 0
-        println(idx, " => ", b.allocs, " allocations")
-    end
-    if VERSION ≥ v"1.11"
-        @test b.allocs <= 7
-    end
-end
-
-@info "Test state getindex call"
-for idx in idxtypes
-    # HACK: _expand_and_collect to workaround https://github.com/SciML/SymbolicIndexingInterface.jl/issues/94
-    _idx = NetworkDynamics._expand_and_collect(s, idx)
-    getter = SII.getu(s, _idx)
-    b = @b $(SII.getu)($s, $_idx)
-    if b.allocs != 0
-        println(rpad(idx,21), "=> ", b.allocs, " allocations to generate getter")
-    end
-    b = @b $getter($s)
-    v = getter(s)
-    if v isa Number
-        @test b.allocs <= 0
-        b.allocs != 0 && println(idx, " => ", b.allocs, " allocations to call getter")
-    elseif v isa AbstractArray
-        @test b.allocs <= 2
-        b.allocs > 2 && println(idx, " => ", b.allocs, " allocations to call getter")
-    else
-        @test false
-    end
-end
-
-# tests for state/parameter constructing/conversion
-using NetworkDynamics: _init_flat, filltype
-T = Vector{Float64}
-@test isequal(_init_flat(T, 10, filltype(T)), [NaN for _ in 1:10])
-T = Vector{Int64}
-@test _init_flat(T, 10, filltype(T)) == zeros(10)
-T = Vector{Union{Int64, Nothing}}
-@test _init_flat(T, 10, filltype(T)) == [nothing for _ in 1:10]
-T = Vector{Union{Int64, Missing}}
-@test isequal(_init_flat(T, 10, filltype(T)), [missing for _ in 1:10])
-@test isequal(pflat(NWState(nw)), pflat(NWParameter(nw)))
-@test isequal(pflat(NWState(p; ufill=0)), pflat(p))
-
-p = NWParameter(nw)
-p.e[2:3,:K] .= 0
-@test p.e[2:3,:K] == [0,0]
-p.e[2:3,:K] = [0,0]
-@test p.e[2:3,:K] == [0,0]
-
-@test eltype(p) == Float64
-p2 = NWParameter(p; ptype=Vector{Union{Float64,Nothing}})
-@test eltype(p2) == Union{Float64,Nothing}
-
-p3 = NWParameter(p)
-p.v[1,:M] = 42
-@test p3.v[1,:M] != 42
-
-
-s = NWState(nw)
-s[:] .= 1
-s2 = NWState(s, utype=Vector{Float64})
-@test eltype(s2) == Float64
-
-
-s.p[:] .= 0
-s3 = NWState(s, utype=Vector{Int}, ptype=Vector{Int})
-@test eltype(NetworkDynamics.uflat(s3)) == Int
-@test eltype(NetworkDynamics.uflat(s3)) == Int
-
-# test new index generator methods
-using NetworkDynamics: vidxs, eidxs, vpidxs, epidxs
-fv = (du, u, ein, p, t) -> nothing
-n1 = VertexModel(; f=fv, g=1:2, sym=[:u, :v], psym=[:p1, :p2], name=:VF)
-n2 = VertexModel(; f=fv, g=1:2, sym=[:x1, :x2], psym=[:p1, :p2], obsf=identity, obssym=[:obs1, :obs2], name=:VF)
-n3 = VertexModel(; f=fv, g=1:2, dim=3, name=:Vertex3)
-
-gss = (odst, vsrc, vdst, p, t) -> nothing
-gfid = (osrc, odst, vsrc, vdst, p ,t) -> nothing
-e1 = EdgeModel(; g=AntiSymmetric(gss), outsym=[:e1])
-e2 = EdgeModel(; g=gfid, outsym=(src=:esrc, dst=:edst))
-g = path_graph(3)
-nw = Network(g, [n1, n2, n3], [e1, e2])
-
-@test vidxs(nw) == [VIndex(1, :u),
-                    VIndex(1, :v),
-                    VIndex(2, :x1),
-                    VIndex(2, :x2),
-                    VIndex(2, :obs1),
-                    VIndex(2, :obs2),
-                    VIndex(3, :v₁),
-                    VIndex(3, :v₂),
-                    VIndex(3, :v₃)]
-@test eidxs(nw) == [EIndex(1, :₋e1),
-                    EIndex(1, :e1),
-                    EIndex(2, :esrc),
-                    EIndex(2, :edst)]
-
-@test vidxs(nw, 1) == [VIndex(1, :u), VIndex(1, :v)]
-@test vidxs(nw, :VF) == [VIndex(1, :u),
-                         VIndex(1, :v),
-                         VIndex(2, :x1),
-                         VIndex(2, :x2),
-                         VIndex(2, :obs1),
-                         VIndex(2, :obs2)]
-@test vidxs(nw, "3") == [VIndex(3, :v₁),
-                         VIndex(3, :v₂),
-                         VIndex(3, :v₃)]
-@test vidxs(nw, :, "v") == [VIndex(1, :v),
-                            VIndex(3, :v₁),
-                            VIndex(3, :v₂),
-                            VIndex(3, :v₃)]
-@test vidxs(nw, 2, "v") == VIndex[]
-@test vpidxs(nw,:,"p") == vpidxs(nw,:,:) == [VPIndex(1, :p1),
-                                             VPIndex(1, :p2),
-                                             VPIndex(2, :p1),
-                                             VPIndex(2, :p2)]
-@test epidxs(nw,:,:) == EPIndex[]
-
-####
-#### Timeseries parameter test
-####
-using NetworkDynamics: vidxs, eidxs, vpidxs, epidxs
-fv = (du, u, ein, p, t) -> nothing
-n1 = VertexModel(; f=fv, g=1:2, sym=[:u, :v], psym=[:p1, :p2])
-n2 = VertexModel(; f=fv, g=1:2, sym=[:x1, :x2], psym=[:p1, :p2], obsf=identity, obssym=[:obs1, :obs2])
-n3 = VertexModel(; f=fv, g=1:2, dim=3, name=:Vertex3)
-
-gss = (odst, vsrc, vdst, p, t) -> nothing
-gfid = (osrc, odst, vsrc, vdst, p ,t) -> nothing
-e1 = EdgeModel(; g=AntiSymmetric(gss), outsym=[:e1])
-e2 = EdgeModel(; g=gfid, outsym=(src=:esrc, dst=:edst))
-g = path_graph(3)
-nw = Network(g, [n1, n2, n3], [e1, e2])
-
-@test SII.get_all_timeseries_indexes(nw, :t) == Set([SII.ContinuousTimeseries()])
-# https://github.com/SciML/SymbolicIndexingInterface.jl/issues/95
-@test_broken SII.get_all_timeseries_indexes(nw, :x) == Set()
-
-@test SII.get_all_timeseries_indexes(nw, VIndex(1,:u)) == Set([SII.ContinuousTimeseries()])
-@test SII.get_all_timeseries_indexes(nw, VPIndex(1,:p1)) == Set([1])
-@test SII.get_all_timeseries_indexes(nw, [VIndex(1,:u), VPIndex(1,:p1)]) == Set([SII.ContinuousTimeseries(), 1])
 
 # test named vertices and edges
 @testset "test sym indices for named edges/vertices" begin

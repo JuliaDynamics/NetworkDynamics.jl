@@ -126,7 +126,9 @@ function Base.:(==)(a::SymbolicIndex, b::SymbolicIndex)
     a.compidx == b.compidx && a.subidx == b.subidx
 end
 
+VPIndex(c) = VIndex(c)
 VPIndex(c, s) = VIndex(c, wrap_pidx(s))
+EPIndex(c) = EIndex(c)
 EPIndex(c, s) = EIndex(c, wrap_pidx(s))
 
 idxtype(s::VIndex) = VIndex
@@ -141,7 +143,7 @@ SII.symbolic_type(::Type{<:SymbolicIndex}) = SII.ArraySymbolic()
 SII.hasname(::SymbolicIndex) = false
 SII.hasname(::SymbolicIndex{<:CONCRETE_COMPIDX,<:CONCRETE_SUBIDX}) = true
 function SII.getname(x::VIndex)
-    prefix = x.compidx isa Symbol ? :v : Symbol()
+    prefix = x.compidx isa Symbol ? Symbol() : :v
     Symbol(prefix, Symbol(x.compidx), :₊, Symbol(x.subidx))
 end
 function SII.getname(x::EIndex)
