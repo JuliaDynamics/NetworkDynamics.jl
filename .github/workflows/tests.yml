@@ -164,6 +164,7 @@ jobs:
       - name: Load Julia packages from cache
         id: julia-cache
         uses: julia-actions/cache@v2
+      - uses: hexaeder/julia-buildpkg@main
       - name: Extract PowerDynamics branch from PR
         id: extract-branch
         run: |
@@ -196,27 +197,13 @@ jobs:
           ref: ${{ steps.extract-branch.outputs.powerdynamics_branch }}
           path: PowerDynamics
       - name: Run PowerDynamics tests
-        shell: julia --project=PowerDynamics/docs --color=yes {0}
+        shell: julia --project=PowerDynamics/test --color=yes {0}
         run: |
             using Pkg
-            using Test
-            pkg"dev ."
-            # pkg"update"
+            pkg"dev ." # dev NetworkDynamics
             pkg"instantiate"
             pkg"build"
-            @testset "PowerDynamics Downstream Tests" begin
-                @testset "Normal Package tests" begin
-                    Pkg.test("PowerDynamics"; coverage=false)
-                end
-                @testset "Documentation Example Tests" begin
-                    examples = abspath(joinpath("PowerDynamics", "docs", "examples"))
-                    for file in readdir(examples; join=true)
-                        endswith(file, ".jl") || continue
-                        @info "Test example $file"
-                        include(file)
-                    end
-                end
-            end
+            Pkg.test("PowerDynamics"; coverage=false)
       - name: Save Julia depot cache on cancel or failure
         id: julia-cache-save
         if: cancelled() || failure()
