@@ -125,7 +125,7 @@ function initialization_problem(cf::T,
     apply_bound_transformation=true,
     verbose=true
 ) where {T<:ComponentModel}
-    hasinsym(cf) || throw(ArgumentError("Component model must have `insym`!"))
+    hasinsym(cf) || throw(ArgumentError("Component model must have `insym` set to support initialiation!"))
 
     # The _m[s] suffix means a bitmask which indicate the free variables
     # the _fix[s] suffix means an array of same length as the symbols, which contains the fixed values
@@ -175,9 +175,9 @@ function initialization_problem(cf::T,
     @assert length(freesym) == Nfree
     if Neqs < Nfree
         throw(
-            ArgumentError("Initialization problem underconstraint. \
-                           $(Neqs) Equations for $(Nfree) free variables: $freesym. Consider \
-                           passing additional constraints using `InitConstraint`.")
+            ComponentInitError("Initialization problem underconstraint. \
+                $(Neqs) Equations for $(Nfree) free variables: $freesym. Consider \
+                passing additional constraints using `InitConstraint`.")
         )
 
     end
@@ -248,15 +248,15 @@ function initialization_problem(cf::T,
             push!(missing_guesses, s)
         end
     end
-    isempty(missing_guesses) || throw(ArgumentError("Missing guesses for free variables $(missing_guesses)"))
+    isempty(missing_guesses) || throw(ComponentInitError("Missing guesses for free variables $(missing_guesses)"))
 
     # apply bound conserving transformation to initial state
     try
         inv_boundT!(uguess)
     catch e
-        throw(ArgumentError("Failed to apply bound-conserving transformation to initial guess. \
-                             This typically happens when a guess has the wrong sign for its bounds \
-                             (e.g., negative guess for a positively-bounded variable). Original error: $(e)"))
+        throw(ComponentInitError("Failed to apply bound-conserving transformation to initial guess. \
+            This typically happens when a guess has the wrong sign for its bounds \
+            (e.g., negative guess for a positively-bounded variable). Original error: $(e)"))
     end
 
     chunksize = ForwardDiff.pickchunksize(Nfree)
