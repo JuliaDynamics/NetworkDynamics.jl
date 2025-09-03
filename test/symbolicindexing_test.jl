@@ -8,71 +8,72 @@ import SymbolicIndexingInterface as SII
 using NetworkDynamics: VIndex, EIndex, VPIndex, EPIndex, _resolve_colon
 
 (isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
+@testset "small test network" begin
+    g = complete_graph(3)
+    vf = Lib.kuramoto_second()
+    ef = Lib.kuramoto_edge()
+    nw = Network(g, vf, ef)
+    u0 = rand(dim(nw))
+    p = rand(pdim(nw))
 
-g = complete_graph(3)
-vf = Lib.kuramoto_second()
-ef = Lib.kuramoto_edge()
-nw = Network(g, vf, ef)
-u0 = rand(dim(nw))
-p = rand(pdim(nw))
+    SII.default_values(nw)
+    prob = ODEProblem(nw, u0, (0,10), p)
+    sol = solve(prob, Tsit5())
 
-SII.default_values(nw)
-prob = ODEProblem(nw, u0, (0,10), p)
-sol = solve(prob, Tsit5())
+    @test SII.is_variable(nw, VIndex(1,:δ))
+    @test !SII.is_variable(nw, VIndex(1,:F))
+    @test_throws BoundsError !SII.is_variable(nw, VIndex(10,:F))
 
-@test SII.is_variable(nw, VIndex(1,:δ))
-@test !SII.is_variable(nw, VIndex(1,:F))
-@test_throws BoundsError !SII.is_variable(nw, VIndex(10,:F))
+    @test sol[VIndex(1,:δ)] == sol[1,:]
+    @test sol[VIndex(1,:ω)] == sol[2,:]
+    @test sol[VIndex(3,:ω)] == sol[6,:]
 
-@test sol[VIndex(1,:δ)] == sol[1,:]
-@test sol[VIndex(1,:ω)] == sol[2,:]
-@test sol[VIndex(3,:ω)] == sol[6,:]
+    @test SII.is_variable(nw, VIndex(1:3,:ω))
+    @test collect(VIndex(1, [:δ,:ω])) == [VIndex(1,:δ), VIndex(1,:ω)]
+    @test collect(VIndex(1, [:δ,2])) == [VIndex(1,:δ), VIndex(1,2)]
+    @test collect(VIndex(1, 1:2)) == [VIndex(1,1), VIndex(1,2)]
+    @test collect(VIndex(1:5, 2)) == [VIndex(i,2) for i in 1:5]
+    @test collect(VIndex([1,3], :δ)) == [VIndex(1,:δ), VIndex(3,:δ)]
+    @test_throws MethodError collect(VIndex(1:2, 1:5))
+    @test SII.is_variable(nw, VIndex(3,[1,:ω]))
+    @test !SII.is_variable(nw, VIndex(3,[1,:ω,:foobar]))
 
-@test SII.is_variable(nw, VIndex(1:3,:ω))
-@test collect(VIndex(1, [:δ,:ω])) == [VIndex(1,:δ), VIndex(1,:ω)]
-@test collect(VIndex(1, [:δ,2])) == [VIndex(1,:δ), VIndex(1,2)]
-@test collect(VIndex(1, 1:2)) == [VIndex(1,1), VIndex(1,2)]
-@test collect(VIndex(1:5, 2)) == [VIndex(i,2) for i in 1:5]
-@test collect(VIndex([1,3], :δ)) == [VIndex(1,:δ), VIndex(3,:δ)]
-@test_throws MethodError collect(VIndex(1:2, 1:5))
-@test SII.is_variable(nw, VIndex(3,[1,:ω]))
-@test !SII.is_variable(nw, VIndex(3,[1,:ω,:foobar]))
+    # test indexing of multipe variables
+    @test sol[VIndex(1:3,:ω),1] == u0[[2,4,6]]
+    @test sol[VIndex(3,[:δ,:ω]),1] == u0[[5,6]]
+    @test sol[VIndex(3,[:ω,:δ]),1] == u0[[6,5]]
+    @test sol[VIndex(3,[1,:ω]),1] == u0[[5,6]]
 
-# test indexing of multipe variables
-@test sol[VIndex(1:3,:ω),1] == u0[[2,4,6]]
-@test sol[VIndex(3,[:δ,:ω]),1] == u0[[5,6]]
-@test sol[VIndex(3,[:ω,:δ]),1] == u0[[6,5]]
-@test sol[VIndex(3,[1,:ω]),1] == u0[[5,6]]
+    @test NetworkDynamics.observed_symbols(nw) == [EIndex(1, :₋P), EIndex(1, :P), EIndex(2, :₋P), EIndex(2, :P), EIndex(3, :₋P), EIndex(3, :P)]
 
-@test NetworkDynamics.observed_symbols(nw) == [EIndex(1, :₋P), EIndex(1, :P), EIndex(2, :₋P), EIndex(2, :P), EIndex(3, :₋P), EIndex(3, :P)]
+    @test SII.parameter_symbols(nw) == [VIndex(1, :M),
+                                        VIndex(1, :D),
+                                        VIndex(1, :Pm),
+                                        VIndex(2, :M),
+                                        VIndex(2, :D),
+                                        VIndex(2, :Pm),
+                                        VIndex(3, :M),
+                                        VIndex(3, :D),
+                                        VIndex(3, :Pm),
+                                        EIndex(1, :K),
+                                        EIndex(2, :K),
+                                        EIndex(3, :K)]
+    SII.all_variable_symbols(nw)
 
-@test SII.parameter_symbols(nw) == [VPIndex{Int64, Symbol}(1, :M),
-                                    VPIndex{Int64, Symbol}(1, :D),
-                                    VPIndex{Int64, Symbol}(1, :Pm),
-                                    VPIndex{Int64, Symbol}(2, :M),
-                                    VPIndex{Int64, Symbol}(2, :D),
-                                    VPIndex{Int64, Symbol}(2, :Pm),
-                                    VPIndex{Int64, Symbol}(3, :M),
-                                    VPIndex{Int64, Symbol}(3, :D),
-                                    VPIndex{Int64, Symbol}(3, :Pm),
-                                    EPIndex{Int64, Symbol}(1, :K),
-                                    EPIndex{Int64, Symbol}(2, :K),
-                                    EPIndex{Int64, Symbol}(3, :K)]
-SII.all_variable_symbols(nw)
+    @test filter(s->SII.is_observed(nw,s), SII.all_symbols(nw)) == NetworkDynamics.observed_symbols(nw)
+    @test filter(s->SII.is_parameter(nw,s), SII.all_symbols(nw)) == SII.parameter_symbols(nw)
+    @test filter(s->SII.is_variable(nw,s), SII.all_symbols(nw)) == SII.variable_symbols(nw)
 
-@test filter(s->SII.is_observed(nw,s), SII.all_symbols(nw)) == NetworkDynamics.observed_symbols(nw)
-@test filter(s->SII.is_parameter(nw,s), SII.all_symbols(nw)) == SII.parameter_symbols(nw)
-@test filter(s->SII.is_variable(nw,s), SII.all_symbols(nw)) == SII.variable_symbols(nw)
-
-# sol[obs] does not work, because obs has two timeseries: Continuous and Discrete
-# it is unclear, whether it should return onlye discre values or for all sol.t
-@test_broken sol[EIndex(1,:P)]
-@test_broken sol[EIndex(2,:P)]
-@test_broken sol[EIndex(3,:P)]
-@test_broken sol[EIndex(1:3,:P)] == sol[[EIndex(1,:P),EIndex(2,:P),EIndex(3,:P)]]
-@test sol(sol.t, idxs=EIndex(1:3,:P)) == sol(sol.t, idxs=[EIndex(1,:P),EIndex(2,:P),EIndex(3,:P)])
-@test sol(sol.t, idxs=EIndex(1:3,:₋P)) == sol(sol.t, idxs=[EIndex(1,:₋P),EIndex(2,:₋P),EIndex(3,:₋P)])
-@test sol(sol.t, idxs=EIndex(1,:P)).u == -1* sol(sol.t, idxs=EIndex(1,:₋P)).u
+    # sol[obs] does not work, because obs has two timeseries: Continuous and Discrete
+    # it is unclear, whether it should return onlye discre values or for all sol.t
+    @test_broken sol[EIndex(1,:P)]
+    @test_broken sol[EIndex(2,:P)]
+    @test_broken sol[EIndex(3,:P)]
+    @test_broken sol[EIndex(1:3,:P)] == sol[[EIndex(1,:P),EIndex(2,:P),EIndex(3,:P)]]
+    @test sol(sol.t, idxs=EIndex(1:3,:P)) == sol(sol.t, idxs=[EIndex(1,:P),EIndex(2,:P),EIndex(3,:P)])
+    @test sol(sol.t, idxs=EIndex(1:3,:₋P)) == sol(sol.t, idxs=[EIndex(1,:₋P),EIndex(2,:₋P),EIndex(3,:₋P)])
+    @test sol(sol.t, idxs=EIndex(1,:P)).u == -1* sol(sol.t, idxs=EIndex(1,:₋P)).u
+end
 
 
 ####
@@ -687,4 +688,27 @@ end
 
     @test nw[[VIndex(1), VIndex(2)]] == nw[VIndex(:)]
     @test nw[[VIndex(2), VIndex(1)]] == reverse(nw[VIndex(:)])
+end
+
+@testset "test PIdx/XIdx constructors" begin
+    @test VIndex(1,1) == VIndex(1, StateIdx(1))
+    @test VPIndex(1,1) == VPIndex(1, ParamIdx(1))
+    @test EIndex(:foo, [1,:bar]) == EIndex(:foo, [StateIdx(1), :bar])
+    @test EIndex(:foo, 1:5) == EIndex(:foo, StateIdx(1:5))
+
+    @test SII.getname(EIndex(1, 1)) == :e1₊x1
+    @test SII.getname(EPIndex(112, 17)) == :e112₊p17
+
+    @test VIndex(1,:) == VIndex(1, StateIdx(:))
+    @test VPIndex(1,:) == VIndex(1, ParamIdx(:))
+
+    @test NetworkDynamics._hascolon(VIndex(1,:))
+    @test NetworkDynamics._hascolon(VIndex(:,:foo))
+
+    g = path_graph(2)
+    vf1 = Lib.kuramoto_second()
+    vf2 = Lib.kuramoto_first()
+    ef = Lib.kuramoto_edge()
+    nw = Network(g, [vf1, vf2], ef)
+
 end

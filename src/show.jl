@@ -235,23 +235,21 @@ function stylesymbolarray(syms, defaults, guesses, symstyles=Dict{Int,Symbol}())
 end
 
 function Base.show(io::IO, idx::VIndex)
-    print(io, "VIndex(", repr(idx.compidx), ", ", repr(idx.subidx), ")")
+    print(io, "VIndex(", repr_colon(idx.compidx), ", ", repr_colon(idx.subidx), ")")
 end
 function Base.show(io::IO, idx::EIndex)
-    print(io, "EIndex(", repr(idx.compidx), ", ", repr(idx.subidx), ")")
+    print(io, "EIndex(", repr_colon(idx.compidx), ", ", repr_colon(idx.subidx), ")")
 end
 function Base.show(io::IO, idx::VIndex{<:Any,Nothing})
-    print(io, "VIndex(", repr(idx.compidx), ")")
+    print(io, "VIndex(", repr_colon(idx.compidx), ")")
 end
 function Base.show(io::IO, idx::EIndex{<:Any,Nothing})
-    print(io, "EIndex(", repr(idx.compidx), ")")
+    print(io, "EIndex(", repr_colon(idx.compidx), ")")
 end
-function Base.show(io::IO, idx::VPIndex)
-    print(io, "VPIndex(", repr(idx.compidx), ", ", repr(idx.subidx), ")")
-end
-function Base.show(io::IO, idx::EPIndex)
-    print(io, "EPIndex(", repr(idx.compidx), ", ", repr(idx.subidx), ")")
-end
+Base.show(io::IO, idx::ParamIdx) = print(io, "ParamIdx(", repr_colon(idx.idx), ")")
+Base.show(io::IO, idx::StateIdx) = print(io, "StateIdx(", repr_colon(idx.idx), ")")
+repr_colon(::Colon) = ":"
+repr_colon(x) = repr(x)
 
 function Base.show(io::IO, mime::MIME"text/plain", @nospecialize(s::NWState); dim=nothing)
     ioc = IOContext(io, :compact => true)
