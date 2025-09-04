@@ -391,9 +391,10 @@ struct AllVertices end
 struct AllEdges end
 
 generate_indices(inpr, s::SymbolicIndex; kwargs...) = generate_indices(inpr, idxtype(s)(s.compidx), s.subidx; kwargs...)
-function generate_indices(inpr, compfilter=nothing, varfilter=nothing; s=true, p=true, out=true, obs=false, in=false, return_types=false)
+function generate_indices(inpr, compfilter=nothing, varfilter=nothing; s=true, p=true, out=true, obs=false, in=false,
+    return_types=false, just_count=false)
     nw = extract_nw(inpr)
-    indices = SymbolicIndex[]
+    indices = !just_count ? SymbolicIndex[] : nothing
     types = return_types ? Symbol[] : nothing
 
     # potentially wrap varfilter
@@ -407,56 +408,82 @@ function generate_indices(inpr, compfilter=nothing, varfilter=nothing; s=true, p
         end
     end
 
-    all_comp = vcat(collect(VIndex(1:nv(nw))), collect(EIndex(1:ne(nw))))
-    compidxs = filter(compidx -> match_compfilter(nw, compfilter, compidx), all_comp)
+    switches = (; s, p, out, obs, in)
+    count = _collect_indices!(nw, indices, types, compfilter, varfilter, switches)
+    @assert isnothing(indices) || count == length(indices)
 
-    for cidx in compidxs
-        comp = getcomp(nw, cidx)
-        if s
-            matched = Iterators.map(last,
-                Iterators.filter(enumerate(sym(comp))) do (i, sym)
-                    match_varfilter(comp, varfilter, sym, StateIdx(i))
-                end
-            )
-            append!(indices, idxtype(cidx).(cidx.compidx, matched))
-            return_types && append!(types, :State for _ in matched)
-        end
-        if p
-            matched = Iterators.map(last,
-                Iterators.filter(enumerate(psym(comp))) do (i, sym)
-                    match_varfilter(comp, varfilter, sym, ParamIdx(i))
-                end
-            )
-            append!(indices, idxtype(cidx).(cidx.compidx, matched))
-            return_types && append!(types, :Parameter for _ in matched)
-        end
-        if out
-            # if s are also requested, do not duplicate
-            _outsym = s ? setdiff(outsym_flat(comp), sym(comp)) : outsym_flat(comp)
-            matched = filter(sym -> match_varfilter(comp, varfilter, sym), _outsym)
-            append!(indices, idxtype(cidx).(cidx.compidx, matched))
-            return_types && append!(types, :Output for _ in matched)
-        end
-        if in
-            insyms = insym_flat(comp)
-            if !isnothing(insyms)
-                matched = filter(sym -> match_varfilter(comp, varfilter, sym), insym_flat(comp))
-                append!(indices, idxtype(cidx).(cidx.compidx, matched))
-                return_types && append!(types, :Input for _ in matched)
-            end
-        end
-        if obs
-            matched = filter(sym -> match_varfilter(comp, varfilter, sym), obssym(comp))
-            append!(indices, idxtype(cidx).(cidx.compidx, matched))
-            return_types && append!(types, :Observable for _ in matched)
-        end
-    end
-    if return_types
+    if just_count
+        return count
+    elseif return_types
         return indices, types
     else
         return indices
     end
 end
+function _collect_indices!(nw, indices, types, compfilter, varfilter, switches)
+    all_verts = VIndex(1:nv(nw))
+    all_edges = EIndex(1:ne(nw))
+    vidxs = Iterators.filter(compidx -> match_compfilter(nw, compfilter, compidx), all_verts)
+    eidxs = Iterators.filter(compidx -> match_compfilter(nw, compfilter, compidx), all_edges)
+    count_v = _collect_symbols!(nw, indices, types, vidxs, varfilter, switches)
+    count_e = _collect_symbols!(nw, indices, types, eidxs, varfilter, switches)
+    count_v + count_e
+end
+function _collect_symbols!(nw, indices, types, compidxs, varfilter, switches)
+    counter = 0
+    for cidx in compidxs
+        comp = getcomp(nw, cidx)
+        if switches.s
+            for (i, s) in enumerate(sym(comp))
+                if match_varfilter(comp, varfilter, s, StateIdx(i))
+                    !isnothing(indices) && push!(indices, idxtype(cidx)(cidx.compidx, s))
+                    !isnothing(types) && push!(types, :State)
+                    counter += 1
+                end
+            end
+        end
+        if switches.p
+            for (i, s) in enumerate(psym(comp))
+                if match_varfilter(comp, varfilter, s, ParamIdx(i))
+                    !isnothing(indices) && push!(indices, idxtype(cidx)(cidx.compidx, s))
+                    !isnothing(types) && push!(types, :Parameter)
+                    counter += 1
+                end
+            end
+        end
+        if switches.out
+            for s in outsym_flat(comp)
+                switches.s && s ∈ sym(comp) && continue
+                if match_varfilter(comp, varfilter, s)
+                    !isnothing(indices) && push!(indices, idxtype(cidx)(cidx.compidx, s))
+                    !isnothing(types) && push!(types, :Output)
+                    counter += 1
+                end
+            end
+        end
+        # insym slighly unstable for unknown comp, tried with function barrier but didnt help
+        if switches.in && hasinsym(comp)
+            for s::Symbol in insym_all(comp)
+                if match_varfilter(comp, varfilter, s)
+                    !isnothing(indices) && push!(indices, idxtype(cidx)(cidx.compidx, s))
+                    !isnothing(types) && push!(types, :Input)
+                    counter += 1
+                end
+            end
+        end
+        if switches.obs
+            for s in obssym(comp)
+                if match_varfilter(comp, varfilter, s)
+                    !isnothing(indices) && push!(indices, idxtype(cidx)(cidx.compidx, s))
+                    !isnothing(types) && push!(types, :Observable)
+                    counter += 1
+                end
+            end
+        end
+    end
+    counter
+end
+
 match_compfilter(nw, filter::Nothing, idx) = true
 function match_compfilter(nw, filter::Union{AbstractVector, Tuple}, idx)
     any(f -> match_compfilter(nw, f, idx), filter)
@@ -712,11 +739,21 @@ end
 
 #### enable broadcasted setindex
 #### https://discourse.julialang.org/t/broadcasting-setindex-is-a-noobtrap/94700
-Base.dotview(f::FilteringProxy, idxs...) = view(f, idxs...)
-function Base.view(f::FilteringProxy, idxs...)
+function Base.dotview(f::FilteringProxy, idxs...)
     refined_f = refine_filter(f, idxs...)
     allindices = resolve_to_index(refined_f)
     view(f.data, allindices)
+end
+
+# methods below are used to allow for s.v[1].p .= 1.0 style broadcasting
+# which his not covered by "dotview" becaus it is a full proxy object
+Base.size(f::FilteringProxy) = length(resolve_to_index(f))
+Base.ndims(::Type{<:FilteringProxy}) = 1
+function Base.copyto!(f::FilteringProxy, bc::Broadcast.Broadcasted{<:Base.Broadcast.DefaultArrayStyle})
+    allindices = resolve_to_index(f)
+    v = view(f.data, allindices)
+    Base.copyto!(v, bc)
+    return f
 end
 
 

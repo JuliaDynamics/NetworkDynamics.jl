@@ -760,6 +760,15 @@ end
     e = Lib.dqline(X=0.1, R=0.01)
     nw = Network(g, [v1, v2, v3, v4, v5], e; dealias=true)
 
+    s = NWState(nw)
+    @test_throws "observables are not allowed" s.e[1].obs[""] .= 1
+
+    @test_throws "observables are not allowed" s.e[1].obs .= 1
+
+    # broadcasting should work for non-observables
+    s.e[1].p .= 1
+    @test values(s.e[1].p) == [1,1,1]
+
     generate_indices(nw, nothing, "i_r")
 
     generate_indices(nw, VIndex(:), nothing; return_types=true)
