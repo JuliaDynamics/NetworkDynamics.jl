@@ -541,6 +541,18 @@ struct FilteringProxy{S,CF,VF} <: IndexingProxy{S}
     observables::Bool
 end
 
+function (f::FilteringProxy)(args...; kwargs...)
+    if !isempty(args)
+        f = refine_filter(f, args...)
+    end
+    if !isempty(kwargs)
+        f = FilteringProxy(f; kwargs...)
+    end
+    return f
+end
+Base.keys(f::FilteringProxy) = generate_indices(f)
+Base.values(f::FilteringProxy) = f.data[generate_indices(f)]
+
 # "copy" constructor
 function FilteringProxy(
     f::FilteringProxy;
@@ -584,15 +596,26 @@ end
 function Base.getindex(f::FilteringProxy, idx::SymbolicIndex)
     if !isnothing(idx.subidx)
         getindex(f.data, idx)
-    else
+    else # if idx.subidx is nothing its just a refinement
         new_filter = refine_filter(f, idx)
         is_fully_refined(new_filter) ? resolve_to_value(new_filter) : new_filter
     end
 end
-function Base.getindex(f::FilteringProxy, refinements...)
-    new_filter = refine_filter(f, refinements...)
+function Base.getindex(f::FilteringProxy, ref)
+    new_filter = refine_filter(f, ref)
     is_fully_refined(new_filter) ? resolve_to_value(new_filter) : new_filter
 end
+Base.getindex(f::FilteringProxy, a, b) = refine_filter(f, a)[b]
+# vector valued things
+function Base.getindex(f::FilteringProxy, idxs::Union{AbstractVector,Tuple})
+    if all(i -> i isa SymbolicIndex && !isnothing(i.subidx), idxs)
+        return getindex(f.data, idxs)
+    else
+        new_filter = refine_filter(f, idxs)
+        return is_fully_refined(new_filter) ? resolve_to_value(new_filter) : new_filter
+    end
+end
+
 function Base.getproperty(f::FilteringProxy, sym::Symbol)
     if sym === :v
         if f.compfilter == nothing
@@ -623,31 +646,18 @@ function Base.getproperty(f::FilteringProxy, sym::Symbol)
     end
 end
 
-# got multiple filters at once (i.e. f[compfilter, varfilter])
-function refine_filter(f::FilteringProxy{<:Any, <:Union{Nothing,AllVertices,AllEdges}}, compfilter, varfilter)
-    refine_filter(refine_filter(f, compfilter), varfilter)
+refine_filter(f::FilteringProxy, a, b) = refine_filter(refine_filter(f, a), b)
+
+function refine_filter(f::FilteringProxy{<:Any, <:AllVertices}, idxs::Union{AbstractVector,Tuple})
+    return FilteringProxy(f, compfilter=VIndex(idxs))
+end
+function refine_filter(f::FilteringProxy{<:Any, <:AllEdges}, idxs::Union{AbstractVector,Tuple})
+    return FilteringProxy(f, compfilter=EIndex(idxs))
+end
+function refine_filter(f::FilteringProxy{<:Any, <:SymbolicIndex}, idxs::Union{AbstractVector,Tuple})
+    return FilteringProxy(f, varfilter=idxs)
 end
 
-###
-### Manual dispatch for vector valued refinements
-###
-refine_filter(f::FilteringProxy{<:Any, <:SymbolicIndex}, refinement::Union{AbstractVector,Tuple}) = _handle_vector_refinement(f, refinement)
-refine_filter(f::FilteringProxy, refinement::Union{AbstractVector,Tuple}) = _handle_vector_refinement(f, refinement)
-function _handle_vector_refinement(f::FilteringProxy, refinement)
-    if all(i -> i isa SymbolicIndex, refinement)
-        return getindex(f.data, refinement)
-    elseif f isa FilteringProxy{<:Any, <:AllVertices}
-        # XXX: vector version for f.v[1:10] for example
-        FilteringProxy(f; compfilter=VIndex(refinement))
-    elseif f isa FilteringProxy{<:Any, <:AllEdges}
-        FilteringProxy(f; compfilter=EIndex(refinement))
-    elseif f isa FilteringProxy{<:Any, <:SymbolicIndex}
-        # XXX: vector version for f.v[1][1:10] for example
-        resolve_to_value(FilteringProxy(f; varfilter=refinement))
-    else
-        throw(ArgumentError("Collection $refinement is not a SymbolicIndex collection."))
-    end
-end
 ####
 #### refinement by SymbolicIndex(something, nothing) is allways compfilter update
 #### refinement by SymolicIndex(something, something) is allways comp + varfilter update

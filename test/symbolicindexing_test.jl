@@ -92,6 +92,7 @@ end
     prob = ODEProblem(nw, rand(dim(nw)), (0,1), rand(pdim(nw)))
     Main.test_execution_styles(prob) # testing all ex styles #src
     sol = solve(prob, Tsit5())
+    t = 1.0
 
     @test SII.variable_index.(Ref(nw), SII.variable_symbols(nw)) == 1:dim(nw)
     @test SII.parameter_index.(Ref(nw), SII.parameter_symbols(nw)) == 1:pdim(nw)
@@ -139,11 +140,15 @@ end
         s.p.e[1,1] = 10
         @test s.p.e[1,1] == s[EPIndex(1,1)] == 10
 
+        @test s.v[[1,3],:δ] == s.v[[1,3]][:δ]
+        s.v[[1,3],:δ] = (17, 9)
+        @test s.v[[1,3],:δ] == s.v[[1,3]][:δ] == [17,9]
         @test s.v[[1,3],:δ] == s[vidxs(s,:,"δ")]
         @test_throws DimensionMismatch s.v[[1,3],:δ] = 1
         @test_throws DimensionMismatch s.p.e[[1,5], :τ] = 1
 
         s.p.e[1,:τ] = 7
+        s.p.e(1,:τ)
         @test s.p.e[1,:τ] == 7
 
         s.e.p[1,:τ] = 2
@@ -169,9 +174,28 @@ end
         s_no_p = NWState(sol, sol(t))
         show(stdout, MIME"text/plain"(), s_no_p.v.p)
         just_p = NWParameter(nw)
-        show(stdout, MIME"text/plain"(), FilteringProxy(just_p).x)
-        @test_throws ErrorException FilteringProxy(just_p).x.v[:, "δ"]
-        @test FilteringProxy(s_no_p).x.v[:]["δ"] == FilteringProxy(s_no_p).x.v[:, "δ"]
+        show(stdout, MIME"text/plain"(), FilteringProxy(just_p).s)
+        @test_throws ErrorException FilteringProxy(just_p).s.v[:, "δ"]
+        @test FilteringProxy(s_no_p).s.v[:]["δ"] == FilteringProxy(s_no_p).s.v[:, "δ"]
+
+        s.v[1, :]
+        s.v[1][:]
+
+        s.v[1]
+        s.v[:]
+
+        using NetworkDynamics: FilteringProxy
+        f_sp = FilteringProxy(FilteringProxy(s), s=true, p=true)
+        @test f_sp[VIndex(:)][:] == f_sp[VIndex(:)][StateIdx(:)]
+        f_p = FilteringProxy(FilteringProxy(s), s=false, p=true)
+        @test f_p[VIndex(:)][:] == f_sp[VIndex(:)][ParamIdx(:)]
+
+        @test f_sp[VIndex(:)][(1,2)] == f_sp[VIndex(:)][[1,2]]
+
+        # test vector valued ambiguity
+        s.v[(1,2)]
+        s.v[:][(1,2)]
+        s.v[:][[1,2]]
     end
 
     @testset "Test colon indexing" begin
