@@ -332,44 +332,10 @@ end
 
 
 ####
-#### Indexing proxys
-####
-abstract type IndexingProxy{S} end
-struct VProxy{S} <: IndexingProxy{S}
-    s::S
-end
-Base.getindex(p::VProxy, comp, state) = getindex(p.s, VIndex(comp, _wrap_proxy_subidx(p, state)))
-Base.getindex(p::VProxy, ::Colon, state) = getindex(p, 1:nv(extract_nw(p)), _wrap_proxy_subidx(p, state))
-Base.setindex!(p::VProxy, val, comp, state) = setindex!(p.s, val, VIndex(comp, _wrap_proxy_subidx(p, state)))
-
-struct EProxy{S} <: IndexingProxy{S}
-    s::S
-end
-Base.getindex(p::EProxy, comp, state) = getindex(p.s, EIndex(comp, _wrap_proxy_subidx(p, state)))
-Base.getindex(p::EProxy, ::Colon, state) = getindex(p, 1:ne(extract_nw(p)), _wrap_proxy_subidx(p, state))
-Base.setindex!(p::EProxy, val, comp, state) = setindex!(p.s, val, EIndex(comp, _wrap_proxy_subidx(p, state)))
-
-_wrap_proxy_subidx(::IndexingProxy{<:NWState}, sub) = wrap_sidx(sub)
-_wrap_proxy_subidx(::IndexingProxy{<:NWParameter}, sub) = wrap_pidx(sub)
-
-function Base.getproperty(s::Union{NWParameter, NWState}, sym::Symbol)
-    if sym === :v
-        return FilteringProxy(s).v
-    elseif sym === :e
-        return FilteringProxy(s).e
-    else
-        return getfield(s, sym)
-    end
-end
-
-
-####
 #### enable broadcasted setindex
 #### https://discourse.julialang.org/t/broadcasting-setindex-is-a-noobtrap/94700
 ####
-Base.dotview(s::Union{NWParameter, NWState, VProxy, EProxy}, idxs...) = view(s, idxs...)
-Base.view(p::VProxy, comp, state) = view(p.s, VIndex(comp, state))
-Base.view(p::EProxy, comp, state) = view(p.s, EIndex(comp, state))
+Base.dotview(s::Union{NWParameter, NWState}, idxs...) = view(s, idxs...)
 
 # NWParameter: view
 Base.view(s::NWParameter, ::Colon) = s.pflat
@@ -505,6 +471,11 @@ end
 _get_components(::Union{Type{<:VIndex}, <:typeof(VPIndex)}, inpr) = extract_nw(inpr).im.vertexm
 _get_components(::Union{Type{<:EIndex}, <:typeof(EPIndex)}, inpr) = extract_nw(inpr).im.edgem
 
+
+####
+#### Indexing proxys
+####
+abstract type IndexingProxy{S} end
 
 struct AllVertices end
 struct AllEdges end

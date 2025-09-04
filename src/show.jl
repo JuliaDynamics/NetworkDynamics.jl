@@ -251,7 +251,7 @@ Base.show(io::IO, idx::StateIdx) = print(io, "StateIdx(", repr_colon(idx.idx), "
 repr_colon(::Colon) = ":"
 repr_colon(x) = repr(x)
 
-function Base.show(io::IO, mime::MIME"text/plain", @nospecialize(s::NWState); dim=nothing)
+function Base.show(io::IO, mime::MIME"text/plain", @nospecialize(s::NWState))
     ioc = IOContext(io, :compact => true)
     if get(io, :limit, true)::Bool
         dsize = get(io, :displaysize, displaysize(io))::Tuple{Int,Int}
@@ -276,11 +276,7 @@ function Base.show(io::IO, mime::MIME"text/plain", @nospecialize(s::NWState); di
             else
                 print(buf, "#undef")
             end
-            str = read(seekstart(buf), AnnotatedString)
-            if !isnothing(dim) && dim(sym)
-                str = styled"{NetworkDynamics_inactive:$str}"
-            end
-            str
+            read(seekstart(buf), AnnotatedString)
         end
         print_treelike(io, align_strings(strvec); prefix="  ", rowmax)
     end
@@ -298,7 +294,7 @@ function Base.show(io::IO, mime::MIME"text/plain", @nospecialize(s::NWState); di
     end
 end
 
-function Base.show(io::IO, mime::MIME"text/plain", @nospecialize(p::NWParameter); dim=nothing)
+function Base.show(io::IO, mime::MIME"text/plain", @nospecialize(p::NWParameter))
     compact = get(io, :compact, false)::Bool
     if get(io, :limit, true)::Bool
         dsize = get(io, :displaysize, displaysize(io))::Tuple{Int,Int}
@@ -326,25 +322,11 @@ function Base.show(io::IO, mime::MIME"text/plain", @nospecialize(p::NWParameter)
             else
                 print(buf, "#undef")
             end
-            str = read(seekstart(buf), AnnotatedString)
-            if !isnothing(dim) && dim(sym)
-                str = styled"{NetworkDynamics_inactive:$str}"
-            end
-            str
+            read(seekstart(buf), AnnotatedString)
         end
         print_treelike(io, align_strings(strvec); prefix="  ", rowmax)
     end
 end
-
-function Base.show(io::IO, mime::MIME"text/plain", p::Union{VProxy,EProxy})
-    name = _proxyname(p)
-    print(io, styled"{bright_blue:$name} for ")
-    show(io, mime, p.s; dim = _dimcondition(p))
-end
-_proxyname(::VProxy) = "Vertex indexer"
-_proxyname(::EProxy) = "Edge indexer"
-_dimcondition(::VProxy) = sym -> sym isa EIndex
-_dimcondition(::EProxy) = sym -> sym isa VIndex
 
 function Base.show(io::IO, mime::MIME"text/plain", fp::FilteringProxy)
     printstyled(io, "FilteringProxy"; bold=true)
