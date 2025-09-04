@@ -83,12 +83,12 @@ export @initformula, InitFormula
 include("init_constraints.jl")
 
 using OrderedCollections: OrderedDict
-using NonlinearSolve: AbstractNonlinearSolveAlgorithm, NonlinearFunction
-using NonlinearSolve: NonlinearLeastSquaresProblem, NonlinearProblem
-using SteadyStateDiffEq: SteadyStateProblem, SteadyStateDiffEqAlgorithm, SSRootfind
+using NonlinearSolve: NonlinearFunction, NonlinearLeastSquaresProblem
+using SteadyStateDiffEq: SteadyStateProblem, SSRootfind
 export find_fixpoint, set_interface_defaults!
 export initialize_component, initialize_component!, init_residual
 export initialize_componentwise, initialize_componentwise!, interface_values
+export NetworkInitError, ComponentInitError
 include("initialization.jl")
 
 export has_metadata, get_metadata, set_metadata!, delete_metadata!, strip_metadata!

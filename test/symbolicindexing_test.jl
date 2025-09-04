@@ -615,3 +615,76 @@ end
     @test SII.getname(EIndex(:a=>2, :P)) == :aₜₒv2₊P
     @test SII.getname(EIndex(1=>:b, :P)) == :v1ₜₒb₊P
 end
+
+@testset "test comparioson of NWState/NWPara" begin
+    # Create test network
+    g = path_graph(2)
+    vf = Lib.kuramoto_second()
+    ef = Lib.kuramoto_edge()
+    nw = Network(g, vf, ef)
+
+    # Test NWParameter comparison
+    p1 = NWParameter(nw; default=false)
+    pflat(p1) .= [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
+
+    p2 = NWParameter(nw; default=false)
+    pflat(p2) .= [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
+
+    p3 = NWParameter(nw; default=false)
+    pflat(p3) .= [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.1]  # slightly different
+
+    # Test exact equality
+    @test p1 == p2
+    @test p1 != p3
+
+    # Test approximate equality
+    @test isapprox(p1, p2)
+    @test isapprox(p1, p3; atol=0.2)
+    @test !isapprox(p1, p3; atol=0.05)
+
+    # Test NWState comparison
+    s1 = NWState(nw; default=false)
+    uflat(s1) .= [0.1, 0.2, 0.3, 0.4]  # state values
+    pflat(s1) .= [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]  # parameter values
+
+    s2 = NWState(nw; default=false)
+    uflat(s2) .= [0.1, 0.2, 0.3, 0.4]
+    pflat(s2) .= [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
+
+    s3 = NWState(nw; default=false)
+    uflat(s3) .= [0.1, 0.2, 0.3, 0.41]  # slightly different state
+    pflat(s3) .= [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
+
+    # Test exact equality
+    @test s1 == s2
+    @test s1 != s3
+
+    # Test approximate equality
+    @test isapprox(s1, s2)
+    @test isapprox(s1, s3; atol=0.02)
+    @test !isapprox(s1, s3; atol=0.005)
+end
+
+@testset "convenience getindex methods" begin
+    g = path_graph(2)
+    vf1 = Lib.kuramoto_second()
+    vf2 = Lib.kuramoto_first()
+    ef = Lib.kuramoto_edge()
+    nw = Network(g, [vf1, vf2], ef)
+
+    @test nw[VPIndex(1)] === nw[VIndex(1)]
+    @test get_default(nw, VPIndex(1, :M)) == get_default(nw, VIndex(1, :M))
+
+    @test nw[VIndex(:)] == [nw[VIndex(1)], nw[VIndex(2)]]
+    @test nw[VIndex(:)] !== nw.im.vertexm
+    @test nw[EIndex(:)] == [nw[EIndex(1)]]
+    @test nw[EIndex(:)] !== nw.im.edgem
+    veccopy = nw[VIndex(:)]
+    veccopy[1] = nw[VIndex(2)]
+    @test veccopy[1] != nw[VIndex(1)]
+    set_default!(veccopy[1], :ω, 42)
+    @test get_default(nw[VIndex(2)], :ω) == 42
+
+    @test nw[[VIndex(1), VIndex(2)]] == nw[VIndex(:)]
+    @test nw[[VIndex(2), VIndex(1)]] == reverse(nw[VIndex(:)])
+end

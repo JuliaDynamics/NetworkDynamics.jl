@@ -36,7 +36,7 @@ jobs:
           using Pkg
           Pkg.develop(PackageSpec(path=pwd()))
           Pkg.instantiate()
-      - uses: julia-actions/julia-buildpkg@v1
+      - uses: hexaeder/julia-buildpkg@main
       # - uses: julia-actions/julia-docdeploy@v1
       #   env:
       #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

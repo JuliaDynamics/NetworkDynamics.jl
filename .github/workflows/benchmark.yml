@@ -52,7 +52,7 @@ jobs:
           fetch-depth: 0 # fetch all history
       - uses: julia-actions/setup-julia@v2
       - uses: julia-actions/cache@v2
-      - uses: julia-actions/julia-buildpkg@v1
+      - uses: hexaeder/julia-buildpkg@main
       - name: Run benchmarks
         env:
           JULIA_NUM_THREADS: auto

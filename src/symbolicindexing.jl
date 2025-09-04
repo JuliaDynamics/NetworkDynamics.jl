@@ -68,6 +68,7 @@ struct VPIndex{C,S} <: SymbolicParameterIndex{C,S}
     compidx::C
     subidx::S
 end
+VPIndex(ci) = VPIndex(ci, nothing)
 """
     EPIndex{C,S} <: SymbolicStateIndex{C,S}
     idx = VEIndex(comp, sub)
@@ -85,6 +86,7 @@ struct EPIndex{C,S} <: SymbolicParameterIndex{C,S}
     compidx::C
     subidx::S
 end
+EPIndex(ci) = EPIndex(ci, nothing)
 const SymbolicEdgeIndex{C,S} = Union{EIndex{C,S}, EPIndex{C,S}}
 const SymbolicVertexIndex{C,S} = Union{VIndex{C,S}, VPIndex{C,S}}
 
@@ -910,7 +912,9 @@ SII.current_time(s::NWParameter) = error("Parameter type does not holde time val
 # NWParameter: getindex
 Base.getindex(p::NWParameter, ::Colon) = pflat(p)
 # HACK: _expand_and_collect to workaround https://github.com/SciML/SymbolicIndexingInterface.jl/issues/94
-Base.getindex(p::NWParameter, idx) = SII.getp(p, _expand_and_collect(p, _paraindex(idx)))(p)
+function Base.getindex(p::NWParameter, idx::Union{SymbolicIndex, AbstractVector, Tuple})
+    SII.getp(p, _expand_and_collect(p, _paraindex(idx)))(p)
+end
 
 # NWParameter: setindex!
 function Base.setindex!(p::NWParameter, val, idx)
@@ -930,7 +934,7 @@ Base.getindex(s::NWState, ::Colon) = uflat(s)
 # HACK: _expand_and_collect to workaround https://github.com/SciML/SymbolicIndexingInterface.jl/issues/94
 Base.getindex(s::NWState, idx::SymbolicParameterIndex) = SII.getp(s, _expand_and_collect(s, idx))(s)
 Base.getindex(s::NWState, idx::SymbolicStateIndex) = SII.getu(s, idx)(s)
-function Base.getindex(s::NWState, idxs)
+function Base.getindex(s::NWState, idxs::Union{AbstractVector, Tuple})
     if all(i -> i isa SymbolicParameterIndex, idxs)
         # HACK: _expand_and_collect to workaround https://github.com/SciML/SymbolicIndexingInterface.jl/issues/94
         SII.getp(s, _expand_and_collect(s, idxs))(s)
@@ -967,6 +971,33 @@ function _chk_dimensions(ms::SII.MultipleSetters, val)
     if size(ms.setters) != size(val)
         throw(DimensionMismatch("Cannot set variables of size $(size(ms.setters)) to values of size $(size(val))."))
     end
+end
+
+
+####
+#### Comparison of states/parameters
+####
+function Base.:(==)(s1::NWState, s2::NWState)
+    s1 === s2 && return true
+    SII.variable_symbols(s1) == SII.variable_symbols(s2) || return false
+    uflat(s1) == uflat(s2) || return false
+    s1.p == s2.p
+end
+function Base.:(==)(p1::NWParameter, p2::NWParameter)
+    p1 === p2 && return true
+    SII.parameter_symbols(p1) == SII.parameter_symbols(p2) || return false
+    pflat(p1) == pflat(p2)
+end
+function Base.isapprox(s1::NWState, s2::NWState; kwargs...)
+    s1 === s2 && return true
+    SII.variable_symbols(s1) == SII.variable_symbols(s2) || return false
+    isapprox(uflat(s1), uflat(s2); kwargs...) || return false
+    isapprox(s1.p, s2.p; kwargs...)
+end
+function Base.isapprox(p1::NWParameter, p2::NWParameter; kwargs...)
+    p1 === p2 && return true
+    SII.parameter_symbols(p1) == SII.parameter_symbols(p2) || return false
+    isapprox(pflat(p1), pflat(p2); kwargs...)
 end
 
 
@@ -1245,9 +1276,18 @@ Base.getindex(s::NWState, idx::ObservableExpression) = SII.getu(s, idx)(s)
 Base.getindex(s::NWParameter, idx::ObservableExpression) = SII.getp(s, idx)(s)
 
 # using getindex to access component models
-function Base.getindex(nw::Network, i::EIndex{<:Union{<:Pair,Symbol,Int}, Nothing})
+function Base.getindex(nw::Network, i::SymbolicEdgeIndex{<:Union{<:Pair,Symbol,Int}, Nothing})
     return getcomp(nw, i)
 end
-function Base.getindex(nw::Network, i::VIndex{<:Union{Symbol,Int}, Nothing})
+function Base.getindex(nw::Network, i::SymbolicVertexIndex{<:Union{Symbol,Int}, Nothing})
     return getcomp(nw, i)
+end
+function Base.getindex(nw::Network, i::SymbolicEdgeIndex{Colon, Nothing})
+    return copy(nw.im.edgem)
+end
+function Base.getindex(nw::Network, i::SymbolicVertexIndex{Colon, Nothing})
+    return copy(nw.im.vertexm)
+end
+function Base.getindex(nw::Network, collection::Union{AbstractArray,Tuple})
+    getindex.(Ref(nw), collection)
 end

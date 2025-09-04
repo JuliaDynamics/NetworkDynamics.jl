@@ -1,8 +1,8 @@
 module NetworkDynamicsSymbolicsExt
 
-using Symbolics: Symbolics, @variables, Num
+using Symbolics: Symbolics, @variables
 using MacroTools: postwalk, @capture
-using NetworkDynamics: NetworkDynamics, ObservableExpression, SymbolicVertexIndex, SymbolicEdgeIndex, SII
+using NetworkDynamics: NetworkDynamics, SymbolicVertexIndex, SymbolicEdgeIndex, SII
 
 function NetworkDynamics.generate_observable_expression(ex::Expr)
     if @capture(ex, capname_ = capcontent_)

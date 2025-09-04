@@ -301,7 +301,7 @@ We can use the [`find_fixpoint`](@ref) from `NetworkDynamics.jl` to initialize t
 Internally, this uses a nummerical solve for the rootfind problem `0 = rhs`.
 The result is automaticially wrapped as a [`NWState`](@ref) object.
 =#
-u0 = find_fixpoint(nw, uguess)
+u0 = find_fixpoint(nw, uguess, t=0)
 
 #=
 ## Solving the ODE
