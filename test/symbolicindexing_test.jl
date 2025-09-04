@@ -96,17 +96,11 @@ end
     @test SII.variable_index.(Ref(nw), SII.variable_symbols(nw)) == 1:dim(nw)
     @test SII.parameter_index.(Ref(nw), SII.parameter_symbols(nw)) == 1:pdim(nw)
 
-    using NetworkDynamics: NWState, NWParameter
-    t = 1.0
-    _uflat = copy(sol(t))
-    _pflat = copy(sol.prob.p)
-    s = NWState(nw, _uflat, _pflat)
-    p = s.p
-
     ####
     #### State tests
     ####
     @testset "State Tests" begin
+        s = NWState(sol, t)
         @test SII.getu(s, EIndex(1,:e_dst))(s) == uflat(s)[7]
         @test SII.getp(s, VPIndex(1,:M))(s) ==pflat(s)[1]
         @test SII.getp(s, VIndex(1,:M))(s) ==pflat(s)[1]
@@ -114,13 +108,16 @@ end
         @test SII.is_variable(nw, EIndex(1,:e_dst))
         @test SII.variable_index(nw, EIndex(1,:e_dst)) == 7
 
-        @test map(idx->s[idx], SII.variable_symbols(nw)) == _uflat
-        @test map(idx->s[idx], SII.parameter_symbols(nw)) == _pflat
+        @test map(idx->s[idx], SII.variable_symbols(nw)) == uflat(s)
+        @test map(idx->s[idx], SII.parameter_symbols(nw)) == pflat(s)
         NetworkDynamics.observed_symbols(nw) .=> map(idx->s[idx], NetworkDynamics.observed_symbols(nw))
 
         @test s[VPIndex(1,:M)] != 1.0
         s[VPIndex(1,:M)] = 1
         @test s[VPIndex(1,:M)] == 1.0
+        s.v[1,:M] = 42
+        @test s[VIndex(1,:M)] == 42
+        @test s.v[1]["δ"] == s[VIndex(1,:δ)]
 
         @test s[VIndex(1,2)] != 1.0
         s[VIndex(1,2)] = 1.0
@@ -131,8 +128,8 @@ end
         @test s.v[1,1] == s[VIndex(1,1)] == 15
 
         @test s.e[5,:e_src] == s[EIndex(5,:e_src)]
-        s.v[1,1] = 15
-        @test s.v[1,1] == s[VIndex(1,1)] == 15
+        s.e[5,:e_src] = 13.5
+        @test s.e[5,:e_src] == s[EIndex(5,:e_src)] == 13.5
 
         @test s.p.v[1,1] == s[VPIndex(1,1)]
         s.p.v[1,1] = 10
@@ -146,7 +143,16 @@ end
         @test_throws DimensionMismatch s.v[[1,3],:δ] = 1
         @test_throws DimensionMismatch s.p.e[[1,5], :τ] = 1
 
-        s.p.e[[1,5], :τ] .= 1
+        s.p.e[1,:τ] = 7
+        @test s.p.e[1,:τ] == 7
+
+        s.e.p[1,:τ] = 2
+        @test s.e.p[1,:τ] == 2
+
+        @test_throws DimensionMismatch s.p.e[[1,5], :τ] = 1
+        @test_throws DimensionMismatch s.p.e[[1,5], :τ] = (1,2,3)
+
+        s.p.e[[1,5], :τ] = (1,1)
         @test s.p.e[[1,5], :τ] == [1,1]
         s.v[[1,3],:δ] .= (1,2)
         @test s.v[[1,3],:δ] == [1,2]
@@ -159,9 +165,17 @@ end
         @test s[vpidxs(s,:,"M")] == [4,4]
         s[vpidxs(s,:,"M")] .= 5
         @test s[vpidxs(s,:,"M")] == [5,5]
+
+        s_no_p = NWState(sol, sol(t))
+        show(stdout, MIME"text/plain"(), s_no_p.v.p)
+        just_p = NWParameter(nw)
+        show(stdout, MIME"text/plain"(), FilteringProxy(just_p).x)
+        @test_throws ErrorException FilteringProxy(just_p).x.v[:, "δ"]
+        @test FilteringProxy(s_no_p).x.v[:]["δ"] == FilteringProxy(s_no_p).x.v[:, "δ"]
     end
 
     @testset "Test colon indexing" begin
+        s = NWState(sol, t)
         @test NetworkDynamics._resolve_colon(nw, VIndex(:, :δ)) == VIndex(1:nv(g), :δ)
         @test NetworkDynamics._resolve_colon(nw, EIndex(:, :δ)) == EIndex(1:ne(g), :δ)
         @test NetworkDynamics._resolve_colon(nw, VPIndex(:, :δ)) == VPIndex(1:nv(g), :δ)
@@ -222,6 +236,7 @@ end
 
 
     @testset "Test performance of different index types" begin
+        s = NWState(sol, t)
         idxtypes = [
             VIndex(1,1), # variable
             EIndex(1,1), # variable
@@ -349,6 +364,7 @@ end
         T = Vector{Union{Int64, Missing}}
         @test isequal(_init_flat(T, 10, filltype(T)), [missing for _ in 1:10])
         @test isequal(pflat(NWState(nw)), pflat(NWParameter(nw)))
+        p = NWParameter(nw)
         @test isequal(pflat(NWState(p; ufill=0)), pflat(p))
     end
 
@@ -708,15 +724,7 @@ end
 
     @test NetworkDynamics._hascolon(VIndex(1,:))
     @test NetworkDynamics._hascolon(VIndex(:,:foo))
-
-    g = path_graph(2)
-    vf1 = Lib.kuramoto_second()
-    vf2 = Lib.kuramoto_first()
-    ef = Lib.kuramoto_edge()
-    nw = Network(g, [vf1, vf2], ef)
-
 end
-
 
 @testest "index generation generate_indices" begin
     g = cycle_graph(5)
@@ -728,6 +736,8 @@ end
     e = Lib.dqline(X=0.1, R=0.01)
     nw = Network(g, [v1, v2, v3, v4, v5], e; dealias=true)
 
+    generate_indices(nw, nothing, "i_r")
+
     generate_indices(nw, VIndex(:), nothing; return_types=true)
     generate_indices(nw, [VIndex(:)], nothing)
     generate_indices(nw, [VIndex(:), EIndex(:)], nothing)
@@ -737,35 +747,4 @@ end
     generate_indices(nw, VIndex("p"), nothing)
     generate_indices(nw, VIndex("load"), nothing)
     generate_indices(nw, VIndex("swing"), nothing)
-
-
-    s = NWState(nw)
-    s.e[1][:R]
-    s.e[1, :R]
-    s.v[1][:swing₊ω]
-
-    NetworkDynamics.VProxy(s)[1, :swing₊ω]
-
-    s.p.v
-
-    fp = FilteringProxy(s)
-    fp.v[1].p
-    fp.v[1]
-    fp.v
-    fp.e
-    fp[VIndex(:)]
-    fp.v[:]
-
-    fp.v.in
-    fp.p
-    fp.v["load"]
-    fp.p
-
-    fp.e[1:10]
-
-    EIndex(1)
-
-    generate_indices(fp)
-
-
 end

@@ -175,6 +175,8 @@ NWState(int::SciMLBase.DEIntegrator) = NWState(int, int.u, int.p, int.t)
     NWState(sol::SciMLBase.AbstractODESolution, t)
 
 Create `NWState` object from solution object `sol` for timepoint `t`.
+
+Copies both u and p objects so you cannot mess with the solution through NWState object.
 """
 function NWState(sol::SciMLBase.AbstractODESolution, t::Number)
     u = sol(t)
@@ -188,7 +190,7 @@ function NWState(sol::SciMLBase.AbstractODESolution, t::Number)
         para_ts.u[tidx-1]
     end
 
-    NWState(sol, u, p, t)
+    NWState(sol, copy(u), copy(p), t)
 end
 
 # init flat array of type T with length N. Init with nothing if possible, else with zeros
@@ -287,12 +289,17 @@ function Base.setindex!(s::NWState, val, idx)
 end
 
 function _chk_dimensions(::Union{SII.SetParameterIndex,SII.SetStateIndex}, val)
-    length(val) == 1 || throw(DimensionMismatch("Cannot set multiple values to single index."))
+    length(val) == 1 || throw(DimensionMismatch("Cannot set a single index to multiple values $val."))
 end
 _chk_dimensions(s::SII.ParameterHookWrapper, val) = _chk_dimensions(s.setter, val)
 function _chk_dimensions(ms::SII.MultipleSetters, val)
-    if size(ms.setters) != size(val)
-        throw(DimensionMismatch("Cannot set variables of size $(size(ms.setters)) to values of size $(size(val))."))
+    if length(ms.setters) != length(val)
+        msg = if length(val) == 1
+            "Cannot set multiple indices ($(length(ms.setters))) to single value $val. Consider using broadcasted .= syntax."
+        else
+            "Cannot set multiple indices ($(length(ms.setters))) to $(length(val)) values $val."
+        end
+        throw(DimensionMismatch(msg))
     end
 end
 
@@ -533,33 +540,30 @@ function generate_indices(f::FilteringProxy; kwargs...)
         observables=f.observables,
         kwargs...)
 end
-function resolve(f::FilteringProxy)
+function resolve_to_index(f::FilteringProxy)
     idxs = generate_indices(f)
     if length(idxs) == 1
-        f.s[only(idxs)]
+        only(idxs)
     else
-        f.s[idxs]
+        idxs
     end
+end
+resolve_to_value(f::FilteringProxy) = f.s[resolve_to_index(f)]
+# shortcut route if the "filter" is just a concrete index
+function resolve_to_value(f::FilteringProxy{<:Any, <:SymbolicIndex{<:CONCRETE_COMPIDX, Nothing}, <:CONCRETE_SUBIDX})
+    idx = idxtype(f.compfilter)(f.compfilter.compidx, f.varfilter)
+    f.s[idx]
 end
 
-Base.getindex(f::FilteringProxy, idx::SymbolicIndex) = getindex(f.s, idx)
-function Base.getindex(f::FilteringProxy, idx::Union{AbstractVector,Tuple})
-    if all(i -> i isa SymbolicIndex, idx)
-        return getindex(f.s, idx)
-    elseif f isa FilteringProxy{<:Any, <:AllVertices}
-        # XXX: vector version for f.v[1:10] for example
-        FilteringProxy(f; compfilter=VIndex(idx))
-    elseif f isa FilteringProxy{<:Any, <:AllEdges}
-        FilteringProxy(f; compfilter=EIndex(idx))
-    elseif f isa FilteringProxy{<:Any, <:SymbolicIndex}
-        # XXX: vector version for f.v[1][1:10] for example
-        resolve(FilteringProxy(f; varfilter=idx))
-    else
-        throw(ArgumentError("Collection $idx is not a SymbolicIndex collection."))
-    end
+function is_fully_refined(f::FilteringProxy)
+    f.compfilter isa SymbolicIndex && !isnothing(f.varfilter)
 end
-function Base.getindex(f::FilteringProxy{<:Any, Nothing}, idx::SymbolicIndex{<:Any, Nothing})
-    FilteringProxy(f; compfilter=idx)
+
+# acessing the underlying data directly with concrete index
+Base.getindex(f::FilteringProxy, idx::SymbolicIndex) = getindex(f.s, idx)
+function Base.getindex(f::FilteringProxy, refinements...)
+    new_filter = refine_filter(f::FilteringProxy, refinements...)
+    is_fully_refined(new_filter) ? resolve_to_value(new_filter) : new_filter
 end
 function Base.getproperty(f::FilteringProxy, sym::Symbol)
     if sym === :v
@@ -590,22 +594,89 @@ function Base.getproperty(f::FilteringProxy, sym::Symbol)
         getfield(f, sym)
     end
 end
-# unspecific comp idx set
-function Base.getindex(f::FilteringProxy{<:Any, AllVertices}, idx::Union{Colon,Int,Symbol,String,Regex})
+
+# got multiple filters at once
+function refine_filter(f::FilteringProxy{<:Any, <:Union{Nothing,AllVertices,AllEdges}}, compfilter, varfilter)
+    refine_filter(refine_filter(f, compfilter), varfilter)
+end
+
+###
+### Manual dispatch for vector valued refinements
+###
+function refine_filter(f::FilteringProxy, refinement::Union{AbstractVector,Tuple})
+    if all(i -> i isa SymbolicIndex, refinement)
+        return getindex(f.s, refinement)
+    elseif f isa FilteringProxy{<:Any, <:AllVertices}
+        # XXX: vector version for f.v[1:10] for example
+        FilteringProxy(f; compfilter=VIndex(refinement))
+    elseif f isa FilteringProxy{<:Any, <:AllEdges}
+        FilteringProxy(f; compfilter=EIndex(refinement))
+    elseif f isa FilteringProxy{<:Any, <:SymbolicIndex}
+        # XXX: vector version for f.v[1][1:10] for example
+        resolve_to_value(FilteringProxy(f; varfilter=refinement))
+    else
+        throw(ArgumentError("Collection $refinement is not a SymbolicIndex collection."))
+    end
+end
+####
+#### refinement by SymbolicIndex(something, nothing) is allways compfilter update
+#### refinement by SymolicIndex(something, something) is allways comp + varfilter update
+####
+function refine_filter(f::FilteringProxy{<:Any}, s::SymbolicIndex{<:Any, <:Any})
+    isnothing(s.compidx) && error("Index $s has component nothing, which is not a valid refinement")
+    if isnothing(s.subidx)
+        FilteringProxy(f; compfilter=s)
+    else
+        FilteringProxy(f; compfilter=idxtype(s)(s.compidx), varfilter=s.subidx)
+    end
+end
+####
+#### if unspecific compfilter is set (i.e. AllVertices/AllEdges by .v .e property)
+#### we refine the comfilter by that type
+####
+function refine_filter(f::FilteringProxy{<:Any, AllVertices}, idx::Union{Colon,Int,Symbol,Pair,String,Regex})
     FilteringProxy(f; compfilter=VIndex(idx))
 end
-function Base.getindex(f::FilteringProxy{<:Any, AllEdges}, idx::Union{Colon,Int,Symbol,String,Regex})
+function refine_filter(f::FilteringProxy{<:Any, AllEdges}, idx::Union{Colon,Int,Symbol,Pair,String,Regex})
     FilteringProxy(f; compfilter=EIndex(idx))
 end
-Base.getindex(f::FilteringProxy{<:Any, <:Union{AllVertices,AllEdges}}, compfilter, varfilter) = f[compfilter][varfilter]
-# specific comp idx set
-function Base.getindex(f::FilteringProxy{<:Any, <:SymbolicIndex}, varfilter::Union{StateIdx, ParamIdx, Symbol, String, Regex})
-    resolve(FilteringProxy(f; varfilter=varfilter))
+####
+#### From a specific compfilter we can only refine the varfilter
+####
+function refine_filter(f::FilteringProxy{<:Any, <:SymbolicIndex}, varfilter)
+    if varfilter isa Union{StateIdx, ParamIdx, Symbol, String, Regex}
+        FilteringProxy(f; varfilter=varfilter)
+    elseif varfilter isa Union{Int,Colon,AbstractVector{Int}} && f.states
+        FilteringProxy(f; varfilter=StateIdx(varfilter))
+    elseif varfilter isa Union{Int,Colon,AbstractVector{Int}} && !f.states && f.parameters
+        FilteringProxy(f; varfilter=ParamIdx(varfilter))
+    else
+        msg = "Index $varfilter is not a valid variable refinement on $(f.compfilter)."
+        if varfilter isa Union{Int,Colon,AbstractVector{Int}}
+            msg *= " Hint: wrap integer-like indices in StateIdx/ParamIdx to select by position, i.e. try with `StateIdx($(varfilter))`."
+        end
+        throw(ArgumentError(msg))
+    end
+end
+
+function Base.setindex!(f::FilteringProxy, val, idx...)
+    refined_f = refine_filter(f, idx...)
+    allindices = resolve_to_index(refined_f)
+    f.s[allindices] = val
+end
+
+#### enable broadcasted setindex
+#### https://discourse.julialang.org/t/broadcasting-setindex-is-a-noobtrap/94700
+Base.dotview(f::FilteringProxy, idxs...) = view(f, idxs...)
+function Base.view(f::FilteringProxy, idxs...)
+    refined_f = refine_filter(f, idxs...)
+    allindices = resolve_to_index(refined_f)
+    view(f.s, allindices)
 end
 
 
 
-generate_indices(inpr, s::SymbolicIndex; kwargs...) = generate_indices(inpr, s.compidx, s.state; kwargs...)
+generate_indices(inpr, s::SymbolicIndex; kwargs...) = generate_indices(inpr, idxtype(s)(s.compidx), s.subidx; kwargs...)
 function generate_indices(inpr, compfilter, varfilter; states=true, parameters=true, outputs=true, observables=false, inputs=false, return_types=false)
     nw = extract_nw(inpr)
     indices = SymbolicIndex[]
@@ -665,14 +736,24 @@ match_compfilter(nw, filter::SymbolicIndex{Symbol}, idx) = _comptypematch(idx, f
 function match_compfilter(nw, filter::SymbolicIndex{<:Union{AbstractString,Regex}}, idx)
     _comptypematch(idx, filter) && occursin(filter.compidx, string(getcomp(nw, idx).name))
 end
+function match_compfilter(nw, filter::EIndex{<:Pair}, idx)
+    _comptypematch(idx, filter) || return false
+    src_idx_filter = VIndex(filter.compidx.first)
+    dst_idx_filter = VIndex(filter.compidx.second)
+
+    simpleedge = nw.im.edgevec[idx.compidx]
+    src_match = match_compfilter(nw, src_idx_filter, VIndex(simpleedge.src))
+    dst_match = match_compfilter(nw, dst_idx_filter, VIndex(simpleedge.dst))
+    src_match && dst_match
+end
 _comptypematch(idx, filter) = idxtype(idx) == idxtype(filter)
 
 match_varfilter(comp, filter::Nothing, sym) = true
 match_varfilter(comp, filter::Union{AbstractVector, Tuple}, sym) = any(f -> match_varfilter(comp, f, sym), filter)
 match_varfilter(comp, filter::Symbol, sym) = sym == filter
 match_varfilter(comp, filter::Union{AbstractString,Regex}, sym) = occursin(filter, string(sym))
-match_varfilter(comp, filter::ParamIdx, sym) = sym == psym(comp)[filter.idx]
-match_varfilter(comp, filter::StateIdx, sym) = sym == sym(comp)[filter.idx]
+match_varfilter(comp, filter::ParamIdx, _sym) = _sym ∈ view(psym(comp), filter.idx)
+match_varfilter(comp, filter::StateIdx, _sym) = _sym ∈ view(sym(comp), filter.idx)
 
 
 

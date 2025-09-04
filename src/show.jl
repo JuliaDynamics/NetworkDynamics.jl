@@ -386,27 +386,38 @@ function Base.show(io::IO, mime::MIME"text/plain", fp::FilteringProxy)
     end
 
     indices, types = generate_indices(fp; return_types=true)
-    values = fp[indices]
+    _val_to_str(x) = isnan(x) ? "NaN (undefined?)" : repr(x)
+    value_str = try
+        # try to resolve all at once (faster)
+        values = fp[indices]
+        map(_val_to_str, indices)
+    catch
+        # alternatively, go through them one by one
+        map(indices) do _idx
+            try
+                _val_to_str(fp[_idx])
+            catch
+                "not accessible"
+            end
+        end
+    end
     nw = extract_nw(fp)
     compnames = [string(getcomp(nw,idx).name) for idx in indices]
 
-    value_str = map(values) do v
-        if isnan(v)
-            repr(v) * " (undefined?)"
-        else
-            repr(v)
+
+    if !isempty(indices)
+        # align all the printouts
+        strvec = Ref("&") .* repr.(indices) .* Ref(" &&=> ") .* value_str .* " &(" .* compnames .*")"
+        aligned_strvec =  align_strings(strvec)
+
+        for type in unique(types)
+            printstyled(io, "\n", type, "s"; bold=true)
+            typeindices = findall(==(type), types)
+            _aligned = aligned_strvec[typeindices]
+            print_treelike(io, _aligned; prefix="  ")
         end
-    end
-
-    # align all the printouts
-    strvec = Ref("&") .* repr.(indices) .* Ref(" &&=> ") .* value_str .* " &(" .* compnames .*")"
-    aligned_strvec =  align_strings(strvec)
-
-    for type in unique(types)
-        printstyled(io, "\n", type, "s"; bold=true)
-        typeindices = findall(==(type), types)
-        _aligned = aligned_strvec[typeindices]
-        print_treelike(io, _aligned; prefix="  ")
+    else
+        printstyled(io, "\nNo indices matching filter!", bold=true)
     end
 end
 Base.show(io::IO, ::MIME"text/plain", ::AllVertices) = print(io, "AllVertices()")
