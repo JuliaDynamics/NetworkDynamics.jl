@@ -341,13 +341,15 @@ Base.dotview(s::Union{NWParameter, NWState}, idxs...) = view(s, idxs...)
 Base.view(s::NWParameter, ::Colon) = s.pflat
 function Base.view(p::NWParameter, idx::SymbolicIndex)
     if !SII.is_parameter(p, idx)
-        throw(ArgumentError("Index $idx is not a valid parameter index."))
+        throw(ArgumentError("Cannot create view into NWParameter: Index $idx is not a valid \
+            parameter index (states and observables are not allowed)."))
     end
     view(p.pflat, SII.parameter_index(p, idx))
 end
 function Base.view(p::NWParameter, idxs)
     if !(all(i -> SII.is_parameter(p, i), idxs))
-        throw(ArgumentError("Index $idxs is not a valid parameter index collection."))
+        throw(ArgumentError("Cannot create view into NWParameter: Index $idxs is not a valid \
+            parameter index collection (states and observables are not allowed)."))
     end
     view(p.pflat, map(i -> SII.parameter_index(p, i), idxs))
 end
@@ -358,13 +360,18 @@ function Base.view(s::NWState, idx::SymbolicIndex)
     if SII.is_variable(s, idx)
         return view(uflat(s), SII.variable_index(s, idx))
     elseif SII.is_parameter(s, idx)
+        isnothing(s.p) && throw(ArgumentError("Cannot create view into NWState: No parameter array present."))
         return view(pflat(s), SII.parameter_index(s, idx))
     else
-        throw(ArgumentError("Index $idx is neither state nor parameter index."))
+        throw(ArgumentError("Cannot create view into NWState: Index $idx is neither state \
+            nor parameter index (observables are not allowed)."))
     end
     view(uflat(s), SII.variable_index(s, idx))
 end
 function Base.view(s::NWState, idxs)
+    if isnothing(s.p) && any(i -> SII.is_parameter(s, i))
+        throw(ArgumentError("Cannot create view into NWState: No parameter array present."))
+    end
     if all(i -> SII.is_parameter(s, i), idxs)
         _viewidx =  map(i -> SII.parameter_index(s, i), idxs)
         return view(pflat(s), _viewidx)
@@ -372,7 +379,8 @@ function Base.view(s::NWState, idxs)
         _viewidx =  map(i -> SII.variable_index(s, i), idxs)
         return view(uflat(s), _viewidx)
     else
-        throw(ArgumentError("Index $idxs is neither a valid parameter nor state index collection."))
+        throw(ArgumentError("Cannot create view into NWState: Index $idxs is neither a valid \
+            parameter nor state index collection (observables are not allowed)."))
     end
 end
 
