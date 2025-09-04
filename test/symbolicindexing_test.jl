@@ -5,7 +5,7 @@ using Chairmarks
 using Test
 using Symbolics
 import SymbolicIndexingInterface as SII
-using NetworkDynamics: VIndex, EIndex, VPIndex, EPIndex, _resolve_colon
+using NetworkDynamics: VIndex, EIndex, VPIndex, EPIndex, _resolve_colon, FilteringProxy
 
 (isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
 @testset "small test network" begin
