@@ -331,12 +331,12 @@ end
 function Base.show(io::IO, mime::MIME"text/plain", fp::FilteringProxy)
     printstyled(io, "FilteringProxy"; bold=true)
     print(io, " for ")
-    if fp.s isa NWState
+    if fp.data isa NWState
         print(io, "NWState()")
-    elseif fp.s isa NWParameter
+    elseif fp.data isa NWParameter
         print(io, "NWParameter()")
     else
-        print(io, repr(typeof(fp.s)))
+        print(io, repr(typeof(fp.data)))
     end
 
     print(io, "\n  Component filter: ")
@@ -371,13 +371,13 @@ function Base.show(io::IO, mime::MIME"text/plain", fp::FilteringProxy)
     _val_to_str(x) = isnan(x) ? "NaN (undefined?)" : repr(x)
     value_str = try
         # try to resolve all at once (faster)
-        values = fp[indices]
+        values = fp.data[indices]
         map(_val_to_str, indices)
     catch
         # alternatively, go through them one by one
         map(indices) do _idx
             try
-                _val_to_str(fp[_idx])
+                _val_to_str(fp.data[_idx])
             catch
                 "not accessible"
             end

@@ -376,311 +376,65 @@ function Base.view(s::NWState, idxs)
     end
 end
 
-
-# TODO: vidx(nw, :, :u) has different semantics from s.v[:, :u] (one searches?)
-"""
-    vidxs([inpr], components=:, variables=:) :: Vector{VIndex}
-
-Generate vector of symbolic indexes for vertices.
-
-- `inpr`: Only needed for name matching or `:` access. Can be Network, sol, prob, ...
-- `components`: Number/Vector, `:`, `Symbol` (name matches), `String`/`Regex` (name contains)
-- `variables`: Symbol/Number/Vector, `:`, `String`/`Regex` (all sym containing)
-
-Examples:
-
-    vidxs(nw)                 # all vertex state indices
-    vidxs(1:2, :u)            # [VIndex(1, :u), VIndex(2, :u)]
-    vidxs(nw, :, [:u, :v])    # [VIndex(i, :u), VIndex(i, :v) for i in 1:nv(nw)]
-    vidxs(nw, "ODEVertex", :) # all symbols of all vertices with name containing "ODEVertex"
-"""
-vidxs(args...) = _idxs(VIndex, args...)
-"""
-    vpidxs([inpr], components=:, variables=:) :: Vector{VPIndex}
-
-Generate vector of symbolic indexes for parameters. See [`vidxs`](@ref) for more information.
-"""
-vpidxs(args...) = _idxs(VPIndex, args...)
-"""
-    vidxs([inpr], components=:, variables=:) :: Vector{EIndex}
-
-Generate vector of symbolic indexes for edges.
-
-- `inpr`: Only needed for name matching or `:` access. Can be Network, sol, prob, ...
-- `components`: Number/Vector, `:`, `Symbol` (name matches), `String`/`Regex` (name contains)
-- `variables`: Symbol/Number/Vector, `:`, `String`/`Regex` (all sym containing)
-
-Examples:
-
-    eidxs(nw)                # all edge state indices
-    eidxs(1:2, :u)           # [EIndex(1, :u), EIndex(2, :u)]
-    eidxs(nw, :, [:u, :v])   # [EIndex(i, :u), EIndex(i, :v) for i in 1:ne(nw)]
-    eidxs(nw, "FlowEdge", :) # all symbols of all edges with name containing "FlowEdge"
-"""
-eidxs(args...) = _idxs(EIndex, args...)
-"""
-    epidxs([inpr], components=:, variables=:) :: Vector{EPIndex}
-
-Generate vector of symbolic indexes for parameters. See [`eidxs`](@ref) for more information.
-"""
-epidxs(args...) = _idxs(EPIndex, args...)
-
-_idxs(IT, cidxs::Union{Number, AbstractVector}, sidxs) = _idxs(IT, nothing, cidxs, sidxs)
-function _idxs(IT, inpr, cidxs=Colon(), sidxs=Colon())
-    res = SymbolicIndex[]
-    for ci in _make_cidx_iterable(IT, inpr, cidxs)
-        for si in _make_sidx_iterable(IT, inpr, ci, sidxs)
-            push!(res, IT(ci, si))
-        end
-    end
-    res
-end
-
-_make_iterabel(idxs) = idxs
-_make_iterabel(idx::Symbol) = Ref(idx)
-
-_make_cidx_iterable(_, _, idx) = _make_iterabel(idx)
-_make_cidx_iterable(::Union{Type{<:VIndex}, <:typeof(VPIndex)}, inpr, ::Colon) = 1:nv(extract_nw(inpr))
-_make_cidx_iterable(::Union{Type{<:EIndex}, <:typeof(EPIndex)}, inpr, ::Colon) = 1:ne(extract_nw(inpr))
-function _make_cidx_iterable(IT, inpr, s::Symbol)
-    names = getproperty.(_get_components(IT, inpr), :name)
-    findall(isequal(s), names)
-end
-function _make_cidx_iterable(IT, inpr, s::Union{AbstractString,AbstractPattern})
-    names = getproperty.(_get_components(IT, inpr), :name)
-    findall(sym -> contains(string(sym), s), names)
-end
-
-_make_sidx_iterable(IT, inpr, cidx, idx) = _make_iterabel(idx)
-function _make_sidx_iterable(IT::Type{<:SymbolicIndex}, inpr, cidx, ::Colon)
-    comp = _get_components(IT, inpr)[cidx]
-    Iterators.flatten((sym(comp), obssym_all(comp)))
-end
-function _make_sidx_iterable(IT::Union{typeof(VPIndex), typeof(EPIndex)}, inpr, cidx, ::Colon)
-    psym(_get_components(IT, inpr)[cidx])
-end
-function _make_sidx_iterable(IT::Type{<:SymbolicIndex}, inpr, cidx, s::Union{AbstractString,AbstractPattern})
-    syms = _make_sidx_iterable(IT, inpr, cidx, :) # get all possible
-    Iterators.filter(sym -> contains(string(sym), s), syms)
-end
-function _make_sidx_iterable(IT::Union{typeof(VPIndex), typeof(EPIndex)}, inpr, cidx, s::Union{AbstractString,AbstractPattern})
-    syms = _make_sidx_iterable(IT, inpr, cidx, :) # get all possible
-    filter(sym -> contains(string(sym), s), syms)
-end
-
-_get_components(::Union{Type{<:VIndex}, <:typeof(VPIndex)}, inpr) = extract_nw(inpr).im.vertexm
-_get_components(::Union{Type{<:EIndex}, <:typeof(EPIndex)}, inpr) = extract_nw(inpr).im.edgem
-
-
-####
-#### Indexing proxys
-####
-abstract type IndexingProxy{S} end
-
+###
+### Indexing generation
+###
 struct AllVertices end
 struct AllEdges end
 
-struct FilteringProxy{S,CF,VF} <: IndexingProxy{S}
-    s::S # the underlying state/parameter object
-    compfilter::CF
-    varfilter::VF
-    states::Bool
-    parameters::Bool
-    outputs::Bool
-    inputs::Bool
-    observables::Bool
-end
-
-# "copy" constructor
-function FilteringProxy(
-    fp::FilteringProxy;
-    compfilter=fp.compfilter, varfilter=fp.varfilter,
-    states=fp.states, parameters=fp.parameters, outputs=fp.outputs,
-    inputs=fp.inputs, observables=fp.observables
-)
-    FilteringProxy(fp.s, compfilter, varfilter, states, parameters, outputs, inputs, observables)
-end
-FilteringProxy(s::NWState) = FilteringProxy(s, nothing, nothing, true, !isnothing(s.p), false, false, false)
-FilteringProxy(s::NWParameter) = FilteringProxy(s, nothing, nothing, false, true, false, false, false)
-function generate_indices(f::FilteringProxy; kwargs...)
-    generate_indices(f.s, f.compfilter, f.varfilter;
-        states=f.states,
-        parameters=f.parameters,
-        outputs=f.outputs,
-        inputs=f.inputs,
-        observables=f.observables,
-        kwargs...)
-end
-function resolve_to_index(f::FilteringProxy)
-    idxs = generate_indices(f)
-    if length(idxs) == 1
-        only(idxs)
-    else
-        idxs
-    end
-end
-resolve_to_value(f::FilteringProxy) = f.s[resolve_to_index(f)]
-# shortcut route if the "filter" is just a concrete index
-function resolve_to_value(f::FilteringProxy{<:Any, <:SymbolicIndex{<:CONCRETE_COMPIDX, Nothing}, <:CONCRETE_SUBIDX})
-    idx = idxtype(f.compfilter)(f.compfilter.compidx, f.varfilter)
-    f.s[idx]
-end
-
-function is_fully_refined(f::FilteringProxy)
-    f.compfilter isa SymbolicIndex && !isnothing(f.varfilter)
-end
-
-# acessing the underlying data directly with concrete index
-Base.getindex(f::FilteringProxy, idx::SymbolicIndex) = getindex(f.s, idx)
-function Base.getindex(f::FilteringProxy, refinements...)
-    new_filter = refine_filter(f::FilteringProxy, refinements...)
-    is_fully_refined(new_filter) ? resolve_to_value(new_filter) : new_filter
-end
-function Base.getproperty(f::FilteringProxy, sym::Symbol)
-    if sym === :v
-        if f.compfilter == nothing
-            FilteringProxy(f; compfilter=AllVertices())
-        else
-            throw(ArgumentError("Cannot apply filter \".v\": already filtering for $(f.compfilter)."))
-        end
-    elseif sym === :e
-        if f.compfilter == nothing
-            FilteringProxy(f; compfilter=AllEdges())
-        else
-            throw(ArgumentError("Cannot apply filter \".e\": already filtering for $(f.compfilter)."))
-        end
-    elseif sym === :p
-        FilteringProxy(f; parameters=true, states=false, outputs=false, inputs=false, observables=false)
-    elseif sym === :x
-        FilteringProxy(f; parameters=false, states=true, outputs=false, inputs=false, observables=false)
-    elseif sym === :out
-        FilteringProxy(f; parameters=false, states=false, outputs=true, inputs=false, observables=false)
-    elseif sym === :in
-        FilteringProxy(f; parameters=false, states=false, outputs=false, inputs=true, observables=false)
-    elseif sym === :obs
-        FilteringProxy(f; parameters=false, states=false, outputs=false, inputs=false, observables=true)
-    elseif sym === :all
-        FilteringProxy(f; parameters=true, states=true, outputs=true, inputs=true, observables=true)
-    else
-        getfield(f, sym)
-    end
-end
-
-# got multiple filters at once
-function refine_filter(f::FilteringProxy{<:Any, <:Union{Nothing,AllVertices,AllEdges}}, compfilter, varfilter)
-    refine_filter(refine_filter(f, compfilter), varfilter)
-end
-
-###
-### Manual dispatch for vector valued refinements
-###
-function refine_filter(f::FilteringProxy, refinement::Union{AbstractVector,Tuple})
-    if all(i -> i isa SymbolicIndex, refinement)
-        return getindex(f.s, refinement)
-    elseif f isa FilteringProxy{<:Any, <:AllVertices}
-        # XXX: vector version for f.v[1:10] for example
-        FilteringProxy(f; compfilter=VIndex(refinement))
-    elseif f isa FilteringProxy{<:Any, <:AllEdges}
-        FilteringProxy(f; compfilter=EIndex(refinement))
-    elseif f isa FilteringProxy{<:Any, <:SymbolicIndex}
-        # XXX: vector version for f.v[1][1:10] for example
-        resolve_to_value(FilteringProxy(f; varfilter=refinement))
-    else
-        throw(ArgumentError("Collection $refinement is not a SymbolicIndex collection."))
-    end
-end
-####
-#### refinement by SymbolicIndex(something, nothing) is allways compfilter update
-#### refinement by SymolicIndex(something, something) is allways comp + varfilter update
-####
-function refine_filter(f::FilteringProxy{<:Any}, s::SymbolicIndex{<:Any, <:Any})
-    isnothing(s.compidx) && error("Index $s has component nothing, which is not a valid refinement")
-    if isnothing(s.subidx)
-        FilteringProxy(f; compfilter=s)
-    else
-        FilteringProxy(f; compfilter=idxtype(s)(s.compidx), varfilter=s.subidx)
-    end
-end
-####
-#### if unspecific compfilter is set (i.e. AllVertices/AllEdges by .v .e property)
-#### we refine the comfilter by that type
-####
-function refine_filter(f::FilteringProxy{<:Any, AllVertices}, idx::Union{Colon,Int,Symbol,Pair,String,Regex})
-    FilteringProxy(f; compfilter=VIndex(idx))
-end
-function refine_filter(f::FilteringProxy{<:Any, AllEdges}, idx::Union{Colon,Int,Symbol,Pair,String,Regex})
-    FilteringProxy(f; compfilter=EIndex(idx))
-end
-####
-#### From a specific compfilter we can only refine the varfilter
-####
-function refine_filter(f::FilteringProxy{<:Any, <:SymbolicIndex}, varfilter)
-    if varfilter isa Union{StateIdx, ParamIdx, Symbol, String, Regex}
-        FilteringProxy(f; varfilter=varfilter)
-    elseif varfilter isa Union{Int,Colon,AbstractVector{Int}} && f.states
-        FilteringProxy(f; varfilter=StateIdx(varfilter))
-    elseif varfilter isa Union{Int,Colon,AbstractVector{Int}} && !f.states && f.parameters
-        FilteringProxy(f; varfilter=ParamIdx(varfilter))
-    else
-        msg = "Index $varfilter is not a valid variable refinement on $(f.compfilter)."
-        if varfilter isa Union{Int,Colon,AbstractVector{Int}}
-            msg *= " Hint: wrap integer-like indices in StateIdx/ParamIdx to select by position, i.e. try with `StateIdx($(varfilter))`."
-        end
-        throw(ArgumentError(msg))
-    end
-end
-
-function Base.setindex!(f::FilteringProxy, val, idx...)
-    refined_f = refine_filter(f, idx...)
-    allindices = resolve_to_index(refined_f)
-    f.s[allindices] = val
-end
-
-#### enable broadcasted setindex
-#### https://discourse.julialang.org/t/broadcasting-setindex-is-a-noobtrap/94700
-Base.dotview(f::FilteringProxy, idxs...) = view(f, idxs...)
-function Base.view(f::FilteringProxy, idxs...)
-    refined_f = refine_filter(f, idxs...)
-    allindices = resolve_to_index(refined_f)
-    view(f.s, allindices)
-end
-
-
-
 generate_indices(inpr, s::SymbolicIndex; kwargs...) = generate_indices(inpr, idxtype(s)(s.compidx), s.subidx; kwargs...)
-function generate_indices(inpr, compfilter, varfilter; states=true, parameters=true, outputs=true, observables=false, inputs=false, return_types=false)
+function generate_indices(inpr, compfilter=nothing, varfilter=nothing; s=true, p=true, out=true, obs=false, in=false, return_types=false)
     nw = extract_nw(inpr)
     indices = SymbolicIndex[]
     types = return_types ? Symbol[] : nothing
+
+    # potentially wrap varfilter
+    if varfilter isa Union{Int, Colon, AbstractVector{Int}, NTuple{<:Any, Int}}
+        if s
+            varfilter = StateIdx(varfilter)
+        elseif p && !s
+            varfilter = ParamIdx(varfilter)
+        else
+            throw(ArgumentError("varfilter as Int or collection of Ints only makes sense if either s or p is true."))
+        end
+    end
 
     all_comp = vcat(collect(VIndex(1:nv(nw))), collect(EIndex(1:ne(nw))))
     compidxs = filter(compidx -> match_compfilter(nw, compfilter, compidx), all_comp)
 
     for cidx in compidxs
         comp = getcomp(nw, cidx)
-        if states
-            matched = filter(sym -> match_varfilter(comp, varfilter, sym), sym(comp))
+        if s
+            matched = Iterators.map(last,
+                Iterators.filter(enumerate(sym(comp))) do (i, sym)
+                    match_varfilter(comp, varfilter, sym, StateIdx(i))
+                end
+            )
             append!(indices, idxtype(cidx).(cidx.compidx, matched))
             return_types && append!(types, :State for _ in matched)
         end
-        if parameters
-            matched = filter(sym -> match_varfilter(comp, varfilter, sym), psym(comp))
+        if p
+            matched = Iterators.map(last,
+                Iterators.filter(enumerate(psym(comp))) do (i, sym)
+                    match_varfilter(comp, varfilter, sym, ParamIdx(i))
+                end
+            )
             append!(indices, idxtype(cidx).(cidx.compidx, matched))
             return_types && append!(types, :Parameter for _ in matched)
         end
-        if outputs
-            # if states are also requested, do not duplicate
-            _outsym = states ? setdiff(outsym_flat(comp), sym(comp)) : outsym_flat(comp)
+        if out
+            # if s are also requested, do not duplicate
+            _outsym = s ? setdiff(outsym_flat(comp), sym(comp)) : outsym_flat(comp)
             matched = filter(sym -> match_varfilter(comp, varfilter, sym), _outsym)
             append!(indices, idxtype(cidx).(cidx.compidx, matched))
             return_types && append!(types, :Output for _ in matched)
         end
-        if inputs
+        if in
             matched = filter(sym -> match_varfilter(comp, varfilter, sym), insym_flat(comp))
             append!(indices, idxtype(cidx).(cidx.compidx, matched))
             return_types && append!(types, :Input for _ in matched)
         end
-        if observables
+        if obs
             matched = filter(sym -> match_varfilter(comp, varfilter, sym), obssym(comp))
             append!(indices, idxtype(cidx).(cidx.compidx, matched))
             return_types && append!(types, :Observable for _ in matched)
@@ -719,12 +473,230 @@ function match_compfilter(nw, filter::EIndex{<:Pair}, idx)
 end
 _comptypematch(idx, filter) = idxtype(idx) == idxtype(filter)
 
-match_varfilter(comp, filter::Nothing, sym) = true
-match_varfilter(comp, filter::Union{AbstractVector, Tuple}, sym) = any(f -> match_varfilter(comp, f, sym), filter)
-match_varfilter(comp, filter::Symbol, sym) = sym == filter
-match_varfilter(comp, filter::Union{AbstractString,Regex}, sym) = occursin(filter, string(sym))
-match_varfilter(comp, filter::ParamIdx, _sym) = _sym ∈ view(psym(comp), filter.idx)
-match_varfilter(comp, filter::StateIdx, _sym) = _sym ∈ view(sym(comp), filter.idx)
+match_varfilter(comp, filter, sym) = match_varfilter(comp, filter, sym, nothing)
+match_varfilter(comp, filter::Nothing, sym, _) = true
+match_varfilter(comp, filter::Union{AbstractVector, Tuple}, sym, _) = any(f -> match_varfilter(comp, f, sym), filter)
+match_varfilter(comp, filter::Symbol, sym, _) = sym == filter
+match_varfilter(comp, filter::Union{AbstractString,Regex}, sym, _) = occursin(filter, string(sym))
+function match_varfilter(comp, filter::NumericSubIndex, _, idx)
+    idxtype(idx) == idxtype(filter) && (filter.idx == Colon() || idx.idx ∈ filter.idx)
+end
+
+
+# shortcuts
+function vidxs(nw, cf=:, vf=nothing; kwargs...)
+    generate_indices(nw, VIndex(cf), vf; s=true, p=false, in=false, out=true, obs=true, kwargs...)
+end
+function eidxs(nw, cf=:, vf=nothing; kwargs...)
+    generate_indices(nw, EIndex(cf), vf; s=true, p=false, in=false, out=true, obs=true, kwargs...)
+end
+function vpidxs(nw, cf=:, vf=nothing; kwargs...)
+    generate_indices(nw, VIndex(cf), vf; s=false, p=true, in=false, out=false, obs=false, kwargs...)
+end
+function epidxs(nw, cf=:, vf=nothing; kwargs...)
+    generate_indices(nw, EIndex(cf), vf; s=false, p=true, in=false, out=false, obs=false, kwargs...)
+end
+
+# deprecated methods
+vidxs(compfilter::Union{Int,AbstractVector{Int},NTuple{<:Any,Int}}, varfilter) = _deprecated_idxs_gen(VIndex, compfilter, varfilter)
+eidxs(compfilter::Union{Int,AbstractVector{Int},NTuple{<:Any,Int}}, varfilter) = _deprecated_idxs_gen(EIndex, compfilter, varfilter)
+vpidxs(compfilter::Union{Int,AbstractVector{Int},NTuple{<:Any,Int}}, varfilter) = _deprecated_idxs_gen(VPIndex, compfilter, varfilter, VIndex)
+epidxs(compfilter::Union{Int,AbstractVector{Int},NTuple{<:Any,Int}}, varfilter) = _deprecated_idxs_gen(EPIndex, compfilter, varfilter, EIndex)
+
+function _deprecated_idxs_gen(constructor, compiter, variter, type=constructor)
+    @warn "*idxs(compfilter, varfilter) methods are deprecated. Use *idxs(nw, compfilter, varfilter) instead."
+    indices = type[]
+    for ci in compfilter
+        for si in varfilter
+            push!(indices, constructor(ci, si))
+        end
+    end
+    indices
+end
+
+
+####
+#### Indexing proxys
+####
+function Base.getproperty(s::Union{NWParameter, NWState}, sym::Symbol)
+    if sym === :v
+        return FilteringProxy(s).v
+    elseif sym === :e
+        return FilteringProxy(s).e
+    else
+        return getfield(s, sym)
+    end
+end
+
+abstract type IndexingProxy{S} end
+
+struct FilteringProxy{S,CF,VF} <: IndexingProxy{S}
+    data::S # the underlying state/parameter object
+    compfilter::CF
+    varfilter::VF
+    states::Bool
+    parameters::Bool
+    outputs::Bool
+    inputs::Bool
+    observables::Bool
+end
+
+# "copy" constructor
+function FilteringProxy(
+    f::FilteringProxy;
+    compfilter=f.compfilter, varfilter=f.varfilter,
+    s=f.states, p=f.parameters, out=f.outputs,
+    in=f.inputs, obs=f.observables
+)
+    FilteringProxy(f.data, compfilter, varfilter, s, p, out, in, obs)
+end
+FilteringProxy(s::NWState) = FilteringProxy(s, nothing, nothing, true, !isnothing(s.p), false, false, false)
+FilteringProxy(s::NWParameter) = FilteringProxy(s, nothing, nothing, false, true, false, false, false)
+function generate_indices(f::FilteringProxy; kwargs...)
+    generate_indices(f.data, f.compfilter, f.varfilter;
+        s=f.states,
+        p=f.parameters,
+        out=f.outputs,
+        in=f.inputs,
+        obs=f.observables,
+        kwargs...)
+end
+function resolve_to_index(f::FilteringProxy)
+    idxs = generate_indices(f)
+    if length(idxs) == 1
+        only(idxs)
+    else
+        idxs
+    end
+end
+resolve_to_value(f::FilteringProxy) = f.data[resolve_to_index(f)]
+# shortcut route if the "filter" is just a concrete index
+function resolve_to_value(f::FilteringProxy{<:Any, <:SymbolicIndex{<:CONCRETE_COMPIDX, Nothing}, <:CONCRETE_SUBIDX})
+    idx = idxtype(f.compfilter)(f.compfilter.compidx, f.varfilter)
+    f.data[idx]
+end
+
+function is_fully_refined(f::FilteringProxy)
+    f.compfilter isa SymbolicIndex && !isnothing(f.varfilter)
+end
+
+# acessing the underlying data directly with concrete index
+function Base.getindex(f::FilteringProxy, idx::SymbolicIndex)
+    if !isnothing(idx.subidx)
+        getindex(f.data, idx)
+    else
+        new_filter = refine_filter(f, idx)
+        is_fully_refined(new_filter) ? resolve_to_value(new_filter) : new_filter
+    end
+end
+function Base.getindex(f::FilteringProxy, refinements...)
+    new_filter = refine_filter(f, refinements...)
+    is_fully_refined(new_filter) ? resolve_to_value(new_filter) : new_filter
+end
+function Base.getproperty(f::FilteringProxy, sym::Symbol)
+    if sym === :v
+        if f.compfilter == nothing
+            FilteringProxy(f; compfilter=AllVertices())
+        else
+            throw(ArgumentError("Cannot apply filter \".v\": already filtering for $(f.compfilter)."))
+        end
+    elseif sym === :e
+        if f.compfilter == nothing
+            FilteringProxy(f; compfilter=AllEdges())
+        else
+            throw(ArgumentError("Cannot apply filter \".e\": already filtering for $(f.compfilter)."))
+        end
+    elseif sym === :p
+        FilteringProxy(f; p=true, s=false, out=false, in=false, obs=false)
+    elseif sym === :s
+        FilteringProxy(f; p=false, s=true, out=false, in=false, obs=false)
+    elseif sym === :out
+        FilteringProxy(f; p=false, s=false, out=true, in=false, obs=false)
+    elseif sym === :in
+        FilteringProxy(f; p=false, s=false, out=false, in=true, obs=false)
+    elseif sym === :obs
+        FilteringProxy(f; p=false, s=false, out=false, in=false, obs=true)
+    elseif sym === :all
+        FilteringProxy(f; p=true, s=true, out=true, in=true, obs=true)
+    else
+        getfield(f, sym)
+    end
+end
+
+# got multiple filters at once (i.e. f[compfilter, varfilter])
+function refine_filter(f::FilteringProxy{<:Any, <:Union{Nothing,AllVertices,AllEdges}}, compfilter, varfilter)
+    refine_filter(refine_filter(f, compfilter), varfilter)
+end
+
+###
+### Manual dispatch for vector valued refinements
+###
+refine_filter(f::FilteringProxy{<:Any, <:SymbolicIndex}, refinement::Union{AbstractVector,Tuple}) = _handle_vector_refinement(f, refinement)
+refine_filter(f::FilteringProxy, refinement::Union{AbstractVector,Tuple}) = _handle_vector_refinement(f, refinement)
+function _handle_vector_refinement(f::FilteringProxy, refinement)
+    if all(i -> i isa SymbolicIndex, refinement)
+        return getindex(f.data, refinement)
+    elseif f isa FilteringProxy{<:Any, <:AllVertices}
+        # XXX: vector version for f.v[1:10] for example
+        FilteringProxy(f; compfilter=VIndex(refinement))
+    elseif f isa FilteringProxy{<:Any, <:AllEdges}
+        FilteringProxy(f; compfilter=EIndex(refinement))
+    elseif f isa FilteringProxy{<:Any, <:SymbolicIndex}
+        # XXX: vector version for f.v[1][1:10] for example
+        resolve_to_value(FilteringProxy(f; varfilter=refinement))
+    else
+        throw(ArgumentError("Collection $refinement is not a SymbolicIndex collection."))
+    end
+end
+####
+#### refinement by SymbolicIndex(something, nothing) is allways compfilter update
+#### refinement by SymolicIndex(something, something) is allways comp + varfilter update
+####
+function refine_filter(f::FilteringProxy{<:Any}, s::SymbolicIndex{<:Any, <:Any})
+    isnothing(s.compidx) && error("Index $s has component nothing, which is not a valid refinement")
+    if isnothing(s.subidx)
+        FilteringProxy(f; compfilter=s)
+    else
+        FilteringProxy(f; compfilter=idxtype(s)(s.compidx), varfilter=s.subidx)
+    end
+end
+####
+#### if unspecific compfilter is set (i.e. AllVertices/AllEdges by .v .e property)
+#### we refine the comfilter by that type
+####
+function refine_filter(f::FilteringProxy{<:Any, AllVertices}, idx::Union{Colon,Int,Symbol,Pair,String,Regex})
+    FilteringProxy(f; compfilter=VIndex(idx))
+end
+function refine_filter(f::FilteringProxy{<:Any, AllEdges}, idx::Union{Colon,Int,Symbol,Pair,String,Regex})
+    FilteringProxy(f; compfilter=EIndex(idx))
+end
+####
+#### From a specific compfilter we can only refine the varfilter
+####
+function refine_filter(f::FilteringProxy{<:Any, <:SymbolicIndex}, varfilter)
+    if varfilter isa Union{StateIdx, ParamIdx, Symbol, String, Regex,
+                           Colon, Int, AbstractVector{Int}, NTuple{<:Any,<:Int}}
+        FilteringProxy(f; varfilter=varfilter)
+    else
+        msg = "Index $varfilter is not a valid variable refinement on $(f.compfilter)."
+        throw(ArgumentError(msg))
+    end
+end
+
+function Base.setindex!(f::FilteringProxy, val, idx...)
+    refined_f = refine_filter(f, idx...)
+    allindices = resolve_to_index(refined_f)
+    f.data[allindices] = val
+end
+
+#### enable broadcasted setindex
+#### https://discourse.julialang.org/t/broadcasting-setindex-is-a-noobtrap/94700
+Base.dotview(f::FilteringProxy, idxs...) = view(f, idxs...)
+function Base.view(f::FilteringProxy, idxs...)
+    refined_f = refine_filter(f, idxs...)
+    allindices = resolve_to_index(refined_f)
+    view(f.data, allindices)
+end
 
 
 
@@ -749,7 +721,7 @@ extract_nw(f::SciMLBase.ODEFunction) = extract_nw(f.sys)
 extract_nw(int::SciMLBase.DEIntegrator) = extract_nw(int.f)
 extract_nw(s::NWState) = s.nw
 extract_nw(p::NWParameter) = p.nw
-extract_nw(p::IndexingProxy) = extract_nw(p.s)
+extract_nw(p::IndexingProxy) = extract_nw(p.data)
 function extract_nw(::Nothing)
     throw(ArgumentError("Needs system context to generate matching indices. Pass Network, sol, prob, ..."))
 end
