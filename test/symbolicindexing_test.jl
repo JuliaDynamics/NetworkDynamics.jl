@@ -502,7 +502,7 @@ end
     g = complete_graph(3)
     nw = Network(g, [v1, v2, v3], [e1, e2, e3])
     s = NWState(nw, collect(1:dim(nw)), collect(dim(nw)+1:dim(nw)+pdim(nw)))
-    @test_throws ArgumentError s.v[:v, 1]
+    @test isempty(s.v[:v, 1])
     @test s.v[:v1, 1] == s[VIndex(1,1)]
     @test s.v[:v2, 1] == s[VIndex(2,1)]
     @test s.v[:v3, 1] == s[VIndex(3,1)]
@@ -750,7 +750,7 @@ end
     @test NetworkDynamics._hascolon(VIndex(:,:foo))
 end
 
-@testest "index generation generate_indices" begin
+@testset "index generation generate_indices" begin
     g = cycle_graph(5)
     v1 = Lib.dqbus_swing_and_load()
     v2 = Lib.dqbus_swing()

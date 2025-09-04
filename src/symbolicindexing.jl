@@ -430,9 +430,12 @@ function generate_indices(inpr, compfilter=nothing, varfilter=nothing; s=true, p
             return_types && append!(types, :Output for _ in matched)
         end
         if in
-            matched = filter(sym -> match_varfilter(comp, varfilter, sym), insym_flat(comp))
-            append!(indices, idxtype(cidx).(cidx.compidx, matched))
-            return_types && append!(types, :Input for _ in matched)
+            insyms = insym_flat(comp)
+            if !isnothing(insyms)
+                matched = filter(sym -> match_varfilter(comp, varfilter, sym), insym_flat(comp))
+                append!(indices, idxtype(cidx).(cidx.compidx, matched))
+                return_types && append!(types, :Input for _ in matched)
+            end
         end
         if obs
             matched = filter(sym -> match_varfilter(comp, varfilter, sym), obssym(comp))
