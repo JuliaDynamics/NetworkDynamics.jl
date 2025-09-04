@@ -747,7 +747,7 @@ end
 
 # methods below are used to allow for s.v[1].p .= 1.0 style broadcasting
 # which his not covered by "dotview" becaus it is a full proxy object
-Base.size(f::FilteringProxy) = length(resolve_to_index(f))
+Base.size(f::FilteringProxy) = length(generate_indices(f; just_count=true))
 Base.ndims(::Type{<:FilteringProxy}) = 1
 function Base.copyto!(f::FilteringProxy, bc::Broadcast.Broadcasted{<:Base.Broadcast.DefaultArrayStyle})
     allindices = resolve_to_index(f)
