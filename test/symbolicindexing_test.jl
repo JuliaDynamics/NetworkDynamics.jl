@@ -781,3 +781,15 @@ end
     generate_indices(nw, VIndex("load"), nothing)
     generate_indices(nw, VIndex("swing"), nothing)
 end
+
+@testset "test deprecated *idxs methods" begin
+    @test_throws "cannot be `:`" vidxs(:, :foo)
+    @test_throws "cannot be `:`" vidxs(1, :)
+    @test vidxs(1, :foo) == [VIndex(1,:foo)]
+    @test vidxs(1:2, :foo) == [VIndex(1,:foo), VIndex(2,:foo)]
+    @test vidxs(1, [1,2]) == [VIndex(1,1), VIndex(1,2)]
+    @test vidxs([1,3], [:foo, 2]) == [VIndex(1,:foo), VIndex(1,2), VIndex(3,:foo), VIndex(3,2)]
+    @test epidxs(1, 1) == [EPIndex(1, 1)]
+    @test vpidxs(1, 1) == [VPIndex(1, 1)]
+    @test eidxs(1, 1) == [EIndex(1, 1)]
+end
