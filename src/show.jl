@@ -380,7 +380,7 @@ function Base.show(io::IO, mime::MIME"text/plain", fp::FilteringProxy)
     end
 
     indices, types = generate_indices(fp; return_types=true)
-    _val_to_str(x) = isnan(x) ? "NaN (undefined?)" : repr(x)
+    _val_to_str(x) = isnan(x) ? "NaN (undefined?)" : str_significant(x; sigdigits=8, phantom_minus=true)
     value_str = try
         # try to resolve all at once (faster)
         values = fp.data[indices]
@@ -401,7 +401,7 @@ function Base.show(io::IO, mime::MIME"text/plain", fp::FilteringProxy)
     if !isempty(indices)
         printstyled(io, "\nMatching Indices:", bold=true)
         # align all the printouts
-        strvec = Ref("&") .* repr.(indices) .* Ref(" &&=> ") .* value_str .* " & :" .* compnames
+        strvec = Ref("&") .* repr.(indices) .* Ref(" && ") .* value_str .* " & :" .* compnames
         aligned_strvec =  align_strings(strvec)
         for i in eachindex(indices)
             isfirst = i == 1 ||
@@ -421,13 +421,13 @@ function Base.show(io::IO, mime::MIME"text/plain", fp::FilteringProxy)
             else
                 print("\n  │ ")
             end
-            regex = r"(\s*[VE]Index\(.*?,\s*)(.*)(\)\s*=>.*)(:.*)\s*$"
+            regex = r"(\s*[VE]Index\(.*?,\s*)(.*)(\).*)(:.*)\s*$"
 
-            # t1 ="  VIndex(1, :Pm) => 0.9645731407002397 (kuramoto_second)"
+            # t1 ="  VIndex(1, :Pm)  0.9645731407002397 (kuramoto_second)"
             # match(regex, t1)[1] == "  VIndex(1, "
             # match(regex, t1)[2] == ":Pm"
             # t1 == match(regex, t1)[1]*match(regex, t1)[2]*match(regex, t1)[3]*match(regex, t1)[4]
-            # t2 =" VIndex(4, :δ)  => 1.2211532806955903 (kuramoto_second)"
+            # t2 =" VIndex(4, :δ)   1.2211532806955903 (kuramoto_second)"
             # match(regex, t2)[1] == " VIndex(4, "
             # match(regex, t2)[2] == ":δ"
             # t2 == match(regex, t2)[1]*match(regex, t2)[2]*match(regex, t2)[3]*match(regex, t2)[4]

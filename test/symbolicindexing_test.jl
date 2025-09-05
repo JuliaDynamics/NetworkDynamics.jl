@@ -187,7 +187,6 @@ end
         show(stdout, MIME"text/plain"(), s.v["moto"])
         show(stdout, MIME"text/plain"(), s.e[[1,"ode", r"fid", :kuramoto_edge]])
 
-
         @test s.v[:][] == values(s.v[:])
         using NetworkDynamics: FilteringProxy
         f_sp = FilteringProxy(FilteringProxy(s), s=true, p=true)
