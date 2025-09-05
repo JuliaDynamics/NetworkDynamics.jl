@@ -437,7 +437,7 @@ function _collect_symbols!(nw, indices, types, compidxs, varfilter, switches)
             for (i, s) in enumerate(sym(comp))
                 if match_varfilter(comp, varfilter, s, StateIdx(i))
                     !isnothing(indices) && push!(indices, idxtype(cidx)(cidx.compidx, s))
-                    !isnothing(types) && push!(types, :State)
+                    !isnothing(types) && push!(types, :states)
                     counter += 1
                 end
             end
@@ -446,7 +446,7 @@ function _collect_symbols!(nw, indices, types, compidxs, varfilter, switches)
             for (i, s) in enumerate(psym(comp))
                 if match_varfilter(comp, varfilter, s, ParamIdx(i))
                     !isnothing(indices) && push!(indices, idxtype(cidx)(cidx.compidx, s))
-                    !isnothing(types) && push!(types, :Parameter)
+                    !isnothing(types) && push!(types, :parameters)
                     counter += 1
                 end
             end
@@ -456,7 +456,7 @@ function _collect_symbols!(nw, indices, types, compidxs, varfilter, switches)
                 switches.s && s ∈ sym(comp) && continue
                 if match_varfilter(comp, varfilter, s)
                     !isnothing(indices) && push!(indices, idxtype(cidx)(cidx.compidx, s))
-                    !isnothing(types) && push!(types, :Output)
+                    !isnothing(types) && push!(types, :outputs)
                     counter += 1
                 end
             end
@@ -466,7 +466,7 @@ function _collect_symbols!(nw, indices, types, compidxs, varfilter, switches)
             for s::Symbol in insym_all(comp)
                 if match_varfilter(comp, varfilter, s)
                     !isnothing(indices) && push!(indices, idxtype(cidx)(cidx.compidx, s))
-                    !isnothing(types) && push!(types, :Input)
+                    !isnothing(types) && push!(types, :inputs)
                     counter += 1
                 end
             end
@@ -475,7 +475,7 @@ function _collect_symbols!(nw, indices, types, compidxs, varfilter, switches)
             for s in obssym(comp)
                 if match_varfilter(comp, varfilter, s)
                     !isnothing(indices) && push!(indices, idxtype(cidx)(cidx.compidx, s))
-                    !isnothing(types) && push!(types, :Observable)
+                    !isnothing(types) && push!(types, :observables)
                     counter += 1
                 end
             end
@@ -516,6 +516,8 @@ match_varfilter(comp, filter::Nothing, sym, _) = true
 match_varfilter(comp, filter::Union{AbstractVector, Tuple}, sym, _) = any(f -> match_varfilter(comp, f, sym), filter)
 match_varfilter(comp, filter::Symbol, sym, _) = sym == filter
 match_varfilter(comp, filter::Union{AbstractString,Regex}, sym, _) = occursin(filter, string(sym))
+# matching for ParamIdx/StateIdx
+match_varfilter(comp, filter::NumericSubIndex, _, ::Nothing) = false
 function match_varfilter(comp, filter::NumericSubIndex, _, idx)
     idxtype(idx) == idxtype(filter) && (filter.idx == Colon() || idx.idx ∈ filter.idx)
 end
@@ -640,6 +642,7 @@ function is_fully_refined(f::FilteringProxy)
 end
 
 # acessing the underlying data directly with concrete index
+Base.getindex(f::FilteringProxy) = resolve_to_value(f)
 function Base.getindex(f::FilteringProxy, idx::SymbolicIndex)
     if !isnothing(idx.subidx)
         getindex(f.data, idx)

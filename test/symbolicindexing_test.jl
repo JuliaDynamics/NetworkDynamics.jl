@@ -92,7 +92,6 @@ end
     prob = ODEProblem(nw, rand(dim(nw)), (0,1), rand(pdim(nw)))
     Main.test_execution_styles(prob) # testing all ex styles #src
     sol = solve(prob, Tsit5())
-    t = 1.0
 
     @test SII.variable_index.(Ref(nw), SII.variable_symbols(nw)) == 1:dim(nw)
     @test SII.parameter_index.(Ref(nw), SII.parameter_symbols(nw)) == 1:pdim(nw)
@@ -101,7 +100,7 @@ end
     #### State tests
     ####
     @testset "State Tests" begin
-        s = NWState(sol, t)
+        s = NWState(sol, 1.0)
         @test SII.getu(s, EIndex(1,:e_dst))(s) == uflat(s)[7]
         @test SII.getp(s, VPIndex(1,:M))(s) ==pflat(s)[1]
         @test SII.getp(s, VIndex(1,:M))(s) ==pflat(s)[1]
@@ -171,7 +170,7 @@ end
         s[vpidxs(s,:,"M")] .= 5
         @test s[vpidxs(s,:,"M")] == [5,5]
 
-        s_no_p = NWState(sol, sol(t))
+        s_no_p = NWState(sol, sol(1.0))
         show(stdout, MIME"text/plain"(), s_no_p.v.p)
         just_p = NWParameter(nw)
         show(stdout, MIME"text/plain"(), FilteringProxy(just_p).s)
@@ -199,7 +198,7 @@ end
     end
 
     @testset "Test colon indexing" begin
-        s = NWState(sol, t)
+        s = NWState(sol, 1.0)
         @test NetworkDynamics._resolve_colon(nw, VIndex(:, :δ)) == VIndex(1:nv(g), :δ)
         @test NetworkDynamics._resolve_colon(nw, EIndex(:, :δ)) == EIndex(1:ne(g), :δ)
         @test NetworkDynamics._resolve_colon(nw, VPIndex(:, :δ)) == VPIndex(1:nv(g), :δ)
@@ -260,7 +259,7 @@ end
 
 
     @testset "Test performance of different index types" begin
-        s = NWState(sol, t)
+        s = NWState(sol, 1.0)
         idxtypes = [
             VIndex(1,1), # variable
             EIndex(1,1), # variable

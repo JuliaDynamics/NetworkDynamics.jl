@@ -359,9 +359,21 @@ function Base.show(io::IO, mime::MIME"text/plain", fp::FilteringProxy)
         show(io, mime, fp.varfilter)
     end
     print(io, "\n  Types:")
+
+    # for c in [:blue, :cyan, :green, :hidden, :light_black, :light_blue, :light_cyan, :light_green, :light_magenta, :light_red, :light_white, :light_yellow, :magenta, :nothing, :red, :reverse, :underline, :white, :yellow]
+    #    printstyled("\n",c, color=c)
+    # end
+    color_map = Dict(
+        :states => :light_green,
+        :parameters => :light_yellow,
+        :inputs => :light_magenta,
+        :outputs => :light_blue,
+        :observables => :light_cyan,
+    )
+
     for s in [:states, :parameters, :inputs, :outputs, :observables]
         if getfield(fp, s)
-            printstyled(io, "  $s ✓", bold=true)
+            printstyled(io, "  $s ✓", bold=true, color=color_map[s])
         else
             printstyled(io, "  $s ✗", color=:light_black)
         end
@@ -386,17 +398,48 @@ function Base.show(io::IO, mime::MIME"text/plain", fp::FilteringProxy)
     nw = extract_nw(fp)
     compnames = [string(getcomp(nw,idx).name) for idx in indices]
 
-
     if !isempty(indices)
+        printstyled(io, "\nMatching Indices:", bold=true)
         # align all the printouts
-        strvec = Ref("&") .* repr.(indices) .* Ref(" &&=> ") .* value_str .* " &(" .* compnames .*")"
+        strvec = Ref("&") .* repr.(indices) .* Ref(" &&=> ") .* value_str .* " &:" .* compnames
         aligned_strvec =  align_strings(strvec)
+        for i in eachindex(indices)
+            isfirst = i == 1 ||
+                      idxtype(indices[i]) != idxtype(indices[i-1]) ||
+                      indices[i].compidx != indices[i-1].compidx
+            islast  = i == length(indices) ||
+                      idxtype(indices[i]) != idxtype(indices[i+1]) ||
+                      indices[i].compidx != indices[i+1].compidx
+            if isfirst && islast
+                # ·  ∙  •  ●  ◦  Ø  ø
+                # □  ■  ▫  ▪  ◆  ◊
+                print("\n  ● ")
+            elseif isfirst
+                print("\n  ╭ ")
+            elseif islast
+                print("\n  ╰ ")
+            else
+                print("\n  │ ")
+            end
+            regex = r"(\s*[VE]Index\(.*?,\s*)(.*)(\)\s*=>.*)(:.*)\s*$"
 
-        for type in unique(types)
-            printstyled(io, "\n", type, "s"; bold=true)
-            typeindices = findall(==(type), types)
-            _aligned = aligned_strvec[typeindices]
-            print_treelike(io, _aligned; prefix="  ")
+            # t1 ="  VIndex(1, :Pm) => 0.9645731407002397 (kuramoto_second)"
+            # match(regex, t1)[1] == "  VIndex(1, "
+            # match(regex, t1)[2] == ":Pm"
+            # t1 == match(regex, t1)[1]*match(regex, t1)[2]*match(regex, t1)[3]*match(regex, t1)[4]
+            # t2 =" VIndex(4, :δ)  => 1.2211532806955903 (kuramoto_second)"
+            # match(regex, t2)[1] == " VIndex(4, "
+            # match(regex, t2)[2] == ":δ"
+            # t2 == match(regex, t2)[1]*match(regex, t2)[2]*match(regex, t2)[3]*match(regex, t2)[4]
+            m = match(regex, aligned_strvec[i])
+            if !isnothing(m)
+                print(m[1])
+                printstyled(m[2], color=color_map[types[i]])
+                print(m[3])
+                isfirst && print(m[4])
+            else
+                print(aligned_strvec[i]) # fallback if regex fails
+            end
         end
     else
         printstyled(io, "\nNo indices matching filter!", bold=true)
