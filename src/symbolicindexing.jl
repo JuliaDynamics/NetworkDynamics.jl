@@ -609,7 +609,7 @@ function FilteringProxy(
 )
     FilteringProxy(f.data, compfilter, varfilter, s, p, out, in, obs)
 end
-FilteringProxy(s::NWState) = FilteringProxy(s, nothing, nothing, true, !isnothing(s.p), false, false, false)
+FilteringProxy(s::NWState) = FilteringProxy(s, nothing, nothing, true, !isnothing(s.p), true, false, false)
 FilteringProxy(s::NWParameter) = FilteringProxy(s, nothing, nothing, false, true, false, false, false)
 function generate_indices(f::FilteringProxy; kwargs...)
     generate_indices(f.data, f.compfilter, f.varfilter;
