@@ -20,15 +20,21 @@ function _vertexf!(dv, v, esum, p, t)
 end
 vertexf = VertexModel(f=_vertexf!, g=1, sym=[:storage])
 ```
+When constructing component models using ModelingToolkit, the variable names are extracted automatically. 
 
 
 ## Fundamental Symbolic Indices
-The default types for this access are the types [`VIndex`](@ref), [`EIndex`](@ref), [`VPIndex`](@ref) and [`EPIndex`](@ref).
-Each of those symbolic indices consists of 2 elements: a reference to the network component and a reference to the 
-symbol within that component.
-As such: 
+The main types for symbolic indexing are [`VIndex`](@ref) and [`EIndex`](@ref) for vertices and edges respectively.
+Each symbolic index consists of 2 elements: a reference to the network component and a reference to the symbol within that component.
+Indices may reference states and parameters, but also things like outputs, inputs and observables which do not directly appear in the state/parameter vector.
+
+For accessing by symbol:
 - `VIndex(2, :x)` refers to variable with symbolic name `:x` in vertex number 2.
-- `EPIndex(4, 2)` refers to the *second* parameter of the edge component for the 4th edge.
+- `EIndex(4, :K)` refers to parameter `:K` of the edge component for the 4th edge.
+
+For numeric indexing, use [`StateIdx`](@ref) and [`ParamIdx`](@ref) wrappers:
+- `VIndex(2, StateIdx(1))` refers to the *first* state of vertex 2.
+- `EIndex(4, ParamIdx(2))` refers to the *second* parameter of edge 4.
 
 !!! details "Setup code to make following examples work"
     ```@example si
@@ -42,20 +48,48 @@ As such:
     ```
 
 Those fundamental indices can be used in a lot of scenarios. Most importantly you can use them to
+extract points or timeseries from a solution object
 ```@example si
-sol(sol.t; idxs=VIndex(1, :storage))   # extract timeseries out of a solution object
-plot(sol; idxs=[VIndex(1, :storage), VIndex(5,:storage)]) # plot storage of two nodes
+ts = 0:0.1:1
+sol(ts; idxs=VIndex(1,:storage)) # value of VIndex(1,:storage) at each t in ts
 ```
+Alternatively, you can use them directly in specialized plotting recipes:
+```@example si
+plot(sol; idxs=[VIndex(1, :storage), VIndex(5,:storage)]) # plot storage of vertex 1 and vertex 5
+```
+!!! tip
+   It is often advised to choose your timesteps for plotting directly, i.e.
+   ```@example si
+   ts = range(0, 1; length=1000)
+   plot(ts, sol(ts; idxs=VIndex(1,:storage)).u)
+   nothing #hide
+   ```
+   gives you more control over how many points are used within the range $(0,1)$.
 
 ## Generate Symbolic Indices
-Often, you need many individual symbolic indices. To achieve this you can use the helper methods [`vidxs`](@ref), 
-[`eidxs`](@ref), [`vpidxs`](@ref) and [`epidxs`](@ref). With their help you can generate arrays of symbolic indices:
+Often, you need many individual symbolic indices. NetworkDynamics provides several approaches:
+
+### Quick Access with Helper Functions
+The helper methods [`vidxs`](@ref), [`eidxs`](@ref), [`vpidxs`](@ref) and [`epidxs`](@ref) provide shortcuts for common patterns:
 
 ```@example si
-vidxs(nw, :, :storage) # get variable "storage" for all vertices
+vidxs(nw, :, :storage) # get state variable "storage" for all vertices
 ```
 ```@example si
 plot(sol; idxs=vidxs(nw, :, :storage))
+```
+
+### Advanced Generation with `generate_indices`
+For more complex filtering, use [`generate_indices`](@ref), which provides the underlying functionality:
+
+```@example si
+# All edge parameters containing "K" in their name
+generate_indices(nw, EIndex(:), "K"; s=false, p=true, out=false)
+```
+
+The helper functions are actually just shortcuts to `generate_indices` calls:
+```
+vidxs(nw, cf, vf) = generate_indices(nw, VIndex(cf), vf; s=true, p=false, out=true, obs=true)
 ```
 
 ## `NWState` and `NWParameter` Objects
@@ -68,7 +102,7 @@ creates a `NWParameter` object for the network `nw`.
 It essentially creates a new flat parameter array and fills it with the default parameter values defined in the component.
 The parameters in the `NWParameter` object can be accessed using symbolic indices.
 ```@example si
-p[EPIndex(5, :K)] = 2.0 # change the parameter K of the 5th edge
+p[EIndex(5, :K)] = 2.0 # change the parameter K of the 5th edge
 nothing #hide
 ```
 Similarly, you can create a `NWState` object for the network `nw` using
@@ -76,27 +110,51 @@ Similarly, you can create a `NWState` object for the network `nw` using
 s = NWState(nw)
 ```
 No default values were provided in the network components, so the state array is filled with `NaN` values.
+
+We can set those values like this:
 ```@example si
 s[VIndex(:, :storage)] .= randn(5) # set the (initial) storage for all vertices 
 s #hide
 ```
-For both `NWState` and `NWParameter` objects, there is a more convenient way to access the variables and parameters.
+For both `NWState` and `NWParameter` objects, there is a more convenient way to access the variables and parameters using the [`FilteringProxy`](@ref) interface.
+The filtering proxy can be accessed by calling `.v` or `.e` on a state:
 ```@example si
-@assert s.v[1, :storage] == s[VIndex(1, :storage)] # s.v -> access vertex states
-@assert s.e[1, :flow]    == s[EIndex(1, :flow)]    # s.e -> access edge states
-@assert s.p.e[1,:K]      == p[EPIndex(1, :K)]      # s.p -> access parameters
+s.v
 ```
+You can then subsequently filter the list by "indexing" into the `FilteringProxy` object:
+```@example si
+s.v[1:2]
+```
+... until you've filtered on both components and variables and the indexing returns
+the actual values:
+```@example si
+s.v[1:2][:storage]
+```
+Check out the docstring of [`FilteringProxy`](@ref) for an in-depth explanation.
 
 The `NWState` and `NWParameter` objects are mutable, thus changing them will also change the underlying wrapped flat arrays.
+
+For example, we can use the syntax introduced above to update the values within the state
+```@example si
+s.v[1:2][:storage] = [1,2]
+nothing #hide
+```
+We can confirm the update by inspecting the values again:
+```@example si
+s.v
+```
+
 You can always access the flat representations by calling [`uflat`](@ref) and [`pflat`](@ref). The ordering of elements 
 in these flat arrays corresponds exactly to the order returned by [`variable_symbols`](@ref) and 
 [`parameter_symbols`](@ref) respectively.
 
 !!! note
     The `NWState` and `NWParameter` wrappers can be constructed from various objects.
-    For example, within a callback you might construct `p = NWParameter(integrator)` to then change the parameters of 
-the network within the callback.
+    For example, within a callback you might construct `p = NWParameter(integrator)` to then change the parameters of the network within the callback.
 
+## Interactive Filtering with FilteringProxy
+
+The [`FilteringProxy`](@ref) system provides an intuitive way to explore and access network variables through progressive filtering. When you access `.v`, `.e`, or `.p` properties of `NWState`/`NWParameter` objects, you get a filtering proxy that can be refined step by step.
 
 ## Observables
 Sometimes, the "states" you're interested in aren't really states in the DAE sense but rather
@@ -138,14 +196,14 @@ For that, you can use the low-level methods defined in `SymbolicIndexingInterfac
 
 ```@example si
 using NetworkDynamics: SII # SII = SymbolicIndexingInterface
-idxs = SII.variable_index(nw, vidxs(1:2, :storage))
+idxs = SII.variable_index(nw, vidxs(nw, 1:2, :storage))
 ```
 ```@example si
 uflat(s)[idxs] == s.v[1:2, :storage]
 ```
-Analogous with parmeters:
-```@example si
-idxs = SII.parameter_index(nw, eidxs(1:2, :K))
+Analogous with parameters:
+```@example si  
+idxs = SII.parameter_index(nw, [EIndex(1, :K), EIndex(2, :K)])
 pflat(s)[idxs] == s.p.e[1:2, :K]
 ```
 
