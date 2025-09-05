@@ -676,7 +676,7 @@ function _expand_and_collect(inpr, sni::SymbolicIndex)
 end
 function _expand_and_collect(inpr, snis)
     nw = extract_nw(inpr)
-    mapreduce(vcat, snis) do sni
+    mapreduce(vcat, snis; init=Vector{eltype(snis)}()) do sni
         _expand_and_collect(nw, sni)
     end
 end

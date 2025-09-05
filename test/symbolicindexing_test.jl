@@ -516,7 +516,7 @@ end
     @test s.e[:e1, :P] == s[EIndex(1,:P)]
     @test s.e[:e2, :P] == s[EIndex(2,:P)]
     @test s.e[:e3, :P] == s[EIndex(3,:P)]
-    @test_throws ArgumentError s.p.v[:v, 1]
+    @test isempty(s.p.v[:v, 1])
     @test s.p.v[:v1, 1] == s[VPIndex(1,1)]
     @test s.p.v[:v2, 1] == s[VPIndex(2,1)]
     @test s.p.v[:v3, 1] == s[VPIndex(3,1)]
