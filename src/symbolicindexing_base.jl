@@ -43,17 +43,20 @@ function Base.iterate(ni::ITERATABLE_NUMERIC_SUB_IDX, state=nothing)
     idxtype(ni)(it[1]), it[2]
 end
 
+# dont wrap empty tuples
+wrap_sidx(x::Tuple{}) = x
+wrap_pidx(x::Tuple{}) = x
 wrap_sidx(x::VALID_NUMERIC_SUB_IDX) = StateIdx(x)
 wrap_pidx(x::VALID_NUMERIC_SUB_IDX) = ParamIdx(x)
 function wrap_sidx(x)
-    if (x isa AbstractVector || x isa Tuple) && any(i -> i isa Int, x)
+    if (x isa AbstractVector || x isa Tuple) && !isempty(x) && any(i -> i isa Int, x)
         map(wrap_sidx, x)
     else
         x
     end
 end
 function wrap_pidx(x)
-    if (x isa AbstractVector || x isa Tuple) && any(i -> i isa Int, x)
+    if (x isa AbstractVector || x isa Tuple) && !isempty(x) && any(i -> i isa Int, x)
         map(wrap_pidx, x)
     else
         x
