@@ -200,7 +200,7 @@ record(fig, "truss.mp4", trange; framerate=fps) do t
     for i in eachindex(pos0)
         p[:node_pos][][i] = (s_at_t.v[i, :x], s_at_t.v[i, :y])
     end
-    notify(p[:node_pos])
+    p[:node_pos][] = p[:node_pos][]
     load = s_at_t.e[:, :Fabs]
     p.edge_color[] = load
     p.elabels = [@sprintf("%.0f", l) for l in load]

@@ -54,27 +54,29 @@ ts = 0:0.1:1
 sol(ts; idxs=VIndex(1,:storage)) # value of VIndex(1,:storage) at each t in ts
 ```
 Alternatively, you can use them directly in specialized plotting recipes:
+
 ```@example si
 plot(sol; idxs=[VIndex(1, :storage), VIndex(5,:storage)]) # plot storage of vertex 1 and vertex 5
 ```
-!!! tip
-   It is often advised to choose your timesteps for plotting directly, i.e.
-   ```@example si
-   ts = range(0, 1; length=1000)
-   plot(ts, sol(ts; idxs=VIndex(1,:storage)).u)
-   nothing #hide
-   ```
-   gives you more control over how many points are used within the range $(0,1)$.
+
+It is often advised to choose your timesteps for plotting directly, i.e.
+```@example si
+ts = range(0, 1; length=1000)
+plot(ts, sol(ts; idxs=VIndex(1,:storage)).u)
+nothing #hide
+```
+gives you more control over how many points are used within the range $(0,1)$.
 
 ## Generate Symbolic Indices
 Often, you need many individual symbolic indices. NetworkDynamics provides several approaches:
 
 ### Quick Access with Helper Functions
-The helper methods [`vidxs`](@ref), [`eidxs`](@ref), [`vpidxs`](@ref) and [`epidxs`](@ref) provide shortcuts for common patterns:
+The helper methods [`vidxs`](@ref), [`eidxs`](@ref), [`vpidxs`](@ref) and [`epidxs`](@ref) provide shortcuts for common patterns
 
 ```@example si
 vidxs(nw, :, :storage) # get state variable "storage" for all vertices
 ```
+
 ```@example si
 plot(sol; idxs=vidxs(nw, :, :storage))
 ```

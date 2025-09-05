@@ -405,7 +405,7 @@ struct AllEdges end
 
 """
     generate_indices(inpr, compfilter=nothing, varfilter=nothing;
-                    s=true, p=true, out=true, obs=false, in=false, just_count=false)
+                    s=true, p=true, out=true, obs=true, in=true, just_count=false)
 
 Generate collections of valid symbolic indices with flexible filtering criteria.
 
@@ -450,7 +450,7 @@ generate_indices(nw, VIndex(:), ParamIdx(1); s=false, out=false)
 
 See also: [`FilteringProxy`](@ref), [`vidxs`](@ref), [`eidxs`](@ref), [`vpidxs`](@ref), [`epidxs`](@ref)
 """
-function generate_indices(inpr, compfilter=nothing, varfilter=nothing; s=true, p=true, out=true, obs=false, in=false,
+function generate_indices(inpr, compfilter=nothing, varfilter=nothing; s=true, p=true, out=true, obs=true, in=true,
     return_types=false, just_count=false)
     nw = extract_nw(inpr)
     indices = !just_count ? SymbolicIndex[] : nothing
@@ -587,25 +587,25 @@ end
 """
     vidxs(nw, cf=:, vf=nothing; kwargs...)
 
-Generate vertex indices for states, outputs, and observables.
-Equivalent to `generate_indices(nw, VIndex(cf), vf; s=true, p=false, in=false, out=true, obs=true, kwargs...)`.
+Generate vertex indices for states, parameters, inputs, outputs, and observables.
+Equivalent to `generate_indices(nw, VIndex(cf), vf; s=true, p=true, in=true, out=true, obs=true, kwargs...)`.
 
 See also: [`generate_indices`](@ref)
 """
 function vidxs(nw, cf=:, vf=nothing; kwargs...)
-    generate_indices(nw, VIndex(cf), vf; s=true, p=false, in=false, out=true, obs=true, kwargs...)
+    generate_indices(nw, VIndex(cf), vf; s=true, p=true, in=true, out=true, obs=true, kwargs...)
 end
 
 """
     eidxs(nw, cf=:, vf=nothing; kwargs...)
 
-Generate edge indices for states, outputs, and observables.
-Equivalent to `generate_indices(nw, EIndex(cf), vf; s=true, p=false, in=false, out=true, obs=true, kwargs...)`.
+Generate edge indices for states, parameters, inputs, outputs, and observables.
+Equivalent to `generate_indices(nw, EIndex(cf), vf; s=true, p=true, in=true, out=true, obs=true, kwargs...)`.
 
 See also: [`generate_indices`](@ref)
 """
 function eidxs(nw, cf=:, vf=nothing; kwargs...)
-    generate_indices(nw, EIndex(cf), vf; s=true, p=false, in=false, out=true, obs=true, kwargs...)
+    generate_indices(nw, EIndex(cf), vf; s=true, p=true, in=true, out=true, obs=true, kwargs...)
 end
 
 """
@@ -782,7 +782,7 @@ function FilteringProxy(
 )
     FilteringProxy(f.data, compfilter, varfilter, s, p, out, in, obs)
 end
-FilteringProxy(s::NWState) = FilteringProxy(s, nothing, nothing, true, !isnothing(s.p), true, false, false)
+FilteringProxy(s::NWState) = FilteringProxy(s, nothing, nothing, true, !isnothing(s.p), true, true, true)
 FilteringProxy(s::NWParameter) = FilteringProxy(s, nothing, nothing, false, true, false, false, false)
 function generate_indices(f::FilteringProxy; kwargs...)
     generate_indices(f.data, f.compfilter, f.varfilter;
