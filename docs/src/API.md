@@ -83,17 +83,17 @@ variable_symbols
 ```@docs
 VIndex
 EIndex
-VPIndex
-EPIndex
 @obsex
 ```
 
 ### Index generators
 ```@docs
+generate_indices
 vidxs
 eidxs
 vpidxs
 epidxs
+FilteringProxy
 ```
 
 ## Metadata API

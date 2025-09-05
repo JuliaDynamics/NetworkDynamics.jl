@@ -1,6 +1,18 @@
 const VALID_NUMERIC_SUB_IDX = Union{Colon, Int, AbstractVector{<:Int}, NTuple{<:Any, Int}}
 
 abstract type NumericSubIndex{T} end
+"""
+    ParamIdx{T} <: NumericSubIndex{T}
+
+Wrapper type for indexing into parameters by index rather than symbol.
+`VPIndex(:name, 1)` is equivalent to `VIndex(:name, ParamIdx(1))` and tells
+NetworkDynamics that you mean the first parameter of the component in contrast
+to the first state of the component.
+Similary, `ParamIdx(:)`, `ParamIdx(1:3)` or `ParamIdx([1,2,3])` can be used
+to access multiple parameters by numeric index at once.
+
+See also: [`StateIdx`](@ref), [`VIndex`](@ref), [`EIndex`](@ref)
+"""
 struct ParamIdx{T<:VALID_NUMERIC_SUB_IDX} <: NumericSubIndex{T}
     idx::T
     function ParamIdx(i)
@@ -8,6 +20,18 @@ struct ParamIdx{T<:VALID_NUMERIC_SUB_IDX} <: NumericSubIndex{T}
         new{typeof(_i)}(_i)
     end
 end
+"""
+    StateIdx{T} <: NumericSubIndex{T}
+
+Wrapper type for indexing into states by index rather than symbol.
+`VIndex(:name, 1)` is equivalent to `VIndex(:name, StateIdx(1))` and tells
+NetworkDynamics that you mean the first state of the component in contrast
+to the first state of the parameter.
+Similary, `StateIdx(:)`, `StateIdx(1:3)` or `StateIdx([1,2,3])` can be used
+to access multiple states by numeric index at once.
+
+See also: [`StateIdx`](@ref), [`VIndex`](@ref), [`EIndex`](@ref)
+"""
 struct StateIdx{T<:VALID_NUMERIC_SUB_IDX} <: NumericSubIndex{T}
     idx::T
     function StateIdx(i)
@@ -72,22 +96,33 @@ end
     VIndex{C,S} <: SymbolicIndex{C,S}
     idx = VIndex(comp, sub)
 
-A symbolic index for a vertex state variable.
+A symbolic index for a vertex variable.
 - `comp`: the component index, either int, symbol or a collection
 - `sub`: the subindex, either int, symbol or a collection of those.
 
+Symbolic indices are rather flexible and can potentially point to states, parameters, inputs, outputs, or observables.
+
+The most basic form is `VIndex(1, :P)` which points to the variable with the name `:P` in the first vertex model.
+The component can be also given by unique name, so `VIndex(:a, :P)` would point to the vertex with unique name `:a`.
+
+It is also possible to have "collections" of indices, such as
 ```
-VIndex(1, :P)      # vertex 1, variable :P
 VIndex(1:5, 1)     # first state of vertices 1 to 5
 VIndex(7, (:x,:y)) # states :x and :y of vertex 7
+```
+
+They can be used to index into objects supporting the `SymbolicIndexingInterface`,
+e.g. [`NWState`](@ref), [`NWParameter`](@ref) or `ODESolution`.
+
+It is also possible to construct vertices without a sub index, in which case they point
+to a component rather than a specific variable:
+```
 VIndex(2)          # references the second vertex model
 VIndex(:a)         # references vertex with unique name :a
 ```
+For example `nw[VIndex(2)]` would return the 2nd [`VertexModel`](@ref) in the `Network`.
 
-Can be used to index into objects supporting the `SymbolicIndexingInterface`,
-e.g. [`NWState`](@ref), [`NWParameter`](@ref) or `ODESolution`.
-
-See also: [`EIndex`](@ref), [`VPIndex`](@ref), [`EPIndex`](@ref)
+See also: [`EIndex`](@ref), [`StateIdx`](@ref), [`ParamIdx`](@ref), [`generate_indices`](@ref), [`NWState`](@ref), [`NWParameter`](@ref)
 """
 struct VIndex{C,S} <: SymbolicIndex{C,S}
     compidx::C
@@ -102,23 +137,40 @@ VIndex(ci) = VIndex(ci, nothing)
     EIndex{C,S} <: SymbolicIndex{C,S}
     idx = EIndex(comp, sub)
 
-A symbolic index for an edge state variable.
+A symbolic index for an edge variable.
 - `comp`: the component index, either int, symbol, pair or a collection
 - `sub`: the subindex, either int, symbol or a collection of those.
 
+Symbolic indices are rather flexible and can potentially point to states, parameters, inputs, outputs, or observables.
+
+The most basic form is `EIndex(1, :P)` which points to the variable with the name `:P` in the first edge model.
+The component can be also given by unique name, so `EIndex(:a, :P)` would point to the edge with unique name `:a`.
+For edges, the component can also be specified as a source-destination pair:
+
 ```
-EIndex(1, :P)      # edge 1, variable :P
+EIndex(1=>2, :P)    # variable :P in edge from vertex 1 to vertex 2
+EIndex(:a=>:b, :P)  # variable :P in edge from vertex :a to vertex :b
+```
+
+It is also possible to have "collections" of indices, such as
+```
 EIndex(1:5, 1)     # first state of edges 1 to 5
 EIndex(7, (:x,:y)) # states :x and :y of edge 7
-EIndex(2)          # references the second edge model
-EIndex(1=>2)       # references edge from v1 to v2
-EIndex(:a=>:b)     # references edge from (uniquely named) vertex :a to :b
 ```
 
-Can be used to index into objects supporting the `SymbolicIndexingInterface`,
+They can be used to index into objects supporting the `SymbolicIndexingInterface`,
 e.g. [`NWState`](@ref), [`NWParameter`](@ref) or `ODESolution`.
 
-See also: [`VIndex`](@ref), [`VPIndex`](@ref), [`EPIndex`](@ref)
+It is also possible to construct edges without a sub index, in which case they point
+to a component rather than a specific variable:
+```
+EIndex(2)          # references the second edge model
+EIndex(1=>2)       # references edge from v1 to v2
+EIndex(:a=>:b)     # references edge from vertex :a to vertex :b
+```
+For example `nw[EIndex(2)]` would return the 2nd [`EdgeModel`](@ref) in the `Network`.
+
+See also: [`VIndex`](@ref), [`StateIdx`](@ref), [`ParamIdx`](@ref), [`generate_indices`](@ref), [`NWState`](@ref), [`NWParameter`](@ref)
 """
 struct EIndex{C,S} <: SymbolicIndex{C,S}
     compidx::C

@@ -3,20 +3,26 @@
 ####
 
 """
-    NWParameter(nw_or_nw_wraper, pflat)
+    NWParameter(nw_or_nw_wrapper, pflat)
 
 Indexable wrapper for flat parameter array `pflat`. Needs Network or wrapper of
 Network, e.g. `ODEProblem`.
 
 ```
 p = NWParameter(nw)
-p.v[idx, :sym] # get parameter :sym of vertex idx
-p.e[idx, :sym] # get parameter :sym of edge idx
-p[s::Union{VPIndex, EPIndex}] # get parameter for specific index
+p.v[idx, :sym]               # get parameter :sym of vertex idx
+p.e[idx, :sym]               # get parameter :sym of edge idx
+p[VIndex(idx, :sym)]         # get parameter using VIndex
+p[VIndex(idx, ParamIdx(1))]  # get first parameter by numeric index
 ```
+
+Using the special `.v` and `.e` properties, you get a [`FilteringProxy`](@ref) object which allows
+for interactive filtering, inspection and changing of parameters. See [`FilteringProxy`](@ref) for details.
 
 Get flat array representation using [`pflat`](@ref). The order of parameters in the flat
 representation corresponds to the order given by [`parameter_symbols`](@ref).
+
+See also: [`NWState`](@ref), [`VIndex`](@ref), [`EIndex`](@ref), [`generate_indices`](@ref), [`FilteringProxy`](@ref)
 """
 struct NWParameter{P,NW<:Network}
     nw::NW
@@ -31,7 +37,7 @@ Base.eltype(p::NWParameter) = eltype(p.pflat)
 Base.length(s::NWParameter) = length(s.pflat)
 
 """
-    NWParameter(nw_or_nw_wraper;
+    NWParameter(nw_or_nw_wrapper;
                 ptype=Vector{Float64}, pfill=filltype(ptype), default=true)
 
 Creates "empty" `NWParameter` object for the Network/Wrapper `nw` with flat type `ptype`.
@@ -78,16 +84,23 @@ Network, e.g. `ODEProblem`.
 
 ```
 s = NWState(nw)
-s.v[idx, :sym] # get state :sym of vertex idx
-s.e[idx, :sym] # get state :sym of edge idx
-s.p.v[idx, :sym] # get parameter :sym of vertex idx
-s.p.e[idx, :sym] # get parameter :sym of edge idx
-s[s::Union{VIndex, EIndex, EPIndex, VPIndex}] # get parameter for specific index
+s.v[idx, :sym]                   # get state :sym of vertex idx
+s.e[idx, :sym]                   # get state :sym of edge idx
+s.p.v[idx, :sym]                 # get parameter :sym of vertex idx
+s.p.e[idx, :sym]                 # get parameter :sym of edge idx
+s[VIndex(idx, :sym)]             # get state using VIndex
+s[VIndex(idx, StateIdx(1))]      # get first state by numeric index
+s[VIndex(idx, ParamIdx(1))]      # get first parameter by numeric index
 ```
+
+Using the special `.v` and `.e` properties, you get a [`FilteringProxy`](@ref) object which allows
+for interactive filtering, inspection and changing of states. See [`FilteringProxy`](@ref) for details.
 
 Get flat array representation using [`uflat`](@ref) and [`pflat`](@ref). The order of states in the flat
 representation corresponds to the order given by [`variable_symbols`](@ref), and the order of parameters
 corresponds to [`parameter_symbols`](@ref).
+
+See also: [`NWParameter`](@ref), [`VIndex`](@ref), [`EIndex`](@ref), [`generate_indices`](@ref), [`FilteringProxy`](@ref)
 """
 struct NWState{U,P,T,NW<:Network}
     nw::NW
@@ -133,7 +146,7 @@ function NWState(thing;
 end
 
 """
-    NWState(p::NWState; utype=typeof(uflat(s)), ptype=typeof(pflat(s)))
+    NWState(s::NWState; utype=typeof(uflat(s)), ptype=typeof(pflat(s)))
 
 Create `NWState` based on other state object, just convert types.
 """
@@ -390,7 +403,53 @@ end
 struct AllVertices end
 struct AllEdges end
 
-generate_indices(inpr, s::SymbolicIndex; kwargs...) = generate_indices(inpr, idxtype(s)(s.compidx), s.subidx; kwargs...)
+"""
+    generate_indices(inpr, compfilter=nothing, varfilter=nothing;
+                    s=true, p=true, out=true, obs=false, in=false, just_count=false)
+
+Generate collections of valid symbolic indices with flexible filtering criteria.
+
+## Arguments
+- `inpr`: Index provider - Network or Network wrapper like `NWState`, `NWParameter`, `sol`, etc.
+- `compfilter`
+  - `nothing` - matches all components (default)
+  - `VIndex(1)` - matches component by number
+  - `VIndex(:name)` - matches by exact component name
+  - `VIndex("pattern")` or `VIndex(r"pattern")` - matches by `contains(name, pattern)`
+  - Vector-like: `VIndex(1:10)` matches vertices 1-10, `[VIndex(:), EIndex(:)]` matches all vertices and edges
+  - `EIndex(src=>dst)` - matches edges where src and dst vertices match (can be Int, Symbol, Regex, ...)
+- `varfilter`
+  - `nothing` - matches all variables (default)
+  - `:name` - matches variable `:name` exactly
+  - `"namepart"` or `r"namepart"` - matches by `contains(variable_name, pattern)`
+  - `StateIdx(1)` or `ParamIdx(1)` - matches by numeric position
+  - Vector-like: `[:foo, StateIdx(1), r"part"]` matches any of the filters
+
+## Keyword Arguments
+- `s=true` - include states
+- `p=true` - include parameters
+- `out=true` - include outputs
+- `obs=false` - include observables
+- `in=false` - include inputs
+- `just_count=false` - return count instead of indices
+
+## Examples
+```julia
+# All vertex states and parameters
+generate_indices(nw, VIndex(:))
+
+# Parameters of vertex with name :generator
+generate_indices(nw, VIndex(:generator); s=false, p=true, out=false)
+
+# All variables containing "voltage" in vertices 1-5
+generate_indices(nw, VIndex(1:5), "voltage")
+
+# First parameter of all vertices using numeric indexing
+generate_indices(nw, VIndex(:), ParamIdx(1); s=false, out=false)
+```
+
+See also: [`FilteringProxy`](@ref), [`vidxs`](@ref), [`eidxs`](@ref), [`vpidxs`](@ref), [`epidxs`](@ref)
+"""
 function generate_indices(inpr, compfilter=nothing, varfilter=nothing; s=true, p=true, out=true, obs=false, in=false,
     return_types=false, just_count=false)
     nw = extract_nw(inpr)
@@ -420,6 +479,7 @@ function generate_indices(inpr, compfilter=nothing, varfilter=nothing; s=true, p
         return indices
     end
 end
+generate_indices(inpr, s::SymbolicIndex; kwargs...) = generate_indices(inpr, idxtype(s)(s.compidx), s.subidx; kwargs...)
 function _collect_indices!(nw, indices, types, compfilter, varfilter, switches)
     all_verts = VIndex(1:nv(nw))
     all_edges = EIndex(1:ne(nw))
@@ -524,15 +584,50 @@ end
 
 
 # shortcuts
+"""
+    vidxs(nw, cf=:, vf=nothing; kwargs...)
+
+Generate vertex indices for states, outputs, and observables.
+Equivalent to `generate_indices(nw, VIndex(cf), vf; s=true, p=false, in=false, out=true, obs=true, kwargs...)`.
+
+See also: [`generate_indices`](@ref)
+"""
 function vidxs(nw, cf=:, vf=nothing; kwargs...)
     generate_indices(nw, VIndex(cf), vf; s=true, p=false, in=false, out=true, obs=true, kwargs...)
 end
+
+"""
+    eidxs(nw, cf=:, vf=nothing; kwargs...)
+
+Generate edge indices for states, outputs, and observables.
+Equivalent to `generate_indices(nw, EIndex(cf), vf; s=true, p=false, in=false, out=true, obs=true, kwargs...)`.
+
+See also: [`generate_indices`](@ref)
+"""
 function eidxs(nw, cf=:, vf=nothing; kwargs...)
     generate_indices(nw, EIndex(cf), vf; s=true, p=false, in=false, out=true, obs=true, kwargs...)
 end
+
+"""
+    vpidxs(nw, cf=:, vf=nothing; kwargs...)
+
+Generate vertex parameter indices.
+Equivalent to `generate_indices(nw, VIndex(cf), vf; s=false, p=true, in=false, out=false, obs=false, kwargs...)`.
+
+See also: [`generate_indices`](@ref)
+"""
 function vpidxs(nw, cf=:, vf=nothing; kwargs...)
     generate_indices(nw, VIndex(cf), vf; s=false, p=true, in=false, out=false, obs=false, kwargs...)
 end
+
+"""
+    epidxs(nw, cf=:, vf=nothing; kwargs...)
+
+Generate edge parameter indices.
+Equivalent to `generate_indices(nw, EIndex(cf), vf; s=false, p=true, in=false, out=false, obs=false, kwargs...)`.
+
+See also: [`generate_indices`](@ref)
+"""
 function epidxs(nw, cf=:, vf=nothing; kwargs...)
     generate_indices(nw, EIndex(cf), vf; s=false, p=true, in=false, out=false, obs=false, kwargs...)
 end
@@ -579,6 +674,82 @@ end
 
 abstract type IndexingProxy{S} end
 
+"""
+    FilteringProxy{S,CF,VF} <: IndexingProxy{S}
+    FilteringProxy(s::NWState)
+    FilteringProxy(p::NWParameter)
+    (s::NWState).v # creates a FilteringProxy
+
+Interactive filtering proxy for exploring and accessing states/parameters in NetworkDynamics objects.
+
+`FilteringProxy` provides a flexible, interactive way to filter and access network variables through
+a progressive refinement system. It acts as a "proxy" that changes indexing rules while operating
+on the same underlying data, allowing both exploration and modification of network states/parameters.
+
+## Core Concept
+
+The proxy uses a filter refinement approach where each indexing operation either:
+- Returns a more refined `FilteringProxy` (if the filter needs more specificity)
+- Returns the actual values (if the filter is fully specified)
+
+All filtering operations translate to equivalent [`generate_indices`](@ref) calls under the hood.
+
+## Stage 1: Component Filtering
+
+Access vertices and edges using `.v` and `.e` properties:
+```julia
+s = NWState(nw)
+s.v          # FilteringProxy for all vertices
+s.e          # FilteringProxy for all edges
+s.v[1]       # Refine to vertex 1
+s.v[:gen]    # Refine to vertices named :gen
+s.v[r"load"] # Refine to vertices matching pattern
+FilteringProxy(s)[[VIndex(1), EIndex(2)]] # filter down to the first vertex and second edge
+```
+
+## Stage 2: Variable Filtering
+Once the component filter is set, the next indexing operation will refine the variable filter.
+
+```julia
+s.v[1][:voltage]          # value of Vertex(1) + variable called :voltage
+s.v[:][r"δ"]              # value of all variables containing "δ" of all vertices
+s.e[1=>2].s[StateIdx(1)]  # First state of edge from vertex 1 to 2
+```
+
+## Variable Type Filtering
+
+Use type switches to select specific variable categories:
+```julia
+s.v.p        # Parameters only
+s.v.s        # States only
+s.v.out      # Outputs only
+s.v.obs      # Observables only
+s.v.in       # Inputs only
+s.v.all      # All variable types
+s.v(; p=true, s=true) # fine grade filter update using function call syntax
+```
+
+## Function Call Syntax
+
+Use function call syntax `proxy(args...)` to refine without collapsing to values:
+```julia
+proxy = s.v(1)(:voltage)  # Build filter without accessing values
+value = proxy[]           # Access value when ready
+```
+The function call syntax can also be used to refine any other properties.
+The properties match the argument names of [`generate_indices`](@ref)
+```julia
+s.v[1](; p=true)            # equivalent to s.v[1].p
+s.v(; compfilter=EIndex(:)) # resets the compfilter and now matches all edges
+```
+
+## Utility Methods
+
+- `keys(proxy)` - Get matching symbolic indices via `generate_indices`
+- `values(proxy) / proxy[]` - Get actual values for all matching indices
+
+See also: [`generate_indices`](@ref), [`NWState`](@ref), [`NWParameter`](@ref), [`VIndex`](@ref), [`EIndex`](@ref)
+"""
 struct FilteringProxy{S,CF,VF} <: IndexingProxy{S}
     data::S # the underlying state/parameter object
     compfilter::CF
@@ -815,7 +986,7 @@ end
 """
     @obsex([name =] expression)
 
-Define observable expressions, which are simple combinations of knonw
+Define observable expressions, which are simple combinations of known
 states/parameters/observables. `@obsex(...)` returns an `ObservableExpression`
 which can be used as an symbolic index. This is mainly intended for quick
 plotting or export of common "derived" variables, such as the argument of a
