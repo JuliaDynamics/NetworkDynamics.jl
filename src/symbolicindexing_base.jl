@@ -27,6 +27,11 @@ end
 idxtype(::ParamIdx) = ParamIdx
 idxtype(::StateIdx) = StateIdx
 
+# ParamIdx(1:2) == ParamIdx([1,2])
+function Base.:(==)(a::NumericSubIndex, b::NumericSubIndex)
+    idxtype(a) == idxtype(b) && a.idx == b.idx
+end
+
 const ITERATABLE_NUMERIC_SUB_IDX = NumericSubIndex{<:Union{AbstractVector, Tuple}}
 
 Base.length(ni::ITERATABLE_NUMERIC_SUB_IDX) = length(ni.idx)
@@ -125,8 +130,9 @@ struct EIndex{C,S} <: SymbolicIndex{C,S}
 end
 EIndex(ci) = EIndex(ci, nothing)
 
+# VIndex(1:2, :foo) == VIndex([1,2], :foo) and so on
 function Base.:(==)(a::SymbolicIndex, b::SymbolicIndex)
-    a.compidx == b.compidx && a.subidx == b.subidx
+    idxtype(a) == idxtype(b) && a.compidx == b.compidx && a.subidx == b.subidx
 end
 
 VPIndex(c) = VIndex(c)

@@ -793,3 +793,11 @@ end
     @test vpidxs(1, 1) == [VPIndex(1, 1)]
     @test eidxs(1, 1) == [EIndex(1, 1)]
 end
+
+@testset "test equal methods for index types" begin
+    @test VIndex(1) != EIndex(1)
+    @test VIndex(Any[1,2,3], 1) == VIndex([1,2,3], 1)
+    @test typeof(VIndex(Any[1,2,3], 1)) != typeof(VIndex([1,2,3], 1))
+    @test ParamIdx(1:2) == ParamIdx([1,2])
+    @test VIndex(1, 1:2) == VIndex(1, [1,2])
+end
