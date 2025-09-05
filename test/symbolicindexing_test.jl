@@ -442,8 +442,12 @@ end
 
     @test vidxs(nw) == [VIndex(1, :u),
                         VIndex(1, :v),
+                        VIndex(1, :p1),
+                        VIndex(1, :p2),
                         VIndex(2, :x1),
                         VIndex(2, :x2),
+                        VIndex(2, :p1),
+                        VIndex(2, :p2),
                         VIndex(2, :obs1),
                         VIndex(2, :obs2),
                         VIndex(3, :v₁),
@@ -454,11 +458,15 @@ end
                         EIndex(2, :esrc),
                         EIndex(2, :edst)]
 
-    @test vidxs(nw, 1) == [VIndex(1, :u), VIndex(1, :v)]
+    @test vidxs(nw, 1) == [VIndex(1, :u), VIndex(1, :v), VIndex(1, :p1), VIndex(1, :p2)]
     @test vidxs(nw, :VF) == [VIndex(1, :u),
                              VIndex(1, :v),
+                             VIndex(1, :p1),
+                             VIndex(1, :p2),
                              VIndex(2, :x1),
                              VIndex(2, :x2),
+                             VIndex(2, :p1),
+                             VIndex(2, :p2),
                              VIndex(2, :obs1),
                              VIndex(2, :obs2)]
     @test vidxs(nw, "3") == [VIndex(3, :v₁),
