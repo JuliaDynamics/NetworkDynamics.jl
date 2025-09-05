@@ -413,13 +413,13 @@ function Base.show(io::IO, mime::MIME"text/plain", fp::FilteringProxy)
             if isfirst && islast
                 # ·  ∙  •  ●  ◦  Ø  ø
                 # □  ■  ▫  ▪  ◆  ◊
-                print("\n  ● ")
+                print(io, "\n  ● ")
             elseif isfirst
-                print("\n  ╭ ")
+                print(io, "\n  ╭ ")
             elseif islast
-                print("\n  ╰ ")
+                print(io, "\n  ╰ ")
             else
-                print("\n  │ ")
+                print(io, "\n  │ ")
             end
             regex = r"(\s*[VE]Index\(.*?,\s*)(.*)(\).*)(:.*)\s*$"
 
@@ -433,9 +433,12 @@ function Base.show(io::IO, mime::MIME"text/plain", fp::FilteringProxy)
             # t2 == match(regex, t2)[1]*match(regex, t2)[2]*match(regex, t2)[3]*match(regex, t2)[4]
             m = match(regex, aligned_strvec[i])
             if !isnothing(m)
-                print(m[1])
-                printstyled(m[2], color=color_map[types[i]])
-                print(m[3])
+                print(io, m[1])
+                basecolor = color_map[types[i]]
+                if !_print_pattern_hl(io, m[2], fp.varfilter; basecolor, hl_sym=false)
+                    printstyled(io, m[2], color=basecolor)
+                end
+                print(io, m[3])
                 if isfirst
                     if fp.compfilter isa SymbolicIndex
                         _print_pattern_hl(io, m[4], fp.compfilter.compidx) || print(io, m[4])
@@ -444,26 +447,27 @@ function Base.show(io::IO, mime::MIME"text/plain", fp::FilteringProxy)
                     end
                 end
             else
-                print(aligned_strvec[i]) # fallback if regex fails
+                print(io, aligned_strvec[i]) # fallback if regex fails
             end
         end
     else
         printstyled(io, "\nNo indices matching filter!", bold=true)
     end
 end
-_print_pattern_hl(io, s, pattern) = false
-function _print_pattern_hl(io, s, vec::Union{AbstractVector, Tuple})
+_print_pattern_hl(io, s, pattern; kw...) = false
+function _print_pattern_hl(io, s, vec::Union{AbstractVector, Tuple}; kw...)
     for subpat in vec
-        _print_pattern_hl(io, s, subpat) && return true
+        _print_pattern_hl(io, s, subpat; kw...) && return true
     end
     return false
 end
-function _print_pattern_hl(io, s, pattern::Symbol)
+function _print_pattern_hl(io, s, pattern::Symbol; hl_sym=true, kw...)
+    hl_sym || return false
     repr(pattern) == s || return false
     printstyled(io, s, color=:light_magenta)
     return true
 end
-function _print_pattern_hl(io, s, pattern::Union{String,Symbol,Regex})
+function _print_pattern_hl(io, s, pattern::Union{String,Regex}; basecolor=:nothing, kw...)
     occursin(pattern, s) || return false
     first, last = split(s, pattern; limit=2)
     mid = if pattern isa Regex
@@ -471,9 +475,9 @@ function _print_pattern_hl(io, s, pattern::Union{String,Symbol,Regex})
     else
         pattern # string
     end
-    print(first)
-    printstyled(mid, color=:light_magenta)
-    print(last)
+    printstyled(io, first; color=basecolor)
+    printstyled(io, mid; color=:light_magenta)
+    printstyled(io, last; color=basecolor)
     return true
 end
 Base.show(io::IO, ::MIME"text/plain", ::AllVertices) = print(io, "AllVertices()")
