@@ -85,6 +85,11 @@ VIndex
 EIndex
 @obsex
 ```
+Retained for backward compatibility:
+```@docs
+VPIndex
+EPIndex
+```
 
 ### Index generators
 ```@docs

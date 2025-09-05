@@ -187,10 +187,29 @@ function Base.:(==)(a::SymbolicIndex, b::SymbolicIndex)
     idxtype(a) == idxtype(b) && a.compidx == b.compidx && a.subidx == b.subidx
 end
 
-VPIndex(c) = VIndex(c)
+"""
+    VPIndex(c, s)
+
+Backward compatibility constructor for vertex parameter indices.
+Wraps integer-like subindices in `ParamIdx`, leaves other types unchanged.
+Equivalent to `VIndex(c, ParamIdx(s))` when `s` is integer-like, otherwise `VIndex(c, s)`.
+
+See also: [`VIndex`](@ref), [`ParamIdx`](@ref)
+"""
 VPIndex(c, s) = VIndex(c, wrap_pidx(s))
-EPIndex(c) = EIndex(c)
+VPIndex(c) = VIndex(c)
+
+"""
+    EPIndex(c, s)
+
+Backward compatibility constructor for edge parameter indices.
+Wraps integer-like subindices in `ParamIdx`, leaves other types unchanged.
+Equivalent to `EIndex(c, ParamIdx(s))` when `s` is integer-like, otherwise `EIndex(c, s)`.
+
+See also: [`EIndex`](@ref), [`ParamIdx`](@ref)
+"""
 EPIndex(c, s) = EIndex(c, wrap_pidx(s))
+EPIndex(c) = EIndex(c)
 
 idxtype(s::VIndex) = VIndex
 idxtype(s::EIndex) = EIndex
