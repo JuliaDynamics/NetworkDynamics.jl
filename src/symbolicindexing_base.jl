@@ -8,7 +8,7 @@ Wrapper type for indexing into parameters by index rather than symbol.
 `VPIndex(:name, 1)` is equivalent to `VIndex(:name, ParamIdx(1))` and tells
 NetworkDynamics that you mean the first parameter of the component in contrast
 to the first state of the component.
-Similary, `ParamIdx(:)`, `ParamIdx(1:3)` or `ParamIdx([1,2,3])` can be used
+Similarly, `ParamIdx(:)`, `ParamIdx(1:3)` or `ParamIdx([1,2,3])` can be used
 to access multiple parameters by numeric index at once.
 
 See also: [`StateIdx`](@ref), [`VIndex`](@ref), [`EIndex`](@ref)
@@ -16,7 +16,7 @@ See also: [`StateIdx`](@ref), [`VIndex`](@ref), [`EIndex`](@ref)
 struct ParamIdx{T<:VALID_NUMERIC_SUB_IDX} <: NumericSubIndex{T}
     idx::T
     function ParamIdx(i)
-        _i = transform_nummeric_subidx(i)
+        _i = transform_numeric_subidx(i)
         new{typeof(_i)}(_i)
     end
 end
@@ -26,20 +26,20 @@ end
 Wrapper type for indexing into states by index rather than symbol.
 `VIndex(:name, 1)` is equivalent to `VIndex(:name, StateIdx(1))` and tells
 NetworkDynamics that you mean the first state of the component in contrast
-to the first state of the parameter.
-Similary, `StateIdx(:)`, `StateIdx(1:3)` or `StateIdx([1,2,3])` can be used
+to the first parameter of the component.
+Similarly, `StateIdx(:)`, `StateIdx(1:3)` or `StateIdx([1,2,3])` can be used
 to access multiple states by numeric index at once.
 
-See also: [`StateIdx`](@ref), [`VIndex`](@ref), [`EIndex`](@ref)
+See also: [`ParamIdx`](@ref), [`VIndex`](@ref), [`EIndex`](@ref)
 """
 struct StateIdx{T<:VALID_NUMERIC_SUB_IDX} <: NumericSubIndex{T}
     idx::T
     function StateIdx(i)
-        _i = transform_nummeric_subidx(i)
+        _i = transform_numeric_subidx(i)
         new{typeof(_i)}(_i)
     end
 end
-function transform_nummeric_subidx(i)
+function transform_numeric_subidx(i)
     if i isa VALID_NUMERIC_SUB_IDX
         return i
     elseif i isa AbstractVector && all(x -> x isa Int, i)

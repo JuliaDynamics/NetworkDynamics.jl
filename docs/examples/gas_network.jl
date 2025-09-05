@@ -213,7 +213,7 @@ Currently, the linear interpolation does not support any units yet. To satisfy t
 we multipy the interpolation output by a constant 1 of that unit.
 
 Note however, that the unit check is only performed at the construction of the
-model. Later on, when the nummeric code will be generated from the symbolic
+model. Later on, when the numeric code will be generated from the symbolic
 representation, all units will be stripped.
 
 !!! note "Discontinuities in RHS"
@@ -298,7 +298,7 @@ This is not a steady state of the system however. To find a true steady state, w
 that the LHS of the system is zero.
 
 We can use the [`find_fixpoint`](@ref) from `NetworkDynamics.jl` to initialize the system.
-Internally, this uses a nummerical solve for the rootfind problem `0 = rhs`.
+Internally, this uses a numerical solve for the rootfind problem `0 = rhs`.
 The result is automaticially wrapped as a [`NWState`](@ref) object.
 =#
 u0 = find_fixpoint(nw, uguess, t=0)

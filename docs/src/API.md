@@ -83,6 +83,8 @@ variable_symbols
 ```@docs
 VIndex
 EIndex
+ParamIdx
+StateIdx
 @obsex
 ```
 Retained for backward compatibility:
