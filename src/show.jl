@@ -401,7 +401,7 @@ function Base.show(io::IO, mime::MIME"text/plain", fp::FilteringProxy)
     if !isempty(indices)
         printstyled(io, "\nMatching Indices:", bold=true)
         # align all the printouts
-        strvec = Ref("&") .* repr.(indices) .* Ref(" &&=> ") .* value_str .* " &:" .* compnames
+        strvec = Ref("&") .* repr.(indices) .* Ref(" &&=> ") .* value_str .* " & :" .* compnames
         aligned_strvec =  align_strings(strvec)
         for i in eachindex(indices)
             isfirst = i == 1 ||
@@ -436,7 +436,13 @@ function Base.show(io::IO, mime::MIME"text/plain", fp::FilteringProxy)
                 print(m[1])
                 printstyled(m[2], color=color_map[types[i]])
                 print(m[3])
-                isfirst && print(m[4])
+                if isfirst
+                    if fp.compfilter isa SymbolicIndex
+                        _print_pattern_hl(io, m[4], fp.compfilter.compidx) || print(io, m[4])
+                    else
+                        print(io, m[4])
+                    end
+                end
             else
                 print(aligned_strvec[i]) # fallback if regex fails
             end
@@ -444,6 +450,31 @@ function Base.show(io::IO, mime::MIME"text/plain", fp::FilteringProxy)
     else
         printstyled(io, "\nNo indices matching filter!", bold=true)
     end
+end
+_print_pattern_hl(io, s, pattern) = false
+function _print_pattern_hl(io, s, vec::Union{AbstractVector, Tuple})
+    for subpat in vec
+        _print_pattern_hl(io, s, subpat) && return true
+    end
+    return false
+end
+function _print_pattern_hl(io, s, pattern::Symbol)
+    repr(pattern) == s || return false
+    printstyled(io, s, color=:light_magenta)
+    return true
+end
+function _print_pattern_hl(io, s, pattern::Union{String,Symbol,Regex})
+    occursin(pattern, s) || return false
+    first, last = split(s, pattern; limit=2)
+    mid = if pattern isa Regex
+        match(pattern, s).match
+    else
+        pattern # string
+    end
+    print(first)
+    printstyled(mid, color=:light_magenta)
+    print(last)
+    return true
 end
 Base.show(io::IO, ::MIME"text/plain", ::AllVertices) = print(io, "AllVertices()")
 Base.show(io::IO, ::MIME"text/plain", ::AllEdges) = print(io, "AllEdges()")

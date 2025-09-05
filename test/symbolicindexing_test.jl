@@ -179,10 +179,16 @@ end
 
         s.v[1, :]
         s.v[1][:]
-
         s.v[1]
         s.v[:]
+        s.v(r"[mM]")
 
+        show(stdout, MIME"text/plain"(), s.v[r"[mM]"])
+        show(stdout, MIME"text/plain"(), s.v["moto"])
+        show(stdout, MIME"text/plain"(), s.e[[1,"ode", r"fid", :kuramoto_edge]])
+
+
+        @test s.v[:][] == values(s.v[:])
         using NetworkDynamics: FilteringProxy
         f_sp = FilteringProxy(FilteringProxy(s), s=true, p=true)
         @test f_sp[VIndex(:)][:] == f_sp[VIndex(:)][StateIdx(:)]
