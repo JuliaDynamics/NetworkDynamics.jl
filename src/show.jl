@@ -235,25 +235,23 @@ function stylesymbolarray(syms, defaults, guesses, symstyles=Dict{Int,Symbol}())
 end
 
 function Base.show(io::IO, idx::VIndex)
-    print(io, "VIndex(", repr(idx.compidx), ", ", repr(idx.subidx), ")")
+    print(io, "VIndex(", repr_colon(idx.compidx), ", ", repr_colon(idx.subidx), ")")
 end
 function Base.show(io::IO, idx::EIndex)
-    print(io, "EIndex(", repr(idx.compidx), ", ", repr(idx.subidx), ")")
+    print(io, "EIndex(", repr_colon(idx.compidx), ", ", repr_colon(idx.subidx), ")")
 end
 function Base.show(io::IO, idx::VIndex{<:Any,Nothing})
-    print(io, "VIndex(", repr(idx.compidx), ")")
+    print(io, "VIndex(", repr_colon(idx.compidx), ")")
 end
 function Base.show(io::IO, idx::EIndex{<:Any,Nothing})
-    print(io, "EIndex(", repr(idx.compidx), ")")
+    print(io, "EIndex(", repr_colon(idx.compidx), ")")
 end
-function Base.show(io::IO, idx::VPIndex)
-    print(io, "VPIndex(", repr(idx.compidx), ", ", repr(idx.subidx), ")")
-end
-function Base.show(io::IO, idx::EPIndex)
-    print(io, "EPIndex(", repr(idx.compidx), ", ", repr(idx.subidx), ")")
-end
+Base.show(io::IO, idx::ParamIdx) = print(io, "ParamIdx(", repr_colon(idx.idx), ")")
+Base.show(io::IO, idx::StateIdx) = print(io, "StateIdx(", repr_colon(idx.idx), ")")
+repr_colon(::Colon) = ":"
+repr_colon(x) = repr(x)
 
-function Base.show(io::IO, mime::MIME"text/plain", @nospecialize(s::NWState); dim=nothing)
+function Base.show(io::IO, mime::MIME"text/plain", @nospecialize(s::NWState))
     ioc = IOContext(io, :compact => true)
     if get(io, :limit, true)::Bool
         dsize = get(io, :displaysize, displaysize(io))::Tuple{Int,Int}
@@ -278,11 +276,7 @@ function Base.show(io::IO, mime::MIME"text/plain", @nospecialize(s::NWState); di
             else
                 print(buf, "#undef")
             end
-            str = read(seekstart(buf), AnnotatedString)
-            if !isnothing(dim) && dim(sym)
-                str = styled"{NetworkDynamics_inactive:$str}"
-            end
-            str
+            read(seekstart(buf), AnnotatedString)
         end
         print_treelike(io, align_strings(strvec); prefix="  ", rowmax)
     end
@@ -300,7 +294,7 @@ function Base.show(io::IO, mime::MIME"text/plain", @nospecialize(s::NWState); di
     end
 end
 
-function Base.show(io::IO, mime::MIME"text/plain", @nospecialize(p::NWParameter); dim=nothing)
+function Base.show(io::IO, mime::MIME"text/plain", @nospecialize(p::NWParameter))
     compact = get(io, :compact, false)::Bool
     if get(io, :limit, true)::Bool
         dsize = get(io, :displaysize, displaysize(io))::Tuple{Int,Int}
@@ -328,25 +322,166 @@ function Base.show(io::IO, mime::MIME"text/plain", @nospecialize(p::NWParameter)
             else
                 print(buf, "#undef")
             end
-            str = read(seekstart(buf), AnnotatedString)
-            if !isnothing(dim) && dim(sym)
-                str = styled"{NetworkDynamics_inactive:$str}"
-            end
-            str
+            read(seekstart(buf), AnnotatedString)
         end
         print_treelike(io, align_strings(strvec); prefix="  ", rowmax)
     end
 end
 
-function Base.show(io::IO, mime::MIME"text/plain", p::Union{VProxy,EProxy})
-    name = _proxyname(p)
-    print(io, styled"{bright_blue:$name} for ")
-    show(io, mime, p.s; dim = _dimcondition(p))
+function Base.show(io::IO, mime::MIME"text/plain", fp::FilteringProxy)
+    printstyled(io, "FilteringProxy"; bold=true)
+    print(io, " for ")
+    if fp.data isa NWState
+        print(io, "NWState()")
+    elseif fp.data isa NWParameter
+        print(io, "NWParameter()")
+    else
+        print(io, repr(typeof(fp.data)))
+    end
+
+    print(io, "\n  Component filter: ")
+    if isnothing(fp.compfilter)
+        printstyled(io, "none"; color=:light_black)
+        printstyled(io, " <- filter further by obj.v, obj.e, obj[VIndex(..)], ..."; color=:light_black)
+    else
+        show(io, mime, fp.compfilter)
+        if fp.compfilter isa Union{AllVertices, AllEdges}
+            printstyled(io, " <- filter further by obj[1], obj[\"name\"], ..."; color=:light_black)
+        end
+    end
+    print(io, "\n  State filter:     ")
+    if isnothing(fp.varfilter)
+        printstyled(io, "none"; color=:light_black)
+        if fp.compfilter isa SymbolicIndex
+            printstyled(io, " <- filter states by obj[\"δ\"], obj[:x], ..."; color=:light_black)
+        end
+    else
+        show(io, mime, fp.varfilter)
+    end
+    print(io, "\n  Types:")
+
+    # for c in [:blue, :cyan, :green, :hidden, :light_black, :light_blue, :light_cyan, :light_green, :light_magenta, :light_red, :light_white, :light_yellow, :magenta, :nothing, :red, :reverse, :underline, :white, :yellow]
+    #    printstyled("\n",c, color=c)
+    # end
+    color_map = Dict(
+        :states => :light_green,
+        :parameters => :light_yellow,
+        :inputs => :light_magenta,
+        :outputs => :light_blue,
+        :observables => :light_cyan,
+    )
+
+    for s in [:states, :parameters, :inputs, :outputs, :observables]
+        if getfield(fp, s)
+            printstyled(io, "  $s ✓", bold=true, color=color_map[s])
+        else
+            printstyled(io, "  $s ✗", color=:light_black)
+        end
+    end
+
+    indices, types = generate_indices(fp; return_types=true)
+    _val_to_str(x) = isnan(x) ? "NaN (undefined?)" : str_significant(x; sigdigits=8, phantom_minus=true)
+    value_str = try
+        # try to resolve all at once (faster)
+        values = fp.data[indices]
+        map(_val_to_str, indices)
+    catch
+        # alternatively, go through them one by one
+        map(indices) do _idx
+            try
+                _val_to_str(fp.data[_idx])
+            catch
+                "not accessible"
+            end
+        end
+    end
+    nw = extract_nw(fp)
+    compnames = [string(getcomp(nw,idx).name) for idx in indices]
+
+    if !isempty(indices)
+        printstyled(io, "\nMatching Indices:", bold=true)
+        # align all the printouts
+        strvec = Ref("&") .* repr.(indices) .* Ref(" && ") .* value_str .* " & :" .* compnames
+        aligned_strvec =  align_strings(strvec)
+        for i in eachindex(indices)
+            isfirst = i == 1 ||
+                      idxtype(indices[i]) != idxtype(indices[i-1]) ||
+                      indices[i].compidx != indices[i-1].compidx
+            islast  = i == length(indices) ||
+                      idxtype(indices[i]) != idxtype(indices[i+1]) ||
+                      indices[i].compidx != indices[i+1].compidx
+            if isfirst && islast
+                # ·  ∙  •  ●  ◦  Ø  ø
+                # □  ■  ▫  ▪  ◆  ◊
+                print(io, "\n  ● ")
+            elseif isfirst
+                print(io, "\n  ╭ ")
+            elseif islast
+                print(io, "\n  ╰ ")
+            else
+                print(io, "\n  │ ")
+            end
+            regex = r"(\s*[VE]Index\(.*?,\s*)(.*)(\).*)(:.*)\s*$"
+
+            # t1 ="  VIndex(1, :Pm)  0.9645731407002397 (kuramoto_second)"
+            # match(regex, t1)[1] == "  VIndex(1, "
+            # match(regex, t1)[2] == ":Pm"
+            # t1 == match(regex, t1)[1]*match(regex, t1)[2]*match(regex, t1)[3]*match(regex, t1)[4]
+            # t2 =" VIndex(4, :δ)   1.2211532806955903 (kuramoto_second)"
+            # match(regex, t2)[1] == " VIndex(4, "
+            # match(regex, t2)[2] == ":δ"
+            # t2 == match(regex, t2)[1]*match(regex, t2)[2]*match(regex, t2)[3]*match(regex, t2)[4]
+            m = match(regex, aligned_strvec[i])
+            if !isnothing(m)
+                print(io, m[1])
+                basecolor = color_map[types[i]]
+                if !_print_pattern_hl(io, m[2], fp.varfilter; basecolor, hl_sym=false)
+                    printstyled(io, m[2], color=basecolor)
+                end
+                print(io, m[3])
+                if isfirst
+                    if fp.compfilter isa SymbolicIndex
+                        _print_pattern_hl(io, m[4], fp.compfilter.compidx) || print(io, m[4])
+                    else
+                        print(io, m[4])
+                    end
+                end
+            else
+                print(io, aligned_strvec[i]) # fallback if regex fails
+            end
+        end
+    else
+        printstyled(io, "\nNo indices matching filter!", bold=true)
+    end
 end
-_proxyname(::VProxy) = "Vertex indexer"
-_proxyname(::EProxy) = "Edge indexer"
-_dimcondition(::VProxy) = sym -> sym isa EIndex || sym isa EPIndex
-_dimcondition(::EProxy) = sym -> sym isa VIndex || sym isa VPIndex
+_print_pattern_hl(io, s, pattern; kw...) = false
+function _print_pattern_hl(io, s, vec::Union{AbstractVector, Tuple}; kw...)
+    for subpat in vec
+        _print_pattern_hl(io, s, subpat; kw...) && return true
+    end
+    return false
+end
+function _print_pattern_hl(io, s, pattern::Symbol; hl_sym=true, kw...)
+    hl_sym || return false
+    repr(pattern) == s || return false
+    printstyled(io, s, color=:light_magenta)
+    return true
+end
+function _print_pattern_hl(io, s, pattern::Union{String,Regex}; basecolor=:nothing, kw...)
+    occursin(pattern, s) || return false
+    first, last = split(s, pattern; limit=2)
+    mid = if pattern isa Regex
+        match(pattern, s).match
+    else
+        pattern # string
+    end
+    printstyled(io, first; color=basecolor)
+    printstyled(io, mid; color=:light_magenta)
+    printstyled(io, last; color=basecolor)
+    return true
+end
+Base.show(io::IO, ::MIME"text/plain", ::AllVertices) = print(io, "AllVertices()")
+Base.show(io::IO, ::MIME"text/plain", ::AllEdges) = print(io, "AllEdges()")
 
 function print_treelike(io, vec; prefix=" ", infix=" ", rowmax=typemax(Int))
     Base.require_one_based_indexing(vec)

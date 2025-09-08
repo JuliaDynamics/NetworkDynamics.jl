@@ -143,8 +143,6 @@ rand_inputs_obsf(cf) = rand_inputs_obsf(Random.default_rng(), cf)
 
 # abstract symbolic index types
 abstract type SymbolicIndex{C,S} end
-abstract type SymbolicStateIndex{C,S} <: SymbolicIndex{C,S} end
-abstract type SymbolicParameterIndex{C,S} <: SymbolicIndex{C,S} end
 
 flatten_sym(v::NamedTuple) = reduce(vcat, values(v))
 flatten_sym(v::AbstractVector{Symbol}) = v

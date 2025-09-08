@@ -2,7 +2,7 @@ module NetworkDynamicsSymbolicsExt
 
 using Symbolics: Symbolics, @variables
 using MacroTools: postwalk, @capture
-using NetworkDynamics: NetworkDynamics, SymbolicVertexIndex, SymbolicEdgeIndex, SII
+using NetworkDynamics: NetworkDynamics, SymbolicIndex, SII
 
 function NetworkDynamics.generate_observable_expression(ex::Expr)
     if @capture(ex, capname_ = capcontent_)
@@ -48,7 +48,7 @@ NetworkDynamics.collect_symbol!(_, x) = x
 function NetworkDynamics.collect_symbol!(mapping, x::Union{AbstractVector, Tuple})
     map(el -> NetworkDynamics.collect_symbol!(mapping, el), x)
 end
-function NetworkDynamics.collect_symbol!(mapping, nwindex::Union{SymbolicVertexIndex,SymbolicEdgeIndex})
+function NetworkDynamics.collect_symbol!(mapping, nwindex::SymbolicIndex)
     if haskey(mapping, nwindex)
         return mapping[nwindex]
     else

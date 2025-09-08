@@ -1,5 +1,13 @@
 # NetworkDynamics Release Notes
 
+## v0.10.7 Changelog (PR #312)
+- [#312](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/312) Major rework of symbolic indexing system:
+  - New index types: Added `ParamIdx` and `StateIdx` for explicit parameter vs state numeric indexing
+  - Enhanced proxy system: Replaced internal `VProxy`/`EProxy` with new `FilteringProxy` system that provides more powerful interactive filtering and inspection capabilities
+  - Improved display system: Major enhancements to `show` methods with compact printing and matched name highlighting
+  - New exports: `ParamIdx`, `StateIdx`, `generate_indices`, `FilteringProxy`
+  - All user-facing API remains backward compatible - `.v` and `.e` properties work as before but are now more powerful
+
 ## v0.10.6 Changelog
 - [#309](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/309) improve error handling in initialization system:
   - Add custom exception types: `NetworkInitError` and `ComponentInitError` with detailed error messages

@@ -903,7 +903,7 @@ function _initialize_componentwise(
         NWState(nw)
     else
         usyms = SII.variable_symbols(nw)
-        psyms = map(_XPIndex_to_XIndex, SII.parameter_symbols(nw))
+        psyms = SII.parameter_symbols(nw)
         _uflat = [fullstate[s] for s in usyms]
         _pflat = [fullstate[s] for s in psyms]
         NWState(nw, _uflat, _pflat)
@@ -921,13 +921,11 @@ function _initialize_componentwise(
     verbose && println("Initialized network with residual $(resid)!")
     s0
 end
-_XPIndex_to_XIndex(idx::VPIndex) = VIndex(idx.compidx, idx.subidx)
-_XPIndex_to_XIndex(idx::EPIndex) = EIndex(idx.compidx, idx.subidx)
 _filter_overrides(_, _, ::Nothing) = nothing
 function _filter_overrides(nw, filteridx::SymbolicIndex{Int,Nothing}, dict::AbstractDict)
     filtered = Dict{Symbol, valtype(dict)}()
     for (key, val) in dict
-        if filteridx == _baseT(key)(resolvecompidx(nw, key))
+        if filteridx == idxtype(key)(resolvecompidx(nw, key))
             if !(key.subidx isa Symbol)
                 error("Overwrites must be provided as SymbolicIndex{...,Symbol}! Got $key instead.")
             end
@@ -937,7 +935,7 @@ function _filter_overrides(nw, filteridx::SymbolicIndex{Int,Nothing}, dict::Abst
     filtered
 end
 function _merge_wrapped!(fullstate, substate, wrapper)
-    idxconstructor = _baseT(wrapper)
+    idxconstructor = idxtype(wrapper)
     for (key, val) in substate
         fullstate[idxconstructor(wrapper.compidx, key)] = val
     end

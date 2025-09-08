@@ -62,11 +62,15 @@ include("coreloop.jl")
 include("external_inputs.jl")
 
 # XXX: have both, s[:] and uflat(s) ?
-export VIndex, EIndex, VPIndex, EPIndex, NWState, NWParameter, uflat, pflat
-export vidxs, eidxs, vpidxs, epidxs
+export VIndex, EIndex, VPIndex, EPIndex
+export ParamIdx, StateIdx
 export save_parameters!, extract_nw
-export @obsex
 export variable_symbols, parameter_symbols
+include("symbolicindexing_base.jl")
+
+export NWState, NWParameter, uflat, pflat
+export vidxs, eidxs, vpidxs, epidxs, generate_indices, FilteringProxy
+export @obsex
 include("symbolicindexing.jl")
 
 export ComponentCondition, ComponentAffect

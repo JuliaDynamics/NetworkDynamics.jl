@@ -83,17 +83,24 @@ variable_symbols
 ```@docs
 VIndex
 EIndex
+ParamIdx
+StateIdx
+@obsex
+```
+Retained for backward compatibility:
+```@docs
 VPIndex
 EPIndex
-@obsex
 ```
 
 ### Index generators
 ```@docs
+generate_indices
 vidxs
 eidxs
 vpidxs
 epidxs
+FilteringProxy
 ```
 
 ## Metadata API
