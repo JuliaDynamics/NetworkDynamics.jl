@@ -464,7 +464,7 @@ end
 function _print_pattern_hl(io, s, pattern::Symbol; hl_sym=true, kw...)
     hl_sym || return false
     repr(pattern) == s || return false
-    printstyled(io, s, color=:light_magenta)
+    printstyled(io, s, color=:light_red)
     return true
 end
 function _print_pattern_hl(io, s, pattern::Union{String,Regex}; basecolor=:nothing, kw...)
@@ -476,7 +476,7 @@ function _print_pattern_hl(io, s, pattern::Union{String,Regex}; basecolor=:nothi
         pattern # string
     end
     printstyled(io, first; color=basecolor)
-    printstyled(io, mid; color=:light_magenta)
+    printstyled(io, mid; color=:light_red)
     printstyled(io, last; color=basecolor)
     return true
 end
