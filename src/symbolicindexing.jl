@@ -867,6 +867,7 @@ function Base.getproperty(f::FilteringProxy, sym::Symbol)
     end
 end
 
+refine_filter(f::FilteringProxy) = f # nothing to refine
 refine_filter(f::FilteringProxy, a, b) = refine_filter(refine_filter(f, a), b)
 
 function refine_filter(f::FilteringProxy{<:Any, <:AllVertices}, idxs::Union{AbstractVector,Tuple})

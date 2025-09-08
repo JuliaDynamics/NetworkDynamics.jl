@@ -203,6 +203,16 @@ end
         s.v[(1,2)]
         s.v[:][(1,2)]
         s.v[:][[1,2]]
+
+        # test dotview for empty getindex
+        s.v(1, StateIdx(:)) .= 2
+        @test s.v[1, StateIdx(:)] == [2, 2]
+        s.v(1, StateIdx(:))[] .= 3
+        @test s.v[1, StateIdx(:)] == [3, 3]
+        s.v(1, StateIdx(:))[] = [4,5]
+        @test s.v[1, StateIdx(:)] == [4, 5]
+        s.v[1, StateIdx(:)] = [7,8]
+        @test s.v[1, StateIdx(:)] == [7, 8]
     end
 
     @testset "Test colon indexing" begin
