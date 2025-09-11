@@ -214,17 +214,18 @@ end
     @test get_marker(nw, VIndex(1)) == :circle
 
     # Test callbacks
+    fakefun = (args...) -> nothing
     cb = ContinuousComponentCallback(
-        ComponentCondition(nothing, [], []),
-        ComponentAffect(nothing, [], [])
+        ComponentCondition(fakefun, [], []),
+        ComponentAffect(fakefun, [], [])
     )
     set_callback!(nw, VIndex(1), cb)
     @test has_callback(nw, VIndex(1))
     @test get_callbacks(nw, VIndex(1)) == (cb,)
 
     cb2 = ContinuousComponentCallback(
-        ComponentCondition(nothing, [], []),
-        ComponentAffect(nothing, [], [])
+        ComponentCondition(fakefun, [], []),
+        ComponentAffect(fakefun, [], [])
     )
     add_callback!(nw, VIndex(1), cb2)
     @test length(get_callbacks(nw, VIndex(1))) == 2
