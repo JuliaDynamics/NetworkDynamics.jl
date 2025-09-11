@@ -190,6 +190,19 @@ end
         show(stdout, MIME"text/plain"(), s.e[[1,"ode", r"fid", :kuramoto_edge]]("dst"))
         show(stdout, MIME"text/plain"(), s.e[[1,"ode", r"fid", :kuramoto_edge]](:e_dst))
 
+        # Test FilteringProxy show methods with various combinations
+        show(stdout, MIME"text/plain"(), FilteringProxy(s).v[r"δ"])
+        show(stdout, MIME"text/plain"(), FilteringProxy(s).v[["δ", r"ω", 1]])
+        show(stdout, MIME"text/plain"(), FilteringProxy(s).e[("K", r"τ")])
+        @test_throws ArgumentError FilteringProxy(s)([1, VIndex(2)])
+        show(stdout, MIME"text/plain"(), FilteringProxy(s)([VIndex(r"δ"), EIndex("K")]))
+        show(stdout, MIME"text/plain"(), FilteringProxy(s)([VIndex([r"δ", "ω", 1]), EIndex("K")]))
+        show(stdout, MIME"text/plain"(), FilteringProxy(s)(VIndex([1, "δ", r"ω"])))
+        show(stdout, MIME"text/plain"(), FilteringProxy(s).v[VIndex(:)])
+        show(stdout, MIME"text/plain"(), FilteringProxy(s)((VIndex(r"δ"), EIndex([1, "K"]))))
+        show(stdout, MIME"text/plain"(), FilteringProxy(s).e[[1, "ode", r"fid"]])
+        show(stdout, MIME"text/plain"(), FilteringProxy(FilteringProxy(s), s=true, p=false).v)
+
         @test s.v[:][] == values(s.v[:])
         using NetworkDynamics: FilteringProxy
         f_sp = FilteringProxy(FilteringProxy(s), s=true, p=true)

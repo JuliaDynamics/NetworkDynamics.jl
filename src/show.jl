@@ -344,7 +344,7 @@ function Base.show(io::IO, mime::MIME"text/plain", fp::FilteringProxy)
         printstyled(io, "none"; color=:light_black)
         printstyled(io, " <- filter further by obj.v, obj.e, obj[VIndex(..)], ..."; color=:light_black)
     else
-        show(io, mime, fp.compfilter)
+        _show_component_filter(io, fp.compfilter)
         if fp.compfilter isa Union{AllVertices, AllEdges}
             printstyled(io, " <- filter further by obj[1], obj[\"name\"], ..."; color=:light_black)
         end
@@ -356,7 +356,7 @@ function Base.show(io::IO, mime::MIME"text/plain", fp::FilteringProxy)
             printstyled(io, " <- filter states by obj[\"δ\"], obj[:x], ..."; color=:light_black)
         end
     else
-        show(io, mime, fp.varfilter)
+        _show_pattern_filter(io, fp.varfilter)
     end
     print(io, "\n  Types:")
 
@@ -480,8 +480,51 @@ function _print_pattern_hl(io, s, pattern::Union{String,Regex}; basecolor=:nothi
     printstyled(io, last; color=basecolor)
     return true
 end
-Base.show(io::IO, ::MIME"text/plain", ::AllVertices) = print(io, "AllVertices()")
-Base.show(io::IO, ::MIME"text/plain", ::AllEdges) = print(io, "AllEdges()")
+_show_pattern_filter(io, v::Any) = show(io, v) # fallback
+function _show_pattern_filter(io, v::String)
+    print(io, "\"")
+    printstyled(io, v; color=:light_red)
+    print(io, "\"")
+end
+function _show_pattern_filter(io, v::Regex)
+    rep = repr(v)
+    m = match(r"^r\"(.*)\"$", rep)
+    if !isnothing(m)
+        print(io, "r\"")
+        printstyled(io, m[1]; color=:light_red)
+        print(io, "\"")
+    else
+        print(io, rep) # fallback if repr is not as expected
+    end
+end
+function _show_pattern_filter(io, vs::Union{AbstractVector, Tuple})
+    pre, post = vs isa AbstractVector ? ("[", "]") : ("(", ")")
+    print(io, pre)
+    for (i, v) in enumerate(vs)
+        i > 1 && print(io, ", ")
+        _show_pattern_filter(io, v)
+    end
+    print(io, post)
+end
+_show_component_filter(io::IO, x::Any) = show(io, x)
+_show_component_filter(io::IO, ::AllVertices) = print(io, "AllVertices()")
+_show_component_filter(io::IO, ::AllEdges) = print(io, "AllEdges()")
+function _show_component_filter(io::IO, v::SymbolicIndex{<:Any, Nothing})
+    show(io, idxtype(v))
+    print(io, "(")
+    _show_pattern_filter(io, v.compidx)
+    print(io, ")")
+end
+function _show_component_filter(io::IO, vs::Union{AbstractVector, Tuple})
+    pre, post = vs isa AbstractVector ? ("[", "]") : ("(", ")")
+    print(io, pre)
+    for (i, v) in enumerate(vs)
+        i > 1 && print(io, ", ")
+        _show_component_filter(io, v)
+    end
+    print(io, post)
+end
+
 
 function print_treelike(io, vec; prefix=" ", infix=" ", rowmax=typemax(Int))
     Base.require_one_based_indexing(vec)
