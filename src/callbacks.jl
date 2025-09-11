@@ -51,6 +51,11 @@ struct ComponentCondition{C,DIM,PDIM}
     sym::NTuple{DIM,Symbol}
     psym::NTuple{PDIM,Symbol}
     function ComponentCondition(f, sym, psym)
+        if !hasmethod(f, Tuple{SymbolicView, SymbolicView, Float64})
+            throw(ArgumentError(
+                "The provided affect function has no method defined for (u, p, t). Available method signatures are:\n$(methods(f))\n"
+            ))
+        end
         new{typeof(f), length(sym), length(psym)}(f, Tuple(sym), Tuple(psym))
     end
 end
@@ -92,6 +97,11 @@ struct ComponentAffect{A,DIM,PDIM}
     sym::NTuple{DIM,Symbol}
     psym::NTuple{PDIM,Symbol}
     function ComponentAffect(f, sym, psym)
+        if !hasmethod(f, Tuple{SymbolicView, SymbolicView, NamedTuple})
+            throw(ArgumentError(
+                "The provided affect function has no method defined for (u, p, ctx). Available method signatures are:\n$(methods(f))\n"
+            ))
+        end
         new{typeof(f), length(sym), length(psym)}(f, Tuple(sym), Tuple(psym))
     end
 end
