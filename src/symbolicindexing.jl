@@ -876,14 +876,20 @@ end
 function refine_filter(f::FilteringProxy{<:Any, <:AllEdges}, idxs::Union{AbstractVector,Tuple})
     return FilteringProxy(f, compfilter=EIndex(idxs))
 end
-function refine_filter(f::FilteringProxy{<:Any}, idxs::Union{AbstractVector,Tuple})
+function refine_filter(f::FilteringProxy{<:Any, <:Nothing}, idxs::Union{AbstractVector,Tuple})
     if all(i -> i isa SymbolicIndex && isnothing(i.subidx), idxs)
         # all are just component refinements
         return FilteringProxy(f; compfilter=idxs)
-    elseif f.compfilter isa SymbolicIndex
-        return FilteringProxy(f, varfilter=idxs)
     else
         throw(ArgumentError("Don't know how to handle filter refinment $idxs in this contex (compfilter $(f.compfilter), varfilter $(f.varfilter))."))
+    end
+end
+function refine_filter(f::FilteringProxy{<:Any, <:SymbolicIndex}, idxs::Union{AbstractVector,Tuple})
+    if all(i -> i isa SymbolicIndex && isnothing(i.subidx), idxs)
+        # all are just component refinements
+        return FilteringProxy(f; compfilter=idxs)
+    else
+        return FilteringProxy(f, varfilter=idxs)
     end
 end
 
