@@ -867,6 +867,7 @@ function Base.getproperty(f::FilteringProxy, sym::Symbol)
     end
 end
 
+refine_filter(f::FilteringProxy) = f # nothing to refine
 refine_filter(f::FilteringProxy, a, b) = refine_filter(refine_filter(f, a), b)
 
 function refine_filter(f::FilteringProxy{<:Any, <:AllVertices}, idxs::Union{AbstractVector,Tuple})
@@ -875,8 +876,21 @@ end
 function refine_filter(f::FilteringProxy{<:Any, <:AllEdges}, idxs::Union{AbstractVector,Tuple})
     return FilteringProxy(f, compfilter=EIndex(idxs))
 end
+function refine_filter(f::FilteringProxy{<:Any, <:Nothing}, idxs::Union{AbstractVector,Tuple})
+    if all(i -> i isa SymbolicIndex && isnothing(i.subidx), idxs)
+        # all are just component refinements
+        return FilteringProxy(f; compfilter=idxs)
+    else
+        throw(ArgumentError("Don't know how to handle filter refinment $idxs in this contex (compfilter $(f.compfilter), varfilter $(f.varfilter))."))
+    end
+end
 function refine_filter(f::FilteringProxy{<:Any, <:SymbolicIndex}, idxs::Union{AbstractVector,Tuple})
-    return FilteringProxy(f, varfilter=idxs)
+    if all(i -> i isa SymbolicIndex && isnothing(i.subidx), idxs)
+        # all are just component refinements
+        return FilteringProxy(f; compfilter=idxs)
+    else
+        return FilteringProxy(f, varfilter=idxs)
+    end
 end
 
 ####

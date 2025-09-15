@@ -618,6 +618,12 @@ Base.@nospecializeinfer function _reconstruct_comp(::Type{T}, cf::ComponentModel
     for f in fields
         dict[f] = getproperty(cf, f)
     end
+    # if there is no change in symbols and it had a clash before, keep the setting
+    if !haskey(kwargs, :allow_output_sym_clash) && !haskey(kwargs, :sym) && !haskey(kwargs, :outsym)
+        if any(s -> s ∈ sym(cf), outsym_flat(cf))
+            dict[:allow_output_sym_clash] = true
+        end
+    end
     for (k, v) in kwargs
         dict[k] = v
     end

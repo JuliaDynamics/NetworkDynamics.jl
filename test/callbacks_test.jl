@@ -108,17 +108,18 @@ end
     nw = basenetwork()
     v = nw.im.vertexm[1]
 
-    cond = ComponentCondition(identity, [:θ, :ω], [])
-    affect = ComponentAffect(identity, [:θ, :ω],[])
+    empty_function = (args...) -> nothing
+    cond = ComponentCondition(empty_function, [:θ, :ω], [])
+    affect = ComponentAffect(empty_function, [:θ, :ω],[])
     cb = VectorContinuousComponentCallback(cond, affect, 2)
     add_callback!(v, cb)
-    display(v)
-    cond = ComponentCondition(identity, [:θ], [])
-    affect = ComponentAffect(identity, [],[:M])
+    show(stdout, MIME"text/plain"(), v)
+    cond = ComponentCondition(empty_function, [:θ], [])
+    affect = ComponentAffect(empty_function, [],[:M])
     cb2 = ContinuousComponentCallback(cond, affect)
     add_callback!(v, cb2)
-    display(v)
-    display(nw)
+    show(stdout, MIME"text/plain"(), v)
+    show(stdout, MIME"text/plain"(), nw)
 end
 
 @testset "vector callbacks" begin
