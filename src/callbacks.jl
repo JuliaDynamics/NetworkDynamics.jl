@@ -727,8 +727,3 @@ function assert_cb_compat(comp::ComponentModel, cb)
     cb
 end
 
-####
-#### Backward compatibility aliases for old misspellings (deprecated)
-####
-const ContinousComponentCallback = ContinuousComponentCallback
-const VectorContinousComponentCallback = VectorContinuousComponentCallback

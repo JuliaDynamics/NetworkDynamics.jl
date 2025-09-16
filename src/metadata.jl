@@ -799,9 +799,6 @@ delete_initformulas!(c::ComponentModel) = delete_metadata!(c, :initformula)
 delete_initformulas!(nw::Network, idx::VCIndex) = delete_initformulas!(getcomp(nw, idx))
 delete_initformulas!(nw::Network, idx::ECIndex) = delete_initformulas!(getcomp(nw, idx))
 
-# Deprecated backward compatibility
-@deprecate delete_initconstraint!(args...; kwargs...) delete_initconstraints!(args...; kwargs...)
-@deprecate delete_initformula!(args...; kwargs...) delete_initformulas!(args...; kwargs...)
 
 
 # generate methods and docstrings for position and marker
