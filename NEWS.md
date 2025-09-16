@@ -1,5 +1,16 @@
 # NetworkDynamics Release Notes
 
+## v0.10.9 Changelog
+- [#314](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/314) Consolidate deprecated functionality: all deprecated functionality moved to dedicated `src/deprecated.jl` file for easier maintenance
+
+## v0.10.8 Changelog
+- [#313](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/313) Fix FilteringProxy issues and improvements:
+  - Fix bug with empty `getindex` operations on FilteringProxy
+  - Add pattern highlighting in FilteringProxy display (matches shown in light red)
+  - Fix method ambiguity issues in symbolic indexing
+  - Improve callback error handling with early validation for wrong signatures
+  - Allow name clash reconstruction when it was previously allowed
+
 ## v0.10.7 Changelog (PR #312)
 - [#312](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/312) Major rework of symbolic indexing system:
   - New index types: Added `ParamIdx` and `StateIdx` for explicit parameter vs state numeric indexing
