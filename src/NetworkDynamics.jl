@@ -75,8 +75,6 @@ include("symbolicindexing.jl")
 
 export ComponentCondition, ComponentAffect
 export ContinuousComponentCallback, VectorContinuousComponentCallback
-# Export deprecated aliases (constants defined at bottom of callbacks.jl)
-export ContinousComponentCallback, VectorContinousComponentCallback
 export DiscreteComponentCallback, PresetTimeComponentCallback
 export SymbolicView
 include("callbacks.jl")
@@ -175,5 +173,11 @@ using PrecompileTools: @compile_workload
 @compile_workload begin
     include("precompile_workload.jl")
 end
+
+####
+#### Deprecated functionality (remove in breaking version)
+####
+export ContinousComponentCallback, VectorContinousComponentCallback
+include("deprecated.jl")
 
 end

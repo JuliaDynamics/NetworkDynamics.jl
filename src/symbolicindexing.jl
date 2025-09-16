@@ -632,31 +632,6 @@ function epidxs(nw, cf=:, vf=nothing; kwargs...)
     generate_indices(nw, EIndex(cf), vf; s=false, p=true, in=false, out=false, obs=false, kwargs...)
 end
 
-# deprecated methods
-vidxs(compfilter::Union{Int,AbstractVector{Int},NTuple{<:Any,Int},Colon}, varfilter) = _deprecated_idxs_gen(VIndex, compfilter, varfilter)
-eidxs(compfilter::Union{Int,AbstractVector{Int},NTuple{<:Any,Int},Colon}, varfilter) = _deprecated_idxs_gen(EIndex, compfilter, varfilter)
-vpidxs(compfilter::Union{Int,AbstractVector{Int},NTuple{<:Any,Int},Colon}, varfilter) = _deprecated_idxs_gen(VPIndex, compfilter, varfilter, VIndex)
-epidxs(compfilter::Union{Int,AbstractVector{Int},NTuple{<:Any,Int},Colon}, varfilter) = _deprecated_idxs_gen(EPIndex, compfilter, varfilter, EIndex)
-
-function _deprecated_idxs_gen(constructor, compiter, variter, type=constructor)
-    @warn "*idxs(compfilter, varfilter) methods are deprecated. Use *idxs(nw, compfilter, varfilter) instead."
-    if compiter isa Colon
-        throw(ArgumentError("compfilter cannot be `:`, use *idxs(nw_like_thing,  ...) for that!"))
-    end
-    if variter isa Colon
-        throw(ArgumentError("varfilter cannot be `:`, use *idxs(nw_like_thing,  ...) for that!"))
-    end
-    if variter isa Symbol
-        variter = (variter,)
-    end
-    indices = type[]
-    for ci in compiter
-        for si in variter
-            push!(indices, constructor(ci, si))
-        end
-    end
-    indices
-end
 
 
 ####
