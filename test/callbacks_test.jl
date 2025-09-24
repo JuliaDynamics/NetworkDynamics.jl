@@ -53,19 +53,19 @@ end
 
     @test NetworkDynamics.condition_dim(cbb) == 3
     @test NetworkDynamics.condition_pdim(cbb) == 2
-    @test all(NetworkDynamics.affect_dim.(Ref(cbb), 1:7) .== 0)
-    @test all(NetworkDynamics.affect_pdim.(Ref(cbb),1:7) .== 1)
+    @test all(NetworkDynamics.affect_dim.(Ref(cbb), NetworkDynamics.getaffect, 1:7) .== 0)
+    @test all(NetworkDynamics.affect_pdim.(Ref(cbb), NetworkDynamics.getaffect, 1:7) .== 1)
 
     @test NetworkDynamics.condition_urange.(Ref(cbb), 1:length(cbb)) == [1:3,4:6,7:9,10:12,13:15,16:18,19:21]
     @test NetworkDynamics.condition_prange.(Ref(cbb), 1:length(cbb)) == [1:2,3:4,5:6,7:8,9:10,11:12,13:14]
-    @test NetworkDynamics.affect_urange.(Ref(cbb), 1:length(cbb)) == [1:0 for i in 1:7]
-    @test NetworkDynamics.affect_prange.(Ref(cbb), 1:length(cbb)) == [1:1,2:2,3:3,4:4,5:5,6:6,7:7]
+    @test NetworkDynamics.affect_urange.(Ref(cbb), NetworkDynamics.getaffect, 1:length(cbb)) == [1:0 for i in 1:7]
+    @test NetworkDynamics.affect_prange.(Ref(cbb), NetworkDynamics.getaffect, 1:length(cbb)) == [1:1,2:2,3:3,4:4,5:5,6:6,7:7]
     @test NetworkDynamics.condition_outrange.(Ref(cbb), 1:length(cbb)) == [1:1,2:2,3:3,4:4,5:5,6:6,7:7]
 
-    @test NetworkDynamics.collect_c_or_a_indices(cbb, :condition, :sym) == collect(Iterators.flatten(collect(EIndex(i, [:P, :₋P, :srcθ])) for i in 1:7))
-    @test NetworkDynamics.collect_c_or_a_indices(cbb, :condition, :psym) == collect(Iterators.flatten(collect(EPIndex(i, [:limit, :K])) for i in 1:7))
-    @test NetworkDynamics.collect_c_or_a_indices(cbb, :affect, :sym) == []
-    @test NetworkDynamics.collect_c_or_a_indices(cbb, :affect, :psym) == collect(EPIndex(i, :active) for i in 1:7)
+    @test NetworkDynamics.collect_c_or_a_indices(cbb, NetworkDynamics.getcondition, :sym) == collect(Iterators.flatten(collect(EIndex(i, [:P, :₋P, :srcθ])) for i in 1:7))
+    @test NetworkDynamics.collect_c_or_a_indices(cbb, NetworkDynamics.getcondition, :psym) == collect(Iterators.flatten(collect(EPIndex(i, [:limit, :K])) for i in 1:7))
+    @test NetworkDynamics.collect_c_or_a_indices(cbb, NetworkDynamics.getaffect, :sym) == []
+    @test NetworkDynamics.collect_c_or_a_indices(cbb, NetworkDynamics.getaffect, :psym) == collect(EPIndex(i, :active) for i in 1:7)
 
     batchcond = NetworkDynamics._batch_condition(cbb)
     out = zeros(7)
@@ -120,6 +120,17 @@ end
     add_callback!(v, cb2)
     show(stdout, MIME"text/plain"(), v)
     show(stdout, MIME"text/plain"(), nw)
+
+    cond = ComponentCondition(empty_function, [:θ], [])
+    affect = ComponentAffect(empty_function, [:ω],[])
+    affect_neg = ComponentAffect(empty_function, [:θ], [:M])
+    cb3 = ContinuousComponentCallback(cond, affect; affect_neg! = affect_neg)
+    show(stdout, MIME"text/plain"(), cb3)
+
+    cond = ComponentCondition(empty_function, [:θ], [])
+    affect = ComponentAffect(empty_function, [:ω],[])
+    cb3 = ContinuousComponentCallback(cond, affect; affect_neg! = nothing)
+    show(stdout, MIME"text/plain"(), cb3)
 end
 
 @testset "vector callbacks" begin
@@ -205,7 +216,7 @@ end
     cbb = only(NetworkDynamics.wrap_component_callbacks(nw));
     # oserved can handle parameters now!
     # @test_throws ArgumentError NetworkDynamics._batch_condition(cbb)
-    @test_throws ArgumentError NetworkDynamics._batch_affect(cbb)
+    @test_throws ArgumentError NetworkDynamics._batch_affect(cbb, NetworkDynamics.getaffect)
 
     # invalid state in condition p
     cond = ComponentCondition((args...)->nothing, [:P, :₋P, :srcθ], [:limit, :K, :P])
@@ -214,7 +225,7 @@ end
     set_callback!.(nw.im.edgem, Ref(cb); check=false);
     cbb = only(NetworkDynamics.wrap_component_callbacks(nw));
     @test_throws ArgumentError NetworkDynamics._batch_condition(cbb)
-    @test_throws ArgumentError NetworkDynamics._batch_affect(cbb)
+    @test_throws ArgumentError NetworkDynamics._batch_affect(cbb, NetworkDynamics.getaffect)
 
     # test on set_callback
     cond = ComponentCondition((args...)->nothing, [:P, :₋P, :srcθ, :limit], [:limit, :K])
@@ -233,9 +244,125 @@ end
     affect = ComponentAffect((args...)->nothing, [],[:active, :P])
     cb = ContinuousComponentCallback(cond, affect)
     @test_throws ArgumentError set_callback!(nw.im.edgem[1], cb)
+
+    # test conditions for negative affect
+    affect  = ComponentAffect((args...)->nothing, [],[])
+    cond = ComponentCondition((args...)->nothing, [:P, :₋P, :srcθ], [:limit, :K])
+    affect_neg! = ComponentAffect((args...)->nothing, [:₋P],[:active])
+    cb = ContinuousComponentCallback(cond, affect; affect_neg!)
+    @test_throws ArgumentError set_callback!(nw.im.edgem[1], cb)
+    cond = ComponentCondition((args...)->nothing, [:P, :₋P, :srcθ], [:limit, :K])
+    affect_neg! = ComponentAffect((args...)->nothing, [],[:active, :P])
+    cb = ContinuousComponentCallback(cond, affect; affect_neg!)
+    @test_throws ArgumentError set_callback!(nw.im.edgem[1], cb)
 end
 
-@testset "discrete callback tests" begin
+# @testset "check callbacks with different affneg" begin
+begin
+    f = (du, u, in, p, t) -> begin
+        du[1] = -sin(t)
+        du[2] = cos(t)
+    end
+    vm = VertexModel(; f, g=1:2, dim=2, indim=2, sym=[:cos=>1, :sin=>0])
+
+    ge = (out, in) -> begin
+        out[1] = 0
+        out[2] = 0
+    end
+    em = EdgeModel(; g=AntiSymmetric(ge), outdim=2, indim=2)
+
+    g = path_graph(2)
+    nw = Network(g, vm, em; dealias=true)
+
+    # upcrossing no vector
+    cond_vec = ComponentCondition([:sin, :cos], []) do out, u, p, t
+        out[1] = u[:sin]
+        out[2] = u[:cos]
+    end
+    vec_sin_up = []
+    vec_cos_up = []
+    vec_sin_down = []
+    vec_cos_down = []
+    affect_vec = ComponentAffect([], []) do u, p, event_idx, ctx
+        pos = ctx.t/pi
+        if event_idx == 1
+            println("sin up at $pos")
+            push!(vec_sin_up, pos)
+        else
+            println("cos up at $pos")
+            push!(vec_cos_up, pos)
+        end
+    end
+    affect_vec_neg = ComponentAffect([], []) do u, p, event_idx, ctx
+        pos = ctx.t/pi
+        if event_idx == 1
+            println("sin down at $pos")
+            push!(vec_sin_down, pos)
+        else
+            println("cos down at $pos")
+            push!(vec_cos_down, pos)
+        end
+    end
+    cb_vec = VectorContinuousComponentCallback(cond_vec, affect_vec, 2; affect_neg! = affect_vec_neg)
+    # set_callback!(nw[VIndex(1)], cb_vec)
+    # set_callback!(nw[VIndex(1)], cb_vec)
+    s0 = NWState(nw)
+    prob = ODEProblem(nw, uflat(s0), (0, 4π+0.1), pflat(s0), callback=get_callbacks(nw, VIndex(1)=>cb_vec))
+    sol = solve(prob, Tsit5());
+    @assert SciMLBase.successful_retcode(sol)
+
+    @test vec_sin_up ≈ [2, 4] atol=1e-3
+    @test vec_sin_down ≈ [1, 3] atol=1e-3
+    @test vec_cos_up ≈ [1.5, 3.5] atol=1e-3
+    @test vec_cos_down ≈ [0.5, 2.5] atol=1e-3
+
+    ####
+    #### no negative affect
+    ####
+    empty!(vec_sin_up)
+    empty!(vec_cos_up)
+    empty!(vec_sin_down)
+    empty!(vec_cos_down)
+    cb_vec = VectorContinuousComponentCallback(cond_vec, affect_vec, 2; affect_neg! = nothing)
+    prob = ODEProblem(nw, uflat(s0), (0, 4π+0.1), pflat(s0), callback=get_callbacks(nw, Dict(VIndex(1)=>cb_vec)))
+    sol = solve(prob, Tsit5());
+    @assert SciMLBase.successful_retcode(sol)
+    @test vec_sin_up ≈ [2, 4] atol=1e-3
+    @test isempty(vec_sin_down)
+    @test vec_cos_up ≈ [1.5, 3.5] atol=1e-3
+    @test isempty(vec_cos_down)
+
+    ####
+    #### non-vector callback
+    ####
+    sin_up = []
+    sin_down = []
+    cond = ComponentCondition([:sin], []) do u, p ,t
+        u[:sin]
+    end
+    affect = ComponentAffect([], []) do u, p, ctx
+        pos = ctx.t/pi
+        println("sin up at $pos")
+        push!(sin_up, pos)
+    end
+    affect_neg = ComponentAffect([], []) do u, p, ctx
+        pos = ctx.t/pi
+        println("sin down at $pos")
+        push!(sin_down, pos)
+    end
+    cb = ContinuousComponentCallback(cond, affect; affect_neg! = affect_neg)
+    prob = ODEProblem(nw, uflat(s0), (0, 4π+0.1), pflat(s0), callback=get_callbacks(nw, Dict(VIndex(1)=>cb)))
+    sol = solve(prob, Tsit5());
+    @test sin_up ≈ [2, 4] atol=1e-3
+    @test sin_down ≈ [1, 3] atol=1e-3
+
+    empty!(sin_up)
+    empty!(sin_down)
+    cb = ContinuousComponentCallback(cond, affect; affect_neg! = nothing)
+    prob = ODEProblem(nw, uflat(s0), (0, 4π+0.1), pflat(s0), callback=get_callbacks(nw, Dict(VIndex(1)=>cb)))
+    sol = solve(prob, Tsit5());
+    @test sin_up ≈ [2, 4] atol=1e-3
+    @test isempty(sin_down)
 end
 
 @testset "symbolic view test" begin

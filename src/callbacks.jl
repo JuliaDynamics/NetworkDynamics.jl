@@ -109,31 +109,39 @@ struct ComponentAffect{A,DIM,PDIM}
 end
 
 """
-    ContinuousComponentCallback(condition, affect; kwargs...)
+    ContinuousComponentCallback(condition, affect; affect_neg! = affect, kwargs...)
 
 Connect a [`ComponentCondition`](@ref) and a [`ComponentAffect`](@ref) to a
 continuous callback which can be attached to a component model using
 [`add_callback!`](@ref) or [`set_callback!`](@ref).
+
+The `affect_neg!` is also a `ComponentAffect` but will be triggered on downcrossing.
+It defaults to the same `affect` as on upcrossing.
 
 The `kwargs` will be forwarded to the `VectorContinuousCallback` when the component based
 callbacks are collected for the whole network using `get_callbacks`.
 [`DiffEq.jl docs`](https://docs.sciml.ai/DiffEqDocs/stable/features/callback_functions/)
 for available options.
 """
-struct ContinuousComponentCallback{C,A,CDIM,CPDIM,ADIM,APDIM} <: ComponentCallback
+struct ContinuousComponentCallback{C,CDIM,CPDIM,A,ADIM,APDIM,An,AnDIM,AnPDIM} <: ComponentCallback
     condition::ComponentCondition{C,CDIM,CPDIM}
     affect::ComponentAffect{A,ADIM,APDIM}
+    affect_neg::Union{Nothing,ComponentAffect{An,AnDIM,AnPDIM}}
     kwargs::NamedTuple
 end
-function ContinuousComponentCallback(condition, affect; kwargs...)
-    if haskey(kwargs, :affect_neg!)
-        throw(ArgumentError("affect_neg! not supported yet. Please raise issue."))
+function ContinuousComponentCallback(condition, affect; affect_neg! = affect, kwargs...)
+    if affect_neg! == nothing
+        ContinuousComponentCallback{_get_type_parameters(condition,affect)...,Nothing,Nothing,Nothing}(condition, affect, nothing, NamedTuple(kwargs))
+    else
+        ContinuousComponentCallback(condition, affect, affect_neg!, NamedTuple(kwargs))
     end
-    ContinuousComponentCallback(condition, affect, NamedTuple(kwargs))
+end
+function _get_type_parameters(condition::ComponentCondition{C,CDIM,CPDIM}, affect::ComponentAffect{A,ADIM,APDIM}) where {C,CDIM,CPDIM,A,ADIM,APDIM}
+    C, CDIM, CPDIM, A, ADIM, APDIM
 end
 
 """
-    VectorContinuousComponentCallback(condition, affect, len; kwargs...)
+    VectorContinuousComponentCallback(condition, affect, len; affect_neg! = affect, kwargs...)
 
 Connect a [`ComponentCondition`](@ref) and a [`ComponentAffect`](@ref) to a
 continuous callback which can be attached to a component model using
@@ -142,22 +150,27 @@ for `conditions` which have `len` output dimensions.
 The `affect` will be triggered with the additional `event_idx` argument to know in which
 dimension the zerocrossing was detected.
 
+The `affect_neg!` is also a `ComponentAffect` but will be triggered on downcrossing.
+It defaults to the same `affect` as on upcrossing.
+
 The `kwargs` will be forwarded to the `VectorContinuousCallback` when the component based
 callbacks are collected for the whole network using [`get_callbacks(::Network)`](@ref).
 [`DiffEq.jl docs`](https://docs.sciml.ai/DiffEqDocs/stable/features/callback_functions/)
 for available options.
 """
-struct VectorContinuousComponentCallback{C,A,CDIM,CPDIM,ADIM,APDIM} <: ComponentCallback
+struct VectorContinuousComponentCallback{C,CDIM,CPDIM,A,ADIM,APDIM,An,AnDIM,AnPDIM} <: ComponentCallback
     condition::ComponentCondition{C,CDIM,CPDIM}
     affect::ComponentAffect{A,ADIM,APDIM}
+    affect_neg::Union{Nothing,ComponentAffect{An,AnDIM,AnPDIM}}
     len::Int
     kwargs::NamedTuple
 end
-function VectorContinuousComponentCallback(condition, affect, len; kwargs...)
-    if haskey(kwargs, :affect_neg!)
-        throw(ArgumentError("affect_neg! not supported yet. Please raise issue."))
+function VectorContinuousComponentCallback(condition, affect, len; affect_neg! = affect, kwargs...)
+    if affect_neg! == nothing
+        VectorContinuousComponentCallback{_get_type_parameters(condition,affect)...,Nothing,Nothing,Nothing}(condition, affect, nothing, len, NamedTuple(kwargs))
+    else
+        VectorContinuousComponentCallback(condition, affect, affect_neg!, len, NamedTuple(kwargs))
     end
-    VectorContinuousComponentCallback(condition, affect, len, NamedTuple(kwargs))
 end
 
 """
@@ -206,6 +219,14 @@ end
 function PresetTimeComponentCallback(ts, affect; kwargs...)
     PresetTimeComponentCallback(ts, affect, NamedTuple(kwargs))
 end
+
+# accessors
+getcondition(cb::DiscreteComponentCallback) = cb.condition
+getcondition(cb::ContinuousComponentCallback) = cb.condition
+getcondition(cb::VectorContinuousComponentCallback) = cb.condition
+getaffect(cb::ComponentCallback) = cb.affect
+getaffect_neg(cb::ContinuousComponentCallback) = cb.affect_neg
+getaffect_neg(cb::VectorContinuousComponentCallback) = cb.affect_neg
 
 """
     get_callbacks(nw::Network, additional_callbacks=Dict())::CallbackSet
@@ -332,20 +353,38 @@ abstract type CallbackWrapper end
 Base.length(cw::CallbackWrapper) = length(cw.callbacks)
 cbtype(cw::CallbackWrapper) = eltype(cw.callbacks)
 
-condition_dim(cw::CallbackWrapper)  = first(cw.callbacks).condition.sym  |> length
-condition_pdim(cw::CallbackWrapper) = first(cw.callbacks).condition.psym |> length
-affect_dim(cw::CallbackWrapper, i)  = cw.callbacks[i].affect.sym  |> length
-affect_pdim(cw::CallbackWrapper, i) = cw.callbacks[i].affect.psym |> length
+@inline condition_dim(cw::CallbackWrapper)  = first(cw.callbacks).condition.sym  |> length
+@inline condition_pdim(cw::CallbackWrapper) = first(cw.callbacks).condition.psym |> length
 
-condition_urange(cw::CallbackWrapper, i) = (1 + (i-1)*condition_dim(cw))  : i*condition_dim(cw)
-condition_prange(cw::CallbackWrapper, i) = (1 + (i-1)*condition_pdim(cw)) : i*condition_pdim(cw)
-affect_urange(cw::CallbackWrapper, i) = (1 + (i-1)*affect_dim(cw,i) ) : i*affect_dim(cw,i)
-affect_prange(cw::CallbackWrapper, i) = (1 + (i-1)*affect_pdim(cw,i)) : i*affect_pdim(cw,i)
+@inline affect_dim(cw::CallbackWrapper, aff_or_cond, i)  = aff_or_cond(cw.callbacks[i]).sym  |> length
+@inline affect_pdim(cw::CallbackWrapper, aff_or_cond, i) = aff_or_cond(cw.callbacks[i]).psym |> length
+@inline function affect_dim(cw::CallbackWrapper, _::typeof(getaffect_neg), i)
+    affect_neg = getaffect_neg(cw.callbacks[i])
+    isnothing(affect_neg) ? 0 : length(affect_neg.sym)
+end
+@inline function affect_pdim(cw::CallbackWrapper, _::typeof(getaffect_neg), i)
+    affect_neg = getaffect_neg(cw.callbacks[i])
+    isnothing(affect_neg) ? 0 : length(affect_neg.psym)
+end
 
-function collect_c_or_a_indices(cw::CallbackWrapper, c_or_a, u_or_p)
+@inline condition_urange(cw::CallbackWrapper, i) = (1 + (i-1)*condition_dim(cw))  : i*condition_dim(cw)
+@inline condition_prange(cw::CallbackWrapper, i) = (1 + (i-1)*condition_pdim(cw)) : i*condition_pdim(cw)
+@inline function affect_urange(cw::CallbackWrapper, aff_or_affneg, i)
+    offset = sum(j -> affect_dim(cw, aff_or_affneg, j), 1:(i-1), init=0) # collect dimension before
+    offset + 1 : offset + affect_dim(cw, aff_or_affneg, i)
+end
+@inline function affect_prange(cw::CallbackWrapper, aff_or_affneg, i)
+    offset = sum(j -> affect_pdim(cw, aff_or_affneg, j), 1:(i-1), init=0) # collect dimension before
+    offset + 1 : offset + affect_pdim(cw, aff_or_affneg, i)
+end
+
+function collect_c_or_a_indices(cw::CallbackWrapper, accessor, u_or_p)
     sidxs = SymbolicIndex[]
     for (component, cb) in zip(cw.components, cw.callbacks)
-        syms = getproperty(getproperty(cb, c_or_a), u_or_p)
+        if accessor == getaffect_neg && accessor(cb) === nothing
+            continue
+        end
+        syms = getproperty(accessor(cb), u_or_p)
         symidxtype = if component isa VIndex
             u_or_p == :sym ? VIndex : VPIndex
         else
@@ -389,13 +428,22 @@ subidx_from_outidx(ccw::ContinuousCallbackWrapper, outidx) = mod(outidx, 1:ccw.s
 function to_callback(ccw::ContinuousCallbackWrapper)
     kwargs = first(ccw.callbacks).kwargs
     cond = _batch_condition(ccw)
-    affect = _batch_affect(ccw)
+
     len = ccw.sublen * length(ccw.callbacks)
-    VectorContinuousCallback(cond, affect, len; kwargs...)
+    affect = _batch_affect(ccw, getaffect)
+    if all(cb -> getaffect(cb) === getaffect_neg(cb), ccw.callbacks)
+        # no need to consider neg affect differently
+        affect_neg! = affect
+    elseif all(cb -> isnothing(getaffect_neg(cb)), ccw.callbacks)
+        affect_neg! = nothing
+    else
+        affect_neg! = _batch_affect(ccw, getaffect_neg)
+    end
+    VectorContinuousCallback(cond, affect, len; affect_neg!, kwargs...)
 end
 function _batch_condition(ccw::ContinuousCallbackWrapper)
-    usymidxs = collect_c_or_a_indices(ccw, :condition, :sym)
-    psymidxs = collect_c_or_a_indices(ccw, :condition, :psym)
+    usymidxs = collect_c_or_a_indices(ccw, getcondition, :sym)
+    psymidxs = collect_c_or_a_indices(ccw, getcondition, :psym)
     ucache = DiffCache(zeros(length(usymidxs)), 12)
 
     obsf = SII.observed(ccw.nw, usymidxs)
@@ -434,9 +482,9 @@ function _batch_condition(ccw::ContinuousCallbackWrapper)
         nothing
     end
 end
-function _batch_affect(ccw::ContinuousCallbackWrapper)
-    usymidxs = collect_c_or_a_indices(ccw, :affect, :sym)
-    psymidxs = collect_c_or_a_indices(ccw, :affect, :psym)
+function _batch_affect(ccw::ContinuousCallbackWrapper, aff_or_affneg::F) where {F}
+    usymidxs = collect_c_or_a_indices(ccw, aff_or_affneg, :sym)
+    psymidxs = collect_c_or_a_indices(ccw, aff_or_affneg, :psym)
 
     uidxs = SII.variable_index.(Ref(ccw.nw), usymidxs)
     pidxs = SII.parameter_index.(Ref(ccw.nw), psymidxs)
@@ -462,23 +510,28 @@ function _batch_affect(ccw::ContinuousCallbackWrapper)
     (integrator, outidx) -> begin
         i = cbidx_from_outidx(ccw, outidx)
 
-        uidxsv = view(uidxs, affect_urange(ccw, i))
-        uv = view(integrator.u, uidxsv)
-        _u = SymbolicView(uv, ccw.callbacks[i].affect.sym)
+        # if affect is nothing just return
+        if aff_or_affneg === getaffect_neg && isnothing(getaffect_neg(ccw.callbacks[i]))
+            return
+        end
 
-        pidxsv = view(pidxs, affect_prange(ccw, i))
+        uidxsv = view(uidxs, affect_urange(ccw, aff_or_affneg, i))
+        uv = view(integrator.u, uidxsv)
+        _u = SymbolicView(uv, aff_or_affneg(ccw.callbacks[i]).sym)
+
+        pidxsv = view(pidxs, affect_prange(ccw, aff_or_affneg, i))
         pv = view(integrator.p, pidxsv)
-        _p = SymbolicView(pv, ccw.callbacks[i].affect.psym)
+        _p = SymbolicView(pv, aff_or_affneg(ccw.callbacks[i]).psym)
 
         ctx = get_ctx(integrator, ccw.components[i])
 
         uhash = hash(uv)
         phash = hash(pv)
         if cbtype(ccw) <: ContinuousComponentCallback
-            ccw.callbacks[i].affect.f(_u, _p, ctx)
+            aff_or_affneg(ccw.callbacks[i]).f(_u, _p, ctx)
         elseif cbtype(ccw) <: VectorContinuousComponentCallback
             num = subidx_from_outidx(ccw, outidx)
-            ccw.callbacks[i].affect.f(_u, _p, num, ctx)
+            aff_or_affneg(ccw.callbacks[i]).f(_u, _p, num, ctx)
         else
             error()
         end
@@ -522,8 +575,8 @@ function to_callback(dcw::DiscreteCallbackWrapper)
     DiscreteCallback(cond, affect; kwargs...)
 end
 function _batch_condition(dcw::DiscreteCallbackWrapper)
-    usymidxs = collect_c_or_a_indices(dcw, :condition, :sym)
-    psymidxs = collect_c_or_a_indices(dcw, :condition, :psym)
+    usymidxs = collect_c_or_a_indices(dcw, getcondition, :sym)
+    psymidxs = collect_c_or_a_indices(dcw, getcondition, :psym)
     ucache = DiffCache(zeros(length(usymidxs)), 12)
 
     obsf = SII.observed(dcw.nw, usymidxs)
@@ -560,15 +613,15 @@ function _batch_condition(dcw::DiscreteCallbackWrapper)
 end
 function _batch_affect(dcw::DiscreteCallbackWrapper)
     # Setup for condition re-evaluation
-    cusymidxs = collect_c_or_a_indices(dcw, :condition, :sym)
-    cpsymidxs = collect_c_or_a_indices(dcw, :condition, :psym)
+    cusymidxs = collect_c_or_a_indices(dcw, getcondition, :sym)
+    cpsymidxs = collect_c_or_a_indices(dcw, getcondition, :psym)
     cucache = DiffCache(zeros(length(cusymidxs)), 12)
     cobsf = SII.observed(dcw.nw, cusymidxs)
     cpidxs = SII.parameter_index.(Ref(dcw.nw), cpsymidxs)
 
     # Setup for affect execution
-    ausymidxs = collect_c_or_a_indices(dcw, :affect, :sym)
-    apsymidxs = collect_c_or_a_indices(dcw, :affect, :psym)
+    ausymidxs = collect_c_or_a_indices(dcw, getaffect, :sym)
+    apsymidxs = collect_c_or_a_indices(dcw, getaffect, :psym)
 
     auidxs = SII.variable_index.(Ref(dcw.nw), ausymidxs)
     apidxs = SII.parameter_index.(Ref(dcw.nw), apsymidxs)
@@ -613,19 +666,19 @@ function _batch_affect(dcw::DiscreteCallbackWrapper)
             # Only execute affect if condition is true
             if dcw.condition(c_u, c_p, integrator.t)
                 # Execute affect for component i
-                auidxsv = view(auidxs, affect_urange(dcw, i))
+                auidxsv = view(auidxs, affect_urange(dcw, getaffect, i))
                 auv = view(integrator.u, auidxsv)
-                a_u = SymbolicView(auv, dcw.callbacks[i].affect.sym)
+                a_u = SymbolicView(auv, getaffect(dcw.callbacks[i]).sym)
 
-                apidxsv = view(apidxs, affect_prange(dcw, i))
+                apidxsv = view(apidxs, affect_prange(dcw, getaffect, i))
                 apv = view(integrator.p, apidxsv)
-                a_p = SymbolicView(apv, dcw.callbacks[i].affect.psym)
+                a_p = SymbolicView(apv, getaffect(dcw.callbacks[i]).psym)
 
                 ctx = get_ctx(integrator, dcw.components[i])
 
                 uhash = hash(auv)
                 phash = hash(apv)
-                dcw.callbacks[i].affect.f(a_u, a_p, ctx)
+                getaffect(dcw.callbacks[i]).f(a_u, a_p, ctx)
                 pchanged = hash(apv) != phash
                 uchanged = hash(auv) != uhash
 
@@ -665,22 +718,22 @@ function to_callback(ptcw::PresetTimeCallbackWrapper)
     # Create affect function for the single component
     uidxtype = component isa EIndex ? EIndex : VIndex
     pidxtype = component isa EIndex ? EPIndex : VPIndex
-    usymidxs = uidxtype(component.compidx, callback.affect.sym)
-    psymidxs = pidxtype(component.compidx, callback.affect.psym)
+    usymidxs = uidxtype(component.compidx, getaffect(callback).sym)
+    psymidxs = pidxtype(component.compidx, getaffect(callback).psym)
 
     uidxs = SII.variable_index.(Ref(ptcw.nw), usymidxs)
     pidxs = SII.parameter_index.(Ref(ptcw.nw), psymidxs)
 
     affect = (integrator) -> begin
         uv = view(integrator.u, uidxs)
-        _u = SymbolicView(uv, callback.affect.sym)
+        _u = SymbolicView(uv, getaffect(callback).sym)
         pv = view(integrator.p, pidxs)
-        _p = SymbolicView(pv, callback.affect.psym)
+        _p = SymbolicView(pv, getaffect(callback).psym)
         ctx = get_ctx(integrator, component)
 
         uhash = hash(uv)
         phash = hash(pv)
-        callback.affect.f(_u, _p, ctx)
+        getaffect(callback).f(_u, _p, ctx)
         pchanged = hash(pv) != phash
         uchanged = hash(uv) != uhash
 
@@ -718,24 +771,41 @@ function assert_cb_compat(comp::ComponentModel, cb)
     ucond_cond = s -> s in all_obssym
     ucond_affect = s -> s in comp.sym
 
+    hints = String[]
     if !(cb isa PresetTimeComponentCallback)
         if !(all(ucond_cond, cb.condition.sym))
             invalid = filter(!ucond_cond, cb.condition.sym)
-            throw(ArgumentError("All u symbols in the callback condition must be observed or variable. Found invalid $invalid !⊆ $all_obssym."))
+            push!(hints, "All u symbols in the callback condition must be observed or variable. Found invalid $invalid !⊆ $all_obssym.")
         end
         if !(all(pcond, cb.condition.psym))
             invalid = filter(!pcond, cb.condition.psym)
-            throw(ArgumentError("All p symbols in the callback condition must be parameters. Found invalid $invalid !⊆ $(comp.psym)."))
+            push!(hints, "All p symbols in the callback condition must be parameters. Found invalid $invalid !⊆ $(comp.psym).")
         end
     end
-    if !(all(ucond_affect, cb.affect.sym))
-        invalid = filter(!ucond_affect, cb.affect.sym)
-        throw(ArgumentError("All u symbols in the callback affect must be variables (in contrast to condition, observables are not allowed here). Found invalid $invalid !⊆ $(comp.sym)."))
+    # check valid affect sym and psym
+    if !(all(ucond_affect, getaffect(cb).sym))
+        invalid = filter(!ucond_affect, getaffect(cb).sym)
+        push!(hints, "All u symbols in the callback affect must be variables (in contrast to condition, observables are not allowed here). Found invalid $invalid !⊆ $(comp.sym).")
     end
-    if !(all(pcond, cb.affect.psym))
-        invalid = filter(!pcond, cb.affect.psym)
-        throw(ArgumentError("All p symbols in the callback affect must be parameters. Found invalid $invalid !⊆ $(comp.psym)."))
+    if !(all(pcond, getaffect(cb).psym))
+        invalid = filter(!pcond, getaffect(cb).psym)
+        push!(hints, "All p symbols in the callback affect must be parameters. Found invalid $invalid !⊆ $(comp.psym).")
     end
+    if !(cb isa Union{DiscreteComponentCallback,PresetTimeComponentCallback}) && getaffect_neg(cb) != getaffect(cb) && !isnothing(getaffect_neg(cb))
+        if getaffect_neg(cb) != getaffect(cb) && !(all(ucond_affect, getaffect_neg(cb).sym))
+            invalid = filter(!ucond_affect, getaffect_neg(cb).sym)
+            push!(hints, "All u symbols in the callback affect_neg! must be variables (in contrast to condition, observables are not allowed here). Found invalid $invalid !⊆ $(comp.sym).")
+        end
+        if getaffect_neg(cb) != getaffect(cb) && !(all(pcond, getaffect_neg(cb).psym))
+            invalid = filter(!pcond, getaffect_neg(cb).psym)
+            push!(hints, "All p symbols in the callback affect_neg! must be parameters. Found invalid $invalid !⊆ $(comp.psym).")
+        end
+    end
+    if !isempty(hints)
+        pushfirst!(hints, "The callback is not compatible with the component model $(comp). Issues found:")
+        throw(ArgumentError(join(hints, "\n - ")))
+    end
+
     cb
 end
 
