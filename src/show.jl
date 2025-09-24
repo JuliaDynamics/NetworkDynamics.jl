@@ -453,6 +453,19 @@ function Base.show(io::IO, mime::MIME"text/plain", fp::FilteringProxy)
         end
     else
         printstyled(io, "\nNo indices matching filter!", bold=true)
+        if !isnothing(fp.compfilter) || !isnothing(fp.varfilter)
+            print(" Filtering for ")
+            fp.states && printstyled(io, "s ", color=:light_green)
+            fp.parameters && printstyled(io, "p ", color=:light_yellow)
+            fp.inputs && printstyled(io, "in ", color=:light_magenta)
+            fp.outputs && printstyled(io, "out ", color=:light_blue)
+            fp.observables && printstyled(io, "obs ", color=:light_cyan)
+            if !isnothing(fp.varfilter)
+                print(io, "\n - ", _explain_varfilter(fp.varfilter))
+            end
+            printstyled(io, " within", color=:light_black)
+            print(io, "\n - ", _explain_compfilter(fp.compfilter))
+        end
     end
 end
 _print_pattern_hl(io, s, pattern; kw...) = false
@@ -525,6 +538,60 @@ function _show_component_filter(io::IO, vs::Union{AbstractVector, Tuple})
     end
     print(io, post)
 end
+_explain_compfilter(x) = repr(x) # fallback
+function _explain_compfilter(cf::AbstractArray)
+    join(map(_explain_compfilter, cf), " or ")
+end
+function _explain_compfilter(cf::VIndex{<:Symbol})
+    "vertices named :$(cf.compidx)"
+end
+function _explain_compfilter(cf::EIndex{<:Symbol})
+    "edges named :$(cf.compidx)"
+end
+function _explain_compfilter(cf::VIndex{<:Integer})
+    "vertex #$(cf.compidx)"
+end
+function _explain_compfilter(cf::EIndex{<:Integer})
+    "edge #$(cf.compidx)"
+end
+function _explain_compfilter(cf::EIndex{<:Union{AbstractString,Regex}})
+    "edges with name containing $(repr(cf.compidx))"
+end
+function _explain_compfilter(cf::VIndex{<:Union{AbstractString,Regex}})
+    "vertices with name containing $(repr(cf.compidx))"
+end
+function _explain_compfilter(cf::VIndex{<:UnitRange})
+    "vertices $(first(cf.compidx))-$(last(cf.compidx))"
+end
+function _explain_compfilter(cf::EIndex{<:UnitRange})
+    "edges $(first(cf.compidx))-$(last(cf.compidx))"
+end
+function _explain_compfilter(cf::EIndex{<:Pair})
+    "edge $(cf.compidx.first) => $(cf.compidx.second)"
+end
+_explain_compfilter(cf::EIndex{Colon}) = "any edge"
+_explain_compfilter(cf::VIndex{Colon}) = "any vertex"
+function _explain_compfilter(cf::SymbolicIndex{<:Union{AbstractVector, Tuple}})
+    if length(cf.compidx) > 3
+        repr(cf)
+    else
+        join(map(x->_explain_compfilter(idxtype(cf)(x)), cf.compidx), " or ")
+    end
+end
+_explain_compfilter(cf::AllVertices) = "any vertex"
+_explain_compfilter(cf::AllEdges) = "any edge"
+_explain_compfilter(::Nothing) = "any components"
+
+_explain_varfilter(x) = repr(x) # fallback
+_explain_varfilter(::Nothing) = "any symbol" # fallback
+_explain_varfilter(x::AbstractArray) = join(map(_explain_varfilter, x), " or ")
+function _explain_varfilter(x::Symbol)
+    "symbols named :$x"
+end
+function _explain_varfilter(x::Union{Regex, AbstractString})
+    "symbols containing $(repr(x))"
+end
+
 
 
 function print_treelike(io, vec; prefix=" ", infix=" ", rowmax=typemax(Int))

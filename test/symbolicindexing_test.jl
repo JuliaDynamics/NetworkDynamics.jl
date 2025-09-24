@@ -226,6 +226,17 @@ end
         @test s.v[1, StateIdx(:)] == [4, 5]
         s.v[1, StateIdx(:)] = [7,8]
         @test s.v[1, StateIdx(:)] == [7, 8]
+
+        s.v(varfilter=r"foo")
+        FilteringProxy(s)(varfilter="foo")
+        NetworkDynamics._explain_compfilter(VIndex(1:2))
+        NetworkDynamics._explain_compfilter(VIndex(:concrete_name))
+        NetworkDynamics._explain_compfilter([VIndex(:concrete_name), EIndex(:)])
+        NetworkDynamics._explain_compfilter([VIndex(:concrete_name), EIndex(r"foo")])
+        NetworkDynamics._explain_compfilter(VIndex(["foo", r"bar"]))
+        s.v["foo"]
+        s.e[:](r"unmatched_regex")
+        s.v[["foo", 1:2, r"bar"]](["foo", :bar])
     end
 
     @testset "Test colon indexing" begin
