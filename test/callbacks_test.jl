@@ -131,6 +131,11 @@ end
     affect = ComponentAffect(empty_function, [:ω],[])
     cb3 = ContinuousComponentCallback(cond, affect; affect_neg! = nothing)
     show(stdout, MIME"text/plain"(), cb3)
+
+    # test delete
+    @test delete_callbacks!(v)
+    @test !has_callback(v)
+    @test !delete_callbacks!(v)
 end
 
 @testset "vector callbacks" begin
