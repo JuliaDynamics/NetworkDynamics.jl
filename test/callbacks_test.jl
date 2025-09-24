@@ -257,8 +257,7 @@ end
     @test_throws ArgumentError set_callback!(nw.im.edgem[1], cb)
 end
 
-# @testset "check callbacks with different affneg" begin
-begin
+@testset "check callbacks with different affneg" begin
     f = (du, u, in, p, t) -> begin
         du[1] = -sin(t)
         du[2] = cos(t)

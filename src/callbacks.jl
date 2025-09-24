@@ -123,21 +123,18 @@ callbacks are collected for the whole network using `get_callbacks`.
 [`DiffEq.jl docs`](https://docs.sciml.ai/DiffEqDocs/stable/features/callback_functions/)
 for available options.
 """
-struct ContinuousComponentCallback{C,CDIM,CPDIM,A,ADIM,APDIM,An,AnDIM,AnPDIM} <: ComponentCallback
-    condition::ComponentCondition{C,CDIM,CPDIM}
-    affect::ComponentAffect{A,ADIM,APDIM}
-    affect_neg::Union{Nothing,ComponentAffect{An,AnDIM,AnPDIM}}
+struct ContinuousComponentCallback{
+    C  <: ComponentCondition,
+    A  <: ComponentAffect,
+    An <: Union{ComponentAffect,Nothing}
+} <: ComponentCallback
+    condition::C
+    affect::A
+    affect_neg::An
     kwargs::NamedTuple
 end
 function ContinuousComponentCallback(condition, affect; affect_neg! = affect, kwargs...)
-    if affect_neg! == nothing
-        ContinuousComponentCallback{_get_type_parameters(condition,affect)...,Nothing,Nothing,Nothing}(condition, affect, nothing, NamedTuple(kwargs))
-    else
-        ContinuousComponentCallback(condition, affect, affect_neg!, NamedTuple(kwargs))
-    end
-end
-function _get_type_parameters(condition::ComponentCondition{C,CDIM,CPDIM}, affect::ComponentAffect{A,ADIM,APDIM}) where {C,CDIM,CPDIM,A,ADIM,APDIM}
-    C, CDIM, CPDIM, A, ADIM, APDIM
+    ContinuousComponentCallback(condition, affect, affect_neg!, NamedTuple(kwargs))
 end
 
 """
@@ -158,19 +155,19 @@ callbacks are collected for the whole network using [`get_callbacks(::Network)`]
 [`DiffEq.jl docs`](https://docs.sciml.ai/DiffEqDocs/stable/features/callback_functions/)
 for available options.
 """
-struct VectorContinuousComponentCallback{C,CDIM,CPDIM,A,ADIM,APDIM,An,AnDIM,AnPDIM} <: ComponentCallback
-    condition::ComponentCondition{C,CDIM,CPDIM}
-    affect::ComponentAffect{A,ADIM,APDIM}
-    affect_neg::Union{Nothing,ComponentAffect{An,AnDIM,AnPDIM}}
+struct VectorContinuousComponentCallback{
+    C  <: ComponentCondition,
+    A  <: ComponentAffect,
+    An <: Union{ComponentAffect,Nothing}
+} <: ComponentCallback
+    condition::C
+    affect::A
+    affect_neg::An
     len::Int
     kwargs::NamedTuple
 end
 function VectorContinuousComponentCallback(condition, affect, len; affect_neg! = affect, kwargs...)
-    if affect_neg! == nothing
-        VectorContinuousComponentCallback{_get_type_parameters(condition,affect)...,Nothing,Nothing,Nothing}(condition, affect, nothing, len, NamedTuple(kwargs))
-    else
-        VectorContinuousComponentCallback(condition, affect, affect_neg!, len, NamedTuple(kwargs))
-    end
+    VectorContinuousComponentCallback(condition, affect, affect_neg!, len, NamedTuple(kwargs))
 end
 
 """
