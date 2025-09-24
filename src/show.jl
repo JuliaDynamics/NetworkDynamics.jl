@@ -6,6 +6,7 @@ function Base.show(io::IO, @nospecialize(nw::Network))
 end
 
 function Base.show(io::IO, ::MIME"text/plain", @nospecialize(nw::Network))
+    aliased_changed(nw, warn=true)
     compact = get(io, :compact, false)::Bool
     if compact
         print(io, "Network ($(nv(nw.im.g)) vertices, $(ne(nw.im.g)) edges)")
