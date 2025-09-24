@@ -208,14 +208,21 @@ function PresetTimeComponentCallback(ts, affect; kwargs...)
 end
 
 """
-    get_callbacks(nw::Network)::CallbackSet
+    get_callbacks(nw::Network, additional_callbacks=Dict())::CallbackSet
 
 Returns a `CallbackSet` composed of all the "component-based" callbacks in the metadata of the
 Network components.
+
+You can inject additional callbacks at that stage by passing
+
+    get_callbacks(nw, VIndex(7) => cb)
+    get_callbacks(nw, Dict(VIndex(1)=>cb1, EIndex(2)=>cb2))
+
+which won't be stored in the metadata of the component.
 """
-function get_callbacks(nw::Network)
+function get_callbacks(nw::Network, additional_callbacks=Dict())
     aliased_changed(nw; warn=true)
-    cbbs = wrap_component_callbacks(nw)
+    cbbs = wrap_component_callbacks(nw, additional_callbacks)
     if isempty(cbbs)
         return nothing
     elseif length(cbbs) == 1
@@ -242,9 +249,14 @@ end
 ####
 #### identifying callbacks which can be combined into batches
 ####
-function wrap_component_callbacks(nw)
+wrap_component_callbacks(nw, additional_cb::Pair) = wrap_component_callbacks(nw, Dict(additional_cb))
+function wrap_component_callbacks(nw, additional_callbacks=Dict())
     components = SymbolicIndex[]
     callbacks = ComponentCallback[]
+    for (comp, cb) in additional_callbacks
+        push!(components, comp)
+        push!(callbacks, cb)
+    end
     for (i, v) in pairs(nw.im.vertexm)
         has_callback(v) || continue
         for cb in get_callbacks(v)
