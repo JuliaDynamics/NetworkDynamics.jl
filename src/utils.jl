@@ -249,3 +249,122 @@ $implicit_output_docstring
 For more information see the NetworkDynamics docs on [fully implicit outputs](@ref Fully-Implicit-Outputs).
 """
 implicit_output(x) = 0
+
+
+"""
+    NetworkDynamics.pretty_f(v::VertexModel)
+
+For debugging vertex models based off MTK, this function pretty prints the
+underlying generated function `f(du, u, in, p, t)` in a more readable way.
+"""
+function pretty_f(v)
+    contains(repr(typeof(v.f)), "RuntimeGeneratedFunction") || throw(ArgumentError("pretty_mtk_function only works for MTK based functions"))
+    rgf = v.f
+
+    renamings = Dict(
+        :ˍ₋out => :du,
+        :ˍ₋arg1 => :u,
+        :ˍ₋arg2 => :in,
+        :ˍ₋arg3 => :p,
+        :ˍ₋arg4 => :t,
+    )
+
+    body = Base.remove_linenums!(rgf.body)
+    # some line number nodes are still there, lets remove them
+    body = postwalk(x -> x isa LineNumberNode ? nothing : x, body)
+
+    allinbound = body.head == :macrocall && body.args[1] == Symbol("@inbounds")
+
+    inboundpass = if allinbound
+        postwalk(body) do x
+            if @capture(x, @inbounds xs_)
+                xs
+            else
+                x
+            end
+        end
+    else
+        body
+    end
+
+    # expand infix symbols
+    infix = [+, *, ^, /, <, >, ≤, ≥]
+    expand_infix = postwalk(inboundpass) do x
+        if x ∈ infix
+            Symbol(x)
+        else
+            x
+        end
+    end
+
+    regex = r"^(.*)\(t\)$"
+    diffregex = r"^Differential\(t\)\((.*)\(t\)\)$"
+    renamed = postwalk(expand_infix) do x
+        if x isa Symbol && haskey(renamings, x)
+            renamings[x]
+        elseif x isa Symbol && contains(string(x), regex)
+            m = match(regex, string(x))
+            Symbol(m.captures[1])
+        elseif x isa Symbol && contains(string(x), diffregex)
+            m = match(diffregex, string(x))
+            Symbol("∂ₜ" * m.captures[1])
+        else
+            x
+        end
+    end
+
+    improve_juxtaposition = postwalk(renamed) do x
+        if @capture(x, -1a_)
+            :(- $a)
+        else
+            x
+        end
+    end
+
+    # now we want to expand our p names
+    # p1, p2, ... = p
+    uassigment = Expr(:(=), Expr(:tuple, sym(v)...), :u)
+    inassigment = Expr(:(=), Expr(:tuple, insym(v)...), :in)
+    passigment = Expr(:(=), Expr(:tuple, psym(v)...), :p)
+    pushfirst!(improve_juxtaposition.args, uassigment)
+    pushfirst!(improve_juxtaposition.args, inassigment)
+    pushfirst!(improve_juxtaposition.args, passigment)
+    resolved_uip = postwalk(improve_juxtaposition) do x
+        if @capture(x, p[i_])
+            psym(v)[i]
+        elseif @capture(x, in[i_])
+            insym(v)[i]
+        elseif @capture(x, u[i_])
+            sym(v)[i]
+        else
+            x
+        end
+    end
+
+    functionex = quote
+        function $(Symbol("vmodel_"*string(v.name)))(du, u, in, p, t)
+            $(resolved_uip)
+        end
+    end
+    Base.remove_linenums!(functionex)
+
+    #no lets get rid of empty blocsk
+    noblocks = postwalk(functionex) do x
+        if x isa Expr && x.head == :block && length(x.args) == 1
+            x.args[1]
+        else
+            x
+        end
+    end
+
+    pretty = sprint(show, MIME"text/plain"(), noblocks)
+    noquote = replace(pretty, r"^:\(" => "")
+    noend = replace(noquote, r"\)$" => "")
+    noindent = replace(noend, r"^  "m => "")
+
+    if allinbound
+        noindent = "@inbounds " * noindent
+    end
+
+    print(noindent)
+end

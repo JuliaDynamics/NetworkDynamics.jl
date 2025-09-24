@@ -253,6 +253,7 @@ ff_to_constraint
 Base.copy(::NetworkDynamics.ComponentModel)
 extract_nw
 implicit_output
+NetworkDynamics.pretty_f
 ```
 
 ## NetworkDynamicsInspector API

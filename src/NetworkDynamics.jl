@@ -23,6 +23,7 @@ using Random: Random
 using Static: Static, StaticInt
 using SciMLBase: VectorContinuousCallback, CallbackSet, DiscreteCallback
 using DiffEqCallbacks: DiffEqCallbacks
+using MacroTools: postwalk, @capture
 
 @static if VERSION ≥ v"1.11.0-0"
     using Base: AnnotatedIOBuffer, AnnotatedString
@@ -79,7 +80,6 @@ export DiscreteComponentCallback, PresetTimeComponentCallback
 export SymbolicView
 include("callbacks.jl")
 
-using MacroTools: postwalk
 export @initconstraint, InitConstraint
 export @initformula, InitFormula
 include("init_constraints.jl")
