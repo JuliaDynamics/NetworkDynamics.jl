@@ -1,14 +1,12 @@
 # NetworkDynamics Release Notes
 
-## v0.10.10 Changelog
+## v0.10.9 Changelog
 - [#317](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/317) Enhanced callback system with negative affect support and runtime callback injection:
   - Add `affect_neg!` parameter to `ContinuousComponentCallback` and `VectorContinuousComponentCallback` for handling downcrossing events
   - Add ability to inject additional callbacks at runtime via `get_callbacks(nw, additional_callbacks)` without storing them in component metadata
   - Add `NetworkDynamics.pretty_f()` debugging utility for pretty-printing MTK-generated functions
   - Improve MTK integration warnings for nested event systems
   - Better initialization error messages with specific variable information when NaN values are detected
-
-## v0.10.9 Changelog
 - [#314](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/314) Consolidate deprecated functionality: all deprecated functionality moved to dedicated `src/deprecated.jl` file for easier maintenance
 
 ## v0.10.8 Changelog
