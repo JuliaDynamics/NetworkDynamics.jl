@@ -65,7 +65,11 @@ function find_fixpoint(nw::Network, x0::AbstractVector, p::AbstractVector;
         # something bad happened
         io = IOBuffer()
         if isnothing(fn_error)
-            print(io, "Evaluation of network rhs at t=$t resulted in NaNs! Probable causes:")
+            nans = findall(isnan, du)
+            syms = SII.variable_symbols(nw)[nans]
+            println(io, "Evaluation of network rhs at t=$t resulted in NaNs.)")
+            println(io, "  NaN-Results:  ", join(syms, ", "))
+            print(io,"Probable causes:")
         else
             print(io, "Evaluation of network rhs at t=$t led to an error! Probable causes:")
         end

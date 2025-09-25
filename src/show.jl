@@ -6,6 +6,7 @@ function Base.show(io::IO, @nospecialize(nw::Network))
 end
 
 function Base.show(io::IO, ::MIME"text/plain", @nospecialize(nw::Network))
+    aliased_changed(nw, warn=true)
     compact = get(io, :compact, false)::Bool
     if compact
         print(io, "Network ($(nv(nw.im.g)) vertices, $(ne(nw.im.g)) edges)")
@@ -452,6 +453,19 @@ function Base.show(io::IO, mime::MIME"text/plain", fp::FilteringProxy)
         end
     else
         printstyled(io, "\nNo indices matching filter!", bold=true)
+        if !isnothing(fp.compfilter) || !isnothing(fp.varfilter)
+            print(" Filtering for ")
+            fp.states && printstyled(io, "s ", color=:light_green)
+            fp.parameters && printstyled(io, "p ", color=:light_yellow)
+            fp.inputs && printstyled(io, "in ", color=:light_magenta)
+            fp.outputs && printstyled(io, "out ", color=:light_blue)
+            fp.observables && printstyled(io, "obs ", color=:light_cyan)
+            if !isnothing(fp.varfilter)
+                print(io, "\n - ", _explain_varfilter(fp.varfilter))
+            end
+            printstyled(io, " within", color=:light_black)
+            print(io, "\n - ", _explain_compfilter(fp.compfilter))
+        end
     end
 end
 _print_pattern_hl(io, s, pattern; kw...) = false
@@ -524,6 +538,60 @@ function _show_component_filter(io::IO, vs::Union{AbstractVector, Tuple})
     end
     print(io, post)
 end
+_explain_compfilter(x) = repr(x) # fallback
+function _explain_compfilter(cf::AbstractArray)
+    join(map(_explain_compfilter, cf), " or ")
+end
+function _explain_compfilter(cf::VIndex{<:Symbol})
+    "vertices named :$(cf.compidx)"
+end
+function _explain_compfilter(cf::EIndex{<:Symbol})
+    "edges named :$(cf.compidx)"
+end
+function _explain_compfilter(cf::VIndex{<:Integer})
+    "vertex #$(cf.compidx)"
+end
+function _explain_compfilter(cf::EIndex{<:Integer})
+    "edge #$(cf.compidx)"
+end
+function _explain_compfilter(cf::EIndex{<:Union{AbstractString,Regex}})
+    "edges with name containing $(repr(cf.compidx))"
+end
+function _explain_compfilter(cf::VIndex{<:Union{AbstractString,Regex}})
+    "vertices with name containing $(repr(cf.compidx))"
+end
+function _explain_compfilter(cf::VIndex{<:UnitRange})
+    "vertices $(first(cf.compidx))-$(last(cf.compidx))"
+end
+function _explain_compfilter(cf::EIndex{<:UnitRange})
+    "edges $(first(cf.compidx))-$(last(cf.compidx))"
+end
+function _explain_compfilter(cf::EIndex{<:Pair})
+    "edge $(cf.compidx.first) => $(cf.compidx.second)"
+end
+_explain_compfilter(cf::EIndex{Colon}) = "any edge"
+_explain_compfilter(cf::VIndex{Colon}) = "any vertex"
+function _explain_compfilter(cf::SymbolicIndex{<:Union{AbstractVector, Tuple}})
+    if length(cf.compidx) > 3
+        repr(cf)
+    else
+        join(map(x->_explain_compfilter(idxtype(cf)(x)), cf.compidx), " or ")
+    end
+end
+_explain_compfilter(cf::AllVertices) = "any vertex"
+_explain_compfilter(cf::AllEdges) = "any edge"
+_explain_compfilter(::Nothing) = "any components"
+
+_explain_varfilter(x) = repr(x) # fallback
+_explain_varfilter(::Nothing) = "any symbol" # fallback
+_explain_varfilter(x::AbstractArray) = join(map(_explain_varfilter, x), " or ")
+function _explain_varfilter(x::Symbol)
+    "symbols named :$x"
+end
+function _explain_varfilter(x::Union{Regex, AbstractString})
+    "symbols containing $(repr(x))"
+end
+
 
 
 function print_treelike(io, vec; prefix=" ", infix=" ", rowmax=typemax(Int))
@@ -663,11 +731,18 @@ function _print_condsyms(io, @nospecialize(cb::ComponentCallback))
 end
 function _print_affectsyms(io, @nospecialize(cb::ComponentCallback))
     print(io, "(")
-    _print_syms(io, cb.affect.sym, true)
-    _print_syms(io, cb.affect.psym, isempty(cb.affect.sym))
+    if cb isa Union{PresetTimeComponentCallback, DiscreteComponentCallback} || getaffect_neg(cb) === nothing || getaffect_neg(cb) == getaffect(cb)
+        syms = getaffect(cb).sym
+        psyms = getaffect(cb).psym
+    else
+        syms = vcat(collect(getaffect(cb).sym), collect(getaffect_neg(cb).sym)) |> unique!
+        psyms = vcat(collect(getaffect(cb).psym), collect(getaffect_neg(cb).psym)) |> unique!
+    end
+    _print_syms(io, syms, true)
+    _print_syms(io, psyms, isempty(cb.affect.sym))
     print(io, ")")
 end
-function _print_syms(io, syms::Tuple, isfirst)
+function _print_syms(io, syms, isfirst)
     for s in syms
         if !isfirst
             print(io, ", ")

@@ -23,6 +23,7 @@ using Random: Random
 using Static: Static, StaticInt
 using SciMLBase: VectorContinuousCallback, CallbackSet, DiscreteCallback
 using DiffEqCallbacks: DiffEqCallbacks
+using MacroTools: postwalk, @capture
 
 @static if VERSION ≥ v"1.11.0-0"
     using Base: AnnotatedIOBuffer, AnnotatedString
@@ -79,7 +80,6 @@ export DiscreteComponentCallback, PresetTimeComponentCallback
 export SymbolicView
 include("callbacks.jl")
 
-using MacroTools: postwalk
 export @initconstraint, InitConstraint
 export @initformula, InitFormula
 include("init_constraints.jl")
@@ -100,7 +100,7 @@ export has_init, get_init, set_init!, delete_init!, strip_inits!
 export has_bounds, get_bounds, set_bounds!, delete_bounds!, strip_bounds!
 export has_graphelement, get_graphelement, set_graphelement!
 export get_initial_state, dump_initial_state, dump_state
-export has_callback, get_callbacks, set_callback!, add_callback!
+export has_callback, get_callbacks, set_callback!, add_callback!, delete_callbacks!
 export has_initconstraint, get_initconstraints, set_initconstraint!, add_initconstraint!, delete_initconstraints!
 export has_initformula, get_initformulas, set_initformula!, add_initformula!, delete_initformulas!
 export has_position, get_position, set_position!

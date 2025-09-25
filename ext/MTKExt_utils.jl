@@ -149,15 +149,27 @@ function generate_massmatrix(eqs::AbstractVector{Equation})
 end
 
 function warn_missing_features(sys)
-    cev = ModelingToolkit.get_continuous_events(sys)
-    dev = ModelingToolkit.get_discrete_events(sys)
+    cev = _collect_continuous_events(sys)
+    dev = _collect_discrete_events(sys)
     if !isempty(cev) || !isempty(dev)
-        @warn "Model has attached events, which is not supported."
+        @warn "MTK-Model $(sys.name) contains events. They will be ignored by NetworkDynamics.jl. Use ComponentCallbacks on a component level for that!"
     end
 
     if !isempty(ModelingToolkit.initialization_equations(sys))
         @warn "Model has explicit init equation. Those are currently ignored by NetworkDynamics.jl."
     end
+end
+function _collect_continuous_events(sys)
+    vcat(
+        ModelingToolkit.get_continuous_events(sys),
+        [_collect_continuous_events(sys) for sys in ModelingToolkit.get_systems(sys)]...
+    )
+end
+function _collect_discrete_events(sys)
+    vcat(
+        ModelingToolkit.get_discrete_events(sys),
+        [_collect_discrete_events(sys) for sys in ModelingToolkit.get_systems(sys)]...
+    )
 end
 
 function check_metadata(exprs)

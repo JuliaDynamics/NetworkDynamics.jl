@@ -595,6 +595,20 @@ end
 add_callback!(nw::Network, idx::VCIndex, cb; kw...) = add_callback!(getcomp(nw, idx), cb; kw...)
 add_callback!(nw::Network, idx::ECIndex, cb; kw...) = add_callback!(getcomp(nw, idx), cb; kw...)
 
+"""
+    delete_callbacks!(c::ComponentModel)
+    delete_callbacks!(nw::Network, idx::Union{VIndex,EIndex})
+
+Removes all callback functions from the component model,
+or from a component referenced by `idx` in a network.
+Returns `true` if callbacks existed and were removed, `false` otherwise.
+
+See also: [`set_callback!`](@ref), [`add_callback!`](@ref).
+"""
+delete_callbacks!(c::ComponentModel) = delete_metadata!(c, :callback)
+delete_callbacks!(nw::Network, idx::VCIndex) = delete_callbacks!(getcomp(nw, idx))
+delete_callbacks!(nw::Network, idx::ECIndex) = delete_callbacks!(getcomp(nw, idx))
+
 ####
 #### Init constraints
 ####
