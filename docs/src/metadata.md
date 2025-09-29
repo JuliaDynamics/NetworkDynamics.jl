@@ -1,10 +1,13 @@
 # Metadata
-Component models such as [`VertexModel`](@ref) and [`EdgeModel`](@ref) can store metadata. We distinguish between two kinds of metadata: component metadata and symbol metadata.
+Component models such as [`VertexModel`](@ref) and [`EdgeModel`](@ref) can store metadata. We distinguish between two 
+kinds of metadata: component metadata and symbol metadata.
 
 ## Component Metadata
-Component metadata is a `Dict{Symbol,Any}` attached to each component to store various information. Use [`metadata`](@ref) to retrieve the full dict.
+Component metadata is a `Dict{Symbol,Any}` attached to each component to store various information. Use 
+[`metadata`](@ref) to retrieve the full dict.
 
-To access the data, you can use the methods `has_metadata`, `get_metadata`, `set_metadata!` and `delete_metadata!` (see [Component Metadata API](@ref)).
+To access the data, you can use the methods `has_metadata`, `get_metadata`, `set_metadata!` and `delete_metadata!` 
+(see [Component Metadata API](@ref)).
 
 Special metadata:
 
