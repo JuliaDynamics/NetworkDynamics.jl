@@ -219,7 +219,6 @@ has_callback
 get_callbacks(::NetworkDynamics.ComponentModel)
 set_callback!
 add_callback!
-delete_callbacks!
 ```
 
 ## Sparsity Detection
@@ -254,7 +253,6 @@ ff_to_constraint
 Base.copy(::NetworkDynamics.ComponentModel)
 extract_nw
 implicit_output
-NetworkDynamics.pretty_f
 ```
 
 ## NetworkDynamicsInspector API
