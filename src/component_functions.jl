@@ -283,7 +283,7 @@ Main Arguments:
 - `outsym`/`outdim`:
    Symbolic names of the outputs. If `outdim` is provided, `outsym` is set automaticially.
    Can be infered automaticially if `g` isa `StateMask`.
-- psym`/`pdim=0`: Symbolic names of the parameters. If `pdim` is provided, `psym` is set automaticially.
+- `psym`/`pdim=0`: Symbolic names of the parameters. If `pdim` is provided, `psym` is set automaticially.
 - `mass_matrix=I`: Mass matrix of component. Can be a vector `v` and is then interpreted as `Diagonal(v)`.
 - `name=dim>0 ? :VertexM : :StaticVertexM`: Name of the component.
 
@@ -340,7 +340,7 @@ Main Arguments:
    In general, outsym for edges isa named tuple `(; src, dst)`. However, depending on the `g` function,
    it might be enough to provide a single vector or even nothing (e.g. `AntiSymmetric(StateMask(1:2))`).
    See [Building `EdgeModel`s](@ref) for examples.
-- psym`/`pdim=0`: Symbolic names of the parameters. If `pdim` is provided, `psym` is set automaticially.
+- `psym`/`pdim=0`: Symbolic names of the parameters. If `pdim` is provided, `psym` is set automaticially.
 - `mass_matrix=I`: Mass matrix of component. Can be a vector `v` and is then interpreted as `Diagonal(v)`.
 - `name=dim>0 ? :EdgeM : :StaticEdgeM`: Name of the component.
 
@@ -614,10 +614,18 @@ end
 
 Base.@nospecializeinfer function _reconstruct_comp(::Type{T}, cf::ComponentModel, @nospecialize(kwargs)) where {T}
     fields = fieldnames(T)
+    # fields to copy
+    cfields = (:metadata, :symmetadata)
+    # normal fields
+    nfields = setdiff(fields, cfields)
     dict = Dict{Symbol, Any}()
-    for f in fields
+    for f in nfields
         dict[f] = getproperty(cf, f)
     end
+    for f in cfields
+        dict[f] = deepcopy(getproperty(cf, f))
+    end
+
     # if there is no change in symbols and it had a clash before, keep the setting
     if !haskey(kwargs, :allow_output_sym_clash) && !haskey(kwargs, :sym) && !haskey(kwargs, :outsym)
         if any(s -> s ∈ sym(cf), outsym_flat(cf))

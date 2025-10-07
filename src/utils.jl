@@ -219,7 +219,10 @@ function _sym_to_int(x::SymbolicView, idx::Int)
     x.allow_int_indexing || throw(IllegalIntIndexingError())
     idx
 end
-_sym_to_int(x::SymbolicView, idx) = _sym_to_int.(Ref(x), idx)
+_sym_to_int(x::SymbolicView, idx::Union{Tuple,AbstractVector}) = _sym_to_int.(Ref(x), idx)
+function _sym_to_int(x::SymbolicView, idx)
+    throw(ArgumentError("Invalid index $idx for SymbolicView($(x.syms))"))
+end
 
 # temp variable to splice docstring into ArgumentError in MTK Ext
 const implicit_output_docstring = """

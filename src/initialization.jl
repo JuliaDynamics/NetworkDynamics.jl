@@ -177,14 +177,6 @@ function initialization_problem(cf::T,
                    psym(cf)[pfree_m])
 
     @assert length(freesym) == Nfree
-    if Neqs < Nfree
-        throw(
-            ComponentInitError("Initialization problem underconstraint. \
-                $(Neqs) Equations for $(Nfree) free variables: $freesym. Consider \
-                passing additional constraints using `InitConstraint`.")
-        )
-
-    end
 
     # which parts of the nonlinear u (unl) correspond to which free parameters
     nextrange = let lasti = 0
@@ -327,8 +319,11 @@ function initialization_problem(cf::T,
 
     if Neqs == Nfree
         verbose && @info "Initialization problem is fully constrained. Created NonlinearLeastSquaresProblem for $freesym"
-    else
+    elseif Neqs > Nfree
         verbose && @info "Initialization problem is overconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for $freesym."
+    else
+        # verbose && @info "Initialization problem is underconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for $freesym."
+        @warn "Initialization problem is underconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for $freesym."
     end
 
     # check rhs of system for obvious problems
@@ -666,14 +661,16 @@ function isinitialized(cf::ComponentModel)
 end
 
 """
-    init_residual(cf::ComponentModel, [state=get_defaults_or_inits_dict(cf)]; t=NaN)
+    init_residual(cf::ComponentModel, [state=get_defaults_or_inits_dict(cf)]; t=NaN, verbose=false)
 
 Calculates the residual |du| for the given component model using the values provided.
 If no state dictionary is provided, it uses the values from default/init [Metadata](@ref).
 
+If `verbose=true` prints the residual of every single state.
+
 See also [`initialize_component`](@ref).
 """
-function init_residual(cf::ComponentModel, state=get_defaults_or_inits_dict(cf); t=NaN)
+function init_residual(cf::ComponentModel, state=get_defaults_or_inits_dict(cf); t=NaN, verbose=false)
     # Check that all necessary symbols are present in the state dictionary
     needed_symbols = Set(vcat(
         sym(cf),                                # states
@@ -722,6 +719,20 @@ function init_residual(cf::ComponentModel, state=get_defaults_or_inits_dict(cf);
     res_out .= RecursiveArrayTools.ArrayPartition(out_calc...) .- RecursiveArrayTools.ArrayPartition(outs...) # compare to calculated ouputs
 
     additional_cf(res_add, outs, u, ins, p, t) # apply additional constraints
+
+    if verbose
+        _sym = sym(cf)
+        _osym = outsym(cf)
+        _addsym = ["init constraint $i" for i in 1:additional_Neqs]
+        lines = String[]
+        for (i, s) in enumerate(vcat(_sym, _osym, _addsym))
+            push!(lines, "  $s &=> $(res[i])")
+        end
+        aligned = align_strings(lines)
+        for l in aligned
+            println(l)
+        end
+    end
 
     res =  LinearAlgebra.norm(res)
     if isnan(res)

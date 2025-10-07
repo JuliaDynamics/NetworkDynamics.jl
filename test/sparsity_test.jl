@@ -5,6 +5,7 @@ using Graphs
 using OrdinaryDiffEqRosenbrock
 using ModelingToolkit
 using ModelingToolkit: D_nounits as Dt, t_nounits as t
+using InteractiveUtils: subtypes
 SE = Base.get_extension(NetworkDynamics, :NetworkDynamicsSparsityExt)
 
 (isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
@@ -47,6 +48,42 @@ SE = Base.get_extension(NetworkDynamics, :NetworkDynamicsSparsityExt)
     # prob_jac = ODEProblem(_nw, x0, (0.0, 1.0), p0)
     # @b solve($prob, $Rodas5P())
     # @b solve($prob_jac, $Rodas5P())
+
+    @testset "test retrieval of jac prototype under different execution schemes" begin
+        # KAAggregator is known to be broken
+        _nw = Network(nw, aggregator=KAAggregator(+))
+        @test_broken get_jac_prototype(_nw; make_compatible=false)
+
+        styles = [KAExecution{true}(),
+                  KAExecution{false}(),
+                  SequentialExecution{true}(),
+                  SequentialExecution{false}(),
+                  PolyesterExecution{true}(),
+                  PolyesterExecution{false}(),
+                  ThreadedExecution{true}(),
+                  ThreadedExecution{false}()]
+        unmatchedstyles = filter(subtypes(NetworkDynamics.ExecutionStyle)) do abstractstyle
+            !any(s -> s isa abstractstyle, styles)
+        end
+        @assert isempty(unmatchedstyles) "Some ExecutionStyle won't be tested: $unmatchedstyles"
+        aggregators = [NetworkDynamics.NaiveAggregator,
+                       KAAggregator,
+                       SequentialAggregator,
+                       PolyesterAggregator,
+                       ThreadedAggregator,
+                       SparseAggregator]
+        unmatchedaggregators = filter(subtypes(NetworkDynamics.Aggregator)) do abstractaggregator
+            !any(s -> s <: abstractaggregator, aggregators)
+        end
+        @assert isempty(unmatchedaggregators) "Some AggrgationStyle won't be tested: $unmatchedaggregators"
+
+        exsaggs = [(ex, agg) for ex in styles for agg in aggregators]
+        for (execution, aggregator) in exsaggs
+            _nw = Network(nw; execution, aggregator=aggregator(+))
+            j = get_jac_prototype(_nw)
+            @test j == j1
+        end
+    end
 end
 
 @testset "test of remove conditional" begin
