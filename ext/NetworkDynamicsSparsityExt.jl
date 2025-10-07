@@ -4,7 +4,7 @@ using SparseConnectivityTracer: TracerSparsityDetector, jacobian_sparsity
 using NetworkDynamics: NetworkDynamics, Network, NWState, uflat, pflat, resolvecompidx, ComponentModel,
                        EIndex, VIndex, EdgeModel, VertexModel, dim, pdim,
                        StateMask, Symmetric, AntiSymmetric, Directed, Fiducial,
-                       executionstyle, SequentialExecution, SequentialAggregator, Aggregator, KAAggregator
+                       executionstyle, SequentialAggregator, Aggregator, KAAggregator
 using MacroTools: @capture, postwalk
 using RuntimeGeneratedFunctions: RuntimeGeneratedFunctions, RuntimeGeneratedFunction, @RuntimeGeneratedFunction
 using SparseArrays: sparse, findnz

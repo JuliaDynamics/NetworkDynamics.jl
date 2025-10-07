@@ -5,6 +5,7 @@ using Graphs
 using OrdinaryDiffEqRosenbrock
 using ModelingToolkit
 using ModelingToolkit: D_nounits as Dt, t_nounits as t
+using InteractiveUtils: subtypes
 SE = Base.get_extension(NetworkDynamics, :NetworkDynamicsSparsityExt)
 
 (isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
