@@ -177,14 +177,6 @@ function initialization_problem(cf::T,
                    psym(cf)[pfree_m])
 
     @assert length(freesym) == Nfree
-    if Neqs < Nfree
-        throw(
-            ComponentInitError("Initialization problem underconstraint. \
-                $(Neqs) Equations for $(Nfree) free variables: $freesym. Consider \
-                passing additional constraints using `InitConstraint`.")
-        )
-
-    end
 
     # which parts of the nonlinear u (unl) correspond to which free parameters
     nextrange = let lasti = 0
@@ -327,8 +319,11 @@ function initialization_problem(cf::T,
 
     if Neqs == Nfree
         verbose && @info "Initialization problem is fully constrained. Created NonlinearLeastSquaresProblem for $freesym"
-    else
+    elseif Neqs > Nfree
         verbose && @info "Initialization problem is overconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for $freesym."
+    else
+        # verbose && @info "Initialization problem is underconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for $freesym."
+        @warn "Initialization problem is underconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for $freesym."
     end
 
     # check rhs of system for obvious problems
