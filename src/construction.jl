@@ -448,6 +448,11 @@ function Network(nw::Network;
     # check, that we actually provide all of the arguments
     # mainly so we don't forget to add it here if we introduce new kw arg to main constructor
     m = only(methods(Network, [typeof(g), typeof(vertexm), typeof(edgem)]))
+    wrong_kwargs = setdiff(keys(_kwargs), Set(Base.kwarg_decl(m)))
+    if !isempty(wrong_kwargs)
+        throw(ArgumentError("Got unknown keyword arguments $(collect(wrong_kwargs)) for copy-constructor Network(nw; kwargs...).\n\
+                             Possible arguments: $(collect(Set(Base.kwarg_decl(m))))"))
+    end
     @assert keys(_kwargs) == Set(Base.kwarg_decl(m))
 
     Network(g, vertexm, edgem; _kwargs...)

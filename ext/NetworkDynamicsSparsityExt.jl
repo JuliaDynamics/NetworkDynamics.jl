@@ -3,7 +3,8 @@ module NetworkDynamicsSparsityExt
 using SparseConnectivityTracer: TracerSparsityDetector, jacobian_sparsity
 using NetworkDynamics: NetworkDynamics, Network, NWState, uflat, pflat, resolvecompidx, ComponentModel,
                        EIndex, VIndex, EdgeModel, VertexModel, dim, pdim,
-                       StateMask, Symmetric, AntiSymmetric, Directed, Fiducial
+                       StateMask, Symmetric, AntiSymmetric, Directed, Fiducial,
+                       executionstyle, SequentialExecution, SequentialAggregator, Aggregator, KAAggregator
 using MacroTools: @capture, postwalk
 using RuntimeGeneratedFunctions: RuntimeGeneratedFunctions, RuntimeGeneratedFunction, @RuntimeGeneratedFunction
 using SparseArrays: sparse, findnz
@@ -57,8 +58,13 @@ prob = ODEProblem(nw, x0, (0.0, 1.0), p0) # uses jac prototype from network
 sol = solve(prob, Rodas5P())
 ```
 """
-function NetworkDynamics.get_jac_prototype(nw::Network; dense=false, remove_conditions=false, check=true)
-    nw_original = nw
+function NetworkDynamics.get_jac_prototype(nw_original::Network; dense=false, remove_conditions=false, check=true, make_compatible=true)
+    # space connectivity tracer does not work for KAExecution and potentially others, so we
+    # transform them into compatible ex/agg schemes
+    nw_compatibile = make_compatible ? _to_compatible_execution_scheme(nw_original) : nw_original
+
+    # potentially transform further (dense/removeconditions)
+    nw = nw_compatibile
     if dense == true
         nw = _replace_dense(nw, eachindex(nw.im.vertexm), eachindex(nw.im.edgem))
     elseif dense isa AbstractVector && !isempty(dense)
@@ -83,12 +89,14 @@ function NetworkDynamics.get_jac_prototype(nw::Network; dense=false, remove_cond
         error("`remove_conditions` must be either true, false or a vector of VIndex and EIndex")
     end
 
-    fx = function(xp)
-        x = @views xp[1:dim(nw)]
-        p = @views xp[dim(nw)+1:dim(nw)+pdim(nw)]
-        dx = similar(x)
-        nw(dx, x, p, 0.0)
-        dx
+    fx = let nw=nw
+        function(xp)
+            x = @views xp[1:dim(nw)]
+            p = @views xp[dim(nw)+1:dim(nw)+pdim(nw)]
+            dx = similar(x)
+            nw(dx, x, p, 0.0)
+            dx
+        end
     end
 
     s0 = NWState(nw)
@@ -128,13 +136,13 @@ function NetworkDynamics.get_jac_prototype(nw::Network; dense=false, remove_cond
 
     # compare with a forward diff jacobian to ensure sparsity pattern is correct
     if check
-        s0_orig = NWState(nw_original)
+        s0_orig = NWState(nw_compatibile)
         if all(!isnan, uflat(s0_orig)) && all(!isnan, pflat(s0_orig))
-            fwjac = _jacobian_at_point(nw_original, s0_orig)
+            fwjac = _jacobian_at_point(nw_compatibile, s0_orig)
             _assert_conservative_pattern(fwjac, ujac)
         else
-            s0_orig_ones = NWState(nw_original, ufill=1.0, pfill=1.0) # fill with ones
-            fwjac = _jacobian_at_point(nw_original, s0_orig_ones)
+            s0_orig_ones = NWState(nw_compatibile, ufill=1.0, pfill=1.0) # fill with ones
+            fwjac = _jacobian_at_point(nw_compatibile, s0_orig_ones)
             _assert_conservative_pattern(fwjac, ujac)
         end
     end
@@ -324,5 +332,22 @@ function comp_constructor(cm)
         error("ComponentModel must be either VertexModel or EdgeModel")
     end
 end
+
+function _to_compatible_execution_scheme(nw_original)
+    newex = _compatible_exstyle(nw_original)
+    if newex !== executionstyle(nw_original) || _needs_new_aggregator(nw_original)
+        newagg = _new_aggregator(nw_original.layer.aggregator)
+        return Network(nw_original; execution=newex, aggregator=newagg)
+    else
+        return nw_original
+    end
+end
+# all ex styles are compatible
+_compatible_exstyle(nw) = executionstyle(nw)
+
+# KAAggregator is known to be incomaptible
+_needs_new_aggregator(nw) = nw.layer.aggregator isa KAAggregator
+_new_aggregator(x::KAAggregator) = SequentialAggregator(x.f)
+_new_aggregator(x::Aggregator) = NetworkDynamics.get_aggr_constructor(x)
 
 end # module
