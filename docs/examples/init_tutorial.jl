@@ -301,6 +301,15 @@ representation of our initialized state (via `uflat` and `pflat`) as input to th
 =#
 prob = ODEProblem(nw_dyn, copy(uflat(u0_dyn)), (0, 7), copy(pflat(u0_dyn));
     callback=get_callbacks(nw_dyn))
+#=
+For less boilerplate, we can also use a [NetworkDynamics specific problem constructor](@ref
+SciMLBase.ODEProblem(::NetworkDynamics.Network, ::NetworkDynamics.NWState, ::Any)) which extracts
+flat arrays and callbacks automatically:
+=#
+prob = ODEProblem(nw_dyn, u0_dyn, (0, 7))
+#=
+The system can then be solved:
+=#
 sol = solve(prob, Tsit5())
 nothing #hide
 
