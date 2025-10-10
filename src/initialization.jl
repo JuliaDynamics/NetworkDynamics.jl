@@ -375,6 +375,7 @@ end
                          guess_overrides=nothing,
                          bound_overrides=nothing,
                          additional_initformula=nothing,
+                         additional_guessformula=nothing,
                          additional_initconstraint=nothing,
                          verbose=true,
                          apply_bound_transformation=true,
@@ -395,7 +396,10 @@ The function solves a nonlinear problem to find values for all free variables/pa
 - `bounds`: Dictionary of bounds (defaults to metadata bounds)
 - `default/guess/bound_overrides`: Dictionary to merge with `defaults`/`guesses`/`bounds`.
   You can use `nothing` as a value for any key to remove that entry from the respective dictionary.
-- `additional_initformula`: Additional initialization formulas to apply beyond those in component metadata
+- `additional_initformula`: Additional initialization formulas to apply beyond those in component metadata.
+  InitFormulas compute and set default values, reducing the number of free variables.
+- `additional_guessformula`: Additional guess formulas to apply beyond those in component metadata.
+  GuessFormulas compute improved initial guesses for free variables, improving solver convergence.
 - `additional_initconstraint`: Additional initialization constraints to apply beyond those in component metadata
 - `verbose`: Whether to print information during initialization
 - `apply_bound_transformation`: Whether to apply bound-conserving transformations
@@ -422,12 +426,16 @@ function initialize_component(cf;
                              guess_overrides=nothing,
                              bound_overrides=nothing,
                              additional_initformula=nothing,
+                             additional_guessformula=nothing,
                              additional_initconstraint=nothing,
                              verbose=true,
                              apply_bound_transformation=true,
                              t=NaN,
                              tol=1e-10,
                              residual=nothing,
+                             # internal keywords to "return" the final defaults/guesses after applying formulas
+                             _final_defaults=nothing,
+                             _final_guesses=nothing,
                              kwargs...)
 
     defaults = isnothing(default_overrides) ? defaults : merge(defaults, default_overrides)
@@ -441,15 +449,30 @@ function initialize_component(cf;
 
     # Extract metadata and merge with additional constraints/formulas
     metadata_initformulas = has_initformula(cf) ? get_initformulas(cf) : nothing
-    combined_initformulas = collect_initformulas(metadata_initformulas, additional_initformula)
+    combined_initformulas = collect_formulas(metadata_initformulas, additional_initformula)
 
     # Apply initialization formulas to defaults
     if !isnothing(combined_initformulas)
         apply_init_formulas!(defaults, combined_initformulas; verbose)
     end
 
+    # Extract and apply guess formulas
+    metadata_guessformulas = has_guessformula(cf) ? get_guessformulas(cf) : nothing
+    combined_guessformulas = collect_formulas(metadata_guessformulas, additional_guessformula)
+    if !isnothing(combined_guessformulas)
+        apply_guess_formulas!(guesses, defaults, combined_guessformulas; verbose)
+    end
+
     metadata_constraint = has_initconstraint(cf) ? get_initconstraints(cf) : nothing
     combined_constraint = merge_initconstraints(metadata_constraint, additional_initconstraint)
+
+    # optinally "return" the final defaults and guesses via keyword ref
+    if _final_defaults isa Ref
+        _final_defaults[] = defaults
+    end
+    if _final_guesses isa Ref
+        _final_guesses[] = guesses
+    end
 
     prob, boundT! = initialization_problem(cf, defaults, guesses, bounds,
                                           combined_constraint;
@@ -531,6 +554,7 @@ end
                           guess_overrides=nothing,
                           bound_overrides=nothing,
                           additional_initformula=nothing,
+                          additional_guessformula=nothing,
                           additional_initconstraint=nothing,
                           verbose=true,
                           t=NaN,
@@ -548,7 +572,10 @@ symbolic metadata and writes the initialized values back in to the metadata.
 - `default/guess/bound_overrides`: Dict of values that override existing
    default/guess/bound metadata. Use `nothing` as a value for any key to remove
    that metadata entry from the component model.
-- `additional_initformula`: Additional initialization formulas to apply beyond those in component metadata
+- `additional_initformula`: Additional initialization formulas to apply beyond those in component metadata.
+  InitFormulas compute and set default values, reducing the number of free variables.
+- `additional_guessformula`: Additional guess formulas to apply beyond those in component metadata.
+  GuessFormulas compute improved initial guesses for free variables, improving solver convergence.
 - `additional_initconstraint`: Additional initialization constraints to apply beyond those in component metadata
 - `verbose`: Whether to print information during initialization
 - `t`: Time at which to solve for steady state. Only relevant for components with explicit time dependency.
@@ -566,6 +593,7 @@ function initialize_component!(cf;
                               guess_overrides=nothing,
                               bound_overrides=nothing,
                               additional_initformula=nothing,
+                              additional_guessformula=nothing,
                               additional_initconstraint=nothing,
                               verbose=true,
                               t=NaN,
@@ -593,13 +621,20 @@ function initialize_component!(cf;
         end
     end
 
+    # make sure to get back the final defaults/guesses after applying formulas
+    _final_defaults = Ref{Dict{Symbol,Float64}}()
+    _final_guesses = Ref{Dict{Symbol,Float64}}()
+
     # Now proceed with initialization using the updated metadata
     init_state = initialize_component(
         cf;
         additional_initformula=additional_initformula,
+        additional_guessformula=additional_guessformula,
         additional_initconstraint=additional_initconstraint,
         verbose=verbose,
         t=t,
+        _final_defaults,
+        _final_guesses,
         kwargs...  # Only pass the remaining kwargs
     )
 
@@ -608,13 +643,20 @@ function initialize_component!(cf;
         delete_init!(cf, s)
     end
 
+    # write back defaults/guesses if they've changed due to formulas
+    for (sym, val) in _final_defaults[]
+        if !has_default(cf, sym) || get_default(cf, sym) != val
+           set_default!(cf, sym, val)
+        end
+    end
+    for (sym, val) in _final_guesses[]
+        if !has_guess(cf, sym) || get_guess(cf, sym) != val
+            set_guess!(cf, sym, val)
+        end
+    end
     # Write back the initialized values to the component metadata
     for (sym, val) in init_state
-        if has_default(cf, sym)
-            # Check if initialized value differs from existing default
-            # This can happen when init formulas override default values
-            get_default(cf, sym) != val && set_default!(cf, sym, val)
-        else
+        if !has_default(cf, sym)
             # No default exists, store as init value
             set_init!(cf, sym, val)
         end
@@ -784,6 +826,7 @@ initialize_docstring = raw"""
         guess_overrides=nothing,
         bound_overrides=nothing,
         additional_initformula=nothing,
+        additional_guessformula=nothing,
         additional_initconstraint=nothing,
         verbose=false,
         subverbose=false,
@@ -809,6 +852,9 @@ state again, as it is stored in the metadata.
 - `bound_overrides`: Dictionary mapping symbolic indices to bounds for constrained variables.
   Use `nothing` as a value for any key to remove those bounds.
 - `additional_initformula`: Dictionary mapping component indices (VIndex/EIndex) to additional initialization formulas.
+  InitFormulas compute and set default values, reducing the number of free variables.
+- `additional_guessformula`: Dictionary mapping component indices (VIndex/EIndex) to additional guess formulas.
+  GuessFormulas compute improved initial guesses for free variables, improving solver convergence.
 - `additional_initconstraint`: Dictionary mapping component indices (VIndex/EIndex) to additional initialization constraints.
 - `verbose`: Whether to print information about each component initialization
 - `subverbose`: Whether to print detailed information within component initialization. Can be Vector [VIndex(1), EIndex(3), ...] for selective output
@@ -848,6 +894,7 @@ function _initialize_componentwise(
     guess_overrides=nothing,
     bound_overrides=nothing,
     additional_initformula=nothing,
+    additional_guessformula=nothing,
     additional_initconstraint=nothing,
     verbose=false,
     subverbose=false,
@@ -879,6 +926,7 @@ function _initialize_componentwise(
             guess_overrides=_guess_overrides,
             bound_overrides=_bound_overrides,
             additional_initformula=isnothing(additional_initformula) ? nothing : get(additional_initformula, VIndex(vi), nothing),
+            additional_guessformula=isnothing(additional_guessformula) ? nothing : get(additional_guessformula, VIndex(vi), nothing),
             additional_initconstraint=isnothing(additional_initconstraint) ? nothing : get(additional_initconstraint, VIndex(vi), nothing),
             verbose=_subverbose,
             t=t,
@@ -903,6 +951,7 @@ function _initialize_componentwise(
             guess_overrides=_guess_overrides,
             bound_overrides=_bound_overrides,
             additional_initformula=isnothing(additional_initformula) ? nothing : get(additional_initformula, EIndex(ei), nothing),
+            additional_guessformula=isnothing(additional_guessformula) ? nothing : get(additional_guessformula, EIndex(ei), nothing),
             additional_initconstraint=isnothing(additional_initconstraint) ? nothing : get(additional_initconstraint, EIndex(ei), nothing),
             verbose=_subverbose,
             t=t,
