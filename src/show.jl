@@ -117,6 +117,16 @@ function print_states_params(io, @nospecialize(c::ComponentModel), styling)
         push!(info, styled"$num &ext in: &&$arr")
     end
 
+    if has_guessformula(c)
+        formulas = get_guessformulas(c)
+        total_eqs = sum(length(formula.outsym) for formula in formulas)
+        num, word = maybe_plural(total_eqs, "eq.", "eqs.")
+        all_outsyms = reduce(vcat, [f.outsym for f in formulas])
+        formula_word = length(formulas) == 1 ? "formula" : "formulas"
+        str = "$num &add. guess $word from $(length(formulas)) $formula_word guessing $(all_outsyms)"
+        push!(info, str)
+    end
+
     if has_initformula(c)
         formulas = get_initformulas(c)
         total_eqs = sum(length(formula.outsym) for formula in formulas)
