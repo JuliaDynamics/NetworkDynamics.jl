@@ -82,6 +82,7 @@ include("callbacks.jl")
 
 export @initconstraint, InitConstraint
 export @initformula, InitFormula
+export @guessformula, GuessFormula
 include("init_constraints.jl")
 
 using OrderedCollections: OrderedDict
@@ -103,6 +104,7 @@ export get_initial_state, dump_initial_state, dump_state
 export has_callback, get_callbacks, set_callback!, add_callback!, delete_callbacks!
 export has_initconstraint, get_initconstraints, set_initconstraint!, add_initconstraint!, delete_initconstraints!
 export has_initformula, get_initformulas, set_initformula!, add_initformula!, delete_initformulas!
+export has_guessformula, get_guessformulas, set_guessformula!, add_guessformula!, delete_guessformulas!
 export has_position, get_position, set_position!
 export has_marker, get_marker, set_marker!
 export get_defaults_dict, get_guesses_dict, get_bounds_dict, get_inits_dict

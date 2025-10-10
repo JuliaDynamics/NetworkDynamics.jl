@@ -1,5 +1,14 @@
 # NetworkDynamics Release Notes
 
+## v0.10.10 Changelog
+- [#323](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/323) Add `GuessFormula` system for improving initial guesses in component initialization:
+  - New `GuessFormula` type and `@guessformula` macro for defining guess refinement formulas
+  - GuessFormulas operate after InitFormulas in the initialization pipeline
+  - Unlike InitFormulas (which set defaults), GuessFormulas refine initial guesses for free variables
+  - Add `has_guessformula`, `get_guessformulas`, `set_guessformula!`, `add_guessformula!`, `delete_guessformulas!` metadata functions
+  - Add `additional_guessformula` keyword to `initialize_component`, `initialize_component!`, and `initialize_componentwise` functions
+  - Improved initialization documentation with execution order details
+
 ## v0.10.9 Changelog
 - [#317](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/317) Enhanced callback system with negative affect support and runtime callback injection:
   - Add `affect_neg!` parameter to `ContinuousComponentCallback` and `VectorContinuousComponentCallback` for handling downcrossing events

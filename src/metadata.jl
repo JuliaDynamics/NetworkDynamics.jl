@@ -813,6 +813,108 @@ delete_initformulas!(c::ComponentModel) = delete_metadata!(c, :initformula)
 delete_initformulas!(nw::Network, idx::VCIndex) = delete_initformulas!(getcomp(nw, idx))
 delete_initformulas!(nw::Network, idx::ECIndex) = delete_initformulas!(getcomp(nw, idx))
 
+####
+#### Guess formulas
+####
+
+"""
+    has_guessformula(c::ComponentModel)
+    has_guessformula(nw::Network, idx::Union{VIndex,EIndex})
+
+Checks if the component has guess formulas in metadata.
+
+See also: [`get_guessformulas`](@ref), [`set_guessformula!`](@ref), [`add_guessformula!`](@ref).
+"""
+has_guessformula(c::ComponentModel) = has_metadata(c, :guessformula)
+has_guessformula(nw::Network, idx::VCIndex) = has_guessformula(getcomp(nw, idx))
+has_guessformula(nw::Network, idx::ECIndex) = has_guessformula(getcomp(nw, idx))
+
+"""
+    get_guessformulas(c::ComponentModel)
+    get_guessformulas(nw::Network, idx::Union{VIndex,EIndex})
+
+Gets all guess formulas for the component. Returns a tuple, even if there is only a single formula.
+
+See also: [`has_guessformula`](@ref), [`set_guessformula!`](@ref), [`add_guessformula!`](@ref).
+"""
+function get_guessformulas(c::ComponentModel)
+    formula = get_metadata(c, :guessformula)
+    formula isa GuessFormula ? (formula,) : formula
+end
+get_guessformulas(nw::Network, idx::VCIndex) = get_guessformulas(getcomp(nw, idx))
+get_guessformulas(nw::Network, idx::ECIndex) = get_guessformulas(getcomp(nw, idx))
+
+"""
+    set_guessformula!(c::ComponentModel, formula; check=true)
+    set_guessformula!(nw::Network, idx::Union{VIndex,EIndex}, formula; check=true)
+
+Sets the guess formula(s) for the component. Overwrites any existing formulas.
+`formula` can be a single `GuessFormula` or a tuple of `GuessFormula` objects.
+
+See also: [`add_guessformula!`](@ref), [`get_guessformulas`](@ref), [`delete_guessformulas!`](@ref).
+"""
+function set_guessformula!(c::ComponentModel, formula; check=true)
+    if !(formula isa GuessFormula) && !(formula isa Tuple && all(f -> f isa GuessFormula, formula))
+        throw(ArgumentError("Formula must be a GuessFormula or a tuple of GuessFormula objects, got $(typeof(formula))."))
+    end
+    if check
+        if formula isa GuessFormula
+            assert_guessformula_compat(c, formula)
+        else
+            for f in formula
+                assert_guessformula_compat(c, f)
+            end
+        end
+    end
+    set_metadata!(c, :guessformula, formula)
+end
+set_guessformula!(nw::Network, idx::VCIndex, formula; kw...) = set_guessformula!(getcomp(nw, idx), formula; kw...)
+set_guessformula!(nw::Network, idx::ECIndex, formula; kw...) = set_guessformula!(getcomp(nw, idx), formula; kw...)
+
+"""
+    add_guessformula!(c::ComponentModel, formula; check=true)
+    add_guessformula!(nw::Network, idx::Union{VIndex,EIndex}, formula; check=true)
+
+Adds a guess formula to the component. Does not overwrite existing formulas.
+`formula` should be a single `GuessFormula` object.
+
+See also: [`set_guessformula!`](@ref), [`get_guessformulas`](@ref).
+"""
+function add_guessformula!(c::ComponentModel, formula; check=true)
+    if !(formula isa GuessFormula)
+        throw(ArgumentError("Formula must be a GuessFormula, got $(typeof(formula))."))
+    end
+    check && assert_guessformula_compat(c, formula)
+
+    if has_guessformula(c)
+        existing_formulas = get_guessformulas(c)
+
+        formula ∈ existing_formulas && return false
+
+        new_formulas = (existing_formulas..., formula)
+        set_metadata!(c, :guessformula, new_formulas)
+    else
+        set_metadata!(c, :guessformula, (formula,))
+    end
+    return true
+end
+add_guessformula!(nw::Network, idx::VCIndex, formula; kw...) = add_guessformula!(getcomp(nw, idx), formula; kw...)
+add_guessformula!(nw::Network, idx::ECIndex, formula; kw...) = add_guessformula!(getcomp(nw, idx), formula; kw...)
+
+"""
+    delete_guessformulas!(c::ComponentModel)
+    delete_guessformulas!(nw::Network, idx::Union{VIndex,EIndex})
+
+Removes all guess formulas from the component model,
+or from a component referenced by `idx` in a network.
+Returns `true` if formulas existed and were removed, `false` otherwise.
+
+See also: [`set_guessformula!`](@ref), [`add_guessformula!`](@ref).
+"""
+delete_guessformulas!(c::ComponentModel) = delete_metadata!(c, :guessformula)
+delete_guessformulas!(nw::Network, idx::VCIndex) = delete_guessformulas!(getcomp(nw, idx))
+delete_guessformulas!(nw::Network, idx::ECIndex) = delete_guessformulas!(getcomp(nw, idx))
+
 
 
 # generate methods and docstrings for position and marker
