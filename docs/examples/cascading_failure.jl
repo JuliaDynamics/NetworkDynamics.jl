@@ -141,11 +141,17 @@ component callbacks.
 =#
 u0 = NWState(nw)
 network_cb = get_callbacks(nw)
-prob = ODEProblem(nw, uflat(u0), (0, 6), pflat(u0); callback=network_cb)
+prob = ODEProblem(nw, uflat(u0), (0, 6), copy(pflat(u0)); callback=network_cb)
 sol = solve(prob, Tsit5());
 nothing #hide #md
 
 #=
+!!! tip
+    Instead of manually extracting flat arrays with `uflat` and `pflat` and constructing network callbacks,
+    we could have used the convenience constructor [`ODEProblem(nw, u0::NWState, tspan)`](@ref
+SciMLBase.ODEProblem(::NetworkDynamics.Network, ::NetworkDynamics.NWState, ::Any))
+    which accepts an `NWState` object directly and extracts flat arrays and callbacks automatically.
+
 Lastly we plot the power flow on all lines using the [`eidxs`](@ref) function to generate the
 symbolic indices for the states of interest:
 =#

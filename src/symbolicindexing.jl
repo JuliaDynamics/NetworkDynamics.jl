@@ -906,6 +906,17 @@ end
 function Base.setindex!(f::FilteringProxy, val, idx...)
     refined_f = refine_filter(f, idx...)
     allindices = resolve_to_index(refined_f)
+    if allindices isa AbstractVector && isempty(allindices)
+        msg = "No such index! No "
+
+        if !isnothing(refined_f.varfilter)
+            msg *= _explain_varfilter(refined_f.varfilter)
+        else
+            msg *= "variables"
+        end
+        msg *= " within " * _explain_compfilter(refined_f.compfilter) * "."
+        throw(ArgumentError(msg))
+    end
     f.data[allindices] = val
 end
 
@@ -1048,4 +1059,49 @@ function Base.getindex(nw::Network, i::VIndex{Colon, Nothing})
 end
 function Base.getindex(nw::Network, collection::Union{AbstractArray,Tuple})
     getindex.(Ref(nw), collection)
+end
+
+
+"""
+    SciMLBase.ODEProblem(nw::Network, s0::NWState, tspan;
+        additional_cb=Dict(),
+        kwargs...)
+    SciMLBase.ODEProblem(nw::Network, s0::NWState, tspan, p0::NWParameter;
+        additional_cb=Dict(),
+        kwargs...)
+
+This is a simple wrapper which:
+- extracts the flat state and parameter vectors from `s0` (and `p0` if provided)
+- makes a copy of the parameter vector to avoid side effects due to callbacks
+- constructs the callbacks from the network and any additional callbacks provided.
+  `additional_cb` is forwarded to [`get_callbacks`](@ref) and can be used to inject
+  component callbacks which are not part of the metadata.
+
+If you need to pass "normal" callbacks, please use the underlying `ODEProblem` constructor directly.
+To avoid confusion, passing `callback` will throw an error.
+
+This function is a convenience wrapper around it:
+
+    ODEProblem(nw, uflat(s0), tspan, copy(pflat(p0));
+               callback=get_callbacks(nw, additional_cb), kwargs...)
+
+where `p0 = s0.p` if not provided.
+"""
+function SciMLBase.ODEProblem(
+    nw::Network, s0::NWState, tspan, p::NWParameter=s0.p;
+    additional_cb=Dict(),
+    kwargs...
+)
+
+    if haskey(kwargs, :callback)
+        throw(ArgumentError("Cannot pass `callback` keyword to ODEProblem(nw, ::NWState) constructor. \
+                             Use `additional_cb` keyword instead. This constructor \
+                             will use the `get_callbacks(nw)` per default."))
+    end
+
+    u = uflat(s0)
+    p = copy(pflat(p))
+    callback = get_callbacks(nw, additional_cb)
+
+    SciMLBase.ODEProblem(nw, u, tspan, p; callback, kwargs...)
 end

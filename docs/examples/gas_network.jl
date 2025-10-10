@@ -307,9 +307,8 @@ u0 = find_fixpoint(nw, uguess, t=0)
 ## Solving the ODE
 
 Using this as our initial state we can create the actual `ODEProblem`.
-Since the ODE always operates on flat state and parameter arrays, we use `uflat` and `pflat` to extract them.
 =#
-prob = ODEProblem(nw, uflat(u0), (0.0,24*3600), copy(pflat(u0)))
+prob = ODEProblem(nw, u0, (0.0,24*3600))
 sol = solve(prob, Tsit5(), tstops=[0,4,12,20,24]*3600)
 nothing #hide
 

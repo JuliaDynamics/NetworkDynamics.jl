@@ -1,5 +1,8 @@
 # NetworkDynamics Release Notes
 
+## v0.10.10 Changelog
+- [#324](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/324): Add custom ODEProblem constructor which takes a `NWState` object rather than flat arrays.
+
 ## v0.10.9 Changelog
 - [#317](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/317) Enhanced callback system with negative affect support and runtime callback injection:
   - Add `affect_neg!` parameter to `ContinuousComponentCallback` and `VectorContinuousComponentCallback` for handling downcrossing events
