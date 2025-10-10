@@ -702,6 +702,309 @@ end
     end
 end
 
+@testset "GuessFormula tests" begin
+    @testset "GuessFormula construction and basic functionality" begin
+        # Test basic macro functionality
+        gf1 = @guessformula begin
+            :Vset = sqrt(:u_r^2 + :u_i^2)
+        end
+
+        @test gf1.outsym == [:Vset]
+        @test gf1.sym == [:u_r, :u_i]
+        @test NetworkDynamics.dim(gf1) == 1
+
+        # Test multiple assignments
+        gf2 = @guessformula begin
+            :Vset = sqrt(:u_r^2 + :u_i^2)
+            :Pset = :u_r * :i_r + :u_i * :i_i
+        end
+
+        @test gf2.outsym == [:Vset, :Pset]
+        @test gf2.sym == [:u_r, :u_i, :i_r, :i_i]
+        @test NetworkDynamics.dim(gf2) == 2
+
+        # Test function call
+        out = Dict{Symbol,Float64}()
+        u_vals = [1.0, 2.0, 3.0, 4.0]  # values for u_r, u_i, i_r, i_i
+        u_view = NetworkDynamics.SymbolicView(u_vals, [:u_r, :u_i, :i_r, :i_i])
+        gf2(out, u_view)
+
+        @test out[:Vset] ≈ sqrt(1.0^2 + 2.0^2)
+        @test out[:Pset] ≈ 1.0 * 3.0 + 2.0 * 4.0
+    end
+
+    @testset "GuessFormula error handling" begin
+        # Test invalid syntax (missing assignment)
+        @test_throws LoadError try
+            @eval @guessformula begin
+                sqrt(:u_r^2 + :u_i^2)
+            end
+        catch e
+            rethrow(e)
+        end
+
+        # Test invalid LHS (not a quoted symbol)
+        @test_throws LoadError try
+            @eval @guessformula begin
+                Vset = sqrt(:u_r^2 + :u_i^2)
+            end
+        catch e
+            rethrow(e)
+        end
+    end
+
+    @testset "GuessFormula validation - KEY DIFFERENCE from InitFormula" begin
+        # Use ComponentLibrary model for testing
+        swing_model = Lib.swing_mtk()
+
+        # Test valid formula - overriding existing state symbol
+        valid_state_formula = @guessformula :θ = :ω + 1
+        @test NetworkDynamics.assert_guessformula_compat(swing_model, valid_state_formula) == valid_state_formula
+
+        # Test another valid formula - overriding existing parameter
+        valid_param_formula = @guessformula :Pmech = 2 * :M + :D
+        @test NetworkDynamics.assert_guessformula_compat(swing_model, valid_param_formula) == valid_param_formula
+
+        # Test invalid input symbols (symbol doesn't exist in component)
+        invalid_input = @guessformula :θ = :nonexistent_symbol + 1
+        @test_throws ArgumentError NetworkDynamics.assert_guessformula_compat(swing_model, invalid_input)
+
+        # Test invalid output symbols (symbol doesn't exist in component)
+        invalid_output = @guessformula :nonexistent_output = :ω + 1
+        @test_throws ArgumentError NetworkDynamics.assert_guessformula_compat(swing_model, invalid_output)
+
+        # GuessFormulas cant read observables
+        valid_observable_input = @guessformula :θ = :Pdamping / 10  # Pdamping is observable - allowed as input
+        @test_throws ArgumentError NetworkDynamics.assert_guessformula_compat(swing_model, valid_observable_input)
+
+        # But writing to observables is still not allowed
+        invalid_observable_output = @guessformula :Pdamping = 1.0  # Pdamping is observable - not allowed as output
+        @test_throws ArgumentError NetworkDynamics.assert_guessformula_compat(swing_model, invalid_observable_output)
+
+        # Test multiple valid overrides
+        multi_valid = @guessformula begin
+            :θ = 2     # θ override is valid
+            :M = :D + 1     # M override is valid
+            :ω = 0.1   # ω override is valid
+        end
+        @test NetworkDynamics.assert_guessformula_compat(swing_model, multi_valid) == multi_valid
+    end
+end
+
+@testset "apply_guess_formulas! tests - KEY DIFFERENCE: Layered lookup" begin
+    using NetworkDynamics: apply_guess_formulas!
+
+    @testset "Basic formula application with layered lookup" begin
+        # Test that defaults take priority over guesses
+        gf1 = @guessformula :voltage_mag = sqrt(:u_r^2 + :u_i^2)
+
+        defaults = Dict(:u_r => 3.0, :u_i => 4.0)
+        guesses = Dict(:u_r => 100.0, :u_i => 200.0)  # Should be ignored
+
+        apply_guess_formulas!(guesses, defaults, [gf1]; verbose=true)
+
+        # Formula should use defaults (3.0, 4.0), not guesses (100.0, 200.0)
+        @test guesses[:voltage_mag] ≈ 5.0  # sqrt(3^2 + 4^2)
+        # Defaults remain unchanged
+        @test defaults[:u_r] == 3.0
+        @test defaults[:u_i] == 4.0
+        # Original guesses remain unchanged
+        @test guesses[:u_r] == 100.0
+        @test guesses[:u_i] == 200.0
+    end
+
+    @testset "Layered lookup: defaults prioritized, guesses fallback" begin
+        # Test that formulas read from defaults first, then guesses
+        gf1 = @guessformula :result = :from_default + :from_guess
+
+        defaults = Dict(:from_default => 10.0)  # Only one value in defaults
+        guesses = Dict(:from_guess => 5.0)      # Other value in guesses
+
+        apply_guess_formulas!(guesses, defaults, [gf1]; verbose=true)
+
+        @test guesses[:result] ≈ 15.0  # 10 (from defaults) + 5 (from guesses)
+        # Original dicts unchanged except for new result
+        @test defaults[:from_default] == 10.0
+        @test guesses[:from_guess] == 5.0
+    end
+
+    @testset "GuessFormulas write to guesses, not defaults" begin
+        # Test that GuessFormulas only modify guesses dict
+        gf1 = @guessformula :new_value = :input * 3
+
+        defaults = Dict(:input => 7.0)
+        guesses = Dict{Symbol,Float64}()
+
+        apply_guess_formulas!(guesses, defaults, [gf1]; verbose=true)
+
+        # New value goes to guesses
+        @test guesses[:new_value] ≈ 21.0
+        # Defaults unchanged
+        @test defaults == Dict(:input => 7.0)
+    end
+
+    @testset "Overwriting existing guesses" begin
+        # Test that formulas can overwrite existing guesses
+        gf1 = @guessformula :existing_guess = :new_value * 3
+
+        defaults = Dict(:new_value => 7.0)
+        guesses = Dict(:existing_guess => 100.0)  # Will be overwritten
+
+        apply_guess_formulas!(guesses, defaults, [gf1]; verbose=true)
+
+        # updating while also having a default
+        defaults[:existing_guess] = 42
+        apply_guess_formulas!(guesses, defaults, [gf1]; verbose=true)
+
+        @test guesses[:existing_guess] ≈ 21.0  # 7 * 3, overwrites original 100.0
+    end
+
+    @testset "Error handling" begin
+        # Test missing input symbol (not in defaults or guesses)
+        gf_missing = @guessformula :output = :missing_symbol + 1
+        defaults = Dict(:other => 5.0)
+        guesses = Dict{Symbol,Float64}()
+
+        @test_throws ArgumentError apply_guess_formulas!(guesses, defaults, [gf_missing]; verbose=false)
+
+        # Test NaN input in defaults
+        gf_nan = @guessformula :output = :input + 1
+        defaults_nan = Dict(:input => NaN)
+        guesses_nan = Dict{Symbol,Float64}()
+
+        @test_throws ArgumentError apply_guess_formulas!(defaults_nan, guesses_nan, [gf_nan]; verbose=false)
+    end
+
+    @testset "Complex dependency chain with layered lookup" begin
+        # Test dependencies reading from both defaults and guesses
+        gf_root = @guessformula :shared = :from_default * :from_guess
+        gf_branch1 = @guessformula :result1 = :shared + 1
+        gf_branch2 = @guessformula :temp = :shared - 1
+        gf_final = @guessformula :result2 = :temp * 3
+
+        defaults = Dict(:from_default => 4.0)
+        guesses = Dict(:from_guess => 2.0)
+
+        apply_guess_formulas!(guesses, defaults, [gf_final, gf_branch1, gf_root, gf_branch2]; verbose=false)
+
+        @test guesses[:shared] ≈ 8.0      # 4 * 2
+        @test guesses[:result1] ≈ 9.0     # 8 + 1
+        @test guesses[:temp] ≈ 7.0        # 8 - 1
+        @test guesses[:result2] ≈ 21.0    # 7 * 3
+        # Defaults unchanged
+        @test defaults == Dict(:from_default => 4.0)
+    end
+
+    @testset "Circular dependency detection" begin
+        # This should fail during topological sorting
+        gf1 = @guessformula :a = :b + 1
+        gf2 = @guessformula :b = :a + 1
+        defaults = Dict(:start => 1.0)
+        guesses = Dict{Symbol,Float64}()
+
+        @test_throws ArgumentError apply_guess_formulas!(guesses, defaults, [gf1, gf2]; verbose=false)
+    end
+
+    @testset "has_guessformula, set_guessformula!, and get_guessformulas" begin
+        swing_model = Lib.swing_mtk()
+
+        # Initially no guess formula
+        @test !has_guessformula(swing_model)
+
+        # Set a guess formula
+        gf1 = @guessformula :θ = :ω + 1
+        set_guessformula!(swing_model, gf1)
+
+        @test has_guessformula(swing_model)
+        formulas = get_guessformulas(swing_model)
+        @test length(formulas) == 1
+        @test formulas[1] === gf1
+
+        # Overwrite with multiple formulas
+        gf2 = @guessformula :Pmech = 2 * :M
+        gf_tuple = (gf1, gf2)
+        set_guessformula!(swing_model, gf_tuple)
+
+        formulas = get_guessformulas(swing_model)
+        @test length(formulas) == 2
+        @test formulas[1] === gf1
+        @test formulas[2] === gf2
+    end
+
+    @testset "add_guessformula! - additive behavior and duplicate detection" begin
+        swing_model = Lib.swing_mtk()
+
+        gf1 = @guessformula :θ = :ω + 1
+        gf2 = @guessformula :Pmech = 2 * :M
+
+        # Add first formula
+        @test add_guessformula!(swing_model, gf1) == true
+        @test length(get_guessformulas(swing_model)) == 1
+
+        # Add second formula
+        @test add_guessformula!(swing_model, gf2) == true
+        @test length(get_guessformulas(swing_model)) == 2
+
+        # Try to add duplicate - should return false
+        @test add_guessformula!(swing_model, gf1) == false
+        @test length(get_guessformulas(swing_model)) == 2  # Still 2
+
+        # Another duplicate
+        @test add_guessformula!(swing_model, gf2) == false
+        @test length(get_guessformulas(swing_model)) == 2
+    end
+
+    @testset "delete_guessformulas!" begin
+        swing_model = Lib.swing_mtk()
+
+        gf1 = @guessformula :θ = :ω + 1
+        set_guessformula!(swing_model, gf1)
+        @test has_guessformula(swing_model)
+
+        delete_guessformulas!(swing_model)
+        @test !has_guessformula(swing_model)
+    end
+
+    @testset "GuessFormula validation during set/add" begin
+        swing_model = Lib.swing_mtk()
+
+        # Valid formula - should work
+        valid_gf = @guessformula :θ = :ω + 1
+        set_guessformula!(swing_model, valid_gf; check=true)
+        @test has_guessformula(swing_model)
+
+        # Invalid formula - should error
+        invalid_gf = @guessformula :θ = :nonexistent + 1
+        @test_throws ArgumentError set_guessformula!(swing_model, invalid_gf; check=true)
+
+        # With check=false, should work
+        set_guessformula!(swing_model, invalid_gf; check=false)
+        @test has_guessformula(swing_model)
+    end
+
+    @testset "GuessFormula combined with InitFormula" begin
+        @named sal = Lib.SwingAndLoadDQ()
+        vm = VertexModel(sal, [:i_r, :i_i], [:u_r, :u_i])
+        add_initformula!(vm, @initformula begin
+            :u_r = 1.0
+            :u_i = 0.1
+            :i_r = 0.5
+            :i_i = 0.1
+        end)
+        add_guessformula!(vm, @guessformula(:swing₊V = sqrt(:u_r^2 + :u_i^2)))
+        add_guessformula!(vm, @guessformula(:swing₊θ = atan(:u_i, :u_r)))
+        add_initconstraint!(vm, @initconstraint begin
+            :swing₊Pmech - :load₊Pset
+            :load₊Qset
+        end)
+
+        initialize_component!(vm)
+
+        @test get_guess(vm, :swing₊V) ≈ sqrt(1.0^2 + 0.1^2)
+        @test get_guess(vm, :swing₊θ) ≈ atan(0.1, 1.0)
+    end
+end
+
 @testset "Topological sorting of InitFormulas" begin
     using NetworkDynamics: topological_sort_formulas
 
@@ -1043,7 +1346,7 @@ end
 end
 
 @testset "Test combining of formulas" begin
-    using NetworkDynamics: collect_initformulas
+    using NetworkDynamics: collect_formulas
     f1 = @initformula :foo = :bar
     f2 = @initformula :baz = :qux
     tup = (f1, f2)
