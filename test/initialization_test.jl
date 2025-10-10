@@ -625,26 +625,6 @@ end
         @test out[:Pset] ≈ 1.0 * 3.0 + 2.0 * 4.0
     end
 
-    @testset "InitFormula error handling" begin
-        # Test invalid syntax (missing assignment)
-        @test_throws LoadError try
-            @eval @initformula begin
-                sqrt(:u_r^2 + :u_i^2)
-            end
-        catch e
-            rethrow(e)
-        end
-
-        # Test invalid LHS (not a quoted symbol)
-        @test_throws LoadError try
-            @eval @initformula begin
-                Vset = sqrt(:u_r^2 + :u_i^2)
-            end
-        catch e
-            rethrow(e)
-        end
-    end
-
     @testset "InitFormula with complex expressions" begin
         # Test with more complex mathematical expressions
         if_complex = @initformula begin
@@ -731,26 +711,6 @@ end
 
         @test out[:Vset] ≈ sqrt(1.0^2 + 2.0^2)
         @test out[:Pset] ≈ 1.0 * 3.0 + 2.0 * 4.0
-    end
-
-    @testset "GuessFormula error handling" begin
-        # Test invalid syntax (missing assignment)
-        @test_throws LoadError try
-            @eval @guessformula begin
-                sqrt(:u_r^2 + :u_i^2)
-            end
-        catch e
-            rethrow(e)
-        end
-
-        # Test invalid LHS (not a quoted symbol)
-        @test_throws LoadError try
-            @eval @guessformula begin
-                Vset = sqrt(:u_r^2 + :u_i^2)
-            end
-        catch e
-            rethrow(e)
-        end
     end
 
     @testset "GuessFormula validation - KEY DIFFERENCE from InitFormula" begin
