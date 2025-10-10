@@ -1060,3 +1060,20 @@ end
 function Base.getindex(nw::Network, collection::Union{AbstractArray,Tuple})
     getindex.(Ref(nw), collection)
 end
+
+
+"""
+    SciMLBase.ODEProblem(nw::Network, s0::NWState, tspan; kwargs)
+    SciMLBase.ODEProblem(nw::Network, s0::NWState, tspan, p0::NWParmeter; kwargs)
+
+This is a really simple wrapper just doing
+
+    ODEProblem(nw, uflat(s0), tspan, copy(pflat(p0)); kwargs...)
+
+where `p0 = s0.p` if not provided.
+"""
+function SciMLBase.ODEProblem(nw::Network, s0::NWState, tspan, p::NWParameter=s0.p; kwargs...)
+    u = uflat(s0)
+    p = copy(pflat(p))
+    SciMLBase.ODEProblem(nw, u, tspan, p; kwargs...)
+end
