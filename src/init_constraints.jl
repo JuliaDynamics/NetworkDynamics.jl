@@ -440,6 +440,13 @@ macro guessformula(ex)
 end
 
 # combined macro code for InitFormula and GuessFormula
+#=
+In a nutshell: wrap every QuoteNote symbol either in u[:sym] or out[:sym]
+- if it appears alone in the LHS of an assignment, it is an output symbol
+- otherwise it is an input symbol
+some thinks will break!
+for example: set!(:out, :in) -> set!(u[:out], u[:in])
+=#
 function _formula_macro(type, ex)
     if ex isa QuoteNode || ex.head != :block
         ex = Base.remove_linenums!(Expr(:block, ex))
@@ -454,28 +461,31 @@ function _formula_macro(type, ex)
     for formula in ex.args
         formula isa Union{Expr, QuoteNode} || continue # skip line number nodes
         if formula isa Expr && formula.head == :(=)
-            lhs = formula.args[1]
             rhs = formula.args[2]
-
-            # Extract the target symbol from the LHS (should be a QuoteNode)
-            if !(lhs isa QuoteNode && lhs.value isa Symbol)
-                throw(ArgumentError("Left-hand side of $(type) assignment must be a quoted symbol like :V"))
-            end
-            target_sym = lhs.value
-            push!(output_syms, target_sym)
-
             # Wrap symbols in the RHS
             wrapped_rhs = _wrap_symbols!(rhs, input_syms, u)
-            push!(body, :($(esc(out_var))[$(QuoteNode(target_sym))] = $wrapped_rhs))
+
+            lhs = formula.args[1]
+            # Extract the target symbol from the LHS (should be a QuoteNode)
+            if lhs isa QuoteNode && lhs.value isa Symbol
+                # :output = ... assigmend
+                target_sym = lhs.value
+                push!(output_syms, target_sym)
+                push!(body, :($(esc(out_var))[$(QuoteNode(target_sym))] = $wrapped_rhs))
+            else
+                # "normal" assigmend
+                push!(body, :($lhs = $wrapped_rhs))
+            end
         else
-            throw(ArgumentError("$(type) expressions must be assignments like :V = sqrt(:u_r^2 + :u_i^2)"))
+            wrapped_expr = _wrap_symbols!(formula, input_syms, u)
+            push!(body, :($wrapped_expr))  # standalone expression
         end
     end
     unique!(input_syms)
 
     # Generate pretty print string
-    s = join(string.(body), "\n")
-    s = replace(s, "(\$(Expr(:escape, Symbol(\"$(string(out_var))\"))))" => "    out")
+    s = "    " * join(string.(body), "\n    ")
+    s = replace(s, "(\$(Expr(:escape, Symbol(\"$(string(out_var))\"))))" => "out")
     s = replace(s, "(\$(Expr(:escape, Symbol(\"$(string(u))\"))))" => "u")
     s = "$(type)($output_syms, $input_syms) do out, u\n" * s * "\nend"
 
