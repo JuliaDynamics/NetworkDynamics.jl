@@ -1050,22 +1050,22 @@ end
     arr = [f1, f2]
 
     # test all combinations
-    @test collect_initformulas(nothing, nothing) === nothing
-    @test collect_initformulas(nothing, f1) == [f1]
-    @test collect_initformulas(nothing, tup) == [f1, f2]
-    @test collect_initformulas(nothing, arr) == [f1, f2]
-    @test collect_initformulas(f1, nothing) == [f1]
-    @test collect_initformulas(f1, f1) == [f1, f1]
-    @test collect_initformulas(f1, tup) == [f1, f1, f2]
-    @test collect_initformulas(f1, arr) == [f1, f1, f2]
-    @test collect_initformulas(tup, nothing) == [f1, f2]
-    @test collect_initformulas(tup, f1) == [f1, f2, f1]
-    @test collect_initformulas(tup, tup) == [f1, f2, f1, f2]
-    @test collect_initformulas(tup, arr) == [f1, f2, f1, f2]
-    @test collect_initformulas(arr, nothing) == [f1, f2]
-    @test collect_initformulas(arr, f1) == [f1, f2, f1]
-    @test collect_initformulas(arr, tup) == [f1, f2, f1, f2]
-    @test collect_initformulas(arr, arr) == [f1, f2, f1, f2]
+    @test collect_formulas(nothing, nothing) === nothing
+    @test collect_formulas(nothing, f1) == [f1]
+    @test collect_formulas(nothing, tup) == [f1, f2]
+    @test collect_formulas(nothing, arr) == [f1, f2]
+    @test collect_formulas(f1, nothing) == [f1]
+    @test collect_formulas(f1, f1) == [f1, f1]
+    @test collect_formulas(f1, tup) == [f1, f1, f2]
+    @test collect_formulas(f1, arr) == [f1, f1, f2]
+    @test collect_formulas(tup, nothing) == [f1, f2]
+    @test collect_formulas(tup, f1) == [f1, f2, f1]
+    @test collect_formulas(tup, tup) == [f1, f2, f1, f2]
+    @test collect_formulas(tup, arr) == [f1, f2, f1, f2]
+    @test collect_formulas(arr, nothing) == [f1, f2]
+    @test collect_formulas(arr, f1) == [f1, f2, f1]
+    @test collect_formulas(arr, tup) == [f1, f2, f1, f2]
+    @test collect_formulas(arr, arr) == [f1, f2, f1, f2]
 end
 
 @testset "Test cobining of constraints" begin

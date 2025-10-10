@@ -82,6 +82,7 @@ include("callbacks.jl")
 
 export @initconstraint, InitConstraint
 export @initformula, InitFormula
+export @guessformula, GuessFormula
 include("init_constraints.jl")
 
 using OrderedCollections: OrderedDict
