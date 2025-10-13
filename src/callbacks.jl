@@ -334,7 +334,7 @@ function _batchequal(a::ComponentCondition, b::ComponentCondition)
 end
 function _batchequal(a::NamedTuple, b::NamedTuple)
     length(a) == length(b) || return false
-    for (k, v) in a
+    for (k, v) in pairs(a)
         haskey(b, k) || return false
         v == b[k] || return false
     end
