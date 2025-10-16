@@ -92,9 +92,8 @@ end
     useless_cb = DiscreteComponentCallback(usless_cond, usless_affect)
     add_callback!(nw[EIndex(1)], useless_cb)
 
-    nwcb = NetworkDynamics.get_callbacks(nw);
     s0 = NWState(nw)
-    prob = ODEProblem(nw, uflat(s0), (0,6), copy(pflat(s0)), callback=nwcb)
+    prob = ODEProblem(nw, uflat(s0), (0,6), copy(pflat(s0)))
     sol = solve(prob, Tsit5());
 
     @test 0.1 < useless_triggertime[] <= 1.0
@@ -311,7 +310,7 @@ end
     # set_callback!(nw[VIndex(1)], cb_vec)
     # set_callback!(nw[VIndex(1)], cb_vec)
     s0 = NWState(nw)
-    prob = ODEProblem(nw, uflat(s0), (0, 4π+0.1), pflat(s0), callback=get_callbacks(nw, VIndex(1)=>cb_vec))
+    prob = ODEProblem(nw, uflat(s0), (0, 4π+0.1), pflat(s0), add_comp_cb=VIndex(1)=>cb_vec)
     sol = solve(prob, Tsit5());
     @assert SciMLBase.successful_retcode(sol)
 
@@ -328,7 +327,7 @@ end
     empty!(vec_sin_down)
     empty!(vec_cos_down)
     cb_vec = VectorContinuousComponentCallback(cond_vec, affect_vec, 2; affect_neg! = nothing)
-    prob = ODEProblem(nw, uflat(s0), (0, 4π+0.1), pflat(s0), callback=get_callbacks(nw, Dict(VIndex(1)=>cb_vec)))
+    prob = ODEProblem(nw, uflat(s0), (0, 4π+0.1), pflat(s0), add_comp_cb=Dict(VIndex(1)=>cb_vec))
     sol = solve(prob, Tsit5());
     @assert SciMLBase.successful_retcode(sol)
     @test vec_sin_up ≈ [2, 4] atol=1e-3
@@ -355,7 +354,7 @@ end
         push!(sin_down, pos)
     end
     cb = ContinuousComponentCallback(cond, affect; affect_neg! = affect_neg)
-    prob = ODEProblem(nw, uflat(s0), (0, 4π+0.1), pflat(s0), callback=get_callbacks(nw, Dict(VIndex(1)=>cb)))
+    prob = ODEProblem(nw, uflat(s0), (0, 4π+0.1), pflat(s0), add_comp_cb=Dict(VIndex(1)=>cb))
     sol = solve(prob, Tsit5());
     @test sin_up ≈ [2, 4] atol=1e-3
     @test sin_down ≈ [1, 3] atol=1e-3
@@ -363,7 +362,7 @@ end
     empty!(sin_up)
     empty!(sin_down)
     cb = ContinuousComponentCallback(cond, affect; affect_neg! = nothing)
-    prob = ODEProblem(nw, uflat(s0), (0, 4π+0.1), pflat(s0), callback=get_callbacks(nw, Dict(VIndex(1)=>cb)))
+    prob = ODEProblem(nw, uflat(s0), (0, 4π+0.1), pflat(s0), add_comp_cb=Dict(VIndex(1)=>cb))
     sol = solve(prob, Tsit5());
     @test sin_up ≈ [2, 4] atol=1e-3
     @test isempty(sin_down)

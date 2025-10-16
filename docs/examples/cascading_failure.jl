@@ -135,22 +135,21 @@ When we inspect the edge model for 5 no, we see that we've registered 2 callback
 nw[EIndex(5)]
 
 #=
-Now we can simulate the network. We use [`get_callbacks(::Network)`](@ref)
-to generate a callback set for the whole network which represents all of the individual
-component callbacks.
+Now we can simulate the network. The [`ODEProblem`](@ref SciMLBase.ODEProblem(::NetworkDynamics.Network, ::NetworkDynamics.NWState, ::Any))
+constructor accepts an `NWState` object directly and automatically extracts flat state and
+parameter arrays, constructs callbacks from component metadata, and handles parameter copying.
 =#
 u0 = NWState(nw)
-network_cb = get_callbacks(nw)
-prob = ODEProblem(nw, uflat(u0), (0, 6), copy(pflat(u0)); callback=network_cb)
+prob = ODEProblem(nw, u0, (0, 6))
+
 sol = solve(prob, Tsit5());
 nothing #hide #md
 
 #=
 !!! tip
-    Instead of manually extracting flat arrays with `uflat` and `pflat` and constructing network callbacks,
-    we could have used the convenience constructor [`ODEProblem(nw, u0::NWState, tspan)`](@ref
-SciMLBase.ODEProblem(::NetworkDynamics.Network, ::NetworkDynamics.NWState, ::Any))
-    which accepts an `NWState` object directly and extracts flat arrays and callbacks automatically.
+    For more control over callback handling, the `ODEProblem` constructor provides keyword
+    arguments like `add_comp_cb`, `add_nw_cb`, and `override_cb`. See the [`ODEProblem`](@ref SciMLBase.ODEProblem(::NetworkDynamics.Network, ::NetworkDynamics.NWState, ::Any))
+    documentation for details.
 
 Lastly we plot the power flow on all lines using the [`eidxs`](@ref) function to generate the
 symbolic indices for the states of interest:
@@ -244,10 +243,14 @@ trip_first_cb = PresetTimeCallback(1.0, integrator->affect!(integrator, 5));
 #=
 Now we are set for solving the system again. This time we create our own callback
 set by combining both Callbacks manually.
+
+!!! tip "System-wide Callbacks"
+    When using system-wide callbacks instead of component-based callbacks, you can pass them
+    using the `add_nw_cb` keyword argument to the `ODEProblem` constructor.
 =#
 u0 = NWState(nw)
 cbset = CallbackSet(trip_cb, trip_first_cb)
-prob = ODEProblem(nw, uflat(u0), (0,6), pflat(u0); callback=cbset)
+prob = ODEProblem(nw, uflat(u0), (0,6), pflat(u0); add_nw_cb=cbset)
 Main.test_execution_styles(prob) # testing all ex styles #src
 sol2 = solve(prob, Tsit5());
 ## we want to test the reconstruction of the observables # hide
@@ -255,5 +258,7 @@ sol2 = solve(prob, Tsit5());
 @test all(iszero, sol2(sol2.t; idxs=eidxs(sol2,:,:P)).u[end][[1:5...,7]]) # hide
 nothing #hide
 
-# Then again we plot the solution:
+#=
+Then again we plot the solution:
+=#
 plot(sol2; idxs=eidxs(sol2,:,:P))

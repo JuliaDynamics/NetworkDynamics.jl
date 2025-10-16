@@ -93,15 +93,19 @@ add_callback!(vert, vccb)
 
 
 ### Extracting the Callback
-In order to use the callback during simulation, we need to generate a [`SciMLBase.CallbackSet`](@extref) which contains the conditions and affects of all the component based callbacks in the network. For that we use [`get_callbacks(::Network)`](@ref):
+Component-level callbacks are automatically extracted and combined when constructing an [`ODEProblem`](@ref SciMLBase.ODEProblem(::NetworkDynamics.Network, ::NetworkDynamics.NWState, ::Any)):
 ```julia
-u0 = NWState(u0)
-cbs = get_callbacks(nw)
-prob = ODEProblem(nw, uflat(u0), (0,10), pflat(u0); callback=cbs)
+u0 = NWState(nw)
+prob = ODEProblem(nw, u0, (0, 10))
 sol = solve(prob, ...)
 ```
 
-When combining the component based callbacks to a single callback, NetworkDynamics will check whether states and or parameters changed during the affect and automatically call [`SciMLBase.auto_dt_reset!`](@extref) and [`save_parameters!`](@ref) if necessary.
+For more control over callback handling—such as adding network/system-level callbacks (e.g., `PeriodicCallback`),
+temporary component callbacks, or overriding the default callbacks, the `ODEProblem` constructor provides
+keyword arguments `add_comp_cb`, `add_nw_cb`, and `override_cb`. See the [`ODEProblem(nw::Network,...)`](@ref SciMLBase.ODEProblem(::NetworkDynamics.Network, ::NetworkDynamics.NWState, ::Any)) documentation for details.
+
+When executing component callbacks, NetworkDynamics automatically checks whether states or parameters
+changed during the affect and calls [`SciMLBase.auto_dt_reset!`](@extref) and [`save_parameters!`](@ref) if necessary.
 
 
 ## Normal DiffEq Callbacks

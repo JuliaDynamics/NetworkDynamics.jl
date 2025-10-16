@@ -52,11 +52,10 @@ First, we need to define the system we want to inspect.
         tripfirst = PresetTimeComponentCallback(1.0, affect) # reuse the same affect
         add_callback!(nw[EIndex(5)], tripfirst)
 
-        nwcb = NetworkDynamics.get_callbacks(nw);
         s0 = NWState(nw)
         s0.p.e[:, :limit] .= limit
 
-        prob = ODEProblem(nw, uflat(s0), (0,6), copy(pflat(s0)), callback=nwcb)
+        prob = ODEProblem(nw, uflat(s0), (0,6), copy(pflat(s0)))
         sol = solve(prob, Tsit5())
     end
 
