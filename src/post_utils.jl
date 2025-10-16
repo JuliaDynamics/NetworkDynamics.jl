@@ -40,12 +40,18 @@ function SciMLBase.ODEProblem(
 )
 
     if haskey(kwargs, :callback)
-        throw(ArgumentError("""
-                            Cannot pass `callback` keyword to ODEProblem(nw::Network, ...) constructor. Callbacks are always generated from the Network object using `get_callbacks(nw)`. You can either
-                             - pass additional component callbacks using `add_comp_cb=Dict(VIndex(1)=>comp_callback)`
-                             - pass additional network level callbacks using `add_nw_cb=callback/CallbackSet` or
-                             - override all callbacks using `override_cb=callback/CallbackSet`
-                             """))
+        if typeof(kwargs[:callback]) == typeof(get_callbacks(nw))
+            @warn "Passing `callback=get_callbacks(nw)` to ODEProblem(nw, ...) is deprecated. The ODEConstructor will allways extract the Network callbacks automaticially."
+            kwargs = filter(kv -> kv.first != :callback, kwargs)
+            @assert !haskey(kwargs, :callback)
+        else
+            throw(ArgumentError("""
+            Cannot pass `callback` keyword to ODEProblem(nw::Network, ...) constructor. Callbacks are always generated from the Network object using `get_callbacks(nw)`. You can either
+            - pass additional component callbacks using `add_comp_cb=Dict(VIndex(1)=>comp_callback)`
+            - pass additional network level callbacks using `add_nw_cb=callback/CallbackSet` or
+            - override all callbacks using `override_cb=callback/CallbackSet`
+            """))
+        end
     end
     if !isnothing(override_cb) && (!isempty(add_comp_cb) || !isnothing(add_nw_cb))
         throw(ArgumentError("Cannot pass `override_cb` together with `add_comp_cb` or `add_nw_cb`. When overriding the default network callbacks, no additional callbacks are allowed."))
