@@ -42,10 +42,11 @@ nw = Network(vertexm, edgem)
 ```
 The graphelement `g` metadata can be set using the following syntax options:
 ```julia
-VertexModel(; ..., vidx=1)         # places a vertex at position 1
-EdgeModel(; ..., src=1, dst=2)     # places an edge between 1 and 2
-EdgeModel(; ..., src=:v1, dst=:v2) # places an edge between vertices with names `:v1` and `:v2`
+graphName_vertex = VertexModel(; ..., vidx=1)         # places a vertex at position 1
+graphName_edge = EdgeModel(; ..., src=1, dst=2)     # places an edge between 1 and 2
+graphName_edge = EdgeModel(; ..., src=:v1, dst=:v2) # places an edge between vertices with names `:v1` and `:v2`
 ```
+where "graphName" is the name you have decided to give your graph.
 
 ## Building `VertexModel`s
 This section will walk you through the most important aspects of defining a custom vertex model. 
@@ -64,27 +65,25 @@ function kuramoto_g!(y, v, esum, p, t)
     y[1] = v[1]
     nothing
 end
-VertexModel(; f=kuramoto_f!, g=kuramoto_g!, dim=2, pdim=3, outdim=1)
+kuramoto_vertex = VertexModel(; f=kuramoto_f!, g=kuramoto_g!, dim=2, pdim=3, outdim=1)
 ```
 Those keywords are the minimum amount of metadata we need to provide.
 
 However, there is a problem: the vertex is classified as a `FeedForward` vertex, which is unnecessary. 
 We can improve the implementation of `g` according to the [Feed Forward Behavior](@ref) section. 
-(@Hans: the Feed Forward has been deprecated according to the [Mathematical Mode](@ref))
+(@Hans: the Feed Forward has been deprecated according to the [Mathematical Mode](@ref).)
 ```@example construction
 function kuramoto_g_noff!(y, v, p, t)
     y[1] = v[1]
     nothing
 end
-VertexModel(; f=kuramoto_f!, g=kuramoto_g_noff!, dim=2, pdim=3, outdim=1)
+kuramoto_vertex = VertexModel(; f=kuramoto_f!, g=kuramoto_g_noff!, dim=2, pdim=3, outdim=1)
 ```
 
-To simplify the programming experience and avoid explicitly writing the above trivial output function 
-`function kuramoto_g_off(y, v, p, t)` we can use [`StateMask`](@ref) and replace `g=kuramoto_g_noff!` with 
+To simplify the programming experience we can use [`StateMask`](@ref) and replace `g=kuramoto_g_noff!` with 
 `g=StateMask(1:1)`. By writing:
-(@Hans: does that mean that writing the `function kuramoto_g_off(y, v, p, t)...` is entirely unnecessary in this case?)
 ```@example construction
-VertexModel(; f=kuramoto_f!, g=StateMask(1:1), dim=2, pdim=3)
+kuramoto_vertex = VertexModel(; f=kuramoto_f!, g=StateMask(1:1), dim=2, pdim=3)
 ```
 we are instructing the vertex model, that the output is part of the states `x[1:1]`.
 This results in the following changes:
@@ -96,18 +95,19 @@ has not been explained anywhere before)
 
 We can be even less verbose by replacing `g=StateMask(1:1)` with `g=1:1` or even just `g=1`.
 ```@example construction
-VertexModel(; f=kuramoto_f!, g=1:1, dim=2, pdim=3)
+kuramoto_vertex = VertexModel(; f=kuramoto_f!, g=1:1, dim=2, pdim=3)
 ```
 or
 ```@example construction
-VertexModel(; f=kuramoto_f!, g=1, dim=2, pdim=3)
+kuramoto_vertex = VertexModel(; f=kuramoto_f!, g=1, dim=2, pdim=3)
 ```
 
-Lastly, we define improved names for our states by using the input parameter `name=:swing` and parameters as well as assigning a position in the graph to enable 
+Lastly, we define improved names for our states by using the input parameter `name=:swing` and parameters as well as 
+assigning a position in the graph to enable 
 the graphless network construction.
 
 
-Whenever you provide a `sym` keyword (@Hans: are the sym keywords `psym`, `insym` and `sym` or just the sym) the 
+Whenever you provide a `sym` keyword (@Hans: are the sym keywords `psym`, `insym` and `sym` or just the `sym`) the 
 corresponding `dim` keyword (@Hans: does the `dim` mentioned here include `pdim` too?) stops being necessary. 
 So, we end up with the relatively short definition:
 (@Hans: this definition is actually longer than the one above so either the above sentence needs to change or the 
