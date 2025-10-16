@@ -1,3 +1,25 @@
+const callback_keyword_docs = """
+## Callback Keywords
+
+The callback system supports three keyword arguments that control how callbacks are managed:
+
+- **`add_comp_cb`**: Additional component callbacks: A `Dict` mapping component
+  indices (e.g., `VIndex(1)` or `EIndex(2)`) to component callbacks. These are
+  forwarded to [`get_callbacks`](@ref) and combined with callbacks stored in the
+  network's component metadata. Use this to inject temporary component callbacks
+  without modifying the network structure.
+
+- **`add_nw_cb`**: Additional network/system callbacks: A network-level callback
+  or `CallbackSet` (e.g., `PeriodicCallback`, `PresetTimeCallback`) that is
+  combined with the network's component callbacks. Use this for callbacks that
+  don't fit the component-based pattern, such as periodic saving or global
+  termination conditions.
+
+- **`override_cb`**: A callback or `CallbackSet` that completely replaces all network callbacks.
+  When set, both `add_comp_cb` and `add_nw_cb` must be empty/nothing (enforced by ArgumentError).
+  Use this for complete control over the callback system.
+"""
+
 """
     SciMLBase.ODEProblem(nw::Network, args...;
         add_comp_cb=Dict(),
@@ -9,27 +31,7 @@
 Custom cosntructor for creating ODEProblem base of a `Network`-Object.
 Its main purpose is to automaticially handle callback construction from the component level callbacks.
 
-## Callback Keywords
-
-The callback system supports three keyword arguments that control how callbacks are managed:
-
-- **`add_comp_cb`**: A `Dict` mapping component indices (e.g., `VIndex(1)` or `EIndex(2)`) to
-  component callbacks. These are forwarded to [`get_callbacks`](@ref) and combined with callbacks
-  stored in the network's component metadata. Use this to inject temporary component callbacks
-  without modifying the network structure.
-
-- **`add_nw_cb`**: A network-level callback or `CallbackSet` (e.g., `PeriodicCallback`,
-  `PresetTimeCallback`) that is combined with the network's component callbacks. Use this for
-  callbacks that don't fit the component-based pattern, such as periodic saving or global
-  termination conditions.
-
-- **`override_cb`**: A callback or `CallbackSet` that completely replaces all network callbacks.
-  When set, both `add_comp_cb` and `add_nw_cb` must be empty/nothing (enforced by ArgumentError).
-  Use this for complete control over the callback system.
-
-**Note**: Passing the `callback` keyword directly will throw an ArgumentError to avoid confusion.
-If you need full control over callback construction, use the underlying `ODEProblem` constructor
-directly with flat state and parameter vectors.
+$callback_keyword_docs
 """
 function SciMLBase.ODEProblem(
     nw::Network, args...;
@@ -80,27 +82,7 @@ This is a simple wrapper which:
 - makes a copy of the parameter vector to avoid side effects due to callbacks
 - constructs the callbacks from the network and combines them with any additional callbacks
 
-## Callback Keywords
-
-The callback system supports three keyword arguments that control how callbacks are managed:
-
-- **`add_comp_cb`**: A `Dict` mapping component indices (e.g., `VIndex(1)` or `EIndex(2)`) to
-  component callbacks. These are forwarded to [`get_callbacks`](@ref) and combined with callbacks
-  stored in the network's component metadata. Use this to inject temporary component callbacks
-  without modifying the network structure.
-
-- **`add_nw_cb`**: A network-level callback or `CallbackSet` (e.g., `PeriodicCallback`,
-  `PresetTimeCallback`) that is combined with the network's component callbacks. Use this for
-  callbacks that don't fit the component-based pattern, such as periodic saving or global
-  termination conditions.
-
-- **`override_cb`**: A callback or `CallbackSet` that completely replaces all network callbacks.
-  When set, both `add_comp_cb` and `add_nw_cb` must be empty/nothing (enforced by ArgumentError).
-  Use this for complete control over the callback system.
-
-**Note**: Passing the `callback` keyword directly will throw an ArgumentError to avoid confusion.
-If you need full control over callback construction, use the underlying `ODEProblem` constructor
-directly with flat state and parameter vectors.
+$callback_keyword_docs
 """
 function SciMLBase.ODEProblem(nw::Network, s0::NWState, tspan, p::NWParameter=s0.p; kwargs...)
     u = uflat(s0)
