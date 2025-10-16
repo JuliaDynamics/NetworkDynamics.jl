@@ -120,6 +120,10 @@ const CHECK_COMPONENT = Ref(true)
 export chk_component
 include("doctor.jl")
 
+# additional utils, which depend on specific types beeing defined so they should be
+# loaded after all other files
+include("post_utils.jl")
+
 export describe_vertices, describe_edges, get_jac_prototype
 function describe_vertices end
 function describe_edges end
