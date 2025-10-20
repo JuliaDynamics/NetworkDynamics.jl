@@ -91,6 +91,7 @@ const anim_chars = ["◐", "◓", "◑", "◒"]
 anim_char(i) = anim_chars[mod1(i, length(anim_chars))]
 ansi_moveup(n::Int) = string("\e[", n, "A")
 ansi_movecol1 = "\e[1G"
+ansi_movecolend = "\e[999C"
 ansi_cleartoend = "\e[0J"
 ansi_cleartoendofline = "\e[0K"
 ansi_enablecursor = "\e[?25h"
@@ -118,11 +119,17 @@ function run_fancy(tasks::Vector{SpinTask})
         try
             buf = _io_like_(stdout)
             anim_counter = 0
+            running = 0
             while !interrupted[] && any(t -> t.status != :printed, tasks)
                 wait(t)
-                anim_counter += 1
 
-                print(buf, ansi_cleartoend)
+                # move cursor up and clear, but not in first iteration
+                if anim_counter > 0
+                    print(buf, ansi_moveup(running+1), ansi_movecol1)
+                    print(buf, ansi_cleartoend)
+                end
+
+                anim_counter += 1
 
                 done = 0
                 # print done/error
@@ -155,7 +162,7 @@ function run_fancy(tasks::Vector{SpinTask})
                 # only print progress bar if not all done
                 if done < n_tasks
                     # print done/total unicode progress bar
-                    width = min(displaysize(stdout)[2], 50)
+                    width = min(displaysize(stdout)[2], 30)
 
                     maxlength = length(string(n_tasks))
 
@@ -178,11 +185,6 @@ function run_fancy(tasks::Vector{SpinTask})
 
                 s = String(take!(buf.io))
                 print(stdout, s)
-
-                if done < n_tasks
-                    print(stdout, ansi_moveup(running + 1), ansi_movecol1)
-                end
-
             end
         catch e
             if e isa InterruptException
@@ -192,6 +194,7 @@ function run_fancy(tasks::Vector{SpinTask})
         finally
             print(stdout, ansi_enablecursor)
         end
+        print(stdout, ansi_moveup(1), ansi_movecolend, ansi_cleartoend)
     end)
 
     Threads.@threads for t in tasks
@@ -208,7 +211,14 @@ function run_fancy(tasks::Vector{SpinTask})
         end
     end
 
-    wait(printer)
+    try
+        wait(printer)
+    catch e
+        if e isa InterruptException
+            interrupted[] = true
+        end
+        rethrow(e)
+    end
 
     return nothing
 end

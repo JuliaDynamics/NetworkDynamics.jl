@@ -47,25 +47,5 @@ NetworkDynamics.run_fancy(tasks)
 
 NetworkDynamics.run_fancy(tasks_noerr)
 
-tasks = [SpinTask((io)->busysleep(rand(1:0.1:10)), "Task $i") for i in 1:20]
+tasks = [SpinTask((io)->busysleep(rand(1:0.1:2)), "Task $i") for i in 1:30]
 NetworkDynamics.run_fancy(tasks)
-
-width = 3
-done = 2
-total = 5
-
-begin
-    width = 3
-    max = 5
-    for i in 0:max
-        println(" $(lpad(i,2))/$max ", NetworkDynamics.progressbar(width, i, max))
-    end
-end
-
-begin
-    width = 10
-    max = 30
-    for i in 0:max
-        println(" $(lpad(i,2))/$max ", NetworkDynamics.progressbar(width, i, max))
-    end
-end
