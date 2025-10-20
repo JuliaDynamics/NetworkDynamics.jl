@@ -85,6 +85,9 @@ export @initformula, InitFormula
 export @guessformula, GuessFormula
 include("init_constraints.jl")
 
+# spinners for initialization
+include("spinners.jl")
+
 using OrderedCollections: OrderedDict
 using NonlinearSolve: NonlinearFunction, NonlinearLeastSquaresProblem
 using SteadyStateDiffEq: SteadyStateProblem, SSRootfind
