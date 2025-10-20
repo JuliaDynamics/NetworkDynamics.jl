@@ -268,6 +268,7 @@ KAAggregator
 
 ## Utils
 ```@docs
+SciMLBase.ODEProblem(::NetworkDynamics.Network, ::NetworkDynamics.NWState, ::Any)
 save_parameters!
 ff_to_constraint
 Base.copy(::NetworkDynamics.ComponentModel)

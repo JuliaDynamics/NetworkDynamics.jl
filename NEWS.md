@@ -1,5 +1,10 @@
 # NetworkDynamics Release Notes
 
+## v0.10.11 Changelog
+- [#324](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/324): Add custom ODEProblem constructor which takes a `NWState` object rather than flat arrays.
+  Also always generate Network callbacks automatically.
+  If you've previously passed `callback=get_callbacks(nw)`, you'll get a deprecation note. For any other usage of the `callback` keyword on ODEProblem Constructor you'll get an error.
+
 ## v0.10.10 Changelog
 - [#323](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/323) Add `GuessFormula` system for improving initial guesses in component initialization:
   - New `GuessFormula` type and `@guessformula` macro for defining guess refinement formulas
