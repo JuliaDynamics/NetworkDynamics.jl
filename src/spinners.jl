@@ -114,14 +114,14 @@ function run_fancy(tasks::Vector{SpinTask})
 
     printer = Base.errormonitor(Threads.@spawn :interactive begin
         n_tasks = length(tasks)
-        t = Timer(0; interval=1/10)
+        timer = Timer(0; interval=1/10)
         print(stdout, ansi_disablecursor)
         try
             buf = _io_like_(stdout)
             anim_counter = 0
             running = 0
             while !interrupted[] && any(t -> t.status != :printed, tasks)
-                wait(t)
+                wait(timer)
 
                 # move cursor up and clear, but not in first iteration
                 if anim_counter > 0
@@ -193,6 +193,7 @@ function run_fancy(tasks::Vector{SpinTask})
             rethrow(e)
         finally
             print(stdout, ansi_enablecursor)
+            close(timer)
         end
         print(stdout, ansi_moveup(1), ansi_movecolend, ansi_cleartoend)
     end)
