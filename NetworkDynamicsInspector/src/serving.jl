@@ -26,7 +26,7 @@ end
 """
     get_display(::NDIDisplay; restart, kwargs...)
 """
-function serve_app(display, app)
+function serve_app(disp, app)
     if disp isa ElectronDisp
         @error "Electron.jl not available. Please install Electron.jl and `using Electron` before calling this function."
     else
