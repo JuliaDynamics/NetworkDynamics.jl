@@ -146,6 +146,7 @@ abstract type SymbolicIndex{C,S} end
 
 flatten_sym(v::NamedTuple) = reduce(vcat, values(v))
 flatten_sym(v::AbstractVector{Symbol}) = v
+flatten_sym(v::AbstractVector) = Symbol.(v)
 
 """
     find_identical(v::Vector;; equality)

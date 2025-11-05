@@ -11,6 +11,7 @@ using LinearAlgebra: Diagonal, I
 using SymbolicUtils.Code: Let, Assignment
 using SymbolicUtils: SymbolicUtils
 using OrderedCollections: OrderedDict
+using SymbolicIndexingInterface: SymbolicIndexingInterface as SII
 
 using NetworkDynamics: NetworkDynamics, set_metadata!,
                        PureFeedForward, FeedForward, NoFeedForward, PureStateMap

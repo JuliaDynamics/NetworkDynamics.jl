@@ -158,6 +158,12 @@ function warn_missing_features(sys)
     if !isempty(ModelingToolkit.initialization_equations(sys))
         @warn "Model has explicit init equation. Those are currently ignored by NetworkDynamics.jl."
     end
+
+    calls = filter(iscall, SII.all_symbols(sys))
+    indx = filter(x -> operation(x) === Base.getindex, calls)
+    if !isempty(indx)
+        @warn "Detected usage of vector variables or parameters in model ($(join(repr.(indx), ", "))), this is not supported and may lead to errors!"
+    end
 end
 function _collect_continuous_events(sys)
     vcat(

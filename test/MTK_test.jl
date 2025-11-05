@@ -427,3 +427,19 @@ end
     @named prosumer_fixed = WrapperFixed()
     VertexModel(prosumer_fixed, [:q̃_nw], [:p]) # no throw
 end
+
+@testset "Error on vector variables" begin
+    @mtkmodel VectorModel begin
+        @variables begin
+            out(t)
+        end
+        @parameters begin
+            A[1:2], [description = "vector parameter"]
+        end
+        @equations begin
+            out ~ A[1] + A[2]
+        end
+    end
+    @named vectormodel = VectorModel()
+    @test_throws ArgumentError VertexModel(vectormodel, [], [:out])
+end
