@@ -5,6 +5,8 @@ using ModelingToolkit
 using ModelingToolkit: t_nounits as t, D_nounits as Dt
 using SymbolicIndexingInterface: SymbolicIndexingInterface as SII
 using Chairmarks
+using NonlinearSolve
+using SciMLLogging
 
 (isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
 
@@ -592,6 +594,18 @@ end
     end
     @test s_meta[VIndex(1, :swing₊V)] ≈ s_meta[VIndex(1, :u_mag)]
     @test s_meta[VIndex(1, :load₊Pset)] ≈ -1.0
+
+    @testset "test passing of subalg and subsolve_kwargs" begin
+        @test_throws SciMLBase.NonSolverError initialize_componentwise(nw; subalg=:foo)
+        @test_throws SciMLBase.NonSolverError initialize_componentwise(nw; subalg=Dict(VIndex(:swing_and_load) => :foo))
+        alg = NonlinearSolve.GaussNewton()
+        @test_throws ComponentInitError initialize_componentwise(nw; subalg=alg) # should work
+        initialize_componentwise(nw; subsolve_kwargs=(;verbose=Detailed())) # should work
+
+        # inject high tolerances to make the tol test fail
+        @test_throws ComponentInitError initialize_componentwise(nw; subsolve_kwargs=(;reltol=100, abstol=100))
+        # initialize_componentwise(nw; subsolve_kwargs=(;verbose=Detailed()))
+    end
 end
 
 @testset "InitFormula tests" begin
