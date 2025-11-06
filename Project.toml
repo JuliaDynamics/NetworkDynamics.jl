@@ -4,7 +4,7 @@ version = "0.10.11"
 authors = ["Frank Hellmann <hellmann@pik-potsdam.de>, Michael Lindner <michaellindner@pik-potsdam.de>, Hans Würfel <git@wuerfel.io"]
 
 [workspace]
-projects = ["test", "docs", "benchmark", "NetworkDynamicsInspector"]
+projects = ["test", "benchmark"]
 
 [deps]
 ArgCheck = "dce04be8-c92d-5529-be00-80e4d2c0e197"
