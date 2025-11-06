@@ -929,6 +929,7 @@ function _initialize_componentwise(
 
     # dict might be proveided as VIndex(:foo) so we need to resolv comp names
     subalg = _resolve_subargument_dict(nw, subalg)
+    subsolve_kwargs = _resolve_subargument_dict(nw, subsolve_kwargs)
 
     for vi in 1:nv(nw)
         _default_overrides = _filter_overrides(nw, VIndex(vi), default_overrides)
