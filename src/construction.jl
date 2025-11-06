@@ -251,7 +251,14 @@ function Network(vertexfs, edgefs; warn_order=true, kwargs...)
         end
         SimpleEdge(src, dst)
     end
-    allunique(simpleedges) || throw(ArgumentError("Some edge models have the same `graphelement`!"))
+    if !allunique(simpleedges)
+        msg = "Some edge models have the same `graphelement`!"
+        alldup = filter(x -> length(x) > 1, find_identical(simpleedges))
+        for dup in alldup
+            msg *= "\n - Edges $dup refer to same element $(simpleedges[first(dup)])"
+        end
+        throw(ArgumentError(msg))
+    end
     edict = Dict(simpleedges .=> edgefs)
 
     # if all src < dst then we can use SimpleGraph, else digraph
