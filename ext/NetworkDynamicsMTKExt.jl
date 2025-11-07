@@ -89,7 +89,7 @@ function VertexModel(sys::System, inputs, outputs; verbose=false, name=getname(s
     set_metadata!(c, :outputeqs, gen.outputeqs)
     set_metadata!(c, :odesystem, gen.odesystem)
 
-    # apply postrocessing functions from subcomponent metadata
+    # apply postprocessing functions from subcomponent metadata
     apply_component_postprocessing!(c)
     c
 end
@@ -207,7 +207,7 @@ function EdgeModel(sys::System, srcin, dstin, srcout, dstout; verbose=false, nam
     set_metadata!(c, :outputeqs, gen.outputeqs)
     set_metadata!(c, :odesystem, gen.odesystem)
 
-    # apply postrocessing functions from subcomponent metadata
+    # apply postprocessing functions from subcomponent metadata
     apply_component_postprocessing!(c)
     c
 end

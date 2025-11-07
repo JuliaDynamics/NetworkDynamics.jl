@@ -377,7 +377,7 @@ end
 """
     ComponentPostprocessing
 
-Custom MTK metadata type, you can add it to register a postprocessing function `f`` for your model
+Custom MTK metadata type, you can add it to register a postprocessing function `f` for your model
 
     function my_postproc(cm::Union{VertexModel, EdgeModel}, namespace)
         # alter the cm as needed, for example add callbacks
@@ -390,7 +390,7 @@ Custom MTK metadata type, you can add it to register a postprocessing function `
         ...
     end
 
-The postprocessing function will called at the end of the `VertexModel`/`EdgeModel` construction
+The postprocessing function will be called at the end of the `VertexModel`/`EdgeModel` construction
 after the model compilation.
 You can use it to add custom callbacks or init functions/metadata to the generated component.
 The function gets both the component model to *modify* and the namespace (as string) of the model.

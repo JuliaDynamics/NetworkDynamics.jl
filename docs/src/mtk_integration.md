@@ -230,11 +230,11 @@ VertexModel(kirchhoff, [:i_sum], [:v])
 where we "trick" MTK into believing that the input forcing equation depends on the output too.
 
 ## Register Postprocessing Functions
-MTK models are "composite" by design, i.e. your toplevel model might contain of multiple internal components.
+MTK models are "composite" by design, i.e. your toplevel model might consist of multiple internal components.
 Sometimes, you want to specify behavior of the **encapsulating model** on a subcomponent level. 
-For that, NetworkDynamics provieds the [`ComponentPostprocessing`](@ref) metadata mechanism.
+For that, NetworkDynamics provides the [`ComponentPostprocessing`](@ref) metadata mechanism.
 
-Lets say you want to implement an integrator with anti windup
+Let's say you want to implement an integrator with anti windup
 ```asciiart
               __ outMax
              /
@@ -248,12 +248,12 @@ outMin __/
 
 We could try to implement this using `ifelse`  functions, but the proper way is to do it with callbacks.
 Since NetworkDynamics cannot understand events defined within MTK models, we need to attach the callbacks on the component level.
-Thats annoying, because the building block might appear in lots of different models.
+That's annoying, because the building block might appear in lots of different models.
 To work around this shortcoming, ND.jl allows you to define postprocessing functions, which will be called on every model which makes use of the subsystem.
 
 In our model, we add two "internal" parameters, to indicate if the system is in lower or upper saturation.
 Depending on the saturation state, the integrator is "disabled".
-The model definition looks like this. The important paert is the `@metadata` block at the end.
+The model definition looks like this. The important part is the `@metadata` block at the end.
 
 ```@example mtk
 function attach_limint_callback! end # function needs to exist before model
@@ -298,7 +298,7 @@ The function below generates such a callback for the component at a given namesp
 
 ```@example mtk
 function attach_limint_callback!(cf, namespace)
-    # generate the require symbols based on the namespace
+    # generate the required symbols based on the namespace
     min = Symbol(namespace, "₊min")
     max = Symbol(namespace, "₊max")
     out = Symbol(namespace, "₊out")
@@ -368,7 +368,7 @@ end
 !!!
 warning: DO NOT USE MODEL ABOVE
     Even though fairly complex, the above function is a simplified example which may have performance problems 
-    and does not add "safty" discrete callbacks. Under discrete jumps, the zero crossing might be skipped so 
+    and does not add "safety" discrete callbacks. Under discrete jumps, the zero crossing might be skipped so 
     it is good practice to add additional discrete callbacks to detect those cases (i.e. check if `out >= max + 1e-10`).
     You'll find a "proper" version of the saturated integrator in the PowerDynamics.jl Library, feel free 
     to copy the code from there.
@@ -395,4 +395,4 @@ When we build this (useless) vertex model
 ```@example mtk
 vm = VertexModel(testcomp, [:in], [:out])
 ```
-we see the callback was generated and attached automaticially.
+we see the callback was generated and attached automatically.

@@ -927,7 +927,7 @@ function _initialize_componentwise(
         Dict{SymbolicIndex, Float64}()
     end
 
-    # dict might be proveided as VIndex(:foo) so we need to resolv comp names
+    # dict might be provided as VIndex(:foo) so we need to resolve comp names
     subalg = _resolve_subargument_dict(nw, subalg)
     subsolve_kwargs = _resolve_subargument_dict(nw, subsolve_kwargs)
 
@@ -1042,7 +1042,7 @@ _resolve_subargument_dict(nw, gooddict::AbstractDict{<:SymbolicIndex{Int}}) = go
 function _resolve_subargument_dict(nw, dict::AbstractDict)
     if any(t -> !(t isa SymbolicIndex{Int}), keys(dict))
         if any(t -> !(t isa SymbolicIndex), keys(dict))
-            throw(ArgumentError("property-dict musst be have VIndex/EIndex as keys!"))
+            throw(ArgumentError("property-dict must have VIndex/EIndex as keys!"))
         end
         resolved_dict = Dict{SymbolicIndex{Int}, Any}()
         for (k, v) in pairs(dict)
