@@ -280,12 +280,13 @@ function attach_limint_callback! end # function needs to exist before model
         min ~ outMin
         max ~ outMax
         forcing ~ K*in
-        T*Dt(out) ~ (1 - _callback_sat_max - _callback_sat_min) * forcing
+        T*D(out) ~ (1 - _callback_sat_max - _callback_sat_min) * forcing
     end
     @metadata begin
         ComponentPostprocessing = attach_limint_callback!
     end
 end
+nothing #hide
 ```
 
 The callback to generate is split in three separate conditions:
@@ -364,9 +365,9 @@ function attach_limint_callback!(cf, namespace)
     # finally add callback to component
     NetworkDynamics.add_callback!(cf, cb)
 end
+nothing #hide
 ```
-!!!
-warning: DO NOT USE MODEL ABOVE
+!!! warning
     Even though fairly complex, the above function is a simplified example which may have performance problems 
     and does not add "safety" discrete callbacks. Under discrete jumps, the zero crossing might be skipped so 
     it is good practice to add additional discrete callbacks to detect those cases (i.e. check if `out >= max + 1e-10`).
@@ -390,6 +391,7 @@ With the definition above, we can create a model which uses the limited integrat
 end
 
 @named testcomp = ComponentWithLimInt()
+nothing #hide
 ```
 When we build this (useless) vertex model
 ```@example mtk
