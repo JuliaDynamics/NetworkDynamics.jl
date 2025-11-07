@@ -246,3 +246,77 @@ function remove_implicit_output_fn!(eqs)
 
     eqs
 end
+
+function collect_comp_metadata(sys, key)
+    md = Dict{String, Any}()
+    _collect_comp_metadata!(md, sys, key, nothing)
+    md
+end
+function _collect_comp_metadata!(md, sys, key, current_namespace)
+    # get namespaced model name
+    ns_modelname = if isnothing(current_namespace)
+        "" # toplevel needs no name
+    elseif isempty(current_namespace)
+        string(getname(sys))
+    else
+        string(current_namespace, "₊", getname(sys))
+    end
+
+    # collect from current system
+    thismd = ModelingToolkit.get_metadata(sys)
+    if haskey(thismd, key)
+        if haskey(md, ns_modelname) && md[ns_modelname] != thismd[key]
+            _modname = isempty(ns_modelname) ? "toplevel model" : ns_modelname
+            @warn "Overwriting metadata $key for $_modname while collecting"
+        end
+        md[ns_modelname] = thismd[key]
+    end
+
+    # collect from parent
+    if !isnothing(ModelingToolkit.get_parent(sys))
+        _collect_comp_metadata!(md, ModelingToolkit.get_parent(sys), key, current_namespace)
+    end
+
+    # collect from subsystems
+    for s in ModelingToolkit.get_systems(sys)
+        _collect_comp_metadata!(md, s, key, ns_modelname)
+    end
+    nothing
+end
+
+
+function apply_component_postprocessing!(cf)
+    sys = cf.metadata[:odesystem]
+    md = collect_comp_metadata(sys, ComponentPostprocessing)
+    for (modelname, ppfs) in md
+        if ppfs isa Union{AbstractVector, Tuple}
+            for ppf in ppfs
+                _check_symbol(ppf, modelname)
+                ppf(cf, modelname)
+            end
+        else
+            _check_symbol(ppfs, modelname)
+            ppfs(cf, modelname)
+        end
+    end
+end
+_check_symbol(x, _) = nothing
+function _check_symbol(ppf::Symbol, name)
+    _name = isempty(name) ? "toplevel model" : "subsystem \"$name\""
+    error(
+        """
+        The postprocessing function `$ppf` included in $_name could not be captured. \
+        This is a limitation of the `@mtkmodel` macro. You need to make sure, that the function \
+        $ppf is defined before the model definition! I.e. write
+
+        function $ppf end
+        @mtkmodel ModelUsedAs begin
+            @metadata begin
+                ComponentPostprocessing = $ppf
+            end
+        end
+
+        or put the entire function above the model definition.
+        """
+    )
+end

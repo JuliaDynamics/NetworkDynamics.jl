@@ -13,7 +13,7 @@ using SymbolicUtils: SymbolicUtils
 using OrderedCollections: OrderedDict
 using SymbolicIndexingInterface: SymbolicIndexingInterface as SII
 
-using NetworkDynamics: NetworkDynamics, set_metadata!,
+using NetworkDynamics: NetworkDynamics, set_metadata!, ComponentPostprocessing,
                        PureFeedForward, FeedForward, NoFeedForward, PureStateMap
 import NetworkDynamics: VertexModel, EdgeModel, AnnotatedSym
 
@@ -88,6 +88,9 @@ function VertexModel(sys::System, inputs, outputs; verbose=false, name=getname(s
     set_metadata!(c, :equations, gen.equations)
     set_metadata!(c, :outputeqs, gen.outputeqs)
     set_metadata!(c, :odesystem, gen.odesystem)
+
+    # apply postrocessing functions from subcomponent metadata
+    apply_component_postprocessing!(c)
     c
 end
 
@@ -203,6 +206,9 @@ function EdgeModel(sys::System, srcin, dstin, srcout, dstout; verbose=false, nam
     set_metadata!(c, :equations, gen.equations)
     set_metadata!(c, :outputeqs, gen.outputeqs)
     set_metadata!(c, :odesystem, gen.odesystem)
+
+    # apply postrocessing functions from subcomponent metadata
+    apply_component_postprocessing!(c)
     c
 end
 
