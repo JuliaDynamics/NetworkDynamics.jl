@@ -498,11 +498,19 @@ module InTime
     end
 end
 @testset "postrpocessing callback defined after model" begin
-    @named mod = Main.ToLate.LateModel()
-    @test_throws ErrorException VertexModel(mod, [:in], [:out])
+    testmodule = @__MODULE__
+    mod = testmodule.ToLate.LateModel(; name=:mod)
+    try
+        VertexModel(mod, [:in], [:out])
+        @test false
+    catch e
+        @test contains(e.msg, "postprocessing function `to_late_defined` included in")
+    end
 
-    @named mod = Main.InTime.Model()
+    @info "Befor in time model"
+    mod = testmodule.InTime.Model(; name=:mod)
     vm = VertexModel(mod, [:in], [:out])
+
     @test InTime.cfref[] === vm
     @test InTime.nsref[] == ""
 end
