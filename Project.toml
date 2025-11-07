@@ -1,7 +1,7 @@
 name = "NetworkDynamics"
 uuid = "22e9dc34-2a0d-11e9-0de0-8588d035468b"
-authors = ["Frank Hellmann <hellmann@pik-potsdam.de>, Michael Lindner <michaellindner@pik-potsdam.de>, Hans Würfel <git@wuerfel.io"]
 version = "0.10.11"
+authors = ["Frank Hellmann <hellmann@pik-potsdam.de>, Michael Lindner <michaellindner@pik-potsdam.de>, Hans Würfel <git@wuerfel.io"]
 
 [deps]
 ArgCheck = "dce04be8-c92d-5529-be00-80e4d2c0e197"
@@ -87,6 +87,6 @@ SteadyStateDiffEq = "2.2.0"
 StyledStrings = "1.0.3"
 SymbolicIndexingInterface = "0.3.27"
 SymbolicUtils = "3.24"
-Symbolics = "6.19.0"
+Symbolics = "6.19.0, 7"
 TimerOutputs = "0.5.23"
 julia = "1.10"
