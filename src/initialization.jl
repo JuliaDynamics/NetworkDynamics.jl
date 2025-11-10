@@ -404,9 +404,10 @@ The function solves a nonlinear problem to find values for all free variables/pa
 - `verbose`: Whether to print information during initialization
 - `apply_bound_transformation`: Whether to apply bound-conserving transformations
 - `t`: Time at which to solve for steady state. Only relevant for components with explicit time dependency.
-- `tol`: Tolerance for the residual of the initialized model (defaults to `1e-10`). Init throws error if resid < tol.
+- `tol`: Tolerance for the residual of the initialized model (defaults to `1e-10`). Init throws error if resid ≥ tol.
 - `residual`: Optional `Ref{Float64}` which gets the final residual of the initialized model.
-- `kwargs...`: Additional arguments passed to the nonlinear solver
+- `alg=nothing`: Nonlinear solver algorithm (defaults to NonlinearSolve.jl default)
+- `solve_kwargs=(;)`: Additional keyword arguments passed to the SciML `solve` function
 
 ## Returns
 - Dictionary mapping symbols to their values (complete state including defaults and initialized values)
@@ -436,7 +437,13 @@ function initialize_component(cf;
                              # internal keywords to "return" the final defaults/guesses after applying formulas
                              _final_defaults=nothing,
                              _final_guesses=nothing,
+                             alg=nothing,
+                             solve_kwargs=(;),
                              kwargs...)
+
+    if !isempty(kwargs)
+        @warn "Passing `kwargs` to `initialize_component(!)` is deprecated. Use `alg` and `solve_kwargs=(; kw=val)` instead."
+    end
 
     defaults = isnothing(default_overrides) ? defaults : merge(defaults, default_overrides)
     guesses  = isnothing(guess_overrides)   ? guesses  : merge(guesses, guess_overrides)
@@ -491,7 +498,7 @@ function initialize_component(cf;
     end
 
     if !isempty(prob.u0)
-        sol = SciMLBase.solve(prob; verbose, kwargs...)
+        sol = SciMLBase.solve(prob, alg; verbose, kwargs..., solve_kwargs...)
 
         if sol.prob isa NonlinearLeastSquaresProblem && sol.retcode == SciMLBase.ReturnCode.Stalled
             res = LinearAlgebra.norm(sol.resid)
@@ -579,7 +586,7 @@ symbolic metadata and writes the initialized values back in to the metadata.
 - `additional_initconstraint`: Additional initialization constraints to apply beyond those in component metadata
 - `verbose`: Whether to print information during initialization
 - `t`: Time at which to solve for steady state. Only relevant for components with explicit time dependency.
-- All other `kwargs` are passed to `initialize_component`
+- All other `kwargs` are passed to [`initialize_component`](@ref), see its docstring for details!
 
 When `defaults`, `guesses`, or `bounds` are provided, they replace the corresponding
 metadata in the component model. Any keys in the original metadata that are not in
@@ -832,7 +839,9 @@ initialize_docstring = raw"""
         subverbose=false,
         tol=1e-10,
         nwtol=1e-10,
-        t=NaN
+        t=NaN,
+        subalg=nothing,
+        subsolve_kwargs=nothing,
     ) :: NWState
 
 Initialize a network by solving initialization problems for each component individually,
@@ -861,6 +870,9 @@ state again, as it is stored in the metadata.
 - `tol`: Tolerance for individual component residuals
 - `nwtol`: Tolerance for the full network residual
 - `t`: Time at which to evaluate the system
+- `subalg`: Nonlinear solver algorithm to use for component initialization (defaults to NonlinearSolve.jl default). Can be passed as single value or dict mapping VIndex/EIndex to alg (non-existent keys use default).
+- `subsolve_kwargs`: Additional keyword arguments passed to the SciML `solve` function for component initialization.
+  Can be passed as single value or dict mapping VIndex/EIndex to kwargs (non-existent keys use empty kwargs `(;)`).
 
 ## Returns
 - `NWState`: A fully initialized network state that can be used for simulation
@@ -900,7 +912,9 @@ function _initialize_componentwise(
     subverbose=false,
     tol=1e-10,
     nwtol=1e-10,
-    t=NaN
+    t=NaN,
+    subalg=nothing,
+    subsolve_kwargs=nothing,
 )
     initfun = if mutating == Val(true)
         initialize_component!
@@ -912,6 +926,11 @@ function _initialize_componentwise(
     else
         Dict{SymbolicIndex, Float64}()
     end
+
+    # dict might be provided as VIndex(:foo) so we need to resolve comp names
+    subalg = _resolve_subargument_dict(nw, subalg)
+    subsolve_kwargs = _resolve_subargument_dict(nw, subsolve_kwargs)
+
     for vi in 1:nv(nw)
         _default_overrides = _filter_overrides(nw, VIndex(vi), default_overrides)
         _guess_overrides = _filter_overrides(nw, VIndex(vi), guess_overrides)
@@ -932,6 +951,8 @@ function _initialize_componentwise(
             t=t,
             tol=tol,
             residual=rescapture,
+            alg=_determine_subargument(subalg, VIndex(vi), nothing),
+            solve_kwargs=_determine_subargument(subsolve_kwargs, VIndex(vi), (;)),
         )
         !_subverbose && verbose && println("\b\b\b => residual $(rescapture[])")
         verbose && _subverbose && println()
@@ -957,6 +978,8 @@ function _initialize_componentwise(
             t=t,
             tol=tol,
             residual=rescapture,
+            alg=_determine_subargument(subalg, EIndex(ei), nothing),
+            solve_kwargs=_determine_subargument(subsolve_kwargs, EIndex(ei), (;)),
         )
         !_subverbose && verbose && println("\b\b\b => residual $(rescapture[])")
         verbose && _subverbose && println()
@@ -1009,6 +1032,28 @@ _merge_wrapped!(::Nothing, _, _) = nothing
 _determine_subverbose(subverbose::Bool, _) = subverbose
 _determine_subverbose(subverbose::AbstractVector, idx) = idx ∈ subverbose
 _determine_subverbose(subverbose, idx) = idx == subverbose
+
+_determine_subargument(subargument::Nothing, idx, default) = default
+_determine_subargument(subargument::AbstractDict, idx, default) = get(subargument, idx, default)
+_determine_subargument(subargument, idx, default) = subargument
+
+_resolve_subargument_dict(nw, nodict) = nodict # no dict
+_resolve_subargument_dict(nw, gooddict::AbstractDict{<:SymbolicIndex{Int}}) = gooddict
+function _resolve_subargument_dict(nw, dict::AbstractDict)
+    if any(t -> !(t isa SymbolicIndex{Int}), keys(dict))
+        if any(t -> !(t isa SymbolicIndex), keys(dict))
+            throw(ArgumentError("property-dict must have VIndex/EIndex as keys!"))
+        end
+        resolved_dict = Dict{SymbolicIndex{Int}, Any}()
+        for (k, v) in pairs(dict)
+            resolvedidx = idxtype(k)(resolvecompidx(nw, k))
+            resolved_dict[resolvedidx] = v
+        end
+        return resolved_dict
+    else
+        return dict
+    end
+end
 
 """
     interface_values(s::NWState) :: OrderedDict{SymbolicIndex, Float64}

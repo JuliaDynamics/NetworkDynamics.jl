@@ -1,5 +1,15 @@
 # NetworkDynamics Release Notes
 
+## v0.10.12 Changelog
+Implemented in [#326](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/326):
+- Add `ComponentPostprocessing` metadata mechanism for MTK models to attach postprocessing functions (like callbacks) at subcomponent level
+- Enhance initialization system:
+  - Add `alg` and `solve_kwargs` parameters to `initialize_component` and `initialize_componentwise` for better control over nonlinear solvers
+  - Deprecate passing raw `kwargs` to initialization functions - use `alg` and `solve_kwargs` instead (old behavior still works with warning)
+  - Support passing solver options as dictionaries mapping `VIndex`/`EIndex` to component-specific settings
+  - Better error reporting for duplicate edge graphelements with detailed information about which edges conflict
+  - Add warning when MTK models use vector variables/parameters (unsupported feature)
+
 ## v0.10.11 Changelog
 - [#324](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/324): Add custom ODEProblem constructor which takes a `NWState` object rather than flat arrays.
   Also always generate Network callbacks automatically.

@@ -21,6 +21,7 @@ EdgeModel()
 VertexModel(::ModelingToolkit.System, ::Any, ::Any)
 EdgeModel(::ModelingToolkit.System, ::Any, ::Any, ::Any, ::Any)
 EdgeModel(::ModelingToolkit.System, ::Any, ::Any, ::Any)
+ComponentPostprocessing
 ```
 
 ### Output Function Helpers/Wrappers

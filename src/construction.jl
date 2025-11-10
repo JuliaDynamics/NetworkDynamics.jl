@@ -239,7 +239,7 @@ function Network(vertexfs, edgefs; warn_order=true, kwargs...)
 
     vdict = Dict(vidxs .=> vertexfs)
 
-    # find unique maapings from name => graphelement
+    # find unique mappings from name => graphelement
     vnamedict = unique_mappings(getproperty.(vertexfs, :name), get_graphelement.(vertexfs))
 
     simpleedges = map(edgefs) do e
@@ -247,11 +247,18 @@ function Network(vertexfs, edgefs; warn_order=true, kwargs...)
         src = get(vnamedict, ge.src, ge.src)
         dst = get(vnamedict, ge.dst, ge.dst)
         if src isa Symbol || dst isa Symbol
-            throw(ArgumentError("Edge graphelement $src => $dst continas non-unique or unknown vertex names!"))
+            throw(ArgumentError("Edge graphelement $src => $dst contains non-unique or unknown vertex names!"))
         end
         SimpleEdge(src, dst)
     end
-    allunique(simpleedges) || throw(ArgumentError("Some edge models have the same `graphelement`!"))
+    if !allunique(simpleedges)
+        msg = "Some edge models have the same `graphelement`!"
+        alldup = filter(x -> length(x) > 1, find_identical(simpleedges))
+        for dup in alldup
+            msg *= "\n - Edges $dup refer to same element $(simpleedges[first(dup)])"
+        end
+        throw(ArgumentError(msg))
+    end
     edict = Dict(simpleedges .=> edgefs)
 
     # if all src < dst then we can use SimpleGraph, else digraph
