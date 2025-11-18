@@ -987,12 +987,17 @@ function _initialize_componentwise(
     subalg = _resolve_subargument_dict(nw, subalg)
     subsolve_kwargs = _resolve_subargument_dict(nw, subsolve_kwargs)
 
+    # to improve type stability, we split the overrides into v/e parts only once
+    default_v_overrides, default_e_overrides = _split_overrides(default_overrides)
+    guess_v_overrides, guess_e_overrides = _split_overrides(guess_overrides)
+    bound_v_overrides, bound_e_overrides = _split_overrides(bound_overrides)
+
     tasks = SpinTask[]
     for vi in 1:nv(nw)
         _comp = nw[VIndex(vi)]
-        _default_overrides = _filter_overrides(nw, VIndex(vi), default_overrides)
-        _guess_overrides = _filter_overrides(nw, VIndex(vi), guess_overrides)
-        _bound_overrides = _filter_overrides(nw, VIndex(vi), bound_overrides)
+        _default_overrides = _filter_overrides(nw, VIndex(vi), default_v_overrides)
+        _guess_overrides = _filter_overrides(nw, VIndex(vi), guess_v_overrides)
+        _bound_overrides = _filter_overrides(nw, VIndex(vi), bound_v_overrides)
         _add_initformula=isnothing(additional_initformula) ? nothing : get(additional_initformula, VIndex(vi), nothing)
         _add_guessformula=isnothing(additional_guessformula) ? nothing : get(additional_guessformula, VIndex(vi), nothing)
         _add_initconstraint=isnothing(additional_initconstraint) ? nothing : get(additional_initconstraint, VIndex(vi), nothing)
@@ -1028,9 +1033,9 @@ function _initialize_componentwise(
     end
     for ei in 1:ne(nw)
         _comp = nw[EIndex(ei)]
-        _default_overrides = _filter_overrides(nw, EIndex(ei), default_overrides)
-        _guess_overrides = _filter_overrides(nw, EIndex(ei), guess_overrides)
-        _bound_overrides = _filter_overrides(nw, EIndex(ei), bound_overrides)
+        _default_overrides = _filter_overrides(nw, EIndex(ei), default_e_overrides)
+        _guess_overrides = _filter_overrides(nw, EIndex(ei), guess_e_overrides)
+        _bound_overrides = _filter_overrides(nw, EIndex(ei), bound_e_overrides)
         _add_initformula=isnothing(additional_initformula) ? nothing : get(additional_initformula, EIndex(ei), nothing)
         _add_guessformula=isnothing(additional_guessformula) ? nothing : get(additional_guessformula, EIndex(ei), nothing)
         _add_initconstraint=isnothing(additional_initconstraint) ? nothing : get(additional_initconstraint, EIndex(ei), nothing)
@@ -1101,17 +1106,29 @@ function _initialize_componentwise(
     s0
 end
 _filter_overrides(_, _, ::Nothing) = nothing
-function _filter_overrides(nw, filteridx::SymbolicIndex{Int,Nothing}, dict::AbstractDict)
+function _filter_overrides(nw, filteridx, dict::AbstractDict)
     filtered = Dict{Symbol, valtype(dict)}()
     for (key, val) in dict
-        if filteridx == idxtype(key)(resolvecompidx(nw, key))
-            if !(key.subidx isa Symbol)
-                error("Overwrites must be provided as SymbolicIndex{...,Symbol}! Got $key instead.")
-            end
+        if filteridx.compidx == resolvecompidx(nw, key)
             filtered[key.subidx] = val
         end
     end
     filtered
+end
+_split_overrides(::Nothing) = nothing, nothing
+function _split_overrides(dict)
+    voverrides = Dict{VIndex{Int,Symbol}, valtype(dict)}()
+    eoverrides = Dict{EIndex{Int,Symbol}, valtype(dict)}()
+    for (key, val) in dict
+        if key isa VIndex{Int,Symbol}
+            voverrides[key] = val
+        elseif key isa EIndex{Int,Symbol}
+            eoverrides[key] = val
+        else
+            error("Overrides must be provided as SymbolicIndex{Int,Symbol} (VIndex or EIndex)! Got $key instead.")
+        end
+    end
+    voverrides, eoverrides
 end
 function _merge_wrapped!(fullstate, substate, wrapper, lock)
     idxconstructor = idxtype(wrapper)
