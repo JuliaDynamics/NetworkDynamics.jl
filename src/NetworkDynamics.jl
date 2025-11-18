@@ -12,7 +12,7 @@ using KernelAbstractions: KernelAbstractions, @kernel, @index, @Const, get_backe
 using Atomix: Atomix
 using Polyester: Polyester
 using Mixers: Mixers
-using LinearAlgebra: LinearAlgebra, UniformScaling
+using LinearAlgebra: LinearAlgebra, UniformScaling, BLAS
 using SparseArrays: SparseArrays, sparse, SparseMatrixCSC
 using StyledStrings: StyledStrings, @styled_str
 using RecursiveArrayTools: RecursiveArrayTools, DiffEqArray

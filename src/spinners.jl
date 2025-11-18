@@ -42,7 +42,9 @@ function runtask(t::SpinTask)
         t.error = String(take!(errbuf.io))
         t.status = :error
     end
-    t.output = String(take!(output.io))
+    # strip leading/trailing newlines
+    out_raw = String(take!(output.io))
+    t.output = String(strip(out_raw, ['\n']))
     nothing
 end
 
@@ -50,13 +52,15 @@ function print_with_newlines(io, s)
     if !isnothing(s) && !isempty(s)
         # println(io)
         print(io, s)
-        println(io)
+        println(io) # ensure ending newline
+        println(io) # create empty line
     end
 end
 
 run_sequential(tasks; kwargs...) = run_sequential(stdout, tasks; kwargs...)
 function run_sequential(io, tasks; verbose=true)
     pad_names!(tasks)
+
     for t in tasks
         verbose && printstyled(io, t.name; bold=true)
         result = t.f(io)
@@ -215,7 +219,6 @@ function run_fancy(tasks::Vector{SpinTask}; verbose=true)
             print(stdout, ansi_enablecursor)
             close(timer)
         end
-        print(stdout, ansi_moveup(1), ansi_movecolend, ansi_cleartoend)
     end)
 
     Threads.@threads for t in tasks

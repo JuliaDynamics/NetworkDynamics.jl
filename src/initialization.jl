@@ -127,7 +127,8 @@ function initialization_problem(cf::T,
     initconstraint=nothing;
     t=NaN,
     apply_bound_transformation=true,
-    verbose=true
+    verbose=true,
+    io=stdout
 ) where {T<:ComponentModel}
     hasinsym(cf) || throw(ArgumentError("Component model must have `insym` set to support initialiation!"))
 
@@ -211,7 +212,7 @@ function initialization_problem(cf::T,
     else
         if verbose
             idxs = findall(!isequal(:none), bound_types)
-            @info "Apply positivity/negativity conserving variable transformation on $(freesym[idxs]) to satisfy bounds."
+            printstyled(io, "\n - Apply positivity/negativity conserving variable transformation on $(freesym[idxs]) to satisfy bounds.")
         end
         boundT! = (u) -> begin
             for i in eachindex(u, bound_types)
@@ -318,12 +319,26 @@ function initialization_problem(cf::T,
     nlf = NonlinearFunction(fz; resid_prototype=zeros(Neqs), sys=SII.SymbolCache(freesym))
 
     if Neqs == Nfree
-        verbose && @info "Initialization problem is fully constrained. Created NonlinearLeastSquaresProblem for $freesym"
+        if verbose
+            printstyled(io, "\n - Initialization problem is fully constrained. Created NonlinearLeastSquaresProblem for:")
+            for (sym, guess) in zip(freesym, uguess)
+                print(io, "\n   - ", sym, " (guess=$(guess))")
+            end
+        end
     elseif Neqs > Nfree
-        verbose && @info "Initialization problem is overconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for $freesym."
+        if verbose
+            printstyled(io, "\n - Initialization problem is overconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for:")
+            for (sym, guess) in zip(freesym, uguess)
+                print(io, "\n   - ", sym, " (guess=$(guess))")
+            end
+        end
     else
-        # verbose && @info "Initialization problem is underconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for $freesym."
-        @warn "Initialization problem is underconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for $freesym."
+        # verbose && printstyled(io, "Initialization problem is underconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for $freesym.\n"; color=:yellow)
+        printstyled(io, "\n - WARNING:", color=:yellow)
+        printstyled(io, "Initialization problem is underconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for:")
+        for (sym, guess) in zip(freesym, uguess)
+            print(io, "\n   - ", sym, " (guess=$(guess))")
+        end
     end
 
     # check rhs of system for obvious problems
@@ -465,14 +480,14 @@ function initialize_component(cf;
 
     # Apply initialization formulas to defaults
     if !isnothing(combined_initformulas)
-        apply_init_formulas!(defaults, combined_initformulas; verbose)
+        apply_init_formulas!(defaults, combined_initformulas; verbose, io)
     end
 
     # Extract and apply guess formulas
     metadata_guessformulas = has_guessformula(cf) ? get_guessformulas(cf) : nothing
     combined_guessformulas = collect_formulas(metadata_guessformulas, additional_guessformula)
     if !isnothing(combined_guessformulas)
-        apply_guess_formulas!(guesses, defaults, combined_guessformulas; verbose)
+        apply_guess_formulas!(guesses, defaults, combined_guessformulas; verbose, io)
     end
 
     metadata_constraint = has_initconstraint(cf) ? get_initconstraints(cf) : nothing
@@ -488,7 +503,7 @@ function initialize_component(cf;
 
     prob, boundT! = initialization_problem(cf, defaults, guesses, bounds,
                                           combined_constraint;
-                                          verbose, apply_bound_transformation, t)
+                                          verbose, apply_bound_transformation, t, io)
 
     # Dictionary for complete state (defaults + initialized values)
     init_state = Dict{Symbol, Float64}()
@@ -507,12 +522,13 @@ function initialize_component(cf;
 
         if sol.prob isa NonlinearLeastSquaresProblem && sol.retcode == SciMLBase.ReturnCode.Stalled
             res = LinearAlgebra.norm(sol.resid)
-            @warn "Initialization for component stalled with residual $(res)"
+            printstlyled("\n - WARN: "; color=:yellow)
+            printstyled("Initialization for component stalled with residual $(res)")
         elseif !SciMLBase.successful_retcode(sol.retcode)
             throw(ComponentInitError("Initialization failed. Solver returned $(sol.retcode)"))
         else
             res = LinearAlgebra.norm(sol.resid)
-            verbose && @info "Initialization successful with residual $(res)"
+            verbose && printstyled(io, "\n - Initialization successful with residual $(res)")
         end
 
         # Transform back to original space
@@ -525,7 +541,7 @@ function initialize_component(cf;
         end
     else
         res = init_residual(cf, init_state; t)
-        verbose && @info "No free variables! Residual $(res)"
+        verbose && printstyled(io, "\n - No free variables! Residual $(res)")
     end
     if residual isa Ref
         residual[] = res
@@ -540,8 +556,9 @@ function initialize_component(cf;
     broken_bnds = broken_bounds(cf, init_state, bounds)
     if !isempty(broken_bnds)
         broken_msgs = ["$sym = $val (bounds: $lb..$ub)" for (sym, val, (lb, ub)) in broken_bnds]
-        @warn "Initialized model has broken bounds. Try to adapt the initial guesses!" *
-              "\n" * join(broken_msgs, "\n")
+        printstyled("\n - WARN: "; color=:yellow)
+        printstyled("Initialized model has broken bounds. Try to adapt the initial guesses!" *
+              "\n" * join(broken_msgs, "\n"))
     end
 
     # Check for broken observable defaults
@@ -1001,7 +1018,11 @@ function _initialize_componentwise(
                 io=io,
             )
             _merge_wrapped!(fullstate, substate, VIndex(vi), statelock)
-            rescapture[] # return residual
+            if _subverbose
+                println()
+            else
+                rescapture[] # return residual, if subverbose printed anyway
+            end
         end
         push!(tasks, task)
     end
@@ -1035,7 +1056,11 @@ function _initialize_componentwise(
                 io=io,
             )
             _merge_wrapped!(fullstate, substate, EIndex(ei), statelock)
-            rescapture[] # return residual
+            if _subverbose
+                println()
+            else
+                rescapture[] # return residual, if subverbose printed anyway
+            end
         end
         push!(tasks, task)
     end
@@ -1043,7 +1068,7 @@ function _initialize_componentwise(
     if parallel
         bthreads = BLAS.get_num_threads()
         BLAS.set_num_threads(1)
-        if io isa Base.TTY # check if print backend supports deletion
+        if stdout isa Base.TTY # check if print backend supports deletion
             run_fancy(tasks; verbose)
         else
             run_plain(tasks; verbose)
