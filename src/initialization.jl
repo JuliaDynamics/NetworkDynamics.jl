@@ -382,6 +382,9 @@ end
                          t=NaN,
                          tol=1e-10,
                          residual=nothing,
+                         alg=nothing,
+                         solve_kwargs=(;),
+                         io=stdout,
                          kwargs...)
 
 The function solves a nonlinear problem to find values for all free variables/parameters
@@ -408,6 +411,7 @@ The function solves a nonlinear problem to find values for all free variables/pa
 - `residual`: Optional `Ref{Float64}` which gets the final residual of the initialized model.
 - `alg=nothing`: Nonlinear solver algorithm (defaults to NonlinearSolve.jl default)
 - `solve_kwargs=(;)`: Additional keyword arguments passed to the SciML `solve` function
+- `io=stdout`: IO stream for printing information
 
 ## Returns
 - Dictionary mapping symbols to their values (complete state including defaults and initialized values)
@@ -439,6 +443,7 @@ function initialize_component(cf;
                              _final_guesses=nothing,
                              alg=nothing,
                              solve_kwargs=(;),
+                             io=stdout,
                              kwargs...)
 
     if !isempty(kwargs)
@@ -604,12 +609,13 @@ function initialize_component!(cf;
                               additional_initconstraint=nothing,
                               verbose=true,
                               t=NaN,
+                              io=stdout,
                               kwargs...)
 
     # Synchronize defaults, guesses, and bounds
-    _sync_metadata!(cf, defaults, get_defaults_dict, set_default!, delete_default!, "default", verbose)
-    _sync_metadata!(cf, guesses,  get_guesses_dict,  set_guess!,   delete_guess!,   "guess",   verbose)
-    _sync_metadata!(cf, bounds,   get_bounds_dict,   set_bounds!,  delete_bounds!,  "bounds",  verbose)
+    _sync_metadata!(cf, defaults, get_defaults_dict, set_default!, delete_default!, "default", verbose, io)
+    _sync_metadata!(cf, guesses,  get_guesses_dict,  set_guess!,   delete_guess!,   "guess",   verbose, io)
+    _sync_metadata!(cf, bounds,   get_bounds_dict,   set_bounds!,  delete_bounds!,  "bounds",  verbose, io)
 
     for (name, set_fn!, rm_fn!, dict) in (
         ("default", set_default!, delete_default!, default_overrides),
@@ -620,10 +626,10 @@ function initialize_component!(cf;
         for (sym, val) in dict
             if !isnothing(val)
                 set_fn!(cf, sym, val)
-                verbose && println("Set additional $name for $sym: $val")
+                verbose && println(io, "Set additional $name for $sym: $val")
             else
                 rm_fn!(cf, sym)
-                verbose && println("Remove $name for $sym")
+                verbose && println(io, "Remove $name for $sym")
             end
         end
     end
@@ -642,6 +648,7 @@ function initialize_component!(cf;
         t=t,
         _final_defaults,
         _final_guesses,
+        io,
         kwargs...  # Only pass the remaining kwargs
     )
 
@@ -671,7 +678,7 @@ function initialize_component!(cf;
 
     cf
 end
-function _sync_metadata!(cf, provided, get_orig_fn, set_fn!, remove_fn!, type_name, verbose)
+function _sync_metadata!(cf, provided, get_orig_fn, set_fn!, remove_fn!, type_name, verbose, io)
     isnothing(provided) && return
 
     original = get_orig_fn(cf)
@@ -688,19 +695,19 @@ function _sync_metadata!(cf, provided, get_orig_fn, set_fn!, remove_fn!, type_na
     # Remove missing keys
     for sym in missing_keys
         remove_fn!(cf, sym)
-        verbose && println("Removed $type_name for $sym (was $(original[sym]))")
+        verbose && println(io, "Removed $type_name for $sym (was $(original[sym]))")
     end
 
     # Add new keys
     for sym in new_keys
         set_fn!(cf, sym, provided[sym])
-        verbose && println("Added $type_name for $sym: $(provided[sym])")
+        verbose && println(io, "Added $type_name for $sym: $(provided[sym])")
     end
 
     # Update changed keys
     for sym in changed_keys
         set_fn!(cf, sym, provided[sym])
-        verbose && println("Updated $type_name for $sym: $(original[sym]) → $(provided[sym])")
+        verbose && println(io, "Updated $type_name for $sym: $(original[sym]) → $(provided[sym])")
     end
 end
 
@@ -896,9 +903,9 @@ sol = solve(prob)
 See also: [`initialize_component`](@ref), [`interface_values`](@ref), [`find_fixpoint`](@ref)
 """
 @doc initialize_docstring
-initialize_componentwise!(nw; kwargs...) = _initialize_componentwise(Val(true), nw; kwargs...)
+initialize_componentwise!(nw; kwargs...) = _initialize_componentwise(Val{true}(), nw; kwargs...)
 @doc initialize_docstring
-initialize_componentwise(nw; kwargs...) = _initialize_componentwise(Val(false), nw; kwargs...)
+initialize_componentwise(nw; kwargs...) = _initialize_componentwise(Val{false}(), nw; kwargs...)
 function _initialize_componentwise(
     mutating,
     nw::Network;
@@ -915,78 +922,136 @@ function _initialize_componentwise(
     t=NaN,
     subalg=nothing,
     subsolve_kwargs=nothing,
+    parallel=false,#(ne(nw) + nv(nw)) > 200,
 )
-    initfun = if mutating == Val(true)
+    # Check for aliased components in mutating mode
+    if mutating == Val{true}()
+        has_aliased_v = !isempty(nw.im.aliased_vertexms)
+        has_aliased_e = !isempty(nw.im.aliased_edgems)
+        if has_aliased_v || has_aliased_e
+            component_type = if has_aliased_v && has_aliased_e
+                "vertices and edges"
+            elseif has_aliased_v
+                "vertices"
+            else
+                "edges"
+            end
+            throw(ArgumentError("""
+                Cannot use mutating initialization (initialize_componentwise!) with aliased components!
+
+                Your network contains aliased $component_type (the same component object
+                is referenced at multiple indices). When using the mutating version,
+                initialization would modify the shared component's metadata, causing all
+                aliased instances to have identical initialization values.
+
+                Solutions:
+                1. Use the non-mutating version: initialize_componentwise(nw, ...)
+                2. Reconstruct the network with dealias=true: Network(g, vertexm, edgem; dealias=true)
+                3. Manually copy component models before creating the network
+                """))
+        end
+    end
+
+    initfun = if mutating == Val{true}()
         initialize_component!
     else
         initialize_component
     end
-    fullstate = if mutating == Val(true)
+    fullstate = if mutating == Val{true}()
         nothing
     else
         Dict{SymbolicIndex, Float64}()
     end
+    statelock = ReentrantLock()
 
     # dict might be provided as VIndex(:foo) so we need to resolve comp names
     subalg = _resolve_subargument_dict(nw, subalg)
     subsolve_kwargs = _resolve_subargument_dict(nw, subsolve_kwargs)
 
+    tasks = SpinTask[]
     for vi in 1:nv(nw)
+        _comp = nw[VIndex(vi)]
         _default_overrides = _filter_overrides(nw, VIndex(vi), default_overrides)
         _guess_overrides = _filter_overrides(nw, VIndex(vi), guess_overrides)
         _bound_overrides = _filter_overrides(nw, VIndex(vi), bound_overrides)
+        _add_initformula=isnothing(additional_initformula) ? nothing : get(additional_initformula, VIndex(vi), nothing)
+        _add_guessformula=isnothing(additional_guessformula) ? nothing : get(additional_guessformula, VIndex(vi), nothing)
+        _add_initconstraint=isnothing(additional_initconstraint) ? nothing : get(additional_initconstraint, VIndex(vi), nothing)
         _subverbose = _determine_subverbose(subverbose, VIndex(vi))
-        verbose && print("Initializing vertex $(vi)...")
-        _subverbose && println()
-        rescapture = Ref{Float64}(NaN) # residual for the component
-        substate = initfun(
-            nw[VIndex(vi)],
-            default_overrides=_default_overrides,
-            guess_overrides=_guess_overrides,
-            bound_overrides=_bound_overrides,
-            additional_initformula=isnothing(additional_initformula) ? nothing : get(additional_initformula, VIndex(vi), nothing),
-            additional_guessformula=isnothing(additional_guessformula) ? nothing : get(additional_guessformula, VIndex(vi), nothing),
-            additional_initconstraint=isnothing(additional_initconstraint) ? nothing : get(additional_initconstraint, VIndex(vi), nothing),
-            verbose=_subverbose,
-            t=t,
-            tol=tol,
-            residual=rescapture,
-            alg=_determine_subargument(subalg, VIndex(vi), nothing),
-            solve_kwargs=_determine_subargument(subsolve_kwargs, VIndex(vi), (;)),
-        )
-        !_subverbose && verbose && println("\b\b\b => residual $(rescapture[])")
-        verbose && _subverbose && println()
-        _merge_wrapped!(fullstate, substate, VIndex(vi))
+        _alg = _determine_subargument(subalg, VIndex(vi), nothing)
+        _solve_kwargs = _determine_subargument(subsolve_kwargs, VIndex(vi), (;))
+        task = SpinTask("Initialize Vertex $vi") do io
+            rescapture = Ref{Float64}(NaN) # residual for the component
+            substate = initfun(
+                _comp,
+                default_overrides=_default_overrides,
+                guess_overrides=_guess_overrides,
+                bound_overrides=_bound_overrides,
+                additional_initformula=_add_initformula,
+                additional_guessformula=_add_guessformula,
+                additional_initconstraint=_add_initconstraint,
+                verbose=_subverbose,
+                t=t,
+                tol=tol,
+                residual=rescapture,
+                alg=_alg,
+                solve_kwargs=_solve_kwargs,
+                io=io,
+            )
+            _merge_wrapped!(fullstate, substate, VIndex(vi), statelock)
+            rescapture[] # return residual
+        end
+        push!(tasks, task)
     end
     for ei in 1:ne(nw)
+        _comp = nw[EIndex(ei)]
         _default_overrides = _filter_overrides(nw, EIndex(ei), default_overrides)
         _guess_overrides = _filter_overrides(nw, EIndex(ei), guess_overrides)
         _bound_overrides = _filter_overrides(nw, EIndex(ei), bound_overrides)
+        _add_initformula=isnothing(additional_initformula) ? nothing : get(additional_initformula, EIndex(ei), nothing)
+        _add_guessformula=isnothing(additional_guessformula) ? nothing : get(additional_guessformula, EIndex(ei), nothing)
+        _add_initconstraint=isnothing(additional_initconstraint) ? nothing : get(additional_initconstraint, EIndex(ei), nothing)
         _subverbose = _determine_subverbose(subverbose, EIndex(ei))
-        verbose && print("Initializing edge $(ei)...")
-        _subverbose && println()
-        rescapture = Ref{Float64}(NaN) # residual for the component
-        substate = initfun(
-            nw[EIndex(ei)],
-            default_overrides=_default_overrides,
-            guess_overrides=_guess_overrides,
-            bound_overrides=_bound_overrides,
-            additional_initformula=isnothing(additional_initformula) ? nothing : get(additional_initformula, EIndex(ei), nothing),
-            additional_guessformula=isnothing(additional_guessformula) ? nothing : get(additional_guessformula, EIndex(ei), nothing),
-            additional_initconstraint=isnothing(additional_initconstraint) ? nothing : get(additional_initconstraint, EIndex(ei), nothing),
-            verbose=_subverbose,
-            t=t,
-            tol=tol,
-            residual=rescapture,
-            alg=_determine_subargument(subalg, EIndex(ei), nothing),
-            solve_kwargs=_determine_subargument(subsolve_kwargs, EIndex(ei), (;)),
-        )
-        !_subverbose && verbose && println("\b\b\b => residual $(rescapture[])")
-        verbose && _subverbose && println()
-        _merge_wrapped!(fullstate, substate, EIndex(ei))
+        _alg = _determine_subargument(subalg, EIndex(ei), nothing)
+        _solve_kwargs = _determine_subargument(subsolve_kwargs, EIndex(ei), (;))
+        task = SpinTask("Initialize Edge $ei") do io
+            rescapture = Ref{Float64}(NaN) # residual for the component
+            substate = initfun(
+                _comp,
+                default_overrides=_default_overrides,
+                guess_overrides=_guess_overrides,
+                bound_overrides=_bound_overrides,
+                additional_initformula=_add_initformula,
+                additional_guessformula=_add_guessformula,
+                additional_initconstraint=_add_initconstraint,
+                verbose=_subverbose,
+                t=t,
+                tol=tol,
+                residual=rescapture,
+                alg=_alg,
+                solve_kwargs=_solve_kwargs,
+                io=io,
+            )
+            _merge_wrapped!(fullstate, substate, EIndex(ei), statelock)
+            rescapture[] # return residual
+        end
+        push!(tasks, task)
     end
 
-    s0 = if mutating == Val(true)
+    if parallel
+        bthreads = BLAS.get_num_threads()
+        BLAS.set_num_threads(1)
+        if io isa Base.TTY # check if print backend supports deletion
+            run_fancy(tasks; verbose)
+        else
+            run_plain(tasks; verbose)
+        end
+        BLAS.set_num_threads(bthreads)
+    else
+        run_sequential(tasks; verbose)
+    end
+
+    s0 = if mutating == Val{true}()
         NWState(nw)
     else
         usyms = SII.variable_symbols(nw)
@@ -1021,14 +1086,16 @@ function _filter_overrides(nw, filteridx::SymbolicIndex{Int,Nothing}, dict::Abst
     end
     filtered
 end
-function _merge_wrapped!(fullstate, substate, wrapper)
+function _merge_wrapped!(fullstate, substate, wrapper, lock)
     idxconstructor = idxtype(wrapper)
-    for (key, val) in substate
-        fullstate[idxconstructor(wrapper.compidx, key)] = val
+    @lock lock begin
+        for (key, val) in substate
+            fullstate[idxconstructor(wrapper.compidx, key)] = val
+        end
     end
-    fullstate
+    nothing
 end
-_merge_wrapped!(::Nothing, _, _) = nothing
+_merge_wrapped!(::Nothing, _, _, _) = nothing
 _determine_subverbose(subverbose::Bool, _) = subverbose
 _determine_subverbose(subverbose::AbstractVector, idx) = idx ∈ subverbose
 _determine_subverbose(subverbose, idx) = idx == subverbose
