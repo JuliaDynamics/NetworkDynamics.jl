@@ -849,6 +849,7 @@ initialize_docstring = raw"""
         t=NaN,
         subalg=nothing,
         subsolve_kwargs=nothing,
+        parallel=false,
     ) :: NWState
 
 Initialize a network by solving initialization problems for each component individually,
@@ -880,6 +881,7 @@ state again, as it is stored in the metadata.
 - `subalg`: Nonlinear solver algorithm to use for component initialization (defaults to NonlinearSolve.jl default). Can be passed as single value or dict mapping VIndex/EIndex to alg (non-existent keys use default).
 - `subsolve_kwargs`: Additional keyword arguments passed to the SciML `solve` function for component initialization.
   Can be passed as single value or dict mapping VIndex/EIndex to kwargs (non-existent keys use empty kwargs `(;)`).
+- `parallel=false`: (Experimental) Whether to initialize components in parallel using multithreading.
 
 ## Returns
 - `NWState`: A fully initialized network state that can be used for simulation
