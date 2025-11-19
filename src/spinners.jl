@@ -160,7 +160,7 @@ function run_fancy(tasks::Vector{SpinTask}; verbose=true)
                         done += 1
                     elseif t.status == :done
                         # still print if not verbose but there is output
-                        _verbose = verbose || !isempty(t.output)
+                        _verbose = verbose || (!isnothing(t.output) && !isempty(t.output))
                         _verbose && printstyled(buf, " ✓ "; color=:green)
                         _verbose && printstyled(buf, t.name; bold=true)
                         _verbose && if !isnothing(t.retstr)

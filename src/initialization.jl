@@ -1021,19 +1021,20 @@ function _initialize_componentwise(
 
     tasks = SpinTask[]
     for vi in 1:nv(nw)
-        _comp = nw[VIndex(vi)]
-        _default_overrides = _filter_overrides(nw, VIndex(vi), default_v_overrides)
-        _guess_overrides = _filter_overrides(nw, VIndex(vi), guess_v_overrides)
-        _bound_overrides = _filter_overrides(nw, VIndex(vi), bound_v_overrides)
-        _add_initformula=isnothing(additional_initformula) ? nothing : get(additional_initformula, VIndex(vi), nothing)
-        _add_guessformula=isnothing(additional_guessformula) ? nothing : get(additional_guessformula, VIndex(vi), nothing)
-        _add_initconstraint=isnothing(additional_initconstraint) ? nothing : get(additional_initconstraint, VIndex(vi), nothing)
-        _subverbose = _determine_subverbose(subverbose, VIndex(vi))
-        _alg = _determine_subargument(subalg, VIndex(vi), nothing)
-        _solve_kwargs = _determine_subargument(subsolve_kwargs, VIndex(vi), (;))
         task = SpinTask("Initialize Vertex $vi") do io
-            subverbose && println()
+            _comp = nw[VIndex(vi)]
+            _default_overrides = _filter_overrides(nw, VIndex(vi), default_v_overrides)
+            _guess_overrides = _filter_overrides(nw, VIndex(vi), guess_v_overrides)
+            _bound_overrides = _filter_overrides(nw, VIndex(vi), bound_v_overrides)
+            _add_initformula=isnothing(additional_initformula) ? nothing : get(additional_initformula, VIndex(vi), nothing)
+            _add_guessformula=isnothing(additional_guessformula) ? nothing : get(additional_guessformula, VIndex(vi), nothing)
+            _add_initconstraint=isnothing(additional_initconstraint) ? nothing : get(additional_initconstraint, VIndex(vi), nothing)
+            _subverbose = _determine_subverbose(subverbose, VIndex(vi))
+            _alg = _determine_subargument(subalg, VIndex(vi), nothing)
+            _solve_kwargs = _determine_subargument(subsolve_kwargs, VIndex(vi), (;))
             rescapture = Ref{Float64}(NaN) # residual for the component
+
+            _subverbose && println()
             substate = initfun(
                 _comp,
                 default_overrides=_default_overrides,
@@ -1057,19 +1058,20 @@ function _initialize_componentwise(
         push!(tasks, task)
     end
     for ei in 1:ne(nw)
-        _comp = nw[EIndex(ei)]
-        _default_overrides = _filter_overrides(nw, EIndex(ei), default_e_overrides)
-        _guess_overrides = _filter_overrides(nw, EIndex(ei), guess_e_overrides)
-        _bound_overrides = _filter_overrides(nw, EIndex(ei), bound_e_overrides)
-        _add_initformula=isnothing(additional_initformula) ? nothing : get(additional_initformula, EIndex(ei), nothing)
-        _add_guessformula=isnothing(additional_guessformula) ? nothing : get(additional_guessformula, EIndex(ei), nothing)
-        _add_initconstraint=isnothing(additional_initconstraint) ? nothing : get(additional_initconstraint, EIndex(ei), nothing)
-        _subverbose = _determine_subverbose(subverbose, EIndex(ei))
-        _alg = _determine_subargument(subalg, EIndex(ei), nothing)
-        _solve_kwargs = _determine_subargument(subsolve_kwargs, EIndex(ei), (;))
         task = SpinTask("Initialize Edge $ei") do io
+            _comp = nw[EIndex(ei)]
+            _default_overrides = _filter_overrides(nw, EIndex(ei), default_e_overrides)
+            _guess_overrides = _filter_overrides(nw, EIndex(ei), guess_e_overrides)
+            _bound_overrides = _filter_overrides(nw, EIndex(ei), bound_e_overrides)
+            _add_initformula=isnothing(additional_initformula) ? nothing : get(additional_initformula, EIndex(ei), nothing)
+            _add_guessformula=isnothing(additional_guessformula) ? nothing : get(additional_guessformula, EIndex(ei), nothing)
+            _add_initconstraint=isnothing(additional_initconstraint) ? nothing : get(additional_initconstraint, EIndex(ei), nothing)
+            _subverbose = _determine_subverbose(subverbose, EIndex(ei))
+            _alg = _determine_subargument(subalg, EIndex(ei), nothing)
+            _solve_kwargs = _determine_subargument(subsolve_kwargs, EIndex(ei), (;))
             rescapture = Ref{Float64}(NaN) # residual for the component
-            subverbose && println()
+
+            _subverbose && println()
             substate = initfun(
                 _comp,
                 default_overrides=_default_overrides,
