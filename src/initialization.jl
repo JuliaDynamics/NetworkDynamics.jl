@@ -49,9 +49,32 @@ function find_fixpoint(nw::Network,
                        kwargs...)
     find_fixpoint(nw, uflat(x0), pflat(p); t, kwargs...)
 end
+
+#=
+We want to fix time for steady state to allow for initializing at varios time points (SteadyStateDiffEq uses t->inf)
+However, we build a custom struct for that to still enable symbolic indexing and sparsity!
+=#
+struct NetworkFixedT{NW}
+    nw::NW
+    t::Float64
+end
+(nwft::NetworkFixedT)(du, u, p, _) = nwft.nw(du, u, p, nwft.t)
+SciMLBase.__has_sys(nw::NetworkFixedT) = true
+SciMLBase.__has_jac_prototype(nw::NetworkFixedT) = !isnothing(nw.nw.jac_prototype)
+function Base.getproperty(nw::NetworkFixedT, s::Symbol)
+    if s===:sys
+        nw.nw
+    elseif s===:jac_prototype
+        getfield(nw.nw, :jac_prototype)[]
+    else
+        getfield(nw, s)
+    end
+end
+
 function find_fixpoint(nw::Network, x0::AbstractVector, p::AbstractVector;
                        alg=SSRootfind(), t=NaN, kwargs...)
-    nw_fixed_t = (du, u, p, _) -> nw(du, u, p, t) #fix t
+    nw_fixed_t = NetworkFixedT(nw, t)
+
     du = zeros(length(x0))
     fn_error = nothing
     try
