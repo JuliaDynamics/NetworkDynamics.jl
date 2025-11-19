@@ -89,7 +89,8 @@ include("init_constraints.jl")
 include("spinners.jl")
 
 using OrderedCollections: OrderedDict
-using NonlinearSolve: NonlinearFunction, NonlinearLeastSquaresProblem
+using NonlinearSolve: NonlinearFunction, NonlinearLeastSquaresProblem, FastShortcutNLLSPolyalg
+using LinearSolve: QRFactorization
 using SteadyStateDiffEq: SteadyStateProblem, SSRootfind
 export find_fixpoint, set_interface_defaults!
 export initialize_component, initialize_component!, init_residual
