@@ -98,24 +98,24 @@ function find_fixpoint(nw::Network, x0::AbstractVector, p::AbstractVector;
         end
 
         if any(isnan, x0) || any(isnan, p)
-            print(io, "\n - Some input states/parameters contained NaN:")
+            println(io, " - Some input states/parameters contained NaN:")
             if any(isnan, x0)
                 nan_indices = findall(isnan, x0)
                 variable_symbols = NetworkDynamics.SII.variable_symbols(nw)
                 missing_vars = [string(variable_symbols[i]) for i in nan_indices]
-                print(io, "\n   Variables:  ", join(missing_vars, ", "))
+                println(io, "   Variables:  ", join(missing_vars, ", "))
             end
 
             if any(isnan, p)
                 nan_indices = findall(isnan, p)
                 parameter_symbols = NetworkDynamics.SII.parameter_symbols(nw)
                 missing_params = [string(parameter_symbols[i]) for i in nan_indices]
-                print(io, "\n   Parameters: ", join(missing_params, ", "))
+                println(io, "   Parameters: ", join(missing_params, ", "))
             end
         end
 
         if output_nans && isnan(t)
-            print(io, "\n - Network was evaluated at t=NaN, maybe your system has explicit time dependence? Try specifying kw argument `t` to decide on time")
+            println(io, " - Network was evaluated at t=NaN, maybe your system has explicit time dependence? Try specifying kw argument `t` to decide on time")
         end
         if !isnothing(fn_error)
             print(io, "\nCausing ERROR:\n")
@@ -235,7 +235,7 @@ function initialization_problem(cf::T,
     else
         if verbose
             idxs = findall(!isequal(:none), bound_types)
-            printstyled(io, "\n - Apply positivity/negativity conserving variable transformation on $(freesym[idxs]) to satisfy bounds.")
+            printstyled(io, " - Apply positivity/negativity conserving variable transformation on $(freesym[idxs]) to satisfy bounds.\n")
         end
         boundT! = (u) -> begin
             for i in eachindex(u, bound_types)
@@ -343,24 +343,24 @@ function initialization_problem(cf::T,
 
     if Neqs == Nfree
         if verbose
-            printstyled(io, "\n - Initialization problem is fully constrained. Created NonlinearLeastSquaresProblem for:")
+            printstyled(io, " - Initialization problem is fully constrained. Created NonlinearLeastSquaresProblem for:\n")
             for (sym, guess) in zip(freesym, uguess)
-                print(io, "\n   - ", sym, " (guess=$(guess))")
+                print(io, "   - ", sym, " (guess=$(guess))\n")
             end
         end
     elseif Neqs > Nfree
         if verbose
-            printstyled(io, "\n - Initialization problem is overconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for:")
+            printstyled(io, " - Initialization problem is overconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for:\n")
             for (sym, guess) in zip(freesym, uguess)
-                print(io, "\n   - ", sym, " (guess=$(guess))")
+                print(io, "   - ", sym, " (guess=$(guess))\n")
             end
         end
     else
         # verbose && printstyled(io, "Initialization problem is underconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for $freesym.\n"; color=:yellow)
-        printstyled(io, "\n - WARNING:", color=:yellow)
+        printstyled(io, " - WARNING:", color=:yellow)
         printstyled(io, "Initialization problem is underconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for:")
         for (sym, guess) in zip(freesym, uguess)
-            print(io, "\n   - ", sym, " (guess=$(guess))")
+            print(io, "   - ", sym, " (guess=$(guess))\n")
         end
     end
 
@@ -377,14 +377,14 @@ function initialization_problem(cf::T,
         io = IOBuffer()
         print(io, "Error while constructing initialization problem for $(cf.name):")
         if resid_nan
-            print(io, "\n - Residual contains NaNs!")
+            print(io, " - Residual contains NaNs!\n")
             if isnan(t)
                 print(io, " System initialized at t=NaN, maybe your system has explicit \
                     time dependence? Try specifying kw argument `t` to decide on time")
             end
         end
         if !isnothing(fn_error)
-            print(io, "\n - Error while calling RHS of initialization problem!")
+            print(io, " - Error while calling RHS of initialization problem!\n")
             print(io, "\n\nOriginal Error:\n")
             Base.showerror(io, fn_error)
         end
@@ -545,13 +545,13 @@ function initialize_component(cf;
 
         if sol.prob isa NonlinearLeastSquaresProblem && sol.retcode == SciMLBase.ReturnCode.Stalled
             res = LinearAlgebra.norm(sol.resid)
-            printstlyled("\n - WARN: "; color=:yellow)
+            printstlyled(" - WARN: "; color=:yellow)
             printstyled("Initialization for component stalled with residual $(res)")
         elseif !SciMLBase.successful_retcode(sol.retcode)
             throw(ComponentInitError("Initialization failed. Solver returned $(sol.retcode)"))
         else
             res = LinearAlgebra.norm(sol.resid)
-            verbose && printstyled(io, "\n - Initialization successful with residual $(res)")
+            verbose && printstyled(io, " - Initialization successful with residual $(res)\n")
         end
 
         # Transform back to original space
@@ -564,7 +564,7 @@ function initialize_component(cf;
         end
     else
         res = init_residual(cf, init_state; t)
-        verbose && printstyled(io, "\n - No free variables! Residual $(res)")
+        verbose && printstyled(io, " - No free variables! Residual $(res)\n")
     end
     if residual isa Ref
         residual[] = res
@@ -579,7 +579,7 @@ function initialize_component(cf;
     broken_bnds = broken_bounds(cf, init_state, bounds)
     if !isempty(broken_bnds)
         broken_msgs = ["$sym = $val (bounds: $lb..$ub)" for (sym, val, (lb, ub)) in broken_bnds]
-        printstyled("\n - WARN: "; color=:yellow)
+        printstyled(" - WARN: "; color=:yellow)
         printstyled("Initialized model has broken bounds. Try to adapt the initial guesses!" *
               "\n" * join(broken_msgs, "\n"))
     end
@@ -666,10 +666,10 @@ function initialize_component!(cf;
         for (sym, val) in dict
             if !isnothing(val)
                 set_fn!(cf, sym, val)
-                verbose && println(io, "Set additional $name for $sym: $val")
+                verbose && println(io, " - Set additional $name for $sym: $val")
             else
                 rm_fn!(cf, sym)
-                verbose && println(io, "Remove $name for $sym")
+                verbose && println(io, " - Remove $name for $sym")
             end
         end
     end
@@ -1028,6 +1028,7 @@ function _initialize_componentwise(
         _alg = _determine_subargument(subalg, VIndex(vi), nothing)
         _solve_kwargs = _determine_subargument(subsolve_kwargs, VIndex(vi), (;))
         task = SpinTask("Initialize Vertex $vi") do io
+            subverbose && println()
             rescapture = Ref{Float64}(NaN) # residual for the component
             substate = initfun(
                 _comp,
@@ -1046,11 +1047,8 @@ function _initialize_componentwise(
                 io=io,
             )
             _merge_wrapped!(fullstate, substate, VIndex(vi), statelock)
-            if _subverbose
-                println()
-            else
-                rescapture[] # return residual, if subverbose printed anyway
-            end
+            # return residual, if subverbose printed anyway
+            _subverbose ? nothing : rescapture[]
         end
         push!(tasks, task)
     end
@@ -1067,6 +1065,7 @@ function _initialize_componentwise(
         _solve_kwargs = _determine_subargument(subsolve_kwargs, EIndex(ei), (;))
         task = SpinTask("Initialize Edge $ei") do io
             rescapture = Ref{Float64}(NaN) # residual for the component
+            subverbose && println()
             substate = initfun(
                 _comp,
                 default_overrides=_default_overrides,
@@ -1084,11 +1083,8 @@ function _initialize_componentwise(
                 io=io,
             )
             _merge_wrapped!(fullstate, substate, EIndex(ei), statelock)
-            if _subverbose
-                println()
-            else
-                rescapture[] # return residual, if subverbose printed anyway
-            end
+            # return residual, if subverbose printed anyway
+            _subverbose ? nothing : rescapture[]
         end
         push!(tasks, task)
     end

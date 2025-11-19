@@ -637,12 +637,12 @@ function apply_init_formulas!(defaults, formulas_unsorted; verbose=false, io=std
             if verbose
                 if haskey(defaults, s)
                     if defaults[s] ≈ val
-                        printstyled(io, "\n - InitFomula: keeping default for :$s at $(val)")
+                        printstyled(io, " - InitFomula: keeping default for :$s at $(val)\n")
                     else
-                        printstyled(io, "\n - InitFomula: updating default for :$s from $(defaults[s]) to $(val)")
+                        printstyled(io, " - InitFomula: updating default for :$s from $(defaults[s]) to $(val)\n")
                     end
                 else
-                    printstyled(io, "\n - InitFomula: setting default for :$s to $(val)")
+                    printstyled(io, " - InitFomula: setting default for :$s to $(val)\n")
                 end
             end
             defaults[s] = val
@@ -679,15 +679,15 @@ function apply_guess_formulas!(guesses, defaults, formulas_unsorted; verbose=fal
             if verbose
                 if haskey(defaults, s)
                     # This symbol is fixed, so updating guess won't affect the solve
-                    printstyled(io, "\n - GuessFormula: symbol :$s has default $(defaults[s]), guess update to $(val) will have no effect")
+                    printstyled(io, " - GuessFormula: symbol :$s has default $(defaults[s]), guess update to $(val) will have no effect\n")
                 elseif haskey(guesses, s)
                     if guesses[s] ≈ val
-                        printstyled(io, "\n - GuessFormula: keeping guess for :$s at $(val)")
+                        printstyled(io, " - GuessFormula: keeping guess for :$s at $(val)\n")
                     else
-                        printstyled(io, "\n - GuessFormula: updating guess for :$s from $(guesses[s]) to $(val)")
+                        printstyled(io, " - GuessFormula: updating guess for :$s from $(guesses[s]) to $(val)\n")
                     end
                 else
-                    printstyled(io, "\n - GuessFormula: setting guess for :$s to $(val)")
+                    printstyled(io, " - GuessFormula: setting guess for :$s to $(val)\n")
                 end
             end
             guesses[s] = val
