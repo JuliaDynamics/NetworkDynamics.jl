@@ -49,9 +49,9 @@ Adapt.@adapt_structure NetworkLayer
 Adapt.@adapt_structure NWParameter
 function Adapt.adapt_structure(to::Type{<:CuArray{<:AbstractFloat}}, nws::NWState)
     nw = adapt(to, nws.nw)
-    u = adapt(to, nws.u)
+    u = adapt(to, nws.uflat)
     if nws.p isa NWParameter
-        p = NWParameter(nw, adapt(to, nws.p.data))
+        p = NWParameter(nw, adapt(to, nws.p.pflat))
     else
         p = adapt(to, nws.p)
     end

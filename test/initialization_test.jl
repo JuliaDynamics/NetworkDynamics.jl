@@ -49,7 +49,7 @@ end
         @parameters begin
             M=0.005, [description="Inertia"]
             D=0.1, [description="Damping"]
-            V, [description="Voltage magnitude", guess=1]
+            V, [description="Voltage magnitude", guess=1, bounds=(0,Inf)]
             ω_ref=0, [description="Reference frequency"]
             Pm, [guess=0.1,description="Mechanical Power"]
             aux, [description="Auxiliary, unused parameter"]
@@ -115,6 +115,7 @@ end
     # Verify the metadata was updated and values were applied correctly
     @test get_default(vf_conflict, :u_r) == 0.0
     @test get_default(vf_conflict, :u_i) == 1.0
+    @test get_init(vf_conflict, :V)  ≈ 1
     @test get_init(vf_conflict, :θ) % 2pi ≈ pi/2
 
     # change metadtaa by providing custom input
@@ -250,7 +251,7 @@ end
     set_guess!(vf, :ψ″_q,   1.353)
     set_guess!(vf, :ω,     -1.55)
     @test_logs (:warn, r"broken bounds") match_mode=:any begin
-        NetworkDynamics.initialize_component!(vf; verbose=true, apply_bound_transformation=false)
+        NetworkDynamics.initialize_component!(vf; verbose=false, apply_bound_transformation=false)
     end
     @test get_initial_state(vf, :vf) < 1 # does not conserve
     NetworkDynamics.initialize_component!(vf; verbose=true, apply_bound_transformation=true)

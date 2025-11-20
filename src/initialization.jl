@@ -57,6 +57,7 @@ However, we build a custom struct for that to still enable symbolic indexing and
 struct NetworkFixedT{NW}
     nw::NW
     t::Float64
+    NetworkFixedT(nw, t) = new{typeof(nw)}(nw, Float64(t))
 end
 (nwft::NetworkFixedT)(du, u, p, _) = nwft.nw(du, u, p, nwft.t)
 SciMLBase.__has_sys(nw::NetworkFixedT) = true
@@ -92,30 +93,30 @@ function find_fixpoint(nw::Network, x0::AbstractVector, p::AbstractVector;
             syms = SII.variable_symbols(nw)[nans]
             println(io, "Evaluation of network rhs at t=$t resulted in NaNs.)")
             println(io, "  NaN-Results:  ", join(syms, ", "))
-            print(io,"Probable causes:")
+            print(io,"Possible causes:")
         else
-            print(io, "Evaluation of network rhs at t=$t led to an error! Probable causes:")
+            print(io, "Evaluation of network rhs at t=$t led to an error! Possible causes:")
         end
 
         if any(isnan, x0) || any(isnan, p)
-            println(io, " - Some input states/parameters contained NaN:")
+            print(io, "\n - Some input states/parameters contained NaN:")
             if any(isnan, x0)
                 nan_indices = findall(isnan, x0)
                 variable_symbols = NetworkDynamics.SII.variable_symbols(nw)
                 missing_vars = [string(variable_symbols[i]) for i in nan_indices]
-                println(io, "   Variables:  ", join(missing_vars, ", "))
+                print(io, "\n   Variables:  ", join(missing_vars, ", "))
             end
 
             if any(isnan, p)
                 nan_indices = findall(isnan, p)
                 parameter_symbols = NetworkDynamics.SII.parameter_symbols(nw)
                 missing_params = [string(parameter_symbols[i]) for i in nan_indices]
-                println(io, "   Parameters: ", join(missing_params, ", "))
+                print(io, "\n   Parameters: ", join(missing_params, ", "))
             end
         end
 
         if output_nans && isnan(t)
-            println(io, " - Network was evaluated at t=NaN, maybe your system has explicit time dependence? Try specifying kw argument `t` to decide on time")
+            print(io, "\n - Network was evaluated at t=NaN, maybe your system has explicit time dependence? Try specifying kw argument `t` to decide on time")
         end
         if !isnothing(fn_error)
             print(io, "\nCausing ERROR:\n")
@@ -564,6 +565,7 @@ function initialize_component(cf;
         # Add solved values to the complete dictionary
         free_symbols = SII.variable_symbols(sol)
         for (sym, val) in zip(free_symbols, u)
+            verbose && print(io, "   - ", sym, " => ", val,"\n")
             init_state[sym] = val
         end
     else
@@ -582,19 +584,30 @@ function initialize_component(cf;
     # Check for broken bounds using the complete state
     broken_bnds = broken_bounds(cf, init_state, bounds)
     if !isempty(broken_bnds)
-        broken_msgs = ["$sym = $val (bounds: $lb..$ub)" for (sym, val, (lb, ub)) in broken_bnds]
-        printstyled(" - WARN: "; color=:yellow)
-        printstyled("Initialized model has broken bounds. Try to adapt the initial guesses!" *
-              "\n" * join(broken_msgs, "\n"))
+        broken_msgs = ["  $sym = $val (bounds: $lb..$ub)" for (sym, val, (lb, ub)) in broken_bnds]
+        fullmsg = "Initialized model has broken bounds. Try to adapt the initial guesses!" *
+              "\n" * join(broken_msgs, "\n")
+        if verbose
+            printstyled(io, " - WARNING: ", color=:yellow)
+            printstyled(io, fullmsg * "\n")
+        else
+            @warn fullmsg
+        end
     end
 
     # Check for broken observable defaults
     if !isempty(observable_defaults)
         broken_obs = broken_observable_defaults(cf, init_state, observable_defaults)
         if !isempty(broken_obs)
-            broken_msgs = ["$sym = $val (default: $def)" for (sym, def, val) in broken_obs]
-            @warn "Initialized model has observables that differ from their specified defaults:" *
+            broken_msgs = ["  $sym = $val (default: $def)" for (sym, def, val) in broken_obs]
+            fullmsg = "Initialized model has observables that differ from their specified defaults:" *
                   "\n" * join(broken_msgs, "\n")
+            if verbose
+                printstyled(io, " - WARNING: ", color=:yellow)
+                printstyled(io, fullmsg * "\n")
+            else
+                @warn fullmsg
+            end
         end
     end
 

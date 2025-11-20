@@ -86,6 +86,7 @@ nw2_d(dx_d1, x0_d1, p_d1, NaN)
     v3 = Lib.dqbus_pq()
     v4 = Lib.dqbus_pq()
     v5 = Lib.dqbus_pq()
+    e = Lib.dqline(X=0.1, R=0.01)
     nw = Network(g, [v1, v2, v3, v4, v5], e; dealias=true, execution=KAExecution{true}(), aggregator=KAAggregator(+))
     nw_d = adapt(CuArray{Float32}, nw)
     @test nw_d.vertexbatches[1].compf.body == nothing
