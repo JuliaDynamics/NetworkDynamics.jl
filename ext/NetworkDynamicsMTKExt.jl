@@ -14,7 +14,8 @@ using OrderedCollections: OrderedDict
 using SymbolicIndexingInterface: SymbolicIndexingInterface as SII
 
 using NetworkDynamics: NetworkDynamics, set_metadata!, ComponentPostprocessing,
-                       PureFeedForward, FeedForward, NoFeedForward, PureStateMap
+                       PureFeedForward, FeedForward, NoFeedForward, PureStateMap,
+                       MultipleOutputWrapper
 import NetworkDynamics: VertexModel, EdgeModel, AnnotatedSym
 
 include("MTKExt_utils.jl")

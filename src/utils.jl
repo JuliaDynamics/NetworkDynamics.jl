@@ -396,3 +396,31 @@ You can use it to add custom callbacks or init functions/metadata to the generat
 The function gets both the component model to *modify* and the namespace (as string) of the model.
 """
 struct ComponentPostprocessing end
+
+# is defined here to allow for adaption in CUDAExt
+"""
+    MultipleOutputWrapper{FF, N, G}
+
+Wrapper type to wrap a g-output function which works on a single output, a stacked
+vector of all outputs.
+
+Used by MTK generated component functions.
+"""
+struct MultipleOutputWrapper{FF, N, G} <: Function
+    g::G
+end
+hasfftype(::MultipleOutputWrapper) = true
+fftype(::MultipleOutputWrapper{FF}) where {FF} = FF
+
+@inline function (g::MultipleOutputWrapper{FF, 1})(out, args...) where {FF}
+    g.g(out, args...)
+    nothing
+end
+@inline function (g::MultipleOutputWrapper{FF, N})(args...) where {FF, N}
+    @inbounds begin
+        _out = RecursiveArrayTools.ArrayPartition(args[1:N])
+        _args = args[N+1:end]
+    end
+    g.g(_out, _args...)
+    nothing
+end
