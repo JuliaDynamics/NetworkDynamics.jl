@@ -438,10 +438,18 @@ end
 Rebuild the Network with same graph and vertex/edge models but possibly different kwargs.
 """
 function Network(nw::Network;
-                 g = nw.im.g,
-                 vertexm = copy.(nw.im.vertexm),
-                 edgem = copy.(nw.im.edgem),
+                 g = nothing,
+                 vertexm = nothing,
+                 edgem = nothing,
                  kwargs...)
+
+    # Check if structure is identical (nothing means unchanged)
+    structurally_identical = isnothing(g) && isnothing(vertexm) && isnothing(edgem)
+
+    # Fill defaults
+    g = isnothing(g) ? nw.im.g : g
+    vertexm = isnothing(vertexm) ? copy.(nw.im.vertexm) : vertexm
+    edgem = isnothing(edgem) ? copy.(nw.im.edgem) : edgem
 
     _kwargs = Dict(:execution => executionstyle(nw),
                    :aggregator => get_aggr_constructor(nw.layer.aggregator),
@@ -462,5 +470,12 @@ function Network(nw::Network;
     end
     @assert keys(_kwargs) == Set(Base.kwarg_decl(m))
 
-    Network(g, vertexm, edgem; _kwargs...)
+    new_nw = Network(g, vertexm, edgem; _kwargs...)
+
+    # Copy jac_prototype if structure is unchanged
+    if structurally_identical && !isnothing(nw.jac_prototype)
+        getfield(new_nw, :jac_prototype)[] = nw.jac_prototype
+    end
+
+    return new_nw
 end
