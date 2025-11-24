@@ -269,11 +269,20 @@ end
 ####
 wrap_component_callbacks(nw, additional_cb::Pair) = wrap_component_callbacks(nw, Dict(additional_cb))
 function wrap_component_callbacks(nw, additional_callbacks=Dict())
-    components = SymbolicIndex[]
+    components = SymbolicIndex{Int,Nothing}[]
     callbacks = ComponentCallback[]
     for (comp, cb) in additional_callbacks
-        push!(components, comp)
-        push!(callbacks, cb)
+        @assert isnothing(comp.subidx)
+        _comp = idxtype(comp)(resolvecompidx(nw, comp))
+        if cb isa AbstractVector || cb isa Tuple
+            for _cb in cb
+                push!(components, _comp)
+                push!(callbacks, _cb)
+            end
+        else
+            push!(components, _comp)
+            push!(callbacks, cb)
+        end
     end
     for (i, v) in pairs(nw.im.vertexm)
         has_callback(v) || continue
