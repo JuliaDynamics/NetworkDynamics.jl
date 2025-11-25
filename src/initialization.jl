@@ -196,10 +196,11 @@ function initialization_problem(cf::T,
 
     Neqs = dim(cf) + mapreduce(length, +, outfree_ms) + additional_Neqs
 
-    freesym = vcat(mapreduce((syms, map) -> syms[map], vcat, outsym_normalized(cf), outfree_ms),
-                   sym(cf)[ufree_m],
-                   mapreduce((syms, map) -> syms[map], vcat, insym_normalized(cf), infree_ms),
-                   psym(cf)[pfree_m])
+    free_outputs = mapreduce((syms, map) -> syms[map], vcat, outsym_normalized(cf), outfree_ms)
+    free_states = sym(cf)[ufree_m]
+    free_inputs = mapreduce((syms, map) -> syms[map], vcat, insym_normalized(cf), infree_ms)
+    free_params = psym(cf)[pfree_m]
+    freesym = vcat(free_outputs, free_states, free_inputs, free_params)
 
     @assert length(freesym) == Nfree
 
@@ -340,7 +341,12 @@ function initialization_problem(cf::T,
         nothing
     end
 
-    nlf = NonlinearFunction(fz; resid_prototype=zeros(Neqs), sys=SII.SymbolCache(freesym))
+    freesym_no_dup = if allunique(freesym)
+        freesym
+    else
+        _deduplicated_free_symbols(freesym)
+    end
+    nlf = NonlinearFunction(fz; resid_prototype=zeros(Neqs), sys=SII.SymbolCache(freesym_no_dup))
 
     if Neqs == Nfree
         if verbose
@@ -403,6 +409,38 @@ function _overwrite_at_mask!(target, mask, source, range)
             j += 1
         end
     end
+end
+
+#=
+Sometimes, components have multiple free variables with the same symbol name (state/output shadowing).
+We live with that and just solve for both, but create internal names which are different.
+At the end, we make sure that all duplicated symbols have been resolved to the same value.
+=#
+function _deduplicated_free_symbols(_freesym::Vector{Symbol})
+    nonunique = Symbol[]
+    dupgroups = filter(idxs -> length(idxs) > 1, find_identical(_freesym))
+
+    freesym = copy(_freesym)
+    for groupidxs in dupgroups
+        for (i, idx) in enumerate(groupidxs)
+            suffix = Symbol("__duplicate", i, "__")
+            freesym[idx] = Symbol(string(_freesym[idx]), suffix)
+        end
+    end
+    freesym
+end
+function _dededuplicated_free_symbols(deduplicated, u)
+    stripped = map(s -> Symbol(replace(string(s), r"__duplicate\d+__" => "")), deduplicated)
+    if !allunique(stripped)
+        dupgroups = filter(idxs -> length(idxs) > 1, find_identical(stripped))
+        for idxs in dupgroups
+            if !reduce((a,b) -> isapprox(a,b; atol=1e-6), u[idxs])
+                throw(ComponentInitError("Duplicated symbols in initialization problem $(stripped[first(idxs)]) have different initialized values $(u[idxs])!"))
+            end
+        end
+    end
+
+    return zip(stripped, u)
 end
 
 """
@@ -563,8 +601,8 @@ function initialize_component(cf;
         u = boundT!(copy(sol.u))
 
         # Add solved values to the complete dictionary
-        free_symbols = SII.variable_symbols(sol)
-        for (sym, val) in zip(free_symbols, u)
+        init_results = _dededuplicated_free_symbols(SII.variable_symbols(sol), u)
+        for (sym, val) in init_results
             verbose && print(io, "   - ", sym, " => ", val,"\n")
             init_state[sym] = val
         end
