@@ -588,7 +588,7 @@ function initialize_component(cf;
 
         if sol.prob isa NonlinearLeastSquaresProblem && sol.retcode == SciMLBase.ReturnCode.Stalled
             res = LinearAlgebra.norm(sol.resid)
-            printstlyled(" - WARN: "; color=:yellow)
+            printstyled(" - WARN: "; color=:yellow)
             printstyled("Initialization for component stalled with residual $(res)")
         elseif !SciMLBase.successful_retcode(sol.retcode)
             throw(ComponentInitError("Initialization failed. Solver returned $(sol.retcode)"))
