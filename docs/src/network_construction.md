@@ -11,14 +11,14 @@ A `Network` is build by passing a graph `g`, as well as vertex models `vertexm` 
 nw = Network(g, vertexm, edgem; kwargs...)
 ```
 
-In order to perform the simulation we need to tell the backend how to parallelise the system and how to aggregate the
+In order to perform the simulation we need to tell the backend how to parallelize the system and how to aggregate the
 inputs and outputs at the node and edge level. To achieve this, we use the `execution` and `aggregator` keywords of 
 the [`Network`](@ref) constructor:
 
 - `execution`:
     It defines the [`ExecutionStyle`](@ref) of the coreloop, e.g. `SequentialExecution{true}()`. 
     (@Hans: the correloop is mentioned here for the first time, please add a definition somewhere and reference it here)
-    The execution style is a special Julia object which tells the backend how to parallelize (@Hans: parallelise what?)
+    The execution style is a special Julia object which tells the backend how to parallelize (@Hans: parallelize what?)
     (e.g. `ThreadedExecution{true}()` [ThreadedExecution](@ref) will use native Julia threads to parallelize the RHS call).
     A list of available executions styles can be found under [Execution Types](@ref) in the API.
 
@@ -157,7 +157,7 @@ This can also lead to briefer output naming. Available single sided wrappers are
 - [`Symmetric`](@ref) (inverse coupling at `dst`) and
 - [`Fiducial`](@ref) (define separate `g` for both ends).
 
-Once again we can add additonal data like defining a `src` and `dst` index
+Once again we can add additional data like defining a `src` and `dst` index
 ```@example construction
 function edge_g_s!(ydst, vsrc, vdst, p, t)
     ydst[1] = p[1] * sin(vsrc[1] - vdst[1])
