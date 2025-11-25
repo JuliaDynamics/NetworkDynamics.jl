@@ -906,6 +906,17 @@ end
 function Base.setindex!(f::FilteringProxy, val, idx...)
     refined_f = refine_filter(f, idx...)
     allindices = resolve_to_index(refined_f)
+    if allindices isa AbstractVector && isempty(allindices)
+        msg = "No such index! No "
+
+        if !isnothing(refined_f.varfilter)
+            msg *= _explain_varfilter(refined_f.varfilter)
+        else
+            msg *= "variables"
+        end
+        msg *= " within " * _explain_compfilter(refined_f.compfilter) * "."
+        throw(ArgumentError(msg))
+    end
     f.data[allindices] = val
 end
 

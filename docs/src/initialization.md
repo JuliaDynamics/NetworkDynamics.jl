@@ -184,10 +184,18 @@ dump_initial_state(vf)
 
 ### Advanced Component Initialization: Formulas and Constraints
 
-NetworkDynamics provides two complementary mechanisms for customizing component initialization beyond the basic defaults and guesses: **initialization formulas** and **initialization constraints**. These operate at different stages of the initialization pipeline and serve distinct purposes.
-Both can help to resolve underconstrained initialization problems: while init formulas **reduce the number of free variables** (by setting additional defaults), init constraints **increase the number of equations**.
+NetworkDynamics provides three complementary mechanisms for customizing component initialization beyond the basic defaults and guesses: **initialization formulas** ,**initialization constraints** and **guess formulas**. These operate at different stages of the initialization pipeline and serve distinct purposes:
+- init formulas **reduce the number of free variables** (by setting additional defaults),
+- init constraints **increase the number of equations** for the init problem and
+- guess formulas **refine starting values** for the initialization rootfinding problem.
 
-#### Initialization Formulas (InitFormulas)
+The execution order is:
+1. Collect defaults, guesses, and bounds from metadata
+2. Apply init formulas → update defaults (fix more variables)
+3. Apply guess formulas → update guesses (improve starting point)
+4. Create and solve the nonlinear least squares problem with additonal constraints
+
+#### Initialization Formulas (`InitFormula`)
 
 Initialization formulas act early in the initialization pipeline to compute and set default values based on other known values. They are particularly useful for deriving dependent quantities or ensuring consistency between related variables.
 
@@ -210,7 +218,7 @@ nothing #hide
 **Dependency Resolution**: When applying multiple separate formulas, NetworkDynamics automatically sorts them topologically to ensure correct evaluation order.
 
 
-#### Initialization Constraints (InitConstraints)
+#### Initialization Constraints (`InitConstraint`)
 
 Initialization constraints add equations to the nonlinear system that must be satisfied during the initialization solve. Unlike formulas, they don't directly set values but impose mathematical relationships.
 
@@ -227,6 +235,31 @@ nothing #hide
 
 **Applying Constraints**: Constraints can be either added to the metadata of components ([`set_initconstraint!`](@ref), [`add_initconstraint!`](@ref)) or passed as `additional_initconstraint` to the
 [`initialize_component[!]`](@ref NetworkDynamics.initialize_component) functions.
+
+
+#### Guess Formulas (`GuessFormula`)
+
+Guess formulas operate later in the initialization pipeline than init formulas. While init formulas set default values (thereby reducing the number of free variables), guess formulas refine the initial guesses for free variables to improve solver convergence without changing the problem dimension.
+
+While InitFormulas use defaults to update other defaults, GuessFormulas update guesses based on other defaults and guesses (if some variable has a default and guess defined, the default takes precedence).
+They act **after** the InitFormulas, thus having access to the updated defaults.
+
+Similar to InitFormulas, NetworkDyanmics makes sure that there are no circular dependencies between guess formulas and you can't have multiple guess formulas updating the same variables.
+It performs some topological sorting on multiple guesses to update in order.
+
+**Basic Usage**: Use the [`@guessformula`](@ref) macro with the same assignment syntax as init formulas:
+
+```@example compinit
+# Example: Improve angle and voltage guesses from interface values
+setpoint_guesses = @guessformula begin
+    :V_set = sqrt(:u_r^2 + :u_i^2)     # guess voltage mag setpoint close to actual voltage
+    :P_set = :u_r * :i_r + :u_i * :i_i # guess power setpoint close to actual power
+end
+nothing #hide
+```
+
+**Applying GuessFormulas**: Like init formulas and constraints, guess formulas can be stored in metadata ([`set_guessformula!`](@ref)) or passed directly using the `additional_guessformula` keyword in [`initialize_componentwise`](@ref), [`initialize_component`](@ref) and friends.
+
 
 ## Analysing Fixpoints
 In order to analyse fixpoints NetworkDynamis provides the functions [`isfixpoint`](@ref), [`is_linear_stable`](@ref) and [`jacobian_eigenvals`](@ref).

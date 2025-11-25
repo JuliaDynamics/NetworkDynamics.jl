@@ -177,14 +177,6 @@ function initialization_problem(cf::T,
                    psym(cf)[pfree_m])
 
     @assert length(freesym) == Nfree
-    if Neqs < Nfree
-        throw(
-            ComponentInitError("Initialization problem underconstraint. \
-                $(Neqs) Equations for $(Nfree) free variables: $freesym. Consider \
-                passing additional constraints using `InitConstraint`.")
-        )
-
-    end
 
     # which parts of the nonlinear u (unl) correspond to which free parameters
     nextrange = let lasti = 0
@@ -327,8 +319,11 @@ function initialization_problem(cf::T,
 
     if Neqs == Nfree
         verbose && @info "Initialization problem is fully constrained. Created NonlinearLeastSquaresProblem for $freesym"
-    else
+    elseif Neqs > Nfree
         verbose && @info "Initialization problem is overconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for $freesym."
+    else
+        # verbose && @info "Initialization problem is underconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for $freesym."
+        @warn "Initialization problem is underconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for $freesym."
     end
 
     # check rhs of system for obvious problems
@@ -380,6 +375,7 @@ end
                          guess_overrides=nothing,
                          bound_overrides=nothing,
                          additional_initformula=nothing,
+                         additional_guessformula=nothing,
                          additional_initconstraint=nothing,
                          verbose=true,
                          apply_bound_transformation=true,
@@ -400,14 +396,18 @@ The function solves a nonlinear problem to find values for all free variables/pa
 - `bounds`: Dictionary of bounds (defaults to metadata bounds)
 - `default/guess/bound_overrides`: Dictionary to merge with `defaults`/`guesses`/`bounds`.
   You can use `nothing` as a value for any key to remove that entry from the respective dictionary.
-- `additional_initformula`: Additional initialization formulas to apply beyond those in component metadata
+- `additional_initformula`: Additional initialization formulas to apply beyond those in component metadata.
+  InitFormulas compute and set default values, reducing the number of free variables.
+- `additional_guessformula`: Additional guess formulas to apply beyond those in component metadata.
+  GuessFormulas compute improved initial guesses for free variables, improving solver convergence.
 - `additional_initconstraint`: Additional initialization constraints to apply beyond those in component metadata
 - `verbose`: Whether to print information during initialization
 - `apply_bound_transformation`: Whether to apply bound-conserving transformations
 - `t`: Time at which to solve for steady state. Only relevant for components with explicit time dependency.
-- `tol`: Tolerance for the residual of the initialized model (defaults to `1e-10`). Init throws error if resid < tol.
+- `tol`: Tolerance for the residual of the initialized model (defaults to `1e-10`). Init throws error if resid ≥ tol.
 - `residual`: Optional `Ref{Float64}` which gets the final residual of the initialized model.
-- `kwargs...`: Additional arguments passed to the nonlinear solver
+- `alg=nothing`: Nonlinear solver algorithm (defaults to NonlinearSolve.jl default)
+- `solve_kwargs=(;)`: Additional keyword arguments passed to the SciML `solve` function
 
 ## Returns
 - Dictionary mapping symbols to their values (complete state including defaults and initialized values)
@@ -427,13 +427,23 @@ function initialize_component(cf;
                              guess_overrides=nothing,
                              bound_overrides=nothing,
                              additional_initformula=nothing,
+                             additional_guessformula=nothing,
                              additional_initconstraint=nothing,
                              verbose=true,
                              apply_bound_transformation=true,
                              t=NaN,
                              tol=1e-10,
                              residual=nothing,
+                             # internal keywords to "return" the final defaults/guesses after applying formulas
+                             _final_defaults=nothing,
+                             _final_guesses=nothing,
+                             alg=nothing,
+                             solve_kwargs=(;),
                              kwargs...)
+
+    if !isempty(kwargs)
+        @warn "Passing `kwargs` to `initialize_component(!)` is deprecated. Use `alg` and `solve_kwargs=(; kw=val)` instead."
+    end
 
     defaults = isnothing(default_overrides) ? defaults : merge(defaults, default_overrides)
     guesses  = isnothing(guess_overrides)   ? guesses  : merge(guesses, guess_overrides)
@@ -446,15 +456,30 @@ function initialize_component(cf;
 
     # Extract metadata and merge with additional constraints/formulas
     metadata_initformulas = has_initformula(cf) ? get_initformulas(cf) : nothing
-    combined_initformulas = collect_initformulas(metadata_initformulas, additional_initformula)
+    combined_initformulas = collect_formulas(metadata_initformulas, additional_initformula)
 
     # Apply initialization formulas to defaults
     if !isnothing(combined_initformulas)
         apply_init_formulas!(defaults, combined_initformulas; verbose)
     end
 
+    # Extract and apply guess formulas
+    metadata_guessformulas = has_guessformula(cf) ? get_guessformulas(cf) : nothing
+    combined_guessformulas = collect_formulas(metadata_guessformulas, additional_guessformula)
+    if !isnothing(combined_guessformulas)
+        apply_guess_formulas!(guesses, defaults, combined_guessformulas; verbose)
+    end
+
     metadata_constraint = has_initconstraint(cf) ? get_initconstraints(cf) : nothing
     combined_constraint = merge_initconstraints(metadata_constraint, additional_initconstraint)
+
+    # optinally "return" the final defaults and guesses via keyword ref
+    if _final_defaults isa Ref
+        _final_defaults[] = defaults
+    end
+    if _final_guesses isa Ref
+        _final_guesses[] = guesses
+    end
 
     prob, boundT! = initialization_problem(cf, defaults, guesses, bounds,
                                           combined_constraint;
@@ -473,7 +498,7 @@ function initialize_component(cf;
     end
 
     if !isempty(prob.u0)
-        sol = SciMLBase.solve(prob; verbose, kwargs...)
+        sol = SciMLBase.solve(prob, alg; verbose, kwargs..., solve_kwargs...)
 
         if sol.prob isa NonlinearLeastSquaresProblem && sol.retcode == SciMLBase.ReturnCode.Stalled
             res = LinearAlgebra.norm(sol.resid)
@@ -536,6 +561,7 @@ end
                           guess_overrides=nothing,
                           bound_overrides=nothing,
                           additional_initformula=nothing,
+                          additional_guessformula=nothing,
                           additional_initconstraint=nothing,
                           verbose=true,
                           t=NaN,
@@ -553,11 +579,14 @@ symbolic metadata and writes the initialized values back in to the metadata.
 - `default/guess/bound_overrides`: Dict of values that override existing
    default/guess/bound metadata. Use `nothing` as a value for any key to remove
    that metadata entry from the component model.
-- `additional_initformula`: Additional initialization formulas to apply beyond those in component metadata
+- `additional_initformula`: Additional initialization formulas to apply beyond those in component metadata.
+  InitFormulas compute and set default values, reducing the number of free variables.
+- `additional_guessformula`: Additional guess formulas to apply beyond those in component metadata.
+  GuessFormulas compute improved initial guesses for free variables, improving solver convergence.
 - `additional_initconstraint`: Additional initialization constraints to apply beyond those in component metadata
 - `verbose`: Whether to print information during initialization
 - `t`: Time at which to solve for steady state. Only relevant for components with explicit time dependency.
-- All other `kwargs` are passed to `initialize_component`
+- All other `kwargs` are passed to [`initialize_component`](@ref), see its docstring for details!
 
 When `defaults`, `guesses`, or `bounds` are provided, they replace the corresponding
 metadata in the component model. Any keys in the original metadata that are not in
@@ -571,6 +600,7 @@ function initialize_component!(cf;
                               guess_overrides=nothing,
                               bound_overrides=nothing,
                               additional_initformula=nothing,
+                              additional_guessformula=nothing,
                               additional_initconstraint=nothing,
                               verbose=true,
                               t=NaN,
@@ -598,13 +628,20 @@ function initialize_component!(cf;
         end
     end
 
+    # make sure to get back the final defaults/guesses after applying formulas
+    _final_defaults = Ref{Dict{Symbol,Float64}}()
+    _final_guesses = Ref{Dict{Symbol,Float64}}()
+
     # Now proceed with initialization using the updated metadata
     init_state = initialize_component(
         cf;
         additional_initformula=additional_initformula,
+        additional_guessformula=additional_guessformula,
         additional_initconstraint=additional_initconstraint,
         verbose=verbose,
         t=t,
+        _final_defaults,
+        _final_guesses,
         kwargs...  # Only pass the remaining kwargs
     )
 
@@ -613,13 +650,20 @@ function initialize_component!(cf;
         delete_init!(cf, s)
     end
 
+    # write back defaults/guesses if they've changed due to formulas
+    for (sym, val) in _final_defaults[]
+        if !has_default(cf, sym) || get_default(cf, sym) != val
+           set_default!(cf, sym, val)
+        end
+    end
+    for (sym, val) in _final_guesses[]
+        if !has_guess(cf, sym) || get_guess(cf, sym) != val
+            set_guess!(cf, sym, val)
+        end
+    end
     # Write back the initialized values to the component metadata
     for (sym, val) in init_state
-        if has_default(cf, sym)
-            # Check if initialized value differs from existing default
-            # This can happen when init formulas override default values
-            get_default(cf, sym) != val && set_default!(cf, sym, val)
-        else
+        if !has_default(cf, sym)
             # No default exists, store as init value
             set_init!(cf, sym, val)
         end
@@ -666,14 +710,16 @@ function isinitialized(cf::ComponentModel)
 end
 
 """
-    init_residual(cf::ComponentModel, [state=get_defaults_or_inits_dict(cf)]; t=NaN)
+    init_residual(cf::ComponentModel, [state=get_defaults_or_inits_dict(cf)]; t=NaN, verbose=false)
 
 Calculates the residual |du| for the given component model using the values provided.
 If no state dictionary is provided, it uses the values from default/init [Metadata](@ref).
 
+If `verbose=true` prints the residual of every single state.
+
 See also [`initialize_component`](@ref).
 """
-function init_residual(cf::ComponentModel, state=get_defaults_or_inits_dict(cf); t=NaN)
+function init_residual(cf::ComponentModel, state=get_defaults_or_inits_dict(cf); t=NaN, verbose=false)
     # Check that all necessary symbols are present in the state dictionary
     needed_symbols = Set(vcat(
         sym(cf),                                # states
@@ -722,6 +768,20 @@ function init_residual(cf::ComponentModel, state=get_defaults_or_inits_dict(cf);
     res_out .= RecursiveArrayTools.ArrayPartition(out_calc...) .- RecursiveArrayTools.ArrayPartition(outs...) # compare to calculated ouputs
 
     additional_cf(res_add, outs, u, ins, p, t) # apply additional constraints
+
+    if verbose
+        _sym = sym(cf)
+        _osym = outsym(cf)
+        _addsym = ["init constraint $i" for i in 1:additional_Neqs]
+        lines = String[]
+        for (i, s) in enumerate(vcat(_sym, _osym, _addsym))
+            push!(lines, "  $s &=> $(res[i])")
+        end
+        aligned = align_strings(lines)
+        for l in aligned
+            println(l)
+        end
+    end
 
     res =  LinearAlgebra.norm(res)
     if isnan(res)
@@ -773,12 +833,15 @@ initialize_docstring = raw"""
         guess_overrides=nothing,
         bound_overrides=nothing,
         additional_initformula=nothing,
+        additional_guessformula=nothing,
         additional_initconstraint=nothing,
         verbose=false,
         subverbose=false,
         tol=1e-10,
         nwtol=1e-10,
-        t=NaN
+        t=NaN,
+        subalg=nothing,
+        subsolve_kwargs=nothing,
     ) :: NWState
 
 Initialize a network by solving initialization problems for each component individually,
@@ -798,12 +861,18 @@ state again, as it is stored in the metadata.
 - `bound_overrides`: Dictionary mapping symbolic indices to bounds for constrained variables.
   Use `nothing` as a value for any key to remove those bounds.
 - `additional_initformula`: Dictionary mapping component indices (VIndex/EIndex) to additional initialization formulas.
+  InitFormulas compute and set default values, reducing the number of free variables.
+- `additional_guessformula`: Dictionary mapping component indices (VIndex/EIndex) to additional guess formulas.
+  GuessFormulas compute improved initial guesses for free variables, improving solver convergence.
 - `additional_initconstraint`: Dictionary mapping component indices (VIndex/EIndex) to additional initialization constraints.
 - `verbose`: Whether to print information about each component initialization
 - `subverbose`: Whether to print detailed information within component initialization. Can be Vector [VIndex(1), EIndex(3), ...] for selective output
 - `tol`: Tolerance for individual component residuals
 - `nwtol`: Tolerance for the full network residual
 - `t`: Time at which to evaluate the system
+- `subalg`: Nonlinear solver algorithm to use for component initialization (defaults to NonlinearSolve.jl default). Can be passed as single value or dict mapping VIndex/EIndex to alg (non-existent keys use default).
+- `subsolve_kwargs`: Additional keyword arguments passed to the SciML `solve` function for component initialization.
+  Can be passed as single value or dict mapping VIndex/EIndex to kwargs (non-existent keys use empty kwargs `(;)`).
 
 ## Returns
 - `NWState`: A fully initialized network state that can be used for simulation
@@ -837,12 +906,15 @@ function _initialize_componentwise(
     guess_overrides=nothing,
     bound_overrides=nothing,
     additional_initformula=nothing,
+    additional_guessformula=nothing,
     additional_initconstraint=nothing,
     verbose=false,
     subverbose=false,
     tol=1e-10,
     nwtol=1e-10,
-    t=NaN
+    t=NaN,
+    subalg=nothing,
+    subsolve_kwargs=nothing,
 )
     initfun = if mutating == Val(true)
         initialize_component!
@@ -854,6 +926,11 @@ function _initialize_componentwise(
     else
         Dict{SymbolicIndex, Float64}()
     end
+
+    # dict might be provided as VIndex(:foo) so we need to resolve comp names
+    subalg = _resolve_subargument_dict(nw, subalg)
+    subsolve_kwargs = _resolve_subargument_dict(nw, subsolve_kwargs)
+
     for vi in 1:nv(nw)
         _default_overrides = _filter_overrides(nw, VIndex(vi), default_overrides)
         _guess_overrides = _filter_overrides(nw, VIndex(vi), guess_overrides)
@@ -868,11 +945,14 @@ function _initialize_componentwise(
             guess_overrides=_guess_overrides,
             bound_overrides=_bound_overrides,
             additional_initformula=isnothing(additional_initformula) ? nothing : get(additional_initformula, VIndex(vi), nothing),
+            additional_guessformula=isnothing(additional_guessformula) ? nothing : get(additional_guessformula, VIndex(vi), nothing),
             additional_initconstraint=isnothing(additional_initconstraint) ? nothing : get(additional_initconstraint, VIndex(vi), nothing),
             verbose=_subverbose,
             t=t,
             tol=tol,
             residual=rescapture,
+            alg=_determine_subargument(subalg, VIndex(vi), nothing),
+            solve_kwargs=_determine_subargument(subsolve_kwargs, VIndex(vi), (;)),
         )
         !_subverbose && verbose && println("\b\b\b => residual $(rescapture[])")
         verbose && _subverbose && println()
@@ -892,11 +972,14 @@ function _initialize_componentwise(
             guess_overrides=_guess_overrides,
             bound_overrides=_bound_overrides,
             additional_initformula=isnothing(additional_initformula) ? nothing : get(additional_initformula, EIndex(ei), nothing),
+            additional_guessformula=isnothing(additional_guessformula) ? nothing : get(additional_guessformula, EIndex(ei), nothing),
             additional_initconstraint=isnothing(additional_initconstraint) ? nothing : get(additional_initconstraint, EIndex(ei), nothing),
             verbose=_subverbose,
             t=t,
             tol=tol,
             residual=rescapture,
+            alg=_determine_subargument(subalg, EIndex(ei), nothing),
+            solve_kwargs=_determine_subargument(subsolve_kwargs, EIndex(ei), (;)),
         )
         !_subverbose && verbose && println("\b\b\b => residual $(rescapture[])")
         verbose && _subverbose && println()
@@ -949,6 +1032,28 @@ _merge_wrapped!(::Nothing, _, _) = nothing
 _determine_subverbose(subverbose::Bool, _) = subverbose
 _determine_subverbose(subverbose::AbstractVector, idx) = idx ∈ subverbose
 _determine_subverbose(subverbose, idx) = idx == subverbose
+
+_determine_subargument(subargument::Nothing, idx, default) = default
+_determine_subargument(subargument::AbstractDict, idx, default) = get(subargument, idx, default)
+_determine_subargument(subargument, idx, default) = subargument
+
+_resolve_subargument_dict(nw, nodict) = nodict # no dict
+_resolve_subargument_dict(nw, gooddict::AbstractDict{<:SymbolicIndex{Int}}) = gooddict
+function _resolve_subargument_dict(nw, dict::AbstractDict)
+    if any(t -> !(t isa SymbolicIndex{Int}), keys(dict))
+        if any(t -> !(t isa SymbolicIndex), keys(dict))
+            throw(ArgumentError("property-dict must have VIndex/EIndex as keys!"))
+        end
+        resolved_dict = Dict{SymbolicIndex{Int}, Any}()
+        for (k, v) in pairs(dict)
+            resolvedidx = idxtype(k)(resolvecompidx(nw, k))
+            resolved_dict[resolvedidx] = v
+        end
+        return resolved_dict
+    else
+        return dict
+    end
+end
 
 """
     interface_values(s::NWState) :: OrderedDict{SymbolicIndex, Float64}

@@ -150,10 +150,10 @@ s.p.v[11, :γ] = 100
 nothing #hide
 
 #=
-No we have everything ready to build the ODEProblem and simulate the system.
+Now we have everything ready to build the [`ODEProblem`](@ref SciMLBase.ODEProblem(::NetworkDynamics.Network, ::NetworkDynamics.NWState, ::Any)) and simulate the system.
 =#
 tspan = (0.0, 12.0)
-prob = ODEProblem(nw, uflat(s), tspan, pflat(s))
+prob = ODEProblem(nw, s, tspan)
 sol  = solve(prob, Tsit5())
 nothing #hide
 

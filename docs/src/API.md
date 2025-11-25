@@ -21,6 +21,7 @@ EdgeModel()
 VertexModel(::ModelingToolkit.System, ::Any, ::Any)
 EdgeModel(::ModelingToolkit.System, ::Any, ::Any, ::Any, ::Any)
 EdgeModel(::ModelingToolkit.System, ::Any, ::Any, ::Any)
+ComponentPostprocessing
 ```
 
 ### Output Function Helpers/Wrappers
@@ -176,6 +177,11 @@ initialize_componentwise!
 initialize_component
 initialize_component!
 init_residual
+interface_values
+```
+
+### Init-Constraints
+```@docs
 InitConstraint
 @initconstraint
 set_initconstraint!
@@ -183,6 +189,10 @@ delete_initconstraints!
 has_initconstraint
 get_initconstraints
 add_initconstraint!
+```
+
+### Init-Formulas
+```@docs
 InitFormula
 @initformula
 has_initformula
@@ -190,7 +200,17 @@ get_initformulas
 set_initformula!
 add_initformula!
 delete_initformulas!
-interface_values
+```
+
+### Guess-Formulas
+```@docs
+GuessFormula
+@guessformula
+has_guessformula
+get_guessformulas
+set_guessformula!
+add_guessformula!
+delete_guessformulas!
 ```
 
 ## Linear Stability Analysis
@@ -248,6 +268,7 @@ KAAggregator
 
 ## Utils
 ```@docs
+SciMLBase.ODEProblem(::NetworkDynamics.Network, ::NetworkDynamics.NWState, ::Any)
 save_parameters!
 ff_to_constraint
 Base.copy(::NetworkDynamics.ComponentModel)

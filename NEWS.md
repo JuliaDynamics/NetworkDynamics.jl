@@ -1,5 +1,29 @@
 # NetworkDynamics Release Notes
 
+## v0.10.12 Changelog
+Implemented in [#326](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/326):
+- Add `ComponentPostprocessing` metadata mechanism for MTK models to attach postprocessing functions (like callbacks) at subcomponent level
+- Enhance initialization system:
+  - Add `alg` and `solve_kwargs` parameters to `initialize_component` and `initialize_componentwise` for better control over nonlinear solvers
+  - Deprecate passing raw `kwargs` to initialization functions - use `alg` and `solve_kwargs` instead (old behavior still works with warning)
+  - Support passing solver options as dictionaries mapping `VIndex`/`EIndex` to component-specific settings
+  - Better error reporting for duplicate edge graphelements with detailed information about which edges conflict
+  - Add warning when MTK models use vector variables/parameters (unsupported feature)
+
+## v0.10.11 Changelog
+- [#324](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/324): Add custom ODEProblem constructor which takes a `NWState` object rather than flat arrays.
+  Also always generate Network callbacks automatically.
+  If you've previously passed `callback=get_callbacks(nw)`, you'll get a deprecation note. For any other usage of the `callback` keyword on ODEProblem Constructor you'll get an error.
+
+## v0.10.10 Changelog
+- [#323](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/323) Add `GuessFormula` system for improving initial guesses in component initialization:
+  - New `GuessFormula` type and `@guessformula` macro for defining guess refinement formulas
+  - GuessFormulas operate after InitFormulas in the initialization pipeline
+  - Unlike InitFormulas (which set defaults), GuessFormulas refine initial guesses for free variables
+  - Add `has_guessformula`, `get_guessformulas`, `set_guessformula!`, `add_guessformula!`, `delete_guessformulas!` metadata functions
+  - Add `additional_guessformula` keyword to `initialize_component`, `initialize_component!`, and `initialize_componentwise` functions
+  - Improved initialization documentation with execution order details
+
 ## v0.10.9 Changelog
 - [#317](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/317) Enhanced callback system with negative affect support and runtime callback injection:
   - Add `affect_neg!` parameter to `ContinuousComponentCallback` and `VectorContinuousComponentCallback` for handling downcrossing events

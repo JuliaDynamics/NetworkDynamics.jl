@@ -146,6 +146,7 @@ abstract type SymbolicIndex{C,S} end
 
 flatten_sym(v::NamedTuple) = reduce(vcat, values(v))
 flatten_sym(v::AbstractVector{Symbol}) = v
+flatten_sym(v::AbstractVector) = Symbol.(v)
 
 """
     find_identical(v::Vector;; equality)
@@ -219,7 +220,10 @@ function _sym_to_int(x::SymbolicView, idx::Int)
     x.allow_int_indexing || throw(IllegalIntIndexingError())
     idx
 end
-_sym_to_int(x::SymbolicView, idx) = _sym_to_int.(Ref(x), idx)
+_sym_to_int(x::SymbolicView, idx::Union{Tuple,AbstractVector}) = _sym_to_int.(Ref(x), idx)
+function _sym_to_int(x::SymbolicView, idx)
+    throw(ArgumentError("Invalid index $idx for SymbolicView($(x.syms))"))
+end
 
 # temp variable to splice docstring into ArgumentError in MTK Ext
 const implicit_output_docstring = """
@@ -368,3 +372,27 @@ function pretty_f(v)
 
     print(noindent)
 end
+
+# metadata utilities for MTK extensions
+"""
+    ComponentPostprocessing
+
+Custom MTK metadata type, you can add it to register a postprocessing function `f` for your model
+
+    function my_postproc(cm::Union{VertexModel, EdgeModel}, namespace)
+        # alter the cm as needed, for example add callbacks
+    end
+    @mtkmodel MyModel begin
+        ...
+        @metadata begin
+            ComponentPostprocessing = my_postproc
+        end
+        ...
+    end
+
+The postprocessing function will be called at the end of the `VertexModel`/`EdgeModel` construction
+after the model compilation.
+You can use it to add custom callbacks or init functions/metadata to the generated component.
+The function gets both the component model to *modify* and the namespace (as string) of the model.
+"""
+struct ComponentPostprocessing end

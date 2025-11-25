@@ -228,3 +228,173 @@ end
 VertexModel(kirchhoff, [:i_sum], [:v])
 ```
 where we "trick" MTK into believing that the input forcing equation depends on the output too.
+
+## Register Postprocessing Functions
+MTK models are "composite" by design, i.e. your toplevel model might consist of multiple internal components.
+Sometimes, you want to specify behavior of the **encapsulating model** on a subcomponent level. 
+For that, NetworkDynamics provides the [`ComponentPostprocessing`](@ref) metadata mechanism.
+
+Let's say you want to implement an integrator with anti windup
+```asciiart
+              __ outMax
+             /
+        ╭─────╮
+     in │  K  │ out
+    ╶───┤╶───╴├────╴
+        │ s T │
+        ╰─────╯
+outMin __/
+```
+
+We could try to implement this using `ifelse`  functions, but the proper way is to do it with callbacks.
+Since NetworkDynamics cannot understand events defined within MTK models, we need to attach the callbacks on the component level.
+That's annoying, because the building block might appear in lots of different models.
+To work around this shortcoming, ND.jl allows you to define postprocessing functions, which will be called on every model which makes use of the subsystem.
+
+In our model, we add two "internal" parameters, to indicate if the system is in lower or upper saturation.
+Depending on the saturation state, the integrator is "disabled".
+The model definition looks like this. The important part is the `@metadata` block at the end.
+
+```@example mtk
+function attach_limint_callback! end # function needs to exist before model
+@mtkmodel LimitedIntegrator begin
+    @structural_parameters begin
+        K # Gain
+        T # Time constant
+        outMin # Lower limit
+        outMax # Upper limit
+        guess=0
+    end
+    @parameters begin
+        _callback_sat_max = 0
+        _callback_sat_min = 0
+    end
+    @variables begin
+        in(t), [description="Input signal", input=true]
+        out(t), [guess=guess, description="limited integrator output state", output=true]
+        min(t), [description="Lower limit"]
+        max(t), [description="Upper limit"]
+        forcing(t)
+    end
+    @equations begin
+        min ~ outMin
+        max ~ outMax
+        forcing ~ K*in
+        T*D(out) ~ (1 - _callback_sat_max - _callback_sat_min) * forcing
+    end
+    @metadata begin
+        ComponentPostprocessing = attach_limint_callback!
+    end
+end
+nothing #hide
+```
+
+The callback to generate is split in three separate conditions:
+- if `out - max` registers an upcrossing, enter upper saturation
+- if `-out + min` registers an upcrossing, enter lower saturation
+- if currently in saturation, check for zero crossings in `forcing`, if in upper saturation and
+forcing turns negative, unsaturate. If in lower saturation and forcing turns positive unsaturate.
+
+The function below generates such a callback for the component at a given namespace:
+
+```@example mtk
+function attach_limint_callback!(cf, namespace)
+    # generate the required symbols based on the namespace
+    min = Symbol(namespace, "₊min")
+    max = Symbol(namespace, "₊max")
+    out = Symbol(namespace, "₊out")
+    forcing = Symbol(namespace, "₊forcing")
+    satmax = Symbol(namespace, "₊_callback_sat_max")
+    satmin = Symbol(namespace, "₊_callback_sat_min")
+
+    condition = ComponentCondition([min, max, out, forcing], [satmax, satmin]) do _out, u, p, _
+        insatmax = !iszero(p[satmax])
+        insatmin = !iszero(p[satmin])
+
+        upcrossing_max =  u[out] - u[max]
+        upcrossing_min = -u[out] + u[min]
+
+        # enable upper saturation
+        _out[1] = insatmax ? Inf : upcrossing_max
+        # enable lower saturation
+        _out[2] = insatmin ? Inf : upcrossing_min
+        if insatmax || insatmin
+            # when in saturation, check for zero crossing of forcing
+            _out[3] = u[forcing]
+        else
+            _out[3] = Inf
+        end
+    end
+
+    upcrossing_affect = ComponentAffect([], [satmax, satmin]) do u, p, eventidx, ctx
+        if eventidx == 1
+            println("$namespace: /⎺ reached upper saturation at $(round(ctx.t, digits=4))s")
+            p[satmax] = 1.0
+            p[satmin] = 0.0
+        elseif eventidx == 2
+            println("$namespace: \\_ reached lower saturation at $(round(ctx.t, digits=4))s")
+            p[satmax] = 0.0
+            p[satmin] = 1.0
+        elseif eventidx == 3
+            # upcrossing means, forcing went from negative to positive, i.e. we leave lower saturation
+            insatmin = !iszero(p[satmin])
+            if insatmin
+                println("$namespace: _/ left lower saturation at $(round(ctx.t, digits=4))s")
+                p[satmin] = 0.0
+            end
+        else
+            error("Unknown event index $eventidx")
+        end
+    end
+
+    downcrossing_affect = ComponentAffect([],[satmax]) do u, p, eventidx, ctx
+        if eventidx == 3 # downcrossing means nothing for saturation affects
+            # downcrossing means, forcing went from positive to negative, i.e. we leave upper saturation
+            insatmax = !iszero(p[satmax])
+            if insatmax
+                println("$namespace: ⎺\\ left upper saturation at $(round(ctx.t, digits=4))s")
+                p[satmax] = 0.0
+            end
+        else
+            error("Unknown event index $eventidx")
+        end
+    end
+
+    cb = VectorContinuousComponentCallback(condition, upcrossing_affect, 3; affect_neg! = downcrossing_affect)
+
+    # finally add callback to component
+    NetworkDynamics.add_callback!(cf, cb)
+end
+nothing #hide
+```
+!!! warning
+    Even though fairly complex, the above function is a simplified example which may have performance problems 
+    and does not add "safety" discrete callbacks. Under discrete jumps, the zero crossing might be skipped so 
+    it is good practice to add additional discrete callbacks to detect those cases (i.e. check if `out >= max + 1e-10`).
+    You'll find a "proper" version of the saturated integrator in the PowerDynamics.jl Library, feel free 
+    to copy the code from there.
+
+With the definition above, we can create a model which uses the limited integrator:
+```@example mtk
+@mtkmodel ComponentWithLimInt begin
+    @components begin
+        int = LimitedIntegrator(K=1, T=1, outMin=-1, outMax=1)
+    end
+    @variables begin
+        out(t)
+        in(t)
+    end
+    @equations begin
+        int.in ~ in
+        out ~ int.out
+    end
+end
+
+@named testcomp = ComponentWithLimInt()
+nothing #hide
+```
+When we build this (useless) vertex model
+```@example mtk
+vm = VertexModel(testcomp, [:in], [:out])
+```
+we see the callback was generated and attached automatically.

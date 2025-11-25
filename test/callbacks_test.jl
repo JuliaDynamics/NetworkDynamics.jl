@@ -92,9 +92,8 @@ end
     useless_cb = DiscreteComponentCallback(usless_cond, usless_affect)
     add_callback!(nw[EIndex(1)], useless_cb)
 
-    nwcb = NetworkDynamics.get_callbacks(nw);
     s0 = NWState(nw)
-    prob = ODEProblem(nw, uflat(s0), (0,6), copy(pflat(s0)), callback=nwcb)
+    prob = ODEProblem(nw, uflat(s0), (0,6), copy(pflat(s0)))
     sol = solve(prob, Tsit5());
 
     @test 0.1 < useless_triggertime[] <= 1.0
@@ -311,7 +310,7 @@ end
     # set_callback!(nw[VIndex(1)], cb_vec)
     # set_callback!(nw[VIndex(1)], cb_vec)
     s0 = NWState(nw)
-    prob = ODEProblem(nw, uflat(s0), (0, 4π+0.1), pflat(s0), callback=get_callbacks(nw, VIndex(1)=>cb_vec))
+    prob = ODEProblem(nw, uflat(s0), (0, 4π+0.1), pflat(s0), add_comp_cb=VIndex(1)=>cb_vec)
     sol = solve(prob, Tsit5());
     @assert SciMLBase.successful_retcode(sol)
 
@@ -328,7 +327,7 @@ end
     empty!(vec_sin_down)
     empty!(vec_cos_down)
     cb_vec = VectorContinuousComponentCallback(cond_vec, affect_vec, 2; affect_neg! = nothing)
-    prob = ODEProblem(nw, uflat(s0), (0, 4π+0.1), pflat(s0), callback=get_callbacks(nw, Dict(VIndex(1)=>cb_vec)))
+    prob = ODEProblem(nw, uflat(s0), (0, 4π+0.1), pflat(s0), add_comp_cb=Dict(VIndex(1)=>cb_vec))
     sol = solve(prob, Tsit5());
     @assert SciMLBase.successful_retcode(sol)
     @test vec_sin_up ≈ [2, 4] atol=1e-3
@@ -355,7 +354,7 @@ end
         push!(sin_down, pos)
     end
     cb = ContinuousComponentCallback(cond, affect; affect_neg! = affect_neg)
-    prob = ODEProblem(nw, uflat(s0), (0, 4π+0.1), pflat(s0), callback=get_callbacks(nw, Dict(VIndex(1)=>cb)))
+    prob = ODEProblem(nw, uflat(s0), (0, 4π+0.1), pflat(s0), add_comp_cb=Dict(VIndex(1)=>cb))
     sol = solve(prob, Tsit5());
     @test sin_up ≈ [2, 4] atol=1e-3
     @test sin_down ≈ [1, 3] atol=1e-3
@@ -363,7 +362,7 @@ end
     empty!(sin_up)
     empty!(sin_down)
     cb = ContinuousComponentCallback(cond, affect; affect_neg! = nothing)
-    prob = ODEProblem(nw, uflat(s0), (0, 4π+0.1), pflat(s0), callback=get_callbacks(nw, Dict(VIndex(1)=>cb)))
+    prob = ODEProblem(nw, uflat(s0), (0, 4π+0.1), pflat(s0), add_comp_cb=Dict(VIndex(1)=>cb))
     sol = solve(prob, Tsit5());
     @test sin_up ≈ [2, 4] atol=1e-3
     @test isempty(sin_down)
@@ -377,4 +376,134 @@ end
     @test v[:c] == 3
     v[:c] = 7
     @test a == [1,2,7,4,5,6,7,8,9,10]
+end
+
+@testset "ODEProblem callback keywords" begin
+    nw = basenetwork()
+
+    # Create reusable callbacks
+    # Component callback (similar to those used in batch tests)
+    triggered_comp = Int[]
+    cond = ComponentCondition([:P, :₋P, :srcθ], [:limit, :K]) do u, p, t
+        t - 1 # trigger at t=1
+    end
+    affect = ComponentAffect([],[:active]) do u, p, ctx
+        push!(triggered_comp, ctx.eidx)
+        p[:active] = 0
+    end
+    comp_cb = ContinuousComponentCallback(cond, affect)
+
+    # Network-level callback (PresetTimeCallback)
+    triggered_nw = Float64[]
+    nw_cb = DiffEqCallbacks.PresetTimeCallback([1.0, 2.0], integrator -> push!(triggered_nw, integrator.t))
+
+    s0 = NWState(nw)
+    tspan = (0.0, 3.0)
+
+    @testset "add_comp_cb: add component callbacks" begin
+        empty!(triggered_comp)
+        # Test adding component callback via keyword
+        prob = ODEProblem(nw, s0, tspan; add_comp_cb=Dict(EIndex(3)=>comp_cb))
+        # Verify callback was added (by checking it's in the callback structure)
+        @test !isnothing(prob.kwargs[:callback])
+
+        # Solve to verify the component callback actually triggers
+        sol = solve(prob, Tsit5())
+        @test 3 in triggered_comp  # EIndex(3) should trigger
+    end
+
+    @testset "add_nw_cb: add network-level callback" begin
+        empty!(triggered_nw)
+        # Test adding network-level callback via keyword
+        prob = ODEProblem(nw, s0, tspan; add_nw_cb=nw_cb)
+        @test prob isa ODEProblem
+        @test !isnothing(prob.kwargs[:callback])
+
+        # Solve to verify the network callback actually triggers
+        sol = solve(prob, Tsit5())
+        @test length(triggered_nw) == 2
+        @test triggered_nw ≈ [1.0, 2.0] atol=1e-10
+    end
+
+    @testset "combined: add_comp_cb + add_nw_cb" begin
+        empty!(triggered_comp)
+        empty!(triggered_nw)
+
+        # Test both keywords together
+        prob = ODEProblem(nw, s0, tspan;
+                         add_comp_cb=Dict(EIndex(3)=>comp_cb),
+                         add_nw_cb=nw_cb)
+        @test prob isa ODEProblem
+        @test !isnothing(prob.kwargs[:callback])
+
+        # Solve to verify both callbacks work
+        sol = solve(prob, Tsit5())
+        @test length(triggered_nw) == 2
+        @test triggered_nw ≈ [1.0, 2.0] atol=1e-10
+    end
+
+    @testset "override_cb: completely replace callbacks" begin
+        # Create a simple override callback
+        override_triggered = Float64[]
+        override_cb = DiffEqCallbacks.PresetTimeCallback([0.5], integrator -> push!(override_triggered, integrator.t))
+
+        # Test override completely replaces network callbacks
+        prob = ODEProblem(nw, s0, tspan; override_cb=override_cb)
+        @test prob isa ODEProblem
+        @test !isnothing(prob.kwargs[:callback])
+        @test prob.kwargs[:callback] isa DiscreteCallback
+
+        # Solve and verify only override callback triggered
+        sol = solve(prob, Tsit5())
+        @test length(override_triggered) == 1
+        @test override_triggered[1] ≈ 0.5 atol=1e-10
+    end
+
+    @testset "error cases" begin
+        # Test that passing callback directly throws error
+        @test_throws ArgumentError ODEProblem(nw, s0, tspan; callback=nw_cb)
+        override_cb = DiffEqCallbacks.PresetTimeCallback([0.5], integrator -> nothing)
+        # Test that combining override_cb with add_comp_cb throws error
+        @test_throws ArgumentError ODEProblem(nw, s0, tspan;
+                                             override_cb=override_cb,
+                                             add_comp_cb=Dict(EIndex(3)=>comp_cb))
+        # Test that combining override_cb with add_nw_cb throws error
+        @test_throws ArgumentError ODEProblem(nw, s0, tspan;
+                                             override_cb=override_cb,
+                                             add_nw_cb=nw_cb)
+    end
+
+    # Create a network with embedded callbacks for testing callback merging
+    nw_with_cb = basenetwork()
+    embedded_triggered = Ref{Float64}(0.0)
+    embedded_cond = ComponentCondition([:P, :₋P, :srcθ], [:limit, :K]) do u, p, t
+        t > 0.5 && iszero(embedded_triggered[])
+    end
+    embedded_affect = ComponentAffect([], [:limit]) do u, p, ctx
+        embedded_triggered[] = ctx.t
+    end
+    embedded_cb = DiscreteComponentCallback(embedded_cond, embedded_affect)
+    add_callback!(nw_with_cb[EIndex(1)], embedded_cb)
+    s0_with_cb = NWState(nw_with_cb)
+
+    @testset "combined with existing network callbacks" begin
+        embedded_triggered[] = 0.0
+        empty!(triggered_comp)
+        empty!(triggered_nw)
+
+        # Network has embedded callback, add both component and network callbacks
+        prob = ODEProblem(nw_with_cb, s0_with_cb, tspan;
+                         add_comp_cb=Dict(EIndex(3)=>comp_cb),
+                         add_nw_cb=nw_cb)
+        @test prob isa ODEProblem
+        @test !isnothing(prob.kwargs[:callback])
+
+        # Solve and verify all three callback types trigger
+        sol = solve(prob, Tsit5())
+        @test embedded_triggered[] > 0.5  # Embedded callback triggered
+        @test !isempty(triggered_comp)  # Additional component callback triggered
+        @test 3 in triggered_comp
+        @test length(triggered_nw) == 2  # Network callback triggered
+        @test triggered_nw ≈ [1.0, 2.0] atol=1e-10
+    end
 end

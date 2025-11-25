@@ -144,8 +144,21 @@ end
 
         @test_throws ArgumentError VertexModel(f=f, g=StateMask(1:1), sym=[:foo=>1]; def=[1])
         @test_throws ArgumentError VertexModel(f=f, g=StateMask(2:2), dim=2, psym=[:foo=>1]; pdef=[1])
-    end
 
+        # test copy behavior of CopyConstructor
+        set_graphelement!(cf, 1) # set metadata
+        cf2 = VertexModel(cf, vidx=2)
+        cf3 = VertexModel(cf, vidx=3, outsym=[:foo=>99, :bar=>99])
+        @test get_graphelement(cf) == 1
+        @test get_graphelement(cf2) == 2
+        @test get_graphelement(cf3) == 3
+        @test get_default(cf, :foo) == 1
+        @test has_default(cf, :bar) == false
+        @test get_default(cf2, :foo) == 1
+        @test has_default(cf2, :bar) == false
+        @test get_default(cf3, :foo) == 99
+        @test get_default(cf3, :bar) == 99
+    end
 
     @testset "EdgeModel Constructor" begin
         using NetworkDynamics

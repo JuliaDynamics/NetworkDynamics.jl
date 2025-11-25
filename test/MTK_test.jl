@@ -427,3 +427,140 @@ end
     @named prosumer_fixed = WrapperFixed()
     VertexModel(prosumer_fixed, [:q̃_nw], [:p]) # no throw
 end
+
+@testset "Error on vector variables" begin
+    @mtkmodel VectorModel begin
+        @variables begin
+            out(t)
+        end
+        @parameters begin
+            A[1:2], [description = "vector parameter"]
+        end
+        @equations begin
+            out ~ A[1] + A[2]
+        end
+    end
+    @named vectormodel = VectorModel()
+    @test_throws ArgumentError VertexModel(vectormodel, [], [:out])
+end
+
+####
+#### ComponentPostprocesssing tests
+#### needs to be on top level because of modules and mtkmacro
+####
+
+module ToLate
+    struct CustomMetadata end
+    using ModelingToolkit
+    using ModelingToolkit: t_nounits as t, D_nounits as Dt
+    using NetworkDynamics: ComponentPostprocessing
+    @mtkmodel LateModel begin
+        @variables begin
+            in(t)
+            out(t)
+        end
+        @equations begin
+            Dt(out) ~ in
+        end
+        @metadata begin
+            ComponentPostprocessing = to_late_defined
+            # CoponentPostprocessing = :foo
+            # CustomMetadata = :foo
+        end
+    end
+    function to_late_defined(cf, namespace)
+        # this function is created after the component
+    end
+end
+module InTime
+    struct CustomMetadata end
+    using ModelingToolkit
+    using ModelingToolkit: t_nounits as t, D_nounits as Dt
+    using NetworkDynamics: ComponentPostprocessing
+    cfref = Ref{Any}(nothing)
+    nsref = Ref{Any}(nothing)
+    function in_time end
+    @mtkmodel Model begin
+        @variables begin
+            in(t)
+            out(t)
+        end
+        @equations begin
+            Dt(out) ~ in
+        end
+        @metadata begin
+            ComponentPostprocessing = in_time
+        end
+    end
+    function in_time(cf, namespace)
+        cfref[] = cf
+        nsref[] = namespace
+    end
+end
+@testset "postrpocessing callback defined after model" begin
+    testmodule = @__MODULE__
+    mod = testmodule.ToLate.LateModel(; name=:mod)
+    try
+        VertexModel(mod, [:in], [:out])
+        @test false
+    catch e
+        @test contains(e.msg, "postprocessing function `to_late_defined` included in")
+    end
+
+    @info "Befor in time model"
+    mod = testmodule.InTime.Model(; name=:mod)
+    vm = VertexModel(mod, [:in], [:out])
+
+    @test InTime.cfref[] === vm
+    @test InTime.nsref[] == ""
+end
+
+postprocessing_called = Any[]
+function sub1_postproc(cf, namespace)
+    push!(postprocessing_called, (:sub1, cf, namespace))
+end
+@mtkmodel SubModel1 begin
+    @metadata begin
+        ComponentPostprocessing = sub1_postproc
+    end
+end
+function sub2_postproc(cf, namespace)
+    push!(postprocessing_called, (:sub2, cf, namespace))
+end
+@mtkmodel SubModel2 begin
+    @components begin
+        sub1_in_sub2 = SubModel1()
+    end
+    @metadata begin
+        ComponentPostprocessing = sub2_postproc
+    end
+end
+function toplevel_postproc(cf, namespace)
+    push!(postprocessing_called, (:toplevel, cf, namespace))
+end
+@mtkmodel Toplevel begin
+    @components begin
+        sub1 = SubModel1()
+        sub2 = SubModel2()
+    end
+    @metadata begin
+        ComponentPostprocessing = toplevel_postproc
+    end
+    @variables begin
+        in(t)
+        out(t)
+    end
+    @equations begin
+        Dt(out) ~ in
+    end
+end
+
+@testset "test in submodel" begin
+    empty!(postprocessing_called)
+    @named mod = Toplevel()
+    vm = VertexModel(mod, [:in], [:out])
+    @test postprocessing_called[1] == (:sub2, vm, "sub2")
+    @test postprocessing_called[2] == (:sub1, vm, "sub1")
+    @test postprocessing_called[3] == (:sub1, vm, "sub2₊sub1_in_sub2")
+    @test postprocessing_called[4] == (:toplevel, vm, "")
+end
