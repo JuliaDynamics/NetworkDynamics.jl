@@ -5,7 +5,7 @@ Construct a `Network` object from a graph `g` and edge and component models `ver
 
 Arguments:
  - `g::AbstractGraph`: The graph on which the network is defined.
-    Optional, can be ommittet if all component models have a defined `graphelement`.
+    Optional, can be omitted if all component models have a defined `graphelement`.
     See `vidx` and `src`/`dst` keywors for [`VertexModel`](@ref) and [`EdgeModel`](@ref) constructors respectively.
  - `vertexm`:
     A single [`VertexModel`](@ref) or a vector of [`VertexModel`](@ref) objects.
@@ -17,14 +17,14 @@ Arguments:
 Optional keyword arguments:
  - `execution=SequentialExecution{true}()`:
     Execution model of the network. E.g. [`SequentialExecution`](@ref), [`KAExecution`](@ref), [`PolyesterExecution`](@ref) or [`ThreadedExecution`](@ref).
- - `aggregator=execution isa SequentialExecution ? SequentialAggregator(+) : PolyesterAggregator(+)`:
+ - `aggregator=execution is a SequentialExecution ? SequentialAggregator(+) : PolyesterAggregator(+)`: (@Hans : is this correct?)
     Aggregation function applied to the edge models. E.g. [`SequentialAggregator`](@ref), [`PolyesterAggregator`](@ref), [`ThreadedAggregator`](@ref), [`SparseAggregator`](@ref).
  - `check_graphelement=true`:
     Check if the `graphelement` metadata is consistent with the graph.
  - `dealias=false`
-    Check if the components alias eachother and create copies if necessary.
+    Check if the components alias each other and create copies if necessary.
     This is necessary if the same component model is referenced in multiple places in the Network but you want to
-    dynamicially asign metadata, such as initialization information to specific instances.
+    dynamically assign metadata, such as initialization information to specific instances.
  - `verbose=false`:
     Show additional information during construction.
 """
@@ -57,8 +57,8 @@ function Network(g::AbstractGraph,
                 to turn feed forward outputs into algebraic states."))
         end
 
-        # check if components alias eachother copy if necessary
-        # allready dealiase if provided as single functions
+        # check if components alias each other copy if necessary
+        # already dealiase if provided as single functions
         if dealias && !all_same_v
             dealias!(_vertexm)
         end

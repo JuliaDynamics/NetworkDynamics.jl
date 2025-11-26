@@ -1,6 +1,6 @@
 # API
 
-The following functions are designed for public use.
+The following functions are designed for use by the user.
 
 ## Network Construction API
 ```@docs

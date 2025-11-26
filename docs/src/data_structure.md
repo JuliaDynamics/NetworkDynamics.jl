@@ -45,11 +45,11 @@ v2 = VertexModel(f=kuramoto_secnd, sym=[:δ, :ω], psym=[:M, :D, :Pm], g=1)
 e = EdgeModel(;g=AntiSymmetric(kuramoto_edge), outsym=[:P], psym=[:K])
 nw = Network(complete_graph(2), [v1, v2], e)
 ```
-They can be access using `getindex`/`[]` with `VIndex` or `EIndex`:
+They can be accessed using `getindex`/`[]` with `VIndex` or `EIndex`:
 ```@example data_structure
 v1 === nw[VIndex(1)]
 ```
-which is useful when we want to change their metadata of components (note: both lines below are equivalent):
+which is useful when we want to change their component metadata (note: both lines below are equivalent):
 ```@example data_structure
 set_position!(v1, (1,0))
 set_position!(nw[VIndex(1)], (1,0))
@@ -57,8 +57,7 @@ nothing #hide
 ```
 
 !!! note "Aliasing of component models"
-    Since components are not copied, multiple entries in the vertex and edge lists might point to the same instance of 
-    a model. 
+    Since components are not copied, multiple entries in the vertex and edge lists might point to the same model instance. 
     ```@example data_structure
     nw = Network(complete_graph(3), [v1,v2,v1], e)
     v1 === nw[VIndex(1)] === nw[VIndex(3)]
