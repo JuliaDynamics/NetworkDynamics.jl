@@ -945,6 +945,8 @@ initialize_docstring = raw"""
         subalg=nothing,
         subsolve_kwargs=nothing,
         parallel=false,
+        vset=[VIndex(i) for i in 1:nv(nw)],
+        eset=[EIndex(i) for i in 1:ne(nw)],
     ) :: NWState
 
 Initialize a network by solving initialization problems for each component individually,
@@ -977,6 +979,8 @@ state again, as it is stored in the metadata.
 - `subsolve_kwargs`: Additional keyword arguments passed to the SciML `solve` function for component initialization.
   Can be passed as single value or dict mapping VIndex/EIndex to kwargs (non-existent keys use empty kwargs `(;)`).
 - `parallel=false`: (Experimental) Whether to initialize components in parallel using multithreading.
+- `vset`: Vector of VIndex values specifying which vertices to initialize (defaults to all vertices).
+- `eset`: Vector of EIndex values specifying which edges to initialize (defaults to all edges).
 
 ## Returns
 - `NWState`: A fully initialized network state that can be used for simulation
@@ -1020,6 +1024,8 @@ function _initialize_componentwise(
     subalg=nothing,
     subsolve_kwargs=nothing,
     parallel=false,#(ne(nw) + nv(nw)) > 200,
+    vset=[VIndex(i) for i in 1:nv(nw)],
+    eset=[EIndex(i) for i in 1:ne(nw)],
 )
     # Check for aliased components in mutating mode
     if mutating == Val{true}()
@@ -1071,18 +1077,19 @@ function _initialize_componentwise(
     bound_v_overrides, bound_e_overrides = _split_overrides(bound_overrides)
 
     tasks = SpinTask[]
-    for vi in 1:nv(nw)
-        task = SpinTask("Initialize Vertex $vi") do io
-            _comp = nw[VIndex(vi)]
-            _default_overrides = _filter_overrides(nw, VIndex(vi), default_v_overrides)
-            _guess_overrides = _filter_overrides(nw, VIndex(vi), guess_v_overrides)
-            _bound_overrides = _filter_overrides(nw, VIndex(vi), bound_v_overrides)
-            _add_initformula=isnothing(additional_initformula) ? nothing : get(additional_initformula, VIndex(vi), nothing)
-            _add_guessformula=isnothing(additional_guessformula) ? nothing : get(additional_guessformula, VIndex(vi), nothing)
-            _add_initconstraint=isnothing(additional_initconstraint) ? nothing : get(additional_initconstraint, VIndex(vi), nothing)
-            _subverbose = _determine_subverbose(subverbose, VIndex(vi))
-            _alg = _determine_subargument(subalg, VIndex(vi), nothing)
-            _solve_kwargs = _determine_subargument(subsolve_kwargs, VIndex(vi), (;))
+
+    for vi in vset
+        task = SpinTask("Initialize $vi") do io
+            _comp = nw[vi]
+            _default_overrides = _filter_overrides(nw, vi, default_v_overrides)
+            _guess_overrides = _filter_overrides(nw, vi, guess_v_overrides)
+            _bound_overrides = _filter_overrides(nw, vi, bound_v_overrides)
+            _add_initformula=isnothing(additional_initformula) ? nothing : get(additional_initformula, vi, nothing)
+            _add_guessformula=isnothing(additional_guessformula) ? nothing : get(additional_guessformula, vi, nothing)
+            _add_initconstraint=isnothing(additional_initconstraint) ? nothing : get(additional_initconstraint, vi, nothing)
+            _subverbose = _determine_subverbose(subverbose, vi)
+            _alg = _determine_subargument(subalg, vi, nothing)
+            _solve_kwargs = _determine_subargument(subsolve_kwargs, vi, (;))
             rescapture = Ref{Float64}(NaN) # residual for the component
 
             _subverbose && println()
@@ -1102,24 +1109,25 @@ function _initialize_componentwise(
                 solve_kwargs=_solve_kwargs,
                 io=io,
             )
-            _merge_wrapped!(fullstate, substate, VIndex(vi), statelock)
+            _merge_wrapped!(fullstate, substate, vi, statelock)
             # return residual, if subverbose printed anyway
             _subverbose ? nothing : rescapture[]
         end
         push!(tasks, task)
     end
-    for ei in 1:ne(nw)
-        task = SpinTask("Initialize Edge $ei") do io
-            _comp = nw[EIndex(ei)]
-            _default_overrides = _filter_overrides(nw, EIndex(ei), default_e_overrides)
-            _guess_overrides = _filter_overrides(nw, EIndex(ei), guess_e_overrides)
-            _bound_overrides = _filter_overrides(nw, EIndex(ei), bound_e_overrides)
-            _add_initformula=isnothing(additional_initformula) ? nothing : get(additional_initformula, EIndex(ei), nothing)
-            _add_guessformula=isnothing(additional_guessformula) ? nothing : get(additional_guessformula, EIndex(ei), nothing)
-            _add_initconstraint=isnothing(additional_initconstraint) ? nothing : get(additional_initconstraint, EIndex(ei), nothing)
-            _subverbose = _determine_subverbose(subverbose, EIndex(ei))
-            _alg = _determine_subargument(subalg, EIndex(ei), nothing)
-            _solve_kwargs = _determine_subargument(subsolve_kwargs, EIndex(ei), (;))
+
+    for ei in eset
+        task = SpinTask("Initialize $ei") do io
+            _comp = nw[ei]
+            _default_overrides = _filter_overrides(nw, ei, default_e_overrides)
+            _guess_overrides = _filter_overrides(nw, ei, guess_e_overrides)
+            _bound_overrides = _filter_overrides(nw, ei, bound_e_overrides)
+            _add_initformula=isnothing(additional_initformula) ? nothing : get(additional_initformula, ei, nothing)
+            _add_guessformula=isnothing(additional_guessformula) ? nothing : get(additional_guessformula, ei, nothing)
+            _add_initconstraint=isnothing(additional_initconstraint) ? nothing : get(additional_initconstraint, ei, nothing)
+            _subverbose = _determine_subverbose(subverbose, ei)
+            _alg = _determine_subargument(subalg, ei, nothing)
+            _solve_kwargs = _determine_subargument(subsolve_kwargs, ei, (;))
             rescapture = Ref{Float64}(NaN) # residual for the component
 
             _subverbose && println()
@@ -1139,7 +1147,7 @@ function _initialize_componentwise(
                 solve_kwargs=_solve_kwargs,
                 io=io,
             )
-            _merge_wrapped!(fullstate, substate, EIndex(ei), statelock)
+            _merge_wrapped!(fullstate, substate, ei, statelock)
             # return residual, if subverbose printed anyway
             _subverbose ? nothing : rescapture[]
         end
@@ -1164,8 +1172,8 @@ function _initialize_componentwise(
     else
         usyms = SII.variable_symbols(nw)
         psyms = SII.parameter_symbols(nw)
-        _uflat = [fullstate[s] for s in usyms]
-        _pflat = [fullstate[s] for s in psyms]
+        _uflat = [haskey(fullstate, s) ? fullstate[s] : NaN for s in usyms]
+        _pflat = [haskey(fullstate, s) ? fullstate[s] : NaN for s in psyms]
         NWState(nw, _uflat, _pflat)
     end
 
