@@ -49,9 +49,33 @@ function find_fixpoint(nw::Network,
                        kwargs...)
     find_fixpoint(nw, uflat(x0), pflat(p); t, kwargs...)
 end
+
+#=
+We want to fix time for steady state to allow for initializing at varios time points (SteadyStateDiffEq uses t->inf)
+However, we build a custom struct for that to still enable symbolic indexing and sparsity!
+=#
+struct NetworkFixedT{NW}
+    nw::NW
+    t::Float64
+    NetworkFixedT(nw, t) = new{typeof(nw)}(nw, Float64(t))
+end
+(nwft::NetworkFixedT)(du, u, p, _) = nwft.nw(du, u, p, nwft.t)
+SciMLBase.__has_sys(nw::NetworkFixedT) = true
+SciMLBase.__has_jac_prototype(nw::NetworkFixedT) = !isnothing(nw.nw.jac_prototype)
+function Base.getproperty(nw::NetworkFixedT, s::Symbol)
+    if s===:sys
+        nw.nw
+    elseif s===:jac_prototype
+        getfield(nw.nw, :jac_prototype)[]
+    else
+        getfield(nw, s)
+    end
+end
+
 function find_fixpoint(nw::Network, x0::AbstractVector, p::AbstractVector;
                        alg=SSRootfind(), t=NaN, kwargs...)
-    nw_fixed_t = (du, u, p, _) -> nw(du, u, p, t) #fix t
+    nw_fixed_t = NetworkFixedT(nw, t)
+
     du = zeros(length(x0))
     fn_error = nothing
     try
@@ -69,9 +93,9 @@ function find_fixpoint(nw::Network, x0::AbstractVector, p::AbstractVector;
             syms = SII.variable_symbols(nw)[nans]
             println(io, "Evaluation of network rhs at t=$t resulted in NaNs.)")
             println(io, "  NaN-Results:  ", join(syms, ", "))
-            print(io,"Probable causes:")
+            print(io,"Possible causes:")
         else
-            print(io, "Evaluation of network rhs at t=$t led to an error! Probable causes:")
+            print(io, "Evaluation of network rhs at t=$t led to an error! Possible causes:")
         end
 
         if any(isnan, x0) || any(isnan, p)
@@ -92,7 +116,7 @@ function find_fixpoint(nw::Network, x0::AbstractVector, p::AbstractVector;
         end
 
         if output_nans && isnan(t)
-            print(io, "\n - Network was evaluated at t=NaN, maybe your system has explicit time dependence? Try specifying kw argument `t` to decide on time")
+            print(io, "\n - Network was evaluated at t=NaN, maybe your system has explicit time dependency? Try specifying kw argument `t` to decide on time")
         end
         if !isnothing(fn_error)
             print(io, "\nCausing ERROR:\n")
@@ -127,7 +151,8 @@ function initialization_problem(cf::T,
     initconstraint=nothing;
     t=NaN,
     apply_bound_transformation=true,
-    verbose=true
+    verbose=true,
+    io=stdout
 ) where {T<:ComponentModel}
     hasinsym(cf) || throw(ArgumentError("Component model must have `insym` set to support initialiation!"))
 
@@ -171,10 +196,11 @@ function initialization_problem(cf::T,
 
     Neqs = dim(cf) + mapreduce(length, +, outfree_ms) + additional_Neqs
 
-    freesym = vcat(mapreduce((syms, map) -> syms[map], vcat, outsym_normalized(cf), outfree_ms),
-                   sym(cf)[ufree_m],
-                   mapreduce((syms, map) -> syms[map], vcat, insym_normalized(cf), infree_ms),
-                   psym(cf)[pfree_m])
+    free_outputs = mapreduce((syms, map) -> syms[map], vcat, outsym_normalized(cf), outfree_ms)
+    free_states = sym(cf)[ufree_m]
+    free_inputs = mapreduce((syms, map) -> syms[map], vcat, insym_normalized(cf), infree_ms)
+    free_params = psym(cf)[pfree_m]
+    freesym = vcat(free_outputs, free_states, free_inputs, free_params)
 
     @assert length(freesym) == Nfree
 
@@ -211,7 +237,7 @@ function initialization_problem(cf::T,
     else
         if verbose
             idxs = findall(!isequal(:none), bound_types)
-            @info "Apply positivity/negativity conserving variable transformation on $(freesym[idxs]) to satisfy bounds."
+            printstyled(io, " - Apply positivity/negativity conserving variable transformation on $(freesym[idxs]) to satisfy bounds.\n")
         end
         boundT! = (u) -> begin
             for i in eachindex(u, bound_types)
@@ -315,15 +341,34 @@ function initialization_problem(cf::T,
         nothing
     end
 
-    nlf = NonlinearFunction(fz; resid_prototype=zeros(Neqs), sys=SII.SymbolCache(freesym))
+    freesym_no_dup = if allunique(freesym)
+        freesym
+    else
+        _deduplicated_free_symbols(freesym)
+    end
+    nlf = NonlinearFunction(fz; resid_prototype=zeros(Neqs), sys=SII.SymbolCache(freesym_no_dup))
 
     if Neqs == Nfree
-        verbose && @info "Initialization problem is fully constrained. Created NonlinearLeastSquaresProblem for $freesym"
+        if verbose
+            printstyled(io, " - Initialization problem is fully constrained. Created NonlinearLeastSquaresProblem for:\n")
+            for (sym, guess) in zip(freesym, uguess)
+                print(io, "   - ", sym, " (guess=$(guess))\n")
+            end
+        end
     elseif Neqs > Nfree
-        verbose && @info "Initialization problem is overconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for $freesym."
+        if verbose
+            printstyled(io, " - Initialization problem is overconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for:\n")
+            for (sym, guess) in zip(freesym, uguess)
+                print(io, "   - ", sym, " (guess=$(guess))\n")
+            end
+        end
     else
-        # verbose && @info "Initialization problem is underconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for $freesym."
-        @warn "Initialization problem is underconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for $freesym."
+        # verbose && printstyled(io, "Initialization problem is underconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for $freesym.\n"; color=:yellow)
+        printstyled(io, " - WARNING:", color=:yellow)
+        printstyled(io, "Initialization problem is underconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for:")
+        for (sym, guess) in zip(freesym, uguess)
+            print(io, "   - ", sym, " (guess=$(guess))\n")
+        end
     end
 
     # check rhs of system for obvious problems
@@ -337,16 +382,16 @@ function initialization_problem(cf::T,
     resid_nan = any(isnan, resid)
     if !isnothing(fn_error) || resid_nan
         io = IOBuffer()
-        print(io, "Error while constructing initialization problem for $(cf.name):")
+        print(io, "Error while constructing initialization problem for $(cf.name):\n")
         if resid_nan
-            print(io, "\n - Residual contains NaNs!")
+            print(io, " - Residual contains NaNs!\n")
             if isnan(t)
                 print(io, " System initialized at t=NaN, maybe your system has explicit \
-                    time dependence? Try specifying kw argument `t` to decide on time")
+                    time dependency? Try specifying kw argument `t` to decide on time")
             end
         end
         if !isnothing(fn_error)
-            print(io, "\n - Error while calling RHS of initialization problem!")
+            print(io, " - Error while calling RHS of initialization problem!\n")
             print(io, "\n\nOriginal Error:\n")
             Base.showerror(io, fn_error)
         end
@@ -366,6 +411,38 @@ function _overwrite_at_mask!(target, mask, source, range)
     end
 end
 
+#=
+Sometimes, components have multiple free variables with the same symbol name (state/output shadowing).
+We live with that and just solve for both, but create internal names which are different.
+At the end, we make sure that all duplicated symbols have been resolved to the same value.
+=#
+function _deduplicated_free_symbols(_freesym::Vector{Symbol})
+    nonunique = Symbol[]
+    dupgroups = filter(idxs -> length(idxs) > 1, find_identical(_freesym))
+
+    freesym = copy(_freesym)
+    for groupidxs in dupgroups
+        for (i, idx) in enumerate(groupidxs)
+            suffix = Symbol("__duplicate", i, "__")
+            freesym[idx] = Symbol(string(_freesym[idx]), suffix)
+        end
+    end
+    freesym
+end
+function _dededuplicated_free_symbols(deduplicated, u)
+    stripped = map(s -> Symbol(replace(string(s), r"__duplicate\d+__" => "")), deduplicated)
+    if !allunique(stripped)
+        dupgroups = filter(idxs -> length(idxs) > 1, find_identical(stripped))
+        for idxs in dupgroups
+            if !reduce((a,b) -> isapprox(a,b; atol=1e-6), u[idxs])
+                throw(ComponentInitError("Duplicated symbols in initialization problem $(stripped[first(idxs)]) have different initialized values $(u[idxs])!"))
+            end
+        end
+    end
+
+    return zip(stripped, u)
+end
+
 """
     initialize_component(cf;
                          defaults=get_defaults_dict(cf),
@@ -382,6 +459,9 @@ end
                          t=NaN,
                          tol=1e-10,
                          residual=nothing,
+                         alg=nothing, # defaults to FastShortcutNLLSPolyalg(linsolve=QRFactorization())
+                         solve_kwargs=(;),
+                         io=stdout,
                          kwargs...)
 
 The function solves a nonlinear problem to find values for all free variables/parameters
@@ -406,8 +486,9 @@ The function solves a nonlinear problem to find values for all free variables/pa
 - `t`: Time at which to solve for steady state. Only relevant for components with explicit time dependency.
 - `tol`: Tolerance for the residual of the initialized model (defaults to `1e-10`). Init throws error if resid ≥ tol.
 - `residual`: Optional `Ref{Float64}` which gets the final residual of the initialized model.
-- `alg=nothing`: Nonlinear solver algorithm (defaults to NonlinearSolve.jl default)
+- `alg=nothing`: Nonlinear solver algorithm (defaults to NonlinearSolve.jl default with QR factorization, since init problems tend to be ill-conditioned.)
 - `solve_kwargs=(;)`: Additional keyword arguments passed to the SciML `solve` function
+- `io=stdout`: IO stream for printing information
 
 ## Returns
 - Dictionary mapping symbols to their values (complete state including defaults and initialized values)
@@ -439,10 +520,15 @@ function initialize_component(cf;
                              _final_guesses=nothing,
                              alg=nothing,
                              solve_kwargs=(;),
+                             io=stdout,
                              kwargs...)
 
     if !isempty(kwargs)
         @warn "Passing `kwargs` to `initialize_component(!)` is deprecated. Use `alg` and `solve_kwargs=(; kw=val)` instead."
+    end
+
+    if alg == nothing
+        alg = FastShortcutNLLSPolyalg(linsolve=QRFactorization())
     end
 
     defaults = isnothing(default_overrides) ? defaults : merge(defaults, default_overrides)
@@ -460,14 +546,14 @@ function initialize_component(cf;
 
     # Apply initialization formulas to defaults
     if !isnothing(combined_initformulas)
-        apply_init_formulas!(defaults, combined_initformulas; verbose)
+        apply_init_formulas!(defaults, combined_initformulas; verbose, io)
     end
 
     # Extract and apply guess formulas
     metadata_guessformulas = has_guessformula(cf) ? get_guessformulas(cf) : nothing
     combined_guessformulas = collect_formulas(metadata_guessformulas, additional_guessformula)
     if !isnothing(combined_guessformulas)
-        apply_guess_formulas!(guesses, defaults, combined_guessformulas; verbose)
+        apply_guess_formulas!(guesses, defaults, combined_guessformulas; verbose, io)
     end
 
     metadata_constraint = has_initconstraint(cf) ? get_initconstraints(cf) : nothing
@@ -483,7 +569,7 @@ function initialize_component(cf;
 
     prob, boundT! = initialization_problem(cf, defaults, guesses, bounds,
                                           combined_constraint;
-                                          verbose, apply_bound_transformation, t)
+                                          verbose, apply_bound_transformation, t, io)
 
     # Dictionary for complete state (defaults + initialized values)
     init_state = Dict{Symbol, Float64}()
@@ -502,25 +588,27 @@ function initialize_component(cf;
 
         if sol.prob isa NonlinearLeastSquaresProblem && sol.retcode == SciMLBase.ReturnCode.Stalled
             res = LinearAlgebra.norm(sol.resid)
-            @warn "Initialization for component stalled with residual $(res)"
+            printstyled(" - WARN: "; color=:yellow)
+            printstyled("Initialization for component stalled with residual $(res)")
         elseif !SciMLBase.successful_retcode(sol.retcode)
             throw(ComponentInitError("Initialization failed. Solver returned $(sol.retcode)"))
         else
             res = LinearAlgebra.norm(sol.resid)
-            verbose && @info "Initialization successful with residual $(res)"
+            verbose && printstyled(io, " - Initialization successful with residual $(res)\n")
         end
 
         # Transform back to original space
         u = boundT!(copy(sol.u))
 
         # Add solved values to the complete dictionary
-        free_symbols = SII.variable_symbols(sol)
-        for (sym, val) in zip(free_symbols, u)
+        init_results = _dededuplicated_free_symbols(SII.variable_symbols(sol), u)
+        for (sym, val) in init_results
+            verbose && print(io, "   - ", sym, " => ", val,"\n")
             init_state[sym] = val
         end
     else
         res = init_residual(cf, init_state; t)
-        verbose && @info "No free variables! Residual $(res)"
+        verbose && printstyled(io, " - No free variables! Residual $(res)\n")
     end
     if residual isa Ref
         residual[] = res
@@ -534,18 +622,30 @@ function initialize_component(cf;
     # Check for broken bounds using the complete state
     broken_bnds = broken_bounds(cf, init_state, bounds)
     if !isempty(broken_bnds)
-        broken_msgs = ["$sym = $val (bounds: $lb..$ub)" for (sym, val, (lb, ub)) in broken_bnds]
-        @warn "Initialized model has broken bounds. Try to adapt the initial guesses!" *
+        broken_msgs = ["  $sym = $val (bounds: $lb..$ub)" for (sym, val, (lb, ub)) in broken_bnds]
+        fullmsg = "Initialized model has broken bounds. Try to adapt the initial guesses!" *
               "\n" * join(broken_msgs, "\n")
+        if verbose
+            printstyled(io, " - WARNING: ", color=:yellow)
+            printstyled(io, fullmsg * "\n")
+        else
+            @warn fullmsg
+        end
     end
 
     # Check for broken observable defaults
     if !isempty(observable_defaults)
         broken_obs = broken_observable_defaults(cf, init_state, observable_defaults)
         if !isempty(broken_obs)
-            broken_msgs = ["$sym = $val (default: $def)" for (sym, def, val) in broken_obs]
-            @warn "Initialized model has observables that differ from their specified defaults:" *
+            broken_msgs = ["  $sym = $val (default: $def)" for (sym, def, val) in broken_obs]
+            fullmsg = "Initialized model has observables that differ from their specified defaults:" *
                   "\n" * join(broken_msgs, "\n")
+            if verbose
+                printstyled(io, " - WARNING: ", color=:yellow)
+                printstyled(io, fullmsg * "\n")
+            else
+                @warn fullmsg
+            end
         end
     end
 
@@ -604,12 +704,13 @@ function initialize_component!(cf;
                               additional_initconstraint=nothing,
                               verbose=true,
                               t=NaN,
+                              io=stdout,
                               kwargs...)
 
     # Synchronize defaults, guesses, and bounds
-    _sync_metadata!(cf, defaults, get_defaults_dict, set_default!, delete_default!, "default", verbose)
-    _sync_metadata!(cf, guesses,  get_guesses_dict,  set_guess!,   delete_guess!,   "guess",   verbose)
-    _sync_metadata!(cf, bounds,   get_bounds_dict,   set_bounds!,  delete_bounds!,  "bounds",  verbose)
+    _sync_metadata!(cf, defaults, get_defaults_dict, set_default!, delete_default!, "default", verbose, io)
+    _sync_metadata!(cf, guesses,  get_guesses_dict,  set_guess!,   delete_guess!,   "guess",   verbose, io)
+    _sync_metadata!(cf, bounds,   get_bounds_dict,   set_bounds!,  delete_bounds!,  "bounds",  verbose, io)
 
     for (name, set_fn!, rm_fn!, dict) in (
         ("default", set_default!, delete_default!, default_overrides),
@@ -620,10 +721,10 @@ function initialize_component!(cf;
         for (sym, val) in dict
             if !isnothing(val)
                 set_fn!(cf, sym, val)
-                verbose && println("Set additional $name for $sym: $val")
+                verbose && println(io, " - Set additional $name for $sym: $val")
             else
                 rm_fn!(cf, sym)
-                verbose && println("Remove $name for $sym")
+                verbose && println(io, " - Remove $name for $sym")
             end
         end
     end
@@ -642,6 +743,7 @@ function initialize_component!(cf;
         t=t,
         _final_defaults,
         _final_guesses,
+        io,
         kwargs...  # Only pass the remaining kwargs
     )
 
@@ -671,7 +773,7 @@ function initialize_component!(cf;
 
     cf
 end
-function _sync_metadata!(cf, provided, get_orig_fn, set_fn!, remove_fn!, type_name, verbose)
+function _sync_metadata!(cf, provided, get_orig_fn, set_fn!, remove_fn!, type_name, verbose, io)
     isnothing(provided) && return
 
     original = get_orig_fn(cf)
@@ -688,19 +790,19 @@ function _sync_metadata!(cf, provided, get_orig_fn, set_fn!, remove_fn!, type_na
     # Remove missing keys
     for sym in missing_keys
         remove_fn!(cf, sym)
-        verbose && println("Removed $type_name for $sym (was $(original[sym]))")
+        verbose && println(io, "Removed $type_name for $sym (was $(original[sym]))")
     end
 
     # Add new keys
     for sym in new_keys
         set_fn!(cf, sym, provided[sym])
-        verbose && println("Added $type_name for $sym: $(provided[sym])")
+        verbose && println(io, "Added $type_name for $sym: $(provided[sym])")
     end
 
     # Update changed keys
     for sym in changed_keys
         set_fn!(cf, sym, provided[sym])
-        verbose && println("Updated $type_name for $sym: $(original[sym]) → $(provided[sym])")
+        verbose && println(io, "Updated $type_name for $sym: $(original[sym]) → $(provided[sym])")
     end
 end
 
@@ -787,7 +889,7 @@ function init_residual(cf::ComponentModel, state=get_defaults_or_inits_dict(cf);
     if isnan(res)
         err_str = if isnan(t)
             "Residual of component is NaN at t=NaN! Maybe your system has \
-                explicit time dependence? Try specifying kw argument `t` to decide on time."
+                explicit time dependency? Try specifying kw argument `t` to decide on time."
         else
             "Residual of component is NaN, which should not happen for an initialized system!"
         end
@@ -842,6 +944,9 @@ initialize_docstring = raw"""
         t=NaN,
         subalg=nothing,
         subsolve_kwargs=nothing,
+        parallel=false,
+        vset=[VIndex(i) for i in 1:nv(nw)],
+        eset=[EIndex(i) for i in 1:ne(nw)],
     ) :: NWState
 
 Initialize a network by solving initialization problems for each component individually,
@@ -873,6 +978,9 @@ state again, as it is stored in the metadata.
 - `subalg`: Nonlinear solver algorithm to use for component initialization (defaults to NonlinearSolve.jl default). Can be passed as single value or dict mapping VIndex/EIndex to alg (non-existent keys use default).
 - `subsolve_kwargs`: Additional keyword arguments passed to the SciML `solve` function for component initialization.
   Can be passed as single value or dict mapping VIndex/EIndex to kwargs (non-existent keys use empty kwargs `(;)`).
+- `parallel=false`: (Experimental) Whether to initialize components in parallel using multithreading.
+- `vset`: Vector of VIndex values specifying which vertices to initialize (defaults to all vertices).
+- `eset`: Vector of EIndex values specifying which edges to initialize (defaults to all edges).
 
 ## Returns
 - `NWState`: A fully initialized network state that can be used for simulation
@@ -896,9 +1004,9 @@ sol = solve(prob)
 See also: [`initialize_component`](@ref), [`interface_values`](@ref), [`find_fixpoint`](@ref)
 """
 @doc initialize_docstring
-initialize_componentwise!(nw; kwargs...) = _initialize_componentwise(Val(true), nw; kwargs...)
+initialize_componentwise!(nw; kwargs...) = _initialize_componentwise(Val{true}(), nw; kwargs...)
 @doc initialize_docstring
-initialize_componentwise(nw; kwargs...) = _initialize_componentwise(Val(false), nw; kwargs...)
+initialize_componentwise(nw; kwargs...) = _initialize_componentwise(Val{false}(), nw; kwargs...)
 function _initialize_componentwise(
     mutating,
     nw::Network;
@@ -915,84 +1023,172 @@ function _initialize_componentwise(
     t=NaN,
     subalg=nothing,
     subsolve_kwargs=nothing,
+    parallel=false,#(ne(nw) + nv(nw)) > 200,
+    vset=[VIndex(i) for i in 1:nv(nw)],
+    eset=[EIndex(i) for i in 1:ne(nw)],
 )
-    initfun = if mutating == Val(true)
+    # Check for aliased components in mutating mode
+    if mutating == Val{true}()
+        has_aliased_v = !isempty(nw.im.aliased_vertexms)
+        has_aliased_e = !isempty(nw.im.aliased_edgems)
+        if has_aliased_v || has_aliased_e
+            component_type = if has_aliased_v && has_aliased_e
+                "vertices and edges"
+            elseif has_aliased_v
+                "vertices"
+            else
+                "edges"
+            end
+            throw(ArgumentError("""
+                Cannot use mutating initialization (initialize_componentwise!) with aliased components!
+
+                Your network contains aliased $component_type (the same component object
+                is referenced at multiple indices). When using the mutating version,
+                initialization would modify the shared component's metadata, causing all
+                aliased instances to have identical initialization values.
+
+                Solutions:
+                1. Use the non-mutating version: initialize_componentwise(nw, ...)
+                2. Reconstruct the network with dealias=true: Network(g, vertexm, edgem; dealias=true)
+                3. Manually copy component models before creating the network
+                """))
+        end
+    end
+
+    initfun = if mutating == Val{true}()
         initialize_component!
     else
         initialize_component
     end
-    fullstate = if mutating == Val(true)
+    fullstate = if mutating == Val{true}()
         nothing
     else
         Dict{SymbolicIndex, Float64}()
     end
+    statelock = ReentrantLock()
 
     # dict might be provided as VIndex(:foo) so we need to resolve comp names
     subalg = _resolve_subargument_dict(nw, subalg)
     subsolve_kwargs = _resolve_subargument_dict(nw, subsolve_kwargs)
 
-    for vi in 1:nv(nw)
-        _default_overrides = _filter_overrides(nw, VIndex(vi), default_overrides)
-        _guess_overrides = _filter_overrides(nw, VIndex(vi), guess_overrides)
-        _bound_overrides = _filter_overrides(nw, VIndex(vi), bound_overrides)
-        _subverbose = _determine_subverbose(subverbose, VIndex(vi))
-        verbose && print("Initializing vertex $(vi)...")
-        _subverbose && println()
-        rescapture = Ref{Float64}(NaN) # residual for the component
-        substate = initfun(
-            nw[VIndex(vi)],
-            default_overrides=_default_overrides,
-            guess_overrides=_guess_overrides,
-            bound_overrides=_bound_overrides,
-            additional_initformula=isnothing(additional_initformula) ? nothing : get(additional_initformula, VIndex(vi), nothing),
-            additional_guessformula=isnothing(additional_guessformula) ? nothing : get(additional_guessformula, VIndex(vi), nothing),
-            additional_initconstraint=isnothing(additional_initconstraint) ? nothing : get(additional_initconstraint, VIndex(vi), nothing),
-            verbose=_subverbose,
-            t=t,
-            tol=tol,
-            residual=rescapture,
-            alg=_determine_subargument(subalg, VIndex(vi), nothing),
-            solve_kwargs=_determine_subargument(subsolve_kwargs, VIndex(vi), (;)),
-        )
-        !_subverbose && verbose && println("\b\b\b => residual $(rescapture[])")
-        verbose && _subverbose && println()
-        _merge_wrapped!(fullstate, substate, VIndex(vi))
-    end
-    for ei in 1:ne(nw)
-        _default_overrides = _filter_overrides(nw, EIndex(ei), default_overrides)
-        _guess_overrides = _filter_overrides(nw, EIndex(ei), guess_overrides)
-        _bound_overrides = _filter_overrides(nw, EIndex(ei), bound_overrides)
-        _subverbose = _determine_subverbose(subverbose, EIndex(ei))
-        verbose && print("Initializing edge $(ei)...")
-        _subverbose && println()
-        rescapture = Ref{Float64}(NaN) # residual for the component
-        substate = initfun(
-            nw[EIndex(ei)],
-            default_overrides=_default_overrides,
-            guess_overrides=_guess_overrides,
-            bound_overrides=_bound_overrides,
-            additional_initformula=isnothing(additional_initformula) ? nothing : get(additional_initformula, EIndex(ei), nothing),
-            additional_guessformula=isnothing(additional_guessformula) ? nothing : get(additional_guessformula, EIndex(ei), nothing),
-            additional_initconstraint=isnothing(additional_initconstraint) ? nothing : get(additional_initconstraint, EIndex(ei), nothing),
-            verbose=_subverbose,
-            t=t,
-            tol=tol,
-            residual=rescapture,
-            alg=_determine_subargument(subalg, EIndex(ei), nothing),
-            solve_kwargs=_determine_subargument(subsolve_kwargs, EIndex(ei), (;)),
-        )
-        !_subverbose && verbose && println("\b\b\b => residual $(rescapture[])")
-        verbose && _subverbose && println()
-        _merge_wrapped!(fullstate, substate, EIndex(ei))
+    # to improve type stability, we split the overrides into v/e parts only once
+    # TODO: might be solve by EIndex/VIndex ADT
+    default_v_overrides, default_e_overrides = _split_overrides(default_overrides)
+    guess_v_overrides, guess_e_overrides = _split_overrides(guess_overrides)
+    bound_v_overrides, bound_e_overrides = _split_overrides(bound_overrides)
+
+    tasks = SpinTask[]
+
+    for vi in vset
+        task = SpinTask("Initialize $vi") do io
+            _comp = nw[vi]
+            _default_overrides = _filter_overrides(nw, vi, default_v_overrides)
+            _guess_overrides = _filter_overrides(nw, vi, guess_v_overrides)
+            _bound_overrides = _filter_overrides(nw, vi, bound_v_overrides)
+            _add_initformula=isnothing(additional_initformula) ? nothing : get(additional_initformula, vi, nothing)
+            _add_guessformula=isnothing(additional_guessformula) ? nothing : get(additional_guessformula, vi, nothing)
+            _add_initconstraint=isnothing(additional_initconstraint) ? nothing : get(additional_initconstraint, vi, nothing)
+            _subverbose = _determine_subverbose(subverbose, vi)
+            _alg = _determine_subargument(subalg, vi, nothing)
+            _solve_kwargs = _determine_subargument(subsolve_kwargs, vi, (;))
+            rescapture = Ref{Float64}(NaN) # residual for the component
+
+            _subverbose && println()
+            substate = initfun(
+                _comp,
+                default_overrides=_default_overrides,
+                guess_overrides=_guess_overrides,
+                bound_overrides=_bound_overrides,
+                additional_initformula=_add_initformula,
+                additional_guessformula=_add_guessformula,
+                additional_initconstraint=_add_initconstraint,
+                verbose=_subverbose,
+                t=t,
+                tol=tol,
+                residual=rescapture,
+                alg=_alg,
+                solve_kwargs=_solve_kwargs,
+                io=io,
+            )
+            _merge_wrapped!(fullstate, substate, vi, statelock)
+            # return residual, if subverbose printed anyway
+            _subverbose ? nothing : rescapture[]
+        end
+        push!(tasks, task)
     end
 
-    s0 = if mutating == Val(true)
+    for ei in eset
+        task = SpinTask("Initialize $ei") do io
+            _comp = nw[ei]
+            _default_overrides = _filter_overrides(nw, ei, default_e_overrides)
+            _guess_overrides = _filter_overrides(nw, ei, guess_e_overrides)
+            _bound_overrides = _filter_overrides(nw, ei, bound_e_overrides)
+            _add_initformula=isnothing(additional_initformula) ? nothing : get(additional_initformula, ei, nothing)
+            _add_guessformula=isnothing(additional_guessformula) ? nothing : get(additional_guessformula, ei, nothing)
+            _add_initconstraint=isnothing(additional_initconstraint) ? nothing : get(additional_initconstraint, ei, nothing)
+            _subverbose = _determine_subverbose(subverbose, ei)
+            _alg = _determine_subargument(subalg, ei, nothing)
+            _solve_kwargs = _determine_subargument(subsolve_kwargs, ei, (;))
+            rescapture = Ref{Float64}(NaN) # residual for the component
+
+            _subverbose && println()
+            substate = initfun(
+                _comp,
+                default_overrides=_default_overrides,
+                guess_overrides=_guess_overrides,
+                bound_overrides=_bound_overrides,
+                additional_initformula=_add_initformula,
+                additional_guessformula=_add_guessformula,
+                additional_initconstraint=_add_initconstraint,
+                verbose=_subverbose,
+                t=t,
+                tol=tol,
+                residual=rescapture,
+                alg=_alg,
+                solve_kwargs=_solve_kwargs,
+                io=io,
+            )
+            _merge_wrapped!(fullstate, substate, ei, statelock)
+            # return residual, if subverbose printed anyway
+            _subverbose ? nothing : rescapture[]
+        end
+        push!(tasks, task)
+    end
+
+    if parallel
+        bthreads = BLAS.get_num_threads()
+        BLAS.set_num_threads(1)
+        try
+            if stdout isa Base.TTY # check if print backend supports deletion
+                run_fancy(tasks; verbose)
+            else
+                run_plain(tasks; verbose)
+            end
+        catch e
+            if e isa SubtaskError
+                printstyled(stderr, VSET_ESIT_ERR_HINT, color=:red)
+            end
+            rethrow(e)
+        end
+        BLAS.set_num_threads(bthreads)
+    else
+        try
+            run_sequential(tasks; verbose)
+        catch e
+            if e isa ComponentInitError
+                printstyled(stderr, VSET_ESIT_ERR_HINT, color=:red)
+            end
+            rethrow(e)
+        end
+    end
+
+    s0 = if mutating == Val{true}()
         NWState(nw)
     else
         usyms = SII.variable_symbols(nw)
         psyms = SII.parameter_symbols(nw)
-        _uflat = [fullstate[s] for s in usyms]
-        _pflat = [fullstate[s] for s in psyms]
+        _uflat = [haskey(fullstate, s) ? fullstate[s] : NaN for s in usyms]
+        _pflat = [haskey(fullstate, s) ? fullstate[s] : NaN for s in psyms]
         NWState(nw, _uflat, _pflat)
     end
 
@@ -1008,27 +1204,42 @@ function _initialize_componentwise(
     verbose && println("Initialized network with residual $(resid)!")
     s0
 end
+VSET_ESIT_ERR_HINT = "\nHint: Init failed for some components. For debugging, consider passing `vset` and `eset` keywords to run init routine on a subset of network components!\n"
 _filter_overrides(_, _, ::Nothing) = nothing
-function _filter_overrides(nw, filteridx::SymbolicIndex{Int,Nothing}, dict::AbstractDict)
+function _filter_overrides(nw, filteridx, dict::AbstractDict)
     filtered = Dict{Symbol, valtype(dict)}()
     for (key, val) in dict
-        if filteridx == idxtype(key)(resolvecompidx(nw, key))
-            if !(key.subidx isa Symbol)
-                error("Overwrites must be provided as SymbolicIndex{...,Symbol}! Got $key instead.")
-            end
+        if filteridx.compidx == resolvecompidx(nw, key)
             filtered[key.subidx] = val
         end
     end
     filtered
 end
-function _merge_wrapped!(fullstate, substate, wrapper)
-    idxconstructor = idxtype(wrapper)
-    for (key, val) in substate
-        fullstate[idxconstructor(wrapper.compidx, key)] = val
+_split_overrides(::Nothing) = nothing, nothing
+function _split_overrides(dict)
+    voverrides = Dict{VIndex{Int,Symbol}, valtype(dict)}()
+    eoverrides = Dict{EIndex{Int,Symbol}, valtype(dict)}()
+    for (key, val) in dict
+        if key isa VIndex{Int,Symbol}
+            voverrides[key] = val
+        elseif key isa EIndex{Int,Symbol}
+            eoverrides[key] = val
+        else
+            error("Overrides must be provided as SymbolicIndex{Int,Symbol} (VIndex or EIndex)! Got $key instead.")
+        end
     end
-    fullstate
+    voverrides, eoverrides
 end
-_merge_wrapped!(::Nothing, _, _) = nothing
+function _merge_wrapped!(fullstate, substate, wrapper, lock)
+    idxconstructor = idxtype(wrapper)
+    @lock lock begin
+        for (key, val) in substate
+            fullstate[idxconstructor(wrapper.compidx, key)] = val
+        end
+    end
+    nothing
+end
+_merge_wrapped!(::Nothing, _, _, _) = nothing
 _determine_subverbose(subverbose::Bool, _) = subverbose
 _determine_subverbose(subverbose::AbstractVector, idx) = idx ∈ subverbose
 _determine_subverbose(subverbose, idx) = idx == subverbose

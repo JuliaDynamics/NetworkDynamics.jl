@@ -613,7 +613,7 @@ function topological_sort_formulas(formulas)
     end
 end
 
-function apply_init_formulas!(defaults, formulas_unsorted; verbose=false)
+function apply_init_formulas!(defaults, formulas_unsorted; verbose=false, io=stdout)
     # Convert tuple to vector if necessary
     formulas_vec = formulas_unsorted isa Tuple ? collect(formulas_unsorted) : formulas_unsorted
     formulas = topological_sort_formulas(formulas_vec)
@@ -637,12 +637,12 @@ function apply_init_formulas!(defaults, formulas_unsorted; verbose=false)
             if verbose
                 if haskey(defaults, s)
                     if defaults[s] ≈ val
-                        println("InitFomula: keeping default for :$s at $(val)")
+                        printstyled(io, " - InitFomula: keeping default for :$s at $(val)\n")
                     else
-                        println("InitFomula: updating default for :$s from $(defaults[s]) to $(val)")
+                        printstyled(io, " - InitFomula: updating default for :$s from $(defaults[s]) to $(val)\n")
                     end
                 else
-                    println("InitFomula: setting default for :$s to $(val)")
+                    printstyled(io, " - InitFomula: setting default for :$s to $(val)\n")
                 end
             end
             defaults[s] = val
@@ -650,7 +650,7 @@ function apply_init_formulas!(defaults, formulas_unsorted; verbose=false)
     end
     return defaults
 end
-function apply_guess_formulas!(guesses, defaults, formulas_unsorted; verbose=false)
+function apply_guess_formulas!(guesses, defaults, formulas_unsorted; verbose=false, io=stdout)
     # Convert tuple to vector if necessary
     formulas_vec = formulas_unsorted isa Tuple ? collect(formulas_unsorted) : formulas_unsorted
     formulas = topological_sort_formulas(formulas_vec)
@@ -679,15 +679,15 @@ function apply_guess_formulas!(guesses, defaults, formulas_unsorted; verbose=fal
             if verbose
                 if haskey(defaults, s)
                     # This symbol is fixed, so updating guess won't affect the solve
-                    println("GuessFormula: symbol :$s has default $(defaults[s]), guess update to $(val) will have no effect")
+                    printstyled(io, " - GuessFormula: symbol :$s has default $(defaults[s]), guess update to $(val) will have no effect\n")
                 elseif haskey(guesses, s)
                     if guesses[s] ≈ val
-                        println("GuessFormula: keeping guess for :$s at $(val)")
+                        printstyled(io, " - GuessFormula: keeping guess for :$s at $(val)\n")
                     else
-                        println("GuessFormula: updating guess for :$s from $(guesses[s]) to $(val)")
+                        printstyled(io, " - GuessFormula: updating guess for :$s from $(guesses[s]) to $(val)\n")
                     end
                 else
-                    println("GuessFormula: setting guess for :$s to $(val)")
+                    printstyled(io, " - GuessFormula: setting guess for :$s to $(val)\n")
                 end
             end
             guesses[s] = val

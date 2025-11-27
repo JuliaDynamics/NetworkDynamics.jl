@@ -79,6 +79,36 @@ fill!(dx_d1, 0)
 nw2_d(dx_d1, x0_d1, p_d1, NaN)
 @test Vector(dx_d1) ≈ dx
 
+@testset "MTK based model" begin
+    g = cycle_graph(5) # 5-node cycle graph
+    v1 = Lib.dqbus_swing_and_load()
+    v2 = Lib.dqbus_swing()
+    v3 = Lib.dqbus_pq()
+    v4 = Lib.dqbus_pq()
+    v5 = Lib.dqbus_pq()
+    e = Lib.dqline(X=0.1, R=0.01)
+    nw = Network(g, [v1, v2, v3, v4, v5], e; dealias=true, execution=KAExecution{true}(), aggregator=KAAggregator(+))
+    nw_d = adapt(CuArray{Float32}, nw)
+    @test nw_d.vertexbatches[1].compf.body == nothing
+    du = zeros(dim(nw))
+    u = ones(dim(nw))
+    p = ones(pdim(nw))
+    du_d = adapt(CuArray{Float32}, du)
+    u_d = adapt(CuArray{Float32}, u)
+    p_d = adapt(CuArray{Float32}, p)
+    t = NaN
+    nw_d(du_d, u_d, p_d, t)
+    nw(du, u, p, t)
+    @test maximum(abs.(du_d .- cu(du))) < 1e-6
+
+    # test state adaption
+    s0 = NWState(nw)
+    adapted_s0 = adapt(CuArray{Float32}, s0)
+    @test uflat(adapted_s0) isa CuArray{Float32}
+    @test pflat(adapted_s0) isa CuArray{Float32}
+end
+
+
 # mini benchmark
 
 #=

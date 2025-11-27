@@ -12,7 +12,7 @@ using KernelAbstractions: KernelAbstractions, @kernel, @index, @Const, get_backe
 using Atomix: Atomix
 using Polyester: Polyester
 using Mixers: Mixers
-using LinearAlgebra: LinearAlgebra, UniformScaling
+using LinearAlgebra: LinearAlgebra, UniformScaling, BLAS
 using SparseArrays: SparseArrays, sparse, SparseMatrixCSC
 using StyledStrings: StyledStrings, @styled_str
 using RecursiveArrayTools: RecursiveArrayTools, DiffEqArray
@@ -85,8 +85,12 @@ export @initformula, InitFormula
 export @guessformula, GuessFormula
 include("init_constraints.jl")
 
+# spinners for initialization
+include("spinners.jl")
+
 using OrderedCollections: OrderedDict
-using NonlinearSolve: NonlinearFunction, NonlinearLeastSquaresProblem
+using NonlinearSolve: NonlinearFunction, NonlinearLeastSquaresProblem, FastShortcutNLLSPolyalg
+using LinearSolve: QRFactorization
 using SteadyStateDiffEq: SteadyStateProblem, SSRootfind
 export find_fixpoint, set_interface_defaults!
 export initialize_component, initialize_component!, init_residual

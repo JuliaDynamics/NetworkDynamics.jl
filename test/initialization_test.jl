@@ -7,6 +7,7 @@ using SymbolicIndexingInterface: SymbolicIndexingInterface as SII
 using Chairmarks
 using NonlinearSolve
 using SciMLLogging
+using NetworkDynamics: SubtaskError
 
 (isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
 
@@ -49,7 +50,7 @@ end
         @parameters begin
             M=0.005, [description="Inertia"]
             D=0.1, [description="Damping"]
-            V, [description="Voltage magnitude", guess=1]
+            V, [description="Voltage magnitude", guess=1, bounds=(0,Inf)]
             ω_ref=0, [description="Reference frequency"]
             Pm, [guess=0.1,description="Mechanical Power"]
             aux, [description="Auxiliary, unused parameter"]
@@ -115,6 +116,7 @@ end
     # Verify the metadata was updated and values were applied correctly
     @test get_default(vf_conflict, :u_r) == 0.0
     @test get_default(vf_conflict, :u_i) == 1.0
+    @test get_init(vf_conflict, :V)  ≈ 1
     @test get_init(vf_conflict, :θ) % 2pi ≈ pi/2
 
     # change metadtaa by providing custom input
@@ -250,7 +252,7 @@ end
     set_guess!(vf, :ψ″_q,   1.353)
     set_guess!(vf, :ω,     -1.55)
     @test_logs (:warn, r"broken bounds") match_mode=:any begin
-        NetworkDynamics.initialize_component!(vf; verbose=true, apply_bound_transformation=false)
+        NetworkDynamics.initialize_component!(vf; verbose=false, apply_bound_transformation=false)
     end
     @test get_initial_state(vf, :vf) < 1 # does not conserve
     NetworkDynamics.initialize_component!(vf; verbose=true, apply_bound_transformation=true)
@@ -587,10 +589,12 @@ end
 
     s_nmut = initialize_componentwise(nw; subverbose=true, verbose=true, default_overrides)
     s_mut = initialize_componentwise!(nw; subverbose=true, verbose=true, default_overrides)
+    s_parallel = initialize_componentwise(nw; subverbose=true, verbose=true, default_overrides, parallel=true)
     s_meta = NWState(nw)
 
     for (k, v) in interface_values(pf)
         @test s_nmut[k] ≈ v atol=1e-10
+        @test s_parallel[k] ≈ v atol=1e-10
     end
     @test s_meta[VIndex(1, :swing₊V)] ≈ s_meta[VIndex(1, :u_mag)]
     @test s_meta[VIndex(1, :load₊Pset)] ≈ -1.0
@@ -599,12 +603,17 @@ end
         @test_throws SciMLBase.NonSolverError initialize_componentwise(nw; subalg=:foo)
         @test_throws SciMLBase.NonSolverError initialize_componentwise(nw; subalg=Dict(VIndex(:swing_and_load) => :foo))
         alg = NonlinearSolve.GaussNewton()
-        @test_throws ComponentInitError initialize_componentwise(nw; subalg=alg) # should work
-        initialize_componentwise(nw; subsolve_kwargs=(;verbose=Detailed())) # should work
+        @test_throws ComponentInitError initialize_componentwise(nw; subalg=alg) # does not work with that solver
+        initialize_componentwise(nw; subsolve_kwargs=(;verbose=Detailed())) # prints solver faield ouput
 
         # inject high tolerances to make the tol test fail
-        @test_throws ComponentInitError initialize_componentwise(nw; subsolve_kwargs=(;reltol=100, abstol=100))
+        @test_throws ComponentInitError initialize_componentwise(nw; verbose=true, subsolve_kwargs=Dict(VIndex(2) => (;reltol=100, abstol=100)))
+        @test_throws SubtaskError initialize_componentwise(nw; verbose=true, subsolve_kwargs=Dict(VIndex(2) => (;reltol=100, abstol=100)), parallel=true)
         # initialize_componentwise(nw; subsolve_kwargs=(;verbose=Detailed()))
+
+        # test parallel versions
+        @test_throws SciMLBase.NonSolverError initialize_componentwise(nw; subalg=:foo, parallel=false)
+        @test_throws SubtaskError initialize_componentwise(nw; subalg=Dict(VIndex(:swing_and_load) => :foo), parallel=true)
     end
 end
 
@@ -1415,4 +1424,13 @@ end
     set_guess!(nw[VIndex(5)], :Qset, -0.2)
     @test_throws ComponentInitError initialize_componentwise(nw; subverbose=false, verbose=false, default_overrides)
     initialize_componentwise(nw; subverbose=false, verbose=false, default_overrides, t=0)
+
+    # test parallel versions of error handling
+    @test_throws SubtaskError initialize_componentwise(nw; subverbose=false, verbose=false, default_overrides, parallel=true)
+    initialize_componentwise(nw; subverbose=false, verbose=false, default_overrides, t=0, parallel=true)
+
+    delete_default!(nw[VIndex(5)], :Qset)
+    set_guess!(nw[VIndex(5)], :Qset, -0.2)
+    @test_throws SubtaskError initialize_componentwise(nw; subverbose=false, verbose=false, default_overrides, parallel=true)
+    initialize_componentwise(nw; subverbose=false, verbose=false, default_overrides, t=0, parallel=true)
 end

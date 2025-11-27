@@ -1,5 +1,14 @@
 # NetworkDynamics Release Notes
 
+## v0.10.13 Changelog
+Multiple new features from [#331](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/331):
+- Parallel component initialization: Add experimental `parallel=false` keyword to `initialize_componentwise` for multithreaded component initialization with visual progress indicators
+- Better initialization defaults: Change default solver to `FastShortcutNLLSPolyalg(linsolve=QRFactorization())` for better handling of ill-conditioned initialization problems
+- Handle duplicate symbols: Support initialization of components with duplicate state/output symbols (shadowing), with automatic validation that duplicates resolve to same values
+- GPU compatibility for MTK models: MTK-generated models can now run on GPU via enhanced CUDA extension with proper handling of RuntimeGeneratedFunctions and function wrappers
+- Network copy constructor enhancement: `Network(nw)` now preserves JAC prototype when network structure is unchanged, improving performance for repeated network construction
+- Callback improvements: Support passing vectors/tuples of callbacks for a single component in `wrap_component_callbacks`
+
 ## v0.10.12 Changelog
 Implemented in [#326](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/326):
 - Add `ComponentPostprocessing` metadata mechanism for MTK models to attach postprocessing functions (like callbacks) at subcomponent level

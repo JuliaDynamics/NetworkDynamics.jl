@@ -2,9 +2,12 @@ module NetworkDynamicsCUDAExt
 using NetworkDynamics: Network, NetworkLayer, ComponentBatch,
                        KAAggregator, AggregationMap, SparseAggregator,
                        LazyGBufProvider, EagerGBufProvider, LazyGBuf,
-                       dispatchT, iscudacompatible, executionstyle, ExtMap
+                       dispatchT, iscudacompatible, executionstyle, ExtMap,
+                       NWState, NWParameter, MultipleOutputWrapper,
+                       AntiSymmetric, Symmetric, Directed, Fiducial
 using NetworkDynamics.PreallocationTools: DiffCache
 using NetworkDynamics: KernelAbstractions as KA
+using RuntimeGeneratedFunctions: RuntimeGeneratedFunctions, RuntimeGeneratedFunction
 
 using CUDA: CuArray
 using Adapt: Adapt, adapt
@@ -43,6 +46,18 @@ function Adapt.adapt_structure(to, n::Network)
 end
 
 Adapt.@adapt_structure NetworkLayer
+Adapt.@adapt_structure NWParameter
+function Adapt.adapt_structure(to::Type{<:CuArray{<:AbstractFloat}}, nws::NWState)
+    nw = adapt(to, nws.nw)
+    u = adapt(to, nws.uflat)
+    if nws.p isa NWParameter
+        p = NWParameter(nw, adapt(to, nws.p.pflat))
+    else
+        p = adapt(to, nws.p)
+    end
+    t = adapt(to, nws.t)
+    NWState(nw, u, p, t)
+end
 
 
 ####
@@ -99,9 +114,30 @@ function Adapt.adapt_structure(to::Type{<:CuArray{<:AbstractFloat}}, b::Componen
 end
 function Adapt.adapt_structure(to, b::ComponentBatch)
     indices = adapt(to, b.indices)
-    ComponentBatch(dispatchT(b), indices, b.compf, b.compg, b.ff,
+
+    # f and g might be rgf or might wrap rgf, we need to drop expr on them to make it
+    # gpu compatible
+    f = _adapt_rgf(b.compf)
+    g = _adapt_rgf(b.compg)
+
+    ComponentBatch(dispatchT(b), indices, f, g, b.ff,
         b.statestride, b.pstride, b.inbufstride, b.outbufstride, b.extbufstride)
 end
+
+####
+#### Adapt Function Wrappers
+####
+function _adapt_rgf(mow::MultipleOutputWrapper{FF,N}) where {FF,N}
+    g = _adapt_rgf(mow.g)
+    MultipleOutputWrapper{FF,N,typeof(g)}(g)
+end
+_adapt_rgf(w::AntiSymmetric) = AntiSymmetric(_adapt_rgf(w.g))
+_adapt_rgf(w::Symmetric) = Symmetric(_adapt_rgf(w.g))
+_adapt_rgf(w::Directed) = Directed(_adapt_rgf(w.g))
+_adapt_rgf(w::Fiducial) = Fiducial(_adapt_rgf(w.src), _adapt_rgf(w.dst))
+_adapt_rgf(rgf::RuntimeGeneratedFunction{<:Any,<:Any,<:Any,<:Any,<:Nothing}) = rgf
+_adapt_rgf(rgf::RuntimeGeneratedFunction) = RuntimeGeneratedFunctions.drop_expr(rgf)
+_adapt_rgf(f) = f
 
 ####
 #### utils
