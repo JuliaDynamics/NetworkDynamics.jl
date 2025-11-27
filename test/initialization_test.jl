@@ -7,6 +7,7 @@ using SymbolicIndexingInterface: SymbolicIndexingInterface as SII
 using Chairmarks
 using NonlinearSolve
 using SciMLLogging
+using NetworkDynamics: SubtaskError
 
 (isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
 
@@ -612,7 +613,7 @@ end
 
         # test parallel versions
         @test_throws SciMLBase.NonSolverError initialize_componentwise(nw; subalg=:foo, parallel=false)
-        @test_throws SubTaskError initialize_componentwise(nw; subalg=Dict(VIndex(:swing_and_load) => :foo), parallel=true)
+        @test_throws SubtaskError initialize_componentwise(nw; subalg=Dict(VIndex(:swing_and_load) => :foo), parallel=true)
     end
 end
 

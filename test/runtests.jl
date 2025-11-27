@@ -49,7 +49,6 @@ haskey(ENV, "BUILDKITE") && @test CUDA.functional() # fail early in buildkite if
     @safetestset "Show-methods test" begin include("show_test.jl") end
     @safetestset "Spinners test" begin include("spinners_test.jl") end
 
-    @safetestset "AD test" begin include("AD_test.jl") end
     @safetestset "sparsity test" begin include("sparsity_test.jl") end
 
     if CUDA.functional()
@@ -61,6 +60,8 @@ haskey(ENV, "BUILDKITE") && @test CUDA.functional() # fail early in buildkite if
     # check on the precompile files
     @safetestset "Precompile workload" begin include("../src/precompile_workload.jl") end
     @safetestset "MTK precompile workload" begin include("../ext/MTKExt_precomp_workload.jl") end
+
+    @safetestset "AD test" begin include("AD_test.jl") end
 end
 
 @testset "Test Doc Examples" begin
