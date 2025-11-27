@@ -9,6 +9,11 @@ mutable struct SpinTask
     SpinTask(f, name) = new(f, name, :waiting, nothing, nothing, nothing)
 end
 
+struct SubtaskError <: Exception
+    msg::String
+end
+Base.showerror(io::IO, e::SubtaskError) = print(io, "SubtaskError: ", e.msg)
+
 function _io_like_(out)
     color = get(out, :color, false)
     size = displaysize(out)
@@ -62,11 +67,11 @@ function run_sequential(io, tasks; verbose=true)
     pad_names!(tasks)
 
     for t in tasks
-        verbose && printstyled(io, t.name; bold=true)
+        verbose && printstyled(io, t.name, " "; bold=true)
         result = t.f(io)
 
         verbose && if !isnothing(result)
-            println(io, " -> ", string(result))
+            println(io, "-> ", string(result))
         else
             println(io)
         end
@@ -84,17 +89,17 @@ function run_plain(io, tasks::Vector{SpinTask}; verbose=true)
             if t.status == :done
                 _verbose = verbose || !isempty(t.output)
                 _verbose && printstyled(io, " ✓ "; color=:green)
-                _verbose && printstyled(io, t.name; bold=true)
+                _verbose && printstyled(io, t.name, " "; bold=true)
                 _verbose && if !isnothing(t.retstr)
-                    println(io, " -> ", t.retstr)
+                    println(io, "-> ", t.retstr)
                 else
                     println(io)
                 end
                 print_with_newlines(io, t.output)
             elseif t.status == :error
                 printstyled(io, " ✗ "; color=:red)
-                printstyled(io, t.name; bold=true)
-                println(io, " -> ")
+                printstyled(io, t.name, " "; bold=true)
+                println(io, "-> ")
                 print_with_newlines(io, t.output)
                 println(io, t.error)
                 println(io)
@@ -104,7 +109,7 @@ function run_plain(io, tasks::Vector{SpinTask}; verbose=true)
     if any(t -> t.error !== nothing, tasks)
         errtasks = filter(t -> t.error !== nothing, tasks)
         names = [t.name for t in errtasks]
-        error("Some parallel Task errored: ", join(names, ", "))
+        throw(SubtaskError("Some parallel Task errored: " * join(names, ", ")))
     end
     nothing
 end
@@ -112,16 +117,16 @@ end
 const anim_chars = ["◐", "◓", "◑", "◒"]
 anim_char(i) = anim_chars[mod1(i, length(anim_chars))]
 ansi_moveup(n::Int) = string("\e[", n, "A")
-ansi_movecol1 = "\e[1G"
-ansi_movecolend = "\e[999C"
-ansi_cleartoend = "\e[0J"
-ansi_cleartoendofline = "\e[0K"
-ansi_enablecursor = "\e[?25h"
-ansi_disablecursor = "\e[?25l"
+const ansi_movecol1 = "\e[1G"
+const ansi_movecolend = "\e[999C"
+const ansi_cleartoend = "\e[0J"
+const ansi_cleartoendofline = "\e[0K"
+const ansi_enablecursor = "\e[?25h"
+const ansi_disablecursor = "\e[?25l"
 
 function pad_names!(tasks::Vector{SpinTask})
     min, max = extrema(length(t.name) for t in tasks)
-    if max-min < 5
+    if max-min < 8
         # pad names for better appearance
         for t in tasks
             t.name = rpad(t.name, max)
@@ -162,9 +167,9 @@ function run_fancy(tasks::Vector{SpinTask}; verbose=true)
                         # still print if not verbose but there is output
                         _verbose = verbose || (!isnothing(t.output) && !isempty(t.output))
                         _verbose && printstyled(buf, " ✓ "; color=:green)
-                        _verbose && printstyled(buf, t.name; bold=true)
+                        _verbose && printstyled(buf, t.name, " "; bold=true)
                         _verbose && if !isnothing(t.retstr)
-                            println(buf, " -> ", t.retstr)
+                            println(buf, "-> ", t.retstr)
                         else
                             println(buf)
                         end
@@ -173,8 +178,8 @@ function run_fancy(tasks::Vector{SpinTask}; verbose=true)
                         done += 1
                     elseif t.status == :error
                         printstyled(buf, " ✗ "; color=:red)
-                        printstyled(buf, t.name; bold=true)
-                        print(buf, " -> ")
+                        printstyled(buf, t.name, " "; bold=true)
+                        print(buf, "-> ")
                         print_with_newlines(buf, t.output)
                         println(buf, t.error)
                         println(buf)
@@ -247,7 +252,7 @@ function run_fancy(tasks::Vector{SpinTask}; verbose=true)
     if any(t -> t.error !== nothing, tasks)
         errtasks = filter(t -> t.error !== nothing, tasks)
         names = [t.name for t in errtasks]
-        error("Some parallel Task errored: ", join(names, ", "))
+        throw(SubtaskError("Some parallel Task errored: " * join(names, ", ")))
     end
 
     return nothing

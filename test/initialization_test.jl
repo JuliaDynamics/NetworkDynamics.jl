@@ -588,10 +588,12 @@ end
 
     s_nmut = initialize_componentwise(nw; subverbose=true, verbose=true, default_overrides)
     s_mut = initialize_componentwise!(nw; subverbose=true, verbose=true, default_overrides)
+    s_parallel = initialize_componentwise(nw; subverbose=true, verbose=true, default_overrides, parallel=true)
     s_meta = NWState(nw)
 
     for (k, v) in interface_values(pf)
         @test s_nmut[k] ≈ v atol=1e-10
+        @test s_parallel[k] ≈ v atol=1e-10
     end
     @test s_meta[VIndex(1, :swing₊V)] ≈ s_meta[VIndex(1, :u_mag)]
     @test s_meta[VIndex(1, :load₊Pset)] ≈ -1.0
@@ -600,12 +602,17 @@ end
         @test_throws SciMLBase.NonSolverError initialize_componentwise(nw; subalg=:foo)
         @test_throws SciMLBase.NonSolverError initialize_componentwise(nw; subalg=Dict(VIndex(:swing_and_load) => :foo))
         alg = NonlinearSolve.GaussNewton()
-        @test_throws ComponentInitError initialize_componentwise(nw; subalg=alg) # should work
-        initialize_componentwise(nw; subsolve_kwargs=(;verbose=Detailed())) # should work
+        @test_throws ComponentInitError initialize_componentwise(nw; subalg=alg) # does not work with that solver
+        initialize_componentwise(nw; subsolve_kwargs=(;verbose=Detailed())) # prints solver faield ouput
 
         # inject high tolerances to make the tol test fail
-        @test_throws ComponentInitError initialize_componentwise(nw; subsolve_kwargs=(;reltol=100, abstol=100))
+        @test_throws ComponentInitError initialize_componentwise(nw; verbose=true, subsolve_kwargs=Dict(VIndex(2) => (;reltol=100, abstol=100)))
+        @test_throws SubtaskError initialize_componentwise(nw; verbose=true, subsolve_kwargs=Dict(VIndex(2) => (;reltol=100, abstol=100)), parallel=true)
         # initialize_componentwise(nw; subsolve_kwargs=(;verbose=Detailed()))
+
+        # test parallel versions
+        @test_throws SciMLBase.NonSolverError initialize_componentwise(nw; subalg=:foo, parallel=false)
+        @test_throws SubTaskError initialize_componentwise(nw; subalg=Dict(VIndex(:swing_and_load) => :foo), parallel=true)
     end
 end
 
@@ -1416,4 +1423,13 @@ end
     set_guess!(nw[VIndex(5)], :Qset, -0.2)
     @test_throws ComponentInitError initialize_componentwise(nw; subverbose=false, verbose=false, default_overrides)
     initialize_componentwise(nw; subverbose=false, verbose=false, default_overrides, t=0)
+
+    # test parallel versions of error handling
+    @test_throws SubtaskError initialize_componentwise(nw; subverbose=false, verbose=false, default_overrides, parallel=true)
+    initialize_componentwise(nw; subverbose=false, verbose=false, default_overrides, t=0, parallel=true)
+
+    delete_default!(nw[VIndex(5)], :Qset)
+    set_guess!(nw[VIndex(5)], :Qset, -0.2)
+    @test_throws SubtaskError initialize_componentwise(nw; subverbose=false, verbose=false, default_overrides, parallel=true)
+    initialize_componentwise(nw; subverbose=false, verbose=false, default_overrides, t=0, parallel=true)
 end

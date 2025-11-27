@@ -1,4 +1,6 @@
 using NetworkDynamics
+using NetworkDynamics: SubtaskError
+using Test
 
 using NetworkDynamics: SpinTask
 
@@ -40,11 +42,11 @@ end
 tasks = [t1, t2, t3, t5, t4]
 tasks_noerr = [t1, t2, t3, t4]
 
-NetworkDynamics.run_plain(tasks)
+@test_throws ErrorException NetworkDynamics.run_sequential([t2,t5,t4])
+@test_throws SubtaskError NetworkDynamics.run_plain(tasks)
 NetworkDynamics.run_plain(tasks_noerr)
 
-NetworkDynamics.run_fancy(tasks)
-
+@test_throws SubtaskError NetworkDynamics.run_fancy(tasks)
 NetworkDynamics.run_fancy(tasks_noerr)
 
 tasks = [SpinTask((io)->busysleep(rand(1:0.1:2)), "Task $i") for i in 1:30]

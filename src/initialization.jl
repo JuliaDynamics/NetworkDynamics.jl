@@ -116,7 +116,7 @@ function find_fixpoint(nw::Network, x0::AbstractVector, p::AbstractVector;
         end
 
         if output_nans && isnan(t)
-            print(io, "\n - Network was evaluated at t=NaN, maybe your system has explicit time dependence? Try specifying kw argument `t` to decide on time")
+            print(io, "\n - Network was evaluated at t=NaN, maybe your system has explicit time dependency? Try specifying kw argument `t` to decide on time")
         end
         if !isnothing(fn_error)
             print(io, "\nCausing ERROR:\n")
@@ -382,12 +382,12 @@ function initialization_problem(cf::T,
     resid_nan = any(isnan, resid)
     if !isnothing(fn_error) || resid_nan
         io = IOBuffer()
-        print(io, "Error while constructing initialization problem for $(cf.name):")
+        print(io, "Error while constructing initialization problem for $(cf.name):\n")
         if resid_nan
             print(io, " - Residual contains NaNs!\n")
             if isnan(t)
                 print(io, " System initialized at t=NaN, maybe your system has explicit \
-                    time dependence? Try specifying kw argument `t` to decide on time")
+                    time dependency? Try specifying kw argument `t` to decide on time")
             end
         end
         if !isnothing(fn_error)
@@ -889,7 +889,7 @@ function init_residual(cf::ComponentModel, state=get_defaults_or_inits_dict(cf);
     if isnan(res)
         err_str = if isnan(t)
             "Residual of component is NaN at t=NaN! Maybe your system has \
-                explicit time dependence? Try specifying kw argument `t` to decide on time."
+                explicit time dependency? Try specifying kw argument `t` to decide on time."
         else
             "Residual of component is NaN, which should not happen for an initialized system!"
         end
@@ -1072,6 +1072,7 @@ function _initialize_componentwise(
     subsolve_kwargs = _resolve_subargument_dict(nw, subsolve_kwargs)
 
     # to improve type stability, we split the overrides into v/e parts only once
+    # TODO: might be solve by EIndex/VIndex ADT
     default_v_overrides, default_e_overrides = _split_overrides(default_overrides)
     guess_v_overrides, guess_e_overrides = _split_overrides(guess_overrides)
     bound_v_overrides, bound_e_overrides = _split_overrides(bound_overrides)
@@ -1157,14 +1158,28 @@ function _initialize_componentwise(
     if parallel
         bthreads = BLAS.get_num_threads()
         BLAS.set_num_threads(1)
-        if stdout isa Base.TTY # check if print backend supports deletion
-            run_fancy(tasks; verbose)
-        else
-            run_plain(tasks; verbose)
+        try
+            if stdout isa Base.TTY # check if print backend supports deletion
+                run_fancy(tasks; verbose)
+            else
+                run_plain(tasks; verbose)
+            end
+        catch e
+            if e isa SubtaskError
+                printstyled(stderr, VSET_ESIT_ERR_HINT, color=:red)
+            end
+            rethrow(e)
         end
         BLAS.set_num_threads(bthreads)
     else
-        run_sequential(tasks; verbose)
+        try
+            run_sequential(tasks; verbose)
+        catch e
+            if e isa ComponentInitError
+                printstyled(stderr, VSET_ESIT_ERR_HINT, color=:red)
+            end
+            rethrow(e)
+        end
     end
 
     s0 = if mutating == Val{true}()
@@ -1189,6 +1204,7 @@ function _initialize_componentwise(
     verbose && println("Initialized network with residual $(resid)!")
     s0
 end
+VSET_ESIT_ERR_HINT = "\nHint: Init failed for some components. For debugging, consider passing `vset` and `eset` keywords to run init routine on a subset of network components!\n"
 _filter_overrides(_, _, ::Nothing) = nothing
 function _filter_overrides(nw, filteridx, dict::AbstractDict)
     filtered = Dict{Symbol, valtype(dict)}()
