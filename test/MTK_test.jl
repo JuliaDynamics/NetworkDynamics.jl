@@ -564,3 +564,102 @@ end
     @test postprocessing_called[3] == (:sub1, vm, "sub2₊sub1_in_sub2")
     @test postprocessing_called[4] == (:toplevel, vm, "")
 end
+
+@testset "test assume_io_coupling=true" begin
+    @mtkmodel GridFollowingInverter begin
+        @parameters begin
+            w_cu
+            omega_ini
+            Kp_omega
+            Ki_omega
+            K_omega
+            K_v
+            V_ref
+            omega_ref
+            P_ref
+            Q_ref
+            KpP
+            KiP
+            KpQ
+            KiQ
+        end
+        @variables begin
+            θ(t)
+            z_omega(t)
+            u_fil_d(t)
+            u_fil_q(t)
+            z_P(t)
+            z_Q(t)
+            V_d(t)
+            V_q(t)
+            ω_meas(t)
+            V_fil_mag(t)
+            P_rd(t)
+            Q_rd(t)
+            P(t)
+            Q(t)
+            i_d(t)
+            i_q(t)
+            u_r(t)
+            u_i(t)
+            i_r(t)
+            i_i(t)
+        end
+        begin
+            T_to_loc(α)  = [ cos(α)   sin(α);
+                            -sin(α)   cos(α) ]
+            T_to_glob(α) = T_to_loc(-α)
+        end
+        @equations begin
+            # voltage to dq
+            [V_d, V_q] .~ T_to_loc(θ) * [u_r, u_i]
+
+            # filter
+            Dt(u_fil_d) ~ w_cu * (V_d - u_fil_d)
+            Dt(u_fil_q) ~ w_cu * (V_q - u_fil_q)
+
+            # PLL
+            Dt(z_omega) ~ V_q
+            ω_meas ~ omega_ini + Kp_omega * V_q + Ki_omega * z_omega
+
+            # voltage magnitude
+            V_fil_mag ~ sqrt(u_fil_d^2 + u_fil_q^2)
+
+            # droop
+            P_rd ~ -K_omega * (ω_meas - omega_ref) + P_ref
+            Q_rd ~ -K_v     * (V_fil_mag - V_ref)   + Q_ref
+
+            # PI controllers for active and reactive power
+            Dt(z_P) ~ (P_rd - P)
+            Dt(z_Q) ~ (Q_rd - Q)
+
+            P ~ KpP * (P_rd - P) + KiP * z_P
+            Q ~ KpQ * (Q_rd - Q) + KiQ * z_Q
+
+            # dq currents
+            i_d ~ (P * u_fil_d + Q * u_fil_q) / (u_fil_d^2 + u_fil_q^2)
+            i_q ~ (P * u_fil_q - Q * u_fil_d) / (u_fil_d^2 + u_fil_q^2)
+
+            # to global frame and connect to terminal
+            [i_r, i_i] .~ T_to_glob(θ) * [i_d, i_q]
+
+            # angle integration
+            Dt(θ) ~ ω_meas
+        end
+    end
+
+    @named inverter = GridFollowingInverter()
+
+    # Without assume_io_coupling, this should throw RHSDifferentialsError
+    # because i_r/i_i outputs depend on θ which has a derivative
+    @test_throws NetworkDynamics.RHSDifferentialsError begin
+        VertexModel(inverter, [:i_r, :i_i], [:u_r, :u_i]; verbose=false)
+    end
+
+    # With assume_io_coupling=true, the construction should succeed
+    # This forces MTK to recognize the input->output coupling even with derivatives
+    v = VertexModel(inverter, [:i_r, :i_i], [:u_r, :u_i];
+                    verbose=false, assume_io_coupling=true)
+
+    @test v isa VertexModel
+end

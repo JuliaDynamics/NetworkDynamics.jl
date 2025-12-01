@@ -20,7 +20,7 @@ import NetworkDynamics: VertexModel, EdgeModel, AnnotatedSym
 
 include("MTKExt_utils.jl")
 
-import NetworkDynamics: implicit_output
+import NetworkDynamics: implicit_output, RHSDifferentialsError
 ModelingToolkit.@register_symbolic implicit_output(x)
 
 """
@@ -38,9 +38,12 @@ Additional kw arguments:
    will bound the variable `extvar(t)` in the equations to the state `a` of the first vertex.
 - `ff_to_constraint=true`: Controls, whether output transformations `g` which depend on inputs should be
   transformed into constraints. Defaults to true since ND.jl does not handle vertices with FF yet.
+- `assume_io_coupling=false`: If true, assumes direct dependency chain from outputs to inputs by adding
+  implicit output terms to all inputs. This forces MTK to consider the dependency during compilation
+  and can help in cases where MTK simplification results in derivatives of inputs.
 """
 function VertexModel(sys::System, inputs, outputs; verbose=false, name=getname(sys),
-                     ff_to_constraint=true, extin=nothing, kwargs...)
+                     ff_to_constraint=true, assume_io_coupling=false, extin=nothing, kwargs...)
     warn_missing_features(sys)
     inputs = inputs isa AbstractVector ? inputs : [inputs]
     outputs = outputs isa AbstractVector ? outputs : [outputs]
@@ -53,7 +56,7 @@ function VertexModel(sys::System, inputs, outputs; verbose=false, name=getname(s
         ins = (inputs, extin_sym)
     end
 
-    gen = generate_io_function(sys, ins, (outputs,); verbose, ff_to_constraint)
+    gen = generate_io_function(sys, ins, (outputs,); verbose, ff_to_constraint, assume_io_coupling)
 
     f = gen.f
     g = gen.g
@@ -128,9 +131,12 @@ Additional kw arguments:
    will bound the variable `extvar(t)` in the equations to the state `a` of the first vertex.
 - `ff_to_constraint=false`: Controls, whether output transformations `g` which depend on inputs should be
   transformed into constraints.
+- `assume_io_coupling=false`: If true, assumes direct dependency chain from outputs to inputs by adding
+  implicit output terms to all inputs. This forces MTK to consider the dependency during compilation
+  and can help in cases where MTK simplification results in derivatives of inputs.
 """
 function EdgeModel(sys::System, srcin, dstin, srcout, dstout; verbose=false, name=getname(sys),
-                   ff_to_constraint=false, extin=nothing, kwargs...)
+                   ff_to_constraint=false, assume_io_coupling=false, extin=nothing, kwargs...)
     warn_missing_features(sys)
     srcin = srcin isa AbstractVector ? srcin : [srcin]
     dstin = dstin isa AbstractVector ? dstin : [dstin]
@@ -160,7 +166,7 @@ function EdgeModel(sys::System, srcin, dstin, srcout, dstout; verbose=false, nam
         outs = (srcout, dstout)
     end
 
-    gen = generate_io_function(sys, ins, outs; verbose, ff_to_constraint)
+    gen = generate_io_function(sys, ins, outs; verbose, ff_to_constraint, assume_io_coupling)
 
     f = gen.f
     g = singlesided ? gwrap(gen.g) : gen.g
@@ -281,7 +287,7 @@ end
 
 function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
                               expression=Val{false}, verbose=false,
-                              ff_to_constraint)
+                              ff_to_constraint, assume_io_coupling)
     # TODO: scalarize vector symbolics/equations?
 
     # f_* may be given in namepsace version or as symbols, resolve to unnamespaced Symbolic
@@ -293,6 +299,20 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         getproperty_symbolic.(Ref(_sys), out)
     end
     alloutputs = reduce(union, outputss)
+
+    # assume_io_coupling means, we expect a direct dependency chain output -> input
+    # we fake this, by replacing all inputs with `input + implicit_output(outputs...)`
+    # which forces MTK to consider the dependency
+    if assume_io_coupling
+        impl_outputs = implicit_output(sum(alloutputs))
+        subs = Dict(in => in + impl_outputs for in in allinputs)
+        _expanded = ModelingToolkit.expand_connections(_sys)
+        _expanded_eqs = ModelingToolkit.get_eqs(_expanded)
+        for i in eachindex(_expanded_eqs)
+            _expanded_eqs[i] = substitute(_expanded_eqs[i], subs)
+        end
+        _sys = _expanded
+    end
 
     missing_inputs = Set{Symbolic}()
     sys = if ModelingToolkit.iscomplete(_sys)
@@ -361,17 +381,10 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         isnothing(type[2]) ? pop!(implicit_states) : type[2]
     end
 
-    # check hat there are no rhs differentials in the equations
+    # check that there are no rhs differentials in the equations
     if !isempty(rhs_differentials(vcat(eqs, obseqs_sorted)))
         diffs = rhs_differentials(vcat(eqs, obseqs_sorted))
-        buf = IOBuffer()
-        println(buf, "Equations contain differentials in their rhs: ", diffs)
-        # for (i, eqs) in enumerate(eqs)
-        #     if !isempty(rhs_differentials(eqs))
-        #         println(buf, " - $i: $eqs")
-        #     end
-        # end
-        throw(ArgumentError(String(take!(buf))))
+        throw(RHSDifferentialsError(repr.(diffs)))
     end
 
     # obs can only depend on parameters (including allinputs) or states

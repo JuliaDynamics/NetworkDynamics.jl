@@ -424,3 +424,15 @@ end
     g.g(_out, _args...)
     nothing
 end
+
+
+struct RHSDifferentialsError <: Exception
+    diffs::Vector{String}
+end
+function Base.showerror(io::IO, e::RHSDifferentialsError)
+    println(io, "RHSDifferentialsError: The RHS of the reduced system contains derivatives for the following symbols:")
+    for d in e.diffs
+        println(io, " - ", d)
+    end
+    print(io, "Consider passing `assume_io_coupling=true` to the component constructor!")
+end
