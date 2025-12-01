@@ -330,7 +330,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         if !isempty(implicit_outputs)
             throw(
                 ArgumentError("The outputs $(getname.(implicit_outputs)) do not appear in the equations of the system! \
-                    Try to to make them explicit using `implicit_output`\n" *
+                    Try to to make them explicit using the keyword `assume_io_coupling` or the more manual `implicit_output`\n" *
                     NetworkDynamics.implicit_output_docstring)
             )
         end

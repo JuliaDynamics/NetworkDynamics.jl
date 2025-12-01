@@ -184,7 +184,7 @@ Here, $y$ does not appear in the equations at all. In general, that doesn't make
 During simplification, MTK will potentially get rid of the equation as it does not contribute to the system's state.
 
 However, in NetworkDynamics, we're always dealing with **open loop models** on the equation level, which is not exactly what MTK was made for.
-If you build a closed loop between a subsystem A which **has input forcing** and a subsystem
+If you build a closed loop between a subsystem A which **has input forcing** (input appears in constraint) and a subsystem
 B which has **input feed forward**, the resulting system can be solved:
 ```
     (system with input forcing)
@@ -206,6 +206,10 @@ ModelingToolkit.@register_symbolic implicit_output(x)
 ```
 which makes it numerically equivalent to zero (no effect on the simulation) but is
 opaque to the Symbolic Simplification.
+
+Alternatively, instead of manually adding `implicit_output` to equations, you can use the
+`assume_io_coupling=true` flag in the `VertexModel` and `EdgeModel` constructors to automatically
+insert these dependencies for all inputs.
 
 ### Example
 
@@ -229,9 +233,71 @@ VertexModel(kirchhoff, [:i_sum], [:v])
 ```
 where we "trick" MTK into believing that the input forcing equation depends on the output too.
 
+Alternatively, you could achieve the same result without manually adding `implicit_output` by using:
+```@example mtk
+VertexModel(kirchhoff, [:i_sum], [:v], assume_io_coupling=true)
+nothing # hide
+```
+
+### Troubleshooting: Derivatives in RHS
+Closely related to the fully implicit outputs are situations where **derivatives of input** states appear on the right hand side of equations.
+
+Let's consider the case where we want to model an inductance to ground in the electrical network
+example we started above:
+```@example mtk
+@mtkmodel InductanceToGround begin
+    @components begin
+        p = NWTerminal()
+    end
+    @variables begin
+        i(t), [description="Current through inductor", output=true]
+    end
+    @parameters begin
+        L = 1.0
+    end
+    @equations begin
+        p.i ~ i
+        L*D(i) ~ p.v
+    end
+end
+@named ind = InductanceToGround()
+nothing #hide
+```
+When we try to build this model, we get an error:
+```@example mtk
+try #hide
+VertexModel(ind, [:p₊i], [:p₊v])
+catch e #hide
+    @assert e isa NetworkDynamics.RHSDifferentialsError #hide
+    printstyled("ERROR: ", color=:light_red, bold=true) #hide
+    Base.showerror(IOContext(stdout, :color => true), e) #hide
+end #hide
+nothing #hide
+```
+Which can be solved by adding the `assume_io_coupling=true` flag:
+```@example mtk
+VertexModel(ind, [:p₊i], [:p₊v], assume_io_coupling=true)
+```
+What happens is, that MTK solves `p.i ~ i` for `i` and plugs that into the second equation,
+which requires the derivative of our input `p.i`! Passing `assume_io_coupling=true` essentially
+inserts a fake dependency of that equation on the output `p.v`:
+```
+p.i + implicit_output(p.v) ~ i
+```
+Therefore, MTK cannot resolve for `i` anymore and leaves the equation as a constraint.
+
+
+!!! note "Be careful with non-feed-forward edges"
+    Using `implicit_output` and `assume_io_coupling` **assumes** that there is some direct feedback mechanism $input = f(output)$.
+    That is not always the case!
+    For example, consider a small electrical network where the edge itself is modeled as an inductance.
+    In that case, both sides of `p.i ~ i` are defined as a differential equation and thus smooth.
+    You *cannot* fulfill this constraint by changing the voltage.
+    In those scenarios, you'd need to introduce a capacitor to ground at the node model, relaxing the constraint $0 = i_{edge} + i_{node}$ to something like $C\,\frac{d}{dt}v_{node} = i_{edge} + i_{node}$.
+
 ## Register Postprocessing Functions
 MTK models are "composite" by design, i.e. your toplevel model might consist of multiple internal components.
-Sometimes, you want to specify behavior of the **encapsulating model** on a subcomponent level. 
+Sometimes, you want to specify behavior of the **encapsulating model** on a subcomponent level.
 For that, NetworkDynamics provides the [`ComponentPostprocessing`](@ref) metadata mechanism.
 
 Let's say you want to implement an integrator with anti windup
@@ -368,10 +434,10 @@ end
 nothing #hide
 ```
 !!! warning
-    Even though fairly complex, the above function is a simplified example which may have performance problems 
-    and does not add "safety" discrete callbacks. Under discrete jumps, the zero crossing might be skipped so 
+    Even though fairly complex, the above function is a simplified example which may have performance problems
+    and does not add "safety" discrete callbacks. Under discrete jumps, the zero crossing might be skipped so
     it is good practice to add additional discrete callbacks to detect those cases (i.e. check if `out >= max + 1e-10`).
-    You'll find a "proper" version of the saturated integrator in the PowerDynamics.jl Library, feel free 
+    You'll find a "proper" version of the saturated integrator in the PowerDynamics.jl Library, feel free
     to copy the code from there.
 
 With the definition above, we can create a model which uses the limited integrator:
