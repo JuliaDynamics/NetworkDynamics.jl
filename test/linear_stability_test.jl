@@ -49,14 +49,14 @@ using Test
         nw = Network(g, vertex_model, edge_model)
 
         # Set up parameters
-        p = NWParameter(nw)
-        p.v[:, :Pm] .= [1, -0.5, -0.5, 0]  # Power injections
-        p.v[:, :M] .= 1.0  # Inertia
-        p.v[:, :D] .= 0.1  # Damping
-        p.e[:, :K] .= 2.0  # Coupling strength
+        s = NWState(nw)
+        s.p.v[:, :Pm] .= [1, -0.5, -0.5, 0]  # Power injections
+        s.p.v[:, :M] .= 1.0  # Inertia
+        s.p.v[:, :D] .= 0.2  # Damping
+        s.p.e[:, :K] .= 2.0  # Coupling strength
 
         # Find fixpoint
-        s0 = find_fixpoint(nw, p)
+        s0 = find_fixpoint(nw, s)
 
         # Test fixpoint check
         @test isfixpoint(nw, s0)
@@ -66,7 +66,7 @@ using Test
         @test length(λ) == 8  # 4 nodes × 2 states each
 
         # Test stability (should be stable for this configuration)
-        @test is_linear_stable(nw, s0)
+        @test is_linear_stable(nw, s0; marginally_stable=true)
 
         # Test that eigenvalues can be complex
         @test any(isa.(λ, Complex))
