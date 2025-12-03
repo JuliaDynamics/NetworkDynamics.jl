@@ -5,6 +5,7 @@
   - New optional parameter forces MTK to consider direct dependency chains from outputs to inputs
   - Helps resolve cases where MTK simplification results in derivatives of input variables
 - Improved error handling for RHS differentials with new `RHSDifferentialsError` exception type that provides helpful guidance
+- fix performance bottleneck in MTK model "compilation"
 
 ## v0.10.13 Changelog
 Multiple new features from [#331](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/331):
