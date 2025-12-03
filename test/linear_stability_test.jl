@@ -65,6 +65,8 @@ using Test
         λ = jacobian_eigenvals(nw, s0)
         @test length(λ) == 8  # 4 nodes × 2 states each
 
+        @info "Kuramoto eigenvalues: " λ
+
         # Test stability (should be stable for this configuration)
         @test is_linear_stable(nw, s0; marginally_stable=true)
 
