@@ -128,9 +128,10 @@ function find_fixpoint(nw::Network, x0::AbstractVector, p::AbstractVector;
 
     prob = SteadyStateProblem(nw_fixed_t, x0, p)
     sol = SciMLBase.solve(prob, alg; kwargs...)
+    resid = maximum(abs.(sol.resid))
     if !SciMLBase.successful_retcode(sol.retcode)
         throw(NetworkInitError("""
-        Could not find fixpoint, solver returned $(sol.retcode) (alg=$(alg))! For debugging, \
+        Could not find fixpoint, solver returned $(sol.retcode) with residual $(resid) (alg=$(alg))! For debugging, \
         it is advised to manually construct the steady state problem and try \
         different solvers/arguments:
 
