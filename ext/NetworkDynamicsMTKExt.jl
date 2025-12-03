@@ -62,27 +62,29 @@ function VertexModel(sys::System, inputs, outputs; verbose=false, name=getname(s
     g = gen.g
     obsf = gen.obsf
 
+    sysdefaults = defaults(sys)
+    sysguesses = ModelingToolkit.guesses(sys)
     _sym = getname.(gen.states)
-    sym = [s => _get_metadata(sys, s) for s in _sym]
+    sym = [s => _get_metadata(sys, s, sysdefaults, sysguesses) for s in _sym]
 
     _psym = getname.(gen.params)
     psym = map(gen.params) do p
         pname = getname(p)
-        md = _get_metadata(sys, pname)
+        md = _get_metadata(sys, pname, sysdefaults, sysguesses)
         if p in gen.unused_params
-            md = (; md..., unused=true)
+            md[:unused] = true
         end
         pname => md
     end
 
     _obssym = getname.(gen.obsstates)
-    obssym = [s => _get_metadata(sys, s) for s in _obssym]
+    obssym = [s => _get_metadata(sys, s, sysdefaults, sysguesses) for s in _obssym]
 
     _insym = getname.(inputs)
-    insym = [s => _get_metadata(sys, s) for s in _insym]
+    insym = [s => _get_metadata(sys, s, sysdefaults, sysguesses) for s in _insym]
 
     _outsym = getname.(outputs)
-    outsym = [s => _get_metadata(sys, s) for s in _outsym]
+    outsym = [s => _get_metadata(sys, s, sysdefaults, sysguesses) for s in _outsym]
 
     mass_matrix = gen.mass_matrix
     c = VertexModel(;f, g, sym, insym, outsym, psym, obssym,
@@ -172,36 +174,38 @@ function EdgeModel(sys::System, srcin, dstin, srcout, dstout; verbose=false, nam
     g = singlesided ? gwrap(gen.g) : gen.g
     obsf = gen.obsf
 
+    sysdefaults = defaults(sys)
+    sysguesses = ModelingToolkit.guesses(sys)
     _sym = getname.(gen.states)
-    sym = [s => _get_metadata(sys, s) for s in _sym]
+    sym = [s => _get_metadata(sys, s, sysdefaults, sysguesses) for s in _sym]
 
     _psym = getname.(gen.params)
     psym = map(gen.params) do p
         pname = getname(p)
-        md = _get_metadata(sys, pname)
+        md = _get_metadata(sys, pname, sysdefaults, sysguesses)
         if p in gen.unused_params
-            md = (; md..., unused=true)
+            md[:unused] = true
         end
         pname => md
     end
 
     _obssym = getname.(gen.obsstates)
-    obssym = [s => _get_metadata(sys, s) for s in _obssym]
+    obssym = [s => _get_metadata(sys, s, sysdefaults, sysguesses) for s in _obssym]
 
     _insym_src = getname.(srcin)
-    insym_src = [s => _get_metadata(sys, s)  for s in _insym_src]
+    insym_src = [s => _get_metadata(sys, s, sysdefaults, sysguesses)  for s in _insym_src]
     _insym_dst = getname.(dstin)
-    insym_dst = [s => _get_metadata(sys, s)  for s in _insym_dst]
+    insym_dst = [s => _get_metadata(sys, s, sysdefaults, sysguesses)  for s in _insym_dst]
     insym = (;src=insym_src, dst=insym_dst)
 
     if singlesided
         _outsym_dst = getname.(dstout)
-        outsym = [s => _get_metadata(sys, s)  for s in _outsym_dst]
+        outsym = [s => _get_metadata(sys, s, sysdefaults, sysguesses)  for s in _outsym_dst]
     else
         _outsym_src = getname.(srcout)
-        outsym_src = [s => _get_metadata(sys, s)  for s in _outsym_src]
+        outsym_src = [s => _get_metadata(sys, s, sysdefaults, sysguesses)  for s in _outsym_src]
         _outsym_dst = getname.(dstout)
-        outsym_dst = [s => _get_metadata(sys, s)  for s in _outsym_dst]
+        outsym_dst = [s => _get_metadata(sys, s, sysdefaults, sysguesses)  for s in _outsym_dst]
         outsym = (;src=outsym_src, dst=outsym_dst)
     end
 
@@ -221,9 +225,11 @@ end
 
 """
 For a given system and name, extract all the relevant meta we want to keep for the component model.
+
+since defaults(sys) and guesses(sys) is relativly expensive those need to be provided
 """
-function _get_metadata(sys, name)
-    nt = (;)
+function _get_metadata(sys, name, alldefaults, sysguesses)
+    md = Dict{Symbol,Any}()
     sym = try
         getproperty_symbolic(sys, name; might_contain_toplevel_ns=false)
     catch e
@@ -232,7 +238,6 @@ function _get_metadata(sys, name)
         end
         return nt
     end
-    alldefaults = defaults(sys)
     if haskey(alldefaults, sym)
         def = alldefaults[sym]
         if def isa Symbolic
@@ -245,32 +250,32 @@ function _get_metadata(sys, name)
         elseif def == ModelingToolkit.NoValue || def isa ModelingToolkit.NoValue
             # skip NoValue thing
         else
-            nt = (; nt..., default=def)
+            md[:default] = def
         end
     end
 
     # check for guess both in symbol metadata and in guesses of system
     # fixes https://github.com/SciML/ModelingToolkit.jl/issues/3075
-    if ModelingToolkit.hasguess(sym) || haskey(ModelingToolkit.guesses(sys), sym)
+    if ModelingToolkit.hasguess(sym) || haskey(sysguesses, sym)
         guess = if ModelingToolkit.hasguess(sym)
             ModelingToolkit.getguess(sym)
         else
-            ModelingToolkit.guesses(sys)[sym]
+            sysguesses[sym]
         end
         if guess isa Symbolic
-            guess = fixpoint_sub(def, merge(defaults(sys), guesses(sys)))
+            guess = fixpoint_sub(def, merge(defaults(sys), sysguesses))
         end
         guess isa Symbolic && error("Could not resolve guess $(ModelingToolkit.getguess(sym)) for $name")
-        nt = (; nt..., guess=guess)
+        md[:guess] = guess
     end
 
     if ModelingToolkit.hasbounds(sym)
-        nt = (; nt..., bounds=ModelingToolkit.getbounds(sym))
+        md[:bounds] = ModelingToolkit.getbounds(sym)
     end
     if ModelingToolkit.hasdescription(sym)
-        nt = (; nt..., description=ModelingToolkit.getdescription(sym))
+        md[:description] = ModelingToolkit.getdescription(sym)
     end
-    nt
+    md
 end
 
 function _split_extin(extin)
@@ -389,7 +394,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
 
     # obs can only depend on parameters (including allinputs) or states
     obs_subs = OrderedDict(eq.lhs => eq.rhs for eq in obseqs_sorted)
-    obs_deps = _all_rhs_symbols(fixpoint_sub(obseqs_sorted, obs_subs))
+    obs_deps = setdiff(_all_rhs_symbols(obs_subs), Set(keys(obs_subs))) # do not count self-dependency
     if !(obs_deps ⊆ Set(allparams) ∪ Set(states) ∪ independent_variables(sys))
         @warn "obs_deps !⊆ parameters ∪ unknowns. Difference: $(setdiff(obs_deps, Set(allparams) ∪ Set(states)))"
     end
@@ -432,8 +437,8 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
             push!(outeqs, out ~ out)
         elseif out ∈ keys(obs_subs)
             # if its a observed, we need to check for ff behavior
-            fulleq = out ~ fixpoint_sub(obs_subs[out], obs_subs)
-            if ff_to_constraint && !isempty(get_variables(fulleq.rhs) ∩ allinputs)
+            fulldeps = _all_dependencies(obs_subs[out], obs_subs);
+            if ff_to_constraint && !isempty(fulldeps ∩ allinputs)
                 verbose && @info "Output $out would lead to FF in g, promote to state instead."
                 # not observed anymore, delete from observed and put in equations
                 push!(eqs, 0 ~ out - obs_subs[out])
@@ -471,7 +476,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
 
     iv = only(independent_variables(sys))
 
-    out_deps = _all_rhs_symbols(fixpoint_sub(outeqs, obs_subs))
+    out_deps = _all_dependencies(outeqs, obs_subs)
     fftype = _determine_fftype(out_deps, states, allinputs, params, iv)
 
     # filter out unnecessary parameters
@@ -480,7 +485,6 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         # symbolic simplifications which we don't have in the actual equations later!
         # i.e. dt(x) ~ x - x0 and x ~ x0 + y leads to dt(x) ~ y in substitution but is not resolved in actual f
         var_deps = _all_rhs_symbols(eqs)
-        obs_deps = _all_rhs_symbols(obs_subs)
         Set(setdiff(params, (var_deps ∪ obs_deps ∪ out_deps))) # do not exclud obs_deps
     end
     if verbose && !isempty(unused_params)
@@ -602,7 +606,29 @@ function _determine_fftype(deps, states, allinputs, params, t)
     end
 end
 
-_all_rhs_symbols(eqs) = mapreduce(eq->get_variables(eq isa Pair ? eq.second : eq.rhs), ∪, eqs, init=Set{Symbolic}())
+_all_rhs_symbols(term) = get_variables(term)
+_all_rhs_symbols(eq::Equation) = get_variables(eq.rhs)
+_all_rhs_symbols(eqs::Union{AbstractVector,AbstractDict}) = mapreduce(eq->get_variables(eq isa Pair ? eq.second : eq.rhs), ∪, eqs, init=Set{Symbolic}())
+
+"""
+Search for recursive dependencies in `term` given a dictionary `dict` of substitutions.
+"""
+function _all_dependencies(term, dict)
+    deps = Set{Symbolic}()
+    _recursive_collect_dependencies!(deps, term, dict)
+    deps
+end
+function _recursive_collect_dependencies!(deps, term, dict)
+    termdeps = _all_rhs_symbols(term)
+    for sym in termdeps
+        if haskey(dict, sym)
+            _recursive_collect_dependencies!(deps, dict[sym], dict)
+        else
+            push!(deps, sym)
+        end
+    end
+    deps
+end
 
 using PrecompileTools: @compile_workload
 @compile_workload begin
