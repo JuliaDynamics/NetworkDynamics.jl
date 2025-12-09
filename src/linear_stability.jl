@@ -17,7 +17,7 @@ function isfixpoint(nw::Network, s0::NWState; tol=1e-10)
 end
 
 """
-    is_linear_stable(nw::Network, s0::NWState; kwargs...)
+    is_linear_stable(nw::Network, s0::NWState; marginally_stable=false, kwargs...)
 
 Check if the fixpoint `s0` of the network `nw` is linearly stable by computing
 the eigenvalues of the Jacobian matrix (or reduced Jacobian for constrained systems).
@@ -30,6 +30,8 @@ See [`jacobian_eigenvals`](@ref) for more details.
 # Arguments
 - `nw::Network`: The network dynamics object
 - `s0::NWState`: The state to check for linear stability (must be a fixpoint)
+- `marginally_stable::Bool=false`: If `true`, eigenvalues with zero real part are considered stable.
+- `atol::Float64=1e-14`: Absolute tolerance for determining marginal stability. When `marginally_stable=true`, eigenvalues with `|real(λ)| < atol` are treated as having zero real part.
 - `kwargs...`: Additional keyword arguments passed to `jacobian_eigenvals`
 
 # Returns
@@ -38,10 +40,15 @@ See [`jacobian_eigenvals`](@ref) for more details.
 # References
 [1] "Power System Modelling and Scripting", F. Milano, Chapter 7.2.
 """
-function is_linear_stable(nw::Network, s0; kwargs...)
+function is_linear_stable(nw::Network, s0; marginally_stable=false, atol=1e-14, kwargs...)
     isfixpoint(nw, s0) || error("The state s0 is not a fixpoint of the network nw.")
     λ = jacobian_eigenvals(nw, s0; kwargs...)
-    if all(λ -> real(λ) < 0.0, λ)
+    comparator = if marginally_stable
+        λ -> real(λ) - atol < 0.0 || isapprox(real(λ), 0.0; atol)
+    else
+        λ -> real(λ) < 0.0
+    end
+    if all(comparator, λ)
         return true
     else
         return false

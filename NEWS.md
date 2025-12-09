@@ -1,5 +1,12 @@
 # NetworkDynamics Release Notes
 
+## v0.10.14 Changelog
+- Add `assume_io_coupling` parameter to MTK `VertexModel` and `EdgeModel` constructors ([#332](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/332))
+  - New optional parameter forces MTK to consider direct dependency chains from outputs to inputs
+  - Helps resolve cases where MTK simplification results in derivatives of input variables
+- Improved error handling for RHS differentials with new `RHSDifferentialsError` exception type that provides helpful guidance
+- fix performance bottleneck in MTK model "compilation"
+
 ## v0.10.13 Changelog
 Multiple new features from [#331](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/331):
 - Parallel component initialization: Add experimental `parallel=false` keyword to `initialize_componentwise` for multithreaded component initialization with visual progress indicators
