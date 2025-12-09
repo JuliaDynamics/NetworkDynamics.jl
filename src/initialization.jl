@@ -385,10 +385,21 @@ function initialization_problem(cf::T,
         io = IOBuffer()
         print(io, "Error while constructing initialization problem for $(cf.name):\n")
         if resid_nan
-            print(io, " - Residual contains NaNs!\n")
+            nans = findall(isnan, resid)
+
+            # Build equation symbols for the residual
+            # The residual has equations for: all states, all outputs, and additional constraints
+            eq_syms = vcat(
+                sym(cf),  # all state equations
+                outsym_flat(cf),  # all output equations
+                [Symbol("init_constraint_$i") for i in 1:additional_Neqs]  # additional constraints
+            )
+
+            nan_eqs = eq_syms[nans]
+            print(io, " - Residual contains NaNs in equations for ", join(nan_eqs, ", "), "\n")
             if isnan(t)
-                print(io, " System initialized at t=NaN, maybe your system has explicit \
-                    time dependency? Try specifying kw argument `t` to decide on time")
+                print(io, "   System initialized at t=NaN, maybe your system has explicit \
+                    time dependency? Try specifying kw argument `t` to decide on time\n")
             end
         end
         if !isnothing(fn_error)
