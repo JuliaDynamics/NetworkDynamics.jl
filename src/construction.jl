@@ -52,9 +52,26 @@ function Network(g::AbstractGraph,
 
         # search for vertex models with feed forward
         if CHECK_COMPONENT[] && any(hasff, _vertexm)
-            throw(ArgumentError("Vertex model with feed forward are not supported yet! \
-                As an intermediate solution, you can call `ff_to_constraint(vf)` on the vertex model\
-                to turn feed forward outputs into algebraic states."))
+            errorstring = ""
+            ffvertices = findall(hasff, _vertexm)
+            nbs = map(ffvertices) do i
+                Graphs.neighbors(g, i)
+            end
+            ERRORMSG = "Feed forward vertex models are only allowed as leave nodes (1 neighbor) \
+                        with single `LoopbackConnection` from satelite to cluster node! In other \
+                        scenarios can use `ff_to_constraint(vf)` on the vertex model to turn \
+                        feed forward outputs into algebraic states."
+            # test all have one neighbor
+            if any(n -> length(n) != 1, nbs)
+                throw(ArgumentError(ERRORMSG))
+            end
+
+            # test all have loopback from ff vert to cluster
+            eidx = findall(is_loopback, _edgem)
+            simpleedges = collect(edges(g))[eidx]
+            all(zip(ffvertices, only.(nbs))) do (src, dst)
+                SimpleEdge(src, dst) ∈ simpleedges
+            end || throw(ArgumentError(ERRORMSG))
         end
 
         # check if components alias eachother copy if necessary
@@ -188,16 +205,20 @@ function Network(g::AbstractGraph,
             LazyGBufProvider(im, edgebatches)
         end
 
-        # create map for extenral inputs
+        loopback_map = has_loopback_edges(im) ? gen_loopback_map(im) : nothing
+
+        # create map for external inputs
         extmap = has_external_input(im) ? ExtMap(im) : nothing
 
         nw = Network{typeof(execution),typeof(g),typeof(nl), typeof(vertexbatches),
-                     typeof(mass_matrix),eltype(caches),typeof(gbufprovider),typeof(extmap)}(
+                     typeof(mass_matrix),eltype(caches),typeof(gbufprovider),
+                     typeof(loopback_map),typeof(extmap)}(
             vertexbatches,
             nl, im,
             caches,
             mass_matrix,
             gbufprovider,
+            loopback_map,
             extmap,
             Ref{Union{Nothing,SparseMatrixCSC{Bool,Int}}}(nothing),
         )

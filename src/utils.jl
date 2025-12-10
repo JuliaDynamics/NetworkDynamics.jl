@@ -436,3 +436,7 @@ function Base.showerror(io::IO, e::RHSDifferentialsError)
     end
     print(io, "Consider passing `assume_io_coupling=true` to the component constructor!")
 end
+
+# needs to be defined befor coreloop
+# rest in post utils
+function LOOPOBACK_G end

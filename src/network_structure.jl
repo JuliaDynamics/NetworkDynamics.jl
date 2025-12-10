@@ -68,7 +68,7 @@ dim(im::IndexManager) = im.lastidx_dynamic
 pdim(im::IndexManager) = im.lastidx_p
 
 
-struct Network{EX<:ExecutionStyle,G,NL,VTup,MM,CT,GBT,EM}
+struct Network{EX<:ExecutionStyle,G,NL,VTup,MM,CT,GBT,LM,EM}
     "vertex batches of same function"
     vertexbatches::VTup
     "network layer"
@@ -81,6 +81,8 @@ struct Network{EX<:ExecutionStyle,G,NL,VTup,MM,CT,GBT,EM}
     mass_matrix::MM
     "Gather buffer provider (lazy or eager)"
     gbufprovider::GBT
+    "map for loopback edge gather"
+    loopbackmap::LM
     "map to gather external inputs"
     extmap::EM
     "sparsity pattern"

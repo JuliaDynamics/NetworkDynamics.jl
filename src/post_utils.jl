@@ -90,3 +90,52 @@ function SciMLBase.ODEProblem(nw::Network, s0::NWState, tspan, p::NWParameter=s0
 
     SciMLBase.ODEProblem(nw, u, tspan, p; kwargs...)
 end
+
+####
+#### Loopback Connections
+####
+function LOOPBACK_G(outdst, insrc, indst, p, t)
+    outdst .= insrc
+    nothing
+end
+function LoopbackConnection(; potential, flow, kwargs...)
+    potential = [:u_r, :u_i]
+    flow = [:i_r, :i_i]
+
+    insym = (;
+        src=[Symbol(:satelite₊, s) for s in flow],
+        dst=[Symbol(:cluster₊, s) for s in potential],
+    )
+    outsym = (;
+        src=[Symbol(:satelite₊, s) for s in potential],
+        dst=[Symbol(:cluster₊, s) for s in flow],
+    )
+
+    g = Directed(NetworkDynamics.LOOPBACK_G)
+    EdgeModel(; g, insym, outsym, check=false, kwargs...)
+end
+
+is_loopback(eb::ComponentBatch) = isnothing(compf(eb)) && compg(eb) == NetworkDynamics.LOOPBACK_G
+is_loopback(em::EdgeModel) = em.g isa Directed && em.g.g == NetworkDynamics.LOOPBACK_G
+has_loopback_edges(im::IndexManager) = any(is_loopback, im.edgem)
+
+function gen_loopback_map(im::IndexManager)
+    outindex = Int[]
+    aggindex = Int[]
+    for i in 1:ne(im.g)
+        is_loopback(im.edgem[i]) || continue
+        e = im.edgevec[i]
+        # we want to copy from dst output to src input
+        append!(outindex, im.v_out[e.dst])  # output idx of dst vertex
+        append!(aggindex, im.v_aggr[e.src]) # input idx of src vertex
+    end
+    outindex, aggindex
+end
+
+function apply_loopback!(aggbuf, obuf, map)
+    outindex, aggindex = map
+    for (oi, ai) in zip(outindex, aggindex)
+        aggbuf[ai] = obuf[oi]
+    end
+    nothing
+end
