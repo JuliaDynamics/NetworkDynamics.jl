@@ -454,14 +454,16 @@ function _check_massmatrix(c)
 end
 
 """
-    Network(nw::Network; g, vertexm, edgem, kwargs...)
+    Network(nw::Network; g, vertexm, edgem, copy_components=true, kwargs...)
 
 Rebuild the Network with same graph and vertex/edge models but possibly different kwargs.
+If `copy_components=true` (default) then the vertex and edge models are copied.
 """
 function Network(nw::Network;
                  g = nothing,
                  vertexm = nothing,
                  edgem = nothing,
+                 copy_components = true,
                  kwargs...)
 
     # Check if structure is identical (nothing means unchanged)
@@ -469,8 +471,16 @@ function Network(nw::Network;
 
     # Fill defaults
     g = isnothing(g) ? nw.im.g : g
-    vertexm = isnothing(vertexm) ? copy.(nw.im.vertexm) : vertexm
-    edgem = isnothing(edgem) ? copy.(nw.im.edgem) : edgem
+    vertexm = if isnothing(vertexm)
+        copy_components ? copy.(nw.im.vertexm) : nw.im.vertexm
+    else
+        vertexm
+    end
+    edgem = if isnothing(edgem)
+        copy_components ? copy.(nw.im.edgem) : nw.im.edgem
+    else
+        edgem
+    end
 
     _kwargs = Dict(:execution => executionstyle(nw),
                    :aggregator => get_aggr_constructor(nw.layer.aggregator),
