@@ -56,7 +56,7 @@ function VertexModel(sys::System, inputs, outputs; verbose=false, name=getname(s
         ins = (inputs, extin_sym)
     end
 
-    gen = generate_io_function(sys, ins, (outputs,); verbose, ff_to_constraint, assume_io_coupling)
+    gen = generate_io_function_cached(sys, ins, (outputs,); verbose, ff_to_constraint, assume_io_coupling)
 
     f = gen.f
     g = gen.g
@@ -168,7 +168,7 @@ function EdgeModel(sys::System, srcin, dstin, srcout, dstout; verbose=false, nam
         outs = (srcout, dstout)
     end
 
-    gen = generate_io_function(sys, ins, outs; verbose, ff_to_constraint, assume_io_coupling)
+    gen = generate_io_function_cached(sys, ins, outs; verbose, ff_to_constraint, assume_io_coupling)
 
     f = gen.f
     g = singlesided ? gwrap(gen.g) : gen.g
@@ -629,6 +629,122 @@ function _recursive_collect_dependencies!(deps, term, dict)
     end
     deps
 end
+
+####
+####
+const USE_MODEL_CACHE = Ref(false)
+const MTK_CACHE = Dict{UInt64, Any}()
+const CACHE_LOCK = ReentrantLock()
+const CACHE_HITS = Ref(0)
+const CACHE_MISSES = Ref(0)
+const CACHE_WAITINGS = Ref(0)
+
+function threadsafe_cache_load!(f, key)
+    local state
+    @lock CACHE_LOCK begin
+        if !haskey(MTK_CACHE, key)
+            MTK_CACHE[key] = nothing # set placeholder to avoid duplicate computation
+            CACHE_MISSES[] += 1
+            state = :compute
+        elseif isnothing(MTK_CACHE[key])
+            CACHE_WAITINGS[] += 1
+            state = :wait
+        else
+            CACHE_HITS[] += 1
+            state = :hit
+        end
+    end
+    model = nothing
+    if state == :compute
+        try
+            model = f() # generate
+            @lock CACHE_LOCK begin
+                MTK_CACHE[key] = model
+            end
+        catch
+            @lock CACHE_LOCK begin
+                delete!(MTK_CACHE, key) # remove placeholder on failure
+            end
+            rethrow()
+        end
+    elseif state == :wait
+        starttime = time()
+        # wait until computed
+        while isnothing(model)
+            sleep(0.01)
+            @lock CACHE_LOCK begin
+                model = MTK_CACHE[key]
+            end
+            if time() - starttime > 60.0
+                error("Timeout while waiting for cached model computation!")
+            end
+        end
+    elseif state == :hit
+        @lock CACHE_LOCK begin
+            model = MTK_CACHE[key]
+        end
+    else
+        error()
+    end
+    isnothing(model) && error("Cache loading failed! Please report issue.")
+    return model
+end
+
+function NetworkDynamics.set_mtk_model_cache!(use::Bool)
+    was_using = USE_MODEL_CACHE[]
+    if use && !was_using
+        # start using
+        CACHE_HITS[] = 0
+        CACHE_MISSES[] = 0
+        CACHE_WAITINGS[] = 0
+    else !use && was_using
+        NetworkDynamics.wipe_mtk_model_cache!()
+    end
+    USE_MODEL_CACHE[] = use
+end
+function NetworkDynamics.wipe_mtk_model_cache!()
+    @lock CACHE_LOCK begin
+        empty!(MTK_CACHE)
+    end
+end
+
+function generate_io_function_cached(_sys, args...; kwargs...)
+    if USE_MODEL_CACHE[]
+        expanded = ModelingToolkit.expand_connections(_sys)
+        syskey = repr.(equations(expanded))
+        key = hash((syskey, args, kwargs))
+        threadsafe_cache_load!(key) do
+            generate_io_function(_sys, args...; kwargs...)
+        end
+    else
+        generate_io_function(_sys, args...; kwargs...)
+    end
+end
+
+function NetworkDynamics.with_mtk_model_cache(f, usecache=true)
+    NetworkDynamics.set_mtk_model_cache!(usecache)
+    local ret
+    try
+        ret = f()
+    finally
+        NetworkDynamics.set_mtk_model_cache!(false)
+    end
+    ret
+end
+
+function NetworkDynamics.mtk_cache_stats()
+    @lock CACHE_LOCK begin
+        println("MTK Model Cache Stats:")
+        println("  Misses:   ", CACHE_MISSES[])
+        println("  Hits:     ", CACHE_HITS[], " (", CACHE_WAITINGS[], " after waiting)")
+        println("  Hit Rate: ", round(CACHE_HITS[] / max(CACHE_HITS[] + CACHE_MISSES[], 1) * 100, digits=2), "%")
+    end
+end
+
+function NetworkDynamics.mtk_model_cache_enabled()
+    USE_MODEL_CACHE[]
+end
+
 
 using PrecompileTools: @compile_workload
 @compile_workload begin
