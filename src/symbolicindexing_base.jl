@@ -710,7 +710,7 @@ function _get_observed_f(im::IndexManager, cf::VertexModel, vidx, _obsf::O) wher
     N = length(cf.obssym)
     ur   = im.v_data[vidx]
     aggr = im.v_aggr[vidx]
-    extr = im.v_out[vidx]
+    extr = im.v_ext[vidx]
     pr   = im.v_para[vidx]
     retcache = DiffCache(Vector{Float64}(undef, N))
     _hasext = has_external_input(cf)
@@ -731,7 +731,7 @@ function _get_observed_f(im::IndexManager, cf::EdgeModel, eidx, _obsf::O) where 
     ur    = im.e_data[eidx]
     esrcr = im.v_out[im.edgevec[eidx].src]
     edstr = im.v_out[im.edgevec[eidx].dst]
-    extr  = im.e_out[eidx]
+    extr  = im.e_ext[eidx]
     pr    = im.e_para[eidx]
     ret = Vector{Float64}(undef, N)
     _hasext = has_external_input(cf)
