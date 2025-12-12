@@ -4,11 +4,13 @@ using SparseConnectivityTracer: TracerSparsityDetector, jacobian_sparsity
 using NetworkDynamics: NetworkDynamics, Network, NWState, uflat, pflat, resolvecompidx, ComponentModel,
                        EIndex, VIndex, EdgeModel, VertexModel, dim, pdim,
                        StateMask, Symmetric, AntiSymmetric, Directed, Fiducial,
-                       executionstyle, SequentialAggregator, Aggregator, KAAggregator
+                       executionstyle, SequentialAggregator, Aggregator, KAAggregator,
+                       ComponentBatch, indim, outdim, extdim, fftype
 using MacroTools: @capture, postwalk
 using RuntimeGeneratedFunctions: RuntimeGeneratedFunctions, RuntimeGeneratedFunction, @RuntimeGeneratedFunction
 using SparseArrays: sparse, findnz
 using ForwardDiff: ForwardDiff
+using Accessors: @set
 RuntimeGeneratedFunctions.init(@__MODULE__)
 
 struct RemainingConditionalsException <: Exception end
@@ -58,7 +60,7 @@ prob = ODEProblem(nw, x0, (0.0, 1.0), p0) # uses jac prototype from network
 sol = solve(prob, Rodas5P())
 ```
 """
-function NetworkDynamics.get_jac_prototype(nw_original::Network; dense=false, remove_conditions=false, check=true, make_compatible=true)
+function get_jac_prototype_old(nw_original::Network; dense=false, remove_conditions=false, check=true, make_compatible=true)
     # space connectivity tracer does not work for KAExecution and potentially others, so we
     # transform them into compatible ex/agg schemes
     nw_compatibile = make_compatible ? _to_compatible_execution_scheme(nw_original) : nw_original
@@ -349,5 +351,118 @@ _compatible_exstyle(nw) = executionstyle(nw)
 _needs_new_aggregator(nw) = nw.layer.aggregator isa KAAggregator
 _new_aggregator(x::KAAggregator) = SequentialAggregator(x.f)
 _new_aggregator(x::Aggregator) = NetworkDynamics.get_aggr_constructor(x)
+
+
+function NetworkDynamics.get_jac_prototype(__nw::Network)
+    vbatches = get_compatible_batch.(__nw.vertexbatches, Ref("Vertex Batch"));
+    ebatches = get_compatible_batch.(__nw.layer.edgebatches, Ref("Edge Batch"));
+
+    _nw = @set __nw.vertexbatches = vbatches
+    nw = @set _nw.layer.edgebatches = ebatches
+
+    s0 = NWState(nw)
+    wrap = let nw=nw, p=pflat(s0)
+        function(dx, x)
+            nw(dx, x, p, NaN)
+            nothing
+        end
+    end
+
+    detector = TracerSparsityDetector()
+    jac = jacobian_sparsity(wrap, similar(uflat(s0)), uflat(s0), detector)
+end
+function get_compatible_batch(batch::ComponentBatch, type)
+    (;fworks, gworks) = _test_SCT_compat(batch)
+    if fworks && gworks
+        return batch
+    end
+
+    println("There was a problem in $type containing $(length((batch.indices))) components:")
+    if !fworks
+        println(" - Try to filter conditionals in compf")
+        batch = @set batch.compf = filter_conditionals(batch.compf)
+    end
+    if !gworks
+        println(" - Try to filter conditionals in compg")
+        batch = @set batch.compg = filter_conditionals(batch.compg)
+    end
+
+    (;fworks, gworks) = _test_SCT_compat(batch; error=true)
+    if fworks && gworks
+        return batch
+    end
+    error("Could not make ComponentBatch compatible with SparseConnectivityTracer.jl")
+end
+function _test_SCT_compat(batch; error=false)
+    fworks = false
+    gworks = false
+
+    xdim = dim(batch)
+
+    urange = 1:Int(dim(batch))
+    inranges = let
+        allinputs = extdim(batch) > 0 ? (indim(batch)..., extdim(batch)) : (indim(batch)...,)
+        _ranges = UnitRange{Int}[]
+        for input in allinputs
+            first = isempty(_ranges) ? dim(batch)+1 : reduce(vcat, _ranges)[end] + 1
+            push!(_ranges, first:first + input - 1)
+        end
+        _ranges
+    end
+    prange = reduce(vcat, inranges)[end] .+ (1 : pdim(batch))
+
+    detector = TracerSparsityDetector()
+    flatin = zeros(reduce(vcat,inranges)[end] + pdim(batch) + 1)
+
+    if isnothing(batch.compf)
+        fworks=true
+    else
+        batchf = (du, allinputs) -> begin
+            u = view(allinputs, urange)
+            ins = map(i -> view(allinputs, inranges[i]), 1:length(inranges))
+            p = view(allinputs, prange)
+            NetworkDynamics.apply_compf(batch.compf, du, u, ins, p, allinputs[end])
+            nothing
+        end
+
+        dx = zeros(Int(xdim))
+        try
+            jac = jacobian_sparsity(batchf, dx, flatin, detector)
+            fworks = true
+        catch e
+            # @error "while f" e
+            error && rethrow(e)
+        end
+    end
+
+    outranges = let
+        _ranges = UnitRange{Int}[]
+        for output in outdim(batch)
+            first = isempty(_ranges) ? 1 : reduce(vcat, _ranges)[end] + 1
+            push!(_ranges, first:first + output - 1)
+        end
+        _ranges
+    end
+
+    batchg = (allgoutputs, allinputs) -> begin
+        outs = map(i -> view(allgoutputs, outranges[i]), 1:length(outranges))
+        u = view(allinputs, urange)
+        ins = map(i -> view(allinputs, inranges[i]), 1:length(inranges))
+        p = view(allinputs, prange)
+        NetworkDynamics.apply_compg(fftype(batch), batch.compg, outs, u, ins, p, allinputs[end])
+        nothing
+    end
+
+    flatout = zeros(reduce(vcat,outranges)[end])
+    try
+        jac = jacobian_sparsity(batchg, flatout, flatin, detector)
+        gworks = true
+    catch e
+        # @error "while g" e
+        error && rethrow(e)
+    end
+
+    return (; fworks, gworks)
+end
 
 end # module

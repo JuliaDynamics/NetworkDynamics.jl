@@ -191,6 +191,9 @@ end
 @inline compf(b::ComponentBatch) = b.compf
 @inline compg(b::ComponentBatch) = b.compg
 @inline fftype(b::ComponentBatch) = b.ff
+@inline dim(batch::ComponentBatch) = batch.statestride.strides
+@inline indim(batch::ComponentBatch) = batch.inbufstride.strides
+@inline outdim(batch::ComponentBatch) = batch.outbufstride.strides
 @inline pdim(b::ComponentBatch) = b.pstride.strides
 @inline extdim(b::ComponentBatch) = b.extbufstride.strides
 
