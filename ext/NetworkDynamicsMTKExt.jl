@@ -94,6 +94,7 @@ function VertexModel(sys::System, inputs, outputs; verbose=false, name=getname(s
     set_metadata!(c, :equations, gen.equations)
     set_metadata!(c, :outputeqs, gen.outputeqs)
     set_metadata!(c, :odesystem, gen.odesystem)
+    set_metadata!(c, :odesystem_simplified, gen.odesystem_simplified)
 
     # apply postprocessing functions from subcomponent metadata
     apply_component_postprocessing!(c)
@@ -217,6 +218,7 @@ function EdgeModel(sys::System, srcin, dstin, srcout, dstout; verbose=false, nam
     set_metadata!(c, :equations, gen.equations)
     set_metadata!(c, :outputeqs, gen.outputeqs)
     set_metadata!(c, :odesystem, gen.odesystem)
+    set_metadata!(c, :odesystem_simplified, gen.odesystem_simplified)
 
     # apply postprocessing functions from subcomponent metadata
     apply_component_postprocessing!(c)
@@ -539,7 +541,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         equations=eqs,
         outputeqs=outeqs,
         observed=obseqs_sorted,
-        odesystem=sys,
+        odesystem_simplified=sys,
         params,
         unused_params
     )
@@ -713,11 +715,13 @@ function generate_io_function_cached(_sys, args...; kwargs...)
         expanded = ModelingToolkit.expand_connections(_sys)
         syskey = repr.(equations(expanded))
         key = hash((syskey, args, kwargs))
-        threadsafe_cache_load!(key) do
+        gen_no_sys = threadsafe_cache_load!(key) do
             generate_io_function(_sys, args...; kwargs...)
         end
+        (; odesystem=_sys, gen_no_sys...)
     else
-        generate_io_function(_sys, args...; kwargs...)
+        gen_no_sys = generate_io_function(_sys, args...; kwargs...)
+        (; odesystem=_sys, gen_no_sys...)
     end
 end
 
