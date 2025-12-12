@@ -95,7 +95,7 @@ end
 #### Loopback Connections
 ####
 function LOOPBACK_G(outdst, insrc, indst, p, t)
-    outdst .= insrc
+    outdst .= -1 .* insrc
     nothing
 end
 function LoopbackConnection(; potential, flow, kwargs...)
