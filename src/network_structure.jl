@@ -87,7 +87,20 @@ struct Network{EX<:ExecutionStyle,G,NL,VTup,MM,CT,GBT,LM,EM}
     extmap::EM
     "sparsity pattern"
     jac_prototype::Ref{Union{Nothing,SparseMatrixCSC{Bool,Int}}}
+    function Network(ex, vb, nl, im, caches, mm, gbufp, loopmap, extmap, jac_prototype)
+        new{
+            ex,typeof(im.g),typeof(nl), typeof(vb),
+            typeof(mm),eltype(caches),typeof(gbufp),
+            typeof(loopmap),typeof(extmap)
+        }(
+            vb, nl, im, caches, mm, gbufp, loopmap, extmap, jac_prototype
+        )
+    end
 end
+function ConstructionBase.constructorof(::Type{<:Network{EX}}) where {EX}
+    return (args...) -> Network(EX, args...)
+end
+
 executionstyle(::Network{ex}) where {ex} = ex()
 nvbatches(::Network) = length(vertexbatches)
 
@@ -168,6 +181,9 @@ struct ComponentBatch{T,F,G,FFT,DIM,PDIM,INDIMS,OUTDIMS,EXTDIM,IV}
         new{dT,typeof.((f,g,ff))...,stridesT.((ss, ps, is, os, es))...,typeof(i)}(
             i, f, g, ff, ss, ps, is, os, es)
     end
+end
+function ConstructionBase.constructorof(::Type{<:ComponentBatch{T}}) where {T}
+    return (args...) -> ComponentBatch(T, args...)
 end
 
 @inline Base.length(cb::ComponentBatch) = Base.length(cb.indices)

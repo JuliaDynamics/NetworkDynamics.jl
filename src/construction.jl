@@ -210,9 +210,8 @@ function Network(g::AbstractGraph,
         # create map for external inputs
         extmap = has_external_input(im) ? ExtMap(im) : nothing
 
-        nw = Network{typeof(execution),typeof(g),typeof(nl), typeof(vertexbatches),
-                     typeof(mass_matrix),eltype(caches),typeof(gbufprovider),
-                     typeof(loopback_map),typeof(extmap)}(
+        nw = Network(
+            typeof(execution),
             vertexbatches,
             nl, im,
             caches,
