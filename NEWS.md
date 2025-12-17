@@ -6,6 +6,7 @@
   - Helps resolve cases where MTK simplification results in derivatives of input variables
 - Improved error handling for RHS differentials with new `RHSDifferentialsError` exception type that provides helpful guidance
 - fix performance bottleneck in MTK model "compilation"
+- much improved sparsity tracing [#334](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/334): no more manual dense/replaced_conditions keywords. Algorithm goes through network batch by batch (not component by component) and replaced incompatible component functions with fixed RGF or dense equivalent automatically.
 
 ## v0.10.13 Changelog
 Multiple new features from [#331](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/331):

@@ -354,7 +354,7 @@ Needs `SparseConnectivityTracer` to be loaded!
 
 # Arguments
 - `nw::Network`: The NetworkDynamics network to modify
-- `kwargs...`: Keyword arguments passed to `get_jac_prototype` (e.g., `dense`, `remove_conditions`)
+- `kwargs...`: Keyword arguments passed to `get_jac_prototype`
 
 # Example Usage
 ```julia
