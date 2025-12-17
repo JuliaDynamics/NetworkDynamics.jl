@@ -600,10 +600,18 @@ function SII.observed(nw::Network, snis)
     isscalar = snis isa SymbolicIndex
     _snis = isscalar ? (snis,) : snis
 
-    # mapping i -> (U_TYPE, j) / (P_TYPE, j) / (OUT_TYPE, j) / (AGG_TYPE, j) / (OBS_TYPE, j in obsfuns)
+    # mapping i -> (U_TYPE, j) / (P_TYPE, j) / (OUT_TYPE, j) / (AGG_TYPE, j) / (OBS_TYPE, j in full obsbuf)
     arraymapping = Vector{Tuple{Int, Int}}(undef, length(_snis))
-    # vector of obs functions
-    obsfuns = Vector{Function}()
+
+    # observables: we build a stack of "ObsfunWrappers". Each Obs fun wrapper wrapts the obs
+    # fun of a single component and reserves "output space" in the bit obs output buffer.
+    # For each observed symbol we store the index in that big buffer.
+    # This prevents us from evaluation the obsfun of a single component multiple times.
+    # Later on, we batch those obsfun wrappers by identical obsf to allow for type stable
+    # loop unrolled eval of all needed component obsf.
+    total_obs_dim = 0
+    obsfunwrappers = Dict{SymbolicIndex, ObsfunWrapper}()
+    obsindex = Vector{Int}()
 
     for (i, sni) in enumerate(_snis)
         if SII.is_variable(nw, sni)
@@ -618,12 +626,15 @@ function SII.observed(nw::Network, snis)
                 _range = getcompoutrange(nw, sni)
                 arraymapping[i] = (OUT_TYPE, _range[idx])
             elseif (idx=findfirst(isequal(sni.subidx), obssym(cf))) != nothing #found in observed
-                _obsf = _get_observed_f(nw, cf, resolvecompidx(nw, sni))
-                _newobsfun = let obsidx = idx # otherwise $idx is boxed everywhere in function
-                    (u, outbuf, aggbuf, extbuf, p, t) -> _obsf(u, outbuf, aggbuf, extbuf, p, t)[obsidx]
+                compidx = resolvecompidx(nw, sni)
+                key = idxtype(sni)(compidx)
+                if !haskey(obsfunwrappers, key)
+                    wrapper, total_obs_dim = get_obsfun_wrapper(nw, cf, compidx, total_obs_dim)
+                    obsfunwrappers[key] = wrapper
+                else
+                    wrapper = obsfunwrappers[key]
                 end
-                push!(obsfuns, _newobsfun)
-                arraymapping[i] = (OBS_TYPE, length(obsfuns))
+                arraymapping[i] = (OBS_TYPE, wrapper.outr[idx])
             elseif hasinsym(cf) && sni.subidx ∈ insym_all(cf) # found in input
                 if sni isa VIndex
                     idx = findfirst(isequal(sni.subidx), insym_all(cf))
@@ -646,24 +657,46 @@ function SII.observed(nw::Network, snis)
         end
     end
     needsbuf = any(m -> m[1] ∈ (OUT_TYPE, AGG_TYPE, OBS_TYPE), arraymapping)
-    obsfunstup = Tuple(obsfuns) # make obsfuns concretely typed
 
+    # create a tuple (or vector if many) batches (identical obsf per batch)
+    batched_obsf = if isempty(obsfunwrappers)
+        Tuple{}()
+    elseif length(obsfunwrappers) == 1
+        (create_obsfun_batch(values(obsfunwrappers)), )
+    elseif length(obsfunwrappers) > 1
+        obswrappers = collect(values(obsfunwrappers))
+        identical_clusters = find_identical(obswrappers; equality=batchequal)
+        if length(identical_clusters) < 20
+            Tuple(create_obsfun_batch(view(obswrappers, cluster)) for cluster in identical_clusters)
+        else
+            [create_obsfun_batch(view(obswrappers, cluster)) for cluster in identical_clusters]
+        end
+    end
+
+    obsoutcache = DiffCache(Vector{Float64}(undef, total_obs_dim)) # big cache for all obs outputs
     if isscalar
         (u, p, t) -> begin
-            if needsbuf
-                outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs=true)
+            outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs=needsbuf)
+
+            outcache = PreallocationTools.get_tmp(obsoutcache, first(u))
+            unrolled_foreach(batched_obsf) do batch
+                batch(outcache, u, outbuf, aggbuf, extbuf, p, t)
             end
+
             type, idx = only(arraymapping)
             type == U_TYPE   && return u[idx]
             type == P_TYPE   && return p[idx]
             type == OUT_TYPE && return outbuf[idx]
             type == AGG_TYPE && return aggbuf[idx]
-            type == OBS_TYPE && return only(obsfunstup)(u, outbuf, aggbuf, extbuf, p, t)::eltype(u)
+            type == OBS_TYPE && return outcache[idx]
         end
     else
         (u, p, t, out=similar(u, length(_snis))) -> begin
-            if needsbuf
-                outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs=true)
+            outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs=needsbuf)
+
+            outcache = PreallocationTools.get_tmp(obsoutcache, first(u))
+            unrolled_foreach(batched_obsf) do batch
+                batch(outcache, u, outbuf, aggbuf, extbuf, p, t)
             end
 
             for (i, (type, idx)) in pairs(arraymapping)
@@ -676,7 +709,7 @@ function SII.observed(nw::Network, snis)
                 elseif type == AGG_TYPE
                     out[i] = aggbuf[idx]
                 elseif type == OBS_TYPE
-                    out[i] = obsfunstup[idx](u, outbuf, aggbuf, extbuf, p, t)::eltype(u)
+                    out[i] = outcache[idx]
                 end
             end
             return out
@@ -704,49 +737,109 @@ function _is_normalized(snis)
 end
 _is_normalized(snis::SymbolicIndex) = SII.symbolic_type(snis) === SII.ScalarSymbolic()
 
-# function barrier for obsf
-_get_observed_f(nw, cf, vidx) = _get_observed_f(nw.im, cf, vidx, obsf(cf))
-function _get_observed_f(im::IndexManager, cf::VertexModel, vidx, _obsf::O) where {O}
+struct ObsfunWrapper
+    type::Symbol # edge or vertex
+    obsf::Function
+    outr::UnitRange{Int}
+    ur::UnitRange{Int}
+    aggr::Union{UnitRange{Int}, Nothing}  # vertex
+    esrcr::Union{UnitRange{Int}, Nothing} # edge
+    edstr::Union{UnitRange{Int}, Nothing} # edge
+    extr::UnitRange{Int}
+    pr::UnitRange{Int}
+end
+function get_obsfun_wrapper(nw::Network, cf::VertexModel, vi, prev_last_idx)
     N = length(cf.obssym)
-    ur   = im.v_data[vidx]
-    aggr = im.v_aggr[vidx]
-    extr = im.v_ext[vidx]
-    pr   = im.v_para[vidx]
-    retcache = DiffCache(Vector{Float64}(undef, N))
-    _hasext = has_external_input(cf)
+    first_idx = prev_last_idx + 1
+    last_idstx = first_idx + N - 1
+    outr = first_idx:last_idstx
+    ur   = nw.im.v_data[vi]
+    aggr = nw.im.v_aggr[vi]
+    extr = nw.im.v_ext[vi]
+    pr   = nw.im.v_para[vi]
+    _obsf = obsf(cf)
+    wrap = ObsfunWrapper(:vertex, _obsf, outr, ur, aggr, nothing, nothing, extr, pr)
+    return wrap, last_idstx
+end
+function get_obsfun_wrapper(nw::Network, cf::EdgeModel, ei, prev_last_idx)
+    N = length(cf.obssym)
+    first_idx = prev_last_idx + 1
+    last_idstx = first_idx + N - 1
+    outr    = first_idx:last_idstx
+    ur      = nw.im.e_data[ei]
+    edge    = nw.im.edgevec[ei]
+    esrcr   = nw.im.v_out[edge.src]
+    edstr   = nw.im.v_out[edge.dst]
+    extr    = nw.im.e_ext[ei]
+    pr      = nw.im.e_para[ei]
+    _obsf = obsf(cf)
+    wrap = ObsfunWrapper(:edge, _obsf, outr, ur, nothing, esrcr, edstr, extr, pr)
+    return wrap, last_idstx
+end
+function batchequal(a::ObsfunWrapper, b::ObsfunWrapper)
+    a.type == b.type && a.obsf == b.obsf
+end
 
-    (u, outbuf, aggbuf, extbuf, p, t) -> begin
-        ret = PreallocationTools.get_tmp(retcache, first(u))
-        ins = if _hasext
-            (view(aggbuf, aggr), view(extbuf, extr))
-        else
-            (view(aggbuf, aggr), )
-        end
-        _obsf(ret, view(u, ur), ins..., view(p, pr), t)
-        ret
+struct VertexObsfunBatch{O, HAS_EXT}
+    obsf::O
+    outrs::Vector{UnitRange{Int}}
+    urs::Vector{UnitRange{Int}}
+    aggrs::Vector{UnitRange{Int}}
+    extrs::Vector{UnitRange{Int}}
+    prs::Vector{UnitRange{Int}}
+end
+
+struct EdgeObsfunBatch{O, HAS_EXT}
+    obsf::O
+    outrs::Vector{UnitRange{Int}}
+    urs::Vector{UnitRange{Int}}
+    esrcrs::Vector{UnitRange{Int}}
+    edstrs::Vector{UnitRange{Int}}
+    extrs::Vector{UnitRange{Int}}
+    prs::Vector{UnitRange{Int}}
+end
+function create_obsfun_batch(wrappers)
+    obsf = first(wrappers).obsf
+    type = first(wrappers).type
+    hasext = !isempty(first(wrappers).extr)
+    outrs = [w.outr for w in wrappers]
+    urs   = [w.ur for w in wrappers]
+    extrs = [w.extr for w in wrappers]
+    prs   = [w.pr for w in wrappers]
+
+    if type == :vertex
+        aggrs = [w.aggr for w in wrappers]
+        VertexObsfunBatch{typeof(obsf), hasext}(obsf, outrs, urs, aggrs, extrs, prs)
+    else # type == :edge
+        esrcrs = [w.esrcr for w in wrappers]
+        edstrs = [w.edstr for w in wrappers]
+        EdgeObsfunBatch{typeof(obsf), hasext}(obsf, outrs, urs, esrcrs, edstrs, extrs, prs)
     end
 end
-function _get_observed_f(im::IndexManager, cf::EdgeModel, eidx, _obsf::O) where {O}
-    N = length(cf.obssym)
-    ur    = im.e_data[eidx]
-    esrcr = im.v_out[im.edgevec[eidx].src]
-    edstr = im.v_out[im.edgevec[eidx].dst]
-    extr  = im.e_ext[eidx]
-    pr    = im.e_para[eidx]
-    ret = Vector{Float64}(undef, N)
-    _hasext = has_external_input(cf)
-
-    (u, outbuf, aggbuf, extbuf, p, t) -> begin
-        ins = if _hasext
-            (view(outbuf, esrcr), view(outbuf, edstr), view(extbuf, extr))
+has_external_input(ow::VertexObsfunBatch{O,HAS_EXT}) where {O,HAS_EXT} = HAS_EXT
+has_external_input(ow::EdgeObsfunBatch{O,HAS_EXT}) where {O,HAS_EXT} = HAS_EXT
+function (owb::VertexObsfunBatch)(ret, u, outbuf, aggbuf, extbuf, p, t)
+    for i in eachindex(owb.urs)
+        ins = if has_external_input(owb)
+            (view(aggbuf, owb.aggrs[i]), view(extbuf, owb.extrs[i]))
         else
-            (view(outbuf, esrcr), view(outbuf, edstr))
+            (view(aggbuf, owb.aggrs[i]), )
         end
-        _obsf(ret, view(u, ur), ins..., view(p, pr), t)
-        ret
+        owb.obsf(view(ret, owb.outrs[i]), view(u, owb.urs[i]), ins..., view(p, owb.prs[i]), t)
     end
+    nothing
 end
-
+function (owb::EdgeObsfunBatch)(ret, u, outbuf, aggbuf, extbuf, p, t)
+    for i in eachindex(owb.urs)
+        ins = if has_external_input(owb)
+            (view(outbuf, owb.esrcrs[i]), view(outbuf, owb.edstrs[i]), view(extbuf, owb.extrs[i]))
+        else
+            (view(outbuf, owb.esrcrs[i]), view(outbuf, owb.edstrs[i]))
+        end
+        owb.obsf(view(ret, owb.outrs[i]), view(u, owb.urs[i]), ins..., view(p, owb.prs[i]), t)
+    end
+    nothing
+end
 
 ####
 #### Default values
