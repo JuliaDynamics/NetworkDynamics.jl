@@ -35,7 +35,7 @@ The conditional `if...else...end` statements generated in the codegen phase will
 !!! details "Setup code"
     ```@example sparsity
     using NetworkDynamics, ModelingToolkit, Graphs
-    using SparseArrays, OrdinaryDiffEqRosenbrock, OrdinaryDiffEqNonlinearSolve
+    using SparseArrays, OrdinaryDiffEqRosenbrock, OrdinaryDiffEqNonlinearSolve, NonlinearSolve
     using ModelingToolkit: D_nounits as Dt, t_nounits as t
     nothing #hide
     ```

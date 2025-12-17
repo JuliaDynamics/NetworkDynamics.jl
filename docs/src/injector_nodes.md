@@ -77,8 +77,8 @@ Notably, injector models have a flipped input-output scheme compared to normal v
 
 To connect this kind of injector nodes, we use the special EdgeModel `LoopbackConnection`.
 See the docstring below for a detailed explaination of the interfaces.
-```@docs
-NetworkDynamics.LoopbackConnection
+```@docs; canonical=false
+LoopbackConnection
 ```
 
 ## Example
