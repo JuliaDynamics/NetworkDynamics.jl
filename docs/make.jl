@@ -73,7 +73,7 @@ kwargs = (;
         ]
     ],
     draft=haskey(ENV, "DOCUMENTER_DRAFT"),
-    format = Documenter.HTML(ansicolor = true, size_threshold=1_000_000),
+    format = Documenter.HTML(ansicolor = true, size_threshold=1_000_000, assets=String["assets/custom.css"]),
     warnonly=[:missing_docs],
 )
 kwargs_warnonly = (; kwargs..., warnonly=true)

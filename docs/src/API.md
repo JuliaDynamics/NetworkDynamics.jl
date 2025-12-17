@@ -14,6 +14,7 @@ pdim(::Network)
 ```@docs
 VertexModel()
 EdgeModel()
+LoopbackConnection
 ```
 
 ## Component Models with MTK

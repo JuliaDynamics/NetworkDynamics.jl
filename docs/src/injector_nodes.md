@@ -1,6 +1,10 @@
 # [Injector Nodes](@id injector-nodes)
 
-Lets consider the following subset of a Network:
+In large network models, vertices often contain multiple internal components (e.g., generators, loads, storage devices). While these can be modeled as a single monolithic vertex model, splitting them into separate "injector nodes" connected via special loopback edges can offer performance and modularity advantages. This page explains the injector node pattern and demonstrates how to use `LoopbackConnection` edges.
+
+## Concept
+
+Let's consider the following subset of a Network:
 
 ```asciiart
    ⋮
@@ -12,10 +16,10 @@ Lets consider the following subset of a Network:
    ┗━┯━┛            ┗━━━━━━━━┛
      ⋮
 ```
-we have a vertex of interested which is connected to two other vertices in the network via edges.
+we have a vertex of interest which is connected to two other vertices in the network via edges.
 Generally, we follow the interface of having **potential like** outputs at the nodes and **flow like** outputs at the edges. I.e. the *potential on the nodes* depends on the *sum of flows through the edges* while the *flows through the edges* depend on the *potential on the adjacent nodes*.
 
-The input-output structrue of this system looks something like this:
+The input-output structure of this system looks something like this:
 ```asciiart
                                  more edges
                                      △
@@ -34,9 +38,9 @@ e ⋯───╯             ╰──────────────▷ +
 ```
 where, notably, only the edge models support feed forward behavior.
 
-In typical NetworkDynamics modeling, the entire nodal dynamic will be subsumed in the single VertexModel.
-However, it is quite common that there is some modulare structure within the vertex which
-itself looks like multiple "flow injectors".
+In typical NetworkDynamics modeling, the entire nodal dynamic is contained within a single VertexModel.
+However, vertices often have modular internal structure consisting of multiple components that inject or draw flows.
+For example, an electrical bus might have generators, loads, and storage devices all connected to it.
 
 ```asciiart
    ⋮                ┏━━━━━━━━━━━━━━━━━━┓
@@ -50,8 +54,11 @@ itself looks like multiple "flow injectors".
                     ┗━━━━━━━━━━━━━━━━━━┛
 ```
 
-While not strictly necessary, it can be useful from a performance standpoint to split up those kind of vertex models in to "clusters", meaning we have a hub vertex and several injector vertices connecting them.
-Notably, the "injector" models have a flipped input-output scheme, i.e. they take the potential of the hub as an direct input while outputting a flow.
+While not strictly necessary, splitting these vertex models into "clusters" can improve performance and code organization. A cluster consists of a hub vertex and several injector vertices that connect to it. This approach can be particularly beneficial because:
+- NetworkDynamics performs best when there are many identical components. Splitting components into smaller parts makes it more likely to have repeated, identical components.
+- The model structure matches the physical modularity of the system.
+- For ModelingToolkit models, large monolithic components can lead to higher compilation and symbolic simplification times compared to multiple smaller models.
+Notably, injector models have a flipped input-output scheme compared to normal vertices: they take the hub's potential as a direct input and output a flow.
 ```asciiart
                 Hub    Loopback  Satelites
               ╭──────╮╭────────╮╭──────────╮
@@ -86,12 +93,12 @@ ideal v source (↗)           ┴  █  ⚕
                 │            ╰──┼──╯
                 ⏚               ⏚
 ```
-For demonstration purposes we'll model second vertex in two ways: as a single model enclsoing all three components and as separate injector nodes.
+For demonstration purposes we'll model second vertex in two ways: as a single model enclosing all three components and as separate injector nodes.
 
-As allways, this is mainly a pedagogical example. For such a simple system, it is probably much cleaner to model it as a single vertex.
-However thats not allwasy the case for very large networks with many complex vertex models!
+As always, this is mainly a pedagogical example. For such a simple system, it is probably much cleaner to model it as a single vertex.
+However thats not always the case for very large networks with many complex vertex models!
 
-### Prequisites
+### Prerequisites
 The first few components building blocks are identical to the docs on [ModelingToolkit Integration](@ref).
 ```@example injector 
 using NetworkDynamics
@@ -141,7 +148,9 @@ end
 @named resistor = Resistor()
 nothing # hide
 ```
-## Part A: Modeling using Injector nodes and LoopbackConnection
+## Part A: Modeling with Injector Nodes and LoopbackConnection
+
+We'll model the circuit using separate components connected via loopback edges.
 Since our capacitor has the equation
 ```math
 \dot{u} = \frac{1}{C} i
@@ -162,7 +171,7 @@ end
 @named cap = Capacitor()
 hub_vertex = VertexModel(cap, [:p₊i], [:p₊v], name=:hub)
 ```
-Next we go for the resistor injector node:
+Next, we define the resistor as an injector node. Unlike the regular `Resistor` edge model, this takes voltage as input and outputs current:
 ```@example injector
 @mtkmodel ResistorInjector begin
     @components begin
@@ -178,8 +187,8 @@ end
 @named resistor_inj = ResistorInjector()
 Rinj_vertex = VertexModel(resistor_inj, [:p₊v], [:p₊i], name=:R_injector)
 ```
-We flipped the input-output scheme here: the injector takes the potential as input and outputs a flow.
-However we notice, that the model above has no feed forward but instead a constraint. This is because per default, the VertexModel constructor will transform feed forwards to constraint states. This is a sane default, sinse most of our models won't be injector models. We can opt out of this behavior:
+Notice how we've flipped the interface: voltage becomes an input (`[:p₊v]`) and current becomes an output (`[:p₊i]`).
+However, the model above has a constraint instead of feed-forward behavior. By default, the `VertexModel` constructor transforms feed-forward relationships into constraint states—a sensible default since most vertex models should not have feed-forward behavior. For injector nodes, we need to opt out of this transformation:
 ```@example injector
 Rinj_vertex = VertexModel(resistor_inj, [:p₊v], [:p₊i], name=:R_injector, ff_to_constraint=false)
 ```
@@ -239,8 +248,9 @@ let
 end
 ```
 
-### Part B: Modeling using a single VertexModel
-For comparison, we now model the same system using a single vertex model for the capacitor, resistor and inductor.
+### Part B: Modeling with a Single VertexModel
+
+For comparison, we now model the same system using a single monolithic vertex that contains all three components (capacitor, resistor, and inductor) internally.
 ```@example injector
 @mtkmodel CRLModel begin
     @components begin

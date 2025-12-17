@@ -28,8 +28,8 @@ The callback system supports three keyword arguments that control how callbacks 
         kwargs...
     )
 
-Custom cosntructor for creating ODEProblem base of a `Network`-Object.
-Its main purpose is to automaticially handle callback construction from the component level callbacks.
+Custom constructor for creating ODEProblem base of a `Network`-Object.
+Its main purpose is to automatically handle callback construction from the component level callbacks.
 
 $callback_keyword_docs
 """
@@ -102,8 +102,8 @@ end
 """
     LoopbackConnection(; potential, flow, kwargs...)
 
-A LoopbackConnection is a special kind of `EdgeModel` which allows a *direct*
-connection of "injector nodes" to a "hub" node.
+A `LoopbackConnection` is a special `EdgeModel` that enables direct connection of
+"injector nodes" to a "hub" node without requiring aggregation logic.
 An injector node is an "inverted" `VertexModel`, which gets the networks potential as an
 input and outputs a flow variable.
 
@@ -122,16 +122,20 @@ The LoopbackConnection is a **directed edge model from injector to hub**!
 
 Injector nodes:
 - have a flipped interface (potential in, flow out)
-- musst be leaf nodes (one neighbor only),
-- musst be connected through a LoopbackConnection EdgeModel and
+- must be leaf nodes (one neighbor only),
+- must be connected through a LoopbackConnection EdgeModel and
 - may have feed-forward (direct dependency of flow-output on potential-input).
 
 !!! note "Sign Convention"
-    For normal vertices, positiv flow as an input means flow into the vertex.
-    Even though slightly counter-intuitive, this convention is kept for injector nodes:
-    positiv flow is a draw from the hub, negative flow is an injection into the hub.
-    Using MTK models, this means that you just need to flip the input/output variables without
-    changing the equations.
+    For normal vertices, positive flow as an input means flow *into* the vertex.
+    This convention is maintained for injector nodes (though it may seem counter-intuitive):
+    - **Positive flow**: Draw from the hub (consumption)
+    - **Negative flow**: Injection into the hub (production)
+
+    When using ModelingToolkit models, you only need to flip the input/output variable
+    declarations—the equations themselves remain unchanged. For example, a resistor with
+    `p.i ~ p.v/R` keeps the same equation; only the interface changes from
+    `VertexModel(..., [:p₊i], [:p₊v])` to `VertexModel(..., [:p₊v], [:p₊i])`.
 
 ```asciiart
                        △
