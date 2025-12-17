@@ -637,12 +637,8 @@ function initialize_component(cf;
         broken_msgs = ["  $sym = $val (bounds: $lb..$ub)" for (sym, val, (lb, ub)) in broken_bnds]
         fullmsg = "Initialized model has broken bounds. Try to adapt the initial guesses!" *
               "\n" * join(broken_msgs, "\n")
-        if verbose
-            printstyled(io, " - WARNING: ", color=:yellow)
-            printstyled(io, fullmsg * "\n")
-        else
-            @warn fullmsg
-        end
+        printstyled(io, " - WARNING: ", color=:yellow)
+        printstyled(io, fullmsg * "\n")
     end
 
     # Check for broken observable defaults
