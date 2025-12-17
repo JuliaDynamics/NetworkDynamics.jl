@@ -423,7 +423,7 @@ end
     @named prosumer = StaticProsumerNode() # consumer
     @test_throws ArgumentError VertexModel(prosumer, [:q̃_nw], [:p])
     @named prosumer_wrapped = Wrapper()
-    @test_throws ArgumentError VertexModel(prosumer_wrapped, [:q̃_nw], [:p])
+    @test_throws ModelingToolkit.InvalidSystemException VertexModel(prosumer_wrapped, [:q̃_nw], [:p])
     @named prosumer_fixed = WrapperFixed()
     VertexModel(prosumer_fixed, [:q̃_nw], [:p]) # no throw
 end

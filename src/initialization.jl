@@ -648,12 +648,8 @@ function initialize_component(cf;
             broken_msgs = ["  $sym = $val (default: $def)" for (sym, def, val) in broken_obs]
             fullmsg = "Initialized model has observables that differ from their specified defaults:" *
                   "\n" * join(broken_msgs, "\n")
-            if verbose
-                printstyled(io, " - WARNING: ", color=:yellow)
-                printstyled(io, fullmsg * "\n")
-            else
-                @warn fullmsg
-            end
+            printstyled(io, " - WARNING: ", color=:yellow)
+            printstyled(io, fullmsg * "\n")
         end
     end
 
