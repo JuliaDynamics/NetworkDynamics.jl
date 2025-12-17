@@ -258,17 +258,23 @@ end
 function Network(vertexfs, edgefs; warn_order=true, kwargs...)
     vertexfs = vertexfs isa VertexModel ? [vertexfs] : vertexfs
     edgefs   = edgefs isa EdgeModel     ? [edgefs]   : edgefs
-    @argcheck all(has_graphelement, vertexfs) "All vertex models must have assigned `graphelement` to implicitly construct graph!"
     @argcheck all(has_graphelement, edgefs) "All edge models must have assigned `graphelement` to implicitly construct graph!"
+    # vertices must either all have unique names or all have graphelement set
+    if all(has_graphelement, vertexfs)
+        vidxs = get_graphelement.(vertexfs)
+    elseif allunique(x -> x.name, vertexfs) && !any(has_graphelement, vertexfs)
+        vidxs = collect(1:length(vertexfs))
+    else
+        throw(ArgumentError("Either all vertex models must have assigned `graphelement` or all vertex models must have unique `name` but no graphelement!"))
+    end
 
-    vidxs = get_graphelement.(vertexfs)
     allunique(vidxs) || throw(ArgumentError("All vertex models must have unique `graphelement`!"))
     sort(vidxs) == 1:length(vidxs) || throw(ArgumentError("Vertex models must have `graphelement` in range 1:length(vertexfs)!"))
 
     vdict = Dict(vidxs .=> vertexfs)
 
     # find unique mappings from name => graphelement
-    vnamedict = unique_mappings(getproperty.(vertexfs, :name), get_graphelement.(vertexfs))
+    vnamedict = unique_mappings(getproperty.(vertexfs, :name), vidxs)
 
     simpleedges = map(edgefs) do e
         ge = get_graphelement(e)
