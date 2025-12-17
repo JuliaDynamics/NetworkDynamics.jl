@@ -55,7 +55,7 @@ function Network(g::AbstractGraph,
             errorstring = ""
             ffvertices = findall(hasff, _vertexm)
             nbs = map(ffvertices) do i
-                Graphs.neighbors(g, i)
+                Graphs.all_neighbors(g, i)
             end
             ERRORMSG = "Feed forward vertex models are only allowed as leave nodes (1 neighbor) \
                         with single `LoopbackConnection` from satelite to cluster node! In other \
@@ -72,6 +72,14 @@ function Network(g::AbstractGraph,
             all(zip(ffvertices, only.(nbs))) do (src, dst)
                 SimpleEdge(src, dst) ∈ simpleedges
             end || throw(ArgumentError(ERRORMSG))
+
+            # check that all looback edges have origin at leaf node
+            for (i, e) in zip(eidx, simpleedges)
+                if Graphs.degree(g, e.src) != 1
+                    throw(ArgumentError("All LoopbackConnection edges must originate from leaf nodes! \
+                                     Found at least one going from hub to leaf: $(_edgem[i])"))
+                end
+            end
         end
 
         # check if components alias eachother copy if necessary

@@ -98,21 +98,78 @@ function LOOPBACK_G(outdst, insrc, indst, p, t)
     outdst .= -1 .* insrc
     nothing
 end
-function LoopbackConnection(; potential, flow, kwargs...)
-    potential = [:u_r, :u_i]
-    flow = [:i_r, :i_i]
 
+"""
+    LoopbackConnection(; potential, flow, kwargs...)
+
+A LoopbackConnection is a special kind of `EdgeModel` which allows a *direct*
+connection of "injector nodes" to a "hub" node.
+An injector node is an "inverted" `VertexModel`, which gets the networks potential as an
+input and outputs a flow variable.
+
+The LoopbackConnection allows a direct, star-like connection of injector nodes
+to a single hub nodes.
+The LoopbackConnection is a **directed edge model from injector to hub**!
+
+```asciiart
+       ┊
+    ┄┄┄◯   ● injector 1
+      ╱ ╲ ╱
+   ┄┄◯╶─╴◯╶─╴● injector 2
+     ┊    ╲
+           ● injector 3
+```
+
+Injector nodes:
+- have a flipped interface (potential in, flow out)
+- musst be leaf nodes (one neighbor only),
+- musst be connected through a LoopbackConnection EdgeModel and
+- may have feed-forward (direct dependency of flow-output on potential-input).
+
+!!! note "Sign Convention"
+    For normal vertices, positiv flow as an input means flow into the vertex.
+    Even though slightly counter-intuitive, this convention is kept for injector nodes:
+    positiv flow is a draw from the hub, negative flow is an injection into the hub.
+    Using MTK models, this means that you just need to flip the input/output variables without
+    changing the equations.
+
+```asciiart
+                       △
+      ╭────────────────┼────────────╮
+      │      potential │ φ out      │
+━━━━━━▽━━┓   ╔═════════△═════════╗  │  ┏━━━━━━━┓   ╔═══════════════════╗
+ normal  ┃   ║ VertexModel (hub) ║  ╰──▷┄┄┄┄┄┄┄▷───▷ Injector Vertex   ║
+EdgeModel┃   ║ ẋ = f(x, Φ, p, t) ║     ┃       ┃   ║ ẋ = f(x, φ, p, t) ║
+         ┃   ║ φ = g(x, p, t)    ║  ╭──◁┄×(-1)┄◁───◁ Φ = g(x, φ, p, t) ║
+━━━━━━▽━━┛   ╚═════════△═════════╝  │  ┗━━━━━━━┛   ╚═══════════════════╝
+ flow │ Φ out        ╭─┴─╮          │  special      ⋅ flipped interface:
+      ╰──────────────▷ + ◁──────────╯  "Loopback"     ▷ potential φ in
+       (aggregation) ╰─△─╯             EdgeModel      ◁ flow Φ out
+                       │               inj => hub   ⋅ feed forward allowed
+```
+For input-output naming you need to provide the `potential` and `flow` symbols.
+
+```julia-repl
+julia> LoopbackConnection(; potential=[:u_r, :u_i], flow=[:i_r, :i_i], src=1, dst=2)
+EdgeModel :loopback PureFeedForward() @ Edge 1=>2
+ ├─ 2/2 inputs:  src=[injector₊i_r, injector₊i_i] dst=[hub₊u_r, hub₊u_i]
+ ├─   0 states:  []
+ └─ 2/2 outputs: src=[injector₊u_r, injector₊u_i] dst=[hub₊i_r, hub₊i_i]
+```
+
+"""
+function LoopbackConnection(; potential, flow, kwargs...)
     insym = (;
-        src=[Symbol(:satelite₊, s) for s in flow],
-        dst=[Symbol(:cluster₊, s) for s in potential],
+        src=[Symbol(:injector₊, s) for s in flow],
+        dst=[Symbol(:hub₊, s) for s in potential],
     )
     outsym = (;
-        src=[Symbol(:satelite₊, s) for s in potential],
-        dst=[Symbol(:cluster₊, s) for s in flow],
+        src=[Symbol(:injector₊, s) for s in potential],
+        dst=[Symbol(:hub₊, s) for s in flow],
     )
 
     g = Directed(NetworkDynamics.LOOPBACK_G)
-    EdgeModel(; g, insym, outsym, check=false, kwargs...)
+    EdgeModel(; g, insym, outsym, check=false, name=:loopback, kwargs...)
 end
 
 is_loopback(eb::ComponentBatch) = isnothing(compf(eb)) && compg(eb) == NetworkDynamics.LOOPBACK_G

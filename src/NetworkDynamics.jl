@@ -128,6 +128,7 @@ include("doctor.jl")
 
 # additional utils, which depend on specific types beeing defined so they should be
 # loaded after all other files
+export LoopbackConnection
 include("post_utils.jl")
 
 export describe_vertices, describe_edges, get_jac_prototype
