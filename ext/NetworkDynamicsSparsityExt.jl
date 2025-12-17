@@ -1,14 +1,13 @@
 module NetworkDynamicsSparsityExt
 
 using SparseConnectivityTracer: TracerSparsityDetector, jacobian_sparsity
-using NetworkDynamics: NetworkDynamics, Network, NWState, uflat, pflat, resolvecompidx, ComponentModel,
-                       EIndex, VIndex, EdgeModel, VertexModel, dim, pdim,
-                       StateMask, Symmetric, AntiSymmetric, Directed, Fiducial,
+using NetworkDynamics: NetworkDynamics, Network, NWState, uflat, pflat,
+                       EdgeModel, VertexModel, dim, pdim,
+                       Symmetric, AntiSymmetric, Directed, Fiducial,
                        executionstyle, SequentialAggregator, Aggregator, KAAggregator,
                        ComponentBatch, indim, outdim, extdim, fftype
 using MacroTools: @capture, postwalk
 using RuntimeGeneratedFunctions: RuntimeGeneratedFunctions, RuntimeGeneratedFunction, @RuntimeGeneratedFunction
-using SparseArrays: sparse, findnz
 using ForwardDiff: ForwardDiff
 using Accessors: @set
 RuntimeGeneratedFunctions.init(@__MODULE__)
