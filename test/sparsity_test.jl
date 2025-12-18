@@ -150,11 +150,16 @@ end
     compare_expr(a, b) = Base.remove_linenums!(a) == Base.remove_linenums!(b)
 
     assigment = :(dest = if cond; truepath; else; falsepath; end)
-    target = :(dest = ifelse(cond, begin
+    # target = :(dest = ifelse(cond, begin
+    #     truepath
+    # end, begin
+    #     falsepath
+    # end))
+    target = :(dest = begin
         truepath
-    end, begin
+    end + begin
         falsepath
-    end))
+    end)
     @test compare_expr(SE.filter_conditionals_expr(assigment), target)
 
     with_elseif = :(if cond; truepath; elseif cond2; true2; else; falsepath; end)

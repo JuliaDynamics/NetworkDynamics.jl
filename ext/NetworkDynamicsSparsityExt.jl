@@ -15,7 +15,7 @@ RuntimeGeneratedFunctions.init(@__MODULE__)
 struct RemainingConditionalsException <: Exception end
 
 """
-    get_jac_prototype(nw::Network; check=:auto, verbose=true)
+    get_jac_prototype(nw::Network; check=:auto, verbose=true, showerror)
 
 Compute the sparsity pattern of the Jacobian matrix for a NetworkDynamics network.
 
@@ -26,8 +26,10 @@ improve the performance of ODE solvers by providing structural information about
 On a per-batch basis (i.e. once per unique component), the function will attempt to get the
 sparsity pattern. Sometimes, certain component functions may not be compatible with SCT,
 in that case the function will attempt to
-- first try to replace if/else in RuntimeGeneratedFunctions with ifelse-function
+- first try to replace if/else in RuntimeGeneratedFunctions with something SCT can handle [1]
 - if it still does not work, replace the component function with a dense equivalent.
+
+If `showerror=true` the error which occurred during the compatibility test will be printed to stdout.
 
 The `check` argument controls whether the detected sparsity pattern is verified against
 the forward-diff jacobian. This check will be disabled with a warning for large networks.
@@ -35,11 +37,25 @@ the forward-diff jacobian. This check will be disabled with a warning for large 
 # Returns
 - A sparse matrix representing the sparsity pattern of the Jacobian matrix
 
+!!! note "[1] On the transformation of conditionals:"
+    ```
+    a = if a < 0 & b <0
+        expr1
+    else
+        expr2
+    end
+    ```
+    Which is not compatible due to the `&` and due to the if..else. This will be repalced by
+    ```
+    a = expr1 + expr2
+    ```
+    which alters the semantics but keeps the conservative sparsity pattern.
+
 See also [`NetworkDynamics.set_jac_prototype!`](@ref).
 """
 function NetworkDynamics.get_jac_prototype(
     nw_original::Network;
-    check=:auto, make_compatible=true, verbose=true,
+    check=:auto, make_compatible=true, verbose=true, showerror=false,
     dense=nothing, remove_conditions=nothing, # deprecated
 )
     if check == :auto
@@ -59,8 +75,18 @@ function NetworkDynamics.get_jac_prototype(
     end
 
     nw_compat = make_compatible ? _to_compatible_execution_scheme(nw_original) : nw_original
-    vbatches = get_compatible_batch.(nw_compat.vertexbatches; verbose);
-    ebatches = get_compatible_batch.(nw_compat.layer.edgebatches; verbose);
+    vbatches = map(enumerate(nw_compat.vertexbatches)) do (i, batch)
+        showerror && printstyled("Process vertex batch $i:\n";bold=true,color=:blue)
+        b = get_compatible_batch(batch; verbose, showerror);
+        showerror && println()
+        b
+    end
+    ebatches = map(enumerate(nw_compat.layer.edgebatches)) do (i, batch)
+        showerror && printstyled("Process edge batch $i:\n";bold=true,color=:blue)
+        b = get_compatible_batch(batch; verbose, showerror);
+        showerror && println()
+        b
+    end
 
     # replace both vertex and edge batches with compatible versions
     _nw = @set nw_compat.vertexbatches = vbatches
@@ -92,8 +118,8 @@ function NetworkDynamics.get_jac_prototype(
     return jac
 end
 
-function get_compatible_batch(batch::ComponentBatch{T}; verbose) where T
-    (;fworks, gworks) = _test_SCT_compat(batch)
+function get_compatible_batch(batch::ComponentBatch{T}; verbose, showerror) where T
+    (;fworks, gworks) = _test_SCT_compat(batch; error=false, showerror)
     fworks && gworks && return batch
 
     if T == VertexModel
@@ -104,7 +130,7 @@ function get_compatible_batch(batch::ComponentBatch{T}; verbose) where T
         error("ComponentBatch type must be either VertexModel or EdgeModel")
     end
 
-    verbose && println("There was a problem in $type containing $(length((batch.indices))) components:")
+    verbose && println("There was a problem in $type containing $(length((batch.indices))) components. Pass `showerror=true` to see full stacktrace.")
 
     # stage 1, try to replace conditionals
     retest = false
@@ -141,7 +167,7 @@ function get_compatible_batch(batch::ComponentBatch{T}; verbose) where T
     end
 
     if retest # only retest if something changed
-        (;fworks, gworks) = _test_SCT_compat(batch; error=false)
+        (;fworks, gworks) = _test_SCT_compat(batch; error=false, showerror)
     end
     fworks && gworks && return batch
 
@@ -156,12 +182,12 @@ function get_compatible_batch(batch::ComponentBatch{T}; verbose) where T
         batch = @set batch.compg = densg
     end
 
-    (;fworks, gworks) = _test_SCT_compat(batch; error=true)
+    (;fworks, gworks) = _test_SCT_compat(batch; error=true, showerror)
     fworks && gworks && return batch
 
     error("Could not make $type compatible with SparseConnectivityTracer.jl")
 end
-function _test_SCT_compat(batch; error=false)
+function _test_SCT_compat(batch; error=false, showerror)
     fworks = false
     gworks = false
 
@@ -196,8 +222,12 @@ function _test_SCT_compat(batch; error=false)
             jac = jacobian_sparsity(batchf, dx, flatin, detector)
             fworks = true
         catch e
-            # @error "while f" e
-            error && rethrow(e)
+            if error
+                rethrow(e)
+            elseif showerror
+                Base.showerror(stdout, e)
+                Base.show_backtrace(stdout, catch_backtrace())
+            end
         end
     end
 
@@ -222,8 +252,12 @@ function _test_SCT_compat(batch; error=false)
         jac = jacobian_sparsity(batchg, flatout, flatin, detector)
         gworks = true
     catch e
-        # @error "while g" e
-        error && rethrow(e)
+        if error
+            rethrow(e)
+        elseif showerror
+            Base.showerror(stdout, e)
+            Base.show_backtrace(stdout, catch_backtrace())
+        end
     end
 
     return (; fworks, gworks)
@@ -284,7 +318,8 @@ function filter_conditionals_expr(expr)
     newex = postwalk(expr) do ex
         if @capture(ex, lhs_ = if cond_; true_ex_; else; false_ex_; end)
             had_conditionals = true
-            :($lhs = ifelse($cond, $true_ex, $false_ex))
+            # :($lhs = ifelse($cond, $true_ex, $false_ex))
+            :($lhs = $true_ex + $false_ex)
         else
             ex
         end
