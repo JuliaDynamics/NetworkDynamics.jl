@@ -38,7 +38,7 @@ function Adapt.adapt_structure(to, n::Network)
               aggregation = _adapt_diffcache(to, n.caches.aggregation),
               external = _adapt_diffcache(to, n.caches.external))
     exT = typeof(executionstyle(n))
-    loopbackmap = adapt(to, n.loopbackmap)
+    loopbackmap = _adapt_loopbackmap(to, n.loopbackmap)
     extmap = adapt(to, n.extmap)
 
     Network(exT, vb, layer, n.im, caches, mm, gbp, loopbackmap, extmap, getfield(n, :jac_prototype))
@@ -103,6 +103,16 @@ Adapt.@adapt_structure ExtMap
 function Adapt.adapt_structure(to::Type{<:CuArray{<:AbstractFloat}}, em::ExtMap)
     adapt(CuArray, em)
 end
+
+####
+#### Adapt Loopback Map
+####
+function _adapt_loopbackmap(to::Type{<:CuArray{<:AbstractFloat}}, lbmap::Tuple{Vector{Int}, Vector{Int}})
+    outindex = adapt(CuArray, lbmap[1])
+    aggindex = adapt(CuArray, lbmap[2])
+    (outindex, aggindex)
+end
+_adapt_loopbackmap(to, lbmap::Nothing) = nothing
 
 
 ####

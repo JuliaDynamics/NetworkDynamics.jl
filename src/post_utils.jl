@@ -193,10 +193,26 @@ function gen_loopback_map(im::IndexManager)
     outindex, aggindex
 end
 
-function apply_loopback!(aggbuf, obuf, map)
+apply_loopback!(aggbuf, obuf, map) = _apply_loopback!(get_backend(aggbuf), aggbuf, obuf, map)
+
+function _apply_loopback!(::KernelAbstractions.CPU, aggbuf, obuf, map)
     outindex, aggindex = map
     for (oi, ai) in zip(outindex, aggindex)
         aggbuf[ai] = obuf[oi]
+    end
+    nothing
+end
+
+function _apply_loopback!(backend::KernelAbstractions.GPU, aggbuf, obuf, map)
+    outindex, aggindex = map
+    kernel = _lb_kernel!(backend)
+    kernel(aggbuf, obuf, outindex, aggindex; ndrange=length(outindex))
+    nothing
+end
+@kernel function _lb_kernel!(aggbuf, @Const(obuf), @Const(outindex), @Const(aggindex))
+    I = @index(Global)
+    @inbounds if I ≤ length(outindex)
+        aggbuf[aggindex[I]] = obuf[outindex[I]]
     end
     nothing
 end
