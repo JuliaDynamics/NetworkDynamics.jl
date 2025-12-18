@@ -77,13 +77,13 @@ function NetworkDynamics.get_jac_prototype(
     nw_compat = make_compatible ? _to_compatible_execution_scheme(nw_original) : nw_original
     vbatches = map(enumerate(nw_compat.vertexbatches)) do (i, batch)
         showerror && printstyled("Process vertex batch $i:\n";bold=true,color=:blue)
-        b = get_compatible_batch(batch; verbose, showerror);
+        b = get_compatible_batch(batch, i; verbose, showerror);
         showerror && println()
         b
     end
     ebatches = map(enumerate(nw_compat.layer.edgebatches)) do (i, batch)
         showerror && printstyled("Process edge batch $i:\n";bold=true,color=:blue)
-        b = get_compatible_batch(batch; verbose, showerror);
+        b = get_compatible_batch(batch, i; verbose, showerror);
         showerror && println()
         b
     end
@@ -118,24 +118,24 @@ function NetworkDynamics.get_jac_prototype(
     return jac
 end
 
-function get_compatible_batch(batch::ComponentBatch{T}; verbose, showerror) where T
+function get_compatible_batch(batch::ComponentBatch{T}, i; verbose, showerror) where T
     (;fworks, gworks) = _test_SCT_compat(batch; error=false, showerror)
     fworks && gworks && return batch
 
     if T == VertexModel
-        type = "vertex batch"
+        type = "Vertex batch"
     elseif T == EdgeModel
-        type = "edge batch"
+        type = "Edge batch"
     else
         error("ComponentBatch type must be either VertexModel or EdgeModel")
     end
 
-    verbose && println("There was a problem in $type containing $(length((batch.indices))) components. Pass `showerror=true` to see full stacktrace.")
+    verbose && println("$type $i containing $(length((batch.indices))) components not directly SCT compatible! Pass `showerror=true` to see full stacktraces, hide message with verbose=false.")
 
     # stage 1, try to replace conditionals
     retest = false
     if !fworks && batch.compf isa RuntimeGeneratedFunction
-        verbose && println(" - Try to filter conditionals in RuntimeGeneratedFunction compf")
+        verbose && println(" - try to filter conditionals in RuntimeGeneratedFunction compf...")
         local newf
         try
             newf = filter_conditionals(batch.compf)
@@ -156,7 +156,7 @@ function get_compatible_batch(batch::ComponentBatch{T}; verbose, showerror) wher
             newg = nothing
         end
         if newg !== batch.compg #
-            verbose && println(" - Try to filter conditionals in RuntimeGeneratedFunctions compg")
+            verbose && println(" - try to filter conditionals in RuntimeGeneratedFunctions compg...")
             if isnothing(newg)
                 verbose && println(" - Failed to remove conditionals from compg: $e")
             else
@@ -173,11 +173,11 @@ function get_compatible_batch(batch::ComponentBatch{T}; verbose, showerror) wher
 
     # stage 2, replace with dense equivalents
     if !fworks
-        verbose && println(" - Replacing compf with dense equivalent")
+        verbose && println(" - Fallback to dense f-function for batch")
         batch = @set batch.compf = _generic_dense_f
     end
     if !gworks
-        verbose && println(" - Replacing compg with dense equivalent")
+        verbose && println(" - Fallback to dense g-function for batch")
         densg = T == VertexModel ? _generic_dense_vertexg : _generic_dense_edgeg
         batch = @set batch.compg = densg
     end
