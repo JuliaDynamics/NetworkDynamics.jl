@@ -38,11 +38,10 @@ function Adapt.adapt_structure(to, n::Network)
               aggregation = _adapt_diffcache(to, n.caches.aggregation),
               external = _adapt_diffcache(to, n.caches.external))
     exT = typeof(executionstyle(n))
-    gT = typeof(n.im.g)
+    loopbackmap = adapt(to, n.loopbackmap)
     extmap = adapt(to, n.extmap)
 
-    Network{exT,gT,typeof(layer),typeof(vb),typeof(mm),eltype(caches),typeof(gbp),typeof(extmap)}(
-        vb, layer, n.im, caches, mm, gbp, extmap, getfield(n, :jac_prototype))
+    Network(exT, vb, layer, n.im, caches, mm, gbp, loopbackmap, extmap, getfield(n, :jac_prototype))
 end
 
 Adapt.@adapt_structure NetworkLayer

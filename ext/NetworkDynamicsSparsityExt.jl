@@ -168,19 +168,17 @@ function _test_SCT_compat(batch; error=false)
     xdim = dim(batch)
 
     urange = 1:Int(dim(batch))
-    inranges = let
-        allinputs = extdim(batch) > 0 ? (indim(batch)..., extdim(batch)) : (indim(batch)...,)
-        _ranges = UnitRange{Int}[]
-        for input in allinputs
-            first = isempty(_ranges) ? dim(batch)+1 : reduce(vcat, _ranges)[end] + 1
-            push!(_ranges, first:first + input - 1)
-        end
-        _ranges
+    inranges = UnitRange{Int}[]
+    last_inrange_idx = dim(batch)
+    allindims = extdim(batch) > 0 ? (indim(batch)..., extdim(batch)) : (indim(batch)...,)
+    for idim in allindims
+        push!(inranges, last_inrange_idx+1:last_inrange_idx+idim)
+        last_inrange_idx += idim
     end
-    prange = reduce(vcat, inranges)[end] .+ (1 : pdim(batch))
+    prange = last_inrange_idx .+ (1 : pdim(batch))
 
     detector = TracerSparsityDetector()
-    flatin = zeros(reduce(vcat,inranges)[end] + pdim(batch) + 1)
+    flatin = zeros(last_inrange_idx + pdim(batch) + 1)
 
     if isnothing(batch.compf)
         fworks=true
@@ -203,13 +201,11 @@ function _test_SCT_compat(batch; error=false)
         end
     end
 
-    outranges = let
-        _ranges = UnitRange{Int}[]
-        for output in outdim(batch)
-            first = isempty(_ranges) ? 1 : reduce(vcat, _ranges)[end] + 1
-            push!(_ranges, first:first + output - 1)
-        end
-        _ranges
+    outranges = UnitRange{Int}[]
+    last_outrange_idx = 0
+    for odim in outdim(batch)
+        push!(outranges, last_outrange_idx+1:last_outrange_idx+odim)
+        last_outrange_idx += odim
     end
 
     batchg = (allgoutputs, allinputs) -> begin
@@ -221,7 +217,7 @@ function _test_SCT_compat(batch; error=false)
         nothing
     end
 
-    flatout = zeros(reduce(vcat,outranges)[end])
+    flatout = zeros(last_outrange_idx)
     try
         jac = jacobian_sparsity(batchg, flatout, flatin, detector)
         gworks = true
