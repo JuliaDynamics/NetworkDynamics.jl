@@ -725,6 +725,45 @@ function generate_io_function_cached(_sys, args...; kwargs...)
     end
 end
 
+"""
+    NetworkDynamics.with_mtk_model_cache(f, usecache=true)
+
+**Experimental:** Enable caching of compiled MTK component functions during model construction.
+
+When building multiple [`VertexModel`](@ref) or [`EdgeModel`](@ref) components from
+ModelingToolkit systems, the expensive symbolic processing and code generation steps
+can be cached and reused. This function provides a convenient block syntax to enable
+caching temporarily.
+
+# Arguments
+- `f`: A callable (typically a `do` block) that performs component model construction
+- `usecache=true`: Optional boolean to enable/disable caching for this block
+
+# Usage
+
+```julia
+NetworkDynamics.with_mtk_model_cache() do
+    # code which generates and compiles mtk models
+end
+```
+
+The cache is automatically disabled when the block exits, ensuring clean state.
+
+# When to Use
+
+This optimization is beneficial when:
+- Building multiple components from **identical** MTK systems (e.g., repeated vertex types)
+- Performing batch or exploratory model construction workflows
+- Constructing components in parallel across multiple threads
+
+The cache is thread safe, so you can safely build components concurrently.
+
+!!! warning "Experimental Feature"
+    This caching mechanism is experimental and may change in future versions. The cache
+    assumes that MTK equation processing is deterministic and does not change between calls.
+
+See also: [`NetworkDynamics.mtk_cache_stats`](@ref)
+"""
 function NetworkDynamics.with_mtk_model_cache(f, usecache=true)
     NetworkDynamics.set_mtk_model_cache!(usecache)
     local ret
@@ -736,6 +775,12 @@ function NetworkDynamics.with_mtk_model_cache(f, usecache=true)
     ret
 end
 
+"""
+    NetworkDynamics.mtk_cache_stats()
+
+Print statistics about the MTK model cache usage during the last
+[`NetworkDynamics.with_mtk_model_cache`](@ref) block.
+"""
 function NetworkDynamics.mtk_cache_stats()
     @lock CACHE_LOCK begin
         println("MTK Model Cache Stats:")
