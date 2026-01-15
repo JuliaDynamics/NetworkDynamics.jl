@@ -95,12 +95,12 @@ end
     vf_def = copy(vf)
     set_default!(vf_def, :Pel, -100)
     set_bounds!(vf_def, :Pel, (-Inf, 0))
-    @test_logs (:warn, r"has broken bounds") match_mode=:any begin
-        NetworkDynamics.initialize_component!(vf_def; verbose=false)
-    end
-    @test_logs (:warn, r"has observables that differ") match_mode=:any begin
-        NetworkDynamics.initialize_component!(vf_def; verbose=false)
-    end
+
+    buf = IOBuffer()
+    NetworkDynamics.initialize_component!(vf_def; verbose=false, io=buf)
+    out = String(take!(buf))
+    @test contains(out, r"has broken bounds")
+    @test contains(out, r"has observables that differ")
 
     vf_conflict = copy(vf)
     defaults = NetworkDynamics.get_defaults_dict(vf_conflict)
@@ -251,9 +251,12 @@ end
     set_guess!(vf, :ψ″_d,   0.50574)
     set_guess!(vf, :ψ″_q,   1.353)
     set_guess!(vf, :ω,     -1.55)
-    @test_logs (:warn, r"broken bounds") match_mode=:any begin
-        NetworkDynamics.initialize_component!(vf; verbose=false, apply_bound_transformation=false)
-    end
+
+    buf = IOBuffer()
+    NetworkDynamics.initialize_component!(vf; verbose=false, apply_bound_transformation=false, io=buf)
+    out = String(take!(buf))
+    @test contains(out, r"has broken bounds")
+
     @test get_initial_state(vf, :vf) < 1 # does not conserve
     NetworkDynamics.initialize_component!(vf; verbose=true, apply_bound_transformation=true)
     @test get_initial_state(vf, :vf) > 1 # conserves

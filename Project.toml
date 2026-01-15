@@ -7,8 +7,10 @@ authors = ["Frank Hellmann <hellmann@pik-potsdam.de>, Michael Lindner <michaelli
 projects = ["test", "benchmark"]
 
 [deps]
+Accessors = "7d9f7c33-5ae7-4f3b-8dc6-eff91059b697"
 ArgCheck = "dce04be8-c92d-5529-be00-80e4d2c0e197"
 Atomix = "a9b6321e-bd34-4604-b9c9-b65b8de01458"
+ConstructionBase = "187b0558-2788-49d3-abe0-74a17ed4e7c9"
 DiffEqCallbacks = "459566f4-90b8-5000-8ac3-15dfb0a30def"
 DocStringExtensions = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
 FastClosures = "9aa1b823-49e4-5ca5-8b0f-3971ec8bab6a"
@@ -56,10 +58,12 @@ NetworkDynamicsSparsityExt = ["SparseConnectivityTracer"]
 NetworkDynamicsSymbolicsExt = ["Symbolics", "MacroTools"]
 
 [compat]
+Accessors = "0.1.43"
 Adapt = "4.0.4"
 ArgCheck = "2.3.0"
 Atomix = "1"
 CUDA = "5.5.2"
+ConstructionBase = "1.6.0"
 DataFrames = "1"
 DiffEqCallbacks = "4.2.2"
 DocStringExtensions = "0.9.3"

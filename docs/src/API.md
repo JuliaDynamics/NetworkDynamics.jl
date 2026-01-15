@@ -14,6 +14,7 @@ pdim(::Network)
 ```@docs
 VertexModel()
 EdgeModel()
+LoopbackConnection
 ```
 
 ## Component Models with MTK
@@ -22,6 +23,8 @@ VertexModel(::ModelingToolkit.System, ::Any, ::Any)
 EdgeModel(::ModelingToolkit.System, ::Any, ::Any, ::Any, ::Any)
 EdgeModel(::ModelingToolkit.System, ::Any, ::Any, ::Any)
 ComponentPostprocessing
+NetworkDynamics.with_mtk_model_cache
+NetworkDynamics.mtk_cache_stats
 ```
 
 ### Output Function Helpers/Wrappers

@@ -68,7 +68,7 @@ dim(im::IndexManager) = im.lastidx_dynamic
 pdim(im::IndexManager) = im.lastidx_p
 
 
-struct Network{EX<:ExecutionStyle,G,NL,VTup,MM,CT,GBT,EM}
+struct Network{EX<:ExecutionStyle,G,NL,VTup,MM,CT,GBT,LM,EM}
     "vertex batches of same function"
     vertexbatches::VTup
     "network layer"
@@ -81,11 +81,26 @@ struct Network{EX<:ExecutionStyle,G,NL,VTup,MM,CT,GBT,EM}
     mass_matrix::MM
     "Gather buffer provider (lazy or eager)"
     gbufprovider::GBT
+    "map for loopback edge gather"
+    loopbackmap::LM
     "map to gather external inputs"
     extmap::EM
     "sparsity pattern"
     jac_prototype::Ref{Union{Nothing,SparseMatrixCSC{Bool,Int}}}
+    function Network(ex, vb, nl, im, caches, mm, gbufp, loopmap, extmap, jac_prototype)
+        new{
+            ex,typeof(im.g),typeof(nl), typeof(vb),
+            typeof(mm),eltype(caches),typeof(gbufp),
+            typeof(loopmap),typeof(extmap)
+        }(
+            vb, nl, im, caches, mm, gbufp, loopmap, extmap, jac_prototype
+        )
+    end
 end
+function ConstructionBase.constructorof(::Type{<:Network{EX}}) where {EX}
+    return (args...) -> Network(EX, args...)
+end
+
 executionstyle(::Network{ex}) where {ex} = ex()
 nvbatches(::Network) = length(vertexbatches)
 
@@ -167,12 +182,18 @@ struct ComponentBatch{T,F,G,FFT,DIM,PDIM,INDIMS,OUTDIMS,EXTDIM,IV}
             i, f, g, ff, ss, ps, is, os, es)
     end
 end
+function ConstructionBase.constructorof(::Type{<:ComponentBatch{T}}) where {T}
+    return (args...) -> ComponentBatch(T, args...)
+end
 
 @inline Base.length(cb::ComponentBatch) = Base.length(cb.indices)
 @inline dispatchT(::ComponentBatch{T}) where {T} = T
 @inline compf(b::ComponentBatch) = b.compf
 @inline compg(b::ComponentBatch) = b.compg
 @inline fftype(b::ComponentBatch) = b.ff
+@inline dim(batch::ComponentBatch) = batch.statestride.strides
+@inline indim(batch::ComponentBatch) = batch.inbufstride.strides
+@inline outdim(batch::ComponentBatch) = batch.outbufstride.strides
 @inline pdim(b::ComponentBatch) = b.pstride.strides
 @inline extdim(b::ComponentBatch) = b.extbufstride.strides
 
@@ -333,7 +354,7 @@ Needs `SparseConnectivityTracer` to be loaded!
 
 # Arguments
 - `nw::Network`: The NetworkDynamics network to modify
-- `kwargs...`: Keyword arguments passed to `get_jac_prototype` (e.g., `dense`, `remove_conditions`)
+- `kwargs...`: Keyword arguments passed to `get_jac_prototype`
 
 # Example Usage
 ```julia

@@ -26,22 +26,6 @@ SE = Base.get_extension(NetworkDynamics, :NetworkDynamicsSparsityExt)
     p0 = pflat(_p0)
 
     j1 = get_jac_prototype(nw)
-    j2 = get_jac_prototype(nw; dense=[EIndex(1), VIndex(1)])
-    j3 = get_jac_prototype(nw; dense=true)
-    j4 = get_jac_prototype(nw; dense=vcat([EIndex(i) for i in 1:ne(nw)], [VIndex(i) for i in 1:nv(nw)]))
-
-    # test that they become strictly more dense
-    @test j3 == j4
-    for idx in eachindex(j1)
-        if j1[idx] != 0
-            @test j1[idx] == j2[idx] == j3[idx]
-        end
-    end
-    for idx in eachindex(j2)
-        if j2[idx] != 0
-            @test j2[idx] == j3[idx]
-        end
-    end
 
     # prob = ODEProblem(nw, x0, (0.0, 1.0), p0)
     # _nw = ODEFunction(nw; jac_prototype=get_jac_prototype(nw))
@@ -123,16 +107,42 @@ end
     valvet = EdgeModel(valvet_mtk, [:p_src], [:p_dst], AntiSymmetric([:q]))
 
     nw = Network(g, v, valvet)
-    @test_throws ErrorException get_jac_prototype(nw) # fails because of the conditional!
-    get_jac_prototype(nw; remove_conditions=true) # should work now
-    get_jac_prototype(nw; dense=true) # should work now
+    j1 = get_jac_prototype(nw) # fails because of the conditional!
 
     nw_sparse = Network(nw)
-    set_jac_prototype!(nw_sparse; remove_conditions=true)
+    set_jac_prototype!(nw_sparse)
 
     s0 = NWState(nw_sparse)
     prob = ODEProblem(nw_sparse, uflat(s0), (0,10), pflat(s0))
     @test prob.f.jac_prototype === nw_sparse.jac_prototype # should be the same prototype
+
+    function true_if_else_block(cond, t, f)
+        if cond
+            return t
+        else
+            return f
+        end
+    end
+    ModelingToolkit.@register_symbolic true_if_else_block(cond, t, f)
+    @mtkmodel ValveToggle2 begin
+        @variables begin
+            p_src(t), [description="pressure at src"]
+            p_dst(t), [description="pressure at dst"]
+            q(t), [description="flow through valve"]
+        end
+        @parameters begin
+            K=1, [description="conductance of valve"]
+            active=1, [description="active state of valve"]
+        end
+        @equations begin
+            q ~ true_if_else_block(active > 0, K * (p_src - p_dst), 0)
+        end
+    end
+    @named valvet2_mtk = ValveToggle2()
+    valvet2 = EdgeModel(valvet2_mtk, [:p_src], [:p_dst], AntiSymmetric([:q]))
+    nw2 = Network(g, v, valvet2)
+    j2 = get_jac_prototype(nw2) # should fall bakc to dense
+    @test j1 == j2 # no diff in that case
 end
 
 
@@ -140,6 +150,11 @@ end
     compare_expr(a, b) = Base.remove_linenums!(a) == Base.remove_linenums!(b)
 
     assigment = :(dest = if cond; truepath; else; falsepath; end)
+    # target = :(dest = ifelse(cond, begin
+    #     truepath
+    # end, begin
+    #     falsepath
+    # end))
     target = :(dest = begin
         truepath
     end + begin

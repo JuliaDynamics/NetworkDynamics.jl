@@ -24,6 +24,8 @@ using Static: Static, StaticInt
 using SciMLBase: VectorContinuousCallback, CallbackSet, DiscreteCallback
 using DiffEqCallbacks: DiffEqCallbacks
 using MacroTools: postwalk, @capture
+using ConstructionBase: ConstructionBase
+using Accessors: Accessors
 
 @static if VERSION ≥ v"1.11.0-0"
     using Base: AnnotatedIOBuffer, AnnotatedString
@@ -126,6 +128,7 @@ include("doctor.jl")
 
 # additional utils, which depend on specific types beeing defined so they should be
 # loaded after all other files
+export LoopbackConnection
 include("post_utils.jl")
 
 export describe_vertices, describe_edges, get_jac_prototype

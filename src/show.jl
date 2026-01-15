@@ -61,6 +61,8 @@ function Base.show(io::IO, mime::MIME"text/plain", c::ComponentModel)
             print(io, " @ Edge $(ge.src)=>$(ge.dst)")
         end
     end
+    # if shown in set context, only print single line
+    io isa IOContext && haskey(io.dict, :SHOWN_SET) && return
 
     styling = Dict{Int,Symbol}()
 
@@ -75,6 +77,7 @@ function Base.show(io::IO, mime::MIME"text/plain", c::ComponentModel)
     end
 end
 # enable compact printing in lists of component models
+# this is only for inline print like VertexModel[...]
 function Base.show(io::IO, c::ComponentModel)
     type = string(typeof(c))
     print(io, type, styled" {NetworkDynamics_name::$(c.name)}")

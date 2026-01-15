@@ -170,6 +170,7 @@ end
 Directed(g::Union{AbstractVector{<:Number},Number}) = Directed(StateMask(g))
 @inline function (c::Directed)(osrc, odst, args...)
     @inline c.g(odst, args...)
+    fill!(osrc, zero(eltype(osrc)))
     nothing
 end
 

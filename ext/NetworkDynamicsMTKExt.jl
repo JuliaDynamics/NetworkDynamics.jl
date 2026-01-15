@@ -56,7 +56,7 @@ function VertexModel(sys::System, inputs, outputs; verbose=false, name=getname(s
         ins = (inputs, extin_sym)
     end
 
-    gen = generate_io_function(sys, ins, (outputs,); verbose, ff_to_constraint, assume_io_coupling)
+    gen = generate_io_function_cached(sys, ins, (outputs,); verbose, ff_to_constraint, assume_io_coupling)
 
     f = gen.f
     g = gen.g
@@ -94,6 +94,7 @@ function VertexModel(sys::System, inputs, outputs; verbose=false, name=getname(s
     set_metadata!(c, :equations, gen.equations)
     set_metadata!(c, :outputeqs, gen.outputeqs)
     set_metadata!(c, :odesystem, gen.odesystem)
+    set_metadata!(c, :odesystem_simplified, gen.odesystem_simplified)
 
     # apply postprocessing functions from subcomponent metadata
     apply_component_postprocessing!(c)
@@ -168,7 +169,7 @@ function EdgeModel(sys::System, srcin, dstin, srcout, dstout; verbose=false, nam
         outs = (srcout, dstout)
     end
 
-    gen = generate_io_function(sys, ins, outs; verbose, ff_to_constraint, assume_io_coupling)
+    gen = generate_io_function_cached(sys, ins, outs; verbose, ff_to_constraint, assume_io_coupling)
 
     f = gen.f
     g = singlesided ? gwrap(gen.g) : gen.g
@@ -217,6 +218,7 @@ function EdgeModel(sys::System, srcin, dstin, srcout, dstout; verbose=false, nam
     set_metadata!(c, :equations, gen.equations)
     set_metadata!(c, :outputeqs, gen.outputeqs)
     set_metadata!(c, :odesystem, gen.odesystem)
+    set_metadata!(c, :odesystem_simplified, gen.odesystem_simplified)
 
     # apply postprocessing functions from subcomponent metadata
     apply_component_postprocessing!(c)
@@ -539,7 +541,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         equations=eqs,
         outputeqs=outeqs,
         observed=obseqs_sorted,
-        odesystem=sys,
+        odesystem_simplified=sys,
         params,
         unused_params
     )
@@ -629,6 +631,169 @@ function _recursive_collect_dependencies!(deps, term, dict)
     end
     deps
 end
+
+####
+####
+const USE_MODEL_CACHE = Ref(false)
+const MTK_CACHE = Dict{UInt64, Any}()
+const CACHE_LOCK = ReentrantLock()
+const CACHE_HITS = Ref(0)
+const CACHE_MISSES = Ref(0)
+const CACHE_WAITINGS = Ref(0)
+
+function threadsafe_cache_load!(f, key)
+    local state
+    @lock CACHE_LOCK begin
+        if !haskey(MTK_CACHE, key)
+            MTK_CACHE[key] = nothing # set placeholder to avoid duplicate computation
+            CACHE_MISSES[] += 1
+            state = :compute
+        elseif isnothing(MTK_CACHE[key])
+            CACHE_WAITINGS[] += 1
+            state = :wait
+        else
+            CACHE_HITS[] += 1
+            state = :hit
+        end
+    end
+    model = nothing
+    if state == :compute
+        try
+            model = f() # generate
+            @lock CACHE_LOCK begin
+                MTK_CACHE[key] = model
+            end
+        catch
+            @lock CACHE_LOCK begin
+                delete!(MTK_CACHE, key) # remove placeholder on failure
+            end
+            rethrow()
+        end
+    elseif state == :wait
+        starttime = time()
+        # wait until computed
+        while isnothing(model)
+            sleep(0.01)
+            @lock CACHE_LOCK begin
+                model = MTK_CACHE[key]
+            end
+            if time() - starttime > 60.0
+                error("Timeout while waiting for cached model computation!")
+            end
+        end
+    elseif state == :hit
+        @lock CACHE_LOCK begin
+            model = MTK_CACHE[key]
+        end
+    else
+        error()
+    end
+    isnothing(model) && error("Cache loading failed! Please report issue.")
+    return model
+end
+
+function NetworkDynamics.set_mtk_model_cache!(use::Bool)
+    was_using = USE_MODEL_CACHE[]
+    if use && !was_using
+        # start using
+        CACHE_HITS[] = 0
+        CACHE_MISSES[] = 0
+        CACHE_WAITINGS[] = 0
+    else !use && was_using
+        NetworkDynamics.wipe_mtk_model_cache!()
+    end
+    USE_MODEL_CACHE[] = use
+end
+function NetworkDynamics.wipe_mtk_model_cache!()
+    @lock CACHE_LOCK begin
+        empty!(MTK_CACHE)
+    end
+end
+
+function generate_io_function_cached(_sys, args...; kwargs...)
+    if USE_MODEL_CACHE[]
+        expanded = ModelingToolkit.expand_connections(_sys)
+        syskey = repr.(equations(expanded))
+        key = hash((syskey, args, kwargs))
+        gen_no_sys = threadsafe_cache_load!(key) do
+            generate_io_function(_sys, args...; kwargs...)
+        end
+        (; odesystem=_sys, gen_no_sys...)
+    else
+        gen_no_sys = generate_io_function(_sys, args...; kwargs...)
+        (; odesystem=_sys, gen_no_sys...)
+    end
+end
+
+"""
+    NetworkDynamics.with_mtk_model_cache(f, usecache=true)
+
+**Experimental:** Enable caching of compiled MTK component functions during model construction.
+
+When building multiple [`VertexModel`](@ref) or [`EdgeModel`](@ref) components from
+ModelingToolkit systems, the expensive symbolic processing and code generation steps
+can be cached and reused. This function provides a convenient block syntax to enable
+caching temporarily.
+
+# Arguments
+- `f`: A callable (typically a `do` block) that performs component model construction
+- `usecache=true`: Optional boolean to enable/disable caching for this block
+
+# Usage
+
+```julia
+NetworkDynamics.with_mtk_model_cache() do
+    # code which generates and compiles mtk models
+end
+```
+
+The cache is automatically disabled when the block exits, ensuring clean state.
+
+# When to Use
+
+This optimization is beneficial when:
+- Building multiple components from **identical** MTK systems (e.g., repeated vertex types)
+- Performing batch or exploratory model construction workflows
+- Constructing components in parallel across multiple threads
+
+The cache is thread safe, so you can safely build components concurrently.
+
+!!! warning "Experimental Feature"
+    This caching mechanism is experimental and may change in future versions. The cache
+    assumes that MTK equation processing is deterministic and does not change between calls.
+
+See also: [`NetworkDynamics.mtk_cache_stats`](@ref)
+"""
+function NetworkDynamics.with_mtk_model_cache(f, usecache=true)
+    NetworkDynamics.set_mtk_model_cache!(usecache)
+    local ret
+    try
+        ret = f()
+    finally
+        NetworkDynamics.set_mtk_model_cache!(false)
+    end
+    ret
+end
+
+"""
+    NetworkDynamics.mtk_cache_stats()
+
+Print statistics about the MTK model cache usage during the last
+[`NetworkDynamics.with_mtk_model_cache`](@ref) block.
+"""
+function NetworkDynamics.mtk_cache_stats()
+    @lock CACHE_LOCK begin
+        println("MTK Model Cache Stats:")
+        println("  Misses:   ", CACHE_MISSES[])
+        println("  Hits:     ", CACHE_HITS[], " (", CACHE_WAITINGS[], " after waiting)")
+        println("  Hit Rate: ", round(CACHE_HITS[] / max(CACHE_HITS[] + CACHE_MISSES[], 1) * 100, digits=2), "%")
+    end
+end
+
+function NetworkDynamics.mtk_model_cache_enabled()
+    USE_MODEL_CACHE[]
+end
+
 
 using PrecompileTools: @compile_workload
 @compile_workload begin

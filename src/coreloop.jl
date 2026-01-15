@@ -13,12 +13,21 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t) where {A,B,C,D,E,dT,T}
 
     duopt = (du, u, o, p, t)
     aggbuf = get_aggregation_cache(nw, du)
+    fill!(aggbuf, _appropriate_zero(aggbuf))
     gbuf = get_gbuf(nw.gbufprovider, o)
 
     # vg without ff
     process_batches!(ex, Val{:g}(), !hasff, nw.vertexbatches, (nothing, nothing), duopt)
     # eg without ff
     process_batches!(ex, Val{:g}(), !hasff, nw.layer.edgebatches, (nothing, nothing), duopt)
+
+    # process batches might be async so sync before next step
+    ex isa KAExecution && KernelAbstractions.synchronize(get_backend(du))
+
+    # if loopback edges are present, we direclty copy cluster output to satelite input
+    !isnothing(nw.loopbackmap) && apply_loopback!(aggbuf, o, nw.loopbackmap)
+    # process vg WITH ff (only allowed on loopback edges)
+    process_batches!(ex, Val{:g}(), hasff, nw.vertexbatches, (aggbuf, nothing), duopt)
 
     # process batches might be async so sync before next step
     ex isa KAExecution && KernelAbstractions.synchronize(get_backend(du))
@@ -50,6 +59,7 @@ end
 function get_buffers(nw, u, p, t; initbufs)
     o = get_output_cache(nw, u)
     aggbuf = get_aggregation_cache(nw, u)
+    fill!(aggbuf, _appropriate_zero(aggbuf))
     extbuf = has_external_input(nw) ? get_extinput_cache(nw, u) : nothing
     if initbufs
         du = nothing
@@ -64,6 +74,12 @@ function get_buffers(nw, u, p, t; initbufs)
         process_batches!(ex, Val{:g}(), !hasff, nw.layer.edgebatches, (nothing, nothing), duopt)
         # process batches might be async so sync before next step
         ex isa KAExecution && KernelAbstractions.synchronize(get_backend(u))
+        # if loopback edges are present, we direclty copy cluster output to satelite input
+        !isnothing(nw.loopbackmap) && apply_loopback!(aggbuf, o, nw.loopbackmap)
+        # process vg WITH ff (only allowed on loopback edges)
+        process_batches!(ex, Val{:g}(), hasff, nw.vertexbatches, (aggbuf, nothing), duopt)
+        # process batches might be async so sync before next step
+        ex isa KAExecution && KernelAbstractions.synchronize(get_backend(du))
         # gather the external inputs
         has_external_input(nw) && collect_externals!(nw.extmap, extbuf, u, o)
         # gather the vertex results for edges with ff
@@ -216,3 +232,11 @@ evalf(::Val{:fg}, batch) = !isnothing(compf(batch))
 evalg(::Val{:f}, _) = false
 evalg(::Val{:g}, _) = true
 evalg(::Val{:fg}, _) = true
+
+function _appropriate_zero(x)
+    if isconcretetype(eltype(x))
+        zero(eltype(x))
+    else
+        0.0 # hopefully that casts to what is needed
+    end
+end

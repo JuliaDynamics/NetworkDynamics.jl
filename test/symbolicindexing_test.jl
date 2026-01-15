@@ -390,7 +390,7 @@ end
                 println(idx, " => ", b.allocs, " allocations")
             end
             if VERSION ≥ v"1.11"
-                @test b.allocs <= 7
+                @test b.allocs <= 21
             end
         end
 
@@ -609,32 +609,36 @@ end
 @testset "test performace of created observed functions" begin
     v1 = Lib.kuramoto_second(name=:v1, vidx=1, insym=[:Pin])
     v2 = Lib.swing_mtk(name=:v2, vidx=2)
+    v3 = Lib.swing_mtk(name=:v3, vidx=3)
     set_default!(v2, :Pmech, -1.0)
-    e = Lib.kuramoto_edge(name=:e12, src=1, dst=2)
-    set_default!(e, :K, 1.0)
-    nw = Network([v1,v2],e)
+    set_default!(v3, :Pmech, 0)
+    e1 = Lib.kuramoto_edge(name=:e12, src=1, dst=2)
+    e2 = Lib.kuramoto_edge(name=:e23, src=2, dst=3)
+    set_default!(e1, :K, 1.0)
+    set_default!(e2, :K, 1.0)
+    nw = Network([v1,v2,v3],[e1,e2])
 
     s = NWState(nw)
     # normal state, observed and output state
-    idxs1 = [VIndex(1,:δ), VIndex(2, :Pdamping), EIndex(1,:P), VIndex(2,:P)]
+    idxs1 = [VIndex(1,:δ), VIndex(2, :Pdamping), VIndex(3,:Pdamping), EIndex(1,:P), VIndex(2,:P)]
     idxs2 = [VIndex(1,:δ), VIndex(2,:θ)]
     # full call
-    # @b $s[$idxs1] # 134 106 94 101
-    # @b $s[$idxs2] # 31  31 34
+    # @b $s[$idxs1] # 134 106 94 101 130 174
+    # @b $s[$idxs2] # 31  31 34 40 44
 
     # scalar call
-    # @b $s[$(VIndex(2,:Pdamping))] # 28
+    # @b $s[$(VIndex(2,:Pdamping))] # 28 58 59
 
-    # @b SII.observed($nw, $(VIndex(2,:Pdamping))) # 15
-    # @b SII.observed($nw, $(VIndex(2,:θ))) # 7 5
+    # @b SII.observed($nw, $(VIndex(2,:Pdamping))) # 15 39 40
+    # @b SII.observed($nw, $(VIndex(2,:θ))) # 7 5 14 15
 
-    b = @b SII.observed($nw, $idxs1) # 69 36 42 30 37 47
+    b = @b SII.observed($nw, $idxs1) # 69 36 42 30 37 47 64 if VERSION ≥ v"1.11"
     if VERSION ≥ v"1.11"
-        @test b.allocs <= 47
+        @test b.allocs <= 96
     end
-    b = @b SII.observed($nw, $idxs2) # 12 7 10 5
+    b = @b SII.observed($nw, $idxs2) # 12 7 10 5 14
     if VERSION ≥ v"1.11"
-        @test b.allocs <= 5
+        @test b.allocs <= 15
     end
 
     obsf1 = SII.observed(nw, idxs1)

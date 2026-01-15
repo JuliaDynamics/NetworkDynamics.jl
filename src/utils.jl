@@ -436,3 +436,14 @@ function Base.showerror(io::IO, e::RHSDifferentialsError)
     end
     print(io, "Consider passing `assume_io_coupling=true` to the component constructor!")
 end
+
+# needs to be defined befor coreloop
+# rest in post utils
+function LOOPOBACK_G end
+
+# cache stubs
+function set_mtk_model_cache! end
+function wipe_mtk_model_cache! end
+function with_mtk_model_cache end
+function mtk_cache_stats end
+function mtk_model_cache_enabled end

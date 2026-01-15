@@ -58,7 +58,7 @@ BUILDKITE && @test CUDA.functional() # fail early in buildkite if cuda is not av
 
     @safetestset "Symbolic Indexing Tests" begin include("symbolicindexing_test.jl") end
     @safetestset "external input test" begin include("external_inputs_test.jl") end
-
+    @safetestset "Loopback Connection test" begin include("loopback_test.jl") end
 
     @safetestset "Diffusion test" begin include("diffusion_test.jl") end
     @safetestset "inhomogeneous test" begin include("inhomogeneous_test.jl") end

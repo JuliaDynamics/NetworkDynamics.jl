@@ -6,6 +6,12 @@
   - Helps resolve cases where MTK simplification results in derivatives of input variables
 - Improved error handling for RHS differentials with new `RHSDifferentialsError` exception type that provides helpful guidance
 - fix performance bottleneck in MTK model "compilation"
+- much improved sparsity tracing [#334](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/334): no more manual dense/replaced_conditions keywords. Algorithm goes through network batch by batch (not component by component) and replaced incompatible component functions with fixed RGF or dense equivalent automatically.
+- Add `LoopbackConnection` edge model for injector node pattern ([#334](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/334))
+  - New special edge type enables direct connection of "injector nodes" (vertices with flipped input-output scheme) to hub nodes
+  - Injector nodes take potential as input and output flow, allowing modular decomposition of complex vertex models
+  - Particularly useful for large networks where splitting vertex models into smaller components improves performance and reduces compilation time
+- Add experimental `with_mtk_model_cache` function ([#334](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/334)) to prevent repeated simplification and code gen for identical models.
 
 ## v0.10.13 Changelog
 Multiple new features from [#331](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/331):

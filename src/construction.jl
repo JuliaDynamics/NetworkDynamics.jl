@@ -52,9 +52,34 @@ function Network(g::AbstractGraph,
 
         # search for vertex models with feed forward
         if CHECK_COMPONENT[] && any(hasff, _vertexm)
-            throw(ArgumentError("Vertex model with feed forward are not supported yet! \
-                As an intermediate solution, you can call `ff_to_constraint(vf)` on the vertex model\
-                to turn feed forward outputs into algebraic states."))
+            errorstring = ""
+            ffvertices = findall(hasff, _vertexm)
+            nbs = map(ffvertices) do i
+                Graphs.all_neighbors(g, i)
+            end
+            ERRORMSG = "Feed forward vertex models are only allowed as leave nodes (1 neighbor) \
+                        with single `LoopbackConnection` from satelite to cluster node! In other \
+                        scenarios can use `ff_to_constraint(vf)` on the vertex model to turn \
+                        feed forward outputs into algebraic states."
+            # test all have one neighbor
+            if any(n -> length(n) != 1, nbs)
+                throw(ArgumentError(ERRORMSG))
+            end
+
+            # test all have loopback from ff vert to cluster
+            eidx = findall(is_loopback, _edgem)
+            simpleedges = collect(edges(g))[eidx]
+            all(zip(ffvertices, only.(nbs))) do (src, dst)
+                SimpleEdge(src, dst) ∈ simpleedges
+            end || throw(ArgumentError(ERRORMSG))
+
+            # check that all looback edges have origin at leaf node
+            for (i, e) in zip(eidx, simpleedges)
+                if Graphs.degree(g, e.src) != 1
+                    throw(ArgumentError("All LoopbackConnection edges must originate from leaf nodes! \
+                                     Found at least one going from hub to leaf: $(_edgem[i])"))
+                end
+            end
         end
 
         # check if components alias eachother copy if necessary
@@ -188,16 +213,19 @@ function Network(g::AbstractGraph,
             LazyGBufProvider(im, edgebatches)
         end
 
-        # create map for extenral inputs
+        loopback_map = has_loopback_edges(im) ? gen_loopback_map(im) : nothing
+
+        # create map for external inputs
         extmap = has_external_input(im) ? ExtMap(im) : nothing
 
-        nw = Network{typeof(execution),typeof(g),typeof(nl), typeof(vertexbatches),
-                     typeof(mass_matrix),eltype(caches),typeof(gbufprovider),typeof(extmap)}(
+        nw = Network(
+            typeof(execution),
             vertexbatches,
             nl, im,
             caches,
             mass_matrix,
             gbufprovider,
+            loopback_map,
             extmap,
             Ref{Union{Nothing,SparseMatrixCSC{Bool,Int}}}(nothing),
         )
@@ -230,17 +258,23 @@ end
 function Network(vertexfs, edgefs; warn_order=true, kwargs...)
     vertexfs = vertexfs isa VertexModel ? [vertexfs] : vertexfs
     edgefs   = edgefs isa EdgeModel     ? [edgefs]   : edgefs
-    @argcheck all(has_graphelement, vertexfs) "All vertex models must have assigned `graphelement` to implicitly construct graph!"
     @argcheck all(has_graphelement, edgefs) "All edge models must have assigned `graphelement` to implicitly construct graph!"
+    # vertices must either all have unique names or all have graphelement set
+    if all(has_graphelement, vertexfs)
+        vidxs = get_graphelement.(vertexfs)
+    elseif allunique(x -> x.name, vertexfs) && !any(has_graphelement, vertexfs)
+        vidxs = collect(1:length(vertexfs))
+    else
+        throw(ArgumentError("Either all vertex models must have assigned `graphelement` or all vertex models must have unique `name` but no graphelement!"))
+    end
 
-    vidxs = get_graphelement.(vertexfs)
     allunique(vidxs) || throw(ArgumentError("All vertex models must have unique `graphelement`!"))
     sort(vidxs) == 1:length(vidxs) || throw(ArgumentError("Vertex models must have `graphelement` in range 1:length(vertexfs)!"))
 
     vdict = Dict(vidxs .=> vertexfs)
 
     # find unique mappings from name => graphelement
-    vnamedict = unique_mappings(getproperty.(vertexfs, :name), get_graphelement.(vertexfs))
+    vnamedict = unique_mappings(getproperty.(vertexfs, :name), vidxs)
 
     simpleedges = map(edgefs) do e
         ge = get_graphelement(e)
@@ -433,14 +467,16 @@ function _check_massmatrix(c)
 end
 
 """
-    Network(nw::Network; g, vertexm, edgem, kwargs...)
+    Network(nw::Network; g, vertexm, edgem, copy_components=true, kwargs...)
 
 Rebuild the Network with same graph and vertex/edge models but possibly different kwargs.
+If `copy_components=true` (default) then the vertex and edge models are copied.
 """
 function Network(nw::Network;
                  g = nothing,
                  vertexm = nothing,
                  edgem = nothing,
+                 copy_components = true,
                  kwargs...)
 
     # Check if structure is identical (nothing means unchanged)
@@ -448,8 +484,16 @@ function Network(nw::Network;
 
     # Fill defaults
     g = isnothing(g) ? nw.im.g : g
-    vertexm = isnothing(vertexm) ? copy.(nw.im.vertexm) : vertexm
-    edgem = isnothing(edgem) ? copy.(nw.im.edgem) : edgem
+    vertexm = if isnothing(vertexm)
+        copy_components ? copy.(nw.im.vertexm) : nw.im.vertexm
+    else
+        vertexm
+    end
+    edgem = if isnothing(edgem)
+        copy_components ? copy.(nw.im.edgem) : nw.im.edgem
+    else
+        edgem
+    end
 
     _kwargs = Dict(:execution => executionstyle(nw),
                    :aggregator => get_aggr_constructor(nw.layer.aggregator),

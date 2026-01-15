@@ -45,7 +45,10 @@ using Symbolics
         aggregator = accT(+)
         nw = Network(g, nvec, evec; aggregator);
         aggbuf = rand(rng, nw.im.lastidx_aggr);
-        b = @b aggregate!($nw.layer.aggregator, $aggbuf, $states)
+        b = @b begin
+            fill!($aggbuf, NetworkDynamics._appropriate_zero($aggbuf))
+            aggregate!($nw.layer.aggregator, $aggbuf, $states)
+        end
         @info "Execute $accT" b
         if accT ∉ [KAAggregator, ThreadedAggregator]
             # @test b.allocs==0
@@ -61,6 +64,18 @@ using Symbolics
             @info "compare" results[1] results[i] results[1]-results[i]
         end
         @test issame
+    end
+
+    # test that aggregate! is additive (doesn't overwrite, but adds to existing values)
+    for accT in subtypes(NetworkDynamics.Aggregator)
+        println("Testing additivity of $accT")
+        aggregator = accT(+)
+        nw = Network(g, nvec, evec; aggregator);
+        aggbuf_zero = zeros(nw.im.lastidx_aggr)
+        aggbuf_offset = collect(Float64, 1:nw.im.lastidx_aggr)
+        aggregate!(nw.layer.aggregator, aggbuf_zero, states)
+        aggregate!(nw.layer.aggregator, aggbuf_offset, states)
+        @test aggbuf_offset - aggbuf_zero ≈ 1:nw.im.lastidx_aggr
     end
 end
 

@@ -218,24 +218,41 @@ function run_fancy(tasks::Vector{SpinTask}; verbose=true)
         catch e
             if e isa InterruptException
                 interrupted[] = true
+            else
+                rethrow(e)
             end
-            rethrow(e)
         finally
             print(stdout, ansi_enablecursor)
             close(timer)
         end
     end)
 
-    Threads.@threads for t in tasks
-        if !interrupted[]
-            t.status = :running
-            try
-                runtask(t)
-            catch e
-                if e isa InterruptException
-                    interrupted[] = true
+    taskids = collect(reverse(eachindex(tasks)))
+    poplock = ReentrantLock()
+    @sync for _ in 1:Threads.nthreads()
+        Threads.@spawn begin
+            while !interrupted[]
+                t = try
+                    @lock poplock begin
+                        isempty(taskids) && break
+                        i = pop!(taskids)
+                        tasks[i]
+                    end
+                catch e
+                    if e isa InterruptException
+                        interrupted[] = true
+                    end
+                    break
                 end
-                rethrow(e)
+                try
+                    runtask(t)
+                catch e
+                    if e isa InterruptException
+                        interrupted[] = true
+                    else
+                        rethrow(e)
+                    end
+                end
             end
         end
     end
@@ -245,8 +262,13 @@ function run_fancy(tasks::Vector{SpinTask}; verbose=true)
     catch e
         if e isa InterruptException
             interrupted[] = true
+        else
+            rethrow(e)
         end
-        rethrow(e)
+    end
+
+    if interrupted[]
+        throw(InterruptException())
     end
 
     if any(t -> t.error !== nothing, tasks)
