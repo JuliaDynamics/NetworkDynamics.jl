@@ -1,12 +1,11 @@
 module NetworkDynamics
 using Graphs: Graphs, AbstractGraph, SimpleEdge, edges, vertices, ne, nv,
               SimpleGraph, SimpleDiGraph, add_edge!, has_edge
-using TimerOutputs: TimerOutputs, @timeit_debug, @timeit
+using TimerOutputs: TimerOutputs, @timeit_debug
 
 using ArgCheck: @argcheck
 using PreallocationTools: PreallocationTools, DiffCache, get_tmp
 using SciMLBase: SciMLBase
-using Base.Threads: @threads
 using NNlib: NNlib
 using KernelAbstractions: KernelAbstractions, @kernel, @index, @Const, get_backend
 using Atomix: Atomix
