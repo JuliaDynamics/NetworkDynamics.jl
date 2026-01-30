@@ -238,7 +238,7 @@ function _get_metadata(sys, name, alldefaults, sysguesses)
         if !endswith(string(name), "ˍt") # known for "internal" derivatives
             @warn "Could not extract metadata for $name $(e.msg)"
         end
-        return nt
+        return md
     end
     if haskey(alldefaults, sym)
         def = alldefaults[sym]

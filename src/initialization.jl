@@ -498,7 +498,10 @@ The function solves a nonlinear problem to find values for all free variables/pa
 - `t`: Time at which to solve for steady state. Only relevant for components with explicit time dependency.
 - `tol`: Tolerance for the residual of the initialized model (defaults to `1e-10`). Init throws error if resid ≥ tol.
 - `residual`: Optional `Ref{Float64}` which gets the final residual of the initialized model.
-- `alg=nothing`: Nonlinear solver algorithm (defaults to NonlinearSolve.jl default with QR factorization, since init problems tend to be ill-conditioned.)
+- `alg_kwargs=(;)`: Additional keyword arguments passed to the nonlinear solver algorithm constructor
+- `alg=FastShortcutNLLSPolyalg(; linsolve=QRFactorization(), autodiff=AutoForwardDiff(), alg_kwargs...)`
+
+   Nonlinear solver algorithm (defaults to NonlinearSolve.jl default with QR factorization, since init problems tend to be ill-conditioned.)
 - `solve_kwargs=(;)`: Additional keyword arguments passed to the SciML `solve` function
 - `io=stdout`: IO stream for printing information
 
@@ -530,17 +533,14 @@ function initialize_component(cf;
                              # internal keywords to "return" the final defaults/guesses after applying formulas
                              _final_defaults=nothing,
                              _final_guesses=nothing,
-                             alg=nothing,
+                             alg_kwargs=(;),
+                             alg=FastShortcutNLLSPolyalg(; linsolve=QRFactorization(), autodiff=AutoForwardDiff(), alg_kwargs...),
                              solve_kwargs=(;),
                              io=stdout,
                              kwargs...)
 
     if !isempty(kwargs)
         @warn "Passing `kwargs` to `initialize_component(!)` is deprecated. Use `alg` and `solve_kwargs=(; kw=val)` instead."
-    end
-
-    if alg == nothing
-        alg = FastShortcutNLLSPolyalg(linsolve=QRFactorization())
     end
 
     defaults = isnothing(default_overrides) ? defaults : merge(defaults, default_overrides)

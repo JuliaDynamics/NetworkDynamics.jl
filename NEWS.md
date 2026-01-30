@@ -1,5 +1,8 @@
 # NetworkDynamics Release Notes
 
+## v0.10.15 Changelog
+- small fixes, mainly for PowerDynamics tests ([#339](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/339))
+
 ## v0.10.14 Changelog
 - Add `assume_io_coupling` parameter to MTK `VertexModel` and `EdgeModel` constructors ([#332](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/332))
   - New optional parameter forces MTK to consider direct dependency chains from outputs to inputs

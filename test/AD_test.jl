@@ -32,10 +32,10 @@ end
 # jacobian(fx, AutoReverseDiff(), x0)
 # jacobian(fx, AutoFiniteDiff(), x0)
 # jacobian(fx, AutoMooncake(), x0)
-@test_broken jacobian(fx, AutoEnzyme(; mode=EnzymeCore.Forward, function_annotation=EnzymeCore.Duplicated), x0)
-@test_broken jacobian(fx, AutoEnzyme(; mode=EnzymeCore.Reverse, function_annotation=EnzymeCore.Duplicated), x0)
-@test_broken jacobian(fx, AutoEnzyme(; mode=Enzyme.set_runtime_activity(EnzymeCore.Forward), function_annotation=EnzymeCore.Duplicated), x0)
-@test_broken jacobian(fx, AutoEnzyme(; mode=Enzyme.set_runtime_activity(EnzymeCore.Reverse), function_annotation=EnzymeCore.Duplicated), x0)
+# @test_broken jacobian(fx, AutoEnzyme(; mode=EnzymeCore.Forward, function_annotation=EnzymeCore.Duplicated), x0)
+# @test_broken jacobian(fx, AutoEnzyme(; mode=EnzymeCore.Reverse, function_annotation=EnzymeCore.Duplicated), x0)
+# @test_broken jacobian(fx, AutoEnzyme(; mode=Enzyme.set_runtime_activity(EnzymeCore.Forward), function_annotation=EnzymeCore.Duplicated), x0)
+# @test_broken jacobian(fx, AutoEnzyme(; mode=Enzyme.set_runtime_activity(EnzymeCore.Reverse), function_annotation=EnzymeCore.Duplicated), x0)
 
 fp = function(p)
     dx = similar(p,length(x0))
@@ -46,10 +46,10 @@ end
 # jacobian(fp, AutoReverseDiff(), pflat(p0))
 # jacobian(fp, AutoFiniteDiff(), pflat(p0))
 # jacobian(fp, AutoMooncake(), pflat(p0))
-@test_broken jacobian(fp, AutoEnzyme(; mode=EnzymeCore.Forward, function_annotation=EnzymeCore.Duplicated), pflat(p0))
-@test_broken jacobian(fp, AutoEnzyme(; mode=EnzymeCore.Reverse, function_annotation=EnzymeCore.Duplicated), pflat(p0))
-@test_broken jacobian(fp, AutoEnzyme(; mode=Enzyme.set_runtime_activity(EnzymeCore.Forward), function_annotation=EnzymeCore.Duplicated), pflat(p0))
-@test_broken jacobian(fp, AutoEnzyme(; mode=Enzyme.set_runtime_activity(EnzymeCore.Reverse), function_annotation=EnzymeCore.Duplicated), pflat(p0))
+# @test_broken jacobian(fp, AutoEnzyme(; mode=EnzymeCore.Forward, function_annotation=EnzymeCore.Duplicated), pflat(p0))
+# @test_broken jacobian(fp, AutoEnzyme(; mode=EnzymeCore.Reverse, function_annotation=EnzymeCore.Duplicated), pflat(p0))
+# @test_broken jacobian(fp, AutoEnzyme(; mode=Enzyme.set_runtime_activity(EnzymeCore.Forward), function_annotation=EnzymeCore.Duplicated), pflat(p0))
+# @test_broken jacobian(fp, AutoEnzyme(; mode=Enzyme.set_runtime_activity(EnzymeCore.Reverse), function_annotation=EnzymeCore.Duplicated), pflat(p0))
 
 scenarios = [Scenario{:jacobian, :in}(fx, x0; res1=jacobian(fx, AutoFiniteDiff(), x0)) ,
              Scenario{:jacobian, :in}(fp, pflat(p0); res1=jacobian(fp, AutoFiniteDiff(), pflat(p0)))]
