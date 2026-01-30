@@ -109,6 +109,7 @@ struct NWState{U,P,T,NW<:Network}
     t::T
     function NWState(thing, uflat::AbstractVector, p=nothing, t=nothing)
         nw = extract_nw(thing)
+        @argcheck length(uflat) == dim(nw) "Length of uflat ($(length(uflat))) does not match number of states in network ($(dim(nw)))."
         _p = p isa Union{NWParameter,Nothing} ? p : NWParameter(nw, p)
         s = new{typeof(uflat),typeof(_p),typeof(t),typeof(nw)}(nw,uflat,_p,t)
         @argcheck isnothing(p) || s.nw === s.p.nw
