@@ -1,4 +1,4 @@
-function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t) where {A,B,C,D,E,dT,T}
+function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t; perturb=nothing, perturb_maps=nothing, RET=Val(:du)) where {A,B,C,D,E,dT,T}
     if !(eachindex(du) == eachindex(u) == 1:nw.im.lastidx_dynamic)
         throw(ArgumentError("du or u does not have expected size $(nw.im.lastidx_dynamic)"))
     end
@@ -16,6 +16,11 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t) where {A,B,C,D,E,dT,T}
     fill!(aggbuf, _appropriate_zero(aggbuf))
     gbuf = get_gbuf(nw.gbufprovider, o)
 
+    # EARLY Return if just buffers are needed
+    if RET isa Val{:buf_uninit}
+        return o, aggbuf, extbuf
+    end
+
     # vg without ff
     process_batches!(ex, Val{:g}(), !hasff, nw.vertexbatches, (nothing, nothing), duopt)
     # eg without ff
@@ -26,6 +31,12 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t) where {A,B,C,D,E,dT,T}
 
     # if loopback edges are present, we direclty copy cluster output to satelite input
     !isnothing(nw.loopbackmap) && apply_loopback!(aggbuf, o, nw.loopbackmap)
+
+    if !isnothing(perturb)
+        @assert aggfun(nw.layer.aggregator) == (+) "currently only + aggregation is supported for vertex input perturbation, got $(nw.layer.aggregator)"
+        _apply_perturb!(aggbuf, perturb, perturb_maps.vi_map)
+    end
+
     # process vg WITH ff (only allowed on loopback edges)
     process_batches!(ex, Val{:g}(), hasff, nw.vertexbatches, (aggbuf, nothing), duopt)
 
@@ -35,8 +46,16 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t) where {A,B,C,D,E,dT,T}
     # gather the external inputs
     has_external_input(nw) && collect_externals!(nw.extmap, extbuf, u, o)
 
+    if !isnothing(perturb)
+        _apply_perturb!(o, perturb, perturb_maps.vo_map)
+    end
     # gather the vertex results for edges with ff
     gather!(nw.gbufprovider, gbuf, o)
+
+    if !isnothing(perturb)
+        @assert nw.gbufprovider isa EagerGBufProvider "edge input perturbation is only supported with buffered execution schemes!"
+        _apply_perturb!(gbuf, perturb, perturb_maps.ei_map)
+    end
 
     # execute f for the edges without ff
     process_batches!(ex, Val{:f}(), !hasff, nw.layer.edgebatches, (gbuf, extbuf), duopt)
@@ -46,8 +65,15 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t) where {A,B,C,D,E,dT,T}
     # process batches might be async so sync before next step
     ex isa KAExecution && KernelAbstractions.synchronize(get_backend(du))
 
+    if !isnothing(perturb)
+        _apply_perturb!(o, perturb, perturb_maps.eo_map)
+    end
     # aggegrate the results
     aggregate!(nw.layer.aggregator, aggbuf, o)
+
+    if RET isa Val{:buf_init}
+        return o, aggbuf, extbuf
+    end
 
     # vf for vertices without ff
     process_batches!(ex, Val{:f}(), !hasff, nw.vertexbatches, (aggbuf, extbuf), duopt)
@@ -56,42 +82,24 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t) where {A,B,C,D,E,dT,T}
     ex isa KAExecution && KernelAbstractions.synchronize(get_backend(du))
     return nothing
 end
-function get_buffers(nw, u, p, t; initbufs)
-    o = get_output_cache(nw, u)
-    aggbuf = get_aggregation_cache(nw, u)
-    fill!(aggbuf, _appropriate_zero(aggbuf))
-    extbuf = has_external_input(nw) ? get_extinput_cache(nw, u) : nothing
-    if initbufs
-        du = nothing
-        duopt = (du, u, o, p, t)
-        ex = executionstyle(nw)
-        fill!(o, convert(eltype(o), NaN))
-        gbuf = get_gbuf(nw.gbufprovider, o)
-
-        # vg without ff
-        process_batches!(ex, Val{:g}(), !hasff, nw.vertexbatches, (nothing, nothing), duopt)
-        # eg without ff
-        process_batches!(ex, Val{:g}(), !hasff, nw.layer.edgebatches, (nothing, nothing), duopt)
-        # process batches might be async so sync before next step
-        ex isa KAExecution && KernelAbstractions.synchronize(get_backend(u))
-        # if loopback edges are present, we direclty copy cluster output to satelite input
-        !isnothing(nw.loopbackmap) && apply_loopback!(aggbuf, o, nw.loopbackmap)
-        # process vg WITH ff (only allowed on loopback edges)
-        process_batches!(ex, Val{:g}(), hasff, nw.vertexbatches, (aggbuf, nothing), duopt)
-        # process batches might be async so sync before next step
-        ex isa KAExecution && KernelAbstractions.synchronize(get_backend(du))
-        # gather the external inputs
-        has_external_input(nw) && collect_externals!(nw.extmap, extbuf, u, o)
-        # gather the vertex results for edges with ff
-        gather!(nw.gbufprovider, gbuf, o) # 2.6ms
-        # execute g for edges with ff
-        process_batches!(ex, Val{:g}(), hasff, nw.layer.edgebatches, (gbuf, nothing), duopt)
-        # process batches might be async so sync before next step
-        ex isa KAExecution && KernelAbstractions.synchronize(get_backend(u))
-        # aggegrate the results
-        aggregate!(nw.layer.aggregator, aggbuf, o)
+function get_buffers(nw, u, p, t; initbufs, perturb, kwargs...)
+    duT = eltype(u)
+    if p isa AbstractArray
+        duT = promote_type(duT, eltype(p))
     end
-    o, aggbuf, extbuf
+    if t isa Number
+        duT = promote_type(duT, typeof(t))
+    end
+    if perturb isa AbstractArray
+        duT = promote_type(duT, eltype(perturb))
+    end
+
+    du = Vector{duT}(undef, length(u))
+    if initbufs
+        nw(du, u, p, t; RET=Val(:buf_init), perturb, kwargs...)
+    else
+        nw(du, u, p, t; RET=Val(:buf_uninit), perturb, kwargs...)
+    end
 end
 
 @inline function process_batches!(::SequentialExecution, fg, filt::F, batches, inbufs, duopt) where {F}
@@ -238,5 +246,72 @@ function _appropriate_zero(x)
         zero(eltype(x))
     else
         0.0 # hopefully that casts to what is needed
+    end
+end
+
+function apply_vin_perturb!(buf, nw::Network, perturb)
+    for (key, value) in perturb
+        if key isa VIndex
+            _apply_vin_perturb!(buf, nw, key, value)
+        end
+    end
+end
+function apply_ein_perturb!(buf, nw::Network, perturb)
+    for (key, value) in perturb
+        if key isa EIndex
+            _apply_ein_perturb!(buf, nw, key, value)
+        end
+    end
+end
+function apply_vout_perturb!(buf, nw::Network, perturb)
+    for (key, value) in perturb
+        if key isa VIndex
+            _apply_vout_perturb!(buf, nw, key, value)
+        end
+    end
+end
+function apply_eout_perturb!(buf, nw::Network, perturb)
+    for (key, value) in perturb
+        if key isa EIndex
+            _apply_eout_perturb!(buf, nw, key, value)
+        end
+    end
+end
+
+function _apply_vin_perturb!(buf, nw::Network, sidx::VIndex{<:Any,Nothing}, vec)
+    vidx = resolvecompidx(nw, sidx)
+    range = nw.im.v_aggr[vidx]
+    buf[range] .+= vec
+end
+
+function _apply_ein_perturb!(buf, nw::Network, sidx::EIndex{<:Any,Nothing}, nt::NamedTuple)
+    eidx = resolvecompidx(nw, sidx)
+    for batch in nw.layer.edgebatches
+        i = findfirst(isequal(eidx), batch.indices)
+        if !isnothing(i)
+            srcv, dstv = get_src_dst(buf, batch, i)
+            srcv += nt.src
+            dstv += nt.dst
+            return
+        end
+    end
+    error("edge $v with idx $eidx not found in any edge batch, should never be reached")
+end
+
+function _apply_vout_perturb!(buf, nw::Network, sidx::VIndex{<:Any,Nothing}, vec)
+    vidx = resolvecompidx(nw, sidx)
+    range = nw.im.v_out[vidx]
+    buf[range] .+= vec
+end
+function _apply_eout_perturb!(buf, nw::Network, sidx::EIndex{<:Any, Nothing}, ntup)
+    eidx = resolvecompidx(nw, sidx)
+    ranges = nw.im.e_out[eidx]
+    buf[ranges.src] .+= ntup.src
+    buf[ranges.dst] .+= ntup.dst
+end
+
+function _apply_perturb!(buf, perturb, map)
+    for (bufidx, pertubidx) in map
+        buf[bufidx] += perturb[pertubidx]
     end
 end

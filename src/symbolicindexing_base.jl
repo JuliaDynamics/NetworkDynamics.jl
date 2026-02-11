@@ -691,8 +691,8 @@ function SII.observed(nw::Network, snis)
             type == OBS_TYPE && return outcache[idx]
         end
     else
-        (u, p, t, out=_outbuf(u,p,t, length(_snis))) -> begin
-            outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs=needsbuf)
+        (u, p, t, out=_outbuf(u,p,t, length(_snis)); kwargs...) -> begin
+            outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs=needsbuf, kwargs...)
 
             outcache = PreallocationTools.get_tmp(obsoutcache, eltype(outbuf))
             unrolled_foreach(batched_obsf) do batch
