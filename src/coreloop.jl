@@ -82,7 +82,7 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t; perturb=nothing, perturb_m
     ex isa KAExecution && KernelAbstractions.synchronize(get_backend(du))
     return nothing
 end
-function get_buffers(nw, u, p, t; initbufs, perturb, kwargs...)
+function get_buffers(nw, u, p, t; initbufs, perturb=nothing, kwargs...)
     duT = eltype(u)
     if p isa AbstractArray
         duT = promote_type(duT, eltype(p))

@@ -338,7 +338,7 @@ Base.axes(si::_IterableSubcomponent) = axes(si.subidx)
 Base.getindex(si::_IterableSubcomponent, i) = idxtype(si)(si.compidx, si.subidx[i])
 function Base.eltype(si::_IterableSubcomponent)
     if isconcretetype(eltype(si.subidx))
-        idxtype(si){eltype(si.compidx),eltype(si.subidx)}
+        idxtype(si){typeof(si.compidx),eltype(si.subidx)}
     else
         Any
     end
