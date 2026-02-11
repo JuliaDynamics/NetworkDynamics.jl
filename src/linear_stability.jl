@@ -122,7 +122,6 @@ function jacobian_eigenvals(nw::Network, s0; eigvalf=LinearAlgebra.eigvals)
         return eigvalf(A_s)       # Eigenvalues of the reduced jacobian
     end
 end
-using LinearAlgebra
 
 """
     jacobian_participation(nw::Network, s0::NWState; normalize=true)
@@ -171,8 +170,8 @@ function jacobian_participation(nw::Network, s0; normalize=true)
     end
 
     # Compute eigenvalues and eigenvectors
-    eigvals, V = eigen(A_s)  # Right eigenvectors (columns of V)
-    W = inv(V)                # Left eigenvectors (rows of W)
+    eigvals, V = LinearAlgebra.eigen(A_s)  # Right eigenvectors (columns of V)
+    W = LinearAlgebra.inv(V)                # Left eigenvectors (rows of W)
 
     # Compute participation factors
     n_states = size(A_s, 1)
@@ -221,152 +220,6 @@ function show_mode_participation(nw::Network, s0, mode_idx::Int;
     end
 end
 
-
-function cl_transfer_function(nw::Network, s0, input, output)
-    # We assume the following system
-    # M * ̇x = f(x, p)
-    #     u = h(x, p) # input observable
-    #     y = g(x, p) # output observable
-    # we then linearize according to
-    # M*δẋ = fx*δx + fp*δp
-    #   δu = hx*δx + hp*δp
-    #   δy = gx*δx + gp*δp
-    # which is the following in freq domain
-    # (M*s - fx)*x̂ = fp*p̂                          |x̂| = | Ms-fx  -fp |^(-1) |0| * û
-    #            û = hx*x̂ + hp*p̂   together gives  |p̂|   |  hx     hp |      |1|
-    #            ŷ = gx*x̂ + gp*p̂   which gives      ŷ = [gx px] * [x̂ p̂]ᵗ
-    # therefore we get
-    #  F(x) = [gx gu] * | Ms-fx  -fp |^(-1) |0|
-    #                   |  hx     hp |      |1|
-
-    M = nw.mass_matrix
-
-    getu = SII.getu(nw, input)
-    gety = SII.getu(nw, output)
-
-    # first we need to define the jacobain hx, hp, gx, gp, fx, fp
-    h = function(x, p)
-        _s = NWState(nw, x, p, s0.t)
-        getu(_s)
-    end
-    g = function(x, p)
-        _s = NWState(nw, x, p, s0.t)
-        gety(_s)
-    end
-    f = function(x, p)
-        du = zeros(promote_type(eltype(x), eltype(p)), length(x))
-        nw(du, x, p, s0.t)
-        du
-    end
-    hx = ForwardDiff.jacobian(x -> h(x, pflat(s0)), uflat(s0))
-    hp = ForwardDiff.jacobian(p -> h(uflat(s0), p), pflat(s0))
-    gx = ForwardDiff.jacobian(x -> g(x, pflat(s0)), uflat(s0))
-    gp = ForwardDiff.jacobian(p -> g(uflat(s0), p), pflat(s0))
-    fx = ForwardDiff.jacobian(x -> f(x, pflat(s0)), uflat(s0))
-    fp = ForwardDiff.jacobian(p -> f(uflat(s0), p), pflat(s0))
-
-    dim_x = dim(nw)
-    dim_u = length(input)
-
-    F = function(s)
-        X = [(M*s-fx)  -fp
-            hx       hp]
-        mask = [zeros(dim_x, dim_u)
-                diagm(ones(dim_u))]
-        [gx gp] * LinearAlgebra.pinv(X) * mask
-    end
-end
-
-function cl_bus_tf_function(nw::Network, s0, sidx)
-    i = resolvecompidx(nw, sidx)
-    inputs = collect(VIndex(i, insym(nw[sidx])))
-    # outputs = collect(VIndex(i, outsym(nw[sidx])))
-
-    f = function(x, pert)
-        du = zeros(promote_type(eltype(x), eltype(pert)), length(x))
-        nw(du, x, pflat(s0), s0.t; input_perturb=Dict(VIndex(i) => pert))
-        du
-    end
-    g = function(x, pert)
-        du = f(x, pert) # make sure to fill buffers
-        # XXX: Hacky way to get the cache
-        outbuf = get_tmp(nw.caches.output, du) # get the outbuf which was filled by exec of the f function
-        outbuf[nw.im.v_out[i]] # return the output of the bus component
-    end
-
-    M = nw.mass_matrix
-    A = fx = ForwardDiff.jacobian(x -> f(x, zeros(length(inputs))), uflat(s0))
-    B = fu = ForwardDiff.jacobian(pert -> f(uflat(s0), pert), zeros(length(inputs)))
-    C = gx = ForwardDiff.jacobian(x -> g(x, zeros(length(inputs))), uflat(s0))
-    D = gu = ForwardDiff.jacobian(pert -> g(uflat(s0), pert), zeros(length(inputs)))
-
-    G(s) = C * ((M*s - A) \ B) + D
-end
-
-function cl_bus_invtf_function(nw::Network, s0, sidx)
-    i = resolvecompidx(nw, sidx)
-    # inputs = collect(VIndex(i, insym(nw[sidx])))
-    outputs = collect(VIndex(i, outsym(nw[sidx])))
-
-    f = function(x, pert)
-        du = zeros(promote_type(eltype(x), eltype(pert)), length(x))
-        nw(du, x, pflat(s0), s0.t; output_perturb=Dict(VIndex(i) => pert))
-        du
-    end
-    g = function(x, pert)
-        du = f(x, pert) # make sure to fill buffers
-        # XXX: Hacky way to get the cache
-        aggbuf = get_tmp(nw.caches.aggregation, du) # get the filled aggregation buffer (input for that vertex)
-        aggbuf[nw.im.v_aggr[i]] # return the input of the bus component
-    end
-
-    M = nw.mass_matrix
-    A = fx = ForwardDiff.jacobian(x -> f(x, zeros(length(outputs))), uflat(s0))
-    B = fu = ForwardDiff.jacobian(pert -> f(uflat(s0), pert), zeros(length(outputs)))
-    C = gx = ForwardDiff.jacobian(x -> g(x, zeros(length(outputs))), uflat(s0))
-    D = gu = ForwardDiff.jacobian(pert -> g(uflat(s0), pert), zeros(length(outputs)))
-
-    G(s) = C * ((M*s - A) \ B) + D
-end
-
-function cl_transfer_function2(nw::Network, s0; input, output)
-    # output = collect(VIndex(i, insym(nw[sidx])))
-    # input = collect(VIndex(i, outsym(nw[sidx])))
-    M = nw.mass_matrix
-    x0 = uflat(s0)
-    p0 = pflat(s0)
-    t0 = s0.t
-    u0 = zeros(length(input))
-
-    getu = SII.getu(nw, input)
-    gety = SII.getu(nw, output)
-
-    h = function(x)
-        _s = NWState(nw, x, p0, t0)
-        getu(_s)
-    end
-    hx = ForwardDiff.jacobian(h, uflat(s0))
-    hx⁻¹ = LinearAlgebra.pinv(hx)
-
-    f = function(x, u)
-        x̂ = x + hx⁻¹*u
-        du = zeros(eltype(x̂), length(x))
-        nw(du, x̂, p0, t0)
-        du
-    end
-    g = function(x, u)
-        x̂ = x + hx⁻¹*u
-        _s = NWState(nw, x̂, p0, t0)
-        gety(_s)
-    end
-
-    A = fx = ForwardDiff.jacobian(x -> f(x, u0), x0)
-    B = fu = ForwardDiff.jacobian(u -> f(x0, u), u0)
-    C = gx = ForwardDiff.jacobian(x -> g(x, u0), x0)
-    D = gu = ForwardDiff.jacobian(u -> g(x0, u), u0)
-
-    G(s) = C * ((M*s - A) \ B) + D
-end
 
 function linearized_model(nw, s0; in, out)
     perturbation_channels = collect(in)

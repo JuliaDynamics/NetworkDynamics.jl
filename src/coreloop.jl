@@ -249,67 +249,6 @@ function _appropriate_zero(x)
     end
 end
 
-function apply_vin_perturb!(buf, nw::Network, perturb)
-    for (key, value) in perturb
-        if key isa VIndex
-            _apply_vin_perturb!(buf, nw, key, value)
-        end
-    end
-end
-function apply_ein_perturb!(buf, nw::Network, perturb)
-    for (key, value) in perturb
-        if key isa EIndex
-            _apply_ein_perturb!(buf, nw, key, value)
-        end
-    end
-end
-function apply_vout_perturb!(buf, nw::Network, perturb)
-    for (key, value) in perturb
-        if key isa VIndex
-            _apply_vout_perturb!(buf, nw, key, value)
-        end
-    end
-end
-function apply_eout_perturb!(buf, nw::Network, perturb)
-    for (key, value) in perturb
-        if key isa EIndex
-            _apply_eout_perturb!(buf, nw, key, value)
-        end
-    end
-end
-
-function _apply_vin_perturb!(buf, nw::Network, sidx::VIndex{<:Any,Nothing}, vec)
-    vidx = resolvecompidx(nw, sidx)
-    range = nw.im.v_aggr[vidx]
-    buf[range] .+= vec
-end
-
-function _apply_ein_perturb!(buf, nw::Network, sidx::EIndex{<:Any,Nothing}, nt::NamedTuple)
-    eidx = resolvecompidx(nw, sidx)
-    for batch in nw.layer.edgebatches
-        i = findfirst(isequal(eidx), batch.indices)
-        if !isnothing(i)
-            srcv, dstv = get_src_dst(buf, batch, i)
-            srcv += nt.src
-            dstv += nt.dst
-            return
-        end
-    end
-    error("edge $v with idx $eidx not found in any edge batch, should never be reached")
-end
-
-function _apply_vout_perturb!(buf, nw::Network, sidx::VIndex{<:Any,Nothing}, vec)
-    vidx = resolvecompidx(nw, sidx)
-    range = nw.im.v_out[vidx]
-    buf[range] .+= vec
-end
-function _apply_eout_perturb!(buf, nw::Network, sidx::EIndex{<:Any, Nothing}, ntup)
-    eidx = resolvecompidx(nw, sidx)
-    ranges = nw.im.e_out[eidx]
-    buf[ranges.src] .+= ntup.src
-    buf[ranges.dst] .+= ntup.dst
-end
-
 function _apply_perturb!(buf, perturb, map)
     for (bufidx, pertubidx) in map
         buf[bufidx] += perturb[pertubidx]
