@@ -678,7 +678,7 @@ function SII.observed(nw::Network, snis)
         (u, p, t) -> begin
             outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs=needsbuf)
 
-            outcache = PreallocationTools.get_tmp(obsoutcache, first(u))
+            outcache = PreallocationTools.get_tmp(obsoutcache, eltype(outbuf))
             unrolled_foreach(batched_obsf) do batch
                 batch(outcache, u, outbuf, aggbuf, extbuf, p, t)
             end
@@ -691,10 +691,10 @@ function SII.observed(nw::Network, snis)
             type == OBS_TYPE && return outcache[idx]
         end
     else
-        (u, p, t, out=similar(u, length(_snis))) -> begin
+        (u, p, t, out=_outbuf(u,p,t, length(_snis))) -> begin
             outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs=needsbuf)
 
-            outcache = PreallocationTools.get_tmp(obsoutcache, first(u))
+            outcache = PreallocationTools.get_tmp(obsoutcache, eltype(outbuf))
             unrolled_foreach(batched_obsf) do batch
                 batch(outcache, u, outbuf, aggbuf, extbuf, p, t)
             end
@@ -716,6 +716,8 @@ function SII.observed(nw::Network, snis)
         end
     end
 end
+_outbuf(u, p, ::Nothing, len) = Vector{promote_type(eltype(u), eltype(p))}(undef, len)
+_outbuf(u, p, t, len) = Vector{promote_type(eltype(u), eltype(p), typeof(t))}(undef, len)
 function _expand_and_collect(inpr, sni::SymbolicIndex)
     nw = extract_nw(inpr)
     if _hascolon(sni)
