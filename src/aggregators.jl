@@ -293,3 +293,6 @@ get_aggr_constructor(a::SparseAggregator) = SparseAggregator(+)
 
 iscudacompatible(::Type{<:KAAggregator}) = true
 iscudacompatible(::Type{<:SparseAggregator}) = true
+
+aggfun(agg::Aggregator) = agg.f
+aggfun(agg::SparseAggregator) = +
