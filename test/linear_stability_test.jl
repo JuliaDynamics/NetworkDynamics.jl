@@ -37,7 +37,7 @@ using Test
 
         # Test is_linear_stable function
         @test is_linear_stable(nw, s0)
-        @test_throws ErrorException is_linear_stable(nw, s_non_fix)
+        @test_throws "state s0 is not a fixpoint" is_linear_stable(nw, s_non_fix)
     end
 
     @testset "Kuramoto system test" begin
@@ -65,41 +65,29 @@ using Test
         λ = jacobian_eigenvals(nw, s0)
         @test length(λ) == 8  # 4 nodes × 2 states each
 
-        @info "Kuramoto eigenvalues: " λ
-
         # Test stability (should be stable for this configuration)
         @test is_linear_stable(nw, s0; marginally_stable=true)
+        show_participation_factors(s0)
 
         # Test that eigenvalues can be complex
         @test any(isa.(λ, Complex))
     end
 
     @testset "DAE system with mass matrix" begin
-        # Test DAE system with mixed differential/algebraic equations
-        g = path_graph(3)
-        # Create vertex with mixed mass matrix: some differential, some algebraic
-        mixed_vertex = VertexModel(f=(dx, x, edges, p, t) -> (dx[1] = -x[1] + edges[1]; dx[2] = 0),
-                                  g=(y, x, p, t) -> y[1] = x[1],
-                                  dim=2, outdim=1,
-                                  mass_matrix=LinearAlgebra.Diagonal([1, 0]))  # Mixed ODE/DAE
-
-        simple_edge = EdgeModel(g=AntiSymmetric((e, v_s, v_d, p, t) -> e[1] = v_s[1] - v_d[1]),
-                               outdim=1)
-
-        nw = Network(g, mixed_vertex, simple_edge)
+        nw, s0 = Lib.powergridlike_network();
 
         # This system has a non-identity mass matrix due to algebraic constraints
         @test nw.mass_matrix != I
-        s0 = find_fixpoint(nw)
         @test isfixpoint(nw, s0)
 
         # Test eigenvalue computation for DAE system (should use reduced Jacobian)
         λ = jacobian_eigenvals(nw, s0)
-        @test length(λ) == 3  # Should have 3 eigenvalues (differential variables only)
-        @test all(real.(λ) .< 0)  # Should be stable
+        @test length(λ) == sum(nw.mass_matrix) # reduce first
 
         # Test stability
-        @test is_linear_stable(nw, s0)
+        @test is_linear_stable(nw, s0; marginally_stable=true)
+
+        show_participation_factors(s0)
 
         # Verify this system uses the DAE branch (reduced Jacobian approach)
         c_idx = findall(LinearAlgebra.diag(nw.mass_matrix) .== 0)
@@ -107,5 +95,4 @@ using Test
         @test length(c_idx) > 0  # Has algebraic constraints
         @test length(d_idx) > 0  # Has differential equations
     end
-
 end

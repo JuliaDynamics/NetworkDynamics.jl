@@ -1,269 +1,347 @@
 """
-    isfixpoint(nw::Network, s0::NWState; tol=1e-10)
+    isfixpoint([nw::Network, ]s0::NWState; tol=1e-10)
 
 Check if the state `s0` is a fixpoint of the network `nw` by
 calculating the the RHS and check that every entry is within the
 given tolerance `tol`.
 """
 function isfixpoint(nw::Network, s0::NWState; tol=1e-10)
-    # Check if the state is a fixpoint of the network
     u0 = uflat(s0)
     p0 = pflat(s0)
     du = zeros(eltype(u0), length(u0))
     nw(du, u0, p0, s0.t)
-
-    # Check if the change is within the tolerance
     return all(abs.(du) .< tol)
+end
+isfixpoint(s0::NWState, args...; kwargs...) = isfixpoint(extract_nw(s0), s0, args...; kwargs...)
+
+"""
+    linearize_network([nw::Network, ]s0::NWState)
+    linearize_network([nw::Network, ]s0::NWState; in, out)
+
+Linearize the network dynamics around state `s0`.
+
+Without `in`/`out`, returns `(; M, A, state_syms)` containing the mass matrix,
+state Jacobian, and symbolic state names.
+
+With `in`/`out`, returns `(; M, A, B, C, D, G, state_syms, in_syms, out_syms)`
+with full state-space matrices for the perturbation channels specified by `in`
+and observations specified by `out`. `G(s)` is the transfer function
+`G(s) = C * (M*s - A)⁻¹ * B + D`.
+
+Perturbation channels (`in`) can be any component input or output, specified as
+symbolic indices (e.g. `VIndex(1, :P)`, `EIndex(1, :i_r)`).
+
+# Examples
+```julia
+# Simple linearization for eigenvalue analysis
+sys = linearize_network(nw, s0)
+eigvals = jacobian_eigenvals(sys)
+
+# Full ABCD linearization with transfer function
+sys = linearize_network(nw, s0; in=[VIndex(1, :u_r)], out=[VIndex(1, :i_r)])
+sys.G(1im * 2π * 50)  # evaluate transfer function at 50 Hz
+```
+
+See also: [`jacobian_eigenvals`](@ref), [`participation_factors`](@ref)
+"""
+function linearize_network(nw, s0; in=nothing, out=nothing)
+    x0 = uflat(s0)
+    p0 = pflat(s0)
+    t0 = s0.t
+    M = nw.mass_matrix
+    state_syms = SII.variable_symbols(nw)
+
+    if isnothing(in) && isnothing(out)
+        h!(dx, x) = nw(dx, x, p0, t0)
+        A = ForwardDiff.jacobian(h!, similar(x0), x0)
+        return (; M, A, state_syms)
+    else
+        isnothing(in) && throw(ArgumentError("Must specify `in` when `out` is given"))
+        isnothing(out) && throw(ArgumentError("Must specify `out` when `in` is given"))
+
+        in_syms = collect(in)
+        out_syms = collect(out)
+        δ0, perturb_maps = _classify_perturbation_channels(nw, in_syms)
+
+        f = function(x, δ)
+            du = zeros(promote_type(eltype(x), eltype(δ)), length(x))
+            nw(du, x, p0, t0; perturb=δ, perturb_maps)
+            du
+        end
+        obsf = SII.observed(nw, out_syms)
+        g = function(x, δ)
+            result = zeros(promote_type(eltype(x), eltype(δ)), length(out_syms))
+            obsf(x, p0, t0, result; perturb=δ, perturb_maps)
+            result
+        end
+
+        A = ForwardDiff.jacobian(x -> f(x, δ0), x0)
+        B = ForwardDiff.jacobian(δ -> f(x0, δ), δ0)
+        C = ForwardDiff.jacobian(x -> g(x, δ0), x0)
+        D = ForwardDiff.jacobian(δ -> g(x0, δ), δ0)
+        G(s) = C * ((M * s - A) \ B) + D
+
+        return (; M, A, B, C, D, G, state_syms, in_syms, out_syms)
+    end
+end
+linearize_network(s0::NWState, args...; kwargs...) = linearize_network(extract_nw(s0), s0, args...; kwargs...)
+
+"""
+    reduce_dae(M, A) -> (; A_s, d_idx, c_idx)
+
+Reduce a differential-algebraic system `M * ẋ = A*x` to an ordinary differential
+system by eliminating algebraic constraints.
+
+Partitions variables into differential (`d_idx`, where `M_ii = 1`) and algebraic
+(`c_idx`, where `M_ii = 0`). Let `x = [x_d; x_a]` where `x_d` are differential
+and `x_a` algebraic variables. The Jacobian `A` is partitioned as:
+
+```
+A = [f_x  f_y]    f_x = ∂f/∂x_d,  f_y = ∂f/∂x_a   (differential equations)
+    [g_x  g_y]    g_x = ∂g/∂x_d,  g_y = ∂g/∂x_a   (algebraic constraints)
+```
+
+The algebraic constraint `0 = g_x*x_d + g_y*x_a` is solved for `x_a` and
+substituted into the differential equations, giving the reduced state matrix:
+
+    A_s = f_x - f_y * g_y⁻¹ * g_x
+
+For unconstrained systems (`M = I`), returns the original matrix unchanged.
+
+See: \"Power System Modelling and Scripting\", F. Milano, Chapter 7.2.
+"""
+function reduce_dae(M, A)
+    if M == LinearAlgebra.I
+        n = size(A, 1)
+        return (; A_s=A, d_idx=collect(1:n), c_idx=Int[])
+    end
+
+    diag_M = LinearAlgebra.diag(M)
+    d_idx = findall(==(1), diag_M)
+    c_idx = findall(==(0), diag_M)
+
+    f_x = A[d_idx, d_idx]
+    f_y = A[d_idx, c_idx]
+    g_x = A[c_idx, d_idx]
+    g_y = A[c_idx, c_idx]
+
+    local A_s
+    try
+        A_s = f_x - f_y * (g_y \ g_x)
+    catch e
+        @warn "Matrix g_y is singular or ill-conditioned, falling back to pseudoinverse $g_y" exception=(e, catch_backtrace())
+        gy_inv = LinearAlgebra.pinv(g_y)
+        A_s = f_x - f_y * gy_inv * g_x
+    end
+    return (; A_s, d_idx, c_idx)
 end
 
 """
-    is_linear_stable(nw::Network, s0::NWState; marginally_stable=false, kwargs...)
+    jacobian_eigenvals([nw::Network, ]s0::NWState; kwargs...)
+    jacobian_eigenvals(sys::NamedTuple; eigvalf=LinearAlgebra.eigvals)
 
-Check if the fixpoint `s0` of the network `nw` is linearly stable by computing
-the eigenvalues of the Jacobian matrix (or reduced Jacobian for constrained systems).
+Compute the eigenvalues of the (reduced) Jacobian for linear stability analysis.
 
-A fixpoint is linearly stable if all eigenvalues of the Jacobian have negative
-real parts. For systems with algebraic constraints (non-identity mass matrix),
-the reduced Jacobian is used following the approach in [1].
-See [`jacobian_eigenvals`](@ref) for more details.
+For unconstrained systems (`M = I`), returns eigenvalues of the full Jacobian.
+For constrained systems (DAE), computes eigenvalues of the reduced Jacobian
+after eliminating algebraic variables.
 
-# Arguments
-- `nw::Network`: The network dynamics object
-- `s0::NWState`: The state to check for linear stability (must be a fixpoint)
-- `marginally_stable::Bool=false`: If `true`, eigenvalues with zero real part are considered stable.
-- `atol::Float64=1e-14`: Absolute tolerance for determining marginal stability. When `marginally_stable=true`, eigenvalues with `|real(λ)| < atol` are treated as having zero real part.
-- `kwargs...`: Additional keyword arguments passed to `jacobian_eigenvals`
+The `eigvalf` keyword allows passing a custom eigenvalue solver (e.g. an
+autodifferentiable eigensolver).
 
-# Returns
-- `Bool`: `true` if the fixpoint is linearly stable, `false` otherwise
+See also: [`linearize_network`](@ref), [`participation_factors`](@ref)
+"""
+function jacobian_eigenvals(sys::NamedTuple; eigvalf=LinearAlgebra.eigvals)
+    (; A_s) = reduce_dae(sys.M, sys.A)
+    return eigvalf(A_s)
+end
 
-# References
-[1] "Power System Modelling and Scripting", F. Milano, Chapter 7.2.
+function jacobian_eigenvals(nw::Network, s0; kwargs...)
+    return jacobian_eigenvals(linearize_network(nw, s0); kwargs...)
+end
+jacobian_eigenvals(s0::NWState, args...; kwargs...) = jacobian_eigenvals(extract_nw(s0), s0, args...; kwargs...)
+
+"""
+    is_linear_stable([nw::Network, ]s0; marginally_stable=false, atol=1e-14, kwargs...)
+
+Check if the fixpoint `s0` is linearly stable by checking that all eigenvalues
+of the (reduced) Jacobian have negative real parts.
+
+Set `marginally_stable=true` to also accept eigenvalues with zero real part
+(within tolerance `atol`).
+
+See also: [`jacobian_eigenvals`](@ref), [`linearize_network`](@ref)
 """
 function is_linear_stable(nw::Network, s0; marginally_stable=false, atol=1e-14, kwargs...)
     isfixpoint(nw, s0) || error("The state s0 is not a fixpoint of the network nw.")
     λ = jacobian_eigenvals(nw, s0; kwargs...)
-    comparator = if marginally_stable
-        λ -> real(λ) - atol < 0.0 || isapprox(real(λ), 0.0; atol)
+    if marginally_stable
+        return all(λi -> real(λi) < atol || isapprox(real(λi), 0.0; atol), λ)
     else
-        λ -> real(λ) < 0.0
-    end
-    if all(comparator, λ)
-        return true
-    else
-        return false
+        return all(λi -> real(λi) < 0.0, λ)
     end
 end
+is_linear_stable(s0::NWState, args...; kwargs...) = is_linear_stable(extract_nw(s0), s0, args...; kwargs...)
 
 """
-    jacobian_eigenvals(nw::Network, s0::NWState; eigvalf=LinearAlgebra.eigvals)
+    participation_factors([nw::Network, ]s0::NWState; kwargs...)
+    participation_factors(sys::NamedTuple; normalize=true)
 
-Compute the eigenvalues of the Jacobian matrix for linear stability analysis of
-the network dynamics at state `s0`.
+Compute participation factors showing which differential state variables
+participate in each eigenmode of the (reduced) Jacobian.
 
-For systems without algebraic constraints (identity mass matrix), this returns
-the eigenvalues of the full Jacobian matrix. For constrained systems (non-identity
-mass matrix), it computes the eigenvalues of the reduced Jacobian following the
-approach for differential-algebraic equations outlined in [1]
+Returns a named tuple:
+- `eigenvalues`: eigenvalues of the reduced Jacobian
+- `pfactors`: participation matrix where `pfactors[k,i]` is the participation
+  of differential state `k` in mode `i`
+- `state_syms`: symbolic names of the differential states
 
-# Arguments
-- `nw::Network`: The network dynamics object
-- `s0::NWState`: The state at which to compute the Jacobian eigenvalues
-- `eigvalf`: Function to compute eigenvalues (default: `LinearAlgebra.eigvals`)
+Participation factors are computed as `p_ki = |W[i,k] * V[k,i]|` where `V` are
+right eigenvectors and `W = V⁻¹` are left eigenvectors. When `normalize=true`
+(default), each mode's participation factors sum to 1.
 
-# Returns
-- `Vector`: Eigenvalues of the Jacobian (or reduced Jacobian for constrained systems)
-
-# Algorithm
-For unconstrained systems (M = I):
-- Computes eigenvalues of the full Jacobian J
-
-For constrained systems (M ≠ I, differential-algebraic equations):
-- The system has the form: M * dz/dt = f(z, t) where M is a diagonal mass matrix
-- Variables are partitioned into differential (M_ii = 1) and algebraic (M_ii = 0) components
-- Let z = [x; y] where x are differential and y are algebraic variables
-- The Jacobian J = ∂f/∂z is partitioned as:
-  ```
-  J = [f_x  f_y]  where f_x = ∂f_d/∂x, f_y = ∂f_d/∂y
-      [g_x  g_y]        g_x = ∂g_a/∂x, g_y = ∂g_a/∂y
-  ```
-- For the algebraic constraints 0 = g_a(x, y), we have dy/dt = -g_y^(-1) * g_x * dx/dt
-- Substituting into the differential equations gives the reduced system:
-  dx/dt = (f_x - f_y * g_y^(-1) * g_x) * x = A_s * x
-- The eigenvalues of the reduced Jacobian A_s determine stability
-- This approach follows the theory of differential-algebraic equations [1]
-
-# References
-[1] "Power System Modelling and Scripting", F. Milano, Chapter 7.2.
+See also: [`linearize_network`](@ref), [`jacobian_eigenvals`](@ref)
 """
-function jacobian_eigenvals(nw::Network, s0; eigvalf=LinearAlgebra.eigvals)
-    x0, p, t = uflat(s0), pflat(s0), s0.t # unpack state
-    M = nw.mass_matrix
+function participation_factors(sys::NamedTuple; normalize=true)
+    (; A_s, d_idx) = reduce_dae(sys.M, sys.A)
 
-    h!(dx, x) = nw(dx, x, p, t)
-    j(x) = (dx = similar(x); ForwardDiff.jacobian(h!, dx, x)) # Jacobian
-    J = j(x0) # Full Jacobian at the equilibrium point
+    eigenvalues, V = LinearAlgebra.eigen(A_s)
+    W = LinearAlgebra.inv(V)
 
-    if M == LinearAlgebra.I # Constraint free system -> use eigenvalues of jacobian
-        return  eigvalf(J)
-    else # Constraints -> Use eigenvalues of reduced jacobian
-        M != LinearAlgebra.Diagonal(M) && error("The constraints are not diagonal.")
-        c_idx = findall(LinearAlgebra.diag(M) .== 0)
-        d_idx = findall(LinearAlgebra.diag(M) .== 1)
-
-        f_x = J[d_idx, d_idx] # Differential equations evaluated at the differential variables
-        f_y = J[d_idx, c_idx] # Differential equations evaluated at the constrained variables
-
-        g_x = J[c_idx, d_idx] # Constrained equations evaluated at the differential variables
-        g_y = J[c_idx, c_idx] # Constrained equations evaluated at the constrained variables
-
-        D = f_y * LinearAlgebra.pinv(g_y) * g_x # Degradation matrix
-        A_s = f_x - D             # State matrix / Reduced Jacobian (eq. 7.16 in [1])
-        return eigvalf(A_s)       # Eigenvalues of the reduced jacobian
+    n = size(A_s, 1)
+    pfactors = zeros(n, n)
+    for i in 1:n, k in 1:n
+        pfactors[k, i] = abs(W[i, k] * V[k, i])
     end
+    if normalize
+        for i in 1:n
+            s = sum(@view pfactors[:, i])
+            s > 0 && (pfactors[:, i] ./= s)
+        end
+    end
+
+    state_syms = haskey(sys, :state_syms) ? sys.state_syms[d_idx] : nothing
+    return (; eigenvalues, pfactors, state_syms)
 end
 
+function participation_factors(nw::Network, s0; kwargs...)
+    return participation_factors(linearize_network(nw, s0); kwargs...)
+end
+participation_factors(s0::NWState, args...; kwargs...) = participation_factors(extract_nw(s0), s0, args...; kwargs...)
+
 """
-    jacobian_participation(nw::Network, s0::NWState; normalize=true)
+    show_participation_factors(io::IO, pf::NamedTuple; kwargs...)
+    show_participation_factors(pf::NamedTuple; kwargs...)
 
-Compute participation factors showing which state variables participate in each mode.
+Display participation factors showing which states participate in each eigenmode.
+Each mode is listed with its contributing states and their participation values.
 
-# Arguments
-- `nw::Network`: The network dynamics object
-- `s0::NWState`: The state at which to compute participation factors
-- `normalize=true`: Whether to normalize participation factors per mode to sum to 1
+# Keyword Arguments
+- `threshold=0.01`: Only show participation factors above this threshold (set to 0 to show all)
+- `sigdigits=3`: Number of significant digits for displaying values
+- `sortby=:eigenvalue`: Sort modes by `:eigenvalue` (real part) or `:magnitude`
 
-# Returns
-- `eigvals`: Eigenvalues of the (reduced) Jacobian
-- `pmat`: Participation matrix where pmat[k,i] is the participation of state k in mode i
-- `d_idx`: Indices of differential states (relevant for constrained systems)
-
-# Interpretation
-For each mode i (column), pmat[:,i] shows which states are most involved.
-Higher values indicate stronger participation.
+# Example
+```julia
+pf = participation_factors(nw, s0)
+show_participation_factors(pf)
+```
 """
-function jacobian_participation(nw::Network, s0; normalize=true)
-    x0, p, t = uflat(s0), pflat(s0), s0.t
-    M = nw.mass_matrix
+function show_participation_factors(io::IO, pf::NamedTuple;
+                                    threshold=0.10,
+                                    sigdigits=3,
+                                    sortby=:eigenvalue)
+    (; eigenvalues, pfactors, state_syms) = pf
 
-    h!(dx, x) = nw(dx, x, p, t)
-    j(x) = (dx = similar(x); ForwardDiff.jacobian(h!, dx, x))
-    J = j(x0)
-
-    if M == LinearAlgebra.I
-        # Unconstrained system
-        A_s = J
-        d_idx = 1:size(J, 1)
+    # Sort modes
+    if sortby == :eigenvalue
+        perm = sortperm(eigenvalues; by=real, rev=true)
+    elseif sortby == :magnitude
+        perm = sortperm(eigenvalues; by=abs, rev=true)
     else
-        # Constrained system - compute reduced Jacobian
-        M != LinearAlgebra.Diagonal(M) && error("The constraints are not diagonal.")
-        c_idx = findall(LinearAlgebra.diag(M) .== 0)
-        d_idx = findall(LinearAlgebra.diag(M) .== 1)
-
-        f_x = J[d_idx, d_idx]
-        f_y = J[d_idx, c_idx]
-        g_x = J[c_idx, d_idx]
-        g_y = J[c_idx, c_idx]
-
-        D = f_y * LinearAlgebra.pinv(g_y) * g_x
-        A_s = f_x - D
+        perm = 1:length(eigenvalues)
     end
 
-    # Compute eigenvalues and eigenvectors
-    eigvals, V = LinearAlgebra.eigen(A_s)  # Right eigenvectors (columns of V)
-    W = LinearAlgebra.inv(V)                # Left eigenvectors (rows of W)
+    eigenvalues = eigenvalues[perm]
+    pfactors = pfactors[:, perm]
 
-    # Compute participation factors
-    n_states = size(A_s, 1)
-    n_modes = length(eigvals)
-    pmat = zeros(n_states, n_modes)
+    n_modes = length(eigenvalues)
+    n_states = size(pfactors, 1)
 
+    # Build header
+    header = "Real (Hz) & Imag (Hz) & Factor & State"
+
+    # Build rows for each mode
+    rows = String[]
     for i in 1:n_modes
+        λ = eigenvalues[i]
+        real_hz = real(λ) / (2π)
+        imag_hz = imag(λ) / (2π)
+        real_str = str_significant(real_hz; sigdigits, phantom_minus=true)
+        imag_str = str_significant(imag_hz; sigdigits, phantom_minus=true)
+
+        # Collect participating states with their values, sorted by participation
+        participants = Tuple{Float64, String}[]
         for k in 1:n_states
-            pmat[k, i] = abs(W[i, k] * V[k, i])
+            pf_val = pfactors[k, i]
+            if abs(pf_val) >= threshold
+                state_idx = state_syms === nothing ? "State($k)" : repr(state_syms[k])
+                push!(participants, (pf_val, state_idx))
+            end
         end
-        if normalize
-            pmat[:, i] ./= sum(pmat[:, i])  # Normalize so each mode sums to 1
-        end
-    end
+        sort!(participants; by=first, rev=true)
 
-    return eigvals, pmat, d_idx
-end
-
-
-"""
-    show_mode_participation(nw::Network, s0::NWState, mode_idx::Int; threshold=0.05)
-
-Display the states that significantly participate in a specific mode.
-
-# Arguments
-- `mode_idx`: Which mode/eigenvalue to analyze
-- `threshold`: Only show states with participation > threshold (default: 0.05 = 5%)
-"""
-function show_mode_participation(nw::Network, s0, mode_idx::Int;
-                                threshold=0.05)
-    eigvals, pmat, d_idx = jacobian_participation(nw, s0)
-
-    λ = eigvals[mode_idx]
-    participations = pmat[:, mode_idx]
-
-    println("Mode $mode_idx: λ = $λ")
-    println("Frequency: $(abs(imag(λ))/(2π)) Hz, Damping: $(real(λ))")
-    println("\nSignificant participants (> $(threshold*100)%):")
-
-    state_names = string.(SII.variable_symbols(nw))
-    for (i, p) in enumerate(participations)
-        if p > threshold
-            state_name = isnothing(state_names) ? "State $(d_idx[i])" : state_names[i]
-            println("  $state_name: $(round(p*100, digits=2))%")
+        # Create rows for this mode
+        if isempty(participants)
+            push!(rows, "$real_str & $imag_str & & -")
+        else
+            # First participation row includes eigenvalue
+            pf_val, state_idx = participants[1]
+            pf_str = str_significant(pf_val; sigdigits)
+            push!(rows, "$real_str & $imag_str & $pf_str & $state_idx")
+            # Subsequent participation rows have empty eigenvalue columns
+            for (pf_val, state_idx) in participants[2:end]
+                pf_str = str_significant(pf_val; sigdigits)
+                push!(rows, " & & $pf_str & $state_idx")
+            end
         end
     end
+
+    # Print table
+    println(io, "Participation Factors:")
+    if isempty(rows)
+        println(io, "  (no modes)")
+    else
+        all_rows = [header; rows]
+        aligned = align_strings(all_rows; padding=:right)
+        println(io, "  ", aligned[1])
+        println(io, "  ", "─"^maximum(textwidth.(aligned)))
+        for line in aligned[2:end]
+            println(io, "  ", line)
+        end
+    end
+end
+function show_participation_factors(pf::NamedTuple; kwargs...)
+    show_participation_factors(stdout, pf; kwargs...)
+end
+function show_participation_factors(s0::NWState, args...; kwargs...)
+    show_participation_factors(extract_nw(s0), s0, args...; kwargs...)
+end
+function show_participation_factors(nw::Network, s0; kwargs...)
+    pf = participation_factors(nw, s0)
+    show_participation_factors(pf; kwargs...)
 end
 
-
-function linearized_model(nw, s0; in, out)
-    perturbation_channels = collect(in)
-    observed_channels = collect(out)
-    # perturbations need can only enter ant inputs or outputs of components (causal links)
-    # Vertex Output -> pre gather, applyied to outbut
-    # Vertex Input -> aggregation perturbation (needs to happen directly after loopback)
-    # Edge Output -> applyed pre aggregate to outbuf
-    # Edge Input -> requires buffered gathering, applyed post gather to gbuf
-    δ0, perturb_maps = _classify_perturbation_channels(nw, perturbation_channels)
-    M = nw.mass_matrix
-    x0 = uflat(s0)
-    p0 = pflat(s0)
-    t0 = s0.t
-
-    f = function(x, δ)
-        du = zeros(promote_type(eltype(x), eltype(δ)), length(x))
-        nw(du, x, p0, t0; perturb=δ, perturb_maps)
-        du
-    end
-    obsf = SII.observed(nw, observed_channels)
-    g = function(x, δ)
-        out = zeros(promote_type(eltype(x), eltype(δ)), length(observed_channels))
-        obsf(x, p0, t0, out; perturb=δ, perturb_maps)
-        out
-    end
-
-    A = fx = ForwardDiff.jacobian(x -> f(x, δ0), x0)
-    B = fu = ForwardDiff.jacobian(δ -> f(x0, δ), δ0)
-    C = gx = ForwardDiff.jacobian(x -> g(x, δ0), x0)
-    D = gu = ForwardDiff.jacobian(δ -> g(x0, δ), δ0)
-
-    G(s) = C * ((M*s - A) \ B) + D
-end
-
+####
+#### Internal: perturbation channel classification
+####
 function _classify_perturbation_channels(nw, perturbation_channels)
-    # we build a vector same size as perturbation
     δ0 = zeros(length(perturbation_channels))
     vo_map = Vector{NTuple{2, Int}}() # map outbuf idx -> δ idx
     vi_map = Vector{NTuple{2, Int}}() # map aggbuf idx -> δ idx
     eo_map = Vector{NTuple{2, Int}}() # map outbuf idx -> δ idx
     ei_map = Vector{NTuple{2, Int}}() # map gbuf idx -> δ idx
 
-    # classify the perturbation channels
     for (i, sym) in enumerate(perturbation_channels)
         comp = getcomp(nw, sym)
         if comp isa VertexModel

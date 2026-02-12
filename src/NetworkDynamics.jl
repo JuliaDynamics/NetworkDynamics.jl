@@ -117,7 +117,7 @@ export get_defaults_dict, get_guesses_dict, get_bounds_dict, get_inits_dict
 export free_p, free_u
 include("metadata.jl")
 
-export isfixpoint, is_linear_stable, jacobian_eigenvals
+export isfixpoint, is_linear_stable, linearize_network, jacobian_eigenvals, participation_factors, show_participation_factors
 include("linear_stability.jl")
 
 include("show.jl")
