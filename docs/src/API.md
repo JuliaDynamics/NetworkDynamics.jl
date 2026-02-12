@@ -279,6 +279,7 @@ Base.copy(::NetworkDynamics.ComponentModel)
 extract_nw
 implicit_output
 NetworkDynamics.pretty_f
+set_mtk_defaults!
 ```
 
 ## NetworkDynamicsInspector API

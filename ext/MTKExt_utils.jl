@@ -296,3 +296,22 @@ function _check_symbol(ppf::Symbol, name)
         """
     )
 end
+
+# docstring lives in utils.jl
+function NetworkDynamics.set_mtk_defaults!(sys::System, pairs)
+    isempty(pairs) && return sys
+    defs = values(pairs)
+    names = keys(pairs)
+    symbols = map(names) do name
+        try
+            getproperty_symbolic(sys, name; might_contain_toplevel_ns=false)
+        catch e
+            throw(ArgumentError("Could not resolve variable of name $name in system $(getname(sys))! None of the defaults have been set."))
+        end
+    end
+    defdict = ModelingToolkit.get_defaults(sys)
+    for (s, v) in zip(symbols, defs)
+        defdict[s] = v
+    end
+    sys
+end

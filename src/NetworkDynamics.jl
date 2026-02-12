@@ -40,7 +40,7 @@ import SymbolicIndexingInterface as SII
 using SymbolicIndexingInterface: variable_symbols, parameter_symbols
 using StaticArrays: StaticArrays, SVector
 
-export implicit_output, ComponentPostprocessing
+export implicit_output, ComponentPostprocessing, set_mtk_defaults!
 include("utils.jl")
 
 export VertexModel, EdgeModel

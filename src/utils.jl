@@ -447,3 +447,32 @@ function wipe_mtk_model_cache! end
 function with_mtk_model_cache end
 function mtk_cache_stats end
 function mtk_model_cache_enabled end
+
+"""
+    set_mtk_defaults!(sys::System, pairs)
+
+Set default values for variables and parameters in a ModelingToolkit `System`.
+
+This function is intended for use inside `@component` definitions to forward
+keyword arguments (`defaults...`) to the underlying `System`. Variable and parameter
+names are resolved symbolically, including namespaced names for subsystem variables
+(e.g. `sub₊x`).
+
+Does nothing if `pairs` is empty. Throws an `ArgumentError` if a name cannot be
+resolved in the system.
+
+Requires the `ModelingToolkit` extension to be loaded.
+
+# Example
+```julia
+@component function mymodel(; name, defaults...)
+    @variables z(t)
+    @named sub = SubModel()
+    eqs = [z ~ sub.x]
+    sys = System(eqs, t; name, systems=[sub])
+    set_mtk_defaults!(sys, defaults)
+end
+@named m = mymodel(; z=1.0, sub₊x=2.0)
+```
+"""
+function set_mtk_defaults! end
