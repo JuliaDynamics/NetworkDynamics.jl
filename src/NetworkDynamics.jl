@@ -118,7 +118,7 @@ export free_p, free_u
 include("metadata.jl")
 
 export isfixpoint, is_linear_stable, linearize_network, jacobian_eigenvals, participation_factors, show_participation_factors
-include("linear_stability.jl")
+include("linear_analysis.jl")
 
 include("show.jl")
 
