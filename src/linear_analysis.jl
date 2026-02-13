@@ -59,8 +59,13 @@ function linearize_network(nw, s0; in=nothing, out=nothing)
         isnothing(in) && throw(ArgumentError("Must specify `in` when `out` is given"))
         isnothing(out) && throw(ArgumentError("Must specify `out` when `in` is given"))
 
-        in_syms = collect(in)
-        out_syms = collect(out)
+        # check for siso
+        single_in = in isa SymbolicIndex && SII.symbolic_type(in) == SII.ScalarSymbolic()
+        single_out = out isa SymbolicIndex && SII.symbolic_type(out) == SII.ScalarSymbolic()
+        siso = single_in && single_out
+
+        in_syms = single_in ? [in] : collect(in)
+        out_syms = single_out ? [out] : collect(out)
         δ0, perturb_maps = _classify_perturbation_channels(nw, in_syms)
 
         f = function(x, δ)
@@ -79,7 +84,14 @@ function linearize_network(nw, s0; in=nothing, out=nothing)
         B = ForwardDiff.jacobian(δ -> f(x0, δ), δ0)
         C = ForwardDiff.jacobian(x -> g(x, δ0), x0)
         D = ForwardDiff.jacobian(δ -> g(x0, δ), δ0)
-        G(s) = C * ((M * s - A) \ B) + D
+
+        _G(s) = C * ((M * s - A) \ B) + D
+
+        if siso
+            G(s) = only(_G(s))
+        else
+            G = _G
+        end
 
         return (; M, A, B, C, D, G, state_syms, in_syms, out_syms)
     end
