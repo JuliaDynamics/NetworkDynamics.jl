@@ -34,7 +34,7 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t; perturb=nothing, perturb_m
 
     if !isnothing(perturb)
         @assert aggfun(nw.layer.aggregator) == (+) "currently only + aggregation is supported for vertex input perturbation, got $(nw.layer.aggregator)"
-        _apply_perturb!(aggbuf, perturb, perturb_maps.vi_map)
+        apply_perturb!(aggbuf, perturb, perturb_maps.vi_map)
     end
 
     # process vg WITH ff (only allowed on loopback edges)
@@ -47,14 +47,14 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t; perturb=nothing, perturb_m
     has_external_input(nw) && collect_externals!(nw.extmap, extbuf, u, o)
 
     if !isnothing(perturb)
-        _apply_perturb!(o, perturb, perturb_maps.vo_map)
+        apply_perturb!(o, perturb, perturb_maps.vo_map)
     end
     # gather the vertex results for edges with ff
     gather!(nw.gbufprovider, gbuf, o)
 
     if !isnothing(perturb)
         @assert nw.gbufprovider isa EagerGBufProvider "edge input perturbation is only supported with buffered execution schemes!"
-        _apply_perturb!(gbuf, perturb, perturb_maps.ei_map)
+        apply_perturb!(gbuf, perturb, perturb_maps.ei_map)
     end
 
     # execute f for the edges without ff
@@ -66,7 +66,7 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t; perturb=nothing, perturb_m
     ex isa KAExecution && KernelAbstractions.synchronize(get_backend(du))
 
     if !isnothing(perturb)
-        _apply_perturb!(o, perturb, perturb_maps.eo_map)
+        apply_perturb!(o, perturb, perturb_maps.eo_map)
     end
     # aggegrate the results
     aggregate!(nw.layer.aggregator, aggbuf, o)
@@ -249,7 +249,7 @@ function _appropriate_zero(x)
     end
 end
 
-function _apply_perturb!(buf, perturb, map)
+function apply_perturb!(buf, perturb, map)
     for (bufidx, pertubidx) in map
         buf[bufidx] += perturb[pertubidx]
     end
