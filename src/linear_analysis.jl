@@ -251,7 +251,9 @@ Each mode is listed with its contributing states and their participation values.
 # Keyword Arguments
 - `threshold=0.01`: Only show participation factors above this threshold (set to 0 to show all)
 - `sigdigits=3`: Number of significant digits for displaying values
-- `sortby=:eigenvalue`: Sort modes by `:eigenvalue` (real part) or `:magnitude`
+- `sortby=nothing`: Sort modes for display. `nothing` preserves `eigen`'s default
+  lexicographic order (consistent with `participation_factors` and `eigenvalue_sensitivity`
+  mode indices). Use `:eigenvalue` (real part, descending) or `:magnitude` for alternative orderings.
 
 # Example
 ```julia
@@ -262,7 +264,7 @@ show_participation_factors(pf)
 function show_participation_factors(io::IO, pf::NamedTuple;
                                     threshold=0.10,
                                     sigdigits=3,
-                                    sortby=:eigenvalue)
+                                    sortby=nothing)
     (; eigenvalues, pfactors, state_syms) = pf
 
     # Sort modes
@@ -281,12 +283,13 @@ function show_participation_factors(io::IO, pf::NamedTuple;
     n_states = size(pfactors, 1)
 
     # Build header
-    header = "Real (Hz) & Imag (Hz) & Factor & State"
+    header = "Mode & Real (Hz) & Imag (Hz) & Factor & State"
 
     # Build rows for each mode
     rows = String[]
     for i in 1:n_modes
         λ = eigenvalues[i]
+        mode_label = string(perm[i])
         real_hz = real(λ) / (2π)
         imag_hz = imag(λ) / (2π)
         real_str = str_significant(real_hz; sigdigits, phantom_minus=true)
@@ -305,16 +308,16 @@ function show_participation_factors(io::IO, pf::NamedTuple;
 
         # Create rows for this mode
         if isempty(participants)
-            push!(rows, "$real_str & $imag_str & & -")
+            push!(rows, "$mode_label & $real_str & $imag_str & & -")
         else
             # First participation row includes eigenvalue
             pf_val, state_idx = participants[1]
             pf_str = str_significant(pf_val; sigdigits)
-            push!(rows, "$real_str & $imag_str & $pf_str & $state_idx")
+            push!(rows, "$mode_label & $real_str & $imag_str & $pf_str & $state_idx")
             # Subsequent participation rows have empty eigenvalue columns
             for (pf_val, state_idx) in participants[2:end]
                 pf_str = str_significant(pf_val; sigdigits)
-                push!(rows, " & & $pf_str & $state_idx")
+                push!(rows, " & & & $pf_str & $state_idx")
             end
         end
     end
