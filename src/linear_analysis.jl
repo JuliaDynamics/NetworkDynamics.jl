@@ -12,8 +12,9 @@ The struct is callable as a transfer function: `sys(s)` computes
 `C (M s - A)⁻¹ B + D`. For SISO systems (scalar `in_syms`/`out_syms`) the
 result is a scalar.
 
-Acces the properties using `sys.A`, `.B`, `.C`, `.D`, `.M` to obtain matrices.
-Use `sym(⋅)`, `insym(⋅)` and `outsym(⋅)` to obtain state names.
+Access the properties using `sys.A`, `.B`, `.C`, `.D`, `.M` to obtain matrices.
+Use `sym(⋅)`, `insym(⋅)` and `outsym(⋅)` to obtain state names (`sym` is
+optional and may be `nothing`).
 
 See also: [`linearize_network`](@ref), [`reduce_dae`](@ref)
 """
@@ -23,12 +24,12 @@ See also: [`linearize_network`](@ref), [`reduce_dae`](@ref)
     B::BT = nothing
     C::CT = nothing
     D::DT = nothing
-    sym::Vector
+    sym::Union{Vector, Nothing} = nothing
     insym::IST = nothing
     outsym::OST = nothing
     function NetworkDescriptorSystem(M, A, B, C, D, sym, insym, outsym)
         dim = size(A, 1)
-        if length(sym) != dim
+        if !isnothing(sym) && length(sym) != dim
             throw(ArgumentError("Length of sym must match number of rows in A"))
         end
         if any(isnothing, (B, C, D, insym, outsym)) && !all(isnothing, (B, C, D, insym, outsym))
@@ -51,6 +52,23 @@ See also: [`linearize_network`](@ref), [`reduce_dae`](@ref)
             end
             if _nsym(outsym) != size(C, 1)
                 throw(ArgumentError("Length of outsym must match number of rows in C"))
+            end
+        end
+        if M != LinearAlgebra.I
+            if M isa UniformScaling
+                if M.λ != 1
+                    throw(ArgumentError("M must be identity or a uniform scaling of 1"))
+                end
+            else # matrix
+                if !(LinearAlgebra.isdiag(M))
+                    throw(ArgumentError("M must be diagonal!"))
+                end
+                if any(x -> x != 0 && x != 1, LinearAlgebra.diag(M))
+                    throw(ArgumentError("M must be a mass matrix with diagonal entries of 0 or 1"))
+                end
+                if size(M, 1) != dim || size(M, 2) != dim
+                    throw(ArgumentError("M must be square and match number of rows in A"))
+                end
             end
         end
         new{typeof(M), typeof(A), typeof(B), typeof(C), typeof(D), typeof(insym), typeof(outsym)}(M, A, B, C, D, sym, insym, outsym)
@@ -226,9 +244,9 @@ linearize_network(s0::NWState, args...; kwargs...) = linearize_network(extract_n
 """
     reduce_dae(sys::NetworkDescriptorSystem) -> NetworkDescriptorSystem
 
-Reduce a descriptor system `M ẋ = A x` to an ODE system by eliminating algebraic
-constraints. Returns a new `NetworkDescriptorSystem` with `M = I` and reduced
-state dimension.
+Reduce a descriptor system `M ẋ = A x + B u`, `y = C x + D u` to an ODE system
+by eliminating algebraic constraints. Returns a new `NetworkDescriptorSystem`
+with `M = I` and reduced state dimension.
 
 Partitions variables into differential (`M_ii = 1`) and algebraic (`M_ii = 0`).
 The Jacobian `A` is partitioned as:
@@ -238,21 +256,34 @@ A = [f_x  f_y]    f_x = ∂f/∂x_d,  f_y = ∂f/∂x_a   (differential equation
     [g_x  g_y]    g_x = ∂g/∂x_d,  g_y = ∂g/∂x_a   (algebraic constraints)
 ```
 
-The algebraic constraint `0 = g_x*x_d + g_y*x_a` is solved for `x_a` and
-substituted into the differential equations, giving the reduced state matrix:
+The algebraic constraint `0 = g_x*x_d + g_y*x_a + B_a*u` is solved for `x_a`
+and substituted, giving the reduced system:
 
     A_s = f_x - f_y * g_y⁻¹ * g_x
+    B_s = B_d - f_y * g_y⁻¹ * B_a
+    C_s = C_d - C_a * g_y⁻¹ * g_x
+    D_s = D   - C_a * g_y⁻¹ * B_a
 
-For unconstrained systems (`M = I`), returns the system with unchanged `A`.
+For unconstrained systems (`M = I`), returns the system unchanged.
 
 See: \"Power System Modelling and Scripting\", F. Milano, Chapter 7.2.
 """
 function reduce_dae(sys::NetworkDescriptorSystem)
     M = sys.M
     A = sys.A
-    if M == LinearAlgebra.I
+    if M isa LinearAlgebra.UniformScaling # treat as identity
         n = size(A, 1)
         d_idx = collect(1:n)
+        return NetworkDescriptorSystem(;
+            M = LinearAlgebra.I,
+            A,
+            B = sys.B,
+            C = sys.C,
+            D = sys.D,
+            sym = sys.sym,
+            insym = sys.insym,
+            outsym = sys.outsym,
+        )
     else
         diag_M = LinearAlgebra.diag(M)
         d_idx = findall(==(1), diag_M)
@@ -263,24 +294,43 @@ function reduce_dae(sys::NetworkDescriptorSystem)
         g_x = A[c_idx, d_idx]
         g_y = A[c_idx, c_idx]
 
+        local gy_solve  # closure: x -> g_y \ x
+        local A_s
         try
-            A = f_x - f_y * (g_y \ g_x)
+            gy_gx = g_y \ g_x
+            gy_solve = x -> g_y \ x
+            A_s = f_x - f_y * gy_gx
         catch e
-            @warn "Matrix g_y is singular or ill-conditioned, falling back to pseudoinverse $g_y" exception=(e, catch_backtrace())
+            @warn "Matrix g_y is singular or ill-conditioned, falling back to pseudoinverse" exception=(e, catch_backtrace())
             gy_inv = LinearAlgebra.pinv(g_y)
-            A = f_x - f_y * gy_inv * g_x
+            gy_solve = x -> gy_inv * x
+            A_s = f_x - f_y * gy_inv * g_x
         end
+
+        B_s = sys.B
+        C_s = sys.C
+        D_s = sys.D
+        if !isnothing(sys.B)
+            B_d = sys.B[d_idx, :]
+            B_a = sys.B[c_idx, :]
+            C_d = sys.C[:, d_idx]
+            C_a = sys.C[:, c_idx]
+            B_s = B_d - f_y * gy_solve(B_a)
+            C_s = C_d - C_a * gy_solve(g_x)
+            D_s = sys.D - C_a * gy_solve(B_a)
+        end
+
+        return NetworkDescriptorSystem(;
+            M = LinearAlgebra.I,
+            A = A_s,
+            B = B_s,
+            C = C_s,
+            D = D_s,
+            sym = isnothing(sys.sym) ? nothing : sys.sym[d_idx],
+            insym = sys.insym,
+            outsym = sys.outsym,
+        )
     end
-    return NetworkDescriptorSystem(;
-        M = LinearAlgebra.I,
-        A,
-        B = sys.B,
-        C = sys.C,
-        D = sys.D,
-        sym = sys.sym[d_idx],
-        insym = sys.insym,
-        outsym = sys.outsym,
-    )
 end
 
 """
@@ -370,7 +420,7 @@ function participation_factors(sys::NetworkDescriptorSystem; normalize=true)
         end
     end
 
-    sym = isempty(red.sym) ? nothing : red.sym
+    sym = isnothing(red.sym) ? nothing : red.sym
     return (; eigenvalues, pfactors, sym)
 end
 
@@ -380,11 +430,15 @@ end
 participation_factors(s0::NWState, args...; kwargs...) = participation_factors(extract_nw(s0), s0, args...; kwargs...)
 
 """
-    show_participation_factors(io::IO, pf::NamedTuple; kwargs...)
-    show_participation_factors(pf::NamedTuple; kwargs...)
+    show_participation_factors([io=stdout,] pf::NamedTuple; kwargs...)
+    show_participation_factors([nw::Network,] s0::NWState; normalize=true, kwargs...)
 
 Display participation factors showing which states participate in each eigenmode.
 Each mode is listed with its contributing states and their participation values.
+
+When called with `nw`/`s0`, internally calls [`participation_factors`](@ref) and then displays the
+result. The `normalize` keyword is forwarded to `participation_factors`; remaining keywords control
+display.
 
 # Keyword Arguments
 - `modes=nothing`: Filter which modes to display. Can be an integer (single mode),
@@ -401,6 +455,9 @@ Each mode is listed with its contributing states and their participation values.
 ```julia
 pf = participation_factors(nw, s0)
 show_participation_factors(pf)
+
+# or directly:
+show_participation_factors(nw, s0; threshold=0.05)
 ```
 """
 function show_participation_factors(io::IO, pf::NamedTuple;
@@ -500,9 +557,205 @@ end
 function show_participation_factors(s0::NWState, args...; kwargs...)
     show_participation_factors(extract_nw(s0), s0, args...; kwargs...)
 end
-function show_participation_factors(nw::Network, s0; kwargs...)
-    pf = participation_factors(nw, s0)
+function show_participation_factors(nw::Network, s0; normalize=true, kwargs...)
+    pf = participation_factors(nw, s0; normalize)
     show_participation_factors(pf; kwargs...)
+end
+
+"""
+    eigenvalue_sensitivity([nw::Network, ]s0::NWState, mode_idx::Int, params=SII.parameter_symbols(nw))
+
+Compute the sensitivity of eigenvalue `mode_idx` to system parameters using
+the classical eigenvalue sensitivity formula:
+
+    ∂λ_i/∂p_k = wᵢᵀ · (∂Aₛ/∂p_k) · vᵢ
+
+where `vᵢ` and `wᵢ` are the right and left eigenvectors of the reduced state
+matrix `Aₛ` (with `W = V⁻¹`, so `wᵢᵀ·vᵢ = 1`). The Jacobian derivative
+`∂Aₛ/∂p_k` is computed exactly via nested forward-mode automatic
+differentiation (ForwardDiff).
+
+Arguments:
+- `mode_idx`: The indexes into eigenvalues in the default order of Julia's `eigen`
+(lexicographic by `(real(λ), imag(λ))`). This is the same ordering as returned
+by [`jacobian_eigenvals`](@ref) and [`participation_factors`](@ref).
+- `params`: Symbolic parameter indices to compute sensitivities for. Defaults to
+all parameters (`SII.parameter_symbols(nw)`). Pass a subset to reduce computation.
+
+Returns a named tuple:
+- `eigenvalue`: the selected eigenvalue (complex, rad/s)
+- `mode_idx`: the mode index used
+- `sensitivities`: `∂λ/∂p_k` for each selected parameter (complex vector)
+- `scaled_sensitivities`: `p_k · ∂λ/∂p_k` for each selected parameter (eigenvalue shift per 100% parameter change)
+- `param_syms`: symbolic parameter indices (matching the `params` argument)
+- `param_vals`: parameter values at the operating point
+
+See also: [`participation_factors`](@ref), [`jacobian_eigenvals`](@ref)
+"""
+function eigenvalue_sensitivity(nw::Network, s0::NWState, mode_idx::Int, params=SII.parameter_symbols(nw))
+    # Baseline linearization and eigendecomposition
+    A_s = reduce_dae(linearize_network(nw, s0)).A
+
+    eigenvalues, V = LinearAlgebra.eigen(A_s)
+    W = LinearAlgebra.inv(V)
+
+    n_modes = length(eigenvalues)
+    1 <= mode_idx <= n_modes || throw(ArgumentError("mode_idx=$mode_idx out of range [1, $n_modes]"))
+
+    λ = eigenvalues[mode_idx]
+    v = V[:, mode_idx]       # right eigenvector
+    w = W[mode_idx, :]       # left eigenvector (row of W = V⁻¹)
+    # W = V⁻¹ implies wᵀ·v = 1 (no conjugation). Use transpose, not adjoint.
+    # ∂λ/∂p = wᵀ · (∂A_s/∂p) · v  (denominator is 1 by construction)
+
+    # Resolve parameter indices
+    param_syms = if params isa SymbolicIndex && SII.symbolic_type(params) == SII.ScalarSymbolic()
+        [params]
+    else
+        collect(params)
+    end
+    pidxs = SII.parameter_index(nw, param_syms)
+    n_sel = length(param_syms)
+
+    # Compute sensitivity for each selected parameter
+    sensitivities = zeros(ComplexF64, n_sel)
+    for (i, pidx) in enumerate(pidxs)
+        dA_s = _reduced_jacobian_param_derivative(nw, s0, pidx)
+        sensitivities[i] = transpose(w) * (dA_s * v)
+    end
+
+    param_vals = pflat(p0)[pidxs]
+    scaled_sensitivities = map(1:n_sel) do i
+        if isfinite(param_vals[i])
+            param_vals[i] * sensitivities[i]
+        else
+            complex(NaN, NaN)
+        end
+    end
+
+    return (; eigenvalue=λ, mode_idx, sensitivities, scaled_sensitivities,
+              param_syms, param_vals)
+end
+function eigenvalue_sensitivity(s0::NWState, args...; kwargs...)
+    eigenvalue_sensitivity(extract_nw(s0), s0, args...; kwargs...)
+end
+
+"""
+Internal: compute ∂Aₛ/∂p_k via nested ForwardDiff.
+
+Uses `ForwardDiff.derivative` with a scalar perturbation `δp` added to parameter
+`pidx`. The inner `ForwardDiff.jacobian` computes the state Jacobian, and the
+outer derivative propagates through the Jacobian computation and DAE reduction.
+"""
+function _reduced_jacobian_param_derivative(nw, s0, pidx)
+    x0 = uflat(s0)
+    p0 = pflat(s0)
+    M = nw.mass_matrix
+    ForwardDiff.derivative(0.0) do δp
+        T = typeof(δp)
+        pbuf = Vector{T}(p0)
+        pbuf[pidx] += δp
+        f(x) = begin
+            du = zeros(promote_type(eltype(x), T), length(x))
+            nw(du, x, pbuf, s0.t)
+            du
+        end
+        J = ForwardDiff.jacobian(f, x0)
+        reduce_dae(NetworkDescriptorSystem(; M, A=J)).A
+    end
+end
+
+"""
+    show_eigenvalue_sensitivity([io::IO, ]result::NamedTuple; threshold=0.01, sigdigits=3, sortby=:mag)
+    show_eigenvalue_sensitivity([io::IO, ][nw::Network, ]s0::NWState, mode_idx[, params]; kwargs...)
+
+Display eigenvalue sensitivity results in a formatted table, sorted by the specified metric
+of the scaled sensitivity `p·∂λ/∂p`.
+
+When called with `nw`/`s0`, internally calls [`eigenvalue_sensitivity`](@ref) with `mode_idx` and
+optional `params`, then displays the result. All keywords are forwarded to the display function.
+
+# Keyword Arguments
+- `threshold=0.01`: Only show entries where the chosen `sortby` metric exceeds this value (Hz or degrees for `:arg`)
+- `sigdigits=3`: Number of significant digits
+- `sortby=:mag`: Sort and filter by `:real`, `:imag`, `:mag`, or `:arg` of `p·∂λ/∂p`
+"""
+function show_eigenvalue_sensitivity(io::IO, result::NamedTuple;
+                                     threshold=0.01, sigdigits=3, sortby=:mag)
+    (; eigenvalue, mode_idx, sensitivities, scaled_sensitivities,
+       param_syms, param_vals) = result
+
+    λ = eigenvalue
+    real_hz = real(λ) / (2π)
+    imag_hz = imag(λ) / (2π)
+    real_str = str_significant(real_hz; sigdigits, phantom_minus=true)
+    imag_str = str_significant(imag_hz; sigdigits, phantom_minus=true)
+    println(io, "Eigenvalue Sensitivity for mode $mode_idx: λ = $(real_str) ± $(abs(imag_hz) |> x -> str_significant(x; sigdigits))j Hz")
+
+    # Collect and sort by chosen metric
+    entries = Tuple{Float64, Int}[]
+    for j in eachindex(scaled_sensitivities)
+        s = scaled_sensitivities[j]
+        sort_val = if sortby == :real
+            real(s) / (2π)
+        elseif sortby == :imag
+            imag(s) / (2π)
+        elseif sortby == :mag
+            abs(s) / (2π)
+        elseif sortby == :arg
+            rad2deg(angle(s))
+        elseif sortby == :realmag
+            abs(real(s)) / (2π)
+        elseif sortby == :imagmag
+            abs(imag(s)) / (2π)
+        else
+            throw(ArgumentError("sortby must be :real, :imag, :mag, or :arg"))
+        end
+
+        if abs(sort_val) >= threshold
+            push!(entries, (sort_val, j))
+        end
+    end
+    sort!(entries; by=first, rev=true)
+
+    if isempty(entries)
+        unit = sortby == :arg ? "deg" : "Hz"
+        println(io, "  (no sensitivities above threshold $threshold $unit)")
+        return
+    end
+
+    header = "Parameter & Value & Real (Hz) & Imag (Hz) & |p·∂λ/∂p| (Hz) & ∠ (deg)"
+    rows = String[]
+    for (_, j) in entries
+        sym_str = repr(param_syms[j])
+        val_str = str_significant(param_vals[j]; sigdigits, phantom_minus=true)
+        s = scaled_sensitivities[j]
+        real_str = str_significant(real(s) / (2π); sigdigits, phantom_minus=true)
+        imag_str = str_significant(imag(s) / (2π); sigdigits, phantom_minus=true)
+        mag_str = str_significant(abs(s) / (2π); sigdigits)
+        ang_str = str_significant(rad2deg(angle(s)); sigdigits, phantom_minus=true)
+        push!(rows, "$sym_str & $val_str & $real_str & $imag_str & $mag_str & $ang_str")
+    end
+
+    all_rows = [header; rows]
+    aligned = align_strings(all_rows; padding=:right)
+    println(io, "  ", aligned[1])
+    println(io, "  ", "─"^maximum(textwidth.(aligned)))
+    for line in aligned[2:end]
+        println(io, "  ", line)
+    end
+end
+function show_eigenvalue_sensitivity(result::NamedTuple; kwargs...)
+    show_eigenvalue_sensitivity(stdout, result; kwargs...)
+end
+function show_eigenvalue_sensitivity(io::IO, nw::Network, s0, mode_idx, params=SII.parameter_symbols(nw); kwargs...)
+    show_eigenvalue_sensitivity(io, eigenvalue_sensitivity(nw, s0, mode_idx, params); kwargs...)
+end
+function show_eigenvalue_sensitivity(nw::Network, s0, args...; kwargs...)
+    show_eigenvalue_sensitivity(stdout, nw, s0, args...; kwargs...)
+end
+function show_eigenvalue_sensitivity(s0::NWState, args...; kwargs...)
+    show_eigenvalue_sensitivity(extract_nw(s0), s0, args...; kwargs...)
 end
 
 ####
