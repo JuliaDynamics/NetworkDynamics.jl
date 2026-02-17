@@ -425,3 +425,19 @@ end
         @test du2 ≈ vcat(du, zeros(length(out)))
     end
 end
+
+@__MODULE__()==Main ? includet(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl")) : (const Lib = Main.Lib)
+@testset "Basic Coreloop Performance test" begin
+    nw, s0 = Lib.powergridlike_network()
+    du = zeros(dim(nw))
+    u = uflat(s0)
+    p = pflat(s0)
+    t0 = NaN
+    b = @b $(nw)($du, $u, $p, $t0)
+    @test b.allocs == 0
+
+    b = @b NetworkDynamics.get_buffers($nw, $u, $p, $0; initbufs=true)
+    @test b.allocs == 0
+    b = @b NetworkDynamics.get_buffers($nw, $u, $p, $0; initbufs=false)
+    @test b.allocs == 0
+end

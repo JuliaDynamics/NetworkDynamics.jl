@@ -4,7 +4,7 @@ using SteadyStateDiffEq
 using Test
 using NetworkDynamics: ForwardDiff
 
-(isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
+@__MODULE__()==Main ? includet(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl")) : (const Lib = Main.Lib)
 
 @testset "Linear Stability Tests" begin
 

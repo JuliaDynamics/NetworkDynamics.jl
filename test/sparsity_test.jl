@@ -8,7 +8,7 @@ using ModelingToolkit: D_nounits as Dt, t_nounits as t
 using InteractiveUtils: subtypes
 SE = Base.get_extension(NetworkDynamics, :NetworkDynamicsSparsityExt)
 
-(isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
+@__MODULE__()==Main ? includet(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl")) : (const Lib = Main.Lib)
 
 @testset "basic tests" begin
     g = complete_graph(4)

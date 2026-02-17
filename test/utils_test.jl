@@ -1,8 +1,8 @@
 using NetworkDynamics
 using ModelingToolkit
-using ModelingToolkit: t_nounits as t
+using ModelingToolkit: t_nounits as t, D_nounits as Dt
 
-(isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
+@__MODULE__()==Main ? includet(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl")) : (const Lib = Main.Lib)
 
 @testset "test utils" begin
     @testset "subscript" begin
@@ -113,6 +113,33 @@ using ModelingToolkit: t_nounits as t
         @test str_significant(1002.1; sigdigits=3) == "1e3"
         @test str_significant(0.00000122; sigdigits=3) == "1.22e-6"
         @test str_significant(-123.294191; sigdigits=5) == "-123.29"
+    end
+
+    @testset "cachetype" begin
+        using NetworkDynamics: cachetype
+
+        # basic single-arg cases
+        @test cachetype(1.0) == Float64
+        @test cachetype(1f0) == Float32
+        @test cachetype([1.0, 2.0]) == Float64
+        @test cachetype(nothing) == Nothing
+        @test cachetype(SciMLBase.NullParameters()) == Nothing
+
+        # multi-arg promotion
+        @test cachetype([1.0], [1f0]) == Float64
+        @test cachetype(nothing, [1.0]) == Float64
+        @test cachetype(SciMLBase.NullParameters(), [1.0]) == Float64
+        @test cachetype([1.0], SciMLBase.NullParameters()) == Float64
+        @test cachetype(nothing, SciMLBase.NullParameters(), [1f0]) == Float32
+
+        # ForwardDiff dual numbers - single and array
+        d = ForwardDiff.Dual(1.0, 1.0)
+        @test cachetype(d) == typeof(d)
+        @test cachetype([d, d]) == typeof(d)
+        @test cachetype(SciMLBase.NullParameters(), d) == typeof(d)
+        @test cachetype(SciMLBase.NullParameters(), [d]) == typeof(d)
+        @test cachetype(nothing, [d]) == typeof(d)
+        @test cachetype(SciMLBase.NullParameters(), nothing, [d]) == typeof(d)
     end
 
     @testset "batch stride" begin

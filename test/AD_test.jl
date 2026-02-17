@@ -7,7 +7,7 @@ using SparseConnectivityTracer
 import ForwardDiff, FiniteDiff, ReverseDiff, Enzyme, Mooncake
 import Enzyme: EnzymeCore
 
-(isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
+@__MODULE__()==Main ? includet(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl")) : (const Lib = Main.Lib)
 
 g = complete_graph(4)
 vf = [Lib.kuramoto_second(), Lib.diffusion_vertex(), Lib.kuramoto_second(), Lib.diffusion_vertex()]

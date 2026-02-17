@@ -12,6 +12,7 @@ using Aqua
 using ExplicitImports
 
 (isinteractive() ? includet : include)(joinpath(pkgdir(NetworkDynamics, "test", "testutils.jl")))
+(isinteractive() ? includet : include)(joinpath(pkgdir(NetworkDynamics, "test", "ComponentLibrary.jl")))
 
 BUILDKITE = haskey(ENV, "BUILDKITE")
 BUILDKITE && @test CUDA.functional() # fail early in buildkite if cuda is not available
