@@ -59,12 +59,12 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t; perturb=nothing, perturb_m
         apply_perturb!(gbuf, perturb, perturb_maps.ei_map)
     end
 
-    if !(RET isa Val) # normal coreloop
+    if RET isa Val{:du} # normal coreloop
         # execute f for the edges without ff
         process_batches!(ex, Val{:f}(), !hasff, nw.layer.edgebatches, (gbuf, extbuf), duopt)
         # execute f&g for edges with ff
         process_batches!(ex, Val{:fg}(), hasff, nw.layer.edgebatches, (gbuf, extbuf), duopt)
-    else # This is the pass if we onlye fill the buffers, :F does notneed to be executed
+    else # This is the pass if we only fill the buffers, :f does not need to be executed
         process_batches!(ex, Val{:g}(), hasff, nw.layer.edgebatches, (gbuf, extbuf), duopt)
     end
 
