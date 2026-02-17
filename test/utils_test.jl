@@ -1,6 +1,8 @@
 using NetworkDynamics
 using ModelingToolkit
 using ModelingToolkit: t_nounits as t, D_nounits as Dt
+using SciMLBase
+using ForwardDiff
 
 @__MODULE__()==Main ? includet(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl")) : (const Lib = Main.Lib)
 
