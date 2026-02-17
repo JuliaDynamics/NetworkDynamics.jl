@@ -7,7 +7,7 @@ using Symbolics
 import SymbolicIndexingInterface as SII
 using NetworkDynamics: VIndex, EIndex, VPIndex, EPIndex, _resolve_colon, FilteringProxy
 
-# either bind Lib from Main or, if executed interativly in main, use revise to laod
+# either bind Lib from Main or, if executed interactively in main, use revise to load
 @__MODULE__()==Main ? includet(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl")) : (const Lib = Main.Lib)
 
 @testset "small test network" begin

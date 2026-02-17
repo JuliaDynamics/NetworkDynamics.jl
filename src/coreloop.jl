@@ -244,7 +244,7 @@ function _appropriate_zero(x)
 end
 
 function apply_perturb!(buf, perturb, map)
-    for (bufidx, pertubidx) in map
-        buf[bufidx] += perturb[pertubidx]
+    for (bufidx, perturbidx) in map
+        buf[bufidx] += perturb[perturbidx]
     end
 end

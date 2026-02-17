@@ -106,7 +106,7 @@ function Base.show(io::IO, ::MIME"text/plain", sys::NetworkDescriptorSystem)
             if nc == 0
                 print(io, " (no algebraic constraints)\n")
             else
-                constraints = maybe_plural(dim(sys) - sum(sys.M), "constaint")[2]
+                constraints = maybe_plural(dim(sys) - sum(sys.M), "constraint")[2]
                 print(io, " ($(nc) algebraic $(constraints))\n")
             end
             print(io, "  └─ without inputs/outputs")
@@ -159,12 +159,12 @@ transfer function: `sys(s) = C * (M*s - A)⁻¹ * B + D`.
 
 The `in` keyword agument specifies the perturbance channel.
 Perturbance channels are related to the input/output structure of the components
-(input indices musst match parameters or input or output states of individual components).
+(input indices must match parameters or input or output states of individual components).
 They can be either
 - parameters (where `δp` is additive perturbation)
 - `δφ_in (edge)`: Perturbation of the edge input (enters just this edge)
 - `δφ_out (vertex)`: Perturbation of the vertex output (enters all connected edges)
-- `δΦ_out (edge)` and `δΦ_in (vertex)`: Perturbation of the flow before or after aggregation. Mathematicially equivalent, only enters the vertex anyway.
+- `δΦ_out (edge)` and `δΦ_in (vertex)`: Perturbation of the flow before or after aggregation. Mathematically equivalent, only enters the vertex anyway.
 
 ```
                   δφ_in          more edges         δφ_in
