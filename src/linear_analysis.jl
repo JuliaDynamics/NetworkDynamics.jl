@@ -227,15 +227,15 @@ function linearize_network(s0::NWState; in=nothing, out=nothing)
 
         _pdim = pdim(nw)
         f = function(x, δ)
-            du = zeros(promote_type(eltype(x), eltype(δ)), length(x))
-            pbuf = Vector{promote_type(eltype(x), eltype(δ))}(p0)
+            du = zeros(cachetype(x, δ), length(x))
+            pbuf = Vector{cachetype(x, δ)}(p0)
             apply_perturb!(pbuf, δ, perturb_maps.p_map)
             nw(du, x, pbuf, t0; perturb=δ, perturb_maps)
             du
         end
         obsf = SII.observed(nw, outsym)
         g = function(x, δ)
-            result = zeros(promote_type(eltype(x), eltype(δ)), length(outsym))
+            result = zeros(cachetype(x, δ), length(outsym))
             obsf(x, p0, t0, result; perturb=δ, perturb_maps)
             result
         end

@@ -131,9 +131,9 @@ Extracts the underlying graph of the network.
 get_graph(nw::Network) = nw.im.g
 
 function get_output_cache(nw::Network, T)
-    if eltype(T) <: AbstractFloat && eltype(nw.caches.output.du) != eltype(T)
+    if T <: AbstractFloat && eltype(nw.caches.output.du) != T
         throw(ArgumentError("Network caches are initialized with $(eltype(nw.caches.output.du)) \
-            but is used for $(eltype(T)) data!"))
+            but is used for $T data!"))
     end
     o = get_tmp(nw.caches.output, T)
     fill!(o, convert(eltype(o), NaN))

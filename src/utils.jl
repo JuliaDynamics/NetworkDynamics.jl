@@ -61,6 +61,40 @@ end
 
 nofilt(_) = true
 
+####
+#### Determine output cachetype
+####
+
+"""
+    cachetype(args...) -> Type
+
+Determine the element type to use for an output cache buffer, given one or more
+inputs (states, parameters, time, etc.). `Nothing` and `SciMLBase.NullParameters`
+are ignored; all other arguments contribute their element type and the results are
+promoted together with `promote_type`.
+"""
+cachetype(n::Number) = eltype(n)
+cachetype(v::AbstractArray{T}) where T = T
+cachetype(::Nothing) = Nothing
+cachetype(::SciMLBase.NullParameters) = Nothing
+function cachetype(args...)
+    _reduce_cachetype(Nothing, args)
+end
+
+@inline function _reduce_cachetype(c::Type, types::Tuple)
+    cnew = _lpromote_cachetype(c, Base.first(types))
+    _reduce_cachetype(cnew, Base.tail(types))
+end
+@inline _reduce_cachetype(c::Type, ::Tuple{}) = c
+# left promote of cachetype, skips Nothing and NullParameters
+@inline _lpromote_cachetype(a::Type, ::Nothing) = a
+@inline _lpromote_cachetype(a::Type, ::SciMLBase.NullParameters) = a
+@inline _lpromote_cachetype(::Type{Nothing}, b) = cachetype(b)
+# tie-breaking: both sides are "empty" → stay Nothing
+@inline _lpromote_cachetype(::Type{Nothing}, ::Nothing) = Nothing
+@inline _lpromote_cachetype(::Type{Nothing}, ::SciMLBase.NullParameters) = Nothing
+@inline _lpromote_cachetype(a::Type, b) = promote_type(a, cachetype(b))
+
 """
     unique_mappings([f=identity], from, to)
 

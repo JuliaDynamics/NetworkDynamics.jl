@@ -1,18 +1,20 @@
 function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t; perturb=nothing, perturb_maps=nothing, RET=Val(:du)) where {A,B,C,D,E,dT,T}
-    if !(eachindex(du) == eachindex(u) == 1:nw.im.lastidx_dynamic)
+    if dT isa AbstractVector && !(eachindex(du) == eachindex(u) == 1:nw.im.lastidx_dynamic)
         throw(ArgumentError("du or u does not have expected size $(nw.im.lastidx_dynamic)"))
     end
     if pdim(nw) > 0 && !(eachindex(p) == 1:nw.im.lastidx_p)
         throw(ArgumentError("p does not has expecte size $(nw.im.lastidx_p)"))
     end
 
+    cacheT = cachetype(u, p, t, perturb)
+
     ex = executionstyle(nw)
-    fill!(du, zero(eltype(du)))
-    o = get_output_cache(nw, du)
-    extbuf = has_external_input(nw) ? get_extinput_cache(nw, du) : nothing
+    isnothing(du) || fill!(du, zero(eltype(du)))
+    o = get_output_cache(nw, cacheT)
+    extbuf = has_external_input(nw) ? get_extinput_cache(nw, cacheT) : nothing
 
     duopt = (du, u, o, p, t)
-    aggbuf = get_aggregation_cache(nw, du)
+    aggbuf = get_aggregation_cache(nw, cacheT)
     fill!(aggbuf, _appropriate_zero(aggbuf))
     gbuf = get_gbuf(nw.gbufprovider, o)
 
@@ -57,10 +59,14 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t; perturb=nothing, perturb_m
         apply_perturb!(gbuf, perturb, perturb_maps.ei_map)
     end
 
-    # execute f for the edges without ff
-    process_batches!(ex, Val{:f}(), !hasff, nw.layer.edgebatches, (gbuf, extbuf), duopt)
-    # execute f&g for edges with ff
-    process_batches!(ex, Val{:fg}(), hasff, nw.layer.edgebatches, (gbuf, extbuf), duopt)
+    if !(RET isa Val) # normal coreloop
+        # execute f for the edges without ff
+        process_batches!(ex, Val{:f}(), !hasff, nw.layer.edgebatches, (gbuf, extbuf), duopt)
+        # execute f&g for edges with ff
+        process_batches!(ex, Val{:fg}(), hasff, nw.layer.edgebatches, (gbuf, extbuf), duopt)
+    else # This is the pass if we onlye fill the buffers, :F does notneed to be executed
+        process_batches!(ex, Val{:g}(), hasff, nw.layer.edgebatches, (gbuf, extbuf), duopt)
+    end
 
     # process batches might be async so sync before next step
     ex isa KAExecution && KernelAbstractions.synchronize(get_backend(du))
@@ -82,23 +88,11 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t; perturb=nothing, perturb_m
     ex isa KAExecution && KernelAbstractions.synchronize(get_backend(du))
     return nothing
 end
-function get_buffers(nw, u, p, t; initbufs, perturb=nothing, kwargs...)
-    duT = eltype(u)
-    if p isa AbstractArray
-        duT = promote_type(duT, eltype(p))
-    end
-    if t isa Number
-        duT = promote_type(duT, typeof(t))
-    end
-    if perturb isa AbstractArray
-        duT = promote_type(duT, eltype(perturb))
-    end
-
-    du = Vector{duT}(undef, length(u))
+function get_buffers(nw, u, p, t; initbufs, kwargs...)
     if initbufs
-        nw(du, u, p, t; RET=Val(:buf_init), perturb, kwargs...)
+        nw(nothing, u, p, t; RET=Val(:buf_init), kwargs...)
     else
-        nw(du, u, p, t; RET=Val(:buf_uninit), perturb, kwargs...)
+        nw(nothing, u, p, t; RET=Val(:buf_uninit), kwargs...)
     end
 end
 
