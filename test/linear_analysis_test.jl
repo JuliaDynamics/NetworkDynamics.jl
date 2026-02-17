@@ -151,4 +151,59 @@ using NetworkDynamics: ForwardDiff
         @test length(c_idx) > 0  # Has algebraic constraints
         @test length(d_idx) > 0  # Has differential equations
     end
+
+    @testset "input/output linearization" begin
+        nw, s0 = Lib.powergridlike_network()
+
+        # SISO: single in/single out (not wrapped in vector) → scalar transfer function value
+        sys_siso = linearize_network(s0; in=VIndex(1, :u_r), out=VIndex(1, :i_r))
+        @test sys_siso.insym isa VIndex
+        @test sys_siso.outsym isa VIndex
+        val_siso = sys_siso(10im * 2π)
+        @test val_siso isa Number
+        @test !isa(val_siso, AbstractMatrix)
+
+        # MIMO: in=[single]/out=[single] (wrapped in vector) → matrix transfer function value
+        sys_mimo = linearize_network(s0; in=[VIndex(1, :u_r)], out=[VIndex(1, :i_r)])
+        @test sys_mimo.insym isa Vector
+        @test sys_mimo.outsym isa Vector
+        val_mimo = sys_mimo(10im * 2π)
+        @test val_mimo isa AbstractMatrix
+        @test size(val_mimo) == (1, 1)
+        @test val_mimo[1, 1] ≈ val_siso
+
+        # One representative per perturbation class; verify classification then linearize once
+        all_ins = [
+            VIndex(1, :u_r),     # vo_map: vertex output
+            VIndex(1, :i_r),     # vi_map: vertex input
+            EIndex(1, :src_i_r), # eo_map: edge output src side
+            EIndex(1, :dst_i_r), # eo_map: edge output dst side
+            EIndex(1, :src_u_r), # ei_map: edge input src side
+            EIndex(1, :dst_u_r), # ei_map: edge input dst side
+            VIndex(2, :M),       # p_map: vertex parameter
+            EIndex(1, :R),       # p_map: edge parameter
+        ]
+        _, maps = NetworkDynamics._classify_perturbation_channels(nw, all_ins)
+        @test !isempty(maps.vo_map)
+        @test !isempty(maps.vi_map)
+        @test !isempty(maps.eo_map)
+        @test !isempty(maps.ei_map)
+        @test !isempty(maps.p_map)
+
+        sys_all = linearize_network(s0; in=all_ins, out=VIndex(2, :u_r))
+        @test size(sys_all.B, 2) == length(all_ins)
+        @test sys_all(10im * 2π) isa AbstractMatrix
+
+        # reduce_dae consistency: G_unreduced(s) ≈ G_reduced(s) at multiple frequencies
+        sys_full = linearize_network(s0;
+            in=[VIndex(1, :u_r), VIndex(1, :u_i)],
+            out=[VIndex(1, :i_r), VIndex(1, :i_i)])
+        @test sys_full.M != LinearAlgebra.I  # has algebraic constraints
+        sys_red = NetworkDynamics.reduce_dae(sys_full)
+        @test sys_red.M == LinearAlgebra.I   # reduced to ODE
+        @test NetworkDynamics.dim(sys_red) < NetworkDynamics.dim(sys_full)
+        for s in [0.1im, 1.0im, 10im, 100im, -1+1im, -0.5+5im, -1-3im, 3im, 7im, 50im] .* 2π
+            @test sys_full(s) ≈ sys_red(s) rtol=1e-8
+        end
+    end
 end
