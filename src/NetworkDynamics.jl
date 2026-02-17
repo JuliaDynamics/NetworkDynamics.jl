@@ -117,7 +117,7 @@ export get_defaults_dict, get_guesses_dict, get_bounds_dict, get_inits_dict
 export free_p, free_u
 include("metadata.jl")
 
-export NetworkDescriptorSystem, isfixpoint, is_linear_stable, linearize_network, jacobian_eigenvals, participation_factors, show_participation_factors, eigenvalue_sensitivity, show_eigenvalue_sensitivity
+export NetworkDescriptorSystem, isfixpoint, is_linear_stable, linearize_network, reduce_dae, jacobian_eigenvals, participation_factors, show_participation_factors, eigenvalue_sensitivity, show_eigenvalue_sensitivity
 include("linear_analysis.jl")
 
 include("show.jl")

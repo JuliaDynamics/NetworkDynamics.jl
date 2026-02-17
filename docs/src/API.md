@@ -221,6 +221,13 @@ delete_guessformulas!
 isfixpoint
 jacobian_eigenvals
 is_linear_stable
+linearize_network
+NetworkDescriptorSystem
+reduce_dae
+participation_factors
+show_participation_factors
+eigenvalue_sensitivity
+show_eigenvalue_sensitivity
 ```
 
 ## Callbacks API
