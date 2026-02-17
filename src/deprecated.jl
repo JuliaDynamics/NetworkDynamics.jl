@@ -12,6 +12,25 @@ eidxs(compfilter::Union{Int,AbstractVector{Int},NTuple{<:Any,Int},Colon}, varfil
 vpidxs(compfilter::Union{Int,AbstractVector{Int},NTuple{<:Any,Int},Colon}, varfilter) = _deprecated_idxs_gen(VPIndex, compfilter, varfilter, VIndex)
 epidxs(compfilter::Union{Int,AbstractVector{Int},NTuple{<:Any,Int},Colon}, varfilter) = _deprecated_idxs_gen(EPIndex, compfilter, varfilter, EIndex)
 
+# Deprecated linear analysis methods with nw as first argument
+function isfixpoint(nw::Network, s0::NWState; kwargs...)
+    @warn "isfixpoint(nw, s0) is deprecated, use isfixpoint(s0) instead." maxlog=1
+    extract_nw(s0) === nw || throw(ArgumentError("Network mismatch: s0 is not associated with the given nw"))
+    isfixpoint(s0; kwargs...)
+end
+
+function jacobian_eigenvals(nw::Network, s0; kwargs...)
+    @warn "jacobian_eigenvals(nw, s0) is deprecated, use jacobian_eigenvals(s0) instead." maxlog=1
+    extract_nw(s0) === nw || throw(ArgumentError("Network mismatch: s0 is not associated with the given nw"))
+    jacobian_eigenvals(s0; kwargs...)
+end
+
+function is_linear_stable(nw::Network, s0; kwargs...)
+    @warn "is_linear_stable(nw, s0) is deprecated, use jacobian_eigenvals(s0) instead." maxlog=1
+    extract_nw(s0) === nw || throw(ArgumentError("Network mismatch: s0 is not associated with the given nw"))
+    is_linear_stable(s0; kwargs...)
+end
+
 function _deprecated_idxs_gen(constructor, compiter, variter, type=constructor)
     @warn "*idxs(compfilter, varfilter) methods are deprecated. Use *idxs(nw, compfilter, varfilter) instead."
     if compiter isa Colon

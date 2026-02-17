@@ -17,14 +17,14 @@ using NetworkDynamics: ForwardDiff
         s0 = find_fixpoint(nw, NWParameter(nw))
 
         # Test isfixpoint function
-        @test isfixpoint(nw, s0)
-        @test isfixpoint(nw, s0; tol=1e-12)
-        @test isfixpoint(nw, s0; tol=1e-15)
+        @test isfixpoint(s0)
+        @test isfixpoint(s0; tol=1e-12)
+        @test isfixpoint(s0; tol=1e-15)
 
         # Test with non-fixpoint state
         s_non_fix = NWState(s0)
         s_non_fix.v[1, :s] = 1.0
-        @test !isfixpoint(nw, s_non_fix)
+        @test !isfixpoint(s_non_fix)
 
         # Test jacobian_eigenvals function
         λ = jacobian_eigenvals(nw, s0)
@@ -33,11 +33,11 @@ using NetworkDynamics: ForwardDiff
         @test nw.mass_matrix == I  # Verify unconstrained system
 
         # Test custom eigenvalue function
-        λ_custom = jacobian_eigenvals(nw, s0; eigvalf=eigvals)
+        λ_custom = jacobian_eigenvals(s0; eigvalf=eigvals)
         @test λ ≈ λ_custom
 
         # Test is_linear_stable function
-        @test is_linear_stable(nw, s0)
+        @test is_linear_stable(s0)
         @test_throws "state s0 is not a fixpoint" is_linear_stable(nw, s_non_fix)
     end
 
@@ -60,14 +60,14 @@ using NetworkDynamics: ForwardDiff
         s0 = find_fixpoint(nw, s)
 
         # Test fixpoint check
-        @test isfixpoint(nw, s0)
+        @test isfixpoint(s0)
 
         # Test eigenvalue computation
-        λ = jacobian_eigenvals(nw, s0)
+        λ = jacobian_eigenvals(s0)
         @test length(λ) == 8  # 4 nodes × 2 states each
 
         # Test stability (should be stable for this configuration)
-        @test is_linear_stable(nw, s0; marginally_stable=true)
+        @test is_linear_stable(s0; marginally_stable=true)
         show_participation_factors(s0)
 
         # Test that eigenvalues can be complex
@@ -78,7 +78,7 @@ using NetworkDynamics: ForwardDiff
         nw, s0 = Lib.powergridlike_network()
         @test nw.mass_matrix != I  # DAE system
 
-        sens = eigenvalue_sensitivity(nw, s0, 1)
+        sens = eigenvalue_sensitivity(s0, 1)
         n_p = length(pflat(s0))
         @test sens.mode_idx == 1
         @test length(sens.sensitivities) == n_p
@@ -87,7 +87,7 @@ using NetworkDynamics: ForwardDiff
 
         # Cross-check: verify a sensitivity against finite-difference eigenvalue shift
         # Uses eigvals() which returns the same default ordering as eigen()
-        sys0 = linearize_network(nw, s0)
+        sys0 = linearize_network(s0)
         red0 = NetworkDynamics.reduce_dae(sys0)
         ev_base = eigvals(red0.A)
 
@@ -116,22 +116,17 @@ using NetworkDynamics: ForwardDiff
         output = String(take!(io))
         @test contains(output, "Eigenvalue Sensitivity")
 
-        # NWState convenience dispatch
-        sens2 = eigenvalue_sensitivity(s0, 1)
-        @test sens.eigenvalue ≈ sens2.eigenvalue
-        @test sens.sensitivities ≈ sens2.sensitivities
-
         # params subset
         subset = sens.param_syms[1:3]
-        sens_sub = eigenvalue_sensitivity(nw, s0, 1; params=subset)
+        sens_sub = eigenvalue_sensitivity(s0, 1; params=subset)
         @test length(sens_sub.sensitivities) == 3
         @test length(sens_sub.param_syms) == 3
         @test sens_sub.sensitivities ≈ sens.sensitivities[1:3]
         @test sens_sub.param_vals ≈ sens.param_vals[1:3]
 
         # mode_idx out of range
-        @test_throws ArgumentError eigenvalue_sensitivity(nw, s0, 0)
-        @test_throws ArgumentError eigenvalue_sensitivity(nw, s0, 1000)
+        @test_throws ArgumentError eigenvalue_sensitivity(s0, 0)
+        @test_throws ArgumentError eigenvalue_sensitivity(s0, 1000)
     end
 
     @testset "DAE system with mass matrix" begin

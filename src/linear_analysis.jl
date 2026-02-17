@@ -89,6 +89,8 @@ outdim(sys::NetworkDescriptorSystem) = sys.C === nothing ? 0 : size(sys.C, 1)
 sym(sys::NetworkDescriptorSystem) = sys.sym
 insym(sys::NetworkDescriptorSystem) = sys.insym
 outsym(sys::NetworkDescriptorSystem) = sys.outsym
+constraint_dim(sys::NetworkDescriptorSystem{<:UniformScaling}) = 0
+constraint_dim(sys::NetworkDescriptorSystem) = dim(sys) - sum(sys.M)
 
 function Base.show(io::IO, ::MIME"text/plain", sys::NetworkDescriptorSystem)
     compact = get(io, :compact, false)::Bool
@@ -98,8 +100,16 @@ function Base.show(io::IO, ::MIME"text/plain", sys::NetworkDescriptorSystem)
             print(io, "(dim=$(dim(sys)))")
         else
             print(io, " with\n")
-            print(io, "  ├─ $(dim(sys)) states\n")
-            print(io, "  └─ without inputs/outputs\n")
+            print(io, "  ├─ $(dim(sys)) states")
+            nc = constraint_dim(sys)
+            @assert nc >= 0
+            if nc == 0
+                print(io, " (no algebraic constraints)\n")
+            else
+                constraints = maybe_plural(dim(sys) - sum(sys.M), "constaint")[2]
+                print(io, " ($(nc) algebraic $(constraints))\n")
+            end
+            print(io, "  └─ without inputs/outputs")
         end
     else
         if compact
@@ -118,24 +128,24 @@ function Base.show(io::IO, ::MIME"text/plain", sys::NetworkDescriptorSystem)
 end
 
 """
-    isfixpoint([nw::Network, ]s0::NWState; tol=1e-10)
+    isfixpoint(s0::NWState; tol=1e-10)
 
-Check if the state `s0` is a fixpoint of the network `nw` by
+Check if the state `s0` is a fixpoint of the network by
 calculating the the RHS and check that every entry is within the
 given tolerance `tol`.
 """
-function isfixpoint(nw::Network, s0::NWState; tol=1e-10)
+function isfixpoint(s0::NWState; tol=1e-10)
+    nw = extract_nw(s0)
     u0 = uflat(s0)
     p0 = pflat(s0)
     du = zeros(eltype(u0), length(u0))
     nw(du, u0, p0, s0.t)
     return all(abs.(du) .< tol)
 end
-isfixpoint(s0::NWState, args...; kwargs...) = isfixpoint(extract_nw(s0), s0, args...; kwargs...)
 
 """
-    linearize_network([nw::Network, ]s0::NWState)
-    linearize_network([nw::Network, ]s0::NWState; in, out)
+    linearize_network(s0::NWState)
+    linearize_network(s0::NWState; in, out)
 
 Linearize the network dynamics around state `s0`.
 
@@ -180,17 +190,18 @@ The output channel `out` can by any observable of the system.
 # Examples
 ```julia
 # Simple linearization for eigenvalue analysis
-sys = linearize_network(nw, s0)
+sys = linearize_network(s0)
 eigvals = jacobian_eigenvals(sys)
 
 # Full ABCD linearization with transfer function
-sys = linearize_network(nw, s0; in=[VIndex(1, :u_r)], out=[VIndex(1, :i_r)])
+sys = linearize_network(s0; in=[VIndex(1, :u_r)], out=[VIndex(1, :i_r)])
 sys(im * 2π * 50)  # evaluate transfer function at 50 Hz
 ```
 
 See also: [`jacobian_eigenvals`](@ref), [`participation_factors`](@ref)
 """
-function linearize_network(nw, s0; in=nothing, out=nothing)
+function linearize_network(s0::NWState; in=nothing, out=nothing)
+    nw = extract_nw(s0)
     x0 = uflat(s0)
     p0 = pflat(s0)
     t0 = s0.t
@@ -239,7 +250,6 @@ function linearize_network(nw, s0; in=nothing, out=nothing)
             outsym = single_out ? only(outsym) : outsym)
     end
 end
-linearize_network(s0::NWState, args...; kwargs...) = linearize_network(extract_nw(s0), s0, args...; kwargs...)
 
 """
     reduce_dae(sys::NetworkDescriptorSystem) -> NetworkDescriptorSystem
@@ -334,9 +344,8 @@ function reduce_dae(sys::NetworkDescriptorSystem)
 end
 
 """
-    jacobian_eigenvals([nw::Network, ]s0::NWState; kwargs...)
+    jacobian_eigenvals(s0::NWState; kwargs...)
     jacobian_eigenvals(sys::NetworkDescriptorSystem; eigvalf=LinearAlgebra.eigvals)
-
 
 Compute the eigenvalues of the (reduced) Jacobian for linear stability analysis.
 
@@ -354,13 +363,12 @@ function jacobian_eigenvals(sys::NetworkDescriptorSystem; eigvalf=LinearAlgebra.
     return eigvalf(red.A)
 end
 
-function jacobian_eigenvals(nw::Network, s0; kwargs...)
-    return jacobian_eigenvals(linearize_network(nw, s0); kwargs...)
+function jacobian_eigenvals(s0::NWState; kwargs...)
+    return jacobian_eigenvals(linearize_network(s0); kwargs...)
 end
-jacobian_eigenvals(s0::NWState, args...; kwargs...) = jacobian_eigenvals(extract_nw(s0), s0, args...; kwargs...)
 
 """
-    is_linear_stable([nw::Network, ]s0; marginally_stable=false, atol=1e-14, kwargs...)
+    is_linear_stable(s0; marginally_stable=false, atol=1e-14, kwargs...)
 
 Check if the fixpoint `s0` is linearly stable by checking that all eigenvalues
 of the (reduced) Jacobian have negative real parts.
@@ -370,19 +378,18 @@ Set `marginally_stable=true` to also accept eigenvalues with zero real part
 
 See also: [`jacobian_eigenvals`](@ref), [`linearize_network`](@ref)
 """
-function is_linear_stable(nw::Network, s0; marginally_stable=false, atol=1e-14, kwargs...)
-    isfixpoint(nw, s0) || error("The state s0 is not a fixpoint of the network nw.")
-    λ = jacobian_eigenvals(nw, s0; kwargs...)
+function is_linear_stable(s0; marginally_stable=false, atol=1e-14, kwargs...)
+    isfixpoint(s0) || error("The state s0 is not a fixpoint of the network.")
+    λ = jacobian_eigenvals(s0; kwargs...)
     if marginally_stable
         return all(λi -> real(λi) < atol || isapprox(real(λi), 0.0; atol), λ)
     else
         return all(λi -> real(λi) < 0.0, λ)
     end
 end
-is_linear_stable(s0::NWState, args...; kwargs...) = is_linear_stable(extract_nw(s0), s0, args...; kwargs...)
 
 """
-    participation_factors([nw::Network, ]s0::NWState; kwargs...)
+    participation_factors(s0::NWState; kwargs...)
     participation_factors(sys::NetworkDescriptorSystem; normalize=true)
 
 
@@ -424,19 +431,18 @@ function participation_factors(sys::NetworkDescriptorSystem; normalize=true)
     return (; eigenvalues, pfactors, sym)
 end
 
-function participation_factors(nw::Network, s0; kwargs...)
-    return participation_factors(linearize_network(nw, s0); kwargs...)
+function participation_factors(s0::NWState; kwargs...)
+    return participation_factors(linearize_network(s0); kwargs...)
 end
-participation_factors(s0::NWState, args...; kwargs...) = participation_factors(extract_nw(s0), s0, args...; kwargs...)
 
 """
     show_participation_factors([io=stdout,] pf::NamedTuple; kwargs...)
-    show_participation_factors([nw::Network,] s0::NWState; normalize=true, kwargs...)
+    show_participation_factors(s0::NWState; normalize=true, kwargs...)
 
 Display participation factors showing which states participate in each eigenmode.
 Each mode is listed with its contributing states and their participation values.
 
-When called with `nw`/`s0`, internally calls [`participation_factors`](@ref) and then displays the
+When called with `s0`, internally calls [`participation_factors`](@ref) and then displays the
 result. The `normalize` keyword is forwarded to `participation_factors`; remaining keywords control
 display.
 
@@ -446,24 +452,24 @@ display.
   (e.g. `λ -> abs(imag(λ)) > 1`), or `nothing` (show all). Indices refer to
   the original eigenvalue ordering from `participation_factors`.
 - `threshold=0.01`: Only show participation factors above this threshold (set to 0 to show all)
-- `sigdigits=3`: Number of significant digits for displaying values
+- `sigdigits=4`: Number of significant digits for displaying values
 - `sortby=nothing`: Sort modes for display. `nothing` preserves `eigen`'s default
   lexicographic order (consistent with `participation_factors` and `eigenvalue_sensitivity`
   mode indices). Use `:eigenvalue` (real part, descending) or `:magnitude` for alternative orderings.
 
 # Example
 ```julia
-pf = participation_factors(nw, s0)
+pf = participation_factors(s0)
 show_participation_factors(pf)
 
 # or directly:
-show_participation_factors(nw, s0; threshold=0.05)
+show_participation_factors(s0; threshold=0.05)
 ```
 """
 function show_participation_factors(io::IO, pf::NamedTuple;
                                     modes=nothing,
                                     threshold=0.10,
-                                    sigdigits=3,
+                                    sigdigits=4,
                                     sortby=nothing)
     (; eigenvalues, pfactors, sym) = pf
 
@@ -554,16 +560,16 @@ end
 function show_participation_factors(pf::NamedTuple; kwargs...)
     show_participation_factors(stdout, pf; kwargs...)
 end
-function show_participation_factors(s0::NWState, args...; kwargs...)
-    show_participation_factors(extract_nw(s0), s0, args...; kwargs...)
+function show_participation_factors(s0::NWState; kwargs...)
+    show_participation_factors(stdout, s0; kwargs...)
 end
-function show_participation_factors(nw::Network, s0; normalize=true, kwargs...)
-    pf = participation_factors(nw, s0; normalize)
-    show_participation_factors(pf; kwargs...)
+function show_participation_factors(io, s0::NWState; normalize=true, kwargs...)
+    pf = participation_factors(s0; normalize)
+    show_participation_factors(io, pf; kwargs...)
 end
 
 """
-    eigenvalue_sensitivity([nw::Network, ]s0::NWState, mode_idx::Int, params=SII.parameter_symbols(nw))
+    eigenvalue_sensitivity(s0::NWState, mode_idx::Int; params=SII.parameter_symbols(extract_nw(s0)))
 
 Compute the sensitivity of eigenvalue `mode_idx` to system parameters using
 the classical eigenvalue sensitivity formula:
@@ -579,8 +585,8 @@ Arguments:
 - `mode_idx`: The indexes into eigenvalues in the default order of Julia's `eigen`
 (lexicographic by `(real(λ), imag(λ))`). This is the same ordering as returned
 by [`jacobian_eigenvals`](@ref) and [`participation_factors`](@ref).
-- `params`: Symbolic parameter indices to compute sensitivities for. Defaults to
-all parameters (`SII.parameter_symbols(nw)`). Pass a subset to reduce computation.
+- `params` (keyword): Symbolic parameter indices to compute sensitivities for. Defaults to
+all parameters (`SII.parameter_symbols(s0)`). Pass a subset to reduce computation.
 
 Returns a named tuple:
 - `eigenvalue`: the selected eigenvalue (complex, rad/s)
@@ -592,9 +598,10 @@ Returns a named tuple:
 
 See also: [`participation_factors`](@ref), [`jacobian_eigenvals`](@ref)
 """
-function eigenvalue_sensitivity(nw::Network, s0::NWState, mode_idx::Int, params=SII.parameter_symbols(nw))
+function eigenvalue_sensitivity(s0::NWState, mode_idx::Int; params=SII.parameter_symbols(s0))
+    nw = extract_nw(s0)
     # Baseline linearization and eigendecomposition
-    A_s = reduce_dae(linearize_network(nw, s0)).A
+    A_s = reduce_dae(linearize_network(s0)).A
 
     eigenvalues, V = LinearAlgebra.eigen(A_s)
     W = LinearAlgebra.inv(V)
@@ -624,7 +631,7 @@ function eigenvalue_sensitivity(nw::Network, s0::NWState, mode_idx::Int, params=
         sensitivities[i] = transpose(w) * (dA_s * v)
     end
 
-    param_vals = pflat(p0)[pidxs]
+    param_vals = pflat(s0)[pidxs]
     scaled_sensitivities = map(1:n_sel) do i
         if isfinite(param_vals[i])
             param_vals[i] * sensitivities[i]
@@ -636,17 +643,7 @@ function eigenvalue_sensitivity(nw::Network, s0::NWState, mode_idx::Int, params=
     return (; eigenvalue=λ, mode_idx, sensitivities, scaled_sensitivities,
               param_syms, param_vals)
 end
-function eigenvalue_sensitivity(s0::NWState, args...; kwargs...)
-    eigenvalue_sensitivity(extract_nw(s0), s0, args...; kwargs...)
-end
 
-"""
-Internal: compute ∂Aₛ/∂p_k via nested ForwardDiff.
-
-Uses `ForwardDiff.derivative` with a scalar perturbation `δp` added to parameter
-`pidx`. The inner `ForwardDiff.jacobian` computes the state Jacobian, and the
-outer derivative propagates through the Jacobian computation and DAE reduction.
-"""
 function _reduced_jacobian_param_derivative(nw, s0, pidx)
     x0 = uflat(s0)
     p0 = pflat(s0)
@@ -667,21 +664,21 @@ end
 
 """
     show_eigenvalue_sensitivity([io::IO, ]result::NamedTuple; threshold=0.01, sigdigits=3, sortby=:mag)
-    show_eigenvalue_sensitivity([io::IO, ][nw::Network, ]s0::NWState, mode_idx[, params]; kwargs...)
+    show_eigenvalue_sensitivity([io::IO, ]s0::NWState, mode_idx; [params,] kwargs...)
 
 Display eigenvalue sensitivity results in a formatted table, sorted by the specified metric
 of the scaled sensitivity `p·∂λ/∂p`.
 
-When called with `nw`/`s0`, internally calls [`eigenvalue_sensitivity`](@ref) with `mode_idx` and
+When called with `s0`, internally calls [`eigenvalue_sensitivity`](@ref) with `mode_idx` and
 optional `params`, then displays the result. All keywords are forwarded to the display function.
 
 # Keyword Arguments
 - `threshold=0.01`: Only show entries where the chosen `sortby` metric exceeds this value (Hz or degrees for `:arg`)
-- `sigdigits=3`: Number of significant digits
+- `sigdigits=4`: Number of significant digits
 - `sortby=:mag`: Sort and filter by `:real`, `:imag`, `:mag`, or `:arg` of `p·∂λ/∂p`
 """
 function show_eigenvalue_sensitivity(io::IO, result::NamedTuple;
-                                     threshold=0.01, sigdigits=3, sortby=:mag)
+                                     threshold=0.01, sigdigits=4, sortby=:mag)
     (; eigenvalue, mode_idx, sensitivities, scaled_sensitivities,
        param_syms, param_vals) = result
 
@@ -748,14 +745,11 @@ end
 function show_eigenvalue_sensitivity(result::NamedTuple; kwargs...)
     show_eigenvalue_sensitivity(stdout, result; kwargs...)
 end
-function show_eigenvalue_sensitivity(io::IO, nw::Network, s0, mode_idx, params=SII.parameter_symbols(nw); kwargs...)
-    show_eigenvalue_sensitivity(io, eigenvalue_sensitivity(nw, s0, mode_idx, params); kwargs...)
+function show_eigenvalue_sensitivity(io::IO, s0::NWState, mode_idx; params=SII.parameter_symbols(extract_nw(s0)), kwargs...)
+    show_eigenvalue_sensitivity(io, eigenvalue_sensitivity(s0, mode_idx; params); kwargs...)
 end
-function show_eigenvalue_sensitivity(nw::Network, s0, args...; kwargs...)
-    show_eigenvalue_sensitivity(stdout, nw, s0, args...; kwargs...)
-end
-function show_eigenvalue_sensitivity(s0::NWState, args...; kwargs...)
-    show_eigenvalue_sensitivity(extract_nw(s0), s0, args...; kwargs...)
+function show_eigenvalue_sensitivity(s0::NWState, mode_idx; kwargs...)
+    show_eigenvalue_sensitivity(stdout, s0, mode_idx; kwargs...)
 end
 
 ####
