@@ -240,7 +240,7 @@ if !isnothing(baseline)
         path = joinpath(original_path, args[:prefix] * "comparison.txt")
         @info "Save table to $path"
         open(path, "w") do io
-            pretty_table(io, comp; backend=:text)
+            pretty_table(io, comp; backend=:text, fit_table_in_display_horizontally=false, fit_table_in_display_vertically=false)
         end
     end
 else
