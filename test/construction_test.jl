@@ -3,6 +3,7 @@ using NetworkDynamics: Symmetric
 using Graphs
 using LinearAlgebra: LinearAlgebra
 using Chairmarks: @b
+using ForwardDiff
 
 @testset "graphless constructor" begin
     g = (out, in, p, t) -> nothing
@@ -424,4 +425,43 @@ end
         @test out ≈ out2
         @test du2 ≈ vcat(du, zeros(length(out)))
     end
+end
+
+@__MODULE__()==Main ? includet(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl")) : (const Lib = Main.Lib)
+@testset "Basic Coreloop Performance and cache creation" begin
+    nw, s0 = Lib.powergridlike_network()
+    du = zeros(dim(nw))
+    u = uflat(s0)
+    p = pflat(s0)
+    t0 = NaN
+    b = @b $(nw)($du, $u, $p, $t0)
+    @test b.allocs == 0
+
+    b = @b NetworkDynamics.get_buffers($nw, $u, $p, $0; initbufs=true)
+    @test b.allocs == 0
+    b = @b NetworkDynamics.get_buffers($nw, $u, $p, $0; initbufs=false)
+    @test b.allocs == 0
+
+    # test cache creation for different input types
+    du32 = rand(Float32, length(du))
+    u32 = rand(Float32, length(u))
+    p32 = rand(Float32, length(p))
+
+    @test_throws "caches are initialized" nw(du32, u32, p32, t0)
+
+    # if t gets Float64 that does not change the cachetype type
+    @test_throws "caches are initialized" nw(du32, u32, p32, Float32(t0))
+    # if u or p get Float64 that promotes the cachetype to Float64
+    @test eltype(nw(nothing, u32, p, 0.0; RET=Val(:buf_init))[1]) == Float64
+    @test eltype(nw(nothing, u, p32, 0.0; RET=Val(:buf_init))[1]) == Float64
+
+    # if t is a Dual, we need to promote indeed
+    dualt0 = ForwardDiff.Dual(t0)
+    CT = eltype(nw(nothing, u32, p32, dualt0; RET=Val(:buf_init))[1])
+    @test CT == typeof(dualt0)
+
+    # if u or p are Duals, we need to promote too
+    dualp32 = ForwardDiff.Dual.(p32, one.(p32))  # Dual{Nothing,Float32,1}; N=0 has no preallocated dual buffer
+    CT = eltype(nw(nothing, u32, dualp32, Float32(t0); RET=Val(:buf_init))[1])
+    @test CT == typeof(dualp32[1])
 end

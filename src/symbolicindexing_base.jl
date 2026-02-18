@@ -338,7 +338,7 @@ Base.axes(si::_IterableSubcomponent) = axes(si.subidx)
 Base.getindex(si::_IterableSubcomponent, i) = idxtype(si)(si.compidx, si.subidx[i])
 function Base.eltype(si::_IterableSubcomponent)
     if isconcretetype(eltype(si.subidx))
-        idxtype(si){eltype(si.compidx),eltype(si.subidx)}
+        idxtype(si){typeof(si.compidx),eltype(si.subidx)}
     else
         Any
     end
@@ -675,10 +675,10 @@ function SII.observed(nw::Network, snis)
 
     obsoutcache = DiffCache(Vector{Float64}(undef, total_obs_dim)) # big cache for all obs outputs
     if isscalar
-        (u, p, t) -> begin
-            outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs=needsbuf)
+        (u, p, t; kwargs...) -> begin
+            outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs=needsbuf, kwargs...)
 
-            outcache = PreallocationTools.get_tmp(obsoutcache, first(u))
+            outcache = PreallocationTools.get_tmp(obsoutcache, eltype(outbuf))
             unrolled_foreach(batched_obsf) do batch
                 batch(outcache, u, outbuf, aggbuf, extbuf, p, t)
             end
@@ -691,10 +691,10 @@ function SII.observed(nw::Network, snis)
             type == OBS_TYPE && return outcache[idx]
         end
     else
-        (u, p, t, out=similar(u, length(_snis))) -> begin
-            outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs=needsbuf)
+        (u, p, t, out=Vector{cachetype(u, p, t)}(undef, length(_snis)); kwargs...) -> begin
+            outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs=needsbuf, kwargs...)
 
-            outcache = PreallocationTools.get_tmp(obsoutcache, first(u))
+            outcache = PreallocationTools.get_tmp(obsoutcache, eltype(outbuf))
             unrolled_foreach(batched_obsf) do batch
                 batch(outcache, u, outbuf, aggbuf, extbuf, p, t)
             end
@@ -716,6 +716,7 @@ function SII.observed(nw::Network, snis)
         end
     end
 end
+
 function _expand_and_collect(inpr, sni::SymbolicIndex)
     nw = extract_nw(inpr)
     if _hascolon(sni)

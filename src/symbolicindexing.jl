@@ -1061,3 +1061,7 @@ end
 function Base.getindex(nw::Network, collection::Union{AbstractArray,Tuple})
     getindex.(Ref(nw), collection)
 end
+
+# shallow copy of NWState/NWParameter
+Base.copy(nws::NWState) = NWState(nws.nw, copy(nws.uflat), copy(nws.p), nws.t)
+Base.copy(nwp::NWParameter) = NWParameter(nwp.nw, copy(nwp.pflat))

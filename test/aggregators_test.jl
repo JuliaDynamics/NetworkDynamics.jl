@@ -9,7 +9,7 @@ using StableRNGs
 using ForwardDiff: Dual
 using Symbolics
 
-(isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
+@__MODULE__()==Main ? includet(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl")) : (const Lib = Main.Lib)
 
 @testset "compare different aggregators" begin
     fv = (dv, v, ein, p, t) -> nothing

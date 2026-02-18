@@ -9,7 +9,7 @@ using NonlinearSolve
 using SciMLLogging
 using NetworkDynamics: SubtaskError
 
-(isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
+@__MODULE__()==Main ? includet(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl")) : (const Lib = Main.Lib)
 
 @testset "test find_fixpoint" begin
     function swing_equation!(dv, v, esum, (M, P, D), t)

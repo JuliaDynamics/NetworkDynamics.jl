@@ -7,7 +7,9 @@ using Symbolics
 import SymbolicIndexingInterface as SII
 using NetworkDynamics: VIndex, EIndex, VPIndex, EPIndex, _resolve_colon, FilteringProxy
 
-(isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
+# either bind Lib from Main or, if executed interactively in main, use revise to load
+@__MODULE__()==Main ? includet(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl")) : (const Lib = Main.Lib)
+
 @testset "small test network" begin
     g = complete_graph(3)
     vf = Lib.kuramoto_second()
@@ -634,11 +636,11 @@ end
 
     b = @b SII.observed($nw, $idxs1) # 69 36 42 30 37 47 64 if VERSION ≥ v"1.11"
     if VERSION ≥ v"1.11"
-        @test b.allocs <= 96
+        @test b.allocs <= 97
     end
     b = @b SII.observed($nw, $idxs2) # 12 7 10 5 14
     if VERSION ≥ v"1.11"
-        @test b.allocs <= 15
+        @test b.allocs <= 16
     end
 
     obsf1 = SII.observed(nw, idxs1)

@@ -1,5 +1,21 @@
 # NetworkDynamics Release Notes
 
+## v0.10.16 Changelog
+- **Linear analysis overhaul** ([#340](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/340)): Renamed `linear_stability.jl` to `linear_analysis.jl` and significantly expanded linear analysis capabilities:
+  - New `NetworkDescriptorSystem` type for descriptor system representation (`M ẋ = Ax + Bu`, `y = Cx + Du`) with callable transfer function evaluation
+  - New `linearize_network(s0; in, out)` for full ABCD state-space linearization with perturbation channel classification (vertex/edge inputs/outputs, parameters)
+  - New `reduce_dae` to eliminate algebraic constraints from descriptor systems
+  - New `participation_factors` and `show_participation_factors` for eigenmode participation analysis
+  - New `eigenvalue_sensitivity` and `show_eigenvalue_sensitivity` for parameter sensitivity of eigenvalues via nested ForwardDiff
+  - **API change (soft-breaking)**: `isfixpoint`, `jacobian_eigenvals`, `is_linear_stable` now take `s0::NWState` directly instead of `(nw, s0)`. Old signatures are deprecated with warnings.
+- New `set_mtk_defaults!` helper for forwarding keyword defaults in `@component` definitions
+- `initialize_component`: add `alg_kwargs` keyword, default `autodiff=AutoForwardDiff()` in solver
+- New dependency: `ADTypes`
+- `Base.copy` methods for `NWState` and `NWParameter`
+- `NWState` constructor now validates `uflat` length
+- PrettyTables v3 compatibility for benchmark code
+- Coreloop: added `perturb`/`perturb_maps` kwargs for perturbation-based linearization
+
 ## v0.10.15 Changelog
 - small fixes, mainly for PowerDynamics tests ([#339](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/339))
 

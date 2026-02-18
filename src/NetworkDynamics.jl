@@ -40,7 +40,7 @@ import SymbolicIndexingInterface as SII
 using SymbolicIndexingInterface: variable_symbols, parameter_symbols
 using StaticArrays: StaticArrays, SVector
 
-export implicit_output, ComponentPostprocessing
+export implicit_output, ComponentPostprocessing, set_mtk_defaults!
 include("utils.jl")
 
 export VertexModel, EdgeModel
@@ -117,8 +117,8 @@ export get_defaults_dict, get_guesses_dict, get_bounds_dict, get_inits_dict
 export free_p, free_u
 include("metadata.jl")
 
-export isfixpoint, is_linear_stable, jacobian_eigenvals
-include("linear_stability.jl")
+export NetworkDescriptorSystem, isfixpoint, is_linear_stable, linearize_network, reduce_dae, jacobian_eigenvals, participation_factors, show_participation_factors, eigenvalue_sensitivity, show_eigenvalue_sensitivity
+include("linear_analysis.jl")
 
 include("show.jl")
 

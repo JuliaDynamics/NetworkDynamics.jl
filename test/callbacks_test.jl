@@ -6,7 +6,7 @@ using Test
 using ModelingToolkit
 using DiffEqCallbacks
 
-(isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
+@__MODULE__()==Main ? includet(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl")) : (const Lib = Main.Lib)
 
 function basenetwork()
     g = SimpleGraph([0 1 1 0 1;

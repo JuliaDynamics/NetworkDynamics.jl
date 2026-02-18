@@ -1,4 +1,5 @@
 module Lib
+using Graphs
 using NetworkDynamics
 using ModelingToolkit
 using ModelingToolkit: t_nounits as t, D_nounits as Dt
@@ -284,6 +285,38 @@ end
 function dqline(; kwargs...)
     @named line = StaticPowerLineDQ(; kwargs...)
     EdgeModel(line, [:src_u_r, :src_u_i], [:dst_u_r, :dst_u_i], [:src_i_r, :src_i_i], [:dst_i_r, :dst_i_i])
+end
+
+function powergridlike_network()
+    # Create a simple network with Kuramoto oscillators
+    g = cycle_graph(5) # 5-node cycle graph
+    v1s = dqbus_slack()
+    v2s = dqbus_pv(Pset=1.5, Vset=1.0)
+    v3s = dqbus_pq(Pset=-1.0, Qset=-0.1)
+    v4s = dqbus_pq(Pset=-1.0, Qset=-0.1)
+    v5s = dqbus_pq(Pset=-1.0, Qset=-0.1)
+    e = dqline(X=0.1, R=0.01)
+
+    nws = Network(g, [v1s, v2s, v3s, v4s, v5s], e)
+    pf = find_fixpoint(nws)
+
+    v1 = dqbus_swing_and_load()
+    set_initconstraint!(v1, @initconstraint begin
+        :load₊Pinj + 1.0
+        - :u_r^2 - :u_i^2 + :swing₊V^2
+    end)
+    v2 = dqbus_swing()
+    v3 = dqbus_pq()
+    v4 = dqbus_pq()
+    v5 = dqbus_pq()
+    nw = Network(g, [v1, v2, v3, v4, v5], e; dealias=true)
+
+    default_overrides = merge(
+        interface_values(pf),
+        Dict(EIndex(1:5, :active) .=> nothing))
+
+    s0 = initialize_componentwise!(nw; subverbose=false, verbose=false, default_overrides)
+    nw, s0
 end
 
 end #module

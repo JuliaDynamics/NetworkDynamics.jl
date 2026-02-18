@@ -102,7 +102,7 @@ function PrettyTables.pretty_table(io::IO, bd::BenchmarkDict; kwargs...)
     end
 
     data = hcat(keycols..., ttime, tallocs, samples)
-    header = vcat("Key", ["" for i in 1:length(keycols)-1]..., "Time", "Allocs", "Samples")
+    column_labels = [vcat("Key", ["" for i in 1:length(keycols)-1]..., "Time", "Allocs", "Samples")]
 
     if any(hasbaseline, flatv)
         btime = map(flatv) do _v
@@ -132,7 +132,7 @@ function PrettyTables.pretty_table(io::IO, bd::BenchmarkDict; kwargs...)
         end
 
         _kwdict = Dict(kwargs)
-        if haskey(_kwdict, :backend) && _kwdict[:backend] == Val(:markdown)
+        if haskey(_kwdict, :backend) && _kwdict[:backend] == :markdown
             ctime = map(ctime) do num
                 sym = if num ≤ 0
                     "✅"
@@ -154,35 +154,34 @@ function PrettyTables.pretty_table(io::IO, bd::BenchmarkDict; kwargs...)
                 repr(round(num, digits=2)) * " % " * sym
             end
         else
-            hl_bad = Highlighter(crayon"red bold") do data, i, j
-                (j ∈ length(keycols) .+ [3,6]) && data[i, j] isa Number && data[i,j] > 0
-            end
-            hl_good = Highlighter(crayon"green bold") do data, i, j
-                (j ∈ length(keycols) .+ [3,6]) && data[i, j] isa Number && (data[i, j] < 0)
-            end
-            formatters = (v, _, col) -> begin
-                if col in length(keycols) .+ [3,6]
-                    if v < -5
-                        @sprintf "%+5.1f %% ✅" v
-                    elseif v < 5
-                        @sprintf "%+5.1f %% ➖" v
-                    else
-                        @sprintf "%+5.1f %% ❌" v
-                    end
+            hl_bad = TextHighlighter(
+                (data, i, j) -> (j ∈ length(keycols) .+ [3,6]) && data[i, j] isa Number && data[i,j] > 0,
+                crayon"red bold")
+            hl_good = TextHighlighter(
+                (data, i, j) -> (j ∈ length(keycols) .+ [3,6]) && data[i, j] isa Number && (data[i, j] < 0),
+                crayon"green bold")
+            fmt = (v, _, col) -> begin
+                col in length(keycols) .+ [3,6] && v isa Number || return v
+                if v < -5
+                    @sprintf "%+5.1f %% ✅" v
+                elseif v < 5
+                    @sprintf "%+5.1f %% ➖" v
                 else
-                    v
+                    @sprintf "%+5.1f %% ❌" v
                 end
             end
-            kwargs = (; kwargs..., highlighters=(hl_bad, hl_good), formatters)
+            kwargs = (; kwargs..., highlighters=[hl_bad, hl_good], formatters=[fmt])
         end
 
         data = hcat(keycols..., ttime, btime, ctime, tallocs, ballocs, callocs)
-        header = (vcat("Key", ["" for i in 1:length(keycols)-1]..., "Time", "", "","Allocs","",""),
-                  vcat(["" for i in 1:length(keycols)]..., "target", "baseline", "","target","baseline",""))
+        column_labels = [
+            vcat("Key", ["" for i in 1:length(keycols)-1]..., "Time", "", "","Allocs","",""),
+            vcat(["" for i in 1:length(keycols)]..., "target", "baseline", "","target","baseline",""),
+        ]
     end
 
     alignment = vcat([:l for _ in 1:length(keycols)-1]..., [:r for _ in 1:size(data,2)-length(keycols)+1]...)
-    pretty_table(io, data; header, header_alignment=:l, alignment, kwargs...)
+    pretty_table(io, data; column_labels, column_label_alignment=:l, alignment, kwargs...)
 
 end
 
@@ -308,40 +307,55 @@ function plot_over_N(target, baseline=nothing)
     fig
 end
 
-# code for interactive testing
+# code for interactive testing — select and run the inner `let` block in the REPL
 @static if false
-bd = BenchmarkDict()
-bd["Group 1", "Subgroup 1", "Benchmark 1"] = BenchmarkResult(1.0, 100)
-bd["Group 1", "Subgroup 1", "Benchmark 2"] = BenchmarkResult(2.0, 100)
-bd["Group 1", "Subgroup 2", "Benchmark 1"] = BenchmarkResult(3.0, 100)
-bd["Group 1", "Subgroup 2", "Benchmark 2"] = BenchmarkResult(4.0, 100)
-bd["Group 2", "Subgroup 1", "Benchmark 1"] = BenchmarkResult(5.0, 100)
-bd["Group 2", "Subgroup 1", "Benchmark 2"] = BenchmarkResult(6.0, 100)
-bd["Group 2", "Subgroup 2", "Benchmark 1"] = BenchmarkResult(7.0, 100)
-bd["Group 2", "Subgroup 2", "Benchmark 2"] = BenchmarkResult(9.0, 100)
+    # --- simple table (no comparison) ---
+    bd = BenchmarkDict()
+    bd["Group 1", "Subgroup 1", "Benchmark 1"] = BenchmarkResult(1.0e-6,  0, 50, nothing)
+    bd["Group 1", "Subgroup 1", "Benchmark 2"] = BenchmarkResult(2.0e-6,  2, 50, nothing)
+    bd["Group 1", "Subgroup 2", "Benchmark 1"] = BenchmarkResult(3.0e-6,  0, 50, nothing)
+    bd["Group 1", "Subgroup 2", "Benchmark 2"] = BenchmarkResult(4.5e-6,  4, 50, nothing)
+    bd["Group 2", "Subgroup 1", "Benchmark 1"] = BenchmarkResult(5.0e-6,  0, 30, nothing)
+    bd["Group 2", "Subgroup 1", "Benchmark 2"] = BenchmarkResult(6.0e-6,  0, 30, nothing)
+    bd["Group 2", "Subgroup 2", "Benchmark 1"] = BenchmarkResult(7.0e-6,  8, 20, nothing)
+    bd["Group 2", "Subgroup 2", "Benchmark 2"] = BenchmarkResult(9.0e-6, 16, 20, nothing)
+    println("=== Simple table ===")
+    pretty_table(bd)
 
-target = deserialize(sort(filter(contains("target.data"), readdir()))[end])
-baseline = deserialize(sort(filter(contains("baseline.data"), readdir()))[end])
-comp = compare(target, baseline)
-test_return_values(comp)
+    # --- comparison table (target vs baseline) ---
+    target = BenchmarkDict()
+    target["Group 1", "Subgroup 1", "Benchmark 1"] = BenchmarkResult(1.0e-6, 0, 50, nothing)
+    target["Group 1", "Subgroup 1", "Benchmark 2"] = BenchmarkResult(2.0e-6, 2, 50, nothing)
+    target["Group 1", "Subgroup 2", "Benchmark 1"] = BenchmarkResult(3.5e-6, 0, 50, nothing)
+    target["Group 2", "Subgroup 1", "Benchmark 1"] = BenchmarkResult(5.0e-6, 0, 30, nothing)
+    baseline = BenchmarkDict()
+    baseline["Group 1", "Subgroup 1", "Benchmark 1"] = BenchmarkResult(1.2e-6, 0, 50, nothing)
+    baseline["Group 1", "Subgroup 1", "Benchmark 2"] = BenchmarkResult(2.2e-6, 4, 50, nothing)
+    baseline["Group 1", "Subgroup 2", "Benchmark 1"] = BenchmarkResult(3.0e-6, 0, 50, nothing)
+    baseline["Group 2", "Subgroup 1", "Benchmark 1"] = BenchmarkResult(4.5e-6, 0, 30, nothing)
+    comp = compare(target, baseline)
 
-entry =  comp["diffusion","ode_edge","ka_buf","KA",6]
-entry =  comp["diffusion","ode_edge","seq_buf","seq",6]
-entry.target.value[1] - entry.baseline.value[1]
-entry.target.value[2]
-entry.baseline.value[2]
+    println("\n=== Comparison table (terminal) ===")
+    pretty_table(comp)
 
-entry =  comp["kuramoto","heterogeneous","ka_buf","KA",6]
-# entry =  comp["kuramoto","heterogeneous","seq_buf","seq",6]
-entry.target.value[1]
-entry.baseline.value[1]
-entry.target.value[2]
-entry.baseline.value[2]
+    println("\n=== Comparison table (markdown) ===")
+    pretty_table(comp; backend=:markdown)
 
-target = deserialize(sort(filter(contains("target.data"), readdir()))[end])
-baseline = deserialize(sort(filter(contains("baseline.data"), readdir()))[end])
-comp = compare(target,baseline)
+    # --- numeric last key (mirrors real benchmark key structure: [casename, exname, aggname, N]) ---
+    target2 = BenchmarkDict()
+    target2["diffusion", "seq_buf", "seq",  100] = BenchmarkResult(1.0e-6, 0, 50, nothing)
+    target2["diffusion", "seq_buf", "seq", 1000] = BenchmarkResult(8.0e-6, 0, 50, nothing)
+    target2["diffusion", "ka_buf",  "seq",  100] = BenchmarkResult(0.9e-6, 0, 50, nothing)
+    target2["diffusion", "ka_buf",  "seq", 1000] = BenchmarkResult(7.5e-6, 0, 50, nothing)
+    baseline2 = BenchmarkDict()
+    baseline2["diffusion", "seq_buf", "seq",  100] = BenchmarkResult(1.1e-6, 0, 50, nothing)
+    baseline2["diffusion", "seq_buf", "seq", 1000] = BenchmarkResult(9.0e-6, 0, 50, nothing)
+    baseline2["diffusion", "ka_buf",  "seq",  100] = BenchmarkResult(1.0e-6, 0, 50, nothing)
+    baseline2["diffusion", "ka_buf",  "seq", 1000] = BenchmarkResult(8.0e-6, 0, 50, nothing)
+    comp2 = compare(target2, baseline2)
 
-pretty_table(comp["diffusion","static_edge"]; backend=Val(:markdown))
-
+    println("\n=== Numeric-key table (mirrors real benchmark structure) ===")
+    pretty_table(target2)
+    println()
+    pretty_table(comp2)
 end

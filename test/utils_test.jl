@@ -1,6 +1,10 @@
 using NetworkDynamics
+using ModelingToolkit
+using ModelingToolkit: t_nounits as t, D_nounits as Dt
+using SciMLBase
+using ForwardDiff
 
-(isinteractive() && @__MODULE__()==Main ? includet : include)("ComponentLibrary.jl")
+@__MODULE__()==Main ? includet(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl")) : (const Lib = Main.Lib)
 
 @testset "test utils" begin
     @testset "subscript" begin
@@ -113,6 +117,33 @@ using NetworkDynamics
         @test str_significant(-123.294191; sigdigits=5) == "-123.29"
     end
 
+    @testset "cachetype" begin
+        using NetworkDynamics: cachetype
+
+        # basic single-arg cases
+        @test cachetype(1.0) == Float64
+        @test cachetype(1f0) == Float32
+        @test cachetype([1.0, 2.0]) == Float64
+        @test cachetype(nothing) == Nothing
+        @test cachetype(SciMLBase.NullParameters()) == Nothing
+
+        # multi-arg promotion
+        @test cachetype([1.0], [1f0]) == Float64
+        @test cachetype(nothing, [1.0]) == Float64
+        @test cachetype(SciMLBase.NullParameters(), [1.0]) == Float64
+        @test cachetype([1.0], SciMLBase.NullParameters()) == Float64
+        @test cachetype(nothing, SciMLBase.NullParameters(), [1f0]) == Float32
+
+        # ForwardDiff dual numbers - single and array
+        d = ForwardDiff.Dual(1.0, 1.0)
+        @test cachetype(d) == typeof(d)
+        @test cachetype([d, d]) == typeof(d)
+        @test cachetype(SciMLBase.NullParameters(), d) == typeof(d)
+        @test cachetype(SciMLBase.NullParameters(), [d]) == typeof(d)
+        @test cachetype(nothing, [d]) == typeof(d)
+        @test cachetype(SciMLBase.NullParameters(), nothing, [d]) == typeof(d)
+    end
+
     @testset "batch stride" begin
         using NetworkDynamics: BatchStride, _fullstride, _fullrange, _range
         using Static
@@ -144,5 +175,52 @@ using NetworkDynamics
         @test _range(bn, 1, 2) == 5:5
         @test _range(bn, 2, 1) == 6:8
         @test _range(bn, 2, 2) == 9:9
+    end
+
+    @testset "Test set_mtk_defaults!" begin
+        @component function inner(; name, defaults...)
+            @parameters a
+            @variables begin
+                x(t)
+                y(t)
+            end
+            eqs = [
+                Dt(x) ~ -a*x + y
+                Dt(y) ~ -y + x
+            ]
+            sys = System(eqs, t; name)
+            set_mtk_defaults!(sys, defaults)
+        end
+        @component function outer(; name, defaults...)
+            @variables z(t)
+            systems = @named begin
+                in = inner()
+            end
+            eqs = [
+                z ~ in.x
+                in.y ~ 0
+            ]
+            sys = System(eqs, t; name, systems)
+            set_mtk_defaults!(sys, defaults)
+        end
+
+        function _defaults(sys)
+            defs = ModelingToolkit.defaults(sys)
+            Dict(ModelingToolkit.getname(k)=>v for (k,v) in defs)
+        end
+
+        @named in = inner()
+        @test isempty(_defaults(in))
+        @named in = inner(; x=2)
+        @test _defaults(in)[:x] == 2
+
+        @named out = outer()
+        @test isempty(_defaults(out))
+        @named out = outer(; in₊x=3)
+        @test _defaults(out)[:in₊x] == 3
+        @named out = outer(; in₊a=5, in₊x=4, z=10)
+        @test _defaults(out)[:in₊a] == 5
+        @test _defaults(out)[:in₊x] == 4
+        @test _defaults(out)[:z] == 10
     end
 end
