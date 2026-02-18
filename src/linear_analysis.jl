@@ -166,7 +166,7 @@ They can be either
 - `δφ_out (vertex)`: Perturbation of the vertex output (enters all connected edges)
 - `δΦ_out (edge)` and `δΦ_in (vertex)`: Perturbation of the flow before or after aggregation. Mathematically equivalent, only enters the vertex anyway.
 
-```
+```asciiart
                   δφ_in          more edges         δφ_in
                     ↓                △                ↓
                     ∙────────────────┼────────────────∙

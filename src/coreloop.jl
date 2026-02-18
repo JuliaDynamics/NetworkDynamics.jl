@@ -6,7 +6,19 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t; perturb=nothing, perturb_m
         throw(ArgumentError("p does not has expecte size $(nw.im.lastidx_p)"))
     end
 
-    cacheT = cachetype(u, p, t, perturb)
+    # determine the cache type
+    cacheT = if RET == Val(:du)
+        eltype(du) # if du is required du needs to be preallocated with the correct type!
+    else
+        prelimCacheT = cachetype(du, u, p, perturb)
+        # don't use t to widen cache type if its just a plain number or nothing;
+        # plain Float64 t would otherwise upcast Float32 GPU arrays, and nothing t (from SII) corrupts cacheT
+        if t isa AbstractFloat || isnothing(t)
+            prelimCacheT
+        else
+            promote_type(prelimCacheT, typeof(t))
+        end
+    end
 
     ex = executionstyle(nw)
     isnothing(du) || fill!(du, zero(eltype(du)))

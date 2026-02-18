@@ -133,7 +133,9 @@ get_graph(nw::Network) = nw.im.g
 function get_output_cache(nw::Network, T)
     if T <: AbstractFloat && eltype(nw.caches.output.du) != T
         throw(ArgumentError("Network caches are initialized with $(eltype(nw.caches.output.du)) \
-            but is used for $T data!"))
+            but is used for $T data! This means you probably used `adapt` on the Network to handle \
+            $(eltype(nw.caches.output.du)) arrays, but now you're calling the `nw`-function with some arguments \
+            of type $T"))
     end
     o = get_tmp(nw.caches.output, T)
     fill!(o, convert(eltype(o), NaN))
