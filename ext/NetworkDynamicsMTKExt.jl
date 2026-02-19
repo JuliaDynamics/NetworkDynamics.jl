@@ -547,7 +547,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     )
 end
 
-function _get_formulas(eqs, obs_subs)
+function _get_formulas(eqs, obs_subs; rename=true)
     # Bit hacky, were building a function like this,
     # where all (necessary) obs and eqs are contained in the bgin block of the first output
     # out[1] = begin
@@ -561,17 +561,33 @@ function _get_formulas(eqs, obs_subs)
     # end
     # out[2] = state2
     # ...
+
     isempty(eqs) && return []
     obsdeps = _collect_deps_on_obs([eq.rhs for eq in eqs], obs_subs)
-    obs_assignments = [Assignment(k, v) for (k,v) in obs_subs if k ∈ obsdeps]
+    obs_assignments_eq = [k ~ v for (k,v) in obs_subs if k ∈ obsdeps]
 
     # implicit equations are not use via assigments, so we filter for e
-    eqs_assignments = [Assignment(eq.lhs, eq.rhs) for eq in eqs
+    eqs_assignments_eq = [eq.lhs ~ eq.rhs for eq in eqs
                           if !isequal(eq.lhs, eq.rhs) && !isequal(eq.lhs, 0)]
     # since implicit eqs did not end up in assighmets, we use the rhs
     out = [isequal(eq.lhs, 0) ? eq.rhs : eq.lhs for eq in eqs]
 
-    [Let(vcat(obs_assignments, eqs_assignments), out[1], false), out[2:end]...]
+    all_assignments_eq = vcat(obs_assignments_eq, eqs_assignments_eq)
+
+    if !isempty(all_assignments_eq) && rename
+        asigned_sym = [asg.lhs for asg in all_assignments_eq]
+        iv = only(arguments(first(asigned_sym)))
+        renamesubs = map(1:length(asigned_sym)) do i
+            name = Symbol(:obs, NetworkDynamics.subscript(i))
+            asigned_sym[i] => Symbolics.unwrap(Symbolics.variable(name; T=Symbolics.FnType)(iv))
+        end |> Dict
+        # we apply the substitutions to the outputs and the assigments
+        all_assignments_eq = substitute.(all_assignments_eq, Ref(renamesubs))
+        out = substitute.(out, Ref(renamesubs))
+    end
+
+    all_assignments = [Assignment(asg.lhs, asg.rhs) for asg in all_assignments_eq]
+    full_eqs = [Let(all_assignments, out[1], false), out[2:end]...]
 end
 function _collect_deps_on_obs(terms, obs_subs)
     deps = Set{Symbolic}()
