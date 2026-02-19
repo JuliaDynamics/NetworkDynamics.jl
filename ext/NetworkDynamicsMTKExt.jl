@@ -61,6 +61,10 @@ function VertexModel(sys::System, inputs, outputs; verbose=false, name=getname(s
     f = gen.f
     g = gen.g
     obsf = gen.obsf
+    aliases = Dict{Symbol,Tuple{Float64,Symbol}}()
+    for (k,v) in gen.aliases
+        aliases[getname(k)] = (v[1], getname(v[2]))
+    end
 
     sysdefaults = defaults(sys)
     sysguesses = ModelingToolkit.guesses(sys)
@@ -89,7 +93,7 @@ function VertexModel(sys::System, inputs, outputs; verbose=false, name=getname(s
     mass_matrix = gen.mass_matrix
     c = VertexModel(;f, g, sym, insym, outsym, psym, obssym,
             obsf, mass_matrix, ff=gen.fftype, name, extin=extin_nwidx,
-            allow_output_sym_clash=true, kwargs...)
+            allow_output_sym_clash=true, aliases, kwargs...)
     set_metadata!(c, :observed, gen.observed)
     set_metadata!(c, :equations, gen.equations)
     set_metadata!(c, :outputeqs, gen.outputeqs)
@@ -174,6 +178,10 @@ function EdgeModel(sys::System, srcin, dstin, srcout, dstout; verbose=false, nam
     f = gen.f
     g = singlesided ? gwrap(gen.g) : gen.g
     obsf = gen.obsf
+    aliases = Dict{Symbol,Tuple{Float64,Symbol}}()
+    for (k,v) in gen.aliases
+        aliases[getname(k)] = (v[1], getname(v[2]))
+    end
 
     sysdefaults = defaults(sys)
     sysguesses = ModelingToolkit.guesses(sys)
@@ -213,7 +221,7 @@ function EdgeModel(sys::System, srcin, dstin, srcout, dstout; verbose=false, nam
     mass_matrix = gen.mass_matrix
     c = EdgeModel(;f, g, sym, insym, outsym, psym, obssym,
             obsf, mass_matrix, ff=gen.fftype, name, extin=extin_nwidx,
-            allow_output_sym_clash=true, kwargs...)
+            allow_output_sym_clash=true, aliases, kwargs...)
     set_metadata!(c, :observed, gen.observed)
     set_metadata!(c, :equations, gen.equations)
     set_metadata!(c, :outputeqs, gen.outputeqs)
@@ -529,6 +537,19 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         obsf_ip = nothing
     end
 
+    aliases = Dict{SymbolicUtils.BasicSymbolic{Real}, Tuple{Float64, SymbolicUtils.BasicSymbolic{Real}}}()
+    for eq in obseqs_sorted
+        rhs = eq.rhs
+        alias = _detect_alias(rhs, iv)
+        isnothing(alias) && continue
+        if any(isequal(alias[2]), states) || any(isequal(alias[2]), Set(params))
+            aliases[eq.lhs] = alias
+        elseif haskey(aliases, alias[2])
+            fac, sym = aliases[alias[2]]
+            aliases[eq.lhs] = (fac*alias[1], sym)
+        end
+    end
+
     return (;
         f=f_ip, g=g_ip,
         mass_matrix,
@@ -543,7 +564,8 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         observed=obseqs_sorted,
         odesystem_simplified=sys,
         params,
-        unused_params
+        unused_params,
+        aliases
     )
 end
 
@@ -630,6 +652,33 @@ function _recursive_collect_dependencies!(deps, term, dict)
         end
     end
     deps
+end
+
+"""
+Takes a term and detects if it is an alias.
+
+1.2*foo => (1.2, foo)
+foo     => (1.0, foo)
+else    => nothing
+"""
+function _detect_alias(term, iv)
+    if !SymbolicUtils.iscall(term) && term isa SymbolicUtils.BasicSymbolic # musst by a symbol then
+        return (1.0, term)
+    elseif SymbolicUtils.iscall(term)
+        op = SymbolicUtils.operation(term)
+        args = SymbolicUtils.arguments(term)
+        if op isa SymbolicUtils.BasicSymbolic &&
+           length(args) == 1 &&
+           isequal(only(args), iv)
+            return (1.0, term)
+        elseif op === Base.:(*) &&
+               length(args) == 2 &&
+               args[1] isa Real &&
+               args[2] isa SymbolicUtils.BasicSymbolic
+            return (Float64(args[1]), args[2])
+        end
+    end
+    nothing
 end
 
 ####

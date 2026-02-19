@@ -40,11 +40,11 @@ function _symidx_to_extidx(im, sni)
     elseif subsym_has_idx(sni.subidx, outsym_flat(cm))
         range = getcompoutrange(im, sni)
         if hasff(cm)
-            throw(ArgumentError("Cannot resolve external input $sni! Outputs of feed-forward components are not allowed as external inputs."))
+            throw(ArgumentError("Cannot resolve external input $(sni)! Outputs of feed-forward components are not allowed as external inputs."))
         end
         return OutBufIdx(range[subsym_to_idx(sni.subidx, sym(cm))])
     else
-        throw(ArgumentError("Cannot resolve external input $sni! External inputs musst be states or outputs of non-feed-forward components."))
+        throw(ArgumentError("Cannot resolve external input $(sni)! External inputs musst be states or outputs of non-feed-forward components."))
     end
 end
 

@@ -268,6 +268,8 @@ struct VertexModel <: ComponentModel
     # metadata
     symmetadata::Dict{Symbol,Dict{Symbol, Any}}
     metadata::Dict{Symbol,Any}
+    # aliases (observables of form a * p_or_state)
+    aliases::Dict{Symbol,Tuple{Float64,Symbol}}
     # cached symbol collections
     _outsym_flat::Vector{Symbol} # outsyms as they appear in outbuf
     _obssym_all::Vector{Symbol}  # collection of true "observed" (flat_out\statesym) ∪ obssym
@@ -323,6 +325,8 @@ struct EdgeModel <: ComponentModel
     # metadata
     symmetadata::Dict{Symbol,Dict{Symbol, Any}}
     metadata::Dict{Symbol,Any}
+    # aliases (observables of form a * p_or_state)
+    aliases::Dict{Symbol,Tuple{Float64,Symbol}}
     # cached symbol collections
     _outsym_flat::Vector{Symbol} # outsyms as they appear in outbuf
     _obssym_all::Vector{Symbol}  # collection of true "observed" (flat_out\statesym) ∪ obssym
@@ -984,6 +988,15 @@ Base.@nospecializeinfer function _fill_defaults(T, @nospecialize(kwargs))
         else
             infer_fftype(T, g, dim, !isnothing(dict[:extin]))
         end
+    end
+
+    ####
+    #### aliases
+    ####
+    if haskey(dict, :aliases)
+        @assert dict[:aliases] isa Dict{Symbol,Tuple{Float64,Symbol}}
+    else
+        dict[:aliases] = Dict{Symbol,Tuple{Float64,Symbol}}()
     end
 
     # check for name clashes (at the end because only now sym, psym, obssym are initialized)
