@@ -1077,9 +1077,9 @@ function _initialize_componentwise(
 
     # to improve type stability, we split the overrides into v/e parts only once
     # TODO: might be solve by EIndex/VIndex ADT
-    default_v_overrides, default_e_overrides = _split_overrides(default_overrides)
-    guess_v_overrides, guess_e_overrides = _split_overrides(guess_overrides)
-    bound_v_overrides, bound_e_overrides = _split_overrides(bound_overrides)
+    default_v_overrides, default_e_overrides = _split_and_resolve_overrides(nw, default_overrides)
+    guess_v_overrides, guess_e_overrides = _split_and_resolve_overrides(nw, guess_overrides)
+    bound_v_overrides, bound_e_overrides = _split_and_resolve_overrides(nw, bound_overrides)
 
     tasks = SpinTask[]
 
@@ -1219,17 +1219,19 @@ function _filter_overrides(nw, filteridx, dict::AbstractDict)
     end
     filtered
 end
-_split_overrides(::Nothing) = nothing, nothing
-function _split_overrides(dict)
+_split_and_resolve_overrides(nw, ::Nothing) = nothing, nothing
+function _split_and_resolve_overrides(nw, dict)
     voverrides = Dict{VIndex{Int,Symbol}, valtype(dict)}()
     eoverrides = Dict{EIndex{Int,Symbol}, valtype(dict)}()
     for (key, val) in dict
-        if key isa VIndex{Int,Symbol}
-            voverrides[key] = val
-        elseif key isa EIndex{Int,Symbol}
+        if key isa VIndex{<:Any, Symbol}
+            _key = VIndex(resolvecompidx(nw, key), key.subidx)
+            voverrides[_key] = val
+        elseif key isa EIndex{<:Any, Symbol}
+            _key = EIndex(resolvecompidx(nw, key), key.subidx)
             eoverrides[key] = val
         else
-            error("Overrides must be provided as SymbolicIndex{Int,Symbol} (VIndex or EIndex)! Got $key instead.")
+            error("Overrides must be provided as SymbolicIndex{Any,Symbol} (VIndex or EIndex)! Got $key instead.")
         end
     end
     voverrides, eoverrides
