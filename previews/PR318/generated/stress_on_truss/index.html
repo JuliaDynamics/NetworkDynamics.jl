@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Stress on Truss · NetworkDynamics</title><meta name="title" content="Stress on Truss · NetworkDynamics"/><meta property="og:title" content="Stress on Truss · NetworkDynamics"/><meta property="twitter:title" content="Stress on Truss · NetworkDynamics"/><meta name="description" content="Documentation for NetworkDynamics."/><meta property="og:description" content="Documentation for NetworkDynamics."/><meta property="twitter:description" content="Documentation for NetworkDynamics."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">NetworkDynamics</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">General</a></li><li><a class="tocitem" href="../../mathematical_model/">Mathematical Model</a></li><li><a class="tocitem" href="../../network_construction/">Network Construction</a></li><li><a class="tocitem" href="../../data_structure/">Data Structure</a></li><li><span class="tocitem">Features</span><ul><li><a class="tocitem" href="../../symbolic_indexing/">Symbolic Indexing</a></li><li><a class="tocitem" href="../../metadata/">Metadata</a></li><li><a class="tocitem" href="../../initialization/">Initialization</a></li><li><a class="tocitem" href="../../callbacks/">Callbacks and Events</a></li><li><a class="tocitem" href="../../mtk_integration/">ModelingToolkit Integration</a></li><li><a class="tocitem" href="../../sparsity_detection/">Sparsity Detection</a></li><li><a class="tocitem" href="../../external_inputs/">External Inputs</a></li><li><a class="tocitem" href="../../inspector/">Interactive Solution Inspection</a></li></ul></li><li><a class="tocitem" href="../../API/">API</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../getting_started_with_network_dynamics/">Getting Started</a></li><li><a class="tocitem" href="../heterogeneous_system/">Heterogeneous Systems</a></li><li><a class="tocitem" href="../init_tutorial/">Initialization</a></li><li><a class="tocitem" href="../cascading_failure/">Cascading Failure</a></li><li><a class="tocitem" href="../gas_network/">Gas Network</a></li><li class="is-active"><a class="tocitem" href>Stress on Truss</a><ul class="internal"><li><a class="tocitem" href="#Definition-of-the-dynamical-system"><span>Definition of the dynamical system</span></a></li><li><a class="tocitem" href="#Plot-the-solution"><span>Plot the solution</span></a></li></ul></li><li><a class="tocitem" href="../directed_and_weighted_graphs/">Directed and Weighted Graphs</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Tutorials</a></li><li class="is-active"><a href>Stress on Truss</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Stress on Truss</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaDynamics/NetworkDynamics.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaDynamics/NetworkDynamics.jl/blob/main/docs/examples/stress_on_truss.jl" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Stress-on-Truss"><a class="docs-heading-anchor" href="#Stress-on-Truss">Stress on Truss</a><a id="Stress-on-Truss-1"></a><a class="docs-heading-anchor-permalink" href="#Stress-on-Truss" title="Permalink"></a></h1><p>In this exampe we&#39;ll simulate the time evolution of a truss structure consisting of joints and stiff springs. This example can be dowloaded as a normal Julia script <a href="../stress_on_truss.jl">here</a>.</p><p><video src="../truss.mp4" controls="true" title="truss animation"><a href="../truss.mp4">truss animation</a></video></p><p>The mathematical model is quite simple: the vertices are point masses with positions <span>$x$</span> and <span>$y$</span> and velocities <span>$v_x$</span> and <span>$v_y$</span>. For simplicity, we add some damping to the nodal motion based on the velocity.</p><p class="math-container">\[\begin{aligned}
+\dot{x} &amp;= v_x\\
+\dot{y} &amp;= v_y\\
+\dot{v}_x &amp;= \frac{1}{M}\left(\sum F_x - γ\,v_x\right)\\
+\dot{v}_y &amp;= \frac{1}{M}\left(\sum F_y - γ\,v_y\right) - g
+\end{aligned}\]</p><p>The vertices cannot absorb any torque, so the beams only exert forces in the direction of the beam.</p><p class="math-container">\[|F| = K\cdot(L - |Δd|)\]</p><p>where <span>$L$</span> is the nominal lenth and <span>$|Δd|$</span> is the actual length of the beam.</p><p>We start by loading the necessary packages.</p><pre><code class="language-julia hljs">using NetworkDynamics
+using OrdinaryDiffEqTsit5
+using Graphs
+using GraphMakie
+using LinearAlgebra: norm
+using Printf
+using CairoMakie
+CairoMakie.activate!()</code></pre><h2 id="Definition-of-the-dynamical-system"><a class="docs-heading-anchor" href="#Definition-of-the-dynamical-system">Definition of the dynamical system</a><a id="Definition-of-the-dynamical-system-1"></a><a class="docs-heading-anchor-permalink" href="#Definition-of-the-dynamical-system" title="Permalink"></a></h2><p>We need 3 models:</p><ul><li>a fixed vertex which cannot change its position,</li><li>a free vertex which can move, and</li><li>a beam which connects two vertices.</li></ul><pre><code class="language-julia hljs">function fixed_g(pos, x, p, t)
+    pos .= p
+end
+vertex_fix = VertexModel(g=fixed_g, psym=[:xfix, :yfix], outsym=[:x, :y], ff=NoFeedForward())</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">VertexModel <span class="sgr1">:StaticVertexM</span> <span class="sgr94">NoFeedForward()</span>
+ ├─ 0 states:  []
+ ├─ 2 outputs: [x, y]
+ └─ 2 params:  [xfix, yfix]</code></pre><p>Here we need to specify the <code>ff</code> keyword manually, because NetworkDynamics cannot distinguish between <code>g(out, x, p, t)</code>  (<code>NoFeedForwarwd</code>) and <code>g(out, in, p, t)</code> (<code>PureFeedForward()</code>) and guesses the latter when <span>$\mathrm{dim}(x)=0$</span>.</p><pre><code class="language-julia hljs">function free_f(dx, x, Fsum, (M, γ, g), t)
+    v = view(x, 1:2)
+    dx[1:2] .= (Fsum .- γ .* v) ./ M
+    dx[2] -= g
+    dx[3:4] .= v
+    nothing
+end
+vertex_free = VertexModel(f=free_f, g=3:4, sym=[:vx=&gt;0, :vy=&gt;0, :x, :y],
+                             psym=[:M=&gt;10, :γ=&gt;200, :g=&gt;9.81], insym=[:Fx, :Fy])</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">VertexModel <span class="sgr1">:VertexM</span> <span class="sgr94">PureStateMap()</span>
+ ├─ 2 inputs:  [Fx, Fy]
+ ├─ 4 states:  [vx=0, vy=0, x, y]
+ ├─ 2 outputs: [x, y]
+ └─ 3 params:  [M=10, γ=200, g=9.81]</code></pre><p>For the edge, we want to do something special. Later on, we want to color the edges according to the force they exert. Therefore, are interested in the absolut force rather than just the force vector. NetworkDynamics allows you to  define so called <code>Observed</code> functions, which can recover additional states, so called observed, after the simulations. We can use this mechanis, to define a &quot;recipe&quot; for calculating the beam force based on the inputs (nodal positions) and  the beam parameters.</p><pre><code class="language-julia hljs">function edge_g!(F, pos_src, pos_dst, (K, L), t)
+    dx = pos_dst[1] - pos_src[1]
+    dy = pos_dst[2] - pos_src[2]
+    d = sqrt(dx^2 + dy^2)
+    Fabs = K * (L - d)
+    F[1] = Fabs * dx / d
+    F[2] = Fabs * dy / d
+    nothing
+end
+function observedf(obsout, u, pos_src, pos_dst, (K, L), t)
+    dx = pos_dst[1] .- pos_src[1]
+    dy = pos_dst[2] .- pos_src[2]
+    d = sqrt(dx^2 + dy^2)
+    obsout[1] = K * (L - d)
+    nothing
+end
+beam = EdgeModel(g=AntiSymmetric(edge_g!), psym=[:K=&gt;0.5e6, :L], outsym=[:Fx, :Fy], obsf=observedf, obssym=[:Fabs])</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">EdgeModel <span class="sgr1">:StaticEdgeM</span> <span class="sgr94">PureFeedForward()</span>
+ ├─   0 states:  []  
+ ├─ 2/2 outputs: src=[₋Fx, ₋Fy] dst=[Fx, Fy]
+ └─   2 params:  [K=5e5, L]</code></pre><p>With the models define we can set up graph topology and initial positions.</p><pre><code class="language-julia hljs">N = 5
+dx = 1.0
+shift = 0.2
+g = SimpleGraph(2*N + 1)
+for i in 1:N
+    add_edge!(g, i, i+N); add_edge!(g, i, i+N)
+    if i &lt; N
+        add_edge!(g, i+1, i+N); add_edge!(g, i, i+1); add_edge!(g, i+N, i+N+1)
+    end
+end
+add_edge!(g, 2N, 2N+1)
+pos0 = zeros(Point2f, 2N + 1)
+pos0[1:N] = [Point((i-1)dx,0) for i in 1:N]
+pos0[N+1:2*N] = [Point(i*dx + shift, 1) for i in 1:N]
+pos0[2N+1] = Point(N*dx + 1, -1)
+fixed = [1,4] # set fixed vertices</code></pre><p>Now can collect the vertex models and construct the Network object.</p><pre><code class="language-julia hljs">verts = VertexModel[vertex_free for i in 1:nv(g)]
+for i in fixed
+    verts[i] = vertex_fix # use the fixed vertex for the fixed points
+end
+nw = Network(g, verts, beam)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Network with 36 states and 67 parameters
+ ├─ 11 vertices (2 unique types)
+ └─ 18 edges (1 unique type)
+Edge-Aggregation using SequentialAggregator(+)</code></pre><p>In order to simulate the system we need to initialize the state and parameter vectors. Some states and parameters are shared between all vertices/edges. Those have been allready set in their constructors. The free symbols are</p><ul><li><code>x</code> and <code>y</code> for the position of the free vertices,</li><li><code>xfix</code> and <code>yfix</code> for the position of the fixed vertices,</li><li><code>L</code> for the nominal length of the beams.</li></ul><pre><code class="language-julia hljs">s = NWState(nw)
+# set x/y and xfix/yfix
+for i in eachindex(pos0, verts)
+    if i in fixed
+        s.p.v[i, :xfix] = pos0[i][1]
+        s.p.v[i, :yfix] = pos0[i][2]
+    else
+        s.v[i, :x] = pos0[i][1]
+        s.v[i, :y] = pos0[i][2]
+    end
+end
+# set L for edges
+for (i,e) in enumerate(edges(g))
+    s.p.e[i, :L] = norm(pos0[src(e)] - pos0[dst(e)])
+end</code></pre><p>Lastly there is a special vertex at the end of the truss which has a higher mass and reduced damping.</p><pre><code class="language-julia hljs">s.p.v[11, :M] = 200
+s.p.v[11, :γ] = 100</code></pre><p>No we have everything ready to build the ODEProblem and simulate the system.</p><pre><code class="language-julia hljs">tspan = (0.0, 12.0)
+prob = ODEProblem(nw, uflat(s), tspan, pflat(s))
+sol  = solve(prob, Tsit5())</code></pre><h2 id="Plot-the-solution"><a class="docs-heading-anchor" href="#Plot-the-solution">Plot the solution</a><a id="Plot-the-solution-1"></a><a class="docs-heading-anchor-permalink" href="#Plot-the-solution" title="Permalink"></a></h2><p>Plotting trajectories of points is kinda boring. So instead we&#39;re going to use <a href="https://github.com/MakieOrg/GraphMakie.jl"><code>GraphMakie.jl</code></a> to create a animation of the timeseries.</p><pre><code class="language-julia hljs">fig = Figure(size=(1000,550));
+fig[1,1] = title = Label(fig, &quot;Stress on truss&quot;, fontsize=30)
+title.tellwidth = false
+
+fig[2,1] = ax = Axis(fig)
+ax.aspect = DataAspect();
+hidespines!(ax); # no borders
+hidedecorations!(ax); # no grid, axis, ...
+limits!(ax, -0.1, pos0[end][1]+0.3, pos0[end][2]-0.5, 1.15) # axis limits to show full plot
+
+# get the maximum force during the simulation to get the color scale
+# It is only possible to access `:Fabs` directly becaus we&#39;ve define the observable function for it!
+(fmin, fmax) = 0.3 .* extrema(Iterators.flatten(sol(sol.t, idxs=eidxs(nw, :, :Fabs))))
+p = graphplot!(ax, g;
+               edge_width = 4.0,
+               node_size = 3*sqrt.(try s.p.v[i, :M] catch; 10.0 end for i in 1:nv(g)),
+               nlabels = [i in fixed ? &quot;Δ&quot; : &quot;&quot; for i in 1:nv(g)],
+               nlabels_align = (:center,:top),
+               nlabels_fontsize = 30,
+               elabels = [&quot;edge $i&quot; for i in 1:ne(g)],
+               elabels_side = Dict(ne(g)  =&gt; :right),
+               edge_color = [0.0 for i in 1:ne(g)],
+               edge_attr = (colorrange=(fmin,fmax),
+                          colormap=:diverging_bkr_55_10_c35_n256))
+
+# draw colorbar
+fig[3,1] = cb = Colorbar(fig, get_edge_plot(p), label = &quot;Axial force&quot;, vertical=false)
+
+T = tspan[2]
+fps = 30
+trange = range(0.0, sol.t[end], length=Int(T * fps))
+record(fig, &quot;truss.mp4&quot;, trange; framerate=fps) do t
+    title.text = @sprintf &quot;Stress on truss (t = %.2f )&quot; t
+    s_at_t = NWState(sol, t)
+    for i in eachindex(pos0)
+        p[:node_pos][][i] = (s_at_t.v[i, :x], s_at_t.v[i, :y])
+    end
+    p[:node_pos][] = p[:node_pos][]
+    load = s_at_t.e[:, :Fabs]
+    p.edge_color[] = load
+    p.elabels = [@sprintf(&quot;%.0f&quot;, l) for l in load]
+    fig
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&quot;truss.mp4&quot;</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../gas_network/">« Gas Network</a><a class="docs-footer-nextpage" href="../directed_and_weighted_graphs/">Directed and Weighted Graphs »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.14.1 on <span class="colophon-date" title="Saturday 27 September 2025 02:03">Saturday 27 September 2025</span>. Using Julia version 1.11.7.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Heterogeneous Systems · NetworkDynamics</title><meta name="title" content="Heterogeneous Systems · NetworkDynamics"/><meta property="og:title" content="Heterogeneous Systems · NetworkDynamics"/><meta property="twitter:title" content="Heterogeneous Systems · NetworkDynamics"/><meta name="description" content="Documentation for NetworkDynamics."/><meta property="og:description" content="Documentation for NetworkDynamics."/><meta property="twitter:description" content="Documentation for NetworkDynamics."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script><link href="../../assets/custom.css" rel="stylesheet" type="text/css"/></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">NetworkDynamics</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">General</a></li><li><a class="tocitem" href="../../mathematical_model/">Mathematical Model</a></li><li><a class="tocitem" href="../../network_construction/">Network Construction</a></li><li><a class="tocitem" href="../../data_structure/">Data Structure</a></li><li><span class="tocitem">Features</span><ul><li><a class="tocitem" href="../../symbolic_indexing/">Symbolic Indexing</a></li><li><a class="tocitem" href="../../metadata/">Metadata</a></li><li><a class="tocitem" href="../../initialization/">Initialization</a></li><li><a class="tocitem" href="../../callbacks/">Callbacks and Events</a></li><li><a class="tocitem" href="../../mtk_integration/">ModelingToolkit Integration</a></li><li><a class="tocitem" href="../../injector_nodes/">Injector Nodes</a></li><li><a class="tocitem" href="../../sparsity_detection/">Sparsity Detection</a></li><li><a class="tocitem" href="../../external_inputs/">External Inputs</a></li><li><a class="tocitem" href="../../inspector/">Interactive Solution Inspection</a></li></ul></li><li><a class="tocitem" href="../../API/">API</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../getting_started_with_network_dynamics/">Getting Started</a></li><li class="is-active"><a class="tocitem" href>Heterogeneous Systems</a><ul class="internal"><li><a class="tocitem" href="#Heterogeneous-parameters"><span>Heterogeneous parameters</span></a></li><li><a class="tocitem" href="#Heterogeneous-dynamics"><span>Heterogeneous dynamics</span></a></li></ul></li><li><a class="tocitem" href="../init_tutorial/">Initialization</a></li><li><a class="tocitem" href="../cascading_failure/">Cascading Failure</a></li><li><a class="tocitem" href="../gas_network/">Gas Network</a></li><li><a class="tocitem" href="../stress_on_truss/">Stress on Truss</a></li><li><a class="tocitem" href="../directed_and_weighted_graphs/">Directed and Weighted Graphs</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Tutorials</a></li><li class="is-active"><a href>Heterogeneous Systems</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Heterogeneous Systems</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaDynamics/NetworkDynamics.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaDynamics/NetworkDynamics.jl/blob/main/docs/examples/heterogeneous_system.jl" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Modeling-a-heterogeneous-system"><a class="docs-heading-anchor" href="#Modeling-a-heterogeneous-system">Modeling a heterogeneous system</a><a id="Modeling-a-heterogeneous-system-1"></a><a class="docs-heading-anchor-permalink" href="#Modeling-a-heterogeneous-system" title="Permalink"></a></h1><p>This example can be downloaded as a normal Julia script <a href="../heterogeneous_system.jl">here</a>.</p><p>One of the main purposes of NetworkDynamics.jl is to facilitate the modeling systems whose components can differ in their parameters as well as their dynamics. These are known as Coupled systems with heterogeneities.</p><h2 id="Heterogeneous-parameters"><a class="docs-heading-anchor" href="#Heterogeneous-parameters">Heterogeneous parameters</a><a id="Heterogeneous-parameters-1"></a><a class="docs-heading-anchor-permalink" href="#Heterogeneous-parameters" title="Permalink"></a></h2><p>We start by setting up a simple system of Kuramoto oscillators.</p><pre><code class="language-julia hljs">using NetworkDynamics, OrdinaryDiffEqTsit5, Plots, Graphs
+
+N = 8
+g = watts_strogatz(N, 2, 0) # ring network
+
+function kuramoto_edge!(e, θ_s, θ_d, (K,), t)
+    e[1] = K * sin(θ_s[1] - θ_d[1])
+    nothing
+end
+edge! = EdgeModel(g=AntiSymmetric(kuramoto_edge!), outdim=1, psym=[:K=&gt;3])</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">EdgeModel <span class="sgr1">:StaticEdgeM</span> <span class="sgr94">PureFeedForward()</span>
+ ├─   0 states:  []  
+ ├─ 1/1 outputs: src=[₋o] dst=[o]
+ └─   1 param:   [K=3]</code></pre><pre><code class="language-julia hljs">function kuramoto_vertex!(dθ, θ, esum, (ω0,), t)
+    dθ[1] = ω0 + esum[1]
+    nothing
+end
+vertex! = VertexModel(f=kuramoto_vertex!, g=StateMask(1:1), sym=[:θ], psym=[:ω0], name=:kuramoto)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">VertexModel <span class="sgr1">:kuramoto</span> <span class="sgr94">PureStateMap()</span>
+ ├─ 1 state:  [θ]
+ ├─ 1 output: [θ]
+ └─ 1 param:  [ω0]</code></pre><pre><code class="language-julia hljs">nw = Network(g, vertex!, edge!)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Network with 8 states and 16 parameters
+ ├─ 8 vertices (1 unique type)
+ └─ 8 edges (1 unique type)
+Edge-Aggregation using SequentialAggregator(+)</code></pre><p>To assign parameters, we can create a <code>NWParameter</code> object based on the <code>nw</code> definition. This parameter object will be pre-filled with the default parameters.</p><pre><code class="language-julia hljs">p = NWParameter(nw)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Parameter{Vector{Float64}} of Network (8 vertices, 8 edges)
+  ├─ VIndex(1, :ω0) =&gt; NaN
+  ├─ VIndex(2, :ω0) =&gt; NaN
+  ├─ VIndex(3, :ω0) =&gt; NaN
+  ├─ VIndex(4, :ω0) =&gt; NaN
+  ├─ VIndex(5, :ω0) =&gt; NaN
+  ├─ VIndex(6, :ω0) =&gt; NaN
+  ├─ VIndex(7, :ω0) =&gt; NaN
+  ├─ VIndex(8, :ω0) =&gt; NaN
+  ├─ EIndex(1, :K)  =&gt; 3.0
+  ├─ EIndex(2, :K)  =&gt; 3.0
+  ├─ EIndex(3, :K)  =&gt; 3.0
+  ├─ EIndex(4, :K)  =&gt; 3.0
+  ├─ EIndex(5, :K)  =&gt; 3.0
+  ├─ EIndex(6, :K)  =&gt; 3.0
+  ├─ EIndex(7, :K)  =&gt; 3.0
+  └─ EIndex(8, :K)  =&gt; 3.0</code></pre><p>To set the vertex parameters, we can use indexing of the <code>p.v</code> field:</p><pre><code class="language-julia hljs">ω = collect(1:N) ./ N
+ω .-= sum(ω) / N
+p.v[:, :ω0] = ω</code></pre><p>Here, the index pairing <code>:, :ω</code> is used to index state ω for all node indices.</p><p>The parameter object contains information about the network structure. For the actual problem definition we need to throw away this wrapper and use the flat-vector representation of the parameters <code>pflat(p)</code>. Note that <code>pflat(p)</code></p><p>Similarily, we could use <code>NWState(nw)</code> to create an indexable wrapper of the initial state. However in this case we can also fill create the flat state array manually:</p><pre><code class="language-julia hljs">x0 = collect(1:N) ./ N
+x0 .-= sum(x0) ./ N
+tspan = (0.0, 10.0)
+prob = ODEProblem(nw, x0, tspan, pflat(p))
+sol = solve(prob, Tsit5())
+plot(sol; ylabel=&quot;θ&quot;, fmt=:png)</code></pre><img src="7a95cad1.svg" alt="Example block output"/><h2 id="Heterogeneous-dynamics"><a class="docs-heading-anchor" href="#Heterogeneous-dynamics">Heterogeneous dynamics</a><a id="Heterogeneous-dynamics-1"></a><a class="docs-heading-anchor-permalink" href="#Heterogeneous-dynamics" title="Permalink"></a></h2><p>Two paradigmatic modifications of the node model above are static nodes and nodes with inertia. A static node has no internal states and instead fixes the variable at a constant value.</p><pre><code class="language-julia hljs">function static_g(out, u, p, t)
+    out[1] = p[1]
+    nothing
+end
+static! = VertexModel(g=static_g, outsym=[:θ], psym=[:θfix =&gt; ω[1]], name=:static)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">VertexModel <span class="sgr1">:static</span> <span class="sgr94">PureFeedForward()</span>
+ ├─ 0 states: []
+ ├─ 1 output: [θ]
+ └─ 1 param:  [θfix=-0.4375]</code></pre><p>But wait! NetworkDynamics classified this as <a href="../../API/#NetworkDynamics.PureFeedForward"><code>PureFeedForward</code></a>, because it cannot distinguish between the function signatures</p><pre><code class="nohighlight hljs">g(out, u, p, t)    # PureFeedForward
+g(out, ins, p, t)  # NoFeedForward</code></pre><p>and since <code>dim(u)=0</code> it wrongfully assumes that the latter is meant. We can overwrite the classification by passing the ff keyword:</p><pre><code class="language-julia hljs">static! = VertexModel(g=static_g, outsym=[:θ], psym=[:θfix =&gt; ω[1]], ff=NoFeedForward(), name=:static)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">VertexModel <span class="sgr1">:static</span> <span class="sgr94">NoFeedForward()</span>
+ ├─ 0 states: []
+ ├─ 1 output: [θ]
+ └─ 1 param:  [θfix=-0.4375]</code></pre><p>A Kuramoto model with inertia consists of two internal variables leading to more complicated (and for many applications more realistic) local dynamics.</p><pre><code class="language-julia hljs">function kuramoto_inertia!(dv, v, esum, (ω0,), t)
+    dv[1] = v[2]
+    dv[2] = ω0 - 1.0 * v[2] + esum[1]
+    nothing
+end
+
+inertia! = VertexModel(f=kuramoto_inertia!, g=1:1, sym=[:θ, :ω], psym=[:ω0], name=:inertia)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">VertexModel <span class="sgr1">:inertia</span> <span class="sgr94">PureStateMap()</span>
+ ├─ 2 states: [θ, ω]
+ ├─ 1 output: [θ]
+ └─ 1 param:  [ω0]</code></pre><p>Since now we model a system with heterogeneous node dynamics we can no longer straightforwardly pass a single VertexModel to the <code>Network</code> constructor but instead have to hand over an Array.</p><pre><code class="language-julia hljs">vertex_array    = VertexModel[vertex! for i in 1:N]
+vertex_array[1] = static!
+vertex_array[5] = inertia! # index should correspond to the node&#39;s index in the graph
+nw_hetero! = Network(g, vertex_array, edge!)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Network with 8 states and 16 parameters
+ ├─ 8 vertices (3 unique types)
+ └─ 8 edges (1 unique type)
+Edge-Aggregation using SequentialAggregator(+)</code></pre><p>Now we have to take a bit more care with defining initial conditions and parameters.</p><p>First, we can generate a <code>NWState</code> object based on the <code>nw_hetero!</code> object which will be populated with the default values.</p><pre><code class="language-julia hljs">state = NWState(nw_hetero!)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">NWState{Vector{Float64}} of Network (8 vertices, 8 edges)
+  ├─ VIndex(2, :θ) =&gt; NaN
+  ├─ VIndex(3, :θ) =&gt; NaN
+  ├─ VIndex(4, :θ) =&gt; NaN
+  ├─ VIndex(6, :θ) =&gt; NaN
+  ├─ VIndex(7, :θ) =&gt; NaN
+  ├─ VIndex(8, :θ) =&gt; NaN
+  ├─ VIndex(5, :θ) =&gt; NaN
+  └─ VIndex(5, :ω) =&gt; NaN<span class="sgr90">
+ p = NWParameter([-0.4375, NaN, NaN, NaN, NaN, NaN, NaN, NaN, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0])
+ t = nothing</span></code></pre><p>The node with inertia is two-dimensional, hence we need to specify two initial conditions. For the first dimension we keep the initial conditions from above and insert! another one into <code>x0</code> at the correct index.</p><p>For the θ states we will use the same initial conditins as before:</p><pre><code class="language-julia hljs">state.v[2:8,:θ] = x0[2:8]</code></pre><p>We&#39;re still missing one initial condition: the second variable ω of the 5th vertex.</p><pre><code class="language-julia hljs">state.v[5,:ω] = 5</code></pre><p>The <code>NWState</code> object also contains a parameter object accessible via <code>state.p</code>. The edge parameters are already filled with default values. The vertex parameters can be copied from our old parmeter object <code>p</code>.</p><pre><code class="language-julia hljs">state.p.v[2:8, :ω0] = p.v[2:8, :ω0]</code></pre><p>For the problem construction, we need to convert the nested stuctures to flat arrays using the <a href="../../API/#NetworkDynamics.uflat"><code>uflat</code></a> and <a href="../../API/#NetworkDynamics.pflat"><code>pflat</code></a> methods.</p><pre><code class="language-julia hljs">prob_hetero = ODEProblem(nw_hetero!, uflat(state), tspan, pflat(state))
+sol_hetero = solve(prob_hetero, Tsit5());
+plot(sol_hetero)</code></pre><img src="e3f3631a.svg" alt="Example block output"/><p>For clarity we plot only the variables referring to the oscillator&#39;s angle θ and color them according to their type.</p><pre><code class="language-julia hljs">colors = map(vertex_array) do vertexf
+    if vertexf.name == :kuramoto
+        colorant&quot;lightseagreen&quot;
+    elseif vertexf.name == :static
+        colorant&quot;orange&quot;
+    elseif vertexf.name == :inertia
+        colorant&quot;darkred&quot;
+    end
+end
+
+plot(sol_hetero; ylabel=&quot;θ&quot;, idxs=vidxs(1:8,:θ), lc=colors&#39;, fmt=:png)</code></pre><img src="3e9c37af.svg" alt="Example block output"/><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../getting_started_with_network_dynamics/">« Getting Started</a><a class="docs-footer-nextpage" href="../init_tutorial/">Initialization »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Thursday 29 January 2026 17:54">Thursday 29 January 2026</span>. Using Julia version 1.12.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Injector Nodes · NetworkDynamics</title><meta name="title" content="Injector Nodes · NetworkDynamics"/><meta property="og:title" content="Injector Nodes · NetworkDynamics"/><meta property="twitter:title" content="Injector Nodes · NetworkDynamics"/><meta name="description" content="Documentation for NetworkDynamics."/><meta property="og:description" content="Documentation for NetworkDynamics."/><meta property="twitter:description" content="Documentation for NetworkDynamics."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/custom.css" rel="stylesheet" type="text/css"/></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">NetworkDynamics</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">General</a></li><li><a class="tocitem" href="../mathematical_model/">Mathematical Model</a></li><li><a class="tocitem" href="../network_construction/">Network Construction</a></li><li><a class="tocitem" href="../data_structure/">Data Structure</a></li><li><span class="tocitem">Features</span><ul><li><a class="tocitem" href="../symbolic_indexing/">Symbolic Indexing</a></li><li><a class="tocitem" href="../metadata/">Metadata</a></li><li><a class="tocitem" href="../initialization/">Initialization</a></li><li><a class="tocitem" href="../callbacks/">Callbacks and Events</a></li><li><a class="tocitem" href="../mtk_integration/">ModelingToolkit Integration</a></li><li class="is-active"><a class="tocitem" href>Injector Nodes</a><ul class="internal"><li><a class="tocitem" href="#Concept"><span>Concept</span></a></li><li><a class="tocitem" href="#Example"><span>Example</span></a></li><li><a class="tocitem" href="#Part-A:-Modeling-with-Injector-Nodes-and-LoopbackConnection"><span>Part A: Modeling with Injector Nodes and LoopbackConnection</span></a></li></ul></li><li><a class="tocitem" href="../sparsity_detection/">Sparsity Detection</a></li><li><a class="tocitem" href="../external_inputs/">External Inputs</a></li><li><a class="tocitem" href="../inspector/">Interactive Solution Inspection</a></li></ul></li><li><a class="tocitem" href="../API/">API</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../generated/getting_started_with_network_dynamics/">Getting Started</a></li><li><a class="tocitem" href="../generated/heterogeneous_system/">Heterogeneous Systems</a></li><li><a class="tocitem" href="../generated/init_tutorial/">Initialization</a></li><li><a class="tocitem" href="../generated/cascading_failure/">Cascading Failure</a></li><li><a class="tocitem" href="../generated/gas_network/">Gas Network</a></li><li><a class="tocitem" href="../generated/stress_on_truss/">Stress on Truss</a></li><li><a class="tocitem" href="../generated/directed_and_weighted_graphs/">Directed and Weighted Graphs</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Features</a></li><li class="is-active"><a href>Injector Nodes</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Injector Nodes</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaDynamics/NetworkDynamics.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaDynamics/NetworkDynamics.jl/blob/main/docs/src/injector_nodes.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="injector-nodes"><a class="docs-heading-anchor" href="#injector-nodes">Injector Nodes</a><a id="injector-nodes-1"></a><a class="docs-heading-anchor-permalink" href="#injector-nodes" title="Permalink"></a></h1><p>In large network models, vertices often contain multiple internal components (e.g., generators, loads, storage devices). While these can be modeled as a single monolithic vertex model, splitting them into separate &quot;injector nodes&quot; connected via special loopback edges can offer performance and modularity advantages. This page explains the injector node pattern and demonstrates how to use <code>LoopbackConnection</code> edges.</p><h2 id="Concept"><a class="docs-heading-anchor" href="#Concept">Concept</a><a id="Concept-1"></a><a class="docs-heading-anchor-permalink" href="#Concept" title="Permalink"></a></h2><p>Let&#39;s consider the following subset of a Network:</p><pre><code class="language-asciiart hljs">   ⋮
+  ┏┷━━┓      input
+⋯─┨vₖ ┠───╮  aggr.  ┏━━━━━━━━┓
+  ┗━━━┛   ╰─────╮   ┃        ┃
+   ┏━━━┓       (+)──┨ Vertex ┃
+⋯──┨vⱼ ┠────────╯   ┃        ┃
+   ┗━┯━┛            ┗━━━━━━━━┛
+     ⋮</code></pre><p>we have a vertex of interest which is connected to two other vertices in the network via edges. Generally, we follow the interface of having <strong>potential like</strong> outputs at the nodes and <strong>flow like</strong> outputs at the edges. I.e. the <em>potential on the nodes</em> depends on the <em>sum of flows through the edges</em> while the <em>flows through the edges</em> depend on the <em>potential on the adjacent nodes</em>.</p><p>The input-output structure of this system looks something like this:</p><pre><code class="language-asciiart hljs">                                 more edges
+                                     △
+n ⋯───╮             ╭────────────────┼────────────────╮             ╭───⋯ n
+e     │             │      potential │ φ out          │             │     e
+x  ┏━━▽━━━━━━━━━━━━━▽━━┓   ╔═════════△═════════╗   ┏━━▽━━━━━━━━━━━━━▽━━┓  x
+t  ┃ EdgeModel         ┃   ║ VertexModel       ║   ┃ EdgeModel         ┃  t
+   ┃ ẋ = f(x, φ, p, t) ┃   ║ ẋ = f(x, Φ, p, t) ║   ┃ ẋ = f(x, φ, p, t) ┃
+n  ┃ Φ = g(x, φ, p, t) ┃   ║ φ = g(x, p, t)    ║   ┃ Φ = g(x, φ, p, t) ┃  n
+o  ┗━━▽━━━━━━━━━━━━━▽━━┛   ╚═════════△═════════╝   ┗━━▽━━━━━━━━━━━━━▽━━┛  o
+d     │        flow │ Φ out        ╭─┴─╮         flow │ Φ out       │     d
+e ⋯───╯             ╰──────────────▷ + ◁──────────────╯             ╰───⋯ e
+                                   ╰─△─╯
+                                     │
+                                 more edges</code></pre><p>where, notably, only the edge models support feed forward behavior.</p><p>In typical NetworkDynamics modeling, the entire nodal dynamic is contained within a single VertexModel. However, vertices often have modular internal structure consisting of multiple components that inject or draw flows. For example, an electrical bus might have generators, loads, and storage devices all connected to it.</p><pre><code class="language-asciiart hljs">   ⋮                ┏━━━━━━━━━━━━━━━━━━┓
+  ┏┷━━┓      input  ┃Vertex            ┃
+⋯─┨vₖ ┠───╮  aggr.  ┃     ╭──────────╮ ┃
+  ┗━━━┛   ╰─────╮   ┃  ╭──┤Injector A│ ┃
+   ┏━━━┓       (+)──╂─(+) ╰──────────╯ ┃
+⋯──┨vⱼ ┠────────╯   ┃  │  ╭──────────╮ ┃
+   ┗━┯━┛            ┃  ╰──┤Injector B│ ┃
+     ⋮              ┃     ╰──────────╯ ┃
+                    ┗━━━━━━━━━━━━━━━━━━┛</code></pre><p>While not strictly necessary, splitting these vertex models into &quot;clusters&quot; can improve performance and code organization. A cluster consists of a hub vertex and several injector vertices that connect to it. This approach can be particularly beneficial because:</p><ul><li>NetworkDynamics performs best when there are many identical components. Splitting components into smaller parts makes it more likely to have repeated, identical components.</li><li>The model structure matches the physical modularity of the system.</li><li>For ModelingToolkit models, large monolithic components can lead to higher compilation and symbolic simplification times compared to multiple smaller models.</li></ul><p>Notably, injector models have a flipped input-output scheme compared to normal vertices: they take the hub&#39;s potential as a direct input and output a flow.</p><pre><code class="language-asciiart hljs">                Hub    Loopback  Satelites
+              ╭──────╮╭────────╮╭──────────╮
+   ⋮
+  ┏┷━━┓                         ┏━━━━━━━━━━┓
+⋯─┨vₖ ┠───╮   ┏━━━━━━┓    ╭─────┨Injector A┃
+  ┗━━━┛   ╰───┨      ┠────╯     ┗━━━━━━━━━━┛
+   ┏━━━┓      ┃ Σi=0 ┃
+⋯──┨vⱼ ┠──────┨      ┠────╮     ┏━━━━━━━━━━┓
+   ┗━┯━┛      ┗━━━━━━┛    ╰─────┨Injector B┃
+     ⋮                          ┗━━━━━━━━━━┛
+
+              ╰────────────────────────────╯
+                     Vertex Cluster</code></pre><p>To connect this kind of injector nodes, we use the special EdgeModel <code>LoopbackConnection</code>. See the docstring below for a detailed explaination of the interfaces.</p><article><details class="docstring" open="true"><summary id="NetworkDynamics.LoopbackConnection-injector_nodes"><a class="docstring-binding" href="#NetworkDynamics.LoopbackConnection-injector_nodes"><code>NetworkDynamics.LoopbackConnection</code></a> — <span class="docstring-category">Function</span></summary><section><div><pre><code class="language-julia hljs">LoopbackConnection(; potential, flow, kwargs...)</code></pre><p>A <code>LoopbackConnection</code> is a special <code>EdgeModel</code> that enables direct connection of &quot;injector nodes&quot; to a &quot;hub&quot; node without requiring aggregation logic. An injector node is an &quot;inverted&quot; <code>VertexModel</code>, which gets the networks potential as an input and outputs a flow variable.</p><p>The LoopbackConnection allows a direct, star-like connection of injector nodes to a single hub nodes. The LoopbackConnection is a <strong>directed edge model from injector to hub</strong>!</p><pre><code class="language-asciiart hljs">       ┊
+    ┄┄┄◯   ● injector 1
+      ╱ ╲ ╱
+   ┄┄◯╶─╴◯╶─╴● injector 2
+     ┊    ╲
+           ● injector 3</code></pre><p>Injector nodes:</p><ul><li>have a flipped interface (potential in, flow out)</li><li>must be leaf nodes (one neighbor only),</li><li>must be connected through a LoopbackConnection EdgeModel and</li><li>may have feed-forward (direct dependency of flow-output on potential-input).</li></ul><div class="admonition is-info" id="Sign-Convention-2e58711471297aff"><header class="admonition-header">Sign Convention<a class="admonition-anchor" href="#Sign-Convention-2e58711471297aff" title="Permalink"></a></header><div class="admonition-body"><p>For normal vertices, positive flow as an input means flow <em>into</em> the vertex. This convention is maintained for injector nodes (though it may seem counter-intuitive):</p><ul><li><strong>Positive flow</strong>: Draw from the hub (consumption)</li><li><strong>Negative flow</strong>: Injection into the hub (production)</li></ul><p>When using ModelingToolkit models, you only need to flip the input/output variable declarations—the equations themselves remain unchanged. For example, a resistor with <code>p.i ~ p.v/R</code> keeps the same equation; only the interface changes from <code>VertexModel(..., [:p₊i], [:p₊v])</code> to <code>VertexModel(..., [:p₊v], [:p₊i])</code>.</p></div></div><pre><code class="language-asciiart hljs">                       △
+      ╭────────────────┼────────────╮
+      │      potential │ φ out      │
+━━━━━━▽━━┓   ╔═════════△═════════╗  │  ┏━━━━━━━┓   ╔═══════════════════╗
+ normal  ┃   ║ VertexModel (hub) ║  ╰──▷┄┄┄┄┄┄┄▷───▷ Injector Vertex   ║
+EdgeModel┃   ║ ẋ = f(x, Φ, p, t) ║     ┃       ┃   ║ ẋ = f(x, φ, p, t) ║
+         ┃   ║ φ = g(x, p, t)    ║  ╭──◁┄×(-1)┄◁───◁ Φ = g(x, φ, p, t) ║
+━━━━━━▽━━┛   ╚═════════△═════════╝  │  ┗━━━━━━━┛   ╚═══════════════════╝
+ flow │ Φ out        ╭─┴─╮          │  special      ⋅ flipped interface:
+      ╰──────────────▷ + ◁──────────╯  &quot;Loopback&quot;     ▷ potential φ in
+       (aggregation) ╰─△─╯             EdgeModel      ◁ flow Φ out
+                       │               inj =&gt; hub   ⋅ feed forward allowed</code></pre><p>For input-output naming you need to provide the <code>potential</code> and <code>flow</code> symbols.</p><pre><code class="language-julia-repl hljs">julia&gt; LoopbackConnection(; potential=[:u_r, :u_i], flow=[:i_r, :i_i], src=1, dst=2)
+EdgeModel :loopback PureFeedForward() @ Edge 1=&gt;2
+ ├─ 2/2 inputs:  src=[injector₊i_r, injector₊i_i] dst=[hub₊u_r, hub₊u_i]
+ ├─   0 states:  []
+ └─ 2/2 outputs: src=[injector₊u_r, injector₊u_i] dst=[hub₊i_r, hub₊i_i]</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/JuliaDynamics/NetworkDynamics.jl/blob/cdc810d257e0322833eafa9711effa5d5a3a2c4d/src/post_utils.jl#L102-L164">source</a></section></details></article><h2 id="Example"><a class="docs-heading-anchor" href="#Example">Example</a><a id="Example-1"></a><a class="docs-heading-anchor-permalink" href="#Example" title="Permalink"></a></h2><p>Following the other examples we&#39;ll showcase the feature on the a small electrical network. The network to model looks like this:</p><pre><code class="nohighlight hljs">                v1   Resistor   v2
+                ●─←────███────→─●
+                │            ╭──┼──╮
+ideal v source (↗)           ┴  █  ⚕
+                │            ┬  █  ⚕  C + R + L
+                │            ╰──┼──╯
+                ⏚               ⏚</code></pre><p>For demonstration purposes we&#39;ll model second vertex in two ways: as a single model enclosing all three components and as separate injector nodes.</p><p>As always, this is mainly a pedagogical example. For such a simple system, it is probably much cleaner to model it as a single vertex. However thats not always the case for very large networks with many complex vertex models!</p><h3 id="Prerequisites"><a class="docs-heading-anchor" href="#Prerequisites">Prerequisites</a><a id="Prerequisites-1"></a><a class="docs-heading-anchor-permalink" href="#Prerequisites" title="Permalink"></a></h3><p>The first few components building blocks are identical to the docs on <a href="../mtk_integration/#ModelingToolkit-Integration">ModelingToolkit Integration</a>.</p><pre><code class="language-julia hljs">using NetworkDynamics
+using ModelingToolkit
+using ModelingToolkit: t_nounits as t, D_nounits as D
+using OrdinaryDiffEqTsit5
+using CairoMakie
+
+@mtkmodel NWTerminal begin
+    @variables begin
+        v(t), [description=&quot;Voltage at node&quot;]
+        i(t), [description=&quot;Current flowing into node&quot;]
+    end
+end
+
+@mtkmodel VoltageSource begin
+    @components begin
+       p = NWTerminal()
+    end
+    @parameters begin
+        V = 1.0
+    end
+    @variables begin
+        i(t), [description=&quot;produced current by ideal voltage source (observable)&quot;]
+    end
+    @equations begin
+        i ~ -p.i
+        p.v ~ V
+    end
+end
+@named vs = VoltageSource()
+vs_vertex = VertexModel(vs, [:p₊i], [:p₊v])
+
+@mtkmodel Resistor begin
+    @components begin
+        src = NWTerminal()
+        dst = NWTerminal()
+    end
+    @parameters begin
+        R = 1
+    end
+    @equations begin
+        dst.i ~ (src.v - dst.v)/R
+        src.i ~ -dst.i
+    end
+end
+@named resistor = Resistor()</code></pre><h2 id="Part-A:-Modeling-with-Injector-Nodes-and-LoopbackConnection"><a class="docs-heading-anchor" href="#Part-A:-Modeling-with-Injector-Nodes-and-LoopbackConnection">Part A: Modeling with Injector Nodes and LoopbackConnection</a><a id="Part-A:-Modeling-with-Injector-Nodes-and-LoopbackConnection-1"></a><a class="docs-heading-anchor-permalink" href="#Part-A:-Modeling-with-Injector-Nodes-and-LoopbackConnection" title="Permalink"></a></h2><p>We&#39;ll model the circuit using separate components connected via loopback edges. Since our capacitor has the equation</p><p class="math-container">\[\dot{u} = \frac{1}{C} i\]</p><p>it is a natural voltage source. We&#39;ll use it as the &quot;hub&quot; node which will be accompanied by two injector nodes for the resistor and inductor.</p><pre><code class="language-julia hljs">@mtkmodel Capacitor begin
+    @components begin
+        p = NWTerminal(;v=0)
+    end
+    @parameters begin
+        C = 1.0
+    end
+    @equations begin
+        D(p.v) ~ p.i / C
+    end
+end
+@named cap = Capacitor()
+hub_vertex = VertexModel(cap, [:p₊i], [:p₊v], name=:hub)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">VertexModel <span class="sgr1">:hub</span> <span class="sgr94">PureStateMap()</span>
+ ├─ 1 input:  [p₊i]
+ ├─ 1 state:  [p₊v=0]
+ ├─ 1 output: [p₊v=0]
+ └─ 1 param:  [C=1]</code></pre><p>Next, we define the resistor as an injector node. Unlike the regular <code>Resistor</code> edge model, this takes voltage as input and outputs current:</p><pre><code class="language-julia hljs">@mtkmodel ResistorInjector begin
+    @components begin
+        p = NWTerminal()
+    end
+    @parameters begin
+        R = 100.0
+    end
+    @equations begin
+        p.i ~ p.v/R
+    end
+end
+@named resistor_inj = ResistorInjector()
+Rinj_vertex = VertexModel(resistor_inj, [:p₊v], [:p₊i], name=:R_injector)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">VertexModel <span class="sgr1">:R_injector</span> <span class="sgr94">PureStateMap()</span>
+ ├─ 1 input:  [p₊v]
+ ├─ 1 state:  [p₊i]
+ |    with diagonal mass matrix [0]
+ ├─ 1 output: [p₊i]
+ └─ 1 param:  [R=100]</code></pre><p>Notice how we&#39;ve flipped the interface: voltage becomes an input (<code>[:p₊v]</code>) and current becomes an output (<code>[:p₊i]</code>). However, the model above has a constraint instead of feed-forward behavior. By default, the <code>VertexModel</code> constructor transforms feed-forward relationships into constraint states—a sensible default since most vertex models should not have feed-forward behavior. For injector nodes, we need to opt out of this transformation:</p><pre><code class="language-julia hljs">Rinj_vertex = VertexModel(resistor_inj, [:p₊v], [:p₊i], name=:R_injector, ff_to_constraint=false)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">VertexModel <span class="sgr1">:R_injector</span> <span class="sgr94">PureFeedForward()</span>
+ ├─ 1 input:  [p₊v]
+ ├─ 0 states: []
+ ├─ 1 output: [p₊i]
+ └─ 1 param:  [R=100]</code></pre><p>Next, we go for the Inductor injector node:</p><pre><code class="language-julia hljs">@mtkmodel InductorInjector begin
+    @components begin
+        p = NWTerminal()
+    end
+    @parameters begin
+        L = 0.1
+    end
+    @equations begin
+        D(p.i) ~ p.v / L
+    end
+end
+@named inductor_inj = InductorInjector()
+Linj_vertex = VertexModel(inductor_inj, [:p₊v], [:p₊i], name=:L_injector, ff_to_constraint=false)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">VertexModel <span class="sgr1">:L_injector</span> <span class="sgr94">PureStateMap()</span>
+ ├─ 1 input:  [p₊v]
+ ├─ 1 state:  [p₊i]
+ ├─ 1 output: [p₊i]
+ └─ 1 param:  [L=0.1]</code></pre><p>Now, we need to define the connections between the hub and the injectors, and between voltage source and hub. For the two injectors we define the special <code>LoopbackConnection</code> endges from injector to hub. For the connection between voltage source and hub we use a regular edge model.</p><pre><code class="language-julia hljs">edges = [
+    LoopbackConnection(potential=[:u], flow=[:i], src=:R_injector, dst=:hub, name=:R_loopback),
+    LoopbackConnection(potential=[:u], flow=[:i], src=:L_injector, dst=:hub, name=:L_loopback),
+    EdgeModel(resistor, [:src₊v], [:dst₊v], [:src₊i], [:dst₊i]; src=:vs, dst=:hub)
+]
+vertices = [vs_vertex, hub_vertex, Rinj_vertex, Linj_vertex]
+nw = Network(vertices, edges; warn_order=false)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Network with 2 states and 5 parameters
+ ├─ 4 vertices (4 unique types)
+ └─ 3 edges (2 unique types)
+Edge-Aggregation using SequentialAggregator(+)</code></pre><p>To simulate the system we use the default initial conditions. We can inspect the states of our network to see how the different variables span the components:</p><pre><code class="language-julia hljs">s0 = NWState(nw)
+s0.v</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">FilteringProxy</span> for NWState()
+  Component filter: AllVertices()<span class="sgr90"> &lt;- filter further by obj[1], obj[&quot;name&quot;], ...</span>
+  State filter:     <span class="sgr90">none</span>
+  Types:<span class="sgr92"><span class="sgr1">  states ✓</span></span><span class="sgr1"><span class="sgr93">  parameters ✓</span><span class="sgr95">  inputs ✓</span><span class="sgr94">  outputs ✓</span><span class="sgr96">  observables ✓</span></span>
+<span class="sgr1">Matching Indices:</span>
+  ╭ VIndex(1, <span class="sgr93">:V</span>)     1                :vs
+  │ VIndex(1, <span class="sgr94">:p₊v</span>)   1                
+  │ VIndex(1, <span class="sgr95">:p₊i</span>)  -1                
+  ╰ VIndex(1, <span class="sgr96">:i</span>)     1                
+  ╭ VIndex(2, <span class="sgr92">:p₊v</span>)   0                :hub
+  │ VIndex(2, <span class="sgr93">:C</span>)     1                
+  ╰ VIndex(2, <span class="sgr95">:p₊i)  NaN (undefined?</span>)  
+  ╭ VIndex(3, <span class="sgr93">:R</span>)     100              :R_injector
+  │ VIndex(3, <span class="sgr94">:p₊i</span>)   0                
+  ╰ VIndex(3, <span class="sgr95">:p₊v</span>)   0                
+  ╭ VIndex(4, <span class="sgr92">:p₊i)  NaN (undefined?</span>)  :L_injector
+  │ VIndex(4, <span class="sgr93">:L</span>)     0.1              
+  ╰ VIndex(4, <span class="sgr95">:p₊v</span>)   0                </code></pre><p>With that knowlege, we can set the initial condition:</p><pre><code class="language-julia hljs">s0.v[:hub, :p₊v] = 0.0
+s0.v[:L_injector, :p₊i] = 0.0</code></pre><p>From initial state we can simulate and plot the results:</p><pre><code class="language-julia hljs">prob = ODEProblem(nw, s0, (0.0, 10.0))
+sol = solve(prob, Tsit5())
+
+let
+    fig = Figure()
+    ax = Axis(fig[1,1])
+    plot!(ax, sol; idxs=VIndex(:hub, :p₊v), label=&quot;Capacitor Voltage (Injector Nodes)&quot;, color=Cycled(1))
+    plot!(ax, sol; idxs=VIndex(:L_injector, :p₊i), label=&quot;Inductor Current (Injector Nodes)&quot;, color=Cycled(2))
+    axislegend(ax)
+    fig
+end</code></pre><img src="10403e20.png" alt="Example block output"/><h3 id="Part-B:-Modeling-with-a-Single-VertexModel"><a class="docs-heading-anchor" href="#Part-B:-Modeling-with-a-Single-VertexModel">Part B: Modeling with a Single VertexModel</a><a id="Part-B:-Modeling-with-a-Single-VertexModel-1"></a><a class="docs-heading-anchor-permalink" href="#Part-B:-Modeling-with-a-Single-VertexModel" title="Permalink"></a></h3><p>For comparison, we now model the same system using a single monolithic vertex that contains all three components (capacitor, resistor, and inductor) internally.</p><pre><code class="language-julia hljs">@mtkmodel CRLModel begin
+    @components begin
+        cap = Capacitor()
+        resistor = ResistorInjector()
+        inductor = InductorInjector()
+    end
+    @variables begin
+        v(t), [description=&quot;Voltage at node&quot;]
+        i(t)=0, [description=&quot;Current flowing into node&quot;]
+    end
+    @equations begin
+        0 ~ resistor.p.i + inductor.p.i + cap.p.i - i
+        v ~ cap.p.v
+        v ~ resistor.p.v
+        v ~ inductor.p.v
+    end
+end
+@named crl_model = CRLModel()
+crl_vertex = VertexModel(crl_model, [:i], [:v], name=:CRL_vertex)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">VertexModel <span class="sgr1">:CRL_vertex</span> <span class="sgr94">PureStateMap()</span>
+ ├─ 1 input:  [i=0]
+ ├─ 2 states: [inductor₊p₊i, v]
+ ├─ 1 output: [v]
+ └─ 3 params: [cap₊C=1, resistor₊R=100, inductor₊L=0.1]</code></pre><p>With that definition we can define the network again:</p><pre><code class="language-julia hljs">edges2 = [
+    EdgeModel(resistor, [:src₊v], [:dst₊v], [:src₊i], [:dst₊i]; src=:vs, dst=:CRL_vertex)
+]
+vertices2 = [vs_vertex, crl_vertex]
+nw2 = Network(vertices2, edges2; warn_order=false)
+
+s0_2 = NWState(nw2)
+s0_2[VIndex(:CRL_vertex, :v)] = 0.0
+s0_2[VIndex(:CRL_vertex, :inductor₊p₊i)] = 0.0
+
+prob2 = ODEProblem(nw2, s0_2, (0.0, 10.0))
+sol2 = solve(prob2, Tsit5())
+let
+    fig = Figure()
+    ax = Axis(fig[1,1])
+    plot!(ax, sol; idxs=VIndex(:hub, :p₊v), label=&quot;Capacitor Voltage (Injector Nodes)&quot;, color=Cycled(1), alpha=0.5)
+    plot!(ax, sol2; idxs=VIndex(:CRL_vertex, :v), label=&quot;Capacitor Voltage (Single Vertex)&quot;, color=Cycled(1), linestyle=:dash)
+    plot!(ax, sol; idxs=VIndex(:L_injector, :p₊i), label=&quot;Inductor Current (Injector Nodes)&quot;, color=Cycled(2), alpha=0.5)
+    plot!(ax, sol2; idxs=VIndex(:CRL_vertex, :inductor₊p₊i), label=&quot;Inductor Current (Single Vertex)&quot;, color=Cycled(2), linestyle=:dash)
+    axislegend(ax)
+    fig
+end</code></pre><img src="396343bc.png" alt="Example block output"/><p>As expected, we get identical results from both modeling approaches.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../mtk_integration/">« ModelingToolkit Integration</a><a class="docs-footer-nextpage" href="../sparsity_detection/">Sparsity Detection »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Wednesday 18 February 2026 12:27">Wednesday 18 February 2026</span>. Using Julia version 1.12.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
