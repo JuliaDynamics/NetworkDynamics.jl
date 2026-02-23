@@ -1,9 +1,9 @@
 module NetworkDynamicsMTKExt
 
-using ModelingToolkit: Symbolic, iscall, operation, arguments, build_function
-using ModelingToolkit: ModelingToolkit, Equation, System, Differential
-using ModelingToolkit: equations, full_equations, get_variables, mtkcompile, getname, unwrap
-using ModelingToolkit: parameters, unknowns, independent_variables, observed, defaults
+using ModelingToolkitBase: Symbolic, iscall, operation, arguments, build_function
+using ModelingToolkitBase: ModelingToolkit, Equation, System, Differential
+using ModelingToolkitBase: equations, full_equations, get_variables, mtkcompile, getname, unwrap
+using ModelingToolkitBase: parameters, unknowns, independent_variables, observed, defaults
 using Symbolics: Symbolics, fixpoint_sub, substitute
 using RecursiveArrayTools: RecursiveArrayTools
 using ArgCheck: @argcheck

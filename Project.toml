@@ -4,7 +4,7 @@ version = "0.10.17"
 authors = ["Frank Hellmann <hellmann@pik-potsdam.de>, Michael Lindner <michaellindner@pik-potsdam.de>, Hans Würfel <git@wuerfel.io"]
 
 [workspace]
-projects = ["test", "benchmark"]
+projects = ["test", "docs"]
 
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
@@ -47,7 +47,7 @@ TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
-ModelingToolkit = "961ee093-0014-501f-94e3-6117800e7a78"
+ModelingToolkitBase = "7771a370-6774-4173-bd38-47e70ca0b839"
 SparseConnectivityTracer = "9f842d2f-2579-4b1d-911e-f412cf18a3f5"
 SymbolicUtils = "d1185830-fcd6-423d-90d6-eec64667417b"
 Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
@@ -55,7 +55,7 @@ Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 [extensions]
 NetworkDynamicsCUDAExt = ["CUDA", "Adapt"]
 NetworkDynamicsDataFramesExt = ["DataFrames"]
-NetworkDynamicsMTKExt = ["ModelingToolkit", "SymbolicUtils", "Symbolics"]
+NetworkDynamicsMTKExt = ["ModelingToolkitBase", "SymbolicUtils", "Symbolics"]
 NetworkDynamicsSparsityExt = ["SparseConnectivityTracer"]
 NetworkDynamicsSymbolicsExt = ["Symbolics", "MacroTools"]
 
@@ -80,7 +80,7 @@ LinearAlgebra = "1"
 LinearSolve = "3.46.1"
 MacroTools = "0.5.15"
 Mixers = "0.1.2"
-ModelingToolkit = "10"
+ModelingToolkitBase = "1.5.3"
 NNlib = "0.9.13"
 NonlinearSolve = "4"
 OrderedCollections = "1.8.0"
@@ -99,7 +99,7 @@ StaticArrays = "1.9.4"
 SteadyStateDiffEq = "2.2.0"
 StyledStrings = "1.0.3"
 SymbolicIndexingInterface = "0.3.27"
-SymbolicUtils = "3.24"
-Symbolics = "6.19.0"
+SymbolicUtils = "4"
+Symbolics = "7"
 TimerOutputs = "0.5.23"
 julia = "1.10"

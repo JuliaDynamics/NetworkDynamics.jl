@@ -54,8 +54,8 @@ fundamental building blocks.
 
 ```@example mtk
 using NetworkDynamics
-using ModelingToolkit
-using ModelingToolkit: t_nounits as t, D_nounits as D
+using ModelingToolkitBase
+using ModelingToolkitBase: t_nounits as t, D_nounits as D
 using OrdinaryDiffEqTsit5
 using CairoMakie
 ```

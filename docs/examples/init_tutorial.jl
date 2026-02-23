@@ -20,8 +20,8 @@ First, let's import the necessary packages:
 =#
 
 using NetworkDynamics
-using ModelingToolkit
-using ModelingToolkit: t_nounits as t, D_nounits as D
+using ModelingToolkitBase
+using ModelingToolkitBase: t_nounits as t, D_nounits as D
 using OrdinaryDiffEqTsit5
 using CairoMakie
 nothing #hide
@@ -29,7 +29,7 @@ nothing #hide
 #=
 ## Node Models
 
-We'll start by defining our node models using ModelingToolkit.
+We'll start by defining our node models using ModelingToolkitBase.
 First, let's create a template for common states and equations in all gas nodes:
 =#
 @mtkmodel GasNode begin

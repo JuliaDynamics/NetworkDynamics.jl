@@ -119,7 +119,7 @@ The same pattern applies at the network level with [`initialize_componentwise`](
 Let's consider the following example of a Swing-equation generator model.
 ```@example compinit
 using NetworkDynamics, ModelingToolkit
-using ModelingToolkit: t_nounits as t, D_nounits as Dt
+using ModelingToolkitBase: t_nounits as t, D_nounits as Dt
 
 @mtkmodel Swing begin
     @variables begin

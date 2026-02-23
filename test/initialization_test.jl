@@ -1,8 +1,8 @@
 using NetworkDynamics, Graphs
 using SteadyStateDiffEq, OrdinaryDiffEqRosenbrock
 using OrdinaryDiffEqNonlinearSolve
-using ModelingToolkit
-using ModelingToolkit: t_nounits as t, D_nounits as Dt
+using ModelingToolkitBase
+using ModelingToolkitBase: t_nounits as t, D_nounits as Dt
 using SymbolicIndexingInterface: SymbolicIndexingInterface as SII
 using Chairmarks
 using NonlinearSolve

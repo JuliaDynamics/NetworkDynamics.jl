@@ -102,8 +102,8 @@ However thats not always the case for very large networks with many complex vert
 The first few components building blocks are identical to the docs on [ModelingToolkit Integration](@ref).
 ```@example injector 
 using NetworkDynamics
-using ModelingToolkit
-using ModelingToolkit: t_nounits as t, D_nounits as D
+using ModelingToolkitBase
+using ModelingToolkitBase: t_nounits as t, D_nounits as D
 using OrdinaryDiffEqTsit5
 using CairoMakie
 

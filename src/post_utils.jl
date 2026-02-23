@@ -132,7 +132,7 @@ Injector nodes:
     - **Positive flow**: Draw from the hub (consumption)
     - **Negative flow**: Injection into the hub (production)
 
-    When using ModelingToolkit models, you only need to flip the input/output variable
+    When using ModelingToolkitBase models, you only need to flip the input/output variable
     declarations—the equations themselves remain unchanged. For example, a resistor with
     `p.i ~ p.v/R` keeps the same equation; only the interface changes from
     `VertexModel(..., [:p₊i], [:p₊v])` to `VertexModel(..., [:p₊v], [:p₊i])`.
