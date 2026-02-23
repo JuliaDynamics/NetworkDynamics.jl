@@ -123,7 +123,7 @@ end
             return f
         end
     end
-    ModelingToolkit.@register_symbolic true_if_else_block(cond, t, f)
+    Symbolics.@register_symbolic true_if_else_block(cond, t, f)
     @mtkmodel ValveToggle2 begin
         @variables begin
             p_src(t), [description="pressure at src"]

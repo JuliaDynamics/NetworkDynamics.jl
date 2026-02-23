@@ -202,7 +202,7 @@ We can do so by introducing "fake" dependencies using [`implicit_output`](@ref).
 This function is defined as
 ```julia
 implicit_output(x) = 0
-ModelingToolkit.@register_symbolic implicit_output(x)
+Symbolics.@register_symbolic implicit_output(x)
 ```
 which makes it numerically equivalent to zero (no effect on the simulation) but is
 opaque to the Symbolic Simplification.

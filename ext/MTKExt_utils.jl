@@ -81,7 +81,7 @@ function getproperty_symbolic(sys, var; might_contain_toplevel_ns=true)
     varname = string(getname(var))
     # split of the toplevel namespace if necessary
     if might_contain_toplevel_ns && startswith(varname, ns*"₊")
-        if getname(sys) ∈ getname.(ModelingToolkit.get_systems(sys))
+        if getname(sys) ∈ getname.(ModelingToolkitBase.get_systems(sys))
             @warn "Namespace :$ns appears multiple times, this might lead to unexpected, since it is not clear whether the namespace should be stripped or not."
         end
         varname = replace(varname, r"^"*ns*"₊" => "")
@@ -131,11 +131,11 @@ function warn_missing_features(sys)
         @warn "MTK-Model $(sys.name) contains events. They will be ignored by NetworkDynamics.jl. Use ComponentCallbacks on a component level for that!"
     end
 
-    if !isempty(ModelingToolkit.initialization_equations(sys))
+    if !isempty(ModelingToolkitBase.initialization_equations(sys))
         @warn "Model has explicit init equation. Those are currently ignored by NetworkDynamics.jl."
     end
 
-    calls = filter(iscall, SII.all_symbols(sys))
+    calls = filter(iscall, SII.all_symbols(ModelingToolkitBase.complete(sys)))
     indx = filter(x -> operation(x) === Base.getindex, calls)
     if !isempty(indx)
         @warn "Detected usage of vector variables or parameters in model ($(join(repr.(indx), ", "))), this is not supported and may lead to errors!"
@@ -143,14 +143,14 @@ function warn_missing_features(sys)
 end
 function _collect_continuous_events(sys)
     vcat(
-        ModelingToolkit.get_continuous_events(sys),
-        [_collect_continuous_events(sys) for sys in ModelingToolkit.get_systems(sys)]...
+        ModelingToolkitBase.get_continuous_events(sys),
+        [_collect_continuous_events(sys) for sys in ModelingToolkitBase.get_systems(sys)]...
     )
 end
 function _collect_discrete_events(sys)
     vcat(
-        ModelingToolkit.get_discrete_events(sys),
-        [_collect_discrete_events(sys) for sys in ModelingToolkit.get_systems(sys)]...
+        ModelingToolkitBase.get_discrete_events(sys),
+        [_collect_discrete_events(sys) for sys in ModelingToolkitBase.get_systems(sys)]...
     )
 end
 
@@ -180,13 +180,14 @@ function fix_metadata!(invalid_eqs, sys)
     end
 
     metadatasubs = Dict()
-    allsyms = ModelingToolkit.all_symbols(sys)
+    allsyms = ModelingToolkitBase.all_symbols(sys)
     filter!(s->!contains(repr(s), "Initial"), allsyms)
-    allnames = string.(ModelingToolkit.getname.(allsyms))
+    allnames = string.(ModelingToolkitBase.getname.(allsyms))
 
     for invalids in missingmetadata
         invalidname = getname(invalids)
         valid = if hasproperty(sys, getname(invalidname))
+            # TODO: upstream fixed, can be removed
             # https://github.com/SciML/ModelingToolkit.jl/issues/3016
             # getproperty(sys, getname(invalidname); namespace=false)
             getproperty_symbolic(sys, invalids) # like getproperty but works on namespaced symbols foo₊bar directly
@@ -239,12 +240,12 @@ function _collect_comp_metadata!(md, sys, key, current_namespace)
     end
 
     # collect from subsystems first (children before parents)
-    for s in ModelingToolkit.get_systems(sys)
+    for s in ModelingToolkitBase.get_systems(sys)
         _collect_comp_metadata!(md, s, key, ns_modelname)
     end
 
-    # collect from current system last (post-order: after all children)
-    thismd = ModelingToolkit.get_metadata(sys)
+    # collect from current system
+    thismd = ModelingToolkitBase.get_metadata(sys)
     if haskey(thismd, key)
         if haskey(md, ns_modelname) && md[ns_modelname] != thismd[key]
             _modname = isempty(ns_modelname) ? "toplevel model" : ns_modelname
