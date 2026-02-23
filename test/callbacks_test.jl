@@ -3,7 +3,7 @@ using Graphs
 using OrdinaryDiffEqTsit5
 using Chairmarks
 using Test
-using ModelingToolkit
+using ModelingToolkitBase
 using DiffEqCallbacks
 
 @__MODULE__()==Main ? includet(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl")) : (const Lib = Main.Lib)

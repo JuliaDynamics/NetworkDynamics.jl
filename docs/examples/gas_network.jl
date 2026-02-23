@@ -14,9 +14,9 @@ This example can be dowloaded as a normal Julia script [here](@__NAME__.jl). #md
 We start by importing the necessary packages:
 =#
 using NetworkDynamics
-using ModelingToolkit
+using ModelingToolkitBase
 using DynamicQuantities
-using ModelingToolkit: D as Dt, t as t
+using ModelingToolkitBase: D as Dt, t as t
 using Test
 using StaticArrays
 using DataInterpolations

@@ -115,8 +115,8 @@ First we define the resistor:
 ```@example extin_mtk
 using NetworkDynamics
 using OrdinaryDiffEqTsit5
-using ModelingToolkit
-using ModelingToolkit: t_nounits as t, D_nounits as Dt
+using ModelingToolkitBase
+using ModelingToolkitBase: t_nounits as t, D_nounits as Dt
 using CairoMakie
 
 @mtkmodel Resistor begin

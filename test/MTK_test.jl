@@ -1,6 +1,6 @@
 import ModelingToolkit as MTK
-using ModelingToolkit
-using ModelingToolkit: t_nounits as t, D_nounits as Dt
+using ModelingToolkitBase
+using ModelingToolkitBase: t_nounits as t, D_nounits as Dt
 using NetworkDynamics
 using OrdinaryDiffEqTsit5
 using LinearAlgebra
@@ -451,8 +451,8 @@ end
 
 module ToLate
     struct CustomMetadata end
-    using ModelingToolkit
-    using ModelingToolkit: t_nounits as t, D_nounits as Dt
+    using ModelingToolkitBase
+    using ModelingToolkitBase: t_nounits as t, D_nounits as Dt
     using NetworkDynamics: ComponentPostprocessing
     @mtkmodel LateModel begin
         @variables begin
@@ -474,8 +474,8 @@ module ToLate
 end
 module InTime
     struct CustomMetadata end
-    using ModelingToolkit
-    using ModelingToolkit: t_nounits as t, D_nounits as Dt
+    using ModelingToolkitBase
+    using ModelingToolkitBase: t_nounits as t, D_nounits as Dt
     using NetworkDynamics: ComponentPostprocessing
     cfref = Ref{Any}(nothing)
     nsref = Ref{Any}(nothing)
