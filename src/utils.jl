@@ -286,7 +286,7 @@ equation depends on `x`. This can be necessary to define a model with fully impl
 """
 """
     implicit_output(x) = 0
-    ModelingToolkit.@register_symbolic implicit_output(x)
+    Symbolics.@register_symbolic implicit_output(x)
 
 $implicit_output_docstring
 

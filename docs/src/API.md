@@ -19,9 +19,9 @@ LoopbackConnection
 
 ## Component Models with MTK
 ```@docs
-VertexModel(::ModelingToolkit.System, ::Any, ::Any)
-EdgeModel(::ModelingToolkit.System, ::Any, ::Any, ::Any, ::Any)
-EdgeModel(::ModelingToolkit.System, ::Any, ::Any, ::Any)
+VertexModel(::ModelingToolkitBase.System, ::Any, ::Any)
+EdgeModel(::ModelingToolkitBase.System, ::Any, ::Any, ::Any, ::Any)
+EdgeModel(::ModelingToolkitBase.System, ::Any, ::Any, ::Any)
 ComponentPostprocessing
 NetworkDynamics.with_mtk_model_cache
 NetworkDynamics.mtk_cache_stats

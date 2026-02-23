@@ -1,4 +1,3 @@
-import ModelingToolkit as MTK
 using ModelingToolkitBase
 using ModelingToolkitBase: t_nounits as t, D_nounits as Dt
 using NetworkDynamics

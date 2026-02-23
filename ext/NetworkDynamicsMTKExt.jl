@@ -1,10 +1,10 @@
 module NetworkDynamicsMTKExt
 
-using ModelingToolkitBase: Symbolic, iscall, operation, arguments, build_function
-using ModelingToolkitBase: ModelingToolkit, Equation, System, Differential
+using ModelingToolkitBase: iscall, operation, arguments, build_function
+using ModelingToolkitBase: ModelingToolkitBase, Equation, System, Differential
 using ModelingToolkitBase: equations, full_equations, get_variables, mtkcompile, getname, unwrap
-using ModelingToolkitBase: parameters, unknowns, independent_variables, observed, defaults
-using Symbolics: Symbolics, fixpoint_sub, substitute
+using ModelingToolkitBase: parameters, unknowns, independent_variables, observed, initial_conditions
+using Symbolics: Symbolics, Symbolic, fixpoint_sub, substitute
 using RecursiveArrayTools: RecursiveArrayTools
 using ArgCheck: @argcheck
 using LinearAlgebra: Diagonal, I
@@ -21,13 +21,13 @@ import NetworkDynamics: VertexModel, EdgeModel, AnnotatedSym
 include("MTKExt_utils.jl")
 
 import NetworkDynamics: implicit_output, RHSDifferentialsError
-ModelingToolkit.@register_symbolic implicit_output(x)
+Symbolics.@register_symbolic implicit_output(x)
 
 """
     VertexModel(sys::System, inputs, outputs;
                 verbose=false, name=getname(sys), extin=nothing, ff_to_constraint=true, kwargs...)
 
-Create a `VertexModel` object from a given `System` created with ModelingToolkit.
+Create a `VertexModel` object from a given `System` created with ModelingToolkitBase.
 You need to provide 2 lists of symbolic names (`Symbol` or `Vector{Symbols}`):
 - `inputs`: names of variables in you equation representing the aggregated edge states
 - `outputs`: names of variables in you equation representing the node output
@@ -62,8 +62,8 @@ function VertexModel(sys::System, inputs, outputs; verbose=false, name=getname(s
     g = gen.g
     obsf = gen.obsf
 
-    sysdefaults = defaults(sys)
-    sysguesses = ModelingToolkit.guesses(sys)
+    sysdefaults = initial_conditons(sys)
+    sysguesses = ModelingToolkitBase.guesses(sys)
     _sym = getname.(gen.states)
     sym = [s => _get_metadata(sys, s, sysdefaults, sysguesses) for s in _sym]
 
@@ -123,7 +123,7 @@ EdgeModel(sys::System, srcin, dstin, dstout; kwargs...) = EdgeModel(sys, srcin, 
     EdgeModel(sys::System, srcin, dstin, srcout, dstout;
               verbose=false, name=getname(sys), extin=nothing, ff_to_constraint=false, kwargs...)
 
-Create a `EdgeModel` object from a given `System` created with ModelingToolkit.
+Create a `EdgeModel` object from a given `System` created with ModelingToolkitBase.
 You need to provide 4 lists of symbolic names (`Symbol` or `Vector{Symbols}`):
 - `srcin`: names of variables in you equation representing the node state at the source
 - `dstin`: names of variables in you equation representing the node state at the destination
@@ -178,7 +178,7 @@ function EdgeModel(sys::System, srcin, dstin, srcout, dstout; verbose=false, nam
     obsf = gen.obsf
 
     sysdefaults = defaults(sys)
-    sysguesses = ModelingToolkit.guesses(sys)
+    sysguesses = ModelingToolkitBase.guesses(sys)
     _sym = getname.(gen.states)
     sym = [s => _get_metadata(sys, s, sysdefaults, sysguesses) for s in _sym]
 
@@ -252,8 +252,8 @@ function _get_metadata(sys, name, alldefaults, sysguesses)
 
         if def isa Symbolic
             # do nothing, as the warning can get annoying
-            # @warn "Could not resolve rhs for default term $name = $(ModelingToolkit.getdefault(sym)). Some rhs symbols might not have default values. Leave free."
-        elseif def == ModelingToolkit.NoValue || def isa ModelingToolkit.NoValue
+            # @warn "Could not resolve rhs for default term $name = $(ModelingToolkitBase.getdefault(sym)). Some rhs symbols might not have default values. Leave free."
+        elseif def == ModelingToolkitBase.NoValue || def isa ModelingToolkitBase.NoValue
             # skip NoValue thing
         else
             md[:default] = def
@@ -261,25 +261,26 @@ function _get_metadata(sys, name, alldefaults, sysguesses)
     end
 
     # check for guess both in symbol metadata and in guesses of system
+    # TODO: this was fixed, remove workaround?
     # fixes https://github.com/SciML/ModelingToolkit.jl/issues/3075
-    if ModelingToolkit.hasguess(sym) || haskey(sysguesses, sym)
-        guess = if ModelingToolkit.hasguess(sym)
-            ModelingToolkit.getguess(sym)
+    if ModelingToolkitBase.hasguess(sym) || haskey(sysguesses, sym)
+        guess = if ModelingToolkitBase.hasguess(sym)
+            ModelingToolkitBase.getguess(sym)
         else
             sysguesses[sym]
         end
         if guess isa Symbolic
             guess = fixpoint_sub(def, merge(defaults(sys), sysguesses))
         end
-        guess isa Symbolic && error("Could not resolve guess $(ModelingToolkit.getguess(sym)) for $name")
+        guess isa Symbolic && error("Could not resolve guess $(ModelingToolkitBase.getguess(sym)) for $name")
         md[:guess] = guess
     end
 
-    if ModelingToolkit.hasbounds(sym)
-        md[:bounds] = ModelingToolkit.getbounds(sym)
+    if ModelingToolkitBase.hasbounds(sym)
+        md[:bounds] = ModelingToolkitBase.getbounds(sym)
     end
-    if ModelingToolkit.hasdescription(sym)
-        md[:description] = ModelingToolkit.getdescription(sym)
+    if ModelingToolkitBase.hasdescription(sym)
+        md[:description] = ModelingToolkitBase.getdescription(sym)
     end
     md
 end
@@ -317,8 +318,8 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     if assume_io_coupling
         impl_outputs = implicit_output(sum(alloutputs))
         subs = Dict(in => in + impl_outputs for in in allinputs)
-        _expanded = ModelingToolkit.expand_connections(_sys)
-        _expanded_eqs = ModelingToolkit.get_eqs(_expanded)
+        _expanded = ModelingToolkitBase.expand_connections(_sys)
+        _expanded_eqs = ModelingToolkitBase.get_eqs(_expanded)
         for i in eachindex(_expanded_eqs)
             _expanded_eqs[i] = substitute(_expanded_eqs[i], subs)
         end
@@ -326,7 +327,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     end
 
     missing_inputs = Set{Symbolic}()
-    sys = if ModelingToolkit.iscomplete(_sys)
+    sys = if ModelingToolkitBase.iscomplete(_sys)
         deepcopy(_sys)
     else
         _openinputs = setdiff(allinputs, Set(parameters(_sys)))
@@ -350,7 +351,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         try
             mtkcompile(_sys; inputs=_openinputs, outputs=alloutputs, simplify=false)
         catch e
-            if e isa ModelingToolkit.ExtraEquationsSystemException
+            if e isa ModelingToolkitBase.ExtraEquationsSystemException
                 msg = "The system could not be compiled because of extra equations! \
                        Sometimes, this can be related to fully implicit output equations. \
                        Check `@doc implicit_output` for more information."
@@ -718,7 +719,7 @@ end
 
 function generate_io_function_cached(_sys, args...; kwargs...)
     if USE_MODEL_CACHE[]
-        expanded = ModelingToolkit.expand_connections(_sys)
+        expanded = ModelingToolkitBase.expand_connections(_sys)
         syskey = repr.(equations(expanded))
         key = hash((syskey, args, kwargs))
         gen_no_sys = threadsafe_cache_load!(key) do

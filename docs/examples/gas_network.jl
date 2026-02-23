@@ -223,7 +223,7 @@ representation, all units will be stripped.
 =#
 load2 = LinearInterpolation(-1*Float64[20, 30, 10, 30, 20], [0, 4, 12, 20, 24]*3600.0; extrapolation=ExtrapolationType.Constant)
 load3 = LinearInterpolation(-1*Float64[40, 50, 30, 50, 40], [0, 4, 12, 20, 24]*3600.0; extrapolation=ExtrapolationType.Constant)
-ModelingToolkit.get_unit(::LinearInterpolation, _ ) = 1.0 # type piracy!
+ModelingToolkitBase.get_unit(::LinearInterpolation, _ ) = 1.0 # type piracy!
 nothing #hide
 
 #=
