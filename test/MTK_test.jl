@@ -6,6 +6,50 @@ using LinearAlgebra
 using Graphs
 using Chairmarks: @b
 using Test
+using SciCompDSL
+using Moshi.Match: @match
+mtkext = Base.get_extension(NetworkDynamics, :NetworkDynamicsMTKExt)
+
+@testset "Woraround tests" begin
+    # if this test gets fixed, we can get rid of workaround get_variables_fix
+    @test get_variables(Dt(x)) == Set(Dt(x))
+end
+
+@testset "eqtype test" begin
+    @variables begin
+        x(t)
+        y(t)
+        z(t)
+        a
+        b
+        c
+    end
+    eq = Dt(x) ~ y + a
+    @test mtkext.eq_type(eq) == (:explicit_diffeq, x.val)
+
+    eq = y ~ x + b
+    mtkext.eq_type(eq) == (:explicit_algebraic, y.val)
+
+    eq = y ~ x + b + y
+    mtkext.eq_type(eq) == (:implicit_algebraic, y.val)
+
+    eq = 0 ~ x+y+b
+    @test mtkext.eq_type(eq) == (:implicit_algebraic, nothing)
+
+    # non zero on the lhs is not expected
+    eq = 1 ~ x+y+b
+    @test_throws "non-zero constant on the lhs" mtkext.eq_type(eq)
+
+    eq = Dt(x) ~ Dt(x)
+    @test_throws "differentials on the rhs" mtkext.eq_type(eq)
+
+    eq = 0 ~ Dt(x)
+    @test_throws "differentials on the rhs" mtkext.eq_type(eq)
+
+    # paraemter on the lhs is not expected
+    eq = a ~ x+y
+    @test_throws "Can't determine eq type" mtkext.eq_type(eq)
+end
 
 @mtkmodel Bus begin
     @variables begin
@@ -20,8 +64,8 @@ end;
         ω(t) = 0.0, [description = "Rotor frequency"]
     end
     @parameters begin
-        M = 1, [description = "Inertia"]
-        D = 0.1, [description = "Damping"]
+        M = 1, [guess=0.1, description = "Inertia"]
+        D = 0.1, [guess=M, description = "Damping"]
         Pmech, [description = "Mechanical Power"]
     end
     @equations begin
@@ -397,7 +441,7 @@ end
         end
     end
     @named implicit = ImplicitForcing()
-    simp = mtkcompile(implicit; inputs = ModelingToolkit.unbound_inputs(implicit))
+    simp = mtkcompile(implicit; inputs = ModelingToolkitBase.unbound_inputs(implicit))
     @test isempty(equations(simp)) # the equation was dropped!
 
     # test fully implicit outputs
@@ -422,7 +466,7 @@ end
     @named prosumer = StaticProsumerNode() # consumer
     @test_throws ArgumentError VertexModel(prosumer, [:q̃_nw], [:p])
     @named prosumer_wrapped = Wrapper()
-    @test_throws ModelingToolkit.InvalidSystemException VertexModel(prosumer_wrapped, [:q̃_nw], [:p])
+    @test_throws ModelingToolkitBase.InvalidSystemException VertexModel(prosumer_wrapped, [:q̃_nw], [:p])
     @named prosumer_fixed = WrapperFixed()
     VertexModel(prosumer_fixed, [:q̃_nw], [:p]) # no throw
 end

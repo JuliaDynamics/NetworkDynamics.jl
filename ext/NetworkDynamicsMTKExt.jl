@@ -4,11 +4,13 @@ using ModelingToolkitBase: iscall, operation, arguments, build_function
 using ModelingToolkitBase: ModelingToolkitBase, Equation, System, Differential
 using ModelingToolkitBase: equations, full_equations, get_variables, mtkcompile, getname, unwrap
 using ModelingToolkitBase: parameters, unknowns, independent_variables, observed, initial_conditions
-using Symbolics: Symbolics, Symbolic, fixpoint_sub, substitute
+using Symbolics: Symbolics, fixpoint_sub, substitute
 using RecursiveArrayTools: RecursiveArrayTools
 using ArgCheck: @argcheck
 using LinearAlgebra: Diagonal, I
-using SymbolicUtils.Code: Let, Assignment
+using SymbolicUtils.Code: Let, Assignment, BasicSymbolic, SymReal, unwrap_const
+using Moshi: Moshi
+using Moshi.Match: @match
 using SymbolicUtils: SymbolicUtils
 using OrderedCollections: OrderedDict
 using SymbolicIndexingInterface: SymbolicIndexingInterface as SII
@@ -62,7 +64,7 @@ function VertexModel(sys::System, inputs, outputs; verbose=false, name=getname(s
     g = gen.g
     obsf = gen.obsf
 
-    sysdefaults = initial_conditons(sys)
+    sysdefaults = initial_conditions(sys)
     sysguesses = ModelingToolkitBase.guesses(sys)
     _sym = getname.(gen.states)
     sym = [s => _get_metadata(sys, s, sysdefaults, sysguesses) for s in _sym]
@@ -234,7 +236,7 @@ For a given system and name, extract all the relevant meta we want to keep for t
 
 since defaults(sys) and guesses(sys) is relativly expensive those need to be provided
 """
-function _get_metadata(sys, name, alldefaults, sysguesses)
+function _get_metadata(sys, name, alldefaults, allguesses)
     md = Dict{Symbol,Any}()
     sym = try
         getproperty_symbolic(sys, name; might_contain_toplevel_ns=false)
@@ -245,35 +247,29 @@ function _get_metadata(sys, name, alldefaults, sysguesses)
         return md
     end
     if haskey(alldefaults, sym)
-        def = alldefaults[sym]
-        if def isa Symbolic
-            def = fixpoint_sub(def, alldefaults)
+        def = unwrap_const(alldefaults[sym])
+        if def isa BasicSymbolic
+            def = unwrap_const(fixpoint_sub(def, alldefaults))
         end
 
-        if def isa Symbolic
-            # do nothing, as the warning can get annoying
-            # @warn "Could not resolve rhs for default term $name = $(ModelingToolkitBase.getdefault(sym)). Some rhs symbols might not have default values. Leave free."
-        elseif def == ModelingToolkitBase.NoValue || def isa ModelingToolkitBase.NoValue
-            # skip NoValue thing
-        else
+        # TODO: this silently drops default "equations"
+        if def isa Real
             md[:default] = def
         end
     end
 
     # check for guess both in symbol metadata and in guesses of system
-    # TODO: this was fixed, remove workaround?
-    # fixes https://github.com/SciML/ModelingToolkit.jl/issues/3075
-    if ModelingToolkitBase.hasguess(sym) || haskey(sysguesses, sym)
-        guess = if ModelingToolkitBase.hasguess(sym)
-            ModelingToolkitBase.getguess(sym)
-        else
-            sysguesses[sym]
+    if haskey(allguesses, sym)
+        guess = unwrap_const(allguesses[sym])
+
+        if guess isa BasicSymbolic
+            guess = unwrap_const(fixpoint_sub(def, merge(allguesses, alldefaults)))
         end
-        if guess isa Symbolic
-            guess = fixpoint_sub(def, merge(defaults(sys), sysguesses))
+
+        # TODO: this silently drops guess "equations"
+        if guess isa Real
+            md[:guess] = guess
         end
-        guess isa Symbolic && error("Could not resolve guess $(ModelingToolkitBase.getguess(sym)) for $name")
-        md[:guess] = guess
     end
 
     if ModelingToolkitBase.hasbounds(sym)
@@ -326,12 +322,12 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         _sys = _expanded
     end
 
-    missing_inputs = Set{Symbolic}()
+    missing_inputs = Set{BasicSymbolic}()
     sys = if ModelingToolkitBase.iscomplete(_sys)
         deepcopy(_sys)
     else
         _openinputs = setdiff(allinputs, Set(parameters(_sys)))
-        all_eq_vars = mapreduce(get_variables, union, full_equations(_sys), init=Set{Symbolic}())
+        all_eq_vars = mapreduce(get_variables_fix, union, full_equations(_sys), init=Set{BasicSymbolic}())
         if !(_openinputs ⊆ all_eq_vars)
             missing_inputs = setdiff(_openinputs, all_eq_vars)
             verbose && @warn "The specified inputs ($missing_inputs) do not appear in the equations of the system!"
@@ -376,7 +372,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     remove_implicit_output_fn!(obseqs_sorted)
 
     # assert the ordering of states and equations
-    explicit_states = Symbolic[eq_type(eq)[2] for eq in eqs if !isnothing(eq_type(eq)[2])]
+    explicit_states = BasicSymbolic[eq_type(eq)[2] for eq in eqs if !isnothing(eq_type(eq)[2])]
     implicit_states = setdiff(unknowns(sys), explicit_states)
 
     if length(explicit_states) + length(implicit_states) !== length(eqs)
@@ -411,7 +407,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     function state_alias(output)
         if output ∈ keys(obs_subs) &&
            iscall(obs_subs[output]) &&
-           operation(obs_subs[output]) isa Symbolics.BasicSymbolic
+           operation(obs_subs[output]) isa BasicSymbolic
             return state_alias(obs_subs[output])
         elseif output ∈ Set(states)
             return output
@@ -581,14 +577,14 @@ function _get_formulas(eqs, obs_subs)
     [Let(vcat(obs_assignments, eqs_assignments), out[1], false), out[2:end]...]
 end
 function _collect_deps_on_obs(terms, obs_subs)
-    deps = Set{Symbolic}()
+    deps = Set{BasicSymbolic}()
     for term in terms
         _collect_deps_on_obs!(deps, obs_subs, term)
     end
     deps
 end
 function _collect_deps_on_obs!(deps, obs_subs, term)
-    termdeps = get_variables(term)
+    termdeps = get_variables_fix(term)
     for sym in termdeps
         if haskey(obs_subs, sym)
             # check recursively whether the observed depends on other observed
@@ -615,15 +611,15 @@ function _determine_fftype(deps, states, allinputs, params, t)
     end
 end
 
-_all_rhs_symbols(term) = get_variables(term)
-_all_rhs_symbols(eq::Equation) = get_variables(eq.rhs)
-_all_rhs_symbols(eqs::Union{AbstractVector,AbstractDict}) = mapreduce(eq->get_variables(eq isa Pair ? eq.second : eq.rhs), ∪, eqs, init=Set{Symbolic}())
+_all_rhs_symbols(term) = get_variables_fix(term)
+_all_rhs_symbols(eq::Equation) = get_variables_fix(eq.rhs)
+_all_rhs_symbols(eqs::Union{AbstractVector,AbstractDict}) = mapreduce(eq->get_variables_fix(eq isa Pair ? eq.second : eq.rhs), ∪, eqs, init=Set{BasicSymbolic}())
 
 """
 Search for recursive dependencies in `term` given a dictionary `dict` of substitutions.
 """
 function _all_dependencies(term, dict)
-    deps = Set{Symbolic}()
+    deps = Set{BasicSymbolic}()
     _recursive_collect_dependencies!(deps, term, dict)
     deps
 end
