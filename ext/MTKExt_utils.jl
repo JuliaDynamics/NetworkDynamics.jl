@@ -4,36 +4,37 @@
 
 Checks the type of the equation. Returns:
 - `(:explicit_diffeq, lhs_variable)` for explicit differential equations
-- `(:implicit_diffeq, lhs_variable)` for implicit differential equations
 - `(:explicit_algebraic, lhs_variable)` for explicit algebraic equations
 - `(:implicit_algebraic, lhs_variable)` for implicit algebraic equations
 
 """
 function eq_type(eq::Equation)
-    if iscall(eq.lhs) && operation(eq.lhs) isa Differential
-        vars = get_variables(eq.lhs)
-        @argcheck length(vars) == 1 "Diff. eq $eq has more than one variable in lhs!"
-        return (:explicit_diffeq, vars[1])
-    elseif eq.lhs isa Symbolic
-        vars = get_variables(eq.lhs)
-        @argcheck length(vars) == 1 "Algebraic eq $eq has more than one variable in lhs!"
-        diffs = _collect_differentials(eq.rhs)
-        if diffs != Set{Symbolic}()
-            if operation(first(diffs.dict)[1]) isa Differential
-                return (:implicit_diffeq, vars[1])
+    rhs_differentials = _collect_differentials(eq.rhs)
+    if !isempty(rhs_differentials)
+        throw(ArgumentError("Got equation $eq which contains differentials on the rhs, this is currently not supported!"))
+    end
+    @match eq.lhs begin
+        SymbolicUtils.BSImpl.Const(; val) => begin
+            if val != 0
+                throw(ArgumentError("Got equation $eq which is a non-zero constant on the lhs, this is currently not supported!"))
+            end
+            (:implicit_algebraic, nothing)
+        end
+        SymbolicUtils.BSImpl.Term(; f=Differential(t,1), args=symvec) => begin
+            @argcheck length(symvec) == 1 "Diff. eq $eq has more than one variable in lhs!"
+            (:explicit_diffeq, only(symvec))
+        end
+        SymbolicUtils.BSImpl.Term(; f=SymbolicUtils.BSImpl.Sym(), args=args) => begin
+            # classic sym call x(t)
+            @argcheck length(args) == 1 "Can't parse equation $eq, lhs is a Sym call with more than one argument!"
+            rhs_vars = get_variables_fix(eq.rhs)
+            if eq.lhs ∈ rhs_vars
+                (:implicit_algebraic, eq.lhs)
             else
-                throw(ArgumentError("Unknown equation type $eq"))
+                (:explicit_algebraic, eq.rhs)
             end
         end
-        if vars[1] ∈ Set(get_variables(eq.rhs))
-            return (:implicit_algebraic, vars[1])
-        else
-            return (:explicit_algebraic, vars[1])
-        end
-    elseif isequal(eq.lhs, 0)
-        return (:implicit_algebraic, nothing)
-    else
-        throw(ArgumentError("Unknown equation type $eq"))
+        _ => throw(ArgumentError("Can't determine eq type of $eq."))
     end
 end
 
@@ -45,15 +46,15 @@ Returns the variable on the lhs of the equation for equations.
 lhs_var(eq::Equation) = eq_type(eq)[2]
 
 function rhs_differentials(eqs::Vector{Equation})
-    diffs = Set{Symbolic}()
+    diffs = Set{BasicSymbolic}()
     for eq in eqs
         _collect_differentials!(diffs, eq.rhs)
     end
     return diffs
 end
-rhs_differentials(eq::Equation) = _collect_differentials!(Set{Symbolic}(), eq.rhs)
+rhs_differentials(eq::Equation) = _collect_differentials!(Set{BasicSymbolic}(), eq.rhs)
 
-_collect_differentials(ex) = _collect_differentials!(Set{Symbolic}(), ex)
+_collect_differentials(ex) = _collect_differentials!(Set{BasicSymbolic}(), ex)
 
 function _collect_differentials!(found, ex)
     if iscall(ex)
@@ -167,7 +168,7 @@ function check_metadata(exprs)
     return unique!(nometadata)
 end
 function _check_metadata!(nometadata, expr)
-    vars = Symbolics.get_variables(expr)
+    vars = get_variables_fix(expr)
     for v in vars
         isnothing(Symbolics.metadata(v)) && push!(nometadata, v)
     end
@@ -310,4 +311,18 @@ function NetworkDynamics.set_mtk_defaults!(sys::System, pairs)
         defdict[s] = v
     end
     sys
+end
+
+# WORKAOROUND: get_variables does not descend into Differential anymore
+function get_variables_fix(ex)
+    set = get_variables(ex)
+    new = map(collect(set)) do v
+        @match v begin
+            SymbolicUtils.BSImpl.Term(; f=Differential(t,1), args=symvec) => begin
+                only(symvec)
+            end
+            _ => v
+        end
+    end
+    typeof(set)(new)
 end
