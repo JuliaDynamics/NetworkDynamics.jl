@@ -18,13 +18,13 @@ optional and may be `nothing`).
 
 See also: [`linearize_network`](@ref), [`reduce_dae`](@ref)
 """
-@kwdef struct NetworkDescriptorSystem{MT,AT,BT,CT,DT,IST,OST}
+@kwdef struct NetworkDescriptorSystem{MT,AT,BT,CT,DT,ST,IST,OST}
     M::MT = LinearAlgebra.I
     A::AT
     B::BT = nothing
     C::CT = nothing
     D::DT = nothing
-    sym::Union{Vector, Nothing} = nothing
+    sym::ST = nothing
     insym::IST = nothing
     outsym::OST = nothing
     function NetworkDescriptorSystem(M, A, B, C, D, sym, insym, outsym)
@@ -71,7 +71,7 @@ See also: [`linearize_network`](@ref), [`reduce_dae`](@ref)
                 end
             end
         end
-        new{typeof(M), typeof(A), typeof(B), typeof(C), typeof(D), typeof(insym), typeof(outsym)}(M, A, B, C, D, sym, insym, outsym)
+        new{typeof(M), typeof(A), typeof(B), typeof(C), typeof(D), typeof(sym), typeof(insym), typeof(outsym)}(M, A, B, C, D, sym, insym, outsym)
     end
 end
 
@@ -120,8 +120,18 @@ function Base.show(io::IO, ::MIME"text/plain", sys::NetworkDescriptorSystem)
             push!(strvec, "$(dim(sys)) &states")
             ni, _inputs = maybe_plural(indim(sys), "input")
             no, _outputs = maybe_plural(outdim(sys), "output")
-            push!(strvec, "$(ni) &$(_inputs): &$(insym(sys))")
-            push!(strvec, "$(no) &$(_outputs): &$(outsym(sys))")
+            if insym(sys) isa AbstractVector
+                _insymstr = "[" * join(string.(insym(sys)), ", ") * "]"
+            else
+                _insymstr = string(insym(sys))
+            end
+            if outsym(sys) isa AbstractVector
+                _outsymstr = "[" * join(string.(outsym(sys)), ", ") * "]"
+            else
+                _outsymstr = string(outsym(sys))
+            end
+            push!(strvec, "$(ni) &$(_inputs): &$(_insymstr)")
+            push!(strvec, "$(no) &$(_outputs): &$(_outsymstr)")
             print_treelike(io, align_strings(strvec))
         end
     end
