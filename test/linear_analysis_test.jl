@@ -204,3 +204,199 @@ end
         @test sys_full(s) ≈ sys_red(s) rtol=1e-8
     end
 end
+
+@testset "Test _blkdiag" begin
+    using NetworkDynamics: _blkdiag
+    A = [1;;]
+    B = nothing
+    C = [1.0 2; 3 4]
+    D = [5 6; 7 8]
+    diag = _blkdiag(A, B, C, D)
+    @test diag[1:1,1:1] == A
+    @test diag[2:3,2:3] == C
+    @test diag[4:5,4:5] == D
+
+    diag2 = _blkdiag(diag, C)
+    @test diag2[1:1,1:1] == A
+    @test diag2[2:3,2:3] == C
+    @test diag2[4:5,4:5] == D
+    @test diag2[6:7,6:7] == C
+
+    M = LinearAlgebra.I
+    @test_throws MethodError _blkdiag(M, A)
+    @test_throws AssertionError _blkdiag((M,(2,2)), (B, (0,0)), (C, (3,3)))  # wrong size for C
+    diag3 = _blkdiag((M,(3,3)), (B, (0,0)), (C, (2,2)))
+    @test diag3[1:3,1:3] == M
+    @test diag3[4:5,4:5] == C
+
+    # rectangular matrices (B: n×m, not square)
+    Brect = [1.0 2; 3 4; 5 6]  # 3×2
+    diag4 = _blkdiag(Brect, Brect)
+    @test size(diag4) == (6, 4)
+    @test diag4[1:3, 1:2] == Brect
+    @test diag4[4:6, 3:4] == Brect
+
+    # all nothing gives nothing
+    @test _blkdiag(nothing, nothing) == nothing
+end
+
+@testset "_cat_syms" begin
+    using NetworkDynamics: _cat_syms
+    vec = [VIndex(1,:a), VIndex(2,:b)]
+    sing = VIndex(3,:c)
+    @test _cat_syms(vec, sing) == vcat(vec, sing)
+    @test _cat_syms((vec,2), (sing, 1), (nothing, 3)) == vcat(vec, sing, nothing, nothing, nothing)
+
+    # all nothing gives nothing
+    @test _cat_syms((nothing,0), (nothing,0)) == nothing
+    @test _cat_syms((nothing,0), (sing,1), (nothing,0)) == [sing]
+end
+
+@testset "LTI composition: append, series (*), parallel (+)" begin
+    # two simple SISO systems
+    # s1: 2-state, 1 in, 1 out
+    s1 = NetworkDescriptorSystem(;
+        A=[0.0 1; -1 -0.1],
+        B=reshape([0.0; 1.0],2,1),
+        C=reshape([1.0, 0.0],1,2),
+        D=fill(0.0,1,1),
+        sym=[VIndex(1,:x), VIndex(1,:v)],
+        insym=VIndex(1,:u),
+        outsym=VIndex(1,:y)
+    )
+    # s2: 1-state, 1 in, 1 out
+    s2 = NetworkDescriptorSystem(;
+        A=fill(-2.0,1,1),
+        B=fill(1.0,1,1),
+        C=fill(1.0,1,1),
+        D=fill(0.0,1,1),
+        sym=nothing,
+        insym=VIndex(2,:u),
+        outsym=VIndex(2,:y)
+    )
+
+    # --- append ---
+    sa = append(s1, s2)
+    @test size(sa.A) == (3,3)
+    @test size(sa.B) == (3,2)
+    @test size(sa.C) == (2,3)
+    @test size(sa.D) == (2,2)
+    # block structure: top-left A1, bottom-right A2, zero off-diagonal
+    @test sa.A[1:2,1:2] == s1.A
+    @test sa.A[3:3,3:3] == s2.A
+    @test sa.A[1:2,3:3] == zeros(2,1)
+    @test sa.A[3:3,1:2] == zeros(1,2)
+    # sym: s1 has syms, s2 has nothing → padded with nothing
+    @test sa.sym == [VIndex(1,:x), VIndex(1,:v), nothing]
+    @test sa.insym == [VIndex(1,:u), VIndex(2,:u)]
+    @test sa.outsym == [VIndex(1,:y), VIndex(2,:y)]
+    # variadic: append of 3 systems equals two nested appends
+    @test Matrix(append(s1, s2, s1).A) ≈ Matrix(append(append(s1,s2),s1).A)
+
+    # --- series: s2 * s1 (output of s1 → input of s2) ---
+    ss = s2 * s1
+    @test size(ss.A) == (3,3)
+    @test size(ss.B) == (3,1)
+    @test size(ss.C) == (1,3)
+    @test size(ss.D) == (1,1)
+    @test ss.insym == s1.insym   # input is s1's input
+    @test ss.outsym == s2.outsym # output is s2's output
+    # verify transfer function at one frequency: G2(s)*G1(s)
+    s_val = 2.0im
+    @test ss(s_val) ≈ s2(s_val)*s1(s_val) rtol=1e-10
+
+    # --- parallel: s1 + s2 (same 1-in/1-out, outputs summed) ---
+    # need matching dims; use s2+s2
+    sp = s2 + s2
+    @test size(sp.A) == (2,2)
+    @test size(sp.B) == (2,1)
+    @test size(sp.C) == (1,2)
+    @test size(sp.D) == (1,1)
+    @test sp.D ≈ s2.D + s2.D
+    # transfer function: G(s) = G2(s) + G2(s)
+    @test sp(s_val) ≈ 2 .* s2(s_val) rtol=1e-10
+
+    # dimension mismatch errors
+    s_2out = NetworkDescriptorSystem(;
+        A=fill(-1.0,1,1),
+        B=fill(1.0,1,1),
+        C=fill(1.0,2,1),
+        D=fill(0.0,2,1),
+        insym=[VIndex(1,:u)],
+        outsym=[VIndex(1,:y1), VIndex(1,:y2)]
+    )
+    @test_throws DimensionMismatch s2 + s_2out   # mismatched outdim
+    @test_throws DimensionMismatch s_2out * s_2out  # outdim=2 ≠ indim=1
+
+    # --- MIMO: 2 inputs, 2 outputs ---
+    # sm: 2-state, 2 in, 2 out  (full B, C, D matrices)
+    sm = NetworkDescriptorSystem(;
+        A = [-1.0 0.5; -0.5 -2.0],
+        B = [1.0 0; 0 1.0],
+        C = [1.0 0; 0 1.0],
+        D = zeros(2,2),
+        insym = [VIndex(1,:u1), VIndex(1,:u2)],
+        outsym = [VIndex(1,:y1), VIndex(1,:y2)],
+    )
+
+    # append(MIMO, SISO): 2+1 states, 2+1 in, 2+1 out
+    sa_ms = append(sm, s2)
+    @test size(sa_ms.A) == (3,3)
+    @test size(sa_ms.B) == (3,3)
+    @test size(sa_ms.C) == (3,3)
+    @test size(sa_ms.D) == (3,3)
+    @test sa_ms.insym  == [VIndex(1,:u1), VIndex(1,:u2), VIndex(2,:u)]
+    @test sa_ms.outsym == [VIndex(1,:y1), VIndex(1,:y2), VIndex(2,:y)]
+
+    # insym/outsym distinction: SISO stores scalars, MIMO-with-1-channel stores vectors
+    s_mimo1 = NetworkDescriptorSystem(;
+        A=fill(-3.0,1,1),
+        B=fill(1.0,1,1),
+        C=fill(1.0,1,1),
+        D=fill(0.0,1,1),
+        insym=[VIndex(3,:u)],
+        outsym=[VIndex(3,:y)]
+    )  # length-1 vectors
+    @test s2.insym isa VIndex          # SISO: scalar
+    @test s_mimo1.insym isa Vector     # MIMO-1: vector
+    # append of SISO and MIMO-1 should concatenate into a 2-vector
+    sa2 = append(s2, s_mimo1)
+    @test sa2.insym isa Vector
+    @test length(sa2.insym) == 2
+
+    # series MIMO→MIMO: sm has 2 out, need a system with 2 in feeding into it
+    # build s_pre: 1-state, 2 in, 2 out (wide B, D)
+    s_pre = NetworkDescriptorSystem(;
+        A = fill(-0.5,1,1),
+        B = [1.0 0.5],          # 1×2
+        C = [1.0; -1.0],        # 2×1
+        D = [0.5 0; 0 0.5],     # 2×2
+        insym = [VIndex(4,:u1), VIndex(4,:u2)],
+        outsym = [VIndex(4,:y1), VIndex(4,:y2)],
+    )
+    ss_mm = sm * s_pre   # output of s_pre (2) feeds input of sm (2)
+    @test size(ss_mm.A) == (3,3)
+    @test size(ss_mm.B) == (3,2)
+    @test size(ss_mm.C) == (2,3)
+    @test size(ss_mm.D) == (2,2)
+    @test ss_mm.insym  == s_pre.insym
+    @test ss_mm.outsym == sm.outsym
+    s_val = 2.0im
+    @test ss_mm(s_val) ≈ sm(s_val) * s_pre(s_val) rtol=1e-10
+
+    # parallel MIMO+MIMO: same 2-in/2-out
+    sp_mm = sm + sm
+    @test size(sp_mm.D) == (2,2)
+    @test sp_mm(s_val) ≈ 2 .* sm(s_val) rtol=1e-10
+
+    # --- scalar multiplication ---
+    s3 = 3.0 * s2
+    @test s3(s_val) ≈ 3.0 .* s2(s_val) rtol=1e-10
+    @test s3.A == s2.A && s3.B == s2.B  # A, B unchanged
+    @test (s2 * 3.0).C == s3.C && (s2 * 3.0).D == s3.D  # commutative
+
+    # unary negation and subtraction
+    @test (-s2)(s_val) ≈ -s2(s_val) rtol=1e-10
+    @test (s2 - s2)(s_val) ≈ zero(s2(s_val)) atol=1e-14
+    @test (sm - sm)(s_val) ≈ zeros(2,2) atol=1e-14
+end

@@ -59,6 +59,11 @@ end
 # no filter
 @inline unrolled_foreach(f, t) = unrolled_foreach(f, nofilt, t)
 
+@inline function unrolled_map(f::F, t::Tuple) where {F}
+    (f(first(t)), unrolled_map(f, Base.tail(t))...)
+end
+@inline unrolled_map(f::F, t::Tuple{}) where {F} = ()
+
 nofilt(_) = true
 
 ####
@@ -75,6 +80,7 @@ promoted together with `promote_type`.
 """
 cachetype(n::Number) = eltype(n)
 cachetype(v::AbstractArray{T}) where T = T
+cachetype(u::UniformScaling) = eltype(u)
 cachetype(::Nothing) = Nothing
 cachetype(::SciMLBase.NullParameters) = Nothing
 function cachetype(args...)

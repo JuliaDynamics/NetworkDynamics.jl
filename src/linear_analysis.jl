@@ -137,6 +137,184 @@ function Base.show(io::IO, ::MIME"text/plain", sys::NetworkDescriptorSystem)
     end
 end
 
+####
+#### LTI composition operations
+####
+"""
+    _blkdiag(A, B, nothing, C,...)
+    _blkdiag((A, n1), (B, n2), (nothing, _), (C, n3),...)
+
+Block-diagonal concatenation of matrices. Ignore nothing.
+Also works with UniformScaling if the size is provided (second signature).
+"""
+function _blkdiag(mats::Union{AbstractMatrix, Nothing}...)
+    _mats = unrolled_map(mats) do mat
+        isnothing(mat) ? (nothing, (0, 0)) : (mat, size(mat))
+    end
+    _blkdiag(_mats...)
+end
+_blkdiag(mats::Tuple{Nothing, <:Any}...) = nothing
+_blkdiag(mats::Nothing...) = nothing
+function _blkdiag(mats::Tuple...)
+    I = Int[]
+    J = Int[]
+    V = cachetype(unrolled_map(first, mats)...)[]
+
+    _collect_ijv_recursive!(I, J, V, mats)
+
+    sparse(I, J, V)
+end
+function _collect_ijv_recursive!(I, J, V, mats::Tuple, roff=0, coff=0)
+    isempty(mats) && return
+    mat, (nrows, ncols) = first(mats)
+    if !isnothing(mat)
+        if mat isa LinearAlgebra.UniformScaling
+            for i in 1:nrows  # nrows == ncols for UniformScaling
+                push!(I, i + roff)
+                push!(J, i + coff)
+                push!(V, mat.λ)
+            end
+        elseif SparseArrays.issparse(mat)
+            @assert size(mat) == (nrows, ncols)
+            _I, _J, _V = SparseArrays.findnz(mat)
+            _I .+= roff
+            _J .+= coff
+            append!(I, _I)
+            append!(J, _J)
+            append!(V, _V)
+        else
+            @assert size(mat) == (nrows, ncols)
+            @inbounds for matidx in eachindex(IndexCartesian(), mat)
+                push!(I, matidx[1] + roff)
+                push!(J, matidx[2] + coff)
+                push!(V, mat[matidx])
+            end
+        end
+        roff += nrows
+        coff += ncols
+    end
+    _collect_ijv_recursive!(I, J, V, Base.tail(mats), roff, coff)
+end
+
+_cat_syms(syms...) = vcat(syms...)
+_cat_syms(tups::Tuple{Nothing, <:Any}...) = nothing
+function _cat_syms(tups::Tuple...)
+    syms = unrolled_map(tups) do tup
+        s, n = tup
+        isnothing(s) ? fill(nothing, n) : s
+    end
+    vcat(syms...)
+end
+
+"""
+    append(sys1, sys2, ...) -> NetworkDescriptorSystem
+
+Block-diagonal (direct sum) of descriptor systems — independent systems sharing no
+states or signals (MATLAB: `append`):
+
+    M·ẋ = blkdiag(A1,A2) x + blkdiag(B1,B2) u
+      y = blkdiag(C1,C2) x + blkdiag(D1,D2) u
+
+`insym` and `outsym` are the concatenation of those of the subsystems.
+"""
+function append(systems::NetworkDescriptorSystem...)
+    Ms = unrolled_map(s -> (s.M, size(s.A)), systems)
+    As = unrolled_map(s -> s.A, systems)
+    Bs = unrolled_map(s -> s.B, systems)
+    Cs = unrolled_map(s -> s.C, systems)
+    Ds = unrolled_map(s -> s.D, systems)
+    syms = unrolled_map(s -> (s.sym, size(s.A, 1)), systems)
+    insyms = unrolled_map(s -> (s.insym, indim(s)), systems)
+    outsyms = unrolled_map(s -> (s.outsym, outdim(s)), systems)
+
+    M = _blkdiag(Ms...)
+    A = _blkdiag(As...)
+    B = _blkdiag(Bs...)
+    C = _blkdiag(Cs...)
+    D = _blkdiag(Ds...)
+    sym = _cat_syms(syms...)
+    insym = _cat_syms(insyms...)
+    outsym = _cat_syms(outsyms...)
+
+    NetworkDescriptorSystem(; M, A, B, C, D, sym, insym, outsym)
+end
+
+"""
+    sys2 * sys1 -> NetworkDescriptorSystem
+
+Series connection: output of `sys1` feeds input of `sys2` (MATLAB: `series`).
+Requires `outdim(sys1) == indim(sys2)`.
+
+The combined state is `[x1; x2]`:
+
+    A = [A1        0 ]    B = [B1      ]
+        [B2·C1    A2 ]        [B2·D1   ]
+    C = [D2·C1    C2 ]    D = D2·D1
+"""
+function Base.:*(sys2::NetworkDescriptorSystem, sys1::NetworkDescriptorSystem)
+    if outdim(sys1) != indim(sys2)
+        throw(DimensionMismatch("outdim(sys1)=$(outdim(sys1)) must equal indim(sys2)=$(indim(sys2))"))
+    end
+    n1, n2 = dim(sys1), dim(sys2)
+    M = _blkdiag((sys1.M, size(sys1.A)), (sys2.M, size(sys2.A)))
+    A = [sys1.A              zeros(n1, n2);
+         sys2.B * sys1.C     sys2.A       ]
+    B = [sys1.B;
+         sys2.B * sys1.D]
+    C = [sys2.D * sys1.C    sys2.C]
+    D = sys2.D * sys1.D
+    sym = _cat_syms((sys1.sym, n1), (sys2.sym, n2))
+    return NetworkDescriptorSystem(; M, A, B, C, D, sym,
+        insym=sys1.insym, outsym=sys2.outsym)
+end
+
+"""
+    k * sys -> NetworkDescriptorSystem
+    sys * k -> NetworkDescriptorSystem
+
+Scalar gain: scales the output of `sys` by `k`.
+
+    C_new = k * C,  D_new = k * D
+
+`A`, `B`, and `M` are unchanged. Unary negation `-sys` is `(-1) * sys`.
+"""
+function Base.:*(k::Number, sys::NetworkDescriptorSystem)
+    NetworkDescriptorSystem(; M=sys.M, A=sys.A, B=sys.B, C=k*sys.C, D=k*sys.D,
+        sym=sys.sym, insym=sys.insym, outsym=sys.outsym)
+end
+Base.:*(sys::NetworkDescriptorSystem, k::Number) = k * sys
+Base.:-(sys::NetworkDescriptorSystem) = (-1) * sys
+Base.:-(sys1::NetworkDescriptorSystem, sys2::NetworkDescriptorSystem) = sys1 + (-sys2)
+
+"""
+    sys1 + sys2 -> NetworkDescriptorSystem
+
+Parallel connection: same inputs, outputs summed (MATLAB: `parallel`).
+Requires matching input and output dimensions.
+
+The combined state is `[x1; x2]`:
+
+    A = blkdiag(A1,A2)    B = [B1; B2]
+    C = [C1  C2]           D = D1 + D2
+"""
+function Base.:+(sys1::NetworkDescriptorSystem, sys2::NetworkDescriptorSystem)
+    if indim(sys1) != indim(sys2)
+        throw(DimensionMismatch("indim(sys1)=$(indim(sys1)) must equal indim(sys2)=$(indim(sys2))"))
+    end
+    if outdim(sys1) != outdim(sys2)
+        throw(DimensionMismatch("outdim(sys1)=$(outdim(sys1)) must equal outdim(sys2)=$(outdim(sys2))"))
+    end
+    n1, n2 = dim(sys1), dim(sys2)
+    M = _blkdiag((sys1.M, size(sys1.A)), (sys2.M, size(sys2.A)))
+    A = _blkdiag(sys1.A, sys2.A)
+    B = vcat(sys1.B, sys2.B)
+    C = hcat(sys1.C, sys2.C)
+    D = sys1.D + sys2.D
+    sym = _cat_syms((sys1.sym, n1), (sys2.sym, n2))
+    return NetworkDescriptorSystem(; M, A, B, C, D, sym,
+        insym=sys1.insym, outsym=sys1.outsym)
+end
+
 """
     isfixpoint(s0::NWState; tol=1e-10)
 

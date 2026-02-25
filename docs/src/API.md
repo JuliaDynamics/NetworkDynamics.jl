@@ -228,6 +228,11 @@ participation_factors
 show_participation_factors
 eigenvalue_sensitivity
 show_eigenvalue_sensitivity
+append
+Base.:*(::NetworkDescriptorSystem, ::NetworkDescriptorSystem)
+Base.:+(::NetworkDescriptorSystem, ::NetworkDescriptorSystem)
+Base.:-(::NetworkDescriptorSystem, ::NetworkDescriptorSystem)
+Base.:*(::Number, ::NetworkDescriptorSystem)
 ```
 
 ## Callbacks API
