@@ -179,6 +179,7 @@ end
 is_loopback(eb::ComponentBatch) = isnothing(compf(eb)) && compg(eb) == NetworkDynamics.LOOPBACK_G
 is_loopback(em::EdgeModel) = em.g isa Directed && em.g.g == NetworkDynamics.LOOPBACK_G
 has_loopback_edges(im::IndexManager) = any(is_loopback, im.edgem)
+has_injector_nodes(nw::Network) = !isnothing(nw.loopbackmap)
 
 function gen_loopback_map(im::IndexManager)
     outindex = Int[]

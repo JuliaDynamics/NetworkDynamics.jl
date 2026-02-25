@@ -160,12 +160,12 @@ function _blkdiag(mats::Tuple...)
     J = Int[]
     V = cachetype(unrolled_map(first, mats)...)[]
 
-    _collect_ijv_recursive!(I, J, V, mats)
+    nrows, ncols = _collect_ijv_recursive!(I, J, V, mats)
 
-    sparse(I, J, V)
+    sparse(I, J, V, nrows, ncols)
 end
 function _collect_ijv_recursive!(I, J, V, mats::Tuple, roff=0, coff=0)
-    isempty(mats) && return
+    isempty(mats) && return (roff, coff)
     mat, (nrows, ncols) = first(mats)
     if !isnothing(mat)
         if mat isa LinearAlgebra.UniformScaling
@@ -285,6 +285,33 @@ end
 Base.:*(sys::NetworkDescriptorSystem, k::Number) = k * sys
 Base.:-(sys::NetworkDescriptorSystem) = (-1) * sys
 Base.:-(sys1::NetworkDescriptorSystem, sys2::NetworkDescriptorSystem) = sys1 + (-sys2)
+
+"""
+    Σ * sys -> NetworkDescriptorSystem
+
+Left-multiply (output transformation): `C_new = Σ*C`, `D_new = Σ*D`.
+`A`, `B`, `M` are unchanged. `outsym` is replaced by generic symbols.
+"""
+function Base.:*(Σ::AbstractMatrix, sys::NetworkDescriptorSystem)
+    n_out = size(Σ, 1)
+    NetworkDescriptorSystem(; M=sys.M, A=sys.A, B=sys.B, C=Σ*sys.C, D=Σ*sys.D,
+        sym=sys.sym, insym=sys.insym,
+        outsym=[Symbol("out_", i) for i in 1:n_out])
+end
+
+"""
+    sys * Γ -> NetworkDescriptorSystem
+
+Right-multiply (input transformation): `B_new = B*Γ`, `D_new = D*Γ`.
+`A`, `C`, `M` are unchanged. `insym` is replaced by generic symbols.
+"""
+function Base.:*(sys::NetworkDescriptorSystem, Γ::AbstractMatrix)
+    n_in = size(Γ, 2)
+    NetworkDescriptorSystem(; M=sys.M, A=sys.A, B=sys.B*Γ, C=sys.C, D=sys.D*Γ,
+        sym=sys.sym,
+        insym=[Symbol("in_", i) for i in 1:n_in],
+        outsym=sys.outsym)
+end
 
 """
     sys1 + sys2 -> NetworkDescriptorSystem
@@ -994,4 +1021,400 @@ function _classify_perturbation_channels(nw, perturbation_channels)
     end
     perturb_maps = (; vo_map, vi_map, eo_map, ei_map, p_map)
     δ0, perturb_maps
+end
+
+"""
+    linearize_component(mod::ComponentModel, u0, p0, in0s::Tuple, out0s::Tuple, t0) -> NetworkDescriptorSystem
+    linearize_component(mod::VertexModel,    u0, p0, in0,         out0,         t0) -> NetworkDescriptorSystem
+    linearize_component(mod::EdgeModel,      u0, p0, in0_src, in0_dst, out0_src, out0_dst, t0) -> NetworkDescriptorSystem
+
+Linearize a single component model in isolation around the given operating point.
+
+Returns a [`NetworkDescriptorSystem`](@ref) with matrices `M`, `A`, `B`, `C`, `D`
+representing:
+
+    M ẋ = A x + B in
+      y = C x + D in
+
+where `x` are the component states, `in` is the (flattened) network input
+(aggregated flows for vertices; src/dst vertex outputs for edges), and `y` is
+the component output.
+
+The matrices are Jacobians evaluated at the operating point `(u0, in0s)`.
+The non-tuple signatures are convenience wrappers: for `VertexModel` pass `in0` and
+`out0` as plain vectors; for `EdgeModel` pass separate src/dst vectors for inputs and
+outputs.
+
+See also: [`linearize_component(::NWState, ::SymbolicIndex)`](@ref), [`linearize_network`](@ref), [`NetworkDescriptorSystem`](@ref)
+"""
+function linearize_component(mod::ComponentModel, u0, p0, in0s::Tuple, out0s::Tuple, t0)
+    if has_external_input(mod)
+        error("Component $(mod.name) has external inputs, open-loop linearization is not supported.")
+    end
+    _f   = compf(mod)
+    _g   = compg(mod)
+    fft  = fftype(mod)
+
+    nin   = sum(length, in0s)
+    nout  = sum(length, out0s)
+    ndim  = length(u0)
+
+    in0_flat   = vcat(in0s...)
+    ins_sizes  = length.(in0s)
+    outs_sizes = length.(out0s)
+
+    du0       = zeros(eltype(u0), ndim)
+    out0_flat = zeros(eltype(u0), nout)
+
+    f_u!   = (du, u) -> begin
+        isnothing(_f) || apply_compf(_f, du, u,  in0s, p0, t0)
+    end
+    f_ins! = (du, ins_flat) -> begin
+        isnothing(_f) || apply_compf(_f, du, u0, _unsplat(ins_flat,  ins_sizes), p0, t0)
+    end
+    g_u!   = (yf, u) -> begin
+        isnothing(_g) || apply_compg(fft, _g, _unsplat(yf, outs_sizes), u,  in0s, p0, t0)
+    end
+    g_ins! = (yf, ins_flat) -> begin
+        isnothing(_g) || apply_compg(fft, _g, _unsplat(yf, outs_sizes), u0, _unsplat(ins_flat,  ins_sizes), p0, t0)
+    end
+
+    A = ForwardDiff.jacobian(f_u!,   du0,        u0)
+    B = ForwardDiff.jacobian(f_ins!, du0,        in0_flat)
+    C = ForwardDiff.jacobian(g_u!,   out0_flat, u0)
+    D = ForwardDiff.jacobian(g_ins!, out0_flat, in0_flat)
+
+    M = mod.mass_matrix
+
+    return NetworkDescriptorSystem(;
+        M, A, B, C, D,
+        sym=sym(mod),
+        insym=insym_flat(mod),
+        outsym=outsym_flat(mod)
+    )
+end
+function linearize_component(
+    mod::VertexModel, u0, p0,
+    in0::AbstractVector, out0::AbstractVector, t0
+)
+    linearize_component(mod, u0, p0, (in0,), (out0,), t0)
+end
+function linearize_component(
+    mod::EdgeModel, u0, p0,
+    in0_src::AbstractVector, in0_dst::AbstractVector,
+    out0_src::AbstractVector, out0_dst::AbstractVector, t0
+)
+    linearize_component(mod, u0, p0, (in0_src, in0_dst), (out0_src, out0_dst), t0)
+end
+# Split a flat vector into a tuple of views according to `sizes`
+function _unsplat(flat, sizes)
+    offset = 0
+    ntuple(length(sizes)) do i
+        r = offset+1:offset+sizes[i]
+        offset += sizes[i]
+        @views flat[r]
+    end
+end
+
+"""
+    linearize_component(s0::NWState, component::SymbolicIndex) -> NetworkDescriptorSystem
+
+Linearize a single network component around the operating point encoded in `s0`.
+
+Extracts the component model, states, parameters, and network inputs from `s0`
+and delegates to [`linearize_component(::ComponentModel, ...)`](@ref). The returned
+[`NetworkDescriptorSystem`](@ref) uses network-level symbolic indices (e.g. `VIndex`
+or `EIndex`) rather than bare component symbols.
+
+See also: [`linearize_network`](@ref), [`NetworkDescriptorSystem`](@ref)
+"""
+function linearize_component(s0::NWState, component::SymbolicIndex; buffers=get_buffers(extract_nw(s0), uflat(s0), pflat(s0), s0.t, initbufs=true))
+    nw = extract_nw(s0)
+    mod = nw[component]
+
+    (; u0, p0, in0s, out0s) = _component_states(nw, s0, buffers, component)
+    t0 = s0.t
+
+    sys = linearize_component(mod, u0, p0, in0s, out0s, t0)
+
+    # wrap the component system to have "Network" indices as symbols
+    ST    = idxtype(component)
+    cidx  = resolvecompidx(nw, component)
+    sys = @set sys.sym = ST.(cidx, sym(sys))
+    sys = @set sys.insym = ST.(cidx, insym(sys))
+    sys = @set sys.outsym = ST.(cidx, outsym(sys))
+    return sys
+end
+function _component_states(nw, s0, buffers, component::VIndex)
+    outbuf, aggbuf, _ = buffers
+    cidx = resolvecompidx(nw, component)
+    u0   = @views uflat(s0)[nw.im.v_data[cidx]]
+    p0   = @views pflat(s0)[nw.im.v_para[cidx]]
+    in0s  = @views (aggbuf[nw.im.v_aggr[cidx]], )
+    out0s = @views (outbuf[nw.im.v_out[cidx]], )
+    (; u0, p0, in0s, out0s)
+end
+function _component_states(nw, s0, buffers, component::EIndex)
+    outbuf, _, _ = buffers
+    cidx = resolvecompidx(nw, component)
+    edge = nw.im.edgevec[cidx]
+    u0   = @views uflat(s0)[nw.im.e_data[cidx]]
+    p0   = @views pflat(s0)[nw.im.e_para[cidx]]
+    in0s  = (
+            @views(outbuf[nw.im.v_out[edge.src]]),
+            @views(outbuf[nw.im.v_out[edge.dst]])
+    )
+    out0s = (
+            @views(outbuf[nw.im.e_out[cidx].src]),
+            @views(outbuf[nw.im.e_out[cidx].dst])
+    )
+    (; u0, p0, in0s, out0s)
+end
+
+"""
+    open_loop_linearization(s0) -> (; Ynw, Zbus, Yinj)
+
+Returns three descriptor systems representing the open-loop linearization of the network:
+- `Ynw`: network admittance; input: all bus outputs/potentials stacked, output: all bus injections stacked
+- `Zbus`: bus impedance; input: all bus injections stacked, output: bus potentials
+- `Yinj`: injector admittance; input: all bus outputs/potentials stacked, output: all "injector node" flows (only returned if the network has injector nodes, `nothing` otherwise)
+
+!!! note
+    The notion of "vertex" differs slightly between the network and the linearization.
+    Vertices in the network are split into two categories: **bus nodes** and **injector nodes**.
+    Injector nodes are vertices that sit at the source end of a [`LoopbackConnection`](@ref) edge,
+    i.e. they inject additional flows into a bus node without defining their own potential.
+    In the linearization, `Ynw` and `Zbus` only operate on bus nodes, while injector node
+    contributions are captured separately in `Yinj`.
+    Therefore, the stacked input and output vectors of all three subsystems only refer to bus nodes.
+"""
+function open_loop_linearization(s0)
+    nw = extract_nw(s0)
+    if has_external_input(nw)
+        throw(ArgumentError("Getting open loop transfer fucntiosn for networks with external inputs is not supported."))
+    end
+    needsYinj = has_injector_nodes(nw)
+
+    # first we need to generatet indices for thethree groups
+    _inj_i = Int[]
+    for eidx in 1:ne(nw)
+        em = nw.im.edgem[eidx]
+        is_loopback(em) || continue
+        # injector nodes are characterized by sitting at the src of loopbacks
+        push!(_inj_i, em.src)
+    end
+    unique!(sort!(_inj_i))
+    _bus_i = setdiff(1:nv(nw), _inj_i)
+    bus_idxs = [VIndex(i) for i in _bus_i]
+    inj_idxs = [VIndex(i) for i in _inj_i]
+    edge_idxs = [EIndex(i) for i in 1:ne(nw) if !is_loopback(nw.im.edgem[i])]
+
+    buffers = get_buffers(nw, uflat(s0), pflat(s0), s0.t; initbufs=true)
+    getlti = idx -> linearize_component(s0, idx; buffers)
+
+    # generate Zbus matrix
+    bus_ltis  = map(getlti, bus_idxs)
+    Zbus = _append_ltis(bus_ltis)
+
+    # generate admittance matrix Ynw = Σ * append(edge_ltis...) * Γ
+    edge_ltis = map(getlti, edge_idxs)
+    Γ, Σ = _gen_Ynw_ΓΣ(nw, bus_idxs)
+    Ynw = Σ * _append_ltis(edge_ltis) * Γ
+    Ynw = @set Ynw.insym = Zbus.outsym
+    Ynw = @set Ynw.outsym = Zbus.insym
+
+    if needsYinj
+        inj_ltis = map(getlti, inj_idxs)
+        Γ_inj, Σ_inj = _gen_Yinj_ΓΣ(nw, bus_idxs, inj_idxs)
+        Yinj = Σ_inj * _append_ltis(inj_ltis) * Γ_inj
+        Yinj = @set Yinj.insym = Zbus.outsym
+        Yinj = @set Yinj.outsym = Zbus.insym
+    else
+        Yinj = nothing
+    end
+
+    (; Ynw, Zbus, Yinj)
+end
+function _append_ltis(vec)
+    if length(vec) < 10
+        append(vec...)
+    else
+        reduce(append, vec)
+    end
+end
+
+"""
+    _gen_Ynw_ΓΣ(nw, bus_idxs) -> Γ, Σ
+
+- Generate the input-gather matrix Γ that maps stacked bus potentials (vertex
+  outputs) to the stacked edge inputs `[in_src_e1; in_dst_e1; in_src_e2; ...]`
+  matching the layout of `append(edge_ltis...)`.
+
+- Generate the output-scatter matrix Σ that maps the stacked edge outputs
+  `[out_src_e1; out_dst_e1; out_src_e2; ...]` (layout of `append(edge_ltis...)`)
+  to stacked bus flow injections (vertex inputs), summing contributions from all
+  connected edges.
+
+ATTENTION: We need to pass bus_idxs, because we don't include "injector nodes" here!
+I.e. if we have [bus1_normal, bus2_injector, bus3_normal] in the original network, our
+stacking for those systems is [bus1_normal, bus3_normal].
+"""
+function _gen_Ynw_ΓΣ(nw, bus_idxs)
+    # Edge ranges in the appended edge LTI (rows of Γ / cols of Σ)
+    e_inranges_src  = Dict{Int, UnitRange{Int}}()
+    e_inranges_dst  = Dict{Int, UnitRange{Int}}()
+    e_outranges_src = Dict{Int, UnitRange{Int}}()
+    e_outranges_dst = Dict{Int, UnitRange{Int}}()
+    e_in_offset, e_out_offset = 0, 0
+    for (i, em) in enumerate(nw.im.edgem)
+        is_loopback(em) && continue
+        id = indim(em)
+        e_inranges_src[i] = e_in_offset+1:e_in_offset+id.src
+        e_in_offset += id.src
+        e_inranges_dst[i] = e_in_offset+1:e_in_offset+id.dst
+        e_in_offset += id.dst
+
+        od = outdim(em)
+        e_outranges_src[i] = e_out_offset+1:e_out_offset+od.src
+        e_out_offset += od.src
+        e_outranges_dst[i] = e_out_offset+1:e_out_offset+od.dst
+        e_out_offset += od.dst
+    end
+
+    # Bus ranges in the stacked bus vectors (cols of Γ / rows of Σ)
+    v_outranges = Dict{Int, UnitRange{Int}}()  # bus potential ranges (Γ cols)
+    v_inranges  = Dict{Int, UnitRange{Int}}()  # bus injection ranges (Σ rows)
+    v_out_offset, v_in_offset = 0, 0
+    for vi in bus_idxs
+        cidx = resolvecompidx(nw, vi)
+        v = nw.im.vertexm[cidx]
+        od = outdim(v)
+        v_outranges[cidx] = v_out_offset+1:v_out_offset+od
+        v_out_offset += od
+        id = indim(v)
+        v_inranges[cidx] = v_in_offset+1:v_in_offset+id
+        v_in_offset += id
+    end
+
+    # Γ: (total_edge_indim × total_bus_outdim)
+    # For each non-loopback edge, place I blocks:
+    #   rows e_inranges_src[i] ← cols v_outranges[src(i)]
+    #   rows e_inranges_dst[i] ← cols v_outranges[dst(i)]
+    Γ_I, Γ_J, Γ_V = Int[], Int[], Float64[]
+    for i in 1:ne(nw)
+        is_loopback(nw.im.edgem[i]) && continue
+        edge = nw.im.edgevec[i]
+        for (r, c) in zip(e_inranges_src[i], v_outranges[edge.src])
+            push!(Γ_I, r); push!(Γ_J, c); push!(Γ_V, 1.0)
+        end
+        for (r, c) in zip(e_inranges_dst[i], v_outranges[edge.dst])
+            push!(Γ_I, r); push!(Γ_J, c); push!(Γ_V, 1.0)
+        end
+    end
+    Γ = sparse(Γ_I, Γ_J, Γ_V, e_in_offset, v_out_offset)
+
+    # Σ: (total_bus_indim × total_edge_outdim)
+    # For each non-loopback edge, place I blocks:
+    #   rows v_inranges[src(i)] ← cols e_outranges_src[i]
+    #   rows v_inranges[dst(i)] ← cols e_outranges_dst[i]
+    Σ_I, Σ_J, Σ_V = Int[], Int[], Float64[]
+    for i in 1:ne(nw)
+        is_loopback(nw.im.edgem[i]) && continue
+        edge = nw.im.edgevec[i]
+        for (r, c) in zip(v_inranges[edge.src], e_outranges_src[i])
+            push!(Σ_I, r); push!(Σ_J, c); push!(Σ_V, 1.0)
+        end
+        for (r, c) in zip(v_inranges[edge.dst], e_outranges_dst[i])
+            push!(Σ_I, r); push!(Σ_J, c); push!(Σ_V, 1.0)
+        end
+    end
+    Σ = sparse(Σ_I, Σ_J, Σ_V, v_in_offset, e_out_offset)
+
+    return Γ, Σ
+end
+
+"""
+    _gen_Yinj_ΓΣ(nw, bus_idxs, inj_idxs) -> Γ_inj, Σ_inj
+
+Generate input-gather and output-scatter matrices for injector nodes.
+
+Injector nodes are "inverted" vertices (potential in, flow out) connected to
+hub (bus) nodes via loopback edges. The loopback mechanism copies the hub's
+potential to the injector's input and negates the injector's flow output into
+the hub's aggregation.
+
+- `Γ_inj`: (total_inj_indim × total_bus_outdim) routes bus potentials to
+  injector inputs. For each injector, places an identity block mapping the
+  hub's output range to the injector's input range.
+
+- `Σ_inj`: (total_bus_indim × total_inj_outdim) routes injector flow outputs
+  to bus injections with a sign flip (−1) matching the loopback convention.
+  For each injector, places a −I block mapping the injector's output range to
+  the hub's input range.
+"""
+function _gen_Yinj_ΓΣ(nw, bus_idxs, inj_idxs)
+    # Build bus ranges (same layout as in _gen_Ynw_ΓΣ)
+    v_outranges = Dict{Int, UnitRange{Int}}()
+    v_inranges  = Dict{Int, UnitRange{Int}}()
+    v_out_offset, v_in_offset = 0, 0
+    for vi in bus_idxs
+        cidx = resolvecompidx(nw, vi)
+        v = nw.im.vertexm[cidx]
+        od = outdim(v)
+        v_outranges[cidx] = v_out_offset+1:v_out_offset+od
+        v_out_offset += od
+        id = indim(v)
+        v_inranges[cidx] = v_in_offset+1:v_in_offset+id
+        v_in_offset += id
+    end
+
+    # Build injector ranges in the appended injector LTI
+    inj_inranges  = Dict{Int, UnitRange{Int}}()
+    inj_outranges = Dict{Int, UnitRange{Int}}()
+    inj_in_offset, inj_out_offset = 0, 0
+    for vi in inj_idxs
+        cidx = resolvecompidx(nw, vi)
+        v = nw.im.vertexm[cidx]
+        id = indim(v)
+        inj_inranges[cidx] = inj_in_offset+1:inj_in_offset+id
+        inj_in_offset += id
+        od = outdim(v)
+        inj_outranges[cidx] = inj_out_offset+1:inj_out_offset+od
+        inj_out_offset += od
+    end
+
+    # Map each injector to its hub via the loopback edge
+    inj_to_hub = Dict{Int, Int}()  # injector cidx => hub cidx
+    for i in 1:ne(nw)
+        em = nw.im.edgem[i]
+        is_loopback(em) || continue
+        edge = nw.im.edgevec[i]
+        inj_to_hub[edge.src] = edge.dst
+    end
+
+    # Γ_inj: (total_inj_indim × total_bus_outdim)
+    # For each injector, route the hub's potential to the injector's input
+    Γ_I, Γ_J, Γ_V = Int[], Int[], Float64[]
+    for vi in inj_idxs
+        cidx = resolvecompidx(nw, vi)
+        hub = inj_to_hub[cidx]
+        for (r, c) in zip(inj_inranges[cidx], v_outranges[hub])
+            push!(Γ_I, r); push!(Γ_J, c); push!(Γ_V, 1.0)
+        end
+    end
+    Γ_inj = sparse(Γ_I, Γ_J, Γ_V, inj_in_offset, v_out_offset)
+
+    # Σ_inj: (total_bus_indim × total_inj_outdim)
+    # For each injector, route its flow output to the hub's injection (with -1 sign)
+    Σ_I, Σ_J, Σ_V = Int[], Int[], Float64[]
+    for vi in inj_idxs
+        cidx = resolvecompidx(nw, vi)
+        hub = inj_to_hub[cidx]
+        for (r, c) in zip(v_inranges[hub], inj_outranges[cidx])
+            push!(Σ_I, r); push!(Σ_J, c); push!(Σ_V, -1.0)
+        end
+    end
+    Σ_inj = sparse(Σ_I, Σ_J, Σ_V, v_in_offset, inj_out_offset)
+
+    return Γ_inj, Σ_inj
 end

@@ -400,3 +400,49 @@ end
     @test (s2 - s2)(s_val) ≈ zero(s2(s_val)) atol=1e-14
     @test (sm - sm)(s_val) ≈ zeros(2,2) atol=1e-14
 end
+
+@testset "Test component linearization" begin
+    nw, s0 = Lib.powergridlike_network()
+    vidx = VIndex(:swing_and_load)
+    v1 = linearize_component(s0, vidx)
+    @test dim(v1) == dim(nw[vidx])
+    @test [s.subidx for s in sym(v1)] == NetworkDynamics.sym(nw[vidx])
+    @test [s.subidx for s in insym(v1)] == NetworkDynamics.insym_flat(nw[vidx])
+    @test [s.subidx for s in outsym(v1)] == NetworkDynamics.outsym_flat(nw[vidx])
+
+    eidx = EIndex(1)
+    e1 = linearize_component(s0, eidx)
+    @test dim(e1) == dim(nw[eidx])
+    @test [s.subidx for s in sym(e1)] == NetworkDynamics.sym(nw[eidx])
+    @test [s.subidx for s in insym(e1)] == NetworkDynamics.insym_flat(nw[eidx])
+    @test [s.subidx for s in outsym(e1)] == NetworkDynamics.outsym_flat(nw[eidx])
+
+    # now we can go for the full system initialization
+    Ynw, Zbus, Yinj = open_loop_linearization(s0)
+    @test dim(Ynw) == 0
+
+    # Ynw.D should be the nodal admittance matrix (with sign convention: current into node from network)
+    # Construct it manually from edge parameters: Y_line = active/(R + jX)
+    # In real 2x2 block form: y_block = [[G, -B], [B, G]] where G + jB = active/(R + jX)
+    # Nodal admittance: Y_nodal[s,s] += y_block, Y_nodal[d,d] += y_block,
+    #                   Y_nodal[s,d] -= y_block, Y_nodal[d,s] -= y_block
+    # Ynw.D = -Y_nodal (current into node = negative of standard injection convention)
+    edgelist = collect(edges(nw.im.g))
+    n = nv(nw)
+    Y_nodal = zeros(2n, 2n)
+    for (k, e) in enumerate(edgelist)
+        s, d = src(e), dst(e)
+        R = s0.p[EIndex(k, :R)]
+        X = s0.p[EIndex(k, :X)]
+        denom = R^2 + X^2
+        G = R / denom
+        B = (-X) / denom
+        yblock = [G -B; B G]
+        si, di = 2(s-1), 2(d-1)
+        Y_nodal[si+1:si+2, si+1:si+2] .+= yblock
+        Y_nodal[di+1:di+2, di+1:di+2] .+= yblock
+        Y_nodal[si+1:si+2, di+1:di+2] .-= yblock
+        Y_nodal[di+1:di+2, si+1:si+2] .-= yblock
+    end
+    @test -Y_nodal ≈ Matrix(Ynw.D) rtol=1e-10
+end

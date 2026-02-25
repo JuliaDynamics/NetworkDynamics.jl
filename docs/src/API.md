@@ -228,11 +228,15 @@ participation_factors
 show_participation_factors
 eigenvalue_sensitivity
 show_eigenvalue_sensitivity
+linearize_component
+open_loop_linearization
 append
 Base.:*(::NetworkDescriptorSystem, ::NetworkDescriptorSystem)
 Base.:+(::NetworkDescriptorSystem, ::NetworkDescriptorSystem)
 Base.:-(::NetworkDescriptorSystem, ::NetworkDescriptorSystem)
 Base.:*(::Number, ::NetworkDescriptorSystem)
+Base.:*(::AbstractMatrix, ::NetworkDescriptorSystem)
+Base.:*(::NetworkDescriptorSystem, ::AbstractMatrix)
 ```
 
 ## Callbacks API
