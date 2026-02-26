@@ -835,6 +835,27 @@ Returns three descriptor systems representing the open-loop linearization of the
 - `Zbus`: bus impedance; input: all bus injections stacked, output: bus potentials
 - `Yinj`: injector admittance; input: all bus outputs/potentials stacked, output: all "injector node" flows (only returned if the network has injector nodes, `nothing` otherwise)
 
+The interconnection of the "full" system looks like this:
+```asciiart
+                     ╔══════════════════════╗
+              ──(+)─→╢ "normal" Nodes zbus  ╟→──┬─╴
+ stacked         │   ╚══════════════════════╝   │ stacked
+ aggregated node │   ╭──────────────────────╮   │ node
+ flow input¹    (+)─←┤ Network Coupling Ynw ├←──┤ potentials¹
+                 │   ╰──────────────────────╯   │
+                 │   ╭──────────────────────╮   │
+                 ╰──←┤ Injector Nodes Yinj  ├←──╯
+                     ╰──────────────────────╯
+¹ Only considering "normal" i.e. non-injector nodes
+```
+
+Therefore, you can get the full linear closed loop system by calling
+```
+Ynw, Zbus, Yinj = open_loop_linearization(s0)
+full_sys = feedback(Zbus, Ynw + Yinj) # keeps Zbus input/output structure
+```
+This linearization is equivalent to `linearize_network(s0)` (without the in/out channels).
+
 !!! note
     The notion of "vertex" differs slightly between the network and the linearization.
     Vertices in the network are split into two categories: **bus nodes** and **injector nodes**.
@@ -851,18 +872,8 @@ function open_loop_linearization(s0)
     end
     needsYinj = has_injector_nodes(nw)
 
-    # first we need to generatet indices for thethree groups
-    _inj_i = Int[]
-    for eidx in 1:ne(nw)
-        em = nw.im.edgem[eidx]
-        is_loopback(em) || continue
-        # injector nodes are characterized by sitting at the src of loopbacks
-        push!(_inj_i, nw.im.edgevec[eidx].src)
-    end
-    unique!(sort!(_inj_i))
-    _bus_i = setdiff(1:nv(nw), _inj_i)
-    bus_idxs = [VIndex(i) for i in _bus_i]
-    inj_idxs = [VIndex(i) for i in _inj_i]
+    inj_idxs = injector_vidxs(nw)
+    bus_idxs = [VIndex(i) for i in 1:nv(nw) if !is_injector(nw, i)]
     edge_idxs = [EIndex(i) for i in 1:ne(nw) if !is_loopback(nw.im.edgem[i])]
 
     buffers = get_buffers(nw, uflat(s0), pflat(s0), s0.t; initbufs=true)

@@ -496,14 +496,8 @@ end
 
     # manually construct the admittance matrix from R and X values of the
     # edge models and comparing them
-    _inj_i = Int[]
-    for eidx in 1:ne(nw)
-        NetworkDynamics.is_loopback(nw.im.edgem[eidx]) || continue
-        push!(_inj_i, nw.im.edgevec[eidx].src)
-    end
-    unique!(sort!(_inj_i))
-    bus_i = setdiff(1:nv(nw), _inj_i)
-    bus_rank = Dict(v => i for (i, v) in enumerate(bus_i))  # global vertex → bus index
+    bus_i = [i for i in 1:nv(nw) if !NetworkDynamics.is_injector(nw, i)]
+    bus_rank = Dict(v => i for (i, v) in enumerate(bus_i))
 
     # Ynw.D = -Y_nodal over bus nodes only, skipping loopback edges
     n_bus = length(bus_i)

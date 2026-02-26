@@ -28,12 +28,15 @@ mutable struct IndexManager{G}
     aliased_edgems::IdDict{EdgeModel, @NamedTuple{idxs::Vector{Int}, hash::UInt}}
     unique_vnames::Dict{Symbol,Int}
     unique_enames::Dict{Symbol,Int}
+    _injector_vidxs::Vector{Int}
     function IndexManager(g, dyn_states, edepth, vdepth, vertexm, edgem; valias, ealias)
         aliased_vertexm_hashes = _aliased_hashes(VertexModel, vertexm, valias)
         aliased_edgem_hashes = _aliased_hashes(EdgeModel, edgem, ealias)
         unique_vnames = unique_mappings(getproperty.(vertexm, :name), 1:nv(g))
         unique_enames = unique_mappings(getproperty.(edgem, :name), 1:ne(g))
-        new{typeof(g)}(g, collect(edges(g)),
+        evec = collect(edges(g))
+        _inj = _find_injector_vidxs(evec, edgem)
+        new{typeof(g)}(g, evec,
                        (Vector{UnitRange{Int}}(undef, nv(g)) for i in 1:5)...,
                        Vector{UnitRange{Int}}(undef, ne(g)),
                        Vector{@NamedTuple{src::UnitRange{Int},dst::UnitRange{Int}}}(undef, ne(g)),
@@ -46,7 +49,8 @@ mutable struct IndexManager{G}
                        aliased_vertexm_hashes,
                        aliased_edgem_hashes,
                        unique_vnames,
-                       unique_enames)
+                       unique_enames,
+                       _inj)
     end
 end
 function _aliased_hashes(T, cfs, aliastype)
@@ -62,6 +66,14 @@ function _aliased_hashes(T, cfs, aliastype)
         hashdict[c] =(; idxs=collect(eachindex(cfs)), hash=hash(c))
     end
     hashdict
+end
+function _find_injector_vidxs(edgevec, edgem)
+    inj = Int[]
+    for i in eachindex(edgem)
+        is_loopback(edgem[i]) || continue
+        push!(inj, edgevec[i].src)
+    end
+    unique!(sort!(inj))
 end
 
 dim(im::IndexManager) = im.lastidx_dynamic
