@@ -778,7 +778,7 @@ end
 Linearize a single network component around the operating point encoded in `s0`.
 
 Extracts the component model, states, parameters, and network inputs from `s0`
-and delegates to [`linearize_component(::ComponentModel, ...)`](@ref). The returned
+and delegates to [`linearize_component(::ComponentModel, ...)`](@ref linearize_component(::ComponentModel, ::Any, ::Any, ::Tuple, ::Tuple, ::Any)). The returned
 [`NetworkDescriptorSystem`](@ref) uses network-level symbolic indices (e.g. `VIndex`
 or `EIndex`) rather than bare component symbols.
 

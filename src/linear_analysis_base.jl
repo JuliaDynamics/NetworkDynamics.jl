@@ -284,6 +284,12 @@ function Base.:*(k::Number, sys::NetworkDescriptorSystem)
 end
 Base.:*(sys::NetworkDescriptorSystem, k::Number) = k * sys
 Base.:-(sys::NetworkDescriptorSystem) = (-1) * sys
+"""
+    sys1 - sys2 -> NetworkDescriptorSystem
+
+Subtract two systems: equivalent to `sys1 + (-sys2)`. Both systems must have the same
+state, input, and output dimensions.
+"""
 Base.:-(sys1::NetworkDescriptorSystem, sys2::NetworkDescriptorSystem) = sys1 + (-sys2)
 
 """
