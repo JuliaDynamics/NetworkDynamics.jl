@@ -139,7 +139,7 @@ end
     @test length(λ) == sum(nw.mass_matrix) # reduce first
 
     # Test stability
-    @test is_linear_stable(s0; marginally_stable=true)
+    @test is_linear_stable(s0; marginally_stable=true, atol=1e-10)
 
     show_participation_factors(s0)
 

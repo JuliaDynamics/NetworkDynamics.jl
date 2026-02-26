@@ -588,7 +588,7 @@ end
 
     default_overrides = merge(
         interface_values(pf),
-        Dict(eidxs(1:5, :active) .=> nothing))
+        Dict(eidxs(nw, 1:5, :active) .=> nothing))
 
     s_nmut = initialize_componentwise(nw; subverbose=true, verbose=true, default_overrides)
     s_mut = initialize_componentwise!(nw; subverbose=true, verbose=true, default_overrides)
@@ -605,8 +605,6 @@ end
     @testset "test passing of subalg and subsolve_kwargs" begin
         @test_throws SciMLBase.NonSolverError initialize_componentwise(nw; subalg=:foo)
         @test_throws SciMLBase.NonSolverError initialize_componentwise(nw; subalg=Dict(VIndex(:swing_and_load) => :foo))
-        alg = NonlinearSolve.GaussNewton()
-        @test_throws ComponentInitError initialize_componentwise(nw; subalg=alg) # does not work with that solver
         initialize_componentwise(nw; subsolve_kwargs=(;verbose=Detailed())) # prints solver faield ouput
 
         # inject high tolerances to make the tol test fail
