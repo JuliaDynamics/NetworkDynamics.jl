@@ -489,3 +489,45 @@ end
     λ_full = sort(jacobian_eigenvals(s0), by=λ->(real(λ), imag(λ)))
     @test λ_cl ≈ λ_full rtol=1e-8
 end
+
+@testset "open loop linearization with injectors" begin
+    nw, s0 = Lib.powergridlike_injector_network()
+    Ynw, Zbus, Yinj = open_loop_linearization(s0)
+
+    # manually construct the admittance matrix from R and X values of the
+    # edge models and comparing them
+    _inj_i = Int[]
+    for eidx in 1:ne(nw)
+        NetworkDynamics.is_loopback(nw.im.edgem[eidx]) || continue
+        push!(_inj_i, nw.im.edgevec[eidx].src)
+    end
+    unique!(sort!(_inj_i))
+    bus_i = setdiff(1:nv(nw), _inj_i)
+    bus_rank = Dict(v => i for (i, v) in enumerate(bus_i))  # global vertex → bus index
+
+    # Ynw.D = -Y_nodal over bus nodes only, skipping loopback edges
+    n_bus = length(bus_i)
+    Y_nodal = zeros(2n_bus, 2n_bus)
+    for (k, e) in enumerate(collect(edges(nw.im.g)))
+        NetworkDynamics.is_loopback(nw.im.edgem[k]) && continue
+        s, d = src(e), dst(e)
+        R = s0.p[EIndex(k, :R)]
+        X = s0.p[EIndex(k, :X)]
+        denom = R^2 + X^2
+        G = R / denom
+        B = (-X) / denom
+        yblock = [G -B; B G]
+        si, di = 2(bus_rank[s]-1), 2(bus_rank[d]-1)
+        Y_nodal[si+1:si+2, si+1:si+2] .+= yblock
+        Y_nodal[di+1:di+2, di+1:di+2] .+= yblock
+        Y_nodal[si+1:si+2, di+1:di+2] .-= yblock
+        Y_nodal[di+1:di+2, si+1:si+2] .-= yblock
+    end
+    @test -Y_nodal ≈ Matrix(Ynw.D) rtol=1e-10
+
+    # closed-loop eigenvalues should match full nonlinear jacobian eigenvalues
+    cl = feedback(Zbus, Ynw + Yinj; pos=true)
+    λ_cl = sort(jacobian_eigenvals(cl), by=λ->(real(λ), imag(λ)))
+    λ_full = sort(jacobian_eigenvals(s0), by=λ->(real(λ), imag(λ)))
+    @test λ_cl ≈ λ_full rtol=1e-8
+end
