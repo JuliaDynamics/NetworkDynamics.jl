@@ -868,7 +868,7 @@ This linearization is equivalent to `linearize_network(s0)` (without the in/out 
 function open_loop_linearization(s0)
     nw = extract_nw(s0)
     if has_external_input(nw)
-        throw(ArgumentError("Getting open loop transfer fucntiosn for networks with external inputs is not supported."))
+        throw(ArgumentError("Getting open loop transfer functions for networks with external inputs is not supported."))
     end
     needsYinj = has_injector_nodes(nw)
 
