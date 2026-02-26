@@ -341,3 +341,61 @@ function Base.:+(sys1::NetworkDescriptorSystem, sys2::NetworkDescriptorSystem)
     return NetworkDescriptorSystem(; M, A, B, C, D, sym,
         insym=sys1.insym, outsym=sys1.outsym)
 end
+
+"""
+    feedback(sys1, sys2; pos=false) -> NetworkDescriptorSystem
+
+Negative feedback connection: `sys1` in the forward path, `sys2` in the feedback path.
+
+```asciiart
+    u ──►(+)──► sys1 ────┬──► y
+          ▲∓             │
+          └──── sys2 ◄───┘
+```
+
+Returns the closed-loop system from `u` to `y`. With `pos=false` (default, negative
+feedback) the closed-loop transfer function is
+
+    T(s) = sys1(s) * inv(I + sys2(s) * sys1(s))
+
+Set `pos=true` for positive feedback (replace `+` with `-`).
+
+Requires `outdim(sys1) == indim(sys2)` and `outdim(sys2) == indim(sys1)`.
+
+The combined state is `[x1; x2]`.
+"""
+function feedback(sys1::NetworkDescriptorSystem, sys2::NetworkDescriptorSystem; pos::Bool=false)
+    if outdim(sys1) != indim(sys2)
+        throw(DimensionMismatch("outdim(sys1)=$(outdim(sys1)) must equal indim(sys2)=$(indim(sys2))"))
+    end
+    if outdim(sys2) != indim(sys1)
+        throw(DimensionMismatch("outdim(sys2)=$(outdim(sys2)) must equal indim(sys1)=$(indim(sys1))"))
+    end
+    sgn = pos ? 1 : -1
+    n1, n2 = dim(sys1), dim(sys2)
+
+    # W = I ∓ D2*D1 is sized (n_out1 × n_out1), typically small → use dense
+    W     = Matrix(LinearAlgebra.I + (-sgn) * sys2.D * sys1.D)
+    Wfact = LinearAlgebra.lu(W)
+
+    # Left-solve W \ (·): collect to dense Matrix to avoid sparse ldiv! issues
+    WiD2C1 = Wfact \ Matrix(sys2.D * sys1.C)
+    WiC2   = Wfact \ Matrix(sys2.C)
+
+    # Right-solve (·) / W via  X/W == (W' \ X')':  collect RHS to dense
+    R      = Wfact \ Matrix(LinearAlgebra.I, size(W))  # R = W⁻¹
+    B1     = Matrix(sys1.B) * R                        # sys1.B / W
+    D_cl   = Matrix(sys1.D) * R                        # sys1.D / W
+    B2     = Matrix(sys2.B) * D_cl                     # sys2.B * sys1.D / W
+
+    M = _blkdiag((sys1.M, size(sys1.A)), (sys2.M, size(sys2.A)))
+    A = [sys1.A + sgn*sys1.B*WiD2C1                        sgn*sys1.B*WiC2;
+         sys2.B*sys1.C + sgn*sys2.B*sys1.D*WiD2C1          sys2.A + sgn*sys2.B*sys1.D*WiC2]
+    B = [B1; B2]
+    C = [sys1.C + sgn*sys1.D*WiD2C1    sgn*sys1.D*WiC2]
+    D = D_cl
+
+    sym = _cat_syms((sys1.sym, n1), (sys2.sym, n2))
+    return NetworkDescriptorSystem(; M, A, B, C, D, sym,
+        insym=sys1.insym, outsym=sys1.outsym)
+end

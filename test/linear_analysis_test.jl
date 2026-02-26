@@ -399,10 +399,46 @@ end
     @test (-s2)(s_val) ≈ -s2(s_val) rtol=1e-10
     @test (s2 - s2)(s_val) ≈ zero(s2(s_val)) atol=1e-14
     @test (sm - sm)(s_val) ≈ zeros(2,2) atol=1e-14
+
+    # --- feedback: SISO negative feedback ---
+    # T(s) = s1(s) * inv(I + s2(s)*s1(s))
+    sf = feedback(s1, s2)
+    @test size(sf.A) == (3,3)
+    @test size(sf.B) == (3,1)
+    @test size(sf.C) == (1,3)
+    @test size(sf.D) == (1,1)
+    @test sf.insym == s1.insym
+    @test sf.outsym == s1.outsym
+    T_expected = s1(s_val) * inv(I + s2(s_val) * s1(s_val))
+    @test sf(s_val) ≈ T_expected rtol=1e-10
+
+    # feedback: positive feedback
+    sf_pos = feedback(s1, s2; pos=true)
+    T_pos = s1(s_val) * inv(I - s2(s_val) * s1(s_val))
+    @test sf_pos(s_val) ≈ T_pos rtol=1e-10
+
+    # feedback: MIMO
+    # use sm (2×2) in forward, sm in feedback
+    sf_mm = feedback(sm, sm)
+    @test size(sf_mm.A) == (4,4)
+    @test size(sf_mm.B) == (4,2)
+    @test size(sf_mm.C) == (2,4)
+    T_mm = sm(s_val) * inv(I + sm(s_val) * sm(s_val))
+    @test sf_mm(s_val) ≈ T_mm rtol=1e-10
+
+    # feedback: dimension mismatch
+    @test_throws DimensionMismatch feedback(s_2out, s2) # outdim=2 ≠ indim=1 for s2→s_2out
+    @test_throws DimensionMismatch feedback(s2, s_2out) # outdim=2 ≠ indim=1
+
+    # feedback: multiple frequencies
+    for s_test in [0.1im, 1.0+1.0im, 10.0im]
+        @test sf(s_test) ≈ s1(s_test) * inv(I + s2(s_test) * s1(s_test)) rtol=1e-10
+        @test sf_mm(s_test) ≈ sm(s_test) * inv(I + sm(s_test) * sm(s_test)) rtol=1e-10
+    end
 end
 
-@testset "Test component linearization" begin
-    nw, s0 = Lib.powergridlike_network()
+@testset "Test open loop linearization" begin
+    nw, s0 = Lib.powergridlike_network();
     vidx = VIndex(:swing_and_load)
     v1 = linearize_component(s0, vidx)
     @test dim(v1) == dim(nw[vidx])
@@ -445,4 +481,11 @@ end
         Y_nodal[di+1:di+2, si+1:si+2] .-= yblock
     end
     @test -Y_nodal ≈ Matrix(Ynw.D) rtol=1e-10
+
+    # closed-loop eigenvalues should match full nonlinear jacobian eigenvalues
+    @test Yinj === nothing  # no injector nodes in this network
+    cl = feedback(Zbus, Ynw; pos=true)
+    λ_cl = sort(jacobian_eigenvals(cl), by=λ->(real(λ), imag(λ)))
+    λ_full = sort(jacobian_eigenvals(s0), by=λ->(real(λ), imag(λ)))
+    @test λ_cl ≈ λ_full rtol=1e-8
 end

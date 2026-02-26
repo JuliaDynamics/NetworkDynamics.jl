@@ -857,7 +857,7 @@ function open_loop_linearization(s0)
         em = nw.im.edgem[eidx]
         is_loopback(em) || continue
         # injector nodes are characterized by sitting at the src of loopbacks
-        push!(_inj_i, em.src)
+        push!(_inj_i, nw.im.edgevec[eidx].src)
     end
     unique!(sort!(_inj_i))
     _bus_i = setdiff(1:nv(nw), _inj_i)
