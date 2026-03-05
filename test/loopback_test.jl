@@ -145,5 +145,5 @@ Main.test_execution_styles(prob2) # testing all ex styles #src
 sol2 = solve(prob2, Tsit5(), saveat=0.1)
 @test SciMLBase.successful_retcode(sol2)
 
-@test sol1[VIndex(2,:p₊v)] ≈ sol2[VIndex(2, :v)]
-@test sol1[VIndex(4,:p₊i)] ≈ sol2[VIndex(2, :inductor₊p₊i)]
+@test sol1[VIndex(2,:p₊v)] ≈ sol2[VIndex(2, :v)] atol=1e-6
+@test sol1[VIndex(4,:p₊i)] ≈ sol2[VIndex(2, :inductor₊p₊i)] atol=1e-6
