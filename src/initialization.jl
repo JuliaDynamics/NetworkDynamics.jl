@@ -535,15 +535,19 @@ function initialize_component(cf;
                              _final_defaults=nothing,
                              _final_guesses=nothing,
                              alg_kwargs=(;),
-                             alg=FastShortcutNLLSPolyalg(;
-                                 linsolve=QRFactorization(),
-                                 autodiff=AutoForwardDiff(),
-                                 vjp_autodiff=pick_init_vjp_autodiff(),
-                                 alg_kwargs...
-                             ),
+                             alg=nothing,
                              solve_kwargs=(;),
                              io=stdout,
                              kwargs...)
+
+    if isnothing(alg)
+        alg = FastShortcutNLLSPolyalg(;
+            linsolve=QRFactorization(),
+            autodiff=AutoForwardDiff(),
+            vjp_autodiff=pick_init_vjp_autodiff(),
+            alg_kwargs...
+        )
+    end
 
     if !isempty(kwargs)
         @warn "Passing `kwargs` to `initialize_component(!)` is deprecated. Use `alg` and `solve_kwargs=(; kw=val)` instead."
