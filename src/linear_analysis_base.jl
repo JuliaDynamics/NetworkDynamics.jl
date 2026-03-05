@@ -76,7 +76,11 @@ See also: [`linearize_network`](@ref), [`reduce_dae`](@ref)
 end
 
 function (sys::NetworkDescriptorSystem)(s)
-    val = sys.C * ((sys.M * s - sys.A) \ sys.B) + sys.D
+    Ms_A = sys.M * s - sys.A
+    # UMFPACK (sparse LU) does not support sparse RHS for complex factorizations;
+    # densify B before the solve to avoid MethodError.
+    B = SparseArrays.issparse(sys.B) ? Matrix(sys.B) : sys.B
+    val = sys.C * (Ms_A \ B) + sys.D
     if sys.insym isa SymbolicIndex && sys.outsym isa SymbolicIndex
         return only(val)
     end
@@ -182,13 +186,22 @@ function _collect_ijv_recursive!(I, J, V, mats::Tuple, roff=0, coff=0)
             append!(I, _I)
             append!(J, _J)
             append!(V, _V)
-        else
+        elseif mat isa LinearAlgebra.Diagonal
+            @assert size(mat) == (nrows, ncols)
+            for i in 1:min(nrows, ncols)
+                push!(I, i + roff)
+                push!(J, i + coff)
+                push!(V, mat.diag[i])
+            end
+        elseif mat isa AbstractMatrix
             @assert size(mat) == (nrows, ncols)
             @inbounds for matidx in eachindex(IndexCartesian(), mat)
                 push!(I, matidx[1] + roff)
                 push!(J, matidx[2] + coff)
                 push!(V, mat[matidx])
             end
+        else
+            error("Cannot handle matrix of type $(typeof(mat)) in _blkdiag")
         end
         roff += nrows
         coff += ncols

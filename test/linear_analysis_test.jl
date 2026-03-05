@@ -488,6 +488,10 @@ end
     λ_cl = sort(jacobian_eigenvals(cl), by=λ->(real(λ), imag(λ)))
     λ_full = sort(jacobian_eigenvals(s0), by=λ->(real(λ), imag(λ)))
     @test λ_cl ≈ λ_full rtol=1e-8
+
+    # test transfer function evaluation
+    Ynw(10im * 2π)  # should not error
+    Zbus(10im * 2π)  # should not error
 end
 
 @testset "open loop linearization with injectors" begin
@@ -524,4 +528,9 @@ end
     λ_cl = sort(jacobian_eigenvals(cl), by=λ->(real(λ), imag(λ)))
     λ_full = sort(jacobian_eigenvals(s0), by=λ->(real(λ), imag(λ)))
     @test λ_cl ≈ λ_full rtol=1e-8
+
+    # test transfer function evaluation
+    Ynw(10im * 2π)  # should not error
+    Zbus(10im * 2π)  # should not error
+    @test_throws SingularException Yinj(10im * 2π) # stiff voltage source is singular in open loop
 end
