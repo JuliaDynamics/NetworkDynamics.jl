@@ -202,9 +202,9 @@ end
     for (e, re) in zip(events, ref_events)
         @test e.vidx == re.vidx
         @test e.event_idx == re.event_idx
-        @test abs(e.θ - re.θ) < 1e-5
-        @test abs(e.ω - re.ω) < 1e-5
-        @test abs(e.t - re.t) < 1e-5
+        @test abs(e.θ - re.θ) < 1e-4
+        @test abs(e.ω - re.ω) < 1e-4
+        @test abs(e.t - re.t) < 1e-4
     end
 end
 

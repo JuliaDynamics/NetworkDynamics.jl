@@ -499,9 +499,10 @@ The function solves a nonlinear problem to find values for all free variables/pa
 - `tol`: Tolerance for the residual of the initialized model (defaults to `1e-10`). Init throws error if resid ≥ tol.
 - `residual`: Optional `Ref{Float64}` which gets the final residual of the initialized model.
 - `alg_kwargs=(;)`: Additional keyword arguments passed to the nonlinear solver algorithm constructor
-- `alg=FastShortcutNLLSPolyalg(; linsolve=QRFactorization(), autodiff=AutoForwardDiff(), alg_kwargs...)`
+- `alg=FastShortcutNLLSPolyalg(; linsolve=QRFactorization(), autodiff=AutoForwardDiff(), vjp_autodiff=pick_init_vjp_autodiff(), alg_kwargs...)`
 
-   Nonlinear solver algorithm (defaults to NonlinearSolve.jl default with QR factorization, since init problems tend to be ill-conditioned.)
+   Nonlinear solver algorithm. Defaults to NonlinearSolve.jl's polyalgorithm with QR factorization, since init problems tend to be ill-conditioned.
+   The `vjp_autodiff` is selected automatically via `pick_init_vjp_autodiff()`, which prefers `AutoReverseDiff()` and falls back to `AutoFiniteDiff()`.
 - `solve_kwargs=(;)`: Additional keyword arguments passed to the SciML `solve` function
 - `io=stdout`: IO stream for printing information
 
@@ -534,10 +535,19 @@ function initialize_component(cf;
                              _final_defaults=nothing,
                              _final_guesses=nothing,
                              alg_kwargs=(;),
-                             alg=FastShortcutNLLSPolyalg(; linsolve=QRFactorization(), autodiff=AutoForwardDiff(), alg_kwargs...),
+                             alg=nothing,
                              solve_kwargs=(;),
                              io=stdout,
                              kwargs...)
+
+    if isnothing(alg)
+        alg = FastShortcutNLLSPolyalg(;
+            linsolve=QRFactorization(),
+            autodiff=AutoForwardDiff(),
+            vjp_autodiff=pick_init_vjp_autodiff(),
+            alg_kwargs...
+        )
+    end
 
     if !isempty(kwargs)
         @warn "Passing `kwargs` to `initialize_component(!)` is deprecated. Use `alg` and `solve_kwargs=(; kw=val)` instead."
@@ -1347,4 +1357,16 @@ function set_interface_defaults!(nw::Network, s::NWState; verbose=false)
         set_default!(nw, sym, val)
     end
     nw
+end
+
+function pick_init_vjp_autodiff()
+    candidates = (
+        AutoReverseDiff(),
+        # AutoForwardDiff(), # throws warning!
+        AutoFiniteDiff(),  # always available, always safe
+    )
+    for ad in candidates
+        DI.check_available(ad) && return ad
+    end
+    error("No compatible VJP autodiff backend found for initialization.")
 end

@@ -7,6 +7,7 @@
   - LTI algebra on `NetworkDescriptorSystem`: `append`, `feedback`, `*` (series/gain/matrix), `+` (parallel), `-` (subtraction/negation)
   - Injector node helpers: `injector_vidxs`, `is_injector`, `has_injector_nodes`
   - **Type parameter change (soft-breaking)**: `NetworkDescriptorSystem` now has 8 type parameters (added `ST` for `sym`) instead of 7
+- [#342](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/342) default initialization problem solver chooses compatible `autodiff_vjp` now to prevent Enzyme errors in some nonlinear solve algorithms
 
 ## v0.10.16 Changelog
 - **Linear analysis overhaul** ([#340](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/340)): Renamed `linear_stability.jl` to `linear_analysis.jl` and significantly expanded linear analysis capabilities:

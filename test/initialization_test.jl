@@ -1435,3 +1435,31 @@ end
     @test_throws SubtaskError initialize_componentwise(nw; subverbose=false, verbose=false, default_overrides, parallel=true)
     initialize_componentwise(nw; subverbose=false, verbose=false, default_overrides, t=0, parallel=true)
 end
+
+@testset "vjp_autodiff compatibility" begin
+    using ForwardDiff, FiniteDiff, ReverseDiff, Enzyme
+
+    # Use a realistic DQ-bus swing component from ComponentLibrary as the init problem.
+    # Inputs fixed to representative powerflow values so the problem is well-posed.
+    vf_base = Lib.dqbus_swing()
+    set_default!(vf_base, :i_r, 1.0)
+    set_default!(vf_base, :i_i, 0.1)
+
+    # Force the GaussNewton sub-algorithm with BackTracking linesearch so that the
+    # vjp_autodiff path is actually exercised (linesearch needs VJPs).
+    function init_with_vjp(vjp_ad)
+        cf = copy(vf_base)
+        alg = GaussNewton(;
+            linesearch   = BackTracking(),
+            autodiff     = AutoForwardDiff(),
+            vjp_autodiff = vjp_ad,
+        )
+        NetworkDynamics.initialize_component!(cf; verbose=false, alg)
+        NetworkDynamics.init_residual(cf)
+    end
+
+    @test_throws Exception init_with_vjp(AutoEnzyme())
+    @test init_with_vjp(AutoForwardDiff()) < 1e-8
+    @test init_with_vjp(AutoFiniteDiff()) < 1e-8
+    @test init_with_vjp(AutoReverseDiff()) < 1e-8
+end

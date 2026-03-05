@@ -25,7 +25,8 @@ using DiffEqCallbacks: DiffEqCallbacks
 using MacroTools: postwalk, @capture
 using ConstructionBase: ConstructionBase
 using Accessors: Accessors, @set
-using ADTypes: AutoForwardDiff
+using ADTypes: AutoForwardDiff, AutoFiniteDiff, AutoReverseDiff
+using DifferentiationInterface: DifferentiationInterface as DI
 
 @static if VERSION ≥ v"1.11.0-0"
     using Base: AnnotatedIOBuffer, AnnotatedString
