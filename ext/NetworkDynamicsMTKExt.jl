@@ -92,7 +92,9 @@ function VertexModel(sys::System, inputs, outputs; verbose=false, name=getname(s
             allow_output_sym_clash=true, kwargs...)
     set_metadata!(c, :observed, gen.observed)
     set_metadata!(c, :equations, gen.equations)
+    set_metadata!(c, :full_equations, gen.full_equations)
     set_metadata!(c, :outputeqs, gen.outputeqs)
+    set_metadata!(c, :full_outputeqs, gen.full_outputeqs)
     set_metadata!(c, :odesystem, gen.odesystem)
     set_metadata!(c, :odesystem_simplified, gen.odesystem_simplified)
 
@@ -216,7 +218,9 @@ function EdgeModel(sys::System, srcin, dstin, srcout, dstout; verbose=false, nam
             allow_output_sym_clash=true, kwargs...)
     set_metadata!(c, :observed, gen.observed)
     set_metadata!(c, :equations, gen.equations)
+    set_metadata!(c, :full_equations, gen.full_equations)
     set_metadata!(c, :outputeqs, gen.outputeqs)
+    set_metadata!(c, :full_outputeqs, gen.full_outputeqs)
     set_metadata!(c, :odesystem, gen.odesystem)
     set_metadata!(c, :odesystem_simplified, gen.odesystem_simplified)
 
@@ -540,6 +544,8 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         obsf = obsf_ip,
         equations=eqs,
         outputeqs=outeqs,
+        full_equations = fixpoint_sub(eqs, obs_subs),
+        full_outputeqs = fixpoint_sub(outeqs, obs_subs),
         observed=obseqs_sorted,
         odesystem_simplified=sys,
         params,
