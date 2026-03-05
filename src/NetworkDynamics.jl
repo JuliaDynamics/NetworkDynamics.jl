@@ -24,7 +24,7 @@ using SciMLBase: VectorContinuousCallback, CallbackSet, DiscreteCallback
 using DiffEqCallbacks: DiffEqCallbacks
 using MacroTools: postwalk, @capture
 using ConstructionBase: ConstructionBase
-using Accessors: Accessors
+using Accessors: Accessors, @set
 using ADTypes: AutoForwardDiff
 
 @static if VERSION ≥ v"1.11.0-0"
@@ -117,7 +117,11 @@ export get_defaults_dict, get_guesses_dict, get_bounds_dict, get_inits_dict
 export free_p, free_u
 include("metadata.jl")
 
-export NetworkDescriptorSystem, isfixpoint, is_linear_stable, linearize_network, reduce_dae, jacobian_eigenvals, participation_factors, show_participation_factors, eigenvalue_sensitivity, show_eigenvalue_sensitivity
+export NetworkDescriptorSystem, append, feedback, reduce_dae
+include("linear_analysis_base.jl")
+export isfixpoint, is_linear_stable, linearize_network, linearize_component
+export jacobian_eigenvals, participation_factors, show_participation_factors
+export eigenvalue_sensitivity, show_eigenvalue_sensitivity, open_loop_linearization
 include("linear_analysis.jl")
 
 include("show.jl")

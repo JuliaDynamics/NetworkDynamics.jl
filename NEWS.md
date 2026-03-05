@@ -1,5 +1,13 @@
 # NetworkDynamics Release Notes
 
+## v0.10.17 Changelog
+- **Open-loop linearization** ([#341](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/341)):
+  - New `open_loop_linearization(s0)` decomposes the network into open-loop subsystems (`Ynw`, `Zbus`, `Yinj`) for bus/injector node analysis
+  - New `linearize_component` for linearizing individual vertex/edge models in isolation
+  - LTI algebra on `NetworkDescriptorSystem`: `append`, `feedback`, `*` (series/gain/matrix), `+` (parallel), `-` (subtraction/negation)
+  - Injector node helpers: `injector_vidxs`, `is_injector`, `has_injector_nodes`
+  - **Type parameter change (soft-breaking)**: `NetworkDescriptorSystem` now has 8 type parameters (added `ST` for `sym`) instead of 7
+
 ## v0.10.16 Changelog
 - **Linear analysis overhaul** ([#340](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/340)): Renamed `linear_stability.jl` to `linear_analysis.jl` and significantly expanded linear analysis capabilities:
   - New `NetworkDescriptorSystem` type for descriptor system representation (`M ẋ = Ax + Bu`, `y = Cx + Du`) with callable transfer function evaluation

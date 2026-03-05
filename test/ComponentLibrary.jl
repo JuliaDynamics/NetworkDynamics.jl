@@ -159,6 +159,9 @@ end
     end
 end
 
+_no_simplify(x) = x
+@register_symbolic _no_simplify(x)
+
 @mtkmodel PQLoad begin
     @extend BusBase()
     @parameters begin
@@ -185,8 +188,6 @@ end
     end
 end
 
-_no_simplify(x) = x
-@register_symbolic _no_simplify(x)
 @mtkmodel PVBus begin
     @extend BusBase()
     @parameters begin
@@ -262,29 +263,48 @@ function dqbus_swing(; kwargs...)
     @named swing = SwingDQ(; kwargs...)
     VertexModel(swing, [:i_r, :i_i], [:u_r, :u_i])
 end
-function dqbus_pq(; kwargs...)
-    @named pq = PQLoad(; kwargs...)
+function dqbus_pq(; name=:pq, kwargs...)
+    pq = PQLoad(; name, kwargs...)
     VertexModel(pq, [:i_r, :i_i], [:u_r, :u_i])
 end
 function dqbus_timedeppq(; kwargs...)
     @named pq_timedep = TimeDependentPQLoad(; kwargs...)
     VertexModel(pq_timedep, [:i_r, :i_i], [:u_r, :u_i])
 end
-function dqbus_pv(; kwargs...)
-    @named pv = PVBus(; kwargs...)
-    VertexModel(pv, [:i_r, :i_i], [:u_r, :u_i])
+function dqbus_pv(; injector=false, name=:pv, kwargs...)
+    pv = PVBus(; name, kwargs...)
+    if injector
+        vm = VertexModel(pv, [:u_r, :u_i], [:i_r, :i_i]; ff_to_constraint=false, assume_io_coupling=true)
+        set_default!(vm, :i_r, 0.0)
+        set_default!(vm, :i_i, 0.0)
+        vm
+    else
+        VertexModel(pv, [:i_r, :i_i], [:u_r, :u_i])
+    end
 end
-function dqbus_slack(; kwargs...)
+function dqbus_slack(; injector=false, kwargs...)
     @named pv = SlackBus(; kwargs...)
-    VertexModel(pv, [:i_r, :i_i], [:u_r, :u_i])
+    if injector
+        vm = VertexModel(pv, [:u_r, :u_i], [:i_r, :i_i]; ff_to_constraint=false, assume_io_coupling=true)
+        set_default!(vm, :i_r, 0.0)
+        set_default!(vm, :i_i, 0.0)
+        vm
+    else
+        VertexModel(pv, [:i_r, :i_i], [:u_r, :u_i])
+    end
 end
 function dqbus_swing_and_load(; kwargs...)
     @named swing_and_load = SwingAndLoadDQ(; kwargs...)
     VertexModel(swing_and_load, [:i_r, :i_i], [:u_r, :u_i])
 end
-function dqline(; kwargs...)
-    @named line = StaticPowerLineDQ(; kwargs...)
-    EdgeModel(line, [:src_u_r, :src_u_i], [:dst_u_r, :dst_u_i], [:src_i_r, :src_i_i], [:dst_i_r, :dst_i_i])
+function dqline(; name=:line, R, X, kwargs...)
+    line = StaticPowerLineDQ(; name, R, X)
+    EdgeModel(
+        line,
+        [:src_u_r, :src_u_i], [:dst_u_r, :dst_u_i],
+        [:src_i_r, :src_i_i], [:dst_i_r, :dst_i_i];
+        kwargs...
+    )
 end
 
 function powergridlike_network()
@@ -315,6 +335,81 @@ function powergridlike_network()
         interface_values(pf),
         Dict(EIndex(1:5, :active) .=> nothing))
 
+    s0 = initialize_componentwise!(nw; subverbose=true, verbose=true, default_overrides)
+    nw, s0
+end
+
+####
+#### Injector node versions (reuse same MTK models, flip interface direction)
+####
+@mtkmodel ShuntHub begin
+    @extend BusBase()
+    @parameters begin
+        G, [guess=1, description = "Shunt conductance"]
+        B, [guess=1, description = "Shunt susceptance"]
+    end
+    begin
+        Y = G + im*B
+        ishunt = -Y * (u_r + im*u_i)
+    end
+    @equations begin
+        i_r ~ simplify(real(ishunt))
+        i_i ~ simplify(imag(ishunt))
+    end
+end
+
+function dqbus_swing_injector(; kwargs...)
+    @named swing = SwingDQ(; kwargs...)
+    VertexModel(swing, [:u_r, :u_i], [:i_r, :i_i]; ff_to_constraint=false, assume_io_coupling=true)
+end
+function dqbus_pq_injector(; kwargs...)
+    @named pq = PQLoad(; kwargs...)
+    VertexModel(pq, [:u_r, :u_i], [:i_r, :i_i]; ff_to_constraint=false, assume_io_coupling=true)
+end
+function dqbus_shunt_hub(; kwargs...)
+    @named shunt_hub = ShuntHub(; kwargs...)
+    VertexModel(shunt_hub, [:i_r, :i_i], [:u_r, :u_i])
+end
+
+function powergridlike_injector_network()
+    # Same 5-bus cycle topology as powergridlike_network, but buses 1 and 2
+    # are split into hub + swing injector connected via LoopbackConnection.
+    edges = [
+        dqline(X=0.1, R=0.04, src=:hub1, dst=:hub2),
+        dqline(X=0.15, R=0.1, src=:hub2, dst=:pq3),
+        dqline(X=0.2, R=0.03, src=:pq3, dst=:pq4),
+        dqline(X=0.02, R=0.015, src=:pq4, dst=:pq5),
+        dqline(X=0.09, R=0.02, src=:pq5, dst=:hub1),
+        LoopbackConnection(potential=[:u_r, :u_i], flow=[:i_r, :i_i], src=:inj1, dst=:hub1, name=:loopback1),
+        LoopbackConnection(potential=[:u_r, :u_i], flow=[:i_r, :i_i], src=:inj2, dst=:hub2, name=:loopback2),
+    ]
+
+    # Powerflow: same topology with shunt hubs + injector PV/slack nodes
+    pf_vertices = [
+        dqbus_shunt_hub(G=0.1, B=0.01, name=:hub1),
+        dqbus_shunt_hub(G=0.1, B=0.01, name=:hub2),
+        dqbus_pq(Pset=-1.0, Qset=-0.1, name=:pq3),
+        dqbus_pq(Pset=-1.0, Qset=-0.1, name=:pq4),
+        dqbus_pq(Pset=-1.0, Qset=-0.1, name=:pq5),
+        dqbus_slack(injector=true, name=:inj1),
+        dqbus_pv(Pset=1.5, Vset=1.0, injector=true, name=:inj2),
+    ]
+    nws = Network(pf_vertices, edges)
+    pf = find_fixpoint(nws)
+
+    # Dynamic model: replace injectors with swing equations
+    dyn_vertices = [
+        dqbus_shunt_hub(name=:hub1),
+        dqbus_shunt_hub(name=:hub2),
+        dqbus_pq(name=:pq3),
+        dqbus_pq(name=:pq4),
+        dqbus_pq(name=:pq5),
+        dqbus_swing_injector(name=:inj1),
+        dqbus_swing_injector(name=:inj2),
+    ]
+    nw = Network(dyn_vertices, edges)
+
+    default_overrides = interface_values(pf)
     s0 = initialize_componentwise!(nw; subverbose=false, verbose=false, default_overrides)
     nw, s0
 end

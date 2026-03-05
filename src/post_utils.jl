@@ -179,6 +179,28 @@ end
 is_loopback(eb::ComponentBatch) = isnothing(compf(eb)) && compg(eb) == NetworkDynamics.LOOPBACK_G
 is_loopback(em::EdgeModel) = em.g isa Directed && em.g.g == NetworkDynamics.LOOPBACK_G
 has_loopback_edges(im::IndexManager) = any(is_loopback, im.edgem)
+has_injector_nodes(nw::Network) = !isnothing(nw.loopbackmap)
+
+"""
+    injector_vidxs(nw::Network) -> Vector{VIndex}
+    injector_vidxs(im::IndexManager) -> Vector{VIndex}
+
+Return the vertex indices of all injector nodes in the network.
+Injector nodes are vertices at the source end of a [`LoopbackConnection`](@ref) edge.
+Returns an empty vector if the network has no injector nodes.
+"""
+injector_vidxs(nw::Network) = injector_vidxs(nw.im)
+injector_vidxs(im::IndexManager) = VIndex.(im._injector_vidxs)
+
+"""
+    is_injector(nw::Network, vidx) -> Bool
+    is_injector(im::IndexManager, vidx) -> Bool
+
+Check whether vertex `vidx` is an injector node.
+"""
+is_injector(nw::Network, vidx) = is_injector(nw.im, vidx)
+is_injector(im::IndexManager, vidx::VIndex) = is_injector(im, vidx.compidx)
+is_injector(im::IndexManager, vidx::Int) = vidx ∈ im._injector_vidxs
 
 function gen_loopback_map(im::IndexManager)
     outindex = Int[]
