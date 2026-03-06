@@ -326,3 +326,81 @@ function get_variables_fix(ex)
     end
     typeof(set)(new)
 end
+
+####
+#### linear algebraic equation reduction
+####
+function reduce_linear_algebraic(eqs, obseqs, states)
+    types = [eq_type(eq)[1] for eq in eqs]
+    try
+        @assert !any(==(:explicit_algebraic), types) "Can't have explicit algebraic at that stage"
+
+        # we need to find the linear subset, we first start with all implicit algebraic equations
+        linmask = [t == :implicit_algebraic for t in types]
+        any(linmask) || return eqs, obseqs, states
+
+        local lineqs, linstates
+        while true
+            linstates = states[linmask]
+            lineqs = eqs[linmask]
+            coeff = _build_coeff_mat(lineqs, linstates)
+
+            if count(isnothing, coeff) == 0
+                break
+            else
+                rm = argmax(count(isnothing, coeff, dims=1)' + count(isnothing, coeff, dims=2))[1]
+                rmidx = (1:length(eqs))[linmask][rm]
+                linmask[rmidx] = false
+            end
+        end
+
+        sol = Symbolics.symbolic_linear_solve(lineqs, linstates)
+        newobs = linstates .~ sol
+        _insert_sorted!(obseqs, newobs)
+
+        neweqs = eqs[(!).(linmask)]
+        newstates = states[(!).(linmask)]
+        neweqs, obseqs, newstates
+    catch
+        @warn "Reduction failed, fall back"
+        eqs, obseqs, states
+    end
+end
+function _insert_sorted!(obseqs, newobs)
+    obssym = [eq.lhs for eq in obseqs]
+    obsdeps = [get_variables_fix(eq.rhs) for eq in obseqs]
+
+    inserts = map(newobs) do eq
+        vars = get_variables_fix(eq.rhs)
+        idx = findlast(sym -> sym ∈ vars, obssym)
+        last_dependency = isnothing(idx) ? 0 : idx
+
+        idx = findfirst(deps -> eq.lhs ∈ deps, obsdeps)
+        first_dependant = isnothing(idx) ? typemax(Int) : idx
+        if first_dependant <= last_dependency
+            throw(ArgumentError("New observation $eq depends on $(obsdeps[first_dependant]) which is observed before it. This should not happen, since the new observation should only depend on states and previously observed variables!"))
+        end
+        last_dependency
+    end
+
+    perm = sortperm(inserts; rev=true)
+    for i in perm
+        insert!(obseqs, inserts[i]+1, newobs[i])
+    end
+    nothing
+end
+function _build_coeff_mat(lineqs, linstates)
+    expanders = Symbolics.LinearExpander.(linstates)
+    mapreduce(hcat, expanders) do ex
+        col = Any[]
+        for eq in lineqs
+            a, b, lin = ex(eq)
+            if lin
+                push!(col, a)
+            else
+                push!(col, nothing)
+            end
+        end
+        col
+    end
+end
