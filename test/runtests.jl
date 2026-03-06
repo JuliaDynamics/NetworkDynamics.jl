@@ -25,6 +25,7 @@ BUILDKITE && @test CUDA.functional() # fail early in buildkite if cuda is not av
         Aqua.test_all(NetworkDynamics;
             ambiguities=false,
             stale_deps=true,
+            deps_compat=VERSION ≥ v"1.11", # don't check compat on LTS
             persistent_tasks=false)
         @test_broken isempty(Docs.undocumented_names(NetworkDynamics))
     end
