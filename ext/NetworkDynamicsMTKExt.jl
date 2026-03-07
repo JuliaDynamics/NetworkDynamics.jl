@@ -21,6 +21,7 @@ using NetworkDynamics: NetworkDynamics, set_metadata!, ComponentPostprocessing,
 import NetworkDynamics: VertexModel, EdgeModel, AnnotatedSym
 
 include("MTKExt_utils.jl")
+include("MTKExt_simplification.jl")
 
 import NetworkDynamics: implicit_output, RHSDifferentialsError
 Symbolics.@register_symbolic implicit_output(x)
