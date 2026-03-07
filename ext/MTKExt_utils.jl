@@ -95,21 +95,6 @@ function getproperty_symbolic(sys, var; might_contain_toplevel_ns=true)
     unwrap(r)
 end
 
-function reorder_by_states(eqs::AbstractVector{Equation}, states)
-    @assert length(eqs) == length(states) "Numbers of eqs should be equal to states! ($(length(eqs)) equations for $(length(states)) states = $states)"
-    # for each state, collect the eq_idx which corresponds some states (implicit
-    # algebraic) don't have special equations attached to them those are the "unused_idx"
-    eq_idx::Vector{Union{Int, Nothing}} = [findfirst(x->isequal(s, lhs_var(x)), eqs) for s in states]
-    unused_idx = reverse(setdiff(1:length(eqs), eq_idx))
-    for i in 1:length(eq_idx)
-        if eq_idx[i] === nothing
-            eq_idx[i] = pop!(unused_idx)
-        end
-    end
-    @assert sort(unique(eq_idx)) == 1:length(eqs) "eq_idx should contain all idx!"
-    return eqs[eq_idx]
-end
-
 function generate_massmatrix(eqs::AbstractVector{Equation})
     V = map(eqs) do eq
         type = eq_type(eq)[1]
@@ -136,11 +121,8 @@ function warn_missing_features(sys)
         @warn "Model has explicit init equation. Those are currently ignored by NetworkDynamics.jl."
     end
 
-    calls = filter(iscall, SII.all_symbols(ModelingToolkitBase.complete(sys)))
-    indx = filter(x -> operation(x) === Base.getindex, calls)
-    if !isempty(indx)
-        @warn "Detected usage of vector variables or parameters in model ($(join(repr.(indx), ", "))), this is not supported and may lead to errors!"
-    end
+    calls = filter(iscall, parameters(sys) ∪ unknowns(sys))
+    any(x -> operation(x) === Base.getindex, calls) && @warn "NetworkDynamics does not support vector-variables or vector-parameters in MTK models. Detected: $(join(repr.(filter(x -> operation(x) === Base.getindex, calls)), ", "))"
 end
 function _collect_continuous_events(sys)
     vcat(
@@ -203,7 +185,7 @@ function fix_metadata!(invalid_eqs, sys)
         metadatasubs[invalids] = valid
     end
 
-    fixedeqs = [Symbolics.fast_substitute(eq, metadatasubs) for eq in invalid_eqs]
+    fixedeqs = [Symbolics.substitute(eq, metadatasubs) for eq in invalid_eqs]
     if !isempty(check_metadata(fixedeqs))
         @warn "Some transformation droped metadata ($missingmetadata)! Could NOT be fixed. $(check_metadata(fixedeqs))"
     else
@@ -330,7 +312,7 @@ end
 ####
 #### linear algebraic equation reduction
 ####
-function reduce_linear_algebraic(eqs, obseqs, states; verbose)
+function reduce_linear_algebraic(eqs, obseqs, states; outputs=[], verbose)
     types = [eq_type(eq)[1] for eq in eqs]
     try
         @assert !any(==(:explicit_algebraic), types) "Can't have explicit algebraic at that stage"
@@ -340,22 +322,23 @@ function reduce_linear_algebraic(eqs, obseqs, states; verbose)
         alg_idx = findall(alg_mask)
 
         if verbose
-            @info "Trying to reduce $(length(alg_idx)) implicit algebraic equations" eqs
+            @info "Trying to reduce $(length(alg_idx)) implicit algebraic equations" eqs[alg_idx]
         end
 
         coeff = _build_coeff_mat(eqs[alg_idx], states[alg_idx])
-        matches = _match_equations_to_states(coeff, states[alg_idx])
-
+        outset = Set(outputs)
+        is_output = [s ∈ outset for s in states[alg_idx]]
+        matches = _match_equations_to_states(coeff, states[alg_idx], is_output)
 
         if verbose
-            @info "Found $(length(matches)) matches in those equations" [states[m[1]] => eqs[m[2]] for m in matches]
+            @info "Found $(length(matches)) matches in those equations" state_eqs_matching = Any[states[alg_idx[m[2]]] => eqs[alg_idx[m[1]]] for m in matches]
         end
 
         isempty(matches) && return eqs, obseqs, states
 
         # decompose matched pairs into SCCs and solve per-SCC
         sccs = _matched_sccs(coeff, matches)
-        @info "Decomposed matches into groups $(length(sccs)) groups to solve:"
+        verbose &&@info "Decomposed matches into groups $(length(sccs)) groups to solve:"
 
         solved_eq_local = Int[]
         solved_st_local = Int[]
@@ -371,43 +354,41 @@ function reduce_linear_algebraic(eqs, obseqs, states; verbose)
                 append!(newobs, scc_sts .~ sol)
                 append!(solved_eq_local, scc_rows)
                 append!(solved_st_local, scc_cols)
-                verbose && @info "Solved group $gi" scc_eqs scc_sts .~ sol
+                verbose && @info "Solved group $gi: $scc" scc_eqs scc_sts .~ sol
             catch
                 # SCC not jointly linear (nonlinear cross-terms) → leave as constraints
                 verbose && @info "Failed to solve group $gi for $scc_sts" scc_eqs
             end
         end
+
         isempty(newobs) && return eqs, obseqs, states
 
         _insert_sorted!(obseqs, newobs)
         keep_eq_idx = sort(union(findall(.!alg_mask), alg_idx[setdiff(1:length(alg_idx), solved_eq_local)]))
         keep_st_idx = sort(union(findall(.!alg_mask), alg_idx[setdiff(1:length(alg_idx), solved_st_local)]))
-        eqs[keep_eq_idx], obseqs, states[keep_st_idx]
+        neweqs = eqs[keep_eq_idx]
+        newstates = states[keep_st_idx]
+        verbose && @info "Left with equations after reduction:" newstates .=> neweqs
+        return neweqs, obseqs, newstates
     catch e
         @warn "Reduction failed, fall back" exception=(e, catch_backtrace())
         eqs, obseqs, states
     end
 end
 function _insert_sorted!(obseqs, newobs)
-    obssym = [eq.lhs for eq in obseqs]
-    obsdeps = [get_variables_fix(eq.rhs) for eq in obseqs]
-
-    inserts = map(newobs) do eq
+    # newobs must be in topological order (dependencies before dependents).
+    # Insert sequentially so each equation finds its dependencies already in obseqs.
+    # We insert each equation just after the last equation in obseqs whose LHS appears
+    # on the RHS of eq (i.e., after all its obs dependencies are defined).
+    # Note: existing obs may reference `eq.lhs` as a state variable (not as an obs),
+    # so we do not check first_dependant here — that check is unsound when states
+    # and obs share the same symbol.
+    for eq in newobs
+        obssym = [e.lhs for e in obseqs]
         vars = get_variables_fix(eq.rhs)
         idx = findlast(sym -> sym ∈ vars, obssym)
         last_dependency = isnothing(idx) ? 0 : idx
-
-        idx = findfirst(deps -> eq.lhs ∈ deps, obsdeps)
-        first_dependant = isnothing(idx) ? typemax(Int) : idx
-        if first_dependant <= last_dependency
-            throw(ArgumentError("New observation $eq depends on $(obsdeps[first_dependant]) which is observed before it. This should not happen, since the new observation should only depend on states and previously observed variables!"))
-        end
-        last_dependency
-    end
-
-    perm = sortperm(inserts; rev=true)
-    for i in perm
-        insert!(obseqs, inserts[i]+1, newobs[i])
+        insert!(obseqs, last_dependency+1, eq)
     end
     nothing
 end
@@ -465,12 +446,17 @@ function _maximum_bipartite_matching(adj::AbstractMatrix{Bool}; col_match::Union
     return cm  # cm[j] = row matched to col j, 0 if unmatched
 end
 
-function _match_equations_to_states(coeff, state_vars)
+function _match_equations_to_states(coeff, state_vars, is_output)
     n_eq, n_st = size(coeff)
     adj_const = [!isnothing(coeff[i,j]) && !_is_zero_coeff(coeff[i,j]) && _is_constant_coeff(coeff[i,j], state_vars) for i in 1:n_eq, j in 1:n_st]
     adj_full  = [!isnothing(coeff[i,j]) && !_is_zero_coeff(coeff[i,j]) for i in 1:n_eq, j in 1:n_st]
 
-    cm = _maximum_bipartite_matching(adj_const)
+    # mask out output columns, match non-outputs first, then extend to outputs
+    not_out = .!is_output
+    cm = _maximum_bipartite_matching(adj_const .* not_out')
+    cm = _maximum_bipartite_matching(adj_full .* not_out'; col_match=cm)
+    # now extend matching to include output columns
+    cm = _maximum_bipartite_matching(adj_const; col_match=cm)
     cm = _maximum_bipartite_matching(adj_full; col_match=cm)
 
     return [(cm[j], j) for j in 1:n_st if cm[j] > 0]
@@ -540,7 +526,6 @@ function _matched_sccs(coeff, matches)
         indices[v] == -1 && strongconnect(v)
     end
 
-    # Tarjan's yields SCCs in reverse topological order
-    reverse!(sccs)
+    # Tarjan's yields SCCs in topological order (dependencies before dependents); no reversal needed
     return sccs
 end

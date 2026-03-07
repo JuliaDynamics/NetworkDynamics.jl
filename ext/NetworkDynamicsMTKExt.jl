@@ -392,7 +392,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     end
 
     # try to solve for remaining linear algebraic states
-    eqs, obseqs_sorted, states = reduce_linear_algebraic(eqs, obseqs_sorted, states; verbose)
+    eqs, obseqs_sorted, states = reduce_linear_algebraic(eqs, obseqs_sorted, states; outputs=alloutputs, verbose)
 
     # get rid of the implicit_output(⋅) terms
     remove_implicit_output_fn!(eqs)
