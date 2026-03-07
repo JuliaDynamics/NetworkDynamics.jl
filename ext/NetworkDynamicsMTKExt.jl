@@ -179,7 +179,7 @@ function EdgeModel(sys::System, srcin, dstin, srcout, dstout; verbose=false, nam
     g = singlesided ? gwrap(gen.g) : gen.g
     obsf = gen.obsf
 
-    sysdefaults = defaults(sys)
+    sysdefaults = initial_conditions(sys)
     sysguesses = ModelingToolkitBase.guesses(sys)
     _sym = getname.(gen.states)
     sym = [s => _get_metadata(sys, s, sysdefaults, sysguesses) for s in _sym]
@@ -367,10 +367,6 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     fix_metadata!(eqs, sys);
     fix_metadata!(obseqs_sorted, sys);
 
-    # get rid of the implicit_output(⋅) terms
-    remove_implicit_output_fn!(eqs)
-    remove_implicit_output_fn!(obseqs_sorted)
-
     # assert the ordering of states and equations
     explicit_states = BasicSymbolic[eq_type(eq)[2] for eq in eqs if !isnothing(eq_type(eq)[2])]
     implicit_states = setdiff(unknowns(sys), explicit_states)
@@ -394,6 +390,13 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         diffs = rhs_differentials(vcat(eqs, obseqs_sorted))
         throw(RHSDifferentialsError(repr.(diffs)))
     end
+
+    # try to solve for remaining linear algebraic states
+    eqs, obseqs_sorted, states = reduce_linear_algebraic(eqs, obseqs_sorted, states; verbose)
+
+    # get rid of the implicit_output(⋅) terms
+    remove_implicit_output_fn!(eqs)
+    remove_implicit_output_fn!(obseqs_sorted)
 
     # obs can only depend on parameters (including allinputs) or states
     obs_subs = OrderedDict(eq.lhs => eq.rhs for eq in obseqs_sorted)
@@ -570,9 +573,9 @@ function _get_formulas(eqs, obs_subs)
 
     # implicit equations are not use via assigments, so we filter for e
     eqs_assignments = [Assignment(eq.lhs, eq.rhs) for eq in eqs
-                          if !isequal(eq.lhs, eq.rhs) && !isequal(eq.lhs, 0)]
+                          if !isequal(eq.lhs, eq.rhs) && !isequal(unwrap_const(eq.lhs), 0)]
     # since implicit eqs did not end up in assighmets, we use the rhs
-    out = [isequal(eq.lhs, 0) ? eq.rhs : eq.lhs for eq in eqs]
+    out = [isequal(unwrap_const(eq.lhs), 0) ? eq.rhs : eq.lhs for eq in eqs]
 
     [Let(vcat(obs_assignments, eqs_assignments), out[1], false), out[2:end]...]
 end
