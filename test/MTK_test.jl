@@ -7,10 +7,10 @@ using Graphs
 using Chairmarks: @b
 using Test
 using SciCompDSL
-using Moshi.Match: @match
 mtkext = Base.get_extension(NetworkDynamics, :NetworkDynamicsMTKExt)
 
 @testset "Woraround tests" begin
+    @variables x(t)
     # if this test gets fixed, we can get rid of workaround get_variables_fix
     @test get_variables(Dt(x)) == Set(Dt(x))
 end
@@ -378,7 +378,7 @@ end
     @named pv = PVConstraint(; P=2, V=1)
     @named busbar = BusBar()
     mtkbus = System(connect(busbar.terminal, pv.terminal), t; systems=[busbar, pv], name=:pvbus)
-    vf = VertexModel(mtkbus, [:busbar₊i_r, :busbar₊i_i], [:busbar₊u_r, :busbar₊u_i], verbose=false)
+    vf = VertexModel(mtkbus, [:busbar₊i_r, :busbar₊i_i], [:busbar₊u_r, :busbar₊u_i], verbose=true)
 
     @test Set(vf.sym) == Set([:busbar₊u_r,:busbar₊u_i])
 end
@@ -429,21 +429,6 @@ end
     end
 end
 @testset "Test transformation of implicit outputs" begin
-    # first, lets test if the underlying MTK problem still exists
-    # see https://github.com/SciML/ModelingToolkit.jl/pull/3686
-    @mtkmodel ImplicitForcing begin
-        @variables begin
-            u(t), [description = "Input Variable", input=true]
-            y(t), [description = "fully implicit output", output=true]
-        end
-        @equations begin
-            0 ~ sqrt(u) # implicitly forces output y because u=f(y) in  closed loop
-        end
-    end
-    @named implicit = ImplicitForcing()
-    simp = mtkcompile(implicit; inputs = ModelingToolkitBase.unbound_inputs(implicit))
-    @test isempty(equations(simp)) # the equation was dropped!
-
     # test fully implicit outputs
     @mtkmodel FullyImplicit begin
         @variables begin
@@ -460,15 +445,20 @@ end
     end
     @named fullyimplicit = FullyImplicit()
     @test_throws ArgumentError VertexModel(fullyimplicit, [:u], [:z])
+    VertexModel(fullyimplicit, [:u], [:z]; assume_io_coupling=true)
 
     # from init_tutorial
     # dependent MTKModels need to be defined at top level, so they are in front of the testset
     @named prosumer = StaticProsumerNode() # consumer
-    @test_throws ArgumentError VertexModel(prosumer, [:q̃_nw], [:p])
+    @test_throws r"outputs .* do not appear in the equations" VertexModel(prosumer, [:q̃_nw], [:p])
     @named prosumer_wrapped = Wrapper()
+    VertexModel(prosumer_wrapped, [:q̃_nw], [:p])
+    # CLAUE: this used to fail but works now, what hwas the purpos on foths test
     @test_throws ModelingToolkitBase.InvalidSystemException VertexModel(prosumer_wrapped, [:q̃_nw], [:p])
     @named prosumer_fixed = WrapperFixed()
-    VertexModel(prosumer_fixed, [:q̃_nw], [:p]) # no throw
+    VertexModel(prosumer_fixed, [:q̃_nw], [:p]).f # no throw
+    pretty_f(VertexModel(prosumer_fixed, [:q̃_nw], [:p]))
+    VertexModel(prosumer_fixed, [:q̃_nw], [:p]).g # no throw
 end
 
 @testset "Error on vector variables" begin
@@ -484,7 +474,7 @@ end
         end
     end
     @named vectormodel = VectorModel()
-    @test_throws ArgumentError VertexModel(vectormodel, [], [:out])
+    @test_throws "does not support vector-variables" VertexModel(vectormodel, [], [:out])
 end
 
 ####
@@ -497,6 +487,7 @@ module ToLate
     using ModelingToolkitBase
     using ModelingToolkitBase: t_nounits as t, D_nounits as Dt
     using NetworkDynamics: ComponentPostprocessing
+    using SciCompDSL
     @mtkmodel LateModel begin
         @variables begin
             in(t)
@@ -519,6 +510,7 @@ module InTime
     struct CustomMetadata end
     using ModelingToolkitBase
     using ModelingToolkitBase: t_nounits as t, D_nounits as Dt
+    using SciCompDSL
     using NetworkDynamics: ComponentPostprocessing
     cfref = Ref{Any}(nothing)
     nsref = Ref{Any}(nothing)
@@ -695,14 +687,89 @@ end
 
     # Without assume_io_coupling, this should throw RHSDifferentialsError
     # because i_r/i_i outputs depend on θ which has a derivative
+    # CLAUDE: this here needs checking, i don't know why the rhs differential is not detected? mabye the colelct differentials osomething like this needs fixing
     @test_throws NetworkDynamics.RHSDifferentialsError begin
-        VertexModel(inverter, [:i_r, :i_i], [:u_r, :u_i]; verbose=false)
+        vm = VertexModel(inverter, [:i_r, :i_i], [:u_r, :u_i]; verbose=false)
     end
 
     # With assume_io_coupling=true, the construction should succeed
     # This forces MTK to recognize the input->output coupling even with derivatives
     v = VertexModel(inverter, [:i_r, :i_i], [:u_r, :u_i];
                     verbose=false, assume_io_coupling=true)
+    data = NetworkDynamics.rand_inputs_fg(v)
+    v.f(data...) # CLAUDE: this here fails, don't know why! if you look at `v.f` one sees that var"Q(t)" is used befor it isdefined, probably wrong odering of obs_eqs, maybe in the algebraic reduction?
+    # CLAUDE: i think the problem is taht newobs themseves are not necesairily sorted and might depend on eachotehr!
 
     @test v isa VertexModel
+end
+
+function topologicical_sorted(eqs)
+    lhs = [eq.lhs for eq in eqs]
+    for i in eachindex(eqs)
+        not_allowed = Set(lhs[i:end])
+        rhs_syms = ModelingToolkitBase.get_variables(eqs[i].rhs)
+        if !isempty(intersect(not_allowed, rhs_syms))
+            return false
+        end
+    end
+    return true
+end
+
+@testset "Algebraic system reduction" begin
+    @variables a1(t) a2(t) a3(t) s1(t) s2(t) s3(t)
+    @parameters p1 p2 p3
+
+    algebraic_states = [a1, a2, a3]
+    eqs = [
+        0 ~ p1*a1 + p2*a2
+        0 ~ s1*s2*a2 + cos(a3)
+        0 ~ sin(a3)
+    ]
+
+    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(eqs, Equation[], algebraic_states)
+    # eq1 can solve for a1 (linear in a1 with const coeff p1), eq2 can solve for a2 (linear in a2 with symbolic coeff s1*s2)
+    # eq3 is nonlinear in a3 → stays as constraint
+    @test length(red_states) == 1
+    @test isequal(only(red_states), a3.val)
+    @test length(red_obs) == 2
+
+    @variables A(t) B(t) C(t) D(t) E(t) F(t) G(t) H(t) I(t) J(t) K(t) L(t) M(t) N(t)
+    @parameters in1 in2 p1 p2
+    eqs = [
+        0 ~ sqrt(G^2 + I^2) - L     # eq1: linear in L (coeff -1)
+        0 ~ atan(I, G) - J           # eq2: linear in J (coeff -1)
+        0 ~ -N + in1*I + G*in2       # eq3: linear in N (coeff -1)
+        0 ~ -M - in1*G + I*in2       # eq4: linear in M (coeff -1)
+        0 ~ B - G                    # eq5: linear in B,G (coeff 1,-1)
+        0 ~ A - I                    # eq6: linear in A,I (coeff 1,-1)
+        0 ~ K - in2                  # eq7: linear in K (coeff 1)
+        0 ~ -in1 + C                 # eq8: linear in C (coeff 1)
+        0 ~ p1^2 - (D^2) - (E^2)    # eq9: nonlinear in D,E
+        0 ~ p2 - D*H - F*E          # eq10: nonlinear in D,E,F,H (products of states)
+        0 ~ -B + E                   # eq11: linear in B,E (coeff -1,1)
+        0 ~ D - A                    # eq12: linear in D,A (coeff 1,-1)
+        0 ~ F + K                    # eq13: linear in F,K (coeff 1,1)
+        0 ~ C + H                    # eq14: linear in C,H (coeff 1,1)
+    ]
+    all_states = [A, B, C, D, E, F, G, H, I, J, K, L, M, N]
+    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(eqs, Equation[], all_states)
+    # 13 of 14 equations matched via SCC decomposition (each individually linear).
+    # Only eq9 (p1^2 - D^2 - E^2) is fully nonlinear and can't be matched.
+    # One state remains as a constraint variable.
+    @test length(red_states) == 1
+    @test length(red_eqs) == 1
+    @test topologicical_sorted(red_eqs)
+
+
+    @variables p(t) prosumer_p(t) prosumer_q_nw(t) prosumer_q_inj(t)
+    @parameters q_nw prosumer_q_prosumer
+    eqs = [
+        0 ~ -p + prosumer_p
+        0 ~ -q_nw + prosumer_q_nw
+        0 ~ -prosumer_q_inj - prosumer_q_nw
+        0 ~ prosumer_q_prosumer + prosumer_q_nw
+    ]
+    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(eqs, Equation[], [p, prosumer_p, prosumer_q_nw, prosumer_q_inj])
+    @test length(red_eqs) == 1
+    @test length(red_obs) == 3
 end

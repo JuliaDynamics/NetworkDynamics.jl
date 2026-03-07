@@ -3,6 +3,7 @@ using Graphs
 using NetworkDynamics
 using ModelingToolkitBase
 using ModelingToolkitBase: t_nounits as t, D_nounits as Dt
+using SciCompDSL
 
 Base.@propagate_inbounds function diffusionedge!(e, v_s, v_d, (p,), _)
     e .= p * (v_s[1] .- v_d[1])
