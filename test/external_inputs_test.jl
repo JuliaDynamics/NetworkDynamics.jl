@@ -4,6 +4,7 @@ using Chairmarks: @b
 using NetworkDynamics: StateBufIdx, OutBufIdx, ExtMap, collect_externals!
 using ModelingToolkitBase
 using ModelingToolkitBase: t_nounits as t, D_nounits as Dt
+using SciCompDSL
 using Random
 using CUDA, Adapt
 

@@ -288,7 +288,7 @@ function NetworkDynamics.set_mtk_defaults!(sys::System, pairs)
             throw(ArgumentError("Could not resolve variable of name $name in system $(getname(sys))! None of the defaults have been set."))
         end
     end
-    defdict = ModelingToolkit.get_defaults(sys)
+    defdict = ModelingToolkitBase.get_initial_conditions(sys)
     for (s, v) in zip(symbols, defs)
         defdict[s] = v
     end

@@ -51,6 +51,43 @@ end
     @test_throws "Can't determine eq type" mtkext.eq_type(eq)
 end
 
+@testset "get_scaled_diff test" begin
+    @variables x(t) y(t) z
+
+    # scaled by symbolic variable
+    r = mtkext.get_scaled_diff((z*Dt(x)).val)
+    @test !isnothing(r)
+    @test isequal(r[1], Dt(x).val)
+    @test isequal(r[2], z.val)
+
+    # scaled by literal number
+    r = mtkext.get_scaled_diff((2*Dt(x)).val)
+    @test !isnothing(r)
+    @test isequal(r[1], Dt(x).val)
+    @test isequal(r[2], 2)
+
+    # scaled by symbolic power
+    r = mtkext.get_scaled_diff((z^2*Dt(x)).val)
+    @test !isnothing(r)
+    @test isequal(r[1], Dt(x).val)
+    @test isequal(r[2], z.val^2)
+
+    # negative coefficient
+    r = mtkext.get_scaled_diff((-z*Dt(x)).val)
+    @test !isnothing(r)
+    @test isequal(r[1], Dt(x).val)
+    @test isequal(r[2], -z.val)
+
+    # plain differential — not a scaled diff
+    @test isnothing(mtkext.get_scaled_diff(Dt(x).val))
+
+    # squared differential — not a scaled diff
+    @test isnothing(mtkext.get_scaled_diff((z*Dt(x)^2).val))
+
+    # non-differential product — not a scaled diff
+    @test isnothing(mtkext.get_scaled_diff((z*x).val))
+end
+
 @mtkmodel Bus begin
     @variables begin
         θ(t), [description = "voltage angle", output=true]
@@ -792,3 +829,156 @@ end
     @test isempty(red_states)
     @test topologicical_sorted(red_obs)
 end
+
+@testset "FF-blocking in reduce_linear_algebraic" begin
+    # Setup: u_r, u_i are outputs (e.g. bus voltages), i_r, i_i are inputs (currents)
+    # n is a non-output internal state, p1/p2 are pure parameters
+    @variables u_r(t) u_i(t) n(t) foo(t)
+    @parameters P Q i_r i_i p1 p2
+
+    pq_eqs = [
+        0 ~ P + u_r*i_r + i_i*u_i   # P-injection: depends on inputs i_r, i_i
+        0 ~ Q + u_r*i_i - i_r*u_i   # Q-injection: depends on inputs i_r, i_i
+    ]
+
+    ff_set = Set([i_r, i_i])
+
+    # A: Output states in input-dependent equations → both stay as constraints
+    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(
+        pq_eqs, Equation[], [u_r, u_i];
+        outputs=[u_r, u_i], ff_inputs=ff_set, verbose=false)
+    @test length(red_states) == 2
+    @test isempty(red_obs)
+    @test length(red_eqs) == 2
+    # Equations should be the originals (no divisions introduced)
+    @test red_eqs == pq_eqs
+
+    # B: Same equations, ff_inputs=Set() → normal solving (blocking disabled)
+    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(
+        pq_eqs, Equation[], [u_r, u_i];
+        outputs=[u_r, u_i], ff_inputs=Set(), verbose=false)
+    @test isempty(red_states)
+    @test length(red_obs) == 2
+
+    # C: Non-output state in input-dependent equation → still solved (blocking only for outputs)
+    eqs_n = [0 ~ n - i_r*u_r - i_i*u_i]  # n is not an output
+    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(
+        eqs_n, Equation[], [n];
+        outputs=[], ff_inputs=ff_set, verbose=false)
+    @test isempty(red_states)
+    @test length(red_obs) == 1
+    @test isequal(only(red_obs).lhs, n.val)
+
+    # D: Output state in input-free equation → still solved (no input dependency)
+    eqs_free = [0 ~ u_r - p1*p2]
+    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(
+        eqs_free, Equation[], [u_r];
+        outputs=[u_r], ff_inputs=ff_set, verbose=false)
+    @test isempty(red_states)
+    @test length(red_obs) == 1
+    @test isequal(only(red_obs).lhs, u_r.val)
+
+    # E: Input dependency via obs chain → output should be blocked
+    # foo is observed as foo ~ i_r + 1 (depends on input i_r)
+    # equation 0 ~ u_r + foo looks input-free without expanding obs
+    existing_obs = Equation[foo ~ i_r + 1]
+    eqs_chain = [0 ~ u_r + foo]
+    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(
+        eqs_chain, existing_obs, [u_r];
+        outputs=[u_r], ff_inputs=ff_set, verbose=false)
+    @test length(red_states) == 1  # u_r stays as state (obs chain detected)
+    @test length(red_eqs) == 1
+
+    # F: Cramer's rule for non-output 2×2 coupled states: verify solution correctness
+    # and absence of spurious i_r or i_i denominators
+    @variables x(t) y(t)
+    eqs_2x2 = [0 ~ P + x*i_r + i_i*y, 0 ~ Q + x*i_i - i_r*y]
+    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(
+        eqs_2x2, Equation[], [x, y]; verbose=false)
+    @test isempty(red_states)
+    @test length(red_obs) == 2
+    x_sol = only(filter(eq -> isequal(eq.lhs, x.val), red_obs)).rhs
+    y_sol = only(filter(eq -> isequal(eq.lhs, y.val), red_obs)).rhs
+    # Expected: x = -(P*i_r + Q*i_i)/(i_r^2+i_i^2), y = (Q*i_r - P*i_i)/(i_r^2+i_i^2)
+    # Verify numerically: P=3, Q=4, i_r=1, i_i=2 → denom=5, x=-11/5, y=-2/5
+    sub = Dict(P => 3.0, Q => 4.0, i_r => 1.0, i_i => 2.0)
+    @test unwrap_const(Symbolics.substitute(x_sol, sub)) ≈ -(3*1 + 4*2)/5
+    @test unwrap_const(Symbolics.substitute(y_sol, sub)) ≈ (4*1 - 3*2)/5
+    # At i_i=0, i_r=1: old symbolic_linear_solve divided by i_i → NaN; Cramer uses i_r^2+i_i^2=1
+    sub2 = Dict(P => 3.0, Q => 4.0, i_r => 1.0, i_i => 0.0)
+    @test unwrap_const(Symbolics.substitute(x_sol, sub2)) ≈ -3.0
+    @test unwrap_const(Symbolics.substitute(y_sol, sub2)) ≈  4.0
+
+    # G: Mixed: output blocked from input-dep eq, non-output still solved
+    # n (non-output) and u_r (output) both appear in same equation set
+    eqs_mixed = [
+        0 ~ P + u_r*i_r + i_i*u_i   # u_r, u_i are outputs → blocked
+        0 ~ Q + u_r*i_i - i_r*u_i   # same
+        0 ~ n - u_r - u_i            # n is non-output, depends only on states (not inputs)
+    ]
+    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(
+        eqs_mixed, Equation[], [u_r, u_i, n];
+        outputs=[u_r, u_i], ff_inputs=ff_set, verbose=true)
+    @test length(red_states) == 2   # u_r, u_i stay as constraints
+    @test length(red_obs) == 1      # n solved from its equation
+    @test isequal(only(red_obs).lhs, n.val)
+
+    # H: PV-like case: output blocked from linear P-eq, nonlinear V-eq stays
+    @parameters Vset Pset
+    eqs_pv = [
+        0 ~ Pset + u_r*i_r + i_i*u_i   # linear in u_r, depends on inputs → blocked
+        0 ~ -(Vset^2) + u_r^2 + u_i^2  # nonlinear → can't be solved for either state
+    ]
+    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(
+        eqs_pv, Equation[], [u_r, u_i];
+        outputs=[u_r, u_i], ff_inputs=ff_set, verbose=false)
+    @test length(red_states) == 2   # both stay
+    @test isempty(red_obs)
+    @test length(red_eqs) == 2      # both original equations preserved intact
+end
+
+@testset "Test get_alias function" begin
+    @variables a(t) b(t) c(t)
+    @parameters p
+
+    @test mtkext.get_alias(a ~ b) == (a, b)
+    @test mtkext.get_alias(0 ~ b - b) == nothing
+    @test mtkext.get_alias(p ~ 1) == nothing
+    # parameters must not be treated as aliases — equation like `x ~ V` defines x,
+    # it doesn't alias two unknowns (regression: VoltageSource p₊v ~ V was falsely aliased)
+    @test mtkext.get_alias(p ~ a) == nothing
+    @test mtkext.get_alias(a ~ p) == nothing
+    @test mtkext.get_alias(0 ~ p - a) == nothing
+    @test mtkext.get_alias(p ~ -a) == nothing
+    @test mtkext.get_alias(0 ~ p-sin(a)) == nothing
+end
+
+@testset "Output defined by parameter (NWTerminal regression)" begin
+    @mtkmodel NWTerminal begin
+        @variables begin
+            v(t), [description="Voltage at node"]
+            i(t), [description="Current flowing into node"]
+        end
+    end
+    @mtkmodel VoltageSource begin
+        @components begin
+            p = NWTerminal()
+        end
+        @parameters begin
+            V = 1.0
+        end
+        @variables begin
+            i(t), [description="produced current"]
+        end
+        @equations begin
+            i ~ -p.i
+            p.v ~ V
+        end
+    end
+    @named vs = VoltageSource()
+    # p₊v ~ V (output defined by parameter) must not be treated as an alias
+    vs_vertex = VertexModel(vs, [:p₊i], [:p₊v])
+    @test Set(NetworkDynamics.outsym(vs_vertex)) == Set([:p₊v])
+    @test :V ∈ Set(NetworkDynamics.psym(vs_vertex))
+end
+

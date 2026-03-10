@@ -170,8 +170,8 @@ _no_simplify(x) = x
         Qset, [description = "Reactive Power setpoint", guess=0]
     end
     @equations begin
-        0 ~ _no_simplify(u_r*i_r + u_i*i_i + Pset)
-        0 ~ _no_simplify(u_r*i_i - u_i*i_r + Qset)
+        0 ~ u_r*i_r + u_i*i_i + Pset
+        0 ~ u_r*i_i - u_i*i_r + Qset
     end
 end
 
@@ -184,8 +184,8 @@ end
         Qset, [description = "Reactive Power setpoint", guess=0]
     end
     @equations begin
-        0 ~ _no_simplify(u_r*i_r + u_i*i_i + Pfun(t))
-        0 ~ _no_simplify(u_r*i_i - u_i*i_r + Qset)
+        0 ~ u_r*i_r + u_i*i_i + Pfun(t)
+        0 ~ u_r*i_i - u_i*i_r + Qset
     end
 end
 
@@ -196,7 +196,7 @@ end
         Vset = 1.0, [description = "Voltage setpoint"]
     end
     @equations begin
-        0 ~ _no_simplify(u_r*i_r + u_i*i_i + Pset)
+        0 ~ u_r*i_r + u_i*i_i + Pset
         Vset^2 ~ u_r^2 + u_i^2
     end
 end
@@ -266,7 +266,7 @@ function dqbus_swing(; kwargs...)
 end
 function dqbus_pq(; name=:pq, kwargs...)
     pq = PQLoad(; name, kwargs...)
-    VertexModel(pq, [:i_r, :i_i], [:u_r, :u_i])
+    VertexModel(pq, [:i_r, :i_i], [:u_r, :u_i]; verbose=false)
 end
 function dqbus_timedeppq(; kwargs...)
     @named pq_timedep = TimeDependentPQLoad(; kwargs...)
@@ -280,7 +280,7 @@ function dqbus_pv(; injector=false, name=:pv, kwargs...)
         set_default!(vm, :i_i, 0.0)
         vm
     else
-        VertexModel(pv, [:i_r, :i_i], [:u_r, :u_i])
+        VertexModel(pv, [:i_r, :i_i], [:u_r, :u_i]; verbose=false)
     end
 end
 function dqbus_slack(; injector=false, kwargs...)
@@ -336,7 +336,7 @@ function powergridlike_network()
         interface_values(pf),
         Dict(EIndex(1:5, :active) .=> nothing))
 
-    s0 = initialize_componentwise!(nw; subverbose=true, verbose=true, default_overrides)
+    s0 = initialize_componentwise!(nw; subverbose=false, verbose=false, default_overrides)
     nw, s0
 end
 
