@@ -224,7 +224,7 @@ function remove_implicit_output_fn!(eqs)
 end
 
 function collect_comp_metadata(sys, key)
-    md = Dict{String, Any}()
+    md = OrderedDict{String, Any}()
     _collect_comp_metadata!(md, sys, key, nothing)
     md
 end
@@ -238,7 +238,12 @@ function _collect_comp_metadata!(md, sys, key, current_namespace)
         string(current_namespace, "₊", getname(sys))
     end
 
-    # collect from current system
+    # collect from subsystems first (children before parents)
+    for s in ModelingToolkit.get_systems(sys)
+        _collect_comp_metadata!(md, s, key, ns_modelname)
+    end
+
+    # collect from current system last (post-order: after all children)
     thismd = ModelingToolkit.get_metadata(sys)
     if haskey(thismd, key)
         if haskey(md, ns_modelname) && md[ns_modelname] != thismd[key]
@@ -246,16 +251,6 @@ function _collect_comp_metadata!(md, sys, key, current_namespace)
             @warn "Overwriting metadata $key for $_modname while collecting"
         end
         md[ns_modelname] = thismd[key]
-    end
-
-    # collect from parent
-    if !isnothing(ModelingToolkit.get_parent(sys))
-        _collect_comp_metadata!(md, ModelingToolkit.get_parent(sys), key, current_namespace)
-    end
-
-    # collect from subsystems
-    for s in ModelingToolkit.get_systems(sys)
-        _collect_comp_metadata!(md, s, key, ns_modelname)
     end
     nothing
 end
