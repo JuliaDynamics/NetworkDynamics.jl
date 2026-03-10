@@ -1,96 +1,115 @@
 """
     remove_aliases(eqs, obseqs, states, outputs; verbose)
 
-Detects aliasgroups in eqs and obseqs, finds a "main" state to represent each
-aliasgroup and uses that everywhere.
+Detects alias equations (`a ~ b` or `0 ~ a - b`) in `eqs` and `obseqs`, groups
+transitive aliases, picks a "main" representative per group (preferring outputs,
+then fewer `₊` namespaces), and substitutes all non-mains → main everywhere.
+
+Alias equations are removed from `eqs`/`obseqs`, their paired states are dropped,
+and observation equations `non_main ~ main` are inserted into `obseqs`.
 """
 function remove_aliases(eqs, obseqs, states, outputs; verbose)
-    ST = SymbolicUtils.BasicSymbolicImpl.var"typeof(BasicSymbolicImpl)"{SymbolicUtils.SymReal}
-    aliasgroups = Set{Set{ST}}()
+    # 1. Identify alias equations in eqs and obseqs
+    alias_pairs = Tuple[]
+    eq_is_alias = falses(length(eqs))
+    for (i, eq) in enumerate(eqs)
+        alias = get_alias(eq)
+        if alias isa Tuple
+            push!(alias_pairs, alias)
+            eq_is_alias[i] = true
+        end
+    end
+    obs_is_alias = falses(length(obseqs))
+    for (i, eq) in enumerate(obseqs)
+        alias = get_alias(eq)
+        if alias isa Tuple
+            push!(alias_pairs, alias)
+            obs_is_alias[i] = true
+        end
+    end
 
-    _collect_and_remove_aliases!(aliasgroups, eqs, states)
-    @assert length(states) == length(eqs) "Expected one state per equation after removing aliases, but got $(length(states)) states and $(length(eqs)) equations"
-    _collect_and_remove_aliases!(aliasgroups, obseqs)
+    isempty(alias_pairs) && return eqs, obseqs, states
 
-    alias_subs = Dict{ST, ST}()
-    alias_obs = Equation[]
+    # 2. Build alias groups via connected components (handles transitive chains correctly)
+    groups = _alias_connected_components(alias_pairs)
 
+    # 3. Pick main per group, build substitution dict and alias observations
     outset = Set(outputs)
-    sortf = function(s)
-        if s ∈ outset
-            return typemin(Int)
-        else
-            st = string(s)
-            count('₊', st)
-        end
-    end
-    if verbose
-        infostr = "Found $(length(aliasgroups)) alias groups:"
-    end
-    for group in aliasgroups
-        candidates = collect(group)
-        sort!(candidates, by=sortf)
-        main = first(candidates)
-        rest = view(candidates, 2:length(candidates))
-
-        if verbose
-            infostr *= "\n  $main => " * join(collect(rest), ", ")
-        end
-
-        for r in rest
+    sortf(s) = s ∈ outset ? typemin(Int) : count('₊', string(s))
+    alias_subs = Dict()
+    alias_obs = Equation[]
+    for group in groups
+        sorted = sort!(collect(group), by=sortf)
+        main = first(sorted)
+        for r in @view(sorted[2:end])
             alias_subs[r] = main
             push!(alias_obs, r ~ main)
         end
     end
 
-    verbose && @info infostr
+    verbose && @info "Found $(length(groups)) alias groups" groups alias_subs
 
-    _eqs = Symbolics.substitute(eqs, alias_subs)
-    _obseqs = Symbolics.substitute(obseqs, alias_subs)
-    _insert_sorted!(_obseqs, alias_obs)
-    _states = Symbolics.substitute(states, alias_subs)
-
-    _eqs, _obseqs, _states
-end
-function _collect_and_remove_aliases!(aliasgroups, eqs::Vector{Equation}, states=nothing)
-    rm_eq = Int[]
-    if !isnothing(states)
-        algebraic = [eq_type(eq)[1] == :implicit_algebraic for eq in eqs]
-        rm_st = Int[]
-        claimed = Set()
+    # 4. Fix implicit-pool misassignment: ensure each alias eq's state is one of its variables.
+    #    The implicit_states pool may assign an unrelated variable as the state for an
+    #    implicit_algebraic alias equation. Swap it into place so positional removal is correct.
+    for i in eachindex(eqs)
+        eq_is_alias[i] || continue
+        a, b = get_alias(eqs[i])
+        (isequal(states[i], a) || isequal(states[i], b)) && continue
+        j = findfirst(j -> isequal(states[j], a) || isequal(states[j], b), eachindex(states))
+        @assert !isnothing(j) "Could not find state matching alias ($a, $b) in states"
+        states[i], states[j] = states[j], states[i]
     end
-    for (i, eq) in enumerate(eqs)
-        alias = get_alias(eq)
-        alias isa Tuple || continue
-        insert_alias!(aliasgroups, alias)
-        push!(rm_eq, i)
-        if !isnothing(states)
-            a, b = alias
-            idx = findfirst(j -> algebraic[j] &&
-                                 (isequal(states[j], a) || isequal(states[j], b)) &&
-                                 states[j] ∉ claimed,
-                            eachindex(states))
-            if !isnothing(idx)
-                push!(rm_st, idx)
-                push!(claimed, states[idx])
+
+    # 5. Remove alias equations and their positionally-paired states
+    keep_eq = .!eq_is_alias
+    eqs = eqs[keep_eq]
+    states = states[keep_eq]
+    obseqs = obseqs[.!obs_is_alias]
+
+    @assert length(states) == length(eqs) "state/eq count mismatch after alias removal: $(length(states)) states vs $(length(eqs)) eqs"
+
+    # 6. Substitute non-main → main everywhere
+    eqs = Symbolics.substitute(eqs, alias_subs)
+    obseqs = Symbolics.substitute(obseqs, alias_subs)
+    states = Symbolics.substitute(states, alias_subs)
+
+    # 7. Insert alias observations in topological order
+    _insert_sorted!(obseqs, alias_obs)
+
+    return eqs, obseqs, states
+end
+
+"""
+    _alias_connected_components(pairs)
+
+Given alias pairs `[(a,b), (c,d), ...]`, returns groups of transitively connected
+variables as a `Vector{Vector}`. E.g. pairs `(a,b), (b,c)` → `[[a, b, c]]`.
+"""
+function _alias_connected_components(pairs)
+    adj = Dict{Any, Vector{Any}}()
+    for (a, b) in pairs
+        push!(get!(adj, a, Any[]), b)
+        push!(get!(adj, b, Any[]), a)
+    end
+    visited = Set{Any}()
+    groups = Vector{Vector{Any}}()
+    for v in keys(adj)
+        v ∈ visited && continue
+        group = Any[]
+        stack = Any[v]
+        while !isempty(stack)
+            u = pop!(stack)
+            u ∈ visited && continue
+            push!(visited, u)
+            push!(group, u)
+            for w in adj[u]
+                w ∈ visited || push!(stack, w)
             end
         end
+        push!(groups, group)
     end
-    deleteat!(eqs, rm_eq)
-    if !isnothing(states)
-        deleteat!(states, sort!(rm_st))
-    end
-end
-function insert_alias!(aliasgroups, tup)
-    a, b = tup
-    for group in aliasgroups
-        if a ∈ group || b ∈ group
-            push!(group, a)
-            push!(group, b)
-            return
-        end
-    end
-    push!(aliasgroups, Set([a, b]))
+    return groups
 end
 
 """
