@@ -1,3 +1,8 @@
+struct InitFuncWrapper
+    f::Any
+end
+(w::InitFuncWrapper)(args...) = w.f(args...)
+
 struct NetworkInitError <: Exception
     msg::String
 end
@@ -347,7 +352,7 @@ function initialization_problem(cf::T,
     else
         _deduplicated_free_symbols(freesym)
     end
-    nlf = NonlinearFunction(fz; resid_prototype=zeros(Neqs), sys=SII.SymbolCache(freesym_no_dup))
+    nlf = NonlinearFunction(InitFuncWrapper(fz); resid_prototype=zeros(Neqs), sys=SII.SymbolCache(freesym_no_dup))
 
     if Neqs == Nfree
         if verbose
@@ -376,7 +381,7 @@ function initialization_problem(cf::T,
     resid = zeros(Neqs)
     fn_error = nothing
     try
-        nlf(resid, uguess, nothing)
+        nlf(resid, uguess, SciMLBase.NullParameters())
     catch e
         fn_error = e
     end
