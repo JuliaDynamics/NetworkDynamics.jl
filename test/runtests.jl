@@ -24,7 +24,7 @@ BUILDKITE && @test CUDA.functional() # fail early in buildkite if cuda is not av
         @test check_no_stale_explicit_imports(NetworkDynamics, ignore=(:Symbolics,)) === nothing
         Aqua.test_all(NetworkDynamics;
             ambiguities=false,
-            stale_deps=true,
+            stale_deps=VERSION ≥ v"1.11", # don't check stale deps on LTS (we add Testfiles to main env)
             deps_compat=VERSION ≥ v"1.11", # don't check compat on LTS
             persistent_tasks=false)
         @test_broken isempty(Docs.undocumented_names(NetworkDynamics))
