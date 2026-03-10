@@ -982,3 +982,216 @@ end
     @test :V ∈ Set(NetworkDynamics.psym(vs_vertex))
 end
 
+####
+#### remove_aliases tests
+####
+@testset "remove_aliases" begin
+    using Symbolics: unwrap
+    @variables a(t) b(t) c(t) d(t) x(t) y(t) z(t)
+    @parameters p q
+
+    # shorthand: call remove_aliases on copies, check length invariant, return results
+    function RA(eqs, obseqs, states, outputs; kw...)
+        eqs_c, obs_c, st_c = copy(eqs), copy(obseqs), copy(states)
+        ret = mtkext.remove_aliases(eqs_c, obs_c, st_c, outputs; verbose=false, kw...)
+        @assert length(ret[1]) == length(ret[3]) "length mismatch: $(length(ret[3])) states vs $(length(ret[1])) eqs"
+        ret
+    end
+    # Order-independent alias check: true if obs contains an alias equation between v1 and v2
+    function is_alias_between(obs, v1, v2)
+        any(o -> (isequal(o.lhs, unwrap(v1)) && isequal(o.rhs, unwrap(v2))) ||
+                 (isequal(o.lhs, unwrap(v2)) && isequal(o.rhs, unwrap(v1))), obs)
+    end
+
+    @testset "No aliases — system unchanged" begin
+        eqs = [Dt(x) ~ -x, 0 ~ y + x]
+        states = unwrap.([x, y])
+        ret_eqs, ret_obs, ret_st = RA(eqs, Equation[], states, [])
+
+        @test isequal(ret_eqs, eqs)
+        @test isequal(ret_st, states)
+        @test isempty(ret_obs)
+    end
+
+    @testset "Explicit alias (a ~ b), no outputs" begin
+        eqs    = [a ~ b]
+        states = [unwrap(b)]
+        ret_eqs, ret_obs, ret_st = RA(eqs, Equation[], states, [])
+        @test isempty(ret_eqs)
+        @test isempty(ret_st)
+        @test length(ret_obs) == 1
+        @test is_alias_between(ret_obs, a, b)
+    end
+
+    @testset "Explicit alias (a ~ b), b is output → b is main, obs: a ~ b" begin
+        eqs    = [a ~ b]
+        states = unwrap.([b])
+        ret_eqs, ret_obs, ret_st = RA(eqs, Equation[], states, [unwrap(b)])
+        @test isempty(ret_eqs)
+        @test isempty(ret_st)
+        # b is output → b is main → a becomes alias of b
+        @test ret_obs == [a ~ b]
+    end
+
+    @testset "Explicit alias (a ~ b), a is output → a is main, obs: b ~ a" begin
+        eqs    = [a ~ b]
+        states = [unwrap(b)]
+        ret_eqs, ret_obs, ret_st = RA(eqs, Equation[], states, [unwrap(a)])
+        @test isempty(ret_eqs)
+        @test isempty(ret_st)
+        @test length(ret_obs) == 1
+        # a is output → a is main → b becomes alias of a
+        @test isequal(only(ret_obs).lhs, unwrap(b))
+        @test isequal(only(ret_obs).rhs, unwrap(a))
+    end
+
+    @testset "Namespace hierarchy: fewer ₊ wins as main" begin
+        # Simulate connector aliasing: sub₊a ~ b (sub₊a has 1 '₊', b has 0)
+        # → b is main, sub₊a is rest → obs: sub₊a ~ b
+        @variables sub₊a(t)
+        eqs    = [sub₊a ~ b]
+        states = [unwrap(b)]
+        ret_eqs, ret_obs, ret_st = RA(eqs, Equation[], states, [])
+        @test isempty(ret_eqs)
+        @test isempty(ret_st)
+        @test length(ret_obs) == 1
+        @test isequal(only(ret_obs).lhs, unwrap(sub₊a))
+        @test isequal(only(ret_obs).rhs, unwrap(b))
+    end
+
+    @testset "Explicit alias coexists with diff eq — diff eq unchanged" begin
+        # Dt(x) ~ -x  and  a ~ b
+        eqs    = [Dt(x) ~ -x, a ~ b]
+        states = [unwrap(x), unwrap(b)]
+        ret_eqs, ret_obs, ret_st = RA(eqs, Equation[], states, [])
+        @test length(ret_eqs) == 1
+        @test length(ret_st)  == 1
+        @test isequal(only(ret_eqs), Dt(x) ~ -x)
+        @test isequal(only(ret_st), unwrap(x))
+        @test length(ret_obs) == 1
+    end
+
+    @testset "Multiple explicit aliases, no implicit_algebraic eqs (the bug case)" begin
+        # 3 alias eqs + 1 diff eq: before fix the @assert fired because no implicit_algebraic
+        # eqs existed to pair with the alias state removal search
+        eqs    = [a ~ b, c ~ d, Dt(x) ~ -x, y ~ z]
+        states = [unwrap(b), unwrap(d), unwrap(x), unwrap(z)]
+        ret_eqs, ret_obs, ret_st = RA(eqs, Equation[], states, [])
+        @test isequal(ret_eqs, [Dt(x) ~ -x])
+        @test isequal(ret_st,  [unwrap(x)])
+        @test length(ret_obs) == 3
+        @test is_alias_between(ret_obs, a, b)
+        @test is_alias_between(ret_obs, c, d)
+        @test is_alias_between(ret_obs, y, z)
+    end
+
+    @testset "Multiple explicit aliases, one output pinned as main" begin
+        # a ~ b, c ~ d: d is output → d is deterministically the main → obs: c ~ d
+        eqs    = [a ~ b, c ~ d]
+        states = [unwrap(b), unwrap(d)]
+        ret_eqs, ret_obs, ret_st = RA(eqs, Equation[], states, [unwrap(d)])
+        @test isempty(ret_eqs)
+        @test isempty(ret_st)
+        @test length(ret_obs) == 2
+        @test any(o -> isequal(o, c ~ d), ret_obs)   # d pinned as output → d is main
+        @test is_alias_between(ret_obs, a, b)
+    end
+
+    @testset "Implicit alias (0 ~ a - b), state from pool" begin
+        # eq_type(0 ~ a - b) = (:implicit_algebraic, nothing)
+        # simulate: pool gives `a` as the state for this equation
+        eqs    = [0 ~ a - b]
+        states = [unwrap(a)]   # a popped from implicit_states pool
+        ret_eqs1, ret_obs1, ret_st1 = RA(eqs, Equation[], states, [])
+        @test isempty(ret_eqs1)
+        @test isempty(ret_st1)
+        @test length(ret_obs1) == 1
+        @test is_alias_between(ret_obs1, a, b)
+
+        # same canonical alias regardless of which variable was the pool state
+        eqs    = [0 ~ a - b]
+        states = [unwrap(b)]
+        ret_eqs2, ret_obs2, ret_st2 = RA(eqs, Equation[], states, [])
+        @test isempty(ret_eqs2)
+        @test isempty(ret_st2)
+        @test isequal(ret_obs1, ret_obs2)
+    end
+
+    @testset "Implicit alias + explicit alias together" begin
+        # 0 ~ a - b (implicit, pool gives a), c ~ d (explicit, state=d), Dt(x) ~ -x
+        eqs    = [0 ~ a - b, c ~ d, Dt(x) ~ -x]
+        states = [unwrap(a), unwrap(d), unwrap(x)]
+        ret_eqs, ret_obs, ret_st = RA(eqs, Equation[], states, [])
+        @test isequal(ret_eqs, [Dt(x) ~ -x])
+        @test isequal(ret_st,  [unwrap(x)])
+        @test length(ret_obs) == 2
+        @test is_alias_between(ret_obs, a, b)
+        @test is_alias_between(ret_obs, c, d)
+    end
+
+    @testset "Transitive chain a ~ b, b ~ c → single alias group" begin
+        # a ~ b  (state=b),  b ~ c  (state=c): all three must end up in one alias group
+        eqs    = [a ~ b, b ~ c]
+        states = [unwrap(b), unwrap(c)]
+        ret_eqs, ret_obs, ret_st = RA(eqs, Equation[], states, [])
+        @test isempty(ret_eqs)
+        @test isempty(ret_st)
+        # two non-mains aliased to a single main (all three vars covered)
+        @test length(ret_obs) == 2
+        @test isequal(ret_obs[1].rhs, ret_obs[2].rhs)  # same main
+        covered = [ret_obs[1].lhs, ret_obs[2].lhs, ret_obs[1].rhs]
+        @test all(v -> any(isequal(v, c2) for c2 in covered), unwrap.([a, b, c]))
+    end
+
+    @testset "Alias in obseqs picked up for aliasgroup" begin
+        # no aliases in main eqs; obseqs contains a ~ b — should be picked up and canonicalized
+        eqs    = [Dt(x) ~ -x]
+        states = [unwrap(x)]
+        obseqs = [a ~ b]
+        ret_eqs, ret_obs, ret_st = RA(eqs, obseqs, states, [])
+        @test isequal(ret_eqs, [Dt(x) ~ -x])
+        @test isequal(ret_st,  [unwrap(x)])
+        @test length(ret_obs) == 1
+        @test is_alias_between(ret_obs, a, b)
+    end
+
+    @testset "Alias variable substituted into remaining equations" begin
+        # a is output → a is deterministically the main; b→a substitution in Dt(x) ~ b
+        eqs    = [a ~ b, Dt(x) ~ b]
+        states = [unwrap(b), unwrap(x)]
+        ret_eqs, ret_obs, ret_st = RA(eqs, Equation[], states, [unwrap(a)])
+        @test isequal(ret_eqs, [Dt(x) ~ a])
+        @test isequal(ret_st,  [unwrap(x)])
+        @test isequal(ret_obs, [b ~ a])
+    end
+
+    @testset "Alias substituted into obseqs" begin
+        # a is output → a is deterministically the main (b→a); obs y ~ a*x unchanged (no b)
+        # alias obs b ~ a inserted before y ~ a*x in topological order
+        eqs    = [a ~ b, Dt(x) ~ -x]
+        states = [unwrap(b), unwrap(x)]
+        obseqs = [y ~ a*x]
+        ret_eqs, ret_obs, ret_st = RA(eqs, obseqs, states, [unwrap(a)])
+        @test isequal(ret_eqs, [Dt(x) ~ -x])
+        @test isequal(ret_st,  [unwrap(x)])
+        @test isequal(ret_obs, [b ~ a, y ~ a*x])
+    end
+
+    @testset "SwingBus-like: multiple connector aliases, diff states" begin
+        # Mirrors the failing precomp_workload case:
+        # explicit alias eqs for connector variables alongside diff eqs for θ and ω.
+        # ur, ui are outputs → mains; sub₊ur, sub₊ui become obs
+        @variables θ(t) ω(t) Pel(t) ur(t) ui(t) sub₊ur(t) sub₊ui(t)
+        diff_eqs   = [Dt(θ) ~ ω, Dt(ω) ~ -(0.1*ω + Pel)]
+        alias_eqs  = [sub₊ur ~ ur, sub₊ui ~ ui]
+        eqs    = vcat(diff_eqs, alias_eqs)
+        states = [unwrap(θ), unwrap(ω), unwrap(ur), unwrap(ui)]
+        ret_eqs, ret_obs, ret_st = RA(eqs, Equation[], states, [unwrap(ur), unwrap(ui)])
+        @test isequal(ret_eqs, diff_eqs)
+        @test isequal(ret_st,  [unwrap(θ), unwrap(ω)])
+        @test length(ret_obs) == 2
+        @test any(o -> isequal(o, sub₊ur ~ ur), ret_obs)
+        @test any(o -> isequal(o, sub₊ui ~ ui), ret_obs)
+    end
+end;
+
