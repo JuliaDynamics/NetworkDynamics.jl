@@ -2,6 +2,7 @@ using Test
 using NetworkDynamics
 using ModelingToolkitBase
 using ModelingToolkitBase: t_nounits as t, D_nounits as D
+using SciCompDSL
 using OrdinaryDiffEqTsit5
 using Graphs
 

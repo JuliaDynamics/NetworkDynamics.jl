@@ -5,6 +5,7 @@ using Graphs
 using OrdinaryDiffEqRosenbrock
 using ModelingToolkitBase
 using ModelingToolkitBase: D_nounits as Dt, t_nounits as t
+using SciCompDSL
 using InteractiveUtils: subtypes
 SE = Base.get_extension(NetworkDynamics, :NetworkDynamicsSparsityExt)
 

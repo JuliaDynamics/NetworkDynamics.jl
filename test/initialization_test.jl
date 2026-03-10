@@ -3,6 +3,7 @@ using SteadyStateDiffEq, OrdinaryDiffEqRosenbrock
 using OrdinaryDiffEqNonlinearSolve
 using ModelingToolkitBase
 using ModelingToolkitBase: t_nounits as t, D_nounits as Dt
+using SciCompDSL
 using SymbolicIndexingInterface: SymbolicIndexingInterface as SII
 using Chairmarks
 using NonlinearSolve
@@ -44,7 +45,7 @@ end
             i_r(t)=1, [description="bus d-current (flowing into bus)", input=true]
             i_i(t)=0.1, [description="bus d-current (flowing into bus)", input=true]
             ω(t), [guess=0.0, description="Rotor frequency"]
-            θ(t), [guess=0.0, bounds=[-π, π], description="Rotor angle"]
+            θ(t), [guess=0.0, bounds=(-π, π), description="Rotor angle"]
             Pel(t), [guess=1, description="Electrical Power injected into the grid"]
         end
         @parameters begin
@@ -69,7 +70,7 @@ end
     @test vf.symmetadata[:u_r][:default] == 1
     @test vf.symmetadata[:u_i][:default] == 0.1
     @test vf.symmetadata[:Pm][:guess] == 0.1
-    @test vf.symmetadata[:θ][:bounds] == [-π, π]
+    @test vf.symmetadata[:θ][:bounds] == (-π, π)
     @test vf.symmetadata[:i_r][:default] == 1
     @test vf.symmetadata[:i_i][:default] == 0.1
     @test filter(p->NetworkDynamics.is_unused(vf, p), psym(vf)) == [:aux]
@@ -210,8 +211,8 @@ end
                             -cos(α)  sin(α)]
         end
         @equations begin
-            [u_r, u_i] .~ T_to_glob(δ)*[V_d, V_q] * Vn/V_b
-            [I_d, I_q] .~ -T_to_loc(δ)*[i_r, i_i] * (S_b/V_b)/(Sn/Vn)
+            [u_r, u_i] .~ T_to_glob(δ)*[V_d, V_q] * (Vn/V_b)
+            [I_d, I_q] .~ -T_to_loc(δ)*[i_r, i_i] * ((S_b/V_b)/(Sn/Vn))
 
             τ_e ~ ψ_d*I_q - ψ_q*I_d
             Dt(δ) ~ ω_b*(ω - 1)
@@ -232,7 +233,7 @@ end
     end
 
     sys = SauerPaiMachine(name=:swing)
-    vf = VertexModel(sys, [:i_r, :i_i], [:u_r, :u_i])
+    vf = VertexModel(sys, [:i_r, :i_i], [:u_r, :u_i]; verbose=false)
 
     @test get_initial_state(vf, sym(vf)) == [nothing, nothing, nothing, nothing, nothing, nothing, 1.0, 0.0]
     @test get_initial_state(vf, insym(vf)) == [-0.5, 0.0]
@@ -507,7 +508,7 @@ _recursive_replace(containter, dict) = map(el -> _recursive_replace(el, dict), c
     @test syms == 1:4
 end
 
-@testset "init with additonal contraints" begin
+@testset "init with additonal contstraints" begin
     @mtkmodel InitSwing begin
         @variables begin
             u_r(t), [description="bus d-voltage", output=true, guess=1]
@@ -516,7 +517,7 @@ end
             i_i(t)=0.1, [description="bus d-current (flowing into bus)", input=true]
             u_mag(t), [description="bus voltage magnitude"]
             ω(t), [guess=0.0, description="Rotor frequency"]
-            θ(t), [guess=0.0, bounds=[-π, π], description="Rotor angle"]
+            θ(t), [guess=0.0, bounds=(-π, π), description="Rotor angle"]
             Pel(t), [guess=1, description="Electrical Power injected into the grid"]
         end
         @parameters begin
@@ -568,7 +569,7 @@ end
         :srcθ
         :P # force P to zero
     end)
-    initialize_component!(em, guess_overrides=Dict(:P=>0,:₋P=>0,:srcθ=>π,:dstθ=>-π,:active=>1.0), verbose=true)
+    @time initialize_component!(em, guess_overrides=Dict(:P=>0,:₋P=>0,:srcθ=>π,:dstθ=>-π,:active=>1.0), verbose=false)
     @test get_initial_state(em, :Δθ) ≈ 1
     @test get_initial_state(em, :dstθ) ≈ -1
     @test get_initial_state(em, :P) ≈ 0 atol=1e-10
@@ -1451,7 +1452,7 @@ end
     v5s_error = Lib.dqbus_timedeppq(Pfun=Pfun_error, Qset=-0.1)
     nws_error = Network(g, [v1s, v2s, v3s, v4s, v5s_error], e)
     find_fixpoint(nws_error) # no error for t=NaN
-    @test_throws NetworkInitError find_fixpoint(nws_error; t=1.0)
+    @test_throws r"GOTCHA!" find_fixpoint(nws_error; t=1.0)
 
     #### Dynamic errors
     v1 = Lib.dqbus_swing()

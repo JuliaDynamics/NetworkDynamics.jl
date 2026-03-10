@@ -8,7 +8,7 @@ using Symbolics: Symbolics, fixpoint_sub, substitute
 using RecursiveArrayTools: RecursiveArrayTools
 using ArgCheck: @argcheck
 using LinearAlgebra: Diagonal, I
-using SymbolicUtils.Code: Let, Assignment, BasicSymbolic, SymReal, unwrap_const
+using SymbolicUtils.Code: Let, Assignment, BasicSymbolic, unwrap_const
 using Moshi: Moshi
 using Moshi.Match: @match
 using SymbolicUtils: SymbolicUtils
@@ -309,18 +309,30 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     end
     alloutputs = reduce(union, outputss)
 
+    # always expand connections before simplification
+    _sys = ModelingToolkitBase.expand_connections(_sys)
+
+    # normalize equations of the form a*D(x) ~ rhs  →  D(x) ~ rhs/a
+    # (can arise after connection expansion)
+    let _eqs = ModelingToolkitBase.get_eqs(_sys)
+        for i in eachindex(_eqs)
+            r = get_scaled_diff(_eqs[i].lhs)
+            isnothing(r) && continue
+            diff_term, coeff = r
+            _eqs[i] = diff_term ~ _eqs[i].rhs / coeff
+        end
+    end
+
     # assume_io_coupling means, we expect a direct dependency chain output -> input
     # we fake this, by replacing all inputs with `input + implicit_output(outputs...)`
     # which forces MTK to consider the dependency
     if assume_io_coupling
         impl_outputs = implicit_output(sum(alloutputs))
         subs = Dict(in => in + impl_outputs for in in allinputs)
-        _expanded = ModelingToolkitBase.expand_connections(_sys)
-        _expanded_eqs = ModelingToolkitBase.get_eqs(_expanded)
+        _expanded_eqs = ModelingToolkitBase.get_eqs(_sys)
         for i in eachindex(_expanded_eqs)
             _expanded_eqs[i] = substitute(_expanded_eqs[i], subs)
         end
-        _sys = _expanded
     end
 
     missing_inputs = Set{BasicSymbolic}()
@@ -392,8 +404,11 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         throw(RHSDifferentialsError(repr.(diffs)))
     end
 
+    # collaps aliasgroups in favor ouf "main" state (i.e. outputs or fewest ₊)
+    eqs, obseqs_sorted, states = remove_aliases(eqs, obseqs_sorted, states, alloutputs; verbose)
+
     # try to solve for remaining linear algebraic states
-    eqs, obseqs_sorted, states = reduce_linear_algebraic(eqs, obseqs_sorted, states; outputs=alloutputs, verbose)
+    eqs, obseqs_sorted, states = reduce_linear_algebraic(eqs, obseqs_sorted, states; outputs=alloutputs, ff_inputs=ff_to_constraint ? Set(allinputs) : Set(), verbose)
 
     # get rid of the implicit_output(⋅) terms
     remove_implicit_output_fn!(eqs)
@@ -404,37 +419,6 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     obs_deps = setdiff(_all_rhs_symbols(obs_subs), Set(keys(obs_subs))) # do not count self-dependency
     if !(obs_deps ⊆ Set(allparams) ∪ Set(states) ∪ independent_variables(sys))
         @warn "obs_deps !⊆ parameters ∪ unknowns. Difference: $(setdiff(obs_deps, Set(allparams) ∪ Set(states)))"
-    end
-
-    # if some outputs are direct aliases for states
-    # switch their names. I.e. prioritize use of name `out`
-    function state_alias(output)
-        if output ∈ keys(obs_subs) &&
-           iscall(obs_subs[output]) &&
-           operation(obs_subs[output]) isa BasicSymbolic
-            return state_alias(obs_subs[output])
-        elseif output ∈ Set(states)
-            return output
-        else
-            return nothing
-        end
-    end
-
-    renamings = Dict()
-    for output in alloutputs
-        sa = state_alias(output)
-        if !isnothing(sa)
-            verbose && @info "Output $output ≙ $sa, prioritize output name over state name."
-            renamings[output] = sa
-            renamings[sa] = output
-        end
-    end
-    if !isempty(renamings)
-        eqs = map(eq -> substitute(eq, renamings), eqs)
-        obseqs_sorted = map(eq -> substitute(eq, renamings), obseqs_sorted)
-        obs_subs = OrderedDict(eq.lhs => eq.rhs for eq in obseqs_sorted)
-        states = map(s -> substitute(s, renamings), states)
-        verbose && @info "New states with applied output aliases:" states
     end
 
     # find the output equations, this might remove them from obseqs_sorted (obs_subs stays intact)

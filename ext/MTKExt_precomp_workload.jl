@@ -1,6 +1,7 @@
 using NetworkDynamics
 using ModelingToolkitBase
 using ModelingToolkitBase: t_nounits as t, D_nounits as Dt
+using SciCompDSL
 
 @connector Terminal begin
     u_r(t)
