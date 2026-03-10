@@ -131,8 +131,8 @@ macro initconstraint(ex)
     end
 
     sym = Symbol[]
-    out = gensym(:out)
-    u = gensym(:u)
+    out = :__out__
+    u = :__u__
     body = Expr[]
 
     dim = 0
@@ -145,8 +145,8 @@ macro initconstraint(ex)
     unique!(sym)
 
     s = join(string.(body), "\n")
-    s = replace(s, "(\$(Expr(:escape, Symbol(\"$(string(out))\"))))" => "    out")
-    s = replace(s, "(\$(Expr(:escape, Symbol(\"$(string(u))\"))))" => "u")
+    s = replace(s, "(\$(Expr(:escape, :$out)))" => "    out")
+    s = replace(s, "(\$(Expr(:escape, :$u)))" => "u")
     s = "InitConstraint($sym, $dim) do out, u\n" * s * "\nend"
 
     quote
@@ -454,8 +454,8 @@ function _formula_macro(type, ex)
 
     input_syms = Symbol[]    # RHS symbols
     output_syms = Symbol[]   # LHS symbols
-    out_var = gensym(:out)
-    u = gensym(:u)
+    out_var = :__out__
+    u = :__u__
     body = Expr[]
 
     for formula in ex.args
@@ -485,8 +485,8 @@ function _formula_macro(type, ex)
 
     # Generate pretty print string
     s = "    " * join(string.(body), "\n    ")
-    s = replace(s, "(\$(Expr(:escape, Symbol(\"$(string(out_var))\"))))" => "out")
-    s = replace(s, "(\$(Expr(:escape, Symbol(\"$(string(u))\"))))" => "u")
+    s = replace(s, "(\$(Expr(:escape, :$out_var)))" => "out")
+    s = replace(s, "(\$(Expr(:escape, :$u)))" => "u")
     s = "$(type)($output_syms, $input_syms) do out, u\n" * s * "\nend"
 
     quote
