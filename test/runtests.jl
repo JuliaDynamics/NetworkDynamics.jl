@@ -71,17 +71,17 @@ BUILDKITE && @test CUDA.functional() # fail early in buildkite if cuda is not av
     if CUDA.functional()
         @testfile "GPU_test.jl"
     end
-end
 
-@testset "Test Doc Examples" begin
-    examples = joinpath(pkgdir(NetworkDynamics), "docs", "examples")
-    for file in readdir(examples; join=true)
-        endswith(file, ".jl") || continue
-        eval(:(@testfile $file))
+    @testset "Test Doc Examples" begin
+        examples = joinpath(pkgdir(NetworkDynamics), "docs", "examples")
+        for file in readdir(examples; join=true)
+            endswith(file, ".jl") || continue
+            eval(:(@testfile $file))
+        end
     end
-end
 
-if !CUDA.functional()
-    @test gethostname() != "hw-g14" # on this pc, CUDA *should* be available
-    @warn "Skipped all CUDA tests because no device is available."
+    if !CUDA.functional()
+        @test gethostname() != "hw-g14" # on this pc, CUDA *should* be available
+        @warn "Skipped all CUDA tests because no device is available."
+    end
 end
