@@ -1,85 +1,72 @@
-"""
-    remove_aliases(eqs, obseqs, states, outputs; verbose)
+function expand_alg_equations(eqs, obseqs, states, inputs; verbose)
+    alg_idx = findall(eqs) do eq
+        type = eq_type(eq)
+        type[1] == :explicit_algebraic && error("Can't have explicit algebraic at that stage")
+        type[1] == :implicit_algebraic
+    end
+    isempty(alg_idx) && return eqs
 
-Detects alias equations (`a ~ b` or `0 ~ a - b`) in `eqs` and `obseqs`, groups
-transitive aliases, picks a "main" representative per group (preferring outputs,
-then fewer `₊` namespaces), and substitutes all non-mains → main everywhere.
+    obs_subs = OrderedDict(eq.lhs => eq.rhs for eq in obseqs)
+    if !isempty(obs_subs)
+        for i in alg_idx
+            eqs[i] = fixpoint_sub(eqs[i], obs_subs)
+        end
+    end
+    eqs
+end
 
-Alias equations are removed from `eqs`/`obseqs`, their paired states are dropped,
-and observation equations `non_main ~ main` are inserted into `obseqs`.
-"""
 function remove_aliases(eqs, obseqs, states, outputs; verbose)
-    # 1. Identify alias equations in eqs and obseqs
-    alias_pairs = Tuple[]
-    eq_is_alias = falses(length(eqs))
+    # 1. Find the alias pairs
+    alias_pairs = Tuple{ST,ST}[]
+    alias_eq = Int[]
+    states_set = Set(states)
     for (i, eq) in enumerate(eqs)
         alias = get_alias(eq)
-        if alias isa Tuple
+        isnothing(alias) && continue
+        a, b = alias
+        if (a ∈ states_set && b ∈ states_set)
             push!(alias_pairs, alias)
-            eq_is_alias[i] = true
-        end
-    end
-    obs_is_alias = falses(length(obseqs))
-    for (i, eq) in enumerate(obseqs)
-        alias = get_alias(eq)
-        if alias isa Tuple
-            push!(alias_pairs, alias)
-            obs_is_alias[i] = true
+            push!(alias_eq, i)
         end
     end
 
-    isempty(alias_pairs) && return eqs, obseqs, states
-
-    # 2. Build alias groups via connected components (handles transitive chains correctly)
+    # 2. Group them into alias groups
     groups = _alias_connected_components(alias_pairs)
+
+    if verbose
+        str = "Found $(length(groups)) alias groups"
+        str *= length(groups) > 0 ? ":" : "."
+    end
 
     # 3. Pick main per group, build substitution dict and alias observations
     outset = Set(outputs)
     sortf(s) = s ∈ outset ? typemin(Int) : count('₊', string(s))
     alias_subs = Dict()
     alias_obs = Equation[]
+    removed_states = Set{ST}()
     for group in groups
         sorted = sort!(collect(group), by=sortf)
         main = first(sorted)
         for r in @view(sorted[2:end])
             alias_subs[r] = main
             push!(alias_obs, r ~ main)
+            push!(removed_states, r)
+        end
+        if verbose
+            str *= "\n  Group: $main replaces $(inline_repr(sorted[2:end]))"
         end
     end
+    verbose && @info str
 
-    verbose && @info "Found $(length(groups)) alias groups" groups alias_subs
+    # 4. insert obs, reduce states and reduce 
+    eqs_new = deleteat!(eqs, alias_eq)
+    eqs_new = Symbolics.substitute.(eqs_new, Ref(alias_subs))
+    obseqs_new = copy(obseqs)
+    _insert_sorted!(obseqs_new, alias_obs)
+    states_new = filter(s -> s ∉ removed_states, states)
 
-    # 4. Fix implicit-pool misassignment: ensure each alias eq's state is one of its variables.
-    #    The implicit_states pool may assign an unrelated variable as the state for an
-    #    implicit_algebraic alias equation. Swap it into place so positional removal is correct.
-    for i in eachindex(eqs)
-        eq_is_alias[i] || continue
-        a, b = get_alias(eqs[i])
-        (isequal(states[i], a) || isequal(states[i], b)) && continue
-        j = findfirst(j -> isequal(states[j], a) || isequal(states[j], b), eachindex(states))
-        @assert !isnothing(j) "Could not find state matching alias ($a, $b) in states"
-        states[i], states[j] = states[j], states[i]
-    end
-
-    # 5. Remove alias equations and their positionally-paired states
-    keep_eq = .!eq_is_alias
-    eqs = eqs[keep_eq]
-    states = states[keep_eq]
-    obseqs = obseqs[.!obs_is_alias]
-
-    @assert length(states) == length(eqs) "state/eq count mismatch after alias removal: $(length(states)) states vs $(length(eqs)) eqs"
-
-    # 6. Substitute non-main → main everywhere
-    eqs = Symbolics.substitute(eqs, alias_subs)
-    obseqs = Symbolics.substitute(obseqs, alias_subs)
-    states = Symbolics.substitute(states, alias_subs)
-
-    # 7. Insert alias observations in topological order
-    _insert_sorted!(obseqs, alias_obs)
-
-    return eqs, obseqs, states
+    eqs_new, obseqs_new, states_new
 end
-
 """
     _alias_connected_components(pairs)
 
@@ -87,17 +74,17 @@ Given alias pairs `[(a,b), (c,d), ...]`, returns groups of transitively connecte
 variables as a `Vector{Vector}`. E.g. pairs `(a,b), (b,c)` → `[[a, b, c]]`.
 """
 function _alias_connected_components(pairs)
-    adj = Dict{Any, Vector{Any}}()
+    adj = Dict{ST, Vector{ST}}()
     for (a, b) in pairs
-        push!(get!(adj, a, Any[]), b)
-        push!(get!(adj, b, Any[]), a)
+        push!(get!(adj, a, ST[]), b)
+        push!(get!(adj, b, ST[]), a)
     end
-    visited = Set{Any}()
-    groups = Vector{Vector{Any}}()
+    visited = Set{ST}()
+    groups = Vector{Vector{ST}}()
     for v in keys(adj)
         v ∈ visited && continue
-        group = Any[]
-        stack = Any[v]
+        group = ST[]
+        stack = ST[v]
         while !isempty(stack)
             u = pop!(stack)
             u ∈ visited && continue
@@ -122,38 +109,11 @@ split of into the GPL licensed MTK.
 This method is not as powerful but may recover some of whats lost by MTKBase.
 It shouldn't to a lot if the system was allready full reduced using MTK.
 """
-# Solve a small linear system using Cramer's rule for n≤2, falling back to
-# symbolic_linear_solve for larger systems. Cramer's rule puts det(A) as the
-# single common denominator, avoiding spurious intermediate divisions (e.g.
-# dividing by one component of a complex current when the natural denominator
-# is the magnitude squared).
-function _symbolic_linear_solve_clean(scc_eqs, scc_sts)
-    n = length(scc_sts)
-    if n > 2
-        return Symbolics.symbolic_linear_solve(scc_eqs, scc_sts)
-    end
-    # extract coefficient matrix A and RHS b from  0 ~ expr  (i.e. expr = 0)
-    exprs = [eq.rhs - eq.lhs for eq in scc_eqs]
-    A = Symbolics.jacobian(exprs, collect(scc_sts))
-    zero_subs = Dict(s => 0 for s in scc_sts)
-    b = [-Symbolics.substitute(e, zero_subs) for e in exprs]
-    # Cramer's rule
-    sol = if n == 1
-        [b[1] / A[1,1]]
-    else  # n == 2
-        det = A[1,1]*A[2,2] - A[1,2]*A[2,1]
-        [(A[2,2]*b[1] - A[1,2]*b[2]) / det,
-         (A[1,1]*b[2] - A[2,1]*b[1]) / det]
-    end
-    Symbolics.simplify.(sol)
-end
-
 function reduce_linear_algebraic(eqs, obseqs, states; outputs=[], ff_inputs=Set(), verbose)
     try
         outset = Set(outputs)
         alg_idx = findall(eqs) do eq
             type = eq_type(eq)
-            type[1] == :explicit_algebraic && error("Can't have explicit algebraic at that stage")
             type[1] == :implicit_algebraic
         end
         # Sort so non-output states come first: the bipartite matching tries columns in
@@ -161,22 +121,25 @@ function reduce_linear_algebraic(eqs, obseqs, states; outputs=[], ff_inputs=Set(
         sort!(alg_idx, by = i -> states[i] ∈ outset ? 1 : 0)
 
         if verbose
-            @info "Trying to reduce $(length(alg_idx)) implicit algebraic equations" eqs[alg_idx]
+            str = "Trying to reduce $(length(alg_idx)) implicit algebraic equations"
+            str *= "\n" * multiline_repr(eqs[alg_idx], prefix="  ")
+            @info str
         end
 
-        # Expand obs that depend on algebraic states (so coeff matrix sees true state
-        # dependencies) and obs that depend on ff_inputs (so FF blocking sees indirect
-        # input dependencies through observed variables).
-        _transparent_deps = ff_inputs ∪ states[alg_idx]
-        obs_subs = _obs_subs_for_states(obseqs, _transparent_deps)
-        alg_eqs_expanded = isempty(obs_subs) ? eqs[alg_idx] : Symbolics.substitute(eqs[alg_idx], obs_subs)
+        alg_eqs = eqs[alg_idx]
 
-        coeff = _build_coeff_mat(alg_eqs_expanded, states[alg_idx]; outset, ff_inputs)
+        coeff = _build_coeff_mat(alg_eqs, states[alg_idx]; outset, ff_inputs)
 
         matches = _match_equations_to_states(coeff)
 
         if verbose
-            @info "Found $(length(matches)) matches in those equations" state_eqs_matching = Any[states[alg_idx[m[2]]] => eqs[alg_idx[m[1]]] for m in matches]
+            str =  "Found $(length(matches)) matches in those equations"
+            states_eqs_matching = OrderedDict(states[alg_idx[m[2]]] => eqs[alg_idx[m[1]]] for m in matches)
+            str *= "\n" * multiline_repr(states_eqs_matching, prefix="  ")
+            @info str
+
+            # state_eqs_matching = Any[states[alg_idx[m[2]]] => eqs[alg_idx[m[1]]] for m in matches]
+            # @info "Found $(length(matches)) matches in those equations" state_eqs_matching = Any[states[alg_idx[m[2]]] => eqs[alg_idx[m[1]]] for m in matches]
         end
 
         isempty(matches) && return eqs, obseqs, states
@@ -192,7 +155,7 @@ function reduce_linear_algebraic(eqs, obseqs, states; outputs=[], ff_inputs=Set(
             scc_rows = [matches[i][1] for i in scc]
             scc_cols = [matches[i][2] for i in scc]
             # use expanded equations so all state dependencies are visible to the solver
-            scc_eqs = alg_eqs_expanded[scc_rows]
+            scc_eqs = alg_eqs[scc_rows]
             scc_sts = states[alg_idx[scc_cols]]
 
             try
@@ -200,10 +163,20 @@ function reduce_linear_algebraic(eqs, obseqs, states; outputs=[], ff_inputs=Set(
                 append!(newobs, scc_sts .~ sol)
                 append!(solved_eq_local, scc_rows)
                 append!(solved_st_local, scc_cols)
-                verbose && @info "Solved group $gi: $scc" scc_eqs scc_sts .~ sol
+                if verbose
+                    str = "Solved group $gi for $(inline_repr(scc_sts))"
+                    str *= "\n" * multiline_repr(scc_eqs, prefix="  ")
+                    str *= "\nSolution:"
+                    soldict = OrderedDict(scc_sts .=> sol)
+                    str *= "\n" * multiline_repr(soldict, prefix="  ")
+                    @info str
+                end
             catch
-                # SCC not jointly linear (nonlinear cross-terms) → leave as constraints
-                verbose && @info "Failed to solve group $gi for $scc_sts" scc_eqs
+                if verbose
+                    str = "Failed to solve group $gi for $(inline_repr(scc_sts))"
+                    str *= "\n" * multiline_repr(scc_eqs, prefix="  ")
+                    @info str
+                end
             end
         end
 
@@ -212,7 +185,11 @@ function reduce_linear_algebraic(eqs, obseqs, states; outputs=[], ff_inputs=Set(
         _insert_sorted!(obseqs, newobs)
         neweqs    = eqs[setdiff(eachindex(eqs), alg_idx[solved_eq_local])]
         newstates = states[setdiff(eachindex(states), alg_idx[solved_st_local])]
-        verbose && @info "Left with equations after reduction:" newstates .=> neweqs
+        if verbose
+            str = "Left with equations after reduction:\n"
+            str *= multiline_repr(newstates .=> neweqs, prefix="  ")
+            @info str
+        end
         return neweqs, obseqs, newstates
     catch e
         @warn "Reduction failed, fall back" exception=(e, catch_backtrace())
@@ -236,25 +213,30 @@ function _insert_sorted!(obseqs, newobs)
     end
     nothing
 end
-
-"""
-Build a substitution dict from obseqs for all observed variables that transitively
-depend on any of the given states. This is used to expand algebraic equations so
-that all state dependencies are explicit (not hidden behind observed variables).
-"""
-function _obs_subs_for_states(obseqs, states::Set)
-    # obs are in topological order: dependencies before dependents.
-    # We iterate forward, accumulating which obs symbols depend on states,
-    # storing fully-expanded RHS values so a single substitute call suffices.
-    subs = Dict()  # lhs => fully-expanded rhs (in terms of states only)
-    for eq in obseqs
-        vars = get_variables_fix(eq.rhs)
-        if any(v -> v ∈ states || haskey(subs, v), vars)
-            expanded_rhs = Symbolics.substitute(eq.rhs, subs)
-            subs[eq.lhs] = expanded_rhs
-        end
+# Solve a small linear system using Cramer's rule for n≤2, falling back to
+# symbolic_linear_solve for larger systems. Cramer's rule puts det(A) as the
+# single common denominator, avoiding spurious intermediate divisions (e.g.
+# dividing by one component of a complex current when the natural denominator
+# is the magnitude squared).
+function _symbolic_linear_solve_clean(scc_eqs, scc_sts)
+    n = length(scc_sts)
+    if n > 2
+        return Symbolics.symbolic_linear_solve(scc_eqs, scc_sts)
     end
-    subs
+    # extract coefficient matrix A and RHS b from  0 ~ expr  (i.e. expr = 0)
+    exprs = [eq.rhs - eq.lhs for eq in scc_eqs]
+    A = Symbolics.jacobian(exprs, collect(scc_sts))
+    zero_subs = Dict(s => 0 for s in scc_sts)
+    b = [-Symbolics.substitute(e, zero_subs) for e in exprs]
+    # Cramer's rule
+    sol = if n == 1
+        [b[1] / A[1,1]]
+    else  # n == 2
+        det = A[1,1]*A[2,2] - A[1,2]*A[2,1]
+        [(A[2,2]*b[1] - A[1,2]*b[2]) / det,
+         (A[1,1]*b[2] - A[2,1]*b[1]) / det]
+    end
+    Symbolics.simplify.(sol, expand=true)
 end
 
 """

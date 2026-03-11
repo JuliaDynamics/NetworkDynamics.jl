@@ -31,7 +31,7 @@ function eq_type(eq::Equation)
             if eq.lhs ∈ rhs_vars
                 (:implicit_algebraic, eq.lhs)
             else
-                (:explicit_algebraic, eq.rhs)
+                (:explicit_algebraic, eq.lhs)
             end
         end
         _ => throw(ArgumentError("Can't determine eq type of $eq."))
