@@ -49,6 +49,43 @@ jobs:
         with:
           coverage: false
 
+  test-gpl-mtk:
+    name: Test (GPL MTK)
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+          arch: x64
+      - name: Load Julia packages from cache
+        id: julia-cache
+        uses: julia-actions/cache@v2
+      - uses: hexaeder/julia-buildpkg@main
+      - name: Add ModelingToolkit to test env
+        shell: julia --project=test --color=yes {0}
+        env:
+          JULIA_PKG_PRECOMPILE_AUTO: "no"
+        run: |
+          import Pkg
+          Pkg.add("ModelingToolkit")
+      - uses: julia-actions/julia-runtest@v1
+        env:
+          GPL_MTK: "true"
+        with:
+          coverage: false
+      - name: Save Julia depot cache on cancel or failure
+        id: julia-cache-save
+        if: cancelled() || failure()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ steps.julia-cache.outputs.cache-paths }}
+          key: ${{ steps.julia-cache.outputs.cache-key }}
+
   test-coverage:
     name: Test Coverage
     runs-on: ubuntu-latest

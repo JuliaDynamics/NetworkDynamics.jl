@@ -296,7 +296,7 @@ function dqbus_slack(; injector=false, kwargs...)
 end
 function dqbus_swing_and_load(; kwargs...)
     @named swing_and_load = SwingAndLoadDQ(; kwargs...)
-    VertexModel(swing_and_load, [:i_r, :i_i], [:u_r, :u_i])
+    VertexModel(swing_and_load, [:i_r, :i_i], [:u_r, :u_i]; verbose=false)
 end
 function dqline(; name=:line, R, X, kwargs...)
     line = StaticPowerLineDQ(; name, R, X)
@@ -365,7 +365,7 @@ function dqbus_swing_injector(; kwargs...)
 end
 function dqbus_pq_injector(; kwargs...)
     @named pq = PQLoad(; kwargs...)
-    VertexModel(pq, [:u_r, :u_i], [:i_r, :i_i]; ff_to_constraint=false, assume_io_coupling=true)
+    VertexModel(pq, [:u_r, :u_i], [:i_r, :i_i]; ff_to_constraint=false, assume_io_coupling=false)
 end
 function dqbus_shunt_hub(; kwargs...)
     @named shunt_hub = ShuntHub(; kwargs...)

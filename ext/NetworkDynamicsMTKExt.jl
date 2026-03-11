@@ -17,7 +17,7 @@ using SymbolicIndexingInterface: SymbolicIndexingInterface as SII
 
 using NetworkDynamics: NetworkDynamics, set_metadata!, ComponentPostprocessing,
                        PureFeedForward, FeedForward, NoFeedForward, PureStateMap,
-                       MultipleOutputWrapper
+                       MultipleOutputWrapper, inline_repr, multiline_repr
 import NetworkDynamics: VertexModel, EdgeModel, AnnotatedSym
 
 include("MTKExt_utils.jl")
@@ -25,6 +25,8 @@ include("MTKExt_simplification.jl")
 
 import NetworkDynamics: implicit_output, RHSDifferentialsError
 Symbolics.@register_symbolic implicit_output(x)
+
+const ST = SymbolicUtils.BasicSymbolicImpl.var"typeof(BasicSymbolicImpl)"{SymbolicUtils.SymReal}
 
 """
     VertexModel(sys::System, inputs, outputs;
@@ -356,7 +358,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
             )
         end
 
-        verbose && @info "Simplifying system with inputs $_openinputs and outputs $alloutputs"
+        verbose && @info "Simplifying system with inputs $(inline_repr(_openinputs)) and outputs $(inline_repr(alloutputs))"
         try
             mtkcompile(_sys; inputs=_openinputs, outputs=alloutputs, simplify=false)
         catch e
@@ -404,11 +406,15 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         throw(RHSDifferentialsError(repr.(diffs)))
     end
 
-    # collaps aliasgroups in favor ouf "main" state (i.e. outputs or fewest ₊)
-    eqs, obseqs_sorted, states = remove_aliases(eqs, obseqs_sorted, states, alloutputs; verbose)
+    eqs, obseqs_sorted, states = let
+        inputs = ff_to_constraint ? Set(allinputs) : Set{ST}()
+        # first, we expand in terms of states and inputs
+        eqs_expanded = expand_alg_equations(eqs, obseqs_sorted, states, inputs; verbose)
+        eqs, obseqs, states = remove_aliases(eqs_expanded, obseqs_sorted, states, alloutputs; verbose)
+        eqs, obseqs, states = reduce_linear_algebraic(eqs, obseqs, states; outputs=alloutputs, ff_inputs=inputs, verbose)
 
-    # try to solve for remaining linear algebraic states
-    eqs, obseqs_sorted, states = reduce_linear_algebraic(eqs, obseqs_sorted, states; outputs=alloutputs, ff_inputs=ff_to_constraint ? Set(allinputs) : Set(), verbose)
+        eqs, obseqs, states
+    end
 
     # get rid of the implicit_output(⋅) terms
     remove_implicit_output_fn!(eqs)
@@ -451,13 +457,12 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
 
     # generate mass matrix (this might change the equations)
     mass_matrix = begin
-        # equations of form o = f(...) have to be transformed to 0 = f(...) - o
         for (i, eq) in enumerate(eqs)
            if eq_type(eq)[1] == :explicit_algebraic
-               eqs[i] = 0 ~ eq.rhs - eq.lhs
+               error("Can't have explicit algebraic equatiosn at this point")
            end
         end
-        verbose && @info "Transformed algebraic eqs" eqs
+        # verbose && @info "Transformed algebraic eqs\n"*multiline_repr(eqs; prefix="  ")
 
         # create massmatrix, we don't use the method provided by System because of reordering
         mm = generate_massmatrix(eqs)
@@ -529,8 +534,8 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         obsf = obsf_ip,
         equations=eqs,
         outputeqs=outeqs,
-        full_equations = fixpoint_sub(eqs, obs_subs),
-        full_outputeqs = fixpoint_sub(outeqs, obs_subs),
+        full_equations = [eq.lhs ~ fixpoint_sub(eq.rhs, obs_subs) for eq in eqs],
+        full_outputeqs = [eq.lhs ~ fixpoint_sub(eq.rhs, obs_subs) for eq in outeqs],
         observed=obseqs_sorted,
         odesystem_simplified=sys,
         params,

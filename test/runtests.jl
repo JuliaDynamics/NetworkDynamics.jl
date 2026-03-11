@@ -1,3 +1,6 @@
+if haskey(ENV, "GPL_MTK")
+    using ModelingToolkit
+end
 using Test
 using Testfiles
 using Pkg
