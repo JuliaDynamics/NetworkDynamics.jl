@@ -104,10 +104,10 @@ end
 
 This function was implemented to cover the shortcomings of MTKBase vs full MTK.
 It implements a subset of the simplification pipeline previously handled by MTK, which is now
-split of into the GPL licensed MTK.
+split off into the GPL-licensed MTK.
 
-This method is not as powerful but may recover some of whats lost by MTKBase.
-It shouldn't to a lot if the system was allready full reduced using MTK.
+This method is not as powerful but may recover some of what's lost by MTKBase.
+It shouldn't do much if the system was already fully reduced using MTK.
 """
 function reduce_linear_algebraic(eqs, obseqs, states; outputs=[], ff_inputs=Set(), verbose)
     try
@@ -137,9 +137,6 @@ function reduce_linear_algebraic(eqs, obseqs, states; outputs=[], ff_inputs=Set(
             states_eqs_matching = OrderedDict(states[alg_idx[m[2]]] => eqs[alg_idx[m[1]]] for m in matches)
             str *= "\n" * multiline_repr(states_eqs_matching, prefix="  ")
             @info str
-
-            # state_eqs_matching = Any[states[alg_idx[m[2]]] => eqs[alg_idx[m[1]]] for m in matches]
-            # @info "Found $(length(matches)) matches in those equations" state_eqs_matching = Any[states[alg_idx[m[2]]] => eqs[alg_idx[m[1]]] for m in matches]
         end
 
         isempty(matches) && return eqs, obseqs, states
