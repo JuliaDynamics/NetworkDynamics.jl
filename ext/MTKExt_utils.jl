@@ -20,14 +20,14 @@ function eq_type(eq::Equation)
             end
             (:implicit_algebraic, nothing)
         end
-        SymbolicUtils.BSImpl.Term(; f=Differential(t,1), args=symvec) => begin
+        SymbolicUtils.BSImpl.Term(; f=Differential(_,1), args=symvec) => begin
             @argcheck length(symvec) == 1 "Diff. eq $eq has more than one variable in lhs!"
             (:explicit_diffeq, only(symvec))
         end
         SymbolicUtils.BSImpl.Term(; f=SymbolicUtils.BSImpl.Sym(), args=args) => begin
             # classic sym call x(t)
             @argcheck length(args) == 1 "Can't parse equation $eq, lhs is a Sym call with more than one argument!"
-            rhs_vars = get_variables_fix(eq.rhs)
+            rhs_vars = get_variables_deriv(eq.rhs)
             if eq.lhs ∈ rhs_vars
                 (:implicit_algebraic, eq.lhs)
             else
@@ -150,7 +150,7 @@ function check_metadata(exprs)
     return unique!(nometadata)
 end
 function _check_metadata!(nometadata, expr)
-    vars = get_variables_fix(expr)
+    vars = get_variables_deriv(expr)
     for v in vars
         isnothing(Symbolics.metadata(v)) && push!(nometadata, v)
     end
@@ -327,15 +327,16 @@ function match_diff_states(eqs, states)
 end
 
 # WORKAOROUND: get_variables does not descend into Differential anymore
-function get_variables_fix(ex)
+function get_variables_deriv(ex)
     set = get_variables(ex)
-    new = map(collect(set)) do v
-        @match v begin
-            SymbolicUtils.BSImpl.Term(; f=Differential(t,1), args=symvec) => begin
-                only(symvec)
+    for s in set
+        @match s begin
+            SymbolicUtils.BSImpl.Term(; f=Differential(_, 1), args=symvec) => begin
+                pop!(set, s)
+                push!(set, only(symvec))
             end
-            _ => v
+            _ => nothing
         end
     end
-    typeof(set)(new)
+    set
 end

@@ -372,7 +372,7 @@ function _insert_sorted!(obseqs, newobs)
     # and obs share the same symbol.
     for eq in newobs
         obssym = [e.lhs for e in obseqs]
-        vars = get_variables_fix(eq.rhs)
+        vars = get_variables_deriv(eq.rhs)
         idx = findlast(sym -> sym ∈ vars, obssym)
         last_dependency = isnothing(idx) ? 0 : idx
         insert!(obseqs, last_dependency+1, eq)
@@ -418,7 +418,7 @@ an ff_input variable.  FF blocking is done in `_solve_plan`, not here.
 function _build_coeff_mat(lineqs, linstates, state_set; ff_inputs=Set())
     coeff = Matrix{Symbol}(undef, length(lineqs), length(linstates))
     has_ff = isempty(ff_inputs) ? falses(length(lineqs)) :
-             Bool[!isempty(Set(get_variables_fix(eq)) ∩ ff_inputs) for eq in lineqs]
+             Bool[!isempty(Set(get_variables_deriv(eq)) ∩ ff_inputs) for eq in lineqs]
     for (j, s) in enumerate(linstates)
         ex = Symbolics.LinearExpander(s)
         for (i, eq) in enumerate(lineqs)
@@ -428,7 +428,7 @@ function _build_coeff_mat(lineqs, linstates, state_set; ff_inputs=Set())
             elseif isequal(unwrap_const(a), 0)
                 coeff[i, j] = :none
             else
-                coeff_vars = Set(get_variables_fix(unwrap_const(a)))
+                coeff_vars = Set(get_variables_deriv(unwrap_const(a)))
                 coeff[i, j] = isempty(coeff_vars ∩ state_set) ? :linear_const : :linear_state
             end
         end
@@ -495,7 +495,7 @@ function get_scaled_diff(lhs)
 end
 
 function get_alias(eq)
-    vars = get_variables_fix(eq)
+    vars = get_variables_deriv(eq)
     length(vars) == 2 || return nothing
     a, b = vars
     # parameters are not aliases — an equation like `x ~ V` (V a parameter) defines x,
