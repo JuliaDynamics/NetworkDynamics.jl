@@ -23,7 +23,7 @@ BUILDKITE && @test CUDA.functional() # fail early in buildkite if cuda is not av
 
 @testset "NetworkDynamics Tests" begin
     # skip majority of tets under GPL_MTK and BUILDKITE env
-    if !GPL_MTK && !BUILKITE
+    if !GPL_MTK && !BUILDKITE
         @testset "Package Quality Tests" begin
             # print_explicit_imports(NetworkDynamics)
             @test check_no_implicit_imports(NetworkDynamics) === nothing
