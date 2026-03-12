@@ -60,7 +60,7 @@ jobs:
           key: ${{ steps.julia-cache.outputs.cache-key }}
 
   test-gpl-mtk:
-    name: Test (GPL MTK)
+    name: Examples with GPL MTK
     runs-on: ubuntu-latest
     permissions:
       actions: write
