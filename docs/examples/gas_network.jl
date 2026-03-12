@@ -17,6 +17,7 @@ using NetworkDynamics
 using ModelingToolkitBase
 using DynamicQuantities
 using ModelingToolkitBase: D as Dt, t as t
+using SciCompDSL
 using Test
 using StaticArrays
 using DataInterpolations

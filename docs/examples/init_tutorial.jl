@@ -24,6 +24,7 @@ using ModelingToolkitBase
 using ModelingToolkitBase: t_nounits as t, D_nounits as D
 using OrdinaryDiffEqTsit5
 using CairoMakie
+using SciCompDSL
 nothing #hide
 
 #=
