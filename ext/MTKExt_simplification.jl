@@ -402,7 +402,6 @@ function _symbolic_linear_solve_clean(scc_eqs, scc_sts)
         [(A[2,2]*b[1] - A[1,2]*b[2]) / det,
          (A[1,1]*b[2] - A[2,1]*b[1]) / det]
     end
-    Symbolics.simplify.(sol, expand=true)
 end
 
 """
@@ -428,7 +427,7 @@ function _build_coeff_mat(lineqs, linstates, state_set; ff_inputs=Set())
             elseif isequal(unwrap_const(a), 0)
                 coeff[i, j] = :none
             else
-                coeff_vars = Set(get_variables_deriv(unwrap_const(a)))
+                coeff_vars = get_variables_deriv(unwrap_const(a))
                 coeff[i, j] = isempty(coeff_vars ∩ state_set) ? :linear_const : :linear_state
             end
         end
