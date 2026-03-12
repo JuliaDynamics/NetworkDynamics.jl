@@ -295,6 +295,37 @@ function NetworkDynamics.set_mtk_defaults!(sys::System, pairs)
     sys
 end
 
+"""
+    match_diff_states(eqs, states::Set)
+
+Match a set of unknowns to a vector of equations.
+Returns a vector of states with diff states at the correct places
+and non-diff states filled in arbitrarily.
+"""
+function match_diff_states(eqs, states)
+    @assert length(eqs) == length(states) "Number of equations and states must match to be able to match them, got $(length(eqs)) equations and $(length(states)) states"
+    states_new = Vector{eltype(states)}(undef, length(eqs))
+    _unsortedstates = Set(states) # creates copy
+    for (i, eq) in pairs(eqs)
+        type, var = eq_type(eq)
+        if type == :explicit_diffeq
+            states_new[i] = pop!(_unsortedstates, var)
+        elseif type == :implicit_algebraic
+            # do nothing
+        else
+            error("Got equation $eq of type $type, which is not expected at that stage (only explicit diff eqs and implicit alg. eqs). Something went wrong.")
+        end
+    end
+    for i in eachindex(states_new)
+        if !isassigned(states_new, i)
+            states_new[i] = pop!(_unsortedstates)
+        end
+    end
+    @assert isempty(_unsortedstates) "Not all states could be matched, something went wrong"
+    @assert length(eqs) == length(states_new)
+    states_new
+end
+
 # WORKAOROUND: get_variables does not descend into Differential anymore
 function get_variables_fix(ex)
     set = get_variables(ex)

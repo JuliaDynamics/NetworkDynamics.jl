@@ -17,17 +17,21 @@ end
 
 function remove_aliases(eqs, obseqs, states, outputs; verbose)
     # 1. Find the alias pairs
-    alias_pairs = Tuple{ST,ST}[]
-    alias_eq = Int[]
     states_set = Set(states)
+    alias_pairs = Tuple{ST,ST}[]
+    eq_alias_idxs = Int[]
     for (i, eq) in enumerate(eqs)
         alias = get_alias(eq)
         isnothing(alias) && continue
-        a, b = alias
-        if (a ∈ states_set && b ∈ states_set)
-            push!(alias_pairs, alias)
-            push!(alias_eq, i)
-        end
+        push!(alias_pairs, alias)
+        push!(eq_alias_idxs, i)
+    end
+    obs_alias_idx = Int[]
+    for (i, eq) in enumerate(obseqs)
+        alias = get_alias(eq)
+        isnothing(alias) && continue
+        push!(alias_pairs, alias)
+        push!(obs_alias_idx, i)
     end
 
     # 2. Group them into alias groups
@@ -42,14 +46,14 @@ function remove_aliases(eqs, obseqs, states, outputs; verbose)
     outset = Set(outputs)
     sortf(s) = s ∈ outset ? typemin(Int) : count('₊', string(s))
     alias_subs = Dict()
-    alias_obs = Equation[]
+    new_alias_obs = Equation[]
     removed_states = Set{ST}()
     for group in groups
         sorted = sort!(collect(group), by=sortf)
         main = first(sorted)
         for r in @view(sorted[2:end])
             alias_subs[r] = main
-            push!(alias_obs, r ~ main)
+            push!(new_alias_obs, r ~ main)
             push!(removed_states, r)
         end
         if verbose
@@ -59,11 +63,25 @@ function remove_aliases(eqs, obseqs, states, outputs; verbose)
     verbose && @info str
 
     # 4. insert obs, reduce states and reduce 
-    eqs_new = deleteat!(eqs, alias_eq)
-    eqs_new = Symbolics.substitute.(eqs_new, Ref(alias_subs))
-    obseqs_new = copy(obseqs)
-    _insert_sorted!(obseqs_new, alias_obs)
-    states_new = filter(s -> s ∉ removed_states, states)
+    eqs_new = let
+        eqs_new = copy(eqs)
+        eqs_new = deleteat!(eqs_new, eq_alias_idxs)
+        eqs_new = Symbolics.substitute_in_deriv.(eqs_new, Ref(alias_subs))
+    end
+
+    obseqs_new = let
+        obseqs_new = copy(obseqs)
+        obseqs_new = deleteat!(obseqs_new, obs_alias_idx)
+        obseqs_new = Symbolics.substitute.(obseqs_new, Ref(alias_subs))
+        _insert_sorted!(obseqs_new, new_alias_obs)
+        obseqs_new
+    end
+
+    # reducing the state vector is tricky!
+    # essentially we need a primitive matching to match diff states where they belong
+    # and then fill the rest with non-diff states
+    unmatched_states = setdiff(states, removed_states)
+    states_new = match_diff_states(eqs_new, unmatched_states)
 
     eqs_new, obseqs_new, states_new
 end

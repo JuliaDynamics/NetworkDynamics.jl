@@ -8,7 +8,7 @@ using Symbolics: Symbolics, fixpoint_sub, substitute
 using RecursiveArrayTools: RecursiveArrayTools
 using ArgCheck: @argcheck
 using LinearAlgebra: Diagonal, I
-using SymbolicUtils.Code: Let, Assignment, BasicSymbolic, unwrap_const
+using SymbolicUtils.Code: Let, Assignment, unwrap_const
 using Moshi: Moshi
 using Moshi.Match: @match
 using SymbolicUtils: SymbolicUtils
@@ -251,7 +251,7 @@ function _get_metadata(sys, name, alldefaults, allguesses)
     end
     if haskey(alldefaults, sym)
         def = unwrap_const(alldefaults[sym])
-        if def isa BasicSymbolic
+        if def isa ST
             def = unwrap_const(fixpoint_sub(def, alldefaults))
         end
 
@@ -264,7 +264,7 @@ function _get_metadata(sys, name, alldefaults, allguesses)
     if haskey(allguesses, sym)
         guess = unwrap_const(allguesses[sym])
 
-        if guess isa BasicSymbolic
+        if guess isa ST
             guess = unwrap_const(fixpoint_sub(def, merge(allguesses, alldefaults)))
         end
 
@@ -336,12 +336,12 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         end
     end
 
-    missing_inputs = Set{BasicSymbolic}()
+    missing_inputs = Set{ST}()
     sys = if ModelingToolkitBase.iscomplete(_sys)
         deepcopy(_sys)
     else
         _openinputs = setdiff(allinputs, Set(parameters(_sys)))
-        all_eq_vars = mapreduce(get_variables_fix, union, full_equations(_sys), init=Set{BasicSymbolic}())
+        all_eq_vars = mapreduce(get_variables_fix, union, full_equations(_sys), init=Set{ST}())
         if !(_openinputs ⊆ all_eq_vars)
             missing_inputs = setdiff(_openinputs, all_eq_vars)
             verbose && @warn "The specified inputs ($missing_inputs) do not appear in the equations of the system!"
@@ -381,29 +381,14 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     fix_metadata!(eqs, sys);
     fix_metadata!(obseqs_sorted, sys);
 
-    # assert the ordering of states and equations
-    explicit_states = BasicSymbolic[eq_type(eq)[2] for eq in eqs if !isnothing(eq_type(eq)[2])]
-    implicit_states = setdiff(unknowns(sys), explicit_states)
-
-    if length(explicit_states) + length(implicit_states) !== length(eqs)
-        buf = IOBuffer()
-        println(buf, "The number of states does not match the number of equations.")
-        println(buf, "Explicit states: ", explicit_states)
-        println(buf, "Implicit states: ", implicit_states)
-        println(buf, "$(length(eqs)) Equations.")
-        throw(ArgumentError(String(take!(buf))))
-    end
-
-    states = map(eqs) do eq
-        type = eq_type(eq)
-        isnothing(type[2]) ? pop!(implicit_states) : type[2]
-    end
-
     # check that there are no rhs differentials in the equations
     if !isempty(rhs_differentials(vcat(eqs, obseqs_sorted)))
         diffs = rhs_differentials(vcat(eqs, obseqs_sorted))
         throw(RHSDifferentialsError(repr.(diffs)))
     end
+
+    # create states vector in correct ordering
+    states = match_diff_states(eqs, unknowns(sys))
 
     eqs, obseqs_sorted, states = let
         inputs = ff_to_constraint ? Set(allinputs) : Set{ST}()
@@ -567,7 +552,7 @@ function _get_formulas(eqs, obs_subs)
     [Let(vcat(obs_assignments, eqs_assignments), out[1], false), out[2:end]...]
 end
 function _collect_deps_on_obs(terms, obs_subs)
-    deps = Set{BasicSymbolic}()
+    deps = Set{ST}()
     for term in terms
         _collect_deps_on_obs!(deps, obs_subs, term)
     end
@@ -603,13 +588,13 @@ end
 
 _all_rhs_symbols(term) = get_variables_fix(term)
 _all_rhs_symbols(eq::Equation) = get_variables_fix(eq.rhs)
-_all_rhs_symbols(eqs::Union{AbstractVector,AbstractDict}) = mapreduce(eq->get_variables_fix(eq isa Pair ? eq.second : eq.rhs), ∪, eqs, init=Set{BasicSymbolic}())
+_all_rhs_symbols(eqs::Union{AbstractVector,AbstractDict}) = mapreduce(eq->get_variables_fix(eq isa Pair ? eq.second : eq.rhs), ∪, eqs, init=Set{ST}())
 
 """
 Search for recursive dependencies in `term` given a dictionary `dict` of substitutions.
 """
 function _all_dependencies(term, dict)
-    deps = Set{BasicSymbolic}()
+    deps = Set{ST}()
     _recursive_collect_dependencies!(deps, term, dict)
     deps
 end
