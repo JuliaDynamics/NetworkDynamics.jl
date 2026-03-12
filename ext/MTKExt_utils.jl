@@ -46,15 +46,15 @@ Returns the variable on the lhs of the equation for equations.
 lhs_var(eq::Equation) = eq_type(eq)[2]
 
 function rhs_differentials(eqs::Vector{Equation})
-    diffs = Set{BasicSymbolic}()
+    diffs = Set{ST}()
     for eq in eqs
         _collect_differentials!(diffs, eq.rhs)
     end
     return diffs
 end
-rhs_differentials(eq::Equation) = _collect_differentials!(Set{BasicSymbolic}(), eq.rhs)
+rhs_differentials(eq::Equation) = _collect_differentials!(Set{ST}(), eq.rhs)
 
-_collect_differentials(ex) = _collect_differentials!(Set{BasicSymbolic}(), ex)
+_collect_differentials(ex) = _collect_differentials!(Set{ST}(), ex)
 
 function _collect_differentials!(found, ex)
     if iscall(ex)
