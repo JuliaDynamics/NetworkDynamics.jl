@@ -7,6 +7,7 @@ using ModelingToolkitBase: parameters, unknowns, independent_variables, observed
 using Symbolics: Symbolics, fixpoint_sub, substitute
 using RecursiveArrayTools: RecursiveArrayTools
 using ArgCheck: @argcheck
+using Graphs: Graphs
 using LinearAlgebra: Diagonal, I
 using SymbolicUtils.Code: Let, Assignment, unwrap_const
 using Moshi: Moshi
@@ -391,11 +392,20 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     states = match_diff_states(eqs, unknowns(sys))
 
     eqs, obseqs_sorted, states = let
-        inputs = ff_to_constraint ? Set(allinputs) : Set{ST}()
-        # first, we expand in terms of states and inputs
+        # detect if we need to pass inputs (to disallow FF from inputs -> outputs)
+        inputs = if ff_to_constraint
+            # 1. move observed equations back to sates to uncover ff
+            eqs, obseqs_sorted, states = observed_outputs_to_states(eqs, obseqs_sorted, states, alloutputs; verbose)
+            Set(allinputs)
+        else
+            Set{ST}()
+        end
+        # 2. expand algebraic equations to uncover state/input depndencies
         eqs_expanded = expand_alg_equations(eqs, obseqs_sorted, states, inputs; verbose)
-        eqs, obseqs, states = remove_aliases(eqs_expanded, obseqs_sorted, states, alloutputs; verbose)
-        eqs, obseqs, states = reduce_linear_algebraic(eqs, obseqs, states; outputs=alloutputs, ff_inputs=inputs, verbose)
+        # 3. reduce linear algebraic equations
+        eqs, obseqs, states = reduce_linear_algebraic(eqs_expanded, obseqs_sorted, states; outputs=alloutputs, ff_inputs=inputs, verbose)
+        # 4. priorize alias names (e.g. use busbar₊u_r rather than gen₊termial₊u_r if both exist)
+        eqs, obseqs, states = pick_best_alias_names(eqs, obseqs, states, alloutputs; verbose)
 
         eqs, obseqs, states
     end

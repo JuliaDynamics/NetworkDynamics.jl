@@ -415,7 +415,7 @@ end
     @named pv = PVConstraint(; P=2, V=1)
     @named busbar = BusBar()
     mtkbus = System(connect(busbar.terminal, pv.terminal), t; systems=[busbar, pv], name=:pvbus)
-    vf = VertexModel(mtkbus, [:busbar₊i_r, :busbar₊i_i], [:busbar₊u_r, :busbar₊u_i], verbose=false)
+    vf = VertexModel(mtkbus, [:busbar₊i_r, :busbar₊i_i], [:busbar₊u_r, :busbar₊u_i], verbose=true)
 
     @test Set(vf.sym) == Set([:busbar₊u_r,:busbar₊u_i])
 end
@@ -802,7 +802,6 @@ end
     @test topologicical_sorted(red_eqs)
     @test topologicical_sorted(red_obs)
 
-
     @variables p(t) prosumer_p(t) prosumer_q_nw(t) prosumer_q_inj(t)
     @parameters q_nw prosumer_q_prosumer
     eqs = [
@@ -829,6 +828,26 @@ end
     red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(eqs, existing_obs, [sA, sB]; verbose=false)
     @test isempty(red_states)
     @test topologicical_sorted(red_obs)
+
+    # Longer 4-state dependency chain A→B→C→D (D=parameter).
+    # Tests that correct SCC order is maintained across a longer chain.
+    @variables chA(t) chB(t) chC(t) chD(t)
+    @parameters chp
+    eqs = [
+        0 ~ -chA + chB,   # chA depends on chB
+        0 ~ -chB + chC,   # chB depends on chC
+        0 ~ -chC + chD,   # chC depends on chD
+        0 ~ -chD + chp,   # chD = chp (pure parameter)
+    ]
+    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(eqs, Equation[], [chA, chB, chC, chD]; verbose=false)
+    @test isempty(red_states)
+    @test isempty(red_eqs)
+    @test topologicical_sorted(red_obs)
+    # chD must come before chC, chC before chB, chB before chA
+    obs_lhs = [eq.lhs for eq in red_obs]
+    @test findfirst(isequal(chD.val), obs_lhs) < findfirst(isequal(chC.val), obs_lhs)
+    @test findfirst(isequal(chC.val), obs_lhs) < findfirst(isequal(chB.val), obs_lhs)
+    @test findfirst(isequal(chB.val), obs_lhs) < findfirst(isequal(chA.val), obs_lhs)
 end
 
 @testset "FF-blocking in reduce_linear_algebraic" begin
@@ -925,6 +944,36 @@ end
     @test length(red_states) == 2   # both stay
     @test isempty(red_obs)
     @test length(red_eqs) == 2      # both original equations preserved intact
+
+    # H: 4-SCC FF chain: input→LC→LS→LS→LC→output
+    # cn1, cn2 are dynamic states whose values appear as coefficients,
+    # making SCCs 2 and 3 :linear_state respectively.
+    # Walking from the output SCC (LC) backward, SCC3 is the first :linear_state hit
+    # → SCC3 must be forbidden; SCCs 1, 2 and 4 must still be solved.
+    @variables c1(t) c2(t) c3(t) c4(t) cn1(t) cn2(t)
+    @parameters c_inp
+    ff_chain_eqs = [
+        Dt(cn1) ~ 0,          # cn1 is a dynamic state (coefficient role → SCC2 is :LS)
+        Dt(cn2) ~ 0,          # cn2 is a dynamic state (coefficient role → SCC3 is :LS)
+        0 ~ c1 - c_inp,       # SCC1: c1 = c_inp,  coeff of c1 = 1    (LC), has_ff
+        0 ~ cn1*c2 - c1,      # SCC2: cn1*c2 = c1, coeff of c2 = cn1  (LS)
+        0 ~ cn2*c3 - c2,      # SCC3: cn2*c3 = c2, coeff of c3 = cn2  (LS)
+        0 ~ c4 - c3,          # SCC4: c4 = c3,     coeff of c4 = 1    (LC), output
+    ]
+    all_chain_states = [cn1, cn2, c1, c2, c3, c4]
+    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(
+        ff_chain_eqs, Equation[], all_chain_states;
+        outputs=[c4], ff_inputs=Set([c_inp]), verbose=false)
+    obs_lhs = Set(eq.lhs for eq in red_obs)
+    # SCCs 1 and 2 are not forbidden
+    @test c1.val ∈ obs_lhs
+    @test c2.val ∈ obs_lhs
+    # SCC3 is forbidden (first :LS from output end): c3 stays as a constraint state
+    @test c3.val ∉ obs_lhs
+    @test c3.val ∈ Set(red_states)
+    # SCC4 (LC) is not forbidden: c4 solved as obs (depends on state c3, no direct FF)
+    @test c4.val ∈ obs_lhs
+    @test topologicical_sorted(red_obs)
 end
 
 @testset "Test get_alias function" begin
