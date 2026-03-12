@@ -1,4 +1,5 @@
-if haskey(ENV, "GPL_MTK")
+GPL_MTK = haskey(ENV, "GPL_MTK")
+if GPL_MTK
     using ModelingToolkit
 end
 using Test
@@ -21,20 +22,20 @@ BUILDKITE = haskey(ENV, "BUILDKITE")
 BUILDKITE && @test CUDA.functional() # fail early in buildkite if cuda is not available
 
 @testset "NetworkDynamics Tests" begin
-    BUILDKITE || @testset "Package Quality Tests" begin
-        # print_explicit_imports(NetworkDynamics)
-        @test check_no_implicit_imports(NetworkDynamics) === nothing
-        @test check_no_stale_explicit_imports(NetworkDynamics, ignore=(:Symbolics,)) === nothing
-        Aqua.test_all(NetworkDynamics;
-            ambiguities=false,
-            stale_deps=VERSION ≥ v"1.11", # don't check stale deps on LTS (we add Testfiles to main env)
-            deps_compat=VERSION ≥ v"1.11", # don't check compat on LTS
-            persistent_tasks=false)
-        @test_broken isempty(Docs.undocumented_names(NetworkDynamics))
-    end
+    # skip majority of tets under GPL_MTK and BUILDKITE env
+    if !GPL_MTK && !BUILKITE
+        @testset "Package Quality Tests" begin
+            # print_explicit_imports(NetworkDynamics)
+            @test check_no_implicit_imports(NetworkDynamics) === nothing
+            @test check_no_stale_explicit_imports(NetworkDynamics, ignore=(:Symbolics,)) === nothing
+            Aqua.test_all(NetworkDynamics;
+                ambiguities=false,
+                stale_deps=VERSION ≥ v"1.11", # don't check stale deps on LTS (we add Testfiles to main env)
+                deps_compat=VERSION ≥ v"1.11", # don't check compat on LTS
+                persistent_tasks=false)
+            @test_broken isempty(Docs.undocumented_names(NetworkDynamics))
+        end
 
-    # skip non-GPU tests on buildkite
-    if !BUILDKITE
         @testfile "utils_test.jl"
 
         NetworkDynamics.CHECK_COMPONENT[] = false
@@ -61,17 +62,21 @@ BUILDKITE && @test CUDA.functional() # fail early in buildkite if cuda is not av
         @testfile "doctor_test.jl"
     end
 
-    @testfile "symbolicindexing_test.jl"
-    @testfile "external_inputs_test.jl"
-    @testfile "loopback_test.jl"
+    # skip additional tests under GPL_MTK env
+    if !GPL_MTK
+        @testfile "symbolicindexing_test.jl"
+        @testfile "external_inputs_test.jl"
+        @testfile "loopback_test.jl"
 
-    @testfile "diffusion_test.jl"
-    @testfile "inhomogeneous_test.jl"
+        @testfile "diffusion_test.jl"
+        @testfile "inhomogeneous_test.jl"
 
-    if CUDA.functional()
-        @testfile "GPU_test.jl"
+        if CUDA.functional()
+            @testfile "GPU_test.jl"
+        end
     end
 
+    # the docs should indeed work with MTK loaded
     @testset "Test Doc Examples" begin
         examples = joinpath(pkgdir(NetworkDynamics), "docs", "examples")
         for file in readdir(examples; join=true)
