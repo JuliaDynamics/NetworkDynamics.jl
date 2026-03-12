@@ -342,7 +342,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         deepcopy(_sys)
     else
         _openinputs = setdiff(allinputs, Set(parameters(_sys)))
-        all_eq_vars = mapreduce(get_variables_fix, union, full_equations(_sys), init=Set{ST}())
+        all_eq_vars = mapreduce(get_variables_deriv, union, full_equations(_sys), init=Set{ST}())
         if !(_openinputs ⊆ all_eq_vars)
             missing_inputs = setdiff(_openinputs, all_eq_vars)
             verbose && @warn "The specified inputs ($missing_inputs) do not appear in the equations of the system!"
@@ -569,7 +569,7 @@ function _collect_deps_on_obs(terms, obs_subs)
     deps
 end
 function _collect_deps_on_obs!(deps, obs_subs, term)
-    termdeps = get_variables_fix(term)
+    termdeps = get_variables_deriv(term)
     for sym in termdeps
         if haskey(obs_subs, sym)
             # check recursively whether the observed depends on other observed
@@ -596,9 +596,9 @@ function _determine_fftype(deps, states, allinputs, params, t)
     end
 end
 
-_all_rhs_symbols(term) = get_variables_fix(term)
-_all_rhs_symbols(eq::Equation) = get_variables_fix(eq.rhs)
-_all_rhs_symbols(eqs::Union{AbstractVector,AbstractDict}) = mapreduce(eq->get_variables_fix(eq isa Pair ? eq.second : eq.rhs), ∪, eqs, init=Set{ST}())
+_all_rhs_symbols(term) = get_variables_deriv(term)
+_all_rhs_symbols(eq::Equation) = get_variables_deriv(eq.rhs)
+_all_rhs_symbols(eqs::Union{AbstractVector,AbstractDict}) = mapreduce(eq->get_variables_deriv(eq isa Pair ? eq.second : eq.rhs), ∪, eqs, init=Set{ST}())
 
 """
 Search for recursive dependencies in `term` given a dictionary `dict` of substitutions.

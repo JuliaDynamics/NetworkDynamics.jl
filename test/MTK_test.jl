@@ -9,10 +9,12 @@ using Test
 using SciCompDSL
 mtkext = Base.get_extension(NetworkDynamics, :NetworkDynamicsMTKExt)
 
-@testset "Woraround tests" begin
-    @variables x(t)
-    # if this test gets fixed, we can get rid of workaround get_variables_fix
-    @test get_variables(Dt(x)) == Set(Dt(x))
+@testset "get_variables_deriv test" begin
+    @variables x(t) y(t)
+    # if this test gets fixed, we can get rid of workaround get_variables_deriv
+    @test get_variables(Dt(x) + y) == Set([Dt(x), y])
+    @test mtkext.get_variables_deriv(Dt(x) + y) == Set([x, y])
+    @test mtkext.get_variables_deriv(Dt(x) + y) == Set([x, y])
 end
 
 @testset "eqtype test" begin
