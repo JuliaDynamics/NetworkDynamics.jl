@@ -17,15 +17,33 @@ end
 
 function remove_aliases(eqs, obseqs, states, outputs; verbose)
     # 1. Find the alias pairs
-    states_set = Set(states)
     alias_pairs = Tuple{ST,ST}[]
+
+    # detect alias pairs in equations
+    # we also build a bipartite adj mat for matching states to alias eqs later
+    biadj = falses(length(eqs), length(states))
     eq_alias_idxs = Int[]
     for (i, eq) in enumerate(eqs)
-        alias = get_alias(eq)
-        isnothing(alias) && continue
-        push!(alias_pairs, alias)
-        push!(eq_alias_idxs, i)
+        type, var = eq_type(eq)
+        if type == :explicit_diffeq
+            sidx = findfirst(isequal(var), states)
+            biadj[i, sidx] = true
+        elseif type == :implicit_algebraic
+            alias = get_alias(eq)
+            if isnothing(alias)
+                biadj[i, :] .= true # no alias, can match to any state
+            else
+                push!(alias_pairs, alias)
+                push!(eq_alias_idxs, i)
+                Aidx = findfirst(isequal(alias[1]), states)
+                Bidx = findfirst(isequal(alias[2]), states)
+                isnothing(Aidx) || setindex!(biadj, true, i, Aidx)
+                isnothing(Bidx) || setindex!(biadj, true, i, Bidx)
+            end
+        end
     end
+
+    # detect alias pairs in obs
     obs_alias_idx = Int[]
     for (i, eq) in enumerate(obseqs)
         alias = get_alias(eq)
@@ -77,11 +95,13 @@ function remove_aliases(eqs, obseqs, states, outputs; verbose)
         obseqs_new
     end
 
-    # reducing the state vector is tricky!
-    # essentially we need a primitive matching to match diff states where they belong
-    # and then fill the rest with non-diff states
-    unmatched_states = setdiff(states, removed_states)
-    states_new = match_diff_states(eqs_new, unmatched_states)
+    # for the states we first need to mach the old state vector to the equations
+    eq_per_state = _maximum_bipartite_matching(biadj) # cm[stateidx] = eqidx
+    state_per_eq = Int[findfirst(isequal(i), eq_per_state) for i in eachindex(eqs)] # inverse mapping, stateidx per eqidx; errors on nothing (broken system)
+    states_ordered = states[state_per_eq]
+    deleteat!(states_ordered, eq_alias_idxs)
+    states_new = Symbolics.substitute.(states_ordered, Ref(alias_subs))
+    @assert length(states_new) == length(eqs_new)
 
     eqs_new, obseqs_new, states_new
 end
@@ -287,13 +307,20 @@ function _build_coeff_mat(lineqs, linstates; outset=Set(), ff_inputs=Set())
     coeff
 end
 
-function _maximum_bipartite_matching(adj::AbstractMatrix{Bool})
-    nrow, ncol = size(adj)
+"""
+    _maximum_bipartite_matching(biadj) -> cm
+
+Maximum bipartite matching via DFS augmenting paths (Kuhn's algorithm).
+`biadj[i,j]` is true if row `i` (equation) can be matched to column `j` (state).
+Returns `cm` where `cm[j]` is the row matched to column `j`, or 0 if unmatched.
+"""
+function _maximum_bipartite_matching(biadj::AbstractMatrix{Bool})
+    nrow, ncol = size(biadj)
     cm = zeros(Int, ncol)
 
     function try_augment!(row, visited)
         for col in 1:ncol
-            adj[row, col] && !visited[col] || continue
+            biadj[row, col] && !visited[col] || continue
             visited[col] = true
             if cm[col] == 0 || try_augment!(cm[col], visited)
                 cm[col] = row
@@ -311,8 +338,8 @@ end
 
 function _match_equations_to_states(coeff)
     n_st = size(coeff, 2)
-    adj = coeff .== :linear
-    cm = _maximum_bipartite_matching(adj)
+    biadj = coeff .== :linear
+    cm = _maximum_bipartite_matching(biadj)
     return [(cm[j], j) for j in 1:n_st if cm[j] > 0]
 end
 
