@@ -65,8 +65,8 @@ jobs:
         id: julia-cache
         uses: julia-actions/cache@v2
       - uses: hexaeder/julia-buildpkg@main
-      - name: Add ModelingToolkit to test env
-        shell: julia --project=test --color=yes {0}
+      - name: Add ModelingToolkit dep to main env
+        shell: julia --project=. --color=yes {0}
         env:
           JULIA_PKG_PRECOMPILE_AUTO: "no"
         run: |
