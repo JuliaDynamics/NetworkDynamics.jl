@@ -121,7 +121,8 @@ end
 """
     NWState(nw_or_nw_wrapper;
             utype=Vector{Float64}, ufill=filltype(utype),
-            ptype=Vector{Float64}, pfill=filltype(ptype), default=true)
+            ptype=Vector{Float64}, pfill=filltype(ptype),
+            default=true, guess=false, init=false)
 
 Creates "empty" `NWState` object for the Network/Wrapper `nw` with flat types
 `utype` & `ptype`. The arrays will be prefilled with `ufill` and `pfill`
@@ -129,20 +130,26 @@ respectively (defaults to NaN).
 
 If `default=true` the default state & parameter values attached to the network
 components will be loaded.
+
+If `guess=true` symbols not covered by defaults are additionally filled with their
+guess values (only applies when `default=true`).
+
+If `init=true` the [`InitFormula`](@ref)s of each component are applied after
+filling defaults and guesses. Formulas whose input symbols are still NaN are skipped.
 """
 function NWState(thing;
                  utype=Vector{Float64}, ufill=filltype(utype),
                  ptype=Vector{Float64}, pfill=filltype(ptype),
-                 default=true)
+                 default=true, guess=false, init=false)
     nw = extract_nw(thing)
     t = nothing
     uflat = _init_flat(utype, dim(nw), ufill)
     p = NWParameter(nw; ptype, pfill, default=false)
     s = NWState(nw,uflat,p,t)
     default || return s
-    for (k, v) in SII.default_values(nw)
-        s[k] = v
-    end
+
+    _apply_defaults_and_guesses!(s, guess)
+    init && _apply_init_formulas!(s)
     return s
 end
 
@@ -162,6 +169,8 @@ end
     NWState(p::NWParameter; utype=Vector{Float64}, ufill=filltype(utype), default=true)
 
 Create `NWState` based on existing `NWParameter` object.
+
+See [`NWState(nw; ...)`](@ref) for the meaning of `guess` and `init`.
 """
 function NWState(p::NWParameter; utype=Vector{Float64}, ufill=filltype(utype), default=true)
     t = nothing
@@ -1065,3 +1074,60 @@ end
 # shallow copy of NWState/NWParameter
 Base.copy(nws::NWState) = NWState(nws.nw, copy(nws.uflat), copy(nws.p), nws.t)
 Base.copy(nwp::NWParameter) = NWParameter(nwp.nw, copy(nwp.pflat))
+
+# helpers for NWStat with guess=true/init=true
+function _apply_defaults_and_guesses!(s::NWState, guess)
+    dictf = guess ? get_defaults_or_guesses_dict : get_defaults_dict
+    nw = s.nw
+    u = uflat(s)
+    p = pflat(s)
+    for (ci, cf) in pairs(nw.im.vertexm)
+        thisdat  = view(u, nw.im.v_data[ci])
+        thispara = view(p, nw.im.v_para[ci])
+        dict = dictf(cf)
+        for (i, sy) in enumerate(sym(cf))
+            _def = get(dict, sy, nothing)
+            isnothing(_def) || (thisdat[i] = _def)
+        end
+        for (i, sy) in enumerate(psym(cf))
+            _def = get(dict, sy, nothing)
+            isnothing(_def) || (thispara[i] = _def)
+        end
+    end
+    for (ci, cf) in pairs(nw.im.edgem)
+        thisdat  = view(u, nw.im.e_data[ci])
+        thispara = view(p, nw.im.e_para[ci])
+        dict = dictf(cf)
+        for (i, sy) in enumerate(sym(cf))
+            _def = get(dict, sy, nothing)
+            isnothing(_def) || (thisdat[i] = _def)
+        end
+        for (i, sy) in enumerate(psym(cf))
+            _def = get(dict, sy, nothing)
+            isnothing(_def) || (thispara[i] = _def)
+        end
+    end
+    return s
+end
+
+function _apply_init_formulas!(s::NWState)
+    nw = s.nw
+    for ci in 1:nv(nw)
+        has_initformula(nw.im.vertexm[ci]) || continue
+        _apply_comp_init_formulas!(s, VIndex(ci))
+    end
+    for ci in 1:ne(nw)
+        has_initformula(nw.im.edgem[ci]) || continue
+        _apply_comp_init_formulas!(s, EIndex(ci))
+    end
+    return s
+end
+function _apply_comp_init_formulas!(s::NWState, cidx)
+    cf = extract_nw(s)[cidx]
+    for f in topological_sort_formulas(collect(get_initformulas(cf)))
+        nw_inbuf  = view(s, idxtype(cidx).(cidx.compidx, f.sym))
+        any(isnan, nw_inbuf) && continue
+        nw_outbuf = view(s, idxtype(cidx).(cidx.compidx, f.outsym))
+        f(SymbolicView(nw_outbuf, f.outsym), SymbolicView(nw_inbuf, f.sym))
+    end
+end

@@ -849,6 +849,40 @@ end
     @test eidxs(1, 1) == [EIndex(1, 1)]
 end
 
+@testset "NWState guess and init keywords" begin
+    # vertex with states that have guesses but no defaults, and params with defaults
+    fv = (du, u, ein, p, t) -> nothing
+    v = VertexModel(; f=fv, g=1:2, sym=[:x, :y], psym=[:r => 2.0, :phi => π/4])
+    set_guess!(v, :x, 0.5)
+    set_guess!(v, :y, 0.5)
+    set_initformula!(v, @initformula begin
+        :x = :r * cos(:phi)
+        :y = :r * sin(:phi)
+    end)
+    nw = Network(path_graph(2), v, Lib.diffusion_edge())
+
+    # default only: states are NaN (no state defaults), params filled
+    s = NWState(nw)
+    @test isnan(s[VIndex(1, :x)])
+    @test isnan(s[VIndex(1, :y)])
+    @test s[VPIndex(1, :r)] == 2.0
+
+    # guess=true: NaN states filled from guess values
+    s = NWState(nw; guess=true)
+    @test s[VIndex(1, :x)] == 0.5
+    @test s[VIndex(1, :y)] == 0.5
+
+    # init=true: states computed from params via InitFormula
+    s = NWState(nw; init=true)
+    @test s[VIndex(1, :x)] ≈ 2.0 * cos(π/4)
+    @test s[VIndex(1, :y)] ≈ 2.0 * sin(π/4)
+
+    # guess=true, init=true: init runs after guess, so formula values win
+    s = NWState(nw; guess=true, init=true)
+    @test s[VIndex(1, :x)] ≈ 2.0 * cos(π/4)
+    @test s[VIndex(1, :y)] ≈ 2.0 * sin(π/4)
+end
+
 @testset "test equal methods for index types" begin
     @test VIndex(1) != EIndex(1)
     @test VIndex(Any[1,2,3], 1) == VIndex([1,2,3], 1)
