@@ -13,7 +13,7 @@ Base.showerror(io::IO, e::NetworkInitError) = print(io, "NetworkInitError: ", e.
 Base.showerror(io::IO, e::ComponentInitError) = print(io, "ComponentInitError: ", e.msg)
 
 """
-    find_fixpoint(nw::Network, [x0::NWState=NWState(nw)], [p::NWParameter=x0.p]; kwargs...)
+    find_fixpoint(nw::Network, [x0::NWState=NWState(nw; ufill=0, guess=true, init=true)]; kwargs...)
     find_fixpoint(nw::Network, x0::AbstractVector, p::AbstractVector; kwargs...)
 
 Find a steady-state (fixed-point) solution of the network dynamics by solving the nonlinear
@@ -25,7 +25,7 @@ constructs and solves the steady state problem, returning the solution as an `NW
 ## Arguments
 - `nw::Network`: The network dynamics to find a fixed point for
 - `x0`: Initial guess for the state variables. Can be:
-  - `NWState`: Complete network state (default: `NWState(nw; ufill=0)`)
+  - `NWState`: Complete network state (default: `NWState(nw; ufill=0, guess=true, init=true)`)
   - `AbstractVector`: Flat state vector
 - `p`: Network parameters. Can be:
   - `NWParameter`: Complete parameter object (default: extracted from `x0` or `NWParameter(nw)`)
@@ -41,18 +41,11 @@ constructs and solves the steady state problem, returning the solution as an `NW
 
 See also: [`NWState`](@ref), [`NWParameter`](@ref), [`initialize_componentwise`](@ref)
 """
-function find_fixpoint(nw::Network, x0::AbstractVector; kwargs...)
-    find_fixpoint(nw, NWState(nw, x0), NWParameter(nw); kwargs...)
-end
-function find_fixpoint(nw::Network, p::NWParameter; kwargs...)
-    find_fixpoint(nw, NWState(p; ufill=0), p; kwargs...)
-end
 function find_fixpoint(nw::Network,
-                       x0::NWState=NWState(nw; ufill=0),
-                       p::NWParameter=x0.p;
+                       x0::NWState=NWState(nw; ufill=0, guess=true, init=true);
                        t=isnothing(x0.t) ? NaN : x0.t,
                        kwargs...)
-    find_fixpoint(nw, uflat(x0), pflat(p); t, kwargs...)
+    find_fixpoint(nw, uflat(x0), pflat(x0); t, kwargs...)
 end
 
 #=
