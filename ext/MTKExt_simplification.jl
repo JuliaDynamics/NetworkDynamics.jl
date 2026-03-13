@@ -80,7 +80,7 @@ function pick_best_alias_names(eqs, obseqs, states, outputs; verbose)
     diffstateset = Set{ST}()
     for eq in eqs
         type = eq_type(eq)
-        type[1] == :explicit_differential && push!(diffstateset, type[2])
+        type[1] == :explicit_diffeq && push!(diffstateset, type[2])
     end
     outset = Set(outputs)
     sortf = function(s)
