@@ -50,3 +50,23 @@ function _deprecated_idxs_gen(constructor, compiter, variter, type=constructor)
     end
     indices
 end
+
+function find_fixpoint(nw::Network, x0::AbstractVector; kwargs...)
+    @warn "find_fixpoint(nw, x0::Vector) is deprecated. Use find_fixpoint(nw, s0::NWState) instead." maxlog=1
+    find_fixpoint(nw, NWState(nw, x0, pflat(NWParameter(nw))); kwargs...)
+end
+function find_fixpoint(nw::Network, p::NWParameter; kwargs...)
+    @warn "find_fixpoint(nw, p::NWParameter) is deprecated. Use  find_fixpoint(nw, s0::NWState) instead." maxlog=1
+    udefs = NWState(nw; guess=true, init=true)
+    s_with_p = NWState(nw, uflat(udefs), pflat(p), udefs.t)
+    find_fixpoint(nw, s_with_p; kwargs...)
+end
+function find_fixpoint(nw::Network,
+                       x0::NWState,
+                       p::NWParameter;
+                       t=isnothing(x0.t) ? NaN : x0.t,
+                       kwargs...)
+    @warn "find_fixpoint(nw, x0::NWState, p::NWParameter) is deprecated. Use find_fixpoint(s0::NWState) instead." maxlog=1
+    s0 = NWState(nw, uflat(x0), pflat(p), x0.t)
+    find_fixpoint(nw, s0; kwargs...)
+end
