@@ -850,6 +850,25 @@ end
     @test findfirst(isequal(chD.val), obs_lhs) < findfirst(isequal(chC.val), obs_lhs)
     @test findfirst(isequal(chC.val), obs_lhs) < findfirst(isequal(chB.val), obs_lhs)
     @test findfirst(isequal(chB.val), obs_lhs) < findfirst(isequal(chA.val), obs_lhs)
+
+    # Nonlinear dependency ordering regression:
+    # nlx ~ atan(nla, nlb) has a *nonlinear* dep on nla and nlb.
+    # nla and nlb in turn depend on nlc which is already in obseqs, so
+    # _insert_sorted! places them at a high position. Without tracking
+    # nonlinear deps in the SCC graph, nlx lands at position 1 (before nla/nlb).
+    @variables nlx(t) nla(t) nlb(t) nlc(t)
+    @parameters nlp
+    eqs = [
+        0 ~ -nlx + atan(nla, nlb),  # nlx nonlinearly depends on nla, nlb
+        0 ~ -nla + nlc,             # nla linearly depends on nlc (already in obseqs)
+        0 ~ -nlb + nlc,             # nlb linearly depends on nlc
+    ]
+    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(eqs, Equation[nlc ~ nlp], [nlx, nla, nlb]; verbose=false)
+    @test isempty(red_states)
+    @test topologicical_sorted(red_obs)
+    obs_lhs = [eq.lhs for eq in red_obs]
+    @test findfirst(isequal(nla.val), obs_lhs) < findfirst(isequal(nlx.val), obs_lhs)
+    @test findfirst(isequal(nlb.val), obs_lhs) < findfirst(isequal(nlx.val), obs_lhs)
 end
 
 @testset "FF-blocking in reduce_linear_algebraic" begin

@@ -291,11 +291,13 @@ function _solve_plan(matches, coeff, alg_sts, has_ff, outset)
     # Step 1: Dependency graph on matched pairs.
     # Edge i→j means "equation of match i has a nonzero coeff for state of match j",
     # i.e. match i depends on match j and must be solved after it.
+    # We include :nonlinear dependencies too, so that equations like
+    # `x ~ atan(a, b)` are correctly ordered after `a` and `b` in the SCC output.
     g = Graphs.SimpleDiGraph(n)
     for (i, (r, _)) in enumerate(matches)
         for (j, (_, c)) in enumerate(matches)
             i == j && continue
-            if coeff[r, c] === :linear_const || coeff[r, c] === :linear_state
+            if coeff[r, c] !== :none
                 Graphs.add_edge!(g, i, j)
             end
         end
