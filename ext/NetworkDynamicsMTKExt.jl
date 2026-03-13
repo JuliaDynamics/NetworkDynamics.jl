@@ -372,6 +372,15 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     end
 
     allparams = parameters(sys) # contains inputs!
+    # mtkcompile/complete calls remove_bound_parameters_from_ps which removes params
+    # whose value is bound to another param (e.g. Sn = S_b) from ps, but those symbols
+    # still appear in equations. Add them back so build_function can reference them and
+    # InitFormulas targeting them remain valid.
+    let bp = ModelingToolkitBase.bound_parameters(sys)
+        if !isempty(bp)
+            append!(allparams, collect(bp))
+        end
+    end
     @argcheck allinputs ⊆ Set(allparams) ∪ missing_inputs
     params = setdiff(allparams, Set(allinputs))
 
