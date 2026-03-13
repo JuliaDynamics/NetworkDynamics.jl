@@ -1067,3 +1067,121 @@ end
     sys = testcomp()
     @test_logs (:warn, r"Model contains .* @discretes") VertexModel(testcomp(), [:x], [:y])
 end
+
+@testset "promotion of bindings to init_formulas" begin
+    @testset "no nesting" begin
+        @component function slack_differential(; name)
+            @parameters u_init_r=1 u_init_i=0
+            @named busbar = BusBase(; u_r = u_init_r + 0.1, u_i = u_init_i)
+            eqs = [Dt(busbar.u_r) ~ 0, Dt(busbar.u_i) ~ 0]
+            System(eqs, t, [], [u_init_r, u_init_i]; name, systems=[busbar])
+        end
+        @named sys = slack_differential()
+        vm = VertexModel(sys, [:busbar₊i_r, :busbar₊i_i], [:busbar₊u_r, :busbar₊u_i]; verbose=false)
+
+        # formulas are automatically attached to the vertex model
+        @test has_initformula(vm)
+        formulas = collect(get_initformulas(vm))
+        @test length(formulas) == 2
+
+        f_ur = only(filter(f -> f.outsym == [:busbar₊u_r], formulas))
+        f_ui = only(filter(f -> f.outsym == [:busbar₊u_i], formulas))
+
+        out = NetworkDynamics.SymbolicView(zeros(1), f_ur.outsym)
+        f_ur(out, NetworkDynamics.SymbolicView([2.0], f_ur.sym))
+        @test out[:busbar₊u_r] ≈ 2.1
+
+        out = NetworkDynamics.SymbolicView(zeros(1), f_ur.outsym)
+        f_ur(out, NetworkDynamics.SymbolicView([0.0], f_ur.sym))
+        @test out[:busbar₊u_r] ≈ 0.1
+
+        out = NetworkDynamics.SymbolicView(zeros(1), f_ui.outsym)
+        f_ui(out, NetworkDynamics.SymbolicView([3.5], f_ui.sym))
+        @test out[:busbar₊u_i] ≈ 3.5
+    end
+
+    @testset "nested model" begin
+        @component function slack_diff_inner(; name)
+            @parameters u_init_r=1
+            @named busbar = BusBase(; u_r = u_init_r)
+            eqs = [Dt(busbar.u_r) ~ 0, Dt(busbar.u_i) ~ 0]
+            System(eqs, t, [], [u_init_r]; name, systems=[busbar])
+        end
+        @component function slack_diff_outer(; name)
+            @variables u_r(t) u_i(t) i_r(t) i_i(t)
+            @named inner = slack_diff_inner()
+            eqs = [
+                u_r ~ inner.busbar.u_r
+                u_i ~ inner.busbar.u_i
+                i_r ~ inner.busbar.i_r
+                i_i ~ inner.busbar.i_i
+            ]
+            System(eqs, t; name, systems=[inner])
+        end
+        # Outer model has no bindings of its own; inner model has u_r = u_init_r binding.
+        # bindings_to_initformulas should propagate the inner binding with the namespaced symbol.
+        @named outer = slack_diff_outer()
+        vm = VertexModel(outer, [:i_r, :i_i], [:u_r, :u_i]; verbose=false)
+
+        @test has_initformula(vm)
+        formulas = collect(get_initformulas(vm))
+        @test length(formulas) == 1
+        f = only(formulas)
+        # inner₊busbar₊u_r is aliased to u_r after pick_best_alias_names
+        @test f.outsym == [:u_r]
+        @test f.sym    == [:inner₊u_init_r]
+
+        out = NetworkDynamics.SymbolicView(zeros(1), f.outsym)
+        f(out, NetworkDynamics.SymbolicView([4.2], f.sym))
+        @test out[:u_r] ≈ 4.2
+
+        @testset "warn on duplicate formula targets" begin
+            @component function slack_diff_outer_dup(; name)
+                @parameters u_init_outer=2.0
+                @variables u_r(t) u_i(t) i_r(t) i_i(t)
+                @named inner = slack_diff_inner()
+                eqs = [
+                    u_r ~ inner.busbar.u_r
+                    u_i ~ inner.busbar.u_i
+                    i_r ~ inner.busbar.i_r
+                    i_i ~ inner.busbar.i_i
+                ]
+                # outer also binds u_r: after obs_subs both this and inner₊busbar₊u_r alias to u_r
+                System(eqs, t; name, systems=[inner], bindings=[u_r => u_init_outer])
+            end
+            @named outer_dup = slack_diff_outer_dup()
+            @test_logs (:warn, r"Multiple InitFormula") match_mode=:any begin
+                VertexModel(outer_dup, [:i_r, :i_i], [:u_r, :u_i]; verbose=false)
+            end
+        end
+    end
+end
+
+@testset "promotion of guesses to guess_formulas" begin
+    @component function vertex_with_symbolic_guess(; name)
+        @parameters u_init=1.0
+        @variables x(t) y(t)
+        eqs = [Dt(x) ~ -x; Dt(y) ~ -y]
+        System(eqs, t, [x, y], [u_init]; name, guesses=[y => 2*u_init])
+    end
+    @named sys = vertex_with_symbolic_guess()
+    vm = VertexModel(sys, [], [:x, :y]; verbose=false)
+
+    @test has_guessformula(vm)
+    formulas = collect(get_guessformulas(vm))
+    @test length(formulas) == 1
+    f = only(formulas)
+    @test f.outsym == [:y]
+    @test f.sym    == [:u_init]
+
+    out = NetworkDynamics.SymbolicView(zeros(1), f.outsym)
+    f(out, NetworkDynamics.SymbolicView([3.0], f.sym))
+    @test out[:y] ≈ 6.0
+
+    out = NetworkDynamics.SymbolicView(zeros(1), f.outsym)
+    f(out, NetworkDynamics.SymbolicView([0.5], f.sym))
+    @test out[:y] ≈ 1.0
+
+    # constant guess is NOT promoted to a formula
+    @test all(gf -> :x ∉ gf.outsym, get_guessformulas(vm))
+end
