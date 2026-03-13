@@ -997,6 +997,64 @@ end
     @test topologicical_sorted(red_obs)
 end
 
+@testset "CPL bus: matching prefers linear_const over linear_state" begin
+    # Reproduces the constant-power-load bus structure with ₊-separated names.
+    # 16 implicit algebraic equations, 16 states. Outputs: busbar₊u_r, busbar₊u_i.
+    # FF inputs: busbar₊i_r, busbar₊i_i.
+    #
+    # The bug: the column sort key `-count('₊', ...)` causes deeply-nested states
+    # like load₊terminal₊u_r (2 ₊) to be tried before load₊P (1 ₊) in the bipartite
+    # matching. The P-balance equation gets matched to load₊terminal₊u_r (linear_state)
+    # instead of load₊P (linear_const). This pulls output-aliased states into an SCC
+    # that is both ff_source and output_sink, causing the group to be skipped.
+    #
+    # After reduction only 2 states should remain (the output voltages as algebraic
+    # constraints defined by the CPL equations).
+    @variables begin
+        busbar₊u_r(t); busbar₊u_i(t); busbar₊P(t); busbar₊Q(t); busbar₊u_mag(t); busbar₊u_arg(t)
+        busbar₊terminal₊u_r(t); busbar₊terminal₊u_i(t); busbar₊terminal₊i_r(t); busbar₊terminal₊i_i(t)
+        load₊P(t); load₊Q(t)
+        load₊terminal₊u_r(t); load₊terminal₊u_i(t); load₊terminal₊i_r(t); load₊terminal₊i_i(t)
+    end
+    @parameters busbar₊i_r busbar₊i_i load₊Pset load₊Qset
+
+    eqs = [
+        0 ~ -busbar₊P - busbar₊i_i*busbar₊u_i - busbar₊u_r*busbar₊i_r
+        0 ~ -busbar₊Q + busbar₊i_i*busbar₊u_r - busbar₊u_i*busbar₊i_r
+        0 ~ sqrt(busbar₊u_r^2 + busbar₊u_i^2) - busbar₊u_mag
+        0 ~ atan(busbar₊u_i, busbar₊u_r) - busbar₊u_arg
+        0 ~ busbar₊terminal₊u_r - busbar₊u_r
+        0 ~ busbar₊terminal₊u_i - busbar₊u_i
+        0 ~ busbar₊terminal₊i_r - busbar₊i_r
+        0 ~ -busbar₊i_i + busbar₊terminal₊i_i
+        0 ~ -load₊P + load₊terminal₊u_i*load₊terminal₊i_i + load₊terminal₊i_r*load₊terminal₊u_r
+        0 ~ -load₊Q + load₊terminal₊u_i*load₊terminal₊i_r - load₊terminal₊i_i*load₊terminal₊u_r
+        0 ~ -load₊terminal₊i_r + (load₊Pset*load₊terminal₊u_r + load₊Qset*load₊terminal₊u_i) / (load₊terminal₊u_i^2 + load₊terminal₊u_r^2)
+        0 ~ (load₊Pset*load₊terminal₊u_i - load₊Qset*load₊terminal₊u_r) / (load₊terminal₊u_i^2 + load₊terminal₊u_r^2) - load₊terminal₊i_i
+        0 ~ -busbar₊terminal₊u_r + load₊terminal₊u_r
+        0 ~ load₊terminal₊u_i - busbar₊terminal₊u_i
+        0 ~ load₊terminal₊i_r + busbar₊terminal₊i_r
+        0 ~ busbar₊terminal₊i_i + load₊terminal₊i_i
+    ]
+    all_states = [busbar₊u_r, busbar₊u_i, busbar₊P, busbar₊Q, busbar₊u_mag, busbar₊u_arg,
+                  busbar₊terminal₊u_r, busbar₊terminal₊u_i, busbar₊terminal₊i_r, busbar₊terminal₊i_i,
+                  load₊P, load₊Q, load₊terminal₊u_r, load₊terminal₊u_i, load₊terminal₊i_r, load₊terminal₊i_i]
+    outputs = [busbar₊u_r, busbar₊u_i]
+    ff_set = Set([busbar₊i_r, busbar₊i_i])
+
+    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(
+        eqs, Equation[], all_states;
+        outputs=outputs, ff_inputs=ff_set, verbose=false)
+
+    # After reduction only 2 states should remain as algebraic constraints.
+    # The remaining states may be the output variables or their aliases (before
+    # pick_best_alias_names resolves them), but there must be exactly 2.
+    @test length(red_states) == 2
+    @test length(red_eqs) == 2
+    @test length(red_obs) == 14
+    @test topologicical_sorted(red_obs)
+end
+
 @testset "Test get_alias function" begin
     @variables a(t) b(t) c(t)
     @parameters p

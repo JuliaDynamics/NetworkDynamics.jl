@@ -452,19 +452,33 @@ function _build_coeff_mat(lineqs, linstates, state_set; ff_inputs=Set())
 end
 
 """
-    _maximum_bipartite_matching(biadj) -> cm
+    _maximum_bipartite_matching(biadj, prefer=biadj) -> cm
 
 Maximum bipartite matching via DFS augmenting paths (Kuhn's algorithm).
 `biadj[i,j]` is true if row `i` (equation) can be matched to column `j` (state).
+When `prefer` is given, the DFS tries preferred edges first (e.g. `:linear_const`)
+before non-preferred ones (`:linear_state`), so that natural constant-coefficient
+matches are established first and only displaced when necessary for a larger matching.
 Returns `cm` where `cm[j]` is the row matched to column `j`, or 0 if unmatched.
 """
-function _maximum_bipartite_matching(biadj::AbstractMatrix{Bool})
+function _maximum_bipartite_matching(biadj::AbstractMatrix{Bool},
+                                     prefer::AbstractMatrix{Bool}=biadj)
     nrow, ncol = size(biadj)
     cm = zeros(Int, ncol)
 
     function try_augment!(row, visited)
+        # First pass: try preferred (linear_const) columns
         for col in 1:ncol
-            biadj[row, col] && !visited[col] || continue
+            prefer[row, col] && !visited[col] || continue
+            visited[col] = true
+            if cm[col] == 0 || try_augment!(cm[col], visited)
+                cm[col] = row
+                return true
+            end
+        end
+        # Second pass: try remaining (linear_state only) columns
+        for col in 1:ncol
+            biadj[row, col] && !prefer[row, col] && !visited[col] || continue
             visited[col] = true
             if cm[col] == 0 || try_augment!(cm[col], visited)
                 cm[col] = row
@@ -483,8 +497,11 @@ end
 function _match_equations_to_states(coeff)
     n_st = size(coeff, 2)
     # Both :linear_const and :linear_state are matchable; FF blocking is in _solve_plan.
+    # Prefer linear_const matches: they produce cleaner solutions (constant coefficients)
+    # and avoid pulling output-aliased states into SCCs with FF-dependent equations.
     biadj = @. (coeff == :linear_const) | (coeff == :linear_state)
-    cm = _maximum_bipartite_matching(biadj)
+    prefer = (coeff .== :linear_const)
+    cm = _maximum_bipartite_matching(biadj, prefer)
     return [(cm[j], j) for j in 1:n_st if cm[j] > 0]
 end
 
