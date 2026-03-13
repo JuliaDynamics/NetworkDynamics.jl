@@ -1077,7 +1077,7 @@ Base.copy(nwp::NWParameter) = NWParameter(nwp.nw, copy(nwp.pflat))
 
 # helpers for NWStat with guess=true/init=true
 function _apply_defaults_and_guesses!(s::NWState, guess)
-    dictf = guess ? get_defaults_or_guesses_dict : get_defaults_dict
+    dictf = guess ? get_defaults_or_inits_or_guesses_dict : get_defaults_or_inits_dict
     nw = s.nw
     u = uflat(s)
     p = pflat(s)
