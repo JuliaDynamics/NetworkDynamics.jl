@@ -77,7 +77,7 @@ function pick_best_alias_names(eqs, obseqs, states, outputs; verbose)
     end
 
     # 3. Pick main per group, build substitution dict and alias observations
-    diffstateset = Set{ST}[]
+    diffstateset = Set{ST}()
     for eq in eqs
         type = eq_type(eq)
         type[1] == :explicit_differential && push!(diffstateset, type[2])

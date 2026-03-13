@@ -129,9 +129,8 @@ function warn_missing_features(sys)
     end
     if has_discretes
         @warn "Model contains variables defined via @discretes. This is not supported in NetworkDynamics. \
-        For discretely changing variables use normal @paraemters with callbacks on the component level."
+        For discretely changing variables use normal @parameters with callbacks on the component level."
     end
-
 end
 function _collect_continuous_events(sys)
     vcat(

@@ -104,6 +104,7 @@ The first few components building blocks are identical to the docs on [ModelingT
 using NetworkDynamics
 using ModelingToolkitBase
 using ModelingToolkitBase: t_nounits as t, D_nounits as D
+using SciCompDSL
 using OrdinaryDiffEqTsit5
 using CairoMakie
 
