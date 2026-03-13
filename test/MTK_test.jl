@@ -1057,3 +1057,13 @@ end
     Lib.powergridlike_network()
     Lib.powergridlike_injector_network()
 end
+
+@testset "Test warn on missing features" begin
+    @component function testcomp()
+        @variables x(t) y(t)
+        @discretes s(t)
+        System([x ~ y + s, s ~ 1], t, [x, y, s], []; name=:test)
+    end
+    sys = testcomp()
+    @test_logs (:warn, r"Model contains .* @discretes") VertexModel(testcomp(), [:x], [:y])
+end
