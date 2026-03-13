@@ -348,3 +348,92 @@ function get_variables_deriv(ex)
     end
     set
 end
+
+"""
+    guesses_to_guessformulas!(sys; alias_substitutions=Dict())
+
+Extracts symbolic guesses from a (simplified) system and returns matching GuessFormulas.
+The symbolic guesses are removed from the system's guesses dict in-place (hence `!`),
+so they won't be silently dropped by metadata extraction.
+Constant (numeric) guesses are left in place — they are handled as `:guess` metadata.
+"""
+function guesses_to_guessformulas!(sys; obs_subs=Dict())
+    allguesses = ModelingToolkitBase.get_guesses(sys)
+    isempty(allguesses) && return nothing
+
+    guessformulas = Set{GuessFormula}()
+
+    for (lhs_sym, rhs_expr) in collect(allguesses)
+        # skip constant guesses — leave them for :guess metadata
+        isempty(get_variables(rhs_expr)) && continue
+
+        # remove from system guesses dict
+        delete!(allguesses.dict, lhs_sym)
+
+        lhs_sub  = Symbolics.substitute(lhs_sym,  obs_subs)
+        rhs_sub  = fixpoint_sub(rhs_expr, obs_subs)
+
+        target = [getname(lhs_sub)]
+        input_symbolic = collect(get_variables(rhs_sub))
+        input_names = getname.(input_symbolic)
+        f = Symbolics.build_function([rhs_sub], input_symbolic; expression=Val(false))[2]
+
+        rhsstring = repr(rhs_sub)
+        for input in input_symbolic
+            rhsstring = replace(rhsstring, repr(input) => "u["*repr(getname(input))*"]")
+        end
+        prettyprint = """
+        GuessFormula([$(join(repr.(target), ", "))], [$(join(repr.(input_names), ", "))]) do out, u
+            out[$(repr(only(target)))] = $(rhsstring)
+        end"""
+        push!(guessformulas, GuessFormula(f, target, input_names, prettyprint))
+    end
+
+    _warn_duplicate_formula_targets(guessformulas, "GuessFormula")
+    isempty(guessformulas) ? nothing : guessformulas
+end
+
+"""
+    bindings_to_initformulas(sys)
+
+Extractes the `bindings` from a system and returns matchin InitFormulas.
+"""
+function bindings_to_initformulas(sys; obs_subs=Dict())
+    bindings = ModelingToolkitBase.bindings(sys)
+    isempty(bindings) && return nothing
+
+    initformulas = Set{InitFormula}()
+
+    for (lhs, rhs) in bindings
+        lhs = Symbolics.substitute(lhs, obs_subs)
+        rhs = fixpoint_sub(rhs, obs_subs)
+        target = [getname(lhs)]
+        input_symbolic = collect(get_variables(rhs))
+        input_names = getname.(input_symbolic)
+        f = Symbolics.build_function([rhs], input_symbolic; expression=Val(false))[2]
+
+        rhsstring = repr(rhs)
+        for input in input_symbolic
+            rhsstring = replace(rhsstring, repr(input) => "u["*repr(getname(input))*"]")
+        end
+        prettyprint  = """
+        InitFormula([$(join(repr.(target), ", "))], [$(join(repr.(input_names), ", "))]) do out, u
+            out[$(repr(only(target)))] = $(rhsstring)
+        end"""
+        push!(initformulas, InitFormula(f, target, input_names, prettyprint))
+    end
+    _warn_duplicate_formula_targets(initformulas, "InitFormula")
+    return initformulas
+end
+
+function _warn_duplicate_formula_targets(formulas, kind)
+    seen = Set{Symbol}()
+    duplicates = Symbol[]
+    for f in formulas, t in f.outsym
+        t ∈ seen ? push!(duplicates, t) : push!(seen, t)
+    end
+    if !isempty(unique!(duplicates))
+        @warn "Multiple $kind formulas target the same symbol(s) $duplicates after obs substitution. \
+               This is not supported yet and may lead to unclear behavior."
+    end
+end

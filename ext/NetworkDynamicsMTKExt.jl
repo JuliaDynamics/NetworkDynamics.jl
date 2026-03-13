@@ -19,7 +19,7 @@ using SymbolicIndexingInterface: SymbolicIndexingInterface as SII
 using NetworkDynamics: NetworkDynamics, set_metadata!, ComponentPostprocessing,
                        PureFeedForward, FeedForward, NoFeedForward, PureStateMap,
                        MultipleOutputWrapper, inline_repr, multiline_repr
-import NetworkDynamics: VertexModel, EdgeModel, AnnotatedSym
+import NetworkDynamics: VertexModel, EdgeModel, AnnotatedSym, InitFormula, add_initformula!, GuessFormula, add_guessformula!
 
 include("MTKExt_utils.jl")
 include("MTKExt_simplification.jl")
@@ -103,6 +103,13 @@ function VertexModel(sys::System, inputs, outputs; verbose=false, name=getname(s
     set_metadata!(c, :full_outputeqs, gen.full_outputeqs)
     set_metadata!(c, :odesystem, gen.odesystem)
     set_metadata!(c, :odesystem_simplified, gen.odesystem_simplified)
+
+    for formula in something(gen.initformulas, ())
+        add_initformula!(c, formula)
+    end
+    for formula in something(gen.guessformulas, ())
+        add_guessformula!(c, formula)
+    end
 
     # apply postprocessing functions from subcomponent metadata
     apply_component_postprocessing!(c)
@@ -230,6 +237,13 @@ function EdgeModel(sys::System, srcin, dstin, srcout, dstout; verbose=false, nam
     set_metadata!(c, :odesystem, gen.odesystem)
     set_metadata!(c, :odesystem_simplified, gen.odesystem_simplified)
 
+    for formula in something(gen.initformulas, ())
+        add_initformula!(c, formula)
+    end
+    for formula in something(gen.guessformulas, ())
+        add_guessformula!(c, formula)
+    end
+
     # apply postprocessing functions from subcomponent metadata
     apply_component_postprocessing!(c)
     c
@@ -252,27 +266,12 @@ function _get_metadata(sys, name, alldefaults, allguesses)
     end
     if haskey(alldefaults, sym)
         def = unwrap_const(alldefaults[sym])
-        if def isa ST
-            def = unwrap_const(fixpoint_sub(def, alldefaults))
-        end
-
-        # TODO: this silently drops default "equations"
-        if def isa Real
-            md[:default] = def
-        end
+        md[:default] = def
     end
 
     if haskey(allguesses, sym)
         guess = unwrap_const(allguesses[sym])
-
-        if guess isa ST
-            guess = unwrap_const(fixpoint_sub(def, merge(allguesses, alldefaults)))
-        end
-
-        # TODO: this silently drops guess "equations"
-        if guess isa Real
-            md[:guess] = guess
-        end
+        md[:guess] = guess
     end
 
     if ModelingToolkitBase.hasbounds(sym)
@@ -531,7 +530,9 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         observed=obseqs_sorted,
         odesystem_simplified=sys,
         params,
-        unused_params
+        unused_params,
+        initformulas = bindings_to_initformulas(_sys; obs_subs),
+        guessformulas = guesses_to_guessformulas!(sys; obs_subs)
     )
 end
 
