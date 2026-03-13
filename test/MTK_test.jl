@@ -1204,3 +1204,35 @@ end
     # constant guess is NOT promoted to a formula
     @test all(gf -> :x ∉ gf.outsym, get_guessformulas(vm))
 end
+
+@testset "bound parameters survive mtkcompile" begin
+    # Bound parameters (params whose default references another param, like Sn = S_b)
+    # are removed from parameters(sys) by mtkcompile/complete via
+    # remove_bound_parameters_from_ps, but still appear symbolically in equations.
+    # ND must include them in allparams so build_function sees them and
+    # InitFormula targeting them can be validated.
+    @mtkmodel BoundParamNode begin
+        @variables begin
+            u(t), [description = "input"]
+            x(t) = 0.0, [description = "state"]
+        end
+        @parameters begin
+            S_b = 100.0, [description = "system base power"]
+            Sn  = S_b,   [description = "machine nominal power (bound to S_b)"]
+        end
+        @equations begin
+            Dt(x) ~ u / Sn - x   # Sn must survive as a real parameter
+        end
+    end
+    @named node = BoundParamNode()
+    vm = VertexModel(node, [:u], [:x])
+    # Sn is independently settable (not just an alias for S_b)
+    @test :Sn  ∈ Set(NetworkDynamics.psym(vm))
+    @test :S_b ∈ Set(NetworkDynamics.psym(vm))
+    # The InitFormula Sn = S_b must be attached
+    @test has_initformula(vm)
+    f = only(filter(f -> f.outsym == [:Sn], collect(get_initformulas(vm))))
+    out = NetworkDynamics.SymbolicView(zeros(1), f.outsym)
+    f(out, NetworkDynamics.SymbolicView([42.0], f.sym))
+    @test out[:Sn] ≈ 42.0   # Sn gets value from S_b
+end
