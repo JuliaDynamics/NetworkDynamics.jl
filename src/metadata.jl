@@ -403,6 +403,19 @@ function get_defaults_or_inits_dict(c::ComponentModel)
     defaults = get_defaults_dict(c)
     merge!(inits, defaults) # add defaults to inits, overwriting existing inits
 end
+"""
+    get_defaults_or_guesses_dict(c::ComponentModel)
+
+Returns a dictionary mapping symbols to their default values or guess values (if no default exists).
+Only includes symbols that have either default or guess values set.
+
+See also: [`get_defaults_dict`](@ref), [`get_guesses_dict`](@ref), [`get_inits_dict`](@ref)
+"""
+function get_defaults_or_guesses_dict(c::ComponentModel)
+    guesses = get_guesses_dict(c)
+    defaults = get_defaults_dict(c)
+    merge!(guesses, defaults) # add defaults to guesses, overwriting existing guesses
+end
 
 
 """
