@@ -82,6 +82,13 @@ jobs:
         run: |
           import Pkg
           Pkg.add("ModelingToolkit")
+      - name: Add ModelingToolkit dep to test env
+        shell: julia --project=test --color=yes {0}
+        env:
+          JULIA_PKG_PRECOMPILE_AUTO: "no"
+        run: |
+          import Pkg
+          Pkg.add("ModelingToolkit")
       - uses: julia-actions/julia-runtest@v1
         env:
           GPL_MTK: "true"

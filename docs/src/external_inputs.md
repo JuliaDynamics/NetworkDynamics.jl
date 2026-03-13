@@ -117,6 +117,7 @@ using NetworkDynamics
 using OrdinaryDiffEqTsit5
 using ModelingToolkitBase
 using ModelingToolkitBase: t_nounits as t, D_nounits as Dt
+using SciCompDSL
 using CairoMakie
 
 @mtkmodel Resistor begin
