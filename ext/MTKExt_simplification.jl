@@ -52,7 +52,7 @@ connect several names for the same quantity (e.g. `busbar₊u_r ~ busbar₊termi
 gen₊terminal₊u_r`).  This pass:
 1. Collects all such alias equations from `obseqs`.
 2. Groups transitively connected aliases into clusters.
-3. Picks one *main* representative per cluster — preferring output variables, then variables
+3. Picks one *main* representative per cluster — preferring differential states, then output variables, then variables
    with fewer `₊` separators (less deeply nested).
 4. Applies the substitution `nonmain → main` throughout `eqs`, `obseqs`, and `states`,
    and reinserts canonical `nonmain ~ main` alias observations.
@@ -77,8 +77,22 @@ function pick_best_alias_names(eqs, obseqs, states, outputs; verbose)
     end
 
     # 3. Pick main per group, build substitution dict and alias observations
+    diffstateset = Set{ST}[]
+    for eq in eqs
+        type = eq_type(eq)
+        type[1] == :explicit_differential && push!(diffstateset, type[2])
+    end
     outset = Set(outputs)
-    sortf(s) = s ∈ outset ? typemin(Int) : count('₊', string(s))
+    sortf = function(s)
+        prio = if s ∈ diffstateset
+            0
+        elseif s ∈ outset
+            1
+        else
+            2
+        end
+        (prio, count('₊', string(s)))
+    end
     alias_subs = Dict()
     new_alias_obs = Equation[]
     for group in groups
