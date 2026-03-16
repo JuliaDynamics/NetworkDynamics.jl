@@ -1294,3 +1294,83 @@ end
     f(out, NetworkDynamics.SymbolicView([42.0], f.sym))
     @test out[:Sn] ≈ 42.0   # Sn gets value from S_b
 end
+
+@testset "SimpleLead: Dt(input) requires index reduction" begin
+    # Minimal reproduction of the HYGOV SimpleLead pattern.
+    #
+    # A SimpleLead block has the equation  T*Dt(in) ~ K*out - in
+    # which is an improper transfer function (1+sT)/K — it uses the
+    # derivative of its input.
+    #
+    # When composed as:  network_input → Filter → Lead → network_output
+    # the Lead's Dt(in) = Dt(filter_x) is already defined by the Filter's
+    # diff eq.  After substitution the Lead equation becomes purely algebraic
+    # in lead_out:
+    #   lead_out = (filter_x + T_l * (P - filter_x)/T_f) / K_l
+    #
+    # Currently mtkcompile classifies T_l*Dt(lead_in) ~ K_l*lead_out - lead_in
+    # as a second differential equation for lead_in, leaving lead_out undefined
+    # → Nstates ≠ Neqs.
+
+    # Variant A: pre-aliased (filter_x used directly in both equations)
+    # After flattening this gives two Dt(filter_x) equations and no eq for lead_out.
+    @mtkmodel FilterLeadNode_A begin
+        @variables begin
+            filter_x(t) = 0.0, [description="filter state"]
+            lead_out(t),       [description="lead output — currently orphaned"]
+            u(t), [description="output signal", output=true]
+            P(t), [description="input signal", input=true]
+        end
+        @parameters begin
+            T_f = 1.0, [description="filter time constant"]
+            T_l = 1.0, [description="lead time constant"]
+            K_l = 2.0, [description="lead gain"]
+        end
+        @equations begin
+            Dt(filter_x) ~ (P - filter_x) / T_f
+            T_l * Dt(filter_x) ~ K_l * lead_out - filter_x
+            u ~ lead_out
+        end
+    end
+    @named node_a = FilterLeadNode_A()
+    @test_broken begin
+        v = VertexModel(node_a, [:P], [:u])
+        length(sym(v)) == 1  # only filter_x should be a diff state
+    end
+
+    # Variant B: separate variables with alias connection (closer to real @components)
+    # filter_out and lead_in are distinct variables connected by an alias equation.
+    # filter_x has one diff eq, lead_in has another, and filter_out ~ lead_in ties them.
+    # After alias resolution, the lead's diff eq should become algebraic in lead_out.
+    @mtkmodel FilterLeadNode_B begin
+        @variables begin
+            filter_x(t) = 0.0, [description="filter state"]
+            filter_out(t),     [description="filter output = filter_x"]
+            lead_in(t),        [description="lead input, aliased to filter_out"]
+            lead_out(t),       [description="lead output — currently orphaned"]
+            u(t), [description="output signal", output=true]
+            P(t), [description="input signal", input=true]
+        end
+        @parameters begin
+            T_f = 1.0, [description="filter time constant"]
+            T_l = 1.0, [description="lead time constant"]
+            K_l = 2.0, [description="lead gain"]
+        end
+        @equations begin
+            # Filter block (SimpleLag flattened)
+            Dt(filter_x) ~ (P - filter_x) / T_f
+            filter_out ~ filter_x
+            # Lead block (SimpleLead flattened) — Dt(in) is the problematic term
+            T_l * Dt(lead_in) ~ K_l * lead_out - lead_in
+            # Connection: lead input = filter output
+            lead_in ~ filter_out
+            # Network output
+            u ~ lead_out
+        end
+    end
+    @named node_b = FilterLeadNode_B()
+    @test_broken begin
+        v = VertexModel(node_b, [:P], [:u])
+        length(sym(v)) == 1  # only filter_x should be a diff state
+    end
+end
