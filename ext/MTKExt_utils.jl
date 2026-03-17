@@ -4,37 +4,28 @@
 
 Checks the type of the equation. Returns:
 - `(:explicit_diffeq, lhs_variable)` for explicit differential equations
+- `(:implicit_diffeq, nothing)` for implicit differential equations
 - `(:explicit_algebraic, lhs_variable)` for explicit algebraic equations
-- `(:implicit_algebraic, lhs_variable)` for implicit algebraic equations
+- `(:implicit_algebraic, nothing)` for implicit algebraic equations
 
 """
 function eq_type(eq::Equation)
     rhs_differentials = _collect_differentials(eq.rhs)
     if !isempty(rhs_differentials)
-        throw(ArgumentError("Got equation $eq which contains differentials on the rhs, this is currently not supported!"))
+        return (:implicit_diffeq, nothing)
     end
-    @match eq.lhs begin
-        SymbolicUtils.BSImpl.Const(; val) => begin
-            if val != 0
-                throw(ArgumentError("Got equation $eq which is a non-zero constant on the lhs, this is currently not supported!"))
-            end
-            (:implicit_algebraic, nothing)
-        end
-        SymbolicUtils.BSImpl.Term(; f=Differential(_,1), args=symvec) => begin
-            @argcheck length(symvec) == 1 "Diff. eq $eq has more than one variable in lhs!"
-            (:explicit_diffeq, only(symvec))
-        end
-        SymbolicUtils.BSImpl.Term(; f=SymbolicUtils.BSImpl.Sym(), args=args) => begin
-            # classic sym call x(t)
-            @argcheck length(args) == 1 "Can't parse equation $eq, lhs is a Sym call with more than one argument!"
-            rhs_vars = get_variables_deriv(eq.rhs)
-            if eq.lhs ∈ rhs_vars
-                (:implicit_algebraic, eq.lhs)
-            else
-                (:explicit_algebraic, eq.lhs)
-            end
-        end
-        _ => throw(ArgumentError("Can't determine eq type of $eq."))
+
+    if isdifferential(eq.lhs)
+        return (:explicit_diffeq, only(eq.lhs.args))
+    end
+
+    lhsvars = get_variables(eq.lhs)
+    rhsvars = get_variables(eq.rhs)
+    commonvars = intersect(lhsvars, rhsvars)
+    if isempty(commonvars) && length(lhsvars) == 1 && isequal(eq.lhs, only(lhsvars))
+        return (:explicit_algebraic, eq.lhs)
+    else
+        return (:implicit_algebraic, nothing)
     end
 end
 
@@ -55,6 +46,7 @@ end
 rhs_differentials(eq::Equation) = _collect_differentials!(Set{ST}(), eq.rhs)
 
 _collect_differentials(ex) = _collect_differentials!(Set{ST}(), ex)
+_collect_differentials(eq::Equation) = _collect_differentials!(Set{ST}(), eq.lhs+eq.rhs)
 
 function _collect_differentials!(found, ex)
     if iscall(ex)

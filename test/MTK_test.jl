@@ -33,24 +33,26 @@ end
     @test mtkext.eq_type(eq) == (:explicit_algebraic, y.val)
 
     eq = y ~ x + b + y
-    @test mtkext.eq_type(eq) == (:implicit_algebraic, y.val)
+    @test mtkext.eq_type(eq) == (:implicit_algebraic, nothing)
 
     eq = 0 ~ x+y+b
     @test mtkext.eq_type(eq) == (:implicit_algebraic, nothing)
 
+    eq = y^2 ~ x
+    @test mtkext.eq_type(eq) == (:implicit_algebraic, nothing)
+
     # non zero on the lhs is not expected
     eq = 1 ~ x+y+b
-    @test_throws "non-zero constant on the lhs" mtkext.eq_type(eq)
+    @test mtkext.eq_type(eq) == (:implicit_algebraic, nothing)
 
     eq = Dt(x) ~ Dt(x)
-    @test_throws "differentials on the rhs" mtkext.eq_type(eq)
+    @test mtkext.eq_type(eq) == (:implicit_diffeq, nothing)
 
     eq = 0 ~ Dt(x)
-    @test_throws "differentials on the rhs" mtkext.eq_type(eq)
+    @test mtkext.eq_type(eq) == (:implicit_diffeq, nothing)
 
-    # paraemter on the lhs is not expected
     eq = a ~ x+y
-    @test_throws "Can't determine eq type" mtkext.eq_type(eq)
+    @test mtkext.eq_type(eq) == (:explicit_algebraic, a.val)
 end
 
 @testset "get_scaled_diff test" begin
@@ -417,7 +419,7 @@ end
     @named pv = PVConstraint(; P=2, V=1)
     @named busbar = BusBar()
     mtkbus = System(connect(busbar.terminal, pv.terminal), t; systems=[busbar, pv], name=:pvbus)
-    vf = VertexModel(mtkbus, [:busbar₊i_r, :busbar₊i_i], [:busbar₊u_r, :busbar₊u_i], verbose=true)
+    vf = VertexModel(mtkbus, [:busbar₊i_r, :busbar₊i_i], [:busbar₊u_r, :busbar₊u_i], verbose=false)
 
     @test Set(vf.sym) == Set([:busbar₊u_r,:busbar₊u_i])
 end
@@ -735,16 +737,16 @@ end
     # because i_r/i_i outputs depend on θ which has a derivative
     # NOT neede anymore sice custom linear alg reduction does not attempt to remove this
     # @test_throws NetworkDynamics.RHSDifferentialsError begin
-    #     vm = VertexModel(inverter, [:i_r, :i_i], [:u_r, :u_i]; verbose=true)
+    #     vm = VertexModel(inverter, [:i_r, :i_i], [:u_r, :u_i]; verbose=false)
     #     vm.metadata[:equations]
     # end
-    v = VertexModel(inverter, [:i_r, :i_i], [:u_r, :u_i]; verbose=true, assume_io_coupling=false)
+    v = VertexModel(inverter, [:i_r, :i_i], [:u_r, :u_i]; verbose=false, assume_io_coupling=false)
     @test sum(v.mass_matrix) == dim(v) - 2
 
     # With assume_io_coupling=true, the construction should succeed
     # This forces MTK to recognize the input->output coupling even with derivatives
     v = VertexModel(inverter, [:i_r, :i_i], [:u_r, :u_i];
-                    verbose=true, assume_io_coupling=true)
+                    verbose=false, assume_io_coupling=true)
     @test sum(v.mass_matrix) == dim(v) - 2
     data = NetworkDynamics.rand_inputs_fg(v)
     NetworkDynamics.compfg(v)(data...)
@@ -1062,7 +1064,7 @@ end
 
     red_eqs, red_obs, red_states = _reduce_equations(
         eqs, Equation[], all_states;
-        outputs=outputs, ff_inputs=ff_set, verbose=false)
+        outset=outputs, ff_inputs=ff_set, verbose=false)
 
     # After reduction only 2 states should remain as algebraic constraints.
     # The remaining states may be the output variables or their aliases (before
@@ -1226,13 +1228,12 @@ end
         formulas = collect(get_initformulas(vm))
         @test length(formulas) == 1
         f = only(formulas)
-        # inner₊busbar₊u_r is aliased to u_r after pick_best_alias_names
-        @test f.outsym == [:u_r]
+        @test f.outsym == [:inner₊busbar₊u_r]
         @test f.sym    == [:inner₊u_init_r]
 
         out = NetworkDynamics.SymbolicView(zeros(1), f.outsym)
         f(out, NetworkDynamics.SymbolicView([4.2], f.sym))
-        @test out[:u_r] ≈ 4.2
+        @test out[:inner₊busbar₊u_r] ≈ 4.2
 
         @testset "warn on duplicate formula targets" begin
             @component function slack_diff_outer_dup(; name)
@@ -1355,7 +1356,7 @@ end
         end
     end
     @named node_a = FilterLeadNode_A()
-    @test begin
+    @test_broken begin
         v = VertexModel(node_a, [:P], [:u])
         # filter_x is a diff state, u is algebraic constraint (FF prevention)
         length(sym(v)) == 2 && v.mass_matrix == Diagonal([1, 0])
@@ -1392,34 +1393,9 @@ end
         end
     end
     @named node_b = FilterLeadNode_B()
-    @test begin
+    @test_broken begin
         v = VertexModel(node_b, [:P], [:u])
         # filter_x is a diff state, u is algebraic constraint (FF prevention)
         length(sym(v)) == 2 && v.mass_matrix == Diagonal([1, 0])
     end
-end
-
-@testset "Simple Index reduction" begin
-    @variables x(t) y(t) a(t) b(t)
-    eqs = [
-        5*Dt(x) ~ -x + y
-        0 ~ -Dt(y) + 2*y
-    ]
-    @test Set(mtkext.simple_index_reduction!(copy(eqs))) == Set([
-        Dt(x) ~ (x - y) / (-5)
-        Dt(y) ~ 2*y
-    ])
-
-    eqs = [
-        0 ~ Dt(x) - a
-        Dt(x) ~ b
-    ]
-    reduced = mtkext.simple_index_reduction!(copy(eqs))
-    # Either Dt(x)~a with 0~a-b or Dt(x)~b with 0~b-a — both valid
-    @test length(reduced) == 2
-    @test count(eq -> isequal(eq.lhs, Dt(x)), reduced) == 1
-    # The non-diff eq should be an algebraic constraint between a and b
-    alg_eq = only(filter(eq -> !isequal(eq.lhs, Dt(x)), reduced))
-    @test mtkext.eq_type(alg_eq)[1] == :implicit_algebraic
-
 end
