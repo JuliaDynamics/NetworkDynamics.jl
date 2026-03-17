@@ -183,7 +183,17 @@ exists on a path, the output-sink SCC itself is forbidden.  This keeps the forbi
 small as possible while preferring to cut at numerically risky solve points.
 """
 function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, states::Vector{ST}; outset::Set{ST}, ff_inputs::Set{ST}, verbose)
+    # Expand states: replace each plain unknown x with D(x) if D(x) appears in the
+    # equations. Callers pass plain unknowns; D(x) bookkeeping lives here.
+    diffstates_in_eqs = filter(isdifferential, Symbolics.get_variables(eqs))
+    diffstates_inner_map = Dict(only(s.args) => s for s in diffstates_in_eqs)
+    states = map(s -> get(diffstates_inner_map, s, s), states)
     state_set = Set(states)
+
+    # check that we don't have any obs to expand
+    if !isempty(Set(obs.lhs for obs in obseqs) ∩ state_set)
+        error("Observation LHS cannot be a state variable! Found: $(Set(obs.lhs for obs in obseqs) ∩ state_set)")
+    end
 
     if verbose
         str = "Trying to match $(length(eqs)) equations to $(length(states)) states for reduction"
@@ -299,7 +309,8 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
         end
     end
 
-    isempty(newobs) && return eqs, obseqs, sorted_sts
+    nodiff(sts) = map(s -> isdifferential(s) ? only(s.args) : s, sts)
+    isempty(newobs) && return eqs, obseqs, nodiff(sorted_sts)
 
     _insert_sorted!(obseqs, newobs)
     sort!(solved_local)
@@ -310,7 +321,7 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
         str *= multiline_repr(sorted_sts .=> eqs, prefix="  ")
         @info str
     end
-    return eqs, obseqs, sorted_sts
+    return eqs, obseqs, nodiff(sorted_sts)
 end
 
 """
@@ -667,28 +678,20 @@ function simplify_without_mtkcompile(_sys, allinputs, alloutputs; verbose, ff_to
     # maybe inputs have been given as parameters
     params = setdiff(allparams, Set{ST}(allinputs))
 
-    # states of the system are
-    diffstates = filter(isdifferential, Set{ST}(get_variables(eqs)))
-    diffstates_inner = [only(s.args) for s in diffstates]
-
-    wo_inputs = setdiff(unknowns(sys), allinputs)
-    just_algebraic = setdiff(wo_inputs, diffstates_inner)
-    states = vcat(collect(diffstates), just_algebraic)
+    # don't consider inputs states
+    states = collect(setdiff(Set{ST}(unknowns(sys)), Set{ST}(allinputs)))
 
     # check if we need to block input ff
     ff_inputs = ff_to_constraint ? Set{ST}(allinputs) : Set{ST}()
 
-    # reduce quations (solves for differentials and algebraic variables)
+    # reduce equations (solves for differentials and algebraic variables)
     eqs, obseqs, states = reduce_equations(
         eqs, obseqs_sorted, states;
         outset=Set{ST}(alloutputs), ff_inputs, verbose
     )
 
-    states_nodiff = map(states) do s
-        isdifferential(s) ? only(s.args) : s
-    end
 
-    _sys, eqs, obseqs, states_nodiff, params
+    _sys, eqs, obseqs, states, params
 end
 
 isdifferential(s) = iscall(unwrap(s)) && operation(unwrap(s)) isa Differential 
