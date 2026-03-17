@@ -157,7 +157,7 @@ function _alias_connected_components(pairs)
 end
 
 """
-    reduce_linear_algebraic(eqs, obseqs, states; outputs=[], ff_inputs=Set(), verbose)
+    reduce_equations(eqs, obseqs, states; outputs=[], ff_inputs=Set(), verbose)
 
 Reduce implicit algebraic equations by solving them symbolically and moving solutions
 into the observation list.
@@ -182,68 +182,111 @@ involves another state, making division by that state necessary).  If no `:linea
 exists on a path, the output-sink SCC itself is forbidden.  This keeps the forbidden set as
 small as possible while preferring to cut at numerically risky solve points.
 """
-function reduce_linear_algebraic(eqs, obseqs, states; outputs=[], ff_inputs=Set(), verbose)
-    try
-        outset    = Set(outputs)
-        state_set = Set(states)
+function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, states::Vector{ST}; outset::Set{ST}, ff_inputs::Set{ST}, verbose)
+    state_set = Set(states)
 
-        alg_idx = findall(eqs) do eq
-            eq_type(eq)[1] == :implicit_algebraic
+    if verbose
+        str = "Trying to match $(length(eqs)) equations to $(length(states)) states for reduction"
+        str *= "\nStates: " * inline_repr(states)
+        str *= "\n" * multiline_repr(eqs, prefix="  ")
+        @info str
+    end
+
+    @assert length(states) == length(eqs)
+
+    # Sort columns (states) by preference for solving:
+    # deeply-nested (many ₊) and non-output states come first so the DFS matching
+    # prefers to eliminate them, leaving outputs and short-named states in the system.
+    sortkey(i) = (states[i] ∈ outset ? 1 : 0, -count('₊', string(states[i])))
+    perm = sort(eachindex(states), by=sortkey)
+    prioritized_sts = states[perm]
+
+    # normalize alg functions which are not yet 0 ~ expr
+    eqs = map(eqs) do eq
+        lhs = unwrap_const(eq.lhs)
+        lhszero = lhs isa Number && isequal(lhs, 0)
+        if !lhszero && !isdifferential(eq.lhs)
+            0 ~ eq.lhs - eq.rhs
+        else
+            eq
+        end
+    end
+
+    # Expand state_set to include inner differential variables (e.g. θ for D(θ)).
+    # These are genuine dynamic variables, so coefficients like cos(θ) or sin(θ) are
+    # state-dependent (:linear_state) rather than constant (:linear_const).
+    # Without this, rotation-matrix equations compete with definition equations for the
+    # same state at equal priority, causing suboptimal matching.
+    diff_inner_set = Set(only(s.args) for s in prioritized_sts if isdifferential(s))
+    coeff_state_set = state_set ∪ diff_inner_set
+
+    coeff, has_ff = _build_coeff_mat(eqs, prioritized_sts, coeff_state_set; ff_inputs)
+    solvable_matches, bk_matches = _match_equations_to_states(coeff)
+    @assert length(solvable_matches) + length(bk_matches) == length(states)
+    
+    # Main.@infiltrate
+    # solvable_matches
+    # for (eqi, si) in solvable_matches
+    #     println(prioritized_sts[si], " ← ", eqs[eqi])
+    # end
+
+
+    # Reorder states so that sorted_sts[i] is the state matched to equation i.
+    # Also permute coeff columns consistently so coeff_sorted[i,j] still means
+    # "equation i depends on sorted_sts[j]".
+    state_perm = [-1 for i in 1:length(states)]
+    for (eqi, si) in Iterators.flatten((solvable_matches, bk_matches))
+        state_perm[eqi] = si
+    end
+    sorted_sts = prioritized_sts[state_perm]
+    coeff_sorted = coeff[:, state_perm]
+
+    # Solvable indices: rows whose matched state has a linear coefficient.
+    # After reordering, match i is always at diagonal position i.
+    linear_idx = sort!([eqi for (eqi, _) in solvable_matches])
+
+    if verbose
+        str = "Found $(length(linear_idx)) linear matches out of $(length(states))"
+        states_eqs_matching = OrderedDict(sorted_sts[i] => eqs[i] for i in linear_idx)
+        str *= "\n" * multiline_repr(states_eqs_matching, prefix="  ")
+        @info str
+    end
+
+    # assert that all differential states have a linear match
+    diffidx = findall(isdifferential, sorted_sts)
+    linear_idx_set = Set(linear_idx)
+    if !(Set(diffidx) ⊆ linear_idx_set)
+        unmatched = sorted_sts[setdiff(diffidx, linear_idx_set)]
+        error("Could not match all differential states to equations! Unmatched differentials:\n" *
+              multiline_repr(unmatched, prefix="  "))
+    end
+
+    # _solve_plan expects matches as (row, col) pairs; since row==col after reordering, zip with self.
+    linear_matches = [(i, i) for i in linear_idx]
+    sccs, forbidden = _solve_plan(linear_matches, coeff_sorted, sorted_sts, has_ff, outset)
+    verbose && @info "Decomposed matches into $(length(sccs)) groups to solve"
+
+    solved_local = Int[]
+    newobs = Equation[]
+    primary_diff_eq = Dict{ST,ST}()
+
+    for (gi, scc) in enumerate(sccs)
+        # scc is a Set of indices into linear_matches; linear_matches[k] = (i,i)
+        scc_idx   = [linear_idx[k] for k in scc]
+        scc_eqs_i = eqs[scc_idx]
+        scc_sts_i = sorted_sts[scc_idx]
+
+        if forbidden[gi]
+            verbose && @info "Group $gi: skipping $(inline_repr(scc_sts_i)) — on input→output path"
+            continue
         end
 
-        isempty(alg_idx) && return eqs, obseqs, states
-
-        if verbose
-            str = "Trying to reduce $(length(alg_idx)) implicit algebraic equations"
-            str *= "\n" * multiline_repr(eqs[alg_idx], prefix="  ")
-            @info str
-        end
-
-        # Sort columns (states) by preference for solving:
-        # deeply-nested (many ₊) and non-output states come first so the DFS matching
-        # prefers to eliminate them, leaving outputs and short-named states in the system.
-        sortkey(i) = (states[i] ∈ outset ? 1 : 0, -count('₊', string(states[i])))
-        sort!(alg_idx, by=sortkey)
-
-        alg_eqs = eqs[alg_idx]
-        alg_sts = states[alg_idx]
-
-        coeff, has_ff = _build_coeff_mat(alg_eqs, alg_sts, state_set; ff_inputs)
-
-        matches = _match_equations_to_states(coeff)
-
-        if verbose
-            str = "Found $(length(matches)) matches in those equations"
-            states_eqs_matching = OrderedDict(alg_sts[m[2]] => alg_eqs[m[1]] for m in matches)
-            str *= "\n" * multiline_repr(states_eqs_matching, prefix="  ")
-            @info str
-        end
-
-        isempty(matches) && return eqs, obseqs, states
-
-        sccs, forbidden = _solve_plan(matches, coeff, alg_sts, has_ff, outset)
-        verbose && @info "Decomposed matches into $(length(sccs)) groups to solve"
-
-        solved_eq_local = Int[]
-        solved_st_local = Int[]
-        newobs = Equation[]
-
-        for (gi, scc) in enumerate(sccs)
-            scc_rows  = [matches[i][1] for i in scc]
-            scc_cols  = [matches[i][2] for i in scc]
-            scc_eqs_i = alg_eqs[scc_rows]
-            scc_sts_i = alg_sts[scc_cols]
-
-            if forbidden[gi]
-                verbose && @info "Group $gi: skipping $(inline_repr(scc_sts_i)) — on input→output path"
-                continue
-            end
-
+        diffstate = any(isdifferential, scc_sts_i)
+        if !diffstate
             try
                 sol = _symbolic_linear_solve_clean(scc_eqs_i, scc_sts_i)
                 append!(newobs, scc_sts_i .~ sol)
-                append!(solved_eq_local, scc_rows)
-                append!(solved_st_local, scc_cols)
+                append!(solved_local, scc_idx)
                 if verbose
                     str = "Solved group $gi for $(inline_repr(scc_sts_i))"
                     str *= "\nSolution:"
@@ -253,27 +296,38 @@ function reduce_linear_algebraic(eqs, obseqs, states; outputs=[], ff_inputs=Set(
             catch err
                 verbose && @info "Failed to solve group $gi for $(inline_repr(scc_sts_i)): $err"
             end
+        else
+            @assert all(isdifferential, scc_sts_i) "Got mixed diff/non-diff SCC, unhandled."
+            sol = _symbolic_linear_solve_clean(scc_eqs_i, scc_sts_i)
+            eqs[scc_idx] .= scc_sts_i .~ sol
+            for (s, e) in zip(scc_sts_i, sol)
+                primary_diff_eq[s] = e
+            end
+            if verbose
+                str = "Solved group $gi for diff states $(inline_repr(scc_sts_i))"
+                str *= "\nSolution:"
+                str *= "\n" * multiline_repr(OrderedDict(scc_sts_i .=> sol), prefix="  ")
+                @info str
+            end
         end
-
-        isempty(newobs) && return eqs, obseqs, states
-
-        _insert_sorted!(obseqs, newobs)
-        neweqs    = eqs[setdiff(eachindex(eqs), alg_idx[solved_eq_local])]
-        newstates = states[setdiff(eachindex(states), alg_idx[solved_st_local])]
-        if verbose
-            str = "Left with equations after reduction:\n"
-            str *= multiline_repr(newstates .=> neweqs, prefix="  ")
-            @info str
-        end
-        return neweqs, obseqs, newstates
-    catch e
-        @warn "Reduction failed, fall back" exception=(e, catch_backtrace())
-        eqs, obseqs, states
     end
+
+    isempty(newobs) && return eqs, obseqs, sorted_sts
+
+    _insert_sorted!(obseqs, newobs)
+    sort!(solved_local)
+    deleteat!(eqs, solved_local)
+    deleteat!(sorted_sts, solved_local)
+    if verbose
+        str = "Left with equations after reduction:\n"
+        str *= multiline_repr(sorted_sts .=> eqs, prefix="  ")
+        @info str
+    end
+    return eqs, obseqs, sorted_sts
 end
 
 """
-    _solve_plan(matches, coeff, alg_sts, has_ff, outset) -> (sccs, forbidden)
+    _solve_plan(matches, coeff, sorted_sts, has_ff, outset) -> (sccs, forbidden)
 
 Decompose matched pairs into SCCs of the dependency digraph (topological order,
 dependencies before dependents) and return a `BitVector` marking SCCs that must
@@ -284,7 +338,7 @@ For each feed-forward source → output-sink path in the SCC meta-DAG, the SCC c
 to the output that is classified as `:linear_state` is forbidden.  If no such SCC
 exists on a path, the output-sink SCC itself is forbidden.
 """
-function _solve_plan(matches, coeff, alg_sts, has_ff, outset)
+function _solve_plan(matches, coeff, sorted_sts, has_ff, outset)
     n = length(matches)
     n == 0 && return (Vector{Int}[], BitVector())
 
@@ -348,8 +402,8 @@ function _solve_plan(matches, coeff, alg_sts, has_ff, outset)
     for (si, scc) in enumerate(sccs)
         rows = [matches[mi][1] for mi in scc]
         cols = [matches[mi][2] for mi in scc]
-        any(has_ff[r] for r in rows)            && push!(ff_sources, si)
-        any(alg_sts[c] ∈ outset for c in cols)  && push!(out_sinks,  si)
+        any(has_ff[r] for r in rows)               && push!(ff_sources, si)
+        any(sorted_sts[c] ∈ outset for c in cols)  && push!(out_sinks,  si)
     end
 
     # Step 6: Forbid SCCs that would introduce algebraic FF.
@@ -375,7 +429,6 @@ function _solve_plan(matches, coeff, alg_sts, has_ff, outset)
             end
         end
     end
-
     return (sccs, forbidden)
 end
 function _insert_sorted!(obseqs, newobs)
@@ -452,57 +505,79 @@ function _build_coeff_mat(lineqs, linstates, state_set; ff_inputs=Set())
 end
 
 """
-    _maximum_bipartite_matching(biadj, prefer=biadj) -> cm
+    _match_equations_to_states(coeff) -> (solvable, bookkeeping)
 
-Maximum bipartite matching via DFS augmenting paths (Kuhn's algorithm).
-`biadj[i,j]` is true if row `i` (equation) can be matched to column `j` (state).
-When `prefer` is given, the DFS tries preferred edges first (e.g. `:linear_const`)
-before non-preferred ones (`:linear_state`), so that natural constant-coefficient
-matches are established first and only displaced when necessary for a larger matching.
-Returns `cm` where `cm[j]` is the row matched to column `j`, or 0 if unmatched.
+Maximum bipartite matching split into two independent sub-problems:
+
+**Solvable matching** (returned first): maximum matching over `:linear_const`
+and `:linear_state` edges.  Two unrestricted Kuhn passes are used:
+- Pass 1 (`:linear_const` only) seeds as many numerically-safe matches as possible.
+- Pass 2 (all linear) extends to the true maximum.  Augmenting paths may reroute
+  a pass-1 `:linear_const` match through a `:linear_state` edge — correct, since
+  maximum cardinality takes priority over edge preference.
+
+**Bookkeeping matching** (returned second): maximum matching over the remaining
+unmatched rows and columns only (`:nonlinear` preferred, `:none` as last resort).
+By restricting augmenting paths to the previously-unmatched columns, the bookkeeping
+sub-problem is completely independent and can never displace a solvable match.
+
+Both return values are `Vector{Tuple{Int,Int}}` of `(row, col)` pairs.
+
+The old "priority-level freeze" variant of Kuhn was buggy: freezing a
+`:linear_const` holder prevented augmenting paths that would have increased
+total solvable cardinality (e.g. row A has edges col1:const and col2:state,
+row B has only col1:const; freeze caused B to remain unmatched even though
+rerouting A→col2 would yield two solvable matches).
 """
-function _maximum_bipartite_matching(biadj::AbstractMatrix{Bool},
-                                     prefer::AbstractMatrix{Bool}=biadj)
-    nrow, ncol = size(biadj)
-    cm = zeros(Int, ncol)
-
-    function try_augment!(row, visited)
-        # First pass: try preferred (linear_const) columns
-        for col in 1:ncol
-            prefer[row, col] && !visited[col] || continue
-            visited[col] = true
-            if cm[col] == 0 || try_augment!(cm[col], visited)
-                cm[col] = row
-                return true
-            end
-        end
-        # Second pass: try remaining (linear_state only) columns
-        for col in 1:ncol
-            biadj[row, col] && !prefer[row, col] && !visited[col] || continue
-            visited[col] = true
-            if cm[col] == 0 || try_augment!(cm[col], visited)
-                cm[col] = row
-                return true
-            end
-        end
-        return false
-    end
-
-    for row in 1:nrow
-        try_augment!(row, falses(ncol))
-    end
-    return cm  # cm[j] = row matched to col j, 0 if unmatched
-end
-
 function _match_equations_to_states(coeff)
-    n_st = size(coeff, 2)
-    # Both :linear_const and :linear_state are matchable; FF blocking is in _solve_plan.
-    # Prefer linear_const matches: they produce cleaner solutions (constant coefficients)
-    # and avoid pulling output-aliased states into SCCs with FF-dependent equations.
-    biadj = @. (coeff == :linear_const) | (coeff == :linear_state)
-    prefer = (coeff .== :linear_const)
-    cm = _maximum_bipartite_matching(biadj, prefer)
-    return [(cm[j], j) for j in 1:n_st if cm[j] > 0]
+    n_eq, n_st = size(coeff)
+    cm = zeros(Int, n_st)   # cm[j] = row matched to col j, 0 = unmatched
+    rm = zeros(Int, n_eq)   # rm[i] = col matched to row i, 0 = unmatched
+
+    function try_augment!(row, visited, pred, cols)
+        for col in cols
+            pred(coeff[row, col]) && !visited[col] || continue
+            visited[col] = true
+            holder = cm[col]
+            if holder == 0 || try_augment!(holder, visited, pred, cols)
+                cm[col] = row; rm[row] = col
+                return true
+            end
+        end
+        false
+    end
+
+    # ── Solvable matching ──────────────────────────────────────────────────────
+    # Pass 1: linear_const preferred; unrestricted augmenting paths over all cols.
+    for row in 1:n_eq
+        try_augment!(row, falses(n_st), c -> c === :linear_const, 1:n_st)
+    end
+    # Pass 2: extend to max matching over all solvable edges.
+    for row in 1:n_eq
+        rm[row] == 0 || continue
+        try_augment!(row, falses(n_st), c -> c === :linear_const || c === :linear_state, 1:n_st)
+    end
+    solvable = [(cm[j], j) for j in 1:n_st if cm[j] > 0]
+
+    # ── Bookkeeping matching ───────────────────────────────────────────────────
+    # Restrict to unmatched columns only — augmenting paths can never reach a
+    # solvable match, so the two sub-problems are fully independent.
+    bk_cols = findall(iszero, cm)
+    if !isempty(bk_cols)
+        # Pass 3: nonlinear preferred (needed for dependency ordering in _solve_plan)
+        for row in 1:n_eq
+            rm[row] == 0 || continue
+            try_augment!(row, falses(n_st), c -> c === :nonlinear, bk_cols)
+        end
+        # Pass 4: last resort — :none pairs
+        for row in 1:n_eq
+            rm[row] == 0 || continue
+            try_augment!(row, falses(n_st), _ -> true, bk_cols)
+        end
+    end
+    bookkeeping = [(cm[j], j) for j in bk_cols if cm[j] > 0]
+
+    return solvable, bookkeeping
 end
 
 
@@ -545,3 +620,104 @@ function get_alias(eq)
         return nothing
     end
 end
+
+function simplify_with_mtkcompile(_sys, allinputs, alloutputs)
+    missing_inputs = Set{ST}()
+    sys = if ModelingToolkitBase.iscomplete(_sys)
+        deepcopy(_sys)
+    else
+        _openinputs = setdiff(allinputs, Set(parameters(_sys)))
+        all_eq_vars = mapreduce(get_variables_deriv, union, full_equations(_sys), init=Set{ST}())
+        if !(_openinputs ⊆ all_eq_vars)
+            missing_inputs = setdiff(_openinputs, all_eq_vars)
+            verbose && @warn "The specified inputs ($missing_inputs) do not appear in the equations of the system!"
+            _openinputs = setdiff(_openinputs, missing_inputs)
+        end
+
+        implicit_outputs = setdiff(alloutputs, all_eq_vars)
+        if !isempty(implicit_outputs)
+            throw(
+                ArgumentError("The outputs $(getname.(implicit_outputs)) do not appear in the equations of the system! \
+                    Try to to make them explicit using the keyword `assume_io_coupling` or the more manual `implicit_output`\n" *
+                    NetworkDynamics.implicit_output_docstring)
+            )
+        end
+
+        verbose && @info "Simplifying system with inputs $(inline_repr(_openinputs)) and outputs $(inline_repr(alloutputs))"
+        try
+            mtkcompile(_sys; inputs=_openinputs, outputs=alloutputs, simplify=false)
+        catch e
+            if e isa ModelingToolkitBase.ExtraEquationsSystemException
+                msg = "The system could not be compiled because of extra equations! \
+                    Sometimes, this can be related to fully implicit output equations. \
+                    Check `@doc implicit_output` for more information."
+                throw(ArgumentError(msg))
+            end
+            rethrow(e)
+        end
+    end
+
+    # extract the main equations and observed equations
+    eqs::Vector{Equation} = equations(sys)
+    obseqs_sorted::Vector{Equation} = copy(observed(sys))
+    fix_metadata!(eqs, sys);
+    fix_metadata!(obseqs_sorted, sys);
+
+    allparams = parameters(sys) # contains inputs!
+    # mtkcompile/complete calls remove_bound_parameters_from_ps which removes params
+    # whose value is bound to another param (e.g. Sn = S_b) from ps, but those symbols
+    # still appear in equations. Add them back so build_function can reference them and
+    # InitFormulas targeting them remain valid.
+    append!(allparams, ModelingToolkitBase.bound_parameters(sys))
+    @argcheck allinputs ⊆ Set(allparams) ∪ missing_inputs
+    params = setdiff(allparams, Set(allinputs))
+
+    # create states vector in correct ordering
+    states = match_diff_states(eqs, unknowns(sys))
+ 
+    # pick best alias names
+    eqs, obseqs, states = pick_best_alias_names(eqs, obseqs, states, alloutputs; verbose)
+
+    sys, eqs, obseqs_sorted, states, params
+end
+
+function simplify_without_mtkcompile(_sys, allinputs, alloutputs; verbose, ff_to_constraint)
+    sys = ModelingToolkitBase.complete(_sys)
+
+    eqs::Vector{Equation} = equations(sys)
+    obseqs_sorted::Vector{Equation} = copy(observed(sys))
+
+    allparams = parameters(sys) # contains inputs!
+    append!(allparams, ModelingToolkitBase.bound_parameters(sys))
+
+    # maybe inputs have been given as parameters
+    params = setdiff(allparams, Set(allinputs))
+
+    # states of the system are
+    diffstates = filter(isdifferential, Set{ST}(get_variables(eqs)))
+    diffstates_inner = [only(s.args) for s in diffstates]
+
+    wo_inputs = setdiff(unknowns(sys), allinputs)
+    just_algebraic = setdiff(wo_inputs, diffstates_inner)
+    states = vcat(collect(diffstates), just_algebraic)
+
+    # check if we need to block input ff
+    ff_inputs = ff_to_constraint ? Set{ST}(allinputs) : Set{ST}()
+
+    # reduce quations (solves for differentials and algebraic variables)
+    eqs, obseqs, states = reduce_equations(
+        eqs, obseqs_sorted, states;
+        outset=Set{ST}(alloutputs), ff_inputs, verbose
+    )
+
+    # pick best alias names
+    eqs, obseqs, states = pick_best_alias_names(eqs, obseqs, states, alloutputs; verbose)
+
+    states_nodiff = map(states) do s
+        isdifferential(s) ? only(s.args) : s
+    end
+
+    _sys, eqs, obseqs, states_nodiff, params
+end
+
+isdifferential(s) = iscall(unwrap(s)) && operation(unwrap(s)) isa Differential 
