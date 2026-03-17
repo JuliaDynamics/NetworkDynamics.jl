@@ -8,6 +8,7 @@ using Symbolics: Symbolics, fixpoint_sub, substitute
 using RecursiveArrayTools: RecursiveArrayTools
 using ArgCheck: @argcheck
 using Graphs: Graphs
+using Hungarian: Hungarian, hungarian
 using LinearAlgebra: Diagonal, I
 using SymbolicUtils.Code: Let, Assignment, unwrap_const
 using Moshi: Moshi
@@ -305,11 +306,11 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     inputss = map(inputss) do in
         getproperty_symbolic.(Ref(_sys), in)
     end
-    allinputs = reduce(union, inputss)
+    allinputs = convert(Vector{ST}, reduce(union, inputss))
     outputss = map(outputss) do out
         getproperty_symbolic.(Ref(_sys), out)
     end
-    alloutputs = reduce(union, outputss)
+    alloutputs = convert(Vector{ST}, reduce(union, outputss))
 
     # always expand connections before simplification
     _sys = ModelingToolkitBase.expand_connections(_sys)
@@ -337,7 +338,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     remove_implicit_output_fn!(eqs)
     remove_implicit_output_fn!(obseqs_sorted)
 
-    eqs, obseqs, states = pick_best_alias_names(eqs, obseqs, states, alloutputs; verbose)
+    eqs, obseqs_sorted, states = pick_best_alias_names(eqs, obseqs_sorted, states, alloutputs; verbose)
 
     # check that there are no rhs differentials in the equations
     if !isempty(rhs_differentials(vcat(eqs, obseqs_sorted)))

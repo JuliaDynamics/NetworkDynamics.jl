@@ -194,13 +194,6 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
 
     @assert length(states) == length(eqs)
 
-    # Sort columns (states) by preference for solving:
-    # deeply-nested (many ₊) and non-output states come first so the DFS matching
-    # prefers to eliminate them, leaving outputs and short-named states in the system.
-    sortkey(i) = (states[i] ∈ outset ? 1 : 0, -count('₊', string(states[i])))
-    perm = sort(eachindex(states), by=sortkey)
-    prioritized_sts = states[perm]
-
     # normalize alg functions which are not yet 0 ~ expr
     eqs = map(eqs) do eq
         lhs = unwrap_const(eq.lhs)
@@ -215,21 +208,12 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
     # Expand state_set to include inner differential variables (e.g. θ for D(θ)).
     # These are genuine dynamic variables, so coefficients like cos(θ) or sin(θ) are
     # state-dependent (:linear_state) rather than constant (:linear_const).
-    # Without this, rotation-matrix equations compete with definition equations for the
-    # same state at equal priority, causing suboptimal matching.
-    diff_inner_set = Set(only(s.args) for s in prioritized_sts if isdifferential(s))
+    diff_inner_set = Set(only(s.args) for s in states if isdifferential(s))
     coeff_state_set = state_set ∪ diff_inner_set
 
-    coeff, has_ff = _build_coeff_mat(eqs, prioritized_sts, coeff_state_set; ff_inputs)
+    coeff, has_ff = _build_coeff_mat(eqs, states, coeff_state_set; ff_inputs)
     solvable_matches, bk_matches = _match_equations_to_states(coeff)
     @assert length(solvable_matches) + length(bk_matches) == length(states)
-    
-    # Main.@infiltrate
-    # solvable_matches
-    # for (eqi, si) in solvable_matches
-    #     println(prioritized_sts[si], " ← ", eqs[eqi])
-    # end
-
 
     # Reorder states so that sorted_sts[i] is the state matched to equation i.
     # Also permute coeff columns consistently so coeff_sorted[i,j] still means
@@ -238,7 +222,7 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
     for (eqi, si) in Iterators.flatten((solvable_matches, bk_matches))
         state_perm[eqi] = si
     end
-    sorted_sts = prioritized_sts[state_perm]
+    sorted_sts = states[state_perm]
     coeff_sorted = coeff[:, state_perm]
 
     # Solvable indices: rows whose matched state has a linear coefficient.
@@ -263,23 +247,26 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
 
     # _solve_plan expects matches as (row, col) pairs; since row==col after reordering, zip with self.
     linear_matches = [(i, i) for i in linear_idx]
-    sccs, forbidden = _solve_plan(linear_matches, coeff_sorted, sorted_sts, has_ff, outset)
-    verbose && @info "Decomposed matches into $(length(sccs)) groups to solve"
+    sccs, forbidden_matches = _solve_plan(linear_matches, coeff_sorted, sorted_sts, has_ff, outset)
+
+    if verbose
+        n_forbidden = sum(forbidden_matches)
+        if n_forbidden > 0
+            forbidden_sts = [sorted_sts[linear_idx[k]] for k in findall(forbidden_matches)]
+            @info "Skipping $(inline_repr(forbidden_sts)) — on input→output feed-forward path"
+        end
+        @info "Decomposed matches into $(length(sccs)) solvable groups"
+    end
 
     solved_local = Int[]
     newobs = Equation[]
     primary_diff_eq = Dict{ST,ST}()
 
     for (gi, scc) in enumerate(sccs)
-        # scc is a Set of indices into linear_matches; linear_matches[k] = (i,i)
+        # scc is a Vector of indices into linear_matches; linear_matches[k] = (i,i)
         scc_idx   = [linear_idx[k] for k in scc]
         scc_eqs_i = eqs[scc_idx]
         scc_sts_i = sorted_sts[scc_idx]
-
-        if forbidden[gi]
-            verbose && @info "Group $gi: skipping $(inline_repr(scc_sts_i)) — on input→output path"
-            continue
-        end
 
         diffstate = any(isdifferential, scc_sts_i)
         if !diffstate
@@ -327,20 +314,31 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
 end
 
 """
-    _solve_plan(matches, coeff, sorted_sts, has_ff, outset) -> (sccs, forbidden)
+    _solve_plan(matches, coeff, sorted_sts, has_ff, outset) -> (sccs, forbidden_matches)
 
 Decompose matched pairs into SCCs of the dependency digraph (topological order,
-dependencies before dependents) and return a `BitVector` marking SCCs that must
-not be solved because they lie on a feed-forward path from an `ff_input`-dependent
-equation to an output state.
+dependencies before dependents) and return a `BitVector` of length `n` marking
+individual matches that must not be solved because they lie on a feed-forward path
+from an `ff_input`-dependent equation to an output state.
 
-For each feed-forward source → output-sink path in the SCC meta-DAG, the SCC closest
-to the output that is classified as `:linear_state` is forbidden.  If no such SCC
-exists on a path, the output-sink SCC itself is forbidden.
+FF detection is performed on the **raw** match-level dependency graph before SCCs are
+formed.  In the raw graph, edge `i→j` means "equation of match `i` depends on state of
+match `j`", so a path `out_sink → … → ff_source` (following dependency edges from the
+output end) is exactly the algebraic FF chain that must be cut.
+
+For each such path the algorithm walks from the output-sink end toward the ff-source and
+forbids the first `:linear_state` match encountered (one whose matched coefficient
+involves another state, making division by that state necessary).  If no `:linear_state`
+match exists on a path the output-sink match itself is forbidden.
+
+After forbidden matches are identified, SCCs are computed only on the surviving
+non-forbidden subgraph, so cycles that existed solely through a forbidden match are
+already eliminated.  The returned `sccs` therefore contain only solvable matches and
+are already in dependency-first topological order.
 """
 function _solve_plan(matches, coeff, sorted_sts, has_ff, outset)
     n = length(matches)
-    n == 0 && return (Vector{Int}[], BitVector())
+    n == 0 && return (Vector{Vector{Int}}[], falses(0))
 
     # Step 1: Dependency graph on matched pairs.
     # Edge i→j means "equation of match i has a nonzero coeff for state of match j",
@@ -357,79 +355,75 @@ function _solve_plan(matches, coeff, sorted_sts, has_ff, outset)
         end
     end
 
-    # Step 2: SCC decomposition in dependency-first order.
-    # For our edge convention (i→j = "i depends on j"), strongly_connected_components_tarjan
-    # already returns SCCs with dependencies before dependents — no reversal needed.
-    sccs = Graphs.strongly_connected_components_tarjan(g)
-
     # Early exit when FF detection is unnecessary.
     if isempty(outset) || all(!, has_ff)
-        return (sccs, falses(length(sccs)))
+        sccs = Graphs.strongly_connected_components_tarjan(g)
+        return (sccs, falses(n))
     end
 
-    n_sccs = length(sccs)
-
-    # Step 3: Classify each SCC.
-    # :linear_state if any of its matched pairs has coeff === :linear_state; else :linear_const.
-    scc_type = fill(:linear_const, n_sccs)
-    for (si, scc) in enumerate(sccs)
-        for mi in scc
-            r, c = matches[mi]
-            if coeff[r, c] === :linear_state
-                scc_type[si] = :linear_state
-                break
-            end
+    # Step 2: Classify each match by the coefficient type of its diagonal entry.
+    match_type = fill(:linear_const, n)
+    for (mi, (r, c)) in enumerate(matches)
+        if coeff[r, c] === :linear_state
+            match_type[mi] = :linear_state
         end
     end
 
-    # Map match index → SCC index.
-    match_to_scc = Dict(mi => si for (si, scc) in enumerate(sccs) for mi in scc)
+    # Step 3: Identify FF-source matches (equation directly references ff_inputs)
+    # and output-sink matches (matched state is an output).
+    ff_sources = [i for (i, (r, _)) in enumerate(matches) if has_ff[r]]
+    out_sinks  = [i for (i, (_, c)) in enumerate(matches) if sorted_sts[c] ∈ outset]
 
-    # Step 4: Meta-DAG of SCCs.
-    # For each match-level edge i→j (i depends on j), add meta edge scc(j)→scc(i).
-    # FF flows from the dependency scc(j) toward the dependent scc(i).
-    meta_g = Graphs.SimpleDiGraph(n_sccs)
-    for e in Graphs.edges(g)
-        si = match_to_scc[e.src]   # dependent
-        sj = match_to_scc[e.dst]   # dependency
-        si == sj && continue
-        Graphs.add_edge!(meta_g, sj, si)
-    end
-
-    # Step 5: Identify FF-source and output-sink SCCs.
-    ff_sources = Int[]
-    out_sinks  = Int[]
-    for (si, scc) in enumerate(sccs)
-        rows = [matches[mi][1] for mi in scc]
-        cols = [matches[mi][2] for mi in scc]
-        any(has_ff[r] for r in rows)               && push!(ff_sources, si)
-        any(sorted_sts[c] ∈ outset for c in cols)  && push!(out_sinks,  si)
-    end
-
-    # Step 6: Forbid SCCs that would introduce algebraic FF.
-    # For each (ff_source, output_sink) pair, walk every path from output toward the
-    # input and forbid the first :linear_state SCC encountered; fall back to the sink.
-    forbidden = falses(n_sccs)
+    # Step 4: Forbid individual matches to break FF paths.
+    # In the dependency graph g (i→j = "i depends on j"), a path from out_sink to ff_source
+    # means out_sink transitively depends on ff_source — the algebraic FF chain.
+    # For each such path walk from the output-sink end and forbid the first :linear_state
+    # match; fall back to the output-sink match itself if none is found.
+    forbidden_matches = falses(n)
     for src in ff_sources
         for dst in out_sinks
             if src == dst
-                forbidden[src] = true
+                forbidden_matches[src] = true
                 continue
             end
-            for path in Graphs.all_simple_paths(meta_g, src, dst)
-                # Walk path from output end (dst) toward ff-source (src).
-                forbid_idx = dst   # fallback: forbid the output sink
-                for scc_idx in reverse(path)
-                    if scc_type[scc_idx] === :linear_state
-                        forbid_idx = scc_idx
+            for path in Graphs.all_simple_paths(g, dst, src)
+                # path[1] == dst (output-sink), path[end] == src (ff-source).
+                forbid_idx = dst   # fallback: forbid the output-sink match
+                for mi in path
+                    if match_type[mi] === :linear_state
+                        forbid_idx = mi
                         break
                     end
                 end
-                forbidden[forbid_idx] = true
+                forbidden_matches[forbid_idx] = true
             end
         end
     end
-    return (sccs, forbidden)
+
+    # Step 5: SCC decomposition on non-forbidden matches only.
+    # Cycles that ran through a forbidden match are already broken.
+    non_forbidden = [i for i in 1:n if !forbidden_matches[i]]
+    isempty(non_forbidden) && return (Vector{Vector{Int}}[], forbidden_matches)
+
+    new_idx = zeros(Int, n)
+    for (k, i) in enumerate(non_forbidden)
+        new_idx[i] = k
+    end
+    g_sub = Graphs.SimpleDiGraph(length(non_forbidden))
+    for i in non_forbidden
+        for j in Graphs.outneighbors(g, i)
+            forbidden_matches[j] && continue
+            Graphs.add_edge!(g_sub, new_idx[i], new_idx[j])
+        end
+    end
+
+    # For our edge convention (i→j = "i depends on j"), strongly_connected_components_tarjan
+    # already returns SCCs with dependencies before dependents — no reversal needed.
+    sccs_sub = Graphs.strongly_connected_components_tarjan(g_sub)
+
+    # Remap subgraph SCC indices back to original match indices.
+    sccs = [[non_forbidden[k] for k in scc] for scc in sccs_sub]
+    return (sccs, forbidden_matches)
 end
 function _insert_sorted!(obseqs, newobs)
     # newobs must be in topological order (dependencies before dependents).
@@ -476,6 +470,7 @@ end
 """
 Dependency type of an equation w.r.t. a state variable:
   :none         — state does not appear in the equation
+  :explicit     — linear in the state; coefficient is exactly ±1 (unit coefficient, no division needed)
   :linear_const — linear in the state; coefficient is free of states (constant/parameter-only)
   :linear_state — linear in the state; coefficient involves other states (risky denominator)
   :nonlinear    — nonlinear in the state (e.g. x^2, sin(x))
@@ -496,8 +491,13 @@ function _build_coeff_mat(lineqs, linstates, state_set; ff_inputs=Set())
             elseif isequal(unwrap_const(a), 0)
                 coeff[i, j] = :none
             else
-                coeff_vars = get_variables_deriv(unwrap_const(a))
-                coeff[i, j] = isempty(coeff_vars ∩ state_set) ? :linear_const : :linear_state
+                a_val = unwrap_const(a)
+                if a_val isa Number && (isequal(a_val, 1) || isequal(a_val, -1))
+                    coeff[i, j] = :explicit
+                else
+                    coeff_vars = get_variables_deriv(a_val)
+                    coeff[i, j] = isempty(coeff_vars ∩ state_set) ? :linear_const : :linear_state
+                end
             end
         end
     end
@@ -507,76 +507,50 @@ end
 """
     _match_equations_to_states(coeff) -> (solvable, bookkeeping)
 
-Maximum bipartite matching split into two independent sub-problems:
+Single-pass min-cost maximum-cardinality bipartite matching via the Hungarian
+algorithm.  The cost matrix encodes a strict five-level priority hierarchy:
 
-**Solvable matching** (returned first): maximum matching over `:linear_const`
-and `:linear_state` edges.  Two unrestricted Kuhn passes are used:
-- Pass 1 (`:linear_const` only) seeds as many numerically-safe matches as possible.
-- Pass 2 (all linear) extends to the true maximum.  Augmenting paths may reroute
-  a pass-1 `:linear_const` match through a `:linear_state` edge — correct, since
-  maximum cardinality takes priority over edge preference.
+| edge type       | cost       | meaning                                   |
+|-----------------|------------|-------------------------------------------|
+| `:explicit`     | 0          | coefficient is ±1; trivial solve          |
+| `:linear_const` | 1          | safe to solve; constant coefficient       |
+| `:linear_state` | 2          | solvable but coefficient involves states  |
+| `:nonlinear`    | 2(n+1)+1   | bookkeeping only; tracks dependency       |
+| `:none`         | C_nl²      | last resort; state absent from eq         |
 
-**Bookkeeping matching** (returned second): maximum matching over the remaining
-unmatched rows and columns only (`:nonlinear` preferred, `:none` as last resort).
-By restricting augmenting paths to the previously-unmatched columns, the bookkeeping
-sub-problem is completely independent and can never displace a solvable match.
+where `n = size(coeff, 1)` (always square).  The sentinel gaps guarantee that
+the Hungarian solution maximises solvable-match cardinality first, then
+prefers `:explicit` over `:linear_const` over `:linear_state`, then prefers
+`:nonlinear` over `:none` for bookkeeping — all in one call.
 
 Both return values are `Vector{Tuple{Int,Int}}` of `(row, col)` pairs.
-
-The old "priority-level freeze" variant of Kuhn was buggy: freezing a
-`:linear_const` holder prevented augmenting paths that would have increased
-total solvable cardinality (e.g. row A has edges col1:const and col2:state,
-row B has only col1:const; freeze caused B to remain unmatched even though
-rerouting A→col2 would yield two solvable matches).
+Solvable pairs have `cost ≤ 2`; bookkeeping pairs have `cost > 2`.
 """
 function _match_equations_to_states(coeff)
-    n_eq, n_st = size(coeff)
-    cm = zeros(Int, n_st)   # cm[j] = row matched to col j, 0 = unmatched
-    rm = zeros(Int, n_eq)   # rm[i] = col matched to row i, 0 = unmatched
+    n = size(coeff, 1)  # always square
+    C_nl   = 2*(n + 1) + 1   # > n*2 = max total solvable cost
+    C_none = C_nl^2           # > n*C_nl = max total nonlinear cost
 
-    function try_augment!(row, visited, pred, cols)
-        for col in cols
-            pred(coeff[row, col]) && !visited[col] || continue
-            visited[col] = true
-            holder = cm[col]
-            if holder == 0 || try_augment!(holder, visited, pred, cols)
-                cm[col] = row; rm[row] = col
-                return true
-            end
-        end
-        false
-    end
-
-    # ── Solvable matching ──────────────────────────────────────────────────────
-    # Pass 1: linear_const preferred; unrestricted augmenting paths over all cols.
-    for row in 1:n_eq
-        try_augment!(row, falses(n_st), c -> c === :linear_const, 1:n_st)
-    end
-    # Pass 2: extend to max matching over all solvable edges.
-    for row in 1:n_eq
-        rm[row] == 0 || continue
-        try_augment!(row, falses(n_st), c -> c === :linear_const || c === :linear_state, 1:n_st)
-    end
-    solvable = [(cm[j], j) for j in 1:n_st if cm[j] > 0]
-
-    # ── Bookkeeping matching ───────────────────────────────────────────────────
-    # Restrict to unmatched columns only — augmenting paths can never reach a
-    # solvable match, so the two sub-problems are fully independent.
-    bk_cols = findall(iszero, cm)
-    if !isempty(bk_cols)
-        # Pass 3: nonlinear preferred (needed for dependency ordering in _solve_plan)
-        for row in 1:n_eq
-            rm[row] == 0 || continue
-            try_augment!(row, falses(n_st), c -> c === :nonlinear, bk_cols)
-        end
-        # Pass 4: last resort — :none pairs
-        for row in 1:n_eq
-            rm[row] == 0 || continue
-            try_augment!(row, falses(n_st), _ -> true, bk_cols)
+    cost = Matrix{Int}(undef, n, n)
+    for i in 1:n, j in 1:n
+        cost[i, j] = @match coeff[i, j] begin
+            :explicit     => 0
+            :linear_const => 1
+            :linear_state => 2
+            :nonlinear    => C_nl
+            _             => C_none
         end
     end
-    bookkeeping = [(cm[j], j) for j in bk_cols if cm[j] > 0]
 
+    assignment, _ = hungarian(cost)
+
+    solvable    = Tuple{Int,Int}[]
+    bookkeeping = Tuple{Int,Int}[]
+    for i in 1:n
+        j = assignment[i]
+        push!(cost[i, j] <= 2 ? solvable : bookkeeping, (i, j))
+    end
+    assignment, total_cost = hungarian(cost)
     return solvable, bookkeeping
 end
 
@@ -691,7 +665,7 @@ function simplify_without_mtkcompile(_sys, allinputs, alloutputs; verbose, ff_to
     append!(allparams, ModelingToolkitBase.bound_parameters(sys))
 
     # maybe inputs have been given as parameters
-    params = setdiff(allparams, Set(allinputs))
+    params = setdiff(allparams, Set{ST}(allinputs))
 
     # states of the system are
     diffstates = filter(isdifferential, Set{ST}(get_variables(eqs)))
@@ -709,9 +683,6 @@ function simplify_without_mtkcompile(_sys, allinputs, alloutputs; verbose, ff_to
         eqs, obseqs_sorted, states;
         outset=Set{ST}(alloutputs), ff_inputs, verbose
     )
-
-    # pick best alias names
-    eqs, obseqs, states = pick_best_alias_names(eqs, obseqs, states, alloutputs; verbose)
 
     states_nodiff = map(states) do s
         isdifferential(s) ? only(s.args) : s
