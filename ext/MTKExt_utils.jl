@@ -437,3 +437,10 @@ function _warn_duplicate_formula_targets(formulas, kind)
                This is not supported yet and may lead to unclear behavior."
     end
 end
+
+function NetworkDynamics.multiline_repr(eqs::Vector{Equation}; prefix="")
+    lines = map(eqs) do eq
+        prefix * repr(eq.lhs) * " &~ " * repr(eq.rhs)
+    end
+    join(NetworkDynamics.align_strings(lines), "\n")
+end

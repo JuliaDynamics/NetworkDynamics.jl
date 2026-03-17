@@ -21,13 +21,13 @@ using NetworkDynamics: NetworkDynamics, set_metadata!, ComponentPostprocessing,
                        MultipleOutputWrapper, inline_repr, multiline_repr
 import NetworkDynamics: VertexModel, EdgeModel, AnnotatedSym, InitFormula, add_initformula!, GuessFormula, add_guessformula!
 
+const ST = SymbolicUtils.BasicSymbolicImpl.var"typeof(BasicSymbolicImpl)"{SymbolicUtils.SymReal}
+
 include("MTKExt_utils.jl")
 include("MTKExt_simplification.jl")
 
 import NetworkDynamics: implicit_output, RHSDifferentialsError
 Symbolics.@register_symbolic implicit_output(x)
-
-const ST = SymbolicUtils.BasicSymbolicImpl.var"typeof(BasicSymbolicImpl)"{SymbolicUtils.SymReal}
 
 """
     VertexModel(sys::System, inputs, outputs;
@@ -296,8 +296,9 @@ function _split_extin(extin)
 end
 
 function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
-                              expression=Val{false}, verbose=false,
+                              expression=Val{false}, verbose=false, mtkcompile=false,
                               ff_to_constraint, assume_io_coupling)
+    # verbose = true
     # TODO: scalarize vector symbolics/equations?
 
     # f_* may be given in namepsace version or as symbols, resolve to unnamespaced Symbolic
@@ -312,17 +313,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
 
     # always expand connections before simplification
     _sys = ModelingToolkitBase.expand_connections(_sys)
-
-    # normalize equations of the form a*D(x) ~ rhs  →  D(x) ~ rhs/a
-    # (can arise after connection expansion)
-    let _eqs = ModelingToolkitBase.get_eqs(_sys)
-        for i in eachindex(_eqs)
-            r = get_scaled_diff(_eqs[i].lhs)
-            isnothing(r) && continue
-            diff_term, coeff = r
-            _eqs[i] = diff_term ~ _eqs[i].rhs / coeff
-        end
-    end
+    iv = only(independent_variables(_sys))
 
     # assume_io_coupling means, we expect a direct dependency chain output -> input
     # we fake this, by replacing all inputs with `input + implicit_output(outputs...)`
@@ -336,59 +327,17 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         end
     end
 
-    missing_inputs = Set{ST}()
-    sys = if ModelingToolkitBase.iscomplete(_sys)
-        deepcopy(_sys)
+    sys, eqs, obseqs_sorted, states, params = if mtkcompile
+        simplify_with_mtkcompile(_sys, allinputs, alloutputs; verbose)
     else
-        _openinputs = setdiff(allinputs, Set(parameters(_sys)))
-        all_eq_vars = mapreduce(get_variables_deriv, union, full_equations(_sys), init=Set{ST}())
-        if !(_openinputs ⊆ all_eq_vars)
-            missing_inputs = setdiff(_openinputs, all_eq_vars)
-            verbose && @warn "The specified inputs ($missing_inputs) do not appear in the equations of the system!"
-            _openinputs = setdiff(_openinputs, missing_inputs)
-        end
-
-        implicit_outputs = setdiff(alloutputs, all_eq_vars)
-        if !isempty(implicit_outputs)
-            throw(
-                ArgumentError("The outputs $(getname.(implicit_outputs)) do not appear in the equations of the system! \
-                    Try to to make them explicit using the keyword `assume_io_coupling` or the more manual `implicit_output`\n" *
-                    NetworkDynamics.implicit_output_docstring)
-            )
-        end
-
-        verbose && @info "Simplifying system with inputs $(inline_repr(_openinputs)) and outputs $(inline_repr(alloutputs))"
-        try
-            mtkcompile(_sys; inputs=_openinputs, outputs=alloutputs, simplify=false)
-        catch e
-            if e isa ModelingToolkitBase.ExtraEquationsSystemException
-                msg = "The system could not be compiled because of extra equations! \
-                       Sometimes, this can be related to fully implicit output equations. \
-                       Check `@doc implicit_output` for more information."
-                throw(ArgumentError(msg))
-            end
-            rethrow(e)
-        end
+        simplify_without_mtkcompile(_sys, allinputs, alloutputs; verbose, ff_to_constraint)
     end
 
-    allparams = parameters(sys) # contains inputs!
-    # mtkcompile/complete calls remove_bound_parameters_from_ps which removes params
-    # whose value is bound to another param (e.g. Sn = S_b) from ps, but those symbols
-    # still appear in equations. Add them back so build_function can reference them and
-    # InitFormulas targeting them remain valid.
-    let bp = ModelingToolkitBase.bound_parameters(sys)
-        if !isempty(bp)
-            append!(allparams, collect(bp))
-        end
-    end
-    @argcheck allinputs ⊆ Set(allparams) ∪ missing_inputs
-    params = setdiff(allparams, Set(allinputs))
+    # get rid of the implicit_output(⋅) terms
+    remove_implicit_output_fn!(eqs)
+    remove_implicit_output_fn!(obseqs_sorted)
 
-    # extract the main equations and observed equations
-    eqs::Vector{Equation} = equations(sys)
-    obseqs_sorted::Vector{Equation} = observed(sys)
-    fix_metadata!(eqs, sys);
-    fix_metadata!(obseqs_sorted, sys);
+    eqs, obseqs, states = pick_best_alias_names(eqs, obseqs, states, alloutputs; verbose)
 
     # check that there are no rhs differentials in the equations
     if !isempty(rhs_differentials(vcat(eqs, obseqs_sorted)))
@@ -396,37 +345,11 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         throw(RHSDifferentialsError(repr.(diffs)))
     end
 
-    # create states vector in correct ordering
-    states = match_diff_states(eqs, unknowns(sys))
-
-    eqs, obseqs_sorted, states = let
-        # detect if we need to pass inputs (to disallow FF from inputs -> outputs)
-        inputs = if ff_to_constraint
-            # 1. move observed equations back to sates to uncover ff
-            eqs, obseqs_sorted, states = observed_outputs_to_states(eqs, obseqs_sorted, states, alloutputs; verbose)
-            Set(allinputs)
-        else
-            Set{ST}()
-        end
-        # 2. expand algebraic equations to uncover state/input depndencies
-        eqs_expanded = expand_alg_equations(eqs, obseqs_sorted, states, inputs; verbose)
-        # 3. reduce linear algebraic equations
-        eqs, obseqs, states = reduce_linear_algebraic(eqs_expanded, obseqs_sorted, states; outputs=alloutputs, ff_inputs=inputs, verbose)
-        # 4. priorize alias names (e.g. use busbar₊u_r rather than gen₊termial₊u_r if both exist)
-        eqs, obseqs, states = pick_best_alias_names(eqs, obseqs, states, alloutputs; verbose)
-
-        eqs, obseqs, states
-    end
-
-    # get rid of the implicit_output(⋅) terms
-    remove_implicit_output_fn!(eqs)
-    remove_implicit_output_fn!(obseqs_sorted)
-
     # obs can only depend on parameters (including allinputs) or states
     obs_subs = OrderedDict(eq.lhs => eq.rhs for eq in obseqs_sorted)
     obs_deps = setdiff(_all_rhs_symbols(obs_subs), Set(keys(obs_subs))) # do not count self-dependency
-    if !(obs_deps ⊆ Set(allparams) ∪ Set(states) ∪ independent_variables(sys))
-        @warn "obs_deps !⊆ parameters ∪ unknowns. Difference: $(setdiff(obs_deps, Set(allparams) ∪ Set(states)))"
+    if !(obs_deps ⊆ Set(params) ∪ Set(allinputs) ∪ Set(states) ∪ iv)
+        @warn "obs_deps !⊆ params ∪ inputs ∪ unknowns. Difference: $(setdiff(obs_deps, Set(params) ∪ Set(allinputs) ∪ Set(states)))"
     end
 
     # find the output equations, this might remove them from obseqs_sorted (obs_subs stays intact)
@@ -469,8 +392,6 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         verbose && @info "Generated mass matrix" mm
         mm
     end
-
-    iv = only(independent_variables(sys))
 
     out_deps = _all_dependencies(outeqs, obs_subs)
     fftype = _determine_fftype(out_deps, states, allinputs, params, iv)
@@ -541,7 +462,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         params,
         unused_params,
         initformulas = bindings_to_initformulas(_sys; obs_subs),
-        guessformulas = guesses_to_guessformulas!(sys; obs_subs)
+        guessformulas = guesses_to_guessformulas!(_sys; obs_subs)
     )
 end
 

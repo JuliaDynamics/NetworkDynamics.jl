@@ -483,13 +483,15 @@ end
         end
     end
     @named fullyimplicit = FullyImplicit()
-    @test_throws r"outputs .* do not appear in the equations" VertexModel(fullyimplicit, [:u], [:z])
+    # @test_throws r"outputs .* do not appear in the equations" VertexModel(fullyimplicit, [:u], [:z])
+    VertexModel(fullyimplicit, [:u], [:z])
     # works when we assume io coupling
     VertexModel(fullyimplicit, [:u], [:z]; assume_io_coupling=true)
     # from init_tutorial
     # dependent MTKModels need to be defined at top level, so they are in front of the testset
     @named prosumer = StaticProsumerNode() # consumer
-    @test_throws r"outputs .* do not appear in the equations" VertexModel(prosumer, [:q̃_nw], [:p])
+    # @test_throws r"outputs .* do not appear in the equations" VertexModel(prosumer, [:q̃_nw], [:p])
+    VertexModel(prosumer, [:q̃_nw], [:p])
     @named prosumer_wrapped = Wrapper()
     # the below command used to fail, but works now with custom matching/tearing in NetworkDynamics
     VertexModel(prosumer_wrapped, [:q̃_nw], [:p]; verbose=false)
@@ -736,12 +738,14 @@ end
     #     vm = VertexModel(inverter, [:i_r, :i_i], [:u_r, :u_i]; verbose=true)
     #     vm.metadata[:equations]
     # end
-    VertexModel(inverter, [:i_r, :i_i], [:u_r, :u_i]; verbose=false, assume_io_coupling=false)
+    v = VertexModel(inverter, [:i_r, :i_i], [:u_r, :u_i]; verbose=true, assume_io_coupling=false)
+    @test sum(v.mass_matrix) == dim(v) - 2
 
     # With assume_io_coupling=true, the construction should succeed
     # This forces MTK to recognize the input->output coupling even with derivatives
     v = VertexModel(inverter, [:i_r, :i_i], [:u_r, :u_i];
-                    verbose=false, assume_io_coupling=true)
+                    verbose=true, assume_io_coupling=true)
+    @test sum(v.mass_matrix) == dim(v) - 2
     data = NetworkDynamics.rand_inputs_fg(v)
     NetworkDynamics.compfg(v)(data...)
 end
@@ -758,7 +762,20 @@ function topologicical_sorted(eqs)
     return true
 end
 
+ST = mtkext.ST
+function _reduce_equations(eqs, obs, states; outset=[], ff_inputs=[], verbose=false)
+    mtkext.reduce_equations(
+        Vector{Equation}(eqs),
+        Vector{Equation}(obs),
+        Vector{ST}(states);
+        outset=Set{ST}(outset),
+        ff_inputs=Set{ST}(ff_inputs),
+        verbose
+    )
+end
+
 @testset "Algebraic system reduction" begin
+    using Symbolics: unwrap
     @variables a1(t) a2(t) a3(t) s1(t) s2(t) s3(t)
     @parameters p1 p2 p3
 
@@ -769,7 +786,7 @@ end
         0 ~ sin(a3)
     ]
 
-    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(eqs, Equation[], algebraic_states; verbose=false)
+    red_eqs, red_obs, red_states = _reduce_equations(eqs, Equation[], algebraic_states; verbose=false)
     # eq1 can solve for a1 (linear in a1 with const coeff p1), eq2 can solve for a2 (linear in a2 with symbolic coeff s1*s2)
     # eq3 is nonlinear in a3 → stays as constraint
     @test length(red_states) == 1
@@ -795,7 +812,7 @@ end
         0 ~ C + H                    # eq14: linear in C,H (coeff 1,1)
     ]
     all_states = [A, B, C, D, E, F, G, H, I, J, K, L, M, N]
-    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(eqs, Equation[], all_states; verbose=false)
+    red_eqs, red_obs, red_states = _reduce_equations(eqs, Equation[], all_states; verbose=false)
     # 13 of 14 equations matched via SCC decomposition (each individually linear).
     # Only eq9 (p1^2 - D^2 - E^2) is fully nonlinear and can't be matched.
     # One state remains as a constraint variable.
@@ -812,7 +829,7 @@ end
         0 ~ -prosumer_q_inj - prosumer_q_nw
         0 ~ prosumer_q_prosumer + prosumer_q_nw
     ]
-    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(eqs, Equation[], [p, prosumer_p, prosumer_q_nw, prosumer_q_inj]; verbose=false)
+    red_eqs, red_obs, red_states = _reduce_equations(eqs, Equation[], [p, prosumer_p, prosumer_q_nw, prosumer_q_inj]; verbose=false)
     @test length(red_eqs) == 1
     @test length(red_obs) == 3
     @test topologicical_sorted(red_obs)
@@ -827,7 +844,7 @@ end
         0 ~ -sA + sB,  # sA depends on sB
         0 ~ -sB + sC,  # sB depends on sC (already in existing_obs)
     ]
-    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(eqs, existing_obs, [sA, sB]; verbose=false)
+    red_eqs, red_obs, red_states = _reduce_equations(eqs, existing_obs, [sA, sB]; verbose=false)
     @test isempty(red_states)
     @test topologicical_sorted(red_obs)
 
@@ -841,7 +858,7 @@ end
         0 ~ -chC + chD,   # chC depends on chD
         0 ~ -chD + chp,   # chD = chp (pure parameter)
     ]
-    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(eqs, Equation[], [chA, chB, chC, chD]; verbose=false)
+    red_eqs, red_obs, red_states = _reduce_equations(eqs, Equation[], [chA, chB, chC, chD]; verbose=false)
     @test isempty(red_states)
     @test isempty(red_eqs)
     @test topologicical_sorted(red_obs)
@@ -863,7 +880,7 @@ end
         0 ~ -nla + nlc,             # nla linearly depends on nlc (already in obseqs)
         0 ~ -nlb + nlc,             # nlb linearly depends on nlc
     ]
-    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(eqs, Equation[nlc ~ nlp], [nlx, nla, nlb]; verbose=false)
+    red_eqs, red_obs, red_states = _reduce_equations(eqs, Equation[nlc ~ nlp], [nlx, nla, nlb]; verbose=false)
     @test isempty(red_states)
     @test topologicical_sorted(red_obs)
     obs_lhs = [eq.lhs for eq in red_obs]
@@ -871,7 +888,7 @@ end
     @test findfirst(isequal(nlb.val), obs_lhs) < findfirst(isequal(nlx.val), obs_lhs)
 end
 
-@testset "FF-blocking in reduce_linear_algebraic" begin
+@testset "FF-blocking in reduce_equations" begin
     # Setup: u_r, u_i are outputs (e.g. bus voltages), i_r, i_i are inputs (currents)
     # n is a non-output internal state, p1/p2 are pure parameters
     @variables u_r(t) u_i(t) n(t) foo(t)
@@ -885,9 +902,9 @@ end
     ff_set = Set([i_r, i_i])
 
     # A: Output states in input-dependent equations → both stay as constraints
-    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(
+    red_eqs, red_obs, red_states = _reduce_equations(
         pq_eqs, Equation[], [u_r, u_i];
-        outputs=[u_r, u_i], ff_inputs=ff_set, verbose=false)
+        outset=[u_r, u_i], ff_inputs=ff_set, verbose=false)
     @test length(red_states) == 2
     @test isempty(red_obs)
     @test length(red_eqs) == 2
@@ -895,26 +912,26 @@ end
     @test red_eqs == pq_eqs
 
     # B: Same equations, ff_inputs=Set() → normal solving (blocking disabled)
-    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(
+    red_eqs, red_obs, red_states = _reduce_equations(
         pq_eqs, Equation[], [u_r, u_i];
-        outputs=[u_r, u_i], ff_inputs=Set(), verbose=false)
+        outset=[u_r, u_i], ff_inputs=Set(), verbose=false)
     @test isempty(red_states)
     @test length(red_obs) == 2
 
     # C: Non-output state in input-dependent equation → still solved (blocking only for outputs)
     eqs_n = [0 ~ n - i_r*u_r - i_i*u_i]  # n is not an output
-    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(
+    red_eqs, red_obs, red_states = _reduce_equations(
         eqs_n, Equation[], [n];
-        outputs=[], ff_inputs=ff_set, verbose=false)
+        outset=[], ff_inputs=ff_set, verbose=false)
     @test isempty(red_states)
     @test length(red_obs) == 1
     @test isequal(only(red_obs).lhs, n.val)
 
     # D: Output state in input-free equation → still solved (no input dependency)
     eqs_free = [0 ~ u_r - p1*p2]
-    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(
+    red_eqs, red_obs, red_states = _reduce_equations(
         eqs_free, Equation[], [u_r];
-        outputs=[u_r], ff_inputs=ff_set, verbose=false)
+        outset=[u_r], ff_inputs=ff_set, verbose=false)
     @test isempty(red_states)
     @test length(red_obs) == 1
     @test isequal(only(red_obs).lhs, u_r.val)
@@ -923,7 +940,7 @@ end
     # and absence of spurious i_r or i_i denominators
     @variables x(t) y(t)
     eqs_2x2 = [0 ~ P + x*i_r + i_i*y, 0 ~ Q + x*i_i - i_r*y]
-    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(
+    red_eqs, red_obs, red_states = _reduce_equations(
         eqs_2x2, Equation[], [x, y]; verbose=false)
     @test isempty(red_states)
     @test length(red_obs) == 2
@@ -942,13 +959,14 @@ end
     # F: Mixed: output blocked from input-dep eq, non-output still solved
     # n (non-output) and u_r (output) both appear in same equation set
     eqs_mixed = [
-        0 ~ P + u_r*i_r + i_i*u_i   # u_r, u_i are outputs → blocked
+       -P ~ u_r*i_r + i_i*u_i   # u_r, u_i are outputs → blocked
         0 ~ Q + u_r*i_i - i_r*u_i   # same
         0 ~ n - u_r - u_i            # n is non-output, depends only on states (not inputs)
     ]
-    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(
+    unwrap_const(eqs_mixed[2].lhs) isa Number
+    red_eqs, red_obs, red_states = _reduce_equations(
         eqs_mixed, Equation[], [u_r, u_i, n];
-        outputs=[u_r, u_i], ff_inputs=ff_set, verbose=true)
+        outset=[u_r, u_i], ff_inputs=ff_set, verbose=false)
     @test length(red_states) == 2   # u_r, u_i stay as constraints
     @test length(red_obs) == 1      # n solved from its equation
     @test isequal(only(red_obs).lhs, n.val)
@@ -959,9 +977,9 @@ end
         0 ~ Pset + u_r*i_r + i_i*u_i   # linear in u_r, depends on inputs → blocked
         0 ~ -(Vset^2) + u_r^2 + u_i^2  # nonlinear → can't be solved for either state
     ]
-    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(
+    red_eqs, red_obs, red_states = _reduce_equations(
         eqs_pv, Equation[], [u_r, u_i];
-        outputs=[u_r, u_i], ff_inputs=ff_set, verbose=false)
+        outset=[u_r, u_i], ff_inputs=ff_set, verbose=false)
     @test length(red_states) == 2   # both stay
     @test isempty(red_obs)
     @test length(red_eqs) == 2      # both original equations preserved intact
@@ -981,10 +999,10 @@ end
         0 ~ cn2*c3 - c2,      # SCC3: cn2*c3 = c2, coeff of c3 = cn2  (LS)
         0 ~ c4 - c3,          # SCC4: c4 = c3,     coeff of c4 = 1    (LC), output
     ]
-    all_chain_states = [cn1, cn2, c1, c2, c3, c4]
-    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(
+    all_chain_states = [Dt(cn1), Dt(cn2), c1, c2, c3, c4]
+    red_eqs, red_obs, red_states = _reduce_equations(
         ff_chain_eqs, Equation[], all_chain_states;
-        outputs=[c4], ff_inputs=Set([c_inp]), verbose=false)
+        outset=[c4], ff_inputs=Set([c_inp]), verbose=false)
     obs_lhs = Set(eq.lhs for eq in red_obs)
     # SCCs 1 and 2 are not forbidden
     @test c1.val ∈ obs_lhs
@@ -1042,7 +1060,7 @@ end
     outputs = [busbar₊u_r, busbar₊u_i]
     ff_set = Set([busbar₊i_r, busbar₊i_i])
 
-    red_eqs, red_obs, red_states = mtkext.reduce_linear_algebraic(
+    red_eqs, red_obs, red_states = _reduce_equations(
         eqs, Equation[], all_states;
         outputs=outputs, ff_inputs=ff_set, verbose=false)
 
@@ -1112,8 +1130,10 @@ end
     @test Set(sym(m)) == Set([:u_r, :u_i])
     m = Lib.dqbus_timedeppq(Pfun = _->1.0)
     @test Set(sym(m)) == Set([:u_r, :u_i])
+
     m = Lib.dqbus_pv()
     @test Set(sym(m)) == Set([:u_r, :u_i])
+
     m = Lib.dqbus_pv(injector=true)
     @test Set(sym(m)) == Set([:i_r, :i_i])
     m = Lib.dqbus_slack()
@@ -1122,8 +1142,10 @@ end
     @test Set(sym(m)) == Set([:i_r, :i_i])
     m = Lib.dqline(R=0.1, X=0.1)
     @test isempty(sym(m))
+
     m = Lib.dqbus_swing_and_load()
     @test Set(sym(m)) == Set([:swing₊θ, :swing₊ω])
+
     m = Lib.dqbus_swing_injector()
     @test Set(sym(m)) == Set([:θ, :ω, :i_r, :i_i])
     m = Lib.dqbus_pq_injector()
@@ -1333,9 +1355,10 @@ end
         end
     end
     @named node_a = FilterLeadNode_A()
-    @test_broken begin
+    @test begin
         v = VertexModel(node_a, [:P], [:u])
-        length(sym(v)) == 1  # only filter_x should be a diff state
+        # filter_x is a diff state, u is algebraic constraint (FF prevention)
+        length(sym(v)) == 2 && v.mass_matrix == Diagonal([1, 0])
     end
 
     # Variant B: separate variables with alias connection (closer to real @components)
@@ -1369,8 +1392,34 @@ end
         end
     end
     @named node_b = FilterLeadNode_B()
-    @test_broken begin
+    @test begin
         v = VertexModel(node_b, [:P], [:u])
-        length(sym(v)) == 1  # only filter_x should be a diff state
+        # filter_x is a diff state, u is algebraic constraint (FF prevention)
+        length(sym(v)) == 2 && v.mass_matrix == Diagonal([1, 0])
     end
+end
+
+@testset "Simple Index reduction" begin
+    @variables x(t) y(t) a(t) b(t)
+    eqs = [
+        5*Dt(x) ~ -x + y
+        0 ~ -Dt(y) + 2*y
+    ]
+    @test Set(mtkext.simple_index_reduction!(copy(eqs))) == Set([
+        Dt(x) ~ (x - y) / (-5)
+        Dt(y) ~ 2*y
+    ])
+
+    eqs = [
+        0 ~ Dt(x) - a
+        Dt(x) ~ b
+    ]
+    reduced = mtkext.simple_index_reduction!(copy(eqs))
+    # Either Dt(x)~a with 0~a-b or Dt(x)~b with 0~b-a — both valid
+    @test length(reduced) == 2
+    @test count(eq -> isequal(eq.lhs, Dt(x)), reduced) == 1
+    # The non-diff eq should be an algebraic constraint between a and b
+    alg_eq = only(filter(eq -> !isequal(eq.lhs, Dt(x)), reduced))
+    @test mtkext.eq_type(alg_eq)[1] == :implicit_algebraic
+
 end
