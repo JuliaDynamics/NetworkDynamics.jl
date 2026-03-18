@@ -1001,7 +1001,7 @@ end
         0 ~ cn2*c3 - c2,      # SCC3: cn2*c3 = c2, coeff of c3 = cn2  (LS)
         0 ~ c4 - c3,          # SCC4: c4 = c3,     coeff of c4 = 1    (LC), output
     ]
-    all_chain_states = [Dt(cn1), Dt(cn2), c1, c2, c3, c4]
+    all_chain_states = [cn1, cn2, c1, c2, c3, c4]
     red_eqs, red_obs, red_states = _reduce_equations(
         ff_chain_eqs, Equation[], all_chain_states;
         outset=[c4], ff_inputs=Set([c_inp]), verbose=false)
