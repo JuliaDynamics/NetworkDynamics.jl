@@ -196,15 +196,6 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
         error("Observation LHS cannot be a state variable! Found: $(Set(obs.lhs for obs in obseqs) ∩ match_states_set)")
     end
 
-    if verbose
-        str = "Trying to match $(length(eqs)) equations to $(length(match_states)) states for reduction"
-        str *= "\nStates: " * inline_repr(match_states)
-        str *= "\n" * multiline_repr(eqs, prefix="  ")
-        @info str
-    end
-
-    @assert length(match_states) == length(eqs)
-
     # normalize alg functions which are not yet 0 ~ expr
     eqs = map(eqs) do eq
         lhs = unwrap_const(eq.lhs)
@@ -216,7 +207,46 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
         end
     end
 
-    coeff = _build_coeff_mat(eqs, obseqs, match_states, all_states; ff_inputs)
+    # iteratively match states and move solved equations to obseqs
+    while true
+        prev_obs = length(obseqs)
+        eqs, obseqs, match_states = _match_and_solve(eqs, obseqs, match_states, all_states; outset, ff_inputs, verbose)
+        new_solved = length(obseqs) - prev_obs
+        if length(eqs) == 0 || new_solved == 0
+            break
+        end
+    end
+
+    # last set: bring solved diffeqs back to eqs
+    rmidx = Int[]
+    for (i, eq) in pairs(obseqs)
+        if isdifferential(eq.lhs)
+            pushfirst!(eqs, eq.lhs ~ eq.rhs)
+            push!(match_states, only(eq.lhs.args))
+            push!(rmidx, i)
+        end
+    end
+    deleteat!(obseqs, rmidx)
+
+    if verbose
+        str = "Left with equations after reduction:\n"
+        str *= multiline_repr(match_states .=> eqs, prefix="  ")
+        @info str
+    end
+    nodiff(sts) = map(s -> isdifferential(s) ? only(s.args) : s, sts)
+    return eqs, obseqs, nodiff(match_states)
+end
+
+function _match_and_solve(eqs, obseqs, match_states, all_states; outset, ff_inputs, verbose)
+    if verbose
+        str = "Trying to match $(length(eqs)) equations to $(length(match_states)) states for reduction"
+        str *= "\nStates: " * inline_repr(match_states)
+        str *= "\n" * multiline_repr(eqs, prefix="  ")
+        @info str
+    end
+
+    @assert length(match_states) == length(eqs)
+    coeff, has_input = _build_coeff_mat(eqs, obseqs, match_states, all_states; ff_inputs)
     solvable_matches, bk_matches = _match_equations_to_states(coeff)
     @assert length(solvable_matches) + length(bk_matches) == length(match_states)
 
@@ -250,12 +280,10 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
               multiline_repr(unmatched, prefix="  "))
     end
 
-    has_ff = if isempty(ff_inputs)
-        falses(length(eqs))
-    else
-        Bool[!isempty(Set(get_variables_deriv(eq)) ∩ ff_inputs) for eq in eqs]
-    end
-    sccs, forbidden_matches = _solve_plan(solvable_eq_idx, coeff_sorted, sorted_match_sts, has_ff, outset)
+    # similarlar to has_input property for equations we need is_output for states which influce output states
+    output_like = symbolic_dependencies(obseqs, outset)
+    is_output = [s ∈ output_like for s in sorted_match_sts]
+    sccs, forbidden_matches = _solve_plan(solvable_eq_idx, coeff_sorted, sorted_match_sts, has_input, is_output)
 
     if verbose
         n_forbidden = sum(forbidden_matches)
@@ -291,34 +319,15 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
         end
     end
 
-    nodiff(sts) = map(s -> isdifferential(s) ? only(s.args) : s, sts)
-
     sort!(solved_eq_idx)
     deleteat!(eqs, solved_eq_idx)
     deleteat!(sorted_match_sts, solved_eq_idx)
     _insert_sorted!(obseqs, solutions)
-
-    # last set: bring solved diffeqs back to eqs
-    rmidx = Int[]
-    for (i, eq) in pairs(obseqs)
-        if isdifferential(eq.lhs)
-            pushfirst!(eqs, eq.lhs ~ eq.rhs)
-            push!(sorted_match_sts, only(eq.lhs.args))
-            push!(rmidx, i)
-        end
-    end
-    deleteat!(obseqs, rmidx)
-
-    if verbose
-        str = "Left with equations after reduction:\n"
-        str *= multiline_repr(sorted_match_sts .=> eqs, prefix="  ")
-        @info str
-    end
-    return eqs, obseqs, nodiff(sorted_match_sts)
+    return eqs, obseqs, sorted_match_sts
 end
 
 """
-    _solve_plan(matches, coeff, sorted_sts, ff_inputs, outset) -> (sccs, forbidden_matches)
+    _solve_plan(matches, coeff, sorted_sts, has_input, is_output) -> (sccs, forbidden_matches)
 
 Decompose matched pairs into SCCs of the dependency digraph (topological order,
 dependencies before dependents) and return a `BitVector` of length `n` marking
@@ -340,7 +349,7 @@ non-forbidden subgraph, so cycles that existed solely through a forbidden match 
 already eliminated.  The returned `sccs` therefore contain only solvable matches and
 are already in dependency-first topological order.
 """
-function _solve_plan(solvable_eq_idx, coeff, sorted_sts, has_ff, outset)
+function _solve_plan(solvable_eq_idx, coeff, sorted_sts, has_input, is_output)
     n = length(solvable_eq_idx)
     n == 0 && return (Vector{Vector{Int}}[], falses(0))
 
@@ -360,7 +369,7 @@ function _solve_plan(solvable_eq_idx, coeff, sorted_sts, has_ff, outset)
     end
 
     # Early exit when FF detection is unnecessary.
-    if all(!, has_ff)
+    if all(!, has_input)
         sccs = Graphs.strongly_connected_components_tarjan(g)
         return (sccs, falses(n))
     end
@@ -375,8 +384,8 @@ function _solve_plan(solvable_eq_idx, coeff, sorted_sts, has_ff, outset)
 
     # Step 3: Identify FF-source matches (equation directly references ff_inputs)
     # and output-sink matches (matched state is an output).
-    ff_sources = [i for (i, r) in enumerate(solvable_eq_idx) if has_ff[r]]
-    out_sinks  = [i for (i, c) in enumerate(solvable_eq_idx) if sorted_sts[c] ∈ outset]
+    ff_sources = [i for (i, r) in enumerate(solvable_eq_idx) if has_input[r]]
+    out_sinks  = [i for (i, c) in enumerate(solvable_eq_idx) if is_output[c]]
 
     # Step 4: Forbid individual matches to break FF paths.
     # In the dependency graph g (i→j = "i depends on j"), a path from out_sink to ff_source
@@ -488,7 +497,9 @@ function _build_coeff_mat(lineqs, obseqs, match_states, all_states; ff_inputs=Se
     columns = Dict{ST,Int}(s => i for (i, s) in enumerate(match_states))
     diffstates = filter(isdifferential, match_states)
     linexpanders = Dict{ST,LinearExpander}(s => LinearExpander(s) for s in match_states)
-    expand_obs = selective_expander(obseqs, match_states)
+    # we need to exapnd the eq in everything to uncover both ff and linear_state dependencies
+    expand_obs = selective_expander(obseqs, Any) 
+    has_input = falses(length(lineqs))
 
     function get_coeff_type(eq, s)
         a, b, lin = linexpanders[s](eq)
@@ -509,7 +520,9 @@ function _build_coeff_mat(lineqs, obseqs, match_states, all_states; ff_inputs=Se
 
     for (i, eq) in enumerate(lineqs)
         eq = expand_obs(eq)
-        syms = Set{ST}(match_states ∩ get_variables(eq))
+        allsyms = get_variables(eq)
+        has_input[i] = !isdisjoint(allsyms, ff_inputs)
+        syms = Set{ST}(match_states ∩ allsyms)
         if any(isdifferential, syms)
             # for differentials we only allow solving for diff states
             for s in syms
@@ -525,7 +538,7 @@ function _build_coeff_mat(lineqs, obseqs, match_states, all_states; ff_inputs=Se
             end
         end
     end
-    coeff
+    coeff, has_input
 end
 
 """
@@ -714,4 +727,35 @@ function selective_expander(obseqs, targets)
     (term) -> begin
         fixpoint_sub(term, obssubs)
     end
+end
+
+"""
+    symbolic_dependencies(obseqs, states)
+
+Given a list of states, return a set of superset of the provided states that also
+includes any "observed" state from obseqs which transitively influences the provided state.
+"""
+function symbolic_dependencies(obseqs, states)
+    isempty(obseqs) && return Set{ST}(states)
+    g, s_to_i_map = _dependecy_graph(obseqs)
+    srcs = Int[s_to_i_map[s] for s in states if haskey(s_to_i_map, s)]
+    transitive = Set{ST}(states)
+    for i in Graphs.BFSIterator(g, srcs)
+        union!(transitive, get_variables(obseqs[i]))
+    end
+    transitive
+end
+
+function _dependecy_graph(obseqs)
+    s_to_i_map = Dict{ST, Int}(eq.lhs => i for (i, eq) in enumerate(obseqs))
+    g = Graphs.SimpleDiGraph(length(s_to_i_map))
+    for (i, obs) in enumerate(obseqs)
+        vars = get_variables(obs.rhs)
+        for v in vars
+            if haskey(s_to_i_map, v)
+                Graphs.add_edge!(g, i, s_to_i_map[v])
+            end
+        end
+    end
+    (g, s_to_i_map)
 end
