@@ -210,16 +210,11 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
         end
     end
 
-    needs_iter = true
     # iteratively match states and move solved equations to obs_unsrtd
     while !isempty(eqs)
-        prev_eqs = length(eqs)
-        prev_obs = length(obs_unsrtd)
-        eqs, obs_unsrtd, match_states, needs_iter = _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_inputs, verbose)
-        if !needs_iter && length(eqs) == prev_eqs && length(obs_unsrtd) == prev_obs
-            # no progress made, stop iterating
-            break
-        end
+        before = hash((eqs, obs_unsrtd, match_states))
+        eqs, obs_unsrtd, match_states = _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_inputs, verbose)
+        before == hash((eqs, obs_unsrtd, match_states)) && break
     end
 
     # last set: bring solved diffeqs back to eqs
@@ -333,7 +328,6 @@ function _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_
     deleteat!(eqs, solved_eq_idx)
     deleteat!(sorted_match_sts, solved_eq_idx)
 
-    needs_iter = false
     ####
     #### Handle solved extra states (conflicting solutions for D(x) vs x)
     ####
@@ -369,7 +363,6 @@ function _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_
                 @info str
             end
         end
-        needs_iter = true
     end
 
     ####
@@ -392,10 +385,9 @@ function _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_
         for (i, eq) in pairs(eqs)
             eqs[i] = fixpoint_sub(eq, known_diffs)
         end
-        needs_iter = true
     end
 
-    return eqs, obs_unsrtd, sorted_match_sts, needs_iter
+    return eqs, obs_unsrtd, sorted_match_sts
 end
 
 """
