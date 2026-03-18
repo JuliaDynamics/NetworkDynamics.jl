@@ -474,7 +474,9 @@ function Base.showerror(io::IO, e::RHSDifferentialsError)
     for d in e.diffs
         println(io, " - ", d)
     end
-    print(io, "Consider passing `assume_io_coupling=true` to the component constructor!")
+    print(io, "This may hint at a higher oder DAE. If you build the component with `mtkcompile=true` consider \
+               passing `assume_io_coupling=true` to the component constructor! If not, pass `verbose=true` \
+               to see where simplification it fails.")
 end
 
 # needs to be defined befor coreloop
