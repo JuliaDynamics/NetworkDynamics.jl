@@ -1359,10 +1359,10 @@ end
         end
     end
     @named node_a = FilterLeadNode_A()
-    v = VertexModel(node_a, [:P], [:u]; verbose=true)
+    v = VertexModel(node_a, [:P], [:u]; verbose=false)
     @test length(sym(v)) == 2 && v.mass_matrix == Diagonal([1, 0])
 
-    v = VertexModel(node_a, [:P], [:u], ff_to_constraint=false, verbose=true)
+    v = VertexModel(node_a, [:P], [:u], ff_to_constraint=false, verbose=false)
     @test dim(v) == 1
 
     # Variant B: separate variables with alias connection (closer to real @components)
@@ -1396,9 +1396,10 @@ end
         end
     end
     @named node_b = FilterLeadNode_B()
-    @test_broken begin
-        v = VertexModel(node_b, [:P], [:u], verbose=true)
-        # filter_x is a diff state, u is algebraic constraint (FF prevention)
-        length(sym(v)) == 3 && v.mass_matrix == Diagonal([1, 0])
-    end
+    v = VertexModel(node_b, [:P], [:u], verbose=false)
+    # filter_x is a diff state, u is algebraic constraint (FF prevention)
+    @test length(sym(v)) == 2 && v.mass_matrix == Diagonal([1, 0])
+
+    v = VertexModel(node_b, [:P], [:u], ff_to_constraint=false, verbose=false)
+    @test length(sym(v)) == 1 && v.mass_matrix == Diagonal([1])
 end

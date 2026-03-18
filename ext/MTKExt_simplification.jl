@@ -123,7 +123,7 @@ function pick_best_alias_names(eqs, obseqs, states, outputs, inputs; verbose)
     end
 
     states_new = Symbolics.substitute.(states, Ref(alias_subs))
-    allunique(states_new) || error("Alias elimination resulted in duplicate state names: $(states_new)! This should never happen.")
+    allunique(states_new) || error("Alias elimination resulted in duplicate state names: $(inline_repr(states_new))! This should never happen.")
 
     eqs_new, obseqs_new, states_new
 end
@@ -212,54 +212,14 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
 
     needs_iter = true
     # iteratively match states and move solved equations to obs_unsrtd
-    while needs_iter
+    while !isempty(eqs)
+        prev_eqs = length(eqs)
         prev_obs = length(obs_unsrtd)
-        eqs, obs_unsrtd, match_states = _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_inputs, verbose)
-
-        needs_iter = false
-
-        if verbose
-            str = "Attempt primitive index reiduction:"
+        eqs, obs_unsrtd, match_states, needs_iter = _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_inputs, verbose)
+        if !needs_iter && length(eqs) == prev_eqs && length(obs_unsrtd) == prev_obs
+            # no progress made, stop iterating
+            break
         end
-
-        diffop = operation(first(diffstates_in_eqs))
-        solved_diffs = Set{ST}(only(obs.lhs.args) for obs in obs_unsrtd if isdifferential(obs.lhs)) 
-        expander = selective_expander(obs_unsrtd, solved_diffs)
-
-        # check for equations which only depend on those diff states
-        for (i, eq) in enumerate(eqs)
-            eq_vars = Symbolics.get_variables(expander(eq))
-            if eq_vars ⊆ solved_diffs
-                eqs[i] = Symbolics.expand_derivatives(diffop(eq.lhs) ~ diffop(eq.rhs))
-                if verbose
-                    str *= "\n - Derive equation $(eq) which only depended on solved differentials $(inline_repr(solved_diffs))\n   $(eqs[i])"
-                end
-            end
-        end
-
-        # check if there are solvable rhs differentials
-        remaining_diffs = filter(isdifferential, Symbolics.get_variables(eqs))
-        if !isempty(remaining_diffs)
-            needs_iter = true
-            known_diffs = Dict{ST,ST}(obs.lhs => obs.rhs for obs in obs_unsrtd if isdifferential(obs.lhs))
-            if !(remaining_diffs ⊆ keys(known_diffs))
-                for obseq in obs_unsrtd
-                    isdifferential(obseq.lhs) && continue
-                    known_diffs[diffop(obseq.lhs)] = Symbolics.expand_derivatives(diffop(obseq.rhs))
-                end
-            end
-            if !(remaining_diffs ⊆ keys(known_diffs))
-                verbose && @info str
-                throw(RHSDifferentialsError([repr(only(d.args)) for d in setdiff(remaining_diffs, keys(known_diffs))]))
-            elseif verbose
-                str *= "\n - Substitute known differentials: " * multiline_repr(known_diffs)
-            end
-            for (i, eq) in pairs(eqs)
-                eqs[i] = fixpoint_sub(eq, known_diffs)
-            end
-        end
-
-        verbose && needs_iter && @info str
     end
 
     # last set: bring solved diffeqs back to eqs
@@ -283,15 +243,20 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
 end
 
 function _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_inputs, verbose)
+    @assert length(match_states) == length(eqs)
+    non_extended_states = length(match_states)
+    coeff, has_input, match_states, extra_match_states = _build_coeff_mat(eqs, obs_unsrtd, match_states, all_states; ff_inputs)
+
     if verbose
         str = "Trying to match $(length(eqs)) equations to $(length(match_states)) states for reduction"
+        if non_extended_states < length(match_states)
+            str *= " (including $(length(match_states) - non_extended_states) extended diff states)"
+        end
         str *= "\nStates: " * inline_repr(match_states)
         str *= "\n" * multiline_repr(eqs, prefix="  ")
         @info str
     end
 
-    @assert length(match_states) == length(eqs)
-    coeff, has_input = _build_coeff_mat(eqs, obs_unsrtd, match_states, all_states; ff_inputs)
     solvable_matches, bk_matches = _match_equations_to_states(coeff)
     @assert length(solvable_matches) + length(bk_matches) == length(match_states)
 
@@ -310,7 +275,7 @@ function _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_
     solvable_eq_idx = sort!([eqi for (eqi, _) in solvable_matches])
 
     if verbose
-        str = "Found $(length(solvable_matches)) solvable matches out of $(length(match_states))"
+        str = "Found $(length(solvable_matches)) solvable matches for $(length(eqs)) eqs"
         states_eqs_matching = OrderedDict(sorted_match_sts[i] => eqs[i] for i in solvable_eq_idx)
         str *= "\n" * multiline_repr(states_eqs_matching, prefix="  ")
     end
@@ -367,7 +332,70 @@ function _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_
     sort!(solved_eq_idx)
     deleteat!(eqs, solved_eq_idx)
     deleteat!(sorted_match_sts, solved_eq_idx)
-    return eqs, obs_unsrtd, sorted_match_sts
+
+    needs_iter = false
+    ####
+    #### Handle solved extra states (conflicting solutions for D(x) vs x)
+    ####
+    solved_extra_states = setdiff(extra_match_states, sorted_match_sts)
+    sorted_match_sts = filter(s -> s ∉ extra_match_states, sorted_match_sts)
+    if !isempty(solved_extra_states)
+        if verbose
+            str = ""
+        end
+        for s in solved_extra_states
+            # find conclicting obs
+            diffob_idx = findfirst(obs -> isdifferential(obs.lhs) && isequal(only(obs.lhs.args), s), obs_unsrtd)
+            algob_idx = findfirst(obs -> isequal(obs.lhs, s), obs_unsrtd)
+            if isnothing(diffob_idx) || isnothing(algob_idx)
+                error("Expected to find both diff and alg obs for solved extended state $s, but found:\n" *
+                      (isnothing(diffob_idx) ? "  No diff obs\n" : "  Diff obs: $(obs_unsrtd[diffob_idx])\n") *
+                      (isnothing(algob_idx) ? "  No alg obs\n" : "  Alg obs: $(obs_unsrtd[algob_idx])\n"))
+            end
+            # we get rid of the dif obs
+            diffeq = obs_unsrtd[diffob_idx]
+            algeq = obs_unsrtd[algob_idx]
+            deleteat!(obs_unsrtd, diffob_idx)
+            diffop = operation(only(diffeq.lhs))
+
+            neweq = 0 ~ Symbolics.expand_derivatives(diffop(algeq.rhs)) - diffeq.rhs
+            push!(eqs, neweq)
+
+            if verbose
+                str *= "Solving exteded state lead to conflicting solutions for $s"
+                str *= "\n - Diff obs: $diffeq"
+                str *= "\n - Alg obs:  $algeq"
+                str *= "\n=> New eq:   $neweq"
+                @info str
+            end
+        end
+        needs_iter = true
+    end
+
+    ####
+    #### Substitute known differentials
+    ####
+    required_diffs = filter(isdifferential, Symbolics.get_variables(eqs))
+    if !isempty(required_diffs)
+        known_diffs = Dict{ST,ST}(obs.lhs => obs.rhs for obs in obs_unsrtd if isdifferential(obs.lhs))
+        if !(required_diffs ⊆ keys(known_diffs))
+            for obseq in obs_unsrtd
+                isdifferential(obseq.lhs) && continue
+                known_diffs[diffop(obseq.lhs)] = Symbolics.expand_derivatives(diffop(obseq.rhs))
+            end
+        end
+        if !(required_diffs ⊆ keys(known_diffs))
+            throw(RHSDifferentialsError([repr(only(d.args)) for d in setdiff(remaining_diffs, keys(known_diffs))]))
+        elseif verbose
+            @info "Substitute known differentials: " * multiline_repr(known_diffs)
+        end
+        for (i, eq) in pairs(eqs)
+            eqs[i] = fixpoint_sub(eq, known_diffs)
+        end
+        needs_iter = true
+    end
+
+    return eqs, obs_unsrtd, sorted_match_sts, needs_iter
 end
 
 """
@@ -536,17 +564,27 @@ Dependency type of an equation w.r.t. a state variable:
   :unsolvable   — unsolvable in the state (e.g. x^2, sin(x))
 """
 function _build_coeff_mat(lineqs, obseqs, match_states, all_states; ff_inputs=Set())
-    coeff = fill(:none, length(lineqs), length(match_states))
+    @assert length(lineqs) == length(match_states)
+    needs_extension = false
+    extended_states = ST[only(s.args) for s in all_states if isdifferential(s)]
+    extended_states_set = Set{ST}(extended_states)
 
-    columns = Dict{ST,Int}(s => i for (i, s) in enumerate(match_states))
-    diffstates = filter(isdifferential, match_states)
-    linexpanders = Dict{ST,LinearExpander}(s => LinearExpander(s) for s in match_states)
+    N = length(match_states) + length(extended_states)
+    # we build coeff with more rows ("fake" equations which do not exist)
+    coeff = fill(:none, N, N)
+
+    extended_match_states = vcat(match_states, extended_states)
+    columns = Dict{ST,Int}(s => i for (i, s) in enumerate(extended_match_states))
+    linexpanders = Dict{ST,LinearExpander}()
     # we need to exapnd the eq in everything to uncover both ff and linear_state dependencies
     expand_obs = selective_expander(obseqs, Any) 
-    has_input = falses(length(lineqs))
+    has_input = falses(N)
 
     function get_coeff_type(eq, s)
-        a, b, lin = linexpanders[s](eq)
+        linex = get!(linexpanders, s) do
+            LinearExpander(s)
+        end
+        a, b, lin = linex(eq)
         if !lin
             return :unsolvable
         elseif isequal(unwrap_const(a), 0)
@@ -566,7 +604,7 @@ function _build_coeff_mat(lineqs, obseqs, match_states, all_states; ff_inputs=Se
         eq = expand_obs(eq)
         allsyms = get_variables(eq)
         has_input[i] = !isdisjoint(allsyms, ff_inputs)
-        syms = Set{ST}(match_states ∩ allsyms)
+        syms = Set{ST}(extended_match_states ∩ allsyms)
         if any(isdifferential, syms)
             # for differentials we only allow solving for diff states
             for s in syms
@@ -576,13 +614,39 @@ function _build_coeff_mat(lineqs, obseqs, match_states, all_states; ff_inputs=Se
                     coeff[i, columns[s]] = :unsolvable
                 end
             end
+        elseif allsyms ⊆ extended_states_set
+            for s in syms
+                t = get_coeff_type(eq, s)
+                if t ∈ (:explicit, :linear_const, :linear_state)
+                    needs_extension = true
+                end
+                coeff[i, columns[s]] = t
+            end
         else # normal equation
             for s in syms
                 coeff[i, columns[s]] = get_coeff_type(eq, s)
             end
         end
     end
-    coeff, has_input
+    if needs_extension
+        # get rid of "unused" extended states
+        mask = map(1:N) do i
+            i <= length(match_states) || any(c -> c !== :none, view(coeff, :, i))
+        end
+        coeff = coeff[mask, mask]
+        extended_match_states = extended_match_states[mask]
+        # make sure that "fake" equations get taken by extended states if possible
+        coeff[length(lineqs)+1:end, length(match_states)+1:end] .= :nonlinear
+    else
+        # don't keep the extended stuff
+        coeff = coeff[1:length(lineqs), 1:length(match_states)]
+    end
+
+    if needs_extension
+        coeff, has_input, extended_match_states, extended_states_set ∩ extended_match_states 
+    else
+        coeff, has_input, match_states, Set{ST}()
+    end
 end
 
 """
