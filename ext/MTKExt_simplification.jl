@@ -57,7 +57,7 @@ gen₊terminal₊u_r`).  This pass:
 4. Applies the substitution `nonmain → main` throughout `eqs`, `obseqs`, and `states`,
    and reinserts canonical `nonmain ~ main` alias observations.
 """
-function pick_best_alias_names(eqs, obseqs, states, outputs; verbose)
+function pick_best_alias_names(eqs, obseqs, states, outputs, inputs; verbose)
     # 1. Find the alias pairs
     alias_pairs = Tuple{ST,ST}[]
     alias_idx = Int[]
@@ -79,17 +79,20 @@ function pick_best_alias_names(eqs, obseqs, states, outputs; verbose)
     # 3. Pick main per group, build substitution dict and alias observations
     diffstateset = Set{ST}()
     for eq in eqs
-        type = eq_type(eq)
-        type[1] == :explicit_diffeq && push!(diffstateset, type[2])
+        type, var = eq_type(eq)
+        type == :explicit_diffeq && push!(diffstateset, var)
     end
-    outset = Set(outputs)
+    inset = Set{ST}(inputs)
+    outset = Set{ST}(outputs)
     sortf = function(s)
         prio = if s ∈ diffstateset
             0
-        elseif s ∈ outset
+        elseif s ∈ inset
             1
-        else
+        elseif s ∈ outset
             2
+        else
+            3
         end
         (prio, count('₊', string(s)))
     end
@@ -109,7 +112,7 @@ function pick_best_alias_names(eqs, obseqs, states, outputs; verbose)
     verbose && @info str
 
     # 4. Apply substitution to eqs, obs (minus old aliases), and states; reinsert canonical aliases.
-    eqs_new = Symbolics.substitute_in_deriv.(eqs, Ref(alias_subs))
+    eqs_new = Symbolics.substitute.(eqs, Ref(alias_subs))
 
     obseqs_new = let
         obseqs_new = copy(obseqs)
@@ -183,7 +186,7 @@ exists on a path, the output-sink SCC itself is forbidden.  This keeps the forbi
 small as possible while preferring to cut at numerically risky solve points.
 """
 function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, states::Vector{ST}; outset::Set{ST}, ff_inputs::Set{ST}, verbose)
-    obseqs = copy(obseqs) # we'll be inserting into this, so make a copy to avoid mutating the input
+    obs_unsrtd = copy(obseqs) # we'll be inserting into this, so make a copy to avoid mutating the input
     # match states include D(x) instead of x
     diffstates_in_eqs = filter(isdifferential, Symbolics.get_variables(eqs))
     diffstates_inner_map = Dict(only(s.args) => s for s in diffstates_in_eqs)
@@ -192,8 +195,8 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
     all_states = match_states_set ∪ states # includs both D(x) and x
 
     # check that we don't have any obs to expand
-    if !isempty(Set(obs.lhs for obs in obseqs) ∩ match_states_set)
-        error("Observation LHS cannot be a state variable! Found: $(Set(obs.lhs for obs in obseqs) ∩ match_states_set)")
+    if !isempty(Set(obs.lhs for obs in obs_unsrtd) ∩ match_states_set)
+        error("Observation LHS cannot be a state variable! Found: $(Set(obs.lhs for obs in obs_unsrtd) ∩ match_states_set)")
     end
 
     # normalize alg functions which are not yet 0 ~ expr
@@ -207,11 +210,11 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
         end
     end
 
-    # iteratively match states and move solved equations to obseqs
+    # iteratively match states and move solved equations to obs_unsrtd
     while true
-        prev_obs = length(obseqs)
-        eqs, obseqs, match_states = _match_and_solve(eqs, obseqs, match_states, all_states; outset, ff_inputs, verbose)
-        new_solved = length(obseqs) - prev_obs
+        prev_obs = length(obs_unsrtd)
+        eqs, obs_unsrtd, match_states = _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_inputs, verbose)
+        new_solved = length(obs_unsrtd) - prev_obs
         if length(eqs) == 0 || new_solved == 0
             break
         end
@@ -219,25 +222,25 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
 
     # last set: bring solved diffeqs back to eqs
     rmidx = Int[]
-    for (i, eq) in pairs(obseqs)
+    for (i, eq) in pairs(obs_unsrtd)
         if isdifferential(eq.lhs)
             pushfirst!(eqs, eq.lhs ~ eq.rhs)
             push!(match_states, only(eq.lhs.args))
             push!(rmidx, i)
         end
     end
-    deleteat!(obseqs, rmidx)
+    deleteat!(obs_unsrtd, rmidx)
 
     if verbose
-        str = "Left with equations after reduction:\n"
+        str = "Left with $(length(eqs)) equations after reduction:\n"
         str *= multiline_repr(match_states .=> eqs, prefix="  ")
         @info str
     end
     nodiff(sts) = map(s -> isdifferential(s) ? only(s.args) : s, sts)
-    return eqs, obseqs, nodiff(match_states)
+    return eqs, _topological_sort(obs_unsrtd), nodiff(match_states)
 end
 
-function _match_and_solve(eqs, obseqs, match_states, all_states; outset, ff_inputs, verbose)
+function _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_inputs, verbose)
     if verbose
         str = "Trying to match $(length(eqs)) equations to $(length(match_states)) states for reduction"
         str *= "\nStates: " * inline_repr(match_states)
@@ -246,7 +249,7 @@ function _match_and_solve(eqs, obseqs, match_states, all_states; outset, ff_inpu
     end
 
     @assert length(match_states) == length(eqs)
-    coeff, has_input = _build_coeff_mat(eqs, obseqs, match_states, all_states; ff_inputs)
+    coeff, has_input = _build_coeff_mat(eqs, obs_unsrtd, match_states, all_states; ff_inputs)
     solvable_matches, bk_matches = _match_equations_to_states(coeff)
     @assert length(solvable_matches) + length(bk_matches) == length(match_states)
 
@@ -281,7 +284,7 @@ function _match_and_solve(eqs, obseqs, match_states, all_states; outset, ff_inpu
     end
 
     # similarlar to has_input property for equations we need is_output for states which influce output states
-    output_like = symbolic_dependencies(obseqs, outset)
+    output_like = symbolic_dependencies(obs_unsrtd, outset)
     is_output = [s ∈ output_like for s in sorted_match_sts]
     sccs, forbidden_matches = _solve_plan(solvable_eq_idx, coeff_sorted, sorted_match_sts, has_input, is_output)
 
@@ -295,18 +298,17 @@ function _match_and_solve(eqs, obseqs, match_states, all_states; outset, ff_inpu
     end
 
     solved_eq_idx = Int[]
-    solutions = Equation[]
 
     for (gi, scc) in enumerate(sccs)
         # scc is a Vector of indices into linear_matches; linear_matches[k] = (i,i)
         scc_idx   = [solvable_eq_idx[k] for k in scc]
         scc_sts_i = sorted_match_sts[scc_idx]
-        expander = selective_expander(obseqs, scc_sts_i)
+        expander = selective_expander(obs_unsrtd, scc_sts_i)
         scc_eqs_i = expander(eqs[scc_idx])
 
         try
             sol = _symbolic_linear_solve_clean(scc_eqs_i, scc_sts_i)
-            append!(solutions, scc_sts_i .~ sol)
+            append!(obs_unsrtd, scc_sts_i .~ sol)
             append!(solved_eq_idx, scc_idx)
             if verbose
                 str = "Solved group $gi for $(inline_repr(scc_sts_i))"
@@ -322,8 +324,7 @@ function _match_and_solve(eqs, obseqs, match_states, all_states; outset, ff_inpu
     sort!(solved_eq_idx)
     deleteat!(eqs, solved_eq_idx)
     deleteat!(sorted_match_sts, solved_eq_idx)
-    _insert_sorted!(obseqs, solutions)
-    return eqs, obseqs, sorted_match_sts
+    return eqs, obs_unsrtd, sorted_match_sts
 end
 
 """
@@ -744,6 +745,13 @@ function symbolic_dependencies(obseqs, states)
         union!(transitive, get_variables(obseqs[i]))
     end
     transitive
+end
+
+function _topological_sort(obseqs)
+    isempty(obseqs) && return obseqs
+    g, s_to_i_map = _dependecy_graph(obseqs)
+    sorted_indices = Graphs.topological_sort(g)
+    obseqs[reverse(sorted_indices)]
 end
 
 function _dependecy_graph(obseqs)

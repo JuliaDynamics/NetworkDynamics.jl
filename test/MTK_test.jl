@@ -117,6 +117,7 @@ end;
 
 @named swing = SwingNode()
 v = VertexModel(swing, [:P], [:θ])
+@test v.mass_matrix == Diagonal([1,1])
 
 data = NetworkDynamics.rand_inputs_fg(v)
 b = @b $(NetworkDynamics.compfg(v))($data...)
@@ -146,6 +147,8 @@ end
 end
 @named line = StaticPowerLine()
 e = EdgeModel(line, [:srcθ], [:dstθ], [:srcP], [:dstP])
+@test dim(e) == 0
+
 @test NetworkDynamics.insym(e).src == [:srcθ]
 @test NetworkDynamics.insym(e).dst == [:dstθ]
 
