@@ -338,7 +338,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     remove_implicit_output_fn!(eqs)
     remove_implicit_output_fn!(obseqs_sorted)
 
-    eqs, obseqs_sorted, states = pick_best_alias_names(eqs, obseqs_sorted, states, alloutputs; verbose)
+    eqs, obseqs_sorted, states = pick_best_alias_names(eqs, obseqs_sorted, states, alloutputs, allinputs; verbose)
 
     # check that there are no rhs differentials in the equations
     if !isempty(rhs_differentials(vcat(eqs, obseqs_sorted)))
