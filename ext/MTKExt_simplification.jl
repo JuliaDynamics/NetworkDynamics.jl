@@ -210,14 +210,56 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
         end
     end
 
+    needs_iter = true
     # iteratively match states and move solved equations to obs_unsrtd
-    while true
+    while needs_iter
         prev_obs = length(obs_unsrtd)
         eqs, obs_unsrtd, match_states = _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_inputs, verbose)
-        new_solved = length(obs_unsrtd) - prev_obs
-        if length(eqs) == 0 || new_solved == 0
-            break
+
+        needs_iter = false
+
+        if verbose
+            str = "Attempt primitive index reiduction:"
         end
+
+        diffop = operation(first(diffstates_in_eqs))
+        solved_diffs = Set{ST}(only(obs.lhs.args) for obs in obs_unsrtd if isdifferential(obs.lhs)) 
+        expander = selective_expander(obs_unsrtd, solved_diffs)
+
+        # check for equations which only depend on those diff states
+        for (i, eq) in enumerate(eqs)
+            eq_vars = Symbolics.get_variables(expander(eq))
+            if eq_vars ⊆ solved_diffs
+                eqs[i] = Symbolics.expand_derivatives(diffop(eq.lhs) ~ diffop(eq.rhs))
+                if verbose
+                    str *= "\n - Derive equation $(eq) which only depended on solved differentials $(inline_repr(solved_diffs))\n   $(eqs[i])"
+                end
+            end
+        end
+
+        # check if there are solvable rhs differentials
+        remaining_diffs = filter(isdifferential, Symbolics.get_variables(eqs))
+        if !isempty(remaining_diffs)
+            needs_iter = true
+            known_diffs = Dict{ST,ST}(obs.lhs => obs.rhs for obs in obs_unsrtd if isdifferential(obs.lhs))
+            if !(remaining_diffs ⊆ keys(known_diffs))
+                for obseq in obs_unsrtd
+                    isdifferential(obseq.lhs) && continue
+                    known_diffs[diffop(obseq.lhs)] = Symbolics.expand_derivatives(diffop(obseq.rhs))
+                end
+            end
+            if !(remaining_diffs ⊆ keys(known_diffs))
+                verbose && @info str
+                throw(RHSDifferentialsError([repr(only(d.args)) for d in setdiff(remaining_diffs, keys(known_diffs))]))
+            elseif verbose
+                str *= "\n - Substitute known differentials: " * multiline_repr(known_diffs)
+            end
+            for (i, eq) in pairs(eqs)
+                eqs[i] = fixpoint_sub(eq, known_diffs)
+            end
+        end
+
+        verbose && needs_iter && @info str
     end
 
     # last set: bring solved diffeqs back to eqs
@@ -271,7 +313,6 @@ function _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_
         str = "Found $(length(solvable_matches)) solvable matches out of $(length(match_states))"
         states_eqs_matching = OrderedDict(sorted_match_sts[i] => eqs[i] for i in solvable_eq_idx)
         str *= "\n" * multiline_repr(states_eqs_matching, prefix="  ")
-        @info str
     end
 
     # assert that all differential states have a linear match
@@ -279,6 +320,7 @@ function _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_
     linear_idx_set = Set(solvable_eq_idx)
     if !(Set(diffidx) ⊆ linear_idx_set)
         unmatched = sorted_match_sts[setdiff(diffidx, linear_idx_set)]
+        verbose && @info str
         error("Could not match all differential states to equations! Unmatched differentials:\n" *
               multiline_repr(unmatched, prefix="  "))
     end
@@ -292,9 +334,9 @@ function _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_
         n_forbidden = sum(forbidden_matches)
         if n_forbidden > 0
             forbidden_sts = [sorted_match_sts[solvable_eq_idx[k]] for k in findall(forbidden_matches)]
-            @info "Skipping $(inline_repr(forbidden_sts)) — on input→output feed-forward path"
+            str *= "\n - Skipping $(inline_repr(forbidden_sts)) — on input→output feed-forward path"
         end
-        @info "Decomposed matches into $(length(sccs)) solvable groups"
+        str *= "\n - Decomposed matches into $(length(sccs)) solvable groups"
     end
 
     solved_eq_idx = Int[]
@@ -311,15 +353,16 @@ function _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_
             append!(obs_unsrtd, scc_sts_i .~ sol)
             append!(solved_eq_idx, scc_idx)
             if verbose
-                str = "Solved group $gi for $(inline_repr(scc_sts_i))"
-                str *= "\nSolution:"
+                str *= "\n\nSolved group $gi for $(inline_repr(scc_sts_i))"
                 str *= "\n" * multiline_repr(OrderedDict(scc_sts_i .=> sol), prefix="  ")
-                @info str
             end
         catch err
-            verbose && @info "Failed to solve group $gi for $(inline_repr(scc_sts_i)): $err"
+            if verbose
+                str *= "\n\nFailed to solve group $gi for $(inline_repr(scc_sts_i)): $err"
+            end
         end
     end
+    verbose && @info str
 
     sort!(solved_eq_idx)
     deleteat!(eqs, solved_eq_idx)
