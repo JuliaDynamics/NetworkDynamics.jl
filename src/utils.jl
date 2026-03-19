@@ -518,3 +518,5 @@ end
 ```
 """
 function set_mtk_defaults! end
+
+function set_mtkcompile! end

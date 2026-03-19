@@ -1403,3 +1403,20 @@ end
     v = VertexModel(node_b, [:P], [:u], ff_to_constraint=false, verbose=false)
     @test length(sym(v)) == 1 && v.mass_matrix == Diagonal([1])
 end
+
+@testest "selective expander" begin
+    @variables a b c d e target1 target2
+    obseqs = [
+        a ~ target1
+        b ~ 4
+        c ~ a + b
+        d ~ b + target2
+        e ~ b + d
+    ]
+    ex = mtkext.selective_expander(obseqs, [target1, target2])
+    @test isequal(ex(a), target1)
+    @test isequal(ex(b), b)
+    @test isequal(ex(c), target1 + b)
+    @test isequal(ex(d), b + target2)
+    @test isequal(ex(e), b + (b + target2))
+end

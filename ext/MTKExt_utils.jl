@@ -436,3 +436,153 @@ function NetworkDynamics.multiline_repr(eqs::Vector{Equation}; prefix="")
     end
     join(NetworkDynamics.align_strings(lines), "\n")
 end
+
+function _compare_mtkcompile(VEModel, args, kwargs)
+    m1 = VEModel(args...; mtkcompile=true, kwargs...)
+    m2 = VEModel(args...; mtkcompile=false, kwargs...)
+
+    # bench for .5 second
+    maxiter = 5
+    t1min = typemax(Float64)
+    iter = 0
+    start = time()
+    while time() - start < 1 && iter < maxiter
+        t = @elapsed VEModel(args...; mtkcompile=true, kwargs..., verbose=false)
+        t1min = min(t1min, t)
+        iter += 1
+    end
+    t2min = typemax(Float64)
+    iter = 0
+    start = time()
+    while time() - start < 1 && iter < maxiter
+        t = @elapsed VEModel(args...; mtkcompile=false, kwargs..., verbose=false)
+        t2min = min(t2min, t)
+        iter += 1
+    end
+
+    printstyled("Timings:", color=:blue, bold=true)
+    print("\n  with mtk:        ", NetworkDynamics.str_significant(t1min; sigdigits=4), " seconds")
+    print("\n  witout mtk:      ", NetworkDynamics.str_significant(t2min; sigdigits=4), " seconds")
+    print("\n  speedup without: ") 
+    printstyled(NetworkDynamics.str_significant(t2min/t1min; sigdigits=3)*"x", color=(t2min<t1min) ? :green : :red, bold=true)
+    println()
+
+    printstyled("States:", color=:blue, bold=true)
+    if NetworkDynamics.insym(m1) == NetworkDynamics.insym(m2)
+        printstyled("\n  Insym match! ", color=:green, bold=true)
+    else
+        printstyled("\n  Insym dont match! ", color=:red, bold=true)
+    end
+    if NetworkDynamics.outsym(m1) == NetworkDynamics.outsym(m2)
+        printstyled("\n  Outsym match! ", color=:green, bold=true)
+    else
+        printstyled("\n  Outsym dont match! ", color=:red, bold=true)
+    end
+    samesym = Set(NetworkDynamics.sym(m1)) == Set(NetworkDynamics.sym(m2))
+    if samesym
+        printstyled("\n  Syms match! ", color=:green, bold=true)
+    else
+        printstyled("\n  Syms dont match! ", color=:red, bold=true)
+        dim1 = NetworkDynamics.dim(m1)
+        dim2 = NetworkDynamics.dim(m2)
+        if dim1 == dim2
+            println("\n  Both have $(dim1) states")
+        else 
+            print("\n    with MTK:    ")
+            printstyled("$(dim1) states", color=(dim2>dim1) ? :green : :red)
+            print("\n    without MTK: ")
+            printstyled("$(dim2) states", color=(dim1>dim2) ? :green : :red)
+        end
+        identical = collect(NetworkDynamics.sym(m1) ∩ NetworkDynamics.sym(m2))
+        print("\n    Identical syms:  ", inline_repr(identical))
+        m1_specific = collect(setdiff(NetworkDynamics.sym(m1), identical))
+        print("\n    Only with mtk:   ", inline_repr(m1_specific))
+        m2_specific = collect(setdiff(NetworkDynamics.sym(m2), identical))
+        print("\n    Only witout mtk: ", inline_repr(m2_specific))
+    end
+    samepsyms =  Set(NetworkDynamics.psym(m1)) == Set(NetworkDynamics.psym(m2))
+    if samepsyms
+        printstyled("\n  Psyms match! ", color=:green, bold=true)
+    else
+        printstyled("\n  Psyms dont match! ", color=:red, bold=true)
+    end
+    !isnothing(m1.extin) || !isnothing(m2.extin) && error("Comparison for extin not supported.")
+    m1.metadata[:full_equations]
+    m2.metadata[:full_equations]
+
+    # try find match between sym and psyms
+    if samesym && samepsyms
+        sym_perm =   [findfirst(==(s), NetworkDynamics.sym(m1)) for s in NetworkDynamics.sym(m2)]
+        psym_perm = [findfirst(==(p), NetworkDynamics.psym(m1)) for p in NetworkDynamics.psym(m2)]
+
+        outs1, du1, u1, ins, p1, t = NetworkDynamics.rand_inputs_fg(m1)
+        outs2 = copy.(outs1)
+        du2 = copy(du1)
+        u2 = u1[sym_perm]
+        p2 = p1[psym_perm]
+        NetworkDynamics.compfg(m1)(outs1, du1, u1, ins, p1, t)
+        NetworkDynamics.compfg(m2)(outs2, du2, u2, ins, p2, t)
+        # split state indices into diff (mass=1) and alg (mass=0)
+        _mm_diag2(m) = begin
+            mm = m.mass_matrix; s = NetworkDynamics.sym(m)
+            mm isa UniformScaling ? fill(Int(mm.λ), length(s)) : LinearAlgebra.diag(mm)
+        end
+        diff_idx1 = findall(!=(0), _mm_diag2(m1))
+        alg_idx1  = findall(==(0), _mm_diag2(m1))
+        diff_idx2 = findall(!=(0), _mm_diag2(m2))
+        alg_idx2  = findall(==(0), _mm_diag2(m2))
+
+        maxodiff = maximum(abs.(reduce(vcat, outs1) .- reduce(vcat, outs2)), init=0.0)
+        # diff states: sym_perm maps m2 positions → m1; compare directly
+        maxdiff_diff = maximum(abs.(du1[sym_perm[diff_idx2]] .- du2[diff_idx2]), init=0.0)
+        # alg states: order is arbitrary — find best matching by min-cost bijection
+        # cost(i,j) = min(|du1_alg[i] - du2_alg[j]|, |du1_alg[i] + du2_alg[j]|)
+        du1_alg = du1[alg_idx1]; du2_alg = du2[alg_idx2]
+        n_alg = length(du1_alg)
+        alg_cost = [min(abs(du1_alg[i] - du2_alg[j]), abs(du1_alg[i] + du2_alg[j]))
+                    for i in 1:n_alg, j in 1:n_alg]
+        alg_matched = Pair{Int,Int}[]
+        used1_alg = falses(n_alg); used2_alg = falses(n_alg)
+        for _ in 1:n_alg
+            best = Inf; bi = bj = 0
+            for i in 1:n_alg, j in 1:n_alg
+                !used1_alg[i] && !used2_alg[j] && alg_cost[i,j] < best &&
+                    (best = alg_cost[i,j]; bi = i; bj = j)
+            end
+            push!(alg_matched, bi => bj)
+            used1_alg[bi] = used2_alg[bj] = true
+        end
+        maxdiff_alg = isempty(alg_matched) ? 0.0 :
+            maximum(alg_cost[p.first, p.second] for p in alg_matched)
+
+        printstyled("\nComparison of f & g outputs with random inputs: ", color=:blue, bold=true)
+        if maxodiff < 1e-6
+            printstyled("\n  Outputs match!         ", color=:green, bold=true)
+        else
+            printstyled("\n  Outputs dont match!    ", color=:red, bold=true)
+        end
+        print("max diff: ", NetworkDynamics.str_significant(maxodiff; sigdigits=3))
+        if maxdiff_diff < 1e-6
+            printstyled("\n  Diff states match!     ", color=:green, bold=true)
+        else
+            printstyled("\n  Diff states dont match!", color=:red, bold=true)
+        end
+        print("max diff: ", NetworkDynamics.str_significant(maxdiff_diff; sigdigits=3))
+        if maxdiff_alg < 1e-6
+            printstyled("\n  Alg states match!      ", color=:green, bold=true)
+        else
+            printstyled("\n  Alg states dont match! ", color=:red, bold=true)
+            alg_syms1 = NetworkDynamics.sym(m1)[alg_idx1]
+            alg_syms2 = NetworkDynamics.sym(m2)[alg_idx2]
+            for (i, j) in alg_matched
+                c = alg_cost[i, j]
+                c >= 1e-6 && print("\n    $(alg_syms1[i]) <-> $(alg_syms2[j]): diff=",
+                    NetworkDynamics.str_significant(c; sigdigits=3))
+            end
+        end
+        print("max diff: ", NetworkDynamics.str_significant(maxdiff_alg; sigdigits=3))
+    end
+    println()
+
+    return m2 # return the one without mtkcompile
+end
