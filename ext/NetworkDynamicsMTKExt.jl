@@ -9,7 +9,7 @@ using RecursiveArrayTools: RecursiveArrayTools
 using ArgCheck: @argcheck
 using Graphs: Graphs
 using Hungarian: Hungarian, hungarian
-using LinearAlgebra: Diagonal, I
+using LinearAlgebra: LinearAlgebra, Diagonal, I, UniformScaling
 using SymbolicUtils.Code: Let, Assignment, unwrap_const
 using Moshi: Moshi
 using Moshi.Match: @match
@@ -30,6 +30,11 @@ include("MTKExt_simplification.jl")
 import NetworkDynamics: implicit_output, RHSDifferentialsError
 Symbolics.@register_symbolic implicit_output(x)
 
+const MTKCOMPILE_DEFAULT = Ref{Union{Symbol,Bool}}(false)
+function NetworkDynamics.set_mtkcompile!(value)
+    MTKCOMPILE_DEFAULT[] = value
+end
+
 """
     VertexModel(sys::System, inputs, outputs;
                 verbose=false, name=getname(sys), extin=nothing, ff_to_constraint=true, kwargs...)
@@ -49,8 +54,23 @@ Additional kw arguments:
   implicit output terms to all inputs. This forces MTK to consider the dependency during compilation
   and can help in cases where MTK simplification results in derivatives of inputs.
 """
-function VertexModel(sys::System, inputs, outputs; verbose=false, name=getname(sys),
-                     ff_to_constraint=true, assume_io_coupling=false, extin=nothing, kwargs...)
+function VertexModel(
+    sys::System, inputs, outputs;
+    verbose=false,
+    name=getname(sys),
+    ff_to_constraint=true,
+    assume_io_coupling=false,
+    extin=nothing,
+    mtkcompile=nothing,
+    kwargs...
+)
+    mtkcompile = isnothing(mtkcompile) ? MTKCOMPILE_DEFAULT[] : mtkcompile
+    if mtkcompile==:compare
+        args = (sys, inputs, outputs)
+        kwargs = (; verbose, name, ff_to_constraint, assume_io_coupling, extin, kwargs...)
+        return _compare_mtkcompile(VertexModel, args, kwargs)
+    end
+
     warn_missing_features(sys)
     inputs = inputs isa AbstractVector ? inputs : [inputs]
     outputs = outputs isa AbstractVector ? outputs : [outputs]
@@ -63,7 +83,7 @@ function VertexModel(sys::System, inputs, outputs; verbose=false, name=getname(s
         ins = (inputs, extin_sym)
     end
 
-    gen = generate_io_function_cached(sys, ins, (outputs,); verbose, ff_to_constraint, assume_io_coupling)
+    gen = generate_io_function_cached(sys, ins, (outputs,); verbose, ff_to_constraint, assume_io_coupling, mtkcompile)
 
     f = gen.f
     g = gen.g
@@ -154,8 +174,23 @@ Additional kw arguments:
   implicit output terms to all inputs. This forces MTK to consider the dependency during compilation
   and can help in cases where MTK simplification results in derivatives of inputs.
 """
-function EdgeModel(sys::System, srcin, dstin, srcout, dstout; verbose=false, name=getname(sys),
-                   ff_to_constraint=false, assume_io_coupling=false, extin=nothing, kwargs...)
+function EdgeModel(
+    sys::System, srcin, dstin, srcout, dstout;
+    verbose=false,
+    name=getname(sys),
+    ff_to_constraint=false,
+    assume_io_coupling=false,
+    extin=nothing,
+    mtkcompile=nothing,
+    kwargs...
+)
+    mtkcompile = isnothing(mtkcompile) ? MTKCOMPILE_DEFAULT[] : mtkcompile
+    if mtkcompile==:compare
+        args = (sys, srcin, dstin, srcout, dstout)
+        kwargs = (; verbose, name, ff_to_constraint, assume_io_coupling, extin, kwargs...)
+        return _compare_mtkcompile(EdgeModel, args, kwargs)
+    end
+
     warn_missing_features(sys)
     srcin = srcin isa AbstractVector ? srcin : [srcin]
     dstin = dstin isa AbstractVector ? dstin : [dstin]
@@ -185,7 +220,7 @@ function EdgeModel(sys::System, srcin, dstin, srcout, dstout; verbose=false, nam
         outs = (srcout, dstout)
     end
 
-    gen = generate_io_function_cached(sys, ins, outs; verbose, ff_to_constraint, assume_io_coupling)
+    gen = generate_io_function_cached(sys, ins, outs; verbose, ff_to_constraint, assume_io_coupling, mtkcompile)
 
     f = gen.f
     g = singlesided ? gwrap(gen.g) : gen.g
@@ -299,7 +334,6 @@ end
 function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
                               expression=Val{false}, verbose=false, mtkcompile=false,
                               ff_to_constraint, assume_io_coupling)
-    # verbose = true
     # TODO: scalarize vector symbolics/equations?
 
     # f_* may be given in namepsace version or as symbols, resolve to unnamespaced Symbolic

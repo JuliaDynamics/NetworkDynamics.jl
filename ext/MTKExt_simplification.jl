@@ -222,7 +222,7 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
     for (i, eq) in pairs(obs_unsrtd)
         if isdifferential(eq.lhs)
             pushfirst!(eqs, eq.lhs ~ eq.rhs)
-            push!(match_states, only(eq.lhs.args))
+            pushfirst!(match_states, only(eq.lhs.args))
             push!(rmidx, i)
         end
     end
@@ -238,7 +238,9 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
 end
 
 function _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_inputs, verbose)
-    @assert length(match_states) == length(eqs)
+    if length(match_states) != length(eqs)
+        throw(ArgumentError("Expected same number of states and quations. Got $(length(match_states)) states and $(length(eqs)) equations. Please report issue and try building ocmponent with `mtkcompile=true` in the meantime."))
+    end
     non_extended_states = length(match_states)
     coeff, has_input, match_states, extra_match_states = _build_coeff_mat(eqs, obs_unsrtd, match_states, all_states; ff_inputs)
 
@@ -464,15 +466,12 @@ function _solve_plan(solvable_eq_idx, coeff, sorted_sts, has_input, is_output)
                 continue
             end
             for path in Graphs.all_simple_paths(g, dst, src)
-                # path[1] == dst (output-sink), path[end] == src (ff-source).
-                forbid_idx = dst   # fallback: forbid the output-sink match
                 for mi in path
                     if match_type[mi] === :linear_state
-                        forbid_idx = mi
+                        forbidden_matches[mi] = true
                         break
                     end
                 end
-                forbidden_matches[forbid_idx] = true
             end
         end
     end
@@ -732,7 +731,7 @@ function get_alias(eq)
     end
 end
 
-function simplify_with_mtkcompile(_sys, allinputs, alloutputs)
+function simplify_with_mtkcompile(_sys, allinputs, alloutputs; verbose)
     missing_inputs = Set{ST}()
     sys = if ModelingToolkitBase.iscomplete(_sys)
         deepcopy(_sys)
@@ -785,9 +784,6 @@ function simplify_with_mtkcompile(_sys, allinputs, alloutputs)
 
     # create states vector in correct ordering
     states = match_diff_states(eqs, unknowns(sys))
- 
-    # pick best alias names
-    eqs, obseqs, states = pick_best_alias_names(eqs, obseqs, states, alloutputs; verbose)
 
     sys, eqs, obseqs_sorted, states, params
 end
@@ -805,7 +801,12 @@ function simplify_without_mtkcompile(_sys, allinputs, alloutputs; verbose, ff_to
     params = setdiff(allparams, Set{ST}(allinputs))
 
     # don't consider inputs states
-    states = collect(setdiff(Set{ST}(unknowns(sys)), Set{ST}(allinputs)))
+    _states = setdiff(Set{ST}(unknowns(sys)), Set{ST}(allinputs))
+
+    states = collect(ST, _states ∩ get_variables_deriv(eqs))
+    if length(_states) != length(states)
+        @warn "Some provided states do not appear in the equations and will be ignored: " * inline_repr(setdiff(Set{ST}(_states), Set{ST}(states)))
+    end
 
     # check if we need to block input ff
     ff_inputs = ff_to_constraint ? Set{ST}(allinputs) : Set{ST}()
@@ -816,16 +817,36 @@ function simplify_without_mtkcompile(_sys, allinputs, alloutputs; verbose, ff_to
         outset=Set{ST}(alloutputs), ff_inputs, verbose
     )
 
-
     _sys, eqs, obseqs, states, params
 end
 
 isdifferential(s) = iscall(unwrap(s)) && operation(unwrap(s)) isa Differential 
 
 function selective_expander(obseqs, targets)
-    obssubs = Dict{ST, ST}(obs.lhs => obs.rhs for obs in obseqs)
+    if isempty(obseqs) || (targets != Any && isempty(targets))
+        return identity
+    end
+
+    if targets == Any
+        obs_subset = _topological_sort(obseqs)
+    else
+        sinks = [o.lhs for o in obseqs if !isdisjoint(get_variables(o.rhs), targets)]
+        g, map = _dependency_graph(obseqs)
+        sinks_i = [map[s] for s in sinks]
+        necessary = collect(Int, Graphs.BFSIterator(g, sinks_i; neighbors_type=Graphs.inneighbors))
+
+        obs_subset = obseqs[necessary]
+        perm = reverse(Graphs.topological_sort(g[necessary]))
+        permute!(obs_subset, perm)
+    end
+
+    substitutions = OrderedDict{ST,ST}()
+    for obs in obs_subset
+        substitutions[obs.lhs] = substitute(obs.rhs, substitutions)
+    end
+
     (term) -> begin
-        fixpoint_sub(term, obssubs)
+        substitute(term, substitutions)
     end
 end
 
@@ -837,7 +858,7 @@ includes any "observed" state from obseqs which transitively influences the prov
 """
 function symbolic_dependencies(obseqs, states)
     isempty(obseqs) && return Set{ST}(states)
-    g, s_to_i_map = _dependecy_graph(obseqs)
+    g, s_to_i_map = _dependency_graph(obseqs)
     srcs = Int[s_to_i_map[s] for s in states if haskey(s_to_i_map, s)]
     transitive = Set{ST}(states)
     for i in Graphs.BFSIterator(g, srcs)
@@ -848,12 +869,12 @@ end
 
 function _topological_sort(obseqs)
     isempty(obseqs) && return obseqs
-    g, s_to_i_map = _dependecy_graph(obseqs)
+    g, s_to_i_map = _dependency_graph(obseqs)
     sorted_indices = Graphs.topological_sort(g)
     obseqs[reverse(sorted_indices)]
 end
 
-function _dependecy_graph(obseqs)
+function _dependency_graph(obseqs)
     s_to_i_map = Dict{ST, Int}(eq.lhs => i for (i, eq) in enumerate(obseqs))
     g = Graphs.SimpleDiGraph(length(s_to_i_map))
     for (i, obs) in enumerate(obseqs)
