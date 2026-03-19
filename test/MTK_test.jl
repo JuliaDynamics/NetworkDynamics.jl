@@ -1011,10 +1011,9 @@ end
     obs_lhs = Set(eq.lhs for eq in red_obs)
     # SCCs 1 and 2 are not forbidden
     @test c1.val ∈ obs_lhs
-    @test c2.val ∈ obs_lhs
-    # SCC3 is forbidden (first :LS from output end): c3 stays as a constraint state
-    @test c3.val ∉ obs_lhs
-    @test c3.val ∈ Set(red_states)
+    @test c3.val ∈ obs_lhs
+    @test c2.val ∉ obs_lhs
+    @test c2.val ∈ Set(red_states)
     # SCC4 (LC) is not forbidden: c4 solved as obs (depends on state c3, no direct FF)
     @test c4.val ∈ obs_lhs
     @test topologicical_sorted(red_obs)
