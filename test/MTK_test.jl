@@ -1404,7 +1404,55 @@ end
     @test length(sym(v)) == 1 && v.mass_matrix == Diagonal([1])
 end
 
-@testest "selective expander" begin
+@testset "Algebraic loop with clamp/min (K_G feedback regression)" begin
+    # Reproduces the esst4b₊ loop seen in real power system models.
+    #
+    # Five algebraic variables form a genuine loop via K_G feedback:
+    #   ce  = va_out - K_G*efd          ← efd feeds back here
+    #   vmp = K_PM * ce
+    #   vmo = clamp(x_int + vmp, ...)   ← clamp makes the chain nonlinear
+    #   vml = min(vmo, VOEL)            ← min too
+    #   efd = vml * vb_signal           ← closes the loop
+    #
+    # Substituting through (in the non-saturated regime) collapses to a single
+    # linear equation in ce, so the system IS analytically solvable.  However,
+    # the current solver hits AssertionError("islinear") because clamp/min
+    # prevent the symbolic linearity check from succeeding.
+    #
+    # Without clamp/min the identical loop is reduced to 0 remaining states.
+    # With clamp/min all 5 remain as algebraic constraints — this testset
+    # documents the gap and will start passing once the solver is fixed.
+
+    @variables ce(t) vmp(t) vmo(t) vml(t) efd(t)
+    @parameters K_G K_PM va_out x_int vb_signal V_MMIN V_MMAX VOEL
+    all_states = [ce, vmp, vmo, vml, efd]
+
+    # Baseline: pure-linear loop (no clamp/min) → fully solved
+    eqs_linear = [
+        0 ~ ce  - va_out + K_G*efd,
+        0 ~ vmp - K_PM*ce,
+        0 ~ vmo - (x_int + vmp),
+        0 ~ vml - vmo,
+        0 ~ efd - vml*vb_signal,
+    ]
+    red_eqs, red_obs, red_states = _reduce_equations(eqs_linear, Equation[], all_states, verbose=true)
+    @test isempty(red_states)
+    @test length(red_obs) == 5
+
+    # Bug: identical loop but with clamp/min → solver fails → all 5 remain as constraints
+    eqs_with_clamp = [
+        0 ~ ce  - va_out + K_G*efd,
+        0 ~ vmp - K_PM*ce,
+        0 ~ vmo - clamp(x_int + vmp, V_MMIN, V_MMAX),
+        0 ~ vml - min(vmo, VOEL),
+        0 ~ efd - vml*vb_signal,
+    ]
+    red_eqs, red_obs, red_states = _reduce_equations(eqs_with_clamp, Equation[], all_states, verbose=true)
+    @test length(red_states) == 1
+    @test length(red_obs) == 4
+end
+
+@testset "selective expander" begin
     @variables a b c d e target1 target2
     obseqs = [
         a ~ target1
@@ -1420,3 +1468,4 @@ end
     @test isequal(ex(d), b + target2)
     @test isequal(ex(e), b + (b + target2))
 end
+
