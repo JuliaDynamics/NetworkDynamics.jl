@@ -1,7 +1,3 @@
-GPL_MTK = haskey(ENV, "GPL_MTK")
-if GPL_MTK
-    using ModelingToolkit
-end
 using Test
 using Testfiles
 using Pkg
@@ -22,8 +18,8 @@ BUILDKITE = haskey(ENV, "BUILDKITE")
 BUILDKITE && @test CUDA.functional() # fail early in buildkite if cuda is not available
 
 @testset "NetworkDynamics Tests" begin
-    # skip majority of tets under GPL_MTK and BUILDKITE env
-    if !GPL_MTK && !BUILDKITE
+    # skip majority of tests under BUILDKITE env
+    if !BUILDKITE
         @testset "Package Quality Tests" begin
             # print_explicit_imports(NetworkDynamics)
             @test check_no_implicit_imports(NetworkDynamics) === nothing
@@ -62,21 +58,18 @@ BUILDKITE && @test CUDA.functional() # fail early in buildkite if cuda is not av
         @testfile "doctor_test.jl"
     end
 
-    # skip additional tests under GPL_MTK env
-    if !GPL_MTK
-        @testfile "symbolicindexing_test.jl"
-        @testfile "external_inputs_test.jl"
-        @testfile "loopback_test.jl"
+    @testfile "symbolicindexing_test.jl"
+    @testfile "external_inputs_test.jl"
+    @testfile "loopback_test.jl"
 
-        @testfile "diffusion_test.jl"
-        @testfile "inhomogeneous_test.jl"
+    @testfile "diffusion_test.jl"
+    @testfile "inhomogeneous_test.jl"
 
-        if CUDA.functional()
-            @testfile "GPU_test.jl"
-        end
+    if CUDA.functional()
+        @testfile "GPU_test.jl"
     end
 
-    # the docs should indeed work with MTK loaded
+    # the docs should work with MTK loaded
     @testset "Test Doc Examples" begin
         examples = joinpath(pkgdir(NetworkDynamics), "docs", "examples")
         for file in readdir(examples; join=true)
