@@ -507,18 +507,27 @@ function _compare_mtkcompile(VEModel, args, kwargs)
         printstyled("\n  Psyms dont match! ", color=:red, bold=true)
     end
     !isnothing(m1.extin) || !isnothing(m2.extin) && error("Comparison for extin not supported.")
-    m1.metadata[:full_equations]
-    m2.metadata[:full_equations]
 
     # try find match between sym and psyms
-    if samesym && samepsyms
-        sym_perm =   [findfirst(==(s), NetworkDynamics.sym(m1)) for s in NetworkDynamics.sym(m2)]
+    if (samesym || all(s -> s ∈ m1.obssym, setdiff(m2.sym, m1.sym))) && samepsyms
+        sym_perm = [findfirst(==(s), NetworkDynamics.sym(m1)) for s in NetworkDynamics.sym(m2)]
         psym_perm = [findfirst(==(p), NetworkDynamics.psym(m1)) for p in NetworkDynamics.psym(m2)]
 
         outs1, du1, u1, ins, p1, t = NetworkDynamics.rand_inputs_fg(m1)
         outs2 = copy.(outs1)
         du2 = copy(du1)
-        u2 = u1[sym_perm]
+        u2 = map(enumerate(sym_perm)) do (i,p)
+            if !isnothing(p)
+                u1[p]
+            else
+                sym = NetworkDynamics.sym(m2)[i]
+                obsidx = findfirst(==(sym), NetworkDynamics.obssym(m1))
+                obsout = zeros(length(m1.obssym))
+                m2.obsf(obsout, u1, ins..., p1, t)
+                obsout[obsidx]
+            end
+        end
+
         p2 = p1[psym_perm]
         NetworkDynamics.compfg(m1)(outs1, du1, u1, ins, p1, t)
         NetworkDynamics.compfg(m2)(outs2, du2, u2, ins, p2, t)
@@ -584,5 +593,11 @@ function _compare_mtkcompile(VEModel, args, kwargs)
     end
     println()
 
-    return m2 # return the one without mtkcompile
+    # return based on default
+    return_mtkcompile = MTKCOMPILE_DEFAULT[] === :compare ? false : MTKCOMPILE_DEFAULT[]
+    if return_mtkcompile
+        return m1 # return the one with mtkcompile
+    else
+        return m2 # return the one without mtkcompile
+    end
 end

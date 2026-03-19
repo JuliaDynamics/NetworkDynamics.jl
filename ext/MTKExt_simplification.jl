@@ -186,6 +186,20 @@ exists on a path, the output-sink SCC itself is forbidden.  This keeps the forbi
 small as possible while preferring to cut at numerically risky solve points.
 """
 function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, states::Vector{ST}; outset::Set{ST}, ff_inputs::Set{ST}, verbose)
+    if length(states) != length(eqs)
+        if length(states) > length(eqs)
+            superflous = setdiff(Set{ST}(states), get_variables_deriv(eqs))
+            if length(superflous) == length(states) - length(eqs)
+                @warn "Some provided states do not appear in the equations and will be ignored: " * inline_repr(superflous)
+                states = filter(s -> s ∉ superflous, states)
+            else
+                throw(ArgumentError("Expected same number of states and quations. Got $(length(states)) states and $(length(eqs)) equations. Please report issue and try building ocmponent with `mtkcompile=true` in the meantime."))
+            end
+        else
+            throw(ArgumentError("Expected same number of states and quations. Got $(length(states)) states and $(length(eqs)) equations. Please report issue and try building ocmponent with `mtkcompile=true` in the meantime."))
+        end
+    end
+
     obs_unsrtd = copy(obseqs) # we'll be inserting into this, so make a copy to avoid mutating the input
     # match states include D(x) instead of x
     diffstates_in_eqs = filter(isdifferential, Symbolics.get_variables(eqs))
@@ -238,9 +252,6 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
 end
 
 function _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_inputs, verbose)
-    if length(match_states) != length(eqs)
-        throw(ArgumentError("Expected same number of states and quations. Got $(length(match_states)) states and $(length(eqs)) equations. Please report issue and try building ocmponent with `mtkcompile=true` in the meantime."))
-    end
     non_extended_states = length(match_states)
     coeff, has_input, match_states, extra_match_states = _build_coeff_mat(eqs, obs_unsrtd, match_states, all_states; ff_inputs)
 
@@ -290,21 +301,13 @@ function _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_
     # similarlar to has_input property for equations we need is_output for states which influce output states
     output_like = symbolic_dependencies(obs_unsrtd, outset)
     is_output = [s ∈ output_like for s in sorted_match_sts]
-    sccs, forbidden_matches = _solve_plan(solvable_eq_idx, coeff_sorted, sorted_match_sts, has_input, is_output)
-
-    if verbose
-        n_forbidden = sum(forbidden_matches)
-        if n_forbidden > 0
-            forbidden_sts = [sorted_match_sts[solvable_eq_idx[k]] for k in findall(forbidden_matches)]
-            str *= "\n - Skipping $(inline_repr(forbidden_sts)) — on input→output feed-forward path"
-        end
-        str *= "\n - Decomposed matches into $(length(sccs)) solvable groups"
-    end
+    sccs = _solve_plan(solvable_eq_idx, coeff_sorted, sorted_match_sts, has_input, is_output; verbose)
 
     solved_eq_idx = Int[]
 
     for (gi, scc) in enumerate(sccs)
         # scc is a Vector of indices into linear_matches; linear_matches[k] = (i,i)
+        scc_idx   = [solvable_eq_idx[k] for k in scc]
         scc_idx   = [solvable_eq_idx[k] for k in scc]
         scc_sts_i = sorted_match_sts[scc_idx]
         expander = selective_expander(obs_unsrtd, scc_sts_i)
@@ -315,8 +318,12 @@ function _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_
             append!(obs_unsrtd, scc_sts_i .~ sol)
             append!(solved_eq_idx, scc_idx)
             if verbose
-                str *= "\n\nSolved group $gi for $(inline_repr(scc_sts_i))"
-                str *= "\n" * multiline_repr(OrderedDict(scc_sts_i .=> sol), prefix="  ")
+                if length(scc) == 1
+                    str *= "\nSolved group $gi for $(only(scc_sts_i)) (trivial)"
+                else
+                    str *= "\nSolved group $gi for $(inline_repr(scc_sts_i))"
+                    str *= "\n" * multiline_repr(OrderedDict(scc_sts_i .=> sol), prefix="  ")
+                end
             end
         catch err
             if verbose
@@ -415,91 +422,111 @@ non-forbidden subgraph, so cycles that existed solely through a forbidden match 
 already eliminated.  The returned `sccs` therefore contain only solvable matches and
 are already in dependency-first topological order.
 """
-function _solve_plan(solvable_eq_idx, coeff, sorted_sts, has_input, is_output)
+function _solve_plan(solvable_eq_idx, coeff, sorted_sts, has_input, is_output; verbose)
     n = length(solvable_eq_idx)
-    n == 0 && return (Vector{Vector{Int}}[], falses(0))
+    n == 0 && return Vector{Vector{Int}}[]
 
-    # Step 1: Dependency graph on matched pairs.
-    # Edge i→j means "equation of match i has a nonzero coeff for state of match j",
-    # i.e. match i depends on match j and must be solved after it.
-    # We include :unsolvable dependencies too, so that equations like
-    # `x ~ atan(a, b)` are correctly ordered after `a` and `b` in the SCC output.
-    g = Graphs.SimpleDiGraph(n)
+    g_solvable   = Graphs.SimpleDiGraph(n)
+    g_unsolvable = Graphs.SimpleDiGraph(n)
     for (i, r) in enumerate(solvable_eq_idx)
         for (j, c) in enumerate(solvable_eq_idx)
             i == j && continue
-            if coeff[r, c] !== :none
-                Graphs.add_edge!(g, i, j)
+            type = coeff[r, c]
+            if type !== :none && type !== :unsolvable # any connection
+                Graphs.add_edge!(g_solvable, i, j)
+            elseif type == :unsolvable
+                Graphs.add_edge!(g_unsolvable, i, j)
             end
         end
     end
 
-    # Early exit when FF detection is unnecessary.
-    if all(!, has_input)
-        sccs = Graphs.strongly_connected_components_tarjan(g)
-        return (sccs, falses(n))
+    sccs = Graphs.strongly_connected_components_tarjan(g_solvable)
+
+    ff_sources = Set{Int}(i for (i, r) in enumerate(solvable_eq_idx) if has_input[r])
+    out_sinks  = Set{Int}(i for (i, c) in enumerate(solvable_eq_idx) if is_output[c])
+
+    forbidden_connections = Dict{Int, Set{Int}}() # src → [dst1, dst2, ...]
+    for src in out_sinks
+        forbidden_connections[src] = copy(ff_sources)
     end
 
-    # Step 2: Classify each match by the coefficient type of its diagonal entry.
-    match_type = fill(:linear_const, n)
-    for (mi, rc) in enumerate(solvable_eq_idx)
-        if coeff[rc, rc] === :linear_state
-            match_type[mi] = :linear_state
-        end
-    end
-
-    # Step 3: Identify FF-source matches (equation directly references ff_inputs)
-    # and output-sink matches (matched state is an output).
-    ff_sources = [i for (i, r) in enumerate(solvable_eq_idx) if has_input[r]]
-    out_sinks  = [i for (i, c) in enumerate(solvable_eq_idx) if is_output[c]]
-
-    # Step 4: Forbid individual matches to break FF paths.
-    # In the dependency graph g (i→j = "i depends on j"), a path from out_sink to ff_source
-    # means out_sink transitively depends on ff_source — the algebraic FF chain.
-    # For each such path walk from the output-sink end and forbid the first :linear_state
-    # match; fall back to the output-sink match itself if none is found.
-    forbidden_matches = falses(n)
-    for src in ff_sources
-        for dst in out_sinks
-            if src == dst
-                forbidden_matches[src] = true
-                continue
-            end
-            for path in Graphs.all_simple_paths(g, dst, src)
-                for mi in path
-                    if match_type[mi] === :linear_state
-                        forbidden_matches[mi] = true
-                        break
-                    end
+    # edges go from dependant -> dependency
+    # the SCC is ordered from dependencies to dependants (i.e. just backward links)
+    # so we need to find **forward** links
+    # we go backward and check if we find links into the already visited area
+    # thos will be ""
+    upstream = Set{Int}()
+    for scc in Iterators.reverse(sccs)
+        for dependency in Graphs.BFSIterator(g_unsolvable, scc; neighbors_type=Graphs.outneighbors)
+            if dependency in upstream
+                out = get!(forbidden_connections, dependency) do
+                    Set{Int}()
                 end
+                # println("Equation $(first(scc)) depends non-linear on eq. $(dependency), which is solved after")
+                push!(out, first(scc))
             end
         end
+        union!(upstream, scc)
     end
 
-    # Step 5: SCC decomposition on non-forbidden matches only.
-    # Cycles that ran through a forbidden match are already broken.
-    non_forbidden = [i for i in 1:n if !forbidden_matches[i]]
-    isempty(non_forbidden) && return (Vector{Vector{Int}}[], forbidden_matches)
+    # return if no need to break cycles
+    isempty(forbidden_connections) && return sccs
 
-    new_idx = zeros(Int, n)
-    for (k, i) in enumerate(non_forbidden)
-        new_idx[i] = k
-    end
-    g_sub = Graphs.SimpleDiGraph(length(non_forbidden))
-    for i in non_forbidden
-        for j in Graphs.outneighbors(g, i)
-            forbidden_matches[j] && continue
-            Graphs.add_edge!(g_sub, new_idx[i], new_idx[j])
+    pathes_to_break = Set{Vector{Int}}()
+    for (src, dsts) in forbidden_connections
+        for p in Graphs.all_simple_paths(g_solvable, src, dsts)
+            push!(pathes_to_break, p)
         end
     end
 
-    # For our edge convention (i→j = "i depends on j"), strongly_connected_components_tarjan
-    # already returns SCCs with dependencies before dependents — no reversal needed.
-    sccs_sub = Graphs.strongly_connected_components_tarjan(g_sub)
+    if verbose
+        str = "Detected algebraic pathes which needs to be cut (avoid feed-forward from input to output or prevent nonlinear loop):"
+        for p in pathes_to_break
+            str *= "\n  " * inline_repr(sorted_sts[p])
+        end
+    end
 
-    # Remap subgraph SCC indices back to original match indices.
-    sccs = [[non_forbidden[k] for k in scc] for scc in sccs_sub]
-    return (sccs, forbidden_matches)
+    # return if no cycles detected
+    isempty(pathes_to_break) && return sccs
+
+    # Classify each match by diagonal coefficient type.
+    # Lower cost = better candidate to keep as residual (tearing variable).
+    match_cost = map(solvable_eq_idx) do r
+        # prefer to break linear_state matches to avoid division by potential 0
+        prio1 = coeff[r, r] == :linear_state ? 0 : 1
+        # second: prefer states which don't appear nonlinear in other equations
+        prio2 = count(c -> c == :unsolvable, view(coeff, :, r))
+        (prio1, prio2)
+    end
+
+    forbidden = Set{Int}()
+    for path in pathes_to_break
+        any(n -> n ∈ forbidden, path) && continue # already broken by previous path
+        # reverse path so we prefer the most-upstream element (furthest from nonlinearity)
+        forbid_idx = first(sort(reverse(path), by=i -> match_cost[i]))
+        push!(forbidden, forbid_idx)
+    end
+    forbidden_matches = [i in forbidden for i in 1:n]
+
+    if verbose
+        broken = sorted_sts[solvable_eq_idx[forbidden_matches]]
+        str *= "\n => break by keep $(inline_repr(broken)) in equations."
+    end
+
+    non_forbidden = [i for i in 1:n if !forbidden_matches[i]]
+
+    g_solvable_subset = g_solvable[non_forbidden]
+    _sccs = Graphs.strongly_connected_components_tarjan(g_solvable_subset)
+
+    # map back to original indices
+    sccs = [[non_forbidden[k] for k in scc] for scc in _sccs]
+
+    if verbose
+        str *= "\n - Decomposed matches into $(length(sccs)) solvable groups"
+        @info str
+    end
+
+    return sccs
 end
 function _insert_sorted!(obseqs, newobs)
     # newobs must be in topological order (dependencies before dependents).
@@ -568,7 +595,7 @@ function _build_coeff_mat(lineqs, obseqs, match_states, all_states; ff_inputs=Se
     columns = Dict{ST,Int}(s => i for (i, s) in enumerate(extended_match_states))
     linexpanders = Dict{ST,LinearExpander}()
     # we need to exapnd the eq in everything to uncover both ff and linear_state dependencies
-    expand_obs = selective_expander(obseqs, Any) 
+    expand_obs = selective_expander(obseqs, Any)
     has_input = falses(N)
 
     function get_coeff_type(eq, s)
@@ -600,7 +627,7 @@ function _build_coeff_mat(lineqs, obseqs, match_states, all_states; ff_inputs=Se
             # for differentials we only allow solving for diff states
             for s in syms
                 if isdifferential(s)
-                    coeff[i, columns[s]] = get_coeff_type(eq, s) 
+                    coeff[i, columns[s]] = get_coeff_type(eq, s)
                 else
                     coeff[i, columns[s]] = :unsolvable
                 end
@@ -634,7 +661,7 @@ function _build_coeff_mat(lineqs, obseqs, match_states, all_states; ff_inputs=Se
     end
 
     if needs_extension
-        coeff, has_input, extended_match_states, extended_states_set ∩ extended_match_states 
+        coeff, has_input, extended_match_states, extended_states_set ∩ extended_match_states
     else
         coeff, has_input, match_states, Set{ST}()
     end
@@ -801,12 +828,7 @@ function simplify_without_mtkcompile(_sys, allinputs, alloutputs; verbose, ff_to
     params = setdiff(allparams, Set{ST}(allinputs))
 
     # don't consider inputs states
-    _states = setdiff(Set{ST}(unknowns(sys)), Set{ST}(allinputs))
-
-    states = collect(ST, _states ∩ get_variables_deriv(eqs))
-    if length(_states) != length(states)
-        @warn "Some provided states do not appear in the equations and will be ignored: " * inline_repr(setdiff(Set{ST}(_states), Set{ST}(states)))
-    end
+    states = collect(setdiff(Set{ST}(unknowns(sys)), Set{ST}(allinputs)))
 
     # check if we need to block input ff
     ff_inputs = ff_to_constraint ? Set{ST}(allinputs) : Set{ST}()
@@ -820,7 +842,7 @@ function simplify_without_mtkcompile(_sys, allinputs, alloutputs; verbose, ff_to
     _sys, eqs, obseqs, states, params
 end
 
-isdifferential(s) = iscall(unwrap(s)) && operation(unwrap(s)) isa Differential 
+isdifferential(s) = iscall(unwrap(s)) && operation(unwrap(s)) isa Differential
 
 function selective_expander(obseqs, targets)
     if isempty(obseqs) || (targets != Any && isempty(targets))
