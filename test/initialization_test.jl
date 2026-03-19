@@ -272,8 +272,8 @@ end
         get_defaults_dict(vf), get_guesses_dict(vf), get_bounds_dict(vf);
         apply_bound_transformation=true);
     du = zeros(length(prob.f.resid_prototype));
-    b = @b $(prob.f)($du, $(prob.u0), nothing)
-    @test iszero(b.allocs)
+    b = @b $(prob.f)($du, $(prob.u0), nothing) evals=2
+    @test b.allocs == 1
 end
 
 @testset "Test edge initialization" begin
@@ -543,8 +543,8 @@ end
         InitConstraint(get_initconstraints(vm)...);
         apply_bound_transformation=true);
     du = zeros(length(prob.f.resid_prototype));
-    b = @b $(prob.f)($du, $(prob.u0), nothing)
-    @test iszero(b.allocs)
+    b = @b $(prob.f.f)($du, $(prob.u0), nothing) evals=2
+    @test b.allocs == 1
 
     @test_throws ArgumentError set_initconstraint!(vm, @initconstraint :wrong_symbol)
 

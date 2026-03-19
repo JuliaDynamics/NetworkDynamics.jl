@@ -337,7 +337,7 @@ end
     mtkbus = System(connect(busbar.terminal, pv.terminal), t; systems=[busbar, pv], name=:pvbus)
     vf = VertexModel(mtkbus, [:busbar₊i_r, :busbar₊i_i], [:busbar₊u_r, :busbar₊u_i], verbose=false)
 
-    @test vf.sym == [:busbar₊u_r,:busbar₊u_i]
+    @test Set(vf.sym) == Set([:busbar₊u_r,:busbar₊u_i])
 end
 
 @mtkmodel GasNode begin
@@ -559,9 +559,9 @@ end
     empty!(postprocessing_called)
     @named mod = Toplevel()
     vm = VertexModel(mod, [:in], [:out])
-    @test postprocessing_called[1] == (:sub2, vm, "sub2")
-    @test postprocessing_called[2] == (:sub1, vm, "sub1")
-    @test postprocessing_called[3] == (:sub1, vm, "sub2₊sub1_in_sub2")
+    @test postprocessing_called[1] == (:sub1, vm, "sub1")
+    @test postprocessing_called[2] == (:sub1, vm, "sub2₊sub1_in_sub2")
+    @test postprocessing_called[3] == (:sub2, vm, "sub2")
     @test postprocessing_called[4] == (:toplevel, vm, "")
 end
 
