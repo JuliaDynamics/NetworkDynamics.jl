@@ -389,16 +389,30 @@ end
     bindings_to_initformulas(sys)
 
 Extractes the `bindings` from a system and returns matchin InitFormulas.
+
+This will **ingore** parameter bindings! Parameter bindings will become observed
+equations in an earlier step.
 """
-function bindings_to_initformulas(sys; obs_subs=Dict())
+function bindings_to_initformulas(sys; states, obs_subs)
     bindings = ModelingToolkitBase.bindings(sys)
     isempty(bindings) && return nothing
 
     initformulas = Set{InitFormula}()
+    for (_lhs, _rhs) in bindings
+        _lhs ∈ ModelingToolkitBase.bound_parameters(sys) && continue # skip parameter bindings, they will become observed equations
+        lhs = Symbolics.substitute(_lhs, obs_subs) # apply alias transformation
+        rhs = fixpoint_sub(_rhs, obs_subs)
 
-    for (lhs, rhs) in bindings
-        lhs = Symbolics.substitute(lhs, obs_subs)
-        rhs = fixpoint_sub(rhs, obs_subs)
+        try
+            if getname(lhs) ∉ states
+                @warn "Binding $_lhs <= $_rhs targets a non-state variable after expansion in known symbols: $lhs <= $rhs. This most likely means that $_lhs was solved and is not an unknown anymore. Skip formula."
+                continue
+            end
+        catch
+            @warn "Could not handle binding with $_lhs <= $_rhs expanded to $lhs <= $rhs. Skip!"
+            continue
+        end
+
         target = [getname(lhs)]
         input_symbolic = collect(get_variables(rhs))
         input_names = getname.(input_symbolic)
@@ -463,7 +477,7 @@ function _compare_mtkcompile(VEModel, args, kwargs)
     printstyled("Timings:", color=:blue, bold=true)
     print("\n  with mtk:        ", NetworkDynamics.str_significant(t1min; sigdigits=4), " seconds")
     print("\n  witout mtk:      ", NetworkDynamics.str_significant(t2min; sigdigits=4), " seconds")
-    print("\n  speedup without: ") 
+    print("\n  speedup without: ")
     printstyled(NetworkDynamics.str_significant(t2min/t1min; sigdigits=3)*"x", color=(t2min<t1min) ? :green : :red, bold=true)
     println()
 
@@ -487,7 +501,7 @@ function _compare_mtkcompile(VEModel, args, kwargs)
         dim2 = NetworkDynamics.dim(m2)
         if dim1 == dim2
             println("\n  Both have $(dim1) states")
-        else 
+        else
             print("\n    with MTK:    ")
             printstyled("$(dim1) states", color=(dim2>dim1) ? :green : :red)
             print("\n    without MTK: ")

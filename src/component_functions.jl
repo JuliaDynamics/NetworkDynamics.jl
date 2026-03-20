@@ -1002,9 +1002,9 @@ Base.@nospecializeinfer function _fill_defaults(T, @nospecialize(kwargs))
     else
         flatten_sym(insym)
     end
-    if !allunique(vcat(_s, _ps, _obss, _is, _os))
+    if !allunique(vcat(_s, _ps, _obss, _is, flatten_sym(_os)))
         counts = Dict{Symbol, Int}()
-        for sym in vcat(_s, _ps, _obss, _is, _os)
+        for sym in vcat(_s, _ps, _obss, _is, flatten_sym(_os))
             counts[sym] = get(counts, sym, 0) + 1
         end
         str = "Symbol names must be unique. There are clashes in sym, psym, outsym, obssym and insym."
@@ -1012,7 +1012,7 @@ Base.@nospecializeinfer function _fill_defaults(T, @nospecialize(kwargs))
             if count > 1
                 str *= "\n - $sym appears in: "
                 cats = String[]
-                for (cat, vec) in zip(("sym", "psym", "obssym", "insym", "outsym"), (_s, _ps, _obss, _is, _os))
+                for (cat, vec) in zip(("sym", "psym", "obssym", "insym", "outsym"), (_s, _ps, _obss, _is, flatten_sym(_os)))
                     if sym in vec
                         push!(cats, cat)
                     end

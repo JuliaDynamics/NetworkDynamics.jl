@@ -1011,9 +1011,9 @@ end
     obs_lhs = Set(eq.lhs for eq in red_obs)
     # SCCs 1 and 2 are not forbidden
     @test c1.val ∈ obs_lhs
-    @test c3.val ∈ obs_lhs
-    @test c2.val ∉ obs_lhs
-    @test c2.val ∈ Set(red_states)
+    @test c2.val ∈ obs_lhs
+    @test c3.val ∉ obs_lhs
+    @test c3.val ∈ Set(red_states)
     # SCC4 (LC) is not forbidden: c4 solved as obs (depends on state c3, no direct FF)
     @test c4.val ∈ obs_lhs
     @test topologicical_sorted(red_obs)
@@ -1288,12 +1288,9 @@ end
     @test all(gf -> :x ∉ gf.outsym, get_guessformulas(vm))
 end
 
-@testset "bound parameters survive mtkcompile" begin
-    # Bound parameters (params whose default references another param, like Sn = S_b)
-    # are removed from parameters(sys) by mtkcompile/complete via
-    # remove_bound_parameters_from_ps, but still appear symbolically in equations.
-    # ND must include them in allparams so build_function sees them and
-    # InitFormula targeting them can be validated.
+@testset "bound parameters become observed" begin
+    # in MTK11, bound parameters (functions of other parameters only) become observed (no parameter anymore)
+    # this i helpful because we can actually "assign" parameter equivalents across models
     @mtkmodel BoundParamNode begin
         @variables begin
             u(t), [description = "input"]
@@ -1308,16 +1305,14 @@ end
         end
     end
     @named node = BoundParamNode()
-    vm = VertexModel(node, [:u], [:x])
-    # Sn is independently settable (not just an alias for S_b)
-    @test :Sn  ∈ Set(NetworkDynamics.psym(vm))
-    @test :S_b ∈ Set(NetworkDynamics.psym(vm))
-    # The InitFormula Sn = S_b must be attached
-    @test has_initformula(vm)
-    f = only(filter(f -> f.outsym == [:Sn], collect(get_initformulas(vm))))
-    out = NetworkDynamics.SymbolicView(zeros(1), f.outsym)
-    f(out, NetworkDynamics.SymbolicView([42.0], f.sym))
-    @test out[:Sn] ≈ 42.0   # Sn gets value from S_b
+    vm1 = VertexModel(node, [:u], [:x]; mtkcompile=true)
+    @test :Sn  ∉ Set(NetworkDynamics.psym(vm1))
+    @test :S_b ∈ Set(NetworkDynamics.psym(vm1))
+    @test :Sn ∈ Set(NetworkDynamics.obssym(vm1)) # sn is observed
+    vm2 = VertexModel(node, [:u], [:x]; mtkcompile=false)
+    @test :Sn  ∉ Set(NetworkDynamics.psym(vm2))
+    @test :S_b ∈ Set(NetworkDynamics.psym(vm2))
+    @test :Sn ∈ Set(NetworkDynamics.obssym(vm2)) # sn is observed
 end
 
 @testset "SimpleLead: Dt(input) requires index reduction" begin
