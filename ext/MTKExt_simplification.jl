@@ -802,10 +802,15 @@ function simplify_with_mtkcompile(_sys, allinputs, alloutputs; verbose)
 
     allparams = parameters(sys) # contains inputs!
     # mtkcompile/complete calls remove_bound_parameters_from_ps which removes params
-    # whose value is bound to another param (e.g. Sn = S_b) from ps, but those symbols
-    # still appear in equations. Add them back so build_function can reference them and
-    # InitFormulas targeting them remain valid.
-    append!(allparams, ModelingToolkitBase.bound_parameters(sys))
+    # lets push those bindings to the obseqs
+    bps = ModelingToolkitBase.bound_parameters(sys)
+    if !isempty(bps)
+        bindings = ModelingToolkitBase.bindings(sys)
+        newobs = [bp ~ bindings[bp] for bp in bps]
+        newobssorted = _topological_sort(newobs) # ensure new obs are in correct order
+        append!(obseqs_sorted, newobssorted)
+    end
+
     @argcheck allinputs ⊆ Set(allparams) ∪ missing_inputs
     params = setdiff(allparams, Set(allinputs))
 
@@ -822,7 +827,15 @@ function simplify_without_mtkcompile(_sys, allinputs, alloutputs; verbose, ff_to
     obseqs_sorted::Vector{Equation} = copy(observed(sys))
 
     allparams = parameters(sys) # contains inputs!
-    append!(allparams, ModelingToolkitBase.bound_parameters(sys))
+    # mtkcompile/complete calls remove_bound_parameters_from_ps which removes params
+    # lets push those bindings to the obseqs
+    bps = ModelingToolkitBase.bound_parameters(sys)
+    if !isempty(bps)
+        bindings = ModelingToolkitBase.bindings(sys)
+        newobs = [bp ~ bindings[bp] for bp in bps]
+        newobssorted = _topological_sort(newobs) # ensure new obs are in correct order
+        append!(obseqs_sorted, newobssorted)
+    end
 
     # maybe inputs have been given as parameters
     params = setdiff(allparams, Set{ST}(allinputs))
@@ -839,7 +852,7 @@ function simplify_without_mtkcompile(_sys, allinputs, alloutputs; verbose, ff_to
         outset=Set{ST}(alloutputs), ff_inputs, verbose
     )
 
-    _sys, eqs, obseqs, states, params
+    sys, eqs, obseqs, states, params
 end
 
 isdifferential(s) = iscall(unwrap(s)) && operation(unwrap(s)) isa Differential

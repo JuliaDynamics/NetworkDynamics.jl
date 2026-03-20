@@ -496,8 +496,8 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         odesystem_simplified=sys,
         params,
         unused_params,
-        initformulas = bindings_to_initformulas(_sys; obs_subs),
-        guessformulas = guesses_to_guessformulas!(_sys; obs_subs)
+        initformulas = bindings_to_initformulas(sys; states, obs_subs),
+        guessformulas = guesses_to_guessformulas!(sys; obs_subs)
     )
 end
 

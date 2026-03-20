@@ -41,7 +41,7 @@ Additionally, we add some "internal" state `q̃_inj` which we want to plot later
         p_set, [description="Constant pressure setpoint", unit=u"Pa"]
     end
     @variables begin
-        p(t) = p_set, [description="Pressure", unit=u"Pa", output=true]
+        p(t), [description="Pressure", unit=u"Pa", output=true]
         q̃_nw(t), [description="aggregated flow from pipes into node", unit=u"m^3/s", input=true]
         q̃_inj(t), [description="internal state for introspection", unit=u"m^3/s"]
     end
