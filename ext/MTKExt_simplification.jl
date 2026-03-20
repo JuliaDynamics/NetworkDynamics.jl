@@ -499,14 +499,39 @@ function _solve_plan(solvable_eq_idx, coeff, sorted_sts, has_input, is_output; v
         (prio1, prio2)
     end
 
-    forbidden = Set{Int}()
-    for path in pathes_to_break
-        any(n -> n ∈ forbidden, path) && continue # already broken by previous path
-        # reverse path so we prefer the most-upstream element (furthest from nonlinearity)
-        forbid_idx = first(sort(reverse(path), by=i -> match_cost[i]))
-        push!(forbidden, forbid_idx)
+    # Greedy minimum hitting set: build inverted index node -> path indices
+    node_to_paths = Dict{Int, Set{Int}}()
+    for (i, path) in enumerate(pathes_to_break)
+        for node in path
+            push!(get!(Set{Int}, node_to_paths, node), i)
+        end
     end
-    forbidden_matches = [i in forbidden for i in 1:n]
+
+    remaining_paths = Set(1:length(pathes_to_break))
+    chosen_nodes = Int[]
+
+    while !isempty(remaining_paths)
+        best_node = argmax(keys(node_to_paths)) do i
+            hits = length(intersect(node_to_paths[i], remaining_paths))
+            cost1, cost2 = match_cost[i]
+            (hits, -cost1, -cost2)
+        end
+        push!(chosen_nodes, best_node)
+        setdiff!(remaining_paths, node_to_paths[best_node])
+    end
+
+    # Reverse greedy cleanup: remove redundant chosen nodes
+    for k in length(chosen_nodes):-1:1
+        node = chosen_nodes[k]
+        others = [n for n in chosen_nodes if n != node]
+        isempty(others) && continue
+        other_coverage = union((node_to_paths[n] for n in others)...)
+        if issubset(node_to_paths[node], other_coverage)
+            deleteat!(chosen_nodes, k)
+        end
+    end
+
+    forbidden_matches = [i in Set(chosen_nodes) for i in 1:n]
 
     if verbose
         broken = sorted_sts[solvable_eq_idx[forbidden_matches]]
