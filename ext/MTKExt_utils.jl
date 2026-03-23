@@ -392,6 +392,7 @@ function bindings_to_initformulas(sys; states::Vector{ST}, obs_subs)
 
     initformulas = Set{InitFormula}()
     for (_lhs, _rhs) in bindings
+        ismissing(unwrap_const(_rhs)) && continue # FIXME somehow, mtkcompile tends to spit out missing bindings?
         _lhs ∈ ModelingToolkitBase.bound_parameters(sys) && continue # skip parameter bindings, they will become observed equations
         lhs = Symbolics.substitute(_lhs, obs_subs) # apply alias transformation
         rhs = fixpoint_sub(_rhs, obs_subs)
