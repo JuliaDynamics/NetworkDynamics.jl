@@ -1,46 +1,3 @@
-function expand_alg_equations(eqs, obseqs, states, inputs; verbose)
-    alg_idx = findall(eqs) do eq
-        type = eq_type(eq)
-        type[1] == :explicit_algebraic && error("Can't have explicit algebraic at that stage")
-        type[1] == :implicit_algebraic
-    end
-    isempty(alg_idx) && return eqs
-
-    obs_subs = OrderedDict(eq.lhs => eq.rhs for eq in obseqs)
-    if !isempty(obs_subs)
-        for i in alg_idx
-            eqs[i] = fixpoint_sub(eqs[i], obs_subs)
-        end
-    end
-    eqs
-end
-
-function observed_outputs_to_states(eqs, obseqs, states, outputs; verbose)
-    outset = Set(outputs)
-    out_obs = Int[]
-    for (i, eq) in pairs(obseqs)
-        if eq.lhs ∈ outset
-            push!(out_obs, i)
-        end
-    end
-    isempty(out_obs) && return eqs, obseqs, states
-
-    if verbose
-        str = "Promote observed outputs to states:\n"
-        str *= multiline_repr(obseqs[out_obs], prefix="  ")
-        @info str
-    end
-    new_obseqs = copy(obseqs)
-    deleteat!(new_obseqs, out_obs)
-    new_eqs = copy(eqs)
-    new_states = copy(states)
-    for i in out_obs
-        eq = obseqs[i]
-        push!(new_eqs, 0 ~ eq.lhs - eq.rhs)
-        push!(new_states, eq.lhs)
-    end
-    new_eqs, new_obseqs, new_states
-end
 
 """
     pick_best_alias_names(eqs, obseqs, states, outputs; verbose)
@@ -744,25 +701,6 @@ function _match_equations_to_states(coeff)
 end
 
 
-# Returns (diff_term, coeff) if lhs is of the form coeff * D(x), otherwise nothing.
-# Handles: numeric scalar, symbolic scalar, product of scalars (a*b*D(x)), negative coefficients.
-function get_scaled_diff(lhs)
-    lhs = SymbolicUtils.unwrap(lhs)
-    @match lhs begin
-        SymbolicUtils.BSImpl.AddMul(; coeff, dict) => begin
-            diff_keys = [(k, v) for (k, v) in dict
-                         if iscall(k) && operation(k) isa Differential && isequal(v, 1)]
-            length(diff_keys) == 1 || return nothing
-            diff_term = diff_keys[1][1]
-            other_keys = [(k, v) for (k, v) in dict if !isequal(k, diff_term)]
-            # guard: no other differential factors (e.g. D(x)*D(y))
-            any(kv -> iscall(kv[1]) && operation(kv[1]) isa Differential, other_keys) && return nothing
-            coeff_expr = coeff * prod(k^v for (k, v) in other_keys; init=1)
-            (diff_term, coeff_expr)
-        end
-        _ => nothing
-    end
-end
 
 function get_alias(eq)
     vars = get_variables_deriv(eq)

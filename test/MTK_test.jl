@@ -55,42 +55,6 @@ end
     @test mtkext.eq_type(eq) == (:explicit_algebraic, a.val)
 end
 
-@testset "get_scaled_diff test" begin
-    @variables x(t) y(t) z
-
-    # scaled by symbolic variable
-    r = mtkext.get_scaled_diff((z*Dt(x)).val)
-    @test !isnothing(r)
-    @test isequal(r[1], Dt(x).val)
-    @test isequal(r[2], z.val)
-
-    # scaled by literal number
-    r = mtkext.get_scaled_diff((2*Dt(x)).val)
-    @test !isnothing(r)
-    @test isequal(r[1], Dt(x).val)
-    @test isequal(r[2], 2)
-
-    # scaled by symbolic power
-    r = mtkext.get_scaled_diff((z^2*Dt(x)).val)
-    @test !isnothing(r)
-    @test isequal(r[1], Dt(x).val)
-    @test isequal(r[2], z.val^2)
-
-    # negative coefficient
-    r = mtkext.get_scaled_diff((-z*Dt(x)).val)
-    @test !isnothing(r)
-    @test isequal(r[1], Dt(x).val)
-    @test isequal(r[2], -z.val)
-
-    # plain differential — not a scaled diff
-    @test isnothing(mtkext.get_scaled_diff(Dt(x).val))
-
-    # squared differential — not a scaled diff
-    @test isnothing(mtkext.get_scaled_diff((z*Dt(x)^2).val))
-
-    # non-differential product — not a scaled diff
-    @test isnothing(mtkext.get_scaled_diff((z*x).val))
-end
 
 @mtkmodel Bus begin
     @variables begin
