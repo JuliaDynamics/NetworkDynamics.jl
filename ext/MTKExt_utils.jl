@@ -393,7 +393,7 @@ Extractes the `bindings` from a system and returns matchin InitFormulas.
 This will **ingore** parameter bindings! Parameter bindings will become observed
 equations in an earlier step.
 """
-function bindings_to_initformulas(sys; states, obs_subs)
+function bindings_to_initformulas(sys; states::Vector{ST}, obs_subs)
     bindings = ModelingToolkitBase.bindings(sys)
     isempty(bindings) && return nothing
 
@@ -404,7 +404,7 @@ function bindings_to_initformulas(sys; states, obs_subs)
         rhs = fixpoint_sub(_rhs, obs_subs)
 
         try
-            if getname(lhs) ∉ states
+            if lhs ∉ Set(states)
                 @warn "Binding $_lhs <= $_rhs targets a non-state variable after expansion in known symbols: $lhs <= $rhs. This most likely means that $_lhs was solved and is not an unknown anymore. Skip formula."
                 continue
             end

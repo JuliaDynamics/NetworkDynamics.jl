@@ -379,6 +379,7 @@ function _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_
     ####
     required_diffs = filter(isdifferential, Symbolics.get_variables(eqs))
     if !isempty(required_diffs)
+        diffop = operation(first(required_diffs))
         known_diffs = Dict{ST,ST}(obs.lhs => obs.rhs for obs in obs_unsrtd if isdifferential(obs.lhs))
         if !(required_diffs ⊆ keys(known_diffs))
             for obseq in obs_unsrtd
