@@ -29,12 +29,6 @@ function eq_type(eq::Equation)
     end
 end
 
-"""
-    lhs_var(eq::Equation)
-
-Returns the variable on the lhs of the equation for equations.
-"""
-lhs_var(eq::Equation) = eq_type(eq)[2]
 
 function rhs_differentials(eqs::Vector{Equation})
     diffs = Set{ST}()
