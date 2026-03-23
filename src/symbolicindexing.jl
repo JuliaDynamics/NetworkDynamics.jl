@@ -170,7 +170,7 @@ end
 
 Create `NWState` based on existing `NWParameter` object.
 
-See [`NWState(nw; ...)`](@ref) for the meaning of `guess` and `init`.
+See [`NWState(nw; ...)`](@ref NWState) for the meaning of `guess` and `init`.
 """
 function NWState(p::NWParameter; utype=Vector{Float64}, ufill=filltype(utype), default=true)
     t = nothing

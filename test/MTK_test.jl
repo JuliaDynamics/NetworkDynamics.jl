@@ -700,13 +700,6 @@ end
 
     @named inverter = GridFollowingInverter()
 
-    # Without assume_io_coupling, this should throw RHSDifferentialsError
-    # because i_r/i_i outputs depend on θ which has a derivative
-    # NOT neede anymore sice custom linear alg reduction does not attempt to remove this
-    # @test_throws NetworkDynamics.RHSDifferentialsError begin
-    #     vm = VertexModel(inverter, [:i_r, :i_i], [:u_r, :u_i]; verbose=false)
-    #     vm.metadata[:equations]
-    # end
     v = VertexModel(inverter, [:i_r, :i_i], [:u_r, :u_i]; verbose=false, assume_io_coupling=false)
     @test sum(v.mass_matrix) == dim(v) - 2
 
