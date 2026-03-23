@@ -37,12 +37,13 @@ end
 
 """
     VertexModel(sys::System, inputs, outputs;
-                verbose=false, name=getname(sys), extin=nothing, ff_to_constraint=true, kwargs...)
+                verbose=false, name=getname(sys), extin=nothing, ff_to_constraint=true,
+                mtkcompile=nothing, kwargs...)
 
 Create a `VertexModel` object from a given `System` created with ModelingToolkitBase.
 You need to provide 2 lists of symbolic names (`Symbol` or `Vector{Symbols}`):
-- `inputs`: names of variables in you equation representing the aggregated edge states
-- `outputs`: names of variables in you equation representing the node output
+- `inputs`: names of variables in your equation representing the aggregated edge states
+- `outputs`: names of variables in your equation representing the node output
 
 Additional kw arguments:
 - `name`: Set name of the component model. Will be lifted from the System name.
@@ -53,6 +54,10 @@ Additional kw arguments:
 - `assume_io_coupling=false`: If true, assumes direct dependency chain from outputs to inputs by adding
   implicit output terms to all inputs. This forces MTK to consider the dependency during compilation
   and can help in cases where MTK simplification results in derivatives of inputs.
+- `mtkcompile=nothing`: Controls the simplification backend. `false` (default) uses NetworkDynamics'
+  own algebraic reduction; `true` delegates structural simplification to MTK's `mtkcompile`;
+  `nothing` inherits the global default set via `NetworkDynamics.set_mtkcompile!`. `:compare` runs both and prints
+  a comparison (for debugging).
 """
 function VertexModel(
     sys::System, inputs, outputs;
@@ -155,14 +160,15 @@ EdgeModel(sys::System, srcin, dstin, dstout; kwargs...) = EdgeModel(sys, srcin, 
 
 """
     EdgeModel(sys::System, srcin, dstin, srcout, dstout;
-              verbose=false, name=getname(sys), extin=nothing, ff_to_constraint=false, kwargs...)
+              verbose=false, name=getname(sys), extin=nothing, ff_to_constraint=false,
+              mtkcompile=nothing, kwargs...)
 
 Create a `EdgeModel` object from a given `System` created with ModelingToolkitBase.
 You need to provide 4 lists of symbolic names (`Symbol` or `Vector{Symbols}`):
-- `srcin`: names of variables in you equation representing the node state at the source
-- `dstin`: names of variables in you equation representing the node state at the destination
-- `srcout`: names of variables in you equation representing the output at the source
-- `dstout`: names of variables in you equation representing the output at the destination
+- `srcin`: names of variables in your equation representing the node state at the source
+- `dstin`: names of variables in your equation representing the node state at the destination
+- `srcout`: names of variables in your equation representing the output at the source
+- `dstout`: names of variables in your equation representing the output at the destination
 
 Additional kw arguments:
 - `name`: Set name of the component model. Will be lifted from the System name.
@@ -173,6 +179,10 @@ Additional kw arguments:
 - `assume_io_coupling=false`: If true, assumes direct dependency chain from outputs to inputs by adding
   implicit output terms to all inputs. This forces MTK to consider the dependency during compilation
   and can help in cases where MTK simplification results in derivatives of inputs.
+- `mtkcompile=nothing`: Controls the simplification backend. `false` (default) uses NetworkDynamics'
+  own algebraic reduction; `true` delegates structural simplification to MTK's `mtkcompile`;
+  `nothing` inherits the global default set via `NetworkDynamics.set_mtkcompile!`. `:compare` runs both and prints
+  a comparison (for debugging).
 """
 function EdgeModel(
     sys::System, srcin, dstin, srcout, dstout;

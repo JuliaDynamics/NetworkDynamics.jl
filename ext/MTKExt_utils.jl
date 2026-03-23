@@ -320,7 +320,7 @@ function match_diff_states(eqs, states)
     states_new
 end
 
-# WORKAOROUND: get_variables does not descend into Differential anymore
+# WORKAROUND: get_variables does not descend into Differential anymore
 function get_variables_deriv(ex)
     set = get_variables(ex)
     for s in set
@@ -336,7 +336,7 @@ function get_variables_deriv(ex)
 end
 
 """
-    guesses_to_guessformulas!(sys; alias_substitutions=Dict())
+    guesses_to_guessformulas!(sys; obs_subs=Dict())
 
 Extracts symbolic guesses from a (simplified) system and returns matching GuessFormulas.
 The symbolic guesses are removed from the system's guesses dict in-place (hence `!`),
@@ -382,9 +382,9 @@ end
 """
     bindings_to_initformulas(sys)
 
-Extractes the `bindings` from a system and returns matchin InitFormulas.
+Extracts the `bindings` from a system and returns matching InitFormulas.
 
-This will **ingore** parameter bindings! Parameter bindings will become observed
+This will **ignore** parameter bindings! Parameter bindings will become observed
 equations in an earlier step.
 """
 function bindings_to_initformulas(sys; states::Vector{ST}, obs_subs)

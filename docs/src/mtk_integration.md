@@ -4,6 +4,10 @@ NetworkDynamics.jl is compatible with [`ModelingToolkit.jl`](https://github.com/
 The general idea is to use MTK to define *component models* (i.e. edge and vertex dynamics)
 which are then connected on network scale using NetworkDynamics.
 
+!!! note "On ModelingToolkit and ModelingToolkitBase"
+    End of 2024 the [SciML Steering Council announced](https://discourse.julialang.org/t/modelingtoolkit-v11-library-split-and-licensing-community-feedback-requested/134396) that going forward MTK will be AGPL licensed while MTKBase remains MIT licensed.
+    To avoid a dependency on MTK, ND.jl implements its own simplification pipeline which only depends on MTKBase. The `mtkcompile` keyword on `VertexModel`/`EdgeModel` lets you switch and compare the simplification backend. Be aware: using `mtkcompile=true` **without** importing ModelingToolkit falls back to the stub `mtkcompile` provided by ModelingToolkitBase, which performs no structural simplification.
+
 The main entry point for this interop are the constructors
 ```julia
 VertexModel(::System, inputs, outputs)
@@ -56,6 +60,7 @@ fundamental building blocks.
 using NetworkDynamics
 using ModelingToolkitBase
 using ModelingToolkitBase: t_nounits as t, D_nounits as D
+using SciCompDSL
 using OrdinaryDiffEqTsit5
 using CairoMakie
 ```

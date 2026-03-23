@@ -1,16 +1,17 @@
 
 """
-    pick_best_alias_names(eqs, obseqs, states, outputs; verbose)
+    pick_best_alias_names(eqs, obseqs, states, outputs, inputs; verbose)
 
-Post-processing pass that consolidates alias chains produced by `reduce_linear_algebraic`.
+Post-processing pass that consolidates alias chains produced by `reduce_equations`.
 
 After reduction, the obs list may contain pure alias equations of the form `a ~ b` that
 connect several names for the same quantity (e.g. `busbar₊u_r ~ busbar₊terminal₊u_r ~
 gen₊terminal₊u_r`).  This pass:
 1. Collects all such alias equations from `obseqs`.
 2. Groups transitively connected aliases into clusters.
-3. Picks one *main* representative per cluster — preferring differential states, then output variables, then variables
-   with fewer `₊` separators (less deeply nested).
+3. Picks one *main* representative per cluster — preferring differential states, then
+   input variables, then output variables, then variables with fewer `₊` separators
+   (less deeply nested).
 4. Applies the substitution `nonmain → main` throughout `eqs`, `obseqs`, and `states`,
    and reinserts canonical `nonmain ~ main` alias observations.
 """
@@ -122,25 +123,20 @@ end
 Reduce implicit algebraic equations by solving them symbolically and moving solutions
 into the observation list.
 
-State preference
-----------------
-Columns (states) are sorted so that deeply-nested states (many `₊` in their name) and
-non-output states come first in the bipartite matching.  This causes the DFS to prefer
-eliminating internal/nested variables, keeping output states and short-named states in the
-remaining equation system.
+Iteratively calls `_match_and_solve` until no further reductions are possible. Each round
+uses a Hungarian-algorithm bipartite match to pair equations with states, then calls
+`_solve_plan` to decide which matched pairs to actually solve.
 
 Feed-forward detection
 -----------------------
-After building SCCs of the matched-pair dependency graph, `_solve_plan` identifies which
-SCCs lie on a directed path from an `ff_input`-dependent SCC (FF-source) to an output-state
-SCC (output-sink) in the SCC meta-DAG.  Solving such an SCC would introduce algebraic
-feed-forward from an input to an output through the observation chain.
+`_solve_plan` identifies all simple dependency paths from output-state matches (output-sinks)
+to `ff_input`-dependent matches (FF-sources).  Solving any match along such a path would
+introduce algebraic feed-forward from an input to an output through the observation chain.
 
-For each FF-source → output-sink path, the algorithm walks from the output end toward the
-source and forbids the first `:linear_state` SCC it encounters (one whose matched coefficient
-involves another state, making division by that state necessary).  If no `:linear_state` SCC
-exists on a path, the output-sink SCC itself is forbidden.  This keeps the forbidden set as
-small as possible while preferring to cut at numerically risky solve points.
+A greedy minimum hitting set selects the smallest set of matches to forbid (keep as residual
+constraints), with preference for `:linear_state` matches (coefficient involves another state)
+to avoid numerically risky denominators. The remaining solvable matches are returned as SCCs
+in topological order.
 """
 function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, states::Vector{ST}; outset::Set{ST}, ff_inputs::Set{ST}, verbose)
     if length(states) != length(eqs)
@@ -150,10 +146,10 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
                 @warn "Some provided states do not appear in the equations and will be ignored: " * inline_repr(superflous)
                 states = filter(s -> s ∉ superflous, states)
             else
-                throw(ArgumentError("Expected same number of states and quations. Got $(length(states)) states and $(length(eqs)) equations. Please report issue and try building ocmponent with `mtkcompile=true` in the meantime."))
+                throw(ArgumentError("Expected same number of states and equations. Got $(length(states)) states and $(length(eqs)) equations. Please report issue and try building component with `mtkcompile=true` in the meantime."))
             end
         else
-            throw(ArgumentError("Expected same number of states and quations. Got $(length(states)) states and $(length(eqs)) equations. Please report issue and try building ocmponent with `mtkcompile=true` in the meantime."))
+            throw(ArgumentError("Expected same number of states and equations. Got $(length(states)) states and $(length(eqs)) equations. Please report issue and try building component with `mtkcompile=true` in the meantime."))
         end
     end
 
@@ -255,7 +251,7 @@ function _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_
               multiline_repr(unmatched, prefix="  "))
     end
 
-    # similarlar to has_input property for equations we need is_output for states which influce output states
+    # similar to has_input property for equations we need is_output for states which influence output states
     output_like = symbolic_dependencies(obs_unsrtd, outset)
     is_output = [s ∈ output_like for s in sorted_match_sts]
     sccs = _solve_plan(solvable_eq_idx, coeff_sorted, sorted_match_sts, has_input, is_output; verbose)
@@ -264,7 +260,6 @@ function _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_
 
     for (gi, scc) in enumerate(sccs)
         # scc is a Vector of indices into linear_matches; linear_matches[k] = (i,i)
-        scc_idx   = [solvable_eq_idx[k] for k in scc]
         scc_idx   = [solvable_eq_idx[k] for k in scc]
         scc_sts_i = sorted_match_sts[scc_idx]
         expander = selective_expander(obs_unsrtd, scc_sts_i)
@@ -358,27 +353,21 @@ function _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_
 end
 
 """
-    _solve_plan(matches, coeff, sorted_sts, has_input, is_output) -> (sccs, forbidden_matches)
+    _solve_plan(solvable_eq_idx, coeff, sorted_sts, has_input, is_output) -> sccs
 
-Decompose matched pairs into SCCs of the dependency digraph (topological order,
-dependencies before dependents) and return a `BitVector` of length `n` marking
-individual matches that must not be solved because they lie on a feed-forward path
-from an `ff_input`-dependent equation to an output state.
+Determine which solvable matched pairs should actually be solved and return them as SCCs
+in dependency-first topological order.
 
-FF detection is performed on the **raw** match-level dependency graph before SCCs are
-formed.  In the raw graph, edge `i→j` means "equation of match `i` depends on state of
-match `j`", so a path `out_sink → … → ff_source` (following dependency edges from the
-output end) is exactly the algebraic FF chain that must be cut.
+Two dependency graphs are built: `g_solvable` (solvable dependencies between matched
+pairs) and `g_unsolvable` (nonlinear dependencies). An initial SCC decomposition of
+`g_solvable` is computed, then combined with BFS over `g_unsolvable` to find all paths
+from output-sink matches (states that influence outputs) to FF-source matches (equations
+that depend on `ff_inputs`).
 
-For each such path the algorithm walks from the output-sink end toward the ff-source and
-forbids the first `:linear_state` match encountered (one whose matched coefficient
-involves another state, making division by that state necessary).  If no `:linear_state`
-match exists on a path the output-sink match itself is forbidden.
-
-After forbidden matches are identified, SCCs are computed only on the surviving
-non-forbidden subgraph, so cycles that existed solely through a forbidden match are
-already eliminated.  The returned `sccs` therefore contain only solvable matches and
-are already in dependency-first topological order.
+A greedy minimum hitting set selects the smallest set of matches to forbid along those
+paths, preferring `:linear_state` matches (coefficient involves another state, making
+the denominator numerically risky). SCCs are then recomputed on the non-forbidden
+subgraph and returned in dependency-first topological order.
 """
 function _solve_plan(solvable_eq_idx, coeff, sorted_sts, has_input, is_output; verbose)
     n = length(solvable_eq_idx)
@@ -408,11 +397,10 @@ function _solve_plan(solvable_eq_idx, coeff, sorted_sts, has_input, is_output; v
         forbidden_connections[src] = copy(ff_sources)
     end
 
-    # edges go from dependant -> dependency
-    # the SCC is ordered from dependencies to dependants (i.e. just backward links)
-    # so we need to find **forward** links
-    # we go backward and check if we find links into the already visited area
-    # thos will be ""
+    # edges go from dependent -> dependency
+    # the SCC is ordered from dependencies to dependents (i.e. just backward links)
+    # so we need to find **forward** links via g_unsolvable: walk backward through SCCs
+    # and check if any unsolvable dependency lands in an already-visited (upstream) SCC
     upstream = Set{Int}()
     for scc in Iterators.reverse(sccs)
         for dependency in Graphs.BFSIterator(g_unsolvable, scc; neighbors_type=Graphs.outneighbors)
