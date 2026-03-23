@@ -11,9 +11,8 @@ mtkext = Base.get_extension(NetworkDynamics, :NetworkDynamicsMTKExt)
 
 @testset "get_variables_deriv test" begin
     @variables x(t) y(t)
-    # if this test gets fixed, we can get rid of workaround get_variables_deriv
+    # get_variables treats D(x) as atomic (intended behavior); get_variables_deriv unwraps it to x
     @test get_variables(Dt(x) + y) == Set([Dt(x), y])
-    @test mtkext.get_variables_deriv(Dt(x) + y) == Set([x, y])
     @test mtkext.get_variables_deriv(Dt(x) + y) == Set([x, y])
 end
 
@@ -459,10 +458,8 @@ end
     # from init_tutorial
     # dependent MTKModels need to be defined at top level, so they are in front of the testset
     @named prosumer = StaticProsumerNode() # consumer
-    # @test_throws r"outputs .* do not appear in the equations" VertexModel(prosumer, [:q̃_nw], [:p])
     VertexModel(prosumer, [:q̃_nw], [:p])
     @named prosumer_wrapped = Wrapper()
-    # the below command used to fail, but works now with custom matching/tearing in NetworkDynamics
     VertexModel(prosumer_wrapped, [:q̃_nw], [:p]; verbose=false)
     # the fixed version works too
     @named prosumer_fixed = WrapperFixed()
@@ -1338,7 +1335,7 @@ end
     @mtkmodel FilterLeadNode_A begin
         @variables begin
             filter_x(t) = 0.0, [description="filter state"]
-            lead_out(t),       [description="lead output — currently orphaned"]
+            lead_out(t),       [description="lead output"]
             u(t), [description="output signal", output=true]
             P(t), [description="input signal", input=true]
         end
@@ -1369,7 +1366,7 @@ end
             filter_x(t) = 0.0, [description="filter state"]
             filter_out(t),     [description="filter output = filter_x"]
             lead_in(t),        [description="lead input, aliased to filter_out"]
-            lead_out(t),       [description="lead output — currently orphaned"]
+            lead_out(t),       [description="lead output"]
             u(t), [description="output signal", output=true]
             P(t), [description="input signal", input=true]
         end
@@ -1405,18 +1402,14 @@ end
     # Five algebraic variables form a genuine loop via K_G feedback:
     #   ce  = va_out - K_G*efd          ← efd feeds back here
     #   vmp = K_PM * ce
-    #   vmo = clamp(x_int + vmp, ...)   ← clamp makes the chain nonlinear
-    #   vml = min(vmo, VOEL)            ← min too
+    #   vmo = clamp(x_int + vmp, ...)   ← clamp makes the chain nonlinear in ce
+    #   vml = min(vmo, VOEL)
     #   efd = vml * vb_signal           ← closes the loop
     #
-    # Substituting through (in the non-saturated regime) collapses to a single
-    # linear equation in ce, so the system IS analytically solvable.  However,
-    # the current solver hits AssertionError("islinear") because clamp/min
-    # prevent the symbolic linearity check from succeeding.
-    #
-    # Without clamp/min the identical loop is reduced to 0 remaining states.
-    # With clamp/min all 5 remain as algebraic constraints — this testset
-    # documents the gap and will start passing once the solver is fixed.
+    # Without clamp/min the loop is fully reduced (all 5 states solved).
+    # With clamp/min the loop is partially reduced: vmp, vmo, vml, efd are solved
+    # but ce stays as the residual constraint because substitution through clamp/min
+    # makes the loop equation nonlinear in ce.
 
     @variables ce(t) vmp(t) vmo(t) vml(t) efd(t)
     @parameters K_G K_PM va_out x_int vb_signal V_MMIN V_MMAX VOEL
@@ -1434,7 +1427,7 @@ end
     @test isempty(red_states)
     @test length(red_obs) == 5
 
-    # Bug: identical loop but with clamp/min → solver fails → all 5 remain as constraints
+    # Same loop with clamp/min: ce remains as the residual algebraic constraint
     eqs_with_clamp = [
         0 ~ ce  - va_out + K_G*efd,
         0 ~ vmp - K_PM*ce,

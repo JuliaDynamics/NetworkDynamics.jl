@@ -164,10 +164,7 @@ function fix_metadata!(invalid_eqs, sys)
     for invalids in missingmetadata
         invalidname = getname(invalids)
         valid = if hasproperty(sys, getname(invalidname))
-            # TODO: upstream fixed, can be removed
-            # https://github.com/SciML/ModelingToolkit.jl/issues/3016
-            # getproperty(sys, getname(invalidname); namespace=false)
-            getproperty_symbolic(sys, invalids) # like getproperty but works on namespaced symbols foo₊bar directly
+            getproperty_symbolic(sys, invalids) # works on namespaced symbols foo₊bar directly
         else
             idxs = findall(contains(string(invalidname)), allnames)
             if length(idxs) == 1
@@ -320,7 +317,9 @@ function match_diff_states(eqs, states)
     states_new
 end
 
-# WORKAROUND: get_variables does not descend into Differential anymore
+# Like `get_variables` but replaces any `D(x)` terms with the inner variable `x`.
+# `get_variables` intentionally treats `D(x)` as an atomic symbol (expected behavior),
+# but we often need the bare variable to check dependencies in the equation graph.
 function get_variables_deriv(ex)
     set = get_variables(ex)
     for s in set
