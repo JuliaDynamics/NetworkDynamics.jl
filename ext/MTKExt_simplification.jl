@@ -262,7 +262,7 @@ function _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_
         # scc is a Vector of indices into linear_matches; linear_matches[k] = (i,i)
         scc_idx   = [solvable_eq_idx[k] for k in scc]
         scc_sts_i = sorted_match_sts[scc_idx]
-        expander = selective_expander(obs_unsrtd, scc_sts_i)
+        expander = selective_expander(obs_unsrtd, scc_sts_i; expand_diffs=true)
         scc_eqs_i = expander(eqs[scc_idx])
 
         try
@@ -365,9 +365,12 @@ from output-sink matches (states that influence outputs) to FF-source matches (e
 that depend on `ff_inputs`).
 
 A greedy minimum hitting set selects the smallest set of matches to forbid along those
-paths, preferring `:linear_state` matches (coefficient involves another state, making
-the denominator numerically risky). SCCs are then recomputed on the non-forbidden
-subgraph and returned in dependency-first topological order.
+paths. Candidates are ranked by a three-level cost:
+1. `:linear_state` diagonal coefficient (denominator would involve another state → numerically risky to solve).
+2. Output state (keeping an output as a residual is preferable to solving it algebraically along an FF path).
+3. Number of `:unsolvable` (nonlinear) appearances in other equations (more appearances → riskier to solve).
+SCCs are then recomputed on the non-forbidden subgraph and returned in dependency-first
+topological order.
 """
 function _solve_plan(solvable_eq_idx, coeff, sorted_sts, has_input, is_output; verbose)
     n = length(solvable_eq_idx)
@@ -437,12 +440,14 @@ function _solve_plan(solvable_eq_idx, coeff, sorted_sts, has_input, is_output; v
 
     # Classify each match by diagonal coefficient type.
     # Lower cost = better candidate to keep as residual (tearing variable).
-    match_cost = map(solvable_eq_idx) do r
+    match_cost = map(solvable_eq_idx, is_output) do r, io
         # prefer to break linear_state matches to avoid division by potential 0
         prio1 = coeff[r, r] == :linear_state ? 0 : 1
-        # second: prefer states which don't appear nonlinear in other equations
-        prio2 = count(c -> c == :unsolvable, view(coeff, :, r))
-        (prio1, prio2)
+        # second: prefer states which are outputs
+        prio2 = io ? 0 : 1
+        # third: prefer states which don't appear nonlinear in other equations
+        prio3 = count(c -> c == :unsolvable, view(coeff, :, r))
+        (prio1, prio2, prio3)
     end
 
     # Greedy minimum hitting set: build inverted index node -> path indices
@@ -457,10 +462,10 @@ function _solve_plan(solvable_eq_idx, coeff, sorted_sts, has_input, is_output; v
     chosen_nodes = Int[]
 
     while !isempty(remaining_paths)
-        best_node = argmax(keys(node_to_paths)) do i
+        best_node = argmin(keys(node_to_paths)) do i
             hits = length(intersect(node_to_paths[i], remaining_paths))
-            cost1, cost2 = match_cost[i]
-            (hits, -cost1, -cost2)
+            cost1, cost2, cost3 = match_cost[i]
+            (-hits, cost1, cost2, cost3)
         end
         push!(chosen_nodes, best_node)
         setdiff!(remaining_paths, node_to_paths[best_node])
@@ -809,7 +814,7 @@ end
 
 isdifferential(s) = iscall(unwrap(s)) && operation(unwrap(s)) isa Differential
 
-function selective_expander(obseqs, targets)
+function selective_expander(obseqs, targets; expand_diffs=false)
     if isempty(obseqs) || (targets != Any && isempty(targets))
         return identity
     end
@@ -830,6 +835,18 @@ function selective_expander(obseqs, targets)
     substitutions = OrderedDict{ST,ST}()
     for obs in obs_subset
         substitutions[obs.lhs] = substitute(obs.rhs, substitutions)
+    end
+
+    if expand_diffs
+        diff_subs = Dict{ST,ST}(o.lhs => o.rhs for o in obseqs if isdifferential(o.lhs))
+        # first: expand diff in diff (non sorted)
+        for (lhs, rhs) in diff_subs
+            diff_subs[lhs] = fixpoint_sub(rhs, diff_subs)
+        end
+        # second: add them to selective substitutions and expand selective (sorted)
+        for (lhs, rhs) in diff_subs
+            substitutions[lhs] = substitute(rhs, substitutions)
+        end
     end
 
     (term) -> begin
