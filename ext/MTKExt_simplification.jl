@@ -777,8 +777,7 @@ function simplify_with_mtkcompile(_sys, allinputs, alloutputs; verbose)
     if !isempty(bps)
         bindings = ModelingToolkitBase.bindings(sys)
         newobs = [bp ~ bindings[bp] for bp in bps]
-        newobssorted = _topological_sort(newobs) # ensure new obs are in correct order
-        append!(obseqs_sorted, newobssorted)
+        _insert_sorted!(obseqs_sorted, newobs)
     end
 
     @argcheck allinputs ⊆ Set(allparams) ∪ missing_inputs
