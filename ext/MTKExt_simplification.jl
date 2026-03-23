@@ -139,6 +139,19 @@ to avoid numerically risky denominators. The remaining solvable matches are retu
 in topological order.
 """
 function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, states::Vector{ST}; outset::Set{ST}, ff_inputs::Set{ST}, verbose)
+    # scalarize equations if necesary
+    if any(eq->Symbolics.isarraysymbolic(eq.lhs), eqs)
+        _eqs = Equation[]
+        for eq in eqs
+            if Symbolics.isarraysymbolic(eq.lhs)
+                append!(_eqs, Symbolics.scalarize(eq))
+            else
+                push!(_eqs, eq)
+            end
+        end
+        eqs = _eqs
+    end
+
     if length(states) != length(eqs)
         if length(states) > length(eqs)
             superflous = setdiff(Set{ST}(states), get_variables_deriv(eqs))
