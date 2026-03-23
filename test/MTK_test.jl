@@ -1457,3 +1457,24 @@ end
     @test isequal(ex(e), b + (b + target2))
 end
 
+@testset "RHS derivative substitution after diff-obs move-back" begin
+    # Regression test: when two diff equations are solved and moved to obs, and one
+    # depends on D(x) of the other (e.g. governor lead-lag: T3*D(x2) = x1+T2*D(x1)-x2),
+    # the final step that moves all diff-obs back to eqs must substitute D(x1) in the
+    # RHS of D(x2).  Without the fix this would leave D(x1) in the RHS and cause a
+    # RHSDifferentialsError downstream.
+    @variables x1(t) x2(t)
+    @parameters T1 T2 T3 ref
+    eqs = [
+        Dt(x1) ~ (ref - x1) / T1,            # explicit ODE for x1
+        0 ~ x2 - x1 - T2*Dt(x1) + T3*Dt(x2), # D(x2) depends on D(x1) in solution
+    ]
+    red_eqs, red_obs, red_states = _reduce_equations(eqs, Equation[], [x1, x2])
+    # Both states keep their own ODE
+    @test length(red_states) == 2
+    @test length(red_eqs) == 2
+    @test all(mtkext.isdifferential(eq.lhs) for eq in red_eqs)
+    # No RHS should contain a derivative after the fix
+    @test isempty(mtkext.rhs_differentials(red_eqs))
+end
+
