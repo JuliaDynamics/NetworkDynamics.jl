@@ -891,6 +891,50 @@ end
     obs_lhs = [eq.lhs for eq in red_obs]
     @test findfirst(isequal(nla.val), obs_lhs) < findfirst(isequal(nlx.val), obs_lhs)
     @test findfirst(isequal(nlb.val), obs_lhs) < findfirst(isequal(nlx.val), obs_lhs)
+
+    # Handle solved extra states:
+    # x_hs and y_hs are both differential states. The algebraic constraint eq3 contains
+    # only x_hs and y_hs — both "extended states" (inner vars of D(.)) — so
+    # needs_extension=true in _build_coeff_mat.
+    # Matching solves D(y_hs)~... and y_hs~x_hs into obs simultaneously → conflict.
+    # The "handle solved extra states" path removes D(y_hs)~-z_hs from obs and creates
+    # the consistency constraint  0 ~ D(x_hs) + z_hs  by differentiating y_hs ~ x_hs.
+    # "Substitute known differentials" then replaces D(x_hs) with z_hs (from eq1),
+    # yielding 0 ~ 2*z_hs → z_hs = 0.  Final: x_hs is the sole diff state, y_hs ~ x_hs,
+    # z_hs ~ 0.
+    @variables x_hs(t) y_hs(t) z_hs(t)
+    eqs = [
+        Dt(x_hs) ~ z_hs,    # diff eq for x_hs, D(x_hs) → x_hs extended
+        Dt(y_hs) ~ -z_hs,   # diff eq for y_hs, D(y_hs) → y_hs extended
+        0 ~ x_hs - y_hs,    # algebraic: allsyms={x_hs,y_hs} ⊆ extended_states_set → needs_extension
+    ]
+    red_eqs, red_obs, red_states = _reduce_equations(eqs, Equation[], [x_hs, y_hs, z_hs], verbose=true)
+    @test length(red_states) == 1 && isequal(only(red_states), x_hs.val)
+    @test length(red_eqs) == 1 && mtkext.isdifferential(only(red_eqs).lhs)
+    @test length(red_obs) == 2
+    obs_dict_hs = Dict(eq.lhs => eq.rhs for eq in red_obs)
+    @test isequal(obs_dict_hs[y_hs.val], x_hs.val)         # y_hs mirrors x_hs
+    @test isequal(obs_dict_hs[z_hs.val], Num(0).val)       # z_hs forced to 0 by consistency
+
+    # Substitute known differentials:
+    # sx and sy_sd are two states; sy_sd's equation contains D(sx) with coefficient 2
+    # (:linear_const, match cost 1), so eq1 (explicit, cost 0) wins the match for D(sx).
+    # sy_sd cannot be solved in round 1 because the presence of D(sx) makes eq2
+    # fall into the "has differential" branch (all other states marked :unsolvable).
+    # After D(sx) is solved from eq1, the "substitute known differentials" path
+    # replaces D(sx) with -sx in the remaining eq2: 0 ~ 2*(-sx) + sy_sd.
+    # sy_sd is then solved in round 2 as sy_sd ~ 2*sx.
+    @variables sx(t) sy_sd(t)
+    eqs = [
+        Dt(sx) ~ -sx,           # D(sx) solved first (explicit coeff → cost 0)
+        0 ~ 2*Dt(sx) + sy_sd,   # D(sx) with coeff 2 (:linear_const) → blocked until substitution
+    ]
+    red_eqs, red_obs, red_states = _reduce_equations(eqs, Equation[], [sx, sy_sd])
+    @test length(red_states) == 1 && isequal(only(red_states), sx.val)
+    @test length(red_eqs) == 1 && mtkext.isdifferential(only(red_eqs).lhs)
+    @test length(red_obs) == 1 && isequal(only(red_obs).lhs, sy_sd.val)
+    # sy_sd = -2*D(sx) evaluated at D(sx)=-sx → sy_sd = 2*sx
+    @test isequal(only(red_obs).rhs, (2*sx).val)
 end
 
 @testset "FF-blocking in reduce_equations" begin
