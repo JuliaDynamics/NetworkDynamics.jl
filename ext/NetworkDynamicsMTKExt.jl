@@ -55,9 +55,11 @@ Additional kw arguments:
   implicit output terms to all inputs. This forces MTK to consider the dependency during compilation
   and can help in cases where MTK simplification results in derivatives of inputs.
 - `mtkcompile=nothing`: Controls the simplification backend. `false` (default) uses NetworkDynamics'
-  own algebraic reduction; `true` delegates structural simplification to MTK's `mtkcompile`;
-  `nothing` inherits the global default set via `NetworkDynamics.set_mtkcompile!`. `:compare` runs both and prints
-  a comparison (for debugging).
+  own algebraic reduction pipeline. `true` delegates to MTK's `mtkcompile`: when `ModelingToolkit` is
+  loaded this performs full structural simplification; when only `ModelingToolkitBase` is available it
+  falls back to the stub `mtkcompile` (no structural simplification). `nothing` inherits the global
+  default set via `NetworkDynamics.set_mtkcompile!`. `:compare` runs both and prints a comparison
+  (for debugging).
 """
 function VertexModel(
     sys::System, inputs, outputs;
@@ -180,9 +182,11 @@ Additional kw arguments:
   implicit output terms to all inputs. This forces MTK to consider the dependency during compilation
   and can help in cases where MTK simplification results in derivatives of inputs.
 - `mtkcompile=nothing`: Controls the simplification backend. `false` (default) uses NetworkDynamics'
-  own algebraic reduction; `true` delegates structural simplification to MTK's `mtkcompile`;
-  `nothing` inherits the global default set via `NetworkDynamics.set_mtkcompile!`. `:compare` runs both and prints
-  a comparison (for debugging).
+  own algebraic reduction pipeline. `true` delegates to MTK's `mtkcompile`: when `ModelingToolkit` is
+  loaded this performs full structural simplification; when only `ModelingToolkitBase` is available it
+  falls back to the stub `mtkcompile` (no structural simplification). `nothing` inherits the global
+  default set via `NetworkDynamics.set_mtkcompile!`. `:compare` runs both and prints a comparison
+  (for debugging).
 """
 function EdgeModel(
     sys::System, srcin, dstin, srcout, dstout;

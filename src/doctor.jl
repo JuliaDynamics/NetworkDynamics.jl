@@ -169,7 +169,7 @@ function chk_component(c::ComponentModel)
         @warn "Component model allocates similar arrays to $(join(similars, ", "))!"
     end
 
-    # smoketest for obsered function
+    # smoketest for observed function
     if !isnothing(c.obsf)
         out = zeros(length(obssym(c)))
         _ins = map(t -> t.data, ins)

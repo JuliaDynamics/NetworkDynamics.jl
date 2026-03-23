@@ -1,5 +1,21 @@
 # NetworkDynamics Release Notes
 
+## v0.10.18 Changelog
+
+- **ModelingToolkit v11 compatibility** ([#344](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/344)):
+  - Raises compat from `ModelingToolkit` v10 to v11. MTK v11 split into `ModelingToolkitBase` (MIT-licensed) and `ModelingToolkit` (AGPL-licensed); NetworkDynamics.jl now only requires the MIT-licensed `ModelingToolkitBase` as a direct dependency, dropping the AGPL dependency.
+  - A custom structural simplification pipeline is added as the new default (`mtkcompile=false`). With `mtkcompile=true`, MTK's own `mtkcompile` is called: full structural simplification when `ModelingToolkit` is loaded, or the stub from `ModelingToolkitBase` (no structural simplification) when it is not.
+  - New extension dependencies: `Moshi`, `Hungarian`.
+  - **Dependency version bumps**: `SymbolicUtils` ≥ 4, `Symbolics` ≥ 7.
+  - `implicit_output` macro updated to use `Symbolics.@register_symbolic` instead of `ModelingToolkit.@register_symbolic`.
+- **`find_fixpoint` signature simplification**:
+  - `find_fixpoint(nw, x0::AbstractVector)` is deprecated; use `find_fixpoint(nw, NWState(...))`.
+  - `find_fixpoint(nw, p::NWParameter)` is deprecated; use `find_fixpoint(nw, NWState(...))`.
+  - `find_fixpoint(nw, x0::NWState, p::NWParameter)` is deprecated; use `find_fixpoint(nw, x0::NWState)`.
+  - The default initial state for fixpoint search now applies guesses and `InitFormula`s automatically (`guess=true, init=true`).
+- **`NWState` constructor** gains `guess` and `init` keyword arguments to control whether guess values and `InitFormula`s are applied during construction.
+- `doctor` check: added smoketest for the observable function (`obsf`) of each component.
+
 ## v0.10.17 Changelog
 - **Open-loop linearization** ([#341](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/341)):
   - New `open_loop_linearization(s0)` decomposes the network into open-loop subsystems (`Ynw`, `Zbus`, `Yinj`) for bus/injector node analysis
