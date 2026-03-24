@@ -520,88 +520,137 @@ function _compare_mtkcompile(VEModel, args, kwargs)
     end
     !isnothing(m1.extin) || !isnothing(m2.extin) && error("Comparison for extin not supported.")
 
-    # try find match between sym and psyms
-    if (samesym || all(s -> s ∈ m1.obssym, setdiff(m2.sym, m1.sym))) && samepsyms
-        sym_perm = [findfirst(==(s), NetworkDynamics.sym(m1)) for s in NetworkDynamics.sym(m2)]
-        psym_perm = [findfirst(==(p), NetworkDynamics.psym(m1)) for p in NetworkDynamics.psym(m2)]
+    # Numerical comparison: seed the model with more states from rand inputs,
+    # then reconstruct the smaller model's inputs using m_big's state + observed values.
+    printstyled("\nComparison of f & g outputs with random inputs: ", color=:blue, bold=true)
+    if !samepsyms
+        printstyled("\n  Skipped: psyms don't match", color=:yellow, bold=true)
+    else
+        m_big, m_small = NetworkDynamics.dim(m1) >= NetworkDynamics.dim(m2) ? (m1, m2) : (m2, m1)
+        psym_perm = [findfirst(==(p), NetworkDynamics.psym(m_small)) for p in NetworkDynamics.psym(m_big)]
 
-        outs1, du1, u1, ins, p1, t = NetworkDynamics.rand_inputs_fg(m1)
-        outs2 = copy.(outs1)
-        du2 = copy(du1)
-        u2 = map(enumerate(sym_perm)) do (i,p)
-            if !isnothing(p)
-                u1[p]
+        # Seed from m_small: its states are all "real" (no algebraically lifted extras),
+        # so the result is consistent without any post-hoc fixup.
+        outs_small, du_small, u_small, ins, p_small, t = NetworkDynamics.rand_inputs_fg(m_small)
+        NetworkDynamics.compfg(m_small)(outs_small, du_small, u_small, ins, p_small, t)
+
+        # collect m_small's observed and output values for filling m_big
+        obsout_small = zeros(length(NetworkDynamics.obssym(m_small)))
+        if !isempty(obsout_small) && !isnothing(m_small.obsf)
+            m_small.obsf(obsout_small, u_small, ins..., p_small, t)
+        end
+        outs_small_flat  = reduce(vcat, outs_small)
+        outsym_small_flat = reduce(vcat, NetworkDynamics.outsym(m_small))
+
+        # for each state of m_big: look it up in m_small.sym, obssym, then outsym
+        u_big_raw = map(NetworkDynamics.sym(m_big)) do s
+            idx = findfirst(==(s), NetworkDynamics.sym(m_small))
+            !isnothing(idx) && return u_small[idx]
+            idx = findfirst(==(s), NetworkDynamics.obssym(m_small))
+            !isnothing(idx) && return obsout_small[idx]
+            idx = findfirst(==(s), outsym_small_flat)
+            !isnothing(idx) && return outs_small_flat[idx]
+            return nothing
+        end
+
+        n_missing = count(isnothing, u_big_raw)
+        if n_missing > 0 || any(isnothing, psym_perm)
+            missing_syms = NetworkDynamics.sym(m_big)[findall(isnothing, u_big_raw)]
+            printstyled("\n  Skipped: $n_missing state(s) of larger model could not be seeded: $(inline_repr(missing_syms))",
+                        color=:yellow, bold=true)
+        else
+            u_big  = Float64[x for x in u_big_raw]
+            p_big  = p_small[psym_perm]
+            outs_big = copy.(outs_small)
+            du_big   = zeros(NetworkDynamics.dim(m_big))
+
+            NetworkDynamics.compfg(m_big)(outs_big, du_big, u_big, ins, p_big, t)
+
+            _mm_diag(m) = begin
+                mm = m.mass_matrix
+                mm isa UniformScaling ? fill(Int(mm.λ), NetworkDynamics.dim(m)) : LinearAlgebra.diag(mm)
+            end
+            sym_big   = NetworkDynamics.sym(m_big)
+            sym_small = NetworkDynamics.sym(m_small)
+            diff_idx_big = findall(!=(0), _mm_diag(m_big))
+            alg_idx_big  = findall(==(0), _mm_diag(m_big))
+            diff_idx_s   = findall(!=(0), _mm_diag(m_small))
+            alg_idx_s    = findall(==(0), _mm_diag(m_small))
+
+            # named diff-state pairs: same symbol name in both models
+            named_diff_pairs = Tuple{Int,Int}[]
+            matched_big_diff = Set{Int}()
+            unmatched_small_diff = Int[]
+            for j in diff_idx_s
+                idx = findfirst(==(sym_small[j]), sym_big)
+                if !isnothing(idx) && idx ∈ diff_idx_big && idx ∉ matched_big_diff
+                    push!(named_diff_pairs, (idx, j))
+                    push!(matched_big_diff, idx)
+                else
+                    push!(unmatched_small_diff, j)
+                end
+            end
+
+            # greedy matching for remaining alg + unmatched diff states
+            remaining_big   = [filter(i -> i ∉ matched_big_diff, diff_idx_big); alg_idx_big]
+            remaining_small = [unmatched_small_diff; alg_idx_s]
+            greedy_matched = 0
+            greedy_total   = length(remaining_small)
+            if !isempty(remaining_small) && !isempty(remaining_big)
+                cost = [min(abs(du_big[i] - du_small[j]), abs(du_big[i] + du_small[j]))
+                        for i in remaining_big, j in remaining_small]
+                used_big   = falses(length(remaining_big))
+                used_small = falses(greedy_total)
+                for _ in 1:greedy_total
+                    best = Inf; bi = bj = 0
+                    for i in eachindex(remaining_big), j in 1:greedy_total
+                        !used_big[i] && !used_small[j] && cost[i,j] < best &&
+                            (best = cost[i,j]; bi = i; bj = j)
+                    end
+                    bi == 0 && break
+                    used_big[bi] = used_small[bj] = true
+                    best < 1e-6 && (greedy_matched += 1)
+                end
+            end
+
+            maxodiff = maximum(abs.(reduce(vcat, outs_big) .- reduce(vcat, outs_small)), init=0.0)
+            maxdiff_diff = isempty(named_diff_pairs) ? 0.0 :
+                maximum(abs(du_big[i] - du_small[j]) for (i, j) in named_diff_pairs)
+
+            alg_syms_big   = Set(sym_big[alg_idx_big])
+            alg_syms_small = Set(sym_small[alg_idx_s])
+            alg_sets_differ = alg_syms_big != alg_syms_small
+            if alg_sets_differ
+                printstyled("\n  (!) Alg state sets differ — output & remaining-state comparison",
+                            color=:yellow)
+                printstyled("\n      may be unreliable (models not on a shared constraint manifold)",
+                            color=:yellow)
+            end
+            if maxodiff < 1e-6
+                printstyled("\n  Outputs match!         ", color=:green, bold=true)
             else
-                sym = NetworkDynamics.sym(m2)[i]
-                obsidx = findfirst(==(sym), NetworkDynamics.obssym(m1))
-                obsout = zeros(length(m1.obssym))
-                m2.obsf(obsout, u1, ins..., p1, t)
-                obsout[obsidx]
+                c = alg_sets_differ ? :yellow : :red
+                printstyled("\n  Outputs dont match!    ", color=c, bold=true)
+            end
+            print("max diff: ", NetworkDynamics.str_significant(maxodiff; sigdigits=3))
+            if isempty(named_diff_pairs)
+                printstyled("\n  No named diff states   ", color=:yellow, bold=true)
+            elseif maxdiff_diff < 1e-6
+                printstyled("\n  Diff states match!     ", color=:green, bold=true)
+            else
+                printstyled("\n  Diff states dont match!", color=:red, bold=true)
+            end
+            !isempty(named_diff_pairs) &&
+                print("max diff: ", NetworkDynamics.str_significant(maxdiff_diff; sigdigits=3))
+            if greedy_total == 0
+                # nothing to report
+            elseif greedy_matched == greedy_total
+                printstyled("\n  Remaining states match! ($greedy_matched/$greedy_total)", color=:green, bold=true)
+            else
+                c = alg_sets_differ ? :yellow : (greedy_matched == 0 ? :red : :yellow)
+                printstyled("\n  Remaining states: $greedy_matched/$greedy_total matched", color=c, bold=true)
             end
         end
-
-        p2 = p1[psym_perm]
-        NetworkDynamics.compfg(m1)(outs1, du1, u1, ins, p1, t)
-        NetworkDynamics.compfg(m2)(outs2, du2, u2, ins, p2, t)
-        # split state indices into diff (mass=1) and alg (mass=0)
-        _mm_diag2(m) = begin
-            mm = m.mass_matrix; s = NetworkDynamics.sym(m)
-            mm isa UniformScaling ? fill(Int(mm.λ), length(s)) : LinearAlgebra.diag(mm)
-        end
-        diff_idx1 = findall(!=(0), _mm_diag2(m1))
-        alg_idx1  = findall(==(0), _mm_diag2(m1))
-        diff_idx2 = findall(!=(0), _mm_diag2(m2))
-        alg_idx2  = findall(==(0), _mm_diag2(m2))
-
-        maxodiff = maximum(abs.(reduce(vcat, outs1) .- reduce(vcat, outs2)), init=0.0)
-        # diff states: sym_perm maps m2 positions → m1; compare directly
-        maxdiff_diff = maximum(abs.(du1[sym_perm[diff_idx2]] .- du2[diff_idx2]), init=0.0)
-        # alg states: order is arbitrary — find best matching by min-cost bijection
-        # cost(i,j) = min(|du1_alg[i] - du2_alg[j]|, |du1_alg[i] + du2_alg[j]|)
-        du1_alg = du1[alg_idx1]; du2_alg = du2[alg_idx2]
-        n_alg = length(du1_alg)
-        alg_cost = [min(abs(du1_alg[i] - du2_alg[j]), abs(du1_alg[i] + du2_alg[j]))
-                    for i in 1:n_alg, j in 1:n_alg]
-        alg_matched = Pair{Int,Int}[]
-        used1_alg = falses(n_alg); used2_alg = falses(n_alg)
-        for _ in 1:n_alg
-            best = Inf; bi = bj = 0
-            for i in 1:n_alg, j in 1:n_alg
-                !used1_alg[i] && !used2_alg[j] && alg_cost[i,j] < best &&
-                    (best = alg_cost[i,j]; bi = i; bj = j)
-            end
-            push!(alg_matched, bi => bj)
-            used1_alg[bi] = used2_alg[bj] = true
-        end
-        maxdiff_alg = isempty(alg_matched) ? 0.0 :
-            maximum(alg_cost[p.first, p.second] for p in alg_matched)
-
-        printstyled("\nComparison of f & g outputs with random inputs: ", color=:blue, bold=true)
-        if maxodiff < 1e-6
-            printstyled("\n  Outputs match!         ", color=:green, bold=true)
-        else
-            printstyled("\n  Outputs dont match!    ", color=:red, bold=true)
-        end
-        print("max diff: ", NetworkDynamics.str_significant(maxodiff; sigdigits=3))
-        if maxdiff_diff < 1e-6
-            printstyled("\n  Diff states match!     ", color=:green, bold=true)
-        else
-            printstyled("\n  Diff states dont match!", color=:red, bold=true)
-        end
-        print("max diff: ", NetworkDynamics.str_significant(maxdiff_diff; sigdigits=3))
-        if maxdiff_alg < 1e-6
-            printstyled("\n  Alg states match!      ", color=:green, bold=true)
-        else
-            printstyled("\n  Alg states dont match! ", color=:red, bold=true)
-            alg_syms1 = NetworkDynamics.sym(m1)[alg_idx1]
-            alg_syms2 = NetworkDynamics.sym(m2)[alg_idx2]
-            for (i, j) in alg_matched
-                c = alg_cost[i, j]
-                c >= 1e-6 && print("\n    $(alg_syms1[i]) <-> $(alg_syms2[j]): diff=",
-                    NetworkDynamics.str_significant(c; sigdigits=3))
-            end
-        end
-        print("max diff: ", NetworkDynamics.str_significant(maxdiff_alg; sigdigits=3))
     end
     println()
 
