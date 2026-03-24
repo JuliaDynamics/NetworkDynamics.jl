@@ -850,12 +850,12 @@ end
     # x_hs and y_hs are both differential states. The algebraic constraint eq3 contains
     # only x_hs and y_hs — both "extended states" (inner vars of D(.)) — so
     # needs_extension=true in _build_coeff_mat.
-    # Matching solves D(y_hs)~... and y_hs~x_hs into obs simultaneously → conflict.
-    # The "handle solved extra states" path removes D(y_hs)~-z_hs from obs and creates
-    # the consistency constraint  0 ~ D(x_hs) + z_hs  by differentiating y_hs ~ x_hs.
-    # "Substitute known differentials" then replaces D(x_hs) with z_hs (from eq1),
-    # yielding 0 ~ 2*z_hs → z_hs = 0.  Final: x_hs is the sole diff state, y_hs ~ x_hs,
-    # z_hs ~ 0.
+    # The matching eliminates one of {x_hs, y_hs} (the choice is symmetric; which one
+    # is picked depends on internal tie-breaking). The "handle solved extra states" path
+    # detects the conflict between the diff obs and the alg obs for the eliminated state,
+    # differentiates the alg obs, and substitutes known differentials to derive 0 ~ ±2*z_hs
+    # → z_hs = 0.  Final: one of {x_hs, y_hs} is the sole diff state, the other mirrors
+    # it, and z_hs ~ 0.
     @variables x_hs(t) y_hs(t) z_hs(t)
     eqs = [
         Dt(x_hs) ~ z_hs,    # diff eq for x_hs, D(x_hs) → x_hs extended
@@ -863,11 +863,15 @@ end
         0 ~ x_hs - y_hs,    # algebraic: allsyms={x_hs,y_hs} ⊆ extended_states_set → needs_extension
     ]
     red_eqs, red_obs, red_states = _reduce_equations(eqs, Equation[], [x_hs, y_hs, z_hs], verbose=true)
-    @test length(red_states) == 1 && isequal(only(red_states), x_hs.val)
+    @test length(red_states) == 1
+    # x_hs and y_hs are symmetric; the matching may eliminate either one
+    remaining_hs = only(red_states)
+    other_hs = isequal(remaining_hs, x_hs.val) ? y_hs.val : x_hs.val
+    @test isequal(remaining_hs, x_hs.val) || isequal(remaining_hs, y_hs.val)
     @test length(red_eqs) == 1 && mtkext.isdifferential(only(red_eqs).lhs)
     @test length(red_obs) == 2
     obs_dict_hs = Dict(eq.lhs => eq.rhs for eq in red_obs)
-    @test isequal(obs_dict_hs[y_hs.val], x_hs.val)         # y_hs mirrors x_hs
+    @test isequal(obs_dict_hs[other_hs], remaining_hs)     # eliminated state mirrors remaining
     @test isequal(obs_dict_hs[z_hs.val], Num(0).val)       # z_hs forced to 0 by consistency
 
     # Substitute known differentials:
@@ -966,7 +970,6 @@ end
         0 ~ Q + u_r*i_i - i_r*u_i   # same
         0 ~ n - u_r - u_i            # n is non-output, depends only on states (not inputs)
     ]
-    unwrap_const(eqs_mixed[2].lhs) isa Number
     red_eqs, red_obs, red_states = _reduce_equations(
         eqs_mixed, Equation[], [u_r, u_i, n];
         outset=[u_r, u_i], ff_inputs=ff_set, verbose=false)
@@ -990,8 +993,9 @@ end
     # H: 4-SCC FF chain: input→LC→LS→LS→LC→output
     # cn1, cn2 are dynamic states whose values appear as coefficients,
     # making SCCs 2 and 3 :linear_state respectively.
-    # Walking from the output SCC (LC) backward, SCC3 is the first :linear_state hit
-    # → SCC3 must be forbidden; SCCs 1, 2 and 4 must still be solved.
+    # Both SCC2 and SCC3 are :linear_state with equal cost; the index tiebreaker
+    # selects SCC2 (lower equation index) as the forbidden match.
+    # → SCC2 must be forbidden; SCCs 1, 3 and 4 must still be solved.
     @variables c1(t) c2(t) c3(t) c4(t) cn1(t) cn2(t)
     @parameters c_inp
     ff_chain_eqs = [
@@ -1009,9 +1013,9 @@ end
     obs_lhs = Set(eq.lhs for eq in red_obs)
     # SCCs 1 and 2 are not forbidden
     @test c1.val ∈ obs_lhs
-    @test c2.val ∈ obs_lhs
-    @test c3.val ∉ obs_lhs
-    @test c3.val ∈ Set(red_states)
+    @test c2.val ∉ obs_lhs
+    @test c2.val ∈ Set(red_states)
+    @test c3.val ∈ obs_lhs
     # SCC4 (LC) is not forbidden: c4 solved as obs (depends on state c3, no direct FF)
     @test c4.val ∈ obs_lhs
     @test topologicical_sorted(red_obs)

@@ -172,7 +172,9 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
     diffstates_inner_map = Dict(only(s.args) => s for s in diffstates_in_eqs)
     match_states = map(s -> get(diffstates_inner_map, s, s), states)
     match_states_set = Set{ST}(match_states)
-    all_states = match_states_set ∪ states # includs both D(x) and x
+    # ordered vector: match_states first, then any extra entries from states (the non-diff originals)
+    # this keeps a deterministic order while including both D(x) and x
+    all_states = vcat(match_states, filter(s -> s ∉ match_states_set, states))
 
     # check that we don't have any obs to expand
     if !isempty(Set(obs.lhs for obs in obs_unsrtd) ∩ match_states_set)
@@ -217,7 +219,7 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
     return eqs, _topological_sort(obs_unsrtd), nodiff(match_states)
 end
 
-function _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_inputs, verbose)
+function _match_and_solve(eqs, obs_unsrtd, match_states::Vector, all_states::Vector; outset, ff_inputs, verbose)
     non_extended_states = length(match_states)
     coeff, has_input, match_states, extra_match_states = _build_coeff_mat(eqs, obs_unsrtd, match_states, all_states; ff_inputs)
 
@@ -306,7 +308,7 @@ function _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_
     #### Handle solved extra states (conflicting solutions for D(x) vs x)
     ####
     solved_extra_states = setdiff(extra_match_states, sorted_match_sts)
-    sorted_match_sts = filter(s -> s ∉ extra_match_states, sorted_match_sts)
+    sorted_match_sts = filter(s -> s ∉ Set{ST}(extra_match_states), sorted_match_sts)
     if !isempty(solved_extra_states)
         if verbose
             str = ""
@@ -478,7 +480,7 @@ function _solve_plan(solvable_eq_idx, coeff, sorted_sts, has_input, is_output; v
         best_node = argmin(keys(node_to_paths)) do i
             hits = length(intersect(node_to_paths[i], remaining_paths))
             cost1, cost2, cost3 = match_cost[i]
-            (-hits, cost1, cost2, cost3)
+            (-hits, cost1, cost2, cost3, i)  # i as tiebreaker: deterministic across Julia versions
         end
         push!(chosen_nodes, best_node)
         setdiff!(remaining_paths, node_to_paths[best_node])
@@ -570,10 +572,15 @@ Dependency type of an equation w.r.t. a state variable:
   :linear_state — linear in the state; coefficient involves other states (risky denominator)
   :unsolvable   — unsolvable in the state (e.g. x^2, sin(x))
 """
-function _build_coeff_mat(lineqs, obseqs, match_states, all_states; ff_inputs=Set())
+function _build_coeff_mat(lineqs, obseqs, match_states::Vector, all_states::Vector; ff_inputs=Set())
     @assert length(lineqs) == length(match_states)
+    all_states_set = Set{ST}(all_states)
     needs_extension = false
-    extended_states = ST[only(s.args) for s in all_states if isdifferential(s)]
+    # Use all_states (ordered Vector) to derive extended states — this ensures that
+    # even after differential states are solved and removed from match_states, their
+    # inner algebraic states remain available for the extension codepath.
+    match_states_set = Set{ST}(match_states)
+    extended_states = ST[only(s.args) for s in all_states if isdifferential(s) && only(s.args) ∉ match_states_set]
     extended_states_set = Set{ST}(extended_states)
 
     N = length(match_states) + length(extended_states)
@@ -602,7 +609,7 @@ function _build_coeff_mat(lineqs, obseqs, match_states, all_states; ff_inputs=Se
                 return :explicit
             else
                 coeff_vars = get_variables_deriv(a_val)
-                return isdisjoint(coeff_vars, all_states) ? :linear_const : :linear_state
+                return isdisjoint(coeff_vars, all_states_set) ? :linear_const : :linear_state
             end
         end
     end
@@ -622,6 +629,7 @@ function _build_coeff_mat(lineqs, obseqs, match_states, all_states; ff_inputs=Se
                 end
             end
         elseif allsyms ⊆ extended_states_set
+            # this is a *last resort*, we onlye extend when we have no choice to match a different state
             for s in syms
                 t = get_coeff_type(eq, s)
                 if t ∈ (:explicit, :linear_const, :linear_state)
@@ -650,9 +658,11 @@ function _build_coeff_mat(lineqs, obseqs, match_states, all_states; ff_inputs=Se
     end
 
     if needs_extension
-        coeff, has_input, extended_match_states, extended_states_set ∩ extended_match_states
+        # Use filter on the ordered Vector (not Set intersection) so extra_match_states
+        # preserves the deterministic order of extended_match_states.
+        coeff, has_input, extended_match_states, filter(s -> s ∈ extended_states_set, extended_match_states)
     else
-        coeff, has_input, match_states, Set{ST}()
+        coeff, has_input, match_states, ST[]
     end
 end
 
@@ -809,11 +819,12 @@ function simplify_without_mtkcompile(_sys, allinputs, alloutputs; verbose, ff_to
     # maybe inputs have been given as parameters
     params = setdiff(allparams, Set{ST}(allinputs))
 
-    # don't consider inputs states
-    states = collect(setdiff(Set{ST}(unknowns(sys)), Set{ST}(allinputs)))
+    # don't consider inputs states; preserve unknowns(sys) order for deterministic matching
+    inputs_set = Set{ST}(allinputs)
+    states = filter(s -> s ∉ inputs_set, unknowns(sys))
 
     # check if we need to block input ff
-    ff_inputs = ff_to_constraint ? Set{ST}(allinputs) : Set{ST}()
+    ff_inputs = ff_to_constraint ? inputs_set : Set{ST}()
 
     # reduce equations (solves for differentials and algebraic variables)
     eqs, obseqs, states = reduce_equations(
@@ -872,7 +883,7 @@ end
 Given a list of states, return a set of superset of the provided states that also
 includes any "observed" state from obseqs which transitively influences the provided state.
 """
-function symbolic_dependencies(obseqs, states)
+function symbolic_dependencies(obseqs, states::Set)
     isempty(obseqs) && return Set{ST}(states)
     g, s_to_i_map = _dependency_graph(obseqs)
     srcs = Int[s_to_i_map[s] for s in states if haskey(s_to_i_map, s)]

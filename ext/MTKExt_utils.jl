@@ -296,23 +296,27 @@ and non-diff states filled in arbitrarily.
 function match_diff_states(eqs, states)
     @assert length(eqs) == length(states) "Number of equations and states must match to be able to match them, got $(length(eqs)) equations and $(length(states)) states"
     states_new = Vector{eltype(states)}(undef, length(eqs))
-    _unsortedstates = Set(states) # creates copy
+    diff_state_set = Set(states) # for fast membership test
     for (i, eq) in pairs(eqs)
         type, var = eq_type(eq)
         if type == :explicit_diffeq
-            states_new[i] = pop!(_unsortedstates, var)
+            states_new[i] = pop!(diff_state_set, var)
         elseif type == :implicit_algebraic
             # do nothing
         else
             error("Got equation $eq of type $type, which is not expected at that stage (only explicit diff eqs and implicit alg. eqs). Something went wrong.")
         end
     end
+    # Fill algebraic slots in the order states appear in the input vector (not hash order).
+    alg_states = [s for s in states if s ∈ diff_state_set]
+    ai = 0
     for i in eachindex(states_new)
         if !isassigned(states_new, i)
-            states_new[i] = pop!(_unsortedstates)
+            ai += 1
+            states_new[i] = alg_states[ai]
         end
     end
-    @assert isempty(_unsortedstates) "Not all states could be matched, something went wrong"
+    @assert ai == length(alg_states) "Not all states could be matched, something went wrong"
     @assert length(eqs) == length(states_new)
     states_new
 end
