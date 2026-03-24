@@ -1482,3 +1482,51 @@ end
     @test isempty(mtkext.rhs_differentials(red_eqs))
 end
 
+@testset "implicit_output algebraic loop should not crash" begin
+    # Regression test: PQ-load connected to a busbar where the busbar uses
+    # implicit_output(i_r + i_i) to signal an output coupling. This creates a
+    # symbolic cycle in the observation dependency graph:
+    #   pq_tu_r → b_tu_r → implicit_output(b_i_r + b_i_i) → b_i_r
+    #           → b_ti_r → pq_ti_r → pq_tu_r  (via pq current equations)
+    # The cycle is not a real algebraic loop at runtime (implicit_output = 0),
+    # but the symbolic solver must not crash — it should leave the coupling
+    # equations as residual constraints.
+    @variables begin
+        b_i_r(t), b_i_i(t)
+        b_P(t), b_Q(t), b_u_mag(t), b_u_arg(t), b_i_mag(t), b_i_arg(t)
+        b_tu_r(t), b_tu_i(t), b_ti_r(t), b_ti_i(t)
+        pq_tu_r(t), pq_tu_i(t), pq_ti_r(t), pq_ti_i(t)
+        b_u_r(t), b_u_i(t)  # voltage inputs (ff_inputs, not states)
+    end
+    @parameters P Q
+
+    io = implicit_output
+    eqs = Equation[
+        0 ~ b_P + b_i_i*(io(b_i_i+b_i_r)+b_u_i) + (b_u_r+io(b_i_i+b_i_r))*b_i_r,
+        0 ~ b_Q - b_i_i*(b_u_r+io(b_i_i+b_i_r)) + (io(b_i_i+b_i_r)+b_u_i)*b_i_r,
+        0 ~ b_u_mag - sqrt((b_u_r+io(b_i_i+b_i_r))^2 + (io(b_i_i+b_i_r)+b_u_i)^2),
+        0 ~ b_u_arg - atan(io(b_i_i+b_i_r)+b_u_i, b_u_r+io(b_i_i+b_i_r)),
+        0 ~ b_i_mag - sqrt(b_i_i^2+b_i_r^2),
+        0 ~ b_i_arg - atan(b_i_i, b_i_r),
+        0 ~ -b_tu_r + b_u_r + io(b_i_i+b_i_r),
+        0 ~ -b_tu_i + io(b_i_i+b_i_r) + b_u_i,
+        0 ~ -b_ti_r + b_i_r,
+        0 ~ b_i_i - b_ti_i,
+        0 ~ (-P*pq_tu_r - Q*pq_tu_i)/(pq_tu_r^2+pq_tu_i^2) + pq_ti_r,
+        0 ~ (-P*pq_tu_i + Q*pq_tu_r)/(pq_tu_r^2+pq_tu_i^2) + pq_ti_i,
+        0 ~ -pq_tu_r + b_tu_r,
+        0 ~ b_tu_i - pq_tu_i,
+        0 ~ b_ti_r + pq_ti_r,
+        0 ~ b_ti_i + pq_ti_i,
+    ]
+    states = [b_i_r, b_i_i, b_P, b_Q, b_u_mag, b_u_arg, b_i_mag, b_i_arg,
+              b_tu_r, b_tu_i, b_ti_r, b_ti_i, pq_tu_r, pq_tu_i, pq_ti_r, pq_ti_i]
+
+    # Should not throw; the coupling equations form an irresolvable symbolic loop
+    # and must remain as residual constraints.
+    red_eqs, red_obs, red_states = _reduce_equations(eqs, Equation[], states;
+                                                      outset=[b_i_r, b_i_i],
+                                                      ff_inputs=[b_u_r, b_u_i])
+    @test length(red_eqs) == 2
+end
+

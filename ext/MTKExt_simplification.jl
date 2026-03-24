@@ -393,14 +393,17 @@ function _solve_plan(solvable_eq_idx, coeff, sorted_sts, has_input, is_output; v
 
     g_solvable   = Graphs.SimpleDiGraph(n)
     g_unsolvable = Graphs.SimpleDiGraph(n)
+    g_combined   = Graphs.SimpleDiGraph(n)
     for (i, r) in enumerate(solvable_eq_idx)
         for (j, c) in enumerate(solvable_eq_idx)
             i == j && continue
             type = coeff[r, c]
             if type !== :none && type !== :unsolvable # any connection
                 Graphs.add_edge!(g_solvable, i, j)
+                Graphs.add_edge!(g_combined, i, j)
             elseif type == :unsolvable
                 Graphs.add_edge!(g_unsolvable, i, j)
+                Graphs.add_edge!(g_combined, i, j)
             end
         end
     end
@@ -436,9 +439,11 @@ function _solve_plan(solvable_eq_idx, coeff, sorted_sts, has_input, is_output; v
     # return if no need to break cycles
     isempty(forbidden_connections) && return sccs
 
+    # Search in g_combined (solvable ∪ unsolvable) because cycles may use a mix
+    # of solvable and unsolvable edges (e.g. through implicit_output barriers).
     pathes_to_break = Set{Vector{Int}}()
     for (src, dsts) in forbidden_connections
-        for p in Graphs.all_simple_paths(g_solvable, src, dsts)
+        for p in Graphs.all_simple_paths(g_combined, src, dsts)
             push!(pathes_to_break, p)
         end
     end
