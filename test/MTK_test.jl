@@ -821,11 +821,6 @@ end
     @test isempty(red_states)
     @test isempty(red_eqs)
     @test topologicical_sorted(red_obs)
-    # chD must come before chC, chC before chB, chB before chA
-    obs_lhs = [eq.lhs for eq in red_obs]
-    @test findfirst(isequal(chD.val), obs_lhs) < findfirst(isequal(chC.val), obs_lhs)
-    @test findfirst(isequal(chC.val), obs_lhs) < findfirst(isequal(chB.val), obs_lhs)
-    @test findfirst(isequal(chB.val), obs_lhs) < findfirst(isequal(chA.val), obs_lhs)
 
     # Nonlinear dependency ordering regression:
     # nlx ~ atan(nla, nlb) has a *nonlinear* dep on nla and nlb.
@@ -1011,13 +1006,9 @@ end
         ff_chain_eqs, Equation[], all_chain_states;
         outset=[c4], ff_inputs=Set([c_inp]), verbose=false)
     obs_lhs = Set(eq.lhs for eq in red_obs)
-    # SCCs 1 and 2 are not forbidden
-    @test c1.val ∈ obs_lhs
-    @test c2.val ∉ obs_lhs
-    @test c2.val ∈ Set(red_states)
-    @test c3.val ∈ obs_lhs
-    # SCC4 (LC) is not forbidden: c4 solved as obs (depends on state c3, no direct FF)
-    @test c4.val ∈ obs_lhs
+
+    @test length(red_states) == 3
+    @test red_eqs[3] ∈ ff_chain_eqs[4:5] # one of the state coeff should stae
     @test topologicical_sorted(red_obs)
 end
 
@@ -1093,6 +1084,9 @@ end
     @test mtkext.get_alias(0 ~ p - a) == nothing
     @test mtkext.get_alias(p ~ -a) == nothing
     @test mtkext.get_alias(0 ~ p-sin(a)) == nothing
+
+    @test mtkext.get_alias(Dt(a) ~ Dt(b)) == nothing
+    @test mtkext.get_alias(Dt(a) ~ b) == nothing
 end
 
 @testset "Output defined by parameter (NWTerminal regression)" begin
@@ -1530,3 +1524,123 @@ end
     @test length(red_eqs) == 2
 end
 
+@testset "Test pre alias reduction to avoid large algebraic cycles over trivial equations" begin
+    @mtkmodel SauerPaiMachine begin
+        @parameters begin
+            R_s=0, [description="stator resistance"]
+            X_d=2.0, [description="d-axis synchronous reactance"]
+            X_q=2.0, [description="q-axis synchronous reactance"]
+            X′_d=0.3, [description="d-axis transient reactance"]
+            X′_q=0.3, [description="q-axis transient reactance"]
+            X″_d=0.2, [description="d-axis subtransient reactance"]
+            X″_q=0.2, [description="q-axis subtransient reactance"]
+            X_ls=0.172, [description="stator leakage reactance"]
+            T′_d0=6.66667, [description="d-axis transient time constant"]
+            T″_d0=0.075, [description="d-axis subtransient time constant"]
+            T′_q0=6.66667, [description="q-axis transient time constant"]
+            T″_q0=0.075, [description="q-axis subtransient time constant"]
+            H=1.3, [description="inertia constant"]
+            D=0, [description="direct shaft damping"]
+            # System and machine base
+            S_b=100, [description="System power basis in MVA"]
+            V_b=110, [description="System voltage basis in kV"]
+            ω_b=2*pi*50, [description="System base frequency in rad/s"]
+            Sn=200, [description="Machine power rating in MVA"]
+            Vn=120, [description="Machine voltage rating in kV"]
+            # input/parameter switches
+            vf, [guess=1, bounds=(0,Inf), description="field voltage"]
+            τ_m, [guess=1, bounds=(0, Inf), description="mechanical torque"]
+        end
+        @variables begin
+            # inputs
+            u_r(t)=1, [description="bus d-voltage", output=true]
+            u_i(t)=0, [description="bus q-voltage", output=true]
+            i_r(t)=-0.5, [description="bus d-current (flowing into bus)", input=true]
+            i_i(t)=0, [description="bus d-current (flowing into bus)", input=true]
+            ψ_d(t), [description="d-axis flux linkage"]
+            ψ_q(t), [description="q-axis flux linkage"]
+            ψ″_d(t), [guess=-1, description="flux linkage assosciated with X″_d"]
+            ψ″_q(t), [guess=0, description="flux linkage assosciated with X″_q"]
+            I_d(t), [guess=0, description="d-axis current"]
+            I_q(t), [guess=0, description="q-axis current"]
+            V_d(t), [guess=0, description="d-axis voltage"]
+            V_q(t), [guess=1, description="q-axis voltage"]
+            E′_d(t), [guess=0, description="transient voltage behind transient reactance in d-axis"]
+            E′_q(t), [guess=-1, description="transient voltage behind transient reactance in q-axis"]
+            δ(t), [guess=0, description="rotor angle"]
+            ω(t), [guess=1, description="rotor speed"]
+            τ_e(t), [bounds=(0, Inf), description="electrical torque"]
+            i_mag(t), [description="terminal current magnitude"]
+            i_arg(t), [description="terminal current angle"]
+        end
+        begin
+            γ_d1 = (X″_d - X_ls)/(X′_d - X_ls)
+            γ_q1 = (X″_q - X_ls)/(X′_q - X_ls)
+            γ_d2 = (X′_d-X″_d)/(X′_d-X_ls)^2 # ~ (1 - γ_d1)/(X′_d - X_ls)
+            γ_q2 = (X′_q-X″_q)/(X′_q-X_ls)^2 # ~ (1 - γ_q1)/(X′_q - X_ls)
+            T_to_loc(α)  = [ sin(α) -cos(α);
+                            cos(α)  sin(α)]
+            T_to_glob(α) = [ sin(α)  cos(α);
+                            -cos(α)  sin(α)]
+        end
+        @equations begin
+            [u_r, u_i] .~ T_to_glob(δ)*[V_d, V_q] * (Vn/V_b)
+            [I_d, I_q] .~ -T_to_loc(δ)*[i_r, i_i] * ((S_b/V_b)/(Sn/Vn))
+
+            τ_e ~ ψ_d*I_q - ψ_q*I_d
+            Dt(δ) ~ ω_b*(ω - 1)
+            2*H * Dt(ω) ~ τ_m  - τ_e - D*(ω - 1)
+            V_d ~ -R_s*I_d - ω * ψ_q
+            V_q ~ -R_s*I_q + ω * ψ_d
+
+            T′_d0 * Dt(E′_q) ~ -E′_q - (X_d - X′_d)*(I_d - γ_d2*ψ″_d - (1-γ_d1)*I_d + γ_d2*E′_q) + vf
+            T′_q0 * Dt(E′_d) ~ -E′_d + (X_q - X′_q)*(I_q - γ_q2*ψ″_q - (1-γ_q1)*I_q - γ_q2*E′_d)
+            T″_d0 * Dt(ψ″_d) ~ -ψ″_d + E′_q - (X′_d - X_ls)*I_d
+            T″_q0 * Dt(ψ″_q) ~ -ψ″_q - E′_d - (X′_q - X_ls)*I_q
+
+            ψ_d ~ -X″_d*I_d + γ_d1*E′_q + (1-γ_d1)*ψ″_d
+            ψ_q ~ -X″_q*I_q - γ_q1*E′_d + (1-γ_q1)*ψ″_q
+            i_mag ~ i_r^2 + i_i^2
+            i_arg ~ atan(i_i, i_r)
+        end
+    end
+
+    @named gen1 = SauerPaiMachine()
+    @named gen2 = SauerPaiMachine()
+    @variables u_r(t) u_i(t) u_r_inter(t) u_i_inter(t)
+    @variables i_r(t) i_i(t)
+    eqs = [
+        u_r ~ u_r_inter
+        u_i ~ u_i_inter
+        u_r_inter ~ gen1.u_r
+        u_r_inter ~ gen2.u_r
+        u_i_inter ~ gen1.u_i
+        u_i_inter ~ gen2.u_i
+        i_r ~ gen1.i_r + gen2.i_r
+        i_i ~ gen1.i_i + gen2.i_i
+    ]
+    bus = System(eqs, t, [u_r, u_i, u_r_inter, u_i_inter, i_r, i_i], []; name=:bus, systems=[gen1, gen2])
+    vm = VertexModel(bus, [:i_r, :i_i], [:u_r, :u_i]; verbose=false, check=false)
+    @test dim(vm) == sum(vm.mass_matrix) + 2
+
+    @named gen1 = SauerPaiMachine()
+    @named gen2 = SauerPaiMachine()
+    @named gen3 = SauerPaiMachine()
+    @variables u_r(t) u_i(t) u_r_inter(t) u_i_inter(t)
+    @variables i_r(t) i_i(t)
+    eqs = [
+        u_r ~ u_r_inter
+        u_i ~ u_i_inter
+        u_r_inter ~ gen1.u_r
+        u_r_inter ~ gen2.u_r
+        u_r_inter ~ gen3.u_r
+        u_i_inter ~ gen1.u_i
+        u_i_inter ~ gen2.u_i
+        u_i_inter ~ gen3.u_i
+        i_r ~ gen1.i_r + gen2.i_r + gen3.i_r
+        i_i ~ gen1.i_i + gen2.i_i + gen3.i_i
+    ]
+    bus = System(eqs, t, [u_r, u_i, u_r_inter, u_i_inter, i_r, i_i], []; name=:bus, systems=[gen1, gen2, gen3])
+    vm = VertexModel(bus, [:i_r, :i_i], [:u_r, :u_i]; verbose=false, check=false)
+    @test dim(vm) == sum(vm.mass_matrix) + 2
+end

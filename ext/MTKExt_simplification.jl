@@ -192,6 +192,42 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
         end
     end
 
+    # first pass: remove trivial alias equations
+    eqs, obs_unsrtd, match_states = let
+        _match_states_set = Set{ST}(match_states)
+        alias_eqs = Int[]
+        removed_alias_states = Set{ST}()
+        # prefer to keep output states or less nested states as main
+        function _sortf(s)
+            if s ∈ removed_alias_states
+                -2
+            elseif s ∈ outset
+                -1
+            else
+                count('₊', repr(s))
+            end
+        end
+        expand_all = selective_expander(obs_unsrtd, Any)
+        for (i, eq) in enumerate(eqs)
+            alias = get_alias(expand_all(eq))
+            isnothing(alias) && continue
+            main, sub = sort(alias, by=_sortf)
+
+            # make sure sub can be removed
+            sub ∈ _match_states_set || continue
+            # make sure sub not yet removed
+            sub ∈ removed_alias_states && continue
+
+            push!(obs_unsrtd, sub ~ main)
+            push!(alias_eqs, i)
+            push!(removed_alias_states, sub)
+        end
+        verbose && @info "Removed $(length(alias_eqs)) trivial alias equations:\n" * multiline_repr(obs_unsrtd[(end-length(alias_eqs))+1:end], prefix="  ")
+        deleteat!(eqs, alias_eqs)
+        match_states = filter(s -> s ∉ removed_alias_states, match_states)
+        eqs, obs_unsrtd, match_states
+    end
+
     # iteratively match states and move solved equations to obs_unsrtd
     while !isempty(eqs)
         before = hash((eqs, obs_unsrtd, match_states))
@@ -552,6 +588,10 @@ end
 function _symbolic_linear_solve_clean(scc_eqs, scc_sts)
     n = length(scc_sts)
     if n > 2
+        if n >= 6
+            @warn "Encountered a strongly connected component with $n states. Skip solving! Please report issue with the full model which caused this as it probably means there is a bug in NetworkDynamics simplificaiton code. In the mean time, try `mtkcompile=true` with ModelingToolkit loaded for a more robust simplification."
+            error()
+        end
         return Symbolics.symbolic_linear_solve(scc_eqs, scc_sts)
     end
     # extract coefficient matrix A and RHS b from  0 ~ expr  (i.e. expr = 0)
