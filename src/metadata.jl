@@ -409,31 +409,6 @@ function get_defaults_or_inits_dict(c::ComponentModel)
     end
     dict
 end
-"""
-    get_defaults_or_inits_or_guesses_dict(c::ComponentModel)
-
-Returns a dictionary mapping symbols to their "default" values:
-
-    defaults > inits > guesses
-
-Only includes symbols that have either default or guess values set.
-
-See also: [`get_defaults_dict`](@ref), [`get_guesses_dict`](@ref), [`get_inits_dict`](@ref)
-"""
-function get_defaults_or_inits_or_guesses_dict(c::ComponentModel)
-    dict = Dict{Symbol, Float64}()
-    for (sym, smd) in c.symmetadata
-        if haskey(smd, :default)
-            dict[sym] = smd[:default]
-        elseif haskey(smd, :init)
-            dict[sym] = smd[:init]
-        elseif haskey(smd, :guess)
-            dict[sym] = smd[:guess]
-        end
-    end
-    dict
-end
-
 
 """
     set_defaults!(nw::Network, s::NWState)

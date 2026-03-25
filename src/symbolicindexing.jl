@@ -122,25 +122,31 @@ end
     NWState(nw_or_nw_wrapper;
             utype=Vector{Float64}, ufill=filltype(utype),
             ptype=Vector{Float64}, pfill=filltype(ptype),
-            default=true, guess=false, init=false)
+            default=true, guess=false, apply_formulas=true,
+            verbose=false)
 
 Creates "empty" `NWState` object for the Network/Wrapper `nw` with flat types
 `utype` & `ptype`. The arrays will be prefilled with `ufill` and `pfill`
 respectively (defaults to NaN).
 
-If `default=true` the default state & parameter values attached to the network
-components will be loaded.
+If `default=true` the state & parameter values are filled in the following order:
+ 1. `default` metadata values, falling back to `init` metadata values.
+ 2. If `apply_formulas=true`: [`InitFormula`](@ref)s whose inputs are all
+    non-`NaN` are evaluated (in topological order). Formulas always overwrite
+    existing values. Formulas whose inputs are undefined are skipped.
+ 3. If `guess=true`: `guess` metadata values for any remaining `NaN` symbols.
+ 4. If `guess=true` and `apply_formulas=true`: [`GuessFormula`](@ref)s are applied
+    to fill remaining symbols. Inputs are looked up from defaults first, then
+    guesses. Formulas whose inputs are still undefined are skipped.
 
-If `guess=true` symbols not covered by defaults are additionally filled with their
-guess values (only applies when `default=true`).
-
-If `init=true` the [`InitFormula`](@ref)s of each component are applied after
-filling defaults and guesses. Formulas whose input symbols are still NaN are skipped.
+If `verbose=true`, print information about which formulas are applied and which
+values are set or skipped.
 """
 function NWState(thing;
                  utype=Vector{Float64}, ufill=filltype(utype),
                  ptype=Vector{Float64}, pfill=filltype(ptype),
-                 default=true, guess=false, init=false)
+                 default=true, guess=false, apply_formulas=true,
+                 verbose=false)
     nw = extract_nw(thing)
     t = nothing
     uflat = _init_flat(utype, dim(nw), ufill)
@@ -148,9 +154,38 @@ function NWState(thing;
     s = NWState(nw,uflat,p,t)
     default || return s
 
-    _apply_defaults_and_guesses!(s, guess)
-    init && _apply_init_formulas!(s)
+    for (i, cm) in pairs(nw.im.vertexm)
+        for (k, v) in _get_appropriate_dict(VIndex(i), cm; guess, apply_formulas, verbose)
+            nwidx = VIndex(i, k)
+            setindex!(s, v, nwidx)
+        end
+    end
+    for (i, cm) in pairs(nw.im.edgem)
+        for (k, v) in _get_appropriate_dict(EIndex(i), cm; guess, apply_formulas, verbose)
+            nwidx = EIndex(i, k)
+            setindex!(s, v, nwidx)
+        end
+    end
+
     return s
+end
+function _get_appropriate_dict(cidx, cm; guess, apply_formulas, verbose)
+    defaults = get_defaults_or_inits_dict(cm)
+    if apply_formulas && has_initformula(cm)
+        verbose && println("Applying InitFormulas for $(cidx) ($(cm.name))...")
+        apply_init_formulas!(defaults, get_initformulas(cm); error_unresolvable=false, verbose)
+    end
+    if guess
+        guesses = get_guesses_dict(cm)
+        if apply_formulas && has_guessformula(cm)
+            verbose && println("Applying GuessFormulas for $(cidx) ($(cm.name))...")
+            apply_guess_formulas!(guesses, defaults, get_guessformulas(cm); error_unresolvable=false, verbose)
+        end
+        defaults = merge(guesses, defaults) # defaults overwrite guesses
+    end
+    # limit dict to only psym and sym of component
+    valid_keys = Set(vcat(sym(cm), psym(cm)))
+    filter!(p -> p.first ∈ valid_keys, defaults)
 end
 
 """
@@ -1074,60 +1109,3 @@ end
 # shallow copy of NWState/NWParameter
 Base.copy(nws::NWState) = NWState(nws.nw, copy(nws.uflat), copy(nws.p), nws.t)
 Base.copy(nwp::NWParameter) = NWParameter(nwp.nw, copy(nwp.pflat))
-
-# helpers for NWStat with guess=true/init=true
-function _apply_defaults_and_guesses!(s::NWState, guess)
-    dictf = guess ? get_defaults_or_inits_or_guesses_dict : get_defaults_or_inits_dict
-    nw = s.nw
-    u = uflat(s)
-    p = pflat(s)
-    for (ci, cf) in pairs(nw.im.vertexm)
-        thisdat  = view(u, nw.im.v_data[ci])
-        thispara = view(p, nw.im.v_para[ci])
-        dict = dictf(cf)
-        for (i, sy) in enumerate(sym(cf))
-            _def = get(dict, sy, nothing)
-            isnothing(_def) || (thisdat[i] = _def)
-        end
-        for (i, sy) in enumerate(psym(cf))
-            _def = get(dict, sy, nothing)
-            isnothing(_def) || (thispara[i] = _def)
-        end
-    end
-    for (ci, cf) in pairs(nw.im.edgem)
-        thisdat  = view(u, nw.im.e_data[ci])
-        thispara = view(p, nw.im.e_para[ci])
-        dict = dictf(cf)
-        for (i, sy) in enumerate(sym(cf))
-            _def = get(dict, sy, nothing)
-            isnothing(_def) || (thisdat[i] = _def)
-        end
-        for (i, sy) in enumerate(psym(cf))
-            _def = get(dict, sy, nothing)
-            isnothing(_def) || (thispara[i] = _def)
-        end
-    end
-    return s
-end
-
-function _apply_init_formulas!(s::NWState)
-    nw = s.nw
-    for ci in 1:nv(nw)
-        has_initformula(nw.im.vertexm[ci]) || continue
-        _apply_comp_init_formulas!(s, VIndex(ci))
-    end
-    for ci in 1:ne(nw)
-        has_initformula(nw.im.edgem[ci]) || continue
-        _apply_comp_init_formulas!(s, EIndex(ci))
-    end
-    return s
-end
-function _apply_comp_init_formulas!(s::NWState, cidx)
-    cf = extract_nw(s)[cidx]
-    for f in topological_sort_formulas(collect(get_initformulas(cf)))
-        nw_inbuf  = view(s, idxtype(cidx).(cidx.compidx, f.sym))
-        any(isnan, nw_inbuf) && continue
-        nw_outbuf = view(s, idxtype(cidx).(cidx.compidx, f.outsym))
-        f(SymbolicView(nw_outbuf, f.outsym), SymbolicView(nw_inbuf, f.sym))
-    end
-end
