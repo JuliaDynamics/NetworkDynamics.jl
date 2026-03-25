@@ -211,7 +211,7 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
         for (i, eq) in enumerate(eqs)
             alias = get_alias(expand_all(eq))
             isnothing(alias) && continue
-            main, sub = sort(alias, by=_sortf)
+            main, sub = sort(collect(alias), by=_sortf)
 
             # make sure sub can be removed
             sub ∈ _match_states_set || continue
