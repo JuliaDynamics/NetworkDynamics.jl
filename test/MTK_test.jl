@@ -1605,10 +1605,12 @@ end
         end
     end
 
-    @named gen1 = SauerPaiMachine()
-    @named gen2 = SauerPaiMachine()
     @variables u_r(t) u_i(t) u_r_inter(t) u_i_inter(t)
     @variables i_r(t) i_i(t)
+
+    # test compilation of 2 gen model
+    @named gen1 = SauerPaiMachine()
+    @named gen2 = SauerPaiMachine()
     eqs = [
         u_r ~ u_r_inter
         u_i ~ u_i_inter
@@ -1623,11 +1625,10 @@ end
     vm = VertexModel(bus, [:i_r, :i_i], [:u_r, :u_i]; verbose=false, check=false)
     @test dim(vm) == sum(vm.mass_matrix) + 2
 
+    # test compilation of 3 gen model (same busbar equations, but more parallel machines)
     @named gen1 = SauerPaiMachine()
     @named gen2 = SauerPaiMachine()
     @named gen3 = SauerPaiMachine()
-    @variables u_r(t) u_i(t) u_r_inter(t) u_i_inter(t)
-    @variables i_r(t) i_i(t)
     eqs = [
         u_r ~ u_r_inter
         u_i ~ u_i_inter
@@ -1643,4 +1644,17 @@ end
     bus = System(eqs, t, [u_r, u_i, u_r_inter, u_i_inter, i_r, i_i], []; name=:bus, systems=[gen1, gen2, gen3])
     vm = VertexModel(bus, [:i_r, :i_i], [:u_r, :u_i]; verbose=false, check=false)
     @test dim(vm) == sum(vm.mass_matrix) + 2
+
+    @testset "test effectiveness of scaling pseudoalg" begin
+        genp = (S_b=100, V_b=1, ω_b=2π*50, R_s=0.000125, T″_d0=0.01, T″_q0=0.01, X_ls=0.01460, X_d=0.1460, X′_d=0.0608, X″_d=0.06, X_q=0.1000, X′_q=0.0969, X″_q=0.06, T′_d0=8.96, T′_q0=0.310, H=23.64, Sn=100, Vn=1)
+        @named gen = SauerPaiMachine(; genp...)
+
+        # init problem as current osurce model
+        vm = VertexModel(gen, [:u_r, :u_i], [:i_r, :i_i], ff_to_constraint=false) # test that the machine model itself is consistent
+        set_default!(vm, :u_r, 1.0)
+        set_default!(vm, :u_i, 0.0)
+        set_default!(vm, :i_r, -0.45)
+        set_default!(vm, :i_i, 0.1)
+        initialize_component(vm);
+    end
 end
