@@ -12,8 +12,8 @@
   - `find_fixpoint(nw, x0::AbstractVector)` is deprecated; use `find_fixpoint(nw, NWState(...))`.
   - `find_fixpoint(nw, p::NWParameter)` is deprecated; use `find_fixpoint(nw, NWState(...))`.
   - `find_fixpoint(nw, x0::NWState, p::NWParameter)` is deprecated; use `find_fixpoint(nw, x0::NWState)`.
-  - The default initial state for fixpoint search now applies guesses and `InitFormula`s automatically (`guess=true, init=true`).
-- **`NWState` constructor** gains `guess` and `init` keyword arguments to control whether guess values and `InitFormula`s are applied during construction.
+  - The default initial state for fixpoint search now applies guesses and formulas automatically (`guess=true, apply_formulas=true`).
+- **`NWState` constructor** gains `guess`, `apply_formulas`, and `verbose` keyword arguments. With `default=true` (the default), values are filled in order: defaults/inits → `InitFormula`s → guesses (if `guess=true`) → `GuessFormula`s. `apply_formulas=true` by default; `guess=false` by default.
 - `doctor` check: added smoketest for the observable function (`obsf`) of each component.
 
 ## v0.10.17 Changelog

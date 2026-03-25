@@ -613,7 +613,7 @@ function topological_sort_formulas(formulas)
     end
 end
 
-function apply_init_formulas!(defaults, formulas_unsorted; verbose=false, io=stdout)
+function apply_init_formulas!(defaults, formulas_unsorted; verbose=false, io=stdout, error_unresolvable=true)
     # Convert tuple to vector if necessary
     formulas_vec = formulas_unsorted isa Tuple ? collect(formulas_unsorted) : formulas_unsorted
     formulas = topological_sort_formulas(formulas_vec)
@@ -622,13 +622,15 @@ function apply_init_formulas!(defaults, formulas_unsorted; verbose=false, io=std
         out = SymbolicView(zeros(length(f.outsym)), f.outsym)
         # ensure all input symbols are in defaults
         invals = map(f.sym) do s
-            if !haskey(defaults, s)
-                throw(ArgumentError("InitFormula requires input symbol $s to be defined in defaults"))
-            end
-            defaults[s]
+            haskey(defaults, s) ? defaults[s] : NaN
         end
         if any(v -> ismissing(v) || isnothing(v) || isnan(v), invals)
-            throw(ArgumentError("InitFormula requires all input symbols to be initialized, but found NaN/missing/nothing in inputs: $(f.sym .=> invals)"))
+            if error_unresolvable
+                throw(ArgumentError("InitFormula requires all input symbols to be initialized, but found NaN/missing/nothing in inputs: $(f.sym .=> invals)"))
+            else
+                verbose && printstyled(io, " - InitFomula: skipping formula for $(f.outsym) with unresolvable inputs: $(f.sym .=> invals)\n")
+                continue
+            end
         end
         in = SymbolicView(invals, f.sym)
         f(out, in)
@@ -650,7 +652,7 @@ function apply_init_formulas!(defaults, formulas_unsorted; verbose=false, io=std
     end
     return defaults
 end
-function apply_guess_formulas!(guesses, defaults, formulas_unsorted; verbose=false, io=stdout)
+function apply_guess_formulas!(guesses, defaults, formulas_unsorted; verbose=false, io=stdout, error_unresolvable=true)
     # Convert tuple to vector if necessary
     formulas_vec = formulas_unsorted isa Tuple ? collect(formulas_unsorted) : formulas_unsorted
     formulas = topological_sort_formulas(formulas_vec)
@@ -664,12 +666,17 @@ function apply_guess_formulas!(guesses, defaults, formulas_unsorted; verbose=fal
             elseif haskey(guesses, s)
                 guesses[s]   # Otherwise use guess value
             else
-                throw(ArgumentError("GuessFormula requires input symbol $s to be defined in defaults or guesses"))
+                NaN
             end
         end
         # Validate inputs are not NaN/missing/nothing
         if any(v -> ismissing(v) || isnothing(v) || isnan(v), invals)
-            throw(ArgumentError("GuessFormula requires all input symbols to be initialized, but found NaN/missing/nothing in inputs: $(f.sym .=> invals)"))
+            if error_unresolvable
+                throw(ArgumentError("GuessFormula requires all input symbols to be initialized, but found NaN/missing/nothing in inputs: $(f.sym .=> invals)"))
+            else
+                verbose && printstyled(io, " - GuessFomula: skipping formula for $(f.outsym) with unresolvable inputs: $(f.sym .=> invals)\n")
+                continue
+            end
         end
         in = SymbolicView(invals, f.sym)
         f(out, in)

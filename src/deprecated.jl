@@ -57,7 +57,7 @@ function find_fixpoint(nw::Network, x0::AbstractVector; kwargs...)
 end
 function find_fixpoint(nw::Network, p::NWParameter; kwargs...)
     @warn "find_fixpoint(nw, p::NWParameter) is deprecated. Use find_fixpoint(nw, s0::NWState) instead." maxlog=1
-    udefs = NWState(nw; ufill=0, guess=true, init=true)
+    udefs = NWState(nw; ufill=0, guess=true)
     s_with_p = NWState(nw, uflat(udefs), pflat(p), udefs.t)
     find_fixpoint(nw, s_with_p; kwargs...)
 end

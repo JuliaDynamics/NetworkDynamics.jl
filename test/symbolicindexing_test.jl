@@ -849,8 +849,8 @@ end
     @test eidxs(1, 1) == [EIndex(1, 1)]
 end
 
-@testset "NWState guess and init keywords" begin
-    # vertex with states that have guesses but no defaults, and params with defaults
+@testset "NWState guess and apply_formulas keywords" begin
+    # Vertex: params r, phi have defaults; states x, y have guesses + init formula
     fv = (du, u, ein, p, t) -> nothing
     v = VertexModel(; f=fv, g=1:2, sym=[:x, :y], psym=[:r => 2.0, :phi => π/4])
     set_guess!(v, :x, 0.5)
@@ -861,26 +861,115 @@ end
     end)
     nw = Network(path_graph(2), v, Lib.diffusion_edge())
 
-    # default only: states are NaN (no state defaults), params filled
-    s = NWState(nw)
-    @test isnan(s[VIndex(1, :x)])
-    @test isnan(s[VIndex(1, :y)])
-    @test s[VPIndex(1, :r)] == 2.0
+    @testset "default=false: everything NaN" begin
+        s = NWState(nw; default=false)
+        @test isnan(s[VIndex(1, :x)])
+        @test isnan(s[VIndex(1, :y)])
+        @test isnan(s[VPIndex(1, :r)])
+    end
 
-    # guess=true: NaN states filled from guess values
-    s = NWState(nw; guess=true)
-    @test s[VIndex(1, :x)] == 0.5
-    @test s[VIndex(1, :y)] == 0.5
+    @testset "apply_formulas=false: only raw defaults, no formulas" begin
+        s = NWState(nw; apply_formulas=false)
+        # params have defaults
+        @test s[VIndex(1, :r)] == 2.0
+        @test s[VIndex(1, :phi)] == π/4
+        # states have no defaults → NaN (no formulas applied)
+        @test isnan(s[VIndex(1, :x)])
+        @test isnan(s[VIndex(1, :y)])
+    end
 
-    # init=true: states computed from params via InitFormula
-    s = NWState(nw; init=true)
-    @test s[VIndex(1, :x)] ≈ 2.0 * cos(π/4)
-    @test s[VIndex(1, :y)] ≈ 2.0 * sin(π/4)
+    @testset "default behavior (apply_formulas=true): defaults + init formulas" begin
+        s = NWState(nw)
+        # params filled from defaults
+        @test s[VPIndex(1, :r)] == 2.0
+        @test s[VPIndex(1, :phi)] == π/4
+        # states computed via init formula (params are available as inputs)
+        @test s[VIndex(1, :x)] ≈ 2.0 * cos(π/4)
+        @test s[VIndex(1, :y)] ≈ 2.0 * sin(π/4)
+    end
 
-    # guess=true, init=true: init runs after guess, so formula values win
-    s = NWState(nw; guess=true, init=true)
-    @test s[VIndex(1, :x)] ≈ 2.0 * cos(π/4)
-    @test s[VIndex(1, :y)] ≈ 2.0 * sin(π/4)
+    @testset "guess=true, apply_formulas=false: defaults + guesses, no formulas" begin
+        s = NWState(nw; guess=true, apply_formulas=false)
+        @test s[VPIndex(1, :r)] == 2.0
+        # states filled from guesses (no formula to override)
+        @test s[VIndex(1, :x)] == 0.5
+        @test s[VIndex(1, :y)] == 0.5
+    end
+
+    @testset "guess=true, apply_formulas=true: full hierarchy" begin
+        s = NWState(nw; guess=true)
+        # init formulas fire first (params available), so formula values win over guesses
+        @test s[VIndex(1, :x)] ≈ 2.0 * cos(π/4)
+        @test s[VIndex(1, :y)] ≈ 2.0 * sin(π/4)
+    end
+
+    @testset "init formula skipped when inputs are NaN" begin
+        # vertex where formula inputs have no defaults → formula can't fire
+        v2 = VertexModel(; f=fv, g=1:2, sym=[:a, :b], psym=[:p1])
+        set_initformula!(v2, @initformula begin
+            :b = :a + :p1
+        end)
+        nw2 = Network(path_graph(2), v2, Lib.diffusion_edge())
+        s = NWState(nw2)
+        # :a and :p1 are NaN → formula skipped → :b stays NaN
+        @test isnan(s[VIndex(1, :a)])
+        @test isnan(s[VIndex(1, :b)])
+    end
+
+    @testset "defaults take priority over guesses" begin
+        v3 = VertexModel(; f=fv, g=1, sym=[:x => 10.0])
+        set_guess!(v3, :x, 99.0)
+        nw3 = Network(path_graph(2), v3, Lib.diffusion_edge())
+        s = NWState(nw3; guess=true)
+        @test s[VIndex(1, :x)] == 10.0  # default wins
+    end
+
+    @testset "guess formulas fill values from guesses" begin
+        # :a has a guess, :b has no guess/default but a guess formula deriving from :a
+        v4 = VertexModel(; f=fv, g=1:2, sym=[:a, :b], psym=Symbol[])
+        set_guess!(v4, :a, 3.0)
+        set_guessformula!(v4, @guessformula begin
+            :b = 2 * :a
+        end)
+        nw4 = Network(path_graph(2), v4, Lib.diffusion_edge())
+
+        # without guess: both NaN (no defaults, no formulas fire)
+        s = NWState(nw4)
+        @test isnan(s[VIndex(1, :a)])
+        @test isnan(s[VIndex(1, :b)])
+
+        # guess=true, apply_formulas=false: only raw guess for :a, :b stays NaN
+        s = NWState(nw4; guess=true, apply_formulas=false, verbose=true)
+        @test s[VIndex(1, :a)] == 3.0
+        @test isnan(s[VIndex(1, :b)])
+
+        # guess=true, apply_formulas=true: guess formula derives :b from :a
+        s = NWState(nw4; guess=true)
+        @test s[VIndex(1, :a)] == 3.0
+        @test s[VIndex(1, :b)] == 6.0
+    end
+
+    @testset "init formulas and guess formulas interact correctly" begin
+        # :r has default, :x has init formula from :r, :y has guess formula from :x
+        v5 = VertexModel(; f=fv, g=1:2, sym=[:x, :y], psym=[:r => 5.0])
+        set_initformula!(v5, @initformula begin
+            :x = 2 * :r
+        end)
+        set_guessformula!(v5, @guessformula begin
+            :y = :x + 1
+        end)
+        nw5 = Network(path_graph(2), v5, Lib.diffusion_edge())
+
+        # default: init formula fires (:x = 10), but guess formula doesn't (guess=false)
+        s = NWState(nw5; verbose=true)
+        @test s[VIndex(1, :x)] == 10.0
+        @test isnan(s[VIndex(1, :y)])
+
+        # guess=true: init formula fills :x=10, then guess formula fills :y=11
+        s = NWState(nw5; guess=true)
+        @test s[VIndex(1, :x)] == 10.0
+        @test s[VIndex(1, :y)] == 11.0
+    end
 end
 
 @testset "test equal methods for index types" begin
