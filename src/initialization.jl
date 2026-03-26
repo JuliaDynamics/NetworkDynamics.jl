@@ -606,8 +606,10 @@ function initialize_component(cf;
     if !isempty(prob.u0)
         sol = SciMLBase.solve(prob, alg; verbose, kwargs..., solve_kwargs...)
 
-        # If the primary solve failed or stalled, retry with residual rescaling
-        if !SciMLBase.successful_retcode(sol.retcode) || sol.retcode == SciMLBase.ReturnCode.Stalled
+        # If the primary solve failed or stalled and the residual is not already within
+        # tolerance, retry with residual rescaling
+        if (!SciMLBase.successful_retcode(sol.retcode) || sol.retcode == SciMLBase.ReturnCode.Stalled) &&
+                LinearAlgebra.norm(sol.resid) > tol
             sol_scaled = _solve_scaled(prob, alg; verbose, kwargs..., solve_kwargs...)
             if LinearAlgebra.norm(sol_scaled.resid) < LinearAlgebra.norm(sol.resid)
                 verbose && printstyled(io, " - Rescaled solve improved residual: $(LinearAlgebra.norm(sol.resid)) → $(LinearAlgebra.norm(sol_scaled.resid))\n")
