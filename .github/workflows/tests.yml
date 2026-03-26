@@ -35,9 +35,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
-      - name: Load Julia packages from cache
-        id: julia-cache
-        uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@v3
       - name: Add Testfiles (Julia 1.10 ignores [sources])
         if: matrix.version == 'lts'
         shell: julia --project=. --color=yes {0}
@@ -50,14 +48,6 @@ jobs:
       - uses: julia-actions/julia-runtest@v1
         with:
           coverage: false
-      - name: Save Julia depot cache on cancel or failure
-        id: julia-cache-save
-        if: cancelled() || failure()
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ${{ steps.julia-cache.outputs.cache-paths }}
-          key: ${{ steps.julia-cache.outputs.cache-key }}
 
   test-coverage:
     name: Test Coverage
@@ -71,9 +61,7 @@ jobs:
         with:
           version: 1
           arch: x64
-      - name: Load Julia packages from cache
-        id: julia-cache
-        uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@v3
       - uses: hexaeder/julia-buildpkg@main
       - uses: julia-actions/julia-runtest@v1
         env:
@@ -86,14 +74,6 @@ jobs:
           files: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
-      - name: Save Julia depot cache on cancel or failure
-        id: julia-cache-save
-        if: cancelled() || failure()
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ${{ steps.julia-cache.outputs.cache-paths }}
-          key: ${{ steps.julia-cache.outputs.cache-key }}
 
   Inspector-tests:
     name: NetworkDynamicsInspector.jl Tests
@@ -121,9 +101,7 @@ jobs:
       - uses: julia-actions/setup-julia@v2
         with:
           version: 1
-      - name: Load Julia packages from cache
-        id: julia-cache
-        uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@v3
       - uses: hexaeder/julia-buildpkg@main
         with:
           project: NetworkDynamicsInspector
@@ -138,14 +116,6 @@ jobs:
       #     files: lcov.info
       #     token: ${{ secrets.CODECOV_TOKEN }}
       #     fail_ci_if_error: false
-      - name: Save Julia depot cache on cancel or failure
-        id: julia-cache-save
-        if: cancelled() || failure()
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ${{ steps.julia-cache.outputs.cache-paths }}
-          key: ${{ steps.julia-cache.outputs.cache-key }}
 
   PowerDynamics-test:
     name: PowerDynamics.jl test - Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }}
@@ -169,9 +139,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
-      - name: Load Julia packages from cache
-        id: julia-cache
-        uses: julia-actions/cache@v2
+      - uses: julia-actions/cache@v3
       - uses: hexaeder/julia-buildpkg@main
       - name: Extract PowerDynamics branch from PR
         id: extract-branch
@@ -212,11 +180,3 @@ jobs:
             pkg"instantiate"
             pkg"build"
             Pkg.test("PowerDynamics"; coverage=false)
-      - name: Save Julia depot cache on cancel or failure
-        id: julia-cache-save
-        if: cancelled() || failure()
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ${{ steps.julia-cache.outputs.cache-paths }}
-          key: ${{ steps.julia-cache.outputs.cache-key }}
