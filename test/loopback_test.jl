@@ -1,7 +1,8 @@
 using Test
 using NetworkDynamics
-using ModelingToolkit
-using ModelingToolkit: t_nounits as t, D_nounits as D
+using ModelingToolkitBase
+using ModelingToolkitBase: t_nounits as t, D_nounits as D
+using SciCompDSL
 using OrdinaryDiffEqTsit5
 using Graphs
 
@@ -137,7 +138,7 @@ vertices2 = [vs_vertex, crl_vertex]
 nw2 = Network(vertices2, edges2; warn_order=false)
 
 s0_2 = NWState(nw2)
-s0_2[VIndex(:CRL_vertex, :v)] = 0.0
+s0_2[VIndex(:CRL_vertex, :cap₊p₊v)] = 0.0
 s0_2[VIndex(:CRL_vertex, :inductor₊p₊i)] = 0.0
 
 prob2 = ODEProblem(nw2, s0_2, (0.0, 10.0))
@@ -145,5 +146,5 @@ Main.test_execution_styles(prob2) # testing all ex styles #src
 sol2 = solve(prob2, Tsit5(), saveat=0.1)
 @test SciMLBase.successful_retcode(sol2)
 
-@test sol1[VIndex(2,:p₊v)] ≈ sol2[VIndex(2, :v)] atol=1e-5
+@test sol1[VIndex(2,:p₊v)] ≈ sol2[VIndex(2, :cap₊p₊v)] atol=1e-5
 @test sol1[VIndex(4,:p₊i)] ≈ sol2[VIndex(2, :inductor₊p₊i)] atol=1e-5

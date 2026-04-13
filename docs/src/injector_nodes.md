@@ -102,8 +102,9 @@ However thats not always the case for very large networks with many complex vert
 The first few components building blocks are identical to the docs on [ModelingToolkit Integration](@ref).
 ```@example injector 
 using NetworkDynamics
-using ModelingToolkit
-using ModelingToolkit: t_nounits as t, D_nounits as D
+using ModelingToolkitBase
+using ModelingToolkitBase: t_nounits as t, D_nounits as D
+using SciCompDSL
 using OrdinaryDiffEqTsit5
 using CairoMakie
 
@@ -281,7 +282,7 @@ vertices2 = [vs_vertex, crl_vertex]
 nw2 = Network(vertices2, edges2; warn_order=false)
 
 s0_2 = NWState(nw2)
-s0_2[VIndex(:CRL_vertex, :v)] = 0.0
+s0_2[VIndex(:CRL_vertex, :cap₊p₊v)] = 0.0
 s0_2[VIndex(:CRL_vertex, :inductor₊p₊i)] = 0.0
 
 prob2 = ODEProblem(nw2, s0_2, (0.0, 10.0))

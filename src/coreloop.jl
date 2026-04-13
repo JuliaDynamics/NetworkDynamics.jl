@@ -100,7 +100,7 @@ function (nw::Network{A,B,C,D,E})(du::dT, u::T, p, t; perturb=nothing, perturb_m
     ex isa KAExecution && KernelAbstractions.synchronize(get_backend(du))
     return nothing
 end
-function get_buffers(nw, u, p, t; initbufs, kwargs...)
+function get_buffers(nw, u, p, t; initbufs=true, kwargs...)
     if initbufs
         nw(nothing, u, p, t; RET=Val(:buf_init), kwargs...)
     else

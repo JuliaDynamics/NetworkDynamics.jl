@@ -399,11 +399,16 @@ Only includes symbols that have either default or init values set.
 See also: [`get_defaults_dict`](@ref), [`get_guesses_dict`](@ref), [`get_inits_dict`](@ref)
 """
 function get_defaults_or_inits_dict(c::ComponentModel)
-    inits = get_inits_dict(c)
-    defaults = get_defaults_dict(c)
-    merge!(inits, defaults) # add defaults to inits, overwriting existing inits
+    dict = Dict{Symbol, Float64}()
+    for (sym, smd) in c.symmetadata
+        if haskey(smd, :default)
+            dict[sym] = smd[:default]
+        elseif haskey(smd, :init)
+            dict[sym] = smd[:init]
+        end
+    end
+    dict
 end
-
 
 """
     set_defaults!(nw::Network, s::NWState)

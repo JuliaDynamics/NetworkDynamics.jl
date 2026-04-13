@@ -1,10 +1,10 @@
 name = "NetworkDynamics"
 uuid = "22e9dc34-2a0d-11e9-0de0-8588d035468b"
-version = "0.10.17"
+version = "1.0.0"
 authors = ["Frank Hellmann <hellmann@pik-potsdam.de>, Michael Lindner <michaellindner@pik-potsdam.de>, Hans Würfel <git@wuerfel.io"]
 
 [workspace]
-projects = ["test", "benchmark"]
+projects = ["test", "docs"]
 
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
@@ -18,12 +18,14 @@ DocStringExtensions = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
 FastClosures = "9aa1b823-49e4-5ca5-8b0f-3971ec8bab6a"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
+Hungarian = "e91730f6-4275-51fb-a7a0-7064cfbd3b39"
 InteractiveUtils = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
 KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 LinearSolve = "7ed4a6bd-45f5-4d41-b270-4a48e9bafcae"
 MacroTools = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
 Mixers = "2a8e4939-dab8-5edc-8f64-72a8776f13de"
+Moshi = "2e0e35c7-a2e4-4343-998d-7ef72827ed2d"
 NNlib = "872c559c-99b0-510c-b3b7-b6c96a88d5cd"
 NonlinearSolve = "8913a72c-1f9b-4ce2-8d82-65094dcecaec"
 OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
@@ -47,7 +49,7 @@ TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
-ModelingToolkit = "961ee093-0014-501f-94e3-6117800e7a78"
+ModelingToolkitBase = "7771a370-6774-4173-bd38-47e70ca0b839"
 SparseConnectivityTracer = "9f842d2f-2579-4b1d-911e-f412cf18a3f5"
 SymbolicUtils = "d1185830-fcd6-423d-90d6-eec64667417b"
 Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
@@ -55,7 +57,7 @@ Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 [extensions]
 NetworkDynamicsCUDAExt = ["CUDA", "Adapt"]
 NetworkDynamicsDataFramesExt = ["DataFrames"]
-NetworkDynamicsMTKExt = ["ModelingToolkit", "SymbolicUtils", "Symbolics"]
+NetworkDynamicsMTKExt = ["ModelingToolkitBase", "SymbolicUtils", "Symbolics", "Moshi"]
 NetworkDynamicsSparsityExt = ["SparseConnectivityTracer"]
 NetworkDynamicsSymbolicsExt = ["Symbolics", "MacroTools"]
 
@@ -74,13 +76,15 @@ DocStringExtensions = "0.9.3"
 FastClosures = "0.3.2"
 ForwardDiff = "0.10.36, 1"
 Graphs = "1"
+Hungarian = "0.7.0"
 InteractiveUtils = "1"
 KernelAbstractions = "0.9.18"
 LinearAlgebra = "1"
 LinearSolve = "3.46.1"
 MacroTools = "0.5.15"
 Mixers = "0.1.2"
-ModelingToolkit = "10"
+ModelingToolkitBase = "1.21"
+Moshi = "0.3"
 NNlib = "0.9.13"
 NonlinearSolve = "4"
 OrderedCollections = "1.8.0"
@@ -99,7 +103,7 @@ StaticArrays = "1.9.4"
 SteadyStateDiffEq = "2.2.0"
 StyledStrings = "1.0.3"
 SymbolicIndexingInterface = "0.3.27"
-SymbolicUtils = "3.24"
-Symbolics = "6.19.0"
+SymbolicUtils = "4"
+Symbolics = "7"
 TimerOutputs = "0.5.23"
 julia = "1.10"
