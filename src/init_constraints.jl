@@ -140,18 +140,20 @@ macro initconstraint(ex)
         constraint isa Union{Expr, QuoteNode} || continue # skip line number nodes
         dim += 1
         wrapped = _wrap_symbols!(constraint, sym, u)
-        push!(body, :($(esc(out))[$dim] = $wrapped))
+        push!(body, :($out[$dim] = $wrapped))
     end
     unique!(sym)
 
     s = join(string.(body), "\n")
-    s = replace(s, "(\$(Expr(:escape, :$out)))" => "    out")
-    s = replace(s, "(\$(Expr(:escape, :$u)))" => "u")
+    s = replace(s, string(out) => "    out")
+    s = replace(s, string(u) => "u")
     s = "InitConstraint($sym, $dim) do out, u\n" * s * "\nend"
+
+    body_esc = _escape_all.(body)
 
     quote
         InitConstraint($sym, $dim, $s) do $(esc(out)), $(esc(u))
-            $(body...)
+            $(body_esc...)
             nothing
         end
     end
@@ -160,7 +162,16 @@ function _wrap_symbols!(ex, sym, u)
     postwalk(ex) do x
         if x isa QuoteNode && x.value isa Symbol
             push!(sym, x.value)
-            :($(esc(u))[$x])
+            :($u[$x])
+        else
+            x
+        end
+    end
+end
+function _escape_all(ex::Expr)
+    postwalk(ex) do x
+        if x isa Symbol
+            esc(x)
         else
             x
         end
@@ -471,7 +482,7 @@ function _formula_macro(type, ex)
                 # :output = ... assigmend
                 target_sym = lhs.value
                 push!(output_syms, target_sym)
-                push!(body, :($(esc(out_var))[$(QuoteNode(target_sym))] = $wrapped_rhs))
+                push!(body, :($out_var[$(QuoteNode(target_sym))] = $wrapped_rhs))
             else
                 # "normal" assigmend
                 push!(body, :($lhs = $wrapped_rhs))
@@ -485,13 +496,15 @@ function _formula_macro(type, ex)
 
     # Generate pretty print string
     s = "    " * join(string.(body), "\n    ")
-    s = replace(s, "(\$(Expr(:escape, :$out_var)))" => "out")
-    s = replace(s, "(\$(Expr(:escape, :$u)))" => "u")
+    s = replace(s, string(out_var) => "out")
+    s = replace(s, string(u) => "u")
     s = "$(type)($output_syms, $input_syms) do out, u\n" * s * "\nend"
+
+    body_esc = _escape_all.(body)
 
     quote
         $(type)($output_syms, $input_syms, $s) do $(esc(out_var)), $(esc(u))
-            $(body...)
+            $(body_esc...)
             nothing
         end
     end

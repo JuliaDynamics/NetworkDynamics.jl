@@ -362,6 +362,19 @@ end
     ic1(out1, u)
     ic2(out2, u)
     @test out1 == out2
+
+    # test with capture of runtime variables
+    _zval = 3.0
+    ic3 = @initconstraint begin
+        :x + :y
+        :z^2 - _zval
+    end
+    @test ic3.sym == [:x, :y, :z]
+    out3 = [0.0, 0.0]
+    ic3(out3, [1.0, 2.0, 4.0])
+    @test out3[1] ≈ 3.0
+    @test out3[2] ≈ 4.0^2 - _zval
+    @test !occursin("Expr(:escape", repr(ic3))
 end
 
 @testset "InitConstraint combining constructor" begin
@@ -647,6 +660,20 @@ end
 
         @test out[:Vset] ≈ sqrt(1.0^2 + 2.0^2)
         @test out[:Pset] ≈ 1.0 * 3.0 + 2.0 * 4.0
+
+        # test with capture of runtim variables
+        _vset = 1.0
+        _pset = 2.0
+        if3 = @initformula begin
+            :Vset = _vset^2
+            :Pset = sin(_pset)
+        end
+
+        out = Dict{Symbol,Float64}()
+        u_view = NetworkDynamics.SymbolicView([], Symbol[])
+        if3(out, u_view)
+        @test out[:Vset] == _vset^2
+        @test out[:Pset] == sin(_pset)
     end
 
     @testset "InitFormula with complex expressions" begin
@@ -735,6 +762,22 @@ end
 
         @test out[:Vset] ≈ sqrt(1.0^2 + 2.0^2)
         @test out[:Pset] ≈ 1.0 * 3.0 + 2.0 * 4.0
+
+        # test with capture of runtime variables
+        _vset = 1.0
+        _pset = 2.0
+        gf3 = @guessformula begin
+            :Vset = _vset^2
+            :Pset = sin(_pset)
+        end
+        @test gf3.outsym == [:Vset, :Pset]
+        @test gf3.sym == Symbol[]
+        out = Dict{Symbol,Float64}()
+        u_view = NetworkDynamics.SymbolicView([], Symbol[])
+        gf3(out, u_view)
+        @test out[:Vset] == _vset^2
+        @test out[:Pset] == sin(_pset)
+        @test !occursin("Expr(:escape", repr(gf3))
     end
 
     @testset "GuessFormula validation - KEY DIFFERENCE from InitFormula" begin
