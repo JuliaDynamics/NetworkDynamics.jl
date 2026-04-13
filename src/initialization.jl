@@ -493,6 +493,7 @@ The function solves a nonlinear problem to find values for all free variables/pa
   GuessFormulas compute improved initial guesses for free variables, improving solver convergence.
 - `additional_initconstraint`: Additional initialization constraints to apply beyond those in component metadata
 - `verbose`: Whether to print information during initialization
+- `warn`: Whether to print warnings during initialization (default: `true`)
 - `apply_bound_transformation`: Whether to apply bound-conserving transformations
 - `t`: Time at which to solve for steady state. Only relevant for components with explicit time dependency.
 - `tol`: Tolerance for the residual of the initialized model (defaults to `1e-10`). Init throws error if resid ≥ tol.
@@ -530,6 +531,7 @@ function initialize_component(cf;
                              additional_guessformula=nothing,
                              additional_initconstraint=nothing,
                              verbose=true,
+                             warn=true,
                              apply_bound_transformation=true,
                              t=NaN,
                              tol=1e-10,
@@ -547,7 +549,7 @@ function initialize_component(cf;
         alg = default_compinit_alg(alg_kwargs...)
     end
 
-    if !isempty(kwargs)
+    if !isempty(kwargs) && warn
         @warn "Passing `kwargs` to `initialize_component(!)` is deprecated. Use `alg` and `solve_kwargs=(; kw=val)` instead."
     end
 
@@ -619,11 +621,11 @@ function initialize_component(cf;
 
         res = LinearAlgebra.norm(sol.resid)
         if sol.prob isa NonlinearLeastSquaresProblem && sol.retcode == SciMLBase.ReturnCode.Stalled
-            printstyled(" - WARN: "; color=:yellow)
-            printstyled("Initialization for component stalled with residual $(res)\n")
+            warn && printstyled(" - WARN: "; color=:yellow)
+            warn && printstyled("Initialization for component stalled with residual $(res)\n")
         elseif !SciMLBase.successful_retcode(sol.retcode) && res < tol
-            printstyled(" - WARN: "; color=:yellow)
-            printstyled("Init failed with code $(sol.retcode) but residual is within tol $(str_significant(res; sigdigits=2)) < $(tol), continue...\n")
+            warn && printstyled(" - WARN: "; color=:yellow)
+            warn && printstyled("Init failed with code $(sol.retcode) but residual is within tol $(str_significant(res; sigdigits=2)) < $(tol), continue...\n")
         elseif !SciMLBase.successful_retcode(sol.retcode)
             throw(ComponentInitError("Initialization failed. Solver returned $(sol.retcode)"))
         else
@@ -654,7 +656,7 @@ function initialize_component(cf;
 
     # Check for broken bounds using the complete state
     broken_bnds = broken_bounds(cf, init_state, bounds)
-    if !isempty(broken_bnds)
+    if !isempty(broken_bnds) && warn
         broken_msgs = ["  $sym = $val (bounds: $lb..$ub)" for (sym, val, (lb, ub)) in broken_bnds]
         fullmsg = "Initialized model has broken bounds. Try to adapt the initial guesses!" *
               "\n" * join(broken_msgs, "\n")
@@ -663,7 +665,7 @@ function initialize_component(cf;
     end
 
     # Check for broken observable defaults
-    if !isempty(observable_defaults)
+    if !isempty(observable_defaults) && warn
         broken_obs = broken_observable_defaults(cf, init_state, observable_defaults)
         if !isempty(broken_obs)
             broken_msgs = ["  $sym = $val (default: $def)" for (sym, def, val) in broken_obs]
@@ -1043,6 +1045,7 @@ function _initialize_componentwise(
     additional_initconstraint=nothing,
     verbose=false,
     subverbose=false,
+    warn=true,
     tol=1e-10,
     nwtol=1e-10,
     t=NaN,
@@ -1128,6 +1131,7 @@ function _initialize_componentwise(
                 additional_guessformula=_add_guessformula,
                 additional_initconstraint=_add_initconstraint,
                 verbose=_subverbose,
+                warn=warn,
                 t=t,
                 tol=tol,
                 residual=rescapture,
@@ -1166,6 +1170,7 @@ function _initialize_componentwise(
                 additional_guessformula=_add_guessformula,
                 additional_initconstraint=_add_initconstraint,
                 verbose=_subverbose,
+                warn=warn,
                 t=t,
                 tol=tol,
                 residual=rescapture,
