@@ -46,6 +46,7 @@ See also: [`linearize_network`](@ref), [`reduce_dae`](@ref)
                 throw(ArgumentError("D must have same number of rows as C and same number of columns as B"))
             end
             _nsym(s::SymbolicIndex) = 1
+            _nsym(s::Symbol) = 1
             _nsym(s) = length(s)
             if _nsym(insym) != size(B, 2)
                 throw(ArgumentError("Length of insym must match number of columns in B"))
