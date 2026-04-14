@@ -856,3 +856,22 @@ end
     @test ParamIdx(1:2) == ParamIdx([1,2])
     @test VIndex(1, 1:2) == VIndex(1, [1,2])
 end
+
+@testest "test observables with alias" begin
+    @testset "test _detect_alias in mtk ext" begin
+        using ModelingToolkit
+        using ModelingToolkit: t_nounits as t, unwrap
+        mtkext = Base.get_extension(NetworkDynamics, :NetworkDynamicsMTKExt)
+        @variables a(t) b(t) d e
+        @test mtkext._detect_alias(unwrap(1.2*a), t) == (1.2, a)
+        @test mtkext._detect_alias(unwrap(1.2*d), t) == (1.2, d)
+        @test mtkext._detect_alias(unwrap(a), t) == (1.0, a)
+        @test mtkext._detect_alias(unwrap(d), t) == (1.0, d)
+        @test mtkext._detect_alias(unwrap(a*d), t) == nothing
+        @test mtkext._detect_alias(unwrap(d*1), t) == (1.0, d)
+        @test mtkext._detect_alias(unwrap(a*1), t) == (1.0, a)
+        @test mtkext._detect_alias(unwrap(-a), t) == (-1.0, a)
+        @test mtkext._detect_alias(unwrap(-d), t) == (-1.0, d)
+    end
+    vm = Lib.dqbus_swing_and_load()
+end
