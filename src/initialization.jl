@@ -13,7 +13,7 @@ Base.showerror(io::IO, e::NetworkInitError) = print(io, "NetworkInitError: ", e.
 Base.showerror(io::IO, e::ComponentInitError) = print(io, "ComponentInitError: ", e.msg)
 
 """
-    find_fixpoint(nw::Network, [x0::NWState=NWState(nw)], [p::NWParameter=x0.p]; kwargs...)
+    find_fixpoint(nw::Network, [x0::NWState=NWState(nw; ufill=0, guess=true)]; kwargs...)
     find_fixpoint(nw::Network, x0::AbstractVector, p::AbstractVector; kwargs...)
 
 Find a steady-state (fixed-point) solution of the network dynamics by solving the nonlinear
@@ -25,7 +25,7 @@ constructs and solves the steady state problem, returning the solution as an `NW
 ## Arguments
 - `nw::Network`: The network dynamics to find a fixed point for
 - `x0`: Initial guess for the state variables. Can be:
-  - `NWState`: Complete network state (default: `NWState(nw; ufill=0)`)
+  - `NWState`: Complete network state (default: `NWState(nw; ufill=0, guess=true)`)
   - `AbstractVector`: Flat state vector
 - `p`: Network parameters. Can be:
   - `NWParameter`: Complete parameter object (default: extracted from `x0` or `NWParameter(nw)`)
@@ -41,18 +41,11 @@ constructs and solves the steady state problem, returning the solution as an `NW
 
 See also: [`NWState`](@ref), [`NWParameter`](@ref), [`initialize_componentwise`](@ref)
 """
-function find_fixpoint(nw::Network, x0::AbstractVector; kwargs...)
-    find_fixpoint(nw, NWState(nw, x0), NWParameter(nw); kwargs...)
-end
-function find_fixpoint(nw::Network, p::NWParameter; kwargs...)
-    find_fixpoint(nw, NWState(p; ufill=0), p; kwargs...)
-end
 function find_fixpoint(nw::Network,
-                       x0::NWState=NWState(nw; ufill=0),
-                       p::NWParameter=x0.p;
+                       x0::NWState=NWState(nw; ufill=0, guess=true);
                        t=isnothing(x0.t) ? NaN : x0.t,
                        kwargs...)
-    find_fixpoint(nw, uflat(x0), pflat(p); t, kwargs...)
+    find_fixpoint(nw, uflat(x0), pflat(x0); t, kwargs...)
 end
 
 #=
@@ -476,7 +469,8 @@ end
                          t=NaN,
                          tol=1e-10,
                          residual=nothing,
-                         alg=nothing, # defaults to FastShortcutNLLSPolyalg(linsolve=QRFactorization())
+                         alg_kwargs=(;),
+                         alg=nothing, # defaults to NetworkDynamics.default_compinit_alg(alg_kwargs...), mainly FastShortcutNLLSPolyalg
                          solve_kwargs=(;),
                          io=stdout,
                          kwargs...)
@@ -499,15 +493,20 @@ The function solves a nonlinear problem to find values for all free variables/pa
   GuessFormulas compute improved initial guesses for free variables, improving solver convergence.
 - `additional_initconstraint`: Additional initialization constraints to apply beyond those in component metadata
 - `verbose`: Whether to print information during initialization
+- `warn`: Whether to print warnings during initialization (default: `true`)
 - `apply_bound_transformation`: Whether to apply bound-conserving transformations
 - `t`: Time at which to solve for steady state. Only relevant for components with explicit time dependency.
 - `tol`: Tolerance for the residual of the initialized model (defaults to `1e-10`). Init throws error if resid ≥ tol.
 - `residual`: Optional `Ref{Float64}` which gets the final residual of the initialized model.
 - `alg_kwargs=(;)`: Additional keyword arguments passed to the nonlinear solver algorithm constructor
-- `alg=FastShortcutNLLSPolyalg(; linsolve=QRFactorization(), autodiff=AutoForwardDiff(), vjp_autodiff=pick_init_vjp_autodiff(), alg_kwargs...)`
+- `alg=nothing`:
 
-   Nonlinear solver algorithm. Defaults to NonlinearSolve.jl's polyalgorithm with QR factorization, since init problems tend to be ill-conditioned.
+   Nonlinear solver algorithm. If nothing, gets set to `NetworkDynamics.default_compinit_alg(alg_kwargs...)`,
+   which is `FastShortcutNLLSPolyalg` with QR factorization. If this fails or stalls, it is automatically
+   retried with residual rescaling (Jacobian row norms) to improve convergence for ill-conditioned problems.
+   The best solution (by unscaled residual norm) is kept.
    The `vjp_autodiff` is selected automatically via `pick_init_vjp_autodiff()`, which prefers `AutoReverseDiff()` and falls back to `AutoFiniteDiff()`.
+
 - `solve_kwargs=(;)`: Additional keyword arguments passed to the SciML `solve` function
 - `io=stdout`: IO stream for printing information
 
@@ -532,6 +531,7 @@ function initialize_component(cf;
                              additional_guessformula=nothing,
                              additional_initconstraint=nothing,
                              verbose=true,
+                             warn=true,
                              apply_bound_transformation=true,
                              t=NaN,
                              tol=1e-10,
@@ -546,15 +546,10 @@ function initialize_component(cf;
                              kwargs...)
 
     if isnothing(alg)
-        alg = FastShortcutNLLSPolyalg(;
-            linsolve=QRFactorization(),
-            autodiff=AutoForwardDiff(),
-            vjp_autodiff=pick_init_vjp_autodiff(),
-            alg_kwargs...
-        )
+        alg = default_compinit_alg(alg_kwargs...)
     end
 
-    if !isempty(kwargs)
+    if !isempty(kwargs) && warn
         @warn "Passing `kwargs` to `initialize_component(!)` is deprecated. Use `alg` and `solve_kwargs=(; kw=val)` instead."
     end
 
@@ -613,14 +608,27 @@ function initialize_component(cf;
     if !isempty(prob.u0)
         sol = SciMLBase.solve(prob, alg; verbose, kwargs..., solve_kwargs...)
 
+        # If the primary solve failed or stalled and the residual is not already within
+        # tolerance, retry with residual rescaling
+        if (!SciMLBase.successful_retcode(sol.retcode) || sol.retcode == SciMLBase.ReturnCode.Stalled) &&
+                LinearAlgebra.norm(sol.resid) > tol
+            sol_scaled = _solve_scaled(prob, alg; verbose, kwargs..., solve_kwargs...)
+            if LinearAlgebra.norm(sol_scaled.resid) < LinearAlgebra.norm(sol.resid)
+                verbose && printstyled(io, " - Rescaled solve improved residual: $(LinearAlgebra.norm(sol.resid)) → $(LinearAlgebra.norm(sol_scaled.resid))\n")
+                sol = sol_scaled
+            end
+        end
+
+        res = LinearAlgebra.norm(sol.resid)
         if sol.prob isa NonlinearLeastSquaresProblem && sol.retcode == SciMLBase.ReturnCode.Stalled
-            res = LinearAlgebra.norm(sol.resid)
-            printstyled(" - WARN: "; color=:yellow)
-            printstyled("Initialization for component stalled with residual $(res)")
+            warn && printstyled(" - WARN: "; color=:yellow)
+            warn && printstyled("Initialization for component stalled with residual $(res)\n")
+        elseif !SciMLBase.successful_retcode(sol.retcode) && res < tol
+            warn && printstyled(" - WARN: "; color=:yellow)
+            warn && printstyled("Init failed with code $(sol.retcode) but residual is within tol $(str_significant(res; sigdigits=2)) < $(tol), continue...\n")
         elseif !SciMLBase.successful_retcode(sol.retcode)
             throw(ComponentInitError("Initialization failed. Solver returned $(sol.retcode)"))
         else
-            res = LinearAlgebra.norm(sol.resid)
             verbose && printstyled(io, " - Initialization successful with residual $(res)\n")
         end
 
@@ -648,7 +656,7 @@ function initialize_component(cf;
 
     # Check for broken bounds using the complete state
     broken_bnds = broken_bounds(cf, init_state, bounds)
-    if !isempty(broken_bnds)
+    if !isempty(broken_bnds) && warn
         broken_msgs = ["  $sym = $val (bounds: $lb..$ub)" for (sym, val, (lb, ub)) in broken_bnds]
         fullmsg = "Initialized model has broken bounds. Try to adapt the initial guesses!" *
               "\n" * join(broken_msgs, "\n")
@@ -657,7 +665,7 @@ function initialize_component(cf;
     end
 
     # Check for broken observable defaults
-    if !isempty(observable_defaults)
+    if !isempty(observable_defaults) && warn
         broken_obs = broken_observable_defaults(cf, init_state, observable_defaults)
         if !isempty(broken_obs)
             broken_msgs = ["  $sym = $val (default: $def)" for (sym, def, val) in broken_obs]
@@ -994,7 +1002,7 @@ state again, as it is stored in the metadata.
 - `tol`: Tolerance for individual component residuals
 - `nwtol`: Tolerance for the full network residual
 - `t`: Time at which to evaluate the system
-- `subalg`: Nonlinear solver algorithm to use for component initialization (defaults to NonlinearSolve.jl default). Can be passed as single value or dict mapping VIndex/EIndex to alg (non-existent keys use default).
+- `subalg`: Nonlinear solver algorithm to use for component initialization. Defaults to `NetworkDynamics.default_compinit_alg()` (`FastShortcutNLLSPolyalg` with QR factorization). If the primary solve fails or stalls, it is automatically retried with residual rescaling (Jacobian row norms) and the better solution is kept. Can be passed as single value or dict mapping VIndex/EIndex to alg (non-existent keys use default).
 - `subsolve_kwargs`: Additional keyword arguments passed to the SciML `solve` function for component initialization.
   Can be passed as single value or dict mapping VIndex/EIndex to kwargs (non-existent keys use empty kwargs `(;)`).
 - `parallel=false`: (Experimental) Whether to initialize components in parallel using multithreading.
@@ -1037,6 +1045,7 @@ function _initialize_componentwise(
     additional_initconstraint=nothing,
     verbose=false,
     subverbose=false,
+    warn=true,
     tol=1e-10,
     nwtol=1e-10,
     t=NaN,
@@ -1122,6 +1131,7 @@ function _initialize_componentwise(
                 additional_guessformula=_add_guessformula,
                 additional_initconstraint=_add_initconstraint,
                 verbose=_subverbose,
+                warn=warn,
                 t=t,
                 tol=tol,
                 residual=rescapture,
@@ -1160,6 +1170,7 @@ function _initialize_componentwise(
                 additional_guessformula=_add_guessformula,
                 additional_initconstraint=_add_initconstraint,
                 verbose=_subverbose,
+                warn=warn,
                 t=t,
                 tol=tol,
                 residual=rescapture,
@@ -1362,6 +1373,42 @@ function set_interface_defaults!(nw::Network, s::NWState; verbose=false)
         set_default!(nw, sym, val)
     end
     nw
+end
+
+# Solve a NonlinearLeastSquaresProblem with residual rescaling by Jacobian row norms.
+# This improves convergence for ill-conditioned problems with mixed physical units.
+# Rows with near-zero norm (< 1e-10) are left unscaled. Returns a solution with the
+# unscaled residual so it is directly comparable to solutions from the primary solver.
+function _solve_scaled(prob::NonlinearLeastSquaresProblem, alg, args...; kwargs...)
+    nlf = prob.f
+    fz = nlf.f isa InitFuncWrapper ? nlf.f.f : nlf.f
+    Neqs = length(nlf.resid_prototype)
+
+    # compute row-norm scales from Jacobian at initial guess
+    J0 = ForwardDiff.jacobian((res,x)->fz(res,x,nothing), zeros(Neqs), prob.u0)
+    scales = Float64[max(LinearAlgebra.norm(@view J0[i,:]), 1e-10) for i in 1:Neqs]
+    scaled_f = (res, x, p) -> begin
+        fz(res, x, p)
+        res ./= scales
+    end
+
+    prob_scaled = @set prob.f.f = InitFuncWrapper(scaled_f)
+    sol = SciMLBase.solve(prob_scaled, alg, args...; kwargs...)
+
+    # recompute residual on the original unscaled problem
+    resid = copy(nlf.resid_prototype)
+    fz(resid, sol.u, prob.p)
+
+    return SciMLBase.build_solution(prob, alg, sol.u, resid; retcode=sol.retcode, stats=sol.stats)
+end
+
+function default_compinit_alg(alg_kwargs...)
+    FastShortcutNLLSPolyalg(;
+        linsolve=QRFactorization(),
+        autodiff=AutoForwardDiff(),
+        vjp_autodiff=pick_init_vjp_autodiff(),
+        alg_kwargs...
+    )
 end
 
 function pick_init_vjp_autodiff()

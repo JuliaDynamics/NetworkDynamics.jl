@@ -168,6 +168,19 @@ function chk_component(c::ComponentModel)
     if !isempty(similars)
         @warn "Component model allocates similar arrays to $(join(similars, ", "))!"
     end
+
+    # smoketest for observed function
+    if !isnothing(c.obsf)
+        out = zeros(length(obssym(c)))
+        _ins = map(t -> t.data, ins)
+        _u = u.data
+        _p = p.data
+        try
+            c.obsf(out, _u, _ins..., _p, t)
+        catch e
+            @warn "Component Check: Error while calling observable function!" exception=(e, catch_backtrace())
+        end
+    end
     nothing
 end
 

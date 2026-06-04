@@ -1,6 +1,6 @@
 using NetworkDynamics
-using ModelingToolkit
-using ModelingToolkit: t_nounits as t, D_nounits as Dt
+using ModelingToolkitBase
+using ModelingToolkitBase: t_nounits as t, D_nounits as Dt
 using SciMLBase
 using ForwardDiff
 
@@ -205,15 +205,14 @@ using ForwardDiff
         end
 
         function _defaults(sys)
-            defs = ModelingToolkit.defaults(sys)
-            Dict(ModelingToolkit.getname(k)=>v for (k,v) in defs)
+            defs = ModelingToolkitBase.initial_conditions(sys)
+            Dict(ModelingToolkitBase.getname(k)=>unwrap_const(v) for (k,v) in defs)
         end
 
         @named in = inner()
         @test isempty(_defaults(in))
         @named in = inner(; x=2)
         @test _defaults(in)[:x] == 2
-
         @named out = outer()
         @test isempty(_defaults(out))
         @named out = outer(; in₊x=3)

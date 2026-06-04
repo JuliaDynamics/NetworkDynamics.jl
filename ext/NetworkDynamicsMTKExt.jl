@@ -1,36 +1,49 @@
 module NetworkDynamicsMTKExt
 
-using ModelingToolkit: Symbolic, iscall, operation, arguments, build_function
-using ModelingToolkit: ModelingToolkit, Equation, System, Differential
-using ModelingToolkit: equations, full_equations, get_variables, mtkcompile, getname, unwrap
-using ModelingToolkit: parameters, unknowns, independent_variables, observed, defaults
-using Symbolics: Symbolics, fixpoint_sub, substitute
+using ModelingToolkitBase: iscall, operation, arguments, build_function
+using ModelingToolkitBase: ModelingToolkitBase, Equation, System, Differential
+using ModelingToolkitBase: equations, full_equations, get_variables, mtkcompile, getname, unwrap
+using ModelingToolkitBase: parameters, unknowns, independent_variables, observed, initial_conditions
+using Symbolics: Symbolics, fixpoint_sub, substitute, LinearExpander
 using RecursiveArrayTools: RecursiveArrayTools
 using ArgCheck: @argcheck
-using LinearAlgebra: Diagonal, I
-using SymbolicUtils.Code: Let, Assignment
+using Graphs: Graphs
+using Hungarian: Hungarian, hungarian
+using LinearAlgebra: LinearAlgebra, Diagonal, I, UniformScaling
+using SymbolicUtils.Code: Let, Assignment, unwrap_const
+using Moshi: Moshi
+using Moshi.Match: @match
 using SymbolicUtils: SymbolicUtils
 using OrderedCollections: OrderedDict
 using SymbolicIndexingInterface: SymbolicIndexingInterface as SII
 
 using NetworkDynamics: NetworkDynamics, set_metadata!, ComponentPostprocessing,
                        PureFeedForward, FeedForward, NoFeedForward, PureStateMap,
-                       MultipleOutputWrapper
-import NetworkDynamics: VertexModel, EdgeModel, AnnotatedSym
+                       MultipleOutputWrapper, inline_repr, multiline_repr
+import NetworkDynamics: VertexModel, EdgeModel, AnnotatedSym, InitFormula, add_initformula!, GuessFormula, add_guessformula!
+
+const ST = SymbolicUtils.BasicSymbolicImpl.var"typeof(BasicSymbolicImpl)"{SymbolicUtils.SymReal}
 
 include("MTKExt_utils.jl")
+include("MTKExt_simplification.jl")
 
 import NetworkDynamics: implicit_output, RHSDifferentialsError
-ModelingToolkit.@register_symbolic implicit_output(x)
+Symbolics.@register_symbolic implicit_output(x)
+
+const MTKCOMPILE_DEFAULT = Ref{Union{Symbol,Bool}}(false)
+function NetworkDynamics.set_mtkcompile!(value)
+    MTKCOMPILE_DEFAULT[] = value
+end
 
 """
     VertexModel(sys::System, inputs, outputs;
-                verbose=false, name=getname(sys), extin=nothing, ff_to_constraint=true, kwargs...)
+                verbose=false, name=getname(sys), extin=nothing, ff_to_constraint=true,
+                mtkcompile=nothing, kwargs...)
 
-Create a `VertexModel` object from a given `System` created with ModelingToolkit.
+Create a `VertexModel` object from a given `System` created with ModelingToolkitBase.
 You need to provide 2 lists of symbolic names (`Symbol` or `Vector{Symbols}`):
-- `inputs`: names of variables in you equation representing the aggregated edge states
-- `outputs`: names of variables in you equation representing the node output
+- `inputs`: names of variables in your equation representing the aggregated edge states
+- `outputs`: names of variables in your equation representing the node output
 
 Additional kw arguments:
 - `name`: Set name of the component model. Will be lifted from the System name.
@@ -41,9 +54,30 @@ Additional kw arguments:
 - `assume_io_coupling=false`: If true, assumes direct dependency chain from outputs to inputs by adding
   implicit output terms to all inputs. This forces MTK to consider the dependency during compilation
   and can help in cases where MTK simplification results in derivatives of inputs.
+- `mtkcompile=nothing`: Controls the simplification backend. `false` (default) uses NetworkDynamics'
+  own algebraic reduction pipeline. `true` delegates to MTK's `mtkcompile`: when `ModelingToolkit` is
+  loaded this performs full structural simplification; when only `ModelingToolkitBase` is available it
+  falls back to the stub `mtkcompile` (no structural simplification). `nothing` inherits the global
+  default set via `NetworkDynamics.set_mtkcompile!`. `:compare` runs both and prints a comparison
+  (for debugging).
 """
-function VertexModel(sys::System, inputs, outputs; verbose=false, name=getname(sys),
-                     ff_to_constraint=true, assume_io_coupling=false, extin=nothing, kwargs...)
+function VertexModel(
+    sys::System, inputs, outputs;
+    verbose=false,
+    name=getname(sys),
+    ff_to_constraint=true,
+    assume_io_coupling=false,
+    extin=nothing,
+    mtkcompile=nothing,
+    kwargs...
+)
+    mtkcompile = isnothing(mtkcompile) ? MTKCOMPILE_DEFAULT[] : mtkcompile
+    if mtkcompile==:compare
+        args = (sys, inputs, outputs)
+        kwargs = (; verbose, name, ff_to_constraint, assume_io_coupling, extin, kwargs...)
+        return _compare_mtkcompile(VertexModel, args, kwargs)
+    end
+
     warn_missing_features(sys)
     inputs = inputs isa AbstractVector ? inputs : [inputs]
     outputs = outputs isa AbstractVector ? outputs : [outputs]
@@ -56,14 +90,14 @@ function VertexModel(sys::System, inputs, outputs; verbose=false, name=getname(s
         ins = (inputs, extin_sym)
     end
 
-    gen = generate_io_function_cached(sys, ins, (outputs,); verbose, ff_to_constraint, assume_io_coupling)
+    gen = generate_io_function_cached(sys, ins, (outputs,); verbose, ff_to_constraint, assume_io_coupling, mtkcompile)
 
     f = gen.f
     g = gen.g
     obsf = gen.obsf
 
-    sysdefaults = defaults(sys)
-    sysguesses = ModelingToolkit.guesses(sys)
+    sysdefaults = initial_conditions(sys)
+    sysguesses = ModelingToolkitBase.guesses(sys)
     _sym = getname.(gen.states)
     sym = [s => _get_metadata(sys, s, sysdefaults, sysguesses) for s in _sym]
 
@@ -98,6 +132,13 @@ function VertexModel(sys::System, inputs, outputs; verbose=false, name=getname(s
     set_metadata!(c, :odesystem, gen.odesystem)
     set_metadata!(c, :odesystem_simplified, gen.odesystem_simplified)
 
+    for formula in something(gen.initformulas, ())
+        add_initformula!(c, formula)
+    end
+    for formula in something(gen.guessformulas, ())
+        add_guessformula!(c, formula)
+    end
+
     # apply postprocessing functions from subcomponent metadata
     apply_component_postprocessing!(c)
     c
@@ -121,14 +162,15 @@ EdgeModel(sys::System, srcin, dstin, dstout; kwargs...) = EdgeModel(sys, srcin, 
 
 """
     EdgeModel(sys::System, srcin, dstin, srcout, dstout;
-              verbose=false, name=getname(sys), extin=nothing, ff_to_constraint=false, kwargs...)
+              verbose=false, name=getname(sys), extin=nothing, ff_to_constraint=false,
+              mtkcompile=nothing, kwargs...)
 
-Create a `EdgeModel` object from a given `System` created with ModelingToolkit.
+Create a `EdgeModel` object from a given `System` created with ModelingToolkitBase.
 You need to provide 4 lists of symbolic names (`Symbol` or `Vector{Symbols}`):
-- `srcin`: names of variables in you equation representing the node state at the source
-- `dstin`: names of variables in you equation representing the node state at the destination
-- `srcout`: names of variables in you equation representing the output at the source
-- `dstout`: names of variables in you equation representing the output at the destination
+- `srcin`: names of variables in your equation representing the node state at the source
+- `dstin`: names of variables in your equation representing the node state at the destination
+- `srcout`: names of variables in your equation representing the output at the source
+- `dstout`: names of variables in your equation representing the output at the destination
 
 Additional kw arguments:
 - `name`: Set name of the component model. Will be lifted from the System name.
@@ -139,9 +181,30 @@ Additional kw arguments:
 - `assume_io_coupling=false`: If true, assumes direct dependency chain from outputs to inputs by adding
   implicit output terms to all inputs. This forces MTK to consider the dependency during compilation
   and can help in cases where MTK simplification results in derivatives of inputs.
+- `mtkcompile=nothing`: Controls the simplification backend. `false` (default) uses NetworkDynamics'
+  own algebraic reduction pipeline. `true` delegates to MTK's `mtkcompile`: when `ModelingToolkit` is
+  loaded this performs full structural simplification; when only `ModelingToolkitBase` is available it
+  falls back to the stub `mtkcompile` (no structural simplification). `nothing` inherits the global
+  default set via `NetworkDynamics.set_mtkcompile!`. `:compare` runs both and prints a comparison
+  (for debugging).
 """
-function EdgeModel(sys::System, srcin, dstin, srcout, dstout; verbose=false, name=getname(sys),
-                   ff_to_constraint=false, assume_io_coupling=false, extin=nothing, kwargs...)
+function EdgeModel(
+    sys::System, srcin, dstin, srcout, dstout;
+    verbose=false,
+    name=getname(sys),
+    ff_to_constraint=false,
+    assume_io_coupling=false,
+    extin=nothing,
+    mtkcompile=nothing,
+    kwargs...
+)
+    mtkcompile = isnothing(mtkcompile) ? MTKCOMPILE_DEFAULT[] : mtkcompile
+    if mtkcompile==:compare
+        args = (sys, srcin, dstin, srcout, dstout)
+        kwargs = (; verbose, name, ff_to_constraint, assume_io_coupling, extin, kwargs...)
+        return _compare_mtkcompile(EdgeModel, args, kwargs)
+    end
+
     warn_missing_features(sys)
     srcin = srcin isa AbstractVector ? srcin : [srcin]
     dstin = dstin isa AbstractVector ? dstin : [dstin]
@@ -171,14 +234,14 @@ function EdgeModel(sys::System, srcin, dstin, srcout, dstout; verbose=false, nam
         outs = (srcout, dstout)
     end
 
-    gen = generate_io_function_cached(sys, ins, outs; verbose, ff_to_constraint, assume_io_coupling)
+    gen = generate_io_function_cached(sys, ins, outs; verbose, ff_to_constraint, assume_io_coupling, mtkcompile)
 
     f = gen.f
     g = singlesided ? gwrap(gen.g) : gen.g
     obsf = gen.obsf
 
-    sysdefaults = defaults(sys)
-    sysguesses = ModelingToolkit.guesses(sys)
+    sysdefaults = initial_conditions(sys)
+    sysguesses = ModelingToolkitBase.guesses(sys)
     _sym = getname.(gen.states)
     sym = [s => _get_metadata(sys, s, sysdefaults, sysguesses) for s in _sym]
 
@@ -224,6 +287,13 @@ function EdgeModel(sys::System, srcin, dstin, srcout, dstout; verbose=false, nam
     set_metadata!(c, :odesystem, gen.odesystem)
     set_metadata!(c, :odesystem_simplified, gen.odesystem_simplified)
 
+    for formula in something(gen.initformulas, ())
+        add_initformula!(c, formula)
+    end
+    for formula in something(gen.guessformulas, ())
+        add_guessformula!(c, formula)
+    end
+
     # apply postprocessing functions from subcomponent metadata
     apply_component_postprocessing!(c)
     c
@@ -234,7 +304,7 @@ For a given system and name, extract all the relevant meta we want to keep for t
 
 since defaults(sys) and guesses(sys) is relativly expensive those need to be provided
 """
-function _get_metadata(sys, name, alldefaults, sysguesses)
+function _get_metadata(sys, name, alldefaults, allguesses)
     md = Dict{Symbol,Any}()
     sym = try
         getproperty_symbolic(sys, name; might_contain_toplevel_ns=false)
@@ -245,41 +315,20 @@ function _get_metadata(sys, name, alldefaults, sysguesses)
         return md
     end
     if haskey(alldefaults, sym)
-        def = alldefaults[sym]
-        if def isa Symbolic
-            def = fixpoint_sub(def, alldefaults)
-        end
-
-        if def isa Symbolic
-            # do nothing, as the warning can get annoying
-            # @warn "Could not resolve rhs for default term $name = $(ModelingToolkit.getdefault(sym)). Some rhs symbols might not have default values. Leave free."
-        elseif def == ModelingToolkit.NoValue || def isa ModelingToolkit.NoValue
-            # skip NoValue thing
-        else
-            md[:default] = def
-        end
+        def = unwrap_const(alldefaults[sym])
+        md[:default] = def
     end
 
-    # check for guess both in symbol metadata and in guesses of system
-    # fixes https://github.com/SciML/ModelingToolkit.jl/issues/3075
-    if ModelingToolkit.hasguess(sym) || haskey(sysguesses, sym)
-        guess = if ModelingToolkit.hasguess(sym)
-            ModelingToolkit.getguess(sym)
-        else
-            sysguesses[sym]
-        end
-        if guess isa Symbolic
-            guess = fixpoint_sub(def, merge(defaults(sys), sysguesses))
-        end
-        guess isa Symbolic && error("Could not resolve guess $(ModelingToolkit.getguess(sym)) for $name")
+    if haskey(allguesses, sym)
+        guess = unwrap_const(allguesses[sym])
         md[:guess] = guess
     end
 
-    if ModelingToolkit.hasbounds(sym)
-        md[:bounds] = ModelingToolkit.getbounds(sym)
+    if ModelingToolkitBase.hasbounds(sym)
+        md[:bounds] = ModelingToolkitBase.getbounds(sym)
     end
-    if ModelingToolkit.hasdescription(sym)
-        md[:description] = ModelingToolkit.getdescription(sym)
+    if ModelingToolkitBase.hasdescription(sym)
+        md[:description] = ModelingToolkitBase.getdescription(sym)
     end
     md
 end
@@ -297,7 +346,7 @@ function _split_extin(extin)
 end
 
 function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
-                              expression=Val{false}, verbose=false,
+                              expression=Val{false}, verbose=false, mtkcompile=false,
                               ff_to_constraint, assume_io_coupling)
     # TODO: scalarize vector symbolics/equations?
 
@@ -305,11 +354,15 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     inputss = map(inputss) do in
         getproperty_symbolic.(Ref(_sys), in)
     end
-    allinputs = reduce(union, inputss)
+    allinputs = convert(Vector{ST}, reduce(union, inputss))
     outputss = map(outputss) do out
         getproperty_symbolic.(Ref(_sys), out)
     end
-    alloutputs = reduce(union, outputss)
+    alloutputs = convert(Vector{ST}, reduce(union, outputss))
+
+    # always expand connections before simplification
+    _sys = ModelingToolkitBase.expand_connections(_sys)
+    iv = only(independent_variables(_sys))
 
     # assume_io_coupling means, we expect a direct dependency chain output -> input
     # we fake this, by replacing all inputs with `input + implicit_output(outputs...)`
@@ -317,80 +370,23 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     if assume_io_coupling
         impl_outputs = implicit_output(sum(alloutputs))
         subs = Dict(in => in + impl_outputs for in in allinputs)
-        _expanded = ModelingToolkit.expand_connections(_sys)
-        _expanded_eqs = ModelingToolkit.get_eqs(_expanded)
+        _expanded_eqs = ModelingToolkitBase.get_eqs(_sys)
         for i in eachindex(_expanded_eqs)
             _expanded_eqs[i] = substitute(_expanded_eqs[i], subs)
         end
-        _sys = _expanded
     end
 
-    missing_inputs = Set{Symbolic}()
-    sys = if ModelingToolkit.iscomplete(_sys)
-        deepcopy(_sys)
+    sys, eqs, obseqs_sorted, states, params = if mtkcompile
+        simplify_with_mtkcompile(_sys, allinputs, alloutputs; verbose)
     else
-        _openinputs = setdiff(allinputs, Set(parameters(_sys)))
-        all_eq_vars = mapreduce(get_variables, union, full_equations(_sys), init=Set{Symbolic}())
-        if !(_openinputs ⊆ all_eq_vars)
-            missing_inputs = setdiff(_openinputs, all_eq_vars)
-            verbose && @warn "The specified inputs ($missing_inputs) do not appear in the equations of the system!"
-            _openinputs = setdiff(_openinputs, missing_inputs)
-        end
-
-        implicit_outputs = setdiff(alloutputs, all_eq_vars)
-        if !isempty(implicit_outputs)
-            throw(
-                ArgumentError("The outputs $(getname.(implicit_outputs)) do not appear in the equations of the system! \
-                    Try to to make them explicit using the keyword `assume_io_coupling` or the more manual `implicit_output`\n" *
-                    NetworkDynamics.implicit_output_docstring)
-            )
-        end
-
-        verbose && @info "Simplifying system with inputs $_openinputs and outputs $alloutputs"
-        try
-            mtkcompile(_sys; inputs=_openinputs, outputs=alloutputs, simplify=false)
-        catch e
-            if e isa ModelingToolkit.ExtraEquationsSystemException
-                msg = "The system could not be compiled because of extra equations! \
-                       Sometimes, this can be related to fully implicit output equations. \
-                       Check `@doc implicit_output` for more information."
-                throw(ArgumentError(msg))
-            end
-            rethrow(e)
-        end
+        simplify_without_mtkcompile(_sys, allinputs, alloutputs; verbose, ff_to_constraint)
     end
-
-    allparams = parameters(sys) # contains inputs!
-    @argcheck allinputs ⊆ Set(allparams) ∪ missing_inputs
-    params = setdiff(allparams, Set(allinputs))
-
-    # extract the main equations and observed equations
-    eqs::Vector{Equation} = equations(sys)
-    obseqs_sorted::Vector{Equation} = observed(sys)
-    fix_metadata!(eqs, sys);
-    fix_metadata!(obseqs_sorted, sys);
 
     # get rid of the implicit_output(⋅) terms
     remove_implicit_output_fn!(eqs)
     remove_implicit_output_fn!(obseqs_sorted)
 
-    # assert the ordering of states and equations
-    explicit_states = Symbolic[eq_type(eq)[2] for eq in eqs if !isnothing(eq_type(eq)[2])]
-    implicit_states = setdiff(unknowns(sys), explicit_states)
-
-    if length(explicit_states) + length(implicit_states) !== length(eqs)
-        buf = IOBuffer()
-        println(buf, "The number of states does not match the number of equations.")
-        println(buf, "Explicit states: ", explicit_states)
-        println(buf, "Implicit states: ", implicit_states)
-        println(buf, "$(length(eqs)) Equations.")
-        throw(ArgumentError(String(take!(buf))))
-    end
-
-    states = map(eqs) do eq
-        type = eq_type(eq)
-        isnothing(type[2]) ? pop!(implicit_states) : type[2]
-    end
+    eqs, obseqs_sorted, states = pick_best_alias_names(eqs, obseqs_sorted, states, alloutputs, allinputs; verbose)
 
     # check that there are no rhs differentials in the equations
     if !isempty(rhs_differentials(vcat(eqs, obseqs_sorted)))
@@ -401,39 +397,8 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     # obs can only depend on parameters (including allinputs) or states
     obs_subs = OrderedDict(eq.lhs => eq.rhs for eq in obseqs_sorted)
     obs_deps = setdiff(_all_rhs_symbols(obs_subs), Set(keys(obs_subs))) # do not count self-dependency
-    if !(obs_deps ⊆ Set(allparams) ∪ Set(states) ∪ independent_variables(sys))
-        @warn "obs_deps !⊆ parameters ∪ unknowns. Difference: $(setdiff(obs_deps, Set(allparams) ∪ Set(states)))"
-    end
-
-    # if some outputs are direct aliases for states
-    # switch their names. I.e. prioritize use of name `out`
-    function state_alias(output)
-        if output ∈ keys(obs_subs) &&
-           iscall(obs_subs[output]) &&
-           operation(obs_subs[output]) isa Symbolics.BasicSymbolic
-            return state_alias(obs_subs[output])
-        elseif output ∈ Set(states)
-            return output
-        else
-            return nothing
-        end
-    end
-
-    renamings = Dict()
-    for output in alloutputs
-        sa = state_alias(output)
-        if !isnothing(sa)
-            verbose && @info "Output $output ≙ $sa, prioritize output name over state name."
-            renamings[output] = sa
-            renamings[sa] = output
-        end
-    end
-    if !isempty(renamings)
-        eqs = map(eq -> substitute(eq, renamings), eqs)
-        obseqs_sorted = map(eq -> substitute(eq, renamings), obseqs_sorted)
-        obs_subs = OrderedDict(eq.lhs => eq.rhs for eq in obseqs_sorted)
-        states = map(s -> substitute(s, renamings), states)
-        verbose && @info "New states with applied output aliases:" states
+    if !(obs_deps ⊆ Set(params) ∪ Set(allinputs) ∪ Set(states) ∪ iv)
+        @warn "obs_deps !⊆ params ∪ inputs ∪ unknowns. Difference: $(setdiff(obs_deps, Set(params) ∪ Set(allinputs) ∪ Set(states)))"
     end
 
     # find the output equations, this might remove them from obseqs_sorted (obs_subs stays intact)
@@ -466,38 +431,33 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
 
     # generate mass matrix (this might change the equations)
     mass_matrix = begin
-        # equations of form o = f(...) have to be transformed to 0 = f(...) - o
         for (i, eq) in enumerate(eqs)
            if eq_type(eq)[1] == :explicit_algebraic
-               eqs[i] = 0 ~ eq.rhs - eq.lhs
+               error("Can't have explicit algebraic equations at this point")
            end
         end
-        verbose && @info "Transformed algebraic eqs" eqs
-
         # create massmatrix, we don't use the method provided by System because of reordering
         mm = generate_massmatrix(eqs)
         verbose && @info "Generated mass matrix" mm
         mm
     end
 
-    iv = only(independent_variables(sys))
-
     out_deps = _all_dependencies(outeqs, obs_subs)
     fftype = _determine_fftype(out_deps, states, allinputs, params, iv)
 
     # filter out unnecessary parameters
     unused_params = let
-        # we need to collect obs and var deps separatly, because replacenment of obs in vars might lead to
+        # we need to collect obs and var deps separately, because replacement of obs in vars might lead to
         # symbolic simplifications which we don't have in the actual equations later!
         # i.e. dt(x) ~ x - x0 and x ~ x0 + y leads to dt(x) ~ y in substitution but is not resolved in actual f
         var_deps = _all_rhs_symbols(eqs)
-        Set(setdiff(params, (var_deps ∪ obs_deps ∪ out_deps))) # do not exclud obs_deps
+        Set(setdiff(params, (var_deps ∪ obs_deps ∪ out_deps))) # do not exclude obs_deps
     end
     if verbose && !isempty(unused_params)
         @info "Parameters $(unused_params) do not appear in equations of f and g and will be marked as unused."
     end
 
-    # TODO: explore Symbolcs/SymbolicUtils CSE
+    # TODO: explore Symbolics/SymbolicUtils CSE
     # now generate the actual functions
     if !isempty(eqs)
         formulas = _get_formulas(eqs, obs_subs)
@@ -506,7 +466,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         f_ip = nothing
     end
 
-    # find all observable assigments necessary for outeqs
+    # find all observable assignments necessary for outeqs
     gformulas = _get_formulas(outeqs, obs_subs)
     gformargs = if fftype isa PureFeedForward
         (inputss..., params, iv)
@@ -518,7 +478,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         (states,)
     end
     _, _g_ip = build_function(gformulas, gformargs...; cse=false, expression)
-    # for more thatn 1 output wrap funktion
+    # for more than 1 output, wrap function in MultipleOutputWrapper
     g_ip = if length(outputss) == 1
         _g_ip
     else
@@ -544,18 +504,20 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         obsf = obsf_ip,
         equations=eqs,
         outputeqs=outeqs,
-        full_equations = fixpoint_sub(eqs, obs_subs),
-        full_outputeqs = fixpoint_sub(outeqs, obs_subs),
+        full_equations = [eq.lhs ~ fixpoint_sub(eq.rhs, obs_subs) for eq in eqs],
+        full_outputeqs = [eq.lhs ~ fixpoint_sub(eq.rhs, obs_subs) for eq in outeqs],
         observed=obseqs_sorted,
         odesystem_simplified=sys,
         params,
-        unused_params
+        unused_params,
+        initformulas = bindings_to_initformulas(sys; states, obs_subs),
+        guessformulas = guesses_to_guessformulas!(sys; obs_subs)
     )
 end
 
 function _get_formulas(eqs, obs_subs)
-    # Bit hacky, were building a function like this,
-    # where all (necessary) obs and eqs are contained in the bgin block of the first output
+    # Bit hacky, we're building a function like this,
+    # where all (necessary) obs and eqs are contained in the begin block of the first output
     # out[1] = begin
     #     obs1   = ...
     #     obs2   = ...
@@ -563,7 +525,7 @@ function _get_formulas(eqs, obs_subs)
     #     state1 = ...
     #     state2 = ...
     #     ...
-    #     state1 # ens up in out[1]
+    #     state1 # ends up in out[1]
     # end
     # out[2] = state2
     # ...
@@ -571,23 +533,23 @@ function _get_formulas(eqs, obs_subs)
     obsdeps = _collect_deps_on_obs([eq.rhs for eq in eqs], obs_subs)
     obs_assignments = [Assignment(k, v) for (k,v) in obs_subs if k ∈ obsdeps]
 
-    # implicit equations are not use via assigments, so we filter for e
+    # implicit equations do not become assignments (lhs is 0), so we use the rhs directly for output
     eqs_assignments = [Assignment(eq.lhs, eq.rhs) for eq in eqs
-                          if !isequal(eq.lhs, eq.rhs) && !isequal(eq.lhs, 0)]
-    # since implicit eqs did not end up in assighmets, we use the rhs
-    out = [isequal(eq.lhs, 0) ? eq.rhs : eq.lhs for eq in eqs]
+                          if !isequal(eq.lhs, eq.rhs) && !isequal(unwrap_const(eq.lhs), 0)]
+    # implicit eqs have 0 lhs, explicit eqs are already captured via assignment, output their lhs
+    out = [isequal(unwrap_const(eq.lhs), 0) ? eq.rhs : eq.lhs for eq in eqs]
 
     [Let(vcat(obs_assignments, eqs_assignments), out[1], false), out[2:end]...]
 end
 function _collect_deps_on_obs(terms, obs_subs)
-    deps = Set{Symbolic}()
+    deps = Set{ST}()
     for term in terms
         _collect_deps_on_obs!(deps, obs_subs, term)
     end
     deps
 end
 function _collect_deps_on_obs!(deps, obs_subs, term)
-    termdeps = get_variables(term)
+    termdeps = get_variables_deriv(term)
     for sym in termdeps
         if haskey(obs_subs, sym)
             # check recursively whether the observed depends on other observed
@@ -614,15 +576,15 @@ function _determine_fftype(deps, states, allinputs, params, t)
     end
 end
 
-_all_rhs_symbols(term) = get_variables(term)
-_all_rhs_symbols(eq::Equation) = get_variables(eq.rhs)
-_all_rhs_symbols(eqs::Union{AbstractVector,AbstractDict}) = mapreduce(eq->get_variables(eq isa Pair ? eq.second : eq.rhs), ∪, eqs, init=Set{Symbolic}())
+_all_rhs_symbols(term) = get_variables_deriv(term)
+_all_rhs_symbols(eq::Equation) = get_variables_deriv(eq.rhs)
+_all_rhs_symbols(eqs::Union{AbstractVector,AbstractDict}) = mapreduce(eq->get_variables_deriv(eq isa Pair ? eq.second : eq.rhs), ∪, eqs, init=Set{ST}())
 
 """
 Search for recursive dependencies in `term` given a dictionary `dict` of substitutions.
 """
 function _all_dependencies(term, dict)
-    deps = Set{Symbolic}()
+    deps = Set{ST}()
     _recursive_collect_dependencies!(deps, term, dict)
     deps
 end
@@ -705,7 +667,7 @@ function NetworkDynamics.set_mtk_model_cache!(use::Bool)
         CACHE_HITS[] = 0
         CACHE_MISSES[] = 0
         CACHE_WAITINGS[] = 0
-    else !use && was_using
+    elseif !use && was_using
         NetworkDynamics.wipe_mtk_model_cache!()
     end
     USE_MODEL_CACHE[] = use
@@ -718,7 +680,7 @@ end
 
 function generate_io_function_cached(_sys, args...; kwargs...)
     if USE_MODEL_CACHE[]
-        expanded = ModelingToolkit.expand_connections(_sys)
+        expanded = ModelingToolkitBase.expand_connections(_sys)
         syskey = repr.(equations(expanded))
         key = hash((syskey, args, kwargs))
         gen_no_sys = threadsafe_cache_load!(key) do

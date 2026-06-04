@@ -286,7 +286,7 @@ equation depends on `x`. This can be necessary to define a model with fully impl
 """
 """
     implicit_output(x) = 0
-    ModelingToolkit.@register_symbolic implicit_output(x)
+    Symbolics.@register_symbolic implicit_output(x)
 
 $implicit_output_docstring
 
@@ -474,7 +474,9 @@ function Base.showerror(io::IO, e::RHSDifferentialsError)
     for d in e.diffs
         println(io, " - ", d)
     end
-    print(io, "Consider passing `assume_io_coupling=true` to the component constructor!")
+    print(io, "This may hint at a higher order DAE. If you build the component with `mtkcompile=true` consider \
+               passing `assume_io_coupling=true` to the component constructor! If not, pass `verbose=true` \
+               to see where simplification fails.")
 end
 
 # needs to be defined befor coreloop
@@ -516,3 +518,5 @@ end
 ```
 """
 function set_mtk_defaults! end
+
+function set_mtkcompile! end

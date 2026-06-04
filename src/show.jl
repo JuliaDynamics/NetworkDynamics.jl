@@ -666,6 +666,7 @@ function align_strings(_vecofstr::AbstractVector{<:AbstractString}; padding=:alt
     alig
 end
 function align_strings(vecofvec::AbstractVector{<:AbstractVector}; padding=:alternating)
+    isempty(vecofvec) && return String[]
     depth = maximum(length.(vecofvec))
     maxlength = zeros(Int,depth)
 
@@ -763,4 +764,25 @@ function _print_syms(io, syms, isfirst)
         print(io, ':', s)
         isfirst = false
     end
+end
+
+inline_repr(arr::Set) = "Set(" * join(string.(arr), ", ") * ")"
+inline_repr(arr::AbstractArray) = "[" * join(string.(arr), ", ") * "]"
+function multiline_repr(dict::AbstractDict; prefix="")
+    lines = String[]
+    for (k,v) in dict
+        str = prefix * string(k) * " &=> " * string(v)
+        push!(lines, str)
+    end
+    join(align_strings(lines), "\n")
+end
+function multiline_repr(arr::AbstractArray; prefix="")
+    join([prefix*repr(a) for a in arr], "\n")
+end
+function multiline_repr(arr::Vector{<:Pair}; prefix="")
+    d = OrderedDict()
+    for p in arr
+        d[p.first] = p.second
+    end
+    multiline_repr(d; prefix)
 end

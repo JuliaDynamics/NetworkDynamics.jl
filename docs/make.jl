@@ -6,7 +6,7 @@ using NetworkDynamicsInspector
 using NetworkDynamicsInspector: NetworkDynamicsInspector as NDI
 using SciMLBase
 using Literate
-using ModelingToolkit
+using ModelingToolkitBase
 using DataFrames: DataFrames
 using DocumenterInterLinks
 using Electron

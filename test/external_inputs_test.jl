@@ -2,8 +2,9 @@ using NetworkDynamics, Graphs
 using Chairmarks: @b
 
 using NetworkDynamics: StateBufIdx, OutBufIdx, ExtMap, collect_externals!
-using ModelingToolkit
-using ModelingToolkit: t_nounits as t, D_nounits as Dt
+using ModelingToolkitBase
+using ModelingToolkitBase: t_nounits as t, D_nounits as Dt
+using SciCompDSL
 using Random
 using CUDA, Adapt
 

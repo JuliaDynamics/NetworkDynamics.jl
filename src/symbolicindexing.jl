@@ -121,29 +121,71 @@ end
 """
     NWState(nw_or_nw_wrapper;
             utype=Vector{Float64}, ufill=filltype(utype),
-            ptype=Vector{Float64}, pfill=filltype(ptype), default=true)
+            ptype=Vector{Float64}, pfill=filltype(ptype),
+            default=true, guess=false, apply_formulas=true,
+            verbose=false)
 
 Creates "empty" `NWState` object for the Network/Wrapper `nw` with flat types
 `utype` & `ptype`. The arrays will be prefilled with `ufill` and `pfill`
 respectively (defaults to NaN).
 
-If `default=true` the default state & parameter values attached to the network
-components will be loaded.
+If `default=true` the state & parameter values are filled in the following order:
+ 1. `default` metadata values, falling back to `init` metadata values.
+ 2. If `apply_formulas=true`: [`InitFormula`](@ref)s whose inputs are all
+    non-`NaN` are evaluated (in topological order). Formulas always overwrite
+    existing values. Formulas whose inputs are undefined are skipped.
+ 3. If `guess=true`: `guess` metadata values for any remaining `NaN` symbols.
+ 4. If `guess=true` and `apply_formulas=true`: [`GuessFormula`](@ref)s are applied
+    to fill remaining symbols. Inputs are looked up from defaults first, then
+    guesses. Formulas whose inputs are still undefined are skipped.
+
+If `verbose=true`, print information about which formulas are applied and which
+values are set or skipped.
 """
 function NWState(thing;
                  utype=Vector{Float64}, ufill=filltype(utype),
                  ptype=Vector{Float64}, pfill=filltype(ptype),
-                 default=true)
+                 default=true, guess=false, apply_formulas=true,
+                 verbose=false)
     nw = extract_nw(thing)
     t = nothing
     uflat = _init_flat(utype, dim(nw), ufill)
     p = NWParameter(nw; ptype, pfill, default=false)
     s = NWState(nw,uflat,p,t)
     default || return s
-    for (k, v) in SII.default_values(nw)
-        s[k] = v
+
+    for (i, cm) in pairs(nw.im.vertexm)
+        for (k, v) in _get_appropriate_dict(VIndex(i), cm; guess, apply_formulas, verbose)
+            nwidx = VIndex(i, k)
+            setindex!(s, v, nwidx)
+        end
     end
+    for (i, cm) in pairs(nw.im.edgem)
+        for (k, v) in _get_appropriate_dict(EIndex(i), cm; guess, apply_formulas, verbose)
+            nwidx = EIndex(i, k)
+            setindex!(s, v, nwidx)
+        end
+    end
+
     return s
+end
+function _get_appropriate_dict(cidx, cm; guess, apply_formulas, verbose)
+    defaults = get_defaults_or_inits_dict(cm)
+    if apply_formulas && has_initformula(cm)
+        verbose && println("Applying InitFormulas for $(cidx) ($(cm.name))...")
+        apply_init_formulas!(defaults, get_initformulas(cm); error_unresolvable=false, verbose)
+    end
+    if guess
+        guesses = get_guesses_dict(cm)
+        if apply_formulas && has_guessformula(cm)
+            verbose && println("Applying GuessFormulas for $(cidx) ($(cm.name))...")
+            apply_guess_formulas!(guesses, defaults, get_guessformulas(cm); error_unresolvable=false, verbose)
+        end
+        defaults = merge(guesses, defaults) # defaults overwrite guesses
+    end
+    # limit dict to only psym and sym of component
+    valid_keys = Set(vcat(sym(cm), psym(cm)))
+    filter!(p -> p.first ∈ valid_keys, defaults)
 end
 
 """
@@ -162,6 +204,8 @@ end
     NWState(p::NWParameter; utype=Vector{Float64}, ufill=filltype(utype), default=true)
 
 Create `NWState` based on existing `NWParameter` object.
+
+See [`NWState(nw; ...)`](@ref NWState) for the meaning of `guess` and `init`.
 """
 function NWState(p::NWParameter; utype=Vector{Float64}, ufill=filltype(utype), default=true)
     t = nothing

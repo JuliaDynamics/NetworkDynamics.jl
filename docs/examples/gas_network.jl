@@ -14,9 +14,10 @@ This example can be dowloaded as a normal Julia script [here](@__NAME__.jl). #md
 We start by importing the necessary packages:
 =#
 using NetworkDynamics
-using ModelingToolkit
+using ModelingToolkitBase
 using DynamicQuantities
-using ModelingToolkit: D as Dt, t as t
+using ModelingToolkitBase: D as Dt, t as t
+using SciCompDSL
 using Test
 using StaticArrays
 using DataInterpolations
@@ -40,7 +41,7 @@ Additionally, we add some "internal" state `q̃_inj` which we want to plot later
         p_set, [description="Constant pressure setpoint", unit=u"Pa"]
     end
     @variables begin
-        p(t) = p_set, [description="Pressure", unit=u"Pa", output=true]
+        p(t), [description="Pressure", unit=u"Pa", output=true]
         q̃_nw(t), [description="aggregated flow from pipes into node", unit=u"m^3/s", input=true]
         q̃_inj(t), [description="internal state for introspection", unit=u"m^3/s"]
     end
@@ -223,7 +224,7 @@ representation, all units will be stripped.
 =#
 load2 = LinearInterpolation(-1*Float64[20, 30, 10, 30, 20], [0, 4, 12, 20, 24]*3600.0; extrapolation=ExtrapolationType.Constant)
 load3 = LinearInterpolation(-1*Float64[40, 50, 30, 50, 40], [0, 4, 12, 20, 24]*3600.0; extrapolation=ExtrapolationType.Constant)
-ModelingToolkit.get_unit(::LinearInterpolation, _ ) = 1.0 # type piracy!
+ModelingToolkitBase.get_unit(::LinearInterpolation, _ ) = 1.0 # type piracy!
 nothing #hide
 
 #=

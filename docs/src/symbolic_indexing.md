@@ -20,7 +20,7 @@ function _vertexf!(dv, v, esum, p, t)
 end
 vertexf = VertexModel(f=_vertexf!, g=1, sym=[:storage])
 ```
-When constructing component models using ModelingToolkit, the variable names are extracted automatically. 
+When constructing component models using ModelingToolkitBase, the variable names are extracted automatically. 
 
 
 ## Fundamental Symbolic Indices
@@ -166,7 +166,7 @@ the `SciML` ecosystem, these values are called Observables.
 A prime example of Observables are edge/vertex-outputs, such as the `flow` in the edge model defined above.
 It is also possible to define additional Observables manually by using the `obssym` and `obsf` keyword
 on the `EdgeModel`/`VertexModel` constructors.
-When building models using ModelingToolkit, the reduced algebraic states will be preserved automatically as observables.
+When building models using ModelingToolkitBase, the reduced algebraic states will be preserved automatically as observables.
 
 Observables can be accessed like any other state. For example, the flows in the network don't show up in the state array 
 but can be accessed in all the ways discussed above. 

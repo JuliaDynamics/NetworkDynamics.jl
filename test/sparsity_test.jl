@@ -3,8 +3,9 @@ using SparseArrays
 using SparseConnectivityTracer
 using Graphs
 using OrdinaryDiffEqRosenbrock
-using ModelingToolkit
-using ModelingToolkit: D_nounits as Dt, t_nounits as t
+using ModelingToolkitBase
+using ModelingToolkitBase: D_nounits as Dt, t_nounits as t
+using SciCompDSL
 using InteractiveUtils: subtypes
 SE = Base.get_extension(NetworkDynamics, :NetworkDynamicsSparsityExt)
 
@@ -123,7 +124,7 @@ end
             return f
         end
     end
-    ModelingToolkit.@register_symbolic true_if_else_block(cond, t, f)
+    Symbolics.@register_symbolic true_if_else_block(cond, t, f)
     @mtkmodel ValveToggle2 begin
         @variables begin
             p_src(t), [description="pressure at src"]
