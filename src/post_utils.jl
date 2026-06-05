@@ -70,7 +70,15 @@ function SciMLBase.ODEProblem(
         end
     end
 
-    SciMLBase.ODEProblem(SciMLBase.ODEFunction(nw), args...; callback=finalcallback, kwargs...)
+    prob = SciMLBase.ODEProblem(SciMLBase.ODEFunction(nw), args...; callback=finalcallback, kwargs...)
+
+    # at this point all parameters are known, so we can check the consistency of
+    # scoped (`:global`/`:device`) parameters, see `chk_global_parameters`
+    if CHECK_GLOBAL_PARAMETERS[] && prob.p isa AbstractVector && length(prob.p) == pdim(nw)
+        chk_global_parameters(NWParameter(nw, prob.p))
+    end
+
+    prob
 end
 
 """

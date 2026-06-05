@@ -186,3 +186,98 @@ end
 
 _ninout(::EdgeModel) = 2
 _ninout(::VertexModel) = 1
+
+####
+#### scope consistency checks
+####
+# basename used for grouping scoped parameters: the trailing part of the symbol
+# name after the last namespace separator `₊`, i.e. matching `r"NAME$"`.
+_scope_basename(sym) = Symbol(last(split(string(sym), '₊')))
+
+"""
+    chk_global_parameters(nw::Network; verbose=true)
+    chk_global_parameters(s::NWState; verbose=true)
+    chk_global_parameters(p::NWParameter; verbose=true)
+
+Check the consistency of *scoped* parameters (see [`VariableScope`](@ref)).
+
+Parameters are grouped by the trailing part of their symbol name (matching
+`r"NAME\$"`):
+
+- parameters with scope `:global` must hold the same value across the **whole
+  network**,
+- parameters with scope `:device` must hold the same value **within a single**
+  `VertexModel`/`EdgeModel`,
+- parameters with scope `:local` are ignored.
+
+For a `Network` the metadata **defaults** are compared. For an `NWState`/
+`NWParameter` the **current values** in the flat parameter array are compared.
+
+Returns `true` if all scoped parameters are consistent, `false` otherwise. When
+`verbose=true` (the default) a warning describing each inconsistency is emitted.
+
+See also: [`VariableScope`](@ref), [`get_scope`](@ref).
+"""
+function chk_global_parameters end
+
+chk_global_parameters(nw::Network; kw...) = _chk_global_parameters(nw, nothing; kw...)
+chk_global_parameters(p::NWParameter; kw...) = _chk_global_parameters(p.nw, p; kw...)
+chk_global_parameters(s::NWState; kw...) = _chk_global_parameters(s.nw, s.p; kw...)
+
+function _chk_global_parameters(nw::Network, valueprovider; verbose=true)
+    # value getter for a parameter `sym` of component `c` at index `ci` (idxtype VIndex/EIndex)
+    getval = if isnothing(valueprovider)
+        (idxtype, ci, c, sym) -> has_default(c, sym) ? get_default(c, sym) : nothing
+    else
+        (idxtype, ci, c, sym) -> valueprovider[idxtype(ci, sym)]
+    end
+
+    ok = true
+    # global groups span the whole network: basename => Vector{Pair{value, location}}
+    globalgroups = OrderedDict{Symbol, Vector{Pair{Any,String}}}()
+
+    function _handle(c, ci, idxtype, prefix)
+        # device groups are local to this single component
+        devicegroups = OrderedDict{Symbol, Vector{Pair{Any,String}}}()
+        for s in psym(c)
+            has_scope(c, s) || continue
+            scope = get_scope(c, s)
+            scope == :local && continue
+            val = getval(idxtype, ci, c, s)
+            isnothing(val) && continue
+            base = _scope_basename(s)
+            loc = "$prefix$ci :$s"
+            if scope == :global
+                push!(get!(globalgroups, base, Pair{Any,String}[]), val => loc)
+            elseif scope == :device
+                push!(get!(devicegroups, base, Pair{Any,String}[]), val => loc)
+            else
+                throw(ArgumentError("Unknown scope $(repr(scope)) for $loc. Must be :local, :device or :global."))
+            end
+        end
+        for (base, entries) in devicegroups
+            ok &= _chk_consistent_scope("device parameter :$base ($prefix$ci)", entries, verbose)
+        end
+    end
+
+    for (ci, c) in pairs(nw.im.vertexm)
+        _handle(c, ci, VIndex, "VIndex ")
+    end
+    for (ci, c) in pairs(nw.im.edgem)
+        _handle(c, ci, EIndex, "EIndex ")
+    end
+    for (base, entries) in globalgroups
+        ok &= _chk_consistent_scope("global parameter :$base", entries, verbose)
+    end
+    ok
+end
+
+function _chk_consistent_scope(desc, entries, verbose)
+    vals = unique(first.(entries))
+    length(vals) <= 1 && return true
+    if verbose
+        msg = "Inconsistent $desc:\n" * join(("  $loc = $val" for (val, loc) in entries), "\n")
+        @warn msg
+    end
+    false
+end

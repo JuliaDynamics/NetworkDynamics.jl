@@ -2,7 +2,12 @@ module NetworkDynamicsSymbolicsExt
 
 using Symbolics: Symbolics, @variables
 using MacroTools: postwalk, @capture
-using NetworkDynamics: NetworkDynamics, SymbolicIndex, SII
+using NetworkDynamics: NetworkDynamics, SymbolicIndex, SII, VariableScope
+
+# Register `scope` as symbolic variable metadata, so that it can be used in
+# `@variables`/`@parameters`/`@mtkmodel`/`@component` style definitions, e.g.
+# `@parameters p [scope=:global]`.
+Symbolics.option_to_metadata_type(::Val{:scope}) = VariableScope
 
 function NetworkDynamics.generate_observable_expression(ex::Expr)
     if @capture(ex, capname_ = capcontent_)

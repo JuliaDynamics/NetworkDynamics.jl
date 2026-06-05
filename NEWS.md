@@ -15,6 +15,10 @@
   - The default initial state for fixpoint search now applies guesses and formulas automatically (`guess=true, apply_formulas=true`).
 - **`NWState` constructor** gains `guess`, `apply_formulas`, and `verbose` keyword arguments. With `default=true` (the default), values are filled in order: defaults/inits → `InitFormula`s → guesses (if `guess=true`) → `GuessFormula`s. `apply_formulas=true` by default; `guess=false` by default.
 - `doctor` check: added smoketest for the observable function (`obsf`) of each component.
+- **Parameter `scope` metadata**: new `VariableScope` symbol metadata to mark (parameter) variables as `:local`, `:device`, or `:global`.
+  - Usable in `@mtkmodel`/`@component` definitions (e.g. `@parameters p [scope=:global]`) and accessible on the component level via `has_scope`/`get_scope`/`set_scope!`/`delete_scope!`/`strip_scopes!`.
+  - New `chk_global_parameters(nw_or_state_or_param)` checks that scoped parameters are consistent: `:global` parameters (grouped by trailing symbol name, `r"NAME$"`) must agree across the whole network, `:device` parameters within a single component; `:local` is ignored. For `Network` defaults are compared, for `NWState`/`NWParameter` the current values.
+  - This check runs automatically on `ODEProblem` construction (toggle via `NetworkDynamics.CHECK_GLOBAL_PARAMETERS[]`).
 
 ## v0.10.17 Changelog
 - **Open-loop linearization** ([#341](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/341)):

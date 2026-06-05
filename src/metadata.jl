@@ -164,8 +164,33 @@ function strip_metadata!(c::ComponentModel, key::Symbol)
 end
 strip_metadata!(nw::Network, sym::SymbolicIndex, key::Symbol) = strip_metadata!(getcomp(nw, sym), key)
 
+"""
+    VariableScope
+
+Symbolic metadata type for specifying the *scope* of a (parameter) variable. The
+scope determines on which level a parameter is expected to be consistent and is
+one of:
+
+- `:local` (default): the parameter is purely local to the component and is not
+  checked for consistency.
+- `:device`: the parameter is expected to be consistent within a single
+  `VertexModel`/`EdgeModel` (e.g. across its subcomponents).
+- `:global`: the parameter is expected to be consistent across the whole network,
+  i.e. all parameters sharing the same (trailing) symbol name must hold the same
+  value.
+
+In `@mtkmodel`/`@component` style definitions the scope can be attached as
+variable metadata, e.g. `@parameters p [scope=:global]`. On the
+`VertexModel`/`EdgeModel` level it is stored as the `:scope` symbol metadata and
+can be accessed using [`get_scope`](@ref)/[`set_scope!`](@ref).
+
+Consistency of scoped parameters can be checked using
+[`chk_global_parameters`](@ref).
+"""
+struct VariableScope end
+
 # generate default methods for some per-symbol metadata fields
-for md in [:default, :guess, :init, :bounds]
+for md in [:default, :guess, :init, :bounds, :scope]
     fname_has = Symbol(:has_, md)
     fname_get = Symbol(:get_, md)
     fname_set = Symbol(:set_, md, :!)

@@ -153,6 +153,12 @@ get_bounds
 set_bounds!
 delete_bounds!
 strip_bounds!
+has_scope
+get_scope
+set_scope!
+delete_scope!
+strip_scopes!
+VariableScope
 set_defaults!
 set_interface_defaults!
 get_defaults_dict
@@ -170,6 +176,7 @@ dump_initial_state
 get_initial_state
 describe_vertices
 describe_edges
+chk_global_parameters
 ```
 
 ## Initialization

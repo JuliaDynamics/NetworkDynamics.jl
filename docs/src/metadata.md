@@ -30,10 +30,30 @@ Special cases for symbol metadata are:
 - `guess`: Stores a guess for a state/parameter which needs to be solved during initialization ("free" variables).
 - `bounds`: Stores bounds for variables/parameters
 - `init`: Stores the solution of the "free" variables, this is rarely set manually but instead when calling [`initialize_component!`](@ref).
+- `scope`: Marks the [`VariableScope`](@ref) of a (parameter) variable as `:local`, `:device` or `:global`. See [Parameter Scope](@ref) below.
 
 For those, there are special functions `has_*`, `get_*`, `set_*!`, `delete_*!` and `strip_*!`. The `strip_*!` functions remove all metadata of a specific type from all symbols in a component. See [Per Symbol Metadata API](@ref).
 
 These are closely aligned with the [metadata use in ModelingToolkit](@extref ModelingToolkit symbolic_metadata). They are automatically copied from the `System` if you use MTK models to create NetworkDynamics models.
+
+## Parameter Scope
+The [`VariableScope`](@ref) metadata (`scope`) declares on which level a parameter is expected to be consistent:
+
+- `:local` (default): the parameter is purely local to the component and is not checked.
+- `:device`: the parameter must be consistent **within a single** [`VertexModel`](@ref)/[`EdgeModel`](@ref) (e.g. across its subcomponents).
+- `:global`: the parameter must be consistent **across the whole network**, i.e. all parameters sharing the same trailing symbol name (matching `r"NAME$"`) must hold the same value.
+
+In `@mtkmodel`/`@component` style definitions the scope can be attached as variable metadata and is automatically copied to the component:
+
+```julia
+@parameters begin
+    Sbase = 100, [scope = :global]
+end
+```
+
+On the component level it can also be set manually using [`set_scope!`](@ref) (and queried via [`get_scope`](@ref)).
+
+Consistency of scoped parameters can be checked with [`chk_global_parameters`](@ref), which accepts a [`Network`](@ref), [`NWState`](@ref) or [`NWParameter`](@ref). For a `Network` the metadata **defaults** are compared, for `NWState`/`NWParameter` the **current values**. This check also runs automatically on `ODEProblem` construction and can be toggled via `NetworkDynamics.CHECK_GLOBAL_PARAMETERS[]`.
 
 ## Metadata Utils
 Accessing metadata (especially defaults) of states and parameters is a very

@@ -330,6 +330,12 @@ function _get_metadata(sys, name, alldefaults, allguesses)
     if ModelingToolkitBase.hasdescription(sym)
         md[:description] = ModelingToolkitBase.getdescription(sym)
     end
+    scope = Symbolics.getmetadata(unwrap(sym), NetworkDynamics.VariableScope, nothing)
+    if !isnothing(scope)
+        # in @mtkmodel definitions symbol-valued metadata is stored unevaluated,
+        # e.g. `[scope = :global]` ends up as a `QuoteNode(:global)`
+        md[:scope] = scope isa QuoteNode ? scope.value : scope
+    end
     md
 end
 
