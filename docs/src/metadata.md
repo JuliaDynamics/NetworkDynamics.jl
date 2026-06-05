@@ -53,6 +53,8 @@ end
 
 On the component level it can also be set manually using [`set_scope!`](@ref) (and queried via [`get_scope`](@ref)).
 
+If the same trailing name is declared with **different** scopes (for example `:global` on one parameter and `:component` or `:local` on another sharing the name), each scope is checked independently — values are never compared across scopes — and a warning is emitted, since this is almost always a mistake.
+
 Consistency of scoped parameters can be checked with [`chk_global_parameters`](@ref), which accepts a [`Network`](@ref), [`NWState`](@ref) or [`NWParameter`](@ref). For a `Network` the metadata **defaults** are compared, for `NWState`/`NWParameter` the **current values**. This check also runs automatically on `ODEProblem` construction and can be toggled via `NetworkDynamics.CHECK_GLOBAL_PARAMETERS[]`.
 
 ## Metadata Utils

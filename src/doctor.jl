@@ -210,6 +210,11 @@ Parameters are grouped by the trailing part of their symbol name (matching
   `VertexModel`/`EdgeModel`,
 - parameters with scope `:local` are ignored.
 
+If the same basename is declared with **different** scopes (e.g. `:global` in
+one place and `:component` or `:local` in another), the scopes are still checked
+independently — values are never compared *across* scopes — but a warning is
+emitted because this is almost always unintended.
+
 For a `Network` the metadata **defaults** are compared. For an `NWState`/
 `NWParameter` the **current values** in the flat parameter array are compared.
 
@@ -235,6 +240,9 @@ function _chk_global_parameters(nw::Network, valueprovider; verbose=true)
     ok = true
     # global groups span the whole network: basename => Vector{Pair{value, location}}
     globalgroups = OrderedDict{Symbol, Vector{Pair{Any,String}}}()
+    # network-wide effective scope per basename, used to detect names that are
+    # declared with conflicting scopes: basename => (scope => Vector{location})
+    networkscopes = OrderedDict{Symbol, OrderedDict{Symbol, Vector{String}}}()
 
     function _handle(c, ci, idxtype, prefix)
         # scope is only meaningful (and enforced) for parameters; warn if it was
@@ -250,14 +258,18 @@ function _chk_global_parameters(nw::Network, valueprovider; verbose=true)
         end
         # component groups are local to this single component
         componentgroups = OrderedDict{Symbol, Vector{Pair{Any,String}}}()
+        # per-component effective scope per basename (mirror of `networkscopes`)
+        componentscopes = OrderedDict{Symbol, OrderedDict{Symbol, Vector{String}}}()
         for s in psym(c)
-            has_scope(c, s) || continue
-            scope = get_scope(c, s)
+            # effective scope defaults to `:local` when no scope metadata is set
+            scope = has_scope(c, s) ? get_scope(c, s) : :local
+            base = _scope_basename(s)
+            loc = "$prefix$ci :$s"
+            _record_scope!(componentscopes, base, scope, loc)
+            _record_scope!(networkscopes, base, scope, loc)
             scope == :local && continue
             val = getval(idxtype, ci, c, s)
             isnothing(val) && continue
-            base = _scope_basename(s)
-            loc = "$prefix$ci :$s"
             if scope == :global
                 push!(get!(globalgroups, base, Pair{Any,String}[]), val => loc)
             elseif scope == :component
@@ -269,6 +281,9 @@ function _chk_global_parameters(nw::Network, valueprovider; verbose=true)
         for (base, entries) in componentgroups
             ok &= _chk_consistent_scope("component parameter :$base ($prefix$ci)", entries, verbose)
         end
+        # warn about names that are `:component`-scoped here but carry a different
+        # scope on another parameter of the *same component*
+        verbose && _warn_mixed_scopes(componentscopes, :component, "within $prefix$ci")
     end
 
     for (ci, c) in pairs(nw.im.vertexm)
@@ -280,7 +295,30 @@ function _chk_global_parameters(nw::Network, valueprovider; verbose=true)
     for (base, entries) in globalgroups
         ok &= _chk_consistent_scope("global parameter :$base", entries, verbose)
     end
+    # warn about names that are `:global`-scoped somewhere but carry a different
+    # scope on another parameter *anywhere in the network*
+    verbose && _warn_mixed_scopes(networkscopes, :global, "across the network")
     ok
+end
+
+# record the effective `scope` of `loc` under `base` into the nested scope map
+function _record_scope!(scopemap, base, scope, loc)
+    byscope = get!(scopemap, base, OrderedDict{Symbol, Vector{String}}())
+    push!(get!(byscope, scope, String[]), loc)
+end
+
+# Warn when a basename is declared with `scope` *and* at least one different scope
+# in `scopemap`. Such names are almost certainly a mistake: the scope buckets are
+# checked independently and are never compared against each other.
+function _warn_mixed_scopes(scopemap, scope, where)
+    for (base, byscope) in scopemap
+        haskey(byscope, scope) || continue
+        length(byscope) <= 1 && continue
+        locs = ["  $loc => $sc" for (sc, ls) in byscope for loc in ls]
+        @warn "Parameter :$base is declared with mixed scopes $where; \
+               each scope is checked independently and the values are not \
+               compared across scopes:\n" * join(locs, "\n")
+    end
 end
 
 function _chk_consistent_scope(desc, entries, verbose)

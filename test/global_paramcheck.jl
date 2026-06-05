@@ -64,7 +64,7 @@ end
     # make the global parameter inconsistent
     set_default!(v2, :Vbase, 2.0)
     nw2 = Network(g, [v1, v2], e)
-    @test (@test_logs (:warn,) chk_global_parameters(nw2)) == false
+    @test (@test_logs (:warn, r"Inconsistent global parameter :Vbase") chk_global_parameters(nw2)) == false
     @test chk_global_parameters(nw2; verbose=false) == false
 end
 
@@ -136,7 +136,9 @@ end
     # component inconsistency is also caught automatically on ODEProblem construction
     s0 = NWState(nwbad)
     s0.v[:, :θ] .= 0.0
-    @test_logs (:warn,) ODEProblem(nwbad, s0, (0.0, 1.0))
+    @test_logs (:warn, r"Inconsistent component parameter :kp") match_mode = :any begin
+        ODEProblem(nwbad, s0, (0.0, 1.0))
+    end
 end
 
 @testset "consistency check on NWState / NWParameter (current values)" begin
@@ -171,9 +173,55 @@ end
     set_scope!(v1, :x, :global)
 
     nw = Network(g, [v1, v2], e)
-    @test_logs (:warn,) match_mode = :any chk_global_parameters(nw)
+    @test_logs (:warn, r"Symbol :x .* not a parameter") match_mode = :any begin
+        chk_global_parameters(nw)
+    end
     # still consistent for the actual parameters
     @test chk_global_parameters(nw; verbose=false) == true
+end
+
+@testset "mixed scopes for the same basename warn" begin
+    e = EdgeModel(g=AntiSymmetric((e, vs, vd, p, t) -> (e[1] = 0.0)), outdim=1, pdim=0, name=:e)
+
+    # network-wide collision: `Vbase` is :global on v1 but :local on v2
+    g = path_graph(2)
+    v1 = scopedvertex(:v1, [:Vbase => 1.0], [:Vbase => :global])
+    v2 = scopedvertex(:v2, [:Vbase => 1.0], [:Vbase => :local])
+    nw = Network(g, [v1, v2], e)
+    @test_logs (:warn, r"Vbase.*mixed scopes across the network") match_mode = :any begin
+        chk_global_parameters(nw)
+    end
+    # values are not compared across scopes -> still "consistent"
+    @test chk_global_parameters(nw; verbose=false) == true
+
+    # within-component collision: `a₊kp` is :component but `b₊kp` is :local
+    vmix = scopedvertex(:vmix, [Symbol("a₊kp") => 1.0, Symbol("b₊kp") => 9.0],
+                        [Symbol("a₊kp") => :component, Symbol("b₊kp") => :local])
+    nwc = Network(g, [vmix, vmix], e)
+    @test_logs (:warn, r"kp.*mixed scopes within") match_mode = :any begin
+        chk_global_parameters(nwc)
+    end
+
+    # network-wide collision between :global and :component for the same name
+    vg = scopedvertex(:vg, [:y => 1.0], [:y => :global])
+    vk = scopedvertex(:vk, [:y => 1.0], [:y => :component])
+    nwgk = Network(g, [vg, vk], e)
+    @test_logs (:warn, r"y.*mixed scopes across the network") match_mode = :any begin
+        chk_global_parameters(nwgk)
+    end
+
+    # `:component` here vs `:local` in another vertex is fine -> no warning.
+    # `gx` is :global (uniform), `c` is :component in vca but :local in vcb.
+    vca = scopedvertex(:vca, [:gx => 1.0, :c => 1.0], [:gx => :global, :c => :component])
+    vcb = scopedvertex(:vcb, [:gx => 1.0, :c => 2.0], [:gx => :global, :c => :local])
+    nwcomp = Network(g, [vca, vcb], e)
+    @test_logs chk_global_parameters(nwcomp)
+
+    # uniform scopes -> no mixed-scope warning
+    vu1 = scopedvertex(:vu1, [:Vbase => 1.0], [:Vbase => :global])
+    vu2 = scopedvertex(:vu2, [:Vbase => 1.0], [:Vbase => :global])
+    nwu = Network(g, [vu1, vu2], e)
+    @test_logs chk_global_parameters(nwu)
 end
 
 @testset "automatic check on ODEProblem construction" begin
@@ -191,7 +239,9 @@ end
 
     # inconsistent parameters -> warning emitted during construction
     s0.p[VIndex(2, :Vbase)] = 42.0
-    @test_logs (:warn,) ODEProblem(nw, s0, (0.0, 1.0))
+    @test_logs (:warn, r"Inconsistent global parameter :Vbase") match_mode = :any begin
+        ODEProblem(nw, s0, (0.0, 1.0))
+    end
 
     # check can be disabled globally
     NetworkDynamics.CHECK_GLOBAL_PARAMETERS[] = false
