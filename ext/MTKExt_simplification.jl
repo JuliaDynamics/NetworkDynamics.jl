@@ -391,7 +391,7 @@ function _match_and_solve(eqs, obs_unsrtd, match_states::Vector, all_states::Vec
             end
         end
         if !(required_diffs ⊆ keys(known_diffs))
-            throw(RHSDifferentialsError([repr(only(d.args)) for d in setdiff(remaining_diffs, keys(known_diffs))]))
+            throw(RHSDifferentialsError([repr(only(d.args)) for d in setdiff(required_diffs, keys(known_diffs))]))
         elseif verbose
             @info "Substitute known differentials: " * multiline_repr(known_diffs)
         end
