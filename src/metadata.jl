@@ -195,16 +195,23 @@ struct ParameterScope end
 Symbolic metadata type for declaring that a (parameter) variable should take its
 default value from another parameter (see [`resolve_default_from!`](@ref)).
 
-The metadata value (`:default_from`) is either
+The metadata value (`:default_from`) is one of
 
 - a `Symbol` naming a parameter elsewhere in the *same* `VertexModel`/`EdgeModel`
-  (e.g. `[default_from = :busbar₊Vbase]`), or
+  (e.g. `[default_from = :busbar₊Vbase]`),
 - a `Tuple` `(:src, paramname)` / `(:dst, paramname)` naming a parameter of the
   source/destination **vertex** of an edge (only resolvable once the `Network`
-  is assembled, e.g. `[default_from = (:src, :busbar₊Vbase)]`).
+  is assembled, e.g. `[default_from = (:src, :busbar₊Vbase)]`),
+- a `Tuple` `(:hub, paramname)` naming a parameter of the **hub vertex** a
+  satellite vertex is attached to via a [`LoopbackConnection`](@ref) (only
+  resolvable once the `Network` is assembled, e.g.
+  `[default_from = (:hub, :busbar₊Vbase)]`), or
+- a `Ref` whose value is dereferenced at resolution (e.g. a module-level base
+  singleton like `[default_from = MyModule.Sbase]`); resolved already at the
+  component level.
 
-In both cases the source is the *full* parameter name exactly as it appears in
-the source component's [`psym`](@ref) (namespaced with `₊`).
+For the named (non-`Ref`) forms the source is the *full* parameter name exactly
+as it appears in the source component's [`psym`](@ref) (namespaced with `₊`).
 
 It is resolved automatically during construction. A manually set default is never
 overwritten, and a missing source warns. See [`resolve_default_from!`](@ref) for

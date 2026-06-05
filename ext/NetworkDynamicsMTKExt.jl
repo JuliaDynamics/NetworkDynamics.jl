@@ -350,6 +350,9 @@ end
 _normalize_default_from(x::QuoteNode) = x.value
 _normalize_default_from(x::Symbol) = x
 _normalize_default_from(x::Tuple) = map(_normalize_default_from, x)
+# a `Ref` source (e.g. a module-level base singleton) is evaluated by @mtkmodel/
+# @component into the actual `Ref` object and is passed through unchanged
+_normalize_default_from(x::Base.RefValue) = x
 
 function _split_extin(extin)
     try

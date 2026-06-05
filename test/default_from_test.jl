@@ -210,6 +210,98 @@ end
     @test get_default(vm, :dev₊Vbase) == 5.0
 end
 
+@testset "Ref source (component level)" begin
+    Sbase = Ref(100.0)
+    v = ivertex(:bus, [:Sbase => 0.0]; nodefault=(:Sbase,))
+    set_default_from!(v, :Sbase, Sbase)
+    @test resolve_default_from!(v) == 1
+    @test get_default(v, :Sbase) == 100.0
+
+    # a Ref source follows changes to the Ref on re-resolution (tagged default)
+    Sbase[] = 200.0
+    resolve_default_from!(v)
+    @test get_default(v, :Sbase) == 200.0
+
+    # a manually set default is never overwritten by the Ref
+    set_default!(v, :Sbase, 7.0)
+    Sbase[] = 300.0
+    resolve_default_from!(v)
+    @test get_default(v, :Sbase) == 7.0
+end
+
+@testset "Ref source on edge" begin
+    g = path_graph(2)
+    v1 = ivertex(:b1, [:x₊p => 1.0])
+    v2 = ivertex(:b2, [:x₊p => 2.0])
+    Sbase = Ref(100.0)
+    e = EdgeModel(g=AntiSymmetric((e, vs, vd, p, t) -> (e[1] = 0.0)), outdim=1,
+                  psym=[:Sbase], name=:line)
+    set_default_from!(e, :Sbase, Sbase)
+    nw = Network(g, [v1, v2], e)
+    @test get_default(nw.im.edgem[1], :Sbase) == 100.0
+end
+
+@testset "hub default_from over loopback" begin
+    Vbaseref = Ref(42.0)
+    @mtkmodel HubCap begin
+        @variables begin
+            v(t) = 0.0, [output=true]
+            i(t), [input=true]
+        end
+        @parameters begin
+            C = 1.0
+            Vbase, [default_from = Vbaseref]
+        end
+        @equations begin
+            Dt(v) ~ i / C
+        end
+    end
+    @mtkmodel SatInj begin
+        @variables begin
+            v(t), [input=true]
+            i(t), [output=true]
+        end
+        @parameters begin
+            R = 100.0
+            Vbase, [default_from = (:hub, :Vbase)]
+        end
+        @equations begin
+            i ~ v / R
+        end
+    end
+
+    hub = VertexModel(HubCap(name=:hub), [:i], [:v], name=:hub)
+    sat = VertexModel(SatInj(name=:sat), [:v], [:i], name=:sat, ff_to_constraint=false)
+
+    loop = LoopbackConnection(potential=[:v], flow=[:i], src=:sat, dst=:hub, name=:loop)
+    nw = Network([hub, sat], [loop]; warn_order=false)
+
+    satvm = nw.im.vertexm[findfirst(v -> v.name == :sat, nw.im.vertexm)]
+    @test get_default(satvm, :Vbase) == 42.0
+
+    Vbaseref[] = 84.0
+    resolve_default_from!(nw)
+    @test get_default(hub, :Vbase) == 84.0
+    @test get_default(satvm, :Vbase) == 84.0
+end
+
+@testset "hub default_from on non-injector errors" begin
+    # a vertex tagged (:hub, …) but not an injector -> structural error
+    g = path_graph(2)
+    v1 = ivertex(:b1, [:Vbase => 0.0]; nodefault=(:Vbase,))
+    set_default_from!(v1, :Vbase, (:hub, :Vbase))
+    v2 = ivertex(:b2, [:Vbase => 5.0])
+    e = EdgeModel(g=AntiSymmetric((e, vs, vd, p, t) -> (e[1] = 0.0)), outdim=1, pdim=0, name=:e)
+    @test_throws ArgumentError Network(g, [v1, v2], e)
+end
+
+@testset "hub default_from on edge parameter errors" begin
+    e = EdgeModel(g=AntiSymmetric((e, vs, vd, p, t) -> (e[1] = 0.0)), outdim=1,
+                  psym=[:Vbase], name=:line)
+    set_default_from!(e, :Vbase, (:hub, :busbar₊Vbase))
+    @test_throws ArgumentError resolve_default_from!(e)
+end
+
 @testset "interaction with chk_global_parameters" begin
     g = path_graph(2)
     v1 = ivertex(:b1, [:busbar₊Vbase => 1.0, :dev₊Vbase => 0.0];

@@ -58,25 +58,29 @@ If the same trailing name is declared with **different** scopes (for example `:g
 Consistency of scoped parameters can be checked with [`chk_global_parameters`](@ref), which accepts a [`Network`](@ref), [`NWState`](@ref) or [`NWParameter`](@ref). For a `Network` the metadata **defaults** are compared, for `NWState`/`NWParameter` the **current values**. This check also runs automatically on `ODEProblem` construction and can be toggled via `NetworkDynamics.CHECK_GLOBAL_PARAMETERS[]`.
 
 ## Parameter Defaults From Another Parameter
-The [`ParameterDefaultFrom`](@ref) metadata (`default_from`) lets a parameter take its **default value** from another parameter, so you only have to specify a value once. A common use is a base quantity like `Vbase` that several parts of a model should share. The source is named by its full parameter name (namespaced with `₊`), in one of two forms:
+The [`ParameterDefaultFrom`](@ref) metadata (`default_from`) lets a parameter take its **default value** from another parameter, so you only have to specify a value once. A common use is a base quantity like `Vbase` that several parts of a model should share. For the named forms the source is given by its full parameter name (namespaced with `₊`):
 
-- a `Symbol` for a parameter elsewhere in the **same** [`VertexModel`](@ref)/[`EdgeModel`](@ref), e.g. `[default_from = :busbar₊Vbase]`, or
-- a `Tuple` `(:src, name)` / `(:dst, name)` for a parameter of the **source/destination vertex** of an edge, e.g. `[default_from = (:src, :busbar₊Vbase)]`.
+- a `Symbol` for a parameter elsewhere in the **same** [`VertexModel`](@ref)/[`EdgeModel`](@ref), e.g. `[default_from = :busbar₊Vbase]`,
+- a `Tuple` `(:src, name)` / `(:dst, name)` for a parameter of the **source/destination vertex** of an edge, e.g. `[default_from = (:src, :busbar₊Vbase)]`,
+- a `Tuple` `(:hub, name)` for a parameter of the **hub vertex** a satellite vertex is attached to via a [`LoopbackConnection`](@ref), e.g. `[default_from = (:hub, :busbar₊Vbase)]`, or
+- a `Ref`, whose value is dereferenced when resolved — handy for a module-level base singleton, e.g. `[default_from = MyModule.Sbase]`.
 
 ```julia
 @parameters begin
     Vbase, [default_from = :busbar₊Vbase]         # same component
     Vbase, [default_from = (:src, :busbar₊Vbase)] # from the src vertex of an edge
+    Vbase, [default_from = (:hub, :busbar₊Vbase)] # from the hub of a loopback satellite
+    Sbase, [default_from = MyModule.Sbase]        # from a module-level Ref
 end
 ```
 
-It is resolved automatically when components and the [`Network`](@ref) are built (you can also trigger it manually with [`resolve_default_from!`](@ref)). Chains (`a` feeds `b` feeds `c`) propagate in a single pass. Same-component sources are resolved already in the [`VertexModel`](@ref)/[`EdgeModel`](@ref) constructor — for MTK-based components this is the point where the MTK system is compiled into a NetworkDynamics component (see [ModelingToolkit Integration](@ref)). Cross-component (`:src`/`:dst`) sources need the graph and are resolved in the `Network` constructor.
+It is resolved automatically when components and the [`Network`](@ref) are built (you can also trigger it manually with [`resolve_default_from!`](@ref)). Chains (`a` feeds `b` feeds `c`) propagate in a single pass. Same-component and `Ref` sources are resolved already in the [`VertexModel`](@ref)/[`EdgeModel`](@ref) constructor — for MTK-based components this is the point where the MTK system is compiled into a NetworkDynamics component (see [ModelingToolkit Integration](@ref)). Cross-component (`:src`/`:dst`/`:hub`) sources need the graph and are resolved in the `Network` constructor.
 
 The behavior is:
 
 - **A default you set manually is never overwritten.** It only fills in values it provided itself; a conflict with a manual default is silently kept (set `verbose=true` to get a warning).
 - **A missing source always warns**, regardless of `verbose`, and the parameter is left untouched.
-- **Misuse is an error:** `default_from` on something that is not a parameter, or an `:src`/`:dst` source on a vertex parameter.
+- **Misuse is an error:** `default_from` on something that is not a parameter, an `:src`/`:dst` source on a vertex parameter, a `:hub` source on an edge parameter, or a `:hub` source on a vertex that is not an injector node (i.e. not the source of a [`LoopbackConnection`](@ref)).
 
 !!! note "It copies a value, it does not link the model"
     This is **not** the same as writing `Vbase = busbar.Vbase` in the model equations. `default_from` simply copies a default value from a parameter you name; it does not create an equation or otherwise couple the two parameters. You assert that the source (e.g. `busbar₊Vbase`) exists — if it does not, you get a warning.

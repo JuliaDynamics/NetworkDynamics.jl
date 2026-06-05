@@ -9,11 +9,19 @@
 #   - `default_from = (:src, :busbar₊Vbase)`  take it from a parameter of the src/dst
 #   - `default_from = (:dst, :busbar₊Vbase)`  vertex of an edge (resolved on Network
 #                                             construction).
+#   - `default_from = (:hub, :busbar₊Vbase)`  take it from a parameter of the hub
+#                                             vertex a satellite vertex is attached to
+#                                             via a `LoopbackConnection` (resolved on
+#                                             Network construction).
+#   - `default_from = some_ref`               take it from a `Ref`, dereferenced at
+#                                             resolution (e.g. a module-level base
+#                                             singleton); resolved already at the
+#                                             component level.
 #
-# The source spec is the *full* parameter name, exactly as it appears in `psym`
-# of the source component (namespaced with `₊`). This is different from writing
-# `Vbase = busbar.Vbase`: it only ever *copies* a default from a known, named
-# parameter, it does not traverse/evaluate the model hierarchy.
+# Except for the `Ref` form, the source spec is the *full* parameter name, exactly
+# as it appears in `psym` of the source component (namespaced with `₊`). This is
+# different from writing `Vbase = busbar.Vbase`: it only ever *copies* a default
+# from a known, named parameter, it does not traverse/evaluate the model hierarchy.
 #
 # It only ever touches metadata defaults; it never modifies the flat parameter
 # array and never throws on value conflicts. Structural misuse (default_from on a
@@ -78,9 +86,17 @@ function _validate_default_from(c::ComponentModel)
                 it is only supported for parameters."))
         end
         spec = md[:default_from]
-        if spec isa Tuple && c isa VertexModel
-            throw(ArgumentError("default_from = $(repr(spec)) on vertex parameter :$s in $(c.name): \
-                src/dst sources are only valid on edge parameters."))
+        if spec isa Tuple
+            dir = first(spec)
+            if c isa VertexModel && dir !== :hub
+                throw(ArgumentError("default_from = $(repr(spec)) on vertex parameter :$s in $(c.name): \
+                    only :hub sources (from a LoopbackConnection hub) are valid on vertex parameters; \
+                    :src/:dst sources are only valid on edge parameters."))
+            elseif c isa EdgeModel && dir === :hub
+                throw(ArgumentError("default_from = $(repr(spec)) on edge parameter :$s in $(c.name): \
+                    :hub sources are only valid on vertex parameters (satellite ← hub); \
+                    use :src/:dst on edge parameters."))
+            end
         end
     end
     nothing
@@ -92,7 +108,12 @@ function _default_from_local_pass!(c::ComponentModel, warned; verbose)
     for p in psym(c)
         has_default_from(c, p) || continue
         spec = get_default_from(c, p)
-        spec isa Tuple && continue  # cross-component (edge), resolved on Network level
+        spec isa Tuple && continue  # cross-component (edge/hub), resolved on Network level
+        if spec isa Ref
+            # a Ref source carries the value directly, deref and apply
+            _apply_default_from!(c, p, spec[]; verbose, warned) && (n += 1)
+            continue
+        end
         src = _find_default_from_source(c, spec)
         if isnothing(src)
             _warn_once!(warned, "default_from: could not resolve source parameter $(repr(spec)) \
@@ -150,6 +171,9 @@ end
 function _edge_is_aliased(im, ef)
     haskey(im.aliased_edgems, ef) && length(im.aliased_edgems[ef].idxs) > 1
 end
+function _vertex_is_aliased(im, vm)
+    haskey(im.aliased_vertexms, vm) && length(im.aliased_vertexms[vm].idxs) > 1
+end
 
 function _resolve_default_from_crosscomponent!(nw::Network, warned; verbose)
     im = nw.im
@@ -195,6 +219,62 @@ function _resolve_default_from_crosscomponent!(nw::Network, warned; verbose)
     total
 end
 
+# resolve hub sources (`(:hub, srcspec)`) on satellite vertices, returns # of
+# updates. A satellite is an injector node (leaf at the `.src` end of a
+# `LoopbackConnection`); its hub is its single graph neighbor (the `.dst` end).
+# Warns (does not error) if a tagged vertex is not an injector (a wiring issue,
+# like a missing source).
+function _has_hub_source(vm)
+    any(psym(vm)) do p
+        has_default_from(vm, p) || return false
+        spec = get_default_from(vm, p)
+        spec isa Tuple && first(spec) === :hub
+    end
+end
+
+function _resolve_default_from_hub!(nw::Network, warned; verbose)
+    im = nw.im
+    any(_has_hub_source, im.vertexm) || return 0
+
+    total = 0
+    for vidx in eachindex(im.vertexm)
+        vm = im.vertexm[vidx]
+        _has_hub_source(vm) || continue
+        # a shared vertex instance cannot hold per-satellite values (different hubs
+        # would write different values to the same object), so reject it up front
+        # (mirrors the aliased-edge guard in `_resolve_default_from_crosscomponent!`).
+        if _vertex_is_aliased(im, vm)
+            throw(ArgumentError("Hub (`:hub`) `default_from` on a vertex model that is \
+                shared across multiple vertices is not supported, because each satellite may \
+                attach to a different hub. Construct the `Network` with `dealias=true` (or pass \
+                per-vertex `copy`s of the vertex model) so each vertex gets its own instance."))
+        end
+        if !is_injector(im, vidx)
+            throw(ArgumentError("default_from = (:hub, …) on vertex $vidx ($(vm.name)): \
+                :hub sources are only valid on injector nodes (the source of a \
+                LoopbackConnection edge), but this vertex is not an injector."))
+        end
+        # an injector is a leaf, so its single neighbor is the hub
+        hubidx = only(Graphs.all_neighbors(im.g, vidx))
+        hubvm = im.vertexm[hubidx]
+        for p in psym(vm)
+            has_default_from(vm, p) || continue
+            spec = get_default_from(vm, p)
+            (spec isa Tuple && first(spec) === :hub) || continue
+            srcspec = spec[2]
+            src = _find_default_from_source(hubvm, srcspec)
+            if isnothing(src)
+                _warn_once!(warned, "default_from: could not resolve source parameter $(repr(srcspec)) \
+                    on hub vertex $hubidx for parameter :$p of satellite vertex $vidx. Skipping.")
+                continue
+            end
+            has_default(hubvm, src) || continue
+            _apply_default_from!(vm, p, get_default(hubvm, src); verbose, warned) && (total += 1)
+        end
+    end
+    total
+end
+
 function resolve_default_from!(nw::Network; verbose=false)
     for c in nw.im.vertexm
         _validate_default_from(c)
@@ -216,6 +296,7 @@ function resolve_default_from!(nw::Network; verbose=false)
             n += _resolve_default_from_local!(c, warned; verbose)
         end
         n += _resolve_default_from_crosscomponent!(nw, warned; verbose)
+        n += _resolve_default_from_hub!(nw, warned; verbose)
         total += n
         n == 0 && break
     end
