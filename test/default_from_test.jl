@@ -5,7 +5,7 @@ using SciCompDSL
 using Graphs
 using Test
 
-using NetworkDynamics: set_inherit!, get_inherit, has_inherit
+using NetworkDynamics: set_default_from!, get_default_from, has_default_from
 
 # helper to build a simple vertex carrying namespaced parameters.
 # `inherits` are `source => target` pairs (reads as "source feeds target").
@@ -16,7 +16,7 @@ function ivertex(name, psympairs; inherits=(), nodefault=())
         s in nodefault || set_default!(v, s, d)
     end
     for (source, target) in inherits
-        set_inherit!(v, target, source)
+        set_default_from!(v, target, source)
     end
     v
 end
@@ -25,24 +25,24 @@ end
     # device picks up busbar default
     v = ivertex(:bus, [:busbar₊Vbase => 1.5, :dev₊Vbase => 0.0];
                 inherits=(:busbar₊Vbase => :dev₊Vbase,), nodefault=(:dev₊Vbase,))
-    @test inherit_parameters!(v) == 1
+    @test resolve_default_from!(v) == 1
     @test get_default(v, :dev₊Vbase) == 1.5
 
     # explicit-equal default is a no-op (no change, no warn)
     v = ivertex(:bus, [:busbar₊Vbase => 1.5, :dev₊Vbase => 1.5];
                 inherits=(:busbar₊Vbase => :dev₊Vbase,))
-    @test_logs inherit_parameters!(v)
+    @test_logs resolve_default_from!(v)
     @test get_default(v, :dev₊Vbase) == 1.5
 
     # explicit-different default is preserved (+ warn when verbose)
     v = ivertex(:bus, [:busbar₊Vbase => 1.5, :dev₊Vbase => 9.0];
                 inherits=(:busbar₊Vbase => :dev₊Vbase,))
-    @test_logs (:warn,) inherit_parameters!(v; verbose=true)
+    @test_logs (:warn,) resolve_default_from!(v; verbose=true)
     @test get_default(v, :dev₊Vbase) == 9.0
     # quiet by default
     v = ivertex(:bus, [:busbar₊Vbase => 1.5, :dev₊Vbase => 9.0];
                 inherits=(:busbar₊Vbase => :dev₊Vbase,))
-    @test_logs inherit_parameters!(v)
+    @test_logs resolve_default_from!(v)
     @test get_default(v, :dev₊Vbase) == 9.0
 end
 
@@ -51,40 +51,40 @@ end
     # when the source changes, but never an explicit default.
     v = ivertex(:bus, [:busbar₊Vbase => 1.0, :dev₊Vbase => 0.0];
                 inherits=(:busbar₊Vbase => :dev₊Vbase,), nodefault=(:dev₊Vbase,))
-    inherit_parameters!(v)
+    resolve_default_from!(v)
     @test get_default(v, :dev₊Vbase) == 1.0
 
     # change the source and re-resolve -> inherited default follows
     set_default!(v, :busbar₊Vbase, 2.0)
-    inherit_parameters!(v)
+    resolve_default_from!(v)
     @test get_default(v, :dev₊Vbase) == 2.0
 
     # explicit set_default! pins the value and clears provenance -> not overwritten
     set_default!(v, :dev₊Vbase, 99.0)
     set_default!(v, :busbar₊Vbase, 3.0)
-    inherit_parameters!(v)
+    resolve_default_from!(v)
     @test get_default(v, :dev₊Vbase) == 99.0
 end
 
 @testset "raw default change invalidates inherited tag" begin
     v = ivertex(:bus, [:busbar₊Vbase => 1.0, :dev₊Vbase => 0.0];
                 inherits=(:busbar₊Vbase => :dev₊Vbase,), nodefault=(:dev₊Vbase,))
-    inherit_parameters!(v)
+    resolve_default_from!(v)
     @test get_default(v, :dev₊Vbase) == 1.0
     # bypass set_default!: change the default directly via metadata
     NetworkDynamics.set_metadata!(v, :dev₊Vbase, :default, 5.0)
     set_default!(v, :busbar₊Vbase, 2.0)
-    inherit_parameters!(v)
+    resolve_default_from!(v)
     # the mismatched tag is treated as an explicit default and kept
     @test get_default(v, :dev₊Vbase) == 5.0
-    @test !NetworkDynamics.has_metadata(v, :dev₊Vbase, :inherited)
+    @test !NetworkDynamics.has_metadata(v, :dev₊Vbase, :default_from_value)
 end
 
 @testset "missing source parameter always warns" begin
     v = ivertex(:bus, [:dev₊Vbase => 0.0];
                 inherits=(:busbar₊Vbase => :dev₊Vbase,), nodefault=(:dev₊Vbase,))
     # warns even though verbose is false (the default)
-    @test_logs (:warn,) inherit_parameters!(v)
+    @test_logs (:warn,) resolve_default_from!(v)
     @test !has_default(v, :dev₊Vbase)
 end
 
@@ -92,7 +92,7 @@ end
     # c inherits from b, b inherits from a; resolved iteratively in one call
     v = ivertex(:bus, [:a₊V => 3.0, :b₊V => 0.0, :c₊V => 0.0];
                 inherits=(:a₊V => :b₊V, :b₊V => :c₊V), nodefault=(:b₊V, :c₊V))
-    @test inherit_parameters!(v) == 2
+    @test resolve_default_from!(v) == 2
     @test get_default(v, :b₊V) == 3.0
     @test get_default(v, :c₊V) == 3.0
 end
@@ -100,14 +100,14 @@ end
 @testset "inherit on non-parameter errors" begin
     v = ivertex(:bus, [:busbar₊Vbase => 1.0])
     # attach inherit to a state symbol -> structural misuse
-    set_inherit!(v, :x, :busbar₊Vbase)
-    @test_throws ArgumentError inherit_parameters!(v)
+    set_default_from!(v, :x, :busbar₊Vbase)
+    @test_throws ArgumentError resolve_default_from!(v)
 end
 
 @testset "src/dst inherit on vertex parameter errors" begin
     v = ivertex(:bus, [:dev₊Vbase => 0.0];
                 inherits=((:src, :busbar₊Vbase) => :dev₊Vbase,), nodefault=(:dev₊Vbase,))
-    @test_throws ArgumentError inherit_parameters!(v)
+    @test_throws ArgumentError resolve_default_from!(v)
 end
 
 @testset "cross-component inherit_src/inherit_dst" begin
@@ -117,8 +117,8 @@ end
 
     e = EdgeModel(g=AntiSymmetric((e, vs, vd, p, t) -> (e[1] = 0.0)), outdim=1,
                   psym=[:srcend₊Vbase, :dstend₊Vbase], name=:line)
-    set_inherit!(e, :srcend₊Vbase, (:src, :busbar₊Vbase))
-    set_inherit!(e, :dstend₊Vbase, (:dst, :busbar₊Vbase))
+    set_default_from!(e, :srcend₊Vbase, (:src, :busbar₊Vbase))
+    set_default_from!(e, :dstend₊Vbase, (:dst, :busbar₊Vbase))
 
     nw = Network(g, [v1, v2], e)
     ef = nw.im.edgem[1]
@@ -134,7 +134,7 @@ end
     mkvs() = [ivertex(Symbol(:b, i), [:busbar₊Vbase => Float64(i)]) for i in 1:3]
     mke() = (e = EdgeModel(g=AntiSymmetric((e, vs, vd, p, t) -> (e[1] = 0.0)), outdim=1,
                            psym=[:srcend₊Vbase], name=:line);
-             set_inherit!(e, :srcend₊Vbase, (:dst, :busbar₊Vbase)); e)
+             set_default_from!(e, :srcend₊Vbase, (:dst, :busbar₊Vbase)); e)
 
     # aliased edge model -> not supported, must dealias
     @test_throws ArgumentError Network(g, mkvs(), mke())
@@ -154,8 +154,8 @@ end
     v2 = ivertex(:b2, [:busbar₊Vbase => 8.0])
     e = EdgeModel(g=AntiSymmetric((e, vs, vd, p, t) -> (e[1] = 0.0)), outdim=1,
                   psym=[:srcend₊Vbase, :relay₊Vbase], name=:line)
-    set_inherit!(e, :srcend₊Vbase, (:src, :busbar₊Vbase))
-    set_inherit!(e, :relay₊Vbase, :srcend₊Vbase)  # local, depends on cross-resolved value
+    set_default_from!(e, :srcend₊Vbase, (:src, :busbar₊Vbase))
+    set_default_from!(e, :relay₊Vbase, :srcend₊Vbase)  # local, depends on cross-resolved value
 
     nw = Network(g, [v1, v2], e)
     ef = nw.im.edgem[1]
@@ -182,7 +182,7 @@ end
             i(t), [input=true]
         end
         @parameters begin
-            Vbase, [inherit = :busbar₊Vbase]
+            Vbase, [default_from = :busbar₊Vbase]
         end
         @equations begin
             o ~ Vbase * i
@@ -205,7 +205,7 @@ end
     end
 
     vm = VertexModel(IBus(name=:bus), [:P], [:θ])
-    @test get_inherit(vm, :dev₊Vbase) == :busbar₊Vbase
+    @test get_default_from(vm, :dev₊Vbase) == :busbar₊Vbase
     # resolved already in the VertexModel constructor
     @test get_default(vm, :dev₊Vbase) == 5.0
 end

@@ -336,20 +336,20 @@ function _get_metadata(sys, name, alldefaults, allguesses)
         # e.g. `[scope = :global]` ends up as a `QuoteNode(:global)`
         md[:scope] = scope isa QuoteNode ? scope.value : scope
     end
-    inherit = Symbolics.getmetadata(unwrap(sym), NetworkDynamics.ParameterInherit, nothing)
-    if !isnothing(inherit)
-        # `[inherit = :busbar₊Vbase]` arrives as a `Symbol`, `[inherit = (:src,
-        # :busbar₊Vbase)]` as a `Tuple` of `Symbol`s (QuoteNode-wrapped in some cases)
-        md[:inherit] = _normalize_inherit(inherit)
+    default_from = Symbolics.getmetadata(unwrap(sym), NetworkDynamics.ParameterDefaultFrom, nothing)
+    if !isnothing(default_from)
+        # `[default_from = :busbar₊Vbase]` arrives as a `Symbol`, `[default_from =
+        # (:src, :busbar₊Vbase)]` as a `Tuple` of `Symbol`s (QuoteNode-wrapped in some cases)
+        md[:default_from] = _normalize_default_from(default_from)
     end
     md
 end
 
-# normalize raw `inherit` metadata (as it arrives from @mtkmodel/@component, where
+# normalize raw `default_from` metadata (as it arrives from @mtkmodel/@component, where
 # symbol-valued metadata is stored unevaluated) into a `Symbol` or `Tuple` of `Symbol`s
-_normalize_inherit(x::QuoteNode) = x.value
-_normalize_inherit(x::Symbol) = x
-_normalize_inherit(x::Tuple) = map(_normalize_inherit, x)
+_normalize_default_from(x::QuoteNode) = x.value
+_normalize_default_from(x::Symbol) = x
+_normalize_default_from(x::Tuple) = map(_normalize_default_from, x)
 
 function _split_extin(extin)
     try

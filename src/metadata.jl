@@ -190,31 +190,30 @@ Consistency of scoped parameters can be checked using
 struct ParameterScope end
 
 """
-    ParameterInherit
+    ParameterDefaultFrom
 
-Symbolic metadata type for declaring that a (parameter) variable should
-automatically *inherit* its default value from another parameter (see
-[`inherit_parameters!`](@ref)).
+Symbolic metadata type for declaring that a (parameter) variable should take its
+default value from another parameter (see [`resolve_default_from!`](@ref)).
 
-The metadata value (`:inherit`) is either
+The metadata value (`:default_from`) is either
 
 - a `Symbol` naming a parameter elsewhere in the *same* `VertexModel`/`EdgeModel`
-  (e.g. `[inherit = :busbar₊Vbase]`), or
+  (e.g. `[default_from = :busbar₊Vbase]`), or
 - a `Tuple` `(:src, paramname)` / `(:dst, paramname)` naming a parameter of the
   source/destination **vertex** of an edge (only resolvable once the `Network`
-  is assembled, e.g. `[inherit = (:src, :busbar₊Vbase)]`).
+  is assembled, e.g. `[default_from = (:src, :busbar₊Vbase)]`).
 
 In both cases the source is the *full* parameter name exactly as it appears in
 the source component's [`psym`](@ref) (namespaced with `₊`).
 
-Inheritance is resolved automatically during construction. A manually set default
-is never overwritten, and a missing source warns. See [`inherit_parameters!`](@ref)
-for details.
+It is resolved automatically during construction. A manually set default is never
+overwritten, and a missing source warns. See [`resolve_default_from!`](@ref) for
+details.
 """
-struct ParameterInherit end
+struct ParameterDefaultFrom end
 
 # generate default methods for some per-symbol metadata fields
-for md in [:default, :guess, :init, :bounds, :scope, :inherit]
+for md in [:default, :guess, :init, :bounds, :scope, :default_from]
     fname_has = Symbol(:has_, md)
     fname_get = Symbol(:get_, md)
     fname_set = Symbol(:set_, md, :!)
@@ -223,6 +222,8 @@ for md in [:default, :guess, :init, :bounds, :scope, :inherit]
         :strip_guesses!
     elseif md == :bounds
         :strip_bounds!
+    elseif md == :default_from
+        :strip_default_from!
     else
         Symbol(:strip_, string(md)*"s", :!)
     end
@@ -303,12 +304,12 @@ for md in [:default, :guess, :init, :bounds, :scope, :inherit]
 end
 
 # hook called after a generated metadata setter; no-op by default. Setting a
-# `default` explicitly clears the `:inherited` provenance marker, i.e. the value
-# is treated as user-provided ("set in stone") and is no longer overwritten by
-# parameter inheritance (see [`inherit_parameters!`](@ref)).
+# `default` explicitly clears the `:default_from_value` provenance marker, i.e. the
+# value is treated as user-provided ("set in stone") and is no longer overwritten
+# by `default_from` propagation (see [`resolve_default_from!`](@ref)).
 _on_set_metadata!(c::Comp_or_NW, sym, ::Val, val) = nothing
 function _on_set_metadata!(c::Comp_or_NW, sym, ::Val{:default}, val)
-    has_metadata(c, sym, :inherited) && delete_metadata!(c, sym, :inherited)
+    has_metadata(c, sym, :default_from_value) && delete_metadata!(c, sym, :default_from_value)
     nothing
 end
 

@@ -19,7 +19,8 @@ These constructors will:
 - transform the states marked as input to parameters and `mtkcompile`ing the system,
 - generate the `f` and `g` functions,
 - generate code for observables,
-- port all supported [Metadata](@ref) from MTK symbols to component symbols and
+- port all supported [Metadata](@ref) from MTK symbols to component symbols,
+- resolve same-component [`default_from`](@ref ParameterDefaultFrom) metadata (see [Parameter Defaults From Another Parameter](@ref)) and
 - output a `Vertex-`/`EdgeModel` function compatible with NetworkDynamics.jl.
 
 The main usecase for this feature is when you want to build relatively complex

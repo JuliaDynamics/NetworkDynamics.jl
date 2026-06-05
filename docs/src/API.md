@@ -159,7 +159,7 @@ set_scope!
 delete_scope!
 strip_scopes!
 ParameterScope
-ParameterInherit
+ParameterDefaultFrom
 set_defaults!
 set_interface_defaults!
 get_defaults_dict
@@ -178,7 +178,7 @@ get_initial_state
 describe_vertices
 describe_edges
 chk_global_parameters
-inherit_parameters!
+resolve_default_from!
 ```
 
 ## Initialization

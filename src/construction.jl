@@ -235,8 +235,8 @@ function Network(g::AbstractGraph,
         )
 
     end
-    # resolve parameter inheritance (metadata defaults only, see `inherit_parameters!`)
-    inherit_parameters!(nw)
+    # resolve default_from (metadata defaults only, see `resolve_default_from!`)
+    resolve_default_from!(nw)
     # TimerOutputs.print_timer()
     return nw
 end

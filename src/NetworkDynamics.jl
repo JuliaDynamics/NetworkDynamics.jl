@@ -135,8 +135,8 @@ const CHECK_GLOBAL_PARAMETERS = Ref(true)
 export chk_component, chk_global_parameters
 include("doctor.jl")
 
-export inherit_parameters!
-include("inherit.jl")
+export resolve_default_from!
+include("default_from.jl")
 
 # additional utils, which depend on specific types beeing defined so they should be
 # loaded after all other files
