@@ -2,12 +2,16 @@ module NetworkDynamicsSymbolicsExt
 
 using Symbolics: Symbolics, @variables
 using MacroTools: postwalk, @capture
-using NetworkDynamics: NetworkDynamics, SymbolicIndex, SII, ParameterScope
+using NetworkDynamics: NetworkDynamics, SymbolicIndex, SII, ParameterScope, ParameterInherit
 
 # Register `scope` as symbolic variable metadata, so that it can be used in
 # `@variables`/`@parameters`/`@mtkmodel`/`@component` style definitions, e.g.
 # `@parameters p [scope=:global]`.
 Symbolics.option_to_metadata_type(::Val{:scope}) = ParameterScope
+
+# Register `inherit` as symbolic variable metadata, e.g.
+# `@parameters p [inherit=:busbar]` or `@parameters p [inherit=(:src, :busbar)]`.
+Symbolics.option_to_metadata_type(::Val{:inherit}) = ParameterInherit
 
 function NetworkDynamics.generate_observable_expression(ex::Expr)
     if @capture(ex, capname_ = capcontent_)

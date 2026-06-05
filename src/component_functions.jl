@@ -609,6 +609,8 @@ Base.@nospecializeinfer function _construct_comp(::Type{T}, @nospecialize(kwargs
     end
 
     c = T(args...)
+    # resolve same-component parameter inheritance (metadata defaults only)
+    inherit_parameters!(c)
     check && chk_component(c)
     return c
 end

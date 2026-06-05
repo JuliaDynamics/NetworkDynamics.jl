@@ -19,6 +19,10 @@
   - Usable in `@mtkmodel`/`@component` definitions (e.g. `@parameters p [scope=:global]`) and accessible on the component level via `has_scope`/`get_scope`/`set_scope!`/`delete_scope!`/`strip_scopes!`.
   - New `chk_global_parameters(nw_or_state_or_param)` checks that scoped parameters are consistent: `:global` parameters (grouped by trailing symbol name, `r"NAME$"`) must agree across the whole network, `:device` parameters within a single component; `:local` is ignored. For `Network` defaults are compared, for `NWState`/`NWParameter` the current values.
   - This check runs automatically on `ODEProblem` construction (toggle via `NetworkDynamics.CHECK_GLOBAL_PARAMETERS[]`).
+- **Parameter `inherit` metadata**: new `ParameterInherit` symbol metadata that lets a parameter automatically take its **default value** from another component.
+  - `inherit = :busbar₊Vbase` inherits from a parameter of a sibling subcomponent in the same `VertexModel`/`EdgeModel`; `inherit = (:src, :busbar₊Vbase)` / `(:dst, :busbar₊Vbase)` inherits from a parameter of an edge's source/destination vertex. The source spec is the full parameter name as it appears in the source component's `psym`.
+  - Usable in `@mtkmodel`/`@component` definitions (e.g. `@parameters p [inherit = :busbar₊Vbase]`). Resolution is driven by the single entry point `inherit_parameters!`, which works on a component (same-component inheritance) or a `Network` (additionally cross-component, alternating to a fixed point). It is called automatically in the component and `Network` constructors.
+  - Soft merge rule: only missing defaults are filled in, existing defaults are never overwritten (conflicts warn only when `verbose=true`). Missing source parameters always warn. Structural misuse errors (`inherit` on a non-parameter, or `:src`/`:dst` on a vertex parameter). Inheritance only touches metadata defaults, not the flat parameter array.
 
 ## v0.10.17 Changelog
 - **Open-loop linearization** ([#341](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/341)):

@@ -189,8 +189,32 @@ Consistency of scoped parameters can be checked using
 """
 struct ParameterScope end
 
+"""
+    ParameterInherit
+
+Symbolic metadata type for declaring that a (parameter) variable should
+automatically *inherit* its default value from another parameter (see
+[`inherit_parameters!`](@ref)).
+
+The metadata value (`:inherit`) is either
+
+- a `Symbol` naming a parameter elsewhere in the *same* `VertexModel`/`EdgeModel`
+  (e.g. `[inherit = :busbar₊Vbase]`), or
+- a `Tuple` `(:src, paramname)` / `(:dst, paramname)` naming a parameter of the
+  source/destination **vertex** of an edge (only resolvable once the `Network`
+  is assembled, e.g. `[inherit = (:src, :busbar₊Vbase)]`).
+
+In both cases the source is the *full* parameter name exactly as it appears in
+the source component's [`psym`](@ref) (namespaced with `₊`).
+
+Inheritance is resolved automatically during construction. A manually set default
+is never overwritten, and a missing source warns. See [`inherit_parameters!`](@ref)
+for details.
+"""
+struct ParameterInherit end
+
 # generate default methods for some per-symbol metadata fields
-for md in [:default, :guess, :init, :bounds, :scope]
+for md in [:default, :guess, :init, :bounds, :scope, :inherit]
     fname_has = Symbol(:has_, md)
     fname_get = Symbol(:get_, md)
     fname_set = Symbol(:set_, md, :!)
@@ -248,6 +272,8 @@ for md in [:default, :guess, :init, :bounds, :scope]
             else
                 delete_metadata!(c, sym, $(QuoteNode(md)))
             end
+            _on_set_metadata!(c, sym, Val($(QuoteNode(md))), val)
+            val
         end
 
         """
@@ -274,6 +300,16 @@ for md in [:default, :guess, :init, :bounds, :scope]
         """
         $fname_strip(c::Comp_or_NW) = strip_metadata!(c, $(QuoteNode(md)))
     end
+end
+
+# hook called after a generated metadata setter; no-op by default. Setting a
+# `default` explicitly clears the `:inherited` provenance marker, i.e. the value
+# is treated as user-provided ("set in stone") and is no longer overwritten by
+# parameter inheritance (see [`inherit_parameters!`](@ref)).
+_on_set_metadata!(c::Comp_or_NW, sym, ::Val, val) = nothing
+function _on_set_metadata!(c::Comp_or_NW, sym, ::Val{:default}, val)
+    has_metadata(c, sym, :inherited) && delete_metadata!(c, sym, :inherited)
+    nothing
 end
 
 """
