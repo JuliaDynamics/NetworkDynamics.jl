@@ -162,6 +162,20 @@ end
     @test chk_global_parameters(s; verbose=false) == false
 end
 
+@testset "scope on non-parameter symbols warns" begin
+    g = path_graph(2)
+    e = EdgeModel(g=AntiSymmetric((e, vs, vd, p, t) -> (e[1] = 0.0)), outdim=1, pdim=0, name=:e)
+    v1 = scopedvertex(:v1, [:Vbase => 1.0], [:Vbase => :global])
+    v2 = scopedvertex(:v2, [:Vbase => 1.0], [:Vbase => :global])
+    # attach scope to a *state* symbol, which is meaningless and should warn
+    set_scope!(v1, :x, :global)
+
+    nw = Network(g, [v1, v2], e)
+    @test_logs (:warn,) match_mode = :any chk_global_parameters(nw)
+    # still consistent for the actual parameters
+    @test chk_global_parameters(nw; verbose=false) == true
+end
+
 @testset "automatic check on ODEProblem construction" begin
     g = path_graph(2)
     v1 = scopedvertex(:v1, [:Vbase => 1.0], [:Vbase => :global])

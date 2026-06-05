@@ -237,6 +237,17 @@ function _chk_global_parameters(nw::Network, valueprovider; verbose=true)
     globalgroups = OrderedDict{Symbol, Vector{Pair{Any,String}}}()
 
     function _handle(c, ci, idxtype, prefix)
+        # scope is only meaningful (and enforced) for parameters; warn if it was
+        # accidentally attached to a state/observable/input/output symbol
+        if verbose
+            pset = Set(psym(c))
+            for (s, smd) in symmetadata(c)
+                if haskey(smd, :scope) && s ∉ pset
+                    @warn "Symbol :$s in $prefix$ci carries `:scope` metadata but is not a parameter. \
+                           Scope is only enforced for parameters and is ignored here."
+                end
+            end
+        end
         # device groups are local to this single component
         devicegroups = OrderedDict{Symbol, Vector{Pair{Any,String}}}()
         for s in psym(c)
