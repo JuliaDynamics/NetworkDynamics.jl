@@ -158,7 +158,7 @@ get_scope
 set_scope!
 delete_scope!
 strip_scopes!
-VariableScope
+ParameterScope
 set_defaults!
 set_interface_defaults!
 get_defaults_dict

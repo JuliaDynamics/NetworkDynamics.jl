@@ -199,7 +199,7 @@ _scope_basename(sym) = Symbol(last(split(string(sym), '₊')))
     chk_global_parameters(s::NWState; verbose=true)
     chk_global_parameters(p::NWParameter; verbose=true)
 
-Check the consistency of *scoped* parameters (see [`VariableScope`](@ref)).
+Check the consistency of *scoped* parameters (see [`ParameterScope`](@ref)).
 
 Parameters are grouped by the trailing part of their symbol name (matching
 `r"NAME\$"`):
@@ -216,7 +216,7 @@ For a `Network` the metadata **defaults** are compared. For an `NWState`/
 Returns `true` if all scoped parameters are consistent, `false` otherwise. When
 `verbose=true` (the default) a warning describing each inconsistency is emitted.
 
-See also: [`VariableScope`](@ref), [`get_scope`](@ref).
+See also: [`ParameterScope`](@ref), [`get_scope`](@ref).
 """
 function chk_global_parameters end
 

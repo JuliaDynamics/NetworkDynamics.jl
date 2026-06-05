@@ -107,7 +107,7 @@ export has_guess, get_guess, set_guess!, delete_guess!, strip_guesses!
 export has_init, get_init, set_init!, delete_init!, strip_inits!
 export has_bounds, get_bounds, set_bounds!, delete_bounds!, strip_bounds!
 export has_scope, get_scope, set_scope!, delete_scope!, strip_scopes!
-export VariableScope
+export ParameterScope
 export has_graphelement, get_graphelement, set_graphelement!
 export get_initial_state, dump_initial_state, dump_state
 export has_callback, get_callbacks, set_callback!, add_callback!, delete_callbacks!

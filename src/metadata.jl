@@ -165,7 +165,7 @@ end
 strip_metadata!(nw::Network, sym::SymbolicIndex, key::Symbol) = strip_metadata!(getcomp(nw, sym), key)
 
 """
-    VariableScope
+    ParameterScope
 
 Symbolic metadata type for specifying the *scope* of a (parameter) variable. The
 scope determines on which level a parameter is expected to be consistent and is
@@ -187,7 +187,7 @@ can be accessed using [`get_scope`](@ref)/[`set_scope!`](@ref).
 Consistency of scoped parameters can be checked using
 [`chk_global_parameters`](@ref).
 """
-struct VariableScope end
+struct ParameterScope end
 
 # generate default methods for some per-symbol metadata fields
 for md in [:default, :guess, :init, :bounds, :scope]
