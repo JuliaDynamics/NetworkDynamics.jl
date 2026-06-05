@@ -206,7 +206,7 @@ Parameters are grouped by the trailing part of their symbol name (matching
 
 - parameters with scope `:global` must hold the same value across the **whole
   network**,
-- parameters with scope `:device` must hold the same value **within a single**
+- parameters with scope `:component` must hold the same value **within a single**
   `VertexModel`/`EdgeModel`,
 - parameters with scope `:local` are ignored.
 
@@ -248,8 +248,8 @@ function _chk_global_parameters(nw::Network, valueprovider; verbose=true)
                 end
             end
         end
-        # device groups are local to this single component
-        devicegroups = OrderedDict{Symbol, Vector{Pair{Any,String}}}()
+        # component groups are local to this single component
+        componentgroups = OrderedDict{Symbol, Vector{Pair{Any,String}}}()
         for s in psym(c)
             has_scope(c, s) || continue
             scope = get_scope(c, s)
@@ -260,14 +260,14 @@ function _chk_global_parameters(nw::Network, valueprovider; verbose=true)
             loc = "$prefix$ci :$s"
             if scope == :global
                 push!(get!(globalgroups, base, Pair{Any,String}[]), val => loc)
-            elseif scope == :device
-                push!(get!(devicegroups, base, Pair{Any,String}[]), val => loc)
+            elseif scope == :component
+                push!(get!(componentgroups, base, Pair{Any,String}[]), val => loc)
             else
-                throw(ArgumentError("Unknown scope $(repr(scope)) for $loc. Must be :local, :device or :global."))
+                throw(ArgumentError("Unknown scope $(repr(scope)) for $loc. Must be :local, :component or :global."))
             end
         end
-        for (base, entries) in devicegroups
-            ok &= _chk_consistent_scope("device parameter :$base ($prefix$ci)", entries, verbose)
+        for (base, entries) in componentgroups
+            ok &= _chk_consistent_scope("component parameter :$base ($prefix$ci)", entries, verbose)
         end
     end
 

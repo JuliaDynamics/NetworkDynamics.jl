@@ -30,7 +30,7 @@ Special cases for symbol metadata are:
 - `guess`: Stores a guess for a state/parameter which needs to be solved during initialization ("free" variables).
 - `bounds`: Stores bounds for variables/parameters
 - `init`: Stores the solution of the "free" variables, this is rarely set manually but instead when calling [`initialize_component!`](@ref).
-- `scope`: Marks the [`ParameterScope`](@ref) of a (parameter) variable as `:local`, `:device` or `:global`. See [Parameter Scope](@ref) below.
+- `scope`: Marks the [`ParameterScope`](@ref) of a (parameter) variable as `:local`, `:component` or `:global`. See [Parameter Scope](@ref) below.
 
 For those, there are special functions `has_*`, `get_*`, `set_*!`, `delete_*!` and `strip_*!`. The `strip_*!` functions remove all metadata of a specific type from all symbols in a component. See [Per Symbol Metadata API](@ref).
 
@@ -40,7 +40,7 @@ These are closely aligned with the [metadata use in ModelingToolkit](@extref Mod
 The [`ParameterScope`](@ref) metadata (`scope`) declares on which level a parameter is expected to be consistent:
 
 - `:local` (default): the parameter is purely local to the component and is not checked.
-- `:device`: the parameter must be consistent **within a single** [`VertexModel`](@ref)/[`EdgeModel`](@ref) (e.g. across its subcomponents).
+- `:component`: the parameter must be consistent **within a single** [`VertexModel`](@ref)/[`EdgeModel`](@ref) (e.g. across its subcomponents).
 - `:global`: the parameter must be consistent **across the whole network**, i.e. all parameters sharing the same trailing symbol name (matching `r"NAME$"`) must hold the same value.
 
 In `@mtkmodel`/`@component` style definitions the scope can be attached as variable metadata and is automatically copied to the component:

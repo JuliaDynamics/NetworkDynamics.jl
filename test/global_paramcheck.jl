@@ -28,7 +28,7 @@ end
         end
         @parameters begin
             Vbase = 1.0, [scope = :global]
-            kp = 2.0, [scope = :device]
+            kp = 2.0, [scope = :component]
             loc = 3.0
         end
         @equations begin
@@ -38,7 +38,7 @@ end
     vm = VertexModel(ScopedNode(name=:scoped), [:P], [:θ])
 
     @test get_scope(vm, :Vbase) == :global
-    @test get_scope(vm, :kp) == :device
+    @test get_scope(vm, :kp) == :component
     @test !has_scope(vm, :loc)
 end
 
@@ -68,13 +68,13 @@ end
     @test chk_global_parameters(nw2; verbose=false) == false
 end
 
-@testset "device scope consistency within component" begin
+@testset "component scope consistency within component" begin
     g = path_graph(2)
     # namespaced parameters sharing the basename `kp`
     vok = scopedvertex(:vok, [Symbol("a₊kp") => 1.0, Symbol("b₊kp") => 1.0],
-                       [Symbol("a₊kp") => :device, Symbol("b₊kp") => :device])
+                       [Symbol("a₊kp") => :component, Symbol("b₊kp") => :component])
     vbad = scopedvertex(:vbad, [Symbol("a₊kp") => 1.0, Symbol("b₊kp") => 9.0],
-                        [Symbol("a₊kp") => :device, Symbol("b₊kp") => :device])
+                        [Symbol("a₊kp") => :component, Symbol("b₊kp") => :component])
     e = EdgeModel(g=AntiSymmetric((e, vs, vd, p, t) -> (e[1] = 0.0)), outdim=1, pdim=0, name=:e)
 
     nwok = Network(g, [vok, vok], e)
@@ -84,8 +84,8 @@ end
     @test chk_global_parameters(nwbad; verbose=false) == false
 end
 
-@testset "device scope from @mtkmodel subcomponents" begin
-    # two subcomponents each carrying a device-scoped parameter `kp`, which become
+@testset "component scope from @mtkmodel subcomponents" begin
+    # two subcomponents each carrying a component-scoped parameter `kp`, which become
     # the namespaced parameters `a₊kp` and `b₊kp` on the VertexModel level
     @mtkmodel DevSub begin
         @variables begin
@@ -93,7 +93,7 @@ end
             i(t), [input = true]
         end
         @parameters begin
-            kp = 1.0, [scope = :device]
+            kp = 1.0, [scope = :component]
         end
         @equations begin
             o ~ kp * i
@@ -116,8 +116,8 @@ end
     end
 
     vmok = VertexModel(DevNode(name=:dev), [:P], [:θ])
-    @test get_scope(vmok, Symbol("a₊kp")) == :device
-    @test get_scope(vmok, Symbol("b₊kp")) == :device
+    @test get_scope(vmok, Symbol("a₊kp")) == :component
+    @test get_scope(vmok, Symbol("b₊kp")) == :component
 
     vmbad = VertexModel(DevNode(name=:dev), [:P], [:θ])
     set_default!(vmbad, Symbol("b₊kp"), 9.0)
@@ -125,15 +125,15 @@ end
     g = path_graph(2)
     e = EdgeModel(g=AntiSymmetric((e, vs, vd, p, t) -> (e[1] = 0.0)), outdim=1, pdim=0, name=:e)
 
-    # consistent device parameters within each component
+    # consistent component parameters within each component
     nwok = Network(g, [vmok, vmok], e)
     @test chk_global_parameters(nwok) == true
 
-    # inconsistent device parameters within the second component
+    # inconsistent component parameters within the second component
     nwbad = Network(g, [vmok, vmbad], e)
     @test chk_global_parameters(nwbad; verbose=false) == false
 
-    # device inconsistency is also caught automatically on ODEProblem construction
+    # component inconsistency is also caught automatically on ODEProblem construction
     s0 = NWState(nwbad)
     s0.v[:, :θ] .= 0.0
     @test_logs (:warn,) ODEProblem(nwbad, s0, (0.0, 1.0))

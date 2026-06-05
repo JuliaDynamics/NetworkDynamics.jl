@@ -173,7 +173,7 @@ one of:
 
 - `:local` (default): the parameter is purely local to the component and is not
   checked for consistency.
-- `:device`: the parameter is expected to be consistent within a single
+- `:component`: the parameter is expected to be consistent within a single
   `VertexModel`/`EdgeModel` (e.g. across its subcomponents).
 - `:global`: the parameter is expected to be consistent across the whole network,
   i.e. all parameters sharing the same (trailing) symbol name must hold the same
