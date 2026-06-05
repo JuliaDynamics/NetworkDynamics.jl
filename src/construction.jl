@@ -38,12 +38,16 @@ function Network(g::AbstractGraph,
                  verbose=false)
     # TimerOutputs.reset_timer!()
     @timeit_debug "Construct Network" begin
-        # collect all vertex/edgf to vector
-        all_same_v = vertexm isa VertexModel
-        all_same_e = edgem isa EdgeModel
+        # collect all vertex/edge models to a vector
+        single_v = vertexm isa VertexModel
+        single_e = edgem isa EdgeModel
+        # a single model backing only a single graph element is not an alias: the
+        # instance is referenced exactly once, so mutating its metadata is safe.
+        all_same_v = single_v && nv(g) > 1
+        all_same_e = single_e && ne(g) > 1
         maybecopy = dealias ? copy : identity
-        _vertexm = all_same_v ? [maybecopy(vertexm) for _ in vertices(g)] : vertexm
-        _edgem   = all_same_e ? [maybecopy(edgem) for _ in edges(g)] : edgem
+        _vertexm = single_v ? [maybecopy(vertexm) for _ in vertices(g)] : vertexm
+        _edgem   = single_e ? [maybecopy(edgem) for _ in edges(g)] : edgem
 
         @argcheck _vertexm isa Vector{<:VertexModel} "Expected VertexModels, got $(eltype(_vertexm))"
         @argcheck _edgem isa Vector{<:EdgeModel} "Expected EdgeModels, got $(eltype(_vertexm))"
