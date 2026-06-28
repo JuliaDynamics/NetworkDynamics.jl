@@ -56,9 +56,12 @@ Testfiles = "cbb5340f-90c5-49b5-a6e6-2125e1f2b326"
 TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"
 
-[sources]
-NetworkDynamics = {path = ".."}
-Testfiles = {rev = "main", url = "https://github.com/hexaeder/Testfiles.jl"}
+[sources.NetworkDynamics]
+path = ".."
+
+[sources.Testfiles]
+rev = "main"
+url = "https://github.com/hexaeder/Testfiles.jl"
 
 [compat]
 Adapt = "≥0.0.1"
@@ -68,7 +71,7 @@ CUDA = "≥0.0.1"
 CairoMakie = "0.15"
 Chairmarks = "1.3.1"
 DataFrames = "≥0.0.1"
-DataInterpolations = "7, 8"
+DataInterpolations = "7, 8, 9"
 DelimitedFiles = "1.9.1"
 DiffEqCallbacks = "4.1.0"
 DifferentiationInterface = "≥0.0.1"
