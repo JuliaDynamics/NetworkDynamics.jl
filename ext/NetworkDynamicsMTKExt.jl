@@ -320,8 +320,17 @@ function _get_metadata(sys, name, alldefaults, allguesses)
     end
 
     if haskey(allguesses, sym)
+        # Keep only *constant* guesses as `:guess` metadata. A symbolic guess that references
+        # OTHER variables/parameters (`guess=Id0Pu`, `Us0Pu + Efd0Pu/K`) is owned by the
+        # `GuessFormula` path (`guesses_to_guessformulas!`) and must not be stored here:
+        # `allguesses` is read from the *un-simplified* system, so it still holds the symbolic
+        # guesses already stripped from the simplified one. Storing one would make
+        # `get_guesses_dict` (which coerces every `:guess` to `Float64`) crash on a
+        # `BasicSymbolic`. Note that under MTKv11 even a literal `guess=0.0` is a *constant*
+        # `BasicSymbolic`, which `symbolic_constant_value` folds to a `Float64` — without that
+        # such guesses are silently lost and componentwise init fails with "missing guesses".
         guess = unwrap_const(allguesses[sym])
-        md[:guess] = guess
+        is_symbolic_constant(guess) && (md[:guess] = symbolic_constant_value(guess))
     end
 
     if ModelingToolkitBase.hasbounds(sym)

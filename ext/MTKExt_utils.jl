@@ -74,9 +74,25 @@ function getproperty_symbolic(sys, var; might_contain_toplevel_ns=true)
         varname = replace(varname, r"^"*ns*"₊" => "")
     end
     parts = split(varname, "₊")
-    r = getproperty(sys, Symbol(parts[1]); namespace=false)
-    for part in parts[2:end]
-        r = getproperty(r, Symbol(part); namespace=true)
+    # Descend a `₊`-segment ONLY when it names an actual child subsystem of the
+    # current node; the first segment that is not a subsystem starts a flat variable
+    # name, so the remaining segments (re-joined by `₊`) are resolved as one variable.
+    # This is necessary because a flattened/transpiled leaf can carry `₊` *inside* a
+    # variable name (e.g. `washout₊derivative₊x` is a single unknown, not the chain
+    # washout→derivative→x). Driven by `get_systems` (the real structure), so it is
+    # not a try/catch guess. First level uses namespace=false (strip the toplevel),
+    # subsequent levels namespace=true (accumulate the full name) — as before.
+    r = sys
+    i = 1
+    while i <= length(parts)
+        first = (i == 1)
+        if r isa System && Symbol(parts[i]) in getname.(ModelingToolkitBase.get_systems(r))
+            r = getproperty(r, Symbol(parts[i]); namespace = !first)
+            i += 1
+        else
+            r = getproperty(r, Symbol(join(parts[i:end], "₊")); namespace = !first)
+            break
+        end
     end
     unwrap(r)
 end
@@ -338,6 +354,16 @@ function get_variables_deriv(ex)
     set
 end
 
+# A value is a *symbolic constant* iff it has no free variables: a plain `Number`, or a
+# `BasicSymbolic` that folds to one (e.g. an MTKv11 literal `0.0`, or `sqrt(2)`). A value that
+# references other variables/parameters is NOT constant — for guesses/bindings those belong to
+# the GuessFormula/InitFormula path, while constants are stored as plain `:guess` metadata.
+# Shared by `_get_metadata` (keep numeric guesses) and `guesses_to_guessformulas!` (skip them).
+is_symbolic_constant(x) = (u = unwrap(x); u isa Number || isempty(get_variables(u)))
+
+# Numeric value of a symbolic constant; only meaningful when `is_symbolic_constant(x)`.
+symbolic_constant_value(x) = (u = unwrap(x); u isa Number ? u : Float64(Symbolics.value(u)))
+
 """
     guesses_to_guessformulas!(sys; obs_subs=Dict())
 
@@ -347,99 +373,175 @@ so they won't be silently dropped by metadata extraction.
 Constant (numeric) guesses are left in place — they are handled as `:guess` metadata.
 """
 function guesses_to_guessformulas!(sys; obs_subs=Dict())
+    # `get_guesses` (raw backing dict), not `guesses` (a freshly-constructed, recursively
+    # namespaced copy): `sys` is already the flattened/simplified system here, so the two are
+    # identical — but we `delete!` symbolic guesses below and need the *mutable* backing dict
+    # for that to stick. (`_get_metadata` uses `guesses(sys)` because it runs on the original,
+    # possibly hierarchical, system where only the recursive accessor namespaces correctly.)
+    @assert isempty(ModelingToolkitBase.get_systems(sys)) "Should be called on flattend/simplified system!"
     allguesses = ModelingToolkitBase.get_guesses(sys)
     isempty(allguesses) && return nothing
 
-    guessformulas = Set{GuessFormula}()
+    # A guess may target any guessable symbol (unknown or parameter — params can be free
+    # during init), so targets and inputs share the same valid set here.
+    valid_inputs = valid_targets = Set(getname.(vcat(unknowns(sys), parameters(sys))))
 
+    resolved = Any[]
     for (lhs_sym, rhs_expr) in collect(allguesses)
         # skip constant guesses — leave them for :guess metadata
-        isempty(get_variables(rhs_expr)) && continue
-
-        # remove from system guesses dict
+        is_symbolic_constant(rhs_expr) && continue
+        # This is a symbolic guess: it can never be a numeric :guess metadata entry, so
+        # remove it from the system dict unconditionally (whether or not it becomes a
+        # GuessFormula below) to avoid it being mishandled later.
         delete!(allguesses.dict, lhs_sym)
 
-        lhs_sub  = Symbolics.substitute(lhs_sym,  obs_subs)
-        rhs_sub  = fixpoint_sub(rhs_expr, obs_subs)
-
-        target = [getname(lhs_sub)]
-        input_symbolic = collect(get_variables(rhs_sub))
-        input_names = getname.(input_symbolic)
-        f = Symbolics.build_function([rhs_sub], input_symbolic; expression=Val(false))[2]
-
-        rhsstring = repr(rhs_sub)
-        for input in input_symbolic
-            rhsstring = replace(rhsstring, repr(input) => "u["*repr(getname(input))*"]")
-        end
-        prettyprint = """
-        GuessFormula([$(join(repr.(target), ", "))], [$(join(repr.(input_names), ", "))]) do out, u
-            out[$(repr(only(target)))] = $(rhsstring)
-        end"""
-        push!(guessformulas, GuessFormula(f, target, input_names, prettyprint))
+        r = _resolve_formula(lhs_sym, rhs_expr; obs_subs, valid_inputs, valid_targets, kind="Guess")
+        r === nothing && continue
+        push!(resolved, r)
     end
 
-    _warn_duplicate_formula_targets(guessformulas, "GuessFormula")
+    # A GuessFormula is only a convergence hint, so conflicting targets (alias-merged
+    # states carrying different guess expressions) are deduped with a warning, never fatal.
+    resolved = _dedupe_resolved(resolved; fail=:warn, kind="GuessFormula")
+    guessformulas = Set(_build_formula(GuessFormula, r) for r in resolved)
     isempty(guessformulas) ? nothing : guessformulas
 end
 
 """
-    bindings_to_initformulas(sys)
+    bindings_to_initformulas(sys; states, obs_subs)
 
 Extracts the `bindings` from a system and returns matching InitFormulas.
 
 This will **ignore** parameter bindings! Parameter bindings will become observed
 equations in an earlier step.
+
+An InitFormula is a constraint (not a hint), so conflicting targets (two bindings forcing
+the same state to *different* values after alias substitution) are a genuine
+over-determination and raise an error.
 """
 function bindings_to_initformulas(sys; states::Vector{ST}, obs_subs)
     bindings = ModelingToolkitBase.bindings(sys)
     isempty(bindings) && return nothing
 
-    initformulas = Set{InitFormula}()
+    valid_inputs  = Set(getname.(vcat(unknowns(sys), parameters(sys))))
+    valid_targets = Set(getname.(states))
+
+    resolved = Any[]
     for (_lhs, _rhs) in bindings
         ismissing(unwrap_const(_rhs)) && continue # FIXME somehow, mtkcompile tends to spit out missing bindings?
         _lhs ∈ ModelingToolkitBase.bound_parameters(sys) && continue # skip parameter bindings, they will become observed equations
-        lhs = Symbolics.substitute(_lhs, obs_subs) # apply alias transformation
-        rhs = fixpoint_sub(_rhs, obs_subs)
-
-        try
-            if lhs ∉ Set(states)
-                @warn "Binding $_lhs <= $_rhs targets a non-state variable after expansion in known symbols: $lhs <= $rhs. This most likely means that $_lhs was solved and is not an unknown anymore. Skip formula."
-                continue
-            end
-        catch
-            @warn "Could not handle binding with $_lhs <= $_rhs expanded to $lhs <= $rhs. Skip!"
-            continue
-        end
-
-        target = [getname(lhs)]
-        input_symbolic = collect(get_variables(rhs))
-        input_names = getname.(input_symbolic)
-        f = Symbolics.build_function([rhs], input_symbolic; expression=Val(false))[2]
-
-        rhsstring = repr(rhs)
-        for input in input_symbolic
-            rhsstring = replace(rhsstring, repr(input) => "u["*repr(getname(input))*"]")
-        end
-        prettyprint  = """
-        InitFormula([$(join(repr.(target), ", "))], [$(join(repr.(input_names), ", "))]) do out, u
-            out[$(repr(only(target)))] = $(rhsstring)
-        end"""
-        push!(initformulas, InitFormula(f, target, input_names, prettyprint))
+        r = _resolve_formula(_lhs, _rhs; obs_subs, valid_inputs, valid_targets, kind="Binding")
+        r === nothing && continue
+        push!(resolved, r)
     end
-    _warn_duplicate_formula_targets(initformulas, "InitFormula")
-    return initformulas
+
+    resolved = _dedupe_resolved(resolved; fail=:error, kind="InitFormula")
+    isempty(resolved) ? nothing : Set(_build_formula(InitFormula, r) for r in resolved)
 end
 
-function _warn_duplicate_formula_targets(formulas, kind)
-    seen = Set{Symbol}()
-    duplicates = Symbol[]
-    for f in formulas, t in f.outsym
-        t ∈ seen ? push!(duplicates, t) : push!(seen, t)
+# ── shared helpers for guesses_to_guessformulas! and bindings_to_initformulas ──
+#
+# Both an InitFormula and a GuessFormula are "set `target := f(inputs)`" objects, so the
+# resolution, validity guards, conflict-deduplication and function-building are identical;
+# only the upstream filtering (numeric guess vs. parameter binding) and the conflict policy
+# (`fail`) live in the two callers above.
+
+# Resolve one `lhs => rhs` pair against the observed-substitution map into a canonical
+# `(target, rhs, inputs)` form, or skip it (with a warning) when it cannot become a
+# well-formed formula. `obs_subs` collapses every alias-group member onto its surviving
+# "main" symbol, so two entries on different members of one alias group resolve to the *same*
+# target here — exactly the collision `_dedupe_resolved` then handles.
+function _resolve_formula(lhs_sym, rhs_expr; obs_subs, valid_inputs, valid_targets, kind)
+    # (1) target must resolve to a single surviving unknown; an eliminated variable expands
+    #     to a compound expression after alias substitution (`getname` would then throw).
+    lhs_sub  = Symbolics.substitute(lhs_sym, obs_subs)
+    lhs_vars = get_variables(lhs_sub)
+    if length(lhs_vars) != 1 || !isequal(only(lhs_vars), lhs_sub)
+        @warn "$kind for $lhs_sym expands to $lhs_sub after alias substitution, which is not \
+               a single unknown (likely eliminated). Skip."
+        return nothing
     end
-    if !isempty(unique!(duplicates))
-        @warn "Multiple $kind formulas target the same symbol(s) $duplicates after obs substitution. \
-               This is not supported yet and may lead to unclear behavior."
+    # (2) it must not resolve to an observable (those are computed, not set).
+    if lhs_sub ∈ keys(obs_subs)
+        @warn "$kind for $lhs_sym resolves to observable $lhs_sub, which is computed rather \
+               than set. Skip."
+        return nothing
     end
+    target = getname(lhs_sub)
+    # (3) and it must be a settable target of the system (a surviving unknown/state).
+    if target ∉ valid_targets
+        @warn "$kind for $lhs_sym resolves to $target, which is not a settable target of the \
+               system. Skip."
+        return nothing
+    end
+
+    rhs_sub        = fixpoint_sub(rhs_expr, obs_subs)
+    input_symbolic = collect(get_variables(rhs_sub))
+    input_names    = getname.(input_symbolic)
+    # (4) no self-dependency (the formula constructors forbid it).
+    if target ∈ input_names
+        @warn "$kind for $lhs_sym depends on its own resolved target $target after \
+               substitution. Skip."
+        return nothing
+    end
+    # (5) every input must be a symbol the system actually exposes (a surviving unknown or
+    #     parameter); a rhs referencing anything else is a malformed formula that would be
+    #     rejected fatally downstream (`assert_*formula_compat`), so skip it with a warning.
+    #     This is a generic well-formedness guard, NOT a namespace workaround: guesses are
+    #     always read through `guesses`/`get_guesses` on the enclosing (flattened) system,
+    #     which namespace correctly, so a well-formed guess never lands here.
+    badins = setdiff(Set(input_names), valid_inputs)
+    if !isempty(badins)
+        @warn "$kind for $lhs_sym references symbol(s) not in the system \
+               ($(join(badins, ", "))). Skip."
+        return nothing
+    end
+
+    (; src=lhs_sym, target, rhs=rhs_sub, input_symbolic, input_names)
+end
+
+# Collapse entries that resolved to the same target. Identical definitions (equal rhs after
+# obs substitution, e.g. alias-merged states carrying the same expression) are always safe to
+# dedupe silently. Genuinely *conflicting* definitions (same target, differing rhs) are a
+# warning for guesses (`fail=:warn`, only a hint) but an error for bindings (`fail=:error`,
+# two constraints forcing one state). Comparison is on the symbolic rhs, not the prettyprint.
+function _dedupe_resolved(resolved; fail::Symbol, kind)
+    by_target = OrderedDict{Symbol,Vector{Any}}()
+    for r in resolved
+        push!(get!(() -> Any[], by_target, r.target), r)
+    end
+    kept = Any[]
+    for (target, group) in by_target
+        chosen = first(sort(group; by = g -> repr(g.rhs)))
+        push!(kept, chosen)
+        length(group) == 1 && continue
+        if all(g -> isequal(g.rhs, chosen.rhs), group)
+            @debug "$kind: $(length(group)) identical definitions for $target after obs \
+                    substitution; keeping one."
+        else
+            msg = "$kind: conflicting definitions target $target after obs substitution \
+                   (differing right-hand sides). Keeping $(repr(chosen.rhs)); dropping the rest."
+            fail === :error ? error(msg) : @warn msg
+        end
+    end
+    kept
+end
+
+# Build the actual Init/GuessFormula from a resolved entry. Identical for both formula types
+# apart from the type name baked into the prettyprint block.
+function _build_formula(::Type{FT}, r) where {FT}
+    label = string(nameof(FT))
+    f = Symbolics.build_function([r.rhs], r.input_symbolic; expression=Val(false))[2]
+
+    rhsstring = repr(r.rhs)
+    for input in r.input_symbolic
+        rhsstring = replace(rhsstring, repr(input) => "u[" * repr(getname(input)) * "]")
+    end
+    prettyprint = """
+    $label([$(repr(r.target))], [$(join(repr.(r.input_names), ", "))]) do out, u
+        out[$(repr(r.target))] = $(rhsstring)
+    end"""
+    FT(f, [r.target], r.input_names, prettyprint)
 end
 
 function NetworkDynamics.multiline_repr(eqs::Vector{Equation}; prefix="")
