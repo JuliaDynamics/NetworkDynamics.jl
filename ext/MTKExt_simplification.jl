@@ -486,8 +486,14 @@ function _solve_plan(solvable_eq_idx, coeff, sorted_sts, has_input, is_output; v
 
     if verbose
         str = "Detected algebraic pathes which needs to be cut (avoid feed-forward from input to output or prevent nonlinear loop):"
+        printed = 1
         for p in pathes_to_break
             str *= "\n  " * inline_repr(sorted_sts[p])
+            printed += 1
+            if printed > 10
+                str *= "\n  ... and $(length(pathes_to_break) - 10) more"
+                break
+            end
         end
     end
 
