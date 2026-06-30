@@ -193,37 +193,71 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
     end
 
     # first pass: remove trivial alias equations
+    #
+    # We must consolidate *transitive* alias groups (e.g. `w ~ SPEED_out ~ SPEED_in ~
+    # speed_input`) and choose the kept representative per group in a diff-state-aware
+    # way: a differential state must remain the representative so its derivative equation
+    # is preserved. Picking a non-differential alias (e.g. `speed_input`) as the kept
+    # state would strand the differential one and force a higher-index residual later.
     eqs, obs_unsrtd, match_states = let
         _match_states_set = Set{ST}(match_states)
-        alias_eqs = Int[]
-        removed_alias_states = Set{ST}()
-        # prefer to keep output states or less nested states as main
-        function _sortf(s)
-            if s ∈ removed_alias_states
-                -2
-            elseif s ∈ outset
-                -1
-            else
-                count('₊', repr(s))
-            end
-        end
+        # differential states appear in match_states as D(x); collect the inner `x`
+        diffstate_inners = Set{ST}(only(s.args) for s in match_states if isdifferential(s))
         expand_all = selective_expander(obs_unsrtd, Any)
+
+        # collect trivial alias equations (and their indices into `eqs`)
+        alias_pairs = Tuple{ST,ST}[]
+        alias_eq_idx = Int[]
         for (i, eq) in enumerate(eqs)
             alias = get_alias(expand_all(eq))
             isnothing(alias) && continue
-            main, sub = sort(collect(alias), by=_sortf)
-
-            # make sure sub can be removed
-            sub ∈ _match_states_set || continue
-            # make sure sub not yet removed
-            sub ∈ removed_alias_states && continue
-
-            push!(obs_unsrtd, sub ~ main)
-            push!(alias_eqs, i)
-            push!(removed_alias_states, sub)
+            push!(alias_pairs, alias)
+            push!(alias_eq_idx, i)
         end
-        verbose && @info "Removed $(length(alias_eqs)) trivial alias equations:\n" * multiline_repr(obs_unsrtd[(end-length(alias_eqs))+1:end], prefix="  ")
-        deleteat!(eqs, alias_eqs)
+        groups = _alias_connected_components(alias_pairs)
+
+        # representative priority (lower = preferred as the kept variable):
+        # differential states first, then outputs, then least-nested names.
+        _prio(s) = s ∈ diffstate_inners ? (0, 0) :
+                   s ∈ outset           ? (1, count('₊', repr(s))) :
+                                          (2, count('₊', repr(s)))
+
+        # adjacency over alias graph, remembering which equation realises each edge
+        adj = Dict{ST, Vector{Tuple{ST,Int}}}()
+        for (k, (a, b)) in enumerate(alias_pairs)
+            ei = alias_eq_idx[k]
+            push!(get!(adj, a, Tuple{ST,Int}[]), (b, ei))
+            push!(get!(adj, b, Tuple{ST,Int}[]), (a, ei))
+        end
+
+        removed_alias_states = Set{ST}()
+        consumed_eqs = Int[]
+        # For each group keep one representative (diff-state preferred) and rewrite every
+        # other removable member as an observation of it. BFS from the representative so
+        # each removed node consumes the (spanning-tree) edge used to reach it, keeping a
+        # 1:1 balance between removed states and deleted equations; differential members
+        # (and non-state members) are kept and leave their edge in place.
+        for group in groups
+            rep = first(sort!(collect(group), by=_prio))
+            visited = Set{ST}((rep,))
+            queue = ST[rep]
+            while !isempty(queue)
+                u = popfirst!(queue)
+                for (v, ei) in get(adj, u, ())
+                    v ∈ visited && continue
+                    push!(visited, v)
+                    push!(queue, v)
+                    if v ∈ _match_states_set && v ∉ diffstate_inners && v ∉ removed_alias_states
+                        push!(obs_unsrtd, v ~ rep)
+                        push!(removed_alias_states, v)
+                        push!(consumed_eqs, ei)
+                    end
+                end
+            end
+        end
+
+        verbose && @info "Removed $(length(consumed_eqs)) trivial alias equations (diff-state-aware):\n" * multiline_repr(obs_unsrtd[(end-length(consumed_eqs))+1:end], prefix="  ")
+        deleteat!(eqs, sort!(consumed_eqs))
         match_states = filter(s -> s ∉ removed_alias_states, match_states)
         eqs, obs_unsrtd, match_states
     end

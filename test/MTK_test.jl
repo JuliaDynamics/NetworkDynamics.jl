@@ -1012,6 +1012,40 @@ end
     @test topologicical_sorted(red_obs)
 end
 
+@testset "diff-state-aware alias removal keeps differential representative" begin
+    # Regression for a PowerDynamics machine+governor higher-index failure
+    # (PSSE GENSAL + HYGOV): a differential speed state `w` is connected through a
+    # transitive alias chain (w ~ spd_out ~ spd_in ~ speed_input) into governor
+    # signals, and a lead block differentiates the chained signal (D(gerr) in an eq).
+    # The first-pass alias removal must keep the *differential* state `w` as the
+    # representative of the whole group, so every chained member becomes an
+    # observation of `w` directly. The previous per-equation handling routed the
+    # chain through a non-differential intermediate (e.g. speed_input), which
+    # stranded the differential equation and forced a higher-index residual
+    # (D(gerr) leaking into the RHS) later in the pipeline → RHSDifferentialsError.
+    @variables w(t) spd_out(t) spd_in(t) speed_input(t) gerr(t) lead(t)
+    @parameters nref Tr
+    eqs = [
+        Dt(w) ~ -w,                          # w is the differential state
+        0 ~ spd_out - w,                     # SPEED_out.u ~ w   (pure alias)
+        0 ~ spd_in - spd_out,                # connect           (pure alias)
+        0 ~ speed_input - spd_in,            # speed_input ~ SPEED_in.u (pure alias)
+        0 ~ gerr - (nref - speed_input),     # governor error (NOT a pure alias)
+        0 ~ lead - (gerr + Tr*Dt(gerr)),     # lead block differentiates the chain
+    ]
+    states = [w, spd_out, spd_in, speed_input, gerr, lead]
+    red_eqs, red_obs, red_states = _reduce_equations(eqs, Equation[], states; verbose=false)
+
+    # the differential equation for w must survive the reduction
+    @test any(eq -> mtkext.isdifferential(eq.lhs) && isequal(only(eq.lhs.args), w.val), red_eqs)
+    # every alias member observes the differential inner `w` *directly* (star, not chain)
+    obs = Dict(eq.lhs => eq.rhs for eq in red_obs)
+    for s in (spd_out, spd_in, speed_input)
+        @test haskey(obs, s.val)
+        @test isequal(obs[s.val], w.val)
+    end
+end
+
 @testset "CPL bus: matching prefers linear_const over linear_state" begin
     # Reproduces the constant-power-load bus structure with ₊-separated names.
     # 16 implicit algebraic equations, 16 states. Outputs: busbar₊u_r, busbar₊u_i.
