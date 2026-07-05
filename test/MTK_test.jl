@@ -1012,6 +1012,40 @@ end
     @test topologicical_sorted(red_obs)
 end
 
+@testset "diff-state-aware alias removal keeps differential representative" begin
+    # Regression for a PowerDynamics machine+governor higher-index failure
+    # (PSSE GENSAL + HYGOV): a differential speed state `w` is connected through a
+    # transitive alias chain (w ~ spd_out ~ spd_in ~ speed_input) into governor
+    # signals, and a lead block differentiates the chained signal (D(gerr) in an eq).
+    # The first-pass alias removal must keep the *differential* state `w` as the
+    # representative of the whole group, so every chained member becomes an
+    # observation of `w` directly. The previous per-equation handling routed the
+    # chain through a non-differential intermediate (e.g. speed_input), which
+    # stranded the differential equation and forced a higher-index residual
+    # (D(gerr) leaking into the RHS) later in the pipeline → RHSDifferentialsError.
+    @variables w(t) spd_out(t) spd_in(t) speed_input(t) gerr(t) lead(t)
+    @parameters nref Tr
+    eqs = [
+        Dt(w) ~ -w,                          # w is the differential state
+        0 ~ spd_out - w,                     # SPEED_out.u ~ w   (pure alias)
+        0 ~ spd_in - spd_out,                # connect           (pure alias)
+        0 ~ speed_input - spd_in,            # speed_input ~ SPEED_in.u (pure alias)
+        0 ~ gerr - (nref - speed_input),     # governor error (NOT a pure alias)
+        0 ~ lead - (gerr + Tr*Dt(gerr)),     # lead block differentiates the chain
+    ]
+    states = [w, spd_out, spd_in, speed_input, gerr, lead]
+    red_eqs, red_obs, red_states = _reduce_equations(eqs, Equation[], states; verbose=false)
+
+    # the differential equation for w must survive the reduction
+    @test any(eq -> mtkext.isdifferential(eq.lhs) && isequal(only(eq.lhs.args), w.val), red_eqs)
+    # every alias member observes the differential inner `w` *directly* (star, not chain)
+    obs = Dict(eq.lhs => eq.rhs for eq in red_obs)
+    for s in (spd_out, spd_in, speed_input)
+        @test haskey(obs, s.val)
+        @test isequal(obs[s.val], w.val)
+    end
+end
+
 @testset "CPL bus: matching prefers linear_const over linear_state" begin
     # Reproduces the constant-power-load bus structure with ₊-separated names.
     # 16 implicit algebraic equations, 16 states. Outputs: busbar₊u_r, busbar₊u_i.
@@ -1233,7 +1267,7 @@ end
         f(out, NetworkDynamics.SymbolicView([4.2], f.sym))
         @test out[:inner₊busbar₊u_r] ≈ 4.2
 
-        @testset "warn on duplicate formula targets" begin
+        @testset "error on conflicting formula targets" begin
             @component function slack_diff_outer_dup(; name)
                 @parameters u_init_outer=2.0
                 @variables u_r(t) u_i(t) i_r(t) i_i(t)
@@ -1245,10 +1279,12 @@ end
                     i_i ~ inner.busbar.i_i
                 ]
                 # outer also binds u_r: after obs_subs both this and inner₊busbar₊u_r alias to u_r
+                # but to *different* values (u_init_outer vs inner₊u_init_r) — a genuine
+                # over-determination, so InitFormula dedup raises an error (not a warning).
                 System(eqs, t; name, systems=[inner], bindings=[u_r => u_init_outer])
             end
             @named outer_dup = slack_diff_outer_dup()
-            @test_logs (:warn, r"Multiple InitFormula") match_mode=:any begin
+            @test_throws "conflicting definitions" begin
                 VertexModel(outer_dup, [:i_r, :i_i], [:u_r, :u_i]; verbose=false)
             end
         end
@@ -1282,6 +1318,101 @@ end
 
     # constant guess is NOT promoted to a formula
     @test all(gf -> :x ∉ gf.outsym, get_guessformulas(vm))
+end
+
+@testset "guesses for eliminated/observable variables are skipped, not fatal" begin
+    # `z` is algebraically eliminated (z = 2x), so its guess expands to a
+    # compound expression `2x(t)` after alias substitution: this used to crash
+    # with `ErrorException("matching non-exhaustive")` inside `getname`.
+    @component function vertex_with_eliminated_guess(; name)
+        @parameters u_init = 1.0
+        @variables x(t) y(t) z(t)
+        eqs = [Dt(x) ~ -x + z, 0 ~ z - 2 * x, Dt(y) ~ -y]
+        System(eqs, t, [x, y, z], [u_init]; name, guesses=[z => 2 * u_init, y => 1.0])
+    end
+    @named sys = vertex_with_eliminated_guess()
+
+    local vm
+    @test_logs (:warn, r"expands to .* after alias substitution") match_mode=:any begin
+        vm = VertexModel(sys, [], [:x, :y]; verbose=false)
+    end
+
+    # the bogus guess for the eliminated variable did not produce a formula,
+    # but the surviving constant guess for `y` is preserved as plain metadata
+    @test !has_guessformula(vm)
+    @test has_guess(vm, :y)
+end
+
+@testset "is_symbolic_constant classification" begin
+    @parameters p
+    @variables x(t)
+    # plain numbers and free-variable-free symbolics are constants (kept as :guess metadata)
+    @test mtkext.is_symbolic_constant(2.0)
+    @test mtkext.symbolic_constant_value(2.0) === 2.0
+    @test mtkext.symbolic_constant_value(3) === 3
+    # an MTKv11 literal guess is a constant BasicSymbolic (not isa Number) and must still be
+    # folded to a Float64 (else such guesses are silently lost on assembly)
+    c = Symbolics.unwrap(Symbolics.Num(0.0))
+    @test !(c isa Number)
+    @test mtkext.is_symbolic_constant(c)
+    @test mtkext.symbolic_constant_value(c) === 0.0
+    @test mtkext.is_symbolic_constant(Symbolics.Num(sqrt(2)))
+    @test mtkext.symbolic_constant_value(Symbolics.Num(sqrt(2))) ≈ sqrt(2)
+    # values referencing other variables/parameters are NOT constant → GuessFormula path
+    @test !mtkext.is_symbolic_constant(x)
+    @test !mtkext.is_symbolic_constant(2x)
+    @test !mtkext.is_symbolic_constant(2p)
+end
+
+@testset "guess referencing nonexistent symbol is skipped, not fatal" begin
+    # a guess whose RHS references a symbol that is not an unknown/parameter of the system
+    # is malformed and would be rejected fatally by assert_guessformula_compat downstream;
+    # the generic well-formedness guard skips it with a warning instead.
+    @variables x(t) y(t) foo(t)
+    @named badsys = System([Dt(x) ~ -x, Dt(y) ~ -y], t, [x, y], []; guesses=[x => 2 * foo])
+    local res
+    @test_logs (:warn, r"references symbol\(s\) not in the system") match_mode=:any begin
+        res = mtkext.guesses_to_guessformulas!(badsys)
+    end
+    @test res === nothing
+end
+
+@testset "_dedupe_resolved conflict policy" begin
+    # `_dedupe_resolved` collapses resolved (target, rhs) entries that share a target.
+    # Comparison is on the symbolic rhs, so identical definitions dedupe silently, while
+    # genuinely conflicting ones warn (guesses) or error (bindings) per the `fail` kw.
+    @variables a(t) b(t)
+    mk(target, rhs) = (; src=rhs, target, rhs, input_symbolic=Any[], input_names=Symbol[])
+
+    # distinct targets: all kept
+    @test length(mtkext._dedupe_resolved([mk(:x, a), mk(:y, b)]; fail=:warn, kind="G")) == 2
+
+    # identical definitions for the same target: deduped to one, and NOT an error even
+    # under fail=:error (equal rhs is a harmless alias-merge duplicate, not a conflict)
+    @test length(mtkext._dedupe_resolved([mk(:x, a), mk(:x, a)]; fail=:error, kind="I")) == 1
+
+    # conflicting definitions (same target, differing rhs), fail=:warn → keep one + warn
+    local kept
+    @test_logs (:warn, r"conflicting definitions target x") match_mode=:any begin
+        kept = mtkext._dedupe_resolved([mk(:x, a), mk(:x, b)]; fail=:warn, kind="G")
+    end
+    @test length(kept) == 1
+
+    # conflicting definitions, fail=:error → throw
+    @test_throws "conflicting definitions" mtkext._dedupe_resolved([mk(:x, a), mk(:x, b)]; fail=:error, kind="I")
+end
+
+@testset "getproperty_symbolic resolves flat ₊-named leaf variable" begin
+    # a flattened/transpiled leaf can carry `₊` *inside* a single variable name
+    # (e.g. `washout₊derivative₊x` is one unknown, not the chain washout→derivative→x).
+    # getproperty_symbolic must NOT descend into a nonexistent subsystem `a`, but
+    # resolve `a₊b` as one flat variable.
+    n = Symbol("a₊b")
+    xab = only(@variables $n(t))
+    @named foo = System([Dt(xab) ~ -xab], t, [xab], [])
+    foo = mtkcompile(foo)
+    r = mtkext.getproperty_symbolic(foo, n; might_contain_toplevel_ns=false)
+    @test isequal(r, Symbolics.unwrap(xab))
 end
 
 @testset "bound parameters become observed" begin
