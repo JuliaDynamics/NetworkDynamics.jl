@@ -397,41 +397,38 @@ function attach_limint_callback!(cf, namespace)
         end
     end
 
-    upcrossing_affect = ComponentAffect([], [satmax, satmin]) do u, p, eventidx, ctx
-        if eventidx == 1
+    # A single affect handles all three conditions. `event_signs[i]` tells us for each
+    # condition output `i` whether it crossed and in which direction: `0` no crossing,
+    # `+1` upcrossing, `-1` downcrossing.
+    affect = ComponentAffect([], [satmax, satmin]) do u, p, event_signs, ctx
+        if event_signs[1] > 0 # upper saturation upcrossing
             println("$namespace: /⎺ reached upper saturation at $(round(ctx.t, digits=4))s")
             p[satmax] = 1.0
             p[satmin] = 0.0
-        elseif eventidx == 2
+        end
+        if event_signs[2] > 0 # lower saturation upcrossing
             println("$namespace: \\_ reached lower saturation at $(round(ctx.t, digits=4))s")
             p[satmax] = 0.0
             p[satmin] = 1.0
-        elseif eventidx == 3
-            # upcrossing means, forcing went from negative to positive, i.e. we leave lower saturation
+        end
+        if event_signs[3] > 0
+            # forcing went from negative to positive, i.e. we leave lower saturation
             insatmin = !iszero(p[satmin])
             if insatmin
                 println("$namespace: _/ left lower saturation at $(round(ctx.t, digits=4))s")
                 p[satmin] = 0.0
             end
-        else
-            error("Unknown event index $eventidx")
-        end
-    end
-
-    downcrossing_affect = ComponentAffect([],[satmax]) do u, p, eventidx, ctx
-        if eventidx == 3 # downcrossing means nothing for saturation affects
-            # downcrossing means, forcing went from positive to negative, i.e. we leave upper saturation
+        elseif event_signs[3] < 0
+            # forcing went from positive to negative, i.e. we leave upper saturation
             insatmax = !iszero(p[satmax])
             if insatmax
                 println("$namespace: ⎺\\ left upper saturation at $(round(ctx.t, digits=4))s")
                 p[satmax] = 0.0
             end
-        else
-            error("Unknown event index $eventidx")
         end
     end
 
-    cb = VectorContinuousComponentCallback(condition, upcrossing_affect, 3; affect_neg! = downcrossing_affect)
+    cb = VectorContinuousComponentCallback(condition, affect, 3)
 
     # finally add callback to component
     NetworkDynamics.add_callback!(cf, cb)

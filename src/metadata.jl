@@ -1164,7 +1164,11 @@ function dump_state(io, sol, t, idx; sigdigits=3)
     filter!(g -> !isempty(g[2]), groups)
     allsym = reduce(vcat, g[2] for g in groups)
     nwidxs = idxtype(idx).(idx.compidx, allsym)
-    u0s, uts = sol([sol.t[begin], t]; idxs=nwidxs)
+    # `sol(tvals; idxs=...)` returns a 2D DiffEqArray; since RecursiveArrayTools 4 makes it
+    # `<: AbstractArray`, destructuring iterates scalars column-major, so index `.u` explicitly
+    # to recover the per-timepoint value vectors.
+    _interp = sol([sol.t[begin], t]; idxs=nwidxs)
+    u0s, uts = _interp.u[1], _interp.u[2]
     guesses = [has_guess(cf, sym) ? get_guess(cf, sym) : nothing for sym in allsym]
     inits = [has_init(cf, sym) ? get_init(cf, sym) : nothing for sym in allsym]
     defaults = [has_default(cf, sym) ? get_default(cf, sym) : nothing for sym in allsym]

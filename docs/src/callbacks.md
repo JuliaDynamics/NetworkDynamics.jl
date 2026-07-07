@@ -28,7 +28,7 @@ The main entry points are the types [`ContinuousComponentCallback`](@ref),
 [`VectorContinuousComponentCallback`](@ref) and [`DiscreteComponentCallback`](@ref). All of those objects combine a [`ComponentCondition`](@ref) with an [`ComponentAffect`](@ref).
 
 The "normal" [`ContinuousComponentCallback`](@ref) and [`DiscreteComponentCallback`](@ref) have a condition which returns a single value. The corresponding affect is triggered when the return value hits zero.
-In contrast, the "vector" version has an in-place condition which writes `len` outputs. When any of those outputs hits zero, the affect is triggered with an additional argument `event_idx` which tells the effect which dimension encountered the zerocrossing.
+In contrast, the "vector" version has an in-place condition which writes `len` outputs. When any of those outputs hits zero, the affect is triggered once with an additional argument `event_signs`: a length-`len` vector where entry `i` is `0` (no crossing), `+1` (upcrossing) or `-1` (downcrossing) for the `i`-th output. The affect resolves the crossing direction (and any simultaneous crossings) itself. This mirrors the `affect!(integrator, event_signs)` interface of the underlying [`VectorContinuousCallback`](@extref SciMLBase.VectorContinuousCallback).
 
 There is a special type [`PresetTimeComponentCallback`](@ref) which has no explicit condition and triggers the affect at given times.
 This internally generates a [`PresetTimeCallback`](@extref DiffEqCallbacks.PresetTimeCallback) object from `DiffEqCallbacks.jl`.
@@ -64,11 +64,15 @@ affect = ComponentAffect([:u], [:p]) do u, p, ctx
    obs = NWState(ctx.integrator)[VIndex(ctx.vidx, :obs)] # extract some observed state from context
    println("Trigger affect at t=$t")
 end
-vectoraffect = ComponentAffect([:u], [:p]) do u, p, event_idx, ctx
-    if event_idx == 1
-        u[:u] = 0 # change state
-    else
-        u[:p] = 0 # change parameter
+vectoraffect = ComponentAffect([:u], [:p]) do u, p, event_signs, ctx
+    for i in eachindex(event_signs)
+        event_signs[i] == 0 && continue # skip outputs that did not cross
+        if i == 1
+            u[:u] = 0 # first output crossed: change state
+        else
+            u[:p] = 0 # second output crossed: change parameter
+        end
+        # event_signs[i] is +1 for an upcrossing and -1 for a downcrossing
     end
 end
 ```
@@ -78,7 +82,7 @@ However the affect gets passed a `ctx` "context" object, which is a named tuple 
 Lastly we need to define the actual callback object using [`ContinuousComponentCallback`](@ref)/[`VectorContinuousComponentCallback`](@ref):
 ```julia
 ccb  = ContinuousComponentCallback(condition, affect; kwargs...)
-vccb = VectorContinuousComponentCallback(condition, affect; kwargs...)
+vccb = VectorContinuousComponentCallback(condition, affect, len; kwargs...)
 ```
 where the `kwargs` are passed to the underlying [`SciMLBase.VectorContinuousCallback`](@extref) to finetune the zerocrossing-detection.
 

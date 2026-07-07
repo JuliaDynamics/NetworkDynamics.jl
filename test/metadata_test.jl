@@ -1,6 +1,7 @@
 using NetworkDynamics
 using DataFrames
 using Graphs
+using OrdinaryDiffEqTsit5
 using Test
 
 @__MODULE__()==Main ? includet(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl")) : (const Lib = Main.Lib)
@@ -492,4 +493,26 @@ end
     # Other metadata should remain
     @test has_guess(vm, :M)
     @test has_init(vm, :Pmech)
+end
+
+@testset "dump_state value (RAT4 destructuring regression)" begin
+    # RecursiveArrayTools 4 made `sol(tvals; idxs=...)` a `<:AbstractArray`, so the old
+    # `u0s, uts = sol(...)` destructuring silently returned scalars instead of the per-
+    # timepoint value vectors. Guard against that by checking the printed value matches.
+    nw = basenetwork()
+    s0 = NWState(nw)
+    prob = ODEProblem(nw, uflat(s0), (0.0, 1.0), pflat(s0))
+    sol = solve(prob, Tsit5())
+    for idx in (VIndex(1), EIndex(1))
+        io = IOBuffer()
+        dump_state(io, sol, 0.5, idx)
+        @test !isempty(out)
+        # every state value at t=0.5 must be printed (the bug replaced the whole value
+        # column with a single scalar, so non-first rows would be wrong)
+        idxctor = idx isa VIndex ? VIndex : EIndex
+        for s in sym(nw[idx])
+            trueval = sol(0.5; idxs=idxctor(idx.compidx, s))
+            @test occursin(NetworkDynamics.str_significant(trueval; sigdigits=3), out)
+        end
+    end
 end
