@@ -506,6 +506,7 @@ end
     for idx in (VIndex(1), EIndex(1))
         io = IOBuffer()
         dump_state(io, sol, 0.5, idx)
+        out = String(take!(io))
         @test !isempty(out)
         # every state value at t=0.5 must be printed (the bug replaced the whole value
         # column with a single scalar, so non-first rows would be wrong)
