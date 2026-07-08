@@ -118,7 +118,7 @@ Main.test_execution_styles(prob_ode) # testing all ex styles #src
 
 sol_L = solve(prob_L, Tsit5(); reltol=1e-5)
 sol_st = solve(prob_st, Tsit5(); reltol=1e-5)
-sol_ode = solve(prob_ode, Rodas5(); initializealg=BrownFullBasicInit())
+sol_ode = solve(prob_ode, Rodas5())
 
 max_L = [maximum(abs.(sol_L(t) .- sol_analytic(x0_ode[1:N], nothing, t))) for t in sol_L.t] |> maximum
 max_st = [maximum(abs.(sol_st(t) .- sol_analytic(x0_ode[1:N], nothing, t))) for t in sol_L.t] |> maximum

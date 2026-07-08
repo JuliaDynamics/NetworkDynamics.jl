@@ -15,7 +15,7 @@
   - The default initial state for fixpoint search now applies guesses and formulas automatically (`guess=true, apply_formulas=true`).
 - **`NWState` constructor** gains `guess`, `apply_formulas`, and `verbose` keyword arguments. With `default=true` (the default), values are filled in order: defaults/inits → `InitFormula`s → guesses (if `guess=true`) → `GuessFormula`s. `apply_formulas=true` by default; `guess=false` by default.
 - `doctor` check: added smoketest for the observable function (`obsf`) of each component.
-- `SciMLBase@3` and `OrdinaryDfifEq@7` compat. Most notably, you need to pass `initializealg=BrownFullBasicInit()` manually if your DAE needs reinit because of discrete events (`DiffEq` no defaults to checking rather than reinit). Also, the interface of the `VectorContinuousComponentCallback` changed to fit that of `VectorContinuousCallback`: the affect now receives a buffer with per-element up or down crossing information rather than a single event idx.
+- `SciMLBase@3` and `OrdinaryDfifEq@7` compat. Most notably, upstream `DiffEq` changed its default `initializealg` to *check* rather than *reinit* inconsistent initial conditions. To preserve the previous behavior, the `ODEProblem(nw::Network, ...)` constructor now defaults to `initializealg=BrownFullBasicInit()` (deliberately differing from the OrdinaryDiffEq default). Pass `initializealg=...` to the constructor to override. Also, the interface of the `VectorContinuousComponentCallback` changed to fit that of `VectorContinuousCallback`: the affect now receives a buffer with per-element up or down crossing information rather than a single event idx.
 
 ## v0.10.17 Changelog
 - **Open-loop linearization** ([#341](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/341)):

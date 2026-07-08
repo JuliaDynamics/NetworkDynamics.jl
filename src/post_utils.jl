@@ -25,11 +25,18 @@ The callback system supports three keyword arguments that control how callbacks 
         add_comp_cb=Dict(),
         add_nw_cb=nothing,
         override_cb=nothing,
+        initializealg=BrownFullBasicInit(),
         kwargs...
     )
 
 Custom constructor for creating ODEProblem base of a `Network`-Object.
 Its main purpose is to automatically handle callback construction from the component level callbacks.
+
+The `initializealg` keyword is stored in the problem and forwarded to `solve`/`init`.
+Note that the default `BrownFullBasicInit()` deliberately differs from the
+OrdinaryDiffEq default: NetworkDynamics models frequently contain algebraic
+constraints (mass-matrix DAEs), for which `BrownFullBasicInit()` fixes up
+inconsistent initial conditions. Pass `initializealg=...` explicitly to override.
 
 $callback_keyword_docs
 """
@@ -38,6 +45,7 @@ function SciMLBase.ODEProblem(
     add_comp_cb=Dict(),
     add_nw_cb=nothing,
     override_cb=nothing,
+    initializealg=BrownFullBasicInit(),
     kwargs...
 )
 
@@ -70,7 +78,7 @@ function SciMLBase.ODEProblem(
         end
     end
 
-    SciMLBase.ODEProblem(SciMLBase.ODEFunction(nw), args...; callback=finalcallback, kwargs...)
+    SciMLBase.ODEProblem(SciMLBase.ODEFunction(nw), args...; callback=finalcallback, initializealg, kwargs...)
 end
 
 """
