@@ -348,6 +348,109 @@ end
     @test v1 != v2
 end
 
+# Two metadata-value stand-ins: `DealiasImmutable` mimics an arbitrary third-party
+# immutable-wrapper-of-mutable-state (no dealias override -> must be defensively
+# deep-copied). `DealiasShared` mimics an MTK `System`/`Equation`: an immutable compile
+# artifact that opts into sharing via a `dealias_metadata` method, exactly as the MTK
+# extension does. See NetworkDynamics.dealias_metadata.
+struct DealiasImmutable
+    payload::Vector{Int}
+end
+struct DealiasShared
+    payload::Vector{Int}
+end
+NetworkDynamics.dealias_metadata(x::DealiasShared) = x
+
+@testset "component metadata dealiasing" begin
+    # copy(::ComponentModel)/reconstruction dealiases metadata & symmetadata via
+    # `dealias_metadata`: rebuild the container spine, deepcopy leaves by default
+    # (defensive), copy nested ComponentModels, and share only types that opt in.
+    dealias = NetworkDynamics.dealias_metadata
+
+    # defensive default: an unknown immutable-wrapper is deep-copied, NOT shared
+    imm = DealiasImmutable([1,2,3])
+    @test dealias(imm) !== imm
+    @test dealias(imm).payload !== imm.payload         # inner mutable state independent
+    # opt-in sharing (the System/Equation pattern): a type with a method is shared as-is
+    shared = DealiasShared([1,2,3])
+    @test dealias(shared) === shared
+
+    # mutable leaf -> deepcopy; ComponentModel -> copy (independent but equal)
+    let v = [1,2,3]
+        @test dealias(v) !== v && dealias(v) == v
+    end
+    inner = VertexModel(; g=(o,i,p,t)->nothing, outdim=1, name=:inner, check=false)
+    @test dealias(inner) !== inner && dealias(inner) == inner
+
+    # Symbol-keyed containers: fresh spine of the same type, elements dealiased
+    d = Dict{Symbol,Any}(:a => shared, :b => [1,2,3])
+    d2 = dealias(d)
+    @test d2 isa Dict{Symbol,Any} && d2 !== d
+    @test d2[:a] === d[:a]                              # opted-in element shared
+    @test d2[:b] !== d[:b]                              # mutable element deep-copied
+    nt = (x = shared, y = [1,2,3])
+    nt2 = dealias(nt)
+    @test nt2 isa NamedTuple{(:x,:y)} && nt2.x === nt.x && nt2.y !== nt.y
+    @test dealias([shared, shared])[1] === shared       # vector: fresh, shared elements
+
+    # the dict rule is restricted to AbstractDict{Symbol}: a non-Symbol dict is deep-
+    # copied wholesale (defensive), so even an opted-in element inside is NOT shared
+    @test dealias(Dict{String,Any}("a" => shared))["a"] !== shared
+
+    # through copy(::ComponentModel)
+    f = (dv, v, ein, p, t) -> nothing
+    g = (out, in, p, t) -> nothing
+    md = Dict{Symbol,Any}(:artifact=>shared, :user_data=>[10,20,30], :nested=>inner)
+    v = VertexModel(; f, g, sym=[:x=>(;default=1)], outdim=2, metadata=md,
+                    name=:vp, check=false)
+    v2 = copy(v)
+    m, m2 = NetworkDynamics.metadata(v), NetworkDynamics.metadata(v2)
+
+    @test m2 !== m                          # fresh dict
+    @test m2[:artifact] === m[:artifact]    # opted-in artifact shared (no deepcopy!)
+    @test m2[:user_data] !== m[:user_data]  # mutable user data deep-copied, independent
+    m2[:user_data][1] = -1
+    @test m[:user_data][1] == 10            # original untouched
+    @test m2[:nested] !== m[:nested]        # nested ComponentModel: copied, not aliased
+    @test m2[:nested] == m[:nested]
+
+    # symmetadata: fresh inner dicts, mutation of the copy is isolated
+    sm, sm2 = NetworkDynamics.symmetadata(v), NetworkDynamics.symmetadata(v2)
+    @test sm2 !== sm
+    @test sm2[:x] !== sm[:x]
+    set_default!(v2, :x, 99)
+    @test get_default(v, :x) == 1
+    @test get_default(v2, :x) == 99
+end
+
+@testset "copy(::Network)" begin
+    using NetworkDynamics: getcomp
+    vertexf = (dv, u, esum, p, t) -> (dv[1] = esum[1]; nothing)
+    edgeg   = (out, src, dst, p, t) -> (out[1] = src[1] - dst[1]; nothing)
+    v1 = VertexModel(; f=vertexf, g=[1], sym=[:x=>(;default=1.0)], insym=[:i], vidx=1, name=:v1, check=false)
+    v2 = VertexModel(; f=vertexf, g=[1], sym=[:x=>(;default=2.0)], insym=[:i], vidx=2, name=:v2, check=false)
+    v3 = VertexModel(; f=vertexf, g=[1], sym=[:x=>(;default=3.0)], insym=[:i], vidx=3, name=:v3, check=false)
+    e1 = EdgeModel(; g=AntiSymmetric(edgeg), outsym=[:f], src=1, dst=2, check=false)
+    e2 = EdgeModel(; g=AntiSymmetric(edgeg), outsym=[:f], src=1, dst=3, check=false)
+    e3 = EdgeModel(; g=AntiSymmetric(edgeg), outsym=[:f], src=2, dst=3, check=false)
+    nw = Network([v1,v2,v3], [e1,e2,e3])
+
+    nw2 = copy(nw)
+    @test nw2 isa Network
+    @test nv(nw2) == nv(nw)
+    @test ne(nw2) == ne(nw)
+    # components are copied (independent objects) but structurally equal
+    @test getcomp(nw2, VIndex(1)) !== getcomp(nw, VIndex(1))
+    @test getcomp(nw2, VIndex(1)) == getcomp(nw, VIndex(1))
+    @test getcomp(nw2, EIndex(1)) !== getcomp(nw, EIndex(1))
+    # graph is shared (immutable), equivalent to but cheaper than deepcopy
+    @test nw2.im.g === nw.im.g
+    # mutating a component of the copy must not leak into the original
+    set_default!(nw2, VIndex(1, :x), 42.0)
+    @test get_default(getcomp(nw2, VIndex(1)), :x) == 42.0
+    @test get_default(getcomp(nw, VIndex(1)), :x) == 1
+end
+
 @testset "test network-remake constructor" begin
     g = (out, in, p, t) -> nothing
     ge = (out, src, dst, p, t) -> nothing

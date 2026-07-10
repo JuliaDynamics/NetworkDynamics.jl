@@ -613,6 +613,19 @@ Base.@nospecializeinfer function _construct_comp(::Type{T}, @nospecialize(kwargs
     return c
 end
 
+"""
+    dealias_metadata(x)
+
+Recursively copy `x` so the result can be mutated without affecting the original,
+while avoiding costly deep copies of large immutable objects. Used to dealias a
+component's `metadata` and `symmetadata` when it is copied or reconstructed (see
+`copy(::ComponentModel)` and `_reconstruct_comp`).
+"""
+dealias_metadata(@nospecialize(x)) = deepcopy(x)
+dealias_metadata(x::ComponentModel) = copy(x)
+dealias_metadata(x::AbstractDict{Symbol}) = typeof(x)(k => dealias_metadata(v) for (k, v) in x)
+dealias_metadata(x::Union{AbstractVector,Tuple,NamedTuple}) = map(dealias_metadata, x)
+
 Base.@nospecializeinfer function _reconstruct_comp(::Type{T}, cf::ComponentModel, @nospecialize(kwargs)) where {T}
     fields = fieldnames(T)
     # fields to copy
@@ -623,9 +636,8 @@ Base.@nospecializeinfer function _reconstruct_comp(::Type{T}, cf::ComponentModel
     for f in nfields
         dict[f] = getproperty(cf, f)
     end
-    for f in cfields
-        dict[f] = deepcopy(getproperty(cf, f))
-    end
+    dict[:metadata]    = dealias_metadata(getproperty(cf, :metadata))
+    dict[:symmetadata] = dealias_metadata(getproperty(cf, :symmetadata))
 
     # if there is no change in symbols and it had a clash before, keep the setting
     if !haskey(kwargs, :allow_output_sym_clash) && !haskey(kwargs, :sym) && !haskey(kwargs, :outsym)
@@ -1114,8 +1126,10 @@ end
 """
     copy(c::NetworkDynamics.ComponentModel)
 
-Shallow copy of the component model. Creates a deepcopy of `metadata` and `symmetadata`
-but references the same objects everywhere else.
+Shallow copy of the component model. `metadata` and `symmetadata` are dealiased via
+`dealias_metadata` (fresh container spine, values deep-copied by default,
+immutable artifacts like MTK `System`s shared) but all other fields reference the same
+objects.
 """
 @generated function Base.copy(c::ComponentModel)
     fields = fieldnames(c)
@@ -1125,7 +1139,8 @@ but references the same objects everywhere else.
     nfields = setdiff(fields, cfields)
     assign = Expr(:block,
         (:($(field) = c.$field) for field in nfields)...,
-        (:($(field) = deepcopy(c.$field)) for field in cfields)...)
+        :(metadata = dealias_metadata(c.metadata)),
+        :(symmetadata = dealias_metadata(c.symmetadata)))
     construct = Expr(:call, c, [:($field) for field in fields]...)
 
     quote
