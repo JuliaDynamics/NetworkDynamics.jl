@@ -523,3 +523,14 @@ function Network(nw::Network;
 
     return new_nw
 end
+
+"""
+    copy(nw::Network)
+
+Copy a `Network`. The vertex and edge component models are copied (see
+[`copy(::ComponentModel)`](@ref) for how their metadata is dealiased) while the
+underlying graph is shared. Much cheaper than `deepcopy(nw)`, which would additionally
+clone the (immutable) graph, caches and buffers as well as the components' symbolic
+compile artifacts (e.g. the MTK `System`s stored in metadata).
+"""
+Base.copy(nw::Network) = Network(nw)

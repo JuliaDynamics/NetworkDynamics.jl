@@ -30,6 +30,12 @@ include("MTKExt_simplification.jl")
 import NetworkDynamics: implicit_output, RHSDifferentialsError
 Symbolics.@register_symbolic implicit_output(x)
 
+# `System`s and `Equation`s are large symbolic compile artifacts that are treated as
+# immutable once stored in component metadata (e.g. `:odesystem`, `:equations`). Opt
+# them into sharing so copying/reconstructing a component does not deep-copy them (which
+# is orders of magnitude slower). See `NetworkDynamics.dealias_metadata`.
+NetworkDynamics.dealias_metadata(x::Union{System,Equation}) = x
+
 const MTKCOMPILE_DEFAULT = Ref{Union{Symbol,Bool}}(false)
 function NetworkDynamics.set_mtkcompile!(value)
     MTKCOMPILE_DEFAULT[] = value
