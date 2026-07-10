@@ -65,12 +65,14 @@ end
     ComponentAffect(f::Function, sym, psym)
 
 Creates a callback condition for a [`ComponentCallback`].
-- `f`: The affect function. Must be a function of the form `f(u, p, [event_idx], ctx)` where `event_idx`
+- `f`: The affect function. Must be a function of the form `f(u, p, [event_signs], ctx)` where `event_signs`
   is only available in [`VectorContinuousComponentCallback`](@ref).
   - Arguments of `f`
     - `u`: The current (mutable) value of the selected `sym` states, provided as a [`SymbolicView`](@ref) object.
     - `p`: The current (mutable) value of the selected `psym` parameters.
-    - `event_idx`: The current event index, i.e. which `out` element triggered in case of [`VectorContinuousComponentCallback`](@ref).
+    - `event_signs`: Only for [`VectorContinuousComponentCallback`](@ref): a length-`len` vector of
+      `Int8`s encoding, for each condition output `i`, whether it crossed (`0` no crossing, `+1` upcrossing,
+      `-1` downcrossing). The affect resolves the direction and any simultaneous crossings itself.
     - `ctx::NamedTuple` a named tuple with context variables.
        - `ctx.model`: a reference to the component model
        - `ctx.vidx`/`ctx.eidx`: The index of the vertex/edge model.
@@ -138,17 +140,24 @@ function ContinuousComponentCallback(condition, affect; affect_neg! = affect, kw
 end
 
 """
-    VectorContinuousComponentCallback(condition, affect, len; affect_neg! = affect, kwargs...)
+    VectorContinuousComponentCallback(condition, affect, len; kwargs...)
 
 Connect a [`ComponentCondition`](@ref) and a [`ComponentAffect`](@ref) to a
 continuous callback which can be attached to a component model using
 [`add_callback!`](@ref) or [`set_callback!`](@ref). This vector version allows
 for `conditions` which have `len` output dimensions.
-The `affect` will be triggered with the additional `event_idx` argument to know in which
-dimension the zerocrossing was detected.
 
-The `affect_neg!` is also a `ComponentAffect` but will be triggered on downcrossing.
-It defaults to the same `affect` as on upcrossing.
+Mirroring `VectorContinuousCallback` from DiffEq, this callback has no separate
+`affect_neg!`. Instead, the single `affect` is triggered with an additional
+`event_signs` argument: a length-`len` vector of `Int8`s where entry `i` encodes
+what happened to the `i`-th condition output:
+- `0`: no zerocrossing detected in this dimension,
+- `+1`: upcrossing (condition went from negative to positive),
+- `-1`: downcrossing (condition went from positive to negative).
+
+The `affect` fires once whenever *any* dimension crossed and is responsible for
+resolving the crossing direction (and any simultaneous crossings) itself. See
+[`ComponentAffect`](@ref) for the affect signature.
 
 The `kwargs` will be forwarded to the `VectorContinuousCallback` when the component based
 callbacks are collected for the whole network using [`get_callbacks(::Network)`](@ref).
@@ -158,16 +167,14 @@ for available options.
 struct VectorContinuousComponentCallback{
     C  <: ComponentCondition,
     A  <: ComponentAffect,
-    An <: Union{ComponentAffect,Nothing}
 } <: ComponentCallback
     condition::C
     affect::A
-    affect_neg::An
     len::Int
     kwargs::NamedTuple
 end
-function VectorContinuousComponentCallback(condition, affect, len; affect_neg! = affect, kwargs...)
-    VectorContinuousComponentCallback(condition, affect, affect_neg!, len, NamedTuple(kwargs))
+function VectorContinuousComponentCallback(condition, affect, len; kwargs...)
+    VectorContinuousComponentCallback(condition, affect, len, NamedTuple(kwargs))
 end
 
 """
@@ -223,7 +230,6 @@ getcondition(cb::ContinuousComponentCallback) = cb.condition
 getcondition(cb::VectorContinuousComponentCallback) = cb.condition
 getaffect(cb::ComponentCallback) = cb.affect
 getaffect_neg(cb::ContinuousComponentCallback) = cb.affect_neg
-getaffect_neg(cb::VectorContinuousComponentCallback) = cb.affect_neg
 
 """
     get_callbacks(nw::Network, additional_callbacks=Dict())::CallbackSet
@@ -428,24 +434,45 @@ end
 condition_outrange(ccw::ContinuousCallbackWrapper, i) = (1 + (i-1)*ccw.sublen) : i*ccw.sublen
 
 cbidx_from_outidx(ccw::ContinuousCallbackWrapper, outidx) = div(outidx-1, ccw.sublen) + 1
-subidx_from_outidx(ccw::ContinuousCallbackWrapper, outidx) = mod(outidx, 1:ccw.sublen)
 
 # generate VectorContinuousCallback from a ContinuousCallbackWrapper
+#
+# SciMLBase>=3 dropped `affect_neg!` from `VectorContinuousCallback`; instead the
+# affect receives an `event_signs::Vector{Int8}` of length `len` (`+1` upcrossing,
+# `-1` downcrossing, `0` no event for each output). Component callbacks are always
+# batched into such a `VectorContinuousCallback`, but the two component-callback types
+# expose different user interfaces (mirroring DiffEq's own `ContinuousCallback` vs
+# `VectorContinuousCallback`):
+# - `ContinuousComponentCallback` keeps a separate `affect`/`affect_neg`; each callback
+#   occupies a single output slot and we dispatch per crossing direction.
+# - `VectorContinuousComponentCallback` has a single `affect` which receives the slice of
+#   `event_signs` belonging to the component and resolves direction/simultaneity itself.
 function to_callback(ccw::ContinuousCallbackWrapper)
     kwargs = first(ccw.callbacks).kwargs
     cond = _batch_condition(ccw)
 
     len = ccw.sublen * length(ccw.callbacks)
-    affect = _batch_affect(ccw, getaffect)
-    if all(cb -> getaffect(cb) === getaffect_neg(cb), ccw.callbacks)
-        # no need to consider neg affect differently
-        affect_neg! = affect
-    elseif all(cb -> isnothing(getaffect_neg(cb)), ccw.callbacks)
-        affect_neg! = nothing
-    else
-        affect_neg! = _batch_affect(ccw, getaffect_neg)
+    if cbtype(ccw) <: ContinuousComponentCallback
+        pos_affect = _batch_affect(ccw, getaffect)
+        neg_affect = _batch_affect(ccw, getaffect_neg)
+        affect = _updown_affect(pos_affect, neg_affect)
+    else # VectorContinuousComponentCallback
+        affect = _batch_vector_affect(ccw)
     end
-    VectorContinuousCallback(cond, affect, len; affect_neg!, kwargs...)
+    VectorContinuousCallback(cond, affect, len; kwargs...)
+end
+function _updown_affect(pos_affect::P, neg_affect::N) where {P,N}
+    (integrator, event_signs) -> begin
+        for oidx in eachindex(event_signs)
+            s = event_signs[oidx]
+            if s > 0
+                pos_affect(integrator, oidx)
+            elseif s < 0
+                neg_affect(integrator, oidx)
+            end
+        end
+        nothing
+    end
 end
 function _batch_condition(ccw::ContinuousCallbackWrapper)
     usymidxs = collect_c_or_a_indices(ccw, getcondition, :sym)
@@ -533,19 +560,69 @@ function _batch_affect(ccw::ContinuousCallbackWrapper, aff_or_affneg::F) where {
 
         uhash = hash(uv)
         phash = hash(pv)
-        if cbtype(ccw) <: ContinuousComponentCallback
-            aff_or_affneg(ccw.callbacks[i]).f(_u, _p, ctx)
-        elseif cbtype(ccw) <: VectorContinuousComponentCallback
-            num = subidx_from_outidx(ccw, outidx)
-            aff_or_affneg(ccw.callbacks[i]).f(_u, _p, num, ctx)
-        else
-            error()
-        end
+        aff_or_affneg(ccw.callbacks[i]).f(_u, _p, ctx)
         pchanged = hash(pv) != phash
         uchanged = hash(uv) != uhash
 
         (pchanged || uchanged) && SciMLBase.auto_dt_reset!(integrator)
         pchanged && save_parameters!(integrator)
+    end
+end
+
+# affect builder for `VectorContinuousComponentCallback` batches. In contrast to the
+# scalar `_batch_affect`, this fires each component's affect at most once per event time,
+# passing the length-`sublen` slice of `event_signs` for that component (`0`/`+1`/`-1`).
+function _batch_vector_affect(ccw::ContinuousCallbackWrapper)
+    usymidxs = collect_c_or_a_indices(ccw, getaffect, :sym)
+    psymidxs = collect_c_or_a_indices(ccw, getaffect, :psym)
+
+    uidxs = SII.variable_index.(Ref(ccw.nw), usymidxs)
+    pidxs = SII.parameter_index.(Ref(ccw.nw), psymidxs)
+
+    if any(isnothing, uidxs) || any(isnothing, pidxs)
+        missing_u = []
+        if any(isnothing, uidxs)
+            nidxs = findall(isnothing, uidxs)
+            append!(missing_u, usymidxs[nidxs])
+        end
+        missing_p = []
+        if any(isnothing, pidxs)
+            nidxs = findall(isnothing, pidxs)
+            append!(missing_p, psymidxs[nidxs])
+        end
+        throw(ArgumentError(
+            "Cannot build callback as it contains refrences to undefined symbols:\n"*
+            (isempty(missing_u) ? "" : "Missing state symbols: $(missing_u)\n")*
+            (isempty(missing_p) ? "" : "Missing param symbols: $(missing_p)\n")
+        ))
+    end
+
+    (integrator, event_signs) -> begin
+        for i in 1:length(ccw)
+            outrange = condition_outrange(ccw, i)
+            any(oidx -> !iszero(event_signs[oidx]), outrange) || continue
+
+            uidxsv = view(uidxs, affect_urange(ccw, getaffect, i))
+            uv = view(integrator.u, uidxsv)
+            _u = SymbolicView(uv, getaffect(ccw.callbacks[i]).sym)
+
+            pidxsv = view(pidxs, affect_prange(ccw, getaffect, i))
+            pv = view(integrator.p, pidxsv)
+            _p = SymbolicView(pv, getaffect(ccw.callbacks[i]).psym)
+
+            ctx = get_ctx(integrator, ccw.components[i])
+            signs = view(event_signs, outrange)
+
+            uhash = hash(uv)
+            phash = hash(pv)
+            getaffect(ccw.callbacks[i]).f(_u, _p, signs, ctx)
+            pchanged = hash(pv) != phash
+            uchanged = hash(uv) != uhash
+
+            (pchanged || uchanged) && SciMLBase.auto_dt_reset!(integrator)
+            pchanged && save_parameters!(integrator)
+        end
+        nothing
     end
 end
 
@@ -797,7 +874,7 @@ function assert_cb_compat(comp::ComponentModel, cb)
         invalid = filter(!pcond, getaffect(cb).psym)
         push!(hints, "All p symbols in the callback affect must be parameters. Found invalid $invalid !⊆ $(comp.psym).")
     end
-    if !(cb isa Union{DiscreteComponentCallback,PresetTimeComponentCallback}) && getaffect_neg(cb) != getaffect(cb) && !isnothing(getaffect_neg(cb))
+    if cb isa ContinuousComponentCallback && !isnothing(getaffect_neg(cb)) && getaffect_neg(cb) != getaffect(cb)
         if getaffect_neg(cb) != getaffect(cb) && !(all(ucond_affect, getaffect_neg(cb).sym))
             invalid = filter(!ucond_affect, getaffect_neg(cb).sym)
             push!(hints, "All u symbols in the callback affect_neg! must be variables (in contrast to condition, observables are not allowed here). Found invalid $invalid !⊆ $(comp.sym).")

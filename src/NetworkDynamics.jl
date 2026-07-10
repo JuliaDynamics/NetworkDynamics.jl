@@ -22,6 +22,7 @@ using Random: Random
 using Static: Static, StaticInt
 using SciMLBase: VectorContinuousCallback, CallbackSet, DiscreteCallback
 using DiffEqCallbacks: DiffEqCallbacks
+using DiffEqBase: BrownFullBasicInit
 using MacroTools: postwalk, @capture
 using ConstructionBase: ConstructionBase
 using Accessors: Accessors, @set

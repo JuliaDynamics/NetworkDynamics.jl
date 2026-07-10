@@ -27,7 +27,9 @@ BUILDKITE && @test CUDA.functional() # fail early in buildkite if cuda is not av
             # ignore Hungarian since we only need it for MTK extension
             Aqua.test_all(NetworkDynamics;
                 ambiguities=false,
-                stale_deps=VERSION ≥ v"1.11" ? (; ignore=[:Hungarian]) : false, # don't check stale deps on LTS (we add Testfiles to main env)
+                # Hungarian and Moshi are only needed for the MTK extension (Moshi used to be
+                # pulled in transitively via SciMLBase<3, which now makes it an optional ext).
+                stale_deps=VERSION ≥ v"1.11" ? (; ignore=[:Hungarian, :Moshi]) : false, # don't check stale deps on LTS (we add Testfiles to main env)
                 deps_compat=VERSION ≥ v"1.11", # don't check compat on LTS
                 persistent_tasks=false)
             @test_broken isempty(Docs.undocumented_names(NetworkDynamics))

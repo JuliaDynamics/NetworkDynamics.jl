@@ -150,9 +150,12 @@ end
         out[1] = 0.18 - abs(u[:θ])
         out[2] = -0.2 - u[:ω]
     end
-    affect = ComponentAffect([:θ, :ω],[]) do u, p, event_idx, ctx
-        push!(events, (;θ=u[:θ], ω=u[:ω], t=ctx.t, vidx=ctx.vidx, event_idx=event_idx))
-        @info "Triggered event_idx $event_idx t=$(ctx.t) on $(ctx.vidx)"
+    affect = ComponentAffect([:θ, :ω],[]) do u, p, event_signs, ctx
+        for event_idx in eachindex(event_signs)
+            event_signs[event_idx] == 0 && continue
+            push!(events, (;θ=u[:θ], ω=u[:ω], t=ctx.t, vidx=ctx.vidx, event_idx=event_idx))
+            @info "Triggered event_idx $event_idx (dir $(event_signs[event_idx])) t=$(ctx.t) on $(ctx.vidx)"
+        end
     end
     ccb = VectorContinuousComponentCallback(cond, affect, 2)
     set_callback!(nw.im.vertexm[1], ccb)
@@ -286,27 +289,22 @@ end
     vec_cos_up = []
     vec_sin_down = []
     vec_cos_down = []
-    affect_vec = ComponentAffect([], []) do u, p, event_idx, ctx
+    # single sign-aware affect handles both crossing directions (up: +1, down: -1)
+    affect_vec = ComponentAffect([], []) do u, p, event_signs, ctx
         pos = ctx.t/pi
-        if event_idx == 1
-            println("sin up at $pos")
-            push!(vec_sin_up, pos)
-        else
-            println("cos up at $pos")
-            push!(vec_cos_up, pos)
+        for i in eachindex(event_signs)
+            s = event_signs[i]
+            s == 0 && continue
+            if i == 1
+                println("sin $(s > 0 ? "up" : "down") at $pos")
+                push!(s > 0 ? vec_sin_up : vec_sin_down, pos)
+            else
+                println("cos $(s > 0 ? "up" : "down") at $pos")
+                push!(s > 0 ? vec_cos_up : vec_cos_down, pos)
+            end
         end
     end
-    affect_vec_neg = ComponentAffect([], []) do u, p, event_idx, ctx
-        pos = ctx.t/pi
-        if event_idx == 1
-            println("sin down at $pos")
-            push!(vec_sin_down, pos)
-        else
-            println("cos down at $pos")
-            push!(vec_cos_down, pos)
-        end
-    end
-    cb_vec = VectorContinuousComponentCallback(cond_vec, affect_vec, 2; affect_neg! = affect_vec_neg)
+    cb_vec = VectorContinuousComponentCallback(cond_vec, affect_vec, 2)
     # set_callback!(nw[VIndex(1)], cb_vec)
     # set_callback!(nw[VIndex(1)], cb_vec)
     s0 = NWState(nw)
@@ -320,13 +318,20 @@ end
     @test vec_cos_down ≈ [0.5, 2.5] atol=1e-3
 
     ####
-    #### no negative affect
+    #### only react to upcrossings (previously expressed via affect_neg! = nothing)
     ####
     empty!(vec_sin_up)
     empty!(vec_cos_up)
     empty!(vec_sin_down)
     empty!(vec_cos_down)
-    cb_vec = VectorContinuousComponentCallback(cond_vec, affect_vec, 2; affect_neg! = nothing)
+    affect_vec_uponly = ComponentAffect([], []) do u, p, event_signs, ctx
+        pos = ctx.t/pi
+        for i in eachindex(event_signs)
+            event_signs[i] > 0 || continue  # skip no-event (0) and downcrossings (-1)
+            i == 1 ? push!(vec_sin_up, pos) : push!(vec_cos_up, pos)
+        end
+    end
+    cb_vec = VectorContinuousComponentCallback(cond_vec, affect_vec_uponly, 2)
     prob = ODEProblem(nw, uflat(s0), (0, 4π+0.1), pflat(s0), add_comp_cb=Dict(VIndex(1)=>cb_vec))
     sol = solve(prob, Tsit5());
     @assert SciMLBase.successful_retcode(sol)

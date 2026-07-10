@@ -745,7 +745,7 @@ function _print_condsyms(io, @nospecialize(cb::ComponentCallback))
 end
 function _print_affectsyms(io, @nospecialize(cb::ComponentCallback))
     print(io, "(")
-    if cb isa Union{PresetTimeComponentCallback, DiscreteComponentCallback} || getaffect_neg(cb) === nothing || getaffect_neg(cb) == getaffect(cb)
+    if !(cb isa ContinuousComponentCallback) || getaffect_neg(cb) === nothing || getaffect_neg(cb) == getaffect(cb)
         syms = getaffect(cb).sym
         psyms = getaffect(cb).psym
     else

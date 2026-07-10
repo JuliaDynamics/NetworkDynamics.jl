@@ -224,7 +224,7 @@ nd_2 = Network(g, nd_diffusion_vertex_2, nd_diffusion_edge_2)
 We define the first diffusion as x ~ $N(0,1)^\mathrm{2}$ and the second diffusion as ϕ ~ $N(0,1)$. So the propagation
 of the diffusion from node 0 to node 2 is given by creating a vector:
 =#
-x0_2 = vec(transpose([randn(rng, N) .^ 2 randn(rng, N)]))
+x0_2 = collect(vec(transpose([randn(rng, N) .^ 2 randn(rng, N)])))
 
 # We then define the `ODEProblem`:
 ode_prob_2 = ODEProblem(nd_2, x0_2, (0.0, 3.0))
@@ -290,7 +290,7 @@ g = barabasi_albert(N, k)
 nd_diffusion_vertex_2 = VertexModel(; f=diffusionvertex_f!, g=1:2, dim=2, sym=[:x, :ϕ])
 nd_diffusion_edge_2 = EdgeModel(; g=AntiSymmetric(diffusionedge_g!), outsym=[:flow_x, :flow_ϕ])
 nd_2 = Network(g, nd_diffusion_vertex_2, nd_diffusion_edge_2)
-x0_2 = vec(transpose([randn(rng, N) .^ 2 randn(rng, N)]))
+x0_2 = collect(vec(transpose([randn(rng, N) .^ 2 randn(rng, N)])))
 ode_prob_2 = ODEProblem(nd_2, x0_2, (0.0, 3.0))
 Main.test_execution_styles(ode_prob_2) #src
 sol_2 = solve(ode_prob_2, Tsit5());

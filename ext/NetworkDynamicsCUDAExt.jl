@@ -155,9 +155,9 @@ _adapt_rgf(f) = f
 function _adapt_diffcache(to, c::DiffCache)
     du = adapt(to, c.du)
     dual_du = adapt(to, c.dual_du)
-    DiffCache(du, dual_du, c.any_du)
-    # N = length(c.dual_du) ÷ length(c.du) - 1
-    # DiffCache(du, N)
+    # PreallocationTools 1.x added the `warn_on_resize` field to `DiffCache`; pass all
+    # fields positionally to hit the struct constructor (not the `(u, siz, chunks)` one).
+    DiffCache(du, dual_du, c.any_du, c.warn_on_resize)
 end
 
 end
