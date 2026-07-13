@@ -39,9 +39,10 @@ function Adapt.adapt_structure(to, n::Network)
               external = _adapt_diffcache(to, n.caches.external))
     loopbackmap = _adapt_loopbackmap(to, n.loopbackmap)
     extmap = adapt(to, n.extmap)
+    jac_prototype = adapt(to, n.jac_prototype)
 
     core = NetworkCore(executionstyle(n), vb, layer, gbp, loopbackmap, extmap, caches)
-    Network(core, n.im, mm, getfield(n, :jac_prototype); fullytyped=isfullytyped(n))
+    Network(core, n.im, mm, jac_prototype; fullytyped=isfullytyped(n))
 end
 
 Adapt.@adapt_structure NetworkLayer
