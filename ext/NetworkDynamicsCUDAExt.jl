@@ -40,8 +40,9 @@ function Adapt.adapt_structure(to, n::Network)
     exT = typeof(executionstyle(n))
     loopbackmap = _adapt_loopbackmap(to, n.loopbackmap)
     extmap = adapt(to, n.extmap)
+    jac_prototype = adapt(to, n.jac_prototype)
 
-    Network(exT, vb, layer, n.im, caches, mm, gbp, loopbackmap, extmap, getfield(n, :jac_prototype))
+    Network(exT, vb, layer, n.im, caches, mm, gbp, loopbackmap, extmap, jac_prototype)
 end
 
 Adapt.@adapt_structure NetworkLayer

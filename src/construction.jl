@@ -233,7 +233,7 @@ function Network(g::AbstractGraph,
             gbufprovider,
             loopback_map,
             extmap,
-            Ref{Union{Nothing,SparseMatrixCSC{Bool,Int}}}(nothing),
+            Ref{Union{Nothing,AbstractSparseMatrix}}(nothing),
         )
 
     end

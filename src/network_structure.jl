@@ -103,7 +103,7 @@ struct Network{EX<:ExecutionStyle,G,NL,VTup,MM,CT,GBT,LM,EM}
     "map to gather external inputs"
     extmap::EM
     "sparsity pattern"
-    jac_prototype::Ref{Union{Nothing,SparseMatrixCSC{Bool,Int}}}
+    jac_prototype::Ref{Union{Nothing,AbstractSparseMatrix}}
     function Network(ex, vb, nl, im, caches, mm, gbufp, loopmap, extmap, jac_prototype)
         new{
             ex,typeof(im.g),typeof(nl), typeof(vb),
