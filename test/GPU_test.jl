@@ -7,6 +7,11 @@ using KernelAbstractions
 using Graphs
 using Random
 using Test
+using SparseConnectivityTracer
+using StableRNGs
+using OrdinaryDiffEqRosenbrock
+using OrdinaryDiffEqNonlinearSolve
+using SparseArrays
 @__MODULE__()==Main ? includet(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl")) : (const Lib = Main.Lib)
 
 rng = StableRNG(1)
@@ -106,6 +111,39 @@ nw2_d(dx_d1, x0_d1, p_d1, NaN)
     adapted_s0 = adapt(CuArray{Float32}, s0)
     @test uflat(adapted_s0) isa CuArray{Float32}
     @test pflat(adapted_s0) isa CuArray{Float32}
+end
+
+@testset "actual GPU solve" begin
+    nw, s0 = Lib.powergridlike_network(; execution=KAExecution{true}(), aggregator=SparseAggregator(+))
+    s0.v[3, :Pset] = -1.2 # force some dynamics
+    s0.v[5, :u_i] = -1 # force reinit
+
+    prob = ODEProblem(nw, s0, (0.0, 10.0))
+    @test prob.f.jac_prototype == nothing
+    sol = solve(prob, Rodas5P())
+    @test sol(0.0, idxs=VIndex(5, :u_i)) != -1 # reinit happend
+
+    nw_sparse = set_jac_prototype!(copy(nw))
+    prob_sparse = ODEProblem(nw_sparse, s0, (0.0, 1.0))
+    @test prob_sparse.f.jac_prototype isa SparseMatrixCSC
+    solve(prob_sparse, Rodas5P())
+
+    # device variants
+    s0_d = adapt(CuArray{Float64}, s0)
+    nw_d = adapt(CuArray{Float64}, nw)
+    nw_sparse_d = adapt(CuArray{Float64}, nw_sparse)
+    nw_sparse_d.jac_prototype isa CuSparseMatrixCSC
+    prob_d = ODEProblem(nw_d, s0_d, (0.0, 10.0))
+    prob_sparse_d = ODEProblem(nw_sparse_d, s0_d, (0.0, 10.0))
+
+    SAVE_INITALG = BrownFullBasicInit(nlsolve=FastShortcutNonlinearPolyalg(; autodiff=AutoFiniteDiff()))
+    solve(prob_d, Rodas5P(); initializealg=SAVE_INITALG) # DI.jacobian! scalar indexing again, i gues  fixed by (1)?
+    solve(prob_sparse_d, Rodas5P(; linsolve=KrylovJL_GMRES())) # ERROR: CanonicalIndexError: setindex! not defined for CuSparseMatrixCSC{Float64, Int32}
+
+    # NEEDS
+    # which would probably help with lots of the error classes
+    # https://github.com/JuliaDiff/ForwardDiff.jl/pull/816
+
 end
 
 
