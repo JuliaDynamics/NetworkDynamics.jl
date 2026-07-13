@@ -308,7 +308,7 @@ function dqline(; name=:line, R, X, kwargs...)
     )
 end
 
-function powergridlike_network()
+function powergridlike_network(; kwargs...)
     # Create a simple network with Kuramoto oscillators
     g = cycle_graph(5) # 5-node cycle graph
     v1s = dqbus_slack()
@@ -330,7 +330,7 @@ function powergridlike_network()
     v3 = dqbus_pq()
     v4 = dqbus_pq()
     v5 = dqbus_pq()
-    nw = Network(g, [v1, v2, v3, v4, v5], e; dealias=true)
+    nw = Network(g, [v1, v2, v3, v4, v5], e; dealias=true, kwargs...)
 
     default_overrides = merge(
         interface_values(pf),
