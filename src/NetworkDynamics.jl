@@ -89,6 +89,8 @@ export @initformula, InitFormula
 export @guessformula, GuessFormula
 include("init_constraints.jl")
 
+include("alias_normalization.jl")
+
 # spinners for initialization
 include("spinners.jl")
 

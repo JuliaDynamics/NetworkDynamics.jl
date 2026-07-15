@@ -1,6 +1,7 @@
 using ModelingToolkitBase
 using ModelingToolkitBase: t_nounits as t, D_nounits as Dt
 using NetworkDynamics
+using NetworkDynamics: AliasMap, get_aliasmap
 using OrdinaryDiffEqTsit5
 using LinearAlgebra
 using Graphs
@@ -1787,5 +1788,83 @@ end
         set_default!(vm, :i_r, -0.45)
         set_default!(vm, :i_i, 0.1)
         initialize_component(vm);
+    end
+end
+
+@testset "AliasMap extraction" begin
+    @testset "_match_scaled_var acceptance" begin
+        @variables x(t) y(t)
+        @parameters k V
+        # pure scaled aliases of a single variable are accepted...
+        @test mtkext._match_scaled_var(x)      == (1.0, :x)
+        @test mtkext._match_scaled_var(-x)     == (-1.0, :x)
+        @test mtkext._match_scaled_var(2.5x)   == (2.5, :x)
+        @test mtkext._match_scaled_var(-2.5x)  == (-2.5, :x)
+        @test mtkext._match_scaled_var(x/2)    == (0.5, :x)
+        @test mtkext._match_scaled_var(V)      == (1.0, :V) # parameters are settable, so they alias
+        # ...everything else stays an ordinary observable
+        @test mtkext._match_scaled_var(x + 1)  === nothing # affine
+        @test mtkext._match_scaled_var(x + y)  === nothing # sum
+        @test mtkext._match_scaled_var(2x + 3y) === nothing
+        @test mtkext._match_scaled_var(x^2)    === nothing # nonlinear
+        @test mtkext._match_scaled_var(x*y)    === nothing
+        @test mtkext._match_scaled_var(sin(x)) === nothing
+        @test mtkext._match_scaled_var(k*x)    === nothing # symbolic factor
+        @test mtkext._match_scaled_var(0*x)    === nothing # degenerate
+        @test mtkext._match_scaled_var(Num(1.0)) === nothing # no variable at all
+    end
+
+    @testset "extraction from compiled component" begin
+        @mtkmodel AliasTestBus begin
+            @variables begin
+                u_r(t) = 1.0
+                θ(t)
+                scaled(t)
+                nl(t)
+                Vmeas(t)
+                i_r(t), [input=true]
+                P(t), [output=true]
+            end
+            @parameters begin
+                Vset = 1.0
+            end
+            @equations begin
+                Dt(u_r) ~ -u_r + i_r
+                θ ~ -u_r        # sign flipped alias of a state
+                scaled ~ 2*θ    # chain: scaled = 2*θ = -2*u_r
+                nl ~ u_r^2      # not an alias
+                Vmeas ~ Vset    # alias of a parameter
+                P ~ u_r + nl
+            end
+        end
+        @named atb = AliasTestBus()
+        vm = VertexModel(atb, [:i_r], [:P])
+
+        am = get_aliasmap(vm)
+        @test am == AliasMap(:θ      => (-1.0, :u_r),
+                             :scaled => (-2.0, :u_r), # factors multiply along the chain
+                             :Vmeas  => (1.0, :Vset))
+        @test !haskey(am, :nl)
+
+        # structural invariants: aliases are observables, roots are settable
+        settable = NetworkDynamics.settable_symbols(vm)
+        @test all(k -> k ∈ NetworkDynamics.obssym(vm), keys(am))
+        @test all(k -> k ∉ settable, keys(am))
+        @test all(v -> v[2] ∈ settable, values(am))
+
+        # the extracted factors must agree with what the obs function actually computes
+        set_default!(vm, :i_r, 0.5)
+        set_default!(vm, :u_r, 0.8)
+        for (alias, (factor, canonical)) in am
+            @test get_initial_state(vm, alias) ≈ factor * get_initial_state(vm, canonical)
+        end
+    end
+
+    @testset "no aliases in ordinary components" begin
+        # observables of the library components are all genuinely computed quantities;
+        # this pins the empty-aliasmap (backwards compatible) path
+        for c in [Lib.dqbus_pv(), Lib.dqbus_swing(), Lib.swing_mtk(), Lib.line_mtk()]
+            @test isempty(get_aliasmap(c))
+        end
     end
 end

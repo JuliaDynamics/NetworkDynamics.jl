@@ -920,6 +920,72 @@ delete_guessformulas!(c::ComponentModel) = delete_metadata!(c, :guessformula)
 delete_guessformulas!(nw::Network, idx::VCIndex) = delete_guessformulas!(getcomp(nw, idx))
 delete_guessformulas!(nw::Network, idx::ECIndex) = delete_guessformulas!(getcomp(nw, idx))
 
+####
+#### Alias map
+####
+
+"""
+    has_aliasmap(c::ComponentModel)
+    has_aliasmap(nw::Network, idx::Union{VIndex,EIndex})
+
+Checks if the component has an alias map in metadata.
+
+See also: [`get_aliasmap`](@ref), [`set_aliasmap!`](@ref), [`AliasMap`](@ref).
+"""
+has_aliasmap(c::ComponentModel) = has_metadata(c, :aliasmap)
+has_aliasmap(nw::Network, idx::VCIndex) = has_aliasmap(getcomp(nw, idx))
+has_aliasmap(nw::Network, idx::ECIndex) = has_aliasmap(getcomp(nw, idx))
+
+"""
+    get_aliasmap(c::ComponentModel)
+    get_aliasmap(nw::Network, idx::Union{VIndex,EIndex})
+
+Gets the [`AliasMap`](@ref) of the component. Returns an *empty* `AliasMap` if the
+component has none, so callers never need to branch on [`has_aliasmap`](@ref).
+
+See also: [`has_aliasmap`](@ref), [`set_aliasmap!`](@ref), [`delete_aliasmap!`](@ref).
+"""
+function get_aliasmap(c::ComponentModel)
+    has_aliasmap(c) ? get_metadata(c, :aliasmap)::AliasMap : AliasMap()
+end
+get_aliasmap(nw::Network, idx::VCIndex) = get_aliasmap(getcomp(nw, idx))
+get_aliasmap(nw::Network, idx::ECIndex) = get_aliasmap(getcomp(nw, idx))
+
+"""
+    set_aliasmap!(c::ComponentModel, am; check=true)
+    set_aliasmap!(nw::Network, idx::Union{VIndex,EIndex}, am; check=true)
+
+Sets the [`AliasMap`](@ref) for the component. Overwrites any existing map.
+With `check=true`, validates the map against the component: factors must be finite and
+nonzero, canonical targets must be settable and alias keys must not be.
+
+See also: [`get_aliasmap`](@ref), [`delete_aliasmap!`](@ref).
+"""
+function set_aliasmap!(c::ComponentModel, am; check=true)
+    if !(am isa AliasMap)
+        throw(ArgumentError("Alias map must be an AliasMap, got $(typeof(am))."))
+    end
+    check && assert_aliasmap_compat(c, am)
+
+    set_metadata!(c, :aliasmap, am)
+end
+set_aliasmap!(nw::Network, idx::VCIndex, am; kw...) = set_aliasmap!(getcomp(nw, idx), am; kw...)
+set_aliasmap!(nw::Network, idx::ECIndex, am; kw...) = set_aliasmap!(getcomp(nw, idx), am; kw...)
+
+"""
+    delete_aliasmap!(c::ComponentModel)
+    delete_aliasmap!(nw::Network, idx::Union{VIndex,EIndex})
+
+Removes the alias map from the component model,
+or from a component referenced by `idx` in a network.
+Returns `true` if a map existed and was removed, `false` otherwise.
+
+See also: [`set_aliasmap!`](@ref).
+"""
+delete_aliasmap!(c::ComponentModel) = delete_metadata!(c, :aliasmap)
+delete_aliasmap!(nw::Network, idx::VCIndex) = delete_aliasmap!(getcomp(nw, idx))
+delete_aliasmap!(nw::Network, idx::ECIndex) = delete_aliasmap!(getcomp(nw, idx))
+
 
 
 # generate methods and docstrings for position and marker

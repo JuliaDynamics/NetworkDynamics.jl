@@ -1,4 +1,5 @@
 using NetworkDynamics
+using NetworkDynamics: AliasMap, has_aliasmap, get_aliasmap, set_aliasmap!, delete_aliasmap!
 using DataFrames
 using Graphs
 using OrdinaryDiffEqTsit5
@@ -515,5 +516,60 @@ end
             trueval = sol(0.5; idxs=idxctor(idx.compidx, s))
             @test occursin(NetworkDynamics.str_significant(trueval; sigdigits=3), out)
         end
+    end
+end
+
+@testset "AliasMap metadata" begin
+    # :Pdamping is the only observable, :ω/:θ/:M/:D/:Pmech/:P are settable
+    cf = Lib.swing_mtk()
+
+    @testset "roundtrip" begin
+        am = AliasMap(:Pdamping => (-1.0, :ω))
+        set_aliasmap!(cf, am)
+        @test has_aliasmap(cf)
+        @test get_aliasmap(cf) == am
+        @test delete_aliasmap!(cf) == true
+        @test delete_aliasmap!(cf) == false
+        @test !has_aliasmap(cf)
+    end
+
+    @testset "empty map for components without one" begin
+        # hand written (non MTK) components never get an aliasmap
+        v = Lib.kuramoto_second()
+        @test !has_aliasmap(v)
+        @test get_aliasmap(v) == AliasMap()
+        @test isempty(get_aliasmap(v))
+    end
+
+    @testset "check rejects invalid maps" begin
+        # canonical target is not settable
+        @test_throws ArgumentError set_aliasmap!(cf, AliasMap(:Pdamping => (1.0, :nope)))
+        # canonical target is an observable, which is not settable either
+        @test_throws ArgumentError set_aliasmap!(cf, AliasMap(:Pdamping => (1.0, :Pdamping)))
+        # alias key is itself settable
+        @test_throws ArgumentError set_aliasmap!(cf, AliasMap(:θ => (1.0, :ω)))
+        # degenerate factors
+        @test_throws ArgumentError set_aliasmap!(cf, AliasMap(:Pdamping => (0.0, :ω)))
+        @test_throws ArgumentError set_aliasmap!(cf, AliasMap(:Pdamping => (Inf, :ω)))
+        @test_throws ArgumentError set_aliasmap!(cf, AliasMap(:Pdamping => (NaN, :ω)))
+        # wrong type
+        @test_throws ArgumentError set_aliasmap!(cf, Dict(:Pdamping => :ω))
+        @test !has_aliasmap(cf) # none of the above may have been stored
+
+        # check=false bypasses validation
+        set_aliasmap!(cf, AliasMap(:θ => (0.0, :nope)); check=false)
+        @test get_aliasmap(cf) == AliasMap(:θ => (0.0, :nope))
+        delete_aliasmap!(cf)
+    end
+
+    @testset "network forwarding" begin
+        nw = basenetwork()
+        am = AliasMap(:Pdamping => (-1.0, :ω))
+        set_aliasmap!(nw, VIndex(1), am)
+        @test has_aliasmap(nw, VIndex(1))
+        @test get_aliasmap(nw, VIndex(1)) == am
+        @test delete_aliasmap!(nw, VIndex(1)) == true
+
+        @test get_aliasmap(nw, EIndex(1)) == AliasMap()
     end
 end

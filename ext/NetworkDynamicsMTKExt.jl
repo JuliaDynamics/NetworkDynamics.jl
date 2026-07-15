@@ -19,7 +19,8 @@ using SymbolicIndexingInterface: SymbolicIndexingInterface as SII
 
 using NetworkDynamics: NetworkDynamics, set_metadata!, ComponentPostprocessing,
                        PureFeedForward, FeedForward, NoFeedForward, PureStateMap,
-                       MultipleOutputWrapper, inline_repr, multiline_repr
+                       MultipleOutputWrapper, inline_repr, multiline_repr,
+                       AliasMap, set_aliasmap!, settable_symbols
 import NetworkDynamics: VertexModel, EdgeModel, AnnotatedSym, InitFormula, add_initformula!, GuessFormula, add_guessformula!
 
 const ST = SymbolicUtils.BasicSymbolicImpl.var"typeof(BasicSymbolicImpl)"{SymbolicUtils.SymReal}
@@ -131,6 +132,7 @@ function VertexModel(
             obsf, mass_matrix, ff=gen.fftype, name, extin=extin_nwidx,
             allow_output_sym_clash=true, kwargs...)
     set_metadata!(c, :observed, gen.observed)
+    set_aliasmap!(c, extract_aliasmap(c, gen.observed))
     set_metadata!(c, :equations, gen.equations)
     set_metadata!(c, :full_equations, gen.full_equations)
     set_metadata!(c, :outputeqs, gen.outputeqs)
@@ -286,6 +288,7 @@ function EdgeModel(
             obsf, mass_matrix, ff=gen.fftype, name, extin=extin_nwidx,
             allow_output_sym_clash=true, kwargs...)
     set_metadata!(c, :observed, gen.observed)
+    set_aliasmap!(c, extract_aliasmap(c, gen.observed))
     set_metadata!(c, :equations, gen.equations)
     set_metadata!(c, :full_equations, gen.full_equations)
     set_metadata!(c, :outputeqs, gen.outputeqs)

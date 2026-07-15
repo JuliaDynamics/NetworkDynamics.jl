@@ -544,6 +544,95 @@ function _build_formula(::Type{FT}, r) where {FT}
     FT(f, [r.target], r.input_names, prettyprint)
 end
 
+"""
+    extract_aliasmap(c::ComponentModel, obseqs::Vector{Equation})
+
+Extracts the `AliasMap` of a compiled component from its observed equations, i.e.
+every observable which is a pure `factor * settable_symbol` alias.
+
+Note that `pick_best_alias_names` already consolidates *identity* alias groups onto a single
+representative and re-inserts direct `alias ~ main` observations; what remains for us are the
+scaled/sign-flipped aliases (`get_alias` matches no coefficient) plus chains through them.
+
+Anything that is not a pure scaled alias — affine (`x + 1`), sums, nonlinear terms, symbolic
+coefficients — as well as chains whose root is not settable, stays an ordinary observable.
+"""
+function extract_aliasmap(c::NetworkDynamics.ComponentModel, obseqs)
+    settable = settable_symbols(c)
+
+    # one-step links only; resolved transitively below
+    steps = Dict{Symbol,Tuple{Float64,Symbol}}()
+    for eq in obseqs
+        m = _match_scaled_var(eq.rhs)
+        isnothing(m) && continue
+        steps[getname(eq.lhs)] = m
+    end
+
+    am = AliasMap()
+    for alias in keys(steps)
+        # a settable symbol must never be recorded as an alias of another settable symbol;
+        # keep both un-aliased instead (`assert_aliasmap_compat` would reject the entry)
+        if alias ∈ settable
+            @debug "Not aliasing :$alias, it is a settable symbol of the component."
+            continue
+        end
+        resolved = _resolve_alias(alias, steps, settable, Symbol[])
+        isnothing(resolved) && continue
+        # never an identity entry: the root is settable, `alias` is not
+        am[alias] = resolved
+    end
+    am
+end
+
+# Match `ex` against `factor * var` with a numeric, nonzero `factor` and a single variable.
+# Returns `(factor, varname)` or `nothing`.
+#
+# `linear_expansion(ex, v)` decomposes `ex` into `(factor, offset, islinear)` such that
+# `ex == factor*v + offset`, which is precisely the shape we accept. The guards reject, in
+# order: multi-variable rhs (`x + y`; also `k*x`, since `get_variables` counts parameters),
+# nonlinear rhs (`x^2`, `sin(x)` — not linear), a symbolic factor or offset (`k*x` again),
+# affine rhs (`x + 1` — nonzero offset) and a degenerate `0*x`.
+#
+# `linear_expansion` hands back MTKv11 symbolic literals, so both parts go through
+# `unwrap_const`; requiring the result to be a `Number` keeps this to numeric literals, and a
+# variable-free but unfolded coefficient is conservatively left as an ordinary observable.
+#
+# Differentials need no handling: `generate_io_function` rejects rhs differentials upfront.
+function _match_scaled_var(ex)
+    vars = get_variables(ex)
+    length(vars) == 1 || return nothing
+    v = only(vars)
+
+    _factor, _offset, islinear = Symbolics.linear_expansion(ex, v)
+    islinear || return nothing
+    factor = unwrap_const(_factor)
+    offset = unwrap_const(_offset)
+    (factor isa Number && offset isa Number) || return nothing
+    iszero(offset) || return nothing
+    (isfinite(factor) && !iszero(factor)) || return nothing
+
+    (Float64(factor), getname(v))
+end
+
+# Follow one-step links until the root is settable, multiplying factors along the way
+# (`obs2 ~ -obs1`, `obs1 ~ 2x` ⇒ `(-2.0, :x)`). Returns `nothing` when the chain dead-ends on
+# a non-settable symbol.
+function _resolve_alias(s, steps, settable, visiting)
+    haskey(steps, s) || return nothing
+    if s ∈ visiting
+        error("Cyclic alias chain detected at :$s via $(join(visiting, " → ")). \
+               Observed equations are topologically sorted, this should never happen.")
+    end
+    factor, target = steps[s]
+    target ∈ settable && return (factor, target)
+
+    push!(visiting, s)
+    rest = _resolve_alias(target, steps, settable, visiting)
+    pop!(visiting)
+    isnothing(rest) && return nothing
+    (factor * rest[1], rest[2])
+end
+
 function NetworkDynamics.multiline_repr(eqs::Vector{Equation}; prefix="")
     lines = map(eqs) do eq
         prefix * repr(eq.lhs) * " &~ " * repr(eq.rhs)
