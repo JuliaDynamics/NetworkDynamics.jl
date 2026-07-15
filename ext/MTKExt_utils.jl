@@ -408,35 +408,116 @@ function guesses_to_guessformulas!(sys; obs_subs=Dict())
 end
 
 """
-    bindings_to_initformulas(sys; states, obs_subs)
+    VariableInitFormula
 
-Extracts the `bindings` from a system and returns matching InitFormulas.
+Metadata type behind the `initf` variable option. A symbol carrying
 
-This will **ignore** parameter bindings! Parameter bindings will become observed
-equations in an earlier step.
+    @variables x(t) [initf = <expression>]
 
-An InitFormula is a constraint (not a hint), so conflicting targets (two bindings forcing
-the same state to *different* values after alias substitution) are a genuine
+declares "at initialization, set `x` to `<expression>`". The expression may reference any
+unknown or parameter of the system; it is lowered to an [`InitFormula`](@ref) at compile
+time. Valid on unknowns and parameters alike.
+"""
+struct VariableInitFormula end
+Symbolics.option_to_metadata_type(::Val{:initf}) = VariableInitFormula
+
+"""
+    collect_initf(sys)
+
+Collect the `initf` metadata of `sys` and all its subsystems into a
+`target => expression` dict, namespaced to the level of `sys`.
+
+Must be called on the **hierarchical** (pre-flattening) system: `renamespace` renames a
+symbol but does not descend into the expressions stored in its metadata, so the `initf` of a
+subsystem symbol read off a flattened system still refers to the subsystem's own symbols by
+their bare names. Recursing here and namespacing each collected pair with `namespace_expr`
+(which honors `ParentScope`, so expressions passed in from the parent survive untouched) is
+the same strategy MTK's own `bindings`/`guesses` accessors use.
+"""
+function collect_initf(sys)
+    initf = OrderedDict{ST,Any}()
+    for v in vcat(ModelingToolkitBase.get_unknowns(sys), ModelingToolkitBase.get_ps(sys))
+        u = unwrap(v)
+        SymbolicUtils.hasmetadata(u, VariableInitFormula) || continue
+        initf[u] = unwrap(SymbolicUtils.getmetadata(u, VariableInitFormula))
+    end
+    for subsys in ModelingToolkitBase.get_systems(sys)
+        for (target, expr) in collect_initf(subsys)
+            initf[ModelingToolkitBase.namespace_expr(target, subsys)] =
+                ModelingToolkitBase.namespace_expr(expr, subsys)
+        end
+    end
+    initf
+end
+
+"""
+    initf_to_initformulas(initf; states, params, inputs, obs_subs)
+
+Turn the `target => expression` pairs collected by [`collect_initf`](@ref) into
+InitFormulas. Unlike guesses, targets may be unknowns **or** parameters **or** inputs — all
+three are settable during initialization.
+
+An InitFormula is a constraint (not a hint), so conflicting targets (two formulas forcing
+the same symbol to *different* values after alias substitution) are a genuine
 over-determination and raise an error.
 """
-function bindings_to_initformulas(sys; states::Vector{ST}, obs_subs)
-    bindings = ModelingToolkitBase.bindings(sys)
-    isempty(bindings) && return nothing
+function initf_to_initformulas(initf; states::Vector{ST}, params, inputs, obs_subs)
+    isempty(initf) && return nothing
 
-    valid_inputs  = Set(getname.(vcat(unknowns(sys), parameters(sys))))
-    valid_targets = Set(getname.(states))
+    valid_targets = Set(getname.(vcat(states, params, inputs)))
+    valid_inputs = Set(getname.(vcat(states, params, inputs)))
 
     resolved = Any[]
-    for (_lhs, _rhs) in bindings
-        ismissing(unwrap_const(_rhs)) && continue # FIXME somehow, mtkcompile tends to spit out missing bindings?
-        _lhs ∈ ModelingToolkitBase.bound_parameters(sys) && continue # skip parameter bindings, they will become observed equations
-        r = _resolve_formula(_lhs, _rhs; obs_subs, valid_inputs, valid_targets, kind="Binding")
+    for (target, expr) in initf
+        r = _resolve_formula(target, expr; obs_subs, valid_inputs, valid_targets, kind="initf")
         r === nothing && continue
         push!(resolved, r)
     end
 
     resolved = _dedupe_resolved(resolved; fail=:error, kind="InitFormula")
     isempty(resolved) ? nothing : Set(_build_formula(InitFormula, r) for r in resolved)
+end
+
+"""
+    assert_no_state_bindings(sys)
+
+Throw if `sys` binds any unknown to an expression, i.e. if it was built with
+`bindings = [x => expr]` or, equivalently, `@variables x(t) = expr` for a symbolic `expr`.
+
+Parameter bindings are fine and are left alone: for a parameter, a symbolic default is a
+genuine runtime dependency which MTK lowers to an observed equation, removing the parameter
+from the compiled model. Only for an unknown is the intent ambiguous, and there it is spelled
+`initf`.
+
+Runs on the **hierarchical** system, so it reports only bindings the user actually wrote
+(`mtkcompile` emits bindings of its own). Note this rules out `bound_parameters` for telling
+the two kinds apart — that one needs a completed system — hence the `isparameter` check.
+"""
+function assert_no_state_bindings(sys)
+    bindings = ModelingToolkitBase.bindings(sys)
+    isempty(bindings) && return nothing
+
+    offenders = [target => expr for (target, expr) in bindings
+                 if !ismissing(unwrap_const(expr)) &&
+                    !ModelingToolkitBase.isparameter(unwrap(target))]
+    isempty(offenders) && return nothing
+
+    list = join(("  $target = $expr" for (target, expr) in offenders), "\n")
+    rewrite = join(("  @variables $target [initf = $expr]" for (target, expr) in offenders), "\n")
+    throw(ArgumentError(
+        """
+        System :$(getname(sys)) binds unknown(s) to an expression:
+        $list
+        A binding on an unknown (`bindings = [x => expr]`, or `@variables x(t) = expr` with a \
+        symbolic `expr`) does not say when the expression should hold. Declare it as an explicit \
+        initialization equation instead:
+        $rewrite
+        which sets the target once, during initialization, and leaves the dynamics alone.
+
+        Note this does not apply to *parameters*: a symbolic default on a parameter is a runtime \
+        dependency which MTK lowers to an observed equation, shadowing the parameter away. That \
+        keeps working and is often what you want.
+        """))
 end
 
 # ── shared helpers for guesses_to_guessformulas! and bindings_to_initformulas ──

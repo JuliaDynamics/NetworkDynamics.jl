@@ -378,6 +378,11 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     end
     alloutputs = convert(Vector{ST}, reduce(union, outputss))
 
+    # Both must see the hierarchical system: `initf` metadata expressions are only
+    # namespaceable before flattening, and mtkcompile synthesizes bindings of its own.
+    assert_no_state_bindings(_sys)
+    initf = collect_initf(_sys)
+
     # always expand connections before simplification
     _sys = ModelingToolkitBase.expand_connections(_sys)
     iv = only(independent_variables(_sys))
@@ -528,7 +533,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         odesystem_simplified=sys,
         params,
         unused_params,
-        initformulas = bindings_to_initformulas(sys; states, obs_subs),
+        initformulas = initf_to_initformulas(initf; states, params, inputs=allinputs, obs_subs),
         guessformulas = guesses_to_guessformulas!(sys; obs_subs)
     )
 end

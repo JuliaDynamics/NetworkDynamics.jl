@@ -1202,94 +1202,209 @@ end
     @test_logs (:warn, r"Model contains .* @discretes") VertexModel(testcomp(), [:x], [:y])
 end
 
-@testset "promotion of bindings to init_formulas" begin
+@testset "initf metadata to init_formulas" begin
     @testset "no nesting" begin
-        @component function slack_differential(; name)
-            @parameters u_init_r=1 u_init_i=0
-            @named busbar = BusBase(; u_r = u_init_r + 0.1, u_i = u_init_i)
-            eqs = [Dt(busbar.u_r) ~ 0, Dt(busbar.u_i) ~ 0]
-            System(eqs, t, [], [u_init_r, u_init_i]; name, systems=[busbar])
+        @component function slack_initf(; name)
+            @parameters begin
+                u_init_r = 1
+                u_init_i = 0
+            end
+            @variables begin
+                u_r(t), [initf = u_init_r + 0.1]
+                u_i(t), [initf = u_init_i]
+                i_r(t), [guess=0]
+                i_i(t), [guess=0]
+            end
+            eqs = [Dt(u_r) ~ 0, Dt(u_i) ~ 0]
+            System(eqs, t, [u_r, u_i, i_r, i_i], [u_init_r, u_init_i]; name)
         end
-        @named sys = slack_differential()
-        vm = VertexModel(sys, [:busbar₊i_r, :busbar₊i_i], [:busbar₊u_r, :busbar₊u_i]; verbose=false)
+        @named sys = slack_initf()
+        vm = VertexModel(sys, [:i_r, :i_i], [:u_r, :u_i]; verbose=false)
 
-        # formulas are automatically attached to the vertex model
         @test has_initformula(vm)
         formulas = collect(get_initformulas(vm))
         @test length(formulas) == 2
 
-        f_ur = only(filter(f -> f.outsym == [:busbar₊u_r], formulas))
-        f_ui = only(filter(f -> f.outsym == [:busbar₊u_i], formulas))
+        f_ur = only(filter(f -> f.outsym == [:u_r], formulas))
+        f_ui = only(filter(f -> f.outsym == [:u_i], formulas))
+        @test f_ur.sym == [:u_init_r]
+        @test f_ui.sym == [:u_init_i]
 
         out = NetworkDynamics.SymbolicView(zeros(1), f_ur.outsym)
         f_ur(out, NetworkDynamics.SymbolicView([2.0], f_ur.sym))
-        @test out[:busbar₊u_r] ≈ 2.1
-
-        out = NetworkDynamics.SymbolicView(zeros(1), f_ur.outsym)
-        f_ur(out, NetworkDynamics.SymbolicView([0.0], f_ur.sym))
-        @test out[:busbar₊u_r] ≈ 0.1
+        @test out[:u_r] ≈ 2.1
 
         out = NetworkDynamics.SymbolicView(zeros(1), f_ui.outsym)
         f_ui(out, NetworkDynamics.SymbolicView([3.5], f_ui.sym))
-        @test out[:busbar₊u_i] ≈ 3.5
+        @test out[:u_i] ≈ 3.5
     end
 
-    @testset "nested model" begin
-        @component function slack_diff_inner(; name)
-            @parameters u_init_r=1
-            @named busbar = BusBase(; u_r = u_init_r)
-            eqs = [Dt(busbar.u_r) ~ 0, Dt(busbar.u_i) ~ 0]
-            System(eqs, t, [], [u_init_r]; name, systems=[busbar])
+    @testset "parameter target" begin
+        # a parameter is a valid initf target -- this is the case MTK `bindings` cannot express
+        @component function param_target(; name)
+            @variables begin
+                x(t), [guess=0]
+                y(t), [guess=0]
+            end
+            @parameters begin
+                setp, [guess=0, initf = 3*x + 1]
+            end
+            System([Dt(x) ~ -x + setp, Dt(y) ~ -y], t, [x, y], [setp]; name)
         end
-        @component function slack_diff_outer(; name)
-            @variables u_r(t) u_i(t) i_r(t) i_i(t)
-            @named inner = slack_diff_inner()
-            eqs = [
-                u_r ~ inner.busbar.u_r
-                u_i ~ inner.busbar.u_i
-                i_r ~ inner.busbar.i_r
-                i_i ~ inner.busbar.i_i
-            ]
-            System(eqs, t; name, systems=[inner])
-        end
-        # Outer model has no bindings of its own; inner model has u_r = u_init_r binding.
-        # bindings_to_initformulas should propagate the inner binding with the namespaced symbol.
-        @named outer = slack_diff_outer()
-        vm = VertexModel(outer, [:i_r, :i_i], [:u_r, :u_i]; verbose=false)
-
-        @test has_initformula(vm)
-        formulas = collect(get_initformulas(vm))
-        @test length(formulas) == 1
-        f = only(formulas)
-        @test f.outsym == [:inner₊busbar₊u_r]
-        @test f.sym    == [:inner₊u_init_r]
+        @named sys = param_target()
+        vm = VertexModel(sys, [], [:y]; verbose=false)
+        f = only(get_initformulas(vm))
+        @test f.outsym == [:setp]
+        @test f.sym == [:x]
 
         out = NetworkDynamics.SymbolicView(zeros(1), f.outsym)
-        f(out, NetworkDynamics.SymbolicView([4.2], f.sym))
-        @test out[:inner₊busbar₊u_r] ≈ 4.2
+        f(out, NetworkDynamics.SymbolicView([2.0], f.sym))
+        @test out[:setp] ≈ 7.0
+    end
 
-        @testset "error on conflicting formula targets" begin
-            @component function slack_diff_outer_dup(; name)
-                @parameters u_init_outer=2.0
-                @variables u_r(t) u_i(t) i_r(t) i_i(t)
-                @named inner = slack_diff_inner()
-                eqs = [
-                    u_r ~ inner.busbar.u_r
-                    u_i ~ inner.busbar.u_i
-                    i_r ~ inner.busbar.i_r
-                    i_i ~ inner.busbar.i_i
-                ]
-                # outer also binds u_r: after obs_subs both this and inner₊busbar₊u_r alias to u_r
-                # but to *different* values (u_init_outer vs inner₊u_init_r) — a genuine
-                # over-determination, so InitFormula dedup raises an error (not a warning).
-                System(eqs, t; name, systems=[inner], bindings=[u_r => u_init_outer])
+    @testset "nested model: metadata expressions are namespaced" begin
+        # The whole point of `collect_initf` recursing over the *hierarchical* system:
+        # `renamespace` renames a symbol but does not descend into its metadata, so a naive
+        # read off the flattened system would leave `a` bare instead of `c₊a`.
+        @component function initf_inner(; name)
+            @parameters a=1.0
+            @variables begin
+                x(t), [guess=0, initf = 2*a]
+                y(t), [guess=0]
             end
-            @named outer_dup = slack_diff_outer_dup()
-            @test_throws "conflicting definitions" begin
-                VertexModel(outer_dup, [:i_r, :i_i], [:u_r, :u_i]; verbose=false)
+            System([Dt(x) ~ -x, Dt(y) ~ -y], t, [x, y], [a]; name)
+        end
+        @component function initf_outer(; name)
+            @named c = initf_inner()
+            @variables z(t), [guess=0]
+            System([Dt(z) ~ -z + c.x], t, [z], []; name, systems=[c])
+        end
+        @named outer = initf_outer()
+        vm = VertexModel(outer, [], [:z]; verbose=false)
+
+        f = only(get_initformulas(vm))
+        @test f.outsym == [:c₊x]
+        @test f.sym == [:c₊a]   # <- namespaced, NOT bare `:a`
+
+        out = NetworkDynamics.SymbolicView(zeros(1), f.outsym)
+        f(out, NetworkDynamics.SymbolicView([4.0], f.sym))
+        @test out[:c₊x] ≈ 8.0
+    end
+
+    @testset "nested model: foreign symbols passed in stay in the parent namespace" begin
+        # `@component` promotes symbolic kwargs to `ParentScope`, so an expression handed
+        # down from the parent must NOT be namespaced into the child.
+        @component function initf_child(; name, foreign)
+            @parameters a=1.0
+            @variables begin
+                x(t), [guess=0, initf = 2*a + foreign]
+                y(t), [guess=0]
             end
+            System([Dt(x) ~ -x, Dt(y) ~ -y], t, [x, y], [a]; name)
+        end
+        @component function initf_parent(; name)
+            @parameters q=5.0
+            @named c = initf_child(; foreign=3*q)
+            @variables z(t), [guess=0]
+            System([Dt(z) ~ -z + c.x], t, [z], [q]; name, systems=[c])
+        end
+        @named p = initf_parent()
+        vm = VertexModel(p, [], [:z]; verbose=false)
+
+        f = only(get_initformulas(vm))
+        @test f.outsym == [:c₊x]
+        @test Set(f.sym) == Set([:c₊a, :q])   # child symbol namespaced, parent symbol bare
+
+        vals = Dict(:c₊a => 4.0, :q => 2.0)
+        out = NetworkDynamics.SymbolicView(zeros(1), f.outsym)
+        f(out, NetworkDynamics.SymbolicView([vals[s] for s in f.sym], f.sym))
+        @test out[:c₊x] ≈ 2*4.0 + 3*2.0
+    end
+
+    @testset "error on conflicting formula targets" begin
+        # two initf entries on different members of one alias group, forcing different values
+        @component function conflict_inner(; name)
+            @parameters a=1.0
+            @variables begin
+                x(t), [guess=0, initf = 2*a]
+                y(t), [guess=0]
+            end
+            System([Dt(x) ~ -x, Dt(y) ~ -y], t, [x, y], [a]; name)
+        end
+        @component function conflict_outer(; name)
+            @parameters b=2.0
+            @named c = conflict_inner()
+            @variables begin
+                z(t), [guess=0]
+                w(t), [guess=0, initf = 5*b]   # w aliases c₊x -> two writers, different values
+            end
+            eqs = [w ~ c.x, Dt(z) ~ -z + w + b]
+            System(eqs, t; name, systems=[c])
+        end
+        @named outer = conflict_outer()
+        @test_throws "conflicting definitions" begin
+            VertexModel(outer, [], [:z]; verbose=false)
         end
     end
+end
+
+@testset "symbolic bindings on unknowns are rejected" begin
+    # `@variables x(t) = <symbolic>` is a binding; on an unknown that is ambiguous and the
+    # user must say `initf` instead.
+    @component function state_binding(; name)
+        @parameters u_init_r=1
+        @variables begin
+            u_r(t) = u_init_r + 0.1     # <- binding on an unknown
+            u_i(t)
+            i_r(t), [guess=0]
+            i_i(t), [guess=0]
+        end
+        System([Dt(u_r) ~ 0, Dt(u_i) ~ 0], t, [u_r, u_i, i_r, i_i], [u_init_r]; name)
+    end
+    @named s = state_binding()
+    err = try
+        VertexModel(s, [:i_r, :i_i], [:u_r, :u_i]; verbose=false)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("binds unknown(s)", err.msg)
+    @test occursin("initf", err.msg)
+
+    # explicit `bindings=` kwarg is the same thing and must be caught too
+    @component function state_binding_kw(; name)
+        @parameters p=1.0
+        @variables begin
+            x(t)
+            y(t), [guess=0]
+        end
+        System([Dt(x) ~ -x, Dt(y) ~ -y], t, [x, y], [p]; name, bindings=[x => 2p])
+    end
+    @named s2 = state_binding_kw()
+    @test_throws ArgumentError VertexModel(s2, [], [:y]; verbose=false)
+end
+
+@testset "symbolic defaults on parameters still shadow" begin
+    # A symbolic default on a *parameter* is a runtime dependency, not an init formula: MTK
+    # lowers it to an observed equation and the parameter disappears from the compiled model.
+    @component function param_shadow(; name)
+        @parameters begin
+            p1 = 2.0
+            p2 = 3*p1        # <- parameter binding: legal, reduces the parameter count
+        end
+        @variables begin
+            x(t), [guess=0]
+            y(t), [guess=0]
+        end
+        System([Dt(x) ~ -x + p2, Dt(y) ~ -y], t, [x, y], [p1, p2]; name)
+    end
+    @named s = param_shadow()
+    vm = VertexModel(s, [], [:y]; verbose=false)   # must not throw
+    @test :p1 ∈ psym(vm)
+    @test :p2 ∉ psym(vm)          # shadowed away
+    @test :p2 ∈ obssym(vm)        # ...into an observable
+    @test !has_initformula(vm)    # and it is NOT an init formula
 end
 
 @testset "promotion of guesses to guess_formulas" begin

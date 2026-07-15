@@ -19,6 +19,12 @@
 - `doctor` check: added smoketest for the observable function (`obsf`) of each component.
 - `SciMLBase@3` and `OrdinaryDiffEq@7` compat. Most notably, upstream `DiffEq` changed its default `initializealg` to *check* rather than *reinit* inconsistent initial conditions. To preserve the previous behavior, the `ODEProblem(nw::Network, ...)` constructor now defaults to `initializealg=BrownFullBasicInit()` (deliberately differing from the OrdinaryDiffEq default). Pass `initializealg=...` to the constructor to override. Also, the interface of the `VectorContinuousComponentCallback` changed to fit that of `VectorContinuousCallback`: the affect now receives a buffer with per-element up or down crossing information rather than a single event idx.
 - new `copy(::Network)` method (dealiases all components and buffers)
+- **New `initf` variable option for MTK models**: `@variables x(t) [initf = <expr>]` (and the
+  same on `@parameters`) declares an explicit initialization equation, which is lowered to an
+  `InitFormula` at compile time. Unlike the symbolic-default/binding route it replaces, `initf`
+  works on **parameters** as well as unknowns, which is what "free setpoint, back-computed from
+  the operating point" needs. Metadata expressions are collected from the hierarchical system
+  and namespaced there, since `renamespace` does not descend into a symbol's metadata.
 
 ## v0.10.17 Changelog
 - **Open-loop linearization** ([#341](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/341)):

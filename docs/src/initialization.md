@@ -219,6 +219,27 @@ nothing #hide
 
 **Dependency Resolution**: When applying multiple separate formulas, NetworkDynamics automatically sorts them topologically to ensure correct evaluation order.
 
+**From MTK models**: when a component is built from a ModelingToolkit `System`, init formulas are usually not written by hand but declared next to the equations using the `initf` variable option:
+
+```julia
+@component function avr(; name)
+    @variables begin
+        v_mag(t)
+        v_meas(t), [guess=1, initf = v_mag]   # measurement equals actual value in steady state
+    end
+    @parameters begin
+        v_ref, [guess=1, initf = v_meas]      # zero control error in steady state
+    end
+    # ...
+end
+```
+
+`initf` reads as "at initialization, set this symbol to that expression". It is valid on unknowns **and** parameters — free setpoint parameters back-computed from a known operating point are one of the main use cases. The expression may reference any unknown or parameter of the system, including observables, which are expanded to their settable roots; formulas from different subcomponents are chained by the same topological sort as hand-written ones, so a whole nested model can be initialized from a few interface values.
+
+!!! warning "`initf` vs. a symbolic default"
+    A *symbolic default* on an unknown (`@variables x(t) = 2a`, i.e. an MTK binding) is rejected: it does not say when the expression is meant to hold. Use `initf` to state that it holds at initialization.
+
+    On a **parameter**, a symbolic default is something else entirely and stays valid: it declares a runtime dependency, which MTK lowers to an observed equation and which removes the parameter from the compiled model. Use it when you want to express one parameter in terms of others; use `initf` when you want an initialization equation.
 
 #### Initialization Constraints (`InitConstraint`)
 
