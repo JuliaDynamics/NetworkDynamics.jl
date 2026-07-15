@@ -557,3 +557,187 @@ end
         @test res[:x] ≈ 0.7 && res[:o] ≈ 0.7
     end
 end
+
+####
+#### Integration test on a realistic composite: a synchronous machine with an AVR and a
+#### governor, wired through a busbar. The field voltage `Efd` and mechanical power `Pm`
+#### cross the machine↔AVR and machine↔governor boundaries, so each becomes an alias class
+#### whose settable survivor is the control state (`avr₊Efd`, `gov₊Pm`). A machine back-init
+#### formula produces them from the terminal condition; the AVR/governor back-init formulas
+#### consume them. The whole point: those formulas share no *raw* symbol with the machine
+#### one, yet must sort after it once normalization collapses the alias classes.
+####
+@mtkmodel GenBusBase begin
+    @variables begin
+        u_r(t)=1.0, [output=true]
+        u_i(t)=0.0, [output=true]
+        i_r(t), [input=true, guess=1.0]
+        i_i(t), [input=true, guess=0.0]
+        u_mag(t)
+    end
+    @equations begin
+        u_mag ~ sqrt(u_r^2 + u_i^2)
+    end
+end
+@mtkmodel GenMachine begin
+    @variables begin
+        u_r(t)=1.0, [output=true]
+        u_i(t)=0.0, [output=true]
+        i_r(t), [input=true, guess=1.0]
+        i_i(t), [input=true, guess=0.0]
+        θ(t), [guess=0.0]
+        ω(t), [guess=0.0]
+        Pel(t)
+        Efd(t), [input=true, guess=1.0]   # field voltage, from the AVR
+        Pm(t), [input=true, guess=1.0]    # mechanical power, from the governor
+    end
+    @parameters begin
+        M = 1.0
+        D = 0.1
+    end
+    @equations begin
+        Pel ~ u_r*i_r + u_i*i_i
+        Dt(θ) ~ ω
+        Dt(ω) ~ 1/M*(Pm - D*ω + Pel)
+        u_r ~ Efd*cos(θ)                  # stylized Park relation (algebraic, not an alias)
+        u_i ~ Efd*sin(θ)
+    end
+end
+@mtkmodel GenAVR begin
+    @variables begin
+        Efd(t), [output=true, guess=1.0]
+        Vmeas(t), [input=true]
+    end
+    @parameters begin
+        Ka = 10.0
+        Vref, [guess=1.0]
+    end
+    @equations begin
+        Dt(Efd) ~ Ka*(Vref - Vmeas) - Efd
+    end
+end
+@mtkmodel GenGov begin
+    @variables begin
+        Pm(t), [output=true, guess=1.0]
+        ω_meas(t), [input=true]
+    end
+    @parameters begin
+        Kg = 5.0
+        Pref, [guess=1.0]
+    end
+    @equations begin
+        Dt(Pm) ~ Pref - Kg*ω_meas - Pm
+    end
+end
+@mtkmodel GenBusModel begin
+    @extend GenBusBase()
+    @components begin
+        machine = GenMachine()
+        avr = GenAVR()
+        gov = GenGov()
+    end
+    @equations begin
+        machine.u_r ~ u_r
+        machine.u_i ~ u_i
+        0 ~ i_r - machine.i_r
+        0 ~ i_i - machine.i_i
+        machine.Efd ~ avr.Efd     # alias class {machine₊Efd, avr₊Efd}, survivor avr₊Efd
+        machine.Pm ~ gov.Pm       # alias class {machine₊Pm, gov₊Pm}, survivor gov₊Pm
+        avr.Vmeas ~ u_mag
+        gov.ω_meas ~ machine.ω
+    end
+end
+
+@testset "Step 5a: machine + AVR + governor stacking" begin
+    @named genbus = GenBusModel()
+    GB = VertexModel(genbus, [:i_r, :i_i], [:u_r, :u_i]; verbose=false)
+    am = get_aliasmap(GB)
+
+    # Efd and Pm survive as the control states, the machine-side names are their aliases
+    @test am[:machine₊Efd] == (1.0, :avr₊Efd)
+    @test am[:machine₊Pm]  == (1.0, :gov₊Pm)
+
+    # the machine back-init produces Efd/Pm/θ from the terminal condition; the controls
+    # back-compute their setpoints from Efd/Pm
+    fM = @initformula begin
+        :machine₊Efd = sqrt(:u_r^2 + :u_i^2)
+        :machine₊θ   = atan(:u_i, :u_r)
+        :machine₊Pm  = -(:u_r*:i_r + :u_i*:i_i)
+    end
+    fA = @initformula :avr₊Vref = :avr₊Efd/:avr₊Ka + :u_mag
+    fG = @initformula :gov₊Pref = :gov₊Pm + :gov₊Kg*:machine₊ω
+
+    # clear the machine-side voltage aliases so a terminal seed is unambiguous
+    seed!(v; ur=1.0, ui=0.2, ir=0.5, ii=-0.1) = begin
+        foreach(s -> delete_metadata!(v, s, :default), [:u_r, :machine₊u_r, :u_i, :machine₊u_i])
+        set_default!(v, :u_r, ur); set_default!(v, :u_i, ui)
+        set_default!(v, :i_r, ir); set_default!(v, :i_i, ii)
+        set_default!(v, :machine₊ω, 0.0)
+        v
+    end
+
+    @testset "back-init sorts before the controls after normalization" begin
+        nM, nA, nG = normalize(fM, am, GB), normalize(fA, am, GB), normalize(fG, am, GB)
+        # no shared *raw* symbol → before normalization the DAG has no edge and order is free
+        @test isdisjoint(fA.sym, fM.outsym) && isdisjoint(fG.sym, fM.outsym)
+        # normalization collapses the alias classes, so both controls now depend on M
+        @test :avr₊Efd in nA.sym && :gov₊Pm in nG.sym
+        @test first(topological_sort_formulas([nA, nG, nM])).outsym == nM.outsym
+    end
+
+    @testset "end-to-end init reproduces the hand-computed reference" begin
+        v = seed!(copy(GB))
+        add_initformula!(v, fM); add_initformula!(v, fA); add_initformula!(v, fG)
+        s = initialize_component(v; verbose=false)
+        ur, ui, ir, ii = 1.0, 0.2, 0.5, -0.1
+        Efd = sqrt(ur^2 + ui^2); θ = atan(ui, ur); Pm = -(ur*ir + ui*ii)
+        @test s[:avr₊Efd]  ≈ Efd
+        @test s[:machine₊θ] ≈ θ
+        @test s[:gov₊Pm]   ≈ Pm
+        @test s[:avr₊Vref] ≈ Efd/10.0 + Efd        # Ka=10, Vmeas=u_mag=Efd
+        @test s[:gov₊Pref] ≈ Pm                     # Kg=5, ω=0
+        @test isapprox(s[:machine₊ω], 0.0; atol=1e-8)
+    end
+
+    # The Park relation u_r ~ Efd·cos(θ) is genuinely algebraic, not an alias — aliasing
+    # handles the renamings, but this relation is enforced as a residual, which then acts as a
+    # consistency check on the back-init: an inconsistent angle is caught rather than silently
+    # accepted.
+    @testset "wrong back-init is caught by the algebraic Park residual" begin
+        fMbad = @initformula begin
+            :machine₊Efd = sqrt(:u_r^2 + :u_i^2)
+            :machine₊θ   = atan(:u_i, :u_r) + 0.5   # inconsistent with the seeded voltage
+            :machine₊Pm  = -(:u_r*:i_r + :u_i*:i_i)
+        end
+        v = seed!(copy(GB))
+        add_initformula!(v, fMbad); add_initformula!(v, fA); add_initformula!(v, fG)
+        @test_throws NetworkDynamics.ComponentInitError initialize_component(v; verbose=false, warn=false)
+    end
+
+    @testset "duplicate writer into one alias class via different members" begin
+        v = seed!(copy(GB))
+        add_initformula!(v, fM)                              # writes :machine₊Efd
+        add_initformula!(v, @initformula :avr₊Efd = 1.0)     # writes the survivor directly
+        add_initformula!(v, fA); add_initformula!(v, fG)
+        err = try; initialize_component(v; verbose=false); catch e; e end
+        @test err isa ArgumentError
+        @test occursin("avr₊Efd", sprint(showerror, err))
+    end
+
+    @testset "placement invariance across subcomponent levels" begin
+        # the voltage seed carried on the bus symbol vs. the machine-level alias member
+        initwith(seedsym) = begin
+            v = copy(GB)
+            foreach(s -> delete_metadata!(v, s, :default),
+                    [:u_r, :machine₊u_r, :u_i, :machine₊u_i])
+            set_default!(v, seedsym, 0.9)
+            set_default!(v, :u_i, 0.2); set_default!(v, :i_r, 0.5); set_default!(v, :i_i, -0.1)
+            set_default!(v, :machine₊ω, 0.0)
+            add_initformula!(v, fM); add_initformula!(v, fA); add_initformula!(v, fG)
+            initialize_component(v; verbose=false)
+        end
+        a = initwith(:u_r); b = initwith(:machine₊u_r)
+        @test keys(a) == keys(b)
+        @test all(isapprox(a[k], b[k]; atol=1e-9) for k in keys(a))
+    end
+end
