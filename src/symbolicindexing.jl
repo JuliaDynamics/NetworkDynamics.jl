@@ -183,14 +183,14 @@ end
 # Both are no-ops with an empty aliasmap (the non-MTK case), see `normalize`.
 function _get_appropriate_dict(cidx, cm; guess, apply_formulas, verbose)
     am = get_aliasmap(cm)
-    defaults = normalize_valuedict(am, get_defaults_or_inits_dict(cm); what="default", verbose)
+    defaults = normalize_valuedict(am, get_defaults_or_inits_dict(cm); what=:default, verbose)
     if apply_formulas && has_initformula(cm)
         verbose && println("Applying InitFormulas for $(cidx) ($(cm.name))...")
         formulas = [normalize(f, am, cm) for f in get_initformulas(cm)]
         apply_init_formulas!(defaults, formulas; error_unresolvable=false, verbose)
     end
     if guess
-        guesses = normalize_valuedict(am, get_guesses_dict(cm); what="guess", verbose)
+        guesses = normalize_valuedict(am, get_guesses_dict(cm); what=:guess, verbose)
         if apply_formulas && has_guessformula(cm)
             verbose && println("Applying GuessFormulas for $(cidx) ($(cm.name))...")
             formulas = [normalize(f, am, cm) for f in get_guessformulas(cm)]

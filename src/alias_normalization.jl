@@ -113,7 +113,7 @@ extracted, so a canonical symbol is never itself an alias key.
 canonicalize(am::AliasMap, s::Symbol) = get(am, s, (1.0, s))
 
 """
-    normalize_valuedict(am::AliasMap, d; what="value", verbose=false, io=stdout)
+    normalize_valuedict(am::AliasMap, d; what=:value, verbose=false, io=stdout)
 
 Moves every value written on an alias symbol onto its canonical symbol, i.e. `d[alias] = v`
 becomes `d[canonical] = v / factor`. Used for the `default`, `guess` and `init` dicts of
@@ -128,7 +128,7 @@ their key untransformed.
 
 See also: [`normalize_bounds`](@ref), [`canonicalize`](@ref).
 """
-function normalize_valuedict(am::AliasMap, d; what="value", verbose=false, io=stdout)
+function normalize_valuedict(am::AliasMap, d; what::Symbol=:value, verbose=false, io=stdout)
     _normalize_symdict(am, d, _transform_value, what, verbose, io)
 end
 
@@ -143,7 +143,7 @@ Bounds on multiple members of one alias class must agree in both endpoints after
 transformation.
 """
 function normalize_bounds(am::AliasMap, d; verbose=false, io=stdout)
-    _normalize_symdict(am, d, _transform_bounds, "bound", verbose, io)
+    _normalize_symdict(am, d, _transform_bounds, :bound, verbose, io)
 end
 
 # Shared skeleton of the two `normalize_*` functions above: transform each aliased key onto

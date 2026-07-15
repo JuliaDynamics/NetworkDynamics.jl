@@ -51,7 +51,7 @@ end
         @test normalize_valuedict(am, Dict(:a => 1.0, :b => -1.0 - 1e-14))[:b] ≈ -1.0
 
         err = try
-            normalize_valuedict(am, Dict(:a => 1.0, :b => 5.0); what="default")
+            normalize_valuedict(am, Dict(:a => 1.0, :b => 5.0); what=:default)
             nothing
         catch e
             e
@@ -89,7 +89,7 @@ end
     @testset "verbose reports the moves" begin
         am = AliasMap(:θ => (-1.0, :u_r))
         out = sprint() do io
-            normalize_valuedict(am, Dict(:θ => 0.3); what="default", verbose=true, io)
+            normalize_valuedict(am, Dict(:θ => 0.3); what=:default, verbose=true, io)
         end
         @test occursin("θ", out) && occursin("u_r", out) && occursin("0.3", out)
         # silent by default
