@@ -99,10 +99,14 @@ dim(c::InitConstraint) = c.dim
 (c::InitConstraint)(res, u) = c.f(res, SymbolicView(u, c.sym))
 
 function Base.show(io::IO, ::MIME"text/plain", @nospecialize(c::InitConstraint))
-    if c.prettyprint === nothing
-        r = repr(c)
-        s = replace(r, ", nothing)"=>")")
-        print(io, s)
+    _show_recipe(io, c)
+end
+
+# `prettyprint` is the recipe as the user wrote it. Without one, fall back to `repr` minus
+# the trailing unset fields, which are noise.
+function _show_recipe(io::IO, @nospecialize(c))
+    if isnothing(c.prettyprint)
+        print(io, replace(repr(c), r"(, nothing)+\)$" => ")"))
     else
         print(io, c.prettyprint)
     end
@@ -308,30 +312,28 @@ struct InitFormula{F}
     outsym::Vector{Symbol}   # output symbols (from LHS of assignments)
     sym::Vector{Symbol}      # input symbols (from RHS of assignments)
     prettyprint::Union{Nothing,String}
+    # set by `normalize` to the untouched user-written formula this one was derived from,
+    # `nothing` for user-written formulas themselves. See [`normalize`](@ref).
+    derived_from::Union{Nothing,InitFormula}
 
-    function InitFormula(f::F, outsym::Vector{Symbol}, sym::Vector{Symbol}, prettyprint::Union{Nothing,String}) where F
+    function InitFormula(f::F, outsym::Vector{Symbol}, sym::Vector{Symbol}, prettyprint::Union{Nothing,String}, derived_from::Union{Nothing,InitFormula}) where F
         # Check for self-dependencies (formula depending on its own output)
         self_deps = intersect(sym, outsym)
         if !isempty(self_deps)
             throw(ArgumentError("InitFormula cannot depend on its own output symbols: $self_deps"))
         end
-        new{F}(f, outsym, sym, prettyprint)
+        new{F}(f, outsym, sym, prettyprint, derived_from)
     end
 end
-InitFormula(f, outsym, sym) = InitFormula(f, outsym, sym, nothing)
+InitFormula(f, outsym, sym) = InitFormula(f, outsym, sym, nothing, nothing)
+InitFormula(f, outsym, sym, prettyprint) = InitFormula(f, outsym, sym, prettyprint, nothing)
 
 dim(c::InitFormula) = length(c.outsym)
 
 (c::InitFormula)(out, u) = c.f(out, SymbolicView(u, c.sym))
 
 function Base.show(io::IO, ::MIME"text/plain", @nospecialize(c::InitFormula))
-    if c.prettyprint === nothing
-        r = repr(c)
-        s = replace(r, ", nothing)"=>")")
-        print(io, s)
-    else
-        print(io, c.prettyprint)
-    end
+    _show_formula(io, c)
 end
 
 """
@@ -368,29 +370,42 @@ struct GuessFormula{F}
     outsym::Vector{Symbol}   # output symbols (from LHS of assignments)
     sym::Vector{Symbol}      # input symbols (from RHS of assignments)
     prettyprint::Union{Nothing,String}
+    # set by `normalize` to the untouched user-written formula this one was derived from,
+    # `nothing` for user-written formulas themselves. See [`normalize`](@ref).
+    derived_from::Union{Nothing,GuessFormula}
 
-    function GuessFormula(f::F, outsym::Vector{Symbol}, sym::Vector{Symbol}, prettyprint::Union{Nothing,String}) where F
+    function GuessFormula(f::F, outsym::Vector{Symbol}, sym::Vector{Symbol}, prettyprint::Union{Nothing,String}, derived_from::Union{Nothing,GuessFormula}) where F
         # Check for self-dependencies (formula depending on its own output)
         self_deps = intersect(sym, outsym)
         if !isempty(self_deps)
             throw(ArgumentError("GuessFormula cannot depend on its own output symbols: $self_deps"))
         end
-        new{F}(f, outsym, sym, prettyprint)
+        new{F}(f, outsym, sym, prettyprint, derived_from)
     end
 end
-GuessFormula(f, outsym, sym) = GuessFormula(f, outsym, sym, nothing)
+GuessFormula(f, outsym, sym) = GuessFormula(f, outsym, sym, nothing, nothing)
+GuessFormula(f, outsym, sym, prettyprint) = GuessFormula(f, outsym, sym, prettyprint, nothing)
 
 dim(c::GuessFormula) = length(c.outsym)
 
 (c::GuessFormula)(out, u) = c.f(out, SymbolicView(u, c.sym))
 
 function Base.show(io::IO, ::MIME"text/plain", @nospecialize(c::GuessFormula))
-    if c.prettyprint === nothing
-        r = repr(c)
-        s = replace(r, ", nothing)"=>")")
-        print(io, s)
+    _show_formula(io, c)
+end
+
+# A normalized formula carries symbol lists the user never wrote, so printing its own
+# `prettyprint` (which spells the original symbols) alone would misrepresent it. Show the
+# original recipe and append the symbols actually in play. `derived_from` is never nested,
+# so this recurses once.
+function _show_formula(io::IO, @nospecialize(c))
+    if isnothing(c.derived_from)
+        _show_recipe(io, c)
     else
-        print(io, c.prettyprint)
+        _show_formula(io, c.derived_from)
+        orig = c.derived_from
+        print(io, "\n(normalized: $(c.sym) → $(c.outsym), \
+                   derived from $(orig.sym) → $(orig.outsym))")
     end
 end
 
@@ -511,50 +526,31 @@ function _formula_macro(type, ex)
 end
 
 # for metadata check, validates both input and output symbols
-function assert_initformula_compat(cf::ComponentModel, c::InitFormula)
-    settable_symbols = Set(vcat(
-        sym(cf),
-        psym(cf),
-        insym_flat(cf),
-        outsym_flat(cf)
-    ))
-    input_symbols = settable_symbols ∪ obssym(cf)
+assert_initformula_compat(cf::ComponentModel, c::InitFormula) = _assert_formula_compat(cf, c)
+assert_guessformula_compat(cf::ComponentModel, c::GuessFormula) = _assert_formula_compat(cf, c)
 
-    input_mismatch = setdiff(c.sym, input_symbols)
+# Inputs may be observables: they are expanded to their settable roots at init time, see
+# `normalize`. Outputs may be observables *if* they are pure aliases, in which case they
+# canonicalize onto a settable symbol; a genuinely algebraic observable has no slot to write
+# to and is rejected here rather than at init. When the component carries no aliasmap (hand
+# written, or the formula is attached before compilation) `get_aliasmap` hands back an empty
+# map and this degrades to the plain "outputs must be settable" rule.
+function _assert_formula_compat(cf::ComponentModel, c::Union{InitFormula,GuessFormula})
+    label = c isa InitFormula ? "InitFormula" : "GuessFormula"
+    settable = settable_symbols(cf)
+
+    input_mismatch = setdiff(c.sym, settable ∪ obssym(cf))
     if !isempty(input_mismatch)
-        throw(ArgumentError("InitFormula uses input symbols not part of component model: $input_mismatch (observables not allowed)"))
+        throw(ArgumentError("$label uses input symbols not part of component model: $input_mismatch"))
     end
 
-    missing_symbols = setdiff(c.outsym, settable_symbols)
-    if !isempty(missing_symbols)
-        throw(ArgumentError("InitFormula output symbols must be existing component symbols (not observables), but these are not: $missing_symbols"))
-    end
-
-    c
-end
-function assert_guessformula_compat(cf::ComponentModel, c::GuessFormula)
-    readable_symbols = Set(vcat(
-        sym(cf),
-        psym(cf),
-        insym_flat(cf),
-        outsym_flat(cf),
-    ))
-
-    guessable_symbols = Set(vcat(
-        sym(cf),
-        psym(cf),
-        insym_flat(cf),
-        outsym_flat(cf)
-    ))
-
-    input_mismatch = setdiff(c.sym, readable_symbols)
-    if !isempty(input_mismatch)
-        throw(ArgumentError("GuessFormula uses input symbols not part of component model: $input_mismatch (observables not allowed)"))
-    end
-
-    output_mismatch = setdiff(c.outsym, guessable_symbols)
+    output_mismatch = setdiff(c.outsym, settable ∪ keys(get_aliasmap(cf)))
     if !isempty(output_mismatch)
-        throw(ArgumentError("GuessFormula output symbols must be guessable (not observables): $output_mismatch"))
+        obs = intersect(output_mismatch, obssym(cf))
+        hint = isempty(obs) ? "" : " ($obs are observables which are not pure aliases of a \
+                                    settable symbol, so there is nothing to write to)"
+        throw(ArgumentError("$label output symbols must be settable component symbols or \
+                             aliases thereof, but these are not: $output_mismatch$hint"))
     end
 
     c
@@ -639,25 +635,27 @@ function apply_init_formulas!(defaults, formulas_unsorted; verbose=false, io=std
         end
         if any(v -> ismissing(v) || isnothing(v) || isnan(v), invals)
             if error_unresolvable
-                throw(ArgumentError("InitFormula requires all input symbols to be initialized, but found NaN/missing/nothing in inputs: $(f.sym .=> invals)"))
+                throw(ArgumentError("InitFormula requires all input symbols to be initialized, but found NaN/missing/nothing in inputs: $(f.sym .=> invals)" * _unresolved_note(f)))
             else
-                verbose && printstyled(io, " - InitFomula: skipping formula for $(f.outsym) with unresolvable inputs: $(f.sym .=> invals)\n")
+                verbose && printstyled(io, " - InitFormula: skipping formula for $(f.outsym) with unresolvable inputs: $(f.sym .=> invals)$(_unresolved_note(f))\n")
                 continue
             end
         end
         in = SymbolicView(invals, f.sym)
-        f(out, in)
+        if !_run_formula!(out, f, in, "InitFormula"; verbose, io, error_unresolvable)
+            continue
+        end
         for s in f.outsym
             val = out[s]
             if verbose
                 if haskey(defaults, s)
                     if defaults[s] ≈ val
-                        printstyled(io, " - InitFomula: keeping default for :$s at $(val)\n")
+                        printstyled(io, " - InitFormula: keeping default for :$s at $(val)\n")
                     else
-                        printstyled(io, " - InitFomula: updating default for :$s from $(defaults[s]) to $(val)\n")
+                        printstyled(io, " - InitFormula: updating default for :$s from $(defaults[s]) to $(val)\n")
                     end
                 else
-                    printstyled(io, " - InitFomula: setting default for :$s to $(val)\n")
+                    printstyled(io, " - InitFormula: setting default for :$s to $(val)\n")
                 end
             end
             defaults[s] = val
@@ -685,14 +683,16 @@ function apply_guess_formulas!(guesses, defaults, formulas_unsorted; verbose=fal
         # Validate inputs are not NaN/missing/nothing
         if any(v -> ismissing(v) || isnothing(v) || isnan(v), invals)
             if error_unresolvable
-                throw(ArgumentError("GuessFormula requires all input symbols to be initialized, but found NaN/missing/nothing in inputs: $(f.sym .=> invals)"))
+                throw(ArgumentError("GuessFormula requires all input symbols to be initialized, but found NaN/missing/nothing in inputs: $(f.sym .=> invals)" * _unresolved_note(f)))
             else
-                verbose && printstyled(io, " - GuessFomula: skipping formula for $(f.outsym) with unresolvable inputs: $(f.sym .=> invals)\n")
+                verbose && printstyled(io, " - GuessFormula: skipping formula for $(f.outsym) with unresolvable inputs: $(f.sym .=> invals)$(_unresolved_note(f))\n")
                 continue
             end
         end
         in = SymbolicView(invals, f.sym)
-        f(out, in)
+        if !_run_formula!(out, f, in, "GuessFormula"; verbose, io, error_unresolvable)
+            continue
+        end
         # Update guesses dictionary (NOT defaults!)
         for s in f.outsym
             val = out[s]
@@ -714,6 +714,36 @@ function apply_guess_formulas!(guesses, defaults, formulas_unsorted; verbose=fal
         end
     end
     return guesses
+end
+
+# Runs `f`, returning whether its outputs may be used. A normalized formula only discovers
+# during the gather that an observable input expands to NaN, which is an unresolvable input
+# like any other — so it lands here rather than escaping, and is treated exactly as the
+# up-front dict lookup treats a missing value.
+function _run_formula!(out, f, u, label; verbose, io, error_unresolvable)
+    try
+        f(out, u)
+        true
+    catch e
+        e isa UnresolvableExpansionError || rethrow()
+        if error_unresolvable
+            throw(ArgumentError("$label for $(f.outsym): $(e.msg)" * _unresolved_note(f)))
+        end
+        verbose && printstyled(io, " - $label: skipping formula for $(f.outsym), $(e.msg)$(_unresolved_note(f))\n")
+        false
+    end
+end
+
+# A normalized formula reads the settable *roots* of what the user asked for, so the symbols
+# named in an unresolvable-input message are not the ones they wrote. Say where they came
+# from, and name the fix: a default on the observable itself would not help, since formulas
+# read observables from the model rather than from the dict.
+function _unresolved_note(f)
+    orig = f.derived_from
+    isnothing(orig) && return ""
+    "\nNote: this formula was normalized, its inputs $(f.sym) are the settable roots of the \
+     originally requested $(orig.sym). Defaults on observables are not consumed as formula \
+     inputs — provide defaults for the roots instead."
 end
 
 _vcattable(t::Tuple) = collect(t)

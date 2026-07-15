@@ -633,6 +633,71 @@ function _resolve_alias(s, steps, settable, visiting)
     (factor * rest[1], rest[2])
 end
 
+"""
+    generate_obs_expansion(cf::ComponentModel, syms::Vector{Symbol}) -> (roots, f)
+
+MTK implementation of the core stub; see `NetworkDynamics.generate_obs_expansion` for the
+contract. Expansion is a plain `fixpoint_sub` against the stored `:observed` equations:
+they are acyclic, and the output-defining equations are absent from them, so substituting
+to a fixpoint necessarily bottoms out on settable symbols (plus the independent variable).
+
+The independent variable is split off from the roots and passed to the closure separately —
+callers source root values from the defaults/guesses dicts, where a `t` has no business
+being. Symbols with no observed equation never enter the symbolic part at all; they are
+copied through by index, which spares us reconstructing a symbolic variable for them.
+"""
+function NetworkDynamics.generate_obs_expansion(cf::NetworkDynamics.ComponentModel, syms::Vector{Symbol})
+    if !NetworkDynamics.has_metadata(cf, :observed)
+        throw(ArgumentError("Cannot expand $syms: component :$(cf.name) has no `:observed` \
+                             metadata. Only components compiled from ModelingToolkit carry \
+                             the symbolic observed equations needed for expansion."))
+    end
+    obseqs = NetworkDynamics.get_metadata(cf, :observed)
+    subs = OrderedDict(eq.lhs => eq.rhs for eq in obseqs)
+    byname = Dict(getname(eq.lhs) => eq.lhs for eq in obseqs)
+
+    obsidx = findall(s -> haskey(byname, s), syms)
+    plainidx = findall(s -> !haskey(byname, s), syms)
+    exprs = [fixpoint_sub(subs[byname[syms[i]]], subs) for i in obsidx]
+
+    iv = only(independent_variables(NetworkDynamics.get_metadata(cf, :odesystem_simplified)))
+    # `get_variables` hands back a set, so collect before flattening
+    symroots = unique(reduce(vcat, [collect(get_variables(ex)) for ex in exprs]; init=[]))
+    filter!(v -> !isequal(v, iv), symroots)
+    rootnames = getname.(symroots)
+
+    _warn_unsettable_roots(cf, rootnames)
+
+    # plain symbols are their own roots; `unique` because a formula may well read both a
+    # settable symbol and an alias of it
+    roots = unique(vcat(rootnames, syms[plainidx]))
+    pos = Dict(s => i for (i, s) in enumerate(roots))
+    symrootpos = [pos[n] for n in rootnames]
+    plainpos = [pos[syms[i]] for i in plainidx]
+
+    g = isempty(exprs) ? nothing : build_function(exprs, symroots, iv; expression=Val(false))[1]
+    n = length(syms)
+    expand = function (rootvals, t)
+        out = Vector{Float64}(undef, n)
+        isnothing(g) || (out[obsidx] .= g(view(rootvals, symrootpos), t))
+        for (k, i) in enumerate(plainidx)
+            out[i] = rootvals[plainpos[k]]
+        end
+        out
+    end
+    (roots, expand)
+end
+
+# Mirrors the `obs_deps ⊆ params ∪ inputs ∪ unknowns` warning in `generate_io_function`: a
+# root that is not settable cannot be sourced from the defaults dict, so the formula reading
+# it will skip. Warn rather than throw — the skip is already diagnosed downstream.
+function _warn_unsettable_roots(cf, rootnames)
+    unsettable = setdiff(rootnames, settable_symbols(cf))
+    isempty(unsettable) && return nothing
+    @warn "Observable expansion for :$(cf.name) bottomed out on non-settable symbol(s) \
+           $(collect(unsettable)). Formulas reading them will be skipped."
+end
+
 function NetworkDynamics.multiline_repr(eqs::Vector{Equation}; prefix="")
     lines = map(eqs) do eq
         prefix * repr(eq.lhs) * " &~ " * repr(eq.rhs)

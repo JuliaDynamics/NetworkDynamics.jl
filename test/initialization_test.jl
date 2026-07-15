@@ -801,9 +801,10 @@ end
         invalid_output = @guessformula :nonexistent_output = :ω + 1
         @test_throws ArgumentError NetworkDynamics.assert_guessformula_compat(swing_model, invalid_output)
 
-        # GuessFormulas cant read observables
-        valid_observable_input = @guessformula :θ = :Pdamping / 10  # Pdamping is observable - allowed as input
-        @test_throws ArgumentError NetworkDynamics.assert_guessformula_compat(swing_model, valid_observable_input)
+        # GuessFormulas may read observables: those are expanded to their settable roots at
+        # init time, see `normalize` and test/alias_normalization_test.jl
+        valid_observable_input = @guessformula :θ = :Pdamping / 10  # Pdamping is observable
+        @test NetworkDynamics.assert_guessformula_compat(swing_model, valid_observable_input) == valid_observable_input
 
         # But writing to observables is still not allowed
         invalid_observable_output = @guessformula :Pdamping = 1.0  # Pdamping is observable - not allowed as output

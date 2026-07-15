@@ -63,6 +63,35 @@ function assert_aliasmap_compat(c::ComponentModel, am::AliasMap)
     am
 end
 
+"""
+    generate_obs_expansion(cf::ComponentModel, syms::Vector{Symbol}) -> (roots, f)
+
+Expresses `syms` through the component's observed equations in terms of *settable* symbols.
+Returns the `roots` the expansion bottoms out on and a closure
+
+    f(rootvals::AbstractVector{<:Real}, t::Real)::Vector{Float64}
+
+giving the values of `syms`, in order, from the values of `roots`, in order.
+
+A symbol without an observed equation is its own root and passes through untouched. That
+makes the whole input list of a formula expandable in one sweep, no matter which entries
+happen to be observables — see [`normalize`](@ref).
+
+The method itself lives in the ModelingToolkit extension.
+"""
+function generate_obs_expansion end
+
+# Only the MTK extension implements `generate_obs_expansion`. Without it there are no
+# symbolic observed equations to expand, so name the fix rather than fail on dispatch.
+function _obs_expansion(cf::ComponentModel, syms::Vector{Symbol})
+    if !hasmethod(generate_obs_expansion, Tuple{typeof(cf),Vector{Symbol}})
+        throw(ArgumentError("Expanding the observed symbol(s) $(intersect(syms, obssym(cf))) \
+            to their settable roots requires the ModelingToolkit extension. Load \
+            ModelingToolkit (or ModelingToolkitBase) to enable it."))
+    end
+    generate_obs_expansion(cf, syms)
+end
+
 # Tolerances for comparing two values which land on the same canonical symbol.
 const ALIAS_RTOL = 1e-10
 const ALIAS_ATOL = 1e-12
@@ -182,3 +211,128 @@ _agree(v1, v2) = isequal(v1, v2) # `nothing` markers and anything else exotic
 _valstring(v::Real) = str_significant(v; sigdigits=5)
 _valstring(v::Tuple) = "(" * join(_valstring.(v), ", ") * ")"
 _valstring(v) = repr(v)
+
+"""
+    normalize(f::InitFormula, am::AliasMap, cf::ComponentModel; t=NaN)
+    normalize(f::GuessFormula, am::AliasMap, cf::ComponentModel; t=NaN)
+
+Rewrites a formula so that it speaks in *settable* symbols only, without touching what the
+user wrote: the returned formula carries the original in its `derived_from` field, and calls
+the original's closure unchanged, under the symbol names it was written against.
+
+Both ends are rewritten:
+
+- **outputs** are canonicalized through `am` and scattered with `1/factor` afterwards.
+  Writing to a non-translatable symbol (an observable which is not a pure alias) is
+  meaningless — the value of an observable *is* its expression — so that throws.
+- **inputs** are expanded to their settable roots via [`generate_obs_expansion`](@ref),
+  unconditionally: observables are never storage, so a default pinned on one is a
+  consistency claim about the model, not a value a formula may read. A pure alias input
+  needs no special case, it is the `factor * root` degenerate expansion.
+
+The resulting input list (the roots) and canonical output list are what the topological
+sort, the duplicate-writer detection and the skip logic downstream operate on, which is the
+point of the exercise: a formula writing `:machine₊Efd` and one reading `:avr₊Efd` are one
+dependency edge once both are canonical, and so are a formula writing `:x` and one reading
+an observable `a = x + y`.
+
+A formula with no aliased outputs and no observable inputs is returned `===`.
+
+`t` is passed to the expansion for observables which depend explicitly on time.
+
+`InitConstraint`s need none of this: they are evaluated against a full candidate state where
+the observable mapping makes every symbol readable already.
+"""
+function normalize(f::Union{InitFormula,GuessFormula}, am::AliasMap, cf::ComponentModel; t=NaN)
+    factors, canonout = _canonicalize_outputs(f, am, cf)
+    obsin = intersect(f.sym, obssym(cf))
+
+    # nothing to rewrite: hand back the very same formula, and stay independent of the ext
+    canonout == f.outsym && isempty(obsin) && return f
+
+    # only expand when there is something to expand: an aliased output alone must not drag
+    # in the MTK extension
+    roots, expand = isempty(obsin) ? (copy(f.sym), nothing) : _obs_expansion(cf, f.sym)
+    _assert_no_self_dependency(f, roots, canonout)
+
+    wrapped = function (out, u)
+        rootvals = Float64[u[r] for r in roots]
+        invals = if isnothing(expand)
+            rootvals
+        else
+            vals = expand(rootvals, t)
+            _assert_expansion_resolved(vals, f.sym, roots, t)
+            vals
+        end
+        tmp = SymbolicView(zeros(length(f.outsym)), f.outsym)
+        f(tmp, invals) # the user's closure, under the names the user wrote
+        for (i, s) in enumerate(f.outsym)
+            out[canonout[i]] = tmp[s] / factors[i]
+        end
+        nothing
+    end
+    _formulatype(f)(wrapped, canonout, roots, f.prettyprint, f)
+end
+
+_formulatype(::InitFormula) = InitFormula
+_formulatype(::GuessFormula) = GuessFormula
+
+function _canonicalize_outputs(f, am, cf)
+    moves = [canonicalize(am, s) for s in f.outsym]
+    canonout = last.(moves)
+
+    settable = settable_symbols(cf)
+    bad = [s => c for (s, c) in zip(f.outsym, canonout) if c ∉ settable]
+    if !isempty(bad)
+        throw(ArgumentError("$(_formulatype(f)) cannot write to $(first.(bad)): \
+            $(length(bad) == 1 ? "it is an observable" : "they are observables") which \
+            $(length(bad) == 1 ? "is" : "are") not a pure alias of a settable symbol. The \
+            value of such an observable is its expression over other symbols, so there is \
+            no slot to write it to. Target the underlying settable symbol(s) instead."))
+    end
+
+    if !allunique(canonout)
+        dupes = unique(c for c in canonout if count(isequal(c), canonout) > 1)
+        throw(ArgumentError("$(_formulatype(f)) writes $(f.outsym), which collapses onto \
+            the canonical symbol(s) $dupes — the same variable would be written twice. \
+            Members of one alias class are one variable."))
+    end
+    first.(moves), canonout
+end
+
+# The raw lists can hide a self-dependency which only normalization makes visible: `:θ` and
+# `:u_r` are one variable, and reading an observable `a = x + y` is reading `:x`. The
+# formula constructor would catch it too, but only knows the canonical names.
+function _assert_no_self_dependency(f, roots, canonout)
+    self_deps = intersect(roots, canonout)
+    isempty(self_deps) && return nothing
+    throw(ArgumentError("$(_formulatype(f)) $(f.sym) → $(f.outsym) depends on its own \
+        output: after normalization it reads $roots and writes $canonout, which overlap in \
+        $self_deps."))
+end
+
+"""
+    UnresolvableExpansionError <: Exception
+
+Thrown by a normalized formula when expanding its observable inputs yields NaN although
+every root resolved. This is an *input* which could not be resolved, just detected one layer
+deeper than the plain dict lookup — so the callers translate it according to their
+`error_unresolvable` setting rather than letting it escape.
+"""
+struct UnresolvableExpansionError <: Exception
+    msg::String
+end
+Base.showerror(io::IO, e::UnresolvableExpansionError) = print(io, e.msg)
+
+# The roots were all resolvable (`apply_init_formulas!` checks that before calling us), so a
+# NaN can only have come out of the expansion itself: an observable depending explicitly on
+# time evaluated at `t=NaN`, or one leaving its domain (`log` of a negative root, …) at the
+# values at hand.
+function _assert_expansion_resolved(invals, origsym, roots, t)
+    any(isnan, invals) || return nothing
+    bad = origsym[findall(isnan, invals)]
+    throw(UnresolvableExpansionError("expanding $bad to the settable root(s) $roots \
+        produced NaN even though every root resolved. Either those observables depend \
+        explicitly on time and no initialization time was given (t=$t), or they leave \
+        their domain at the values at hand."))
+end
