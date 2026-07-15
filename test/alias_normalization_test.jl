@@ -450,3 +450,110 @@ end
         @test isnan(NWState(twonode(v))[VIndex(1, :u_i)])
     end
 end
+
+# `initialize_component` normalizes values and formulas onto canonical settable symbols, so
+# the init result does not depend on which member of an alias class a default/guess/formula
+# was written against. This is the component-init counterpart of the `NWState` testset above.
+@testset "initialize_component normalization" begin
+    # strip the MTK-declared defaults so each case controls its own values
+    freshvm() = (v = copy(VM); foreach(s -> delete_metadata!(v, s, :default), [:u_r, :u_i, :Vset]); v)
+    # a steady, fully-pinned surrounding: i_r = u_r keeps Dt(u_r)=0, u_i=0 keeps Dt(u_i)=0,
+    # :P is the free output solved from P ~ u_r + u_r^2
+    base!(v) = (set_default!(v, :i_r, 0.5); set_default!(v, :u_i, 0.0);
+                set_default!(v, :Vset, 1.0); set_guess!(v, :P, 0.0); v)
+    eq(a, b) = keys(a) == keys(b) && all(isapprox(a[k], b[k]; atol=1e-7) for k in keys(a))
+
+    # For the sign-flipped alias pair θ = -u_r, the same scenario carried once on the
+    # canonical :u_r and once on the alias :θ must init identically — one case per carrier.
+    @testset "placement invariance: a default" begin
+        canon = let v = base!(freshvm()); set_default!(v, :u_r, 0.5); initialize_component(v; verbose=false) end
+        alias = let v = base!(freshvm()); set_default!(v, :θ, -0.5); initialize_component(v; verbose=false) end
+        @test eq(canon, alias)
+        @test canon[:u_r] ≈ 0.5              # landed on the canonical symbol, not :θ
+        @test !haskey(alias, :θ)
+    end
+
+    @testset "placement invariance: a guess" begin  # u_r free, solved to i_r=0.5
+        canon = let v = base!(freshvm()); set_guess!(v, :u_r, 0.1);  initialize_component(v; verbose=false) end
+        alias = let v = base!(freshvm()); set_guess!(v, :θ, -0.1);   initialize_component(v; verbose=false) end
+        @test eq(canon, alias)
+    end
+
+    @testset "placement invariance: a formula output" begin
+        canon = let v = base!(freshvm()); add_initformula!(v, @initformula :u_r = 0.5);  initialize_component(v; verbose=false) end
+        alias = let v = base!(freshvm()); add_initformula!(v, @initformula :θ = -0.5);   initialize_component(v; verbose=false) end
+        @test eq(canon, alias)
+    end
+
+    @testset "placement invariance: a formula input" begin
+        # the formula reads the voltage through either member (adjusting for the factor) and
+        # computes the same u_i; the read must resolve to the one canonical value
+        mk(read) = let v = base!(freshvm())
+            set_default!(v, :u_r, 0.5); delete_metadata!(v, :u_i, :default)
+            add_initformula!(v, read); initialize_component(v; verbose=false)
+        end
+        @test eq(mk(@initformula :u_i = :u_r - 0.5), mk(@initformula :u_i = -:θ - 0.5))
+    end
+
+    @testset "placement invariance: a constraint input" begin
+        # InitConstraints are not normalized, but reach an alias through the observable
+        # mapping, so placement invariance holds there too (u_r free + guess, constraint pins)
+        mk(con) = let v = base!(freshvm())
+            set_guess!(v, :u_r, 0.1); add_initconstraint!(v, con); initialize_component(v; verbose=false)
+        end
+        @test eq(mk(@initconstraint :u_r - 0.5), mk(@initconstraint :θ + 0.5))
+    end
+
+    @testset "write-back: alias readable as factor * canonical" begin
+        v = base!(freshvm()); set_default!(v, :u_r, 0.5)
+        initialize_component!(v; verbose=false)
+        @test get_initial_state(v, :u_r) ≈ 0.5
+        @test get_initial_state(v, :θ) ≈ -1 * get_initial_state(v, :u_r)      # θ = -u_r
+        @test get_initial_state(v, :scaled) ≈ -2 * get_initial_state(v, :u_r) # scaled = -2u_r
+    end
+
+    @testset "t is threaded into the expansion" begin
+        # the formula targets the parameter :Vset (absent from the dynamics) so it cannot
+        # disturb the residual; :timed = u_r * t
+        tbase!(v) = (set_default!(v, :i_r, 3.0); set_default!(v, :u_i, 0.0);
+                     set_default!(v, :u_r, 3.0); set_guess!(v, :P, 0.0);
+                     delete_metadata!(v, :Vset, :default); v)
+
+        v = tbase!(freshvm()); add_initformula!(v, @initformula :Vset = :timed)
+        @test initialize_component(v; verbose=false, t=2.0)[:Vset] ≈ 6.0   # 3 * 2
+
+        # no time given (t=NaN): the expanded input is unresolvable, so it errors here (unlike
+        # the NWState path which skips)
+        v2 = tbase!(freshvm()); add_initformula!(v2, @initformula :Vset = :timed)
+        err = try; initialize_component(v2; verbose=false); catch e; e end
+        @test err isa Exception
+        @test occursin("depend explicitly on time", sprint(showerror, err))
+    end
+
+    @testset "default on a non-alias observable is not consumed" begin
+        # :nl = u_r^2 is a genuine observable, not an alias; a default pinned on it is not a
+        # formula input, and with the root :u_r missing the formula errors with the migration
+        # instruction naming the roots
+        v = freshvm()
+        set_default!(v, :i_r, 0.5); set_default!(v, :u_i, 0.0)
+        set_default!(v, :Vset, 1.0); set_guess!(v, :P, 0.0)
+        set_default!(v, :nl, 4.0)   # pinned on the observable itself
+        add_initformula!(v, @initformula :Vset = :nl)
+        err = try; initialize_component(v; verbose=false); catch e; e end
+        @test err isa ArgumentError
+        msg = sprint(showerror, err)
+        @test occursin("roots of the originally requested [:nl]", msg)
+        @test occursin("provide defaults for the roots", msg)
+    end
+
+    # I1: a hand-built, non-MTK component has no aliasmap and no observable-input formulas, so
+    # normalization is a no-op and init is unaffected.
+    @testset "empty-map component is unaffected (I1)" begin
+        v = VertexModel(f=(du, u, in, p, t) -> du .= .-u .+ in, g=1:1,
+                        sym=[:x], insym=[:i], outsym=[:o], name=:bare)
+        @test isempty(get_aliasmap(v))
+        set_default!(v, :i, 0.7); set_guess!(v, :x, 0.0); set_guess!(v, :o, 0.0)
+        res = initialize_component(v; verbose=false)
+        @test res[:x] ≈ 0.7 && res[:o] ≈ 0.7
+    end
+end

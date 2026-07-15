@@ -562,12 +562,22 @@ function initialize_component(cf;
     guesses = filter(p -> !isnothing(p.second), guesses)
     bounds = filter(p -> !isnothing(p.second), bounds)
 
+    # Alias-normalize values and formulas onto canonical settable symbols, so it does not
+    # matter which member of an alias class a value/formula was written against, and formulas
+    # reading observables resolve them to their settable roots. No-op when the component has
+    # no aliasmap and no formula reads an observable (bit-identical to the un-normalized path).
+    am = get_aliasmap(cf)
+    defaults = normalize_valuedict(am, defaults; what=:default, verbose, io)
+    guesses  = normalize_valuedict(am, guesses;  what=:guess,   verbose, io)
+    bounds   = normalize_bounds(am, bounds; verbose, io)
+
     # Extract metadata and merge with additional constraints/formulas
     metadata_initformulas = has_initformula(cf) ? get_initformulas(cf) : nothing
     combined_initformulas = collect_formulas(metadata_initformulas, additional_initformula)
 
     # Apply initialization formulas to defaults
     if !isnothing(combined_initformulas)
+        combined_initformulas = [normalize(f, am, cf; t) for f in combined_initformulas]
         apply_init_formulas!(defaults, combined_initformulas; verbose, io)
     end
 
@@ -575,6 +585,7 @@ function initialize_component(cf;
     metadata_guessformulas = has_guessformula(cf) ? get_guessformulas(cf) : nothing
     combined_guessformulas = collect_formulas(metadata_guessformulas, additional_guessformula)
     if !isnothing(combined_guessformulas)
+        combined_guessformulas = [normalize(f, am, cf; t) for f in combined_guessformulas]
         apply_guess_formulas!(guesses, defaults, combined_guessformulas; verbose, io)
     end
 
