@@ -190,7 +190,7 @@ function _get_appropriate_dict(cidx, cm; guess, apply_formulas, verbose)
         apply_init_formulas!(defaults, formulas; error_unresolvable=false, verbose)
     end
     if guess
-        guesses = normalize_valuedict(am, get_guesses_dict(cm); what=:guess, verbose)
+        guesses = normalize_valuedict(am, get_guesses_dict(cm); what=:guess, on_conflict=:keepfirst, verbose)
         if apply_formulas && has_guessformula(cm)
             verbose && println("Applying GuessFormulas for $(cidx) ($(cm.name))...")
             formulas = [normalize(f, am, cm) for f in get_guessformulas(cm)]

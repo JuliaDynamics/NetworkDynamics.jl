@@ -113,23 +113,30 @@ extracted, so a canonical symbol is never itself an alias key.
 canonicalize(am::AliasMap, s::Symbol) = get(am, s, (1.0, s))
 
 """
-    normalize_valuedict(am::AliasMap, d; what=:value, verbose=false, io=stdout)
+    normalize_valuedict(am::AliasMap, d; what=:value, on_conflict=:error, verbose=false, io=stdout)
 
 Moves every value written on an alias symbol onto its canonical symbol, i.e. `d[alias] = v`
 becomes `d[canonical] = v / factor`. Used for the `default`, `guess` and `init` dicts of
 the initialization pipeline.
 
 Values on multiple members of one alias class must agree *after* transformation, i.e.
-`:a => 1.0` and `:b => -1.0` merge silently if `a ~ -b`. Disagreement throws an
-`ArgumentError`. `what` names the kind of value in messages.
+`:a => 1.0` and `:b => -1.0` merge silently if `a ~ -b`. `what` names the kind of value in
+messages. `on_conflict` decides what happens when two members disagree:
+
+- `:error` (default) — throw an `ArgumentError`. Correct for asserted values (defaults):
+  two inconsistent defaults on one variable are a model contradiction.
+- `:keepfirst` — keep the established value and drop the conflicting one, noting it under
+  `verbose`. Correct for solver seeds (guesses): the class only needs *a* starting point,
+  and the deterministic winner is the value on the canonical symbol, else the first alias
+  in sorted order.
 
 Returns a new dict; `d` is never mutated. `nothing` values (removal markers) travel with
 their key untransformed.
 
 See also: [`normalize_bounds`](@ref), [`canonicalize`](@ref).
 """
-function normalize_valuedict(am::AliasMap, d; what::Symbol=:value, verbose=false, io=stdout)
-    _normalize_symdict(am, d, _transform_value, what, verbose, io)
+function normalize_valuedict(am::AliasMap, d; what::Symbol=:value, on_conflict::Symbol=:error, verbose=false, io=stdout)
+    _normalize_symdict(am, d, _transform_value, what, on_conflict, verbose, io)
 end
 
 """
@@ -143,7 +150,7 @@ Bounds on multiple members of one alias class must agree in both endpoints after
 transformation.
 """
 function normalize_bounds(am::AliasMap, d; verbose=false, io=stdout)
-    _normalize_symdict(am, d, _transform_bounds, :bound, verbose, io)
+    _normalize_symdict(am, d, _transform_bounds, :bound, :error, verbose, io)
 end
 
 # Shared skeleton of the two `normalize_*` functions above: transform each aliased key onto
@@ -154,7 +161,7 @@ end
 # depend on hash order. Hence two passes — canonical entries first, aliases after in sorted
 # order — which makes a value written on the canonical symbol itself always win, and sorted
 # order decide between competing aliases.
-function _normalize_symdict(am::AliasMap, d, transform, what, verbose, io)
+function _normalize_symdict(am::AliasMap, d, transform, what, on_conflict, verbose, io)
     isempty(am) && return d
 
     res = empty(d)
@@ -167,22 +174,45 @@ function _normalize_symdict(am::AliasMap, d, transform, what, verbose, io)
     # canonical => symbol the value in `res` came from; absent means it came from the
     # canonical symbol itself in the pass above
     origin = Dict{Symbol,Symbol}()
+    moves = String[]   # rows for the verbose block, one per de-aliased symbol
+    ndrop = 0
     for s in sort!(aliases)
         factor, canonical = am[s]
         val = transform(d[s], factor)
         if haskey(res, canonical)
             other = get(origin, canonical, canonical)
-            _assert_agreement(canonical, what, factor,
-                              other => d[other] => res[canonical],
-                              s => d[s] => val)
-            continue # first writer wins, both agree anyways
+            if !_agree(res[canonical], val)
+                # asserted values (defaults/bounds) must not disagree; solver seeds
+                # (guesses) may — keep the established one and drop this member.
+                on_conflict === :error && _conflict_error(canonical, what, factor,
+                                                          other => d[other] => res[canonical],
+                                                          s => d[s] => val)
+                ndrop += 1
+                verbose && push!(moves, ":$s &⇒ :$canonical &($(_valstring(d[s]))) \
+                                         &dropped, class holds $(_valstring(res[canonical]))")
+            end
+            continue # first writer wins
         end
         res[canonical] = val
         origin[canonical] = s
-        verbose && printstyled(io, " - Move $what :$s (=$(_valstring(d[s]))) → :$canonical \
-                                    (=$(_valstring(val))) via factor $factor.\n")
+        verbose && push!(moves, _dealias_row(s, canonical, d[s], val))
     end
+    verbose && print_aligned_group(io, _dealias_title(what, ndrop), moves)
     res
+end
+
+# `d[s]` (raw) equals the moved value under a unit factor, so only show the arrow when the
+# transformation actually changed something.
+function _dealias_row(s, canonical, raw, val)
+    valpart = _agree(raw, val) ? "($(_valstring(val)))" : "($(_valstring(raw)) → $(_valstring(val)))"
+    ":$s &⇒ :$canonical &$valpart &"
+end
+
+function _dealias_title(what, ndrop)
+    kind = what === :default ? "defaults" :
+           what === :guess   ? "guesses"  :
+           what === :bound   ? "bounds"   : "$(what)s"
+    ndrop > 0 ? "De-aliased $kind ($ndrop conflicting dropped):" : "De-aliased $kind:"
 end
 
 _transform_value(v, factor) = isnothing(v) ? v : v / factor
@@ -193,11 +223,11 @@ function _transform_bounds(v, factor)
     factor > 0 ? (lb, ub) : (ub, lb) # a negative factor flips the interval
 end
 
-# each entry is `symbol => raw_value => transformed_value`
-function _assert_agreement(canonical, what, factor, entry1, entry2)
+# each entry is `symbol => raw_value => transformed_value`; called only once the two
+# transformed values are known to disagree
+function _conflict_error(canonical, what, factor, entry1, entry2)
     s1, (raw1, v1) = entry1
     s2, (raw2, v2) = entry2
-    _agree(v1, v2) && return nothing
     throw(ArgumentError("Conflicting $what values in the alias class of :$canonical: \
         :$s1 = $(_valstring(raw1)) (→ $(_valstring(v1))) and :$s2 = $(_valstring(raw2)) \
         (→ $(_valstring(v2)) via factor $factor). Values written on members of one alias \
@@ -208,7 +238,7 @@ _agree(v1::Real, v2::Real) = isapprox(v1, v2; rtol=ALIAS_RTOL, atol=ALIAS_ATOL)
 _agree(v1::Tuple, v2::Tuple) = all(splat(_agree), zip(v1, v2))
 _agree(v1, v2) = isequal(v1, v2) # `nothing` markers and anything else exotic
 
-_valstring(v::Real) = str_significant(v; sigdigits=5)
+_valstring(v::Real) = str_significant(v; sigdigits=5, phantom_minus=true)
 _valstring(v::Tuple) = "(" * join(_valstring.(v), ", ") * ")"
 _valstring(v) = repr(v)
 

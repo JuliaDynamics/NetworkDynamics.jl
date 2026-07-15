@@ -347,27 +347,19 @@ function initialization_problem(cf::T,
     end
     nlf = NonlinearFunction(InitFuncWrapper(fz); resid_prototype=zeros(Neqs), sys=SII.SymbolCache(freesym_no_dup))
 
+    freevar_rows = [":$sym &(guess=$(str_significant(guess; sigdigits=5, phantom_minus=true)))"
+                    for (sym, guess) in zip(freesym, uguess)]
     if Neqs == Nfree
-        if verbose
-            printstyled(io, " - Initialization problem is fully constrained. Created NonlinearLeastSquaresProblem for:\n")
-            for (sym, guess) in zip(freesym, uguess)
-                print(io, "   - ", sym, " (guess=$(guess))\n")
-            end
-        end
+        verbose && print_aligned_group(io, "Initialization problem is fully constrained. \
+                                             Created NonlinearLeastSquaresProblem for:", freevar_rows)
     elseif Neqs > Nfree
-        if verbose
-            printstyled(io, " - Initialization problem is overconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for:\n")
-            for (sym, guess) in zip(freesym, uguess)
-                print(io, "   - ", sym, " (guess=$(guess))\n")
-            end
-        end
+        verbose && print_aligned_group(io, "Initialization problem is overconstrained \
+                                             ($Nfree vars for $Neqs equations). Created \
+                                             NonlinearLeastSquaresProblem for:", freevar_rows)
     else
-        # verbose && printstyled(io, "Initialization problem is underconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for $freesym.\n"; color=:yellow)
-        printstyled(io, " - WARNING:", color=:yellow)
-        printstyled(io, "Initialization problem is underconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for:")
-        for (sym, guess) in zip(freesym, uguess)
-            print(io, "   - ", sym, " (guess=$(guess))\n")
-        end
+        printstyled(io, " - WARNING: Initialization problem is underconstrained ($Nfree vars \
+                         for $Neqs equations). Created NonlinearLeastSquaresProblem for:\n"; color=:yellow)
+        print_aligned_rows(io, freevar_rows)
     end
 
     # check rhs of system for obvious problems
@@ -568,7 +560,7 @@ function initialize_component(cf;
     # no aliasmap and no formula reads an observable (bit-identical to the un-normalized path).
     am = get_aliasmap(cf)
     defaults = normalize_valuedict(am, defaults; what=:default, verbose, io)
-    guesses  = normalize_valuedict(am, guesses;  what=:guess,   verbose, io)
+    guesses  = normalize_valuedict(am, guesses;  what=:guess, on_conflict=:keepfirst, verbose, io)
     bounds   = normalize_bounds(am, bounds; verbose, io)
 
     # Extract metadata and merge with additional constraints/formulas
@@ -648,10 +640,12 @@ function initialize_component(cf;
 
         # Add solved values to the complete dictionary
         init_results = _dededuplicated_free_symbols(SII.variable_symbols(sol), u)
+        solved_rows = String[]
         for (sym, val) in init_results
-            verbose && print(io, "   - ", sym, " => ", val,"\n")
+            verbose && push!(solved_rows, ":$sym &=> $(str_significant(val; sigdigits=5, phantom_minus=true))")
             init_state[sym] = val
         end
+        verbose && print_aligned_rows(io, solved_rows)
     else
         res = init_residual(cf, init_state; t)
         verbose && printstyled(io, " - No free variables! Residual $(res)\n")
@@ -660,8 +654,15 @@ function initialize_component(cf;
         residual[] = res
     end
     if !(res < tol)
+        # name the original model equations that are still off, so the miss is actionable
+        # from the error alone; the breakdown is best-effort and must never mask this error
+        breakdown = try
+            "\n" * _residual_breakdown(cf, init_state; t)
+        catch
+            ""
+        end
         throw(ComponentInitError("Initialized model has a residual larger than specified tolerance $(res) > $(tol)! \
-               Fix initialization or increase tolerance to suppress error."))
+               Fix initialization or increase tolerance to suppress error.$(breakdown)"))
     end
 
 
@@ -756,15 +757,17 @@ function initialize_component!(cf;
         ("bound", set_bounds!, delete_bounds!, bound_overrides)
     )
         isnothing(dict) && continue
+        rows = String[]
         for (sym, val) in dict
             if !isnothing(val)
                 set_fn!(cf, sym, val)
-                verbose && println(io, " - Set additional $name for $sym: $val")
+                verbose && push!(rows, ":$sym &= $(_valstring(val))")
             else
                 rm_fn!(cf, sym)
-                verbose && println(io, " - Remove $name for $sym")
+                verbose && push!(rows, ":$sym &removed")
             end
         end
+        verbose && print_aligned_group(io, "Additional $(name)s:", rows)
     end
 
     # make sure to get back the final defaults/guesses after applying formulas
@@ -859,8 +862,28 @@ If `verbose=true` prints the residual of every single state.
 
 See also [`initialize_component`](@ref).
 """
-function init_residual(cf::ComponentModel, state=get_defaults_or_inits_dict(cf); t=NaN, verbose=false)
-    # Check that all necessary symbols are present in the state dictionary
+function init_residual(cf::ComponentModel, state=get_defaults_or_inits_dict(cf); t=NaN, verbose=false, io=stdout)
+    res, eqsyms = _init_residual_vec(cf, state; t)
+
+    verbose && print_aligned_group(io, "Residual per model equation:", _residual_rows(res, eqsyms))
+
+    resnorm = LinearAlgebra.norm(res)
+    if isnan(resnorm)
+        err_str = if isnan(t)
+            "Residual of component is NaN at t=NaN! Maybe your system has \
+                explicit time dependency? Try specifying kw argument `t` to decide on time."
+        else
+            "Residual of component is NaN, which should not happen for an initialized system!"
+        end
+        throw(ComponentInitError(err_str))
+    end
+    return resnorm
+end
+
+# Residual vector of the *original* model equations (one per state, output and init
+# constraint) at `state`, together with the matching equation symbols. Shared by
+# `init_residual` and the tolerance-miss diagnostic in `initialize_component`.
+function _init_residual_vec(cf::ComponentModel, state; t=NaN)
     needed_symbols = Set(vcat(
         sym(cf),                                # states
         filter(s->!is_unused(cf, s), psym(cf)), # used parameters
@@ -909,31 +932,24 @@ function init_residual(cf::ComponentModel, state=get_defaults_or_inits_dict(cf);
 
     additional_cf(res_add, outs, u, ins, p, t) # apply additional constraints
 
-    if verbose
-        _sym = sym(cf)
-        _osym = outsym(cf)
-        _addsym = ["init constraint $i" for i in 1:additional_Neqs]
-        lines = String[]
-        for (i, s) in enumerate(vcat(_sym, _osym, _addsym))
-            push!(lines, "  $s &=> $(res[i])")
-        end
-        aligned = align_strings(lines)
-        for l in aligned
-            println(l)
-        end
-    end
+    # tag each equation with its kind: a state and an output can share a symbol (e.g. a
+    # promoted output), so the bare symbol alone would be ambiguous in the breakdown.
+    eqsyms = vcat(
+        [(s, "state")  for s in sym(cf)],
+        [(s, "output") for s in outsym(cf)],
+        [("init constraint $i", "constraint") for i in 1:additional_Neqs],
+    )
+    res, eqsyms
+end
 
-    res =  LinearAlgebra.norm(res)
-    if isnan(res)
-        err_str = if isnan(t)
-            "Residual of component is NaN at t=NaN! Maybe your system has \
-                explicit time dependency? Try specifying kw argument `t` to decide on time."
-        else
-            "Residual of component is NaN, which should not happen for an initialized system!"
-        end
-        throw(ComponentInitError(err_str))
-    end
-    return res
+_residual_rows(res, eqsyms) = ["[$kind] &:$s &=> $(str_significant(res[i]; sigdigits=5, phantom_minus=true))"
+                               for (i, (s, kind)) in enumerate(eqsyms)]
+
+# Aligned per-equation residual as a plain multi-line string, for embedding in an error
+# message. Recomputes the residual; used only on the failure path, so cost is irrelevant.
+function _residual_breakdown(cf::ComponentModel, state; t=NaN)
+    res, eqsyms = _init_residual_vec(cf, state; t)
+    "Residual per model equation:\n" * join("  " .* align_strings(_residual_rows(res, eqsyms)), "\n")
 end
 
 function broken_bounds(cf, state=get_defaults_or_inits_dict(cf), bounds=get_bounds_dict(cf))

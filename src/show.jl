@@ -690,6 +690,27 @@ function align_strings(vecofvec::AbstractVector{<:AbstractVector}; padding=:alte
     end
 end
 
+# Print column-aligned rows, or nothing at all when `rows` is empty. Each row uses `&` as
+# the column separator consumed by `align_strings`; `padding=:right` left-aligns every
+# column, which reads best for the short symbol/value tables the init pipeline emits under
+# `verbose`.
+function print_aligned_rows(io, rows; padding=:right, prefix="   - ")
+    isempty(rows) && return
+    for r in align_strings(collect(rows); padding)
+        println(io, prefix, rstrip(r))
+    end
+    return
+end
+
+# Like [`print_aligned_rows`](@ref) but with a leading title line, printed only when there
+# are rows (so callers never guard a lonely header).
+function print_aligned_group(io, title, rows; padding=:right)
+    isempty(rows) && return
+    printstyled(io, " - ", title, "\n")
+    print_aligned_rows(io, rows; padding)
+    return
+end
+
 function maybe_plural(num, word, substitution=s"\1s")
     if num > 1 || num == 0
         word = replace(word, r"^(.*)$" => substitution)

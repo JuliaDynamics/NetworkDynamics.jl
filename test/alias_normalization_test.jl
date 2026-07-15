@@ -78,6 +78,27 @@ end
         end
     end
 
+    @testset "on_conflict=:keepfirst drops instead of erroring (guesses)" begin
+        am = AliasMap(:a => (-1.0, :b))
+        # inconsistent members would throw under :error, but a soft seed just keeps one
+        @test normalize_valuedict(am, Dict(:a => 1.0, :b => 5.0); on_conflict=:keepfirst) ==
+              Dict(:b => 5.0)  # value on the canonical symbol wins
+        # deterministic winner between two aliases: sorted-first
+        am2 = AliasMap(:a => (1.0, :x), :z => (1.0, :x))
+        for _ in 1:20
+            @test normalize_valuedict(am2, Dict(:a => 1.0, :z => 7.0); on_conflict=:keepfirst) ==
+                  Dict(:x => 1.0)
+        end
+        # the drop is noted under verbose, silent otherwise
+        d = Dict(:a => 1.0, :b => 5.0)
+        out = sprint(io -> normalize_valuedict(am, d; what=:guess, on_conflict=:keepfirst, verbose=true, io))
+        @test occursin("conflicting dropped", out) && occursin("a", out) && occursin("b", out)
+        @test sprint(io -> normalize_valuedict(am, d; on_conflict=:keepfirst, io)) == ""
+        # agreeing members still merge silently (no spurious drop line)
+        out2 = sprint(io -> normalize_valuedict(am, Dict(:a => 1.0, :b => -1.0); on_conflict=:keepfirst, verbose=true, io))
+        @test !occursin("dropped", out2)
+    end
+
     @testset "nothing markers follow their key" begin
         am = AliasMap(:a => (-1.0, :b))
         d = Dict{Symbol,Union{Float64,Nothing}}(:a => nothing, :c => 1.0)

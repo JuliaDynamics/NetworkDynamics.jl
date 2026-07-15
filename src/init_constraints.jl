@@ -627,6 +627,7 @@ function apply_init_formulas!(defaults, formulas_unsorted; verbose=false, io=std
     formulas_vec = formulas_unsorted isa Tuple ? collect(formulas_unsorted) : formulas_unsorted
     formulas = topological_sort_formulas(formulas_vec)
 
+    rows = String[]
     for f in formulas
         out = SymbolicView(zeros(length(f.outsym)), f.outsym)
         # ensure all input symbols are in defaults
@@ -647,20 +648,11 @@ function apply_init_formulas!(defaults, formulas_unsorted; verbose=false, io=std
         end
         for s in f.outsym
             val = out[s]
-            if verbose
-                if haskey(defaults, s)
-                    if defaults[s] ≈ val
-                        printstyled(io, " - InitFormula: keeping default for :$s at $(val)\n")
-                    else
-                        printstyled(io, " - InitFormula: updating default for :$s from $(defaults[s]) to $(val)\n")
-                    end
-                else
-                    printstyled(io, " - InitFormula: setting default for :$s to $(val)\n")
-                end
-            end
+            verbose && push!(rows, _formula_row(s, val, defaults; op="="))
             defaults[s] = val
         end
     end
+    verbose && print_aligned_group(io, "InitFormulas set:", rows)
     return defaults
 end
 function apply_guess_formulas!(guesses, defaults, formulas_unsorted; verbose=false, io=stdout, error_unresolvable=true)
@@ -668,6 +660,7 @@ function apply_guess_formulas!(guesses, defaults, formulas_unsorted; verbose=fal
     formulas_vec = formulas_unsorted isa Tuple ? collect(formulas_unsorted) : formulas_unsorted
     formulas = topological_sort_formulas(formulas_vec)
 
+    rows = String[]
     for f in formulas
         out = SymbolicView(zeros(length(f.outsym)), f.outsym)
         # Layered lookup: defaults (fixed) take precedence over guesses
@@ -696,24 +689,27 @@ function apply_guess_formulas!(guesses, defaults, formulas_unsorted; verbose=fal
         # Update guesses dictionary (NOT defaults!)
         for s in f.outsym
             val = out[s]
-            if verbose
-                if haskey(defaults, s)
-                    # This symbol is fixed, so updating guess won't affect the solve
-                    printstyled(io, " - GuessFormula: symbol :$s has default $(defaults[s]), guess update to $(val) will have no effect\n")
-                elseif haskey(guesses, s)
-                    if guesses[s] ≈ val
-                        printstyled(io, " - GuessFormula: keeping guess for :$s at $(val)\n")
-                    else
-                        printstyled(io, " - GuessFormula: updating guess for :$s from $(guesses[s]) to $(val)\n")
-                    end
-                else
-                    printstyled(io, " - GuessFormula: setting guess for :$s to $(val)\n")
-                end
-            end
+            verbose && push!(rows, _formula_row(s, val, guesses; op="≈", fixed=defaults))
             guesses[s] = val
         end
     end
+    verbose && print_aligned_group(io, "GuessFormulas set:", rows)
     return guesses
+end
+
+# One aligned row for a formula that wrote `val` onto `:s`, annotated with what it did
+# relative to what was there: nothing for a fresh write, the previous value if it changed
+# one, or a no-effect note when a fixed default (guesses only) shadows the write.
+function _formula_row(s, val, prev; op, fixed=nothing)
+    v = str_significant(val; sigdigits=5, phantom_minus=true)
+    note = if !isnothing(fixed) && haskey(fixed, s)
+        "(no effect, fixed at $(str_significant(fixed[s]; sigdigits=5)))"
+    elseif haskey(prev, s)
+        prev[s] ≈ val ? "(unchanged)" : "(was $(str_significant(prev[s]; sigdigits=5)))"
+    else
+        ""
+    end
+    ":$s &$op $v &$note"
 end
 
 # Runs `f`, returning whether its outputs may be used. A normalized formula only discovers
