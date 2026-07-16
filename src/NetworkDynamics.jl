@@ -42,7 +42,7 @@ import SymbolicIndexingInterface as SII
 using SymbolicIndexingInterface: variable_symbols, parameter_symbols
 using StaticArrays: StaticArrays, SVector
 
-export implicit_output, ComponentPostprocessing, set_mtk_defaults!
+export implicit_output, ComponentPostprocessing, set_mtk_defaults
 export set_initf, SystemInitFormulas
 include("utils.jl")
 

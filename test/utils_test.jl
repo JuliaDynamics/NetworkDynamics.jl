@@ -177,7 +177,46 @@ using ForwardDiff
         @test _range(bn, 2, 2) == 9:9
     end
 
-    @testset "Test set_mtk_defaults!" begin
+    @testset "set_mtk_defaults: symbolic values become parameter bindings" begin
+        # A symbolic value must be routed to the system's `bindings` rather than its
+        # initial conditions, mirroring `@parameters K = K_e`. Otherwise a parameter with
+        # a symbolic value survives compilation instead of being demoted to an observable.
+        @component function _bind_inner(; name, defaults...)
+            @parameters K T
+            @variables begin
+                u(t)
+                y(t)
+                x(t), [guess=0]
+            end
+            sys = System([T*Dt(x) ~ K*u - x, y ~ x], t; name)
+            sys = set_mtk_defaults(sys, defaults)
+        end
+        @component function _bind_outer(; name, bind::Bool)
+            pars = @parameters K_e = 2.0
+            vars = @variables u(t) y(t)
+            # `K` is bound to the parent's parameter, `T` gets a plain numeric default
+            @named inner = _bind_inner(; K = bind ? K_e : 3.0, T = 0.5)
+            System([inner.u ~ u, y ~ inner.y], t, vars, pars; name, systems=[inner])
+        end
+
+        @named out = _bind_outer(; bind=true)
+        vm = VertexModel(out, [:u], [:y]; verbose=false)
+        # the bound parameter is demoted to an observable, the free one survives
+        @test :K_e ∈ psym(vm)
+        @test :inner₊K ∈ obssym(vm)
+        @test :inner₊K ∉ psym(vm)
+        # a numeric value still lands as an ordinary default on a real parameter
+        @test :inner₊T ∈ psym(vm)
+        @test get_default(vm, :inner₊T) == 0.5
+
+        # purely numeric values must not create any bindings
+        @named plain = _bind_outer(; bind=false)
+        vmp = VertexModel(plain, [:u], [:y]; verbose=false)
+        @test :inner₊K ∈ psym(vmp)
+        @test get_default(vmp, :inner₊K) == 3.0
+    end
+
+    @testset "Test set_mtk_defaults" begin
         @component function inner(; name, defaults...)
             @parameters a
             @variables begin
@@ -189,7 +228,7 @@ using ForwardDiff
                 Dt(y) ~ -y + x
             ]
             sys = System(eqs, t; name)
-            set_mtk_defaults!(sys, defaults)
+            sys = set_mtk_defaults(sys, defaults)
         end
         @component function outer(; name, defaults...)
             @variables z(t)
@@ -201,7 +240,7 @@ using ForwardDiff
                 in.y ~ 0
             ]
             sys = System(eqs, t; name, systems)
-            set_mtk_defaults!(sys, defaults)
+            sys = set_mtk_defaults(sys, defaults)
         end
 
         function _defaults(sys)

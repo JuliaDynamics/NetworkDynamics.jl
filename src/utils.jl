@@ -491,7 +491,7 @@ function mtk_cache_stats end
 function mtk_model_cache_enabled end
 
 """
-    set_mtk_defaults!(sys::System, pairs)
+    set_mtk_defaults(sys::System, pairs) -> System
 
 Set default values for variables and parameters in a ModelingToolkit `System`.
 
@@ -499,6 +499,20 @@ This function is intended for use inside `@component` definitions to forward
 keyword arguments (`defaults...`) to the underlying `System`. Variable and parameter
 names are resolved symbolically, including namespaced names for subsystem variables
 (e.g. `sub₊x`).
+
+Values are routed exactly like MTK routes `default` metadata at `System` construction, so
+that forwarded keywords behave like values written directly onto the declaration:
+
+  * a **numeric** value becomes an ordinary default (initial condition), while
+  * a **symbolic** value becomes a parameter *binding* — `set_mtk_defaults(sys, K = K_e)`
+    is equivalent to declaring `@parameters K = K_e` inside `sys`. `mtkcompile` resolves
+    bindings into observed equations: the bound parameter is demoted to an observable and
+    the "true" parameter is the one it is bound to.
+
+The function is **non-mutating** (a `System`'s bindings are immutable), so the result must
+be rebound:
+
+    sys = set_mtk_defaults(sys, defaults)
 
 Does nothing if `pairs` is empty. Throws an `ArgumentError` if a name cannot be
 resolved in the system.
@@ -508,16 +522,19 @@ Requires the `ModelingToolkit` extension to be loaded.
 # Example
 ```julia
 @component function mymodel(; name, defaults...)
-    @variables z(t)
-    @named sub = SubModel()
+    vars = @variables z(t)
+    pars = @parameters K
+    @named sub = SubModel(K_sub = K)   # binding: `sub₊K_sub` becomes an observable
     eqs = [z ~ sub.x]
-    sys = System(eqs, t; name, systems=[sub])
-    set_mtk_defaults!(sys, defaults)
+    sys = System(eqs, t, vars, pars; name, systems=[sub])
+    set_mtk_defaults(sys, defaults)
 end
 @named m = mymodel(; z=1.0, sub₊x=2.0)
 ```
+
+See also: [`set_initf`](@ref), which follows the same non-mutating convention.
 """
-function set_mtk_defaults! end
+function set_mtk_defaults end
 
 """
     SystemInitFormulas

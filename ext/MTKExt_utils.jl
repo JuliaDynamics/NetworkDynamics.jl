@@ -284,7 +284,7 @@ function _check_symbol(ppf::Symbol, name)
 end
 
 # docstring lives in utils.jl
-function NetworkDynamics.set_mtk_defaults!(sys::System, pairs)
+function NetworkDynamics.set_mtk_defaults(sys::System, pairs)
     isempty(pairs) && return sys
     defs = values(pairs)
     names = keys(pairs)
@@ -296,9 +296,35 @@ function NetworkDynamics.set_mtk_defaults!(sys::System, pairs)
         end
     end
     defdict = ModelingToolkitBase.get_initial_conditions(sys)
-    for (s, v) in zip(symbols, defs)
-        defdict[s] = v
+    binddict = ModelingToolkitBase.SymmapT()
+    for (k, v) in ModelingToolkitBase.get_bindings(sys)
+        binddict[k] = v
     end
+
+    # Mirror MTK's `collect_defaults!`, which routes a variable's `default` metadata to
+    # either the initial conditions (numeric) or the bindings (symbolic) at `System`
+    # construction. Values forwarded through this function arrive too late for that pass,
+    # so they are classified here instead.
+    bindings_changed = false
+    for (s, v) in zip(symbols, defs)
+        us = unwrap(s)
+        if SII.symbolic_type(v) === SII.NotSymbolic()
+            defdict[s] = v
+            if haskey(binddict, us)
+                delete!(binddict, us)
+                bindings_changed = true
+            end
+        else
+            binddict[us] = unwrap(v)
+            delete!(defdict, us)
+            bindings_changed = true
+        end
+    end
+    bindings_changed || return sys
+
+    @reset sys.bindings = ModelingToolkitBase.ROSymmapT(binddict)
+    ## a cached bindings graph (built by `complete`) would be stale now
+    @reset sys.parameter_bindings_graph = nothing
     sys
 end
 

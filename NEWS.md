@@ -25,6 +25,15 @@
   works on **parameters** as well as unknowns, which is what "free setpoint, back-computed from
   the operating point" needs. Metadata expressions are collected from the hierarchical system
   and namespaced there, since `renamespace` does not descend into a symbol's metadata.
+- **`set_mtk_defaults!` renamed to `set_mtk_defaults` and is no longer mutating** (breaking):
+  rebind the result, `sys = set_mtk_defaults(sys, defaults)`. In exchange, forwarded keywords
+  now mirror values written directly onto a declaration: a **numeric** value becomes an
+  ordinary default, while a **symbolic** value becomes a parameter *binding* — i.e.
+  `set_mtk_defaults(sys, K = K_e)` is equivalent to `@parameters K = K_e`, so `K` is resolved
+  into an observed equation and the "true" parameter is the one it is bound to. This mirrors
+  MTK's own `collect_defaults!` routing, which a mutating function cannot reach: a `System`'s
+  bindings are immutable, and previously a symbolic value was silently stored as an ordinary
+  default, leaving a parameter with a symbolic value behind.
 - **Alias normalization for the initialization pipeline**: At init time, defaults/guesses/bounds and formula outputs written against an
   alias are transported onto the canonical settable symbol, and formula inputs which are
   observables are expanded through the observed equations down to settable roots. In practice:

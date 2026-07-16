@@ -13,6 +13,7 @@ using LinearAlgebra: LinearAlgebra, Diagonal, I, UniformScaling
 using SymbolicUtils.Code: Let, Assignment, unwrap_const
 using Moshi: Moshi
 using Moshi.Match: @match
+using Accessors: @reset
 using SymbolicUtils: SymbolicUtils
 using OrderedCollections: OrderedDict
 using SymbolicIndexingInterface: SymbolicIndexingInterface as SII
