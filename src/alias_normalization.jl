@@ -64,7 +64,7 @@ function assert_aliasmap_compat(c::ComponentModel, am::AliasMap)
 end
 
 """
-    generate_obs_expansion(cf::ComponentModel, syms::Vector{Symbol}) -> (roots, f)
+    generate_obs_expansion(cf::ComponentModel, syms::Vector{Symbol}; stop_at=Set{Symbol}()) -> (roots, f)
 
 Expresses `syms` through the component's observed equations in terms of *settable* symbols.
 Returns the `roots` the expansion bottoms out on and a closure
@@ -77,19 +77,24 @@ A symbol without an observed equation is its own root and passes through untouch
 makes the whole input list of a formula expandable in one sweep, no matter which entries
 happen to be observables — see [`normalize`](@ref).
 
+Symbols in `stop_at` are treated as if they had no observed equation: they are their own
+root, and expansion of other symbols does not substitute through their defining equation.
+This is how pinned observables (observables written by an `InitFormula`) become readable
+dataflow nodes instead of being expanded away — see [`pinned_obssyms`](@ref).
+
 The method itself lives in the ModelingToolkit extension.
 """
 function generate_obs_expansion end
 
 # Only the MTK extension implements `generate_obs_expansion`. Without it there are no
 # symbolic observed equations to expand, so name the fix rather than fail on dispatch.
-function _obs_expansion(cf::ComponentModel, syms::Vector{Symbol})
+function _obs_expansion(cf::ComponentModel, syms::Vector{Symbol}; stop_at=Set{Symbol}())
     if !hasmethod(generate_obs_expansion, Tuple{typeof(cf),Vector{Symbol}})
         throw(ArgumentError("Expanding the observed symbol(s) $(intersect(syms, obssym(cf))) \
             to their settable roots requires the ModelingToolkit extension. Load \
             ModelingToolkit (or ModelingToolkitBase) to enable it."))
     end
-    generate_obs_expansion(cf, syms)
+    generate_obs_expansion(cf, syms; stop_at)
 end
 
 # Tolerances for comparing two values which land on the same canonical symbol.
@@ -243,8 +248,60 @@ _valstring(v::Tuple) = "(" * join(_valstring.(v), ", ") * ")"
 _valstring(v) = repr(v)
 
 """
-    normalize(f::InitFormula, am::AliasMap, cf::ComponentModel; t=NaN)
-    normalize(f::GuessFormula, am::AliasMap, cf::ComponentModel; t=NaN)
+    pinned_obssyms(formulas, cf::ComponentModel) -> Set{Symbol}
+    pinned_obssyms(cf::ComponentModel; guess=false) -> Set{Symbol}
+
+The set of *pinned observables* of a formula set: observable symbols some formula writes.
+A formula output which is neither settable nor a pure alias of a settable symbol has no
+storage slot behind it — but when a formula explicitly writes it, it becomes a legitimate
+dataflow node of that initialization: the written value is held in the working dicts while
+formulas run, downstream formulas read it directly instead of expanding through its
+defining equation (see [`generate_obs_expansion`](@ref) and [`normalize`](@ref)). It is
+never stored on the component.
+
+The two formula kinds pin with different strength, staged the way they run:
+
+- an `InitFormula` pin is a *commitment*: the value lands in the working defaults and is
+  checked post-solve against the value the final state actually produces.
+- a `GuessFormula` pin is a *hint*: the value lands in the working guesses, seeds downstream
+  guess formulas and the nonlinear solve, and is never checked — the solver may move away
+  from it freely.
+
+Since init formulas run before guess formulas, they must never depend on a guess writer:
+init formulas are normalized against the init pin-set only, guess formulas against the
+union of both. A guess reader of an init-pinned symbol finds the value through the
+documented defaults-before-guesses lookup, and an init pin shadows a guess pin on the same
+symbol the same way.
+
+This is a static property of the formula *set*: it must be computed over all formulas of an
+initialization before any of them is normalized, so that readers and writers of a pin agree
+on the frontier no matter in which order they run.
+
+The component method computes the frontier from the formulas attached to the component's
+metadata: the init pin-set by default, the guess-formula frontier with `guess=true`.
+"""
+function pinned_obssyms(formulas, cf::ComponentModel)
+    pins = Set{Symbol}()
+    isnothing(formulas) && return pins
+    am = get_aliasmap(cf)
+    settable = settable_symbols(cf)
+    obs = obssym(cf)
+    for f in formulas
+        for s in f.outsym
+            canonicalize(am, s)[2] ∉ settable && s ∈ obs && push!(pins, s)
+        end
+    end
+    pins
+end
+function pinned_obssyms(cf::ComponentModel; guess=false)
+    pins = pinned_obssyms(has_initformula(cf) ? get_initformulas(cf) : nothing, cf)
+    guess || return pins
+    pins ∪ pinned_obssyms(has_guessformula(cf) ? get_guessformulas(cf) : nothing, cf)
+end
+
+"""
+    normalize(f::InitFormula, am::AliasMap, cf::ComponentModel; t=NaN, pinned=Set{Symbol}())
+    normalize(f::GuessFormula, am::AliasMap, cf::ComponentModel; t=NaN, pinned=Set{Symbol}())
 
 Rewrites a formula so that it speaks in *settable* symbols only, without touching what the
 user wrote: the returned formula carries the original in its `derived_from` field, and calls
@@ -254,35 +311,42 @@ Both ends are rewritten:
 
 - **outputs** are canonicalized through `am` and scattered with `1/factor` afterwards.
   Writing to a non-translatable symbol (an observable which is not a pure alias) is
-  meaningless — the value of an observable *is* its expression — so that throws.
+  meaningless — the value of an observable *is* its expression — so that throws, unless the
+  symbol is in `pinned`: a pinned observable is an init-time dataflow node a formula may
+  legitimately write (see [`pinned_obssyms`](@ref), also for how the frontier differs
+  between the two formula kinds).
 - **inputs** are expanded to their settable roots via [`generate_obs_expansion`](@ref),
   unconditionally: observables are never storage, so a default pinned on one is a
   consistency claim about the model, not a value a formula may read. A pure alias input
-  needs no special case, it is the `factor * root` degenerate expansion.
+  needs no special case, it is the `factor * root` degenerate expansion. Expansion stops at
+  symbols in `pinned` — those are written by a formula of the same init, so they are read
+  directly instead of being expanded through their defining equation.
 
 The resulting input list (the roots) and canonical output list are what the topological
 sort, the duplicate-writer detection and the skip logic downstream operate on, which is the
 point of the exercise: a formula writing `:machine₊Efd` and one reading `:avr₊Efd` are one
 dependency edge once both are canonical, and so are a formula writing `:x` and one reading
-an observable `a = x + y`.
+an observable `a = x + y` — or one pinning observable `:y` and one reading `:y`.
 
-A formula with no aliased outputs and no observable inputs is returned `===`.
+A formula with no aliased outputs and no expandable observable inputs is returned `===`.
 
 `t` is passed to the expansion for observables which depend explicitly on time.
 
 `InitConstraint`s need none of this: they are evaluated against a full candidate state where
 the observable mapping makes every symbol readable already.
 """
-function normalize(f::Union{InitFormula,GuessFormula}, am::AliasMap, cf::ComponentModel; t=NaN)
-    factors, canonout = _canonicalize_outputs(f, am, cf)
-    obsin = intersect(f.sym, obssym(cf))
+function normalize(f::Union{InitFormula,GuessFormula}, am::AliasMap, cf::ComponentModel;
+                   t=NaN, pinned=Set{Symbol}())
+    factors, canonout = _canonicalize_outputs(f, am, cf, pinned)
+    # pinned obs inputs are read directly from the working dict, only the rest expands
+    expandable = setdiff(intersect(f.sym, obssym(cf)), pinned)
 
     # nothing to rewrite: hand back the very same formula, and stay independent of the ext
-    canonout == f.outsym && isempty(obsin) && return f
+    canonout == f.outsym && isempty(expandable) && return f
 
     # only expand when there is something to expand: an aliased output alone must not drag
     # in the MTK extension
-    roots, expand = isempty(obsin) ? (copy(f.sym), nothing) : _obs_expansion(cf, f.sym)
+    roots, expand = isempty(expandable) ? (copy(f.sym), nothing) : _obs_expansion(cf, f.sym; stop_at=pinned)
     _assert_no_self_dependency(f, roots, canonout)
 
     wrapped = function (out, u)
@@ -307,12 +371,15 @@ end
 _formulatype(::InitFormula) = InitFormula
 _formulatype(::GuessFormula) = GuessFormula
 
-function _canonicalize_outputs(f, am, cf)
-    moves = [canonicalize(am, s) for s in f.outsym]
+function _canonicalize_outputs(f, am, cf, pinned=Set{Symbol}())
+    # a pinned obs output is written as-is: it IS the dataflow node, no canonical slot
+    # behind it
+    _ispin(s) = s ∈ pinned
+    moves = [_ispin(s) ? (1.0, s) : canonicalize(am, s) for s in f.outsym]
     canonout = last.(moves)
 
     settable = settable_symbols(cf)
-    bad = [s => c for (s, c) in zip(f.outsym, canonout) if c ∉ settable]
+    bad = [s => c for (s, c) in zip(f.outsym, canonout) if c ∉ settable && !_ispin(s)]
     if !isempty(bad)
         throw(ArgumentError("$(_formulatype(f)) cannot write to $(first.(bad)): \
             $(length(bad) == 1 ? "it is an observable" : "they are observables") which \

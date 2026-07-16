@@ -297,6 +297,8 @@ extract_nw
 implicit_output
 NetworkDynamics.pretty_f
 set_mtk_defaults!
+set_initf
+SystemInitFormulas
 ```
 
 ## NetworkDynamicsInspector API

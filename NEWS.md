@@ -25,6 +25,29 @@
   works on **parameters** as well as unknowns, which is what "free setpoint, back-computed from
   the operating point" needs. Metadata expressions are collected from the hierarchical system
   and namespaced there, since `renamespace` does not descend into a symbol's metadata.
+- **Alias normalization for the initialization pipeline**: At init time, defaults/guesses/bounds and formula outputs written against an
+  alias are transported onto the canonical settable symbol, and formula inputs which are
+  observables are expanded through the observed equations down to settable roots. In practice:
+  it does not matter wheter you define your guess/default or Init/GuessFormula metadata for :busbar.u or :terminal.u,
+  both states are aliased so they will be rerouted to the cannonical name.
+- **Pinned observables — backward-flow initialization**: an `InitFormula` may now *write* a
+  non-alias observable, "pinning" it as an init-time dataflow node. 
+  Other `InitFormulas` will priortize thoses as inputs to the equations. I.e. you can
+  subcomponent local Init/GuessFormulas, once they connect end to end you can achieve true
+  backward flow initialization as commonly used for power models.
+  This enables fully component-local backward init: a
+  parent formula states what a child's output must be, the child's formula inverts its own
+  equation. `GuessFormula`s pin as *hints*: a guess-pin lands in the working guesses, seeds
+  downstream guess formulas and the solve, and is never consistency-checked — so whole
+  backward chains can safely be spelled as guesses, starting the solver at the right
+  operating point without committing to it. Init formulas run first and never read
+  guess-pins; guess formulas read both kinds through the defaults-before-guesses lookup.
+- **New `set_initf(sys, target => expr, ...)`** attaches init equations to an MTK `System` at
+  the *system* level (non-mutating, rebind the result). It covers the case the `initf`
+  variable option cannot express: the target belongs to a subsystem, e.g. pinning a child's
+  output observable from the parent. Additionally, within a single component InitFormulas can be
+  attachted to symbols using the `initf` symbol metadtata, guess formulas can be attached by just passing an
+  expression rather than a number to the `guess` metadata.
 
 ## v0.10.17 Changelog
 - **Open-loop linearization** ([#341](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/341)):

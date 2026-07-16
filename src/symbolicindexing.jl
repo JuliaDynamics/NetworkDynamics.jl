@@ -183,22 +183,25 @@ end
 # Both are no-ops with an empty aliasmap (the non-MTK case), see `normalize`.
 function _get_appropriate_dict(cidx, cm; guess, apply_formulas, verbose)
     am = get_aliasmap(cm)
+    pinned = apply_formulas ? pinned_obssyms(cm) : Set{Symbol}()
     defaults = normalize_valuedict(am, get_defaults_or_inits_dict(cm); what=:default, verbose)
     if apply_formulas && has_initformula(cm)
         verbose && println("Applying InitFormulas for $(cidx) ($(cm.name))...")
-        formulas = [normalize(f, am, cm) for f in get_initformulas(cm)]
-        apply_init_formulas!(defaults, formulas; error_unresolvable=false, verbose)
+        formulas = [normalize(f, am, cm; pinned) for f in get_initformulas(cm)]
+        apply_init_formulas!(defaults, formulas; error_unresolvable=false, verbose, pinned)
     end
     if guess
         guesses = normalize_valuedict(am, get_guesses_dict(cm); what=:guess, on_conflict=:keepfirst, verbose)
         if apply_formulas && has_guessformula(cm)
             verbose && println("Applying GuessFormulas for $(cidx) ($(cm.name))...")
-            formulas = [normalize(f, am, cm) for f in get_guessformulas(cm)]
-            apply_guess_formulas!(guesses, defaults, formulas; error_unresolvable=false, verbose)
+            guess_pinned = pinned_obssyms(cm; guess=true)
+            formulas = [normalize(f, am, cm; pinned=guess_pinned) for f in get_guessformulas(cm)]
+            apply_guess_formulas!(guesses, defaults, formulas; error_unresolvable=false, verbose, pinned=guess_pinned)
         end
         defaults = merge(guesses, defaults) # defaults overwrite guesses
     end
-    # limit dict to only psym and sym of component
+    # limit dict to only psym and sym of component; this is also what discards the
+    # init-time scratch values of pinned observables
     valid_keys = Set(vcat(sym(cm), psym(cm)))
     filter!(p -> p.first ∈ valid_keys, defaults)
 end

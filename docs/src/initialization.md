@@ -91,6 +91,12 @@ All other symbols are considered *free* and must provide a **guess** value as an
 
 The **defaults** and **guesses** can be either obtained from the [Metadata](@ref) directly or provided as arguments.
 
+### Aliases: the name you pick doesn't matter
+
+When a component is assembled from ModelingToolkit models, one physical quantity often ends up with several names. A bus voltage might be reachable both as `busbar₊u_r` and as `terminal₊u_r`, because an equation `busbar₊u_r ~ terminal₊u_r` ties the two together. NetworkDynamics recognizes such aliases and treats each group of them as a *single* variable.
+
+For initialization this means you may attach a **default** or **guess** to *any* member of an alias group and it counts for the whole group — you never have to track down the "canonical" name. Giving the same value to two aliases of one quantity is fine; only genuinely *conflicting* values are reported. This happens automatically, before the initialization problem is assembled.
+
 ### Non-mutating vs Mutating Initialization
 
 NetworkDynamics provides two approaches for component-wise initialization:
@@ -234,12 +240,48 @@ nothing #hide
 end
 ```
 
-`initf` reads as "at initialization, set this symbol to that expression". It is valid on unknowns **and** parameters — free setpoint parameters back-computed from a known operating point are one of the main use cases. The expression may reference any unknown or parameter of the system, including observables, which are expanded to their settable roots; formulas from different subcomponents are chained by the same topological sort as hand-written ones, so a whole nested model can be initialized from a few interface values.
+`initf` reads as "at initialization, set this symbol to that expression". It works on unknowns **and** parameters — back-computing a free setpoint parameter from a known operating point is one of the main uses. The expression may reference any state, parameter or observable of the system, and formulas from different subcomponents connect to each other automatically (see [below](@ref backward-flow-init)), so a whole nested model can be initialized from a handful of interface values.
+
+**Attaching a formula from outside (`set_initf`)**: the `initf` option annotates a variable *where it is declared*. Its postfix counterpart is [`set_initf`](@ref), which attaches the same kind of rule to an *already-built* system without touching the declaration:
+
+```julia
+sys = set_initf(sys, v_ref => v_meas)     # same effect as the `initf = v_meas` option above
+```
+
+Reach for `set_initf` when the rule comes from *outside* the block that owns the symbol — most often a parent component initializing one of its subsystems' symbols, which the `initf` option cannot express because it only annotates a system's *own* variables. `set_initf` returns a new system rather than mutating, so rebind it (`sys = set_initf(sys, …)`).
 
 !!! warning "`initf` vs. a symbolic default"
     A *symbolic default* on an unknown (`@variables x(t) = 2a`, i.e. an MTK binding) is rejected: it does not say when the expression is meant to hold. Use `initf` to state that it holds at initialization.
 
     On a **parameter**, a symbolic default is something else entirely and stays valid: it declares a runtime dependency, which MTK lowers to an observed equation and which removes the parameter from the compiled model. Use it when you want to express one parameter in terms of others; use `initf` when you want an initialization equation.
+
+#### [Backward-Flow Initialization: Formulas That Find Each Other](@id backward-flow-init)
+
+The real power of init formulas is that they **connect to one another**. Each formula is a small "set this from that" rule; NetworkDynamics gathers the rules of an entire nested model and wires them into a single dependency graph, automatically matching each value a formula *produces* to the formulas that *consume* it. You never connect them by hand — the outputs and inputs find each other by name (across aliases, too) and are evaluated in the right order.
+
+This lets initialization flow **backwards** through a model, against the direction the equations normally compute. The motivating case is a control block that can initialize its own state *from its own output*. A PI controller's integrator state, in steady state, is:
+
+```julia
+x(t), [guess=0, initf = (y - K_p*err)/K_i]   # the PI law y = K_p⋅err + K_i⋅x, solved for x
+```
+
+On its own this rule is stuck: `y` is the block's *output*, normally computed *from* `x`, so the block cannot supply `y` by itself. The missing piece — what `y` has to be in steady state — is known only one layer up, where the surrounding component sets it with [`set_initf`](@ref):
+
+```julia
+@component function SimpleAVR(; name)
+    @named pi = PIBlock()      # carries the x-from-y initf above
+    # ... equations ...
+    sys = System(eqs, t; name, systems=[pi])
+    # in steady state the PI must hold the field circuit: set its output
+    sys = set_initf(sys, pi.y => K_e*v_f)
+end
+```
+
+Now the two rules link up: the parent's rule produces `y`, the child's rule consumes `y` and produces `x`. A dead end becomes a chain that determines every internal state from the operating point at the interface — the component summary lists the resulting formula clusters and `initialize_component` reports *"No free variables!"*.
+
+**Setting an observable (pinning).** For the chain to close, a formula has to be allowed to set `y` — an *observable*, a quantity the model defines through an equation rather than storing it as a state. NetworkDynamics permits this and calls it *pinning*. A pinned value is only a stepping stone used while the formulas run; it is not stored on the component. Afterwards it is checked for consistency: the observable is recomputed from the solved state and must agree with what was pinned, otherwise you get a warning (and usually a failing residual). A plain default sitting on an observable is never used this way — pinning is a deliberate act of a formula, not ambient data.
+
+**Guesses do the same, more softly.** A `GuessFormula` can drive the very same backward chain, but its values land among the *guesses*: they seed the solver near the right operating point without committing to it, and are never consistency-checked. That makes back-computing guess formulas a safe default to sprinkle throughout a model library — spell the whole backward chain as guesses and initialization simply starts close to the answer. Wherever you *do* know an exact value (a default, or an `InitFormula` pin), it takes precedence over the guessed one.
 
 #### Initialization Constraints (`InitConstraint`)
 

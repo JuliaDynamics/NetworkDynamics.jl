@@ -519,4 +519,42 @@ end
 """
 function set_mtk_defaults! end
 
+"""
+    SystemInitFormulas
+
+Custom MTK metadata type holding the `target => expression` initialization pairs attached
+to a `System` via [`set_initf`](@ref). Advanced usage only — prefer `set_initf` over
+touching the metadata directly.
+"""
+struct SystemInitFormulas end
+
+"""
+    set_initf(sys::System, pairs::Pair...) -> System
+
+Attach initialization equations to a ModelingToolkit `System` at the *system* level, as
+`target => expression` pairs. Each pair declares "at initialization, set `target` to
+`expression`" and is lowered to an [`InitFormula`](@ref) when the model is compiled —
+exactly like the `initf` variable option, which is preferred whenever the target is the
+system's own variable:
+
+    @variables x(t) [initf = <expression>]
+
+`set_initf` exists for the case the variable option cannot express: the target belongs to a
+*subsystem*. Most importantly, a parent can set the init value of a child variable which
+alias elimination turns into an observable — the formula then *pins* that observable as an
+init-time dataflow node, from which the child's own `initf` recipes can continue backwards.
+See the initialization docs on pinned observables.
+
+The function is **non-mutating** (system metadata is immutable), so the result must be
+rebound:
+
+    @named pi = PIBlock()
+    eqs = [...]
+    sys = System(eqs, t; name, systems=[pi])
+    sys = set_initf(sys, pi.y => K_e * v_f)
+
+Requires the `ModelingToolkit` extension to be loaded.
+"""
+function set_initf end
+
 function set_mtkcompile! end

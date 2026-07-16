@@ -567,18 +567,26 @@ function initialize_component(cf;
     metadata_initformulas = has_initformula(cf) ? get_initformulas(cf) : nothing
     combined_initformulas = collect_formulas(metadata_initformulas, additional_initformula)
 
+    # The pin-set is a property of the complete formula set and must be known before any
+    # formula is normalized: readers stop their input expansion at every observable some
+    # other formula of this very init writes. Init formulas run first and must not depend
+    # on a guess writer, so their frontier contains the init pins only; guess formulas see
+    # both (init pins through the defaults-before-guesses lookup, guess pins from guesses).
+    pinned = pinned_obssyms(combined_initformulas, cf)
+
     # Apply initialization formulas to defaults
     if !isnothing(combined_initformulas)
-        combined_initformulas = [normalize(f, am, cf; t) for f in combined_initformulas]
-        apply_init_formulas!(defaults, combined_initformulas; verbose, io)
+        combined_initformulas = [normalize(f, am, cf; t, pinned) for f in combined_initformulas]
+        apply_init_formulas!(defaults, combined_initformulas; verbose, io, pinned)
     end
 
     # Extract and apply guess formulas
     metadata_guessformulas = has_guessformula(cf) ? get_guessformulas(cf) : nothing
     combined_guessformulas = collect_formulas(metadata_guessformulas, additional_guessformula)
     if !isnothing(combined_guessformulas)
-        combined_guessformulas = [normalize(f, am, cf; t) for f in combined_guessformulas]
-        apply_guess_formulas!(guesses, defaults, combined_guessformulas; verbose, io)
+        guess_pinned = pinned ∪ pinned_obssyms(combined_guessformulas, cf)
+        combined_guessformulas = [normalize(f, am, cf; t, pinned=guess_pinned) for f in combined_guessformulas]
+        apply_guess_formulas!(guesses, defaults, combined_guessformulas; verbose, io, pinned=guess_pinned)
     end
 
     metadata_constraint = has_initconstraint(cf) ? get_initconstraints(cf) : nothing
@@ -676,12 +684,17 @@ function initialize_component(cf;
         printstyled(io, fullmsg * "\n")
     end
 
-    # Check for broken observable defaults
+    # Check for broken observable defaults. This also verifies pinned observables: the
+    # value a formula asserted must agree with what the final state actually produces,
+    # otherwise the back-init recipe contradicts the model equations.
     if !isempty(observable_defaults) && warn
-        broken_obs = broken_observable_defaults(cf, init_state, observable_defaults)
+        broken_obs = broken_observable_defaults(cf, init_state, observable_defaults; t)
         if !isempty(broken_obs)
-            broken_msgs = ["  $sym = $val (default: $def)" for (sym, def, val) in broken_obs]
-            fullmsg = "Initialized model has observables that differ from their specified defaults:" *
+            broken_msgs = map(broken_obs) do (sym, def, val)
+                origin = sym ∈ pinned ? "pinned by InitFormula" : "default"
+                "  $sym = $val ($origin: $def)"
+            end
+            fullmsg = "Initialized model has observables that differ from their specified values:" *
                   "\n" * join(broken_msgs, "\n")
             printstyled(io, " - WARNING: ", color=:yellow)
             printstyled(io, fullmsg * "\n")
@@ -968,13 +981,16 @@ function bounds_satisfied(val, bounds)
     !isnothing(val) && !isnan(val) && first(bounds) ≤ val ≤ last(bounds)
 end
 
-function broken_observable_defaults(cf, state=get_defaults_or_inits_dict(cf), defaults=get_defaults_dict(cf))
+function broken_observable_defaults(cf, state=get_defaults_or_inits_dict(cf), defaults=get_defaults_dict(cf); t=NaN)
     obs_defaults = filter(p -> p.first ∈ obssym(cf), pairs(defaults))
-    vals = get_initial_state(cf, state, keys(obs_defaults); missing_val=NaN)
+    vals = get_initial_state(cf, state, keys(obs_defaults); missing_val=NaN, t)
 
     broken = []
     for (val, sym, def) in zip(vals, keys(obs_defaults), values(obs_defaults))
-        if !(isapprox(val, def, atol=1e-10))
+        # a NaN recompute means the value cannot be verified (an unresolvable input, or a
+        # time-dependent observable evaluated at t=NaN), which is not evidence of a
+        # contradiction. A time-dependent observable *does* verify when init ran at a given `t`.
+        if !isnan(val) && !isapprox(val, def, atol=1e-10)
             push!(broken, (sym, def, val))
         end
     end

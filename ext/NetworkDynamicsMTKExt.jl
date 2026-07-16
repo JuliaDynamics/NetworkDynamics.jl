@@ -20,7 +20,8 @@ using SymbolicIndexingInterface: SymbolicIndexingInterface as SII
 using NetworkDynamics: NetworkDynamics, set_metadata!, ComponentPostprocessing,
                        PureFeedForward, FeedForward, NoFeedForward, PureStateMap,
                        MultipleOutputWrapper, inline_repr, multiline_repr,
-                       AliasMap, set_aliasmap!, settable_symbols
+                       AliasMap, set_aliasmap!, settable_symbols,
+                       assert_initformula_compat, assert_guessformula_compat
 import NetworkDynamics: VertexModel, EdgeModel, AnnotatedSym, InitFormula, add_initformula!, GuessFormula, add_guessformula!
 
 const ST = SymbolicUtils.BasicSymbolicImpl.var"typeof(BasicSymbolicImpl)"{SymbolicUtils.SymReal}
@@ -141,10 +142,10 @@ function VertexModel(
     set_metadata!(c, :odesystem_simplified, gen.odesystem_simplified)
 
     for formula in something(gen.initformulas, ())
-        add_initformula!(c, formula)
+        add_initformula_lenient!(c, formula)
     end
     for formula in something(gen.guessformulas, ())
-        add_guessformula!(c, formula)
+        add_guessformula_lenient!(c, formula)
     end
 
     # apply postprocessing functions from subcomponent metadata
@@ -297,10 +298,10 @@ function EdgeModel(
     set_metadata!(c, :odesystem_simplified, gen.odesystem_simplified)
 
     for formula in something(gen.initformulas, ())
-        add_initformula!(c, formula)
+        add_initformula_lenient!(c, formula)
     end
     for formula in something(gen.guessformulas, ())
-        add_guessformula!(c, formula)
+        add_guessformula_lenient!(c, formula)
     end
 
     # apply postprocessing functions from subcomponent metadata
@@ -533,8 +534,8 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         odesystem_simplified=sys,
         params,
         unused_params,
-        initformulas = initf_to_initformulas(initf; states, params, inputs=allinputs, obs_subs),
-        guessformulas = guesses_to_guessformulas!(sys; obs_subs)
+        initformulas = initf_to_initformulas(initf),
+        guessformulas = guesses_to_guessformulas!(sys)
     )
 end
 

@@ -530,11 +530,9 @@ assert_initformula_compat(cf::ComponentModel, c::InitFormula) = _assert_formula_
 assert_guessformula_compat(cf::ComponentModel, c::GuessFormula) = _assert_formula_compat(cf, c)
 
 # Inputs may be observables: they are expanded to their settable roots at init time, see
-# `normalize`. Outputs may be observables *if* they are pure aliases, in which case they
-# canonicalize onto a settable symbol; a genuinely algebraic observable has no slot to write
-# to and is rejected here rather than at init. When the component carries no aliasmap (hand
-# written, or the formula is attached before compilation) `get_aliasmap` hands back an empty
-# map and this degrades to the plain "outputs must be settable" rule.
+# `normalize`. Outputs may be observables too — as pure aliases they canonicalize onto a
+# settable symbol, and as genuinely algebraic observables the write *pins* them as an
+# init-time dataflow node, see `pinned_obssyms`.
 function _assert_formula_compat(cf::ComponentModel, c::Union{InitFormula,GuessFormula})
     label = c isa InitFormula ? "InitFormula" : "GuessFormula"
     settable = settable_symbols(cf)
@@ -544,13 +542,11 @@ function _assert_formula_compat(cf::ComponentModel, c::Union{InitFormula,GuessFo
         throw(ArgumentError("$label uses input symbols not part of component model: $input_mismatch"))
     end
 
-    output_mismatch = setdiff(c.outsym, settable ∪ keys(get_aliasmap(cf)))
+    output_mismatch = setdiff(c.outsym, settable ∪ keys(get_aliasmap(cf)) ∪ obssym(cf))
     if !isempty(output_mismatch)
-        obs = intersect(output_mismatch, obssym(cf))
-        hint = isempty(obs) ? "" : " ($obs are observables which are not pure aliases of a \
-                                    settable symbol, so there is nothing to write to)"
-        throw(ArgumentError("$label output symbols must be settable component symbols or \
-                             aliases thereof, but these are not: $output_mismatch$hint"))
+        throw(ArgumentError("$label output symbols must be settable component symbols, \
+                             aliases thereof or observables (pins), but these are not: \
+                             $output_mismatch"))
     end
 
     c
@@ -622,7 +618,8 @@ function topological_sort_formulas(formulas)
     end
 end
 
-function apply_init_formulas!(defaults, formulas_unsorted; verbose=false, io=stdout, error_unresolvable=true)
+function apply_init_formulas!(defaults, formulas_unsorted; verbose=false, io=stdout,
+                              error_unresolvable=true, pinned=Set{Symbol}())
     # Convert tuple to vector if necessary
     formulas_vec = formulas_unsorted isa Tuple ? collect(formulas_unsorted) : formulas_unsorted
     formulas = topological_sort_formulas(formulas_vec)
@@ -648,14 +645,15 @@ function apply_init_formulas!(defaults, formulas_unsorted; verbose=false, io=std
         end
         for s in f.outsym
             val = out[s]
-            verbose && push!(rows, _formula_row(s, val, defaults; op="="))
+            verbose && push!(rows, _formula_row(s, val, defaults; op="=", pin=s ∈ pinned))
             defaults[s] = val
         end
     end
     verbose && print_aligned_group(io, "InitFormulas set:", rows)
     return defaults
 end
-function apply_guess_formulas!(guesses, defaults, formulas_unsorted; verbose=false, io=stdout, error_unresolvable=true)
+function apply_guess_formulas!(guesses, defaults, formulas_unsorted; verbose=false, io=stdout,
+                               error_unresolvable=true, pinned=Set{Symbol}())
     # Convert tuple to vector if necessary
     formulas_vec = formulas_unsorted isa Tuple ? collect(formulas_unsorted) : formulas_unsorted
     formulas = topological_sort_formulas(formulas_vec)
@@ -689,7 +687,7 @@ function apply_guess_formulas!(guesses, defaults, formulas_unsorted; verbose=fal
         # Update guesses dictionary (NOT defaults!)
         for s in f.outsym
             val = out[s]
-            verbose && push!(rows, _formula_row(s, val, guesses; op="≈", fixed=defaults))
+            verbose && push!(rows, _formula_row(s, val, guesses; op="≈", fixed=defaults, pin=s ∈ pinned))
             guesses[s] = val
         end
     end
@@ -700,7 +698,7 @@ end
 # One aligned row for a formula that wrote `val` onto `:s`, annotated with what it did
 # relative to what was there: nothing for a fresh write, the previous value if it changed
 # one, or a no-effect note when a fixed default (guesses only) shadows the write.
-function _formula_row(s, val, prev; op, fixed=nothing)
+function _formula_row(s, val, prev; op, fixed=nothing, pin=false)
     v = str_significant(val; sigdigits=5, phantom_minus=true)
     note = if !isnothing(fixed) && haskey(fixed, s)
         "(no effect, fixed at $(str_significant(fixed[s]; sigdigits=5)))"
@@ -709,6 +707,7 @@ function _formula_row(s, val, prev; op, fixed=nothing)
     else
         ""
     end
+    pin && (note = strip(note * " (pinned observable)"))
     ":$s &$op $v &$note"
 end
 

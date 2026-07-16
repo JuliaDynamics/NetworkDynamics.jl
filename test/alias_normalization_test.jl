@@ -150,7 +150,7 @@ using SciCompDSL
 using NetworkDynamics: generate_obs_expansion, settable_symbols, obssym, normalize,
                        get_aliasmap, delete_aliasmap!, apply_init_formulas!,
                        apply_guess_formulas!, topological_sort_formulas, dim,
-                       delete_metadata!
+                       delete_metadata!, pinned_obssyms
 using Graphs: path_graph
 
 # One bus carrying every shape normalization has to tell apart: a sign-flipped alias, an
@@ -218,6 +218,30 @@ const AM = get_aliasmap(VM)
     @testset "components without observed equations" begin
         cf = VertexModel(f=(du, u, in, p, t) -> du .= u, g=1:1, sym=[:x], outsym=[:o])
         @test_throws ArgumentError generate_obs_expansion(cf, [:x])
+    end
+
+    @testset "stop_at halts expansion at pinned symbols" begin
+        # scaled = 2θ, but θ is a frontier symbol now: it must survive as the root even
+        # though it is neither settable nor equation-free
+        roots, f = @test_nowarn generate_obs_expansion(VM, [:scaled]; stop_at=Set([:θ]))
+        @test roots == [:θ]
+        @test f([3.0], NaN) ≈ [6.0]
+
+        # a stopped symbol requested directly is its own root, identity pass-through
+        roots, f = generate_obs_expansion(VM, [:θ]; stop_at=Set([:θ]))
+        @test roots == [:θ]
+        @test f([0.5], NaN) ≈ [0.5]
+
+        # mixed sweep: one sym stops at the frontier, the other expands past it as usual
+        roots, f = generate_obs_expansion(VM, [:scaled, :nl]; stop_at=Set([:θ]))
+        @test Set(roots) == Set([:θ, :u_r])
+        vals = [Dict(:θ => -2.0, :u_r => 3.0)[r] for r in roots]
+        @test f(vals, NaN) ≈ [-4.0, 9.0]
+
+        # empty frontier is exactly the default behavior
+        roots, f = generate_obs_expansion(VM, [:scaled]; stop_at=Set{Symbol}())
+        @test roots == [:u_r]
+        @test f([3.0], NaN) ≈ [-6.0]
     end
 end
 
@@ -327,6 +351,103 @@ end
     @test d[:P] ≈ 8.0    # 1 + 5 + 2: B saw A's freshly written value
 end
 
+# An observable written by an InitFormula is "pinned": it becomes an init-time dataflow
+# node. Readers stop expansion at it and consume the written value instead of the defining
+# equation — this is what makes backward flow through a model possible (a parent formula
+# states what a child's output must be, the child's formula inverts its own equation).
+@testset "pinned observables" begin
+    @testset "pin classification and the write path" begin
+        w = @initformula :nl = :u_r + 1      # nl = u_r^2 is a non-alias obs
+        r = @initformula :Vset = :nl
+        a = @initformula :θ = 0.5            # alias output — canonicalizes, no pin
+
+        @test pinned_obssyms([w, r, a], VM) == Set([:nl])
+        @test pinned_obssyms(nothing, VM) == Set{Symbol}()
+
+        # without the pin declared, writing the obs still throws...
+        @test_throws ArgumentError normalize(w, AM, VM)
+        # ... with it, there is nothing left to rewrite on either formula
+        @test normalize(w, AM, VM; pinned=Set([:nl])) === w
+        @test normalize(r, AM, VM; pinned=Set([:nl])) === r
+    end
+
+    @testset "expansion stops at a pin along the way" begin
+        h = @initformula :Vset = :scaled     # scaled = 2θ
+        n = normalize(h, AM, VM; pinned=Set([:θ]))
+        @test n.sym == [:θ]
+    end
+
+    @testset "writer → reader dataflow through the pin" begin
+        w = @initformula :nl = :u_r + 1
+        r = @initformula :Vset = :nl
+        pins = pinned_obssyms([w, r], VM)
+        nfs = [normalize(f, AM, VM; pinned=pins) for f in [r, w]]  # wrong order on purpose
+        @test only(topological_sort_formulas(nfs)[1].outsym) == :nl
+        d = Dict{Symbol,Float64}(:u_r => 2.0)
+        apply_init_formulas!(d, nfs)
+        @test d[:nl] ≈ 3.0
+        @test d[:Vset] ≈ 3.0
+    end
+
+    @testset "two writers of one pin are duplicate writers" begin
+        w1 = @initformula :nl = :u_r + 1
+        w2 = @initformula :nl = 5.0
+        pins = pinned_obssyms([w1, w2], VM)
+        nfs = [normalize(f, AM, VM; pinned=pins) for f in [w1, w2]]
+        @test_throws ArgumentError topological_sort_formulas(nfs)
+    end
+
+    @testset "GuessFormulas pin too, as hints" begin
+        # a guess formula may write a pin (it lands in the guesses dict) and read one; the
+        # frontier for guess formulas is the union of init and guess pins
+        gw = @guessformula :nl = :u_r + 1
+        gr = @guessformula :Vset = :nl
+        @test pinned_obssyms([gw, gr], VM) == Set([:nl])
+        @test normalize(gw, AM, VM; pinned=Set([:nl])) === gw
+        @test normalize(gr, AM, VM; pinned=Set([:nl])) === gr
+        @test add_guessformula!(copy(VM), gw) !== nothing
+
+        guesses = Dict{Symbol,Float64}()
+        apply_guess_formulas!(guesses, Dict(:u_r => 2.0), [gw, gr])
+        @test guesses[:nl] ≈ 3.0
+        @test guesses[:Vset] ≈ 3.0
+
+        # an init pin on the same symbol shadows the guess pin: defaults take precedence
+        guesses = Dict{Symbol,Float64}()
+        apply_guess_formulas!(guesses, Dict(:u_r => 2.0, :nl => 10.0), [gw, gr])
+        @test guesses[:Vset] ≈ 10.0
+    end
+end
+
+# Reading through one's own pin is a genuine cycle — the pin stops the expansion, so the
+# formula's effective inputs contain its own output. Needs an obs-of-obs, which the main
+# fixture doesn't have.
+@mtkmodel PinSelfDepBus begin
+    @variables begin
+        x(t) = 1.0
+        y(t); yplus(t)
+        i(t), [input=true]
+        o(t), [output=true]
+    end
+    @parameters begin
+        K = 2.0
+    end
+    @equations begin
+        Dt(x) ~ -x + i
+        y ~ K * x          # parameter factor: not an alias
+        yplus ~ y + 1
+        o ~ x
+    end
+end
+@testset "self-dependency through one's own pin" begin
+    @named _psd = PinSelfDepBus()
+    VMsd = VertexModel(_psd, [:i], [:o])
+    f = @initformula :y = :yplus - 1   # yplus stops at pinned :y → reads what it writes
+    err = try; normalize(f, get_aliasmap(VMsd), VMsd; pinned=Set([:y])); catch e; e; end
+    @test err isa ArgumentError
+    @test occursin("depends on its own", sprint(showerror, err))
+end
+
 @testset "normalize(::GuessFormula)" begin
     f = @guessformula :P = :summed
     n = normalize(f, AM, VM)
@@ -372,17 +493,22 @@ end
 @testset "attach-time validation (D2)" begin
     @test add_initformula!(copy(VM), @initformula :θ = :u_i) !== nothing      # alias target
     @test add_initformula!(copy(VM), @initformula :u_i = :summed) !== nothing # obs input
-    @test_throws ArgumentError add_initformula!(copy(VM), @initformula :nl = :u_i)
+    # a non-alias obs output is a *pin* — attachable for InitFormulas, effective once the
+    # init pipeline computes the pin-set (see the "pinned observables" testset)
+    @test add_initformula!(copy(VM), @initformula :nl = :u_i) !== nothing
     @test_throws ArgumentError add_initformula!(copy(VM), @initformula :nonexistent = :u_i)
 
-    # observable inputs are expanded to roots, for GuessFormulas just as for InitFormulas
+    # observable inputs are expanded to roots, for GuessFormulas just as for InitFormulas,
+    # and obs outputs (pins) are attachable for both kinds
     @test add_guessformula!(copy(VM), @guessformula :P = :summed) !== nothing
-    @test_throws ArgumentError add_guessformula!(copy(VM), @guessformula :nl = :u_i)
+    @test add_guessformula!(copy(VM), @guessformula :nl = :u_i) !== nothing
 
-    # with no aliasmap this degrades to the plain "outputs must be settable" rule
+    # with no aliasmap, an obs-targeting formula is still attachable — it degrades from
+    # "transported to the canonical symbol" to "pin on the obs"
     bare = copy(VM)
     delete_aliasmap!(bare)
-    @test_throws ArgumentError add_initformula!(bare, @initformula :θ = :u_i)
+    @test add_initformula!(bare, @initformula :θ = :u_i) !== nothing
+    @test add_guessformula!(bare, @guessformula :θ = :u_i) !== nothing
 end
 
 @testset "normalize: provenance" begin
@@ -576,6 +702,147 @@ end
         set_default!(v, :i, 0.7); set_guess!(v, :x, 0.0); set_guess!(v, :o, 0.0)
         res = initialize_component(v; verbose=false)
         @test res[:x] ≈ 0.7 && res[:o] ≈ 0.7
+    end
+end
+
+####
+#### Pinned observables in the full init pipeline: a PI-flavored vertex where the
+#### backward-init chain runs *through* an observable. The parent-side knowledge "in steady
+#### state the PI output must hold the plant" pins `y`; the child-side knowledge "my
+#### integrator state follows from my output" inverts the PI equation. Neither formula
+#### works without the other, and together they determine everything — no nonlinear solve.
+####
+@mtkmodel PinPipelineBus begin
+    @variables begin
+        x(t), [guess=0]      # integrator state
+        v(t) = 1.0           # plant state
+        err(t); y(t)
+        i(t), [input=true]
+        o(t), [output=true]
+    end
+    @parameters begin
+        Kp = 20.0
+        Ki = 5.0
+        K = 2.0
+        vref = 1.0
+    end
+    @equations begin
+        Dt(x) ~ err
+        err ~ vref - v
+        y ~ Kp*err + Ki*x
+        Dt(v) ~ y - K*v + i
+        o ~ v
+    end
+end
+@testset "pinned observables: init pipeline" begin
+    @named _ppb = PinPipelineBus()
+    PVM = VertexModel(_ppb, [:i], [:o])
+    seeds = Dict(:i => 0.5, :o => 1.0)
+
+    pin_y  = @initformula :y = :K * :v - :i          # steady state of the plant equation
+    calc_x = @initformula :x = (:y - :Kp * :err) / :Ki   # PI equation solved for x
+
+    @testset "backward flow through the pin, zero free variables" begin
+        io = IOBuffer()
+        state = initialize_component(PVM;
+            default_overrides=seeds,
+            additional_initformula=[pin_y, calc_x],
+            verbose=true, io)
+        out = String(take!(io))
+        @test state[:x] ≈ 0.3     # (1.5 - 20*0) / 5
+        @test state[:v] ≈ 1.0
+        @test !haskey(state, :y)  # the pin is init-time scratch, never part of the state
+        @test occursin("(pinned observable)", out)
+        @test occursin("No free variables!", out)
+    end
+
+    @testset "a wrong pin with a reader fails the residual check" begin
+        bad_pin = @initformula :y = :K * :v - :i + 0.1
+        @test_throws NetworkDynamics.ComponentInitError initialize_component(PVM;
+            default_overrides=seeds,
+            additional_initformula=[bad_pin, calc_x], verbose=false)
+    end
+
+    @testset "a wrong unread pin trips the consistency warning" begin
+        # x is seeded manually, so nothing consumes the pin; the recomputed observable
+        # disagrees with the asserted value and the post-solve check names the origin
+        bad_pin = @initformula :y = :K * :v - :i + 0.1
+        io = IOBuffer()
+        initialize_component(PVM;
+            default_overrides=merge(seeds, Dict(:x => 0.3)),
+            additional_initformula=[bad_pin],
+            verbose=false, tol=1.0, io)   # high tol: the warning must fire on its own
+        out = String(take!(io))
+        @test occursin("pinned by InitFormula", out)
+        @test occursin("differ from their specified values", out)
+    end
+
+    @testset "NWState path applies the chain and drops the scratch value" begin
+        cfm = copy(PVM)
+        add_initformula!(cfm, pin_y); add_initformula!(cfm, calc_x)
+        set_default!(cfm, :i, 0.5); set_default!(cfm, :o, 1.0)
+        d = NetworkDynamics._get_appropriate_dict(nothing, cfm; guess=true,
+                                                  apply_formulas=true, verbose=false)
+        @test d[:x] ≈ 0.3
+        @test !haskey(d, :y)
+    end
+
+    @testset "the same chain as guess formulas seeds the solve without committing" begin
+        # spelled as guesses, the backward chain does not eliminate the free variables —
+        # it starts the nonlinear solve at (what happens to be) the exact solution. The
+        # library-author pattern: back-computing guess formulas are a safe default even
+        # when they might be only approximately right.
+        pin_y_g  = @guessformula :y = :K * :v - :i
+        calc_x_g = @guessformula :x = (:y - :Kp * :err) / :Ki
+        io = IOBuffer()
+        state = initialize_component(PVM;
+            default_overrides=seeds,
+            additional_guessformula=[pin_y_g, calc_x_g],
+            verbose=true, io)
+        out = String(take!(io))
+        @test occursin("(pinned observable)", out)   # marked in the guess rows
+        @test occursin("NonlinearLeastSquaresProblem", out)  # x stays free, unlike initformula
+        @test state[:x] ≈ 0.3 atol=1e-8
+        @test !haskey(state, :y)
+    end
+
+    # :timed = u_r * t on the AliasNormBus fixture. The post-solve consistency check
+    # recomputes the observable at the init-time `t`, so a time-dependent pin is verifiable
+    # exactly when init ran at a concrete `t`.
+    freshtimed() = begin
+        v = copy(VM)
+        set_default!(v, :i_r, 1.0); set_default!(v, :u_r, 1.0); set_default!(v, :u_i, 0.0)
+        set_default!(v, :Vset, 1.0); set_default!(v, :P, 2.0)
+        v
+    end
+
+    @testset "at t=NaN a time-dependent pin cannot be checked (no warning)" begin
+        # recompute is u_r * NaN = NaN, which must read as "unverifiable", not a contradiction
+        io = IOBuffer()
+        initialize_component(freshtimed();
+            additional_initformula=[@initformula :timed = 99.0],  # wrong, but unverifiable at t=NaN
+            verbose=false, t=NaN, io)
+        @test !occursin("WARNING", String(take!(io)))
+    end
+
+    @testset "at a concrete t a consistent time-dependent pin does not warn" begin
+        # u_r*t at u_r=1, t=2 is 2.0, which matches the pinned 2*u_r
+        io = IOBuffer()
+        initialize_component(freshtimed();
+            additional_initformula=[@initformula :timed = 2 * :u_r],
+            verbose=false, t=2.0, io)
+        @test !occursin("WARNING", String(take!(io)))
+    end
+
+    @testset "at a concrete t an inconsistent time-dependent pin warns" begin
+        # pinned 2*u_r+0.5 = 2.5 disagrees with the recomputed u_r*t = 2.0 at t=2
+        io = IOBuffer()
+        initialize_component(freshtimed();
+            additional_initformula=[@initformula :timed = 2 * :u_r + 0.5],
+            verbose=false, t=2.0, io)
+        out = String(take!(io))
+        @test occursin("pinned by InitFormula", out)
+        @test occursin("differ from their specified values", out)
     end
 end
 

@@ -1321,8 +1321,11 @@ end
         @test out[:c₊x] ≈ 2*4.0 + 3*2.0
     end
 
-    @testset "error on conflicting formula targets" begin
-        # two initf entries on different members of one alias group, forcing different values
+    @testset "conflicting formula targets" begin
+        # two initf entries forcing the same raw target to different values is a compile
+        # error; two entries on different members of one alias class both compile and are
+        # reported by the init-time duplicate-writer check, once normalization has collapsed
+        # the class (formulas are ejected raw, all classification happens at init).
         @component function conflict_inner(; name)
             @parameters a=1.0
             @variables begin
@@ -1342,9 +1345,135 @@ end
             System(eqs, t; name, systems=[c])
         end
         @named outer = conflict_outer()
-        @test_throws "conflicting definitions" begin
-            VertexModel(outer, [], [:z]; verbose=false)
+        vm = VertexModel(outer, [], [:z]; verbose=false)
+        @test length(get_initformulas(vm)) == 2
+        err = try; initialize_component(vm; verbose=false); catch e; e; end
+        @test err isa ArgumentError
+        @test occursin("Multiple InitFormulas set the same symbol", sprint(showerror, err))
+    end
+end
+
+@testset "set_initf: system-level init formulas" begin
+    # the backward-flow showcase: the child knows only its own inverse (initf on x reads
+    # the child's own output y), the parent knows what that output must be in steady state
+    # and pins it via set_initf. Together they determine everything — no nonlinear solve.
+    @component function pin_pi_block(; name)
+        @parameters K_p=20.0 K_i=5.0
+        @variables begin
+            err(t)
+            y(t)
+            x(t), [guess=0, initf=(y - K_p*err)/K_i]
         end
+        System([Dt(x) ~ err, y ~ K_p*err + K_i*x], t; name)
+    end
+    @component function pin_ctrl(; name)
+        @named pi = pin_pi_block()
+        @parameters K=2.0 vref=1.0
+        @variables begin
+            v(t) = 1.0
+            i(t), [input=true]
+            o(t), [output=true]
+        end
+        eqs = [pi.err ~ vref - v, Dt(v) ~ pi.y - K*v + i, o ~ v]
+        sys = System(eqs, t; name, systems=[pi])
+        set_initf(sys, pi.y => K*v - i)
+    end
+
+    @testset "parent pins the child's observable output" begin
+        @named ctrl = pin_ctrl()
+        vm = VertexModel(ctrl, [:i], [:o]; verbose=false)
+        @test :pi₊y ∈ obssym(vm)
+        @test NetworkDynamics.pinned_obssyms(vm) == Set([:pi₊y])
+
+        io = IOBuffer()
+        state = initialize_component(vm;
+            default_overrides=Dict(:i => 0.5, :o => 1.0), verbose=true, io)
+        @test occursin("No free variables!", String(take!(io)))
+        @test state[:pi₊x] ≈ 0.3    # ((K*v - i) - K_p*0) / K_i
+        @test !haskey(state, :pi₊y)
+    end
+
+    @testset "pairs survive a second nesting level" begin
+        @component function pin_outer(; name)
+            @named ctrl = pin_ctrl()
+            @variables begin
+                iin(t), [input=true]
+                oout(t), [output=true]
+            end
+            System([ctrl.i ~ iin, oout ~ ctrl.o], t; name, systems=[ctrl])
+        end
+        @named outer = pin_outer()
+        vm = VertexModel(outer, [:iin], [:oout]; verbose=false)
+        @test NetworkDynamics.pinned_obssyms(vm) == Set([:ctrl₊pi₊y])
+        state = initialize_component(vm;
+            default_overrides=Dict(:iin => 0.5, :oout => 1.0), verbose=false)
+        @test state[:ctrl₊pi₊x] ≈ 0.3
+    end
+
+    @testset "settable targets work like the variable option" begin
+        @component function settable_target(; name)
+            @parameters a=1.0
+            @variables begin
+                x(t), [guess=0]
+                y(t), [guess=0]
+            end
+            sys = System([Dt(x) ~ -x, Dt(y) ~ -y], t, [x, y], [a]; name)
+            set_initf(sys, x => 2a)
+        end
+        @named sys = settable_target()
+        vm = VertexModel(sys, [], [:y]; verbose=false)
+        f = only(get_initformulas(vm))
+        @test f.outsym == [:x]
+        @test f.sym == [:a]
+    end
+
+    @testset "conflict with a variable-option initf on the same target errors" begin
+        @component function initf_conflict(; name)
+            @parameters a=1.0
+            @variables begin
+                x(t), [guess=0, initf=2a]
+                y(t), [guess=0]
+            end
+            sys = System([Dt(x) ~ -x, Dt(y) ~ -y], t, [x, y], [a]; name)
+            set_initf(sys, x => 3a)   # different recipe for the same raw target
+        end
+        @named sys = initf_conflict()
+        @test_throws "conflicting definitions" VertexModel(sys, [], [:y]; verbose=false)
+    end
+
+    @testset "eager validation and appending" begin
+        @variables x(t) y(t)
+        @named sys = System([Dt(x) ~ -x, Dt(y) ~ -y], t, [x, y], [])
+        @test_throws ArgumentError set_initf(sys, x + y => 1.0)
+        sys2 = set_initf(set_initf(sys, x => 1.0), y => 2.0)  # appends, non-mutating
+        @test length(mtkext.collect_initf(sys2)) == 2
+        @test isempty(mtkext.collect_initf(sys))
+    end
+
+    # The same pin can be spelled without set_initf, through a parent-local alias variable
+    # carrying the initf. This works deterministically: alias-name selection prefers the
+    # shallower name, so the parent-local variable always becomes the class representative
+    # holding the defining equation, the child symbol becomes an alias leaf, and the child's
+    # read expands onto the pinned representative and stops there.
+    @testset "alternative spelling: parent-local alias variable" begin
+        @component function ctrl_aliasvar(; name)
+            @named pi = pin_pi_block()
+            @parameters K=2.0 vref=1.0
+            @variables begin
+                v(t) = 1.0
+                i(t), [input=true]
+                o(t), [output=true]
+            end
+            @variables y_wish(t), [initf = K*v - i]
+            eqs = [y_wish ~ pi.y, pi.err ~ vref - v, Dt(v) ~ pi.y - K*v + i, o ~ v]
+            System(eqs, t; name, systems=[pi])
+        end
+        @named ctrl = ctrl_aliasvar()
+        vm = VertexModel(ctrl, [:i], [:o]; verbose=false)
+        @test NetworkDynamics.pinned_obssyms(vm) == Set([:y_wish])
+        state = initialize_component(vm;
+            default_overrides=Dict(:i => 0.5, :o => 1.0), verbose=false)
+        @test state[:pi₊x] ≈ 0.3
     end
 end
 
@@ -1436,10 +1565,11 @@ end
     @test all(gf -> :x ∉ gf.outsym, get_guessformulas(vm))
 end
 
-@testset "guesses for eliminated/observable variables are skipped, not fatal" begin
-    # `z` is algebraically eliminated (z = 2x), so its guess expands to a
-    # compound expression `2x(t)` after alias substitution: this used to crash
-    # with `ErrorException("matching non-exhaustive")` inside `getname`.
+@testset "guesses for eliminated variables survive as raw formulas" begin
+    # `z` is algebraically eliminated (z = 2x) into a scaled-alias observable. The guess
+    # formula is ejected raw, targeting `z` as written; at init time `normalize` transports
+    # it onto the surviving symbol through the aliasmap. (This used to be skipped with a
+    # warning when formulas were resolved symbolically at compile time.)
     @component function vertex_with_eliminated_guess(; name)
         @parameters u_init = 1.0
         @variables x(t) y(t) z(t)
@@ -1447,15 +1577,18 @@ end
         System(eqs, t, [x, y, z], [u_init]; name, guesses=[z => 2 * u_init, y => 1.0])
     end
     @named sys = vertex_with_eliminated_guess()
+    vm = VertexModel(sys, [], [:x, :y]; verbose=false)
 
-    local vm
-    @test_logs (:warn, r"expands to .* after alias substitution") match_mode=:any begin
-        vm = VertexModel(sys, [], [:x, :y]; verbose=false)
-    end
+    f = only(get_guessformulas(vm))
+    @test f.outsym == [:z]      # raw target, the alias key
+    @test f.sym == [:u_init]
+    n = NetworkDynamics.normalize(f, get_aliasmap(vm), vm)
+    @test n.outsym == [:x]      # ... lands on the settable survivor at init time
+    guesses = Dict{Symbol,Float64}()
+    NetworkDynamics.apply_guess_formulas!(guesses, Dict(:u_init => 1.0), [n])
+    @test guesses[:x] ≈ 1.0     # z = 2x = 2*u_init  =>  x = u_init
 
-    # the bogus guess for the eliminated variable did not produce a formula,
-    # but the surviving constant guess for `y` is preserved as plain metadata
-    @test !has_guessformula(vm)
+    # the constant guess for `y` is preserved as plain metadata
     @test has_guess(vm, :y)
 end
 
@@ -1481,16 +1614,19 @@ end
 end
 
 @testset "guess referencing nonexistent symbol is skipped, not fatal" begin
-    # a guess whose RHS references a symbol that is not an unknown/parameter of the system
-    # is malformed and would be rejected fatally by assert_guessformula_compat downstream;
-    # the generic well-formedness guard skips it with a warning instead.
-    @variables x(t) y(t) foo(t)
-    @named badsys = System([Dt(x) ~ -x, Dt(y) ~ -y], t, [x, y], []; guesses=[x => 2 * foo])
-    local res
-    @test_logs (:warn, r"references symbol\(s\) not in the system") match_mode=:any begin
-        res = mtkext.guesses_to_guessformulas!(badsys)
+    # a guess whose RHS references a symbol the compiled component does not expose is
+    # malformed; the attach-time validation catches it and the lenient MTK attach demotes
+    # the error to a warn-and-skip.
+    @component function vertex_with_bad_guess(; name)
+        @variables x(t) y(t) foo(t)
+        System([Dt(x) ~ -x, Dt(y) ~ -y], t, [x, y], []; name, guesses=[x => 2 * foo])
     end
-    @test res === nothing
+    @named badsys = vertex_with_bad_guess()
+    local vm
+    @test_logs (:warn, r"Skipping an? \w*Formula") match_mode=:any begin
+        vm = VertexModel(badsys, [], [:x, :y]; verbose=false)
+    end
+    @test !has_guessformula(vm)
 end
 
 @testset "_dedupe_resolved conflict policy" begin

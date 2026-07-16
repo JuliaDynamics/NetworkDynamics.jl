@@ -1046,9 +1046,9 @@ get_initial_state(c::ComponentModel, s::Symbol; kw...) = only(get_initial_state(
 function get_initial_state(cf::ComponentModel, syms; kw...)
     get_initial_state(cf, get_defaults_or_inits_dict(cf), syms; kw...)
 end
-function get_initial_state(cf::ComponentModel, state, syms; missing_val=nothing)
+function get_initial_state(cf::ComponentModel, state, syms; missing_val=nothing, t=NaN)
     obsbuf = if any(in(syms), obssym(cf))
-        _get_component_observed(cf, state)
+        _get_component_observed(cf, state; t)
     else
         nothing
     end
@@ -1065,7 +1065,7 @@ function get_initial_state(cf::ComponentModel, state, syms; missing_val=nothing)
 end
 get_initial_state(nw::Network, sni; kw...) = get_initial_state(getcomp(nw, sni), sni.subidx; kw...)
 
-function _get_component_observed(cf, state=get_defaults_or_inits_dict(cf))
+function _get_component_observed(cf, state=get_defaults_or_inits_dict(cf); t=NaN)
     obs = Vector{Float64}(undef, length(obssym(cf)))
     u = get.(Ref(state), sym(cf), NaN)
     ins = if cf isa EdgeModel
@@ -1075,7 +1075,7 @@ function _get_component_observed(cf, state=get_defaults_or_inits_dict(cf))
         (get.(Ref(state), insym(cf), NaN), )
     end
     p = get.(Ref(state), psym(cf), NaN)
-    obsf(cf)(obs, u, ins..., p, NaN)
+    obsf(cf)(obs, u, ins..., p, t)
     obs
 end
 

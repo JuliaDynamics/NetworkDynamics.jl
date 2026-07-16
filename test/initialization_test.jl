@@ -720,9 +720,10 @@ end
         invalid_output = @initformula :nonexistent_output = :ω + 1
         @test_throws ArgumentError NetworkDynamics.assert_initformula_compat(swing_model, invalid_output)
 
-        # Test setting observable symbols (not allowed)
-        observable_conflict = @initformula :Pdamping = 1.0  # Pdamping is observable
-        @test_throws ArgumentError NetworkDynamics.assert_initformula_compat(swing_model, observable_conflict)
+        # Setting an observable symbol is allowed for InitFormulas: it pins the observable
+        # as an init-time dataflow node (GuessFormulas keep rejecting this, see below)
+        observable_pin = @initformula :Pdamping = 1.0  # Pdamping is observable
+        @test NetworkDynamics.assert_initformula_compat(swing_model, observable_pin) == observable_pin
 
         # Test multiple valid overrides
         multi_valid = @initformula begin
@@ -806,9 +807,10 @@ end
         valid_observable_input = @guessformula :θ = :Pdamping / 10  # Pdamping is observable
         @test NetworkDynamics.assert_guessformula_compat(swing_model, valid_observable_input) == valid_observable_input
 
-        # But writing to observables is still not allowed
-        invalid_observable_output = @guessformula :Pdamping = 1.0  # Pdamping is observable - not allowed as output
-        @test_throws ArgumentError NetworkDynamics.assert_guessformula_compat(swing_model, invalid_observable_output)
+        # writing an observable pins it as a hint, valid for GuessFormulas just as for
+        # InitFormulas (see test/alias_normalization_test.jl)
+        observable_pin = @guessformula :Pdamping = 1.0  # Pdamping is observable
+        @test NetworkDynamics.assert_guessformula_compat(swing_model, observable_pin) == observable_pin
 
         # Test multiple valid overrides
         multi_valid = @guessformula begin

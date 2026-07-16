@@ -302,6 +302,21 @@ function NetworkDynamics.set_mtk_defaults!(sys::System, pairs)
     sys
 end
 
+# docstring lives in utils.jl
+function NetworkDynamics.set_initf(sys::System, pairs::Pair...)
+    isempty(pairs) && return sys
+    for (target, _) in pairs
+        u = unwrap(target)
+        vars = get_variables(u)
+        if length(vars) != 1 || !isequal(only(vars), u)
+            throw(ArgumentError("set_initf target $target is not a single variable."))
+        end
+    end
+    existing = SymbolicUtils.getmetadata(sys, NetworkDynamics.SystemInitFormulas, Pair[])
+    combined = vcat(existing, [unwrap(t) => unwrap(e) for (t, e) in pairs])
+    SymbolicUtils.setmetadata(sys, NetworkDynamics.SystemInitFormulas, combined)
+end
+
 """
     match_diff_states(eqs, states::Set)
 
@@ -365,14 +380,14 @@ is_symbolic_constant(x) = (u = unwrap(x); u isa Number || isempty(get_variables(
 symbolic_constant_value(x) = (u = unwrap(x); u isa Number ? u : Float64(Symbolics.value(u)))
 
 """
-    guesses_to_guessformulas!(sys; obs_subs=Dict())
+    guesses_to_guessformulas!(sys)
 
 Extracts symbolic guesses from a (simplified) system and returns matching GuessFormulas.
 The symbolic guesses are removed from the system's guesses dict in-place (hence `!`),
 so they won't be silently dropped by metadata extraction.
 Constant (numeric) guesses are left in place — they are handled as `:guess` metadata.
 """
-function guesses_to_guessformulas!(sys; obs_subs=Dict())
+function guesses_to_guessformulas!(sys)
     # `get_guesses` (raw backing dict), not `guesses` (a freshly-constructed, recursively
     # namespaced copy): `sys` is already the flattened/simplified system here, so the two are
     # identical — but we `delete!` symbolic guesses below and need the *mutable* backing dict
@@ -381,10 +396,6 @@ function guesses_to_guessformulas!(sys; obs_subs=Dict())
     @assert isempty(ModelingToolkitBase.get_systems(sys)) "Should be called on flattend/simplified system!"
     allguesses = ModelingToolkitBase.get_guesses(sys)
     isempty(allguesses) && return nothing
-
-    # A guess may target any guessable symbol (unknown or parameter — params can be free
-    # during init), so targets and inputs share the same valid set here.
-    valid_inputs = valid_targets = Set(getname.(vcat(unknowns(sys), parameters(sys))))
 
     resolved = Any[]
     for (lhs_sym, rhs_expr) in collect(allguesses)
@@ -395,13 +406,13 @@ function guesses_to_guessformulas!(sys; obs_subs=Dict())
         # GuessFormula below) to avoid it being mishandled later.
         delete!(allguesses.dict, lhs_sym)
 
-        r = _resolve_formula(lhs_sym, rhs_expr; obs_subs, valid_inputs, valid_targets, kind="Guess")
+        r = _resolve_formula(lhs_sym, rhs_expr; kind="Guess")
         r === nothing && continue
         push!(resolved, r)
     end
 
-    # A GuessFormula is only a convergence hint, so conflicting targets (alias-merged
-    # states carrying different guess expressions) are deduped with a warning, never fatal.
+    # A GuessFormula is only a convergence hint, so conflicting targets (the same raw symbol
+    # carrying different guess expressions) are deduped with a warning, never fatal.
     resolved = _dedupe_resolved(resolved; fail=:warn, kind="GuessFormula")
     guessformulas = Set(_build_formula(GuessFormula, r) for r in resolved)
     isempty(guessformulas) ? nothing : guessformulas
@@ -415,8 +426,11 @@ Metadata type behind the `initf` variable option. A symbol carrying
     @variables x(t) [initf = <expression>]
 
 declares "at initialization, set `x` to `<expression>`". The expression may reference any
-unknown or parameter of the system; it is lowered to an [`InitFormula`](@ref) at compile
-time. Valid on unknowns and parameters alike.
+unknown, parameter or observable of the system; it is lowered to an [`InitFormula`](@ref)
+at compile time, with the names exactly as written — classification and observable
+expansion happen at init time. Valid on unknowns and parameters alike; on a variable which
+simplification turns into a non-alias observable, the formula *pins* that observable (see
+the initialization docs). For targets belonging to a subsystem use [`set_initf`](@ref).
 """
 struct VariableInitFormula end
 Symbolics.option_to_metadata_type(::Val{:initf}) = VariableInitFormula
@@ -424,52 +438,67 @@ Symbolics.option_to_metadata_type(::Val{:initf}) = VariableInitFormula
 """
     collect_initf(sys)
 
-Collect the `initf` metadata of `sys` and all its subsystems into a
-`target => expression` dict, namespaced to the level of `sys`.
+Collect the `initf` variable metadata and the [`set_initf`](@ref) system metadata of `sys`
+and all its subsystems into a list of `target => expression` pairs, namespaced to the level
+of `sys`. Deliberately a list, not a dict: a target carrying both a variable-level and a
+system-level recipe must surface as two entries, so `_dedupe_resolved` can dedupe them when
+identical and error when they conflict — never silently prefer one.
 
 Must be called on the **hierarchical** (pre-flattening) system: `renamespace` renames a
 symbol but does not descend into the expressions stored in its metadata, so the `initf` of a
 subsystem symbol read off a flattened system still refers to the subsystem's own symbols by
 their bare names. Recursing here and namespacing each collected pair with `namespace_expr`
 (which honors `ParentScope`, so expressions passed in from the parent survive untouched) is
-the same strategy MTK's own `bindings`/`guesses` accessors use.
+the same strategy MTK's own `bindings`/`guesses` accessors use. `set_initf` pairs are
+written in the local names of the system they were attached to, so the same recursion
+namespaces them correctly too.
 """
 function collect_initf(sys)
-    initf = OrderedDict{ST,Any}()
+    initf = Pair{ST,Any}[]
+    # a subsystem variable referenced in this level's equations shows up in this level's
+    # unknowns too, still carrying its initf metadata — but with the expression in the
+    # *subsystem's* local names. Only the recursion below sees it in the right namespace,
+    # so it must be skipped here.
+    subvars = Set{ST}()
+    for subsys in ModelingToolkitBase.get_systems(sys)
+        for v in vcat(ModelingToolkitBase.get_unknowns(subsys), ModelingToolkitBase.get_ps(subsys))
+            push!(subvars, unwrap(ModelingToolkitBase.namespace_expr(v, subsys)))
+        end
+    end
     for v in vcat(ModelingToolkitBase.get_unknowns(sys), ModelingToolkitBase.get_ps(sys))
         u = unwrap(v)
+        u ∈ subvars && continue
         SymbolicUtils.hasmetadata(u, VariableInitFormula) || continue
-        initf[u] = unwrap(SymbolicUtils.getmetadata(u, VariableInitFormula))
+        push!(initf, u => unwrap(SymbolicUtils.getmetadata(u, VariableInitFormula)))
+    end
+    for (target, expr) in SymbolicUtils.getmetadata(sys, NetworkDynamics.SystemInitFormulas, Pair[])
+        push!(initf, unwrap(target) => unwrap(expr))
     end
     for subsys in ModelingToolkitBase.get_systems(sys)
         for (target, expr) in collect_initf(subsys)
-            initf[ModelingToolkitBase.namespace_expr(target, subsys)] =
-                ModelingToolkitBase.namespace_expr(expr, subsys)
+            push!(initf, ModelingToolkitBase.namespace_expr(target, subsys) =>
+                         ModelingToolkitBase.namespace_expr(expr, subsys))
         end
     end
     initf
 end
 
 """
-    initf_to_initformulas(initf; states, params, inputs, obs_subs)
+    initf_to_initformulas(initf)
 
 Turn the `target => expression` pairs collected by [`collect_initf`](@ref) into
-InitFormulas. Unlike guesses, targets may be unknowns **or** parameters **or** inputs — all
-three are settable during initialization.
+InitFormulas. Targets may be unknowns, parameters, inputs — or observables, in which case
+the formula *pins* the observable as an init-time dataflow node.
 
-An InitFormula is a constraint (not a hint), so conflicting targets (two formulas forcing
-the same symbol to *different* values after alias substitution) are a genuine
-over-determination and raise an error.
+An InitFormula is a constraint (not a hint), so conflicting definitions for the same raw
+target are a genuine over-determination and raise an error.
 """
-function initf_to_initformulas(initf; states::Vector{ST}, params, inputs, obs_subs)
+function initf_to_initformulas(initf)
     isempty(initf) && return nothing
-
-    valid_targets = Set(getname.(vcat(states, params, inputs)))
-    valid_inputs = Set(getname.(vcat(states, params, inputs)))
 
     resolved = Any[]
     for (target, expr) in initf
-        r = _resolve_formula(target, expr; obs_subs, valid_inputs, valid_targets, kind="initf")
+        r = _resolve_formula(target, expr; kind="initf")
         r === nothing && continue
         push!(resolved, r)
     end
@@ -520,72 +549,82 @@ function assert_no_state_bindings(sys)
         """))
 end
 
-# ── shared helpers for guesses_to_guessformulas! and bindings_to_initformulas ──
+# ── shared helpers for guesses_to_guessformulas! and initf_to_initformulas ──
 #
 # Both an InitFormula and a GuessFormula are "set `target := f(inputs)`" objects, so the
-# resolution, validity guards, conflict-deduplication and function-building are identical;
-# only the upstream filtering (numeric guess vs. parameter binding) and the conflict policy
-# (`fail`) live in the two callers above.
+# resolution, conflict-deduplication and function-building are identical; only the upstream
+# filtering (numeric guess vs. parameter binding) and the conflict policy (`fail`) live in
+# the two callers above.
 
-# Resolve one `lhs => rhs` pair against the observed-substitution map into a canonical
-# `(target, rhs, inputs)` form, or skip it (with a warning) when it cannot become a
-# well-formed formula. `obs_subs` collapses every alias-group member onto its surviving
-# "main" symbol, so two entries on different members of one alias group resolve to the *same*
-# target here — exactly the collision `_dedupe_resolved` then handles.
-function _resolve_formula(lhs_sym, rhs_expr; obs_subs, valid_inputs, valid_targets, kind)
-    # (1) target must resolve to a single surviving unknown; an eliminated variable expands
-    #     to a compound expression after alias substitution (`getname` would then throw).
-    lhs_sub  = Symbolics.substitute(lhs_sym, obs_subs)
-    lhs_vars = get_variables(lhs_sub)
-    if length(lhs_vars) != 1 || !isequal(only(lhs_vars), lhs_sub)
-        @warn "$kind for $lhs_sym expands to $lhs_sub after alias substitution, which is not \
-               a single unknown (likely eliminated). Skip."
+# Shape one `lhs => rhs` pair into a `(target, rhs, inputs)` form, or skip it (with a
+# warning) when it structurally cannot become a formula. Deliberately *raw*: the target and
+# the inputs keep the names the user wrote, without any substitution through the observed
+# equations. Classification (settable / alias / pinned observable) and observable-input
+# expansion happen at init time in `normalize`, exactly as for a formula attached to the
+# compiled component by hand — one resolution path instead of two. Whether the raw names
+# actually exist on the compiled component is checked at attach time, see
+# `add_initformula_lenient!` / `add_guessformula_lenient!`.
+function _resolve_formula(lhs_sym, rhs_expr; kind)
+    lhs_vars = get_variables(lhs_sym)
+    if length(lhs_vars) != 1 || !isequal(only(lhs_vars), unwrap(lhs_sym))
+        @warn "$kind target $lhs_sym is not a single variable. Skip."
         return nothing
     end
-    # (2) it must not resolve to an observable (those are computed, not set).
-    if lhs_sub ∈ keys(obs_subs)
-        @warn "$kind for $lhs_sym resolves to observable $lhs_sub, which is computed rather \
-               than set. Skip."
-        return nothing
-    end
-    target = getname(lhs_sub)
-    # (3) and it must be a settable target of the system (a surviving unknown/state).
-    if target ∉ valid_targets
-        @warn "$kind for $lhs_sym resolves to $target, which is not a settable target of the \
-               system. Skip."
-        return nothing
-    end
+    target = getname(lhs_sym)
 
-    rhs_sub        = fixpoint_sub(rhs_expr, obs_subs)
-    input_symbolic = collect(get_variables(rhs_sub))
+    input_symbolic = collect(get_variables(rhs_expr))
     input_names    = getname.(input_symbolic)
-    # (4) no self-dependency (the formula constructors forbid it).
+    # no raw self-dependency (the formula constructors throw on it); a dependency hidden
+    # behind an observable is only detectable at init time, where `normalize` reports it
     if target ∈ input_names
-        @warn "$kind for $lhs_sym depends on its own resolved target $target after \
-               substitution. Skip."
-        return nothing
-    end
-    # (5) every input must be a symbol the system actually exposes (a surviving unknown or
-    #     parameter); a rhs referencing anything else is a malformed formula that would be
-    #     rejected fatally downstream (`assert_*formula_compat`), so skip it with a warning.
-    #     This is a generic well-formedness guard, NOT a namespace workaround: guesses are
-    #     always read through `guesses`/`get_guesses` on the enclosing (flattened) system,
-    #     which namespace correctly, so a well-formed guess never lands here.
-    badins = setdiff(Set(input_names), valid_inputs)
-    if !isempty(badins)
-        @warn "$kind for $lhs_sym references symbol(s) not in the system \
-               ($(join(badins, ", "))). Skip."
+        @warn "$kind for $lhs_sym depends on its own target. Skip."
         return nothing
     end
 
-    (; src=lhs_sym, target, rhs=rhs_sub, input_symbolic, input_names)
+    (; src=lhs_sym, target, rhs=unwrap(rhs_expr), input_symbolic, input_names)
 end
 
-# Collapse entries that resolved to the same target. Identical definitions (equal rhs after
-# obs substitution, e.g. alias-merged states carrying the same expression) are always safe to
-# dedupe silently. Genuinely *conflicting* definitions (same target, differing rhs) are a
-# warning for guesses (`fail=:warn`, only a hint) but an error for bindings (`fail=:error`,
-# two constraints forcing one state). Comparison is on the symbolic rhs, not the prettyprint.
+"""
+    add_initformula_lenient!(c, formula)
+    add_guessformula_lenient!(c, formula)
+
+Attach an MTK-lowered formula to a compiled component, demoting the compatibility check to a
+warn-and-skip. Lowering is best effort: a recipe whose target or inputs did not survive
+simplification (or which references the independent variable directly) must not fail
+compilation — the model works without it, the initialization just knows less. Only the
+compatibility check is caught; the attach itself runs unchecked, having already been
+validated.
+"""
+function add_initformula_lenient!(c, formula)
+    try
+        assert_initformula_compat(c, formula)
+    catch e
+        e isa ArgumentError || rethrow()
+        @warn "Skipping an InitFormula which does not fit the compiled component :$(c.name): $(e.msg)" formula
+        return nothing
+    end
+    add_initformula!(c, formula; check=false)  # already validated
+    nothing
+end
+function add_guessformula_lenient!(c, formula)
+    try
+        assert_guessformula_compat(c, formula)
+    catch e
+        e isa ArgumentError || rethrow()
+        @warn "Skipping a GuessFormula which does not fit the compiled component :$(c.name): $(e.msg)" formula
+        return nothing
+    end
+    add_guessformula!(c, formula; check=false)  # already validated
+    nothing
+end
+
+# Collapse entries with the same raw target. Identical definitions (equal rhs) are always
+# safe to dedupe silently. Genuinely *conflicting* definitions (same target, differing rhs)
+# are a warning for guesses (`fail=:warn`, only a hint) but an error for initf
+# (`fail=:error`, two constraints forcing one state). Comparison is on the symbolic rhs, not
+# the prettyprint. Note this is syntactic and name-level: two formulas targeting different
+# members of one alias class both survive here, and the init-time duplicate-writer check
+# reports them once normalization has collapsed the class.
 function _dedupe_resolved(resolved; fail::Symbol, kind)
     by_target = OrderedDict{Symbol,Vector{Any}}()
     for r in resolved
@@ -597,11 +636,10 @@ function _dedupe_resolved(resolved; fail::Symbol, kind)
         push!(kept, chosen)
         length(group) == 1 && continue
         if all(g -> isequal(g.rhs, chosen.rhs), group)
-            @debug "$kind: $(length(group)) identical definitions for $target after obs \
-                    substitution; keeping one."
+            @debug "$kind: $(length(group)) identical definitions for $target; keeping one."
         else
-            msg = "$kind: conflicting definitions target $target after obs substitution \
-                   (differing right-hand sides). Keeping $(repr(chosen.rhs)); dropping the rest."
+            msg = "$kind: conflicting definitions target $target (differing right-hand \
+                   sides). Keeping $(repr(chosen.rhs)); dropping the rest."
             fail === :error ? error(msg) : @warn msg
         end
     end
@@ -715,25 +753,29 @@ function _resolve_alias(s, steps, settable, visiting)
 end
 
 """
-    generate_obs_expansion(cf::ComponentModel, syms::Vector{Symbol}) -> (roots, f)
+    generate_obs_expansion(cf::ComponentModel, syms::Vector{Symbol}; stop_at) -> (roots, f)
 
 MTK implementation of the core stub; see `NetworkDynamics.generate_obs_expansion` for the
 contract. Expansion is a plain `fixpoint_sub` against the stored `:observed` equations:
 they are acyclic, and the output-defining equations are absent from them, so substituting
 to a fixpoint necessarily bottoms out on settable symbols (plus the independent variable).
+Equations whose lhs name is in `stop_at` are excluded from the substitution set, so the
+fixpoint additionally bottoms out on those symbols.
 
 The independent variable is split off from the roots and passed to the closure separately —
 callers source root values from the defaults/guesses dicts, where a `t` has no business
 being. Symbols with no observed equation never enter the symbolic part at all; they are
 copied through by index, which spares us reconstructing a symbolic variable for them.
 """
-function NetworkDynamics.generate_obs_expansion(cf::NetworkDynamics.ComponentModel, syms::Vector{Symbol})
+function NetworkDynamics.generate_obs_expansion(cf::NetworkDynamics.ComponentModel, syms::Vector{Symbol};
+                                                stop_at=Set{Symbol}())
     if !NetworkDynamics.has_metadata(cf, :observed)
         throw(ArgumentError("Cannot expand $syms: component :$(cf.name) has no `:observed` \
                              metadata. Only components compiled from ModelingToolkit carry \
                              the symbolic observed equations needed for expansion."))
     end
     obseqs = NetworkDynamics.get_metadata(cf, :observed)
+    obseqs = filter(eq -> getname(eq.lhs) ∉ stop_at, obseqs)
     subs = OrderedDict(eq.lhs => eq.rhs for eq in obseqs)
     byname = Dict(getname(eq.lhs) => eq.lhs for eq in obseqs)
 
@@ -747,7 +789,7 @@ function NetworkDynamics.generate_obs_expansion(cf::NetworkDynamics.ComponentMod
     filter!(v -> !isequal(v, iv), symroots)
     rootnames = getname.(symroots)
 
-    _warn_unsettable_roots(cf, rootnames)
+    _warn_unsettable_roots(cf, rootnames, stop_at)
 
     # plain symbols are their own roots; `unique` because a formula may well read both a
     # settable symbol and an alias of it
@@ -771,9 +813,10 @@ end
 
 # Mirrors the `obs_deps ⊆ params ∪ inputs ∪ unknowns` warning in `generate_io_function`: a
 # root that is not settable cannot be sourced from the defaults dict, so the formula reading
-# it will skip. Warn rather than throw — the skip is already diagnosed downstream.
-function _warn_unsettable_roots(cf, rootnames)
-    unsettable = setdiff(rootnames, settable_symbols(cf))
+# it will skip. Warn rather than throw — the skip is already diagnosed downstream. Symbols
+# the expansion was asked to stop at are deliberate roots, not accidents — never warn on them.
+function _warn_unsettable_roots(cf, rootnames, stop_at)
+    unsettable = setdiff(rootnames, settable_symbols(cf), stop_at)
     isempty(unsettable) && return nothing
     @warn "Observable expansion for :$(cf.name) bottomed out on non-settable symbol(s) \
            $(collect(unsettable)). Formulas reading them will be skipped."
