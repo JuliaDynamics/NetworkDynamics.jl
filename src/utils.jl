@@ -574,4 +574,43 @@ Requires the `ModelingToolkit` extension to be loaded.
 """
 function set_initf end
 
+"""
+    SystemGuessFormulas
+
+Custom MTK metadata type holding the `target => expression` guess pairs attached to a
+`System` via [`set_guessf`](@ref). Advanced usage only — prefer `set_guessf` over touching
+the metadata directly. The guess-side counterpart of [`SystemInitFormulas`](@ref).
+"""
+struct SystemGuessFormulas end
+
+"""
+    set_guessf(sys::System, pairs::Pair...) -> System
+
+Attach guess equations to a ModelingToolkit `System` at the *system* level, as
+`target => expression` pairs. Each pair declares "at initialization, *guess* `target` from
+`expression`" and is lowered to a [`GuessFormula`](@ref) when the model is compiled —
+exactly like the `guessf` variable option, which is preferred whenever the target is the
+system's own variable:
+
+    @variables x(t) [guessf = <expression>]
+
+`set_guessf` is the guess-side counterpart of [`set_initf`](@ref) and exists for the same
+reason: the variable option cannot express a target that belongs to a *subsystem*, or an
+observable a parent wants to seed. A guess is only a *hint* — it lands among the guesses,
+seeds the solver, and is never consistency-checked — so unlike `set_initf`, conflicting
+definitions for one target are a warning, not an error, and a formula whose inputs cannot be
+resolved is silently skipped (leaving any scalar `guess` as the fallback).
+
+The function is **non-mutating** (system metadata is immutable), so the result must be
+rebound:
+
+    @named pi = PIBlock()
+    eqs = [...]
+    sys = System(eqs, t; name, systems=[pi])
+    sys = set_guessf(sys, pi.y => K_e * v_f)
+
+Requires the `ModelingToolkit` extension to be loaded.
+"""
+function set_guessf end
+
 function set_mtkcompile! end

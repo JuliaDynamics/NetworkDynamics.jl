@@ -343,6 +343,21 @@ function NetworkDynamics.set_initf(sys::System, pairs::Pair...)
     SymbolicUtils.setmetadata(sys, NetworkDynamics.SystemInitFormulas, combined)
 end
 
+# docstring lives in utils.jl
+function NetworkDynamics.set_guessf(sys::System, pairs::Pair...)
+    isempty(pairs) && return sys
+    for (target, _) in pairs
+        u = unwrap(target)
+        vars = get_variables(u)
+        if length(vars) != 1 || !isequal(only(vars), u)
+            throw(ArgumentError("set_guessf target $target is not a single variable."))
+        end
+    end
+    existing = SymbolicUtils.getmetadata(sys, NetworkDynamics.SystemGuessFormulas, Pair[])
+    combined = vcat(existing, [unwrap(t) => unwrap(e) for (t, e) in pairs])
+    SymbolicUtils.setmetadata(sys, NetworkDynamics.SystemGuessFormulas, combined)
+end
+
 """
     match_diff_states(eqs, states::Set)
 
@@ -397,94 +412,74 @@ end
 
 # A value is a *symbolic constant* iff it has no free variables: a plain `Number`, or a
 # `BasicSymbolic` that folds to one (e.g. an MTKv11 literal `0.0`, or `sqrt(2)`). A value that
-# references other variables/parameters is NOT constant — for guesses/bindings those belong to
-# the GuessFormula/InitFormula path, while constants are stored as plain `:guess` metadata.
-# Shared by `_get_metadata` (keep numeric guesses) and `guesses_to_guessformulas!` (skip them).
+# references other variables/parameters is NOT constant; only constants are stored as plain
+# `:guess` metadata. A non-constant `:guess` is rejected by `_get_metadata` — the `guessf`
+# variable option (or `set_guessf`) is the way to spell a symbolic guess.
 is_symbolic_constant(x) = (u = unwrap(x); u isa Number || isempty(get_variables(u)))
 
 # Numeric value of a symbolic constant; only meaningful when `is_symbolic_constant(x)`.
 symbolic_constant_value(x) = (u = unwrap(x); u isa Number ? u : Float64(Symbolics.value(u)))
 
-"""
-    guesses_to_guessformulas!(sys)
-
-Extracts symbolic guesses from a (simplified) system and returns matching GuessFormulas.
-The symbolic guesses are removed from the system's guesses dict in-place (hence `!`),
-so they won't be silently dropped by metadata extraction.
-Constant (numeric) guesses are left in place — they are handled as `:guess` metadata.
-"""
-function guesses_to_guessformulas!(sys)
-    # `get_guesses` (raw backing dict), not `guesses` (a freshly-constructed, recursively
-    # namespaced copy): `sys` is already the flattened/simplified system here, so the two are
-    # identical — but we `delete!` symbolic guesses below and need the *mutable* backing dict
-    # for that to stick. (`_get_metadata` uses `guesses(sys)` because it runs on the original,
-    # possibly hierarchical, system where only the recursive accessor namespaces correctly.)
-    @assert isempty(ModelingToolkitBase.get_systems(sys)) "Should be called on flattend/simplified system!"
-    allguesses = ModelingToolkitBase.get_guesses(sys)
-    isempty(allguesses) && return nothing
-
-    resolved = Any[]
-    for (lhs_sym, rhs_expr) in collect(allguesses)
-        # skip constant guesses — leave them for :guess metadata
-        is_symbolic_constant(rhs_expr) && continue
-        # This is a symbolic guess: it can never be a numeric :guess metadata entry, so
-        # remove it from the system dict unconditionally (whether or not it becomes a
-        # GuessFormula below) to avoid it being mishandled later.
-        delete!(allguesses.dict, lhs_sym)
-
-        r = _resolve_formula(lhs_sym, rhs_expr; kind="Guess")
-        r === nothing && continue
-        push!(resolved, r)
-    end
-
-    # A GuessFormula is only a convergence hint, so conflicting targets (the same raw symbol
-    # carrying different guess expressions) are deduped with a warning, never fatal.
-    resolved = _dedupe_resolved(resolved; fail=:warn, kind="GuessFormula")
-    guessformulas = Set(_build_formula(GuessFormula, r) for r in resolved)
-    isempty(guessformulas) ? nothing : guessformulas
-end
-
-"""
+vigformula_docstring = raw"""
     VariableInitFormula
+    VariableGuessFormula
 
-Metadata type behind the `initf` variable option. A symbol carrying
+Metadata types behind the `initf` / `guessf` variable options. A symbol carrying
 
-    @variables x(t) [initf = <expression>]
+    @variables x(t) [initf  = <expression>]     # VariableInitFormula
+    @variables x(t) [guessf = <expression>]     # VariableGuessFormula
 
-declares "at initialization, set `x` to `<expression>`". The expression may reference any
-unknown, parameter or observable of the system; it is lowered to an [`InitFormula`](@ref)
-at compile time, with the names exactly as written — classification and observable
-expansion happen at init time. Valid on unknowns and parameters alike; on a variable which
-simplification turns into a non-alias observable, the formula *pins* that observable (see
-the initialization docs). For targets belonging to a subsystem use [`set_initf`](@ref).
+declares "at initialization, set (`initf`) / guess (`guessf`) `x` from `<expression>`". The
+expression may reference any unknown, parameter or observable of the system; it is lowered to
+an [`InitFormula`](@ref) / [`GuessFormula`](@ref) at compile time, with the names exactly as
+written — classification and observable expansion happen at init time. Valid on unknowns and
+parameters alike; on a variable which simplification turns into a non-alias observable, the
+formula *pins* that observable (see the initialization docs).
+
+`initf` is a constraint (lands in defaults, consistency-checked); `guessf` is only a hint
+(lands in guesses, never checked, skipped when its inputs cannot be resolved — leaving any
+scalar `guess` as the fallback). For targets belonging to a subsystem use [`set_initf`](@ref)
+/ [`set_guessf`](@ref).
 """
+
+
+@doc vigformula_docstring
 struct VariableInitFormula end
-Symbolics.option_to_metadata_type(::Val{:initf}) = VariableInitFormula
+
+@doc vigformula_docstring
+struct VariableGuessFormula end
+
+Symbolics.option_to_metadata_type(::Val{:initf})  = VariableInitFormula
+Symbolics.option_to_metadata_type(::Val{:guessf}) = VariableGuessFormula
 
 """
     collect_initf(sys)
+    collect_guessf(sys)
 
-Collect the `initf` variable metadata and the [`set_initf`](@ref) system metadata of `sys`
-and all its subsystems into a list of `target => expression` pairs, namespaced to the level
-of `sys`. Deliberately a list, not a dict: a target carrying both a variable-level and a
-system-level recipe must surface as two entries, so `_dedupe_resolved` can dedupe them when
-identical and error when they conflict — never silently prefer one.
+Collect the `initf`/`guessf` variable metadata and the [`set_initf`](@ref)/[`set_guessf`](@ref)
+system metadata of `sys` and all its subsystems into a list of `target => expression` pairs,
+namespaced to the level of `sys`. Deliberately a list, not a dict: a target carrying both a
+variable-level and a system-level recipe must surface as two entries, so `_dedupe_resolved`
+can dedupe them when identical and error/warn when they conflict — never silently prefer one.
 
 Must be called on the **hierarchical** (pre-flattening) system: `renamespace` renames a
-symbol but does not descend into the expressions stored in its metadata, so the `initf` of a
+symbol but does not descend into the expressions stored in its metadata, so the formula of a
 subsystem symbol read off a flattened system still refers to the subsystem's own symbols by
 their bare names. Recursing here and namespacing each collected pair with `namespace_expr`
 (which honors `ParentScope`, so expressions passed in from the parent survive untouched) is
-the same strategy MTK's own `bindings`/`guesses` accessors use. `set_initf` pairs are
-written in the local names of the system they were attached to, so the same recursion
+the same strategy MTK's own `bindings`/`guesses` accessors use. `set_initf`/`set_guessf` pairs
+are written in the local names of the system they were attached to, so the same recursion
 namespaces them correctly too.
 """
-function collect_initf(sys)
-    initf = Pair{ST,Any}[]
+collect_initf(sys)  = _collect_formula_metadata(sys, VariableInitFormula,  NetworkDynamics.SystemInitFormulas)
+collect_guessf(sys) = _collect_formula_metadata(sys, VariableGuessFormula, NetworkDynamics.SystemGuessFormulas)
+
+function _collect_formula_metadata(sys, VarMetaType, SysMetaKey)
+    pairs = Pair{ST,Any}[]
     # a subsystem variable referenced in this level's equations shows up in this level's
-    # unknowns too, still carrying its initf metadata — but with the expression in the
-    # *subsystem's* local names. Only the recursion below sees it in the right namespace,
-    # so it must be skipped here.
+    # unknowns too, still carrying its metadata — but with the expression in the *subsystem's*
+    # local names. Only the recursion below sees it in the right namespace, so it must be
+    # skipped here.
     subvars = Set{ST}()
     for subsys in ModelingToolkitBase.get_systems(sys)
         for v in vcat(ModelingToolkitBase.get_unknowns(subsys), ModelingToolkitBase.get_ps(subsys))
@@ -494,43 +489,49 @@ function collect_initf(sys)
     for v in vcat(ModelingToolkitBase.get_unknowns(sys), ModelingToolkitBase.get_ps(sys))
         u = unwrap(v)
         u ∈ subvars && continue
-        SymbolicUtils.hasmetadata(u, VariableInitFormula) || continue
-        push!(initf, u => unwrap(SymbolicUtils.getmetadata(u, VariableInitFormula)))
+        SymbolicUtils.hasmetadata(u, VarMetaType) || continue
+        push!(pairs, u => unwrap(SymbolicUtils.getmetadata(u, VarMetaType)))
     end
-    for (target, expr) in SymbolicUtils.getmetadata(sys, NetworkDynamics.SystemInitFormulas, Pair[])
-        push!(initf, unwrap(target) => unwrap(expr))
+    for (target, expr) in SymbolicUtils.getmetadata(sys, SysMetaKey, Pair[])
+        push!(pairs, unwrap(target) => unwrap(expr))
     end
     for subsys in ModelingToolkitBase.get_systems(sys)
-        for (target, expr) in collect_initf(subsys)
-            push!(initf, ModelingToolkitBase.namespace_expr(target, subsys) =>
+        for (target, expr) in _collect_formula_metadata(subsys, VarMetaType, SysMetaKey)
+            push!(pairs, ModelingToolkitBase.namespace_expr(target, subsys) =>
                          ModelingToolkitBase.namespace_expr(expr, subsys))
         end
     end
-    initf
+    pairs
 end
 
 """
-    initf_to_initformulas(initf)
+    initf_to_initformulas(pairs)
+    guessf_to_guessformulas(pairs)
 
-Turn the `target => expression` pairs collected by [`collect_initf`](@ref) into
-InitFormulas. Targets may be unknowns, parameters, inputs — or observables, in which case
-the formula *pins* the observable as an init-time dataflow node.
+Turn the `target => expression` pairs collected by
+[`collect_initf`](@ref)/[`collect_guessf`](@ref) into InitFormulas/GuessFormulas. Targets may
+be unknowns, parameters, inputs — or observables, in which case the formula *pins* the
+observable as an init-time dataflow node.
 
 An InitFormula is a constraint (not a hint), so conflicting definitions for the same raw
-target are a genuine over-determination and raise an error.
+target are a genuine over-determination and raise an error. A GuessFormula is only a
+convergence hint, so conflicting definitions are deduped with a warning, never fatal.
 """
-function initf_to_initformulas(initf)
-    isempty(initf) && return nothing
+initf_to_initformulas(pairs)   = _metadata_to_formulas(pairs, InitFormula;  fail=:error, kind="initf")
+guessf_to_guessformulas(pairs) = _metadata_to_formulas(pairs, GuessFormula; fail=:warn,  kind="guessf")
+
+function _metadata_to_formulas(pairs, ::Type{FT}; fail::Symbol, kind::String) where {FT}
+    (isnothing(pairs) || isempty(pairs)) && return nothing
 
     resolved = Any[]
-    for (target, expr) in initf
-        r = _resolve_formula(target, expr; kind="initf")
+    for (target, expr) in pairs
+        r = _resolve_formula(target, expr; kind)
         r === nothing && continue
         push!(resolved, r)
     end
 
-    resolved = _dedupe_resolved(resolved; fail=:error, kind="InitFormula")
-    isempty(resolved) ? nothing : Set(_build_formula(InitFormula, r) for r in resolved)
+    resolved = _dedupe_resolved(resolved; fail, kind=string(nameof(FT)))
+    isempty(resolved) ? nothing : Set(_build_formula(FT, r) for r in resolved)
 end
 
 """
@@ -575,12 +576,11 @@ function assert_no_state_bindings(sys)
         """))
 end
 
-# ── shared helpers for guesses_to_guessformulas! and initf_to_initformulas ──
+# ── shared helpers for _metadata_to_formulas (initf and guessf) ──
 #
 # Both an InitFormula and a GuessFormula are "set `target := f(inputs)`" objects, so the
-# resolution, conflict-deduplication and function-building are identical; only the upstream
-# filtering (numeric guess vs. parameter binding) and the conflict policy (`fail`) live in
-# the two callers above.
+# resolution, conflict-deduplication and function-building are identical; only the conflict
+# policy (`fail`: error for initf, warn for guessf) differs between the two.
 
 # Shape one `lhs => rhs` pair into a `(target, rhs, inputs)` form, or skip it (with a
 # warning) when it structurally cannot become a formula. Deliberately *raw*: the target and

@@ -54,9 +54,14 @@
 - **New `set_initf(sys, target => expr, ...)`** attaches init equations to an MTK `System` at
   the *system* level (non-mutating, rebind the result). It covers the case the `initf`
   variable option cannot express: the target belongs to a subsystem, e.g. pinning a child's
-  output observable from the parent. Additionally, within a single component InitFormulas can be
-  attachted to symbols using the `initf` symbol metadtata, guess formulas can be attached by just passing an
-  expression rather than a number to the `guess` metadata.
+  output observable from the parent.
+- **Guess formulas mirror the init side**: `@variables x(t) [guessf = <expr>]` and
+  `set_guessf(sys, target => expr, ...)` are the guess-side twins of `initf` / `set_initf`,
+  lowered to `GuessFormula`s. They land among the guesses (a hint, never consistency-checked),
+  so conflicts warn instead of error and an unresolvable formula is skipped. Because `guessf` is
+  its own key, a scalar `guess=0` (fallback seed) and `guessf=<expr>` (refined value) now coexist
+  on one variable. (Breaking: the old route of passing a symbolic expression to the `guess`
+  metadata is removed — a symbolic `guess` now errors, use `guessf` instead.)
 
 ## v0.10.17 Changelog
 - **Open-loop linearization** ([#341](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/341)):

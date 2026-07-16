@@ -44,6 +44,7 @@ using StaticArrays: StaticArrays, SVector
 
 export implicit_output, ComponentPostprocessing, set_mtk_defaults
 export set_initf, SystemInitFormulas
+export set_guessf, SystemGuessFormulas
 include("utils.jl")
 
 export VertexModel, EdgeModel

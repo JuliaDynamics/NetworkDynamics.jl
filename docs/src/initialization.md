@@ -281,7 +281,7 @@ Now the two rules link up: the parent's rule produces `y`, the child's rule cons
 
 **Setting an observable (pinning).** For the chain to close, a formula has to be allowed to set `y` — an *observable*, a quantity the model defines through an equation rather than storing it as a state. NetworkDynamics permits this and calls it *pinning*. A pinned value is only a stepping stone used while the formulas run; it is not stored on the component. Afterwards it is checked for consistency: the observable is recomputed from the solved state and must agree with what was pinned, otherwise you get a warning (and usually a failing residual). A plain default sitting on an observable is never used this way — pinning is a deliberate act of a formula, not ambient data.
 
-**Guesses do the same, more softly.** A `GuessFormula` can drive the very same backward chain, but its values land among the *guesses*: they seed the solver near the right operating point without committing to it, and are never consistency-checked. That makes back-computing guess formulas a safe default to sprinkle throughout a model library — spell the whole backward chain as guesses and initialization simply starts close to the answer. Wherever you *do* know an exact value (a default, or an `InitFormula` pin), it takes precedence over the guessed one.
+**Guesses do the same, more softly.** A `GuessFormula` can drive the very same backward chain, but its values land among the *guesses*: they seed the solver near the right operating point without committing to it, and are never consistency-checked. That makes back-computing guess formulas a safe default to sprinkle throughout a model library — spell the whole backward chain as guesses and initialization simply starts close to the answer. Wherever you *do* know an exact value (a default, or an `InitFormula` pin), it takes precedence over the guessed one. The guess-side spellings mirror the init side exactly: the `guessf` variable option next to a declaration, and [`set_guessf`](@ref) to attach a rule from outside — see below.
 
 #### Initialization Constraints (`InitConstraint`)
 
@@ -324,6 +324,21 @@ nothing #hide
 ```
 
 **Applying GuessFormulas**: Like init formulas and constraints, guess formulas can be stored in metadata ([`set_guessformula!`](@ref)) or passed directly using the `additional_guessformula` keyword in [`initialize_componentwise`](@ref), [`initialize_component`](@ref) and friends.
+
+**From MTK models**: guess formulas mirror the `initf` / [`set_initf`](@ref) spellings on the guess side. Next to a declaration use the `guessf` variable option; from outside the block use [`set_guessf`](@ref):
+
+```julia
+@component function avr(; name)
+    @variables begin
+        v_meas(t), [guess=1.0, guessf=v_mag]   # guess the measurement from the actual value
+    end
+    # ...
+end
+
+sys = set_guessf(sys, sub.x => sub.p)          # seed a subsystem's state from outside
+```
+
+`guessf` reads as "at initialization, *guess* this symbol from that expression". Because a guess is only a hint, it differs from `initf` in two ways: conflicting recipes for one target are a warning (not an error), and a formula whose inputs cannot be resolved is silently skipped. That skip is what makes `guessf` compose with a scalar `guess`: give a variable both `guess=0` (the fallback seed) and `guessf=<expr>` (the refined value), and the formula is used whenever it resolves while the scalar remains as a safe default. A symbolic value given to the plain `guess` option is rejected — spell it as `guessf` instead.
 
 
 ## Analysing Fixpoints

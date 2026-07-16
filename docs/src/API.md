@@ -299,6 +299,8 @@ NetworkDynamics.pretty_f
 set_mtk_defaults!
 set_initf
 SystemInitFormulas
+set_guessf
+SystemGuessFormulas
 ```
 
 ## NetworkDynamicsInspector API

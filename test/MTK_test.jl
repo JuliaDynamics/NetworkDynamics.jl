@@ -70,7 +70,7 @@ end;
     end
     @parameters begin
         M = 1, [guess=0.1, description = "Inertia"]
-        D = 0.1, [guess=M, description = "Damping"]
+        D = 0.1, [guess=0.1, description = "Damping"]
         Pmech, [description = "Mechanical Power"]
     end
     @equations begin
@@ -1477,6 +1477,53 @@ end
     end
 end
 
+@testset "set_guessf: system-level guess formulas" begin
+    @testset "subsystem-owned target is namespaced" begin
+        @component function guessf_inner(; name)
+            @parameters a=1.0
+            @variables x(t) [guess=0.0] y(t) [guess=0.0]
+            System([Dt(x) ~ -x + a, Dt(y) ~ -y], t, [x, y], [a]; name)
+        end
+        @component function guessf_outer(; name)
+            @named c = guessf_inner()
+            @variables z(t) [guess=0.0]
+            sys = System([Dt(z) ~ -z + c.x], t, [z], []; name, systems=[c])
+            set_guessf(sys, c.x => c.a)
+        end
+        @named outer = guessf_outer()
+        vm = VertexModel(outer, [], [:z]; verbose=false)
+        f = only(get_guessformulas(vm))
+        @test f.outsym == [:c₊x]
+        @test f.sym == [:c₊a]   # <- namespaced, NOT bare `:a`
+    end
+
+    @testset "conflicting guessf targets warn, never error" begin
+        # unlike set_initf (a constraint → error), two guess recipes for one target are only
+        # a hint clash: dedupe with a warning and keep one.
+        @component function guessf_conflict(; name)
+            @parameters a=1.0
+            @variables x(t) [guess=0.0, guessf=2a] y(t) [guess=0.0]
+            sys = System([Dt(x) ~ -x, Dt(y) ~ -y], t, [x, y], [a]; name)
+            set_guessf(sys, x => 3a)   # different recipe for the same raw target
+        end
+        @named sys = guessf_conflict()
+        local vm
+        @test_logs (:warn, r"conflicting definitions") match_mode=:any begin
+            vm = VertexModel(sys, [], [:y]; verbose=false)
+        end
+        @test length(get_guessformulas(vm)) == 1
+    end
+
+    @testset "eager validation and appending" begin
+        @variables x(t) y(t)
+        @named sys = System([Dt(x) ~ -x, Dt(y) ~ -y], t, [x, y], [])
+        @test_throws ArgumentError set_guessf(sys, x + y => 1.0)
+        sys2 = set_guessf(set_guessf(sys, x => 1.0), y => 2.0)  # appends, non-mutating
+        @test length(mtkext.collect_guessf(sys2)) == 2
+        @test isempty(mtkext.collect_guessf(sys))
+    end
+end
+
 @testset "symbolic bindings on unknowns are rejected" begin
     # `@variables x(t) = <symbolic>` is a binding; on an unknown that is ambiguous and the
     # user must say `initf` instead.
@@ -1536,14 +1583,14 @@ end
     @test !has_initformula(vm)    # and it is NOT an init formula
 end
 
-@testset "promotion of guesses to guess_formulas" begin
-    @component function vertex_with_symbolic_guess(; name)
+@testset "guessf variable option to guess_formulas" begin
+    @component function vertex_with_guessf(; name)
         @parameters u_init=1.0
-        @variables x(t) y(t)
+        @variables x(t) [guess=0.5] y(t) [guessf=2*u_init]
         eqs = [Dt(x) ~ -x; Dt(y) ~ -y]
-        System(eqs, t, [x, y], [u_init]; name, guesses=[y => 2*u_init])
+        System(eqs, t, [x, y], [u_init]; name)
     end
-    @named sys = vertex_with_symbolic_guess()
+    @named sys = vertex_with_guessf()
     vm = VertexModel(sys, [], [:x, :y]; verbose=false)
 
     @test has_guessformula(vm)
@@ -1561,22 +1608,39 @@ end
     f(out, NetworkDynamics.SymbolicView([0.5], f.sym))
     @test out[:y] ≈ 1.0
 
-    # constant guess is NOT promoted to a formula
+    # a scalar guess coexists as plain metadata (the fallback), NOT promoted to a formula
     @test all(gf -> :x ∉ gf.outsym, get_guessformulas(vm))
+    @test get_guess(vm, :x) == 0.5
 end
 
-@testset "guesses for eliminated variables survive as raw formulas" begin
+@testset "guessf seeds the init solver" begin
+    # end-to-end: a free variable with only a `guessf` (no scalar guess) gets its solver
+    # starting value from the formula.
+    @component function seedme(; name)
+        @parameters p=5.0
+        @variables x(t) [guessf=p] o(t) [guess=0.0]
+        System([Dt(x) ~ p - x, o ~ x], t, [x, o], [p]; name)
+    end
+    @named sys = seedme()
+    vm = VertexModel(sys, Symbol[], [:o]; verbose=false)
+    @test has_guessformula(vm)
+    @test !has_guess(vm, :x)
+    state = initialize_component(vm; verbose=false)
+    @test state[:x] ≈ 5.0
+end
+
+@testset "guessf for eliminated variables survives as a raw formula" begin
     # `z` is algebraically eliminated (z = 2x) into a scaled-alias observable. The guess
     # formula is ejected raw, targeting `z` as written; at init time `normalize` transports
     # it onto the surviving symbol through the aliasmap. (This used to be skipped with a
     # warning when formulas were resolved symbolically at compile time.)
-    @component function vertex_with_eliminated_guess(; name)
+    @component function vertex_with_eliminated_guessf(; name)
         @parameters u_init = 1.0
-        @variables x(t) y(t) z(t)
+        @variables x(t) y(t) [guess=1.0] z(t) [guessf=2*u_init]
         eqs = [Dt(x) ~ -x + z, 0 ~ z - 2 * x, Dt(y) ~ -y]
-        System(eqs, t, [x, y, z], [u_init]; name, guesses=[z => 2 * u_init, y => 1.0])
+        System(eqs, t, [x, y, z], [u_init]; name)
     end
-    @named sys = vertex_with_eliminated_guess()
+    @named sys = vertex_with_eliminated_guessf()
     vm = VertexModel(sys, [], [:x, :y]; verbose=false)
 
     f = only(get_guessformulas(vm))
@@ -1607,26 +1671,46 @@ end
     @test mtkext.symbolic_constant_value(c) === 0.0
     @test mtkext.is_symbolic_constant(Symbolics.Num(sqrt(2)))
     @test mtkext.symbolic_constant_value(Symbolics.Num(sqrt(2))) ≈ sqrt(2)
-    # values referencing other variables/parameters are NOT constant → GuessFormula path
+    # values referencing other variables/parameters are NOT constant → rejected as a scalar
+    # `:guess`, must be spelled with the `guessf` option instead
     @test !mtkext.is_symbolic_constant(x)
     @test !mtkext.is_symbolic_constant(2x)
     @test !mtkext.is_symbolic_constant(2p)
 end
 
-@testset "guess referencing nonexistent symbol is skipped, not fatal" begin
-    # a guess whose RHS references a symbol the compiled component does not expose is
+@testset "guessf referencing nonexistent symbol is skipped, not fatal" begin
+    # a guessf whose RHS references a symbol the compiled component does not expose is
     # malformed; the attach-time validation catches it and the lenient MTK attach demotes
     # the error to a warn-and-skip.
-    @component function vertex_with_bad_guess(; name)
-        @variables x(t) y(t) foo(t)
-        System([Dt(x) ~ -x, Dt(y) ~ -y], t, [x, y], []; name, guesses=[x => 2 * foo])
+    @component function vertex_with_bad_guessf(; name)
+        @variables foo(t) x(t) [guessf=2*foo] y(t)
+        System([Dt(x) ~ -x, Dt(y) ~ -y], t, [x, y], []; name)
     end
-    @named badsys = vertex_with_bad_guess()
+    @named badsys = vertex_with_bad_guessf()
     local vm
     @test_logs (:warn, r"Skipping an? \w*Formula") match_mode=:any begin
         vm = VertexModel(badsys, [], [:x, :y]; verbose=false)
     end
     @test !has_guessformula(vm)
+end
+
+@testset "symbolic guess (non-constant) is rejected, directing to guessf" begin
+    # the `guess` option is scalar-only; a symbolic guess must use `guessf`/`set_guessf`.
+    @component function vertex_symguess_option(; name)
+        @parameters q=3.0
+        @variables x(t) [guess=q] y(t)
+        System([Dt(x) ~ -x + q, Dt(y) ~ -y], t, [x, y], [q]; name)
+    end
+    @named s1 = vertex_symguess_option()
+    @test_throws "guessf" VertexModel(s1, [], [:y]; verbose=false)
+
+    @component function vertex_symguess_kwarg(; name)
+        @parameters q=3.0
+        @variables x(t) y(t)
+        System([Dt(x) ~ -x + q, Dt(y) ~ -y], t, [x, y], [q]; name, guesses=[x => 2*q])
+    end
+    @named s2 = vertex_symguess_kwarg()
+    @test_throws "guessf" VertexModel(s2, [], [:y]; verbose=false)
 end
 
 @testset "_dedupe_resolved conflict policy" begin
