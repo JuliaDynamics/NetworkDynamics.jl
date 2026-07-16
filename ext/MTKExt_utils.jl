@@ -647,19 +647,22 @@ function _dedupe_resolved(resolved; fail::Symbol, kind)
 end
 
 # Build the actual Init/GuessFormula from a resolved entry. Identical for both formula types
-# apart from the type name baked into the prettyprint block.
+# apart from the type name. The prettyprint mirrors the macro form a hand-written formula
+# prints as (see `_macro_source_string`), even though these come from `initf`/guess metadata
+# rather than an `@initformula` call — it reads nicer and keeps the two origins consistent.
 function _build_formula(::Type{FT}, r) where {FT}
-    label = string(nameof(FT))
+    macroname = "@" * lowercase(string(nameof(FT)))
     f = Symbolics.build_function([r.rhs], r.input_symbolic; expression=Val(false))[2]
 
+    # spell the inputs as the `:sym` the macro form uses, in place of the symbolic variables
     rhsstring = repr(r.rhs)
     for input in r.input_symbolic
-        rhsstring = replace(rhsstring, repr(input) => "u[" * repr(getname(input)) * "]")
+        rhsstring = replace(rhsstring, repr(input) => repr(getname(input)))
     end
-    prettyprint = """
-    $label([$(repr(r.target))], [$(join(repr.(r.input_names), ", "))]) do out, u
-        out[$(repr(r.target))] = $(rhsstring)
-    end"""
+    # `repr` prints a numeric coefficient times a variable as juxtaposition (`3x`); with the
+    # variable now a `:sym` that would read as a range (`3:x`), so restore the explicit `*`.
+    rhsstring = replace(rhsstring, r"(?<=[0-9.]):(?=[A-Za-z_])" => " * :")
+    prettyprint = "$macroname begin\n    $(repr(r.target)) = $(rhsstring)\nend"
     FT(f, [r.target], r.input_names, prettyprint)
 end
 

@@ -77,16 +77,12 @@ function InitConstraint(subconstraints::InitConstraint...)
     if any(isnothing, c.prettyprint for c in subconstraints)
         prettyprint = nothing
     else
-        header = "InitConstraint($all_syms) do out, u"
+        # the combined constraint is itself expressible as one `@initconstraint` block:
+        # concatenate the subconstraints' bodies, dropping each one's macro header/footer
+        header = "@initconstraint begin"
         footer = "end"
         bodylines = mapreduce(vcat, subconstraints) do c
-            full = c.prettyprint
-            split(full, '\n')[2:end-1] # remove header and footer
-        end
-        outidx = 1
-        for i in eachindex(bodylines)
-            bodylines[i] = replace(bodylines[i], r"out\[.*?\]" => "out[$(outidx)]")
-            outidx += 1
+            split(c.prettyprint, '\n')[2:end-1] # drop the macro header and footer
         end
         prettyprint = join([header, join(bodylines, "\n"), footer], "\n")
     end
@@ -134,6 +130,9 @@ macro initconstraint(ex)
         ex = Base.remove_linenums!(Expr(:block, ex))
     end
 
+    # capture the macro-form source before the symbols get wrapped into `u[:sym]`
+    s = _macro_source_string("@initconstraint", ex)
+
     sym = Symbol[]
     out = :__out__
     u = :__u__
@@ -147,11 +146,6 @@ macro initconstraint(ex)
         push!(body, :($out[$dim] = $wrapped))
     end
     unique!(sym)
-
-    s = join(string.(body), "\n")
-    s = replace(s, string(out) => "    out")
-    s = replace(s, string(u) => "u")
-    s = "InitConstraint($sym, $dim) do out, u\n" * s * "\nend"
 
     body_esc = _escape_all.(body)
 
@@ -181,6 +175,19 @@ function _escape_all(ex::Expr)
         end
     end
 end
+
+# Reproduce the `@name begin … end` source the user wrote, so a constraint/formula prints
+# as its macro call rather than as the expanded inline `do`-block — it reads nicer. Only the
+# macros carry this; direct-constructor objects have no source and fall back to `repr` (see
+# `_show_recipe`). Must be called before the symbols are wrapped into `u[:sym]`.
+function _macro_source_string(macroname, ex)
+    lines = [_strip_locations(string("    ", a)) for a in ex.args if a isa Union{Expr, QuoteNode}]
+    string(macroname, " begin\n", join(lines, "\n"), "\nend")
+end
+
+# Nested macro calls (e.g. `@pf(:x)`) print with a `#= file:line =#` location comment that
+# `remove_linenums!` cannot reach; drop it so the source reads cleanly.
+_strip_locations(s) = replace(s, r"#=.*?=# " => "")
 
 # for metadata check, just passes down the
 function assert_initconstraint_compat(cf::ComponentModel, c::InitConstraint)
@@ -478,6 +485,10 @@ function _formula_macro(type, ex)
         ex = Base.remove_linenums!(Expr(:block, ex))
     end
 
+    # capture the macro-form source before the symbols get wrapped into `u[:sym]`/`out[:sym]`
+    macroname = type === InitFormula ? "@initformula" : "@guessformula"
+    s = _macro_source_string(macroname, ex)
+
     input_syms = Symbol[]    # RHS symbols
     output_syms = Symbol[]   # LHS symbols
     out_var = :__out__
@@ -508,12 +519,6 @@ function _formula_macro(type, ex)
         end
     end
     unique!(input_syms)
-
-    # Generate pretty print string
-    s = "    " * join(string.(body), "\n    ")
-    s = replace(s, string(out_var) => "out")
-    s = replace(s, string(u) => "u")
-    s = "$(type)($output_syms, $input_syms) do out, u\n" * s * "\nend"
 
     body_esc = _escape_all.(body)
 
