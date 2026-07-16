@@ -296,7 +296,7 @@ Base.copy(::NetworkDynamics.ComponentModel)
 extract_nw
 implicit_output
 NetworkDynamics.pretty_f
-set_mtk_defaults!
+set_mtk_defaults
 set_initf
 SystemInitFormulas
 set_guessf
