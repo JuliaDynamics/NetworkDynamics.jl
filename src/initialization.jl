@@ -920,7 +920,7 @@ function _init_residual_vec(cf::ComponentModel, state; t=NaN)
     outs = Tuple(Float64[get(state, s, NaN) for s in sv] for sv in outsym_normalized(cf))
     u = Float64[get(state, s, NaN) for s in sym(cf)]
     ins = Tuple(Float64[get(state, s, NaN) for s in sv] for sv in insym_normalized(cf))
-    p = Float64[is_unused(cf, s) ? NaN : get(state, s, NaN) for s in psym(cf)]
+    p = Float64[get(state, s, NaN) for s in psym(cf)]
 
     # collect additional constraints
     additional_constraint = if has_initconstraint(cf)

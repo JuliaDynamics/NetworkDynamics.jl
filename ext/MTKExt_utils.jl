@@ -603,7 +603,7 @@ function _resolve_formula(lhs_sym, rhs_expr; kind)
     target = getname(lhs_sym)
 
     input_symbolic = collect(get_variables(rhs_expr))
-    input_names    = getname.(input_symbolic)
+    input_names    = Symbol[getname(s) for s in input_symbolic]
     # no raw self-dependency (the formula constructors throw on it); a dependency hidden
     # behind an observable is only detectable at init time, where `normalize` reports it
     if target ∈ input_names
