@@ -696,17 +696,24 @@ end
     extract_aliasmap(c::ComponentModel, obseqs::Vector{Equation})
 
 Extracts the `AliasMap` of a compiled component from its observed equations, i.e.
-every observable which is a pure `factor * settable_symbol` alias.
+every observable which is a pure `factor * symbol` alias.
 
 Note that `pick_best_alias_names` already consolidates *identity* alias groups onto a single
 representative and re-inserts direct `alias ~ main` observations; what remains for us are the
 scaled/sign-flipped aliases (`get_alias` matches no coefficient) plus chains through them.
 
+A chain either reaches a settable symbol — the usual case — or bottoms out on an observable
+whose own equation is not a pure alias (a sum, say). That terminal observable is a valid
+canonical too: it is where `generate_obs_expansion` bottoms out anyway, so recording it
+unifies the names of a class whose shared value has no storage slot at all. See
+[`AliasMap`](@ref) for what that buys and what it costs.
+
 Anything that is not a pure scaled alias — affine (`x + 1`), sums, nonlinear terms, symbolic
-coefficients — as well as chains whose root is not settable, stays an ordinary observable.
+coefficients — stays an ordinary observable.
 """
 function extract_aliasmap(c::NetworkDynamics.ComponentModel, obseqs)
     settable = settable_symbols(c)
+    obs = NetworkDynamics.obssym(c)
 
     # one-step links only; resolved transitively below
     steps = Dict{Symbol,Tuple{Float64,Symbol}}()
@@ -724,10 +731,14 @@ function extract_aliasmap(c::NetworkDynamics.ComponentModel, obseqs)
             @debug "Not aliasing :$alias, it is a settable symbol of the component."
             continue
         end
-        resolved = _resolve_alias(alias, steps, settable, Symbol[])
-        isnothing(resolved) && continue
-        # never an identity entry: the root is settable, `alias` is not
-        am[alias] = resolved
+        factor, canonical = _resolve_alias(alias, steps, settable, Symbol[])
+        # `a ~ 2*t` matches as a scaled alias of the independent variable, which is neither
+        # settable nor an observable — no canonical, hence no entry
+        if canonical ∉ settable && canonical ∉ obs
+            @debug "Not aliasing :$alias, its root :$canonical is neither settable nor an observable."
+            continue
+        end
+        am[alias] = (factor, canonical)
     end
     am
 end
@@ -762,22 +773,22 @@ function _match_scaled_var(ex)
     (Float64(factor), getname(v))
 end
 
-# Follow one-step links until the root is settable, multiplying factors along the way
-# (`obs2 ~ -obs1`, `obs1 ~ 2x` ⇒ `(-2.0, :x)`). Returns `nothing` when the chain dead-ends on
-# a non-settable symbol.
+# Follow one-step links until the chain ends, multiplying factors along the way
+# (`obs2 ~ -obs1`, `obs1 ~ 2x` ⇒ `(-2.0, :x)`). It ends on the first settable symbol, or else
+# on the first symbol without a further link — the terminal observable, which is the
+# canonical of a class that has no settable member. Only ever called for an `s` which has a
+# link, so it always resolves.
 function _resolve_alias(s, steps, settable, visiting)
-    haskey(steps, s) || return nothing
     if s ∈ visiting
         error("Cyclic alias chain detected at :$s via $(join(visiting, " → ")). \
                Observed equations are topologically sorted, this should never happen.")
     end
     factor, target = steps[s]
-    target ∈ settable && return (factor, target)
+    (target ∈ settable || !haskey(steps, target)) && return (factor, target)
 
     push!(visiting, s)
     rest = _resolve_alias(target, steps, settable, visiting)
     pop!(visiting)
-    isnothing(rest) && return nothing
     (factor * rest[1], rest[2])
 end
 

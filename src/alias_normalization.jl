@@ -11,9 +11,20 @@ scaled) aliases of a settable symbol. The aliasmap records that relationship so 
 initialization pipeline can canonicalize user input regardless of which member of an
 alias class it was written against.
 
-Canonical symbols are always settable symbols of the component, i.e. states, parameters,
-inputs or outputs. Identity entries (`s => (1.0, s)`) are never stored; absence of a key
-means "already canonical, or not an alias".
+A canonical symbol is a settable symbol of the component — a state, parameter, input or
+output — whenever the alias class has one. A class may have none: two names for one
+observable whose value is a many-to-one expression (an output port wired to an input port,
+say) share no storage slot. Such a class canonicalizes onto its *terminal observable*, the
+one carrying the defining expression, which is where [`generate_obs_expansion`](@ref)
+bottoms out anyway. Nothing can be stored there, but the names unify, which is what lets a
+pin travel between them (see [`pinned_obssyms`](@ref)).
+
+If a class *does* contain a settable member, the canonical must be that member — otherwise
+[`normalize_valuedict`](@ref) would move a default onto a symbol with no slot behind it.
+
+An alias key is never settable, and never itself canonical: identity entries
+(`s => (1.0, s)`) are not stored, so absence of a key means "already canonical, or not an
+alias", and a single lookup always suffices.
 
 Stored as component metadata under the key `:aliasmap`, see [`set_aliasmap!`](@ref).
 """
@@ -40,20 +51,28 @@ end
     assert_aliasmap_compat(c::ComponentModel, am::AliasMap)
 
 Validates an [`AliasMap`](@ref) against a component: factors must be finite and nonzero,
-every canonical target must be settable, and no alias key may itself be settable (a
-settable symbol must never be recorded as an alias of another settable symbol).
+every canonical target must be settable or an observable of the component, no canonical may
+itself be an alias key (chains are resolved at extraction, so one lookup must suffice), and
+no alias key may itself be settable (a settable symbol must never be recorded as an alias of
+another settable symbol).
 
 Returns `am` on success, throws an `ArgumentError` otherwise.
 """
 function assert_aliasmap_compat(c::ComponentModel, am::AliasMap)
     settable = settable_symbols(c)
+    obs = obssym(c)
     for (alias, (factor, canonical)) in am
         if !isfinite(factor) || iszero(factor)
             throw(ArgumentError("AliasMap factor for :$alias must be finite and nonzero, got $factor."))
         end
-        if canonical ∉ settable
-            throw(ArgumentError("AliasMap maps :$alias to :$canonical, which is not a settable \
-                                 symbol of the component model."))
+        if canonical ∉ settable && canonical ∉ obs
+            throw(ArgumentError("AliasMap maps :$alias to :$canonical, which is neither a settable \
+                                 symbol nor an observable of the component model."))
+        end
+        if canonical ∉ settable && haskey(am, canonical)
+            throw(ArgumentError("AliasMap maps :$alias to the observable :$canonical, which is \
+                                 itself an alias of :$(am[canonical][2]). An observable canonical \
+                                 must be terminal, i.e. the end of its alias chain."))
         end
         if alias ∈ settable
             throw(ArgumentError("AliasMap key :$alias is itself a settable symbol of the \
@@ -251,13 +270,19 @@ _valstring(v) = repr(v)
     pinned_obssyms(formulas, cf::ComponentModel) -> Set{Symbol}
     pinned_obssyms(cf::ComponentModel; guess=false) -> Set{Symbol}
 
-The set of *pinned observables* of a formula set: observable symbols some formula writes.
-A formula output which is neither settable nor a pure alias of a settable symbol has no
-storage slot behind it — but when a formula explicitly writes it, it becomes a legitimate
-dataflow node of that initialization: the written value is held in the working dicts while
-formulas run, downstream formulas read it directly instead of expanding through its
-defining equation (see [`generate_obs_expansion`](@ref) and [`normalize`](@ref)). It is
+The set of *pinned observables* of a formula set: observable symbols some formula writes, in
+canonical names. A formula output which is neither settable nor a pure alias of a settable
+symbol has no storage slot behind it — but when a formula explicitly writes it, it becomes a
+legitimate dataflow node of that initialization: the written value is held in the working
+dicts while formulas run, downstream formulas read it directly instead of expanding through
+its defining equation (see [`generate_obs_expansion`](@ref) and [`normalize`](@ref)). It is
 never stored on the component.
+
+The pin is collected under the *canonical* name of the written symbol, which matters when an
+observable-only alias class holds several names for one node (an output port wired to an
+input port). Expansion bottoms out on the canonical, so a formula writing one member and one
+reading another meet on it — which of the two interchangeable names each side happened to be
+written against must not decide whether the pin connects.
 
 The two formula kinds pin with different strength, staged the way they run:
 
@@ -288,7 +313,9 @@ function pinned_obssyms(formulas, cf::ComponentModel)
     obs = obssym(cf)
     for f in formulas
         for s in f.outsym
-            canonicalize(am, s)[2] ∉ settable && s ∈ obs && push!(pins, s)
+            s ∈ obs || continue
+            c = canonicalize(am, s)[2]
+            c ∉ settable && push!(pins, c)
         end
     end
     pins
@@ -372,14 +399,13 @@ _formulatype(::InitFormula) = InitFormula
 _formulatype(::GuessFormula) = GuessFormula
 
 function _canonicalize_outputs(f, am, cf, pinned=Set{Symbol}())
-    # a pinned obs output is written as-is: it IS the dataflow node, no canonical slot
-    # behind it
-    _ispin(s) = s ∈ pinned
-    moves = [_ispin(s) ? (1.0, s) : canonicalize(am, s) for s in f.outsym]
+    moves = [canonicalize(am, s) for s in f.outsym]
     canonout = last.(moves)
 
+    # a pinned obs canonical is a legitimate target: it IS the dataflow node, even though
+    # there is no storage slot behind it
     settable = settable_symbols(cf)
-    bad = [s => c for (s, c) in zip(f.outsym, canonout) if c ∉ settable && !_ispin(s)]
+    bad = [s => c for (s, c) in zip(f.outsym, canonout) if c ∉ settable && c ∉ pinned]
     if !isempty(bad)
         throw(ArgumentError("$(_formulatype(f)) cannot write to $(first.(bad)): \
             $(length(bad) == 1 ? "it is an observable" : "they are observables") which \

@@ -238,7 +238,7 @@ end
 # expansion needs the MTK extension and may be unavailable, and `show` is not the place to
 # report that.
 function _formula_io(@nospecialize(c::ComponentModel), @nospecialize(f), am, pinned=Set{Symbol}())
-    writes = unique!([s ∈ pinned ? s : last(canonicalize(am, s)) for s in f.outsym])
+    writes = unique!([last(canonicalize(am, s)) for s in f.outsym])
     reads = if isempty(setdiff(intersect(f.sym, obssym(c)), pinned))
         unique!([last(canonicalize(am, s)) for s in f.sym])
     else

@@ -1029,3 +1029,125 @@ end
         @test all(isapprox(a[k], b[k]; atol=1e-9) for k in keys(a))
     end
 end
+
+####
+#### Alias classes *without* a settable member: two names for one observable, created by a
+#### connection between two subcomponents. `producer₊out_u` is defined by a many-to-one sum,
+#### so neither it nor `consumer₊inp_u` has a storage slot — the class has no settable
+#### survivor and is invisible to the AliasMap today. Yet the two names are provably one
+#### value (MTK emits the identity `consumer₊inp_u ~ producer₊out_u` itself), so a pin on
+#### either of them must be visible to a reader of the other: which of two interchangeable
+#### names a formula happens to be written against must not decide whether the model
+#### initializes.
+####
+@mtkmodel ObsAliasProducer begin
+    @variables begin
+        x1(t), [guess=1]
+        x2(t), [guess=1]
+        out_u(t)
+    end
+    @parameters begin
+        K1 = 0.5
+        K2 = 0.5
+        r1, [guess=1]
+        r2, [guess=1]
+    end
+    @equations begin
+        Dt(x1) ~ r1 - x1
+        Dt(x2) ~ r2 - x2
+        out_u ~ K1*x1 + K2*x2   # many-to-one: a pure alias of no single state
+    end
+end
+@mtkmodel ObsAliasConsumer begin
+    @variables begin
+        y(t) = 1.0
+        inp_u(t)
+    end
+    @equations begin
+        Dt(y) ~ inp_u - 2*y     # steady state ⇔ the demand `inp_u = 2y`
+    end
+end
+@mtkmodel ObsAliasBus begin
+    @components begin
+        producer = ObsAliasProducer()
+        consumer = ObsAliasConsumer()
+    end
+    @variables begin
+        o(t), [output=true, guess=1]
+    end
+    @equations begin
+        producer.out_u ~ consumer.inp_u   # the connection: an observable-only alias class
+        o ~ consumer.y
+    end
+end
+
+@testset "observable-only alias class" begin
+    @named _oab = ObsAliasBus()
+    OAB = VertexModel(_oab, [], [:o]; verbose=false)
+
+    # the producer's own backward knowledge: "at rest my states follow from my output"
+    invert = @initformula begin
+        :producer₊x1 = :producer₊out_u / (:producer₊K1 + :producer₊K2)
+        :producer₊x2 = :producer₊out_u / (:producer₊K1 + :producer₊K2)
+    end
+    # the same demand, once per member of the class
+    demand_producer_name = @initformula :producer₊out_u = 2.0 * :consumer₊y
+    demand_consumer_name = @initformula :consumer₊inp_u = 2.0 * :consumer₊y
+
+    @testset "the class is detected, with the terminal observable as canonical" begin
+        # MTK normalizes every reference onto `producer₊out_u` (it carries the defining
+        # equation) and emits the leaf as a plain identity — that terminal is the only
+        # possible canonical, since expansion bottoms out there by construction
+        @test obssym(OAB) == [:producer₊out_u, :consumer₊inp_u]
+        @test get_aliasmap(OAB)[:consumer₊inp_u] == (1.0, :producer₊out_u)
+    end
+
+    @testset "the pin is one node under both names" begin
+        # whichever member is written, the frontier is expressed in canonical names, so the
+        # producer's reader of `producer₊out_u` finds it
+        @test pinned_obssyms([demand_producer_name, invert], OAB) == Set([:producer₊out_u])
+        @test pinned_obssyms([demand_consumer_name, invert], OAB) == Set([:producer₊out_u])
+    end
+
+    # y = 1 ⇒ demanded out_u = 2 ⇒ x1 = x2 = 2/(K1+K2) = 2 ⇒ r1 = r2 = 2, residual 0.
+    reference = Dict(:producer₊x1 => 2.0, :producer₊x2 => 2.0,
+                     :producer₊r1 => 2.0, :producer₊r2 => 2.0,
+                     :consumer₊y  => 1.0, :o => 1.0)
+
+    @testset "both spellings of the demand initialize identically" begin
+        for demand in (demand_producer_name, demand_consumer_name)
+            state = initialize_component(OAB;
+                additional_initformula=[demand, invert], verbose=false)
+            for (s, v) in reference
+                @test state[s] ≈ v
+            end
+            @test !haskey(state, :producer₊out_u)   # the pin is init-time scratch
+            @test !haskey(state, :consumer₊inp_u)
+        end
+    end
+
+    @testset "the boundary case still works (producer output settable)" begin
+        # compiled standalone, `out_u` is a real output: settable, hence a root, which is
+        # why the identical formula has always resolved here
+        @named _oap = ObsAliasProducer()
+        P = VertexModel(_oap, [], [:out_u]; verbose=false)
+        @test :out_u ∉ obssym(P)   # it is a real output here, not an observable
+        state = initialize_component(P;
+            default_overrides=Dict(:out_u => 2.0),
+            additional_initformula=[@initformula begin
+                :x1 = :out_u / (:K1 + :K2)
+                :x2 = :out_u / (:K1 + :K2)
+            end], verbose=false)
+        @test state[:x1] ≈ 2.0 && state[:x2] ≈ 2.0
+    end
+
+    @testset "two members of the class are two writers of one node" begin
+        err = try
+            initialize_component(OAB;
+                additional_initformula=[demand_producer_name, demand_consumer_name, invert],
+                verbose=false)
+        catch e; e end
+        @test err isa ArgumentError
+        @test occursin("producer₊out_u", sprint(showerror, err))
+    end
+end
