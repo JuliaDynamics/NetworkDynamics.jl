@@ -1510,3 +1510,54 @@ end
     @test init_with_vjp(AutoFiniteDiff()) < 1e-8
     @test init_with_vjp(AutoReverseDiff()) < 1e-8
 end
+
+@testset "jacobian-row-scaled residual fallback" begin
+    using ForwardDiff
+    using LinearAlgebra: norm
+
+    # stiff component: `du = 1e8·(pref - x)` inflates a state-space mismatch of 1e-15
+    # to a raw residual of ~1e-7, far above the default tol of 1e-10
+    fstiff = (du, u, ins, p, t) -> (du[1] = 1e8 * (p[1] - u[1]); nothing)
+    v = VertexModel(; f=fstiff, g=StateMask(1:1), sym=[:x], psym=[:pref], insym=[:agg], name=:stiff)
+
+    defaults = Dict(:x => 1.0, :pref => 1.0 + 1e-15, :agg => 0.0)
+    r = Ref(NaN)
+    state = initialize_component(v; defaults, guesses=Dict(), verbose=false, residual=r)
+    @test r[] > 1e-8       # raw residual misses the tolerance, `residual` Ref stays raw
+    @test state[:x] == 1.0 # but the scaled fallback accepts the state
+
+    # a genuine miss of 1e-3 in state-space units still throws
+    defaults_bad = Dict(:x => 1.0, :pref => 1.0 + 1e-3, :agg => 0.0)
+    @test_throws ComponentInitError initialize_component(v; defaults=defaults_bad, guesses=Dict(), verbose=false)
+
+    # streaming network row scales must match a dense jacobian reference;
+    # 30 states exercises the chunked pushforward loop incl. the zero-padded last block
+    gedge = AntiSymmetric((out, src, dst, p, t) -> (out[1] = 10.0 * (src[1] - dst[1]); nothing))
+    e = EdgeModel(; g=gedge, outsym=[:flow], name=:diffusion)
+    fv = (du, u, ins, p, t) -> (du[1] = 1e6 * (p[1] - u[1]) + ins[1][1]; nothing)
+    vv = VertexModel(; f=fv, g=StateMask(1:1), sym=[:x], psym=[:pref], insym=[:agg], name=:node)
+    nw = Network(path_graph(30), vv, e)
+    u = ones(30) # uniform state, so edge flows vanish and only the stiff rows are off
+    s0 = NWState(nw, copy(u), u .+ 1e-13)
+    du = zeros(30)
+    nw(du, uflat(s0), pflat(s0), NaN)
+    rhs = (dx, x) -> nw(dx, x, pflat(s0), NaN)
+    J = ForwardDiff.jacobian(rhs, zeros(30), uflat(s0))
+    scales = [max(norm(view(J, i, :)), 1.0) for i in axes(J, 1)]
+    @test NetworkDynamics._streaming_row_scales(rhs, du, uflat(s0)) ≈ scales
+    scaled = NetworkDynamics._scaled_network_residual(nw, du, s0, NaN)
+    @test scaled ≈ norm(du ./ scales)
+    @test norm(du) > 1e-8 # raw residual would fail the default nwtol
+    @test scaled < 1e-10
+
+    # end-to-end: componentwise init passes only through the fallback, on both the
+    # per-component tol check and the network nwtol check (raw resid ~5e-7 ≫ 1e-10)
+    estiff = EdgeModel(; g=gedge, outsym=[:flow => 0.0],
+                       insym=(; src=[:src₊V => 1.0], dst=[:dst₊V => 1.0]), name=:diffusion)
+    set_default!(estiff, :₋flow, 0.0)
+    vstiff = VertexModel(; f=fv, g=StateMask(1:1), sym=[:x => 1.0],
+                         psym=[:pref => 1.0 + 1e-13], insym=[:agg => 0.0], name=:node)
+    nw2 = Network(path_graph(30), vstiff, estiff)
+    s = initialize_componentwise(nw2; verbose=false, subverbose=false)
+    @test all(==(1.0), uflat(s))
+end

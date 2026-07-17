@@ -488,7 +488,10 @@ The function solves a nonlinear problem to find values for all free variables/pa
 - `warn`: Whether to print warnings during initialization (default: `true`)
 - `apply_bound_transformation`: Whether to apply bound-conserving transformations
 - `t`: Time at which to solve for steady state. Only relevant for components with explicit time dependency.
-- `tol`: Tolerance for the residual of the initialized model (defaults to `1e-10`). Init throws error if resid ≥ tol.
+- `tol`: Tolerance for the residual of the initialized model (defaults to `1e-10`). The raw
+  residual `‖du‖` is checked first; if it misses, a fallback check divides each equation by
+  its Jacobian row norm (residual measured in state-space units) and only that miss throws.
+  This keeps the tolerance meaningful for stiff/ill-scaled equations (e.g. `Dt(V_C) = (ω0/C)·Δi`).
 - `residual`: Optional `Ref{Float64}` which gets the final residual of the initialized model.
 - `alg_kwargs=(;)`: Additional keyword arguments passed to the nonlinear solver algorithm constructor
 - `alg=nothing`:
@@ -655,15 +658,28 @@ function initialize_component(cf;
         residual[] = res
     end
     if !(res < tol)
-        # name the original model equations that are still off, so the miss is actionable
-        # from the error alone; the breakdown is best-effort and must never mask this error
-        breakdown = try
-            "\n" * _residual_breakdown(cf, init_state; t)
-        catch
-            ""
+        # `res` is a raw ‖du‖ over the stacked (f, g, constraint) system and is not scale
+        # invariant (e.g. a `Dt(V_C) = (ω0/C)·Δi` row inflates a roundoff mismatch by ω0/C).
+        # Only reject once the Jacobian-row-scaled residual, measured in state-space units,
+        # also misses the tolerance. The Jacobian is worth computing only on this failure path.
+        scaled = _scaled_init_residual(cf, init_state; t)
+        if isnothing(scaled) || !(scaled < tol)
+            # name the original model equations that are still off, so the miss is actionable
+            # from the error alone; the breakdown is best-effort and must never mask this error
+            breakdown = try
+                "\n" * _residual_breakdown(cf, init_state; t)
+            catch
+                ""
+            end
+            # `scaled === nothing` means the component was too large for the dense-Jacobian
+            # fallback (see `SCALED_JAC_MAXDIM`); report the raw miss without it.
+            scaled_str = isnothing(scaled) ? "skipped, model too large" : string(scaled)
+            throw(ComponentInitError("Initialized model has a residual larger than specified \
+                   tolerance $(res) > $(tol) (Jacobian-scaled: $(scaled_str))! Fix initialization \
+                   or increase tolerance to suppress error.$(breakdown)"))
         end
-        throw(ComponentInitError("Initialized model has a residual larger than specified tolerance $(res) > $(tol)! \
-               Fix initialization or increase tolerance to suppress error.$(breakdown)"))
+        verbose && printstyled(io, " - Residual $(res) exceeds tol $(tol), but is within tol \
+                                    after Jacobian row scaling ($(scaled))\n")
     end
 
 
@@ -922,15 +938,7 @@ function _init_residual_vec(cf::ComponentModel, state; t=NaN)
     ins = Tuple(Float64[get(state, s, NaN) for s in sv] for sv in insym_normalized(cf))
     p = Float64[get(state, s, NaN) for s in psym(cf)]
 
-    # collect additional constraints
-    additional_constraint = if has_initconstraint(cf)
-        _c = get_initconstraints(cf)
-        length(_c) == 1 ? only(_c) : InitConstraint(_c...)
-    else
-        nothing
-    end
-    additional_Neqs = isnothing(additional_constraint) ? 0 : dim(additional_constraint)
-    additional_cf = prep_initiconstraint(cf, additional_constraint, 0) #is noop for add_c == nothing
+    additional_cf, additional_Neqs = _init_additional_constraint(cf, 0)
 
     Nout = reduce(+, outdim(cf))
     res = zeros(dim(cf) + Nout + additional_Neqs)
@@ -970,6 +978,83 @@ _residual_rows(res, eqsyms) = ["[$kind] &:$s &=> $(str_significant(res[i]; sigdi
 function _residual_breakdown(cf::ComponentModel, state; t=NaN)
     res, eqsyms = _init_residual_vec(cf, state; t)
     "Residual per model equation:\n" * join("  " .* align_strings(_residual_rows(res, eqsyms)), "\n")
+end
+
+# Additional init-constraint callable plus its equation count. `chunksize` sizes the
+# internal DiffCaches: 0 is fine for plain Float64 evaluation (`_init_residual_vec`), while
+# the AD-able closure passes the width of `z` so ForwardDiff duals fit.
+function _init_additional_constraint(cf, chunksize)
+    c = if has_initconstraint(cf)
+        _c = get_initconstraints(cf)
+        length(_c) == 1 ? only(_c) : InitConstraint(_c...)
+    else
+        nothing
+    end
+    Neqs = isnothing(c) ? 0 : dim(c)
+    prep_initiconstraint(cf, c, chunksize), Neqs # prep is a noop for c === nothing
+end
+
+# AD-able core of the stacked (f, g, init-constraint) residual. Same equations and ordering
+# as `_init_residual_vec`, but expressed as a function of z = [u; ins...; outs...] with the
+# parameters and time held fixed. Backs both the residual value and the Jacobian used for
+# the scale-invariant tolerance check. See `_scaled_init_residual`.
+function _init_residual_closure(cf, state; t=NaN)
+    u0    = Float64[get(state, s, NaN) for s in sym(cf)]
+    ins0  = Tuple(Float64[get(state, s, NaN) for s in sv] for sv in insym_normalized(cf))
+    outs0 = Tuple(Float64[get(state, s, NaN) for s in sv] for sv in outsym_normalized(cf))
+    p     = Float64[get(state, s, NaN) for s in psym(cf)]
+
+    Nu   = dim(cf)
+    Nout = sum(length, outs0)
+    z0   = vcat(u0, ins0..., outs0...)
+
+    # z-layout is [u; ins...; outs...]; precompute the block ranges once (on Float64)
+    off = Nu
+    in_ranges = map(ins0) do v
+        r = (off+1):(off+length(v)); off += length(v); r
+    end
+    out_ranges = map(outs0) do v
+        r = (off+1):(off+length(v)); off += length(v); r
+    end
+
+    additional_cf, additional_Neqs = _init_additional_constraint(cf, length(z0))
+    Neqs = Nu + Nout + additional_Neqs
+    fgf  = compfg(cf)
+
+    function f!(res, z)
+        # slice z back into state/inputs/outputs; views inherit z's eltype for AD
+        u    = @view z[1:Nu]
+        ins  = map(r -> @view(z[r]), in_ranges)
+        outs = map(r -> @view(z[r]), out_ranges)
+
+        res_fg  = @view res[1:Nu]
+        res_out = @view res[Nu+1:Nu+Nout]
+        res_add = @view res[Nu+Nout+1:end]
+
+        out_calc = map(r -> similar(res_fg, length(r)), out_ranges)
+        fgf(out_calc, res_fg, u, ins, p, t)
+        res_out .= RecursiveArrayTools.ArrayPartition(out_calc...) .-
+                   RecursiveArrayTools.ArrayPartition(outs...)
+        additional_cf(res_add, outs, u, ins, p, t)
+        nothing
+    end
+
+    f!, z0, Neqs
+end
+
+# Jacobian-row-scaled residual of the stacked init system at `state`. Unlike the free-
+# variable Jacobian in `_solve_scaled`, the columns here are the full state z = [u; ins;
+# outs], so the scaled norm is independent of which variables happened to be free -- it is
+# the same whether a value was solved for or set by an init formula. See `_row_scales`.
+# Used only on the failure path. Returns `nothing` for an oversized component whose dense
+# Jacobian would be too large (see `SCALED_JAC_MAXDIM`); components are normally tiny.
+function _scaled_init_residual(cf, state; t=NaN)
+    f!, z0, Neqs = _init_residual_closure(cf, state; t)
+    max(Neqs, length(z0)) > SCALED_JAC_MAXDIM && return nothing
+    res = zeros(Neqs)
+    f!(res, z0)
+    J = ForwardDiff.jacobian(f!, zeros(Neqs), z0)
+    LinearAlgebra.norm(res ./ _row_scales(J))
 end
 
 function broken_bounds(cf, state=get_defaults_or_inits_dict(cf), bounds=get_bounds_dict(cf))
@@ -1049,8 +1134,9 @@ state again, as it is stored in the metadata.
 - `additional_initconstraint`: Dictionary mapping component indices (VIndex/EIndex) to additional initialization constraints.
 - `verbose`: Whether to print information about each component initialization
 - `subverbose`: Whether to print detailed information within component initialization. Can be Vector [VIndex(1), EIndex(3), ...] for selective output
-- `tol`: Tolerance for individual component residuals
-- `nwtol`: Tolerance for the full network residual
+- `tol`: Tolerance for individual component residuals. Checked against the raw residual
+  `‖du‖` first, then (on a miss) against the Jacobian-row-scaled residual; both must miss to throw.
+- `nwtol`: Tolerance for the full network residual, with the same raw-then-scaled fallback as `tol`.
 - `t`: Time at which to evaluate the system
 - `subalg`: Nonlinear solver algorithm to use for component initialization. Defaults to `NetworkDynamics.default_compinit_alg()` (`FastShortcutNLLSPolyalg` with QR factorization). If the primary solve fails or stalls, it is automatically retried with residual rescaling (Jacobian row norms) and the better solution is kept. Can be passed as single value or dict mapping VIndex/EIndex to alg (non-existent keys use default).
 - `subsolve_kwargs`: Additional keyword arguments passed to the SciML `solve` function for component initialization.
@@ -1278,10 +1364,28 @@ function _initialize_componentwise(
     resid = LinearAlgebra.norm(du)
 
     if !(resid < nwtol)
-        throw(NetworkInitError("Initialized network has a residual larger than $nwtol: $(resid)! \
-               Fix initialization or increase tolerance to suppress error."))
+        # `resid` is a raw ‖du‖ and not scale invariant: a state like `Dt(V_C) = (ω0/C)·Δi`
+        # inflates a roundoff-level mismatch by ω0/C, making `nwtol` unreachable at an
+        # otherwise converged point. Fall back to the Jacobian-row-scaled residual, which
+        # measures the miss in state-space units. Dense AD Jacobian, so only on failure.
+        scaled = _scaled_network_residual(nw, du, s0, t)
+        if isnothing(scaled)
+            # network too large for a dense Jacobian scale check; report the raw miss
+            throw(NetworkInitError("Initialized network has a residual larger than $nwtol: \
+                   $(resid)! (Network exceeds $(SCALED_NW_MAXDIM) states, so the \
+                   Jacobian-row-scaled fallback check was skipped. If this is a scaling \
+                   artifact of stiff equations, loosen `nwtol`.) Fix initialization or \
+                   increase tolerance to suppress error."))
+        elseif !(scaled < nwtol)
+            throw(NetworkInitError("Initialized network has a residual larger than $nwtol: \
+                   $(resid) (Jacobian-scaled: $(scaled))! Fix initialization or increase \
+                   tolerance to suppress error."))
+        end
+        verbose && println("Initialized network with residual $(resid), within tol $(nwtol) \
+                            after Jacobian row scaling ($(scaled)).")
+    else
+        verbose && println("Initialized network with residual $(resid)!")
     end
-    verbose && println("Initialized network with residual $(resid)!")
     s0
 end
 VSET_ESIT_ERR_HINT = "\nHint: Init failed for some components. For debugging, consider passing `vset` and `eset` keywords to run init routine on a subset of network components!\n"
@@ -1423,6 +1527,68 @@ function set_interface_defaults!(nw::Network, s::NWState; verbose=false)
         set_default!(nw, sym, val)
     end
     nw
+end
+
+# Row scales for the scale-invariant residual checks: scaleᵢ = max(‖J[i,:]‖, 1).
+# A raw ‖du‖ threshold is not scale invariant: an equation like `Dt(V_C) = (ω0/C)·Δi`
+# inflates a roundoff-level current mismatch by ω0/C, so `tol` is unreachable even at a
+# perfectly converged point. Dividing each row by its Jacobian row norm measures the
+# residual in state-space units instead and recovers that factor.
+#
+# The floor is 1, not the 1e-10 used in `_solve_scaled`: as a *weighting* for a solve,
+# amplifying an insensitive row is harmless, but as an *acceptance criterion* it would turn
+# an equation that barely depends on the free variables into a spurious failure. A floor of
+# 1 keeps the scaled norm ≤ the raw norm, so the check can only ever relax the tolerance.
+_row_scales(J) = [max(LinearAlgebra.norm(@view J[i, :]), 1.0) for i in axes(J, 1)]
+
+# The *dense* component fallback (`_scaled_init_residual`) builds a `Neqs × Ncols` ForwardDiff
+# Jacobian; above this dimension we decline (return `nothing`) so a pathologically large
+# component cannot allocate `8·N²` bytes on the failure path (~128 MB at the cutoff).
+# Components are normally tiny, so this is belt-and-suspenders. The network path does not use
+# this -- it streams (see `_streaming_row_scales`) and has its own, much larger, compute cap.
+const SCALED_JAC_MAXDIM = 4096
+
+# Compute cap for the *streaming* network fallback. Streaming keeps memory at O(Neqs·chunk),
+# so this is not a memory limit but a bound on runtime: the row scales cost ~N/chunk RHS
+# evaluations (no sparsity coloring is available to do better). Above this the caller degrades
+# to the raw check rather than spend a long time scaling a residual on a failed init.
+const SCALED_NW_MAXDIM = 50_000
+
+# Row-norm scales `max(‖J[i,:]‖, 1)` WITHOUT materializing the dense Jacobian. Forward-mode AD
+# yields `J` one column-block at a time; a row norm is a sum-of-squares reduction across
+# columns, so we stream blocks of width `chunk` and accumulate into a length-`Neqs` vector.
+# Memory is O(Neqs·chunk) instead of O(Neqs·N). `f!` is the in-place residual `f!(y, x)`.
+function _streaming_row_scales(f!, y, x; chunk::Int=12)
+    N = length(x)
+    c = min(chunk, N)
+    backend = DI.AutoForwardDiff()
+    tx = ntuple(_ -> zeros(N), c)              # reused unit-vector (input) tangent buffers
+    ty = ntuple(_ -> similar(y), c)            # reused output tangent buffers (the columns)
+    ybuf = similar(y)
+    prep = DI.prepare_pushforward(f!, ybuf, backend, x, tx)
+    rownorm2 = zeros(length(y))
+    for block in Iterators.partition(1:N, c)
+        for k in 1:c
+            fill!(tx[k], 0.0)
+            k <= length(block) && (tx[k][block[k]] = 1.0) # padding tangents stay zero
+        end
+        DI.pushforward!(f!, ybuf, ty, prep, backend, x, tx)
+        for col in ty
+            rownorm2 .+= abs2.(col)
+        end
+    end
+    [max(sqrt(r), 1.0) for r in rownorm2]
+end
+
+# Jacobian-row-scaled residual of the full network RHS at the initialized state. `p` and `t`
+# are held fixed, so the columns are the network states. Only runs once the raw ‖du‖ check
+# has failed. Streams the row scales to avoid a dense Jacobian; returns `nothing` when the
+# network exceeds `SCALED_NW_MAXDIM` (see there).
+function _scaled_network_residual(nw::Network, du, s0, t)
+    length(du) > SCALED_NW_MAXDIM && return nothing
+    p = pflat(s0)
+    scales = _streaming_row_scales((dx, x) -> nw(dx, x, p, t), du, uflat(s0))
+    LinearAlgebra.norm(du ./ scales)
 end
 
 # Solve a NonlinearLeastSquaresProblem with residual rescaling by Jacobian row norms.
