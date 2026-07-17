@@ -545,23 +545,16 @@ function initialize_component(cf;
         @warn "Passing `kwargs` to `initialize_component(!)` is deprecated. Use `alg` and `solve_kwargs=(; kw=val)` instead."
     end
 
-    defaults = isnothing(default_overrides) ? defaults : merge(defaults, default_overrides)
-    guesses  = isnothing(guess_overrides)   ? guesses  : merge(guesses, guess_overrides)
-    bounds   = isnothing(bound_overrides)   ? bounds   : merge(bounds, bound_overrides)
-
-    # filter out nothing values
-    defaults = filter(p -> !isnothing(p.second), defaults)
-    guesses = filter(p -> !isnothing(p.second), guesses)
-    bounds = filter(p -> !isnothing(p.second), bounds)
-
     # Alias-normalize values and formulas onto canonical settable symbols, so it does not
     # matter which member of an alias class a value/formula was written against, and formulas
     # reading observables resolve them to their settable roots. No-op when the component has
     # no aliasmap and no formula reads an observable (bit-identical to the un-normalized path).
     am = get_aliasmap(cf)
-    defaults = normalize_valuedict(am, defaults; what=:default, verbose, io)
-    guesses  = normalize_valuedict(am, guesses;  what=:guess, on_conflict=:keepfirst, verbose, io)
-    bounds   = normalize_bounds(am, bounds; verbose, io)
+    defaults = _merge_overrides(am, defaults, default_overrides, normalize_valuedict;
+                                what=:default, verbose, io)
+    guesses  = _merge_overrides(am, guesses, guess_overrides, normalize_valuedict;
+                                what=:guess, on_conflict=:keepfirst, verbose, io)
+    bounds   = _merge_overrides(am, bounds, bound_overrides, normalize_bounds; verbose, io)
 
     # Extract metadata and merge with additional constraints/formulas
     metadata_initformulas = has_initformula(cf) ? get_initformulas(cf) : nothing
@@ -702,6 +695,20 @@ function initialize_component(cf;
     end
 
     return init_state
+end
+
+# Merge overrides onto the base dict, each normalized onto canonical symbols first. An
+# override may name any member of an alias class, and only canonical keys compare
+# meaningfully — normalizing both sides is what makes the merge a plain key-wise override of
+# the value the caller targeted, and what lets a `nothing` marker remove the class it names.
+# A conflict *within* either dict is the caller contradicting themselves, and is left to the
+# normalizer's `on_conflict`.
+function _merge_overrides(am, base, overrides, normalizer; kwargs...)
+    normalized = normalizer(am, base; kwargs...)
+    if !isnothing(overrides)
+        normalized = merge(normalized, normalizer(am, overrides; kwargs...))
+    end
+    filter(p -> !isnothing(p.second), normalized)
 end
 
 """

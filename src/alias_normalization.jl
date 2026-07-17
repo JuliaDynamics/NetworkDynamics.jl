@@ -154,8 +154,10 @@ messages. `on_conflict` decides what happens when two members disagree:
   and the deterministic winner is the value on the canonical symbol, else the first alias
   in sorted order.
 
-Returns a new dict; `d` is never mutated. `nothing` values (removal markers) travel with
-their key untransformed.
+Returns a new dict; `d` is never mutated. A `nothing` value (a removal marker) moves onto
+the canonical symbol like any other, but is not scaled — there is no value to scale. It
+takes part in the collision check as an ordinary value, so a marker and a real value on one
+class disagree: setting and removing a class in a single dict is a contradiction.
 
 See also: [`normalize_bounds`](@ref), [`canonicalize`](@ref).
 """

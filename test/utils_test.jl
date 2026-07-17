@@ -216,6 +216,25 @@ using ForwardDiff
         @test get_default(vmp, :inner₊K) == 3.0
     end
 
+    @testset "set_mtk_defaults does not mutate the system it is given" begin
+        # `get_initial_conditions` hands back the live dict, so the numeric path is the one
+        # that can leak: both paths must leave `sys` as it was and carry the change out on
+        # the returned system
+        @variables x(t)
+        @parameters K T
+        sys = System([Dt(x) ~ -K*x + T], t, [x], [K, T]; name=:nomut)
+
+        numeric = NetworkDynamics.set_mtk_defaults(sys, (; K = 2.0))
+        # values come back wrapped, so unwrap before comparing (`==` would stay symbolic)
+        @test unwrap_const(ModelingToolkitBase.get_initial_conditions(numeric)[K]) == 2.0
+        @test isempty(ModelingToolkitBase.get_initial_conditions(sys))
+
+        symbolic = NetworkDynamics.set_mtk_defaults(sys, (; K = T))
+        @test isempty(ModelingToolkitBase.get_initial_conditions(sys))
+        @test isempty(ModelingToolkitBase.get_bindings(sys))
+        @test !isempty(ModelingToolkitBase.get_bindings(symbolic))
+    end
+
     @testset "Test set_mtk_defaults" begin
         @component function inner(; name, defaults...)
             @parameters a

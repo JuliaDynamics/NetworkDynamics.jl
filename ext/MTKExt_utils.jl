@@ -295,7 +295,9 @@ function NetworkDynamics.set_mtk_defaults(sys::System, pairs)
             throw(ArgumentError("Could not resolve variable of name $name in system $(getname(sys))! None of the defaults have been set."))
         end
     end
-    defdict = ModelingToolkitBase.get_initial_conditions(sys)
+    # both dicts are copies: `get_initial_conditions` hands back the live dict, and `sys`
+    # must come out of here untouched — every change leaves on the returned system
+    defdict = copy(ModelingToolkitBase.get_initial_conditions(sys))
     binddict = ModelingToolkitBase.SymmapT()
     for (k, v) in ModelingToolkitBase.get_bindings(sys)
         binddict[k] = v
@@ -320,6 +322,8 @@ function NetworkDynamics.set_mtk_defaults(sys::System, pairs)
             bindings_changed = true
         end
     end
+
+    @reset sys.initial_conditions = defdict
     bindings_changed || return sys
 
     @reset sys.bindings = ModelingToolkitBase.ROSymmapT(binddict)
@@ -531,7 +535,7 @@ function _metadata_to_formulas(pairs, ::Type{FT}; fail::Symbol, kind::String) wh
     end
 
     resolved = _dedupe_resolved(resolved; fail, kind=string(nameof(FT)))
-    isempty(resolved) ? nothing : Set(_build_formula(FT, r) for r in resolved)
+    isempty(resolved) ? nothing : [_build_formula(FT, r) for r in resolved]
 end
 
 """

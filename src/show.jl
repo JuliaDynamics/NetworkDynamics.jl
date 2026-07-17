@@ -122,13 +122,7 @@ function print_states_params(io, @nospecialize(c::ComponentModel), styling)
 
     _push_cluster_info!(info, c, _collect_formulalike(c, :guessformula), "GuessFormula", "guesses")
 
-    # PowerDynamics' PFInitFormulas act on the same defaults as the plain InitFormulas and
-    # participate in the same dataflow, so they share the cluster analysis instead of getting
-    # a section of their own.
-    _push_cluster_info!(info, c,
-                        vcat(_collect_formulalike(c, :initformula),
-                             _collect_formulalike(c, :pfinitformula)),
-                        "InitFormula", "initializes")
+    _push_cluster_info!(info, c, _init_formulalike(c), "InitFormula", "initializes")
 
     if has_initconstraint(c)
         constraints = get_initconstraints(c)
@@ -187,8 +181,13 @@ end
 
 function _cluster_lines(@nospecialize(c::ComponentModel), formulas, verb)
     am = get_aliasmap(c)
-    # guess formulas run after the init formulas and see both pin kinds
-    pinned = pinned_obssyms(c; guess=any(f -> f isa GuessFormula, formulas))
+    # The frontier of the displayed group: the pins of its own formulas — which covers the
+    # `:pfinitformula` entries grouped in with the plain InitFormulas — plus, for guess
+    # formulas, the init pins, since guesses run after the init stage.
+    pinned = pinned_obssyms(formulas, c)
+    if any(f -> f isa GuessFormula, formulas)
+        pinned = pinned ∪ pinned_obssyms(_init_formulalike(c), c)
+    end
     ios = [_formula_io(c, f, am, pinned) for f in formulas]
     total = _num_init_variables(c, ios)
 
@@ -275,6 +274,12 @@ function _collect_formulalike(@nospecialize(c::ComponentModel), key)
     f = get_metadata(c, key)
     collect(Any, f isa Tuple ? f : (f,))
 end
+
+# PowerDynamics' PFInitFormulas act on the same defaults as the plain InitFormulas and
+# participate in the same dataflow, so they are analyzed together instead of getting a
+# section of their own.
+_init_formulalike(@nospecialize(c::ComponentModel)) =
+    vcat(_collect_formulalike(c, :initformula), _collect_formulalike(c, :pfinitformula))
 
 function _inout_string(c::VertexModel, f, name)
     sym = f(c)

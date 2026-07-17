@@ -651,6 +651,38 @@ end
         @test eq(mk(@initconstraint :u_r - 0.5), mk(@initconstraint :θ + 0.5))
     end
 
+    # An override may name any member of the class and must beat the value the class holds,
+    # whichever member the metadata used — one case per carrier, as above.
+    @testset "placement invariance: a default override" begin
+        # the metadata value is the wrong one (u_r must equal i_r = 0.5 for steady state),
+        # so only an override that lands on the class gets this to init at all
+        mk(ov) = let v = base!(freshvm()); set_default!(v, :u_r, 0.1)
+            initialize_component(v; default_overrides=ov, verbose=false)
+        end
+        canon = mk(Dict(:u_r => 0.5))
+        alias = mk(Dict(:θ => -0.5))
+        @test eq(canon, alias)
+        @test alias[:u_r] ≈ 0.5    # the override, not the 0.1 from metadata
+    end
+
+    @testset "guess override on an alias beats the metadata guess" begin
+        # guesses only seed the solve, so the working dict is the only place the override
+        # is observable — the solution is the same either way
+        g = Ref{Any}()
+        v = base!(freshvm()); set_guess!(v, :u_r, 0.1)
+        initialize_component(v; guess_overrides=Dict(:θ => -0.7), verbose=false, _final_guesses=g)
+        @test g[][:u_r] ≈ 0.7
+        @test !haskey(g[], :θ)
+    end
+
+    @testset "a removal marker reaches the class through any member" begin
+        d = Ref{Any}()
+        v = base!(freshvm()); set_default!(v, :u_r, 0.5); set_guess!(v, :u_r, 0.1)
+        initialize_component(v; default_overrides=Dict(:θ => nothing), verbose=false, _final_defaults=d)
+        @test !haskey(d[], :u_r)   # the default is gone, u_r is free and solved for again
+        @test !haskey(d[], :θ)
+    end
+
     @testset "write-back: alias readable as factor * canonical" begin
         v = base!(freshvm()); set_default!(v, :u_r, 0.5)
         initialize_component!(v; verbose=false)

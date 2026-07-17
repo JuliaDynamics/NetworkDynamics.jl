@@ -25,6 +25,10 @@
   works on **parameters** as well as unknowns, which is what "free setpoint, back-computed from
   the operating point" needs. Metadata expressions are collected from the hierarchical system
   and namespaced there, since `renamespace` does not descend into a symbol's metadata.
+  **Breaking**: a *binding* on an unknown — `@variables x(t) = <symbolic expr>` — was
+  previously converted into an `InitFormula` behind your back, and now throws at compile
+  time. The error names the `initf` rewrite; spell it `@variables x(t) [initf = <expr>]`
+  instead. Bindings on parameters are unaffected.
 - **`set_mtk_defaults!` renamed to `set_mtk_defaults` and is no longer mutating** (breaking):
   rebind the result, `sys = set_mtk_defaults(sys, defaults)`. In exchange, forwarded keywords
   now mirror values written directly onto a declaration: a **numeric** value becomes an
@@ -37,12 +41,12 @@
 - **Alias normalization for the initialization pipeline**: At init time, defaults/guesses/bounds and formula outputs written against an
   alias are transported onto the canonical settable symbol, and formula inputs which are
   observables are expanded through the observed equations down to settable roots. In practice:
-  it does not matter wheter you define your guess/default or Init/GuessFormula metadata for :busbar.u or :terminal.u,
-  both states are aliased so they will be rerouted to the cannonical name.
+  it does not matter whether you define your guess/default or Init/GuessFormula metadata for
+  :busbar.u or :terminal.u, both states are aliased so they will be rerouted to the canonical name.
 - **Pinned observables — backward-flow initialization**: an `InitFormula` may now *write* a
-  non-alias observable, "pinning" it as an init-time dataflow node. 
-  Other `InitFormulas` will priortize thoses as inputs to the equations. I.e. you can
-  subcomponent local Init/GuessFormulas, once they connect end to end you can achieve true
+  non-alias observable, "pinning" it as an init-time dataflow node.
+  Other `InitFormulas` will prioritize those as inputs to the equations. I.e. you can write
+  subcomponent-local Init/GuessFormulas; once they connect end to end you can achieve true
   backward flow initialization as commonly used for power models.
   This enables fully component-local backward init: a
   parent formula states what a child's output must be, the child's formula inverts its own
