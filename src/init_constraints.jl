@@ -82,7 +82,7 @@ function InitConstraint(subconstraints::InitConstraint...)
         header = "@initconstraint begin"
         footer = "end"
         bodylines = mapreduce(vcat, subconstraints) do c
-            split(c.prettyprint, '\n')[2:end-1] # drop the macro header and footer
+            split(c.prettyprint, '\n')[2:end-1]
         end
         prettyprint = join([header, join(bodylines, "\n"), footer], "\n")
     end

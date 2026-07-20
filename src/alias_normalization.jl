@@ -12,15 +12,12 @@ initialization pipeline can canonicalize user input regardless of which member o
 alias class it was written against.
 
 A canonical symbol is a settable symbol of the component — a state, parameter, input or
-output — whenever the alias class has one. A class may have none: two names for one
-observable whose value is a many-to-one expression (an output port wired to an input port,
-say) share no storage slot. Such a class canonicalizes onto its *terminal observable*, the
-one carrying the defining expression, which is where [`generate_obs_expansion`](@ref)
-bottoms out anyway. Nothing can be stored there, but the names unify, which is what lets a
-pin travel between them (see [`pinned_obssyms`](@ref)).
-
-If a class *does* contain a settable member, the canonical must be that member — otherwise
-[`normalize_valuedict`](@ref) would move a default onto a symbol with no slot behind it.
+output — whenever the alias class has one; it *must* be that member, else
+[`normalize_valuedict`](@ref) would move a default onto a symbol with no slot behind it. A
+class with no settable member (two names for one observable, e.g. an output port wired to an
+input port) canonicalizes onto its *terminal observable* instead: nothing can be stored
+there, but the names unify, which is what lets a pin travel between them (see
+[`pinned_obssyms`](@ref)).
 
 An alias key is never settable, and never itself canonical: identity entries
 (`s => (1.0, s)`) are not stored, so absence of a key means "already canonical, or not an

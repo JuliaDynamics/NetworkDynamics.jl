@@ -587,13 +587,10 @@ end
 # policy (`fail`: error for initf, warn for guessf) differs between the two.
 
 # Shape one `lhs => rhs` pair into a `(target, rhs, inputs)` form, or skip it (with a
-# warning) when it structurally cannot become a formula. Deliberately *raw*: the target and
-# the inputs keep the names the user wrote, without any substitution through the observed
-# equations. Classification (settable / alias / pinned observable) and observable-input
-# expansion happen at init time in `normalize`, exactly as for a formula attached to the
-# compiled component by hand — one resolution path instead of two. Whether the raw names
-# actually exist on the compiled component is checked at attach time, see
-# `add_initformula_lenient!` / `add_guessformula_lenient!`.
+# warning) when it structurally cannot become a formula. Deliberately *raw*: target and
+# inputs keep the names the user wrote, so classification and observable expansion happen at
+# init time in `normalize` — one resolution path, shared with hand-attached formulas.
+# Existence of the raw names is checked at attach time (`add_initformula_lenient!` etc.).
 function _resolve_formula(lhs_sym, rhs_expr; kind)
     lhs_vars = get_variables(lhs_sym)
     if length(lhs_vars) != 1 || !isequal(only(lhs_vars), unwrap(lhs_sym))
@@ -748,18 +745,11 @@ function extract_aliasmap(c::NetworkDynamics.ComponentModel, obseqs)
 end
 
 # Match `ex` against `factor * var` with a numeric, nonzero `factor` and a single variable.
-# Returns `(factor, varname)` or `nothing`.
-#
-# `linear_expansion(ex, v)` decomposes `ex` into `(factor, offset, islinear)` such that
-# `ex == factor*v + offset`, which is precisely the shape we accept. The guards reject, in
-# order: multi-variable rhs (`x + y`; also `k*x`, since `get_variables` counts parameters),
-# nonlinear rhs (`x^2`, `sin(x)` — not linear), a symbolic factor or offset (`k*x` again),
-# affine rhs (`x + 1` — nonzero offset) and a degenerate `0*x`.
-#
-# `linear_expansion` hands back MTKv11 symbolic literals, so both parts go through
-# `unwrap_const`; requiring the result to be a `Number` keeps this to numeric literals, and a
-# variable-free but unfolded coefficient is conservatively left as an ordinary observable.
-#
+# Returns `(factor, varname)` or `nothing`. Accepts exactly the shape `linear_expansion`
+# reports as `factor*v + offset` with a single variable, numeric nonzero factor and zero
+# offset; everything else (multi-variable, nonlinear, symbolic/affine, `0*x`) is rejected by
+# the guards below. `linear_expansion` returns MTKv11 symbolic literals, so factor and offset
+# go through `unwrap_const` and must land on a `Number` to count as numeric.
 # Differentials need no handling: `generate_io_function` rejects rhs differentials upfront.
 function _match_scaled_var(ex)
     vars = get_variables(ex)

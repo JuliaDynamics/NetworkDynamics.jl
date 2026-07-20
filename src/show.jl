@@ -161,10 +161,9 @@ function print_states_params(io, @nospecialize(c::ComponentModel), styling)
     print_treelike(io, align_strings(info))
 end
 
-# Summarize a component's formulas as one line per dataflow cluster. Listing the symbols a
-# formula sets drowns the reader on deeply nested components — the names are long and there
-# are many — so a cluster reports only *how many* variables it pins and, more usefully, which
-# seeds it pins them from.
+# Summarize a component's formulas as one line per dataflow cluster. Listing every symbol a
+# formula sets is unreadable on deeply nested components, so a cluster reports only how many
+# variables it pins and which seeds it pins them from.
 function _push_cluster_info!(info, @nospecialize(c::ComponentModel), formulas, label, verb)
     isempty(formulas) && return
     lines = _cluster_lines(c, formulas, verb)

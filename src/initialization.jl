@@ -559,7 +559,6 @@ function initialize_component(cf;
                                 what=:guess, on_conflict=:keepfirst, verbose, io)
     bounds   = _merge_overrides(am, bounds, bound_overrides, normalize_bounds; verbose, io)
 
-    # Extract metadata and merge with additional constraints/formulas
     metadata_initformulas = has_initformula(cf) ? get_initformulas(cf) : nothing
     combined_initformulas = collect_formulas(metadata_initformulas, additional_initformula)
 
@@ -570,13 +569,11 @@ function initialize_component(cf;
     # both (init pins through the defaults-before-guesses lookup, guess pins from guesses).
     pinned = pinned_obssyms(combined_initformulas, cf)
 
-    # Apply initialization formulas to defaults
     if !isnothing(combined_initformulas)
         combined_initformulas = [normalize(f, am, cf; t, pinned) for f in combined_initformulas]
         apply_init_formulas!(defaults, combined_initformulas; verbose, io, pinned)
     end
 
-    # Extract and apply guess formulas
     metadata_guessformulas = has_guessformula(cf) ? get_guessformulas(cf) : nothing
     combined_guessformulas = collect_formulas(metadata_guessformulas, additional_guessformula)
     if !isnothing(combined_guessformulas)
