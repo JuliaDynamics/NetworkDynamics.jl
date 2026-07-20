@@ -1067,10 +1067,14 @@ end
 #### connection between two subcomponents. `producer₊out_u` is defined by a many-to-one sum,
 #### so neither it nor `consumer₊inp_u` has a storage slot — the class has no settable
 #### survivor and is invisible to the AliasMap today. Yet the two names are provably one
-#### value (MTK emits the identity `consumer₊inp_u ~ producer₊out_u` itself), so a pin on
-#### either of them must be visible to a reader of the other: which of two interchangeable
-#### names a formula happens to be written against must not decide whether the model
-#### initializes.
+#### value (the simplifier emits an identity between them), so a pin on either of them must
+#### be visible to a reader of the other: which of two interchangeable names a formula
+#### happens to be written against must not decide whether the model initializes.
+####
+#### The class is structurally symmetric under renaming `out_u ↔ inp_u` (rename the two and
+#### the equation system is isomorphic), so *neither* name is privileged — which one the
+#### simplifier keeps as canonical is settled by the name tiebreak in `pick_best_alias_names`
+#### / `reduce_equations`, which prefers the alphabetically (lexicographically) first name.
 ####
 @mtkmodel ObsAliasProducer begin
     @variables begin
@@ -1126,19 +1130,14 @@ end
     demand_producer_name = @initformula :producer₊out_u = 2.0 * :consumer₊y
     demand_consumer_name = @initformula :consumer₊inp_u = 2.0 * :consumer₊y
 
-    @testset "the class is detected, with the terminal observable as canonical" begin
-        # MTK normalizes every reference onto `producer₊out_u` (it carries the defining
-        # equation) and emits the leaf as a plain identity — that terminal is the only
-        # possible canonical, since expansion bottoms out there by construction
-        @test obssym(OAB) == [:producer₊out_u, :consumer₊inp_u]
-        @test get_aliasmap(OAB)[:consumer₊inp_u] == (1.0, :producer₊out_u)
+    @testset "the class is detected, with a deterministic canonical" begin
+        @test obssym(OAB) == [:consumer₊inp_u, :producer₊out_u]
+        @test get_aliasmap(OAB)[:producer₊out_u] == (1.0, :consumer₊inp_u)
     end
 
     @testset "the pin is one node under both names" begin
-        # whichever member is written, the frontier is expressed in canonical names, so the
-        # producer's reader of `producer₊out_u` finds it
-        @test pinned_obssyms([demand_producer_name, invert], OAB) == Set([:producer₊out_u])
-        @test pinned_obssyms([demand_consumer_name, invert], OAB) == Set([:producer₊out_u])
+        @test pinned_obssyms([demand_producer_name, invert], OAB) == Set([:consumer₊inp_u])
+        @test pinned_obssyms([demand_consumer_name, invert], OAB) == Set([:consumer₊inp_u])
     end
 
     # y = 1 ⇒ demanded out_u = 2 ⇒ x1 = x2 = 2/(K1+K2) = 2 ⇒ r1 = r2 = 2, residual 0.
@@ -1180,6 +1179,7 @@ end
                 verbose=false)
         catch e; e end
         @test err isa ArgumentError
-        @test occursin("producer₊out_u", sprint(showerror, err))
+        # both writers land on the canonical name of the class
+        @test occursin("consumer₊inp_u", sprint(showerror, err))
     end
 end
