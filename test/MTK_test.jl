@@ -1,6 +1,7 @@
 using ModelingToolkitBase
 using ModelingToolkitBase: t_nounits as t, D_nounits as Dt
 using NetworkDynamics
+using NetworkDynamics: AliasMap, get_aliasmap
 using OrdinaryDiffEqTsit5
 using LinearAlgebra
 using Graphs
@@ -69,7 +70,7 @@ end;
     end
     @parameters begin
         M = 1, [guess=0.1, description = "Inertia"]
-        D = 0.1, [guess=M, description = "Damping"]
+        D = 0.1, [guess=0.1, description = "Damping"]
         Pmech, [description = "Mechanical Power"]
     end
     @equations begin
@@ -1201,104 +1202,395 @@ end
     @test_logs (:warn, r"Model contains .* @discretes") VertexModel(testcomp(), [:x], [:y])
 end
 
-@testset "promotion of bindings to init_formulas" begin
+@testset "initf metadata to init_formulas" begin
     @testset "no nesting" begin
-        @component function slack_differential(; name)
-            @parameters u_init_r=1 u_init_i=0
-            @named busbar = BusBase(; u_r = u_init_r + 0.1, u_i = u_init_i)
-            eqs = [Dt(busbar.u_r) ~ 0, Dt(busbar.u_i) ~ 0]
-            System(eqs, t, [], [u_init_r, u_init_i]; name, systems=[busbar])
+        @component function slack_initf(; name)
+            @parameters begin
+                u_init_r = 1
+                u_init_i = 0
+            end
+            @variables begin
+                u_r(t), [initf = u_init_r + 0.1]
+                u_i(t), [initf = u_init_i]
+                i_r(t), [guess=0]
+                i_i(t), [guess=0]
+            end
+            eqs = [Dt(u_r) ~ 0, Dt(u_i) ~ 0]
+            System(eqs, t, [u_r, u_i, i_r, i_i], [u_init_r, u_init_i]; name)
         end
-        @named sys = slack_differential()
-        vm = VertexModel(sys, [:busbar₊i_r, :busbar₊i_i], [:busbar₊u_r, :busbar₊u_i]; verbose=false)
+        @named sys = slack_initf()
+        vm = VertexModel(sys, [:i_r, :i_i], [:u_r, :u_i]; verbose=false)
 
-        # formulas are automatically attached to the vertex model
         @test has_initformula(vm)
         formulas = collect(get_initformulas(vm))
         @test length(formulas) == 2
 
-        f_ur = only(filter(f -> f.outsym == [:busbar₊u_r], formulas))
-        f_ui = only(filter(f -> f.outsym == [:busbar₊u_i], formulas))
+        f_ur = only(filter(f -> f.outsym == [:u_r], formulas))
+        f_ui = only(filter(f -> f.outsym == [:u_i], formulas))
+        @test f_ur.sym == [:u_init_r]
+        @test f_ui.sym == [:u_init_i]
 
         out = NetworkDynamics.SymbolicView(zeros(1), f_ur.outsym)
         f_ur(out, NetworkDynamics.SymbolicView([2.0], f_ur.sym))
-        @test out[:busbar₊u_r] ≈ 2.1
-
-        out = NetworkDynamics.SymbolicView(zeros(1), f_ur.outsym)
-        f_ur(out, NetworkDynamics.SymbolicView([0.0], f_ur.sym))
-        @test out[:busbar₊u_r] ≈ 0.1
+        @test out[:u_r] ≈ 2.1
 
         out = NetworkDynamics.SymbolicView(zeros(1), f_ui.outsym)
         f_ui(out, NetworkDynamics.SymbolicView([3.5], f_ui.sym))
-        @test out[:busbar₊u_i] ≈ 3.5
+        @test out[:u_i] ≈ 3.5
     end
 
-    @testset "nested model" begin
-        @component function slack_diff_inner(; name)
-            @parameters u_init_r=1
-            @named busbar = BusBase(; u_r = u_init_r)
-            eqs = [Dt(busbar.u_r) ~ 0, Dt(busbar.u_i) ~ 0]
-            System(eqs, t, [], [u_init_r]; name, systems=[busbar])
+    @testset "parameter target" begin
+        # a parameter is a valid initf target -- this is the case MTK `bindings` cannot express
+        @component function param_target(; name)
+            @variables begin
+                x(t), [guess=0]
+                y(t), [guess=0]
+            end
+            @parameters begin
+                setp, [guess=0, initf = 3*x + 1]
+            end
+            System([Dt(x) ~ -x + setp, Dt(y) ~ -y], t, [x, y], [setp]; name)
         end
-        @component function slack_diff_outer(; name)
-            @variables u_r(t) u_i(t) i_r(t) i_i(t)
-            @named inner = slack_diff_inner()
-            eqs = [
-                u_r ~ inner.busbar.u_r
-                u_i ~ inner.busbar.u_i
-                i_r ~ inner.busbar.i_r
-                i_i ~ inner.busbar.i_i
-            ]
-            System(eqs, t; name, systems=[inner])
-        end
-        # Outer model has no bindings of its own; inner model has u_r = u_init_r binding.
-        # bindings_to_initformulas should propagate the inner binding with the namespaced symbol.
-        @named outer = slack_diff_outer()
-        vm = VertexModel(outer, [:i_r, :i_i], [:u_r, :u_i]; verbose=false)
-
-        @test has_initformula(vm)
-        formulas = collect(get_initformulas(vm))
-        @test length(formulas) == 1
-        f = only(formulas)
-        @test f.outsym == [:inner₊busbar₊u_r]
-        @test f.sym    == [:inner₊u_init_r]
+        @named sys = param_target()
+        vm = VertexModel(sys, [], [:y]; verbose=false)
+        f = only(get_initformulas(vm))
+        @test f.outsym == [:setp]
+        @test f.sym == [:x]
 
         out = NetworkDynamics.SymbolicView(zeros(1), f.outsym)
-        f(out, NetworkDynamics.SymbolicView([4.2], f.sym))
-        @test out[:inner₊busbar₊u_r] ≈ 4.2
+        f(out, NetworkDynamics.SymbolicView([2.0], f.sym))
+        @test out[:setp] ≈ 7.0
+    end
 
-        @testset "error on conflicting formula targets" begin
-            @component function slack_diff_outer_dup(; name)
-                @parameters u_init_outer=2.0
-                @variables u_r(t) u_i(t) i_r(t) i_i(t)
-                @named inner = slack_diff_inner()
-                eqs = [
-                    u_r ~ inner.busbar.u_r
-                    u_i ~ inner.busbar.u_i
-                    i_r ~ inner.busbar.i_r
-                    i_i ~ inner.busbar.i_i
-                ]
-                # outer also binds u_r: after obs_subs both this and inner₊busbar₊u_r alias to u_r
-                # but to *different* values (u_init_outer vs inner₊u_init_r) — a genuine
-                # over-determination, so InitFormula dedup raises an error (not a warning).
-                System(eqs, t; name, systems=[inner], bindings=[u_r => u_init_outer])
+    @testset "nested model: metadata expressions are namespaced" begin
+        # The whole point of `collect_initf` recursing over the *hierarchical* system:
+        # `renamespace` renames a symbol but does not descend into its metadata, so a naive
+        # read off the flattened system would leave `a` bare instead of `c₊a`.
+        @component function initf_inner(; name)
+            @parameters a=1.0
+            @variables begin
+                x(t), [guess=0, initf = 2*a]
+                y(t), [guess=0]
             end
-            @named outer_dup = slack_diff_outer_dup()
-            @test_throws "conflicting definitions" begin
-                VertexModel(outer_dup, [:i_r, :i_i], [:u_r, :u_i]; verbose=false)
-            end
+            System([Dt(x) ~ -x, Dt(y) ~ -y], t, [x, y], [a]; name)
         end
+        @component function initf_outer(; name)
+            @named c = initf_inner()
+            @variables z(t), [guess=0]
+            System([Dt(z) ~ -z + c.x], t, [z], []; name, systems=[c])
+        end
+        @named outer = initf_outer()
+        vm = VertexModel(outer, [], [:z]; verbose=false)
+
+        f = only(get_initformulas(vm))
+        @test f.outsym == [:c₊x]
+        @test f.sym == [:c₊a]   # <- namespaced, NOT bare `:a`
+
+        out = NetworkDynamics.SymbolicView(zeros(1), f.outsym)
+        f(out, NetworkDynamics.SymbolicView([4.0], f.sym))
+        @test out[:c₊x] ≈ 8.0
+    end
+
+    @testset "nested model: foreign symbols passed in stay in the parent namespace" begin
+        # `@component` promotes symbolic kwargs to `ParentScope`, so an expression handed
+        # down from the parent must NOT be namespaced into the child.
+        @component function initf_child(; name, foreign)
+            @parameters a=1.0
+            @variables begin
+                x(t), [guess=0, initf = 2*a + foreign]
+                y(t), [guess=0]
+            end
+            System([Dt(x) ~ -x, Dt(y) ~ -y], t, [x, y], [a]; name)
+        end
+        @component function initf_parent(; name)
+            @parameters q=5.0
+            @named c = initf_child(; foreign=3*q)
+            @variables z(t), [guess=0]
+            System([Dt(z) ~ -z + c.x], t, [z], [q]; name, systems=[c])
+        end
+        @named p = initf_parent()
+        vm = VertexModel(p, [], [:z]; verbose=false)
+
+        f = only(get_initformulas(vm))
+        @test f.outsym == [:c₊x]
+        @test Set(f.sym) == Set([:c₊a, :q])   # child symbol namespaced, parent symbol bare
+
+        vals = Dict(:c₊a => 4.0, :q => 2.0)
+        out = NetworkDynamics.SymbolicView(zeros(1), f.outsym)
+        f(out, NetworkDynamics.SymbolicView([vals[s] for s in f.sym], f.sym))
+        @test out[:c₊x] ≈ 2*4.0 + 3*2.0
+    end
+
+    @testset "conflicting formula targets" begin
+        # two initf entries forcing the same raw target to different values is a compile
+        # error; two entries on different members of one alias class both compile and are
+        # reported by the init-time duplicate-writer check, once normalization has collapsed
+        # the class (formulas are ejected raw, all classification happens at init).
+        @component function conflict_inner(; name)
+            @parameters a=1.0
+            @variables begin
+                x(t), [guess=0, initf = 2*a]
+                y(t), [guess=0]
+            end
+            System([Dt(x) ~ -x, Dt(y) ~ -y], t, [x, y], [a]; name)
+        end
+        @component function conflict_outer(; name)
+            @parameters b=2.0
+            @named c = conflict_inner()
+            @variables begin
+                z(t), [guess=0]
+                w(t), [guess=0, initf = 5*b]   # w aliases c₊x -> two writers, different values
+            end
+            eqs = [w ~ c.x, Dt(z) ~ -z + w + b]
+            System(eqs, t; name, systems=[c])
+        end
+        @named outer = conflict_outer()
+        vm = VertexModel(outer, [], [:z]; verbose=false)
+        @test length(get_initformulas(vm)) == 2
+        err = try; initialize_component(vm; verbose=false); catch e; e; end
+        @test err isa ArgumentError
+        @test occursin("Multiple InitFormulas set the same symbol", sprint(showerror, err))
     end
 end
 
-@testset "promotion of guesses to guess_formulas" begin
-    @component function vertex_with_symbolic_guess(; name)
-        @parameters u_init=1.0
-        @variables x(t) y(t)
-        eqs = [Dt(x) ~ -x; Dt(y) ~ -y]
-        System(eqs, t, [x, y], [u_init]; name, guesses=[y => 2*u_init])
+@testset "set_initf: system-level init formulas" begin
+    # the backward-flow showcase: the child knows only its own inverse (initf on x reads
+    # the child's own output y), the parent knows what that output must be in steady state
+    # and pins it via set_initf. Together they determine everything — no nonlinear solve.
+    @component function pin_pi_block(; name)
+        @parameters K_p=20.0 K_i=5.0
+        @variables begin
+            err(t)
+            y(t)
+            x(t), [guess=0, initf=(y - K_p*err)/K_i]
+        end
+        System([Dt(x) ~ err, y ~ K_p*err + K_i*x], t; name)
     end
-    @named sys = vertex_with_symbolic_guess()
+    @component function pin_ctrl(; name)
+        @named pi = pin_pi_block()
+        @parameters K=2.0 vref=1.0
+        @variables begin
+            v(t) = 1.0
+            i(t), [input=true]
+            o(t), [output=true]
+        end
+        eqs = [pi.err ~ vref - v, Dt(v) ~ pi.y - K*v + i, o ~ v]
+        sys = System(eqs, t; name, systems=[pi])
+        set_initf(sys, pi.y => K*v - i)
+    end
+
+    @testset "parent pins the child's observable output" begin
+        @named ctrl = pin_ctrl()
+        vm = VertexModel(ctrl, [:i], [:o]; verbose=false)
+        @test :pi₊y ∈ obssym(vm)
+        @test NetworkDynamics.pinned_obssyms(vm) == Set([:pi₊y])
+
+        io = IOBuffer()
+        state = initialize_component(vm;
+            default_overrides=Dict(:i => 0.5, :o => 1.0), verbose=true, io)
+        @test occursin("No free variables!", String(take!(io)))
+        @test state[:pi₊x] ≈ 0.3    # ((K*v - i) - K_p*0) / K_i
+        @test !haskey(state, :pi₊y)
+    end
+
+    @testset "pairs survive a second nesting level" begin
+        @component function pin_outer(; name)
+            @named ctrl = pin_ctrl()
+            @variables begin
+                iin(t), [input=true]
+                oout(t), [output=true]
+            end
+            System([ctrl.i ~ iin, oout ~ ctrl.o], t; name, systems=[ctrl])
+        end
+        @named outer = pin_outer()
+        vm = VertexModel(outer, [:iin], [:oout]; verbose=false)
+        @test NetworkDynamics.pinned_obssyms(vm) == Set([:ctrl₊pi₊y])
+        state = initialize_component(vm;
+            default_overrides=Dict(:iin => 0.5, :oout => 1.0), verbose=false)
+        @test state[:ctrl₊pi₊x] ≈ 0.3
+    end
+
+    @testset "settable targets work like the variable option" begin
+        @component function settable_target(; name)
+            @parameters a=1.0
+            @variables begin
+                x(t), [guess=0]
+                y(t), [guess=0]
+            end
+            sys = System([Dt(x) ~ -x, Dt(y) ~ -y], t, [x, y], [a]; name)
+            set_initf(sys, x => 2a)
+        end
+        @named sys = settable_target()
+        vm = VertexModel(sys, [], [:y]; verbose=false)
+        f = only(get_initformulas(vm))
+        @test f.outsym == [:x]
+        @test f.sym == [:a]
+    end
+
+    @testset "conflict with a variable-option initf on the same target errors" begin
+        @component function initf_conflict(; name)
+            @parameters a=1.0
+            @variables begin
+                x(t), [guess=0, initf=2a]
+                y(t), [guess=0]
+            end
+            sys = System([Dt(x) ~ -x, Dt(y) ~ -y], t, [x, y], [a]; name)
+            set_initf(sys, x => 3a)   # different recipe for the same raw target
+        end
+        @named sys = initf_conflict()
+        @test_throws "conflicting definitions" VertexModel(sys, [], [:y]; verbose=false)
+    end
+
+    @testset "eager validation and appending" begin
+        @variables x(t) y(t)
+        @named sys = System([Dt(x) ~ -x, Dt(y) ~ -y], t, [x, y], [])
+        @test_throws ArgumentError set_initf(sys, x + y => 1.0)
+        sys2 = set_initf(set_initf(sys, x => 1.0), y => 2.0)  # appends, non-mutating
+        @test length(mtkext.collect_initf(sys2)) == 2
+        @test isempty(mtkext.collect_initf(sys))
+    end
+
+    # The same pin can be spelled without set_initf, through a parent-local alias variable
+    # carrying the initf. This works deterministically: alias-name selection prefers the
+    # shallower name, so the parent-local variable always becomes the class representative
+    # holding the defining equation, the child symbol becomes an alias leaf, and the child's
+    # read expands onto the pinned representative and stops there.
+    @testset "alternative spelling: parent-local alias variable" begin
+        @component function ctrl_aliasvar(; name)
+            @named pi = pin_pi_block()
+            @parameters K=2.0 vref=1.0
+            @variables begin
+                v(t) = 1.0
+                i(t), [input=true]
+                o(t), [output=true]
+            end
+            @variables y_wish(t), [initf = K*v - i]
+            eqs = [y_wish ~ pi.y, pi.err ~ vref - v, Dt(v) ~ pi.y - K*v + i, o ~ v]
+            System(eqs, t; name, systems=[pi])
+        end
+        @named ctrl = ctrl_aliasvar()
+        vm = VertexModel(ctrl, [:i], [:o]; verbose=false)
+        @test NetworkDynamics.pinned_obssyms(vm) == Set([:y_wish])
+        state = initialize_component(vm;
+            default_overrides=Dict(:i => 0.5, :o => 1.0), verbose=false)
+        @test state[:pi₊x] ≈ 0.3
+    end
+end
+
+@testset "set_guessf: system-level guess formulas" begin
+    @testset "subsystem-owned target is namespaced" begin
+        @component function guessf_inner(; name)
+            @parameters a=1.0
+            @variables x(t) [guess=0.0] y(t) [guess=0.0]
+            System([Dt(x) ~ -x + a, Dt(y) ~ -y], t, [x, y], [a]; name)
+        end
+        @component function guessf_outer(; name)
+            @named c = guessf_inner()
+            @variables z(t) [guess=0.0]
+            sys = System([Dt(z) ~ -z + c.x], t, [z], []; name, systems=[c])
+            set_guessf(sys, c.x => c.a)
+        end
+        @named outer = guessf_outer()
+        vm = VertexModel(outer, [], [:z]; verbose=false)
+        f = only(get_guessformulas(vm))
+        @test f.outsym == [:c₊x]
+        @test f.sym == [:c₊a]   # <- namespaced, NOT bare `:a`
+    end
+
+    @testset "conflicting guessf targets warn, never error" begin
+        # unlike set_initf (a constraint → error), two guess recipes for one target are only
+        # a hint clash: dedupe with a warning and keep one.
+        @component function guessf_conflict(; name)
+            @parameters a=1.0
+            @variables x(t) [guess=0.0, guessf=2a] y(t) [guess=0.0]
+            sys = System([Dt(x) ~ -x, Dt(y) ~ -y], t, [x, y], [a]; name)
+            set_guessf(sys, x => 3a)   # different recipe for the same raw target
+        end
+        @named sys = guessf_conflict()
+        local vm
+        @test_logs (:warn, r"conflicting definitions") match_mode=:any begin
+            vm = VertexModel(sys, [], [:y]; verbose=false)
+        end
+        @test length(get_guessformulas(vm)) == 1
+    end
+
+    @testset "eager validation and appending" begin
+        @variables x(t) y(t)
+        @named sys = System([Dt(x) ~ -x, Dt(y) ~ -y], t, [x, y], [])
+        @test_throws ArgumentError set_guessf(sys, x + y => 1.0)
+        sys2 = set_guessf(set_guessf(sys, x => 1.0), y => 2.0)  # appends, non-mutating
+        @test length(mtkext.collect_guessf(sys2)) == 2
+        @test isempty(mtkext.collect_guessf(sys))
+    end
+end
+
+@testset "symbolic bindings on unknowns are rejected" begin
+    # `@variables x(t) = <symbolic>` is a binding; on an unknown that is ambiguous and the
+    # user must say `initf` instead.
+    @component function state_binding(; name)
+        @parameters u_init_r=1
+        @variables begin
+            u_r(t) = u_init_r + 0.1     # <- binding on an unknown
+            u_i(t)
+            i_r(t), [guess=0]
+            i_i(t), [guess=0]
+        end
+        System([Dt(u_r) ~ 0, Dt(u_i) ~ 0], t, [u_r, u_i, i_r, i_i], [u_init_r]; name)
+    end
+    @named s = state_binding()
+    err = try
+        VertexModel(s, [:i_r, :i_i], [:u_r, :u_i]; verbose=false)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("binds unknown(s)", err.msg)
+    @test occursin("initf", err.msg)
+
+    # explicit `bindings=` kwarg is the same thing and must be caught too
+    @component function state_binding_kw(; name)
+        @parameters p=1.0
+        @variables begin
+            x(t)
+            y(t), [guess=0]
+        end
+        System([Dt(x) ~ -x, Dt(y) ~ -y], t, [x, y], [p]; name, bindings=[x => 2p])
+    end
+    @named s2 = state_binding_kw()
+    @test_throws ArgumentError VertexModel(s2, [], [:y]; verbose=false)
+end
+
+@testset "symbolic defaults on parameters still shadow" begin
+    # A symbolic default on a *parameter* is a runtime dependency, not an init formula: MTK
+    # lowers it to an observed equation and the parameter disappears from the compiled model.
+    @component function param_shadow(; name)
+        @parameters begin
+            p1 = 2.0
+            p2 = 3*p1        # <- parameter binding: legal, reduces the parameter count
+        end
+        @variables begin
+            x(t), [guess=0]
+            y(t), [guess=0]
+        end
+        System([Dt(x) ~ -x + p2, Dt(y) ~ -y], t, [x, y], [p1, p2]; name)
+    end
+    @named s = param_shadow()
+    vm = VertexModel(s, [], [:y]; verbose=false)   # must not throw
+    @test :p1 ∈ psym(vm)
+    @test :p2 ∉ psym(vm)          # shadowed away
+    @test :p2 ∈ obssym(vm)        # ...into an observable
+    @test !has_initformula(vm)    # and it is NOT an init formula
+end
+
+@testset "guessf variable option to guess_formulas" begin
+    @component function vertex_with_guessf(; name)
+        @parameters u_init=1.0
+        @variables x(t) [guess=0.5] y(t) [guessf=2*u_init]
+        eqs = [Dt(x) ~ -x; Dt(y) ~ -y]
+        System(eqs, t, [x, y], [u_init]; name)
+    end
+    @named sys = vertex_with_guessf()
     vm = VertexModel(sys, [], [:x, :y]; verbose=false)
 
     @test has_guessformula(vm)
@@ -1316,30 +1608,51 @@ end
     f(out, NetworkDynamics.SymbolicView([0.5], f.sym))
     @test out[:y] ≈ 1.0
 
-    # constant guess is NOT promoted to a formula
+    # a scalar guess coexists as plain metadata (the fallback), NOT promoted to a formula
     @test all(gf -> :x ∉ gf.outsym, get_guessformulas(vm))
+    @test get_guess(vm, :x) == 0.5
 end
 
-@testset "guesses for eliminated/observable variables are skipped, not fatal" begin
-    # `z` is algebraically eliminated (z = 2x), so its guess expands to a
-    # compound expression `2x(t)` after alias substitution: this used to crash
-    # with `ErrorException("matching non-exhaustive")` inside `getname`.
-    @component function vertex_with_eliminated_guess(; name)
+@testset "guessf seeds the init solver" begin
+    # end-to-end: a free variable with only a `guessf` (no scalar guess) gets its solver
+    # starting value from the formula.
+    @component function seedme(; name)
+        @parameters p=5.0
+        @variables x(t) [guessf=p] o(t) [guess=0.0]
+        System([Dt(x) ~ p - x, o ~ x], t, [x, o], [p]; name)
+    end
+    @named sys = seedme()
+    vm = VertexModel(sys, Symbol[], [:o]; verbose=false)
+    @test has_guessformula(vm)
+    @test !has_guess(vm, :x)
+    state = initialize_component(vm; verbose=false)
+    @test state[:x] ≈ 5.0
+end
+
+@testset "guessf for eliminated variables survives as a raw formula" begin
+    # `z` is algebraically eliminated (z = 2x) into a scaled-alias observable. The guess
+    # formula is ejected raw, targeting `z` as written; at init time `normalize` transports
+    # it onto the surviving symbol through the aliasmap. (This used to be skipped with a
+    # warning when formulas were resolved symbolically at compile time.)
+    @component function vertex_with_eliminated_guessf(; name)
         @parameters u_init = 1.0
-        @variables x(t) y(t) z(t)
+        @variables x(t) y(t) [guess=1.0] z(t) [guessf=2*u_init]
         eqs = [Dt(x) ~ -x + z, 0 ~ z - 2 * x, Dt(y) ~ -y]
-        System(eqs, t, [x, y, z], [u_init]; name, guesses=[z => 2 * u_init, y => 1.0])
+        System(eqs, t, [x, y, z], [u_init]; name)
     end
-    @named sys = vertex_with_eliminated_guess()
+    @named sys = vertex_with_eliminated_guessf()
+    vm = VertexModel(sys, [], [:x, :y]; verbose=false)
 
-    local vm
-    @test_logs (:warn, r"expands to .* after alias substitution") match_mode=:any begin
-        vm = VertexModel(sys, [], [:x, :y]; verbose=false)
-    end
+    f = only(get_guessformulas(vm))
+    @test f.outsym == [:z]      # raw target, the alias key
+    @test f.sym == [:u_init]
+    n = NetworkDynamics.normalize(f, get_aliasmap(vm), vm)
+    @test n.outsym == [:x]      # ... lands on the settable survivor at init time
+    guesses = Dict{Symbol,Float64}()
+    NetworkDynamics.apply_guess_formulas!(guesses, Dict(:u_init => 1.0), [n])
+    @test guesses[:x] ≈ 1.0     # z = 2x = 2*u_init  =>  x = u_init
 
-    # the bogus guess for the eliminated variable did not produce a formula,
-    # but the surviving constant guess for `y` is preserved as plain metadata
-    @test !has_guessformula(vm)
+    # the constant guess for `y` is preserved as plain metadata
     @test has_guess(vm, :y)
 end
 
@@ -1358,23 +1671,46 @@ end
     @test mtkext.symbolic_constant_value(c) === 0.0
     @test mtkext.is_symbolic_constant(Symbolics.Num(sqrt(2)))
     @test mtkext.symbolic_constant_value(Symbolics.Num(sqrt(2))) ≈ sqrt(2)
-    # values referencing other variables/parameters are NOT constant → GuessFormula path
+    # values referencing other variables/parameters are NOT constant → rejected as a scalar
+    # `:guess`, must be spelled with the `guessf` option instead
     @test !mtkext.is_symbolic_constant(x)
     @test !mtkext.is_symbolic_constant(2x)
     @test !mtkext.is_symbolic_constant(2p)
 end
 
-@testset "guess referencing nonexistent symbol is skipped, not fatal" begin
-    # a guess whose RHS references a symbol that is not an unknown/parameter of the system
-    # is malformed and would be rejected fatally by assert_guessformula_compat downstream;
-    # the generic well-formedness guard skips it with a warning instead.
-    @variables x(t) y(t) foo(t)
-    @named badsys = System([Dt(x) ~ -x, Dt(y) ~ -y], t, [x, y], []; guesses=[x => 2 * foo])
-    local res
-    @test_logs (:warn, r"references symbol\(s\) not in the system") match_mode=:any begin
-        res = mtkext.guesses_to_guessformulas!(badsys)
+@testset "guessf referencing nonexistent symbol is skipped, not fatal" begin
+    # a guessf whose RHS references a symbol the compiled component does not expose is
+    # malformed; the attach-time validation catches it and the lenient MTK attach demotes
+    # the error to a warn-and-skip.
+    @component function vertex_with_bad_guessf(; name)
+        @variables foo(t) x(t) [guessf=2*foo] y(t)
+        System([Dt(x) ~ -x, Dt(y) ~ -y], t, [x, y], []; name)
     end
-    @test res === nothing
+    @named badsys = vertex_with_bad_guessf()
+    local vm
+    @test_logs (:warn, r"Skipping an? \w*Formula") match_mode=:any begin
+        vm = VertexModel(badsys, [], [:x, :y]; verbose=false)
+    end
+    @test !has_guessformula(vm)
+end
+
+@testset "symbolic guess (non-constant) is rejected, directing to guessf" begin
+    # the `guess` option is scalar-only; a symbolic guess must use `guessf`/`set_guessf`.
+    @component function vertex_symguess_option(; name)
+        @parameters q=3.0
+        @variables x(t) [guess=q] y(t)
+        System([Dt(x) ~ -x + q, Dt(y) ~ -y], t, [x, y], [q]; name)
+    end
+    @named s1 = vertex_symguess_option()
+    @test_throws "guessf" VertexModel(s1, [], [:y]; verbose=false)
+
+    @component function vertex_symguess_kwarg(; name)
+        @parameters q=3.0
+        @variables x(t) y(t)
+        System([Dt(x) ~ -x + q, Dt(y) ~ -y], t, [x, y], [q]; name, guesses=[x => 2*q])
+    end
+    @named s2 = vertex_symguess_kwarg()
+    @test_throws "guessf" VertexModel(s2, [], [:y]; verbose=false)
 end
 
 @testset "_dedupe_resolved conflict policy" begin
@@ -1787,5 +2123,83 @@ end
         set_default!(vm, :i_r, -0.45)
         set_default!(vm, :i_i, 0.1)
         initialize_component(vm);
+    end
+end
+
+@testset "AliasMap extraction" begin
+    @testset "_match_scaled_var acceptance" begin
+        @variables x(t) y(t)
+        @parameters k V
+        # pure scaled aliases of a single variable are accepted...
+        @test mtkext._match_scaled_var(x)      == (1.0, :x)
+        @test mtkext._match_scaled_var(-x)     == (-1.0, :x)
+        @test mtkext._match_scaled_var(2.5x)   == (2.5, :x)
+        @test mtkext._match_scaled_var(-2.5x)  == (-2.5, :x)
+        @test mtkext._match_scaled_var(x/2)    == (0.5, :x)
+        @test mtkext._match_scaled_var(V)      == (1.0, :V) # parameters are settable, so they alias
+        # ...everything else stays an ordinary observable
+        @test mtkext._match_scaled_var(x + 1)  === nothing # affine
+        @test mtkext._match_scaled_var(x + y)  === nothing # sum
+        @test mtkext._match_scaled_var(2x + 3y) === nothing
+        @test mtkext._match_scaled_var(x^2)    === nothing # nonlinear
+        @test mtkext._match_scaled_var(x*y)    === nothing
+        @test mtkext._match_scaled_var(sin(x)) === nothing
+        @test mtkext._match_scaled_var(k*x)    === nothing # symbolic factor
+        @test mtkext._match_scaled_var(0*x)    === nothing # degenerate
+        @test mtkext._match_scaled_var(Num(1.0)) === nothing # no variable at all
+    end
+
+    @testset "extraction from compiled component" begin
+        @mtkmodel AliasTestBus begin
+            @variables begin
+                u_r(t) = 1.0
+                θ(t)
+                scaled(t)
+                nl(t)
+                Vmeas(t)
+                i_r(t), [input=true]
+                P(t), [output=true]
+            end
+            @parameters begin
+                Vset = 1.0
+            end
+            @equations begin
+                Dt(u_r) ~ -u_r + i_r
+                θ ~ -u_r        # sign flipped alias of a state
+                scaled ~ 2*θ    # chain: scaled = 2*θ = -2*u_r
+                nl ~ u_r^2      # not an alias
+                Vmeas ~ Vset    # alias of a parameter
+                P ~ u_r + nl
+            end
+        end
+        @named atb = AliasTestBus()
+        vm = VertexModel(atb, [:i_r], [:P])
+
+        am = get_aliasmap(vm)
+        @test am == AliasMap(:θ      => (-1.0, :u_r),
+                             :scaled => (-2.0, :u_r), # factors multiply along the chain
+                             :Vmeas  => (1.0, :Vset))
+        @test !haskey(am, :nl)
+
+        # structural invariants: aliases are observables, roots are settable
+        settable = NetworkDynamics.settable_symbols(vm)
+        @test all(k -> k ∈ NetworkDynamics.obssym(vm), keys(am))
+        @test all(k -> k ∉ settable, keys(am))
+        @test all(v -> v[2] ∈ settable, values(am))
+
+        # the extracted factors must agree with what the obs function actually computes
+        set_default!(vm, :i_r, 0.5)
+        set_default!(vm, :u_r, 0.8)
+        for (alias, (factor, canonical)) in am
+            @test get_initial_state(vm, alias) ≈ factor * get_initial_state(vm, canonical)
+        end
+    end
+
+    @testset "no aliases in ordinary components" begin
+        # observables of the library components are all genuinely computed quantities;
+        # this pins the empty-aliasmap (backwards compatible) path
+        for c in [Lib.dqbus_pv(), Lib.dqbus_swing(), Lib.swing_mtk(), Lib.line_mtk()]
+            @test isempty(get_aliasmap(c))
+        end
     end
 end

@@ -491,7 +491,7 @@ function mtk_cache_stats end
 function mtk_model_cache_enabled end
 
 """
-    set_mtk_defaults!(sys::System, pairs)
+    set_mtk_defaults(sys::System, pairs) -> System
 
 Set default values for variables and parameters in a ModelingToolkit `System`.
 
@@ -499,6 +499,20 @@ This function is intended for use inside `@component` definitions to forward
 keyword arguments (`defaults...`) to the underlying `System`. Variable and parameter
 names are resolved symbolically, including namespaced names for subsystem variables
 (e.g. `sub₊x`).
+
+Values are routed exactly like MTK routes `default` metadata at `System` construction, so
+that forwarded keywords behave like values written directly onto the declaration:
+
+  * a **numeric** value becomes an ordinary default (initial condition), while
+  * a **symbolic** value becomes a parameter *binding* — `set_mtk_defaults(sys, K = K_e)`
+    is equivalent to declaring `@parameters K = K_e` inside `sys`. `mtkcompile` resolves
+    bindings into observed equations: the bound parameter is demoted to an observable and
+    the "true" parameter is the one it is bound to.
+
+The function is **non-mutating** (a `System`'s bindings are immutable), so the result must
+be rebound:
+
+    sys = set_mtk_defaults(sys, defaults)
 
 Does nothing if `pairs` is empty. Throws an `ArgumentError` if a name cannot be
 resolved in the system.
@@ -508,15 +522,95 @@ Requires the `ModelingToolkit` extension to be loaded.
 # Example
 ```julia
 @component function mymodel(; name, defaults...)
-    @variables z(t)
-    @named sub = SubModel()
+    vars = @variables z(t)
+    pars = @parameters K
+    @named sub = SubModel(K_sub = K)   # binding: `sub₊K_sub` becomes an observable
     eqs = [z ~ sub.x]
-    sys = System(eqs, t; name, systems=[sub])
-    set_mtk_defaults!(sys, defaults)
+    sys = System(eqs, t, vars, pars; name, systems=[sub])
+    set_mtk_defaults(sys, defaults)
 end
 @named m = mymodel(; z=1.0, sub₊x=2.0)
 ```
+
+See also: [`set_initf`](@ref), which follows the same non-mutating convention.
 """
-function set_mtk_defaults! end
+function set_mtk_defaults end
+
+"""
+    SystemInitFormulas
+
+Custom MTK metadata type holding the `target => expression` initialization pairs attached
+to a `System` via [`set_initf`](@ref). Advanced usage only — prefer `set_initf` over
+touching the metadata directly.
+"""
+struct SystemInitFormulas end
+
+"""
+    set_initf(sys::System, pairs::Pair...) -> System
+
+Attach initialization equations to a ModelingToolkit `System` at the *system* level, as
+`target => expression` pairs. Each pair declares "at initialization, set `target` to
+`expression`" and is lowered to an [`InitFormula`](@ref) when the model is compiled —
+exactly like the `initf` variable option, which is preferred whenever the target is the
+system's own variable:
+
+    @variables x(t) [initf = <expression>]
+
+`set_initf` exists for the case the variable option cannot express: the target belongs to a
+*subsystem*. Most importantly, a parent can set the init value of a child variable which
+alias elimination turns into an observable — the formula then *pins* that observable as an
+init-time dataflow node, from which the child's own `initf` recipes can continue backwards.
+See the initialization docs on pinned observables.
+
+The function is **non-mutating** (system metadata is immutable), so the result must be
+rebound:
+
+    @named pi = PIBlock()
+    eqs = [...]
+    sys = System(eqs, t; name, systems=[pi])
+    sys = set_initf(sys, pi.y => K_e * v_f)
+
+Requires the `ModelingToolkit` extension to be loaded.
+"""
+function set_initf end
+
+"""
+    SystemGuessFormulas
+
+Custom MTK metadata type holding the `target => expression` guess pairs attached to a
+`System` via [`set_guessf`](@ref). Advanced usage only — prefer `set_guessf` over touching
+the metadata directly. The guess-side counterpart of [`SystemInitFormulas`](@ref).
+"""
+struct SystemGuessFormulas end
+
+"""
+    set_guessf(sys::System, pairs::Pair...) -> System
+
+Attach guess equations to a ModelingToolkit `System` at the *system* level, as
+`target => expression` pairs. Each pair declares "at initialization, *guess* `target` from
+`expression`" and is lowered to a [`GuessFormula`](@ref) when the model is compiled —
+exactly like the `guessf` variable option, which is preferred whenever the target is the
+system's own variable:
+
+    @variables x(t) [guessf = <expression>]
+
+`set_guessf` is the guess-side counterpart of [`set_initf`](@ref) and exists for the same
+reason: the variable option cannot express a target that belongs to a *subsystem*, or an
+observable a parent wants to seed. A guess is only a *hint* — it lands among the guesses,
+seeds the solver, and is never consistency-checked — so unlike `set_initf`, conflicting
+definitions for one target are a warning, not an error, and a formula whose inputs cannot be
+resolved is silently skipped (leaving any scalar `guess` as the fallback).
+
+The function is **non-mutating** (system metadata is immutable), so the result must be
+rebound:
+
+    @named pi = PIBlock()
+    eqs = [...]
+    sys = System(eqs, t; name, systems=[pi])
+    sys = set_guessf(sys, pi.y => K_e * v_f)
+
+Requires the `ModelingToolkit` extension to be loaded.
+"""
+function set_guessf end
 
 function set_mtkcompile! end

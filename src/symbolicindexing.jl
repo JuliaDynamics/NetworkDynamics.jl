@@ -139,6 +139,11 @@ If `default=true` the state & parameter values are filled in the following order
     to fill remaining symbols. Inputs are looked up from defaults first, then
     guesses. Formulas whose inputs are still undefined are skipped.
 
+Values and formulas are alias-normalized first, so it does not matter which member of an
+alias class a `default`/`guess` was written against, nor whether a formula targets an alias
+or reads an observable. Note that no time is available here: a formula reading an
+observable which depends explicitly on time is skipped like any other unresolvable one.
+
 If `verbose=true`, print information about which formulas are applied and which
 values are set or skipped.
 """
@@ -169,21 +174,34 @@ function NWState(thing;
 
     return s
 end
+# Values and formulas are alias-normalized here for the same reason `initialize_component`
+# does it: which member of an alias class a value was written against is an accident of MTK's
+# reduction, and must not decide whether the value survives. Without it the `valid_keys`
+# filter below would silently drop a default placed on an alias, and a formula reading an
+# observable would look for roots the dict still spells under their alias names.
+#
+# Both are no-ops with an empty aliasmap (the non-MTK case), see `normalize`.
 function _get_appropriate_dict(cidx, cm; guess, apply_formulas, verbose)
-    defaults = get_defaults_or_inits_dict(cm)
+    am = get_aliasmap(cm)
+    pinned = apply_formulas ? pinned_obssyms(cm) : Set{Symbol}()
+    defaults = normalize_valuedict(am, get_defaults_or_inits_dict(cm); what=:default, verbose)
     if apply_formulas && has_initformula(cm)
         verbose && println("Applying InitFormulas for $(cidx) ($(cm.name))...")
-        apply_init_formulas!(defaults, get_initformulas(cm); error_unresolvable=false, verbose)
+        formulas = [normalize(f, am, cm; pinned) for f in get_initformulas(cm)]
+        apply_init_formulas!(defaults, formulas; error_unresolvable=false, verbose, pinned)
     end
     if guess
-        guesses = get_guesses_dict(cm)
+        guesses = normalize_valuedict(am, get_guesses_dict(cm); what=:guess, on_conflict=:keepfirst, verbose)
         if apply_formulas && has_guessformula(cm)
             verbose && println("Applying GuessFormulas for $(cidx) ($(cm.name))...")
-            apply_guess_formulas!(guesses, defaults, get_guessformulas(cm); error_unresolvable=false, verbose)
+            guess_pinned = pinned_obssyms(cm; guess=true)
+            formulas = [normalize(f, am, cm; pinned=guess_pinned) for f in get_guessformulas(cm)]
+            apply_guess_formulas!(guesses, defaults, formulas; error_unresolvable=false, verbose, pinned=guess_pinned)
         end
         defaults = merge(guesses, defaults) # defaults overwrite guesses
     end
-    # limit dict to only psym and sym of component
+    # limit dict to only psym and sym of component; this is also what discards the
+    # init-time scratch values of pinned observables
     valid_keys = Set(vcat(sym(cm), psym(cm)))
     filter!(p -> p.first ∈ valid_keys, defaults)
 end

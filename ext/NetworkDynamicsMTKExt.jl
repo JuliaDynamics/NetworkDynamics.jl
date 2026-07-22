@@ -13,13 +13,16 @@ using LinearAlgebra: LinearAlgebra, Diagonal, I, UniformScaling
 using SymbolicUtils.Code: Let, Assignment, unwrap_const
 using Moshi: Moshi
 using Moshi.Match: @match
+using Accessors: @reset
 using SymbolicUtils: SymbolicUtils
 using OrderedCollections: OrderedDict
 using SymbolicIndexingInterface: SymbolicIndexingInterface as SII
 
 using NetworkDynamics: NetworkDynamics, set_metadata!, ComponentPostprocessing,
                        PureFeedForward, FeedForward, NoFeedForward, PureStateMap,
-                       MultipleOutputWrapper, inline_repr, multiline_repr
+                       MultipleOutputWrapper, inline_repr, multiline_repr,
+                       AliasMap, set_aliasmap!, settable_symbols,
+                       assert_initformula_compat, assert_guessformula_compat
 import NetworkDynamics: VertexModel, EdgeModel, AnnotatedSym, InitFormula, add_initformula!, GuessFormula, add_guessformula!
 
 const ST = SymbolicUtils.BasicSymbolicImpl.var"typeof(BasicSymbolicImpl)"{SymbolicUtils.SymReal}
@@ -131,6 +134,7 @@ function VertexModel(
             obsf, mass_matrix, ff=gen.fftype, name, extin=extin_nwidx,
             allow_output_sym_clash=true, kwargs...)
     set_metadata!(c, :observed, gen.observed)
+    set_aliasmap!(c, extract_aliasmap(c, gen.observed))
     set_metadata!(c, :equations, gen.equations)
     set_metadata!(c, :full_equations, gen.full_equations)
     set_metadata!(c, :outputeqs, gen.outputeqs)
@@ -139,10 +143,10 @@ function VertexModel(
     set_metadata!(c, :odesystem_simplified, gen.odesystem_simplified)
 
     for formula in something(gen.initformulas, ())
-        add_initformula!(c, formula)
+        add_initformula_lenient!(c, formula)
     end
     for formula in something(gen.guessformulas, ())
-        add_guessformula!(c, formula)
+        add_guessformula_lenient!(c, formula)
     end
 
     # apply postprocessing functions from subcomponent metadata
@@ -286,6 +290,7 @@ function EdgeModel(
             obsf, mass_matrix, ff=gen.fftype, name, extin=extin_nwidx,
             allow_output_sym_clash=true, kwargs...)
     set_metadata!(c, :observed, gen.observed)
+    set_aliasmap!(c, extract_aliasmap(c, gen.observed))
     set_metadata!(c, :equations, gen.equations)
     set_metadata!(c, :full_equations, gen.full_equations)
     set_metadata!(c, :outputeqs, gen.outputeqs)
@@ -294,10 +299,10 @@ function EdgeModel(
     set_metadata!(c, :odesystem_simplified, gen.odesystem_simplified)
 
     for formula in something(gen.initformulas, ())
-        add_initformula!(c, formula)
+        add_initformula_lenient!(c, formula)
     end
     for formula in something(gen.guessformulas, ())
-        add_guessformula!(c, formula)
+        add_guessformula_lenient!(c, formula)
     end
 
     # apply postprocessing functions from subcomponent metadata
@@ -326,17 +331,16 @@ function _get_metadata(sys, name, alldefaults, allguesses)
     end
 
     if haskey(allguesses, sym)
-        # Keep only *constant* guesses as `:guess` metadata. A symbolic guess that references
-        # OTHER variables/parameters (`guess=Id0Pu`, `Us0Pu + Efd0Pu/K`) is owned by the
-        # `GuessFormula` path (`guesses_to_guessformulas!`) and must not be stored here:
-        # `allguesses` is read from the *un-simplified* system, so it still holds the symbolic
-        # guesses already stripped from the simplified one. Storing one would make
-        # `get_guesses_dict` (which coerces every `:guess` to `Float64`) crash on a
-        # `BasicSymbolic`. Note that under MTKv11 even a literal `guess=0.0` is a *constant*
-        # `BasicSymbolic`, which `symbolic_constant_value` folds to a `Float64` — without that
-        # such guesses are silently lost and componentwise init fails with "missing guesses".
         guess = unwrap_const(allguesses[sym])
-        is_symbolic_constant(guess) && (md[:guess] = symbolic_constant_value(guess))
+        if is_symbolic_constant(guess)
+            md[:guess] = symbolic_constant_value(guess)
+        else
+            throw(ArgumentError(
+                "Symbolic guess `$name => $guess` is not supported: the `guess` option only \
+                 takes constant values. Use the `guessf` variable option \
+                 (`@variables $name [guessf = $guess]`) or `set_guessf` to declare a guess \
+                 formula instead."))
+        end
     end
 
     if ModelingToolkitBase.hasbounds(sym)
@@ -374,6 +378,12 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         getproperty_symbolic.(Ref(_sys), out)
     end
     alloutputs = convert(Vector{ST}, reduce(union, outputss))
+
+    # Both must see the hierarchical system: `initf` metadata expressions are only
+    # namespaceable before flattening, and mtkcompile synthesizes bindings of its own.
+    assert_no_state_bindings(_sys)
+    initf = collect_initf(_sys)
+    guessf = collect_guessf(_sys)
 
     # always expand connections before simplification
     _sys = ModelingToolkitBase.expand_connections(_sys)
@@ -525,8 +535,8 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         odesystem_simplified=sys,
         params,
         unused_params,
-        initformulas = bindings_to_initformulas(sys; states, obs_subs),
-        guessformulas = guesses_to_guessformulas!(sys; obs_subs)
+        initformulas = initf_to_initformulas(initf),
+        guessformulas = guessf_to_guessformulas(guessf)
     )
 end
 

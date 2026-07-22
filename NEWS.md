@@ -16,9 +16,57 @@
   - The default initial state for fixpoint search now applies guesses and formulas automatically (`guess=true, apply_formulas=true`).
 - **`NWState` constructor** gains `guess`, `apply_formulas`, and `verbose` keyword arguments. With `default=true` (the default), values are filled in order: defaults/inits → `InitFormula`s → guesses (if `guess=true`) → `GuessFormula`s. `apply_formulas=true` by default; `guess=false` by default.
 - `initialize_component` / `initialize_componentwise` gain a `warn` keyword (default `true`) to silence initialization warnings.
+- **Scale-invariant init residual check**: the `tol`/`nwtol` checks in `initialize_component` and `initialize_componentwise` no longer reject on the raw residual `‖du‖` alone. If the raw check misses, the residual is re-measured with each equation divided by its Jacobian row norm (floored at 1, so the fallback can only relax the check), which expresses the miss in state-space units; only if that also misses is the error thrown. This prevents spurious failures for stiff/ill-scaled equations — e.g. a shunt capacitor's `Dt(V_C) = (ω0/C)·Δi` inflating a roundoff-level current mismatch beyond any fixed tolerance.
 - `doctor` check: added smoketest for the observable function (`obsf`) of each component.
 - `SciMLBase@3` and `OrdinaryDiffEq@7` compat. Most notably, upstream `DiffEq` changed its default `initializealg` to *check* rather than *reinit* inconsistent initial conditions. To preserve the previous behavior, the `ODEProblem(nw::Network, ...)` constructor now defaults to `initializealg=BrownFullBasicInit()` (deliberately differing from the OrdinaryDiffEq default). Pass `initializealg=...` to the constructor to override. Also, the interface of the `VectorContinuousComponentCallback` changed to fit that of `VectorContinuousCallback`: the affect now receives a buffer with per-element up or down crossing information rather than a single event idx.
 - new `copy(::Network)` method (dealiases all components and buffers)
+- **New `initf` variable option for MTK models**: `@variables x(t) [initf = <expr>]` (and the
+  same on `@parameters`) declares an explicit initialization equation, which is lowered to an
+  `InitFormula` at compile time. Unlike the symbolic-default/binding route it replaces, `initf`
+  works on **parameters** as well as unknowns, which is what "free setpoint, back-computed from
+  the operating point" needs. Metadata expressions are collected from the hierarchical system
+  and namespaced there, since `renamespace` does not descend into a symbol's metadata.
+  **Breaking**: a *binding* on an unknown — `@variables x(t) = <symbolic expr>` — was
+  previously converted into an `InitFormula` behind your back, and now throws at compile
+  time. The error names the `initf` rewrite; spell it `@variables x(t) [initf = <expr>]`
+  instead. Bindings on parameters are unaffected.
+- **`set_mtk_defaults!` renamed to `set_mtk_defaults` and is no longer mutating** (breaking):
+  rebind the result, `sys = set_mtk_defaults(sys, defaults)`. In exchange, forwarded keywords
+  now mirror values written directly onto a declaration: a **numeric** value becomes an
+  ordinary default, while a **symbolic** value becomes a parameter *binding* — i.e.
+  `set_mtk_defaults(sys, K = K_e)` is equivalent to `@parameters K = K_e`, so `K` is resolved
+  into an observed equation and the "true" parameter is the one it is bound to. This mirrors
+  MTK's own `collect_defaults!` routing, which a mutating function cannot reach: a `System`'s
+  bindings are immutable, and previously a symbolic value was silently stored as an ordinary
+  default, leaving a parameter with a symbolic value behind.
+- **Alias normalization for the initialization pipeline**: At init time, defaults/guesses/bounds and formula outputs written against an
+  alias are transported onto the canonical settable symbol, and formula inputs which are
+  observables are expanded through the observed equations down to settable roots. In practice:
+  it does not matter whether you define your guess/default or Init/GuessFormula metadata for
+  :busbar.u or :terminal.u, both states are aliased so they will be rerouted to the canonical name.
+- **Pinned observables — backward-flow initialization**: an `InitFormula` may now *write* a
+  non-alias observable, "pinning" it as an init-time dataflow node.
+  Other `InitFormulas` will prioritize those as inputs to the equations. I.e. you can write
+  subcomponent-local Init/GuessFormulas; once they connect end to end you can achieve true
+  backward flow initialization as commonly used for power models.
+  This enables fully component-local backward init: a
+  parent formula states what a child's output must be, the child's formula inverts its own
+  equation. `GuessFormula`s pin as *hints*: a guess-pin lands in the working guesses, seeds
+  downstream guess formulas and the solve, and is never consistency-checked — so whole
+  backward chains can safely be spelled as guesses, starting the solver at the right
+  operating point without committing to it. Init formulas run first and never read
+  guess-pins; guess formulas read both kinds through the defaults-before-guesses lookup.
+- **New `set_initf(sys, target => expr, ...)`** attaches init equations to an MTK `System` at
+  the *system* level (non-mutating, rebind the result). It covers the case the `initf`
+  variable option cannot express: the target belongs to a subsystem, e.g. pinning a child's
+  output observable from the parent.
+- **Guess formulas mirror the init side**: `@variables x(t) [guessf = <expr>]` and
+  `set_guessf(sys, target => expr, ...)` are the guess-side twins of `initf` / `set_initf`,
+  lowered to `GuessFormula`s. They land among the guesses (a hint, never consistency-checked),
+  so conflicts warn instead of error and an unresolvable formula is skipped. Because `guessf` is
+  its own key, a scalar `guess=0` (fallback seed) and `guessf=<expr>` (refined value) now coexist
+  on one variable. (Breaking: the old route of passing a symbolic expression to the `guess`
+  metadata is removed — a symbolic `guess` now errors, use `guessf` instead.)
 
 ## v0.10.17 Changelog
 - **Open-loop linearization** ([#341](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/341)):

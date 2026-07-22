@@ -120,25 +120,9 @@ function print_states_params(io, @nospecialize(c::ComponentModel), styling)
         push!(info, styled"$num &ext in: &&$arr")
     end
 
-    if has_guessformula(c)
-        formulas = get_guessformulas(c)
-        total_eqs = sum(length(formula.outsym) for formula in formulas)
-        num, word = maybe_plural(total_eqs, "eq.", "eqs.")
-        all_outsyms = reduce(vcat, [f.outsym for f in formulas])
-        formula_word = length(formulas) == 1 ? "formula" : "formulas"
-        str = "$num &add. guess $word from $(length(formulas)) $formula_word guessing $(all_outsyms)"
-        push!(info, str)
-    end
+    _push_cluster_info!(info, c, _collect_formulalike(c, :guessformula), "GuessFormula", "guesses")
 
-    if has_initformula(c)
-        formulas = get_initformulas(c)
-        total_eqs = sum(length(formula.outsym) for formula in formulas)
-        num, word = maybe_plural(total_eqs, "eq.", "eqs.")
-        all_outsyms = reduce(vcat, [f.outsym for f in formulas])
-        formula_word = length(formulas) == 1 ? "formula" : "formulas"
-        str = "$num &add. init $word from $(length(formulas)) $formula_word setting $(all_outsyms)"
-        push!(info, str)
-    end
+    _push_cluster_info!(info, c, _init_formulalike(c), "InitFormula", "initializes")
 
     if has_initconstraint(c)
         constraints = get_initconstraints(c)
@@ -151,18 +135,6 @@ function print_states_params(io, @nospecialize(c::ComponentModel), styling)
     end
 
     # PowerDynamics metadata display
-    if has_metadata(c, :pfinitformula)
-        formulas = get_metadata(c, :pfinitformula)
-        formulas_tuple = formulas isa Tuple ? formulas : (formulas,)
-        total_eqs = sum(length(formula.outsym) for formula in formulas_tuple)
-        num, word = maybe_plural(total_eqs, "pf init eq.", "pf init eqs.")
-        formula_word = length(formulas_tuple) == 1 ? "formula" : "formulas"
-        all_outsyms = unique(reduce(vcat, [formula.outsym for formula in formulas_tuple]))
-        all_pfsyms = unique(reduce(vcat, [formula.pfsym for formula in formulas_tuple]))
-        str = "$num &add. $word from $(length(formulas_tuple)) $formula_word setting $(all_outsyms) using @pf($(all_pfsyms))"
-        push!(info, str)
-    end
-
     if has_metadata(c, :pfinitconstraint)
         constraints = get_metadata(c, :pfinitconstraint)
         constraints_tuple = constraints isa Tuple ? constraints : (constraints,)
@@ -188,6 +160,127 @@ function print_states_params(io, @nospecialize(c::ComponentModel), styling)
 
     print_treelike(io, align_strings(info))
 end
+
+# Summarize a component's formulas as one line per dataflow cluster. Listing the symbols a
+# formula sets drowns the reader on deeply nested components — the names are long and there
+# are many — so a cluster reports only *how many* variables it pins and, more usefully, which
+# seeds it pins them from.
+function _push_cluster_info!(info, @nospecialize(c::ComponentModel), formulas, label, verb)
+    isempty(formulas) && return
+    lines = _cluster_lines(c, formulas, verb)
+    num, word = maybe_plural(length(lines), "$label cluster")
+    # the header ends its line, so the long label stays out of the column shared with the
+    # state/param rows instead of padding all of them out to its width
+    str = styled"$num &$word:"
+    for l in lines
+        str *= styled"\n&$l"
+    end
+    push!(info, str)
+    return
+end
+
+function _cluster_lines(@nospecialize(c::ComponentModel), formulas, verb)
+    am = get_aliasmap(c)
+    # The frontier of the displayed group: the pins of its own formulas — which covers the
+    # `:pfinitformula` entries grouped in with the plain InitFormulas — plus, for guess
+    # formulas, the init pins, since guesses run after the init stage.
+    pinned = pinned_obssyms(formulas, c)
+    if any(f -> f isa GuessFormula, formulas)
+        pinned = pinned ∪ pinned_obssyms(_init_formulalike(c), c)
+    end
+    ios = [_formula_io(c, f, am, pinned) for f in formulas]
+    total = _num_init_variables(c, ios)
+
+    map(_cluster_indices(ios)) do idxs
+        writes = union(Symbol[], (ios[i].writes for i in idxs)...)
+        reads = union(Symbol[], (ios[i].reads for i in idxs)...)
+        # what the cluster consumes without producing it itself
+        seeds = setdiff(reads, writes)
+        # a parameter which already carries a value is not news; it would only pad the list
+        set_params = filter(s -> s in psym(c) && has_default_or_init(c, s), seeds)
+        # powerflow seeds live in another namespace, so they go last rather than sorting into
+        # the component symbols
+        pfseeds = union(Symbol[], (ios[i].seeds for i in idxs)...)
+        shown = vcat(sort!(collect(setdiff(seeds, set_params))), sort!(collect(pfseeds)))
+
+        seedstr = join(shown, ", ")
+        if !isempty(set_params)
+            num, word = maybe_plural(length(set_params), "already set param")
+            # the `+` joins the named seeds to the elided ones; with nothing to join to it
+            # would read as a stray operator
+            seedstr *= isempty(shown) ? "$num $word" : " + $num $word"
+        end
+        # pinned observables are dataflow nodes, not variables to determine — count them
+        # separately so the fraction stays "variables set / variables to set"
+        pins = intersect(writes, pinned)
+        pinstr = isempty(pins) ? "" : " (via $(length(pins)) pinned obs)"
+        "explicitly $verb $(length(writes) - length(pins))/$total variables$pinstr from seeds [$seedstr]"
+    end
+end
+
+# How many variables the initialization has to determine, i.e. what the cluster counts are a
+# fraction of. Inputs are excluded — the network supplies them — and a symbol already pinned by
+# a default is not up for determination. A formula output counts even when it does carry a
+# default, since applying the formula overwrites it.
+function _num_init_variables(@nospecialize(c::ComponentModel), ios)
+    # a promoted output is a state and an output under the same name; count it once
+    candidates = unique!(vcat(sym(c), psym(c), outsym_flat(c)))
+    free = Set(s for s in candidates if !has_default_or_init(c, s))
+    for io in ios
+        union!(free, intersect(io.writes, candidates))
+    end
+    length(free)
+end
+
+# What a formula writes and reads once normalized, as plain symbol lists — no closures, so
+# none of `normalize`'s machinery is needed. Printing must never fail, hence the fallbacks:
+# expansion needs the MTK extension and may be unavailable, and `show` is not the place to
+# report that.
+function _formula_io(@nospecialize(c::ComponentModel), @nospecialize(f), am, pinned=Set{Symbol}())
+    writes = unique!([last(canonicalize(am, s)) for s in f.outsym])
+    reads = if isempty(setdiff(intersect(f.sym, obssym(c)), pinned))
+        unique!([last(canonicalize(am, s)) for s in f.sym])
+    else
+        try
+            first(generate_obs_expansion(c, collect(f.sym); stop_at=pinned))
+        catch
+            unique!([last(canonicalize(am, s)) for s in f.sym])
+        end
+    end
+    (; writes, reads, seeds=_lazy_seeds(f))
+end
+
+# PowerDynamics' PFInitFormulas read, besides component symbols, variables of the solved
+# powerflow model, which they carry in a `pfsym` field and which are always available by the
+# time the formula runs. ND does not know the type, but the field is a stable convention:
+# treat those as seeds of their own, spelled the way the user wrote them (`@pf(:x)`). Naming
+# them as symbols keeps the seed set homogeneous; they cannot collide with component symbols.
+_lazy_seeds(@nospecialize(f)) = hasproperty(f, :pfsym) ? [Symbol("@pf(:$s)") for s in f.pfsym] : Symbol[]
+
+# Formulas belong to one cluster when they form a connected dataflow island, i.e. one's
+# output feeds another's input. Undirected connectivity is enough: the point is to attribute a
+# set of initialized variables to the seeds it ultimately came from, in either direction.
+function _cluster_indices(ios)
+    g = SimpleGraph(length(ios))
+    for i in eachindex(ios), j in eachindex(ios)
+        i == j && continue
+        isdisjoint(ios[i].writes, ios[j].reads) || add_edge!(g, i, j)
+    end
+    Graphs.connected_components(g)
+end
+
+function _collect_formulalike(@nospecialize(c::ComponentModel), key)
+    has_metadata(c, key) || return Any[]
+    f = get_metadata(c, key)
+    collect(Any, f isa Tuple ? f : (f,))
+end
+
+# PowerDynamics' PFInitFormulas act on the same defaults as the plain InitFormulas and
+# participate in the same dataflow, so they are analyzed together instead of getting a
+# section of their own.
+_init_formulalike(@nospecialize(c::ComponentModel)) =
+    vcat(_collect_formulalike(c, :initformula), _collect_formulalike(c, :pfinitformula))
+
 function _inout_string(c::VertexModel, f, name)
     sym = f(c)
     num, word = maybe_plural(length(sym), name)
@@ -688,6 +781,27 @@ function align_strings(vecofvec::AbstractVector{<:AbstractVector}; padding=:alte
             pad(str, l)
         end
     end
+end
+
+# Print column-aligned rows, or nothing at all when `rows` is empty. Each row uses `&` as
+# the column separator consumed by `align_strings`; `padding=:right` left-aligns every
+# column, which reads best for the short symbol/value tables the init pipeline emits under
+# `verbose`.
+function print_aligned_rows(io, rows; padding=:right, prefix="   - ")
+    isempty(rows) && return
+    for r in align_strings(collect(rows); padding)
+        println(io, prefix, rstrip(r))
+    end
+    return
+end
+
+# Like [`print_aligned_rows`](@ref) but with a leading title line, printed only when there
+# are rows (so callers never guard a lonely header).
+function print_aligned_group(io, title, rows; padding=:right)
+    isempty(rows) && return
+    printstyled(io, " - ", title, "\n")
+    print_aligned_rows(io, rows; padding)
+    return
 end
 
 function maybe_plural(num, word, substitution=s"\1s")

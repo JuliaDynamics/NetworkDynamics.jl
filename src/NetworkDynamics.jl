@@ -42,7 +42,9 @@ import SymbolicIndexingInterface as SII
 using SymbolicIndexingInterface: variable_symbols, parameter_symbols
 using StaticArrays: StaticArrays, SVector
 
-export implicit_output, ComponentPostprocessing, set_mtk_defaults!
+export implicit_output, ComponentPostprocessing, set_mtk_defaults
+export set_initf, SystemInitFormulas
+export set_guessf, SystemGuessFormulas
 include("utils.jl")
 
 export VertexModel, EdgeModel
@@ -88,6 +90,8 @@ export @initconstraint, InitConstraint
 export @initformula, InitFormula
 export @guessformula, GuessFormula
 include("init_constraints.jl")
+
+include("alias_normalization.jl")
 
 # spinners for initialization
 include("spinners.jl")

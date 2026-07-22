@@ -52,7 +52,11 @@ function pick_best_alias_names(eqs, obseqs, states, outputs, inputs; verbose)
         else
             3
         end
-        (prio, count('₊', string(s)))
+        # name as final tiebreak: when a class is structurally symmetric under renaming
+        # (two interchangeable observable names for one value), nothing above distinguishes
+        # the members, so fall back to the name to keep the representative deterministic
+        # across Julia versions (hash/iteration order must never decide the canonical).
+        (prio, count('₊', string(s)), string(getname(s)))
     end
     alias_subs = Dict()
     new_alias_obs = Equation[]
@@ -218,9 +222,11 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
 
         # representative priority (lower = preferred as the kept variable):
         # differential states first, then outputs, then least-nested names.
-        _prio(s) = s ∈ diffstate_inners ? (0, 0) :
-                   s ∈ outset           ? (1, count('₊', repr(s))) :
-                                          (2, count('₊', repr(s)))
+        # name as final tiebreak keeps the kept representative deterministic across Julia
+        # versions when a class is structurally symmetric (see `pick_best_alias_names`).
+        _prio(s) = (s ∈ diffstate_inners ? 0 : s ∈ outset ? 1 : 2,
+                    count('₊', repr(s)),
+                    string(getname(s)))
 
         # adjacency over alias graph, remembering which equation realises each edge
         adj = Dict{ST, Vector{Tuple{ST,Int}}}()

@@ -347,27 +347,19 @@ function initialization_problem(cf::T,
     end
     nlf = NonlinearFunction(InitFuncWrapper(fz); resid_prototype=zeros(Neqs), sys=SII.SymbolCache(freesym_no_dup))
 
+    freevar_rows = [":$sym &(guess=$(str_significant(guess; sigdigits=5, phantom_minus=true)))"
+                    for (sym, guess) in zip(freesym, uguess)]
     if Neqs == Nfree
-        if verbose
-            printstyled(io, " - Initialization problem is fully constrained. Created NonlinearLeastSquaresProblem for:\n")
-            for (sym, guess) in zip(freesym, uguess)
-                print(io, "   - ", sym, " (guess=$(guess))\n")
-            end
-        end
+        verbose && print_aligned_group(io, "Initialization problem is fully constrained. \
+                                             Created NonlinearLeastSquaresProblem for:", freevar_rows)
     elseif Neqs > Nfree
-        if verbose
-            printstyled(io, " - Initialization problem is overconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for:\n")
-            for (sym, guess) in zip(freesym, uguess)
-                print(io, "   - ", sym, " (guess=$(guess))\n")
-            end
-        end
+        verbose && print_aligned_group(io, "Initialization problem is overconstrained \
+                                             ($Nfree vars for $Neqs equations). Created \
+                                             NonlinearLeastSquaresProblem for:", freevar_rows)
     else
-        # verbose && printstyled(io, "Initialization problem is underconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for $freesym.\n"; color=:yellow)
-        printstyled(io, " - WARNING:", color=:yellow)
-        printstyled(io, "Initialization problem is underconstrained ($Nfree vars for $Neqs equations). Create NonlinearLeastSquaresProblem for:")
-        for (sym, guess) in zip(freesym, uguess)
-            print(io, "   - ", sym, " (guess=$(guess))\n")
-        end
+        printstyled(io, " - WARNING: Initialization problem is underconstrained ($Nfree vars \
+                         for $Neqs equations). Created NonlinearLeastSquaresProblem for:\n"; color=:yellow)
+        print_aligned_rows(io, freevar_rows)
     end
 
     # check rhs of system for obvious problems
@@ -496,7 +488,10 @@ The function solves a nonlinear problem to find values for all free variables/pa
 - `warn`: Whether to print warnings during initialization (default: `true`)
 - `apply_bound_transformation`: Whether to apply bound-conserving transformations
 - `t`: Time at which to solve for steady state. Only relevant for components with explicit time dependency.
-- `tol`: Tolerance for the residual of the initialized model (defaults to `1e-10`). Init throws error if resid ≥ tol.
+- `tol`: Tolerance for the residual of the initialized model (defaults to `1e-10`). The raw
+  residual `‖du‖` is checked first; if it misses, a fallback check divides each equation by
+  its Jacobian row norm (residual measured in state-space units) and only that miss throws.
+  This keeps the tolerance meaningful for stiff/ill-scaled equations (e.g. `Dt(V_C) = (ω0/C)·Δi`).
 - `residual`: Optional `Ref{Float64}` which gets the final residual of the initialized model.
 - `alg_kwargs=(;)`: Additional keyword arguments passed to the nonlinear solver algorithm constructor
 - `alg=nothing`:
@@ -553,29 +548,41 @@ function initialize_component(cf;
         @warn "Passing `kwargs` to `initialize_component(!)` is deprecated. Use `alg` and `solve_kwargs=(; kw=val)` instead."
     end
 
-    defaults = isnothing(default_overrides) ? defaults : merge(defaults, default_overrides)
-    guesses  = isnothing(guess_overrides)   ? guesses  : merge(guesses, guess_overrides)
-    bounds   = isnothing(bound_overrides)   ? bounds   : merge(bounds, bound_overrides)
-
-    # filter out nothing values
-    defaults = filter(p -> !isnothing(p.second), defaults)
-    guesses = filter(p -> !isnothing(p.second), guesses)
-    bounds = filter(p -> !isnothing(p.second), bounds)
+    # Alias-normalize values and formulas onto canonical settable symbols, so it does not
+    # matter which member of an alias class a value/formula was written against, and formulas
+    # reading observables resolve them to their settable roots. No-op when the component has
+    # no aliasmap and no formula reads an observable (bit-identical to the un-normalized path).
+    am = get_aliasmap(cf)
+    defaults = _merge_overrides(am, defaults, default_overrides, normalize_valuedict;
+                                what=:default, verbose, io)
+    guesses  = _merge_overrides(am, guesses, guess_overrides, normalize_valuedict;
+                                what=:guess, on_conflict=:keepfirst, verbose, io)
+    bounds   = _merge_overrides(am, bounds, bound_overrides, normalize_bounds; verbose, io)
 
     # Extract metadata and merge with additional constraints/formulas
     metadata_initformulas = has_initformula(cf) ? get_initformulas(cf) : nothing
     combined_initformulas = collect_formulas(metadata_initformulas, additional_initformula)
 
+    # The pin-set is a property of the complete formula set and must be known before any
+    # formula is normalized: readers stop their input expansion at every observable some
+    # other formula of this very init writes. Init formulas run first and must not depend
+    # on a guess writer, so their frontier contains the init pins only; guess formulas see
+    # both (init pins through the defaults-before-guesses lookup, guess pins from guesses).
+    pinned = pinned_obssyms(combined_initformulas, cf)
+
     # Apply initialization formulas to defaults
     if !isnothing(combined_initformulas)
-        apply_init_formulas!(defaults, combined_initformulas; verbose, io)
+        combined_initformulas = [normalize(f, am, cf; t, pinned) for f in combined_initformulas]
+        apply_init_formulas!(defaults, combined_initformulas; verbose, io, pinned)
     end
 
     # Extract and apply guess formulas
     metadata_guessformulas = has_guessformula(cf) ? get_guessformulas(cf) : nothing
     combined_guessformulas = collect_formulas(metadata_guessformulas, additional_guessformula)
     if !isnothing(combined_guessformulas)
-        apply_guess_formulas!(guesses, defaults, combined_guessformulas; verbose, io)
+        guess_pinned = pinned ∪ pinned_obssyms(combined_guessformulas, cf)
+        combined_guessformulas = [normalize(f, am, cf; t, pinned=guess_pinned) for f in combined_guessformulas]
+        apply_guess_formulas!(guesses, defaults, combined_guessformulas; verbose, io, pinned=guess_pinned)
     end
 
     metadata_constraint = has_initconstraint(cf) ? get_initconstraints(cf) : nothing
@@ -637,10 +644,12 @@ function initialize_component(cf;
 
         # Add solved values to the complete dictionary
         init_results = _dededuplicated_free_symbols(SII.variable_symbols(sol), u)
+        solved_rows = String[]
         for (sym, val) in init_results
-            verbose && print(io, "   - ", sym, " => ", val,"\n")
+            verbose && push!(solved_rows, ":$sym &=> $(str_significant(val; sigdigits=5, phantom_minus=true))")
             init_state[sym] = val
         end
+        verbose && print_aligned_rows(io, solved_rows)
     else
         res = init_residual(cf, init_state; t)
         verbose && printstyled(io, " - No free variables! Residual $(res)\n")
@@ -649,8 +658,28 @@ function initialize_component(cf;
         residual[] = res
     end
     if !(res < tol)
-        throw(ComponentInitError("Initialized model has a residual larger than specified tolerance $(res) > $(tol)! \
-               Fix initialization or increase tolerance to suppress error."))
+        # `res` is a raw ‖du‖ over the stacked (f, g, constraint) system and is not scale
+        # invariant (e.g. a `Dt(V_C) = (ω0/C)·Δi` row inflates a roundoff mismatch by ω0/C).
+        # Only reject once the Jacobian-row-scaled residual, measured in state-space units,
+        # also misses the tolerance. The Jacobian is worth computing only on this failure path.
+        scaled = _scaled_init_residual(cf, init_state; t)
+        if isnothing(scaled) || !(scaled < tol)
+            # name the original model equations that are still off, so the miss is actionable
+            # from the error alone; the breakdown is best-effort and must never mask this error
+            breakdown = try
+                "\n" * _residual_breakdown(cf, init_state; t)
+            catch
+                ""
+            end
+            # `scaled === nothing` means the component was too large for the dense-Jacobian
+            # fallback (see `SCALED_JAC_MAXDIM`); report the raw miss without it.
+            scaled_str = isnothing(scaled) ? "skipped, model too large" : string(scaled)
+            throw(ComponentInitError("Initialized model has a residual larger than specified \
+                   tolerance $(res) > $(tol) (Jacobian-scaled: $(scaled_str))! Fix initialization \
+                   or increase tolerance to suppress error.$(breakdown)"))
+        end
+        verbose && printstyled(io, " - Residual $(res) exceeds tol $(tol), but is within tol \
+                                    after Jacobian row scaling ($(scaled))\n")
     end
 
 
@@ -664,12 +693,17 @@ function initialize_component(cf;
         printstyled(io, fullmsg * "\n")
     end
 
-    # Check for broken observable defaults
+    # Check for broken observable defaults. This also verifies pinned observables: the
+    # value a formula asserted must agree with what the final state actually produces,
+    # otherwise the back-init recipe contradicts the model equations.
     if !isempty(observable_defaults) && warn
-        broken_obs = broken_observable_defaults(cf, init_state, observable_defaults)
+        broken_obs = broken_observable_defaults(cf, init_state, observable_defaults; t)
         if !isempty(broken_obs)
-            broken_msgs = ["  $sym = $val (default: $def)" for (sym, def, val) in broken_obs]
-            fullmsg = "Initialized model has observables that differ from their specified defaults:" *
+            broken_msgs = map(broken_obs) do (sym, def, val)
+                origin = sym ∈ pinned ? "pinned by InitFormula" : "default"
+                "  $sym = $val ($origin: $def)"
+            end
+            fullmsg = "Initialized model has observables that differ from their specified values:" *
                   "\n" * join(broken_msgs, "\n")
             printstyled(io, " - WARNING: ", color=:yellow)
             printstyled(io, fullmsg * "\n")
@@ -677,6 +711,20 @@ function initialize_component(cf;
     end
 
     return init_state
+end
+
+# Merge overrides onto the base dict, each normalized onto canonical symbols first. An
+# override may name any member of an alias class, and only canonical keys compare
+# meaningfully — normalizing both sides is what makes the merge a plain key-wise override of
+# the value the caller targeted, and what lets a `nothing` marker remove the class it names.
+# A conflict *within* either dict is the caller contradicting themselves, and is left to the
+# normalizer's `on_conflict`.
+function _merge_overrides(am, base, overrides, normalizer; kwargs...)
+    normalized = normalizer(am, base; kwargs...)
+    if !isnothing(overrides)
+        normalized = merge(normalized, normalizer(am, overrides; kwargs...))
+    end
+    filter(p -> !isnothing(p.second), normalized)
 end
 
 """
@@ -745,15 +793,17 @@ function initialize_component!(cf;
         ("bound", set_bounds!, delete_bounds!, bound_overrides)
     )
         isnothing(dict) && continue
+        rows = String[]
         for (sym, val) in dict
             if !isnothing(val)
                 set_fn!(cf, sym, val)
-                verbose && println(io, " - Set additional $name for $sym: $val")
+                verbose && push!(rows, ":$sym &= $(_valstring(val))")
             else
                 rm_fn!(cf, sym)
-                verbose && println(io, " - Remove $name for $sym")
+                verbose && push!(rows, ":$sym &removed")
             end
         end
+        verbose && print_aligned_group(io, "Additional $(name)s:", rows)
     end
 
     # make sure to get back the final defaults/guesses after applying formulas
@@ -848,8 +898,28 @@ If `verbose=true` prints the residual of every single state.
 
 See also [`initialize_component`](@ref).
 """
-function init_residual(cf::ComponentModel, state=get_defaults_or_inits_dict(cf); t=NaN, verbose=false)
-    # Check that all necessary symbols are present in the state dictionary
+function init_residual(cf::ComponentModel, state=get_defaults_or_inits_dict(cf); t=NaN, verbose=false, io=stdout)
+    res, eqsyms = _init_residual_vec(cf, state; t)
+
+    verbose && print_aligned_group(io, "Residual per model equation:", _residual_rows(res, eqsyms))
+
+    resnorm = LinearAlgebra.norm(res)
+    if isnan(resnorm)
+        err_str = if isnan(t)
+            "Residual of component is NaN at t=NaN! Maybe your system has \
+                explicit time dependency? Try specifying kw argument `t` to decide on time."
+        else
+            "Residual of component is NaN, which should not happen for an initialized system!"
+        end
+        throw(ComponentInitError(err_str))
+    end
+    return resnorm
+end
+
+# Residual vector of the *original* model equations (one per state, output and init
+# constraint) at `state`, together with the matching equation symbols. Shared by
+# `init_residual` and the tolerance-miss diagnostic in `initialize_component`.
+function _init_residual_vec(cf::ComponentModel, state; t=NaN)
     needed_symbols = Set(vcat(
         sym(cf),                                # states
         filter(s->!is_unused(cf, s), psym(cf)), # used parameters
@@ -866,17 +936,9 @@ function init_residual(cf::ComponentModel, state=get_defaults_or_inits_dict(cf);
     outs = Tuple(Float64[get(state, s, NaN) for s in sv] for sv in outsym_normalized(cf))
     u = Float64[get(state, s, NaN) for s in sym(cf)]
     ins = Tuple(Float64[get(state, s, NaN) for s in sv] for sv in insym_normalized(cf))
-    p = Float64[is_unused(cf, s) ? NaN : get(state, s, NaN) for s in psym(cf)]
+    p = Float64[get(state, s, NaN) for s in psym(cf)]
 
-    # collect additional constraints
-    additional_constraint = if has_initconstraint(cf)
-        _c = get_initconstraints(cf)
-        length(_c) == 1 ? only(_c) : InitConstraint(_c...)
-    else
-        nothing
-    end
-    additional_Neqs = isnothing(additional_constraint) ? 0 : dim(additional_constraint)
-    additional_cf = prep_initiconstraint(cf, additional_constraint, 0) #is noop for add_c == nothing
+    additional_cf, additional_Neqs = _init_additional_constraint(cf, 0)
 
     Nout = reduce(+, outdim(cf))
     res = zeros(dim(cf) + Nout + additional_Neqs)
@@ -898,31 +960,101 @@ function init_residual(cf::ComponentModel, state=get_defaults_or_inits_dict(cf);
 
     additional_cf(res_add, outs, u, ins, p, t) # apply additional constraints
 
-    if verbose
-        _sym = sym(cf)
-        _osym = outsym(cf)
-        _addsym = ["init constraint $i" for i in 1:additional_Neqs]
-        lines = String[]
-        for (i, s) in enumerate(vcat(_sym, _osym, _addsym))
-            push!(lines, "  $s &=> $(res[i])")
-        end
-        aligned = align_strings(lines)
-        for l in aligned
-            println(l)
-        end
+    # tag each equation with its kind: a state and an output can share a symbol (e.g. a
+    # promoted output), so the bare symbol alone would be ambiguous in the breakdown.
+    eqsyms = vcat(
+        [(s, "state")  for s in sym(cf)],
+        [(s, "output") for s in outsym(cf)],
+        [("init constraint $i", "constraint") for i in 1:additional_Neqs],
+    )
+    res, eqsyms
+end
+
+_residual_rows(res, eqsyms) = ["[$kind] &:$s &=> $(str_significant(res[i]; sigdigits=5, phantom_minus=true))"
+                               for (i, (s, kind)) in enumerate(eqsyms)]
+
+# Aligned per-equation residual as a plain multi-line string, for embedding in an error
+# message. Recomputes the residual; used only on the failure path, so cost is irrelevant.
+function _residual_breakdown(cf::ComponentModel, state; t=NaN)
+    res, eqsyms = _init_residual_vec(cf, state; t)
+    "Residual per model equation:\n" * join("  " .* align_strings(_residual_rows(res, eqsyms)), "\n")
+end
+
+# Additional init-constraint callable plus its equation count. `chunksize` sizes the
+# internal DiffCaches: 0 is fine for plain Float64 evaluation (`_init_residual_vec`), while
+# the AD-able closure passes the width of `z` so ForwardDiff duals fit.
+function _init_additional_constraint(cf, chunksize)
+    c = if has_initconstraint(cf)
+        _c = get_initconstraints(cf)
+        length(_c) == 1 ? only(_c) : InitConstraint(_c...)
+    else
+        nothing
+    end
+    Neqs = isnothing(c) ? 0 : dim(c)
+    prep_initiconstraint(cf, c, chunksize), Neqs # prep is a noop for c === nothing
+end
+
+# AD-able core of the stacked (f, g, init-constraint) residual. Same equations and ordering
+# as `_init_residual_vec`, but expressed as a function of z = [u; ins...; outs...] with the
+# parameters and time held fixed. Backs both the residual value and the Jacobian used for
+# the scale-invariant tolerance check. See `_scaled_init_residual`.
+function _init_residual_closure(cf, state; t=NaN)
+    u0    = Float64[get(state, s, NaN) for s in sym(cf)]
+    ins0  = Tuple(Float64[get(state, s, NaN) for s in sv] for sv in insym_normalized(cf))
+    outs0 = Tuple(Float64[get(state, s, NaN) for s in sv] for sv in outsym_normalized(cf))
+    p     = Float64[get(state, s, NaN) for s in psym(cf)]
+
+    Nu   = dim(cf)
+    Nout = sum(length, outs0)
+    z0   = vcat(u0, ins0..., outs0...)
+
+    # z-layout is [u; ins...; outs...]; precompute the block ranges once (on Float64)
+    off = Nu
+    in_ranges = map(ins0) do v
+        r = (off+1):(off+length(v)); off += length(v); r
+    end
+    out_ranges = map(outs0) do v
+        r = (off+1):(off+length(v)); off += length(v); r
     end
 
-    res =  LinearAlgebra.norm(res)
-    if isnan(res)
-        err_str = if isnan(t)
-            "Residual of component is NaN at t=NaN! Maybe your system has \
-                explicit time dependency? Try specifying kw argument `t` to decide on time."
-        else
-            "Residual of component is NaN, which should not happen for an initialized system!"
-        end
-        throw(ComponentInitError(err_str))
+    additional_cf, additional_Neqs = _init_additional_constraint(cf, length(z0))
+    Neqs = Nu + Nout + additional_Neqs
+    fgf  = compfg(cf)
+
+    function f!(res, z)
+        # slice z back into state/inputs/outputs; views inherit z's eltype for AD
+        u    = @view z[1:Nu]
+        ins  = map(r -> @view(z[r]), in_ranges)
+        outs = map(r -> @view(z[r]), out_ranges)
+
+        res_fg  = @view res[1:Nu]
+        res_out = @view res[Nu+1:Nu+Nout]
+        res_add = @view res[Nu+Nout+1:end]
+
+        out_calc = map(r -> similar(res_fg, length(r)), out_ranges)
+        fgf(out_calc, res_fg, u, ins, p, t)
+        res_out .= RecursiveArrayTools.ArrayPartition(out_calc...) .-
+                   RecursiveArrayTools.ArrayPartition(outs...)
+        additional_cf(res_add, outs, u, ins, p, t)
+        nothing
     end
-    return res
+
+    f!, z0, Neqs
+end
+
+# Jacobian-row-scaled residual of the stacked init system at `state`. Unlike the free-
+# variable Jacobian in `_solve_scaled`, the columns here are the full state z = [u; ins;
+# outs], so the scaled norm is independent of which variables happened to be free -- it is
+# the same whether a value was solved for or set by an init formula. See `_row_scales`.
+# Used only on the failure path. Returns `nothing` for an oversized component whose dense
+# Jacobian would be too large (see `SCALED_JAC_MAXDIM`); components are normally tiny.
+function _scaled_init_residual(cf, state; t=NaN)
+    f!, z0, Neqs = _init_residual_closure(cf, state; t)
+    max(Neqs, length(z0)) > SCALED_JAC_MAXDIM && return nothing
+    res = zeros(Neqs)
+    f!(res, z0)
+    J = ForwardDiff.jacobian(f!, zeros(Neqs), z0)
+    LinearAlgebra.norm(res ./ _row_scales(J))
 end
 
 function broken_bounds(cf, state=get_defaults_or_inits_dict(cf), bounds=get_bounds_dict(cf))
@@ -941,13 +1073,16 @@ function bounds_satisfied(val, bounds)
     !isnothing(val) && !isnan(val) && first(bounds) ≤ val ≤ last(bounds)
 end
 
-function broken_observable_defaults(cf, state=get_defaults_or_inits_dict(cf), defaults=get_defaults_dict(cf))
+function broken_observable_defaults(cf, state=get_defaults_or_inits_dict(cf), defaults=get_defaults_dict(cf); t=NaN)
     obs_defaults = filter(p -> p.first ∈ obssym(cf), pairs(defaults))
-    vals = get_initial_state(cf, state, keys(obs_defaults); missing_val=NaN)
+    vals = get_initial_state(cf, state, keys(obs_defaults); missing_val=NaN, t)
 
     broken = []
     for (val, sym, def) in zip(vals, keys(obs_defaults), values(obs_defaults))
-        if !(isapprox(val, def, atol=1e-10))
+        # a NaN recompute means the value cannot be verified (an unresolvable input, or a
+        # time-dependent observable evaluated at t=NaN), which is not evidence of a
+        # contradiction. A time-dependent observable *does* verify when init ran at a given `t`.
+        if !isnan(val) && !isapprox(val, def, atol=1e-10)
             push!(broken, (sym, def, val))
         end
     end
@@ -999,8 +1134,9 @@ state again, as it is stored in the metadata.
 - `additional_initconstraint`: Dictionary mapping component indices (VIndex/EIndex) to additional initialization constraints.
 - `verbose`: Whether to print information about each component initialization
 - `subverbose`: Whether to print detailed information within component initialization. Can be Vector [VIndex(1), EIndex(3), ...] for selective output
-- `tol`: Tolerance for individual component residuals
-- `nwtol`: Tolerance for the full network residual
+- `tol`: Tolerance for individual component residuals. Checked against the raw residual
+  `‖du‖` first, then (on a miss) against the Jacobian-row-scaled residual; both must miss to throw.
+- `nwtol`: Tolerance for the full network residual, with the same raw-then-scaled fallback as `tol`.
 - `t`: Time at which to evaluate the system
 - `subalg`: Nonlinear solver algorithm to use for component initialization. Defaults to `NetworkDynamics.default_compinit_alg()` (`FastShortcutNLLSPolyalg` with QR factorization). If the primary solve fails or stalls, it is automatically retried with residual rescaling (Jacobian row norms) and the better solution is kept. Can be passed as single value or dict mapping VIndex/EIndex to alg (non-existent keys use default).
 - `subsolve_kwargs`: Additional keyword arguments passed to the SciML `solve` function for component initialization.
@@ -1228,10 +1364,28 @@ function _initialize_componentwise(
     resid = LinearAlgebra.norm(du)
 
     if !(resid < nwtol)
-        throw(NetworkInitError("Initialized network has a residual larger than $nwtol: $(resid)! \
-               Fix initialization or increase tolerance to suppress error."))
+        # `resid` is a raw ‖du‖ and not scale invariant: a state like `Dt(V_C) = (ω0/C)·Δi`
+        # inflates a roundoff-level mismatch by ω0/C, making `nwtol` unreachable at an
+        # otherwise converged point. Fall back to the Jacobian-row-scaled residual, which
+        # measures the miss in state-space units. Dense AD Jacobian, so only on failure.
+        scaled = _scaled_network_residual(nw, du, s0, t)
+        if isnothing(scaled)
+            # network too large for a dense Jacobian scale check; report the raw miss
+            throw(NetworkInitError("Initialized network has a residual larger than $nwtol: \
+                   $(resid)! (Network exceeds $(SCALED_NW_MAXDIM) states, so the \
+                   Jacobian-row-scaled fallback check was skipped. If this is a scaling \
+                   artifact of stiff equations, loosen `nwtol`.) Fix initialization or \
+                   increase tolerance to suppress error."))
+        elseif !(scaled < nwtol)
+            throw(NetworkInitError("Initialized network has a residual larger than $nwtol: \
+                   $(resid) (Jacobian-scaled: $(scaled))! Fix initialization or increase \
+                   tolerance to suppress error."))
+        end
+        verbose && println("Initialized network with residual $(resid), within tol $(nwtol) \
+                            after Jacobian row scaling ($(scaled)).")
+    else
+        verbose && println("Initialized network with residual $(resid)!")
     end
-    verbose && println("Initialized network with residual $(resid)!")
     s0
 end
 VSET_ESIT_ERR_HINT = "\nHint: Init failed for some components. For debugging, consider passing `vset` and `eset` keywords to run init routine on a subset of network components!\n"
@@ -1373,6 +1527,68 @@ function set_interface_defaults!(nw::Network, s::NWState; verbose=false)
         set_default!(nw, sym, val)
     end
     nw
+end
+
+# Row scales for the scale-invariant residual checks: scaleᵢ = max(‖J[i,:]‖, 1).
+# A raw ‖du‖ threshold is not scale invariant: an equation like `Dt(V_C) = (ω0/C)·Δi`
+# inflates a roundoff-level current mismatch by ω0/C, so `tol` is unreachable even at a
+# perfectly converged point. Dividing each row by its Jacobian row norm measures the
+# residual in state-space units instead and recovers that factor.
+#
+# The floor is 1, not the 1e-10 used in `_solve_scaled`: as a *weighting* for a solve,
+# amplifying an insensitive row is harmless, but as an *acceptance criterion* it would turn
+# an equation that barely depends on the free variables into a spurious failure. A floor of
+# 1 keeps the scaled norm ≤ the raw norm, so the check can only ever relax the tolerance.
+_row_scales(J) = [max(LinearAlgebra.norm(@view J[i, :]), 1.0) for i in axes(J, 1)]
+
+# The *dense* component fallback (`_scaled_init_residual`) builds a `Neqs × Ncols` ForwardDiff
+# Jacobian; above this dimension we decline (return `nothing`) so a pathologically large
+# component cannot allocate `8·N²` bytes on the failure path (~128 MB at the cutoff).
+# Components are normally tiny, so this is belt-and-suspenders. The network path does not use
+# this -- it streams (see `_streaming_row_scales`) and has its own, much larger, compute cap.
+const SCALED_JAC_MAXDIM = 4096
+
+# Compute cap for the *streaming* network fallback. Streaming keeps memory at O(Neqs·chunk),
+# so this is not a memory limit but a bound on runtime: the row scales cost ~N/chunk RHS
+# evaluations (no sparsity coloring is available to do better). Above this the caller degrades
+# to the raw check rather than spend a long time scaling a residual on a failed init.
+const SCALED_NW_MAXDIM = 50_000
+
+# Row-norm scales `max(‖J[i,:]‖, 1)` WITHOUT materializing the dense Jacobian. Forward-mode AD
+# yields `J` one column-block at a time; a row norm is a sum-of-squares reduction across
+# columns, so we stream blocks of width `chunk` and accumulate into a length-`Neqs` vector.
+# Memory is O(Neqs·chunk) instead of O(Neqs·N). `f!` is the in-place residual `f!(y, x)`.
+function _streaming_row_scales(f!, y, x; chunk::Int=12)
+    N = length(x)
+    c = min(chunk, N)
+    backend = DI.AutoForwardDiff()
+    tx = ntuple(_ -> zeros(N), c)              # reused unit-vector (input) tangent buffers
+    ty = ntuple(_ -> similar(y), c)            # reused output tangent buffers (the columns)
+    ybuf = similar(y)
+    prep = DI.prepare_pushforward(f!, ybuf, backend, x, tx)
+    rownorm2 = zeros(length(y))
+    for block in Iterators.partition(1:N, c)
+        for k in 1:c
+            fill!(tx[k], 0.0)
+            k <= length(block) && (tx[k][block[k]] = 1.0) # padding tangents stay zero
+        end
+        DI.pushforward!(f!, ybuf, ty, prep, backend, x, tx)
+        for col in ty
+            rownorm2 .+= abs2.(col)
+        end
+    end
+    [max(sqrt(r), 1.0) for r in rownorm2]
+end
+
+# Jacobian-row-scaled residual of the full network RHS at the initialized state. `p` and `t`
+# are held fixed, so the columns are the network states. Only runs once the raw ‖du‖ check
+# has failed. Streams the row scales to avoid a dense Jacobian; returns `nothing` when the
+# network exceeds `SCALED_NW_MAXDIM` (see there).
+function _scaled_network_residual(nw::Network, du, s0, t)
+    length(du) > SCALED_NW_MAXDIM && return nothing
+    p = pflat(s0)
+    scales = _streaming_row_scales((dx, x) -> nw(dx, x, p, t), du, uflat(s0))
+    LinearAlgebra.norm(du ./ scales)
 end
 
 # Solve a NonlinearLeastSquaresProblem with residual rescaling by Jacobian row norms.
