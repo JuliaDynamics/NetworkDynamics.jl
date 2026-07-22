@@ -2,71 +2,98 @@
 
 ## v1.0.0 Changelog
 
-- **ModelingToolkit v11 compatibility** ([#344](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/344)):
-  - Raises compat from `ModelingToolkit` v10 to v11. MTK v11 split into `ModelingToolkitBase` (MIT-licensed) and `ModelingToolkit` (AGPL-licensed); NetworkDynamics.jl now only requires the MIT-licensed `ModelingToolkitBase` as a direct dependency, dropping the AGPL dependency.
-  - A custom structural-simplification pipeline replaces MTK's `mtkcompile` as the new default (`mtkcompile=false`). It performs alias/linear-state elimination, breaks algebraic and nonlinear loops, and handles simple DAE index reduction. Set the global default via `NetworkDynamics.set_mtkcompile!`; use `mtkcompile=:compare` to run both backends and print a comparison for debugging. With `mtkcompile=true`, MTK's own `mtkcompile` is called: full structural simplification when `ModelingToolkit` is loaded, or the stub from `ModelingToolkitBase` (no structural simplification) when it is not.
-  - MTK models now warn when they contain discrete variables (unsupported).
-  - New extension dependencies: `Moshi`, `Hungarian`.
-  - **Dependency version bumps**: `SymbolicUtils` ≥ 4, `Symbolics` ≥ 7.
-  - `implicit_output` macro updated to use `Symbolics.@register_symbolic` instead of `ModelingToolkit.@register_symbolic`.
-- **`find_fixpoint` signature simplification**:
-  - `find_fixpoint(nw, x0::AbstractVector)` is deprecated; use `find_fixpoint(nw, NWState(...))`.
-  - `find_fixpoint(nw, p::NWParameter)` is deprecated; use `find_fixpoint(nw, NWState(...))`.
-  - `find_fixpoint(nw, x0::NWState, p::NWParameter)` is deprecated; use `find_fixpoint(nw, x0::NWState)`.
-  - The default initial state for fixpoint search now applies guesses and formulas automatically (`guess=true, apply_formulas=true`).
-- **`NWState` constructor** gains `guess`, `apply_formulas`, and `verbose` keyword arguments. With `default=true` (the default), values are filled in order: defaults/inits → `InitFormula`s → guesses (if `guess=true`) → `GuessFormula`s. `apply_formulas=true` by default; `guess=false` by default.
-- `initialize_component` / `initialize_componentwise` gain a `warn` keyword (default `true`) to silence initialization warnings.
-- **Scale-invariant init residual check**: the `tol`/`nwtol` checks in `initialize_component` and `initialize_componentwise` no longer reject on the raw residual `‖du‖` alone. If the raw check misses, the residual is re-measured with each equation divided by its Jacobian row norm (floored at 1, so the fallback can only relax the check), which expresses the miss in state-space units; only if that also misses is the error thrown. This prevents spurious failures for stiff/ill-scaled equations — e.g. a shunt capacitor's `Dt(V_C) = (ω0/C)·Δi` inflating a roundoff-level current mismatch beyond any fixed tolerance.
-- `doctor` check: added smoketest for the observable function (`obsf`) of each component.
-- `SciMLBase@3` and `OrdinaryDiffEq@7` compat. Most notably, upstream `DiffEq` changed its default `initializealg` to *check* rather than *reinit* inconsistent initial conditions. To preserve the previous behavior, the `ODEProblem(nw::Network, ...)` constructor now defaults to `initializealg=BrownFullBasicInit()` (deliberately differing from the OrdinaryDiffEq default). Pass `initializealg=...` to the constructor to override. Also, the interface of the `VectorContinuousComponentCallback` changed to fit that of `VectorContinuousCallback`: the affect now receives a buffer with per-element up or down crossing information rather than a single event idx.
-- new `copy(::Network)` method (dealiases all components and buffers)
-- **New `initf` variable option for MTK models**: `@variables x(t) [initf = <expr>]` (and the
-  same on `@parameters`) declares an explicit initialization equation, which is lowered to an
-  `InitFormula` at compile time. Unlike the symbolic-default/binding route it replaces, `initf`
-  works on **parameters** as well as unknowns, which is what "free setpoint, back-computed from
-  the operating point" needs. Metadata expressions are collected from the hierarchical system
-  and namespaced there, since `renamespace` does not descend into a symbol's metadata.
-  **Breaking**: a *binding* on an unknown — `@variables x(t) = <symbolic expr>` — was
-  previously converted into an `InitFormula` behind your back, and now throws at compile
-  time. The error names the `initf` rewrite; spell it `@variables x(t) [initf = <expr>]`
-  instead. Bindings on parameters are unaffected.
-- **`set_mtk_defaults!` renamed to `set_mtk_defaults` and is no longer mutating** (breaking):
-  rebind the result, `sys = set_mtk_defaults(sys, defaults)`. In exchange, forwarded keywords
-  now mirror values written directly onto a declaration: a **numeric** value becomes an
-  ordinary default, while a **symbolic** value becomes a parameter *binding* — i.e.
-  `set_mtk_defaults(sys, K = K_e)` is equivalent to `@parameters K = K_e`, so `K` is resolved
-  into an observed equation and the "true" parameter is the one it is bound to. This mirrors
-  MTK's own `collect_defaults!` routing, which a mutating function cannot reach: a `System`'s
-  bindings are immutable, and previously a symbolic value was silently stored as an ordinary
-  default, leaving a parameter with a symbolic value behind.
-- **Alias normalization for the initialization pipeline**: At init time, defaults/guesses/bounds and formula outputs written against an
-  alias are transported onto the canonical settable symbol, and formula inputs which are
-  observables are expanded through the observed equations down to settable roots. In practice:
-  it does not matter whether you define your guess/default or Init/GuessFormula metadata for
-  :busbar.u or :terminal.u, both states are aliased so they will be rerouted to the canonical name.
-- **Pinned observables — backward-flow initialization**: an `InitFormula` may now *write* a
-  non-alias observable, "pinning" it as an init-time dataflow node.
-  Other `InitFormulas` will prioritize those as inputs to the equations. I.e. you can write
-  subcomponent-local Init/GuessFormulas; once they connect end to end you can achieve true
-  backward flow initialization as commonly used for power models.
-  This enables fully component-local backward init: a
-  parent formula states what a child's output must be, the child's formula inverts its own
-  equation. `GuessFormula`s pin as *hints*: a guess-pin lands in the working guesses, seeds
-  downstream guess formulas and the solve, and is never consistency-checked — so whole
-  backward chains can safely be spelled as guesses, starting the solver at the right
-  operating point without committing to it. Init formulas run first and never read
-  guess-pins; guess formulas read both kinds through the defaults-before-guesses lookup.
-- **New `set_initf(sys, target => expr, ...)`** attaches init equations to an MTK `System` at
-  the *system* level (non-mutating, rebind the result). It covers the case the `initf`
-  variable option cannot express: the target belongs to a subsystem, e.g. pinning a child's
-  output observable from the parent.
-- **Guess formulas mirror the init side**: `@variables x(t) [guessf = <expr>]` and
-  `set_guessf(sys, target => expr, ...)` are the guess-side twins of `initf` / `set_initf`,
-  lowered to `GuessFormula`s. They land among the guesses (a hint, never consistency-checked),
-  so conflicts warn instead of error and an unresolvable formula is skipped. Because `guessf` is
-  its own key, a scalar `guess=0` (fallback seed) and `guessf=<expr>` (refined value) now coexist
-  on one variable. (Breaking: the old route of passing a symbolic expression to the `guess`
-  metadata is removed — a symbolic `guess` now errors, use `guessf` instead.)
+Three themes: ModelingToolkit v11 support (which drops the AGPL dependency), a
+reworked initialization pipeline, and the SciML v3 stack.
+
+### Breaking
+
+- **`ModelingToolkit` v10 → v11** ([#344](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/344)).
+  MTK v11 split into `ModelingToolkitBase` (MIT) and `ModelingToolkit` (AGPL);
+  NetworkDynamics now only depends on the MIT half, so the AGPL dependency is gone.
+  (This does not make the package copyleft-free: the `SparseArrays` stdlib still pulls in
+  SuiteSparse, whose UMFPACK/CHOLMOD/SPQR binaries are GPL-2.0-or-later. That is the
+  weaker, non-network-clause copyleft that large parts of the Julia ecosystem already carry.)
+  Along with it: `SymbolicUtils` ≥4, `Symbolics` ≥7.
+- **MTK models are no longer simplified by `mtkcompile`** ([#344](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/344)).
+  A built-in pipeline (alias/linear-state elimination, algebraic and nonlinear loop
+  breaking, simple DAE index reduction) took its place, since `mtkcompile` lives in the
+  AGPL half. Pass `mtkcompile=true` for the old behavior, `mtkcompile=:compare` to print
+  both side by side, or set the global default with `NetworkDynamics.set_mtkcompile!`.
+  Models containing discrete variables now warn (still unsupported).
+- **Symbolic expressions as a `guess`, or bound to an unknown, now error**
+  ([#378](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/378))
+  (the `@variables x(t) = <symbolic expr> [guess=<symbolic expr>]` pattern).
+  They used to be substituted *once, at build time*, and frozen into a number — so they silently went stale
+  when the values they referenced changed, and an expression that could not be resolved was
+  quietly dropped, leaving the variable free. Since formulas are now tracked properly, write
+  `@variables x(t) [initf = <expr>]` (or `[guessf = <expr>]`) instead; the error message
+  names the rewrite. **Symbolic values on `@parameters` do not error**: since MTKv11 those create
+  a so-called parameter binding, the bound parameter on the lhs is moved to observed thus a
+  permanent runtime dependency is injected. This is in contrast to `initf`, which sets the
+  parameter's numeric value once at init time.
+- **`set_mtk_defaults!` → `set_mtk_defaults`, non-mutating**
+  ([#378](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/378)): rebind the
+  result, `sys = set_mtk_defaults(sys, ...)`. A symbolic value now becomes a parameter
+  *binding* (as if written `@parameters K = K_e`) rather than a default; numeric values
+  are unchanged.
+- **`SciMLBase` v3 / `OrdinaryDiffEq` v7**
+  ([#374](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/374)). Upstream changed
+  the default `initializealg` to *check* inconsistent initial conditions rather than
+  reinitialize them, so `ODEProblem(nw, ...)` now passes `initializealg=BrownFullBasicInit()`
+  to keep the previous behavior. Override with `initializealg=...`.
+  We deliberately chose to deviate from the DiffEq default here because for the kind of systems
+  simulated with ND you mostly want DAE reinit at events and sim start.
+- **`VectorContinuousComponentCallback` lost `affect_neg!`**
+  ([#374](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/374)), matching DiffEq's
+  `VectorContinuousCallback`. The affect now receives an `event_signs` vector (per output:
+  `+1` upcrossing, `-1` downcrossing, `0` none) and resolves the direction itself.
+- **`find_fixpoint` takes an `NWState`**
+  ([#344](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/344)). The `Vector`,
+  `NWParameter` and `(NWState, NWParameter)` forms are deprecated but still work.
+
+### Initialization
+
+- **Aliased names are interchangeable**
+  ([#378](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/378)): it no longer
+  matters which of several aliased symbols you attach metadata to. `:busbar.u` and
+  `:terminal.u` are the same state, so defaults, guesses, bounds and formulas written
+  against either are routed to the canonical one.
+- **Backward-flow initialization**
+  ([#378](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/378)): an `InitFormula`
+  may now write an *observable*, "pinning" it as a value downstream formulas read as
+  input. This lets you write purely component-local formulas — a parent states what a
+  child's output must be, the child's formula inverts its own equation — and have them
+  chain end to end, the way power system models are usually initialized. `GuessFormula`
+  pins are hints: they seed the solver but are never consistency-checked, so an entire
+  backward chain can be spelled as guesses.
+- **New `initf` / `guessf` metadata**
+  ([#378](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/378)):
+  `@variables x(t) [initf = <expr>]` declares an initialization equation,
+  `[guessf = <expr>]` a guess. Both also work on `@parameters`, and there they do something
+  a binding cannot: the parameter stays a real, free parameter that the dynamics can use,
+  it is merely *given its value* at initialization. (A binding would eliminate it into an
+  observed equation instead.) That is what a setpoint back-computed from the operating point
+  needs. A scalar `guess=0` and a `guessf=<expr>` can now coexist on one variable.
+  `set_initf(sys, target => expr, ...)` and `set_guessf` attach the same thing at system
+  level, for targets inside a subsystem (non-mutating, rebind the result).
+- **More robust on badly scaled models**
+  ([#344](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/344),
+  [#378](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/378)): a failed init
+  solve is retried on a rescaled problem, and the `tol`/`nwtol` residual check falls back
+  to a Jacobian-scaled residual before giving up. Stiff equations — e.g. a shunt
+  capacitor's `Dt(V_C) = (ω0/C)·Δi` — no longer fail on a roundoff-level mismatch. The
+  fallback can only relax the check, never tighten it.
+- **`NWState`** gains `guess`, `apply_formulas` and `verbose` keywords. With `default=true`
+  values are filled in order: defaults/inits → `InitFormula`s → guesses (if `guess=true`)
+  → `GuessFormula`s. `find_fixpoint`'s default start state now uses `guess=true`.
+- `initialize_component` / `initialize_componentwise` gain `warn=false` to silence
+  initialization warnings.
+
+### Other
+
+- New `copy(::Network)` ([#376](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/376)),
+  much cheaper than `deepcopy`.
+- `doctor` now smoketests each component's observable function.
 
 ## v0.10.17 Changelog
 - **Open-loop linearization** ([#341](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/341)):

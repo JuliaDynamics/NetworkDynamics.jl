@@ -209,6 +209,8 @@ Initialization formulas act early in the initialization pipeline to compute and 
 
 Each formula can only reference symbols that are already available - it cannot use intermediate values computed within the same formula.
 
+A formula takes precedence over a plain default: if a symbol carries both a numeric `default` and an `initf`, the formula overwrites the default. That is by design — it lets a component ship a sensible standalone value which is superseded once the surrounding model pins the symbol down.
+
 **Basic Usage**: Use the [`@initformula`](@ref) macro to define formulas with assignment syntax:
 
 ```@example compinit
@@ -250,10 +252,15 @@ sys = set_initf(sys, v_ref => v_meas)     # same effect as the `initf = v_meas` 
 
 Reach for `set_initf` when the rule comes from *outside* the block that owns the symbol — most often a parent component initializing one of its subsystems' symbols, which the `initf` option cannot express because it only annotates a system's *own* variables. `set_initf` returns a new system rather than mutating, so rebind it (`sys = set_initf(sys, …)`).
 
-!!! warning "`initf` vs. a symbolic default"
-    A *symbolic default* on an unknown (`@variables x(t) = 2a`, i.e. an MTK binding) is rejected: it does not say when the expression is meant to hold. Use `initf` to state that it holds at initialization.
+!!! warning "Symbolic expressions in metadata: be explicit about *when* they hold"
+    An expression attached to a variable does not say **when** it is supposed to be true. Is `x = 2a` a statement about the initial state, or a relation that must hold for all time? Those mean very different things, so NetworkDynamics does not guess: a symbolic expression passed to `default` (on an unknown) or to `guess` is **rejected**.
 
-    On a **parameter**, a symbolic default is something else entirely and stays valid: it declares a runtime dependency, which MTK lowers to an observed equation and which removes the parameter from the compiled model. Use it when you want to express one parameter in terms of others; use `initf` when you want an initialization equation.
+    Say it explicitly instead:
+
+    - `initf = <expr>` holds **once, at initialization**. It is evaluated while the init problem is assembled and is not enforced afterwards — during the simulation the state is free to drift away from it.
+    - `guessf = <expr>` has the same timing but is only a *hint*: it seeds the solver's starting point and is never checked.
+
+    **Exception: symbolic defaults on parameters.** `@parameters K = K_e` stays valid, because it means something categorically different — it holds **unconditionally, at all times**. MTK demotes `K` to an observable of `K_e`, so from then on there is only one parameter. This is the mechanism for wiring parameter dependencies between a model and its subcomponents: a parent's `voltage_kp` can be handed down to the generic `Kp` of a nested PI block (`@named pi = PIBlock(Kp = voltage_kp)`), which demotes `pi₊Kp` and leaves `voltage_kp` as the single tunable knob — rather than two separate parameters that must be kept in sync.
 
 #### [Backward-Flow Initialization: Formulas That Find Each Other](@id backward-flow-init)
 
