@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>ModelingToolkit Integration · NetworkDynamics</title><meta name="title" content="ModelingToolkit Integration · NetworkDynamics"/><meta property="og:title" content="ModelingToolkit Integration · NetworkDynamics"/><meta property="twitter:title" content="ModelingToolkit Integration · NetworkDynamics"/><meta name="description" content="Documentation for NetworkDynamics."/><meta property="og:description" content="Documentation for NetworkDynamics."/><meta property="twitter:description" content="Documentation for NetworkDynamics."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">NetworkDynamics</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">General</a></li><li><a class="tocitem" href="../mathematical_model/">Mathematical Model</a></li><li><a class="tocitem" href="../network_construction/">Network Construction</a></li><li><a class="tocitem" href="../data_structure/">Data Structure</a></li><li><span class="tocitem">Features</span><ul><li><a class="tocitem" href="../symbolic_indexing/">Symbolic Indexing</a></li><li><a class="tocitem" href="../metadata/">Metadata</a></li><li><a class="tocitem" href="../initialization/">Initialization</a></li><li><a class="tocitem" href="../callbacks/">Callbacks and Events</a></li><li class="is-active"><a class="tocitem" href>ModelingToolkit Integration</a><ul class="internal"><li><a class="tocitem" href="#RC-Circuit-Example"><span>RC-Circuit Example</span></a></li><li><a class="tocitem" href="#Fully-Implicit-Outputs"><span>Fully Implicit Outputs</span></a></li></ul></li><li><a class="tocitem" href="../sparsity_detection/">Sparsity Detection</a></li><li><a class="tocitem" href="../external_inputs/">External Inputs</a></li><li><a class="tocitem" href="../inspector/">Interactive Solution Inspection</a></li></ul></li><li><a class="tocitem" href="../API/">API</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../generated/getting_started_with_network_dynamics/">Getting Started</a></li><li><a class="tocitem" href="../generated/heterogeneous_system/">Heterogeneous Systems</a></li><li><a class="tocitem" href="../generated/init_tutorial/">Initialization</a></li><li><a class="tocitem" href="../generated/cascading_failure/">Cascading Failure</a></li><li><a class="tocitem" href="../generated/gas_network/">Gas Network</a></li><li><a class="tocitem" href="../generated/stress_on_truss/">Stress on Truss</a></li><li><a class="tocitem" href="../generated/directed_and_weighted_graphs/">Directed and Weighted Graphs</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Features</a></li><li class="is-active"><a href>ModelingToolkit Integration</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>ModelingToolkit Integration</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaDynamics/NetworkDynamics.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaDynamics/NetworkDynamics.jl/blob/main/docs/src/mtk_integration.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="ModelingToolkit-Integration"><a class="docs-heading-anchor" href="#ModelingToolkit-Integration">ModelingToolkit Integration</a><a id="ModelingToolkit-Integration-1"></a><a class="docs-heading-anchor-permalink" href="#ModelingToolkit-Integration" title="Permalink"></a></h1><p>NetworkDynamics.jl is compatible with <a href="https://github.com/SciML/ModelingToolkit.jl"><code>ModelingToolkit.jl</code></a> (MTK). The general idea is to use MTK to define <em>component models</em> (i.e. edge and vertex dynamics) which are then connected on network scale using NetworkDynamics.</p><p>The main entry point for this interop are the constructors</p><pre><code class="language-julia hljs">VertexModel(::System, inputs, outputs)
+EdgeModel(::System, srcin, dstin, [srscout], dstout)</code></pre><p>whose docstrings can be found in the <a href="../API/#Component-Models-with-MTK">Component Models with MTK</a> section in the API.</p><p>These constructors will:</p><ul><li>transform the states marked as input to parameters and <code>mtkcompile</code>ing the system,</li><li>generate the <code>f</code> and <code>g</code> functions,</li><li>generate code for observables,</li><li>port all supported <a href="../metadata/#Metadata">Metadata</a> from MTK symbols to component symbols and</li><li>output a <code>Vertex-</code>/<code>EdgeModel</code> function compatible with NetworkDynamics.jl.</li></ul><p>The main usecase for this feature is when you want to build relatively complex component models but interconnect them in a very homogeneous way (i.e. having the same output/input pairings in the whole system).</p><p>In theory, you can achieve everything you want to do with plain MTK. The idea of combining the two is, that NetworkDynamics offers <em>far less flexibility</em> when in comes to interconnection of subsystems on the network level. This might allow ND to exploit more knowledge of the structure without very expensive operations such as tearing of thousands of equations.</p><div class="admonition is-warning" id="Warning-6c801ef9ed4c6654"><header class="admonition-header">Warning<a class="admonition-anchor" href="#Warning-6c801ef9ed4c6654" title="Permalink"></a></header><div class="admonition-body"><p>ModelingToolkit is a fast paced library with lots of functionality and ever growing complexity. As such the provided interface is kinda experimental. Some features of MTK are straight up unsupported, for example events within models or delay differential equations.</p></div></div><h2 id="RC-Circuit-Example"><a class="docs-heading-anchor" href="#RC-Circuit-Example">RC-Circuit Example</a><a id="RC-Circuit-Example-1"></a><a class="docs-heading-anchor-permalink" href="#RC-Circuit-Example" title="Permalink"></a></h2><p>In good <a href="https://docs.sciml.ai/ModelingToolkit/stable/tutorials/acausal_components/">MTK tradition</a>, this feature will be explained along a simple RC circuit example. The <a href="../generated/gas_network/#gas-example">Gas Network Example</a> or <a href="../generated/init_tutorial/#init-tutorial">Initialization Tutorial</a> also showcase the MTK constructors.</p><p>The system to model is 2 node, 1 edge network. The node output states are the voltage (to ground), the edge output sates are the currents at both ends.</p><pre><code class="nohighlight hljs">
+ideal v source      Resistor     Capacitor
+            v1 o─←────MMM────→─o v2
+               │               ┴
+              (↗)              ┬
+               │               │
+               ⏚               ⏚</code></pre><p>Obviously there is no need in modeling such a small system using NetworkDynamics, however the method extends quite easily to construct large electrical networks reusing the same fundamental building blocks.</p><pre><code class="language-julia hljs">using NetworkDynamics
+using ModelingToolkit
+using ModelingToolkit: t_nounits as t, D_nounits as D
+using OrdinaryDiffEqTsit5
+using CairoMakie</code></pre><p>All our components have &quot;terminals&quot;, which have a voltage and current. We don&#39;t use the <code>@connector</code> from MTK here because our pins mark the interface towards the network and do not follow the MTK connector semantics.</p><pre><code class="language-julia hljs">@mtkmodel NWTerminal begin
+    @variables begin
+        v(t), [description=&quot;Voltage at node&quot;]
+        i(t), [description=&quot;Current flowing into node&quot;]
+    end
+end</code></pre><p>An ideal voltage source is just a model which pins its output voltage to a fixed parameter. The source ejects whatever current is necessary. We introduce another variable <code>i(t)</code> to &quot;capture&quot; this current. This variable will be removed during structural simplify, but will be available for plotting through the <a href="../symbolic_indexing/#Observables">Observables</a> mechanism. The <code>VertexModel</code> can be generated from an <code>System</code> by providing names of the input and output states:</p><pre><code class="language-julia hljs">@mtkmodel VoltageSource begin
+    @components begin
+       p = NWTerminal()
+    end
+    @parameters begin
+        V = 1.0
+    end
+    @variables begin
+        i(t), [description=&quot;produced current by ideal voltage source (observable)&quot;]
+    end
+    @equations begin
+        i ~ -p.i
+        p.v ~ V
+    end
+end
+@named vs = VoltageSource()
+vs_vertex = VertexModel(vs, [:p₊i], [:p₊v]; vidx=1)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">VertexModel <span class="sgr1">:vs</span> <span class="sgr94">NoFeedForward()</span> @ Vertex 1
+ ├─ 1 input:  [p₊i]
+ ├─ 0 states: []
+ ├─ 1 output: [p₊v]
+ └─ 1 param:  [V=1]</code></pre><p>A capacitor is a slightly more complicated model. Its voltage is defined as an differential equation based on the inflowing current.</p><pre><code class="language-julia hljs">@mtkmodel Capacitor begin
+    @components begin
+        p = NWTerminal(;v=0)
+    end
+    @parameters begin
+        C = 1.0
+    end
+    @equations begin
+        D(p.v) ~ p.i / C
+    end
+end
+@named cap = Capacitor()
+cap_vertex = VertexModel(cap, [:p₊i], [:p₊v], vidx=2)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">VertexModel <span class="sgr1">:cap</span> <span class="sgr94">PureStateMap()</span> @ Vertex 2
+ ├─ 1 input:  [p₊i]
+ ├─ 1 state:  [p₊v=0]
+ ├─ 1 output: [p₊v=0]
+ └─ 1 param:  [C=1]</code></pre><p>For the resistor we need two pins, one for the <code>src</code> and one for the <code>dst</code> side. The equations are straight forward.</p><pre><code class="language-julia hljs">@mtkmodel Resistor begin
+    @components begin
+        src = NWTerminal()
+        dst = NWTerminal()
+    end
+    @parameters begin
+        R = 1.0
+    end
+    @equations begin
+        dst.i ~ (src.v - dst.v)/R
+        src.i ~ -dst.i
+    end
+end
+@named resistor = Resistor()
+resistor_edge = EdgeModel(resistor, [:src₊v], [:dst₊v], [:src₊i], [:dst₊i]; src=:vs, dst=:cap)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">EdgeModel <span class="sgr1">:resistor</span> <span class="sgr94">PureFeedForward()</span> @ Edge vs=&gt;cap
+ ├─ 1/1 inputs:  src=[src₊v] dst=[dst₊v]
+ ├─   0 states:  []  
+ ├─ 1/1 outputs: src=[src₊i] dst=[dst₊i]
+ └─   1 param:   [R=1]</code></pre><p>Having all those components defined, we can build the network. We don&#39;t need to provide a graph object here because we specified the placement in the graph on a per component basis.</p><pre><code class="language-julia hljs">nw = Network([vs_vertex, cap_vertex], [resistor_edge])</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Network with 1 state and 3 parameters
+ ├─ 2 vertices (2 unique types)
+ └─ 1 edges (1 unique type)
+Edge-Aggregation using SequentialAggregator(+)</code></pre><p>We can see, that NetworkDynamics internally is able to reduce all of the &quot;output&quot; states. We end up with a plain ODE of a single state.</p><p>Now we can simulate the system. For that we generate the <code>u0</code> object. Since the metadata (such as default values) was automatically transferred, we can straight away construct the <code>ODEProblem</code> and solve the system.</p><pre><code class="language-julia hljs">u0 = NWState(nw) # generate state based on default values
+prob = ODEProblem(nw, uflat(u0), (0, 10.0), pflat(u0))
+sol = solve(prob, Tsit5())
+
+# plot the solution
+fig, ax1, p = plot(sol; idxs=VIndex(:cap, :p₊v), label=&quot;Capacitor Voltage&quot;);
+axislegend(ax1)
+ax2 = Axis(fig[2,1])
+plot!(ax2, sol; idxs=VIndex(:vs, :i), label=&quot;Current produced by ideal v source&quot;)
+axislegend(ax2)</code></pre><img src="1b00a697.png" alt="Example block output"/><h2 id="Fully-Implicit-Outputs"><a class="docs-heading-anchor" href="#Fully-Implicit-Outputs">Fully Implicit Outputs</a><a id="Fully-Implicit-Outputs-1"></a><a class="docs-heading-anchor-permalink" href="#Fully-Implicit-Outputs" title="Permalink"></a></h2><p>When working with MTK systems in NetworkDynamics, you may encounter situations where your desired output variables don&#39;t explicitly appear in the equations. This creates <strong>fully implicit outputs</strong> - variables that are determined by the system&#39;s constraints but aren&#39;t directly computed.</p><div class="admonition is-success" id="tl;dr-3d47f153f1079267"><header class="admonition-header">tl;dr<a class="admonition-anchor" href="#tl;dr-3d47f153f1079267" title="Permalink"></a></header><div class="admonition-body"><p>Introduce &quot;fake&quot; dependencies to your input-forcing equations <code>0 ~ in + implicit_output(y)</code>. Which is mathematically equivalent to <code>0 ~ in</code> but helps MTK to reason about dependencies.</p></div></div><p>Consider a system with a fully implicit output:</p><pre><code class="nohighlight hljs">   u┌───────┐y
+  ─→┤ 0 ~ u ├→─
+    └───────┘</code></pre><p>Here, <span>$y$</span> does not appear in the equations at all. In general, that doesn&#39;t make too much sense. During simplification, MTK will potentially get rid of the equation as it does not contribute to the system&#39;s state.</p><p>However, in NetworkDynamics, we&#39;re always dealing with <strong>open loop models</strong> on the equation level, which is not exactly what MTK was made for. If you build a closed loop between a subsystem A which <strong>has input forcing</strong> and a subsystem B which has <strong>input feed forward</strong>, the resulting system can be solved:</p><pre><code class="nohighlight hljs">    (system with input forcing)
+          ua┌─────────┐ya
+        ┌──→┤  0 ~ ua ├→──┐
+        │   └─────────┘   │
+        │ yb┌─────────┐ub │
+        └──←┤ yb ~ ub ├←──┘
+            └─────────┘
+(system with input feed forward)</code></pre><p>Since MTK does not know about the closed loop (which is only introduced on the NetworkDynamics level once we leave the equation based domain) we need to help MTK to figure out those dependencies. We can do so by introducing &quot;fake&quot; dependencies using <a href="../API/#NetworkDynamics.implicit_output"><code>implicit_output</code></a>. This function is defined as</p><pre><code class="language-julia hljs">implicit_output(x) = 0
+ModelingToolkit.@register_symbolic implicit_output(x)</code></pre><p>which makes it numerically equivalent to zero (no effect on the simulation) but is opaque to the Symbolic Simplification.</p><h3 id="Example"><a class="docs-heading-anchor" href="#Example">Example</a><a id="Example-1"></a><a class="docs-heading-anchor-permalink" href="#Example" title="Permalink"></a></h3><p>Consider a &quot;Kirchhoff Node&quot; between multiple resistors:</p><ul><li>the currents through the resistors directly depend on the voltage output of the node (input feed forward) and</li><li>the Kirchhoff node requires the sum of all inflowing currents to be zero (input forcing).</li></ul><p>We can model this type of node like this:</p><pre><code class="language-julia hljs">@mtkmodel KirchhoffNode begin
+    @variables begin
+        v(t), [description=&quot;Node voltage&quot;, output=true]
+        i_sum(t), [description=&quot;Sum of incoming currents&quot;, input=true]
+    end
+    @equations begin
+        0 ~ i_sum + implicit_output(v)  # Kirchhoff&#39;s current law
+    end
+end
+@named kirchhoff = KirchhoffNode()
+VertexModel(kirchhoff, [:i_sum], [:v])</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">VertexModel <span class="sgr1">:kirchhoff</span> <span class="sgr94">PureStateMap()</span>
+ ├─ 1 input:  [i_sum]
+ ├─ 1 state:  [v]
+ |    with diagonal mass matrix [0]
+ └─ 1 output: [v]</code></pre><p>where we &quot;trick&quot; MTK into believing that the input forcing equation depends on the output too.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../callbacks/">« Callbacks and Events</a><a class="docs-footer-nextpage" href="../sparsity_detection/">Sparsity Detection »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.14.1 on <span class="colophon-date" title="Monday 8 September 2025 07:59">Monday 8 September 2025</span>. Using Julia version 1.11.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
