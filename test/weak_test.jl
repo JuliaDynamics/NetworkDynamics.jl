@@ -79,34 +79,51 @@ end
     log = sprint() do io
         @test isempty(drop_weak_formulas([wf], d2; verbose=true, io))
     end
-    @test occursin("dropping weak formula", log)
+    @test occursin("yields to existing default", log)
     apply_init_formulas!(d2, drop_weak_formulas([wf], d2))
     @test d2[:Sn] == 250.0
 
     # a strong formula is never touched by the drop, default or not
     sf = @initformula begin :Sn = :S_b end
     @test length(drop_weak_formulas([sf], d2)) == 1
+
+    # a weak formula also yields to a *strong* formula writing the same target (strong_outputs),
+    # even with no default: an InitFormula always fires, so the strong writer pins it
+    d3 = Dict{Symbol,Float64}(:S_b => 100.0)
+    log3 = sprint() do io
+        @test isempty(drop_weak_formulas([wf], d3, Set([:Sn]); verbose=true, io))
+    end
+    @test occursin("yields to a strong formula", log3)
+    # but with neither a default nor a strong writer it stays and fires
+    @test length(drop_weak_formulas([wf], d3, Set{Symbol}())) == 1
 end
 
-@testset "multi-output weak with a mixed default: whole formula dropped + warn" begin
-    mf = @initformula weak=true begin
+@testset "weak formulas are single-output (constructor rejects multi-output)" begin
+    # weak defaulting is single-target: a multi-output weak formula is rejected at construction,
+    # which is what makes the drop pin-safe (it can never strand a uniquely-pinned sibling output)
+    @test_throws ArgumentError (@initformula weak=true begin
         :a = :src
         :b = :src
-    end
-    d = Dict{Symbol,Float64}(:src => 5.0, :a => 1.0)  # only :a has a default
-    kept = @test_logs (:warn, r"apply only partially") drop_weak_formulas([mf], d)
-    @test isempty(kept)
-    # no default on either output -> the multi-output formula participates normally
-    @test length(drop_weak_formulas([mf], Dict{Symbol,Float64}(:src => 5.0))) == 1
+    end)
+    # a strong multi-output formula is still fine
+    @test length((@initformula begin
+        :a = :src
+        :b = :src
+    end).outsym) == 2
 end
 
-@testset "weak + strong on one target: duplicate-writer error is weak-aware" begin
+@testset "weak yields to a strong co-writer on one target" begin
     strong = @initformula begin :Sn = :S_b end
     weak   = @initformula weak=true begin :Sn = :S_b end
-    # both survive the pre-filter only when no default exists -> duplicate-writer error, whose
-    # message must explain that weak yields to a default, not to another formula
+    # strong writes :Sn -> the weak one is dropped (yields), the strong one survives, no error
+    kept = drop_weak_formulas([strong, weak], Dict{Symbol,Float64}(), Set([:Sn]))
+    @test length(kept) == 1
+    @test !only(kept).weak
+
+    # two *weak* writers on one target (no strong, no default) is a genuine over-determination
+    weak2 = @initformula weak=true begin :Sn = :S_b + 1 end
     err = try
-        topological_sort_formulas([strong, weak]); nothing
+        topological_sort_formulas([weak, weak2]); nothing
     catch e
         e
     end
@@ -170,15 +187,27 @@ end
     @test wf.weak == true
 end
 
-@testset "dedupe: identical initf + initf_weak on one target keeps strong" begin
-    # a target carrying both a strong `initf` and an identical weak `initf_weak` is one recipe
-    # with ANDed weak flags -> strong wins (it overwrites, does not yield)
-    @named sub = _weakdev(name=:sub)   # child already carries `initf_weak = p_src` on p
-    @parameters q = 1.0
+@testset "metadata initf + initf_weak on one target: weak yields to strong" begin
+    # a target carrying both a strong `initf` and a weak `initf_weak` keeps only the strong one
+    # (weak yields to a strong writer, no conflict error) — whether the two rhs match or differ.
+    strong_wins(strong_rhs) = begin
+        @named sub = _weakdev(name=:sub)   # child already carries `initf_weak = p_src` on p
+        @variables z(t) = 0.0
+        parent = System([D(z) ~ -z], t; name=:par, systems=[sub])   # steady state z=0 (= default)
+        parent = set_initf(parent, sub.p => strong_rhs(sub))
+        vp = VertexModel(parent, [:sub₊i], [:sub₊o]; verbose=false)
+        only(filter(f -> f.outsym == [:sub₊p], collect(get_initformulas(vp))))
+    end
+    @test strong_wins(sub -> sub.p_src).weak == false        # identical rhs
+    @test strong_wins(sub -> sub.p_src + 10).weak == false   # differing rhs
+
+    # and end to end: the strong value wins at init, the weak default stands down
+    @named sub = _weakdev(name=:sub)
     @variables z(t) = 0.0
-    parent = System([D(z) ~ -z + q], t; name=:par, systems=[sub])
-    parent = set_initf(parent, sub.p => sub.p_src)   # strong, identical rhs
+    parent = System([D(z) ~ -z], t; name=:par, systems=[sub])
+    parent = set_initf(parent, sub.p => sub.p_src + 10)   # strong, p_src=2 -> p should be 12
     vp = VertexModel(parent, [:sub₊i], [:sub₊o]; verbose=false)
-    wf = only(filter(f -> f.outsym == [:sub₊p], collect(get_initformulas(vp))))
-    @test wf.weak == false
+    for s in (:sub₊x, :sub₊y, :sub₊o); set_guess!(vp, s, 0.5); end
+    initialize_component!(vp; verbose=false)
+    @test get_default_or_init(vp, :sub₊p) == 12.0
 end

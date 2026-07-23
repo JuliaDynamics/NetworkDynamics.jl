@@ -747,8 +747,10 @@ function _dedupe_resolved(resolved; fail::Symbol, kind)
     end
     kept = Any[]
     for (target, group) in by_target
-        # sort strong-first (`weak=false` before `weak=true`), then by rhs: among identical
-        # duplicates a strong writer wins
+        # a weak entry yields to a strong writer on the same target: drop the weak ones whenever
+        # a strong one exists (any rhs), so weak+strong never reads as a conflict below
+        any(g -> !g.weak, group) && (group = filter(g -> !g.weak, group))
+        # sort strong-first, then by rhs: among identical duplicates a strong writer wins
         chosen = first(sort(group; by = g -> (g.weak, repr(g.rhs))))
         length(group) == 1 && (push!(kept, chosen); continue)
         if all(g -> isequal(g.rhs, chosen.rhs), group)

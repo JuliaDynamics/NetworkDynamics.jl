@@ -334,6 +334,11 @@ struct InitFormula{F}
         if !isempty(self_deps)
             throw(ArgumentError("InitFormula cannot depend on its own output symbols: $self_deps"))
         end
+        # weak defaulting is single-target: a weak formula is dropped whole when its target is
+        # already backed, so a multi-output weak could strand a uniquely-pinned sibling output.
+        if weak && length(outsym) != 1
+            throw(ArgumentError("A weak InitFormula must have exactly one output symbol (got $outsym)."))
+        end
         new{F}(f, outsym, sym, prettyprint, derived_from, weak)
     end
 end
@@ -608,12 +613,12 @@ function topological_sort_formulas(formulas)
 
     if !allunique(all_outputs)
         conflicts = [s for s in unique(all_outputs) if count(==(s), all_outputs) > 1]
-        # A weak writer only reaches here with no default on its target (else the pre-DAG filter
-        # dropped it) — so it collides with another *formula*, which weak does not yield to.
+        # A weak writer yields to a `default` or a *strong* co-writer (both drop it earlier), so
+        # reaching here means the colliding writers are all weak — a genuine ambiguity.
         hint = if any(f -> f isa InitFormula && f.weak && !isdisjoint(f.outsym, conflicts), formulas)
-            "\nOne of the colliding formulas is `weak`: a weak formula yields to an existing \
-             default, not to another formula. Give the target a default (then the weak formula \
-             stands down) or drop one of the writers."
+            "\nThe colliding formulas are `weak`: a weak formula yields to a default or a strong \
+             writer, but here only weak writers target the symbol. Give the target a default, or \
+             drop one of the writers."
         else
             ""
         end
@@ -653,12 +658,13 @@ function topological_sort_formulas(formulas)
     end
 end
 
-# Resolve `weak` before the DAG is built: a weak formula whose target already carries a
-# `default` yields and is dropped. Checked on `default` only, never `init` — a weak formula
-# persists its own output as an `init`, so testing `init` here would self-block it on reinit.
-# A single-output drop is the quiet yield (reported only under `verbose`); a multi-output
-# formula with a partial default is refused loudly — weak is all-or-nothing.
-function drop_weak_formulas(formulas, defaults; verbose=false, io=stdout)
+# A weak formula yields — and is dropped — when its (canonical) target already carries a
+# `default` or is written by a *strong* formula (`strong_outputs`): an InitFormula always fires,
+# so a strong writer pins the target and the weak default is redundant. The default check is on
+# `default` only, never `init` — a weak formula persists its own output as an `init`, and testing
+# `init` here would self-block it on reinit. Weak formulas are single-output by construction, so
+# a drop never strands a uniquely-pinned sibling output.
+function drop_weak_formulas(formulas, defaults, strong_outputs=(); verbose=false, io=stdout)
     any(f -> f isa InitFormula && f.weak, formulas) || return formulas
     kept = empty(formulas)
     for f in formulas
@@ -666,17 +672,13 @@ function drop_weak_formulas(formulas, defaults; verbose=false, io=stdout)
             push!(kept, f)
             continue
         end
-        blocked = filter(s -> haskey(defaults, s), f.outsym)
-        if isempty(blocked)
-            push!(kept, f)
-        elseif length(f.outsym) == 1
-            s = only(f.outsym)
-            verbose && printstyled(io, " - InitFormula: dropping weak formula for :$s, \
-                                        yields to existing default :$s = $(defaults[s])\n")
+        @assert length(f.outsym) == 1 "weak InitFormula must be single-output (enforced at construction)"
+        s = only(f.outsym)
+        if haskey(defaults, s) || s in strong_outputs
+            verbose && printstyled(io, " - InitFormula: weak formula for :$s yields to \
+                $(haskey(defaults, s) ? "existing default :$s = $(defaults[s])" : "a strong formula writing :$s")\n")
         else
-            @warn "Dropping a weak InitFormula because it would apply only partially: it \
-                   writes $(f.outsym) but $blocked already carry a default. A weak formula is \
-                   all-or-nothing — split it, or drop the conflicting default(s)."
+            push!(kept, f)
         end
     end
     kept

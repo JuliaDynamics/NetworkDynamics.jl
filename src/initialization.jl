@@ -562,13 +562,6 @@ function initialize_component(cf;
     metadata_initformulas = has_initformula(cf) ? get_initformulas(cf) : nothing
     combined_initformulas = collect_formulas(metadata_initformulas, additional_initformula)
 
-    # Drop weak formulas that yield to an existing default *before* pin computation, normalize,
-    # or the DAG see the set — the decision is static-metadata-only. See [`drop_weak_formulas`](@ref).
-    if !isnothing(combined_initformulas)
-        combined_initformulas = drop_weak_formulas(combined_initformulas, defaults; verbose, io)
-        isempty(combined_initformulas) && (combined_initformulas = nothing)
-    end
-
     # The pin-set is a property of the complete formula set and must be known before any
     # formula is normalized: readers stop their input expansion at every observable some
     # other formula of this very init writes. Init formulas run first and must not depend
@@ -578,7 +571,12 @@ function initialize_component(cf;
 
     if !isnothing(combined_initformulas)
         combined_initformulas = [normalize(f, am, cf; t, pinned) for f in combined_initformulas]
-        apply_init_formulas!(defaults, combined_initformulas; verbose, io, pinned)
+        # a weak formula also yields to a *strong* formula writing the same target (see
+        # `drop_weak_formulas`); computed post-normalize so the outputs are canonical
+        strong_out = Set(s for f in combined_initformulas if !f.weak for s in f.outsym)
+        combined_initformulas = drop_weak_formulas(combined_initformulas, defaults, strong_out; verbose, io)
+        isempty(combined_initformulas) ||
+            apply_init_formulas!(defaults, combined_initformulas; verbose, io, pinned)
     end
 
     metadata_guessformulas = has_guessformula(cf) ? get_guessformulas(cf) : nothing
