@@ -826,10 +826,16 @@ function initialize_component!(cf;
         delete_init!(cf, s)
     end
 
-    # write back defaults/guesses if they've changed due to formulas
+    # Write back only formula outputs that *overrode* a pre-existing default. Init formulas
+    # are strong and may overpower a default, and such an override must persist as a default.
+    # Fresh formula outputs (no prior default) are deliberately NOT written here: they are
+    # already in `init_state` (a formula output is fixed, so it survives the solve untouched)
+    # and the init writeback below turns them into `init` metadata. This means (a) formulas
+    # never inflate the set of defaults, and (b) a future "weak" formula that only writes when
+    # no default exists will not self-lock by persisting its own output as a default.
     for (sym, val) in _final_defaults[]
-        if !has_default(cf, sym) || get_default(cf, sym) != val
-           set_default!(cf, sym, val)
+        if has_default(cf, sym) && get_default(cf, sym) != val
+            set_default!(cf, sym, val)
         end
     end
     for (sym, val) in _final_guesses[]
