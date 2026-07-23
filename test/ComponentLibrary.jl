@@ -415,4 +415,55 @@ function powergridlike_injector_network()
     nw, s0
 end
 
+####
+#### Per-unit handling models (bound_to / weak / default_from)
+####
+# Anchored on the PowerDynamics use case: a bus carries a `busbar` sub-component with the base
+# quantities `S_b`/`V_b` (the single source of truth), and devices on the bus must agree with
+# that base. The physics is deliberate nonsense — only the structure is realistic — so the same
+# models exercise the whole per-unit feature set:
+#   (B) `bound_to`     — the injector's `S_b` is a hard alias of `busbar₊S_b` (implemented).
+#   (A) `weak`         — a device rating that defaults to the base but stays settable (future).
+#   (C) `default_from` — a line end picking up the base of its endpoint bus (future).
+# The extension points for (A)/(C) are marked below so the models grow without being rewritten.
+
+"The busbar sub-component: holds the base quantities and one trivial state that uses them so MTK
+keeps the parameters. `busbar₊S_b` is the true parameter every device on the bus binds to."
+function busbar_sys(; name)
+    @parameters S_b=100.0 V_b=1.0
+    @variables ub(t)=1.0
+    System([Dt(ub) ~ S_b * V_b - ub], t; name)
+end
+
+"A bus vertex: a `busbar` plus an injector whose per-unit base `S_b` is `bound_to` the busbar's,
+so it is eliminated from `psym` and can never desync from the bus base."
+function pu_bus(; name)
+    @named busbar = busbar_sys()
+    @variables u(t)=1.0 i(t) o(t)
+    @parameters P=1.0
+    @parameters S_b [bound_to = :busbar₊S_b]
+    # (A) future: an injector rating `Sn` that weakly defaults to `busbar₊S_b` but stays settable
+    eqs = [Dt(u) ~ -u + i + P / S_b, o ~ u]
+    System(eqs, t; name, systems=[busbar])
+end
+
+pu_bus_vertex(; kwargs...) = VertexModel(pu_bus(name=:bus), [:i], [:o]; kwargs...)
+
+"A line edge connecting two buses. Physics is a trivial admittance flow."
+function pu_line(; name)
+    @variables src_u(t) dst_u(t) flow(t)
+    @parameters Y=0.5
+    # (C) future: a line-end base `S_b [default_from = (:src, :S_b)]` picked up from the endpoint
+    # bus, and an internal quantity `bound_to` that line-end base.
+    System([flow ~ Y * (src_u - dst_u)], t; name)
+end
+
+pu_line_edge(; kwargs...) = EdgeModel(pu_line(name=:line), [:src_u], [:dst_u], AntiSymmetric([:flow]); kwargs...)
+
+"A minimal 2-bus network: two identical PU buses joined by one line."
+function pu_network()
+    v = pu_bus_vertex()
+    Network(path_graph(2), [v, v], pu_line_edge())
+end
+
 end #module

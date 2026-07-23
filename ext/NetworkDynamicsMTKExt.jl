@@ -88,6 +88,7 @@ function VertexModel(
     end
 
     warn_missing_features(sys)
+    sys = resolve_bound_to(sys)
     inputs = inputs isa AbstractVector ? inputs : [inputs]
     outputs = outputs isa AbstractVector ? outputs : [outputs]
 
@@ -216,6 +217,7 @@ function EdgeModel(
     end
 
     warn_missing_features(sys)
+    sys = resolve_bound_to(sys)
     srcin = srcin isa AbstractVector ? srcin : [srcin]
     dstin = dstin isa AbstractVector ? dstin : [dstin]
 

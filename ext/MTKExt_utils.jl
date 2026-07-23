@@ -457,6 +457,72 @@ Symbolics.option_to_metadata_type(::Val{:initf})  = VariableInitFormula
 Symbolics.option_to_metadata_type(::Val{:guessf}) = VariableGuessFormula
 
 """
+    ParameterBoundTo
+
+Symbolic metadata type backing `@parameters S_b [bound_to = :busbar₊S_b]`. Declares that a
+parameter is a structural alias of another symbol in the *same* component. Realized as a real
+MTK binding in the `VertexModel`/`EdgeModel` constructor, before compilation (see
+[`resolve_bound_to`](@ref)): the bound parameter is demoted to an observable of its target and
+leaves `psym`, so there is exactly one true parameter for the quantity.
+
+The metadata value is the target's full (namespaced with `₊`) symbol name. `bound_to` is
+component-local — the structural binding can only be injected before compilation, so the target
+must live in the same component; cross-component defaulting is `default_from` instead. An
+explicit default on a `bound_to` parameter, or an unresolvable target, is an error.
+"""
+struct ParameterBoundTo end
+
+Symbolics.option_to_metadata_type(::Val{:bound_to}) = ParameterBoundTo
+
+"""
+    resolve_bound_to(sys) -> System
+
+Turn `bound_to` parameter metadata into MTK bindings before compilation. For each parameter
+`@parameters p [bound_to = :target]`, inject the binding `p = target` (via
+[`set_mtk_defaults`](@ref)), so that `complete`/`mtkcompile` demotes `p` to an observable while
+`target` stays the parameter. Returns `sys` unchanged if no parameter carries `bound_to`.
+
+Errors if a `bound_to` parameter also has an explicit default (contradictory intent) or if the
+target cannot be resolved in the component. See [`ParameterBoundTo`](@ref).
+"""
+function resolve_bound_to(sys)
+    ps = parameters(sys)
+    pset = Set(unwrap.(ps))
+    defs = initial_conditions(sys)
+    bindings = Pair{Symbol,Any}[]
+    # every symbol that could carry `bound_to` metadata — parameters, states, observed. It is
+    # only meaningful on a parameter (it becomes an MTK binding); anywhere else is a mistake.
+    candidates = Iterators.flatten((ps, unknowns(sys), (eq.lhs for eq in observed(sys))))
+    for v in candidates
+        uv = unwrap(v)
+        target = Symbolics.getmetadata(uv, ParameterBoundTo, nothing)
+        isnothing(target) && continue
+        if uv ∉ pset
+            throw(ArgumentError(
+                "`bound_to` on `$(getname(v))` is invalid: it only applies to parameters, but \
+                 `$(getname(v))` is not a parameter of component `$(getname(sys))`."))
+        end
+        tname = target isa QuoteNode ? target.value : target
+        if haskey(defs, v)
+            throw(ArgumentError(
+                "Parameter `$(getname(v))` has both an explicit default (`$(defs[v])`) and \
+                 `bound_to = $tname`. These are contradictory: a `bound_to` parameter is \
+                 eliminated from the parameters. Remove the default or the binding."))
+        end
+        tsym = try
+            getproperty_symbolic(sys, tname; might_contain_toplevel_ns=false)
+        catch
+            throw(ArgumentError(
+                "`bound_to = $tname` on parameter `$(getname(v))` could not be resolved in \
+                 component `$(getname(sys))`. Available parameters: $(sort(getname.(ps)))."))
+        end
+        push!(bindings, getname(v) => tsym)
+    end
+    isempty(bindings) && return sys
+    NetworkDynamics.set_mtk_defaults(sys, (; bindings...))
+end
+
+"""
     collect_initf(sys)
     collect_guessf(sys)
 
