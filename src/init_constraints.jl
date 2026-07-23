@@ -98,11 +98,15 @@ function Base.show(io::IO, ::MIME"text/plain", @nospecialize(c::InitConstraint))
     _show_recipe(io, c)
 end
 
-# `prettyprint` is the recipe as the user wrote it. Without one, fall back to `repr` minus
-# the trailing unset fields, which are noise.
+# `prettyprint` is the complete authored recipe — a weak `InitFormula`'s header already carries
+# `weak=true` (baked in at construction, see `_formula_macro`/`_build_formula`), so show just
+# prints it. Without one (raw constructor) fall back to `repr`.
 function _show_recipe(io::IO, @nospecialize(c))
     if isnothing(c.prettyprint)
-        print(io, replace(repr(c), r"(, nothing)+\)$" => ")"))
+        # strip trailing default-valued fields so the result stays a valid constructor call:
+        # `nothing` (prettyprint/derived_from) and `weak=false`. A non-default `weak=true` stays,
+        # keeping the preceding `nothing`s so the positional call still lines up.
+        print(io, replace(repr(c), r"(, (nothing|false))+\)$" => ")"))
     else
         print(io, c.prettyprint)
     end
@@ -322,18 +326,19 @@ struct InitFormula{F}
     # set by `normalize` to the untouched user-written formula this one was derived from,
     # `nothing` for user-written formulas themselves. See [`normalize`](@ref).
     derived_from::Union{Nothing,InitFormula}
+    weak::Bool # don't overwrite set defaults
 
-    function InitFormula(f::F, outsym::Vector{Symbol}, sym::Vector{Symbol}, prettyprint::Union{Nothing,String}, derived_from::Union{Nothing,InitFormula}) where F
+    function InitFormula(f::F, outsym::Vector{Symbol}, sym::Vector{Symbol}, prettyprint::Union{Nothing,String}, derived_from::Union{Nothing,InitFormula}, weak::Bool=false) where F
         # Check for self-dependencies (formula depending on its own output)
         self_deps = intersect(sym, outsym)
         if !isempty(self_deps)
             throw(ArgumentError("InitFormula cannot depend on its own output symbols: $self_deps"))
         end
-        new{F}(f, outsym, sym, prettyprint, derived_from)
+        new{F}(f, outsym, sym, prettyprint, derived_from, weak)
     end
 end
-InitFormula(f, outsym, sym) = InitFormula(f, outsym, sym, nothing, nothing)
-InitFormula(f, outsym, sym, prettyprint) = InitFormula(f, outsym, sym, prettyprint, nothing)
+InitFormula(f, outsym, sym; weak::Bool=false) = InitFormula(f, outsym, sym, nothing, nothing, weak)
+InitFormula(f, outsym, sym, prettyprint; weak::Bool=false) = InitFormula(f, outsym, sym, prettyprint, nothing, weak)
 
 dim(c::InitFormula) = length(c.outsym)
 
@@ -433,8 +438,18 @@ is equal to
         out[:Pset] = u[:u_r] * u[:i_r] + u[:u_i] * u[:i_i]
     end
 """
-macro initformula(ex)
-    _formula_macro(InitFormula, ex)
+macro initformula(args...)
+    isempty(args) && throw(ArgumentError("@initformula expects a formula block"))
+    ex = last(args)
+    weak = false
+    for opt in args[1:end-1]
+        if opt isa Expr && opt.head == :(=) && opt.args[1] === :weak
+            weak = opt.args[2]
+        else
+            throw(ArgumentError("@initformula: unexpected option `$opt`, only `weak=true/false` is supported"))
+        end
+    end
+    _formula_macro(InitFormula, ex; weak)
 end
 
 
@@ -480,14 +495,14 @@ In a nutshell: wrap every QuoteNote symbol either in u[:sym] or out[:sym]
 some thinks will break!
 for example: set!(:out, :in) -> set!(u[:out], u[:in])
 =#
-function _formula_macro(type, ex)
+function _formula_macro(type, ex; weak=false)
     if ex isa QuoteNode || ex.head != :block
         ex = Base.remove_linenums!(Expr(:block, ex))
     end
 
-    # capture the macro-form source before the symbols get wrapped into `u[:sym]`/`out[:sym]`
     macroname = type === InitFormula ? "@initformula" : "@guessformula"
-    s = _macro_source_string(macroname, ex)
+    header = (type === InitFormula && weak === true) ? "$macroname weak=true" : macroname
+    s = _macro_source_string(header, ex)
 
     input_syms = Symbol[]    # RHS symbols
     output_syms = Symbol[]   # LHS symbols
@@ -522,11 +537,17 @@ function _formula_macro(type, ex)
 
     body_esc = _escape_all.(body)
 
-    quote
-        $(type)($output_syms, $input_syms, $s) do $(esc(out_var)), $(esc(u))
+    closure = quote
+        function ($(esc(out_var)), $(esc(u)))
             $(body_esc...)
             nothing
         end
+    end
+    # only InitFormula carries `weak`; GuessFormula's constructor has no such kwarg
+    if type === InitFormula
+        :($(type)($closure, $output_syms, $input_syms, $s; weak = $(esc(weak))))
+    else
+        :($(type)($closure, $output_syms, $input_syms, $s))
     end
 end
 
@@ -587,7 +608,16 @@ function topological_sort_formulas(formulas)
 
     if !allunique(all_outputs)
         conflicts = [s for s in unique(all_outputs) if count(==(s), all_outputs) > 1]
-        throw(ArgumentError("Multiple $(type)s set the same symbol(s): $conflicts"))
+        # A weak writer only reaches here with no default on its target (else the pre-DAG filter
+        # dropped it) — so it collides with another *formula*, which weak does not yield to.
+        hint = if any(f -> f isa InitFormula && f.weak && !isdisjoint(f.outsym, conflicts), formulas)
+            "\nOne of the colliding formulas is `weak`: a weak formula yields to an existing \
+             default, not to another formula. Give the target a default (then the weak formula \
+             stands down) or drop one of the writers."
+        else
+            ""
+        end
+        throw(ArgumentError("Multiple $(type)s set the same symbol(s): $conflicts$hint"))
     end
 
     # Build dependency graph using Graphs.jl
@@ -621,6 +651,35 @@ function topological_sort_formulas(formulas)
             rethrow(e)
         end
     end
+end
+
+# Resolve `weak` before the DAG is built: a weak formula whose target already carries a
+# `default` yields and is dropped. Checked on `default` only, never `init` — a weak formula
+# persists its own output as an `init`, so testing `init` here would self-block it on reinit.
+# A single-output drop is the quiet yield (reported only under `verbose`); a multi-output
+# formula with a partial default is refused loudly — weak is all-or-nothing.
+function drop_weak_formulas(formulas, defaults; verbose=false, io=stdout)
+    any(f -> f isa InitFormula && f.weak, formulas) || return formulas
+    kept = empty(formulas)
+    for f in formulas
+        if !f.weak
+            push!(kept, f)
+            continue
+        end
+        blocked = filter(s -> haskey(defaults, s), f.outsym)
+        if isempty(blocked)
+            push!(kept, f)
+        elseif length(f.outsym) == 1
+            s = only(f.outsym)
+            verbose && printstyled(io, " - InitFormula: dropping weak formula for :$s, \
+                                        yields to existing default :$s = $(defaults[s])\n")
+        else
+            @warn "Dropping a weak InitFormula because it would apply only partially: it \
+                   writes $(f.outsym) but $blocked already carry a default. A weak formula is \
+                   all-or-nothing — split it, or drop the conflicting default(s)."
+        end
+    end
+    kept
 end
 
 function apply_init_formulas!(defaults, formulas_unsorted; verbose=false, io=stdout,

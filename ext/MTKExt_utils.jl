@@ -333,33 +333,35 @@ function NetworkDynamics.set_mtk_defaults(sys::System, pairs)
 end
 
 # docstring lives in utils.jl
-function NetworkDynamics.set_initf(sys::System, pairs::Pair...)
+function NetworkDynamics.set_initf(sys::System, pairs::Pair...; weak::Bool=false)
     isempty(pairs) && return sys
-    for (target, _) in pairs
-        u = unwrap(target)
-        vars = get_variables(u)
-        if length(vars) != 1 || !isequal(only(vars), u)
-            throw(ArgumentError("set_initf target $target is not a single variable."))
-        end
-    end
-    existing = SymbolicUtils.getmetadata(sys, NetworkDynamics.SystemInitFormulas, Pair[])
-    combined = vcat(existing, [unwrap(t) => unwrap(e) for (t, e) in pairs])
+    _assert_single_variable_targets("set_initf", pairs)
+    existing = SymbolicUtils.getmetadata(sys, NetworkDynamics.SystemInitFormulas, _sysformula_entries())
+    combined = vcat(existing, [(; target=unwrap(t), expr=unwrap(e), weak) for (t, e) in pairs])
     SymbolicUtils.setmetadata(sys, NetworkDynamics.SystemInitFormulas, combined)
 end
 
 # docstring lives in utils.jl
 function NetworkDynamics.set_guessf(sys::System, pairs::Pair...)
     isempty(pairs) && return sys
+    _assert_single_variable_targets("set_guessf", pairs)
+    existing = SymbolicUtils.getmetadata(sys, NetworkDynamics.SystemGuessFormulas, _sysformula_entries())
+    combined = vcat(existing, [(; target=unwrap(t), expr=unwrap(e), weak=false) for (t, e) in pairs])
+    SymbolicUtils.setmetadata(sys, NetworkDynamics.SystemGuessFormulas, combined)
+end
+
+# system-level init/guess formulas are stored as `(; target, expr, weak)` entries so the weak
+# flag rides alongside the recipe (see `_collect_formula_metadata`).
+_sysformula_entries() = @NamedTuple{target::Any, expr::Any, weak::Bool}[]
+
+function _assert_single_variable_targets(fname, pairs)
     for (target, _) in pairs
         u = unwrap(target)
         vars = get_variables(u)
         if length(vars) != 1 || !isequal(only(vars), u)
-            throw(ArgumentError("set_guessf target $target is not a single variable."))
+            throw(ArgumentError("$fname target $target is not a single variable."))
         end
     end
-    existing = SymbolicUtils.getmetadata(sys, NetworkDynamics.SystemGuessFormulas, Pair[])
-    combined = vcat(existing, [unwrap(t) => unwrap(e) for (t, e) in pairs])
-    SymbolicUtils.setmetadata(sys, NetworkDynamics.SystemGuessFormulas, combined)
 end
 
 """
@@ -453,8 +455,20 @@ struct VariableInitFormula end
 @doc vigformula_docstring
 struct VariableGuessFormula end
 
-Symbolics.option_to_metadata_type(::Val{:initf})  = VariableInitFormula
-Symbolics.option_to_metadata_type(::Val{:guessf}) = VariableGuessFormula
+"""
+    VariableInitFormulaWeak
+
+Metadata type behind the `initf_weak` variable option: `@variables x(t) [initf_weak = <expr>]`
+declares a *weak* [`InitFormula`](@ref) — identical to `initf`, except it yields to a value the
+user already set (it is dropped at init time if `x` carries a `default`). This is the
+variable-level spelling of the `weak=true` keyword on `@initformula`/[`set_initf`](@ref); the
+core API's `weak` kwarg is preferred where it applies.
+"""
+struct VariableInitFormulaWeak end
+
+Symbolics.option_to_metadata_type(::Val{:initf})      = VariableInitFormula
+Symbolics.option_to_metadata_type(::Val{:initf_weak}) = VariableInitFormulaWeak
+Symbolics.option_to_metadata_type(::Val{:guessf})     = VariableGuessFormula
 
 """
     ParameterBoundTo
@@ -526,11 +540,12 @@ end
     collect_initf(sys)
     collect_guessf(sys)
 
-Collect the `initf`/`guessf` variable metadata and the [`set_initf`](@ref)/[`set_guessf`](@ref)
-system metadata of `sys` and all its subsystems into a list of `target => expression` pairs,
-namespaced to the level of `sys`. Deliberately a list, not a dict: a target carrying both a
-variable-level and a system-level recipe must surface as two entries, so `_dedupe_resolved`
-can dedupe them when identical and error/warn when they conflict — never silently prefer one.
+Collect the `initf`/`initf_weak`/`guessf` variable metadata and the
+[`set_initf`](@ref)/[`set_guessf`](@ref) system metadata of `sys` and all its subsystems into a
+list of `(; target, expr, weak)` entries, namespaced to the level of `sys` (`weak` is always
+`false` for guesses). Deliberately a list, not a dict: a target carrying both a variable-level
+and a system-level recipe must surface as two entries, so `_dedupe_resolved` can dedupe them
+when identical and error/warn when they conflict — never silently prefer one.
 
 Must be called on the **hierarchical** (pre-flattening) system: `renamespace` renames a
 symbol but does not descend into the expressions stored in its metadata, so the formula of a
@@ -541,11 +556,13 @@ the same strategy MTK's own `bindings`/`guesses` accessors use. `set_initf`/`set
 are written in the local names of the system they were attached to, so the same recursion
 namespaces them correctly too.
 """
-collect_initf(sys)  = _collect_formula_metadata(sys, VariableInitFormula,  NetworkDynamics.SystemInitFormulas)
+# `weak_var_type` is the metadata type whose presence marks a *weak* formula (`initf_weak`);
+# `nothing` for guesses, which have no weak variant.
+collect_initf(sys)  = _collect_formula_metadata(sys, VariableInitFormula,  NetworkDynamics.SystemInitFormulas;  weak_var_type=VariableInitFormulaWeak)
 collect_guessf(sys) = _collect_formula_metadata(sys, VariableGuessFormula, NetworkDynamics.SystemGuessFormulas)
 
-function _collect_formula_metadata(sys, VarMetaType, SysMetaKey)
-    pairs = Pair{ST,Any}[]
+function _collect_formula_metadata(sys, VarMetaType, SysMetaKey; weak_var_type=nothing)
+    entries = @NamedTuple{target::Any, expr::Any, weak::Bool}[]
     # a subsystem variable referenced in this level's equations shows up in this level's
     # unknowns too, still carrying its metadata — but with the expression in the *subsystem's*
     # local names. Only the recursion below sees it in the right namespace, so it must be
@@ -559,26 +576,31 @@ function _collect_formula_metadata(sys, VarMetaType, SysMetaKey)
     for v in vcat(ModelingToolkitBase.get_unknowns(sys), ModelingToolkitBase.get_ps(sys))
         u = unwrap(v)
         u ∈ subvars && continue
-        SymbolicUtils.hasmetadata(u, VarMetaType) || continue
-        push!(pairs, u => unwrap(SymbolicUtils.getmetadata(u, VarMetaType)))
-    end
-    for (target, expr) in SymbolicUtils.getmetadata(sys, SysMetaKey, Pair[])
-        push!(pairs, unwrap(target) => unwrap(expr))
-    end
-    for subsys in ModelingToolkitBase.get_systems(sys)
-        for (target, expr) in _collect_formula_metadata(subsys, VarMetaType, SysMetaKey)
-            push!(pairs, ModelingToolkitBase.namespace_expr(target, subsys) =>
-                         ModelingToolkitBase.namespace_expr(expr, subsys))
+        if SymbolicUtils.hasmetadata(u, VarMetaType)
+            push!(entries, (; target=u, expr=unwrap(SymbolicUtils.getmetadata(u, VarMetaType)), weak=false))
+        end
+        if !isnothing(weak_var_type) && SymbolicUtils.hasmetadata(u, weak_var_type)
+            push!(entries, (; target=u, expr=unwrap(SymbolicUtils.getmetadata(u, weak_var_type)), weak=true))
         end
     end
-    pairs
+    for e in SymbolicUtils.getmetadata(sys, SysMetaKey, _sysformula_entries())
+        push!(entries, (; target=unwrap(e.target), expr=unwrap(e.expr), weak=e.weak))
+    end
+    for subsys in ModelingToolkitBase.get_systems(sys)
+        for e in _collect_formula_metadata(subsys, VarMetaType, SysMetaKey; weak_var_type)
+            push!(entries, (; target=ModelingToolkitBase.namespace_expr(e.target, subsys),
+                              expr=ModelingToolkitBase.namespace_expr(e.expr, subsys),
+                              weak=e.weak))
+        end
+    end
+    entries
 end
 
 """
     initf_to_initformulas(pairs)
     guessf_to_guessformulas(pairs)
 
-Turn the `target => expression` pairs collected by
+Turn the `(; target, expr, weak)` entries collected by
 [`collect_initf`](@ref)/[`collect_guessf`](@ref) into InitFormulas/GuessFormulas. Targets may
 be unknowns, parameters, inputs — or observables, in which case the formula *pins* the
 observable as an init-time dataflow node.
@@ -587,15 +609,15 @@ An InitFormula is a constraint (not a hint), so conflicting definitions for the 
 target are a genuine over-determination and raise an error. A GuessFormula is only a
 convergence hint, so conflicting definitions are deduped with a warning, never fatal.
 """
-initf_to_initformulas(pairs)   = _metadata_to_formulas(pairs, InitFormula;  fail=:error, kind="initf")
-guessf_to_guessformulas(pairs) = _metadata_to_formulas(pairs, GuessFormula; fail=:warn,  kind="guessf")
+initf_to_initformulas(entries)   = _metadata_to_formulas(entries, InitFormula;  fail=:error, kind="initf")
+guessf_to_guessformulas(entries) = _metadata_to_formulas(entries, GuessFormula; fail=:warn,  kind="guessf")
 
-function _metadata_to_formulas(pairs, ::Type{FT}; fail::Symbol, kind::String) where {FT}
-    (isnothing(pairs) || isempty(pairs)) && return nothing
+function _metadata_to_formulas(entries, ::Type{FT}; fail::Symbol, kind::String) where {FT}
+    (isnothing(entries) || isempty(entries)) && return nothing
 
     resolved = Any[]
-    for (target, expr) in pairs
-        r = _resolve_formula(target, expr; kind)
+    for e in entries
+        r = _resolve_formula(e.target, e.expr; kind, weak=e.weak)
         r === nothing && continue
         push!(resolved, r)
     end
@@ -657,7 +679,7 @@ end
 # inputs keep the names the user wrote, so classification and observable expansion happen at
 # init time in `normalize` — one resolution path, shared with hand-attached formulas.
 # Existence of the raw names is checked at attach time (`add_initformula_lenient!` etc.).
-function _resolve_formula(lhs_sym, rhs_expr; kind)
+function _resolve_formula(lhs_sym, rhs_expr; kind, weak::Bool=false)
     lhs_vars = get_variables(lhs_sym)
     if length(lhs_vars) != 1 || !isequal(only(lhs_vars), unwrap(lhs_sym))
         @warn "$kind target $lhs_sym is not a single variable. Skip."
@@ -674,7 +696,7 @@ function _resolve_formula(lhs_sym, rhs_expr; kind)
         return nothing
     end
 
-    (; src=lhs_sym, target, rhs=unwrap(rhs_expr), input_symbolic, input_names)
+    (; src=lhs_sym, target, rhs=unwrap(rhs_expr), input_symbolic, input_names, weak)
 end
 
 """
@@ -725,12 +747,16 @@ function _dedupe_resolved(resolved; fail::Symbol, kind)
     end
     kept = Any[]
     for (target, group) in by_target
-        chosen = first(sort(group; by = g -> repr(g.rhs)))
-        push!(kept, chosen)
-        length(group) == 1 && continue
+        # sort strong-first (`weak=false` before `weak=true`), then by rhs: among identical
+        # duplicates a strong writer wins
+        chosen = first(sort(group; by = g -> (g.weak, repr(g.rhs))))
+        length(group) == 1 && (push!(kept, chosen); continue)
         if all(g -> isequal(g.rhs, chosen.rhs), group)
+            push!(kept, chosen)
             @debug "$kind: $(length(group)) identical definitions for $target; keeping one."
+            continue
         else
+            push!(kept, chosen)
             msg = "$kind: conflicting definitions target $target (differing right-hand \
                    sides). Keeping $(repr(chosen.rhs)); dropping the rest."
             fail === :error ? error(msg) : @warn msg
@@ -755,8 +781,12 @@ function _build_formula(::Type{FT}, r) where {FT}
     # `repr` prints a numeric coefficient times a variable as juxtaposition (`3x`); with the
     # variable now a `:sym` that would read as a range (`3:x`), so restore the explicit `*`.
     rhsstring = replace(rhsstring, r"(?<=[0-9.]):(?=[A-Za-z_])" => " * :")
-    prettyprint = "$macroname begin\n    $(repr(r.target)) = $(rhsstring)\nend"
-    FT(f, [r.target], r.input_names, prettyprint)
+    # bake the (resolved, post-dedupe) `weak` flag straight into the header so `prettyprint`
+    # is the complete copy-pasteable recipe — see `_show_recipe`. guessf has no weak variant.
+    header = (FT === InitFormula && r.weak) ? "$macroname weak=true" : macroname
+    prettyprint = "$header begin\n    $(repr(r.target)) = $(rhsstring)\nend"
+    FT === InitFormula ? FT(f, [r.target], r.input_names, prettyprint; weak=r.weak) :
+                         FT(f, [r.target], r.input_names, prettyprint)
 end
 
 """

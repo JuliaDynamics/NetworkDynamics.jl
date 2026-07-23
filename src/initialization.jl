@@ -562,6 +562,13 @@ function initialize_component(cf;
     metadata_initformulas = has_initformula(cf) ? get_initformulas(cf) : nothing
     combined_initformulas = collect_formulas(metadata_initformulas, additional_initformula)
 
+    # Drop weak formulas that yield to an existing default *before* pin computation, normalize,
+    # or the DAG see the set — the decision is static-metadata-only. See [`drop_weak_formulas`](@ref).
+    if !isnothing(combined_initformulas)
+        combined_initformulas = drop_weak_formulas(combined_initformulas, defaults; verbose, io)
+        isempty(combined_initformulas) && (combined_initformulas = nothing)
+    end
+
     # The pin-set is a property of the complete formula set and must be known before any
     # formula is normalized: readers stop their input expansion at every observable some
     # other formula of this very init writes. Init formulas run first and must not depend

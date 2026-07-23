@@ -436,14 +436,16 @@ function busbar_sys(; name)
 end
 
 "A bus vertex: a `busbar` plus an injector whose per-unit base `S_b` is `bound_to` the busbar's,
-so it is eliminated from `psym` and can never desync from the bus base."
+so it is eliminated from `psym` and can never desync from the bus base. The injector also carries
+its own rating `Sn` which *weakly* defaults to the busbar base (`initf_weak`): it follows the base
+unless the user pins it, the (A) `weak` use case — unlike `S_b`, `Sn` stays a live parameter."
 function pu_bus(; name)
     @named busbar = busbar_sys()
     @variables u(t)=1.0 i(t) o(t)
     @parameters P=1.0
     @parameters S_b [bound_to = :busbar₊S_b]
-    # (A) future: an injector rating `Sn` that weakly defaults to `busbar₊S_b` but stays settable
-    eqs = [Dt(u) ~ -u + i + P / S_b, o ~ u]
+    @parameters Sn [initf_weak = S_b]
+    eqs = [Dt(u) ~ -u + i + P / S_b - u * Sn / busbar.S_b, o ~ u]
     System(eqs, t; name, systems=[busbar])
 end
 

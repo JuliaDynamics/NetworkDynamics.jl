@@ -24,7 +24,7 @@ using SciMLBase: VectorContinuousCallback, CallbackSet, DiscreteCallback
 using DiffEqCallbacks: DiffEqCallbacks
 using DiffEqBase: BrownFullBasicInit
 using MacroTools: postwalk, @capture
-using ConstructionBase: ConstructionBase
+using ConstructionBase: ConstructionBase, setproperties
 using Accessors: Accessors, @set
 using ADTypes: AutoForwardDiff, AutoFiniteDiff, AutoReverseDiff
 using DifferentiationInterface: DifferentiationInterface as DI
