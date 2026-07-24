@@ -89,7 +89,7 @@ include("callbacks.jl")
 export @initconstraint, InitConstraint
 export @initformula, InitFormula
 export @guessformula, GuessFormula
-include("init_constraints.jl")
+include("init_formulas.jl")
 
 include("alias_normalization.jl")
 
