@@ -853,8 +853,9 @@ function _build_formula(::Type{FT}, r) where {FT}
     # is the complete copy-pasteable recipe — see `_show_recipe`. guessf has no weak variant.
     header = (FT === InitFormula && r.weak) ? "$macroname weak=true" : macroname
     prettyprint = "$header begin\n    $(repr(r.target)) = $(rhsstring)\nend"
-    FT === InitFormula ? FT(f, [r.target], r.input_names, prettyprint; weak=r.weak) :
-                         FT(f, [r.target], r.input_names, prettyprint)
+    label = "$(r.target) = $(replace(repr(r.rhs), r"\(t\)" => ""))"
+    FT === InitFormula ? FT(f, [r.target], r.input_names, prettyprint; weak=r.weak, label) :
+                         FT(f, [r.target], r.input_names, prettyprint; label)
 end
 
 """

@@ -1561,3 +1561,90 @@ end
     s = initialize_componentwise(nw2; verbose=false, subverbose=false)
     @test all(==(1.0), uflat(s))
 end
+
+@testset "verbose init showcase (formula `(via …)` labels)" begin
+    # A single-vertex, end-to-end tour of the verbose init log — meant to be *read* as much as
+    # asserted. It deliberately exercises every formula path so the `(via <label>)` provenance
+    # column (and its absence on multi-line formulas) can be eyeballed in one run:
+    #   • strong single-line InitFormula   -> auto label `Pref = (Pset * Sn) / S_b`
+    #   • strong multi-line  InitFormula   -> no label, rows fall back to bare `:Ta`/`:Tb`
+    #   • weak InitFormula that fires       -> auto label `Kd = S_b`
+    #   • weak InitFormula dropped (default)-> drop line names the label `Sn = S_b`
+    #   • weak InitFormula dropped (strong) -> drop line names the label `Pref = S_b`
+    #   • a hand-built `default_from` copy   -> explicit label `default_from(:src, :V_ref)`
+    #   • GuessFormulas incl. one shadowed by a fixed default (`(no effect, fixed at …)`)
+    #   • three genuinely free states + the output -> a real NonlinearLeastSquares solve
+    # The dynamics are a trivial diagonal relaxation `xᵢ' = pᵢ - xᵢ`, so the fixpoint is known
+    # (x→Pset, y→Qset, z→Pref, P_out→x+y) and the solve is guaranteed to converge to residual 0.
+    function _showcase_dev()
+        f! = function (du, u, in, p, t)
+            Pset, Qset, S_b, Sn, Pref, Ta, Tb, Kd, V_base, aux = p
+            du[1] = Pset - u[1]
+            du[2] = Qset - u[2]
+            du[3] = Pref - u[3]
+            nothing
+        end
+        g! = function (out, u, in, p, t)   # distinct output symbol so it never aliases a state
+            out[1] = u[1] + u[2]
+            nothing
+        end
+        # every no-default param (Pref/Ta/Tb/Kd/V_base) is supplied by a formula below, so the
+        # only free unknowns are the states + output. The unused Ta/Tb/Kd/V_base/aux would trip
+        # the component checker, hence the toggle (idiomatic for base-parameter-carrying models).
+        old = NetworkDynamics.CHECK_COMPONENT[]; NetworkDynamics.CHECK_COMPONENT[] = false
+        vm = VertexModel(; f=f!, g=g!, outsym=[:P_out], sym=[:x, :y, :z],
+            psym=[:Pset=>1.0, :Qset=>0.5, :S_b=>100.0, :Sn=>200.0,
+                  :Pref, :Ta, :Tb, :Kd, :V_base, :aux=>0.0],
+            insym=[:i=>0.0], name=:showcase)
+        NetworkDynamics.CHECK_COMPONENT[] = old
+        for s in (:x, :y, :z, :P_out)
+            set_guess!(vm, s, 0.0)
+        end
+        vm
+    end
+    vm = _showcase_dev()
+
+    # A hand-built stand-in for what `resolve_default_from` bakes at the network level: a weak,
+    # single-output InitFormula carrying an explicit `default_from(...)` label. Building it here
+    # (rather than via a full Network) keeps the showcase to a single component.
+    V_ref_value = 1.05
+    fake_default_from = InitFormula(
+        (out, u) -> (out[:V_base] = V_ref_value; nothing),
+        [:V_base], Symbol[],
+        "default_from: :V_base = $(V_ref_value)  (weak copy from src V_ref)";
+        weak=true, label="default_from(:src, :V_ref)")
+
+    init_formulas = [
+        @initformula(:Pref = :Pset * :Sn / :S_b),        # strong, single-line -> auto label
+        @initformula(begin :Ta = :S_b; :Tb = :Sn end),   # strong, multi-line  -> no label
+        @initformula(weak=true, :Kd = :S_b),             # weak, fires (Kd has no default)
+        @initformula(weak=true, :Sn = :S_b),             # weak, drops (Sn already defaulted)
+        @initformula(weak=true, :Pref = :S_b),           # weak, drops (strong co-writer wins)
+        fake_default_from,                               # weak, fires -> default_from label
+    ]
+    guess_formulas = [
+        @guessformula(:x = :Pset),   # improves the guess for free state x
+        @guessformula(:y = :Qset),   # improves the guess for free state y
+        @guessformula(:Sn = :S_b),   # target is a fixed default -> "(no effect, fixed at …)"
+    ]
+
+    println("\n" * repeat("=", 78))
+    println("verbose init showcase — read the `(via …)` column:")
+    println(repeat("=", 78))
+    state = initialize_component(vm;
+        additional_initformula = init_formulas,
+        additional_guessformula = guess_formulas,
+        verbose = true)
+    println(repeat("=", 78) * "\n")
+
+    # light sanity checks — the fixpoint is analytically known
+    @test state[:Pref]   ≈ 2.0      # strong: Pset*Sn/S_b = 1*200/100
+    @test state[:Ta]     ≈ 100.0    # multi-line strong
+    @test state[:Kd]     ≈ 100.0    # weak fired (= S_b)
+    @test state[:V_base] ≈ V_ref_value  # default_from copy fired
+    @test state[:Sn]     ≈ 200.0    # weak yielded to the existing default
+    @test state[:x]      ≈ 1.0      # solved free state
+    @test state[:y]      ≈ 0.5
+    @test state[:z]      ≈ 2.0
+    @test state[:P_out]  ≈ 1.5      # solved output = x + y
+end

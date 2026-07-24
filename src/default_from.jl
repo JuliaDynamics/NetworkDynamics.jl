@@ -74,9 +74,8 @@ function _default_from_formulas(nw, c, cidx, is_edge, default_overrides; verbose
         end
 
         # Bake the copied constant into a weak single-output InitFormula. The setter is built by
-        # `_default_from_setter` so the closure captures `p`/`val` by value.
-        pp = "default_from: :$p = $(str_significant(val; sigdigits=5))  (weak copy from $dir $srcsym)"
-        push!(formulas, InitFormula(_default_from_setter(p, val), [p], Symbol[], pp; weak=true))
+        label = "default_from($(repr(dir)), $(repr(srcsym)))"
+        push!(formulas, InitFormula(_default_from_setter(p, val), [p], Symbol[]; weak=true, label))
     end
     formulas
 end
