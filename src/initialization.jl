@@ -569,18 +569,14 @@ function initialize_component(cf;
     # both (init pins through the defaults-before-guesses lookup, guess pins from guesses).
     pinned = pinned_obssyms(combined_initformulas, cf)
 
-    if !isnothing(combined_initformulas)
-        combined_initformulas = [normalize(f, am, cf; t, pinned) for f in combined_initformulas]
-        apply_init_formulas!(defaults, combined_initformulas; verbose, io, pinned)
-    end
+    # seed `defaults` (default-only here) with the resolved formula outputs; `pinned` is reused by
+    # the guess block below, so it stays computed in this scope and is threaded in.
+    extend_knowns_by_formulas!(defaults, cf, combined_initformulas; am, t, pinned, verbose, io)
 
     metadata_guessformulas = has_guessformula(cf) ? get_guessformulas(cf) : nothing
     combined_guessformulas = collect_formulas(metadata_guessformulas, additional_guessformula)
-    if !isnothing(combined_guessformulas)
-        guess_pinned = pinned ∪ pinned_obssyms(combined_guessformulas, cf)
-        combined_guessformulas = [normalize(f, am, cf; t, pinned=guess_pinned) for f in combined_guessformulas]
-        apply_guess_formulas!(guesses, defaults, combined_guessformulas; verbose, io, pinned=guess_pinned)
-    end
+    # guess frontier = init pins (reused from above) ∪ guess pins; see `extend_guesses_by_formulas!`
+    extend_guesses_by_formulas!(guesses, defaults, cf, combined_guessformulas; am, t, init_pinned=pinned, verbose, io)
 
     metadata_constraint = has_initconstraint(cf) ? get_initconstraints(cf) : nothing
     combined_constraint = merge_initconstraints(metadata_constraint, additional_initconstraint)
@@ -826,10 +822,16 @@ function initialize_component!(cf;
         delete_init!(cf, s)
     end
 
-    # write back defaults/guesses if they've changed due to formulas
+    # Write back only formula outputs that *overrode* a pre-existing default. Init formulas
+    # are strong and may overpower a default, and such an override must persist as a default.
+    # Fresh formula outputs (no prior default) are deliberately NOT written here: they are
+    # already in `init_state` (a formula output is fixed, so it survives the solve untouched)
+    # and the init writeback below turns them into `init` metadata. This means (a) formulas
+    # never inflate the set of defaults, and (b) a future "weak" formula that only writes when
+    # no default exists will not self-lock by persisting its own output as a default.
     for (sym, val) in _final_defaults[]
-        if !has_default(cf, sym) || get_default(cf, sym) != val
-           set_default!(cf, sym, val)
+        if has_default(cf, sym) && get_default(cf, sym) != val
+            set_default!(cf, sym, val)
         end
     end
     for (sym, val) in _final_guesses[]
@@ -1231,6 +1233,11 @@ function _initialize_componentwise(
     # dict might be provided as VIndex(:foo) so we need to resolve comp names
     subalg = _resolve_subargument_dict(nw, subalg)
     subsolve_kwargs = _resolve_subargument_dict(nw, subsolve_kwargs)
+
+    # resolve `default_from` metadata into baked weak InitFormulas, merged into the per-component
+    # additional_initformula map — a pre-pass so it runs before any init task (order-independent,
+    # reads only params/defaults). No-op unless some component declares `default_from`.
+    additional_initformula = resolve_default_from(nw, additional_initformula, default_overrides; verbose)
 
     # to improve type stability, we split the overrides into v/e parts only once
     # TODO: might be solve by EIndex/VIndex ADT

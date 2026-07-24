@@ -88,6 +88,7 @@ function VertexModel(
     end
 
     warn_missing_features(sys)
+    sys = resolve_bound_to(sys)
     inputs = inputs isa AbstractVector ? inputs : [inputs]
     outputs = outputs isa AbstractVector ? outputs : [outputs]
 
@@ -216,6 +217,7 @@ function EdgeModel(
     end
 
     warn_missing_features(sys)
+    sys = resolve_bound_to(sys)
     srcin = srcin isa AbstractVector ? srcin : [srcin]
     dstin = dstin isa AbstractVector ? dstin : [dstin]
 
@@ -348,6 +350,12 @@ function _get_metadata(sys, name, alldefaults, allguesses)
     end
     if ModelingToolkitBase.hasdescription(sym)
         md[:description] = ModelingToolkitBase.getdescription(sym)
+    end
+
+    default_from = Symbolics.getmetadata(unwrap(sym), ParameterDefaultFrom, nothing)
+    if !isnothing(default_from)
+        # arrives as a `(:src, :busbar₊S_b)` tuple of QuoteNodes from @mtkmodel/@component
+        md[:default_from] = normalize_default_from(default_from)
     end
     md
 end

@@ -24,7 +24,7 @@ using SciMLBase: VectorContinuousCallback, CallbackSet, DiscreteCallback
 using DiffEqCallbacks: DiffEqCallbacks
 using DiffEqBase: BrownFullBasicInit
 using MacroTools: postwalk, @capture
-using ConstructionBase: ConstructionBase
+using ConstructionBase: ConstructionBase, setproperties
 using Accessors: Accessors, @set
 using ADTypes: AutoForwardDiff, AutoFiniteDiff, AutoReverseDiff
 using DifferentiationInterface: DifferentiationInterface as DI
@@ -89,7 +89,7 @@ include("callbacks.jl")
 export @initconstraint, InitConstraint
 export @initformula, InitFormula
 export @guessformula, GuessFormula
-include("init_constraints.jl")
+include("init_formulas.jl")
 
 include("alias_normalization.jl")
 
@@ -111,6 +111,7 @@ export has_default, get_default, set_default!, delete_default!, set_defaults!, s
 export has_guess, get_guess, set_guess!, delete_guess!, strip_guesses!
 export has_init, get_init, set_init!, delete_init!, strip_inits!
 export has_bounds, get_bounds, set_bounds!, delete_bounds!, strip_bounds!
+export has_default_from, get_default_from, set_default_from!, delete_default_from!, strip_default_from!
 export has_graphelement, get_graphelement, set_graphelement!
 export get_initial_state, dump_initial_state, dump_state
 export has_callback, get_callbacks, set_callback!, add_callback!, delete_callbacks!
@@ -140,6 +141,8 @@ include("doctor.jl")
 # loaded after all other files
 export LoopbackConnection
 include("post_utils.jl")
+
+include("default_from.jl")
 
 export describe_vertices, describe_edges, get_jac_prototype
 function describe_vertices end

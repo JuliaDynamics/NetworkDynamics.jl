@@ -1,5 +1,30 @@
 # NetworkDynamics Release Notes
 
+## v1.1.0 Changelog
+
+Cross-component initialization metadata for per-unit / base-value handling: three separate
+features that resolve at three different times.
+
+### Added
+
+- **Weak `InitFormula`s**: a formula declared `weak` (kwarg `weak=true`, macro
+  `@initformula weak=true …`, `set_initf(…; weak=true)`, or the `[initf_weak = <expr>]`
+  variable option) *yields* to a value the user already set — it is dropped at init when its
+  single target already carries a `default` or is written by a strong formula. This is the
+  right precedence for defaulting (a value that follows another *unless* pinned), the inverse
+  of a plain `initf`, which always overwrites.
+- **`bound_to` parameter metadata**: `@parameters S_b [bound_to = :busbar₊S_b]` declares a
+  parameter as a structural alias of another symbol in the *same* component. It is realized as
+  a real MTK binding before compilation, so the bound parameter leaves `psym` and reappears as
+  an observable of its target — one true parameter for the quantity, nothing can desync. An
+  explicit default on a bound parameter, or an unresolvable target, is an error.
+- **`default_from` parameter metadata**: `@parameters S_b [default_from = (:src, :busbar₊S_b)]`
+  weakly copies a parameter's *default* from a neighboring component — the src/dst vertex of an
+  edge (`:src`/`:dst`), or the hub an injector node hangs off (`:hub`). The value is resolved at
+  network init and baked into a weak `InitFormula`, so it follows the source but stays
+  independently settable (contrast `bound_to`, which eliminates the parameter). Unlike
+  `bound_to`, the source lives in a *different* component, resolvable only once the graph exists.
+
 ## v1.0.0 Changelog
 
 Three themes: ModelingToolkit v11 support (which drops the AGPL dependency), a

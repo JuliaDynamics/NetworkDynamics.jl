@@ -333,33 +333,35 @@ function NetworkDynamics.set_mtk_defaults(sys::System, pairs)
 end
 
 # docstring lives in utils.jl
-function NetworkDynamics.set_initf(sys::System, pairs::Pair...)
+function NetworkDynamics.set_initf(sys::System, pairs::Pair...; weak::Bool=false)
     isempty(pairs) && return sys
-    for (target, _) in pairs
-        u = unwrap(target)
-        vars = get_variables(u)
-        if length(vars) != 1 || !isequal(only(vars), u)
-            throw(ArgumentError("set_initf target $target is not a single variable."))
-        end
-    end
-    existing = SymbolicUtils.getmetadata(sys, NetworkDynamics.SystemInitFormulas, Pair[])
-    combined = vcat(existing, [unwrap(t) => unwrap(e) for (t, e) in pairs])
+    _assert_single_variable_targets("set_initf", pairs)
+    existing = SymbolicUtils.getmetadata(sys, NetworkDynamics.SystemInitFormulas, _sysformula_entries())
+    combined = vcat(existing, [(; target=unwrap(t), expr=unwrap(e), weak) for (t, e) in pairs])
     SymbolicUtils.setmetadata(sys, NetworkDynamics.SystemInitFormulas, combined)
 end
 
 # docstring lives in utils.jl
 function NetworkDynamics.set_guessf(sys::System, pairs::Pair...)
     isempty(pairs) && return sys
+    _assert_single_variable_targets("set_guessf", pairs)
+    existing = SymbolicUtils.getmetadata(sys, NetworkDynamics.SystemGuessFormulas, _sysformula_entries())
+    combined = vcat(existing, [(; target=unwrap(t), expr=unwrap(e), weak=false) for (t, e) in pairs])
+    SymbolicUtils.setmetadata(sys, NetworkDynamics.SystemGuessFormulas, combined)
+end
+
+# system-level init/guess formulas are stored as `(; target, expr, weak)` entries so the weak
+# flag rides alongside the recipe (see `_collect_formula_metadata`).
+_sysformula_entries() = @NamedTuple{target::Any, expr::Any, weak::Bool}[]
+
+function _assert_single_variable_targets(fname, pairs)
     for (target, _) in pairs
         u = unwrap(target)
         vars = get_variables(u)
         if length(vars) != 1 || !isequal(only(vars), u)
-            throw(ArgumentError("set_guessf target $target is not a single variable."))
+            throw(ArgumentError("$fname target $target is not a single variable."))
         end
     end
-    existing = SymbolicUtils.getmetadata(sys, NetworkDynamics.SystemGuessFormulas, Pair[])
-    combined = vcat(existing, [unwrap(t) => unwrap(e) for (t, e) in pairs])
-    SymbolicUtils.setmetadata(sys, NetworkDynamics.SystemGuessFormulas, combined)
 end
 
 """
@@ -453,18 +455,132 @@ struct VariableInitFormula end
 @doc vigformula_docstring
 struct VariableGuessFormula end
 
-Symbolics.option_to_metadata_type(::Val{:initf})  = VariableInitFormula
-Symbolics.option_to_metadata_type(::Val{:guessf}) = VariableGuessFormula
+"""
+    VariableInitFormulaWeak
+
+Metadata type behind the `initf_weak` variable option: `@variables x(t) [initf_weak = <expr>]`
+declares a *weak* [`InitFormula`](@ref) — identical to `initf`, except it yields to a value the
+user already set (it is dropped at init time if `x` carries a `default`). This is the
+variable-level spelling of the `weak=true` keyword on `@initformula`/[`set_initf`](@ref); the
+core API's `weak` kwarg is preferred where it applies.
+"""
+struct VariableInitFormulaWeak end
+
+Symbolics.option_to_metadata_type(::Val{:initf})      = VariableInitFormula
+Symbolics.option_to_metadata_type(::Val{:initf_weak}) = VariableInitFormulaWeak
+Symbolics.option_to_metadata_type(::Val{:guessf})     = VariableGuessFormula
+
+"""
+    ParameterBoundTo
+
+Symbolic metadata type backing `@parameters S_b [bound_to = :busbar₊S_b]`. Declares that a
+parameter is a structural alias of another symbol in the *same* component. Realized as a real
+MTK binding in the `VertexModel`/`EdgeModel` constructor, before compilation (see
+[`resolve_bound_to`](@ref)): the bound parameter is demoted to an observable of its target and
+leaves `psym`, so there is exactly one true parameter for the quantity.
+
+The metadata value is the target's full (namespaced with `₊`) symbol name. `bound_to` is
+component-local — the structural binding can only be injected before compilation, so the target
+must live in the same component; cross-component defaulting is `default_from` instead. An
+explicit default on a `bound_to` parameter, or an unresolvable target, is an error.
+"""
+struct ParameterBoundTo end
+
+Symbolics.option_to_metadata_type(::Val{:bound_to}) = ParameterBoundTo
+
+"""
+    ParameterDefaultFrom
+
+Symbolic metadata type backing `@parameters S_b [default_from = (:src, :busbar₊S_b)]`. Declares
+that a parameter takes its *default* value by copying it from a parameter of a *neighboring*
+component. Resolved as a pre-pass at network initialization time (see `resolve_default_from`) by
+baking the copied value into a *weak* [`InitFormula`](@ref), so the copy yields to a user-set
+default and stays independently settable (unlike [`ParameterBoundTo`](@ref), which eliminates the
+parameter structurally).
+
+The metadata value is a `(scope, srcsym)` tuple, where `scope` is one of
+
+  - `:src` / `:dst` — a parameter of the src/dst vertex of an edge, and
+  - `:hub` — a parameter of the hub vertex an injector node is attached to via a
+    `LoopbackConnection`.
+
+`srcsym` is the *full* (namespaced with `₊`) parameter name, exactly as it appears in the source
+component's `psym`. `default_from` is always cross-component; there is no same-component spelling
+(use [`ParameterBoundTo`](@ref) for that).
+"""
+struct ParameterDefaultFrom end
+
+Symbolics.option_to_metadata_type(::Val{:default_from}) = ParameterDefaultFrom
+
+# Normalize raw `default_from` metadata as it arrives from `@mtkmodel`/`@component`, where
+# `(:src, :sym)` is stored as a tuple of QuoteNodes. `default_from` is only ever cross-component,
+# so the top-level value must be a `(scope, srcsym)` tuple — a bare symbol is rejected.
+normalize_default_from(x::Tuple) = map(_unquote_sym, x)
+normalize_default_from(x) = throw(ArgumentError(
+    "default_from must be a `(scope, srcsym)` tuple with scope ∈ (:src, :dst, :hub), got \
+     $(repr(x)). `default_from` is always cross-component — use `bound_to` for a same-component \
+     alias."))
+_unquote_sym(x::QuoteNode) = x.value
+_unquote_sym(x::Symbol) = x
+
+"""
+    resolve_bound_to(sys) -> System
+
+Turn `bound_to` parameter metadata into MTK bindings before compilation. For each parameter
+`@parameters p [bound_to = :target]`, inject the binding `p = target` (via
+[`set_mtk_defaults`](@ref)), so that `complete`/`mtkcompile` demotes `p` to an observable while
+`target` stays the parameter. Returns `sys` unchanged if no parameter carries `bound_to`.
+
+Errors if a `bound_to` parameter also has an explicit default (contradictory intent) or if the
+target cannot be resolved in the component. See [`ParameterBoundTo`](@ref).
+"""
+function resolve_bound_to(sys)
+    ps = parameters(sys)
+    pset = Set(unwrap.(ps))
+    defs = initial_conditions(sys)
+    bindings = Pair{Symbol,Any}[]
+    # every symbol that could carry `bound_to` metadata — parameters, states, observed. It is
+    # only meaningful on a parameter (it becomes an MTK binding); anywhere else is a mistake.
+    candidates = Iterators.flatten((ps, unknowns(sys), (eq.lhs for eq in observed(sys))))
+    for v in candidates
+        uv = unwrap(v)
+        target = Symbolics.getmetadata(uv, ParameterBoundTo, nothing)
+        isnothing(target) && continue
+        if uv ∉ pset
+            throw(ArgumentError(
+                "`bound_to` on `$(getname(v))` is invalid: it only applies to parameters, but \
+                 `$(getname(v))` is not a parameter of component `$(getname(sys))`."))
+        end
+        tname = target isa QuoteNode ? target.value : target
+        if haskey(defs, v)
+            throw(ArgumentError(
+                "Parameter `$(getname(v))` has both an explicit default (`$(defs[v])`) and \
+                 `bound_to = $tname`. These are contradictory: a `bound_to` parameter is \
+                 eliminated from the parameters. Remove the default or the binding."))
+        end
+        tsym = try
+            getproperty_symbolic(sys, tname; might_contain_toplevel_ns=false)
+        catch
+            throw(ArgumentError(
+                "`bound_to = $tname` on parameter `$(getname(v))` could not be resolved in \
+                 component `$(getname(sys))`. Available parameters: $(sort(getname.(ps)))."))
+        end
+        push!(bindings, getname(v) => tsym)
+    end
+    isempty(bindings) && return sys
+    NetworkDynamics.set_mtk_defaults(sys, (; bindings...))
+end
 
 """
     collect_initf(sys)
     collect_guessf(sys)
 
-Collect the `initf`/`guessf` variable metadata and the [`set_initf`](@ref)/[`set_guessf`](@ref)
-system metadata of `sys` and all its subsystems into a list of `target => expression` pairs,
-namespaced to the level of `sys`. Deliberately a list, not a dict: a target carrying both a
-variable-level and a system-level recipe must surface as two entries, so `_dedupe_resolved`
-can dedupe them when identical and error/warn when they conflict — never silently prefer one.
+Collect the `initf`/`initf_weak`/`guessf` variable metadata and the
+[`set_initf`](@ref)/[`set_guessf`](@ref) system metadata of `sys` and all its subsystems into a
+list of `(; target, expr, weak)` entries, namespaced to the level of `sys` (`weak` is always
+`false` for guesses). Deliberately a list, not a dict: a target carrying both a variable-level
+and a system-level recipe must surface as two entries, so `_dedupe_resolved` can dedupe them
+when identical and error/warn when they conflict — never silently prefer one.
 
 Must be called on the **hierarchical** (pre-flattening) system: `renamespace` renames a
 symbol but does not descend into the expressions stored in its metadata, so the formula of a
@@ -475,11 +591,13 @@ the same strategy MTK's own `bindings`/`guesses` accessors use. `set_initf`/`set
 are written in the local names of the system they were attached to, so the same recursion
 namespaces them correctly too.
 """
-collect_initf(sys)  = _collect_formula_metadata(sys, VariableInitFormula,  NetworkDynamics.SystemInitFormulas)
+# `weak_var_type` is the metadata type whose presence marks a *weak* formula (`initf_weak`);
+# `nothing` for guesses, which have no weak variant.
+collect_initf(sys)  = _collect_formula_metadata(sys, VariableInitFormula,  NetworkDynamics.SystemInitFormulas;  weak_var_type=VariableInitFormulaWeak)
 collect_guessf(sys) = _collect_formula_metadata(sys, VariableGuessFormula, NetworkDynamics.SystemGuessFormulas)
 
-function _collect_formula_metadata(sys, VarMetaType, SysMetaKey)
-    pairs = Pair{ST,Any}[]
+function _collect_formula_metadata(sys, VarMetaType, SysMetaKey; weak_var_type=nothing)
+    entries = @NamedTuple{target::Any, expr::Any, weak::Bool}[]
     # a subsystem variable referenced in this level's equations shows up in this level's
     # unknowns too, still carrying its metadata — but with the expression in the *subsystem's*
     # local names. Only the recursion below sees it in the right namespace, so it must be
@@ -490,29 +608,65 @@ function _collect_formula_metadata(sys, VarMetaType, SysMetaKey)
             push!(subvars, unwrap(ModelingToolkitBase.namespace_expr(v, subsys)))
         end
     end
+    _localvars = Dict{Symbol,Any}() # cache to store potentail roots (for mtkmodel bug recorvery)
     for v in vcat(ModelingToolkitBase.get_unknowns(sys), ModelingToolkitBase.get_ps(sys))
         u = unwrap(v)
         u ∈ subvars && continue
-        SymbolicUtils.hasmetadata(u, VarMetaType) || continue
-        push!(pairs, u => unwrap(SymbolicUtils.getmetadata(u, VarMetaType)))
-    end
-    for (target, expr) in SymbolicUtils.getmetadata(sys, SysMetaKey, Pair[])
-        push!(pairs, unwrap(target) => unwrap(expr))
-    end
-    for subsys in ModelingToolkitBase.get_systems(sys)
-        for (target, expr) in _collect_formula_metadata(subsys, VarMetaType, SysMetaKey)
-            push!(pairs, ModelingToolkitBase.namespace_expr(target, subsys) =>
-                         ModelingToolkitBase.namespace_expr(expr, subsys))
+        if SymbolicUtils.hasmetadata(u, VarMetaType)
+            expr = _fix_mtkmodel_formula(sys, SymbolicUtils.getmetadata(u, VarMetaType), u, _localvars)
+            push!(entries, (; target=u, expr, weak=false))
+        end
+        if !isnothing(weak_var_type) && SymbolicUtils.hasmetadata(u, weak_var_type)
+            expr = _fix_mtkmodel_formula(sys, SymbolicUtils.getmetadata(u, weak_var_type), u, _localvars)
+            push!(entries, (; target=u, expr, weak=true))
         end
     end
-    pairs
+    for e in SymbolicUtils.getmetadata(sys, SysMetaKey, _sysformula_entries())
+        push!(entries, (; target=unwrap(e.target), expr=unwrap(e.expr), weak=e.weak))
+    end
+    for subsys in ModelingToolkitBase.get_systems(sys)
+        for e in _collect_formula_metadata(subsys, VarMetaType, SysMetaKey; weak_var_type)
+            push!(entries, (; target=ModelingToolkitBase.namespace_expr(e.target, subsys),
+                              expr=ModelingToolkitBase.namespace_expr(e.expr, subsys),
+                              weak=e.weak))
+        end
+    end
+    entries
+end
+
+# Recover from the `@mtkmodel` footgun: a metadata option written as a *bare identifier*
+# (`[initf = x]`) is parsed and stored as a plain `Symbol` (`:x`), not the symbolic variable, so it
+# carries no free variables and would lower to an input-less constant formula that fails at init
+# with `x not defined`. `@component`/`@parameters` (which evaluate metadata) and any *compound*
+# expression (`[initf = 1*x]`) already capture the variable correctly — a bare symbol is thus the
+# *only* mangled shape, and it can only ever name a same-level variable. So resolve it by name
+# against this level's own variables (`localvars`); an unresolvable name is a genuine error.
+function _fix_mtkmodel_formula(sys, raw, target, localvars)
+    if raw isa Symbol || raw isa QuoteNode
+        if isempty(localvars)
+            # if not yet init we need to find all possibel roots now
+            for v in vcat(ModelingToolkitBase.get_unknowns(sys), ModelingToolkitBase.get_ps(sys))
+                localvars[getname(unwrap(v))] = unwrap(v)
+            end
+        end
+
+        name = raw isa QuoteNode ? raw.value : raw
+        haskey(localvars, name) && return localvars[name]
+        avail = join(sort(string.(keys(localvars))), ", ")
+        throw(ArgumentError("initf/guessf on :$(getname(target)) references `$name`, which is not a \
+            variable of this model. `@mtkmodel` stores a bare identifier literally (not as a \
+            variable reference), so it is resolved by name against the model's own \
+            unknowns/parameters — available: $avail. Check the spelling, write the RHS as an \
+            expression (e.g. `1*$name`), or use `set_initf`/`set_guessf`."))
+    end
+    unwrap(raw)
 end
 
 """
     initf_to_initformulas(pairs)
     guessf_to_guessformulas(pairs)
 
-Turn the `target => expression` pairs collected by
+Turn the `(; target, expr, weak)` entries collected by
 [`collect_initf`](@ref)/[`collect_guessf`](@ref) into InitFormulas/GuessFormulas. Targets may
 be unknowns, parameters, inputs — or observables, in which case the formula *pins* the
 observable as an init-time dataflow node.
@@ -521,15 +675,15 @@ An InitFormula is a constraint (not a hint), so conflicting definitions for the 
 target are a genuine over-determination and raise an error. A GuessFormula is only a
 convergence hint, so conflicting definitions are deduped with a warning, never fatal.
 """
-initf_to_initformulas(pairs)   = _metadata_to_formulas(pairs, InitFormula;  fail=:error, kind="initf")
-guessf_to_guessformulas(pairs) = _metadata_to_formulas(pairs, GuessFormula; fail=:warn,  kind="guessf")
+initf_to_initformulas(entries)   = _metadata_to_formulas(entries, InitFormula;  fail=:error, kind="initf")
+guessf_to_guessformulas(entries) = _metadata_to_formulas(entries, GuessFormula; fail=:warn,  kind="guessf")
 
-function _metadata_to_formulas(pairs, ::Type{FT}; fail::Symbol, kind::String) where {FT}
-    (isnothing(pairs) || isempty(pairs)) && return nothing
+function _metadata_to_formulas(entries, ::Type{FT}; fail::Symbol, kind::String) where {FT}
+    (isnothing(entries) || isempty(entries)) && return nothing
 
     resolved = Any[]
-    for (target, expr) in pairs
-        r = _resolve_formula(target, expr; kind)
+    for e in entries
+        r = _resolve_formula(e.target, e.expr; kind, weak=e.weak)
         r === nothing && continue
         push!(resolved, r)
     end
@@ -591,7 +745,7 @@ end
 # inputs keep the names the user wrote, so classification and observable expansion happen at
 # init time in `normalize` — one resolution path, shared with hand-attached formulas.
 # Existence of the raw names is checked at attach time (`add_initformula_lenient!` etc.).
-function _resolve_formula(lhs_sym, rhs_expr; kind)
+function _resolve_formula(lhs_sym, rhs_expr; kind, weak::Bool=false)
     lhs_vars = get_variables(lhs_sym)
     if length(lhs_vars) != 1 || !isequal(only(lhs_vars), unwrap(lhs_sym))
         @warn "$kind target $lhs_sym is not a single variable. Skip."
@@ -608,7 +762,7 @@ function _resolve_formula(lhs_sym, rhs_expr; kind)
         return nothing
     end
 
-    (; src=lhs_sym, target, rhs=unwrap(rhs_expr), input_symbolic, input_names)
+    (; src=lhs_sym, target, rhs=unwrap(rhs_expr), input_symbolic, input_names, weak)
 end
 
 """
@@ -659,12 +813,18 @@ function _dedupe_resolved(resolved; fail::Symbol, kind)
     end
     kept = Any[]
     for (target, group) in by_target
-        chosen = first(sort(group; by = g -> repr(g.rhs)))
-        push!(kept, chosen)
-        length(group) == 1 && continue
+        # a weak entry yields to a strong writer on the same target: drop the weak ones whenever
+        # a strong one exists (any rhs), so weak+strong never reads as a conflict below
+        any(g -> !g.weak, group) && (group = filter(g -> !g.weak, group))
+        # sort strong-first, then by rhs: among identical duplicates a strong writer wins
+        chosen = first(sort(group; by = g -> (g.weak, repr(g.rhs))))
+        length(group) == 1 && (push!(kept, chosen); continue)
         if all(g -> isequal(g.rhs, chosen.rhs), group)
+            push!(kept, chosen)
             @debug "$kind: $(length(group)) identical definitions for $target; keeping one."
+            continue
         else
+            push!(kept, chosen)
             msg = "$kind: conflicting definitions target $target (differing right-hand \
                    sides). Keeping $(repr(chosen.rhs)); dropping the rest."
             fail === :error ? error(msg) : @warn msg
@@ -689,8 +849,13 @@ function _build_formula(::Type{FT}, r) where {FT}
     # `repr` prints a numeric coefficient times a variable as juxtaposition (`3x`); with the
     # variable now a `:sym` that would read as a range (`3:x`), so restore the explicit `*`.
     rhsstring = replace(rhsstring, r"(?<=[0-9.]):(?=[A-Za-z_])" => " * :")
-    prettyprint = "$macroname begin\n    $(repr(r.target)) = $(rhsstring)\nend"
-    FT(f, [r.target], r.input_names, prettyprint)
+    # bake the (resolved, post-dedupe) `weak` flag straight into the header so `prettyprint`
+    # is the complete copy-pasteable recipe — see `_show_recipe`. guessf has no weak variant.
+    header = (FT === InitFormula && r.weak) ? "$macroname weak=true" : macroname
+    prettyprint = "$header begin\n    $(repr(r.target)) = $(rhsstring)\nend"
+    label = "$(r.target) = $(replace(repr(r.rhs), r"\(t\)" => ""))"
+    FT === InitFormula ? FT(f, [r.target], r.input_names, prettyprint; weak=r.weak, label) :
+                         FT(f, [r.target], r.input_names, prettyprint; label)
 end
 
 """

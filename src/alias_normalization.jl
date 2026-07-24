@@ -391,7 +391,10 @@ function normalize(f::Union{InitFormula,GuessFormula}, am::AliasMap, cf::Compone
         end
         nothing
     end
-    _formulatype(f)(wrapped, canonout, roots, f.prettyprint, f)
+    # Rebuild carrying the original as `derived_from`: swap in the rewritten closure/outputs/
+    # inputs; every other field (prettyprint, and InitFormula's `weak`) rides along untouched.
+    # `setproperties` covers both formula types and still runs the self-dependency check.
+    setproperties(f, (; f=wrapped, outsym=canonout, sym=roots, derived_from=f))
 end
 
 _formulatype(::InitFormula) = InitFormula

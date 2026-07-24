@@ -1718,7 +1718,7 @@ end
     # Comparison is on the symbolic rhs, so identical definitions dedupe silently, while
     # genuinely conflicting ones warn (guesses) or error (bindings) per the `fail` kw.
     @variables a(t) b(t)
-    mk(target, rhs) = (; src=rhs, target, rhs, input_symbolic=Any[], input_names=Symbol[])
+    mk(target, rhs; weak=false) = (; src=rhs, target, rhs, input_symbolic=Any[], input_names=Symbol[], weak)
 
     # distinct targets: all kept
     @test length(mtkext._dedupe_resolved([mk(:x, a), mk(:y, b)]; fail=:warn, kind="G")) == 2
@@ -1726,6 +1726,19 @@ end
     # identical definitions for the same target: deduped to one, and NOT an error even
     # under fail=:error (equal rhs is a harmless alias-merge duplicate, not a conflict)
     @test length(mtkext._dedupe_resolved([mk(:x, a), mk(:x, a)]; fail=:error, kind="I")) == 1
+
+    # a weak writer yields to a strong one on the same target (order-independent); all-weak
+    # duplicates stay weak
+    @test only(mtkext._dedupe_resolved([mk(:x, a; weak=true), mk(:x, a)]; fail=:error, kind="I")).weak == false
+    @test only(mtkext._dedupe_resolved([mk(:x, a), mk(:x, a; weak=true)]; fail=:error, kind="I")).weak == false
+    @test only(mtkext._dedupe_resolved([mk(:x, a; weak=true), mk(:x, a; weak=true)]; fail=:error, kind="I")).weak == true
+
+    # weak yields to a strong writer even with a *differing* rhs — no conflict, the strong wins
+    let r = only(mtkext._dedupe_resolved([mk(:x, a), mk(:x, b; weak=true)]; fail=:error, kind="I"))
+        @test !r.weak && isequal(r.rhs, a)
+    end
+    # two *weak* writers with differing rhs stay a genuine conflict
+    @test_throws "conflicting definitions" mtkext._dedupe_resolved([mk(:x, a; weak=true), mk(:x, b; weak=true)]; fail=:error, kind="I")
 
     # conflicting definitions (same target, differing rhs), fail=:warn → keep one + warn
     local kept

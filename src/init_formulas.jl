@@ -98,11 +98,15 @@ function Base.show(io::IO, ::MIME"text/plain", @nospecialize(c::InitConstraint))
     _show_recipe(io, c)
 end
 
-# `prettyprint` is the recipe as the user wrote it. Without one, fall back to `repr` minus
-# the trailing unset fields, which are noise.
+# `prettyprint` is the complete authored recipe — a weak `InitFormula`'s header already carries
+# `weak=true` (baked in at construction, see `_formula_macro`/`_build_formula`), so show just
+# prints it. Without one (raw constructor) fall back to `repr`.
 function _show_recipe(io::IO, @nospecialize(c))
     if isnothing(c.prettyprint)
-        print(io, replace(repr(c), r"(, nothing)+\)$" => ")"))
+        # strip trailing default-valued fields so the result stays a valid constructor call:
+        # `nothing` (prettyprint/derived_from) and `weak=false`. A non-default `weak=true` stays,
+        # keeping the preceding `nothing`s so the positional call still lines up.
+        print(io, replace(repr(c), r"(, (nothing|false))+\)$" => ")"))
     else
         print(io, c.prettyprint)
     end
@@ -188,6 +192,15 @@ end
 # Nested macro calls (e.g. `@pf(:x)`) print with a `#= file:line =#` location comment that
 # `remove_linenums!` cannot reach; drop it so the source reads cleanly.
 _strip_locations(s) = replace(s, r"#=.*?=# " => "")
+
+# Best-effort one-line `label`, only 1 line formulas
+function _auto_formula_label(ex)
+    exprs = filter(a -> a isa Union{Expr,QuoteNode}, ex.args)
+    length(exprs) == 1 || return nothing
+    a = only(exprs)
+    (a isa Expr && a.head === :(=) && a.args[1] isa QuoteNode) || return nothing
+    replace(_strip_locations(string(a)), r":(?=[A-Za-z_])" => "")
+end
 
 # for metadata check, just passes down the
 function assert_initconstraint_compat(cf::ComponentModel, c::InitConstraint)
@@ -322,18 +335,25 @@ struct InitFormula{F}
     # set by `normalize` to the untouched user-written formula this one was derived from,
     # `nothing` for user-written formulas themselves. See [`normalize`](@ref).
     derived_from::Union{Nothing,InitFormula}
+    weak::Bool # don't overwrite set defaults
+    label::Union{Nothing,String} # short line identifier (just verbose application)
 
-    function InitFormula(f::F, outsym::Vector{Symbol}, sym::Vector{Symbol}, prettyprint::Union{Nothing,String}, derived_from::Union{Nothing,InitFormula}) where F
+    function InitFormula(f::F, outsym::Vector{Symbol}, sym::Vector{Symbol}, prettyprint::Union{Nothing,String}, derived_from::Union{Nothing,InitFormula}, weak::Bool=false, label::Union{Nothing,String}=nothing) where F
         # Check for self-dependencies (formula depending on its own output)
         self_deps = intersect(sym, outsym)
         if !isempty(self_deps)
             throw(ArgumentError("InitFormula cannot depend on its own output symbols: $self_deps"))
         end
-        new{F}(f, outsym, sym, prettyprint, derived_from)
+        # weak defaulting is single-target: a weak formula is dropped whole when its target is
+        # already backed, so a multi-output weak could strand a uniquely-pinned sibling output.
+        if weak && length(outsym) != 1
+            throw(ArgumentError("A weak InitFormula must have exactly one output symbol (got $outsym)."))
+        end
+        new{F}(f, outsym, sym, prettyprint, derived_from, weak, label)
     end
 end
-InitFormula(f, outsym, sym) = InitFormula(f, outsym, sym, nothing, nothing)
-InitFormula(f, outsym, sym, prettyprint) = InitFormula(f, outsym, sym, prettyprint, nothing)
+InitFormula(f, outsym, sym; weak::Bool=false, label=nothing) = InitFormula(f, outsym, sym, nothing, nothing, weak, label)
+InitFormula(f, outsym, sym, prettyprint; weak::Bool=false, label=nothing) = InitFormula(f, outsym, sym, prettyprint, nothing, weak, label)
 
 dim(c::InitFormula) = length(c.outsym)
 
@@ -380,18 +400,19 @@ struct GuessFormula{F}
     # set by `normalize` to the untouched user-written formula this one was derived from,
     # `nothing` for user-written formulas themselves. See [`normalize`](@ref).
     derived_from::Union{Nothing,GuessFormula}
+    label::Union{Nothing,String}  # one-line `(via …)` provenance for the verbose log, see `InitFormula.label`
 
-    function GuessFormula(f::F, outsym::Vector{Symbol}, sym::Vector{Symbol}, prettyprint::Union{Nothing,String}, derived_from::Union{Nothing,GuessFormula}) where F
+    function GuessFormula(f::F, outsym::Vector{Symbol}, sym::Vector{Symbol}, prettyprint::Union{Nothing,String}, derived_from::Union{Nothing,GuessFormula}, label::Union{Nothing,String}=nothing) where F
         # Check for self-dependencies (formula depending on its own output)
         self_deps = intersect(sym, outsym)
         if !isempty(self_deps)
             throw(ArgumentError("GuessFormula cannot depend on its own output symbols: $self_deps"))
         end
-        new{F}(f, outsym, sym, prettyprint, derived_from)
+        new{F}(f, outsym, sym, prettyprint, derived_from, label)
     end
 end
-GuessFormula(f, outsym, sym) = GuessFormula(f, outsym, sym, nothing, nothing)
-GuessFormula(f, outsym, sym, prettyprint) = GuessFormula(f, outsym, sym, prettyprint, nothing)
+GuessFormula(f, outsym, sym; label=nothing) = GuessFormula(f, outsym, sym, nothing, nothing, label)
+GuessFormula(f, outsym, sym, prettyprint; label=nothing) = GuessFormula(f, outsym, sym, prettyprint, nothing, label)
 
 dim(c::GuessFormula) = length(c.outsym)
 
@@ -433,8 +454,18 @@ is equal to
         out[:Pset] = u[:u_r] * u[:i_r] + u[:u_i] * u[:i_i]
     end
 """
-macro initformula(ex)
-    _formula_macro(InitFormula, ex)
+macro initformula(args...)
+    isempty(args) && throw(ArgumentError("@initformula expects a formula block"))
+    ex = last(args)
+    weak = false
+    for opt in args[1:end-1]
+        if opt isa Expr && opt.head == :(=) && opt.args[1] === :weak
+            weak = opt.args[2]
+        else
+            throw(ArgumentError("@initformula: unexpected option `$opt`, only `weak=true/false` is supported"))
+        end
+    end
+    _formula_macro(InitFormula, ex; weak)
 end
 
 
@@ -480,14 +511,15 @@ In a nutshell: wrap every QuoteNote symbol either in u[:sym] or out[:sym]
 some thinks will break!
 for example: set!(:out, :in) -> set!(u[:out], u[:in])
 =#
-function _formula_macro(type, ex)
+function _formula_macro(type, ex; weak=false)
     if ex isa QuoteNode || ex.head != :block
         ex = Base.remove_linenums!(Expr(:block, ex))
     end
 
-    # capture the macro-form source before the symbols get wrapped into `u[:sym]`/`out[:sym]`
     macroname = type === InitFormula ? "@initformula" : "@guessformula"
-    s = _macro_source_string(macroname, ex)
+    header = (type === InitFormula && weak === true) ? "$macroname weak=true" : macroname
+    s = _macro_source_string(header, ex)
+    lbl = _auto_formula_label(ex)
 
     input_syms = Symbol[]    # RHS symbols
     output_syms = Symbol[]   # LHS symbols
@@ -522,11 +554,17 @@ function _formula_macro(type, ex)
 
     body_esc = _escape_all.(body)
 
-    quote
-        $(type)($output_syms, $input_syms, $s) do $(esc(out_var)), $(esc(u))
+    closure = quote
+        function ($(esc(out_var)), $(esc(u)))
             $(body_esc...)
             nothing
         end
+    end
+    # only InitFormula carries `weak`; GuessFormula's constructor has no such kwarg
+    if type === InitFormula
+        :($(type)($closure, $output_syms, $input_syms, $s; weak = $(esc(weak)), label = $lbl))
+    else
+        :($(type)($closure, $output_syms, $input_syms, $s; label = $lbl))
     end
 end
 
@@ -587,7 +625,16 @@ function topological_sort_formulas(formulas)
 
     if !allunique(all_outputs)
         conflicts = [s for s in unique(all_outputs) if count(==(s), all_outputs) > 1]
-        throw(ArgumentError("Multiple $(type)s set the same symbol(s): $conflicts"))
+        # A weak writer yields to a `default` or a *strong* co-writer (both drop it earlier), so
+        # reaching here means the colliding writers are all weak — a genuine ambiguity.
+        hint = if any(f -> f isa InitFormula && f.weak && !isdisjoint(f.outsym, conflicts), formulas)
+            "\nThe colliding formulas are `weak`: a weak formula yields to a default or a strong \
+             writer, but here only weak writers target the symbol. Give the target a default, or \
+             drop one of the writers."
+        else
+            ""
+        end
+        throw(ArgumentError("Multiple $(type)s set the same symbol(s): $conflicts$hint"))
     end
 
     # Build dependency graph using Graphs.jl
@@ -623,6 +670,99 @@ function topological_sort_formulas(formulas)
     end
 end
 
+"""
+    extend_knowns_by_formulas!(knowns, cf, formulas; am, t, pinned, error_unresolvable, verbose, io)
+
+Extend a dict of known component values `knowns` in place by applying init `formulas`, mutating and
+returning `knowns`. This is the shared formula pass behind both `initialize_component` and the
+`NWState` reconstruction (`_get_appropriate_dict`): compute the pin-set from the *complete* formula
+set, [`normalize`](@ref) each formula onto canonical settable symbols, [`drop_weak_formulas`](@ref)
+whose target is already backed (a value in `knowns`, or a strong co-writer), then
+[`apply_init_formulas!`](@ref) the survivors. A no-op when `formulas` is `nothing`.
+
+The one seam between the callers is *what they pass as `knowns`*: `initialize_component` passes the
+default-only dict (so weak formulas re-fire on reinit and the solve refines the rest); `NWState`
+passes defaults-and-inits (so a reconstruction reproduces the post-init state). Keeping the
+normalize / weak-drop / pin-set machinery here — not copied into each caller — is what stops the two
+paths from silently drifting apart (as they once did on the weak-drop, see git history).
+"""
+function extend_knowns_by_formulas!(knowns, cf, formulas;
+                                    am=get_aliasmap(cf), t=NaN,
+                                    pinned=pinned_obssyms(formulas, cf),
+                                    error_unresolvable=true, verbose=false, io=stdout)
+    isnothing(formulas) && return knowns
+    normed = [normalize(f, am, cf; t, pinned) for f in formulas]
+    # a weak formula also yields to a *strong* co-writer on the same target (see
+    # `drop_weak_formulas`); computed post-normalize so the outputs are canonical
+    strong_out = Set(s for f in normed if !f.weak for s in f.outsym)
+    kept = drop_weak_formulas(normed, knowns, strong_out; verbose, io)
+    isempty(kept) || apply_init_formulas!(knowns, kept; error_unresolvable, verbose, io, pinned)
+    return knowns
+end
+
+"""
+    extend_guesses_by_formulas!(guesses, defaults, cf, formulas; am, t, init_pinned, error_unresolvable, verbose, io)
+
+Guess-formula sibling of [`extend_knowns_by_formulas!`](@ref), shared by `initialize_component` and
+the `NWState` reconstruction (`_get_appropriate_dict`). Extends the `guesses` dict in place by
+`normalize`-ing and applying the guess `formulas`, mutating and returning `guesses`. A no-op when
+`formulas` is `nothing`.
+
+Differs from the init pass in two structural ways, which is why it is a separate function rather
+than the same one: guess application is a *layered* two-dict write — [`apply_guess_formulas!`](@ref)
+writes `guesses` but reads `defaults`-before-`guesses` as inputs (fixed values win) — and there is
+no weak-drop (`GuessFormula` has no `weak`).
+
+The guess frontier is `(init_pinned ∩ keys(defaults)) ∪ guess_pins`. The caller passes the full
+static *init* pin-set in (`initialize_component` reuses the one it already computed — which covers
+its `additional_initformula`s too; `NWState` passes `pinned_obssyms(cm)`), and it is **intersected
+with what actually landed in `defaults`**: an init formula that did not run (skipped on unresolvable
+inputs under `error_unresolvable=false`, i.e. the NWState path) leaves its pinned observable
+*unwritten*, so a guess reading it must expand to roots rather than stop at a value that is not
+there. This filtering is only valid for the init pins — the init pass has already run and
+materialized its outputs, so `keys(defaults)` is ground truth for "did this pin happen." The guess
+pins cannot be filtered the same way: guess formulas are all normalized before any is applied, so
+their pin-set must stay the full static set (order-independent *within* the guess pass, exactly as
+init pins are within the init pass). Kept here so the pin-set/normalize rule is single-sourced and
+the two callers cannot drift.
+"""
+function extend_guesses_by_formulas!(guesses, defaults, cf, formulas;
+                                     am=get_aliasmap(cf), t=NaN, init_pinned=Set{Symbol}(),
+                                     error_unresolvable=true, verbose=false, io=stdout)
+    isnothing(formulas) && return guesses
+    guess_pinned = (init_pinned ∩ keys(defaults)) ∪ pinned_obssyms(formulas, cf)
+    normed = [normalize(f, am, cf; t, pinned=guess_pinned) for f in formulas]
+    apply_guess_formulas!(guesses, defaults, normed; error_unresolvable, verbose, io, pinned=guess_pinned)
+    return guesses
+end
+
+# A weak formula yields — and is dropped — when its (canonical) target already carries a
+# `default` or is written by a *strong* formula (`strong_outputs`): an InitFormula always fires,
+# so a strong writer pins the target and the weak default is redundant. The default check is on
+# `default` only, never `init` — a weak formula persists its own output as an `init`, and testing
+# `init` here would self-block it on reinit. Weak formulas are single-output by construction, so
+# a drop never strands a uniquely-pinned sibling output.
+function drop_weak_formulas(formulas, defaults, strong_outputs=(); verbose=false, io=stdout)
+    any(f -> f isa InitFormula && f.weak, formulas) || return formulas
+    kept = empty(formulas)
+    for f in formulas
+        if !f.weak
+            push!(kept, f)
+            continue
+        end
+        @assert length(f.outsym) == 1 "weak InitFormula must be single-output (enforced at construction)"
+        s = only(f.outsym)
+        if haskey(defaults, s) || s in strong_outputs
+            ref = isnothing(f.label) ? "weak formula for :$s" : f.label
+            verbose && printstyled(io, " - InitFormula: $ref yields to \
+                $(haskey(defaults, s) ? "existing default :$s = $(defaults[s])" : "a strong formula writing :$s")\n")
+        else
+            push!(kept, f)
+        end
+    end
+    kept
+end
+
 function apply_init_formulas!(defaults, formulas_unsorted; verbose=false, io=stdout,
                               error_unresolvable=true, pinned=Set{Symbol}())
     # Convert tuple to vector if necessary
@@ -640,7 +780,7 @@ function apply_init_formulas!(defaults, formulas_unsorted; verbose=false, io=std
             if error_unresolvable
                 throw(ArgumentError("InitFormula requires all input symbols to be initialized, but found NaN/missing/nothing in inputs: $(f.sym .=> invals)" * _unresolved_note(f)))
             else
-                verbose && printstyled(io, " - InitFormula: skipping formula for $(f.outsym) with unresolvable inputs: $(f.sym .=> invals)$(_unresolved_note(f))\n")
+                verbose && printstyled(io, " - InitFormula: skipping formula $(_formula_ref(f)) with unresolvable inputs: $(f.sym .=> invals)$(_unresolved_note(f))\n")
                 continue
             end
         end
@@ -650,7 +790,7 @@ function apply_init_formulas!(defaults, formulas_unsorted; verbose=false, io=std
         end
         for s in f.outsym
             val = out[s]
-            verbose && push!(rows, _formula_row(s, val, defaults; op="=", pin=s ∈ pinned))
+            verbose && push!(rows, _formula_row(s, val, defaults; op="=", pin=s ∈ pinned, label=f.label))
             defaults[s] = val
         end
     end
@@ -681,7 +821,7 @@ function apply_guess_formulas!(guesses, defaults, formulas_unsorted; verbose=fal
             if error_unresolvable
                 throw(ArgumentError("GuessFormula requires all input symbols to be initialized, but found NaN/missing/nothing in inputs: $(f.sym .=> invals)" * _unresolved_note(f)))
             else
-                verbose && printstyled(io, " - GuessFormula: skipping formula for $(f.outsym) with unresolvable inputs: $(f.sym .=> invals)$(_unresolved_note(f))\n")
+                verbose && printstyled(io, " - GuessFormula: skipping formula $(_formula_ref(f)) with unresolvable inputs: $(f.sym .=> invals)$(_unresolved_note(f))\n")
                 continue
             end
         end
@@ -692,7 +832,7 @@ function apply_guess_formulas!(guesses, defaults, formulas_unsorted; verbose=fal
         # Update guesses dictionary (NOT defaults!)
         for s in f.outsym
             val = out[s]
-            verbose && push!(rows, _formula_row(s, val, guesses; op="≈", fixed=defaults, pin=s ∈ pinned))
+            verbose && push!(rows, _formula_row(s, val, guesses; op="≈", fixed=defaults, pin=s ∈ pinned, label=f.label))
             guesses[s] = val
         end
     end
@@ -702,8 +842,10 @@ end
 
 # One aligned row for a formula that wrote `val` onto `:s`, annotated with what it did
 # relative to what was there: nothing for a fresh write, the previous value if it changed
-# one, or a no-effect note when a fixed default (guesses only) shadows the write.
-function _formula_row(s, val, prev; op, fixed=nothing, pin=false)
+# one, or a no-effect note when a fixed default (guesses only) shadows the write. `label` (the
+# formula's short name) is appended as its own trailing `(via …)` column so provenance lines up
+# across rows; rows whose formula has no label leave the column empty (rstripped away on print).
+function _formula_row(s, val, prev; op, fixed=nothing, pin=false, label=nothing)
     v = str_significant(val; sigdigits=5, phantom_minus=true)
     note = if !isnothing(fixed) && haskey(fixed, s)
         "(no effect, fixed at $(str_significant(fixed[s]; sigdigits=5)))"
@@ -713,7 +855,8 @@ function _formula_row(s, val, prev; op, fixed=nothing, pin=false)
         ""
     end
     pin && (note = strip(note * " (pinned observable)"))
-    ":$s &$op $v &$note"
+    via = isnothing(label) ? "" : "(via $label)"
+    ":$s &$op $v &$note &$via"
 end
 
 # Runs `f`, returning whether its outputs may be used. A normalized formula only discovers
@@ -729,10 +872,14 @@ function _run_formula!(out, f, u, label; verbose, io, error_unresolvable)
         if error_unresolvable
             throw(ArgumentError("$label for $(f.outsym): $(e.msg)" * _unresolved_note(f)))
         end
-        verbose && printstyled(io, " - $label: skipping formula for $(f.outsym), $(e.msg)$(_unresolved_note(f))\n")
+        verbose && printstyled(io, " - $label: skipping formula $(_formula_ref(f)), $(e.msg)$(_unresolved_note(f))\n")
         false
     end
 end
+
+# Short human reference to a formula for the verbose log's prose lines (skips, weak-drops): its
+# `label` when it has one, else a `for [:out…]` fallback naming the output symbols.
+_formula_ref(f) = isnothing(f.label) ? "for $(f.outsym)" : f.label
 
 # A normalized formula reads the settable *roots* of what the user asked for, so the symbols
 # named in an unresolvable-input message are not the ones they wrote. Say where they came

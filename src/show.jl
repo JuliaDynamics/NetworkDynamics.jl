@@ -114,6 +114,8 @@ function print_states_params(io, @nospecialize(c::ComponentModel), styling)
     num, word = maybe_plural(pdim(c), "param")
     pdim(c) > 0 && push!(info, styled"$num &$word: &&$(stylesymbolarray(c.psym, _pdef(c), _pguess(c)))")
 
+    _push_default_from_info!(info, c)
+
     if has_external_input(c)
         num = extdim(c)
         arr = match(r"(\[.*\])", repr(extin(c)))[1]
@@ -298,6 +300,16 @@ function _inout_string(c::EdgeModel, f, name)
     dstguesses = get_guesses(c, sym.dst)
     styled"$srcnum/$dstnum &$word: &&src=&$(stylesymbolarray(sym.src, srcdefs, srcguesses)) \
             dst=$(stylesymbolarray(sym.dst, dstdefs, dstguesses))"
+end
+# Surface `default_from` declarations in the component's param listing (display-only): each
+# marked parameter shows the neighbor it weakly copies from, e.g. `:S_b ← src busbar₊S_b`.
+function _push_default_from_info!(info, @nospecialize(c::ComponentModel))
+    marked = [(p, get_default_from(c, p)) for p in psym(c) if has_default_from(c, p)]
+    isempty(marked) && return
+    # `default_from` is always a `(scope, srcsym)` tuple (cross-component)
+    parts = [":$p ← $scope $srcsym" for (p, (scope, srcsym)) in marked]
+    num, word = maybe_plural(length(marked), "param")
+    push!(info, styled"$num &$word default_from: &&$(join(parts, \", \"))")
 end
 function _def(c::ComponentModel)::Vector{Union{Nothing,Float64}}
     map(c.sym) do s
