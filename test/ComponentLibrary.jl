@@ -418,14 +418,9 @@ end
 ####
 #### Per-unit handling models (bound_to / weak / default_from)
 ####
-# Anchored on the PowerDynamics use case: a bus carries a `busbar` sub-component with the base
-# quantities `S_b`/`V_b` (the single source of truth), and devices on the bus must agree with
-# that base. The physics is deliberate nonsense — only the structure is realistic — so the same
-# models exercise the whole per-unit feature set:
-#   (B) `bound_to`     — the injector's `S_b` is a hard alias of `busbar₊S_b` (implemented).
-#   (A) `weak`         — a device rating that defaults to the base but stays settable (future).
-#   (C) `default_from` — a line end picking up the base of its endpoint bus (future).
-# The extension points for (A)/(C) are marked below so the models grow without being rewritten.
+# A bus carries a `busbar` sub-component holding the base quantities `S_b`/`V_b` (the single
+# source of truth); devices on the bus agree with that base via `bound_to`, `weak`, and
+# `default_from`. Physics is deliberate nonsense — only the structure is realistic.
 
 "The busbar sub-component: holds the base quantities and one trivial state that uses them so MTK
 keeps the parameters. `busbar₊S_b` is the true parameter every device on the bus binds to."
@@ -455,8 +450,7 @@ pu_bus_vertex(; kwargs...) = VertexModel(pu_bus(name=:bus), [:i], [:o]; kwargs..
 function pu_line(; name)
     @variables src_u(t) dst_u(t) flow(t)
     @parameters Y=0.5
-    # (C) `default_from` — the line-end base picked up from an endpoint bus, with an internal
-    # quantity `bound_to` that line-end base — is exercised in `test/default_from_test.jl`.
+    # `default_from` on the line end is exercised in `test/default_from_test.jl`.
     System([flow ~ Y * (src_u - dst_u)], t; name)
 end
 
@@ -471,14 +465,11 @@ end
 ####
 #### Per-unit DQ injector network — all three features end-to-end
 ####
-# A realistic-shaped grid slice (same hub/injector/line topology as
-# `powergridlike_injector_network`) that exercises `bound_to`, `default_from` and the weak
-# `initf_weak` together. The base rides on *observables only* — it never scales the dynamics — so
-# it is inert to the physics yet still flows through every feature:
-#   • hub — carries `busbar₊S_b` (the source of truth); a hub-local `S_b` is `bound_to` it.
-#   • inj — its `S_b` is `default_from = (:hub, …)`; its rating `Sn` weakly follows `S_b`
-#           (`initf_weak`) but stays independently settable.
-#   • line — its end base is `default_from = (:src, …)`; an internal base is `bound_to` it.
+# Same hub/injector/line topology as `powergridlike_injector_network`, exercising all three
+# features together. The base rides on observables only, so it is inert to the physics:
+#   • hub — carries `busbar₊S_b` (source of truth); a hub-local `S_b` is `bound_to` it.
+#   • inj — `S_b` is `default_from = (:hub, …)`; rating `Sn` weakly follows `S_b` (`initf_weak`).
+#   • line — end base is `default_from = (:src, …)`; an internal base is `bound_to` it.
 
 "Stateless carrier of the system power base; kept alive by a per-unit observable on its host."
 @mtkmodel PUBusBar begin

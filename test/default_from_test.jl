@@ -7,7 +7,7 @@ using ModelingToolkitBase
 using ModelingToolkitBase: t_nounits as t, D_nounits as D, System, @variables, @parameters, @named
 using Test
 
-@__MODULE__() == Main ? includet(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl")) : (Lib = Main.Lib)
+@__MODULE__() == Main ? includet(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl")) : (const Lib = Main.Lib)
 
 # ---------------------------------------------------------------------------------------------
 # Plain (non-MTK) routing models. `S_b` is a per-unit base parameter — inert in these trivial
