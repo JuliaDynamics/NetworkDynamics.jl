@@ -165,7 +165,7 @@ end
 strip_metadata!(nw::Network, sym::SymbolicIndex, key::Symbol) = strip_metadata!(getcomp(nw, sym), key)
 
 # generate default methods for some per-symbol metadata fields
-for md in [:default, :guess, :init, :bounds]
+for md in [:default, :guess, :init, :bounds, :default_from]
     fname_has = Symbol(:has_, md)
     fname_get = Symbol(:get_, md)
     fname_set = Symbol(:set_, md, :!)
@@ -174,6 +174,8 @@ for md in [:default, :guess, :init, :bounds]
         :strip_guesses!
     elseif md == :bounds
         :strip_bounds!
+    elseif md == :default_from
+        :strip_default_from!
     else
         Symbol(:strip_, string(md)*"s", :!)
     end

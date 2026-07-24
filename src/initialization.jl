@@ -1243,6 +1243,11 @@ function _initialize_componentwise(
     subalg = _resolve_subargument_dict(nw, subalg)
     subsolve_kwargs = _resolve_subargument_dict(nw, subsolve_kwargs)
 
+    # resolve `default_from` metadata into baked weak InitFormulas, merged into the per-component
+    # additional_initformula map — a pre-pass so it runs before any init task (order-independent,
+    # reads only params/defaults). No-op unless some component declares `default_from`.
+    additional_initformula = resolve_default_from(nw, additional_initformula, default_overrides; verbose)
+
     # to improve type stability, we split the overrides into v/e parts only once
     # TODO: might be solve by EIndex/VIndex ADT
     default_v_overrides, default_e_overrides = _split_overrides(default_overrides)

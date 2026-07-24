@@ -455,8 +455,8 @@ pu_bus_vertex(; kwargs...) = VertexModel(pu_bus(name=:bus), [:i], [:o]; kwargs..
 function pu_line(; name)
     @variables src_u(t) dst_u(t) flow(t)
     @parameters Y=0.5
-    # (C) future: a line-end base `S_b [default_from = (:src, :S_b)]` picked up from the endpoint
-    # bus, and an internal quantity `bound_to` that line-end base.
+    # (C) `default_from` — the line-end base picked up from an endpoint bus, with an internal
+    # quantity `bound_to` that line-end base — is exercised in `test/default_from_test.jl`.
     System([flow ~ Y * (src_u - dst_u)], t; name)
 end
 
@@ -466,6 +466,150 @@ pu_line_edge(; kwargs...) = EdgeModel(pu_line(name=:line), [:src_u], [:dst_u], A
 function pu_network()
     v = pu_bus_vertex()
     Network(path_graph(2), [v, v], pu_line_edge())
+end
+
+####
+#### Per-unit DQ injector network — all three features end-to-end
+####
+# A realistic-shaped grid slice (same hub/injector/line topology as
+# `powergridlike_injector_network`) that exercises `bound_to`, `default_from` and the weak
+# `initf_weak` together. The base rides on *observables only* — it never scales the dynamics — so
+# it is inert to the physics yet still flows through every feature:
+#   • hub — carries `busbar₊S_b` (the source of truth); a hub-local `S_b` is `bound_to` it.
+#   • inj — its `S_b` is `default_from = (:hub, …)`; its rating `Sn` weakly follows `S_b`
+#           (`initf_weak`) but stays independently settable.
+#   • line — its end base is `default_from = (:src, …)`; an internal base is `bound_to` it.
+
+"Stateless carrier of the system power base; kept alive by a per-unit observable on its host."
+@mtkmodel PUBusBar begin
+    @parameters begin
+        S_b = 100.0, [description = "system power base [MVA]"]
+    end
+end
+
+"A shunt hub carrying the busbar base. The hub-local `S_b` is `bound_to` `busbar₊S_b` (eliminated)."
+@mtkmodel PUShuntHub begin
+    @extend BusBase()
+    @components begin
+        busbar = PUBusBar()
+    end
+    @parameters begin
+        G = 0.1, [description = "shunt conductance"]
+        B = 0.01, [description = "shunt susceptance"]
+        S_b, [bound_to = :busbar₊S_b, description = "hub base (alias of busbar₊S_b)"]
+    end
+    @variables begin
+        S_shunt_pu(t), [description = "shunt apparent power in per-unit of the bus base"]
+    end
+    begin
+        Y = G + im*B
+        ishunt = -Y * (u_r + im*u_i)
+    end
+    @equations begin
+        i_r ~ simplify(real(ishunt))
+        i_i ~ simplify(imag(ishunt))
+        S_shunt_pu ~ sqrt(Pinj^2 + Qinj^2) / S_b
+    end
+end
+
+"A swing injector: base `default_from` the hub, rating `Sn` weakly follows the base (`initf_weak`)."
+@mtkmodel PUSwingInjector begin
+    @extend BusBase()
+    @variables begin
+        θ(t), [description = "voltage angle", guess = 0.0]
+        ω(t), [description = "rotor frequency", guess = 0.0]
+        Pel(t), [description = "electrical power from network into node"]
+        loading(t), [description = "electrical loading in per-unit of the machine rating"]
+    end
+    @parameters begin
+        M = 1, [description = "inertia"]
+        D = 0.1, [description = "damping"]
+        Pmech, [description = "mechanical power", guess = 1.0]
+        V, [description = "voltage magnitude", guess = 1.0]
+        S_b, [default_from = (:hub, :busbar₊S_b), description = "base copied weakly from the hub"]
+        Sn, [initf_weak = S_b, description = "machine rating; weakly follows the base, stays settable"]
+    end
+    @equations begin
+        Pel ~ u_r*i_r + u_i*i_i
+        loading ~ Pel / Sn
+        Dt(θ) ~ ω
+        Dt(ω) ~ 1/M * (Pmech - D*ω + Pel)
+        u_r ~ V*cos(θ)
+        u_i ~ V*sin(θ)
+    end
+end
+
+"A line whose end base is `default_from` its src bus, with an internal base `bound_to` that end base."
+@mtkmodel PUStaticLine begin
+    @variables begin
+        src_u_r(t), [input=true]; src_u_i(t), [input=true]
+        src_i_r(t), [output=true]; src_i_i(t), [output=true]
+        dst_u_r(t), [input=true]; dst_u_i(t), [input=true]
+        dst_i_r(t), [output=true]; dst_i_i(t), [output=true]
+        src_P(t), [description = "active power at src end"]
+        src_P_pu(t), [description = "src active power in per-unit of the line base"]
+    end
+    @parameters begin
+        R = 0.04, [description = "line resistance"]
+        X = 0.1, [description = "line reactance"]
+        S_b, [default_from = (:src, :busbar₊S_b), description = "endpoint base copied from src bus"]
+        S_b_int, [bound_to = :S_b, description = "internal base (alias of the endpoint base)"]
+    end
+    begin
+        Z = R + im*X
+        Vsrc = src_u_r + im*src_u_i
+        Vdst = dst_u_r + im*dst_u_i
+        idst = 1/Z * (Vsrc - Vdst)
+        isrc = -idst
+    end
+    @equations begin
+        src_i_r ~ simplify(real(isrc)); src_i_i ~ simplify(imag(isrc))
+        dst_i_r ~ simplify(real(idst)); dst_i_i ~ simplify(imag(idst))
+        src_P ~ simplify(real(Vsrc * conj(isrc)))
+        src_P_pu ~ src_P / S_b_int
+    end
+end
+
+pu_dqhub(; name, kwargs...) = VertexModel(PUShuntHub(; name, kwargs...), [:i_r,:i_i], [:u_r,:u_i]; verbose=false)
+function pu_dqswing_injector(; name, kwargs...)
+    VertexModel(PUSwingInjector(; name, kwargs...), [:u_r,:u_i], [:i_r,:i_i];
+                ff_to_constraint=false, assume_io_coupling=true, verbose=false)
+end
+function pu_dqline(; name=:line, R=0.04, X=0.1, kwargs...)
+    EdgeModel(PUStaticLine(; name, R, X),
+              [:src_u_r,:src_u_i], [:dst_u_r,:dst_u_i], [:src_i_r,:src_i_i], [:dst_i_r,:dst_i_i];
+              verbose=false, kwargs...)
+end
+
+"Two hubs joined by a line, each carrying a swing injector via a LoopbackConnection. The hubs hold
+distinct system bases (100 / 200 MVA); the base flows into each injector (`default_from (:hub,…)`),
+each injector's rating (`initf_weak`), and the line (`default_from (:src,…)`). Powerflow-then-
+dynamic like [`powergridlike_injector_network`](@ref). Returns `(nw, s0)`."
+function pu_injector_network()
+    edges = [
+        pu_dqline(R=0.04, X=0.1, src=:hub1, dst=:hub2),
+        LoopbackConnection(potential=[:u_r,:u_i], flow=[:i_r,:i_i], src=:inj1, dst=:hub1, name=:loopback1),
+        LoopbackConnection(potential=[:u_r,:u_i], flow=[:i_r,:i_i], src=:inj2, dst=:hub2, name=:loopback2),
+    ]
+    # powerflow: PU hubs + plain slack/PV injectors (the base is inert here)
+    pf_vertices = [
+        pu_dqhub(name=:hub1), pu_dqhub(name=:hub2),
+        dqbus_slack(injector=true, name=:inj1),
+        dqbus_pv(injector=true, Pset=1.0, Vset=1.0, name=:inj2),
+    ]
+    nws = Network(pf_vertices, edges; warn_order=false)
+    pf = find_fixpoint(nws)
+
+    # dynamic model: swing injectors, distinct base per hub
+    dyn_vertices = [
+        pu_dqhub(name=:hub1), pu_dqhub(name=:hub2),
+        pu_dqswing_injector(name=:inj1), pu_dqswing_injector(name=:inj2),
+    ]
+    set_default!(dyn_vertices[1], :busbar₊S_b, 100.0)
+    set_default!(dyn_vertices[2], :busbar₊S_b, 200.0)
+    nw = Network(dyn_vertices, edges; warn_order=false)
+    s0 = initialize_componentwise!(nw; subverbose=false, verbose=false, default_overrides=interface_values(pf))
+    nw, s0
 end
 
 end #module

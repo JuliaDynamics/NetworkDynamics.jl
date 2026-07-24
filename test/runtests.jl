@@ -55,6 +55,7 @@ BUILDKITE && @test CUDA.functional() # fail early in buildkite if cuda is not av
         @testfile "MTK_test.jl"
         @testfile "bound_to_test.jl"
         @testfile "weak_test.jl"
+        @testfile "default_from_test.jl"
 
         # check on the precompile files
         @testfile "../src/precompile_workload.jl"

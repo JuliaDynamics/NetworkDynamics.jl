@@ -187,6 +187,46 @@ end
     @test wf.weak == true
 end
 
+@testset "@mtkmodel bare-symbol initf RHS is recovered by name" begin
+    # `@mtkmodel` stores a lone-identifier metadata RHS as a plain `Symbol` (not the variable), so
+    # `[initf_weak = S_b]` would otherwise lower to an input-less formula that fails at init. The
+    # collector recovers it by name against the model's own variables, so a bare identifier works
+    # exactly like the `1*S_b` compound spelling. An unresolvable name is a hard error.
+    mtkext = Base.get_extension(NetworkDynamics, :NetworkDynamicsMTKExt)
+
+    @mtkmodel BareRecover begin
+        @parameters begin
+            S_b = 5.0
+            Sn = 1.0, [initf_weak = S_b]     # bare identifier — mangled to `:S_b` by @mtkmodel
+        end
+        @variables begin
+            x(t) = 0.0
+        end
+        @equations begin
+            D(x) ~ S_b - Sn - x              # keep S_b and Sn from being pruned
+        end
+    end
+    sys = BareRecover(; name=:c)
+    e = only(filter(en -> Symbol(en.target) == :Sn, mtkext.collect_initf(sys)))
+    @test e.weak == true
+    @test !(e.expr isa Symbol)     # recovered to a real symbolic (not the mangled Symbol) …
+    @test Symbol(e.expr) == :S_b   # … which is the S_b variable
+
+    # a bare identifier that names no variable of the model → ArgumentError (naming the candidates)
+    @mtkmodel BareUnresolvable begin
+        @parameters begin
+            Sn = 1.0, [initf_weak = NOPE]
+        end
+        @variables begin
+            x(t) = 0.0
+        end
+        @equations begin
+            D(x) ~ Sn - x
+        end
+    end
+    @test_throws ArgumentError mtkext.collect_initf(BareUnresolvable(; name=:c))
+end
+
 @testset "metadata initf + initf_weak on one target: weak yields to strong" begin
     # a target carrying both a strong `initf` and a weak `initf_weak` keeps only the strong one
     # (weak yields to a strong writer, no conflict error) — whether the two rhs match or differ.

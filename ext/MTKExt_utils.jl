@@ -489,6 +489,41 @@ struct ParameterBoundTo end
 Symbolics.option_to_metadata_type(::Val{:bound_to}) = ParameterBoundTo
 
 """
+    ParameterDefaultFrom
+
+Symbolic metadata type backing `@parameters S_b [default_from = (:src, :busbar₊S_b)]`. Declares
+that a parameter takes its *default* value by copying it from a parameter of a *neighboring*
+component. Resolved as a pre-pass at network initialization time (see `resolve_default_from`) by
+baking the copied value into a *weak* [`InitFormula`](@ref), so the copy yields to a user-set
+default and stays independently settable (unlike [`ParameterBoundTo`](@ref), which eliminates the
+parameter structurally).
+
+The metadata value is a `(scope, srcsym)` tuple, where `scope` is one of
+
+  - `:src` / `:dst` — a parameter of the src/dst vertex of an edge, and
+  - `:hub` — a parameter of the hub vertex an injector node is attached to via a
+    `LoopbackConnection`.
+
+`srcsym` is the *full* (namespaced with `₊`) parameter name, exactly as it appears in the source
+component's `psym`. `default_from` is always cross-component; there is no same-component spelling
+(use [`ParameterBoundTo`](@ref) for that).
+"""
+struct ParameterDefaultFrom end
+
+Symbolics.option_to_metadata_type(::Val{:default_from}) = ParameterDefaultFrom
+
+# Normalize raw `default_from` metadata as it arrives from `@mtkmodel`/`@component`, where
+# `(:src, :sym)` is stored as a tuple of QuoteNodes. `default_from` is only ever cross-component,
+# so the top-level value must be a `(scope, srcsym)` tuple — a bare symbol is rejected.
+normalize_default_from(x::Tuple) = map(_unquote_sym, x)
+normalize_default_from(x) = throw(ArgumentError(
+    "default_from must be a `(scope, srcsym)` tuple with scope ∈ (:src, :dst, :hub), got \
+     $(repr(x)). `default_from` is always cross-component — use `bound_to` for a same-component \
+     alias."))
+_unquote_sym(x::QuoteNode) = x.value
+_unquote_sym(x::Symbol) = x
+
+"""
     resolve_bound_to(sys) -> System
 
 Turn `bound_to` parameter metadata into MTK bindings before compilation. For each parameter

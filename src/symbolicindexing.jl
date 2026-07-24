@@ -188,6 +188,11 @@ function _get_appropriate_dict(cidx, cm; guess, apply_formulas, verbose)
     if apply_formulas && has_initformula(cm)
         verbose && println("Applying InitFormulas for $(cidx) ($(cm.name))...")
         formulas = [normalize(f, am, cm; pinned) for f in get_initformulas(cm)]
+        # a weak formula yields to an existing default or a strong co-writer, exactly as in
+        # `initialize_component` — without this drop it would fire unconditionally here and
+        # clobber a user default it is supposed to defer to (post-normalize for canonical outputs)
+        strong_out = Set(s for f in formulas if !f.weak for s in f.outsym)
+        formulas = drop_weak_formulas(formulas, defaults, strong_out; verbose)
         apply_init_formulas!(defaults, formulas; error_unresolvable=false, verbose, pinned)
     end
     if guess
