@@ -159,14 +159,19 @@ function NWState(thing;
     s = NWState(nw,uflat,p,t)
     default || return s
 
+    # resolve `default_from` metadata into per-component weak InitFormulas
+    add_initf = apply_formulas ? resolve_default_from(nw, nothing, nothing; verbose) : nothing
+
     for (i, cm) in pairs(nw.im.vertexm)
-        for (k, v) in _get_appropriate_dict(VIndex(i), cm; guess, apply_formulas, verbose)
+        addf = isnothing(add_initf) ? nothing : get(add_initf, VIndex(i), nothing)
+        for (k, v) in _get_appropriate_dict(VIndex(i), cm; guess, apply_formulas, verbose, additional_initformula=addf)
             nwidx = VIndex(i, k)
             setindex!(s, v, nwidx)
         end
     end
     for (i, cm) in pairs(nw.im.edgem)
-        for (k, v) in _get_appropriate_dict(EIndex(i), cm; guess, apply_formulas, verbose)
+        addf = isnothing(add_initf) ? nothing : get(add_initf, EIndex(i), nothing)
+        for (k, v) in _get_appropriate_dict(EIndex(i), cm; guess, apply_formulas, verbose, additional_initformula=addf)
             nwidx = EIndex(i, k)
             setindex!(s, v, nwidx)
         end
@@ -181,27 +186,25 @@ end
 # observable would look for roots the dict still spells under their alias names.
 #
 # Both are no-ops with an empty aliasmap (the non-MTK case), see `normalize`.
-function _get_appropriate_dict(cidx, cm; guess, apply_formulas, verbose)
+function _get_appropriate_dict(cidx, cm; guess, apply_formulas, verbose, additional_initformula=nothing)
     am = get_aliasmap(cm)
-    pinned = apply_formulas ? pinned_obssyms(cm) : Set{Symbol}()
     defaults = normalize_valuedict(am, get_defaults_or_inits_dict(cm); what=:default, verbose)
-    if apply_formulas && has_initformula(cm)
+    # fold the network-resolved `default_from` weak formulas (passed per component by the
+    # constructor) into the component's own init formulas, so a `default_from` copy also
+    # materializes on reconstruction — same combined set `initialize_component` uses.
+    metadata_initf = has_initformula(cm) ? get_initformulas(cm) : nothing
+    combined_initf = apply_formulas ? collect_formulas(metadata_initf, additional_initformula) : nothing
+    if !isnothing(combined_initf)
         verbose && println("Applying InitFormulas for $(cidx) ($(cm.name))...")
-        formulas = [normalize(f, am, cm; pinned) for f in get_initformulas(cm)]
-        # a weak formula yields to an existing default or a strong co-writer, exactly as in
-        # `initialize_component` — without this drop it would fire unconditionally here and
-        # clobber a user default it is supposed to defer to (post-normalize for canonical outputs)
-        strong_out = Set(s for f in formulas if !f.weak for s in f.outsym)
-        formulas = drop_weak_formulas(formulas, defaults, strong_out; verbose)
-        apply_init_formulas!(defaults, formulas; error_unresolvable=false, verbose, pinned)
+        extend_knowns_by_formulas!(defaults, cm, combined_initf; am, error_unresolvable=false, verbose)
     end
     if guess
         guesses = normalize_valuedict(am, get_guesses_dict(cm); what=:guess, on_conflict=:keepfirst, verbose)
         if apply_formulas && has_guessformula(cm)
             verbose && println("Applying GuessFormulas for $(cidx) ($(cm.name))...")
-            guess_pinned = pinned_obssyms(cm; guess=true)
-            formulas = [normalize(f, am, cm; pinned=guess_pinned) for f in get_guessformulas(cm)]
-            apply_guess_formulas!(guesses, defaults, formulas; error_unresolvable=false, verbose, pinned=guess_pinned)
+            extend_guesses_by_formulas!(guesses, defaults, cm, get_guessformulas(cm);
+                                        am, init_pinned=pinned_obssyms(combined_initf, cm),
+                                        error_unresolvable=false, verbose)
         end
         defaults = merge(guesses, defaults) # defaults overwrite guesses
     end

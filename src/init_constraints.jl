@@ -658,6 +658,72 @@ function topological_sort_formulas(formulas)
     end
 end
 
+"""
+    extend_knowns_by_formulas!(knowns, cf, formulas; am, t, pinned, error_unresolvable, verbose, io)
+
+Extend a dict of known component values `knowns` in place by applying init `formulas`, mutating and
+returning `knowns`. This is the shared formula pass behind both `initialize_component` and the
+`NWState` reconstruction (`_get_appropriate_dict`): compute the pin-set from the *complete* formula
+set, [`normalize`](@ref) each formula onto canonical settable symbols, [`drop_weak_formulas`](@ref)
+whose target is already backed (a value in `knowns`, or a strong co-writer), then
+[`apply_init_formulas!`](@ref) the survivors. A no-op when `formulas` is `nothing`.
+
+The one seam between the callers is *what they pass as `knowns`*: `initialize_component` passes the
+default-only dict (so weak formulas re-fire on reinit and the solve refines the rest); `NWState`
+passes defaults-and-inits (so a reconstruction reproduces the post-init state). Keeping the
+normalize / weak-drop / pin-set machinery here — not copied into each caller — is what stops the two
+paths from silently drifting apart (as they once did on the weak-drop, see git history).
+"""
+function extend_knowns_by_formulas!(knowns, cf, formulas;
+                                    am=get_aliasmap(cf), t=NaN,
+                                    pinned=pinned_obssyms(formulas, cf),
+                                    error_unresolvable=true, verbose=false, io=stdout)
+    isnothing(formulas) && return knowns
+    normed = [normalize(f, am, cf; t, pinned) for f in formulas]
+    # a weak formula also yields to a *strong* co-writer on the same target (see
+    # `drop_weak_formulas`); computed post-normalize so the outputs are canonical
+    strong_out = Set(s for f in normed if !f.weak for s in f.outsym)
+    kept = drop_weak_formulas(normed, knowns, strong_out; verbose, io)
+    isempty(kept) || apply_init_formulas!(knowns, kept; error_unresolvable, verbose, io, pinned)
+    return knowns
+end
+
+"""
+    extend_guesses_by_formulas!(guesses, defaults, cf, formulas; am, t, init_pinned, error_unresolvable, verbose, io)
+
+Guess-formula sibling of [`extend_knowns_by_formulas!`](@ref), shared by `initialize_component` and
+the `NWState` reconstruction (`_get_appropriate_dict`). Extends the `guesses` dict in place by
+`normalize`-ing and applying the guess `formulas`, mutating and returning `guesses`. A no-op when
+`formulas` is `nothing`.
+
+Differs from the init pass in two structural ways, which is why it is a separate function rather
+than the same one: guess application is a *layered* two-dict write — [`apply_guess_formulas!`](@ref)
+writes `guesses` but reads `defaults`-before-`guesses` as inputs (fixed values win) — and there is
+no weak-drop (`GuessFormula` has no `weak`).
+
+The guess frontier is `(init_pinned ∩ keys(defaults)) ∪ guess_pins`. The caller passes the full
+static *init* pin-set in (`initialize_component` reuses the one it already computed — which covers
+its `additional_initformula`s too; `NWState` passes `pinned_obssyms(cm)`), and it is **intersected
+with what actually landed in `defaults`**: an init formula that did not run (skipped on unresolvable
+inputs under `error_unresolvable=false`, i.e. the NWState path) leaves its pinned observable
+*unwritten*, so a guess reading it must expand to roots rather than stop at a value that is not
+there. This filtering is only valid for the init pins — the init pass has already run and
+materialized its outputs, so `keys(defaults)` is ground truth for "did this pin happen." The guess
+pins cannot be filtered the same way: guess formulas are all normalized before any is applied, so
+their pin-set must stay the full static set (order-independent *within* the guess pass, exactly as
+init pins are within the init pass). Kept here so the pin-set/normalize rule is single-sourced and
+the two callers cannot drift.
+"""
+function extend_guesses_by_formulas!(guesses, defaults, cf, formulas;
+                                     am=get_aliasmap(cf), t=NaN, init_pinned=Set{Symbol}(),
+                                     error_unresolvable=true, verbose=false, io=stdout)
+    isnothing(formulas) && return guesses
+    guess_pinned = (init_pinned ∩ keys(defaults)) ∪ pinned_obssyms(formulas, cf)
+    normed = [normalize(f, am, cf; t, pinned=guess_pinned) for f in formulas]
+    apply_guess_formulas!(guesses, defaults, normed; error_unresolvable, verbose, io, pinned=guess_pinned)
+    return guesses
+end
+
 # A weak formula yields — and is dropped — when its (canonical) target already carries a
 # `default` or is written by a *strong* formula (`strong_outputs`): an InitFormula always fires,
 # so a strong writer pins the target and the weak default is redundant. The default check is on

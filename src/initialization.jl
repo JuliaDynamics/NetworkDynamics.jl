@@ -569,23 +569,14 @@ function initialize_component(cf;
     # both (init pins through the defaults-before-guesses lookup, guess pins from guesses).
     pinned = pinned_obssyms(combined_initformulas, cf)
 
-    if !isnothing(combined_initformulas)
-        combined_initformulas = [normalize(f, am, cf; t, pinned) for f in combined_initformulas]
-        # a weak formula also yields to a *strong* formula writing the same target (see
-        # `drop_weak_formulas`); computed post-normalize so the outputs are canonical
-        strong_out = Set(s for f in combined_initformulas if !f.weak for s in f.outsym)
-        combined_initformulas = drop_weak_formulas(combined_initformulas, defaults, strong_out; verbose, io)
-        isempty(combined_initformulas) ||
-            apply_init_formulas!(defaults, combined_initformulas; verbose, io, pinned)
-    end
+    # seed `defaults` (default-only here) with the resolved formula outputs; `pinned` is reused by
+    # the guess block below, so it stays computed in this scope and is threaded in.
+    extend_knowns_by_formulas!(defaults, cf, combined_initformulas; am, t, pinned, verbose, io)
 
     metadata_guessformulas = has_guessformula(cf) ? get_guessformulas(cf) : nothing
     combined_guessformulas = collect_formulas(metadata_guessformulas, additional_guessformula)
-    if !isnothing(combined_guessformulas)
-        guess_pinned = pinned ∪ pinned_obssyms(combined_guessformulas, cf)
-        combined_guessformulas = [normalize(f, am, cf; t, pinned=guess_pinned) for f in combined_guessformulas]
-        apply_guess_formulas!(guesses, defaults, combined_guessformulas; verbose, io, pinned=guess_pinned)
-    end
+    # guess frontier = init pins (reused from above) ∪ guess pins; see `extend_guesses_by_formulas!`
+    extend_guesses_by_formulas!(guesses, defaults, cf, combined_guessformulas; am, t, init_pinned=pinned, verbose, io)
 
     metadata_constraint = has_initconstraint(cf) ? get_initconstraints(cf) : nothing
     combined_constraint = merge_initconstraints(metadata_constraint, additional_initconstraint)

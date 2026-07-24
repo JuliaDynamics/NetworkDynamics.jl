@@ -137,6 +137,19 @@ end
     @test NWState(nw)[VIndex(3, :Sn)] == 777.0
 end
 
+@testset "NWState(nw) materializes default_from copies" begin
+    # `default_from` lowers to a weak formula that is resolved *network-wide* (`resolve_default_from`);
+    # the NWState constructor must run that pre-pass too, so the copied neighbor value shows up on
+    # reconstruction — not only after a full init. The line's `S_b` copies from its src hub (100).
+    nw = Network(path_graph(2), [M.mkhub(100.0, :hub1), M.mkhub(200.0, :hub2)], M.mkline(:src))
+    @test NWState(nw)[EIndex(1, :S_b)] == 100.0
+
+    # a user default on the target → the weak default_from yields, the user value survives
+    nw2 = Network(path_graph(2), [M.mkhub(100.0, :hub1), M.mkhub(200.0, :hub2)],
+                  M.mkline(:src; sb_default=42.0))
+    @test NWState(nw2)[EIndex(1, :S_b)] == 42.0
+end
+
 @testset "structural / resolution errors" begin
     hubs() = [M.mkhub(100.0, :hub1), M.mkhub(200.0, :hub2)]
 
