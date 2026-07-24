@@ -608,14 +608,17 @@ function _collect_formula_metadata(sys, VarMetaType, SysMetaKey; weak_var_type=n
             push!(subvars, unwrap(ModelingToolkitBase.namespace_expr(v, subsys)))
         end
     end
+    _localvars = Dict{Symbol,Any}() # cache to store potentail roots (for mtkmodel bug recorvery)
     for v in vcat(ModelingToolkitBase.get_unknowns(sys), ModelingToolkitBase.get_ps(sys))
         u = unwrap(v)
         u ∈ subvars && continue
         if SymbolicUtils.hasmetadata(u, VarMetaType)
-            push!(entries, (; target=u, expr=unwrap(SymbolicUtils.getmetadata(u, VarMetaType)), weak=false))
+            expr = _fix_mtkmodel_formula(sys, SymbolicUtils.getmetadata(u, VarMetaType), u, _localvars)
+            push!(entries, (; target=u, expr, weak=false))
         end
         if !isnothing(weak_var_type) && SymbolicUtils.hasmetadata(u, weak_var_type)
-            push!(entries, (; target=u, expr=unwrap(SymbolicUtils.getmetadata(u, weak_var_type)), weak=true))
+            expr = _fix_mtkmodel_formula(sys, SymbolicUtils.getmetadata(u, weak_var_type), u, _localvars)
+            push!(entries, (; target=u, expr, weak=true))
         end
     end
     for e in SymbolicUtils.getmetadata(sys, SysMetaKey, _sysformula_entries())
@@ -629,6 +632,34 @@ function _collect_formula_metadata(sys, VarMetaType, SysMetaKey; weak_var_type=n
         end
     end
     entries
+end
+
+# Recover from the `@mtkmodel` footgun: a metadata option written as a *bare identifier*
+# (`[initf = x]`) is parsed and stored as a plain `Symbol` (`:x`), not the symbolic variable, so it
+# carries no free variables and would lower to an input-less constant formula that fails at init
+# with `x not defined`. `@component`/`@parameters` (which evaluate metadata) and any *compound*
+# expression (`[initf = 1*x]`) already capture the variable correctly — a bare symbol is thus the
+# *only* mangled shape, and it can only ever name a same-level variable. So resolve it by name
+# against this level's own variables (`localvars`); an unresolvable name is a genuine error.
+function _fix_mtkmodel_formula(sys, raw, target, localvars)
+    if raw isa Symbol || raw isa QuoteNode
+        if isempty(localvars)
+            # if not yet init we need to find all possibel roots now
+            for v in vcat(ModelingToolkitBase.get_unknowns(sys), ModelingToolkitBase.get_ps(sys))
+                localvars[getname(unwrap(v))] = unwrap(v)
+            end
+        end
+
+        name = raw isa QuoteNode ? raw.value : raw
+        haskey(localvars, name) && return localvars[name]
+        avail = join(sort(string.(keys(localvars))), ", ")
+        throw(ArgumentError("initf/guessf on :$(getname(target)) references `$name`, which is not a \
+            variable of this model. `@mtkmodel` stores a bare identifier literally (not as a \
+            variable reference), so it is resolved by name against the model's own \
+            unknowns/parameters — available: $avail. Check the spelling, write the RHS as an \
+            expression (e.g. `1*$name`), or use `set_initf`/`set_guessf`."))
+    end
+    unwrap(raw)
 end
 
 """
