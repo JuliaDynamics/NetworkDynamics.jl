@@ -373,7 +373,7 @@ function normalize(f::Union{InitFormula,GuessFormula}, am::AliasMap, cf::Compone
     # only expand when there is something to expand: an aliased output alone must not drag
     # in the MTK extension
     roots, expand = isempty(expandable) ? (copy(f.sym), nothing) : _obs_expansion(cf, f.sym; stop_at=pinned)
-    _assert_no_self_dependency(f, roots, canonout)
+    _assert_no_self_dependency(f, roots, canonout, cf, expandable, pinned)
 
     wrapped = function (out, u)
         rootvals = Float64[u[r] for r in roots]
@@ -428,13 +428,46 @@ end
 # The raw lists can hide a self-dependency which only normalization makes visible: `:θ` and
 # `:u_r` are one variable, and reading an observable `a = x + y` is reading `:x`. The
 # formula constructor would catch it too, but only knows the canonical names.
-function _assert_no_self_dependency(f, roots, canonout)
+function _assert_no_self_dependency(f, roots, canonout, cf, expandable, pinned)
     self_deps = intersect(roots, canonout)
     isempty(self_deps) && return nothing
-    throw(ArgumentError("$(_formulatype(f)) $(f.sym) → $(f.outsym) depends on its own \
-        output: after normalization it reads $roots and writes $canonout, which overlap in \
-        $self_deps."))
+    # one fact per line: the symbol lists get long in deeply nested models, and a reader who
+    # has to scan them wants an obvious place to jump to next
+    lines = ["$(_formulatype(f)) $(_formula_ref(f)) depends on its own output:",
+             " - writes $(_symrepr(f.outsym))" *
+                 (canonout == f.outsym ? "" : ", i.e. $(_symrepr(canonout))"),
+             " - reads $(_symrepr(f.sym))" *
+                 (roots == f.sym ? "" : ", expanded to $(_symrepr(roots))")]
+    append!(lines, _self_dependency_lines(f, cf, expandable, pinned, roots, self_deps))
+    throw(ArgumentError(join(lines, "\n")))
 end
+
+function _self_dependency_lines(f, cf, expandable, pinned, roots, self_deps)
+    stop_at = pinned ∪ setdiff(roots, settable_symbols(cf))
+    lines = String[]
+    fixes = String[]
+    for s in expandable
+        sroots = first(_obs_expansion(cf, [s]; stop_at))
+        overlap = intersect(sroots, self_deps)
+        isempty(overlap) && continue
+        push!(lines, " - :$s is an observable depending on $(_symrepr(sroots)), which \
+                       introduces $(_symrepr(overlap))")
+        # suggesting the formula's own kind fits either: an init formula must be pinned by an
+        # init formula, a guess formula reads both pin-sets (see `pinned_obssyms`)
+        kind = f isa InitFormula ? "an InitFormula" : "a GuessFormula"
+        push!(fixes, isdisjoint(overlap, pinned) ?
+            " - stop expanding :$s by declaring $kind for it, then it is read as-is" :
+            " - $(_symrepr(overlap)) is declared by this formula itself, so no further formula \
+               breaks the loop — read what $(_symrepr(overlap)) is computed from instead")
+    end
+    # no observable input explains the overlap, so it came in through canonicalization
+    isempty(lines) && return [" - $(_symrepr(self_deps)) is read and written: members of one \
+                               alias class are one variable"]
+    append!(lines, fixes)
+end
+
+# `:a` for a single symbol, `[:a, :b]` for several — brackets around a lone symbol are noise
+_symrepr(syms) = length(syms) == 1 ? ":$(only(syms))" : repr(syms)
 
 """
     UnresolvableExpansionError <: Exception

@@ -933,7 +933,7 @@ end
         defaults = Dict(:start => 1.0)
         guesses = Dict{Symbol,Float64}()
 
-        @test_throws ArgumentError apply_guess_formulas!(guesses, defaults, [gf1, gf2]; verbose=false)
+        @test_throws "Circular dependency detected between 2 GuessFormulas" apply_guess_formulas!(guesses, defaults, [gf1, gf2]; verbose=false)
     end
 
     @testset "has_guessformula, set_guessformula!, and get_guessformulas" begin
@@ -1249,6 +1249,8 @@ end
         defaults = Dict(:start => 1.0)
 
         @test_throws ArgumentError apply_init_formulas!(defaults, [f1, f2]; verbose=false)
+        # the message spells the cycle out rather than just its existence
+        @test_throws ["Circular dependency detected between 2 InitFormulas", "writes [:a], read by"] apply_init_formulas!(defaults, [f1, f2]; verbose=false)
     end
 end
 
