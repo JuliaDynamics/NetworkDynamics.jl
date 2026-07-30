@@ -153,6 +153,11 @@ get_bounds
 set_bounds!
 delete_bounds!
 strip_bounds!
+has_default_from
+get_default_from
+set_default_from!
+delete_default_from!
+strip_default_from!
 set_defaults!
 set_interface_defaults!
 get_defaults_dict
