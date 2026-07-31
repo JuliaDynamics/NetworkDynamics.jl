@@ -328,7 +328,16 @@ end
         alias_induced = @initformula :θ = :u_r * 2        # writes -u_r, reads u_r
         err = try; normalize(alias_induced, AM, VM); catch e; e; end
         @test err isa ArgumentError
-        @test occursin("[:u_r] → [:θ]", sprint(showerror, err)) # names raw and canonical
+        msg = sprint(showerror, err)
+        @test occursin("writes :θ, i.e. :u_r", msg)    # names raw and canonical
+        # nothing expanded here, so the hint must blame the alias class, not a missing formula
+        @test occursin("members of one alias class are one variable", msg)
+        @test !occursin("stop expanding", msg)
+
+        # same, but with an observable input around which does *not* cause the overlap
+        mixed = @initformula :θ = :u_r + :Vmeas
+        @test occursin("members of one alias class are one variable",
+                       sprint(showerror, try; normalize(mixed, AM, VM); catch e; e; end))
 
         expansion_induced = @initformula :u_r = :summed   # summed = u_r + u_i + Vset
         @test_throws ArgumentError normalize(expansion_induced, AM, VM)
@@ -445,7 +454,36 @@ end
     f = @initformula :y = :yplus - 1   # yplus stops at pinned :y → reads what it writes
     err = try; normalize(f, get_aliasmap(VMsd), VMsd; pinned=Set([:y])); catch e; e; end
     @test err isa ArgumentError
-    @test occursin("depends on its own", sprint(showerror, err))
+    msg = sprint(showerror, err)
+    @test occursin("depends on its own", msg)
+    # the hint must name the observable the cycle runs through, and must *not* offer a pin:
+    # the formula writes the pin itself
+    @test occursin(":yplus is an observable depending on :y", msg)
+    @test occursin("no further formula breaks the loop", msg)
+    @test !occursin("stop expanding", msg)
+end
+
+# The governor-without-machine shape: a formula reads an observable which is downstream of
+# its own output. Absent a second formula pinning that observable it expands straight back
+# onto the output, and the message has to name it as the thing to pin.
+@testset "self-dependency through an unpinned observable" begin
+    f = @initformula :Vset = :summed - :u_r - :u_i
+    err = try; normalize(f, AM, VM); catch e; e; end
+    @test err isa ArgumentError
+    msg = sprint(showerror, err)
+    @test occursin("depends on its own output", msg)
+    @test occursin(":summed is an observable depending on", msg)
+    @test occursin("stop expanding :summed by declaring an InitFormula for it", msg)
+
+    # a guess formula pins with a guess formula, so the suggestion follows the kind
+    gerr = try; normalize((@guessformula :Vset = :summed), AM, VM); catch e; e; end
+    @test occursin("declaring a GuessFormula for it", sprint(showerror, gerr))
+
+    # and pinning `:summed` — i.e. adding the formula that writes it — resolves the cycle:
+    # nothing expands anymore, so `normalize` hands back the very same formula
+    pins = pinned_obssyms([f, (@initformula :summed = 2 * :u_r)], VM)
+    @test pins == Set([:summed])
+    @test normalize(f, AM, VM; pinned=pins) === f
 end
 
 @testset "normalize(::GuessFormula)" begin
@@ -795,6 +833,21 @@ end
             additional_initformula=[bad_pin, calc_x], verbose=false)
     end
 
+    # Half of the chain is not half an initialization: without the writer, `:y` is not a pin,
+    # so the reader's `:y` expands back through the PI equation onto its own output `:x`. This
+    # is the "governor formula without the machine formula" failure, end to end.
+    @testset "dropping the pin writer turns the reader into a cycle" begin
+        err = try
+            initialize_component(PVM; default_overrides=seeds,
+                                 additional_initformula=[calc_x], verbose=false)
+        catch e; e; end
+        @test err isa ArgumentError
+        msg = sprint(showerror, err)
+        @test occursin("depends on its own output", msg)
+        @test occursin(":y is an observable depending on", msg)
+        @test occursin("stop expanding :y by declaring an InitFormula for it", msg)
+    end
+
     @testset "a wrong unread pin trips the consistency warning" begin
         # x is seeded manually, so nothing consumes the pin; the recomputed observable
         # disagrees with the asserted value and the post-solve check names the origin
@@ -1032,6 +1085,22 @@ end
         v = seed!(copy(GB))
         add_initformula!(v, fMbad); add_initformula!(v, fA); add_initformula!(v, fG)
         @test_throws NetworkDynamics.ComponentInitError initialize_component(v; verbose=false, warn=false)
+    end
+
+    # Dropping the machine formula here is *not* the cyclic-dependency case: `Efd`/`Pm` are
+    # settable alias classes (the control states are their survivors), so the controls read
+    # storage slots, not observables — nothing expands, and the failure is the plain
+    # unresolvable input. Contrast "dropping the pin writer turns the reader into a cycle",
+    # where the shared symbol is an observable and the reader's input expands onto its output.
+    @testset "controls without the machine formula: unresolvable, not cyclic" begin
+        v = seed!(copy(GB))
+        add_initformula!(v, fA); add_initformula!(v, fG)
+        err = try; initialize_component(v; verbose=false, warn=false); catch e; e; end
+        @test err isa ArgumentError
+        msg = sprint(showerror, err)
+        @test occursin("requires all input symbols to be initialized", msg)
+        @test occursin(":gov₊Pm => NaN", msg)
+        @test !occursin("depends on its own output", msg)
     end
 
     @testset "duplicate writer into one alias class via different members" begin

@@ -209,7 +209,7 @@ Initialization formulas act early in the initialization pipeline to compute and 
 
 Each formula can only reference symbols that are already available - it cannot use intermediate values computed within the same formula.
 
-A formula takes precedence over a plain default: if a symbol carries both a numeric `default` and an `initf`, the formula overwrites the default. That is by design — it lets a component ship a sensible standalone value which is superseded once the surrounding model pins the symbol down.
+A formula takes precedence over a plain default: if a symbol carries both a numeric `default` and an `initf`, the formula overwrites the default. That is by design — it lets a component ship a sensible standalone value which is superseded once the surrounding model pins the symbol down. The opposite precedence — a rule which *yields* to a value the user already set — is available as a [weak formula](@ref weak-initformulas).
 
 **Basic Usage**: Use the [`@initformula`](@ref) macro to define formulas with assignment syntax:
 
@@ -260,7 +260,37 @@ Reach for `set_initf` when the rule comes from *outside* the block that owns the
     - `initf = <expr>` holds **once, at initialization**. It is evaluated while the init problem is assembled and is not enforced afterwards — during the simulation the state is free to drift away from it.
     - `guessf = <expr>` has the same timing but is only a *hint*: it seeds the solver's starting point and is never checked.
 
-    **Exception: symbolic defaults on parameters.** `@parameters K = K_e` stays valid, because it means something categorically different — it holds **unconditionally, at all times**. MTK demotes `K` to an observable of `K_e`, so from then on there is only one parameter. This is the mechanism for wiring parameter dependencies between a model and its subcomponents: a parent's `voltage_kp` can be handed down to the generic `Kp` of a nested PI block (`@named pi = PIBlock(Kp = voltage_kp)`), which demotes `pi₊Kp` and leaves `voltage_kp` as the single tunable knob — rather than two separate parameters that must be kept in sync.
+    **Exception: symbolic defaults on parameters.** `@parameters K = K_e` stays valid, because it means something categorically different — it holds **unconditionally, at all times**. MTK demotes `K` to an observable of `K_e`, so from then on there is only one parameter. This is the mechanism for wiring parameter dependencies between a model and its subcomponents: a parent's `voltage_kp` can be handed down to the generic `Kp` of a nested PI block (`@named pi = PIBlock(Kp = voltage_kp)`), which demotes `pi₊Kp` and leaves `voltage_kp` as the single tunable knob — rather than two separate parameters that must be kept in sync. The postfix spelling of that same mechanism is [`bound_to`](@ref parameter-sharing).
+
+#### [Weak Formulas: Rules That Yield](@id weak-initformulas)
+
+The precedence above — formula beats default — is the right one for *deriving* a quantity: the formula knows more than whatever standalone value the component happened to ship with. It is the wrong one for *defaulting* a quantity, where the rule should read "use this **unless** the user pinned something else". That inverse precedence is what a **weak** formula expresses.
+
+A weak formula is **dropped** at initialization when its target is already backed by
+
+- a `default` on the component (or a `default_overrides` entry passed to the init call), or
+- a strong (non-weak) formula writing the same symbol.
+
+Otherwise it fires exactly like a plain `InitFormula`. Because dropping is all-or-nothing, a weak formula must have exactly **one** output symbol — a multi-output weak rule could strand a sibling output that nothing else pins, so it is rejected at construction. Two weak formulas competing for the same target with nothing to break the tie is a genuine ambiguity and errors.
+
+The core-API spelling is a keyword on the macro (and on the [`InitFormula`](@ref) constructor):
+
+```@example compinit
+weak_formula = @initformula weak=true begin
+    :V_base = :V_nom     # follow V_nom — unless someone pinned V_base
+end
+nothing #hide
+```
+
+On the MTK side it is the `initf_weak` variable option next to the declaration, or `weak=true` on [`set_initf`](@ref):
+
+```julia
+@parameters V_base, [guess=1.0, initf_weak = V_nom]   # weak sibling of `initf`
+
+sys = set_initf(sys, sub.V_base => V_nom; weak=true)  # ... attached from outside
+```
+
+The check is deliberately against `default` only, never `init`: a weak formula persists its own output as `init` metadata, so consulting `init` would make it block itself whenever the component is re-initialized.
 
 #### [Backward-Flow Initialization: Formulas That Find Each Other](@id backward-flow-init)
 
@@ -347,6 +377,48 @@ sys = set_guessf(sys, sub.x => sub.p)          # seed a subsystem's state from o
 
 `guessf` reads as "at initialization, *guess* this symbol from that expression". Because a guess is only a hint, it differs from `initf` in two ways: conflicting recipes for one target are a warning (not an error), and a formula whose inputs cannot be resolved is silently skipped. That skip is what makes `guessf` compose with a scalar `guess`: give a variable both `guess=0` (the fallback seed) and `guessf=<expr>` (the refined value), and the formula is used whenever it resolves while the scalar remains as a safe default. A symbolic value given to the plain `guess` option is rejected — spell it as `guessf` instead.
 
+## [Sharing Parameter Values Between Components](@id parameter-sharing)
+
+Base values and per-unit references are the typical case where *the same number* must appear in several places: a machine's rating, a bus's nominal voltage, a line's base impedance. Keeping those in sync by hand is exactly the kind of bookkeeping that silently desyncs. Two pieces of parameter metadata cover the two situations that actually arise — one *within* a component, one *across* components.
+
+### `bound_to`: one quantity, one parameter (same component)
+
+`bound_to` declares that a parameter **is** another symbol of the *same* component:
+
+```julia
+@parameters begin
+    S_b, [bound_to = :busbar₊S_b]    # my base power is the busbar's base power
+end
+```
+
+Before the component is compiled this is turned into a real MTK binding (`S_b = busbar₊S_b`). The effect is structural, not merely initial: `S_b` **leaves** [`psym`](@ref) and reappears as an *observable* of its target, so there is exactly one true parameter for the quantity and the two cannot drift apart. It is the postfix spelling of the `@parameters K = K_e` mechanism described in the warning above — reach for it when the declaration and the binding live in different places, or when the intent should read as "alias" rather than "default".
+
+Since the parameter ceases to exist, giving a `bound_to` parameter an explicit default is contradictory and errors, as does a target that cannot be resolved within the system.
+
+### `default_from`: copy a neighbor's default (across components)
+
+The cross-component case cannot be a binding: an edge and its terminal vertices are separate models, joined only once the graph exists. `default_from` therefore copies a **default value** from a neighboring component:
+
+```julia
+@parameters begin
+    S_b, [default_from = (:src, :busbar₊S_b)]   # take the base power of my src vertex
+end
+```
+
+The scope keyword names the neighbor to read from:
+
+| scope | valid on | source |
+|:--|:--|:--|
+| `:src` / `:dst` | edge parameters | the src / dst vertex of that edge |
+| `:hub` | vertex parameters of an [injector node](@ref injector-nodes) | the vertex the injector hangs off, via its [`LoopbackConnection`](@ref) |
+
+Resolution happens once the network exists — as a pre-pass of [`initialize_componentwise`](@ref) and of the [`NWState`](@ref) constructor — and the copied value is baked into a [weak](@ref weak-initformulas) [`InitFormula`](@ref). That yields the intended semantics: the parameter follows its neighbor but stays independently settable, because any `default` on it (or a `default_overrides` entry) drops the weak formula. On the source side a `default_overrides` entry is honored as well, so a network-level base-power override propagates to everything that follows it.
+
+Misuse is reported rather than silently ignored: `default_from` on a non-parameter, a scope that does not fit the component type (`:src`/`:dst` on a vertex, `:hub` on an edge or on a non-injector vertex), or a source symbol which is not a parameter of the source vertex all **error**. A resolvable source that simply carries no value yet is **skipped**, leaving the target's own default in place.
+
+The metadata is reachable from the ND side too, via `has_default_from`, `get_default_from`, `set_default_from!`, `delete_default_from!` and `strip_default_from!` (see [Per-Symbol Metadata API](@ref)).
+
+The two features are complements: use `bound_to` when the values must be *identical by construction* and one of them should stop being a knob; use `default_from` when a component should *start* from its neighbor's value but remain adjustable.
 
 ## Analysing Fixpoints
 In order to analyse fixpoints NetworkDynamis provides the functions [`isfixpoint`](@ref), [`is_linear_stable`](@ref) and [`jacobian_eigenvals`](@ref).

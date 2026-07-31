@@ -199,7 +199,8 @@ function _auto_formula_label(ex)
     length(exprs) == 1 || return nothing
     a = only(exprs)
     (a isa Expr && a.head === :(=) && a.args[1] isa QuoteNode) || return nothing
-    replace(_strip_locations(string(a)), r":(?=[A-Za-z_])" => "")
+    # `\p{L}` rather than `[A-Za-z]`: symbol names are commonly Greek (`:θ`, `:ω`)
+    replace(_strip_locations(string(a)), r":(?=[\p{L}_])" => "")
 end
 
 # for metadata check, just passes down the
@@ -658,17 +659,47 @@ function topological_sort_formulas(formulas)
         if length(sorted_indices) != n
             # This shouldn't happen with a proper topological sort implementation,
             # but let's be safe
-            throw(ArgumentError("Circular dependency detected in $(type)s"))
+            throw(ArgumentError(_circular_dependency_msg(formulas, g, type)))
         end
         return formulas[sorted_indices]
     catch e
         if e isa ErrorException && occursin("graph contains at least one loop", string(e))
-            throw(ArgumentError("Circular dependency detected in $(type)s"))
+            throw(ArgumentError(_circular_dependency_msg(formulas, g, type)))
         else
             rethrow(e)
         end
     end
 end
+
+function _circular_dependency_msg(formulas, g, type)
+    # cycle count is bounded by the (small) number of formulas on one component; take the
+    # shortest witness, one is enough to explain the failure
+    cycles = Graphs.simplecycles_limited_length(g, Graphs.nv(g))
+    isempty(cycles) && return "Circular dependency detected in $(type)s"
+    cycle = argmin(length, cycles)
+
+    rows = map(eachindex(cycle)) do i
+        from = formulas[cycle[i]]
+        to = formulas[cycle[mod1(i + 1, length(cycle))]]
+        shared = intersect(to.sym, from.outsym)
+        "  $(_cycle_ref(from)) writes $shared, read by $(_cycle_ref(to))"
+    end
+    normalized = filter(i -> !isnothing(formulas[i].derived_from), cycle)
+    note = if isempty(normalized)
+        ""
+    else
+        "\nSome of them were normalized, i.e. their inputs are the settable roots of the \
+         observables they were written against: \
+         $(join(("$(_cycle_ref(formulas[i])) was written to read $(formulas[i].derived_from.sym)" for i in normalized), ", ")). \
+         An observable which is written by a formula of this initialization becomes a pin and \
+         is read directly instead of being expanded to its roots — so an edge above may \
+         disappear once the observable it runs through is written by a formula."
+    end
+    "Circular dependency detected between $(length(cycle)) $(type)s:\n" * join(rows, "\n") * note
+end
+# `_formula_ref`'s prose form ("for [:x]") does not survive mid-sentence next to a `writes`,
+# so name a formula by its quoted recipe where it has one
+_cycle_ref(f) = isnothing(f.label) ? "the formula for $(f.outsym)" : "`$(f.label)`"
 
 """
     extend_knowns_by_formulas!(knowns, cf, formulas; am, t, pinned, error_unresolvable, verbose, io)

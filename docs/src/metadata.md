@@ -22,7 +22,7 @@ details.
 ## Symbol Metadata
 Each component stores symbol metadata. The symbol metadata is a `Dict{Symbol, Dict{Symbol, Any}}` which stores a metadata dict per symbol. Symbols are everything that appears in [`sym`](@ref), [`psym`](@ref), [`obssym`](@ref) and [`insym`](@ref).
 
-To access the data, you can use the methods `has_metadata`, `get_metadata`, `set_metadata!` and `delete_metadata!` (see [Per Symbol Metadata API](@ref)). These functions also support pattern matching using String or Regex patterns to match symbol names, making it easier to work with symbols containing special characters or when you only know part of the symbol name.
+To access the data, you can use the methods `has_metadata`, `get_metadata`, `set_metadata!` and `delete_metadata!` (see [Per-Symbol Metadata API](@ref)). These functions also support pattern matching using String or Regex patterns to match symbol names, making it easier to work with symbols containing special characters or when you only know part of the symbol name.
 
 Special cases for symbol metadata are:
 
@@ -30,8 +30,9 @@ Special cases for symbol metadata are:
 - `guess`: Stores a guess for a state/parameter which needs to be solved during initialization ("free" variables).
 - `bounds`: Stores bounds for variables/parameters
 - `init`: Stores the solution of the "free" variables, this is rarely set manually but instead when calling [`initialize_component!`](@ref).
+- `default_from`: Declares that a *parameter* takes its default value from a neighboring component, as a `(scope, srcsym)` tuple such as `(:src, :busbar₊S_b)`. Resolved once the network exists, see [Sharing Parameter Values Between Components](@ref parameter-sharing).
 
-For those, there are special functions `has_*`, `get_*`, `set_*!`, `delete_*!` and `strip_*!`. The `strip_*!` functions remove all metadata of a specific type from all symbols in a component. See [Per Symbol Metadata API](@ref).
+For those, there are special functions `has_*`, `get_*`, `set_*!`, `delete_*!` and `strip_*!`. The `strip_*!` functions remove all metadata of a specific type from all symbols in a component. See [Per-Symbol Metadata API](@ref).
 
 These are closely aligned with the [metadata use in ModelingToolkit](@extref ModelingToolkit symbolic_metadata). They are automatically copied from the `System` if you use MTK models to create NetworkDynamics models.
 
