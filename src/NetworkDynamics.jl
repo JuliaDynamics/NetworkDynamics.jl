@@ -93,6 +93,8 @@ include("init_formulas.jl")
 
 include("alias_normalization.jl")
 
+include("init_resolution.jl")
+
 # spinners for initialization
 include("spinners.jl")
 
