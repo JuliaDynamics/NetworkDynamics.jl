@@ -9,24 +9,25 @@ using Test
 # compiled component and hence MTK.
 
 @testset "canonicalize" begin
-    am = AliasMap(:θ => (-1.0, :u_r), :s => (2.5, :x))
+    am = AliasMap(:θ => :u_r, :s => :x)
 
-    @test canonicalize(am, :θ) == (-1.0, :u_r)
-    @test canonicalize(am, :s) == (2.5, :x)
+    @test canonicalize(am, :θ) == :u_r
+    @test canonicalize(am, :s) == :x
 
     # everything which is not an alias key passes through untouched (I4): canonical
     # symbols, non-alias observables and symbols unknown to any component alike
-    @test canonicalize(am, :u_r) == (1.0, :u_r)
-    @test canonicalize(am, :nonalias_obs) == (1.0, :nonalias_obs)
-    @test canonicalize(am, :totally_unknown) == (1.0, :totally_unknown)
-    @test canonicalize(AliasMap(), :θ) == (1.0, :θ)
+    @test canonicalize(am, :u_r) == :u_r
+    @test canonicalize(am, :nonalias_obs) == :nonalias_obs
+    @test canonicalize(am, :totally_unknown) == :totally_unknown
+    @test canonicalize(AliasMap(), :θ) == :θ
 end
 
 @testset "normalize_valuedict" begin
     @testset "moves values onto the canonical symbol" begin
-        am = AliasMap(:θ => (-1.0, :u_r), :s => (2.5, :x))
+        # members of a class are one variable, so the value travels untouched
+        am = AliasMap(:θ => :u_r, :s => :x)
         d = Dict(:θ => 0.3, :s => 5.0, :u_i => 1.0)
-        @test normalize_valuedict(am, d) == Dict(:u_r => -0.3, :x => 2.0, :u_i => 1.0)
+        @test normalize_valuedict(am, d) == Dict(:u_r => 0.3, :x => 5.0, :u_i => 1.0)
         @test d == Dict(:θ => 0.3, :s => 5.0, :u_i => 1.0) # I3: input untouched
     end
 
@@ -36,19 +37,18 @@ end
         @test normalize_valuedict(AliasMap(), d) === d
         # non-alias keys survive a non-empty map, so `broken_observable_defaults` keeps
         # seeing defaults placed on genuinely algebraic observables
-        @test normalize_valuedict(AliasMap(:other => (1.0, :x)), d) == d
+        @test normalize_valuedict(AliasMap(:other => :x), d) == d
     end
 
-    @testset "collisions are sign-aware (I5)" begin
-        am = AliasMap(:a => (-1.0, :b))
+    @testset "collisions (I5)" begin
+        am = AliasMap(:a => :b)
 
-        # a = 1.0 and b = -1.0 under `a ~ -b` describe the same state, so they merge
-        @test normalize_valuedict(am, Dict(:a => 1.0, :b => -1.0)) == Dict(:b => -1.0)
-        # ... and would be a contradiction without the sign
-        @test_throws ArgumentError normalize_valuedict(am, Dict(:a => 1.0, :b => 1.0))
+        # one variable, so its members must simply carry the same value
+        @test normalize_valuedict(am, Dict(:a => 1.0, :b => 1.0)) == Dict(:b => 1.0)
+        @test_throws ArgumentError normalize_valuedict(am, Dict(:a => 1.0, :b => -1.0))
 
         # tolerances: agreement is approximate, roundoff between the two must not throw
-        @test normalize_valuedict(am, Dict(:a => 1.0, :b => -1.0 - 1e-14))[:b] ≈ -1.0
+        @test normalize_valuedict(am, Dict(:a => 1.0, :b => 1.0 + 1e-14))[:b] ≈ 1.0
 
         err = try
             normalize_valuedict(am, Dict(:a => 1.0, :b => 5.0); what=:default)
@@ -59,7 +59,7 @@ end
         @test err isa ArgumentError
         msg = sprint(showerror, err)
         @test occursin("default", msg)
-        for s in [":a", ":b", "1", "5", "-1"] # both symbols, both raw and both moved values
+        for s in [":a", ":b", "1", "5"] # both symbols and both values
             @test occursin(s, msg)
         end
     end
@@ -67,24 +67,24 @@ end
     @testset "collision resolution is deterministic" begin
         # values agree only approximately, so which one survives must not depend on hash
         # order: the canonical symbol wins over any alias ...
-        am = AliasMap(:a => (-1.0, :b))
+        am = AliasMap(:a => :b)
         for _ in 1:20
-            @test normalize_valuedict(am, Dict(:a => -1.0, :b => 1.0 + 1e-14))[:b] == 1.0 + 1e-14
+            @test normalize_valuedict(am, Dict(:a => 1.0, :b => 1.0 + 1e-14))[:b] == 1.0 + 1e-14
         end
         # ... and between two aliases the sorted-first one does
-        am2 = AliasMap(:a => (1.0, :x), :z => (1.0, :x))
+        am2 = AliasMap(:a => :x, :z => :x)
         for _ in 1:20
             @test normalize_valuedict(am2, Dict(:a => 1.0, :z => 1.0 + 1e-14))[:x] == 1.0
         end
     end
 
     @testset "on_conflict=:keepfirst drops instead of erroring (guesses)" begin
-        am = AliasMap(:a => (-1.0, :b))
+        am = AliasMap(:a => :b)
         # inconsistent members would throw under :error, but a soft seed just keeps one
         @test normalize_valuedict(am, Dict(:a => 1.0, :b => 5.0); on_conflict=:keepfirst) ==
               Dict(:b => 5.0)  # value on the canonical symbol wins
         # deterministic winner between two aliases: sorted-first
-        am2 = AliasMap(:a => (1.0, :x), :z => (1.0, :x))
+        am2 = AliasMap(:a => :x, :z => :x)
         for _ in 1:20
             @test normalize_valuedict(am2, Dict(:a => 1.0, :z => 7.0); on_conflict=:keepfirst) ==
                   Dict(:x => 1.0)
@@ -95,12 +95,12 @@ end
         @test occursin("conflicting dropped", out) && occursin("a", out) && occursin("b", out)
         @test sprint(io -> normalize_valuedict(am, d; on_conflict=:keepfirst, io)) == ""
         # agreeing members still merge silently (no spurious drop line)
-        out2 = sprint(io -> normalize_valuedict(am, Dict(:a => 1.0, :b => -1.0); on_conflict=:keepfirst, verbose=true, io))
+        out2 = sprint(io -> normalize_valuedict(am, Dict(:a => 1.0, :b => 1.0); on_conflict=:keepfirst, verbose=true, io))
         @test !occursin("dropped", out2)
     end
 
     @testset "nothing markers follow their key" begin
-        am = AliasMap(:a => (-1.0, :b))
+        am = AliasMap(:a => :b)
         d = Dict{Symbol,Union{Float64,Nothing}}(:a => nothing, :c => 1.0)
         @test normalize_valuedict(am, d) == Dict(:b => nothing, :c => 1.0)
         # two removal markers in one class agree, remove-vs-set does not
@@ -108,7 +108,7 @@ end
     end
 
     @testset "verbose reports the moves" begin
-        am = AliasMap(:θ => (-1.0, :u_r))
+        am = AliasMap(:θ => :u_r)
         out = sprint() do io
             normalize_valuedict(am, Dict(:θ => 0.3); what=:default, verbose=true, io)
         end
@@ -119,20 +119,19 @@ end
 end
 
 @testset "normalize_bounds" begin
-    @testset "scaling and endpoint swap" begin
-        am = AliasMap(:θ => (-1.0, :u_r), :s => (2.5, :x))
+    @testset "moves intervals onto the canonical symbol" begin
+        # both endpoints travel untouched: an alias is the same variable
+        am = AliasMap(:θ => :u_r, :s => :x)
         d = Dict(:θ => (-1.0, 2.0), :s => (5.0, 10.0), :u_i => (0.0, 1.0))
-        # a negative factor flips the interval, so the endpoints swap
-        @test normalize_bounds(am, d) == Dict(:u_r => (-2.0, 1.0), :x => (2.0, 4.0), :u_i => (0.0, 1.0))
+        @test normalize_bounds(am, d) == Dict(:u_r => (-1.0, 2.0), :x => (5.0, 10.0), :u_i => (0.0, 1.0))
         @test d[:θ] == (-1.0, 2.0) # I3
     end
 
     @testset "collisions" begin
-        am = AliasMap(:a => (-1.0, :b))
-        # (-1, 2) on :a is the same interval as (-2, 1) on :b
-        @test normalize_bounds(am, Dict(:a => (-1.0, 2.0), :b => (-2.0, 1.0))) == Dict(:b => (-2.0, 1.0))
+        am = AliasMap(:a => :b)
+        @test normalize_bounds(am, Dict(:a => (-1.0, 2.0), :b => (-1.0, 2.0))) == Dict(:b => (-1.0, 2.0))
         # one endpoint off is enough to conflict
-        @test_throws ArgumentError normalize_bounds(am, Dict(:a => (-1.0, 2.0), :b => (-2.0, 9.0)))
+        @test_throws ArgumentError normalize_bounds(am, Dict(:a => (-1.0, 2.0), :b => (-1.0, 9.0)))
     end
 
     @testset "pass-through" begin
@@ -153,8 +152,8 @@ using NetworkDynamics: generate_obs_expansion, settable_symbols, obssym, normali
                        delete_metadata!, pinned_obssyms
 using Graphs: path_graph
 
-# One bus carrying every shape normalization has to tell apart: a sign-flipped alias, an
-# alias chain, an alias of a parameter, a genuinely algebraic (non-alias) observable, a
+# One bus carrying every shape normalization has to tell apart: a sign-flipped relation, a
+# chain of them, an observable defined by a parameter, a genuinely algebraic observable, a
 # multi-root one, and one that depends explicitly on time.
 @mtkmodel AliasNormBus begin
     @variables begin
@@ -170,11 +169,11 @@ using Graphs: path_graph
     @equations begin
         Dt(u_r) ~ -u_r + i_r
         Dt(u_i) ~ -u_i
-        θ ~ -u_r                    # sign flipped alias of a state
+        θ ~ -u_r                    # sign flipped relation to a state
         scaled ~ 2*θ                # chain: scaled = 2θ = -2*u_r
-        nl ~ u_r^2                  # not an alias
-        Vmeas ~ Vset                # alias of a parameter
-        summed ~ u_r + u_i + Vset   # multi-root, not an alias
+        nl ~ u_r^2                  # not invertible
+        Vmeas ~ Vset                # defined by a parameter
+        summed ~ u_r + u_i + Vset   # multi-root
         timed ~ u_r * t             # explicitly time dependent
         P ~ u_r + nl
     end
@@ -1027,8 +1026,8 @@ end
     am = get_aliasmap(GB)
 
     # Efd and Pm survive as the control states, the machine-side names are their aliases
-    @test am[:machine₊Efd] == (1.0, :avr₊Efd)
-    @test am[:machine₊Pm]  == (1.0, :gov₊Pm)
+    @test am[:machine₊Efd] == :avr₊Efd
+    @test am[:machine₊Pm]  == :gov₊Pm
 
     # the machine back-init produces Efd/Pm/θ from the terminal condition; the controls
     # back-compute their setpoints from Efd/Pm
@@ -1201,7 +1200,7 @@ end
 
     @testset "the class is detected, with a deterministic canonical" begin
         @test obssym(OAB) == [:consumer₊inp_u, :producer₊out_u]
-        @test get_aliasmap(OAB)[:producer₊out_u] == (1.0, :consumer₊inp_u)
+        @test get_aliasmap(OAB)[:producer₊out_u] == :consumer₊inp_u
     end
 
     @testset "the pin is one node under both names" begin

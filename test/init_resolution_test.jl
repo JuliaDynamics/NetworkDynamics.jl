@@ -27,7 +27,7 @@ scale(factor, out, in; kw...) = rule((o, u) -> (o[1] = factor * u[1]; nothing), 
 end
 
 @testset "formula wrapping" begin
-    am = AliasMap(:alias_out => (1.0, :y), :alias_in => (1.0, :x))
+    am = AliasMap(:alias_out => :y, :alias_in => :x)
     f = @initformula :alias_out = 2 * :alias_in
     r = ResolutionRule(f, am)
 
@@ -44,7 +44,7 @@ end
     @test ResolutionRule(@guessformula(:alias_out = :alias_in), am).provenance == :weak_formula
 
     # two members of one alias class in one list are one variable, not two
-    am2 = AliasMap(:a => (1.0, :x), :b => (1.0, :x))
+    am2 = AliasMap(:a => :x, :b => :x)
     collapsing = @initformula begin
         :a = 1.0
         :b = 2.0

@@ -90,10 +90,9 @@ _rule_ref(r::ResolutionRule) = isnothing(r.label) ? "rule for $(r.outsym)" : "`$
 Wrap a user formula as a rule: canonicalize both symbol lists through `am`, and keep calling
 the user's own closure under the names they wrote.
 
-This presumes an identity-only `AliasMap`, i.e. every factor is 1. Canonicalization is then a
-pure rename — same order, same length — so the payload needs no arithmetic and no permutation,
-it just presents the buffers under the original names. Scaled relations are not aliases and do
-not belong in the map; they are invertible rules in the graph.
+Canonicalizing renames, same order and same length, so the payload needs no arithmetic and no
+permutation — it just presents the buffers under the original names. A scaled relation is not
+an alias and never reaches here; it is an invertible pair of rules in the graph.
 
 A `GuessFormula` writes at the lowest precedence: a guess is a seed, not an assertion, so it yields
 to anything the init pass determined. The rest of the guess pass's collision policy is
@@ -118,7 +117,7 @@ end
 # Members of one alias class are one variable, so two of them in a rule's output list would
 # mean writing the same variable twice — caught here rather than as a mystery collision.
 function _canonical_names(syms, am, f)
-    names = [last(canonicalize(am, s)) for s in syms]
+    names = [canonicalize(am, s) for s in syms]
     if !allunique(names)
         dupes = unique(n for n in names if count(isequal(n), names) > 1)
         throw(ArgumentError("$(typeof(f).name.name) uses $syms, which collapse onto $dupes — \

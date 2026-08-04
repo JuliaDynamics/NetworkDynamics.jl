@@ -2139,7 +2139,9 @@ end
     end
 end
 
-@testset "AliasMap extraction" begin
+@testset "AliasMap and scaled relations" begin
+    # `_match_scaled_var` decides which equations `build_obsrules` can invert. It has nothing
+    # to do with the AliasMap: a scaled relation is not an alias.
     @testset "_match_scaled_var acceptance" begin
         @variables x(t) y(t)
         @parameters k V
@@ -2149,7 +2151,7 @@ end
         @test mtkext._match_scaled_var(2.5x)   == (2.5, :x)
         @test mtkext._match_scaled_var(-2.5x)  == (-2.5, :x)
         @test mtkext._match_scaled_var(x/2)    == (0.5, :x)
-        @test mtkext._match_scaled_var(V)      == (1.0, :V) # parameters are settable, so they alias
+        @test mtkext._match_scaled_var(V)      == (1.0, :V) # a parameter is an ordinary root
         # ...everything else stays an ordinary observable
         @test mtkext._match_scaled_var(x + 1)  === nothing # affine
         @test mtkext._match_scaled_var(x + y)  === nothing # sum
@@ -2162,12 +2164,15 @@ end
         @test mtkext._match_scaled_var(Num(1.0)) === nothing # no variable at all
     end
 
-    @testset "extraction from compiled component" begin
+    # The map holds the clusters `pick_best_alias_names` consolidated: several names for one
+    # variable. Everything the model merely *relates* stays out of it.
+    @testset "map from pick_best_alias_names" begin
         @mtkmodel AliasTestBus begin
             @variables begin
                 u_r(t) = 1.0
+                term_u_r(t)     # a second name for the state
+                meas_u_r(t)     # a third, one hop further out
                 θ(t)
-                scaled(t)
                 nl(t)
                 Vmeas(t)
                 i_r(t), [input=true]
@@ -2178,10 +2183,11 @@ end
             end
             @equations begin
                 Dt(u_r) ~ -u_r + i_r
-                θ ~ -u_r        # sign flipped alias of a state
-                scaled ~ 2*θ    # chain: scaled = 2*θ = -2*u_r
-                nl ~ u_r^2      # not an alias
-                Vmeas ~ Vset    # alias of a parameter
+                term_u_r ~ u_r  # identity alias
+                meas_u_r ~ term_u_r
+                θ ~ -u_r        # sign flipped: a relation between two variables, not an alias
+                nl ~ u_r^2      # not an alias either
+                Vmeas ~ Vset    # a parameter defines an observable, it does not alias it
                 P ~ u_r + nl
             end
         end
@@ -2189,23 +2195,23 @@ end
         vm = VertexModel(atb, [:i_r], [:P])
 
         am = get_aliasmap(vm)
-        @test am == AliasMap(:θ      => (-1.0, :u_r),
-                             :scaled => (-2.0, :u_r), # factors multiply along the chain
-                             :Vmeas  => (1.0, :Vset))
-        @test !haskey(am, :nl)
+        @test am == AliasMap(:term_u_r => :u_r, :meas_u_r => :u_r)
 
-        # structural invariants: aliases are observables, roots are settable
+        # structural invariants: aliases are observables, canonicals are settable
         settable = NetworkDynamics.settable_symbols(vm)
         @test all(k -> k ∈ NetworkDynamics.obssym(vm), keys(am))
         @test all(k -> k ∉ settable, keys(am))
-        @test all(v -> v[2] ∈ settable, values(am))
+        @test all(v -> v ∈ settable, values(am))
 
-        # the extracted factors must agree with what the obs function actually computes
+        # members of a class carry the same value, which is what makes the map a rename
         set_default!(vm, :i_r, 0.5)
         set_default!(vm, :u_r, 0.8)
-        for (alias, (factor, canonical)) in am
-            @test get_initial_state(vm, alias) ≈ factor * get_initial_state(vm, canonical)
+        for (alias, canonical) in am
+            @test get_initial_state(vm, alias) ≈ get_initial_state(vm, canonical)
         end
+
+        # what the model relates but does not rename is a rule of the graph, not a map entry
+        @test !haskey(am, :θ) && !haskey(am, :nl) && !haskey(am, :Vmeas)
     end
 
     @testset "no aliases in ordinary components" begin

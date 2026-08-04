@@ -858,57 +858,6 @@ function _build_formula(::Type{FT}, r) where {FT}
                          FT(f, [r.target], r.input_names, prettyprint; label)
 end
 
-"""
-    extract_aliasmap(c::ComponentModel, obseqs::Vector{Equation})
-
-Extracts the `AliasMap` of a compiled component from its observed equations, i.e.
-every observable which is a pure `factor * symbol` alias.
-
-Note that `pick_best_alias_names` already consolidates *identity* alias groups onto a single
-representative and re-inserts direct `alias ~ main` observations; what remains for us are the
-scaled/sign-flipped aliases (`get_alias` matches no coefficient) plus chains through them.
-
-A chain either reaches a settable symbol — the usual case — or bottoms out on an observable
-whose own equation is not a pure alias (a sum, say). That terminal observable is a valid
-canonical too: it is where `generate_obs_expansion` bottoms out anyway, so recording it
-unifies the names of a class whose shared value has no storage slot at all. See
-[`AliasMap`](@ref) for what that buys and what it costs.
-
-Anything that is not a pure scaled alias — affine (`x + 1`), sums, nonlinear terms, symbolic
-coefficients — stays an ordinary observable.
-"""
-function extract_aliasmap(c::NetworkDynamics.ComponentModel, obseqs)
-    settable = settable_symbols(c)
-    obs = NetworkDynamics.obssym(c)
-
-    # one-step links only; resolved transitively below
-    steps = Dict{Symbol,Tuple{Float64,Symbol}}()
-    for eq in obseqs
-        m = _match_scaled_var(eq.rhs)
-        isnothing(m) && continue
-        steps[getname(eq.lhs)] = m
-    end
-
-    am = AliasMap()
-    for alias in keys(steps)
-        # a settable symbol must never be recorded as an alias of another settable symbol;
-        # keep both un-aliased instead (`assert_aliasmap_compat` would reject the entry)
-        if alias ∈ settable
-            @debug "Not aliasing :$alias, it is a settable symbol of the component."
-            continue
-        end
-        factor, canonical = _resolve_alias(alias, steps, settable, Symbol[])
-        # `a ~ 2*t` matches as a scaled alias of the independent variable, which is neither
-        # settable nor an observable — no canonical, hence no entry
-        if canonical ∉ settable && canonical ∉ obs
-            @debug "Not aliasing :$alias, its root :$canonical is neither settable nor an observable."
-            continue
-        end
-        am[alias] = (factor, canonical)
-    end
-    am
-end
-
 # Match `ex` against `factor * var` with a numeric, nonzero `factor` and a single variable.
 # Returns `(factor, varname)` or `nothing`. Accepts exactly the shape `linear_expansion`
 # reports as `factor*v + offset` with a single variable, numeric nonzero factor and zero
@@ -932,24 +881,78 @@ function _match_scaled_var(ex)
     (Float64(factor), getname(v))
 end
 
-# Follow one-step links until the chain ends, multiplying factors along the way
-# (`obs2 ~ -obs1`, `obs1 ~ 2x` ⇒ `(-2.0, :x)`). It ends on the first settable symbol, or else
-# on the first symbol without a further link — the terminal observable, which is the
-# canonical of a class that has no settable member. Only ever called for an `s` which has a
-# link, so it always resolves.
-function _resolve_alias(s, steps, settable, visiting)
-    if s ∈ visiting
-        error("Cyclic alias chain detected at :$s via $(join(visiting, " → ")). \
-               Observed equations are topologically sorted, this should never happen.")
-    end
-    factor, target = steps[s]
-    (target ∈ settable || !haskey(steps, target)) && return (factor, target)
+"""
+    build_obsrules(obseqs, outputeqs, am::AliasMap, iv) -> Vector{ResolutionRule}
 
-    push!(visiting, s)
-    rest = _resolve_alias(target, steps, settable, visiting)
-    pop!(visiting)
-    (factor * rest[1], rest[2])
+Turns the symbolic equations of a compiled component into the `:derived` part of the
+resolution graph (see `src/init_resolution.jl`): one rule per observed and per output
+equation, plus the *inverse* of every relation of the form `y ~ k*x` — never inverting onto
+the independent variable `iv`, which is an argument of the model and not an unknown of it.
+
+The pairs are the point. Which end of `i_r ~ -term_i_r` determines the other depends on what
+the query writes, not on the model, so keeping both directions moves that decision to init
+time. The rules stay a *separate view* of `:observed`/`:outputeqs` and never rewrite them —
+`:observed` has to keep mirroring exactly what `obsf` computes.
+"""
+function build_obsrules(obseqs, outputeqs, am::AliasMap, iv)
+    ivname = getname(iv)
+    rules = ResolutionRule[]
+    for eq in Iterators.flatten((obseqs, outputeqs))
+        haskey(am, getname(eq.lhs)) && continue # the re-inserted `alias ~ main` observation
+        _push_eq_rules!(rules, eq, ivname)
+    end
+    rules
 end
+
+function _push_eq_rules!(rules, eq, ivname)
+    lhsname = getname(eq.lhs)
+
+    m = _match_scaled_var(eq.rhs)
+    if !isnothing(m)
+        factor, varname = m
+        if varname == lhsname
+            # `out ~ out` may appear -> skip
+            isone(factor) && return rules
+            _self_reference_error(eq)
+        end
+        push!(rules, _derived_rule(_scaled_payload(factor), lhsname, [varname]))
+        # `ramp ~ 2t` must not invert
+        if varname != ivname
+            push!(rules, _derived_rule(_scaled_payload(inv(factor)), varname, [lhsname];
+                                       label="inverse of :$lhsname"))
+        end
+        return rules
+    end
+
+    vars = collect(get_variables(eq.rhs))
+    if isempty(vars)
+        val = unwrap_const(Symbolics.value(eq.rhs))
+        if val isa Number
+            push!(rules, _derived_rule(_const_payload(val), lhsname, Symbol[]))
+        end
+        return rules
+    end
+
+    syms = getname.(vars)
+    lhsname ∈ syms && _self_reference_error(eq)
+
+    f = build_function([eq.rhs], vars; expression=Val(false))[2]
+    push!(rules, _derived_rule(f, lhsname, syms))
+end
+
+_self_reference_error(eq) =
+    error("Equation $eq is self-referential: its lhs appears in its rhs. Such an equation \
+           constrains its lhs rather than defining it and must not be an observed or output \
+           equation; the lhs has to be defined in terms of other variables/parameters/observables.")
+
+# `out = factor * in` and `out = value` are the two shapes worth not compiling a function for:
+# on a component of any size most observed equations are one of them, and both directions of an
+# invertible relation are the first. One closure each, so one type each however many rules.
+_scaled_payload(factor) = (out, u) -> (out[1] = factor * u[1]; nothing)
+_const_payload(value) = (out, _) -> (out[1] = value; nothing)
+
+_derived_rule(f, out, syms; label=nothing) =
+    ResolutionRule(f, [out], syms; provenance=:derived, optional=true, label)
 
 """
     generate_obs_expansion(cf::ComponentModel, syms::Vector{Symbol}; stop_at) -> (roots, f)
