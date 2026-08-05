@@ -746,10 +746,66 @@ function extend_knowns_by_formulas!(knowns, cf, formulas;
     return knowns
 end
 
+"""
+    extend_guesses_by_formulas!(guesses, defaults, cf, formulas; am, t, targets, error_unresolvable, verbose, io)
+
+Guess-formula sibling of [`extend_knowns_by_formulas!`](@ref): extend `guesses` in place by
+everything the resolution graph derives from the component's `:obsrules` together with the
+user's guess `formulas`.
+
+Same executor, different roots. The **full output of the init pass** (`defaults`) is seeded as
+`:provided` — everything it determined outranks any guess and is never moved — while a value
+already sitting in `guesses` is seeded at `:guess`, the very rank a `GuessFormula` writes at.
+With `overwrite_equal=true` a guess formula therefore *refines* an existing guess instead of
+colliding with it: a guess is a seed, not an assertion. Which of two guess formulas writing one
+symbol wins is deliberately unspecified.
+
+An observed equation stays `:derived` and hence *below* the guesses: it may fill a symbol
+nothing else reaches, but it never replaces a guess that was handed to us.
+"""
+function extend_guesses_by_formulas!(guesses, defaults, cf, formulas;
+                                     am=get_aliasmap(cf), t=NaN, targets=nothing,
+                                     error_unresolvable=true, verbose=false, io=stdout)
+    settable = settable_symbols(cf)
+    if isnothing(targets)
+        targets = settable
+    end
+    # layered seed, `defaults` over `guesses` — the same lookup the guess pass always had
+    seed = Dict{Symbol,Float64}(guesses)
+    merge!(seed, defaults)
+    # collect rules (user formulas + obs rules)
+    rules = _resolution_rules(cf, formulas, am, seed, settable)
+    isempty(rules) && return guesses
+
+    # the init output is bound, a pre-existing guess is not; `:guess` is what a `GuessFormula`
+    # rule writes at, so with `overwrite_equal` a formula may refine it
+    bound = Set{Symbol}(keys(defaults))
+    if !isnan(t)
+        seed[:t] = t # `t` so that formulas and observables can read it
+        push!(bound, :t)
+    end
+    seedprov = s -> s ∈ bound ? :provided : :guess
+    # final targets: prune away any symbol already known and known to be not overwritten
+    targets = _prune_resolution_targets(targets, rules, seed; seedprov, overwrite_equal=true)
+    # actually resolve rules (result stored in res)
+    res = resolve_rules(seed, rules; targets, seedprov, overwrite_equal=true)
+    _check_resolution(res, rules; error_unresolvable, verbose, io, type="GuessFormula")
+
+    verbose && _print_resolution(res, rules, guesses, settable;
+                                 io, type="GuessFormula", op="≈", fixed=defaults)
+    for (s, v) in res.vals
+        p = res.provenance[s]
+        p === :provided && continue # bound by the init pass (or the seeded `t`), not a guess
+        (s ∈ settable || p !== :derived) || continue
+        guesses[s] = v
+    end
+    return guesses
+end
+
 # Must run *before* the writeback, so `knowns` still holds the value each row reports as "(was
 # …)". Two groups: what the user's formulas asserted, and what the model's own equations
 # determined on the way — the latter is new with the graph.
-function _print_resolution(res, rules, knowns, settable; io)
+function _print_resolution(res, rules, knowns, settable; io, type="InitFormula", op="=", fixed=nothing)
     formula_rows = String[]
     for (i, r) in enumerate(rules)
         _is_user_rule(r) || continue
@@ -758,12 +814,12 @@ function _print_resolution(res, rules, knowns, settable; io)
             # formula that never fired keeps none of its outputs — neither may claim the write
             get(res.writer, s, 0) == i || continue
             push!(formula_rows, _formula_row(s, res.vals[s], knowns;
-                                             op="=", pin=s ∉ settable, label=r.label))
+                                             op, fixed, pin=s ∉ settable, label=r.label))
         end
     end
-    print_aligned_group(io, "InitFormulas set:", formula_rows)
+    print_aligned_group(io, "$(type)s set:", formula_rows)
 
-    derived_rows = [_formula_row(s, v, knowns; op="=")
+    derived_rows = [_formula_row(s, v, knowns; op, fixed)
                     for (s, v) in sort!(collect(res.vals); by=first)
                     if res.provenance[s] === :derived && s ∈ settable]
     print_aligned_group(io, "Derived from the component's own equations:", derived_rows)
@@ -799,7 +855,7 @@ function _resolution_rules(cf, formulas, am, knowns, settable)
 end
 
 """
-    _prune_resolution_targets(targets, rules, vals) -> Set{Symbol}
+    _prune_resolution_targets(targets, rules, vals; seedprov, overwrite_equal) -> Set{Symbol}
 
 Targets are what the rules are pruned for. Narrows `targets` down to:
 - the ones written by some rule
@@ -807,9 +863,14 @@ Targets are what the rules are pruned for. Narrows `targets` down to:
 
 (for example, a user provided default can only be changed by a strong formula, so
 we can remove it as target UNLESS there is such a strong formula in the ruleset)
+
+`seedprov` is what the seed's entries are worth, mirroring `resolve_rules`' `seed_provenance`:
+the init pass provides everything, the guess pass only the init output (the rest is a guess,
+which a guess rule of equal rank may still refine). The comparison is therefore the same one
+`_write_value!` makes — equal rank changes nothing unless `overwrite_equal`.
 """
-function _prune_resolution_targets(targets, rules, vals)
-    seedrank = _precedence(:provided)
+function _prune_resolution_targets(targets, rules, vals;
+                                   seedprov=Returns(:provided), overwrite_equal=false)
     best = Dict{Symbol,Int}()
     for r in rules, s in r.outsym
         best[s] = max(get(best, s, 0), _precedence(r.provenance))
@@ -819,7 +880,10 @@ function _prune_resolution_targets(targets, rules, vals)
     for (s, rank) in best
         s ∈ targets || continue
         # `haskey`, matching `resolve_rules`: a seeded NaN is a value like any other
-        haskey(vals, s) && seedrank ≥ rank && continue
+        if haskey(vals, s)
+            held = _precedence(seedprov(s))
+            (held > rank || (held == rank && !overwrite_equal)) && continue
+        end
         push!(kept, s)
     end
     kept
@@ -828,8 +892,8 @@ end
 # Caller-side policy, the half `resolve_rules` deliberately does not have: a rule that left one
 # of its outputs unknown, two rules of equal precedence disagreeing about one, a required rule
 # that turned out not to be needed, and values that came out non-finite.
-function _check_resolution(res, rules; error_unresolvable, verbose, io)
-    _check_pruned(res, rules; error_unresolvable, verbose, io)
+function _check_resolution(res, rules; error_unresolvable, verbose, io, type="InitFormula")
+    _check_pruned(res, rules; error_unresolvable, verbose, io, type)
     _check_nonfinite(res, rules; error_unresolvable, verbose, io)
 
     if !isempty(res.conflicts)
@@ -848,7 +912,7 @@ function _check_resolution(res, rules; error_unresolvable, verbose, io)
         # not firing is a failure only if something is still unknown — with duplicate writers
         # allowed, the other one may simply have got there first
         all(s -> haskey(res.vals, s), r.outsym) && continue
-        msg = "$(_rule_ref(r)) could not be resolved: its inputs are unknown: \
+        msg = "$type $(_rule_ref(r)) could not be resolved: its inputs are unknown: \
                $(_resolution_hint(res, rules, u.unknown))."
         if error_unresolvable
             throw(ArgumentError(msg))
@@ -874,11 +938,13 @@ function _check_nonfinite(res, rules; error_unresolvable, verbose, io)
     nothing
 end
 # warn if non-optional rule pruned away, weak formulas are optional
-function _check_pruned(res, rules; error_unresolvable, verbose, io)
+function _check_pruned(res, rules; error_unresolvable, verbose, io, type)
     for (i, r) in enumerate(rules)
         (res.pruned[i] && _is_user_rule(r)) || continue
-        if r.provenance === :weak_formula
-            verbose && printstyled(io, " - InitFormula: $(_rule_ref(r)) yields, \
+        # both kinds that legitimately yield: a weak init formula, and any guess rule whose
+        # target the init pass already determined
+        if r.provenance === :weak_formula || r.provenance === :guess
+            verbose && printstyled(io, " - $type: $(_rule_ref(r)) yields, \
                                         its target $(r.outsym) is already determined\n")
         elseif error_unresolvable # the init path; `NWState` reconstruction narrows the slot
             # set to states and parameters, where a formula writing an output prunes routinely
@@ -907,28 +973,6 @@ function _resolution_hint(res, rules, unknown)
         ":$s (computable from $need)"
     end
     join(parts, ", ")
-end
-
-"""
-    extend_guesses_by_formulas!(guesses, defaults, cf, formulas; am, t, init_pinned, error_unresolvable, verbose, io)
-
-Guess-formula sibling of [`extend_knowns_by_formulas!`](@ref): `normalize` and apply the guess
-`formulas` to `guesses` in place. No-op when `formulas` is `nothing`. Separate from the init pass
-because [`apply_guess_formulas!`](@ref) is a layered two-dict write (reads `defaults`-before-
-`guesses`, fixed values win) and there is no weak-drop (`GuessFormula` has no `weak`).
-"""
-function extend_guesses_by_formulas!(guesses, defaults, cf, formulas;
-                                     am=get_aliasmap(cf), t=NaN, init_pinned=Set{Symbol}(),
-                                     error_unresolvable=true, verbose=false, io=stdout)
-    isnothing(formulas) && return guesses
-    # frontier = init pins that actually landed in `defaults`, plus the guess pins. Init pins are
-    # intersected with `keys(defaults)` because an init formula skipped on unresolvable inputs
-    # (the NWState path) leaves its observable unwritten, so a guess reading it must expand to
-    # roots. Guess pins stay the full static set — all guesses normalize before any is applied.
-    guess_pinned = (init_pinned ∩ keys(defaults)) ∪ pinned_obssyms(formulas, cf)
-    normed = [normalize(f, am, cf; t, pinned=guess_pinned) for f in formulas]
-    apply_guess_formulas!(guesses, defaults, normed; error_unresolvable, verbose, io, pinned=guess_pinned)
-    return guesses
 end
 
 # A weak formula yields — and is dropped — when its (canonical) target already carries a

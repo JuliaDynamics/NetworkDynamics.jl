@@ -205,10 +205,13 @@ function _get_appropriate_dict(cidx, cm; guess, apply_formulas, verbose, additio
     end
     if guess
         guesses = normalize_valuedict(am, get_guesses_dict(cm); what=:guess, on_conflict=:keepfirst, verbose)
-        if apply_formulas && has_guessformula(cm)
-            verbose && println("Applying GuessFormulas for $(cidx) ($(cm.name))...")
-            extend_guesses_by_formulas!(guesses, defaults, cm, get_guessformulas(cm);
-                                        am, init_pinned=pinned_obssyms(combined_initf, cm),
+        if apply_formulas
+            guessf = has_guessformula(cm) ? get_guessformulas(cm) : nothing
+            verbose && !isnothing(guessf) && println("Applying GuessFormulas for $(cidx) ($(cm.name))...")
+            # unconditional for the same reason the init pass is: a `guess` on a *scaled* alias
+            # reaches its canonical symbol only through the graph's inverse rule
+            extend_guesses_by_formulas!(guesses, defaults, cm, guessf;
+                                        am, targets=Set(vcat(sym(cm), psym(cm))),
                                         error_unresolvable=false, verbose)
         end
         defaults = merge(guesses, defaults) # defaults overwrite guesses

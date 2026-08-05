@@ -562,16 +562,18 @@ function initialize_component(cf;
     metadata_initformulas = has_initformula(cf) ? get_initformulas(cf) : nothing
     combined_initformulas = collect_formulas(metadata_initformulas, additional_initformula)
 
-    # still needed for guess formulas, soon to be removed
-    pinned = pinned_obssyms(combined_initformulas, cf)
+    # observables which carry a value *before* the pass; afterwards, the only other way one can
+    # hold a value is that a formula wrote it (the pass drops purely derived observables), which
+    # is all the post-solve check below needs to tell the two origins apart
+    predefined_obs = Set(s for s in keys(defaults) if s ∈ obssym(cf))
 
     # seed `defaults` (default-only here) with everything the resolution graph derives
     extend_knowns_by_formulas!(defaults, cf, combined_initformulas; am, t, verbose, io)
 
     metadata_guessformulas = has_guessformula(cf) ? get_guessformulas(cf) : nothing
     combined_guessformulas = collect_formulas(metadata_guessformulas, additional_guessformula)
-    # guess frontier = init pins (reused from above) ∪ guess pins; see `extend_guesses_by_formulas!`
-    extend_guesses_by_formulas!(guesses, defaults, cf, combined_guessformulas; am, t, init_pinned=pinned, verbose, io)
+    # second graph over the same obs rules, rooted in the full output of the init pass
+    extend_guesses_by_formulas!(guesses, defaults, cf, combined_guessformulas; am, t, verbose, io)
 
     metadata_constraint = has_initconstraint(cf) ? get_initconstraints(cf) : nothing
     combined_constraint = merge_initconstraints(metadata_constraint, additional_initconstraint)
@@ -688,7 +690,7 @@ function initialize_component(cf;
         broken_obs = broken_observable_defaults(cf, init_state, observable_defaults; t)
         if !isempty(broken_obs)
             broken_msgs = map(broken_obs) do (sym, def, val)
-                origin = sym ∈ pinned ? "pinned by InitFormula" : "default"
+                origin = sym ∈ predefined_obs ? "default" : "pinned by InitFormula"
                 "  $sym = $val ($origin: $def)"
             end
             fullmsg = "Initialized model has observables that differ from their specified values:" *

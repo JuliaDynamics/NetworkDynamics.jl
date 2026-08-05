@@ -69,17 +69,24 @@ end
 
 Precedence of a value's provenance, higher wins:
 
-    :strong_formula > :provided > :derived > :weak_formula
+    :strong_formula > :provided > :guess > :derived > :weak_formula
 
 `:derived` is what a rule of the graph produces from other values. It sits *below* `:provided`
 because an observed or output equation is definitional — it computes a value, it does not
 assert one, so it must never displace something the user wrote down. It sits *above*
 `:weak_formula` because a weak formula's purpose is to yield to anything that actually
 determines its target, and a derived value determines it.
+
+`:guess` is a starting point rather than a value, and only the guess pass ever produces one.
+It sits between the two: below `:provided`, since anything the init pass determined is not up
+for guessing, but *above* `:derived`, so that a number the user (or a guess formula) put
+forward is not silently replaced by one the model equations merely happen to be able to
+compute from other guesses.
 """
 function _precedence(provenance::Symbol)
-    provenance === :strong_formula ? 4 :
-    provenance === :provided       ? 3 :
+    provenance === :strong_formula ? 5 :
+    provenance === :provided       ? 4 :
+    provenance === :guess          ? 3 :
     provenance === :derived        ? 2 :
     provenance === :weak_formula   ? 1 :
     throw(ArgumentError("Unknown value provenance :$provenance"))
@@ -105,14 +112,15 @@ Canonicalizing renames, same order and same length, so the payload needs no arit
 permutation — it just presents the buffers under the original names. A scaled relation is not
 an alias and never reaches here; it is an invertible pair of rules in the graph.
 
-A `GuessFormula` writes at the lowest precedence: a guess is a seed, not an assertion, so it yields
-to anything the init pass determined. The rest of the guess pass's collision policy is
+A `GuessFormula` writes at `:guess`: a guess is a seed, not an assertion, so it yields to
+anything the init pass determined, while still outranking a value the model equations merely
+derived. Two guesses meeting is not a contradiction — that half of the policy is
 `resolve_rules`' `overwrite_equal`.
 """
 ResolutionRule(f::InitFormula, am::AliasMap) =
     _wrap_formula(f, am; provenance=f.weak ? :weak_formula : :strong_formula)
 ResolutionRule(f::GuessFormula, am::AliasMap) =
-    _wrap_formula(f, am; provenance=:weak_formula)
+    _wrap_formula(f, am; provenance=:guess)
 
 function _wrap_formula(f, am; provenance)
     outsym = _canonical_names(f.outsym, am, f)
@@ -183,7 +191,7 @@ function ResolutionResult(vals, provenance, nrules::Int)
 end
 
 """
-    resolve_rules(vals, rules; targets, seed_provenance, overwrite_equal, maxpasses) -> ResolutionResult
+    resolve_rules(vals, rules; targets, seedprov, overwrite_equal, maxpasses) -> ResolutionResult
 
 Resolve everything derivable from `vals` by firing rules whose inputs are known, in an order
 derived from the rules themselves. `vals` is the root set and is **not** mutated: the result
@@ -191,7 +199,9 @@ carries a fresh `Dict{Symbol,Float64}`.
 
 The walk:
 
-1. Seed, with provenance `seed_provenance` (`:provided` for the init pass).
+1. Seed, with the provenance `seedprov(sym)`. The init pass provides everything; the guess pass
+   is the reason this is a function of the symbol rather than one value, since it binds the init
+   output but seeds a pre-existing guess at guess rank.
 2. Prune to what can still matter, if `targets` is given: reverse reachability from the targets
    over the rules' outputs. Callers should pass targets rather than rely on the walk being cheap.
 3. Tarjan over the *rule* graph (a rule is one node however many outputs it has), then walk the
@@ -205,11 +215,10 @@ The walk:
 is what the guess pass wants: refining a guess is desirable, not a contradiction.
 """
 function resolve_rules(vals, rules::AbstractVector;
-                       targets=nothing, seed_provenance=:provided,
+                       targets=nothing, seedprov=Returns(:provided),
                        overwrite_equal=false, maxpasses=1000)
-    _precedence(seed_provenance)
     values = Dict{Symbol,Float64}(vals)
-    provenance = Dict{Symbol,Symbol}(s => seed_provenance for s in keys(values))
+    provenance = Dict{Symbol,Symbol}(s => seedprov(s) for s in keys(values))
 
     res = ResolutionResult(values, provenance, length(rules))
 
