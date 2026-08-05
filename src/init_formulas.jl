@@ -358,7 +358,7 @@ dim(c::InitFormula) = length(c.outsym)
 (c::InitFormula)(out, u) = c.f(out, SymbolicView(u, c.sym))
 
 function Base.show(io::IO, ::MIME"text/plain", @nospecialize(c::InitFormula))
-    _show_formula(io, c)
+    _show_recipe(io, c)
 end
 
 """
@@ -414,10 +414,8 @@ dim(c::GuessFormula) = length(c.outsym)
 (c::GuessFormula)(out, u) = c.f(out, SymbolicView(u, c.sym))
 
 function Base.show(io::IO, ::MIME"text/plain", @nospecialize(c::GuessFormula))
-    _show_formula(io, c)
+    _show_recipe(io, c)
 end
-
-_show_formula(io::IO, @nospecialize(c)) = _show_recipe(io, c)
 
 """
    @initformula
