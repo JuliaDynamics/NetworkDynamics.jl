@@ -843,11 +843,21 @@ end
 function _check_pruned(res, rules; error_unresolvable, verbose, io, type)
     for (i, r) in enumerate(rules)
         (res.pruned[i] && _is_user_rule(r)) || continue
-        # both kinds that legitimately yield: a weak init formula, and any guess rule whose
-        # target the init pass already determined
-        if r.provenance === :weak_formula || r.provenance === :guess
+        # Two different reasons collapse into "pruned", and they read very differently. A rule
+        # all of whose targets already hold something that outranks it *yielded*, which is the
+        # designed outcome for a weak formula and for a guess whose target the init pass fixed.
+        # Anything else pruned because nothing reads what it writes.
+        outranked = all(r.outsym) do s
+            haskey(res.vals, s) && _precedence(res.provenance[s]) > _precedence(r.provenance)
+        end
+        if outranked
             verbose && printstyled(io, " - $type: $(_rule_ref(r)) yields, \
                                         its target $(r.outsym) is already determined\n")
+        elseif r.provenance === :weak_formula || r.provenance === :guess
+            # a rule that yields *by design* never warns for being unread — a library spelling
+            # out a backward chain as weak or guess rules would drown the log in them
+            verbose && printstyled(io, " - $type: $(_rule_ref(r)) had no effect, \
+                                        nothing reads $(r.outsym)\n")
         elseif error_unresolvable # the init path; `NWState` reconstruction narrows the slot
             # set to states and parameters, where a formula writing an output prunes routinely
             printstyled(io, " - WARNING: ", color=:yellow)
