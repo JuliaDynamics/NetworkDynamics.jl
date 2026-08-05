@@ -1355,9 +1355,14 @@ end
     end
 end
 
-# which observables the attached init formulas target — the fact these testsets are after,
-# spelled without the machinery that used to compute it
-_obs_targets(vm) = Set(s for f in get_initformulas(vm) for s in f.outsym if s ∈ obssym(vm))
+# The pins of the attached init formulas — the fact these testsets are after. A rule
+# canonicalizes its targets, so a formula writing an alias of a settable symbol lands on that
+# symbol and is an ordinary write; what is left without a slot is a pin.
+function _obs_targets(vm)
+    am, settable = get_aliasmap(vm), NetworkDynamics.settable_symbols(vm)
+    Set(s for f in get_initformulas(vm)
+          for s in NetworkDynamics.ResolutionRule(f, am).outsym if s ∉ settable)
+end
 
 @testset "set_initf: system-level init formulas" begin
     # the backward-flow showcase: the child knows only its own inverse (initf on x reads
