@@ -1,50 +1,28 @@
 ####
 #### Rule resolution: one graph for observed equations, output equations and init formulas
 ####
-# In short: every observed equation, every output
-# equation and every user formula is the same thing — an algebraic rule `out = f(in…)`. Put
-# them in one bucket, add inverse rules where a relation is invertible, and derive the
-# execution order from which symbols are known. Orientation becomes a property of the query
-# instead of something baked into the stored model.
+# Everything here is an algebraic rule `out = f(in…)`: observed equations, output equations and
+# user formulas all look the same. They go into one bucket and the execution order falls out of
+# which symbols are already known.
 #
-# This file is the *executor* only: it knows nothing about components, MTK or metadata. What
-# rules exist and what to do with the result is the caller's business — `initialize_component`
-# errors where `NWState` reconstruction skips, and neither policy belongs here.
+# This file is the executor. It knows nothing about components or metadata, and it decides
+# nothing — which rules exist and what counts as an error is up to the caller.
 
 """
     ResolutionRule(f, outsym, sym; provenance, optional, label=nothing)
 
-One algebraic rule `outsym = f(sym…)` in the resolution graph.
+One rule `outsym = f(sym…)` of the resolution graph. The symbol names are canonical and the
+payload is a plain `f(out, u)` on vectors, which is the shape `build_function` gives us anyway.
 
-The payload is plain vector-in, vector-out:
+- `provenance` — the rank the values it writes get, see [`_precedence`](@ref).
+- `optional` — whether it is fine for this rule to never fire.
+- `label` — short name for diagnostics.
 
-    f(out::Vector{Float64}, u::Vector{Float64})::Nothing
+`optional` and a low `provenance` are two different escape hatches: the first lets a rule not run
+at all, the second lets it run and lose.
 
-which is what a `build_function` result already looks like, so an observed equation wraps with
-no adaptation at all. A user formula indexes by symbol instead, and the constructor taking an
-[`InitFormula`](@ref) puts the [`SymbolicView`](@ref) wrapping *inside* the payload. The
-executor therefore never sees symbolic indexing, and one loop drives both kinds.
-
-`outsym`/`sym` are **canonical** names. The `InitFormula` constructor below canonicalizes them
-and lets the payload keep speaking the names the user wrote — which is the whole of what the
-old `normalize` pass did to a formula's two ends.
-
-- `provenance` — what this rule stamps on the values it writes, see [`_precedence`](@ref).
-- `optional` — whether failing to fire is acceptable. Observed and output rules are optional
-  (nothing says their inputs must ever be known); user init formulas are not.
-- `label` — short human reference for diagnostics, may be `nothing`.
-
-A rule can be droppable from either end, and the two are independent — all four combinations are
-meaningful:
-
-- **weak** (a `provenance` below `:provided`) drops it on the *target* side: the value is already
-  there, so the rule yields.
-- **optional** drops it on the *source* side: the inputs never arrived, so the rule is skipped.
-
-A rule fires *atomically*: it runs once all its inputs are known and produces all its outputs,
-but each output is then written independently (see [`resolve_rules`](@ref)). That is what makes
-a multi-output formula a plain single node of the graph rather than a special case — a
-collision on one output cannot strand its siblings.
+A rule fires as a unit once all its inputs are known, but its outputs are written one by one, so
+a collision on one of them leaves the others alone.
 """
 struct ResolutionRule
     f::Function # potentialy FunctionWrapper
@@ -71,9 +49,9 @@ Precedence of a value's provenance, higher wins:
 
     :strong_formula > :provided > :guess_formula > :guess > :derived > :weak_formula
 
-A formula outranks the value class it refines. `:derived` (produced by a rule) is definitional
-rather than asserted, so it stays below anything the user wrote down — a guess included — but
-above `:weak_formula`, whose whole purpose is to yield to whatever determines its target.
+Formulas rank above the values they are meant to refine. Values a rule computed rank below
+anything the user wrote down, guesses included, but above weak formulas, which only exist to
+step aside for something better.
 """
 function _precedence(provenance::Symbol)
     provenance === :strong_formula ? 6 :
@@ -85,28 +63,18 @@ function _precedence(provenance::Symbol)
     throw(ArgumentError("Unknown value provenance :$provenance"))
 end
 
-# `for [:out…]` reads badly mid-sentence, so name a rule by its label where it has one —
-# same convention as `_formula_ref` for the formula types.
+# prefer the label, `rule for [:out…]` reads badly mid-sentence
 _rule_ref(r::ResolutionRule) = isnothing(r.label) ? "rule for $(r.outsym)" : "`$(r.label)`"
 
-# Obs and output rules are exactly the `:derived` ones, everything else came from a user
-# formula. Deliberately not `!optional`, which coincides only as long as every user formula is
-# built non-optional.
+# obs/output rules are exactly the `:derived` ones. Not `!optional`, which only coincides.
 _is_user_rule(r::ResolutionRule) = r.provenance !== :derived
 
 """
     ResolutionRule(f::InitFormula, am::AliasMap)
     ResolutionRule(f::GuessFormula, am::AliasMap)
 
-Wrap a user formula as a rule: canonicalize both symbol lists through `am`, and keep calling
-the user's own closure under the names they wrote.
-
-Canonicalizing renames, same order and same length, so the payload needs no arithmetic and no
-permutation — it just presents the buffers under the original names. A scaled relation is not
-an alias and never reaches here; it is an invertible pair of rules in the graph.
-
-A `GuessFormula` writes at `:guess_formula`: it refines an existing guess, but yields to
-anything the init pass determined.
+Wrap a user formula as a rule. The symbol lists are canonicalized through `am`, while the user's
+closure keeps being called under the names they originally wrote.
 """
 ResolutionRule(f::InitFormula, am::AliasMap) =
     _wrap_formula(f, am; provenance=f.weak ? :weak_formula : :strong_formula)
@@ -124,8 +92,7 @@ function _wrap_formula(f, am; provenance)
     ResolutionRule(payload, outsym, sym; provenance, optional=false, label=f.label)
 end
 
-# Members of one alias class are one variable, so two of them in a rule's output list would
-# mean writing the same variable twice — caught here rather than as a mystery collision.
+# two members of one alias class are the same variable, so listing both would write it twice
 function _canonical_names(syms, am, f)
     names = [canonicalize(am, s) for s in syms]
     if !allunique(names)
@@ -139,28 +106,17 @@ end
 """
     ResolutionResult
 
-What [`resolve_rules`](@ref) produced, and what it observed on the way. Deliberately free of
-policy: it records what happened and leaves erroring, warning or ignoring to the caller.
+What [`resolve_rules`](@ref) did. It only records things; erroring or warning is up to the caller.
 
-- `vals` — the resolved values, a fresh `Dict{Symbol,Float64}`. Directly usable as the
-  `defaults`/`guesses` dict downstream.
-- `provenance` — where every entry of `vals` came from.
-- `writer` — which rule wrote each entry, as an index into the rule vector; a seeded entry that
-  no rule touched has no key here. Provenance alone does not identify the writer (two formulas
-  share one), so this is what a diagnostic must key on to credit a value to a rule.
-- `fired` / `pruned` — per rule, indexed like the rule vector handed to `resolve_rules`.
-- `unfired` — non-optional rules that never ran, with the inputs still unknown. This is the
-  "to compute `:δ`, provide one of {…}" material. A rule that *ran* and had all of its writes
-  yield counts as `fired`: it was tested against what was already there, not dropped.
-- `nonfinite` — the symbols holding a non-finite value, with the rule that wrote each (`0` for a
-  seed nothing touched). Purely a diagnostic: such a value is written and propagated like any
-  other, and this only says where it entered.
-- `yields` — rules whose contribution to a symbol was superseded by a higher-precedence one,
-  either because they landed on it (yielded) or because they got there first and were overwritten.
-  The two are the same fact seen from different firing orders, so both are recorded under the
-  losing rule; without that, whether a weak formula's yield is visible would depend on the
-  accident of the walk order, and on whether the rule was also pruned.
-- `conflicts` — two rules of equal precedence landing on one target with disagreeing values.
+- `vals` — the resolved values, usable as a `defaults`/`guesses` dict.
+- `provenance` — where each value came from.
+- `writer` — which rule wrote each value. Diagnostics need this, since several rules can share
+  one provenance.
+- `fired` / `pruned` — per rule.
+- `unfired` — rules that never ran because their inputs stayed unknown.
+- `nonfinite` — values that came out `NaN`/`Inf`, and who wrote them.
+- `yields` — a rule lost a symbol to a higher-ranked one.
+- `conflicts` — two rules of the same rank disagreed about a symbol.
 """
 struct ResolutionResult
     vals::Dict{Symbol,Float64}
@@ -191,25 +147,18 @@ end
 """
     resolve_rules(vals, rules; targets, seedprov, maxpasses) -> ResolutionResult
 
-Resolve everything derivable from `vals` by firing rules whose inputs are known, in an order
-derived from the rules themselves. `vals` is the root set and is **not** mutated: the result
-carries a fresh `Dict{Symbol,Float64}`.
+Resolve everything that follows from `vals` by firing rules whose inputs are known. `vals` itself
+is not modified.
 
 The walk:
 
-1. Seed, with the provenance `seedprov(sym)`. The init pass provides everything; the guess pass
-   is the reason this is a function of the symbol rather than one value, since it binds the init
-   output but seeds a pre-existing guess at guess rank.
-2. Prune to what can still matter, if `targets` is given: reverse reachability from the targets
-   over the rules' outputs. Callers should pass targets rather than rely on the walk being cheap.
-3. Tarjan over the *rule* graph (a rule is one node however many outputs it has), then walk the
-   condensation in topological order. Singleton blocks fire at most once; multi-member blocks
-   are re-scanned until nothing changes, with readiness deciding which member goes first.
-4. Write policy per target, comparing the rule's provenance `rp` against the target's current
-   `tp`: empty slot → write; `tp > rp` → yield, recorded; `tp == rp` → tolerance check, recorded
-   as a conflict on disagreement; `tp < rp` → overwrite, recorded as a yield for the loser.
+1. Seed the known values, each at the rank `seedprov` gives it.
+2. Drop the rules that cannot contribute to `targets`.
+3. Order the rules with Tarjan and walk them, re-scanning cyclic groups until they settle.
+4. Write each output, unless something of higher rank is already sitting there. Equal rank is a
+   consistency check rather than a write.
 
-Whether a recorded conflict is an error is up to the caller — the guess pass ignores them.
+Conflicts are only recorded; the caller decides whether they are an error.
 """
 function resolve_rules(vals, rules::AbstractVector;
                        targets=nothing, seedprov=Returns(:provided), maxpasses=1000)
@@ -224,8 +173,7 @@ function resolve_rules(vals, rules::AbstractVector;
 
     for block in _rule_blocks(g, keep)
         if length(block) == 1
-            # a rule cannot read its own output, so a singleton block has no self-loop and
-            # gets exactly one chance
+            # there are no self-loops, so a lone rule gets exactly one chance
             _try_fire!(res, rules, only(block))
         else
             _resolve_block!(res, rules, block; maxpasses)
@@ -251,21 +199,12 @@ end
 """
     rule_graph(rules) -> SimpleDiGraph
 
-Dependency graph over `rules`: vertex `i` is `rules[i]`, and there is an edge `i → j` whenever
-an output of rule `i` is an input of rule `j`, i.e. "`i` must run before `j`".
+Dependency graph over `rules`: an edge `i → j` means rule `i` writes something rule `j` reads.
 
-**Nodes are rules, not variables.** A rule with several outputs is one vertex, which is what
-spares multi-output formulas any special handling downstream — Tarjan then treats such a
-formula atomically without any merge-then-split bookkeeping.
+Vertices are rules, not variables, so a formula with several outputs stays a single node.
 
-An edge means "run before", **not** "requires": two rules writing one symbol both get an edge to
-every reader, though either alone would determine it. That is deliberate — it puts all candidate
-writers ahead of any reader, so precedence settles before the value is read. Need is checked at
-firing time instead, per symbol. The cost is that a redundant writer sitting *downstream* of a
-reader lands both in one SCC, i.e. redundancy can enlarge blocks.
-
-Edges are fully determined by the order of `rules`: no dict iteration reaches the graph, so the
-execution plan does not shift with Julia's hash order.
+Edges mean "run before", not "requires": if two rules could write the same symbol, both are
+ordered ahead of everything that reads it.
 """
 function rule_graph(rules)
     writers = Dict{Symbol,Vector{Int}}()
@@ -283,13 +222,8 @@ function rule_graph(rules)
     g
 end
 
-# Pruning is plain **reverse reachability in the rule graph**: seed with the rules writing a
-# target, then walk backwards, because a predecessor is by construction a rule writing something
-# a kept rule reads. `neighbors_type=inneighbors` is what walks the edges the wrong way round,
-# so no reversed copy of the graph is materialized.
-#
-# `targets === nothing` means "keep everything" — for callers that genuinely want every
-# observable resolved, and for tests.
+# walk backwards from the rules writing a target and keep everything reachable.
+# `targets === nothing` keeps all rules.
 function _prune_rules(g, rules, targets)
     isnothing(targets) && return trues(length(rules))
 
@@ -302,25 +236,20 @@ function _prune_rules(g, rules, targets)
     keep
 end
 
-# The kept rules as blocks of mutually dependent ones, in execution order, as indices into
-# `rules`. Restricting to `keep` first matters: dropping a vertex can split an SCC, so running
-# Tarjan on the full graph and filtering afterwards would leave blocks coarser than they are.
+# Groups of mutually dependent rules, in execution order. Pruning has to happen before Tarjan
+# runs, otherwise the groups come out bigger than they really are.
 function _rule_blocks(g, keep)
     sg, vmap = Graphs.induced_subgraph(g, findall(keep))
     sccs = reverse(Graphs.strongly_connected_components_tarjan(sg))
     [sort!(vmap[scc]) for scc in sccs]
 end
 
-# Inside a block a writer of `x` may sit downstream of a reader of `x`, so one pass is not
-# enough: re-scan until nothing changes. Readiness is what selects — the rule whose inputs
-# happen to be known goes first, and the order of `rules` only decides between two rules ready
-# at the same moment.
+# Rules in a cycle cannot be put in order, so the group is re-scanned until nothing changes and
+# whichever rule happens to have its inputs ready goes first. An overwrite re-arms everyone who
+# read the old value.
 #
-# Termination: a rule fires at most once, so a block settles in at most `|block|` firings —
-# except that an *overwrite* re-arms the rules reading the overwritten symbol, so their stale
-# results get repaired. That cannot run away either, because an overwrite strictly raises the
-# target's provenance and the precedence levels are bounded. `maxpasses` guards a hole in that
-# argument, it is not part of the design.
+# This settles because a rule fires at most once and an overwrite always raises the target's
+# rank. `maxpasses` is only a safety net.
 function _resolve_block!(res, rules, block; maxpasses)
     overwritten = Set{Symbol}()
     for _ in 1:maxpasses
@@ -360,10 +289,7 @@ function _try_fire!(res, rules, i; overwritten=nothing)
     true
 end
 
-# The write policy, and the one place precedence is decided. Purely local to the target: the
-# topological order has already put every writer of `s` ahead of every reader of it, so an
-# overwrite here can never strand a value someone computed from the old one — outside a block,
-# where `_resolve_block!` re-arms the readers instead.
+# The write policy, and the only place where precedence is decided.
 function _write_value!(res, s, v, provenance, i; overwritten)
     if !haskey(res.vals, s)
         _store!(res, s, v, provenance, i; overwritten=nothing)
@@ -372,26 +298,23 @@ function _write_value!(res, s, v, provenance, i; overwritten)
     held = _precedence(res.provenance[s])
     offered = _precedence(provenance)
     if held > offered
-        # yield: something stronger already determined this. Recorded rather than silent, since
-        # for a weak formula this *is* the outcome the caller wants to report.
+        # recorded, not silent: for a weak formula this *is* the outcome to report
         push!(res.yields, (; sym=s, offered=v, rule=i))
         return nothing
     elseif held == offered
-        # equal precedence is a check, never a write — that is what bounds the block fixpoint, and it
-        # is the free half of the consistency checking that pruning otherwise costs us
+        # same rank never overwrites, we only check that the two agree
         _agree(res.vals[s], v) ||
             push!(res.conflicts, (; sym=s, held=res.vals[s], offered=v, rule=i))
         return nothing
     end
-    # the mirror of the yield above: the rule that got there first is the one superseded
+    # the rule that got here first is the one that lost
     haskey(res.writer, s) && push!(res.yields, (; sym=s, offered=res.vals[s], rule=res.writer[s]))
     _store!(res, s, v, provenance, i; overwritten)
     nothing
 end
 
-# `overwritten` collects what a block has to re-read, so the test is whether the *value* moved,
-# not whether the precedence did. Tolerance rather than `!=`: a value jittering in the last bits
-# would otherwise re-arm its readers forever.
+# `overwritten` collects the symbols whose value actually moved, so a block knows what to
+# re-read. Compared with a tolerance, otherwise jitter in the last bits would never settle.
 function _store!(res, s, v, provenance, i; overwritten)
     if !isnothing(overwritten) && haskey(res.vals, s) && !_agree(res.vals[s], v)
         push!(overwritten, s)

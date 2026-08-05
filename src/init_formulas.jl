@@ -552,10 +552,8 @@ end
 assert_initformula_compat(cf::ComponentModel, c::InitFormula) = _assert_formula_compat(cf, c)
 assert_guessformula_compat(cf::ComponentModel, c::GuessFormula) = _assert_formula_compat(cf, c)
 
-# Inputs may be observables: the resolution graph computes them from what is known, or reads
-# them directly where another formula writes them. Outputs may be observables too — as pure
-# aliases they canonicalize onto a settable symbol, and as genuinely algebraic observables the
-# write is an assertion about the model, checked post-solve.
+# Observables are allowed on both ends. As an input the graph computes them, as an output the
+# formula either lands on an aliased symbol or asserts something that is checked after the solve.
 function _assert_formula_compat(cf::ComponentModel, c::Union{InitFormula,GuessFormula})
     label = c isa InitFormula ? "InitFormula" : "GuessFormula"
     settable = settable_symbols(cf)
@@ -578,14 +576,11 @@ end
 """
     extend_knowns_by_formulas!(knowns, cf, formulas; am, t, targets, error_unresolvable, verbose, io)
 
-Extend `knowns` in place by everything the resolution graph derives from it: the component's
-`:obsrules` together with the user's init `formulas`, resolved by [`resolve_rules`](@ref).
+Extend `knowns` in place by whatever the component's `:obsrules` and the user's init `formulas`
+can derive from it, using [`resolve_rules`](@ref).
 
-`targets` narrows what is worth computing — an `NWState` holds states and parameters only.
-Which symbols have a *slot* is the component's full settable set either way.
-
-`t=NaN` means "no time given" and is translated here: `:t` is then not seeded at all, so a rule
-reading it stays unfired instead of quietly producing `NaN`.
+`targets` narrows down what is worth computing, e.g. an `NWState` only cares about states and
+parameters. With `t=NaN` no time is given, and a rule reading `:t` simply does not fire.
 
 See [`_resolution_rules`](@ref) for when the pass runs at all.
 """
@@ -597,12 +592,7 @@ function extend_knowns_by_formulas!(knowns, cf, formulas;
     rules = _resolution_rules(cf, formulas, am, knowns, settable)
     isempty(rules) && return knowns
     if isnothing(targets)
-        # Everything settable, plus what a user formula writes. A formula writing an *observable*
-        # asserts something about the model: the value has no slot, but it is checked against the
-        # solved state afterwards (`broken_observable_defaults`), so the rule is worth running
-        # even though nothing in the component reads it. Observed rules are deliberately not
-        # seeded this way — nothing but a formula ever reads an observable, so they stay
-        # prunable, which is what keeps a plain component free.
+        # include outputs of user formulas in targets so no user rule is dropped
         targets = settable ∪ Set(s for r in rules if _is_user_rule(r) for s in r.outsym)
     end
 
@@ -629,16 +619,12 @@ end
 """
     extend_guesses_by_formulas!(guesses, defaults, cf, formulas; am, t, targets, error_unresolvable, verbose, io)
 
-Guess-formula sibling of [`extend_knowns_by_formulas!`](@ref): extend `guesses` in place by
-everything the resolution graph derives from the component's `:obsrules` together with the
-user's guess `formulas`.
+Guess-formula sibling of [`extend_knowns_by_formulas!`](@ref), same executor but seeded with both
+`defaults` and `guesses`.
 
-Same executor, different roots: the full init output (`defaults`) seeds at `:provided`, a
-pre-existing guess at `:guess`. So a `GuessFormula` refines a guess but never moves what init
-determined, and an obs rule (`:derived`) may fill a symbol nothing else reaches but never
-replaces a guess. Which of two guess formulas writing one symbol wins is unspecified.
-
-Conflicts are ignored — guesses are inconsistent by construction.
+Anything the init pass determined is off limits here. A guess formula may overwrite an existing
+guess, an observed equation may only fill a symbol nothing else reached. Conflicts are ignored,
+guesses are inconsistent by construction.
 """
 function extend_guesses_by_formulas!(guesses, defaults, cf, formulas;
                                      am=get_aliasmap(cf), t=NaN, targets=nothing,
@@ -741,9 +727,7 @@ Targets are what the rules are pruned for. Narrows `targets` down to:
 (for example, a user provided default can only be changed by a strong formula, so
 we can remove it as target UNLESS there is such a strong formula in the ruleset)
 
-`seedprov` values the seed entries, like in `resolve_rules` (init pass: everything `:provided`;
-guess pass: only the init output). Same comparison `_write_value!` makes — equal rank is a
-check, so it can never change the value.
+`seedprov` says what the entries of `vals` are worth, same as in `resolve_rules`.
 """
 function _prune_resolution_targets(targets, rules, vals; seedprov=Returns(:provided))
     best = Dict{Symbol,Int}()
@@ -764,10 +748,8 @@ function _prune_resolution_targets(targets, rules, vals; seedprov=Returns(:provi
     kept
 end
 
-# Caller-side policy, the half `resolve_rules` deliberately does not have: a rule that left one
-# of its outputs unknown, two rules of equal precedence disagreeing about one, a required rule
-# that turned out not to be needed, and values that came out non-finite.
-# `check_conflicts=false` for the guess pass: guesses are inconsistent by construction.
+# Decide what the recorded problems mean — `resolve_rules` itself never errors or warns.
+# `check_conflicts=false` for the guess pass, guesses are inconsistent by construction.
 function _check_resolution(res, rules; error_unresolvable, verbose, io,
                            type="InitFormula", check_conflicts=true)
     _check_pruned(res, rules; error_unresolvable, verbose, io, type)
@@ -834,14 +816,13 @@ function _check_nonfinite(res, rules; error_unresolvable, verbose, io)
     print_aligned_rows(io, rows)
     nothing
 end
-# warn if non-optional rule pruned away, weak formulas are optional
+# Complain about user formulas that got pruned away. Obs rules are pruned all the time, that is
+# the whole point of `targets`, so they never show up here.
 function _check_pruned(res, rules; error_unresolvable, verbose, io, type)
     for (i, r) in enumerate(rules)
         (res.pruned[i] && _is_user_rule(r)) || continue
-        # Two different reasons collapse into "pruned", and they read very differently. A rule
-        # all of whose targets already hold something that outranks it *yielded*, which is the
-        # designed outcome for a weak formula and for a guess whose target the init pass fixed.
-        # Anything else pruned because nothing reads what it writes.
+        # "pruned" covers two very different stories: the rule yielded because its targets are
+        # already determined, or nothing reads what it writes
         outranked = all(r.outsym) do s
             haskey(res.vals, s) && _precedence(res.provenance[s]) > _precedence(r.provenance)
         end
@@ -849,12 +830,11 @@ function _check_pruned(res, rules; error_unresolvable, verbose, io, type)
             verbose && printstyled(io, " - $type: $(_rule_ref(r)) yields, \
                                         its target $(r.outsym) is already determined\n")
         elseif r.provenance === :weak_formula || r.provenance === :guess_formula
-            # a rule that yields *by design* never warns for being unread — a library spelling
-            # out a backward chain as weak or guess rules would drown the log in them
+            # these are meant to be droppable, so no warning; a library full of them would
+            # otherwise drown the log
             verbose && printstyled(io, " - $type: $(_rule_ref(r)) had no effect, \
                                         nothing reads $(r.outsym)\n")
-        elseif error_unresolvable # the init path; `NWState` reconstruction narrows the slot
-            # set to states and parameters, where a formula writing an output prunes routinely
+        elseif error_unresolvable # the init path; `NWState` prunes such rules routinely
             printstyled(io, " - WARNING: ", color=:yellow)
             printstyled(io, "$(_rule_ref(r)) had no effect: nothing in this component reads \
                              $(r.outsym), so it cannot change any state, parameter or \
