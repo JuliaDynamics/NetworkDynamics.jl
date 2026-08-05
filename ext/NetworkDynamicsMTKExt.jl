@@ -21,7 +21,7 @@ using SymbolicIndexingInterface: SymbolicIndexingInterface as SII
 using NetworkDynamics: NetworkDynamics, set_metadata!, ComponentPostprocessing,
                        PureFeedForward, FeedForward, NoFeedForward, PureStateMap,
                        MultipleOutputWrapper, inline_repr, multiline_repr,
-                       AliasMap, set_aliasmap!, settable_symbols,
+                       AliasMap, set_aliasmap!,
                        ResolutionRule, set_obsrules!,
                        assert_initformula_compat, assert_guessformula_compat
 import NetworkDynamics: VertexModel, EdgeModel, AnnotatedSym, InitFormula, add_initformula!, GuessFormula, add_guessformula!
