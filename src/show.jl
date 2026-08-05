@@ -182,9 +182,8 @@ end
 
 function _cluster_lines(@nospecialize(c::ComponentModel), formulas, verb)
     am = get_aliasmap(c)
-    # The frontier of the displayed group: observables its own formulas write — which covers the
-    # `:pfinitformula` entries grouped in with the plain InitFormulas — plus, for guess
-    # formulas, the ones the init formulas write, since guesses run after the init stage.
+    # observables this group of formulas writes. Guess formulas run after the init stage, so
+    # they also see whatever the init formulas wrote.
     pinned = _written_obssyms(c, formulas, am)
     if any(f -> f isa GuessFormula, formulas)
         pinned = pinned ∪ _written_obssyms(c, _init_formulalike(c), am)
@@ -233,24 +232,20 @@ function _num_init_variables(@nospecialize(c::ComponentModel), ios)
     length(free)
 end
 
-# What a formula writes and reads, as plain symbol lists. Reads are traced backwards through the
-# component's `:obsrules` onto the symbols that ultimately feed them, so a cluster is attributed
-# to the seeds it came from rather than to whichever observables it happens to mention. Nothing
-# is compiled and no extension is needed, so unlike the expansion this replaces, printing cannot
-# fail here.
+# What a formula writes and reads, as plain symbol lists. Reads are traced back to the symbols
+# that ultimately feed them, so a cluster is listed by its actual seeds rather than by whichever
+# observables the formula happens to mention.
 function _formula_io(@nospecialize(c::ComponentModel), @nospecialize(f), am, pinned=Set{Symbol}())
     writes = unique!([canonicalize(am, s) for s in f.outsym])
     reads = _trace_to_roots(c, [canonicalize(am, s) for s in f.sym], pinned)
     (; writes, reads, seeds=_lazy_seeds(f))
 end
 
-# The backwards walk. It stops at a settable symbol (that is where a value can actually be
-# placed), at the frontier (the resolution graph reads such an observable directly instead of
-# going through its defining equation) and at anything no rule computes.
+# The backwards walk. It stops wherever a value could actually sit: a settable symbol, one of the
+# `frontier` observables, or something no rule computes at all.
 #
-# Display-only, which is why it is allowed a shortcut the executor is not: where several rules
-# write one observable — the two directions of a scaled relation — it takes the union of their
-# inputs. Choosing between them is a property of the query, and a `show` has no query.
+# For display only, so it is sloppier than the executor: if several rules write one observable it
+# simply takes all of their inputs.
 function _trace_to_roots(@nospecialize(c::ComponentModel), syms, frontier)
     writers = Dict{Symbol,Vector{Int}}()
     rules = get_obsrules(c)
@@ -277,9 +272,8 @@ function _trace_to_roots(@nospecialize(c::ComponentModel), syms, frontier)
     roots
 end
 
-# Observables a set of formulas writes, canonically named. Such a symbol has no storage slot of
-# its own: it is not a variable the initialization has to determine, and the graph hands its
-# value straight to whoever reads it — both of which the cluster line reports.
+# Observables a set of formulas writes, canonically named. These have no slot of their own, the
+# initialization does not solve for them.
 function _written_obssyms(@nospecialize(c::ComponentModel), formulas, am)
     settable = settable_symbols(c)
     obs = obssym(c)

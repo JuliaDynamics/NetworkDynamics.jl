@@ -92,13 +92,10 @@ function pick_best_alias_names(eqs, obseqs, states, outputs, inputs; verbose)
 
     # 5. The alias map, from the very groups picked above.
     aliasmap = let
-        # a settable alias — an input/output that lost to a better representative — keeps its
-        # slot, and a settable symbol must never be recorded as an alias of another
-        # (`assert_aliasmap_compat`). It stays un-aliased and its `alias ~ main` observation
-        # becomes an ordinary rule pair instead.
+        # settable symbols keep their slot and are never recorded as an alias of something else.
+        # They stay un-aliased and their `alias ~ main` relation becomes an ordinary rule pair.
         settable = union(inset, outset)
-        # a canonical needs somewhere to live: a slot, or at least a defining equation of its
-        # own (the terminal observable of a class with no settable member).
+        # a canonical needs somewhere to live: a slot, or at least a defining equation
         known = union(Set(states_new), settable, Set(eq.lhs for eq in obseqs_new))
         am = AliasMap()
         for (alias, main) in alias_pairs_kept

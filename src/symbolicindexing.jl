@@ -179,11 +179,9 @@ function NWState(thing;
 
     return s
 end
-# Values are alias-normalized here for the same reason `initialize_component` does it: which
-# member of an alias class a value was written against is an accident of MTK's reduction, and
-# must not decide whether the value survives — without it the `valid_keys` filter below would
-# silently drop a default placed on an alias. A no-op with an empty aliasmap (the non-MTK
-# case); formulas need no such pass, the rules canonicalize their symbol lists themselves.
+# Values are alias-normalized here, like in `initialize_component`: which member of an alias
+# class a value was written against should not decide whether it survives the `valid_keys`
+# filter below. Does nothing without an aliasmap.
 function _get_appropriate_dict(cidx, cm; guess, apply_formulas, verbose, additional_initformula=nothing)
     am = get_aliasmap(cm)
     defaults = normalize_valuedict(am, get_defaults_or_inits_dict(cm); what=:default, verbose)
@@ -194,9 +192,8 @@ function _get_appropriate_dict(cidx, cm; guess, apply_formulas, verbose, additio
     combined_initf = apply_formulas ? collect_formulas(metadata_initf, additional_initformula) : nothing
     if apply_formulas
         verbose && !isnothing(combined_initf) && println("Applying InitFormulas for $(cidx) ($(cm.name))...")
-        # Called even with no formula: a `default` on a *scaled* alias reaches its canonical
-        # symbol only through the graph's inverse rule, and that has to happen before the
-        # `valid_keys` filter below drops it. An `NWState` holds states and parameters only.
+        # called even without formulas: a `default` on a scaled alias only reaches its canonical
+        # symbol through the graph, and that has to happen before `valid_keys` drops it
         extend_knowns_by_formulas!(defaults, cm, combined_initf;
                                    am, targets=Set(vcat(sym(cm), psym(cm))),
                                    error_unresolvable=false, verbose)
@@ -206,8 +203,7 @@ function _get_appropriate_dict(cidx, cm; guess, apply_formulas, verbose, additio
         if apply_formulas
             guessf = has_guessformula(cm) ? get_guessformulas(cm) : nothing
             verbose && !isnothing(guessf) && println("Applying GuessFormulas for $(cidx) ($(cm.name))...")
-            # unconditional for the same reason the init pass is: a `guess` on a *scaled* alias
-            # reaches its canonical symbol only through the graph's inverse rule
+            # unconditional for the same reason as the init pass above
             extend_guesses_by_formulas!(guesses, defaults, cm, guessf;
                                         am, targets=Set(vcat(sym(cm), psym(cm))),
                                         error_unresolvable=false, verbose)

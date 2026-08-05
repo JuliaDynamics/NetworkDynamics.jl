@@ -194,9 +194,8 @@ function _conflict_error(canonical, what, entry1, entry2)
         are one variable, so values written on them must agree."))
 end
 
-# The NaN clause is not cosmetic: `resolve_rules` decides "has this value moved" with `!_agree`,
-# and `isapprox(NaN, NaN)` is `false`. Without it a NaN inside a rule block would re-arm its
-# readers on every pass and the block would never settle.
+# NaN counts as equal to NaN here: `resolve_rules` asks `!_agree` whether a value moved, and
+# without this clause a NaN would look like it keeps changing forever.
 _agree(v1::Real, v2::Real) = isapprox(v1, v2; rtol=ALIAS_RTOL, atol=ALIAS_ATOL) || (isnan(v1) && isnan(v2))
 _agree(v1::Tuple, v2::Tuple) = all(splat(_agree), zip(v1, v2))
 _agree(v1, v2) = isequal(v1, v2) # `nothing` markers and anything else exotic

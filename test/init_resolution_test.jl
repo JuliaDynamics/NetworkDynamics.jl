@@ -3,10 +3,9 @@ using NetworkDynamics: ResolutionRule, resolve_rules, rule_graph, AliasMap, _pre
 using Graphs: Graphs
 using Test
 
-# The resolution executor is a pure function of a rule vector and a value dict: no component,
-# no Symbolics, no ModelingToolkit. Everything here is hand-built, which is the point — the
-# semantics that are hard to see through a compiled bus (readiness inside a block, precedence,
-# termination) are one-liners at this level.
+# The resolution executor is a pure function of a rule vector and a value dict, so everything
+# here is hand-built: no component, no Symbolics, no MTK. Things that are hard to see through a
+# compiled bus, like readiness or precedence, become one-liners at this level.
 
 # rules take plain vectors, so a test rule is just a closure over indices
 rule(f, outsym, sym; provenance=:derived, optional=true, label=nothing) =
@@ -80,9 +79,8 @@ end
 end
 
 @testset "non-finite seeds are ordinary values" begin
-    # "unknown" is the absence of a key, so nothing is filtered: `NaN` and `Inf` are seeded and
-    # carry `:provided` like any number. `nothing`/`missing` are turned away one level up, in
-    # `_numeric_seed`, so `resolve_rules` never has to test for them.
+    # "unknown" means the key is missing, so `NaN` and `Inf` are seeded like any other number.
+    # `nothing`/`missing` never get here, `_numeric_seed` turns them away one level up.
     res = resolve_rules(Dict(:a => 1.0, :b => NaN, :e => Inf), ResolutionRule[])
     @test keys(res.vals) == Set([:a, :b, :e])
     @test res.provenance[:b] == :provided
@@ -178,9 +176,8 @@ end
 end
 
 @testset "a superseded rule is recorded, whichever way round it fired" begin
-    # The same fact reaches the executor two ways depending on the walk: the weak rule lands on a
-    # value that already outranks it (a yield), or it got there first and is overwritten. Both are
-    # recorded under the *losing* rule, so a caller's log does not depend on the firing order.
+    # Depending on the walk the weak rule either lands on a value that outranks it or gets there
+    # first and is overwritten. Both end up recorded under the losing rule.
     weak_last = [scale(2.0, :w, :seed; provenance=:strong_formula, optional=false),
                  scale(9.0, :w, :seed; provenance=:weak_formula, optional=false)]
     a = resolve_rules(Dict(:seed => 2.0), weak_last; targets=[:w])

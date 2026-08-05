@@ -1009,10 +1009,8 @@ has_obsrules(nw::Network, idx::ECIndex) = has_obsrules(getcomp(nw, idx))
     get_obsrules(c::ComponentModel)
     get_obsrules(nw::Network, idx::Union{VIndex,EIndex})
 
-Gets the component's observed/output [`ResolutionRule`](@ref)s, or an *empty* vector if it
-has none — a component not compiled from ModelingToolkit simply contributes nothing but the
-user's own formulas to the resolution graph, so callers need not branch on
-[`has_obsrules`](@ref).
+Gets the component's observed/output [`ResolutionRule`](@ref)s, or an *empty* vector if it has
+none, so callers do not have to branch on [`has_obsrules`](@ref).
 
 See also: [`has_obsrules`](@ref), [`set_obsrules!`](@ref).
 """

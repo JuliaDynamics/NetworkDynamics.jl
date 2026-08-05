@@ -742,8 +742,8 @@ end
 
 # Shape one `lhs => rhs` pair into a `(target, rhs, inputs)` form, or skip it (with a
 # warning) when it structurally cannot become a formula. Deliberately *raw*: target and
-# inputs keep the names the user wrote; the resolution graph resolves them at init time — one
-# resolution path, shared with hand-attached formulas.
+# inputs keep the names the user wrote and the resolution graph sorts them out at init time,
+# the same way it does for hand-attached formulas.
 # Existence of the raw names is checked at attach time (`add_initformula_lenient!` etc.).
 function _resolve_formula(lhs_sym, rhs_expr; kind, weak::Bool=false)
     lhs_vars = get_variables(lhs_sym)
@@ -884,15 +884,13 @@ end
 """
     build_obsrules(obseqs, outputeqs, am::AliasMap, iv) -> Vector{ResolutionRule}
 
-Turns the symbolic equations of a compiled component into the `:derived` part of the
-resolution graph (see `src/init_resolution.jl`): one rule per observed and per output
-equation, plus the *inverse* of every relation of the form `y ~ k*x` — never inverting onto
-the independent variable `iv`, which is an argument of the model and not an unknown of it.
+Turns the symbolic equations of a compiled component into the `:derived` rules of the resolution
+graph: one per observed and per output equation, plus the inverse of every relation `y ~ k*x`.
 
-The pairs are the point. Which end of `i_r ~ -term_i_r` determines the other depends on what
-the query writes, not on the model, so keeping both directions moves that decision to init
-time. The rules stay a *separate view* of `:observed`/`:outputeqs` and never rewrite them —
-`:observed` has to keep mirroring exactly what `obsf` computes.
+Both directions are kept because which end of `i_r ~ -term_i_r` determines the other depends on
+the query, not on the model. Time is never inverted onto, it is an argument of the model.
+
+This is a separate view of `:observed`/`:outputeqs` and never rewrites them.
 """
 function build_obsrules(obseqs, outputeqs, am::AliasMap, iv)
     ivname = getname(iv)
@@ -928,7 +926,8 @@ function _push_eq_rules!(rules, eq, ivname)
     if isempty(vars)
         val = unwrap_const(Symbolics.value(eq.rhs))
         if val isa Number
-            push!(rules, _derived_rule(_const_payload(val), lhsname, Symbol[]))
+            # `Float64` so all constant payloads share one closure type, see `_const_payload`
+            push!(rules, _derived_rule(_const_payload(Float64(val)), lhsname, Symbol[]))
         end
         return rules
     end
@@ -945,9 +944,8 @@ _self_reference_error(eq) =
            constrains its lhs rather than defining it and must not be an observed or output \
            equation; the lhs has to be defined in terms of other variables/parameters/observables.")
 
-# `out = factor * in` and `out = value` are the two shapes worth not compiling a function for:
-# on a component of any size most observed equations are one of them, and both directions of an
-# invertible relation are the first. One closure each, so one type each however many rules.
+# most observed equations have one of these two shapes, so give them a hand-written closure
+# instead of a compiled one. One closure each means one type each, however many rules there are.
 _scaled_payload(factor) = (out, u) -> (out[1] = factor * u[1]; nothing)
 _const_payload(value) = (out, _) -> (out[1] = value; nothing)
 

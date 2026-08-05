@@ -562,9 +562,8 @@ function initialize_component(cf;
     metadata_initformulas = has_initformula(cf) ? get_initformulas(cf) : nothing
     combined_initformulas = collect_formulas(metadata_initformulas, additional_initformula)
 
-    # observables which carry a value *before* the pass; afterwards, the only other way one can
-    # hold a value is that a formula wrote it (the pass drops purely derived observables), which
-    # is all the post-solve check below needs to tell the two origins apart
+    # observables which already carry a value before the pass. Afterwards a formula is the only
+    # other thing that can have put one there, which is how the check below tells them apart.
     predefined_obs = Set(s for s in keys(defaults) if s ∈ obssym(cf))
 
     # seed `defaults` (default-only here) with everything the resolution graph derives

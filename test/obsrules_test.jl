@@ -8,9 +8,8 @@ using SciCompDSL
 using Test
 
 # The `:derived` half of the resolution graph, built from a component's symbolic equations at
-# compile time. What is tested here is the *translation* — which equations become which rules —
-# plus the one invariant that anchors it: firing every rule from a full root set must reproduce
-# `obsf` exactly. The executor itself is tested in `init_resolution_test.jl`, without MTK.
+# compile time. Tested here: which equations become which rules, and that firing all of them
+# reproduces `obsf`. The executor itself is tested in `init_resolution_test.jl`, without MTK.
 
 # One bus carrying every shape the translation has to tell apart: an identity alias, a
 # sign-flipped relation, a chain of them, a genuinely algebraic observable, a multi-root one,
@@ -117,9 +116,8 @@ end
     @test res.vals[:nl] ≈ 4.0
 end
 
-# The case the whole design exists for: on a component whose *output* is a scaled alias of an
-# observable, which end determines the other depends on what the query writes. As a rule pair
-# both queries are answerable from one rule set.
+# The case the whole design exists for: the output is a scaled alias of an observable, and which
+# end determines the other depends on the query. Keeping both directions answers both queries.
 @mtkmodel InvBus begin
     @variables begin
         x(t) = 1.0
