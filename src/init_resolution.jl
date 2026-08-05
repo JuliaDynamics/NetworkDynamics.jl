@@ -89,6 +89,11 @@ end
 # same convention as `_formula_ref` for the formula types.
 _rule_ref(r::ResolutionRule) = isnothing(r.label) ? "rule for $(r.outsym)" : "`$(r.label)`"
 
+# Obs and output rules are exactly the `:derived` ones, everything else came from a user
+# formula. Deliberately not `!optional`, which coincides only as long as every user formula is
+# built non-optional.
+_is_user_rule(r::ResolutionRule) = r.provenance !== :derived
+
 """
     ResolutionRule(f::InitFormula, am::AliasMap)
     ResolutionRule(f::GuessFormula, am::AliasMap)

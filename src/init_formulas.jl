@@ -752,7 +752,7 @@ end
 function _print_resolution(res, rules, knowns, settable; io)
     formula_rows = String[]
     for (i, r) in enumerate(rules)
-        r.optional && continue
+        _is_user_rule(r) || continue
         for s in r.outsym
             # `res.writer`, not the provenance: two same-tier formulas share a provenance, and a
             # formula that never fired keeps none of its outputs — neither may claim the write
@@ -876,7 +876,7 @@ end
 # warn if non-optional rule pruned away, weak formulas are optional
 function _check_pruned(res, rules; error_unresolvable, verbose, io)
     for (i, r) in enumerate(rules)
-        (res.pruned[i] && !r.optional) || continue
+        (res.pruned[i] && _is_user_rule(r)) || continue
         if r.provenance === :weak_formula
             verbose && printstyled(io, " - InitFormula: $(_rule_ref(r)) yields, \
                                         its target $(r.outsym) is already determined\n")
