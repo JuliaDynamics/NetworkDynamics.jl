@@ -182,12 +182,12 @@ end
 
 function _cluster_lines(@nospecialize(c::ComponentModel), formulas, verb)
     am = get_aliasmap(c)
-    # The frontier of the displayed group: the pins of its own formulas — which covers the
+    # The frontier of the displayed group: observables its own formulas write — which covers the
     # `:pfinitformula` entries grouped in with the plain InitFormulas — plus, for guess
-    # formulas, the init pins, since guesses run after the init stage.
-    pinned = pinned_obssyms(formulas, c)
+    # formulas, the ones the init formulas write, since guesses run after the init stage.
+    pinned = _written_obssyms(c, formulas, am)
     if any(f -> f isa GuessFormula, formulas)
-        pinned = pinned ∪ pinned_obssyms(_init_formulalike(c), c)
+        pinned = pinned ∪ _written_obssyms(c, _init_formulalike(c), am)
     end
     ios = [_formula_io(c, f, am, pinned) for f in formulas]
     total = _num_init_variables(c, ios)
@@ -233,22 +233,58 @@ function _num_init_variables(@nospecialize(c::ComponentModel), ios)
     length(free)
 end
 
-# What a formula writes and reads once normalized, as plain symbol lists — no closures, so
-# none of `normalize`'s machinery is needed. Printing must never fail, hence the fallbacks:
-# expansion needs the MTK extension and may be unavailable, and `show` is not the place to
-# report that.
+# What a formula writes and reads, as plain symbol lists. Reads are traced backwards through the
+# component's `:obsrules` onto the symbols that ultimately feed them, so a cluster is attributed
+# to the seeds it came from rather than to whichever observables it happens to mention. Nothing
+# is compiled and no extension is needed, so unlike the expansion this replaces, printing cannot
+# fail here.
 function _formula_io(@nospecialize(c::ComponentModel), @nospecialize(f), am, pinned=Set{Symbol}())
     writes = unique!([canonicalize(am, s) for s in f.outsym])
-    reads = if isempty(setdiff(intersect(f.sym, obssym(c)), pinned))
-        unique!([canonicalize(am, s) for s in f.sym])
-    else
-        try
-            first(generate_obs_expansion(c, collect(f.sym); stop_at=pinned))
-        catch
-            unique!([canonicalize(am, s) for s in f.sym])
+    reads = _trace_to_roots(c, [canonicalize(am, s) for s in f.sym], pinned)
+    (; writes, reads, seeds=_lazy_seeds(f))
+end
+
+# The backwards walk. It stops at a settable symbol (that is where a value can actually be
+# placed), at the frontier (the resolution graph reads such an observable directly instead of
+# going through its defining equation) and at anything no rule computes.
+#
+# Display-only, which is why it is allowed a shortcut the executor is not: where several rules
+# write one observable — the two directions of a scaled relation — it takes the union of their
+# inputs. Choosing between them is a property of the query, and a `show` has no query.
+function _trace_to_roots(@nospecialize(c::ComponentModel), syms, frontier)
+    writers = Dict{Symbol,Vector{Int}}()
+    rules = get_obsrules(c)
+    for (i, r) in enumerate(rules), s in r.outsym
+        push!(get!(writers, s, Int[]), i)
+    end
+
+    settable = settable_symbols(c)
+    roots = Symbol[]
+    seen = Set{Symbol}()
+    queue = collect(Symbol, syms)
+    while !isempty(queue)
+        s = popfirst!(queue)
+        s ∈ seen && continue
+        push!(seen, s)
+        if s ∈ settable || s ∈ frontier || !haskey(writers, s)
+            push!(roots, s)
+            continue
+        end
+        for i in writers[s], x in rules[i].sym
+            push!(queue, x)
         end
     end
-    (; writes, reads, seeds=_lazy_seeds(f))
+    roots
+end
+
+# Observables a set of formulas writes, canonically named. Such a symbol has no storage slot of
+# its own: it is not a variable the initialization has to determine, and the graph hands its
+# value straight to whoever reads it — both of which the cluster line reports.
+function _written_obssyms(@nospecialize(c::ComponentModel), formulas, am)
+    settable = settable_symbols(c)
+    obs = obssym(c)
+    Set(s for f in formulas for s in (canonicalize(am, x) for x in f.outsym)
+        if s ∈ obs && s ∉ settable)
 end
 
 # PowerDynamics' PFInitFormulas read, besides component symbols, variables of the solved
