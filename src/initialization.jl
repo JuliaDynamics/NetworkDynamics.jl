@@ -562,16 +562,11 @@ function initialize_component(cf;
     metadata_initformulas = has_initformula(cf) ? get_initformulas(cf) : nothing
     combined_initformulas = collect_formulas(metadata_initformulas, additional_initformula)
 
-    # The pin-set is a property of the complete formula set and must be known before any
-    # formula is normalized: readers stop their input expansion at every observable some
-    # other formula of this very init writes. Init formulas run first and must not depend
-    # on a guess writer, so their frontier contains the init pins only; guess formulas see
-    # both (init pins through the defaults-before-guesses lookup, guess pins from guesses).
+    # still needed for guess formulas, soon to be removed
     pinned = pinned_obssyms(combined_initformulas, cf)
 
-    # seed `defaults` (default-only here) with the resolved formula outputs; `pinned` is reused by
-    # the guess block below, so it stays computed in this scope and is threaded in.
-    extend_knowns_by_formulas!(defaults, cf, combined_initformulas; am, t, pinned, verbose, io)
+    # seed `defaults` (default-only here) with everything the resolution graph derives
+    extend_knowns_by_formulas!(defaults, cf, combined_initformulas; am, t, verbose, io)
 
     metadata_guessformulas = has_guessformula(cf) ? get_guessformulas(cf) : nothing
     combined_guessformulas = collect_formulas(metadata_guessformulas, additional_guessformula)

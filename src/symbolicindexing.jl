@@ -194,9 +194,14 @@ function _get_appropriate_dict(cidx, cm; guess, apply_formulas, verbose, additio
     # materializes on reconstruction — same combined set `initialize_component` uses.
     metadata_initf = has_initformula(cm) ? get_initformulas(cm) : nothing
     combined_initf = apply_formulas ? collect_formulas(metadata_initf, additional_initformula) : nothing
-    if !isnothing(combined_initf)
-        verbose && println("Applying InitFormulas for $(cidx) ($(cm.name))...")
-        extend_knowns_by_formulas!(defaults, cm, combined_initf; am, error_unresolvable=false, verbose)
+    if apply_formulas
+        verbose && !isnothing(combined_initf) && println("Applying InitFormulas for $(cidx) ($(cm.name))...")
+        # Called even with no formula: a `default` on a *scaled* alias reaches its canonical
+        # symbol only through the graph's inverse rule, and that has to happen before the
+        # `valid_keys` filter below drops it. An `NWState` holds states and parameters only.
+        extend_knowns_by_formulas!(defaults, cm, combined_initf;
+                                   am, targets=Set(vcat(sym(cm), psym(cm))),
+                                   error_unresolvable=false, verbose)
     end
     if guess
         guesses = normalize_valuedict(am, get_guesses_dict(cm); what=:guess, on_conflict=:keepfirst, verbose)

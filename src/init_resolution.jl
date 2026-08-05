@@ -31,9 +31,15 @@ old `normalize` pass did to a formula's two ends.
 
 - `provenance` — what this rule stamps on the values it writes, see [`_precedence`](@ref).
 - `optional` — whether failing to fire is acceptable. Observed and output rules are optional
-  (nothing says their inputs must ever be known); user init formulas are not. Orthogonal to
-  `provenance`: all four combinations are meaningful.
+  (nothing says their inputs must ever be known); user init formulas are not.
 - `label` — short human reference for diagnostics, may be `nothing`.
+
+A rule can be droppable from either end, and the two are independent — all four combinations are
+meaningful:
+
+- **weak** (a `provenance` below `:provided`) drops it on the *target* side: the value is already
+  there, so the rule yields.
+- **optional** drops it on the *source* side: the inputs never arrived, so the rule is skipped.
 
 A rule fires *atomically*: it runs once all its inputs are known and produces all its outputs,
 but each output is then written independently (see [`resolve_rules`](@ref)). That is what makes

@@ -702,29 +702,211 @@ end
 _cycle_ref(f) = isnothing(f.label) ? "the formula for $(f.outsym)" : "`$(f.label)`"
 
 """
-    extend_knowns_by_formulas!(knowns, cf, formulas; am, t, pinned, error_unresolvable, verbose, io)
+    extend_knowns_by_formulas!(knowns, cf, formulas; am, t, targets, error_unresolvable, verbose, io)
 
-Extend `knowns` in place by applying init `formulas`: [`normalize`](@ref) each,
-[`drop_weak_formulas`](@ref) whose target is already backed (a value in `knowns` or a strong
-co-writer), then [`apply_init_formulas!`](@ref) the survivors. No-op when `formulas` is `nothing`.
+Extend `knowns` in place by everything the resolution graph derives from it: the component's
+`:obsrules` together with the user's init `formulas`, resolved by [`resolve_rules`](@ref).
 
-Shared by `initialize_component` and the `NWState` reconstruction (`_get_appropriate_dict`) so the
-normalize/weak-drop/pin-set rule is single-sourced. The callers differ only in what they pass as
-`knowns`: `initialize_component` the default-only dict (weak formulas re-fire on reinit), `NWState`
-defaults-and-inits (reproduces the post-init state).
+`targets` narrows what is worth computing — an `NWState` holds states and parameters only.
+Which symbols have a *slot* is the component's full settable set either way.
+
+`t=NaN` means "no time given" and is translated here: `:t` is then not seeded at all, so a rule
+reading it stays unfired instead of quietly producing `NaN`.
+
+See [`_resolution_rules`](@ref) for when the pass runs at all.
 """
 function extend_knowns_by_formulas!(knowns, cf, formulas;
-                                    am=get_aliasmap(cf), t=NaN,
-                                    pinned=pinned_obssyms(formulas, cf),
+                                    am=get_aliasmap(cf), t=NaN, targets=nothing,
                                     error_unresolvable=true, verbose=false, io=stdout)
-    isnothing(formulas) && return knowns
-    normed = [normalize(f, am, cf; t, pinned) for f in formulas]
-    # a weak formula also yields to a *strong* co-writer on the same target (see
-    # `drop_weak_formulas`); computed post-normalize so the outputs are canonical
-    strong_out = Set(s for f in normed if !f.weak for s in f.outsym)
-    kept = drop_weak_formulas(normed, knowns, strong_out; verbose, io)
-    isempty(kept) || apply_init_formulas!(knowns, kept; error_unresolvable, verbose, io, pinned)
+    settable = settable_symbols(cf)
+    if isnothing(targets)
+        targets = settable
+    end
+    # collect rules (user formulas + obs rules)
+    rules = _resolution_rules(cf, formulas, am, knowns, settable)
+    isempty(rules) && return knowns
+
+    seed = Dict{Symbol,Float64}(knowns)
+    isnan(t) || (seed[:t] = t) # `t` so that formulas and observables can read it
+    # final targets: prune away any symbol already known and known to be not overwritten
+    targets = _prune_resolution_targets(targets, rules, seed)
+    # actually resolve rules (result stored in res)
+    res = resolve_rules(seed, rules; targets)
+    _check_resolution(res, rules; error_unresolvable, verbose, io)
+
+    verbose && _print_resolution(res, rules, knowns, settable; io)
+    for (s, v) in res.vals
+        p = res.provenance[s]
+        p === :provided && continue # an untouched seed, already in `knowns`
+        # a `:derived` observable is a scratch value of the walk; one written by a formula is a
+        # pin, which does belong in `knowns`
+        (s ∈ settable || p !== :derived) || continue
+        knowns[s] = v
+    end
     return knowns
+end
+
+# Must run *before* the writeback, so `knowns` still holds the value each row reports as "(was
+# …)". Two groups: what the user's formulas asserted, and what the model's own equations
+# determined on the way — the latter is new with the graph.
+function _print_resolution(res, rules, knowns, settable; io)
+    formula_rows = String[]
+    for (i, r) in enumerate(rules)
+        r.optional && continue
+        for s in r.outsym
+            # `res.writer`, not the provenance: two same-tier formulas share a provenance, and a
+            # formula that never fired keeps none of its outputs — neither may claim the write
+            get(res.writer, s, 0) == i || continue
+            push!(formula_rows, _formula_row(s, res.vals[s], knowns;
+                                             op="=", pin=s ∉ settable, label=r.label))
+        end
+    end
+    print_aligned_group(io, "InitFormulas set:", formula_rows)
+
+    derived_rows = [_formula_row(s, v, knowns; op="=")
+                    for (s, v) in sort!(collect(res.vals); by=first)
+                    if res.provenance[s] === :derived && s ∈ settable]
+    print_aligned_group(io, "Derived from the component's own equations:", derived_rows)
+    nothing
+end
+
+"""
+    _resolution_rules(cf, formulas, am, knowns, settable) -> Vector{ResolutionRule}
+
+The rule bucket to apply. Init stays cheap when there is nothing to resolve, so the bucket is
+non-empty only if
+
+- the user provided a formula, or
+- some value sits on a non-settable symbol — a `default` on the observable `y` of `y ~ -x`
+  reaches the state `x` only through the inverse rule.
+
+Obs rules go first so a user formula wins the arbitration between two rules ready in the same
+pass.
+"""
+function _resolution_rules(cf, formulas, am, knowns, settable)
+    hasformulas = !isnothing(formulas) && !isempty(formulas)
+    if !hasformulas && all(s -> s ∈ settable, keys(knowns))
+        return ResolutionRule[]
+    end
+
+    rules = collect(ResolutionRule, get_obsrules(cf))
+    if hasformulas
+        for f in formulas
+            push!(rules, ResolutionRule(f, am))
+        end
+    end
+    rules
+end
+
+"""
+    _prune_resolution_targets(targets, rules, vals) -> Set{Symbol}
+
+Targets are what the rules are pruned for. Narrows `targets` down to:
+- the ones written by some rule
+- MINUS the symbols which are already in `vals` and outrank the rules writing them
+
+(for example, a user provided default can only be changed by a strong formula, so
+we can remove it as target UNLESS there is such a strong formula in the ruleset)
+"""
+function _prune_resolution_targets(targets, rules, vals)
+    seedrank = _precedence(:provided)
+    best = Dict{Symbol,Int}()
+    for r in rules, s in r.outsym
+        best[s] = max(get(best, s, 0), _precedence(r.provenance))
+    end
+
+    kept = Set{Symbol}()
+    for (s, rank) in best
+        s ∈ targets || continue
+        # `haskey`, matching `resolve_rules`: a seeded NaN is a value like any other
+        haskey(vals, s) && seedrank ≥ rank && continue
+        push!(kept, s)
+    end
+    kept
+end
+
+# Caller-side policy, the half `resolve_rules` deliberately does not have: a rule that left one
+# of its outputs unknown, two rules of equal precedence disagreeing about one, a required rule
+# that turned out not to be needed, and values that came out non-finite.
+function _check_resolution(res, rules; error_unresolvable, verbose, io)
+    _check_pruned(res, rules; error_unresolvable, verbose, io)
+    _check_nonfinite(res, rules; error_unresolvable, verbose, io)
+
+    if !isempty(res.conflicts)
+        rows = ["$(_rule_ref(rules[c.rule])) computed :$(c.sym) = $(c.offered), \
+                 but it already held $(c.held)" for c in res.conflicts]
+        msg = "Inconsistent initialization values:\n" * join("  - " .* rows, "\n")
+        if error_unresolvable
+            throw(ArgumentError(msg))
+        else
+            verbose && printstyled(io, " - $msg\n"; color=:yellow)
+        end
+    end
+
+    for u in res.unfired
+        r = rules[u.rule]
+        # not firing is a failure only if something is still unknown — with duplicate writers
+        # allowed, the other one may simply have got there first
+        all(s -> haskey(res.vals, s), r.outsym) && continue
+        msg = "$(_rule_ref(r)) could not be resolved: its inputs are unknown: \
+               $(_resolution_hint(res, rules, u.unknown))."
+        if error_unresolvable
+            throw(ArgumentError(msg))
+        else
+            verbose && printstyled(io, " - skipping: $msg\n")
+        end
+    end
+    nothing
+end
+# warn for on nonfininte values
+function _check_nonfinite(res, rules; error_unresolvable, verbose, io)
+    isempty(res.nonfinite) && return nothing
+    (error_unresolvable || verbose) || return nothing
+    rows = map(res.nonfinite) do nf
+        src = iszero(nf.rule) ? "provided" : "computed by $(_rule_ref(rules[nf.rule]))"
+        ":$(nf.sym) &= $(res.vals[nf.sym]) &($src)"
+    end
+    printstyled(io, " - WARNING: ", color=:yellow)
+    printstyled(io, "non-finite values, which poison everything derived from them. A common \
+                     cause is an observable with an explicit time dependence and no `t` \
+                     passed to the initialization.\n")
+    print_aligned_rows(io, rows)
+    nothing
+end
+# warn if non-optional rule pruned away, weak formulas are optional
+function _check_pruned(res, rules; error_unresolvable, verbose, io)
+    for (i, r) in enumerate(rules)
+        (res.pruned[i] && !r.optional) || continue
+        if r.provenance === :weak_formula
+            verbose && printstyled(io, " - InitFormula: $(_rule_ref(r)) yields, \
+                                        its target $(r.outsym) is already determined\n")
+        elseif error_unresolvable # the init path; `NWState` reconstruction narrows the slot
+            # set to states and parameters, where a formula writing an output prunes routinely
+            printstyled(io, " - WARNING: ", color=:yellow)
+            printstyled(io, "$(_rule_ref(r)) had no effect: nothing in this component reads \
+                             $(r.outsym), so it cannot change any state, parameter or \
+                             output.\n")
+        else
+            verbose && printstyled(io, " - skipping: $(_rule_ref(r)), nothing reads \
+                                        $(r.outsym)\n")
+        end
+    end
+    nothing
+end
+# One level backwards from each missing input: either nothing computes it, or something does
+# but is itself starved — the "to compute :δ, provide one of {…}" material.
+function _resolution_hint(res, rules, unknown)
+    parts = map(unknown) do s
+        src = [r for r in rules if s ∈ r.outsym]
+        isempty(src) && return ":$s (nothing computes it, provide it directly)"
+        need = unique(Symbol[x for r in src for x in r.sym if !haskey(res.vals, x)])
+        isempty(need) && return ":$s"
+        # `t` is the one missing input nobody can provide a default for — it is a call argument
+        :t ∈ need && return ":$s (equations that depend explicitly on time need a concrete \
+                               `t`, which this initialization was not given)"
+        ":$s (computable from $need)"
+    end
+    join(parts, ", ")
 end
 
 """
