@@ -776,6 +776,7 @@ end
 # that turned out not to be needed, and values that came out non-finite.
 function _check_resolution(res, rules; error_unresolvable, verbose, io, type="InitFormula")
     _check_pruned(res, rules; error_unresolvable, verbose, io, type)
+    _check_yielded(res, rules; verbose, io, type)
     _check_nonfinite(res, rules; error_unresolvable, verbose, io)
 
     if !isempty(res.conflicts)
@@ -804,6 +805,25 @@ function _check_resolution(res, rules; error_unresolvable, verbose, io, type="In
     end
     nothing
 end
+# A user rule whose write was outranked. Pruning catches the same thing earlier where the rule
+# writes *only* outranked targets, but a rule that also feeds something live survives pruning and
+# yields at the write instead — reporting both keeps a weak formula's yield visible either way.
+function _check_yielded(res, rules; verbose, io, type)
+    verbose || return nothing
+    seen = Set{Tuple{Int,Symbol}}()
+    for y in res.yields
+        r = rules[y.rule]
+        (_is_user_rule(r) && (y.rule, y.sym) ∉ seen) || continue
+        push!(seen, (y.rule, y.sym))
+        # the *final* value, which is the one that superseded this rule whichever way round the
+        # two fired — `offered` is what this rule wanted, and saying both is the point
+        printstyled(io, " - $type: $(_rule_ref(r)) yields on :$(y.sym) = \
+                         $(str_significant(res.vals[y.sym]; sigdigits=5)) \
+                         (would have set $(str_significant(y.offered; sigdigits=5)))\n")
+    end
+    nothing
+end
+
 # warn for on nonfininte values
 function _check_nonfinite(res, rules; error_unresolvable, verbose, io)
     isempty(res.nonfinite) && return nothing

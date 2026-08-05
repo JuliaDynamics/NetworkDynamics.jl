@@ -176,6 +176,30 @@ end
     @test resolve_rules(Dict(:seed => 2.0), over; targets=[:w]).vals[:w] == 4.0
 end
 
+@testset "a superseded rule is recorded, whichever way round it fired" begin
+    # The same fact reaches the executor two ways depending on the walk: the weak rule lands on a
+    # value that already outranks it (a yield), or it got there first and is overwritten. Both are
+    # recorded under the *losing* rule, so a caller's log does not depend on the firing order.
+    weak_last = [scale(2.0, :w, :seed; provenance=:strong_formula, optional=false),
+                 scale(9.0, :w, :seed; provenance=:weak_formula, optional=false)]
+    a = resolve_rules(Dict(:seed => 2.0), weak_last; targets=[:w])
+    @test a.vals[:w] == 4.0
+    @test only(a.yields) == (; sym=:w, offered=18.0, rule=2)
+
+    weak_first = reverse(weak_last)
+    b = resolve_rules(Dict(:seed => 2.0), weak_first; targets=[:w])
+    @test b.vals[:w] == 4.0
+    @test only(b.yields) == (; sym=:w, offered=18.0, rule=1)   # the weak rule, now index 1
+
+    # yielding to a seed is the same thing with no rule on the other side
+    seeded = resolve_rules(Dict(:seed => 2.0, :w => 1.0), [weak_last[2]]; targets=[:w])
+    @test seeded.vals[:w] == 1.0
+    @test only(seeded.yields) == (; sym=:w, offered=18.0, rule=1)
+
+    # nothing is recorded when a rule simply wins
+    @test isempty(resolve_rules(Dict(:seed => 2.0), [weak_last[1]]; targets=[:w]).yields)
+end
+
 @testset "collisions at equal precedence" begin
     dup = [scale(2.0, :q, :p), scale(3.0, :q, :p)]
     res = resolve_rules(Dict(:p => 1.0), dup; targets=[:q])

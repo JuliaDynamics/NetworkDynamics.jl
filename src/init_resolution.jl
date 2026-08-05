@@ -164,6 +164,11 @@ policy: it records what happened and leaves erroring, warning or ignoring to the
 - `nonfinite` — the symbols holding a non-finite value, with the rule that wrote each (`0` for a
   seed nothing touched). Purely a diagnostic: such a value is written and propagated like any
   other, and this only says where it entered.
+- `yields` — rules whose contribution to a symbol was superseded by a higher-precedence one,
+  either because they landed on it (yielded) or because they got there first and were overwritten.
+  The two are the same fact seen from different firing orders, so both are recorded under the
+  losing rule; without that, whether a weak formula's yield is visible would depend on the
+  accident of the walk order, and on whether the rule was also pruned.
 - `conflicts` — two rules of equal precedence landing on one target with disagreeing values.
 """
 struct ResolutionResult
@@ -175,6 +180,7 @@ struct ResolutionResult
     unfired::Vector{@NamedTuple{rule::Int, unknown::Vector{Symbol}}}
     nonfinite::Vector{@NamedTuple{sym::Symbol, rule::Int}}
     conflicts::Vector{@NamedTuple{sym::Symbol, held::Float64, offered::Float64, rule::Int}}
+    yields::Vector{@NamedTuple{sym::Symbol, offered::Float64, rule::Int}}
 end
 
 function ResolutionResult(vals, provenance, nrules::Int)
@@ -186,7 +192,8 @@ function ResolutionResult(vals, provenance, nrules::Int)
         falses(nrules),
         @NamedTuple{rule::Int, unknown::Vector{Symbol}}[],
         @NamedTuple{sym::Symbol, rule::Int}[],
-        @NamedTuple{sym::Symbol, held::Float64, offered::Float64, rule::Int}[]
+        @NamedTuple{sym::Symbol, held::Float64, offered::Float64, rule::Int}[],
+        @NamedTuple{sym::Symbol, offered::Float64, rule::Int}[]
     )
 end
 
@@ -376,7 +383,10 @@ function _write_value!(res, s, v, provenance, i; overwrite_equal, overwritten)
     held = _precedence(res.provenance[s])
     offered = _precedence(provenance)
     if held > offered
-        return nothing # yield silently: something stronger already determined this
+        # yield: something stronger already determined this. Recorded rather than silent, since
+        # for a weak formula this *is* the outcome the caller wants to report.
+        push!(res.yields, (; sym=s, offered=v, rule=i))
+        return nothing
     elseif held == offered && !overwrite_equal
         # equal precedence is a check, never a write — that is what bounds the block fixpoint, and it
         # is the free half of the consistency checking that pruning otherwise costs us
@@ -384,6 +394,8 @@ function _write_value!(res, s, v, provenance, i; overwrite_equal, overwritten)
             push!(res.conflicts, (; sym=s, held=res.vals[s], offered=v, rule=i))
         return nothing
     end
+    # the mirror of the yield above: the rule that got there first is the one superseded
+    haskey(res.writer, s) && push!(res.yields, (; sym=s, offered=res.vals[s], rule=res.writer[s]))
     _store!(res, s, v, provenance, i; overwritten)
     nothing
 end
