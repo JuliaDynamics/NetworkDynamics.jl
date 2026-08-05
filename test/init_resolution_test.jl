@@ -44,6 +44,12 @@ end
     @test ResolutionRule(@initformula(weak = true, :alias_out = :alias_in), am).provenance == :weak_formula
     @test ResolutionRule(@guessformula(:alias_out = :alias_in), am).provenance == :guess_formula
 
+    # weak and optional are independent flags; a guess is a hint, hence always skippable
+    optrule = ResolutionRule(@initformula(optional = true, :alias_out = :alias_in), am)
+    @test optrule.optional
+    @test optrule.provenance == :strong_formula   # optional says nothing about rank
+    @test ResolutionRule(@guessformula(:alias_out = :alias_in), am).optional
+
     # two members of one alias class in one list are one variable, not two — on either end
     am2 = AliasMap(:a => :x, :b => :x)
     collapsing = @initformula begin

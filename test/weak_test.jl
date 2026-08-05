@@ -91,18 +91,19 @@ end
     @test d3[:p] == 101.0
 end
 
-@testset "weak formulas are single-output (constructor rejects multi-output)" begin
-    # weak defaulting is single-target: a multi-output weak formula is rejected at construction,
-    # which is what makes the drop pin-safe (it can never strand a uniquely-pinned sibling output)
-    @test_throws ArgumentError (@initformula weak=true begin
+@testset "a weak formula may write several outputs" begin
+    # weakness is decided per target at the write, so a weak formula writing two symbols can
+    # lose one of them and still deliver the other — it is never dropped as a whole
+    f = @initformula weak=true begin
         :a = :src
-        :b = :src
-    end)
-    # a strong multi-output formula is still fine
-    @test length((@initformula begin
-        :a = :src
-        :b = :src
-    end).outsym) == 2
+        :b = 2 * :src
+    end
+    @test length(f.outsym) == 2
+
+    rules = [ResolutionRule(f, AliasMap())]
+    res = resolve_rules(Dict(:src => 3.0, :a => 100.0), rules; targets=Set([:a, :b]))
+    @test res.vals[:a] == 100.0   # the provided value outranks the weak write
+    @test res.vals[:b] == 6.0     # ... while the sibling is written as usual
 end
 
 @testset "weak yields to a strong co-writer on one target" begin

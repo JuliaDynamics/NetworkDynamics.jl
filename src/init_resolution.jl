@@ -77,11 +77,12 @@ Wrap a user formula as a rule. The symbol lists are canonicalized through `am`, 
 closure keeps being called under the names they originally wrote.
 """
 ResolutionRule(f::InitFormula, am::AliasMap) =
-    _wrap_formula(f, am; provenance=f.weak ? :weak_formula : :strong_formula)
+    _wrap_formula(f, am; provenance=f.weak ? :weak_formula : :strong_formula, optional=f.optional)
+# a guess is a hint: not computing it costs nothing, so guess formulas are always optional
 ResolutionRule(f::GuessFormula, am::AliasMap) =
-    _wrap_formula(f, am; provenance=:guess_formula)
+    _wrap_formula(f, am; provenance=:guess_formula, optional=true)
 
-function _wrap_formula(f, am; provenance)
+function _wrap_formula(f, am; provenance, optional)
     outsym = _canonical_names(f.outsym, am, f)
     sym = _canonical_names(f.sym, am, f)
     origout, origin = f.outsym, f.sym
@@ -89,7 +90,7 @@ function _wrap_formula(f, am; provenance)
         f.f(SymbolicView(out, origout), SymbolicView(u, origin))
         nothing
     end
-    ResolutionRule(payload, outsym, sym; provenance, optional=false, label=f.label)
+    ResolutionRule(payload, outsym, sym; provenance, optional, label=f.label)
 end
 
 # two members of one alias class are the same variable, so listing both would write it twice

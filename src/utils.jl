@@ -539,14 +539,14 @@ function set_mtk_defaults end
 """
     SystemInitFormulas
 
-Custom MTK metadata type holding the `(; target, expr, weak)` initialization entries attached
-to a `System` via [`set_initf`](@ref). Advanced usage only — prefer `set_initf` over
+Custom MTK metadata type holding the `(; target, expr, weak, optional)` initialization entries
+attached to a `System` via [`set_initf`](@ref). Advanced usage only — prefer `set_initf` over
 touching the metadata directly.
 """
 struct SystemInitFormulas end
 
 """
-    set_initf(sys::System, pairs::Pair...; weak=false) -> System
+    set_initf(sys::System, pairs::Pair...; weak=false, optional=false) -> System
 
 Attach initialization equations to a ModelingToolkit `System` at the *system* level, as
 `target => expression` pairs. Each pair declares "at initialization, set `target` to
@@ -559,6 +559,10 @@ system's own variable:
 Pass `weak=true` to attach *weak* formulas: they yield to a value the user already set (a
 target carrying a `default` at init time drops the formula), the system-level counterpart of
 `@variables x(t) [initf_weak = <expression>]` and of the `weak=true` keyword on `@initformula`.
+
+Pass `optional=true` for formulas that may fail to resolve: unknown inputs skip the formula
+instead of failing the initialization, which is how a block ships both directions of a relation
+and lets the surrounding model decide which one runs (`initf_optional` as a variable option).
 
 `set_initf` exists for the case the variable option cannot express: the target belongs to a
 *subsystem*. Most importantly, a parent can set the init value of a child variable which

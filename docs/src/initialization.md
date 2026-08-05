@@ -271,7 +271,7 @@ A weak formula **yields** when its target is already backed by
 - a `default` on the component (or a `default_overrides` entry passed to the init call), or
 - a strong (non-weak) formula writing the same symbol.
 
-Otherwise it fires exactly like a plain `InitFormula`. A weak formula must currently have exactly **one** output symbol, and is rejected at construction otherwise. Two weak formulas competing for the same target both fire; if they disagree, the mismatch is reported as an inconsistency.
+Otherwise it fires exactly like a plain `InitFormula`. Yielding is decided per target, so a weak formula writing several symbols can lose one of them and still deliver the rest. Two weak formulas competing for the same target both fire; if they disagree, the mismatch is reported as an inconsistency.
 
 The core-API spelling is a keyword on the macro (and on the [`InitFormula`](@ref) constructor):
 
@@ -291,6 +291,36 @@ sys = set_initf(sys, sub.V_base => V_nom; weak=true)  # ... attached from outsid
 ```
 
 The check is deliberately against `default` only, never `init`: a weak formula persists its own output as `init` metadata, so consulting `init` would make it block itself whenever the component is re-initialized.
+
+#### [Optional Formulas: Rules That May Not Run](@id optional-initformulas)
+
+Weakness is about the *target*: the value is already there, so step aside. **Optional** is the other side of the same coin — it is about the *inputs*. An optional formula whose inputs never become known is simply skipped, where an ordinary formula would fail the initialization with "could not be resolved".
+
+The two flags are independent and can be combined.
+
+This is what lets a reusable block ship **both directions** of a relation and let the surrounding model decide which one runs. A lag block whose steady state is `y = K*u` knows the output from the input and the input from the output; which of the two is computable depends on where the outer model anchors the operating point, and the block cannot know that:
+
+```julia
+@component function Lag(; name)
+    @parameters K=1.5 T=2.0
+    @variables u(t)
+    @variables y(t) [initf_optional = K * u]   # forward:  output from input
+    @variables x(t) [guess=0.0]
+    sys = System([D(x) ~ (u - x)/T, y ~ K*x], t; name)
+    set_initf(sys, u => y / K; optional=true)   # backward: input from output
+end
+```
+
+Anchor the output and the backward rule fires; anchor the input and the forward one does; anchor neither and both are skipped without complaint. Whichever direction runs first, the other one lands on a value that is already there and becomes a consistency check of the pair against the model's own equations.
+
+The core-API spelling is `optional=true`, on the macro and on the [`InitFormula`](@ref) constructor:
+
+```@example compinit
+optional_formula = @initformula optional=true begin
+    :y = :K * :u
+end
+nothing #hide
+```
 
 #### [Backward-Flow Initialization: Formulas That Find Each Other](@id backward-flow-init)
 

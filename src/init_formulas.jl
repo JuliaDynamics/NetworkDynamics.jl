@@ -98,13 +98,13 @@ function Base.show(io::IO, ::MIME"text/plain", @nospecialize(c::InitConstraint))
     _show_recipe(io, c)
 end
 
-# `prettyprint` is the complete authored recipe — a weak `InitFormula`'s header already carries
-# `weak=true` (baked in at construction, see `_formula_macro`/`_build_formula`), so show just
-# prints it. Without one (raw constructor) fall back to `repr`.
+# `prettyprint` is the complete authored recipe — a weak or optional `InitFormula`'s header
+# already carries the flag (baked in at construction, see `_formula_macro`/`_build_formula`), so
+# show just prints it. Without one (raw constructor) fall back to `repr`.
 function _show_recipe(io::IO, @nospecialize(c))
     if isnothing(c.prettyprint)
         # strip trailing default-valued fields so the result stays a valid constructor call:
-        # `nothing` (prettyprint) and `weak=false`. A non-default `weak=true` stays, keeping the
+        # `nothing` (prettyprint) and the `false` flags. A flag that is set stays, keeping the
         # preceding `nothing` so the positional call still lines up.
         print(io, replace(repr(c), r"(, (nothing|false))+\)$" => ")"))
     else
@@ -326,6 +326,10 @@ a vector of input symbols `sym` that are used in the formulas, and an optional p
         out[:Vset] = sqrt(u[:u_r]^2 + u[:u_i]^2)
     end
 
+Two independent flags say what may go wrong with it. `weak` yields on the target side: the
+value is already there, so step aside. `optional` yields on the source side: the inputs never
+became known, so skip the formula instead of failing the initialization.
+
 See also [`@initformula`](@ref) for a macro to create such formulas.
 """
 struct InitFormula{F}
@@ -334,24 +338,20 @@ struct InitFormula{F}
     sym::Vector{Symbol}      # input symbols (from RHS of assignments)
     prettyprint::Union{Nothing,String}
     weak::Bool # don't overwrite set defaults
+    optional::Bool # may stay unresolved
     label::Union{Nothing,String} # short line identifier (just verbose application)
 
-    function InitFormula(f::F, outsym::Vector{Symbol}, sym::Vector{Symbol}, prettyprint::Union{Nothing,String}, weak::Bool=false, label::Union{Nothing,String}=nothing) where F
+    function InitFormula(f::F, outsym::Vector{Symbol}, sym::Vector{Symbol}, prettyprint::Union{Nothing,String}, weak::Bool=false, optional::Bool=false, label::Union{Nothing,String}=nothing) where F
         # Check for self-dependencies (formula depending on its own output)
         self_deps = intersect(sym, outsym)
         if !isempty(self_deps)
             throw(ArgumentError("InitFormula cannot depend on its own output symbols: $self_deps"))
         end
-        # weak defaulting is single-target: a weak formula is dropped whole when its target is
-        # already backed, so a multi-output weak could strand a uniquely-pinned sibling output.
-        if weak && length(outsym) != 1
-            throw(ArgumentError("A weak InitFormula must have exactly one output symbol (got $outsym)."))
-        end
-        new{F}(f, outsym, sym, prettyprint, weak, label)
+        new{F}(f, outsym, sym, prettyprint, weak, optional, label)
     end
 end
-InitFormula(f, outsym, sym; weak::Bool=false, label=nothing) = InitFormula(f, outsym, sym, nothing, weak, label)
-InitFormula(f, outsym, sym, prettyprint; weak::Bool=false, label=nothing) = InitFormula(f, outsym, sym, prettyprint, weak, label)
+InitFormula(f, outsym, sym; weak::Bool=false, optional::Bool=false, label=nothing) = InitFormula(f, outsym, sym, nothing, weak, optional, label)
+InitFormula(f, outsym, sym, prettyprint; weak::Bool=false, optional::Bool=false, label=nothing) = InitFormula(f, outsym, sym, prettyprint, weak, optional, label)
 
 dim(c::InitFormula) = length(c.outsym)
 
@@ -433,19 +433,28 @@ is equal to
         out[:Vset] = sqrt(u[:u_r]^2 + u[:u_i]^2)
         out[:Pset] = u[:u_r] * u[:i_r] + u[:u_i] * u[:i_i]
     end
+
+Takes the [`InitFormula`](@ref) flags as leading options:
+
+    @initformula weak=true :Sn = :S_b          # yield if :Sn already has a value
+    @initformula optional=true :y = :K * :u    # skip if :u never becomes known
 """
 macro initformula(args...)
     isempty(args) && throw(ArgumentError("@initformula expects a formula block"))
     ex = last(args)
     weak = false
+    optional = false
     for opt in args[1:end-1]
         if opt isa Expr && opt.head == :(=) && opt.args[1] === :weak
             weak = opt.args[2]
+        elseif opt isa Expr && opt.head == :(=) && opt.args[1] === :optional
+            optional = opt.args[2]
         else
-            throw(ArgumentError("@initformula: unexpected option `$opt`, only `weak=true/false` is supported"))
+            throw(ArgumentError("@initformula: unexpected option `$opt`, only `weak=true/false` \
+                                 and `optional=true/false` are supported"))
         end
     end
-    _formula_macro(InitFormula, ex; weak)
+    _formula_macro(InitFormula, ex; weak, optional)
 end
 
 
@@ -491,13 +500,16 @@ In a nutshell: wrap every QuoteNote symbol either in u[:sym] or out[:sym]
 some thinks will break!
 for example: set!(:out, :in) -> set!(u[:out], u[:in])
 =#
-function _formula_macro(type, ex; weak=false)
+function _formula_macro(type, ex; weak=false, optional=false)
     if ex isa QuoteNode || ex.head != :block
         ex = Base.remove_linenums!(Expr(:block, ex))
     end
 
     macroname = type === InitFormula ? "@initformula" : "@guessformula"
-    header = (type === InitFormula && weak === true) ? "$macroname weak=true" : macroname
+    # the header is the recipe `_show_recipe` prints back, so it repeats the options as given
+    opts = [o for (o, on) in (("weak=true", weak), ("optional=true", optional))
+            if type === InitFormula && on === true]
+    header = isempty(opts) ? macroname : "$macroname $(join(opts, " "))"
     s = _macro_source_string(header, ex)
     lbl = _auto_formula_label(ex)
 
@@ -540,9 +552,10 @@ function _formula_macro(type, ex; weak=false)
             nothing
         end
     end
-    # only InitFormula carries `weak`; GuessFormula's constructor has no such kwarg
+    # only InitFormula carries the flags; a GuessFormula is weak and optional by nature
     if type === InitFormula
-        :($(type)($closure, $output_syms, $input_syms, $s; weak = $(esc(weak)), label = $lbl))
+        :($(type)($closure, $output_syms, $input_syms, $s;
+                  weak = $(esc(weak)), optional = $(esc(optional)), label = $lbl))
     else
         :($(type)($closure, $output_syms, $input_syms, $s; label = $lbl))
     end
@@ -753,6 +766,7 @@ end
 function _check_resolution(res, rules; error_unresolvable, verbose, io,
                            type="InitFormula", check_conflicts=true)
     _check_pruned(res, rules; error_unresolvable, verbose, io, type)
+    _check_skipped(res, rules; verbose, io, type)
     _check_yielded(res, rules; verbose, io, type)
     _check_nonfinite(res, rules; error_unresolvable, verbose, io)
 
@@ -782,6 +796,19 @@ function _check_resolution(res, rules; error_unresolvable, verbose, io,
     end
     nothing
 end
+# An optional user rule that never ran. `res.unfired` leaves these out — not running is what
+# optional means — but the log should still show that the formula was there and did nothing.
+function _check_skipped(res, rules; verbose, io, type)
+    verbose || return nothing
+    for (i, r) in enumerate(rules)
+        (r.optional && _is_user_rule(r) && !res.fired[i] && !res.pruned[i]) || continue
+        unknown = [s for s in r.sym if !haskey(res.vals, s)]
+        printstyled(io, " - $type: $(_rule_ref(r)) skipped, it is optional and \
+                         $unknown never became known\n")
+    end
+    nothing
+end
+
 # A user rule whose write was outranked. Pruning catches the same thing earlier where the rule
 # writes *only* outranked targets, but a rule that also feeds something live survives pruning and
 # yields at the write instead — reporting both keeps a weak formula's yield visible either way.
@@ -829,7 +856,7 @@ function _check_pruned(res, rules; error_unresolvable, verbose, io, type)
         if outranked
             verbose && printstyled(io, " - $type: $(_rule_ref(r)) yields, \
                                         its target $(r.outsym) is already determined\n")
-        elseif r.provenance === :weak_formula || r.provenance === :guess_formula
+        elseif r.optional || r.provenance === :weak_formula || r.provenance === :guess_formula
             # these are meant to be droppable, so no warning; a library full of them would
             # otherwise drown the log
             verbose && printstyled(io, " - $type: $(_rule_ref(r)) had no effect, \
