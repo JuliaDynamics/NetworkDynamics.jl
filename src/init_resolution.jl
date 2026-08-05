@@ -141,12 +141,10 @@ policy: it records what happened and leaves erroring, warning or ignoring to the
 - `fired` / `pruned` — per rule, indexed like the rule vector handed to `resolve_rules`.
 - `unfired` — non-optional rules that never ran, with the inputs still unknown. This is the
   "to compute `:δ`, provide one of {…}" material. A rule that *ran* and had all of its writes
-  yield counts as `fired`: it was tested against what was already there, not dropped. A rule
-  listed here with an *empty* input list did not fail for want of inputs — it ran and produced a
-  non-finite value, so check `nonfinite` before phrasing the message.
-- `nonfinite` — rules that ran but produced a non-finite output and were therefore treated as
-  *not fired*. Almost always an observable with an explicit time dependence evaluated at
-  `t=NaN`; worth saying so in the message.
+  yield counts as `fired`: it was tested against what was already there, not dropped.
+- `nonfinite` — the symbols holding a non-finite value, with the rule that wrote each (`0` for a
+  seed nothing touched). Purely a diagnostic: such a value is written and propagated like any
+  other, and this only says where it entered.
 - `conflicts` — two rules of equal precedence landing on one target with disagreeing values.
 """
 struct ResolutionResult
@@ -156,7 +154,7 @@ struct ResolutionResult
     fired::BitVector
     pruned::BitVector
     unfired::Vector{@NamedTuple{rule::Int, unknown::Vector{Symbol}}}
-    nonfinite::Vector{Int}
+    nonfinite::Vector{@NamedTuple{sym::Symbol, rule::Int}}
     conflicts::Vector{@NamedTuple{sym::Symbol, held::Float64, offered::Float64, rule::Int}}
 end
 
@@ -168,7 +166,7 @@ function ResolutionResult(vals, provenance, nrules::Int)
         falses(nrules),
         falses(nrules),
         @NamedTuple{rule::Int, unknown::Vector{Symbol}}[],
-        Int[],
+        @NamedTuple{sym::Symbol, rule::Int}[],
         @NamedTuple{sym::Symbol, held::Float64, offered::Float64, rule::Int}[]
     )
 end
@@ -178,51 +176,35 @@ end
 
 Resolve everything derivable from `vals` by firing rules whose inputs are known, in an order
 derived from the rules themselves. `vals` is the root set and is **not** mutated: the result
-carries a fresh `Dict{Symbol,Float64}`, which is also how entries that are not finite reals
-(`NaN`, `nothing`, `missing`) get dropped — "unknown" is the *absence* of a value, never a
-sentinel in the buffer.
-
-**This is preprocessing over a value dict and nothing else.** It resolves fixed values and
-guesses; it makes no claim about, and does not derive, the residual system of the nonlinear
-problem — that stays exactly what it was. What changes is only which symbols carry a value by
-the time the free-variable masks are built.
+carries a fresh `Dict{Symbol,Float64}`.
 
 The walk:
 
 1. Seed, with provenance `seed_provenance` (`:provided` for the init pass).
-2. Prune to what can still matter, if `targets` is given: plain reverse reachability from the
-   targets over the rules' outputs. This is what keeps a component with no formulas free of
-   cost, so callers should pass targets rather than rely on the walk being cheap.
+2. Prune to what can still matter, if `targets` is given: reverse reachability from the targets
+   over the rules' outputs. Callers should pass targets rather than rely on the walk being cheap.
 3. Tarjan over the *rule* graph (a rule is one node however many outputs it has), then walk the
    condensation in topological order. Singleton blocks fire at most once; multi-member blocks
    are re-scanned until nothing changes, with readiness deciding which member goes first.
-4. Write policy per target, comparing the precedence of the rule's provenance `rp` with that of
-   the target's current one `tp`:
-   empty slot → write; `tp > rp` → yield silently; `tp == rp` → tolerance check, recorded as a
-   conflict on disagreement; `tp < rp` → overwrite.
+4. Write policy per target, comparing the rule's provenance `rp` against the target's current
+   `tp`: empty slot → write; `tp > rp` → yield silently; `tp == rp` → tolerance check, recorded
+   as a conflict on disagreement; `tp < rp` → overwrite.
 
-`overwrite_equal=true` relaxes the equal-precedence case to an overwrite without a check, which is
-what the guess pass wants: refining a guess is the desirable outcome, not a contradiction.
+`overwrite_equal=true` relaxes the equal-precedence case to an overwrite without a check, which
+is what the guess pass wants: refining a guess is desirable, not a contradiction.
 """
 function resolve_rules(vals, rules::AbstractVector;
                        targets=nothing, seed_provenance=:provided,
                        overwrite_equal=false, maxpasses=1000)
     _precedence(seed_provenance)
-    values = Dict{Symbol,Float64}()
-    provenance = Dict{Symbol,Symbol}()
-    for (s, v) in vals
-        v isa Real && isfinite(v) || continue
-        values[s] = v
-        provenance[s] = seed_provenance
-    end
+    values = Dict{Symbol,Float64}(vals)
+    provenance = Dict{Symbol,Symbol}(s => seed_provenance for s in keys(values))
 
     res = ResolutionResult(values, provenance, length(rules))
-    isempty(rules) && return res
 
     g = rule_graph(rules)
     keep = _prune_rules(g, rules, targets)
     res.pruned .= .!keep
-    any(keep) || return res
 
     for block in _rule_blocks(g, keep)
         if length(block) == 1
@@ -237,6 +219,15 @@ function resolve_rules(vals, rules::AbstractVector;
     for i in eachindex(rules)
         (res.fired[i] || res.pruned[i] || rules[i].optional) && continue
         push!(res.unfired, (; rule=i, unknown=[s for s in rules[i].sym if !haskey(res.vals, s)]))
+    end
+
+    # `writer` already knows who produced what, so one scan finds every non-finite value; the
+    # `any` guard keeps the collect+sort off the hot path, the sort keeps the order stable.
+    if any(!isfinite, Base.values(res.vals))
+        for s in sort!(collect(keys(res.vals)))
+            isfinite(res.vals[s]) ||
+                push!(res.nonfinite, (; sym=s, rule=get(res.writer, s, 0)))
+        end
     end
     res
 end
@@ -337,10 +328,7 @@ function _resolve_block!(res, rules, block; overwrite_equal, maxpasses)
            should not happen — please report it, together with the model that produced it.")
 end
 
-# Returns whether the rule fired. A rule that ran but produced a non-finite output counts as
-# *not* fired and writes nothing: the realistic trigger is an observable with an explicit time
-# dependence evaluated at `t=NaN`, and letting that land in the buffer would poison everything
-# downstream with a value that merely looks known.
+# Returns whether the rule fired. Firing depends on readiness (all inputs set?)
 function _try_fire!(res, rules, i; overwrite_equal, overwritten=nothing)
     r = rules[i]
     all(s -> haskey(res.vals, s), r.sym) || return false
@@ -348,12 +336,6 @@ function _try_fire!(res, rules, i; overwrite_equal, overwritten=nothing)
     u = Float64[res.vals[s] for s in r.sym]
     out = zeros(Float64, length(r.outsym))
     r.f(out, u)
-
-    if any(!isfinite, out)
-        # one entry per rule, however many passes of a block it fails in
-        i ∈ res.nonfinite || push!(res.nonfinite, i)
-        return false
-    end
 
     res.fired[i] = true
     for (k, s) in enumerate(r.outsym)

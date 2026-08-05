@@ -77,11 +77,26 @@ end
     @test Graphs.ne(rule_graph([scale(2.0, :q, :p), scale(3.0, :q, :p)])) == 0
 end
 
-@testset "seeding drops non-values" begin
-    res = resolve_rules(Dict{Symbol,Any}(:a => 1.0, :b => NaN, :c => nothing,
-                                         :d => missing, :e => Inf), ResolutionRule[])
-    @test keys(res.vals) == Set([:a])
-    @test res.provenance[:a] == :provided
+@testset "non-finite seeds are ordinary values" begin
+    # "unknown" is the absence of a key, so nothing is filtered: `NaN` and `Inf` are seeded and
+    # carry `:provided` like any number. `nothing`/`missing` are turned away one level up, in
+    # `_numeric_seed`, so `resolve_rules` never has to test for them.
+    res = resolve_rules(Dict(:a => 1.0, :b => NaN, :e => Inf), ResolutionRule[])
+    @test keys(res.vals) == Set([:a, :b, :e])
+    @test res.provenance[:b] == :provided
+    @test isnan(res.vals[:b])
+    @test res.vals[:e] == Inf
+    # the seeds themselves show up in `nonfinite`, credited to no rule
+    @test res.nonfinite == [(; sym=:b, rule=0), (; sym=:e, rule=0)]
+
+    # a rule mapping the infinite input to a finite limit contributes its value; one that stays
+    # infinite contributes that, and is named together with the rule that produced it
+    limit = [rule((o, u) -> (o[1] = exp(-u[1]); nothing), [:decayed], [:e]),
+             scale(2.0, :ramp, :e)]
+    res2 = resolve_rules(Dict(:e => Inf), limit; targets=[:decayed, :ramp])
+    @test res2.vals[:decayed] == 0.0
+    @test res2.vals[:ramp] == Inf
+    @test res2.nonfinite == [(; sym=:e, rule=0), (; sym=:ramp, rule=2)]
 end
 
 @testset "orientation is a property of the query" begin
@@ -176,18 +191,34 @@ end
     @test isempty(resolve_rules(Dict(:p => 1.0), agree; targets=[:q]).conflicts)
 end
 
-@testset "non-finite output counts as not fired" begin
+@testset "a non-finite output fires and propagates" begin
     rules = [rule((o, u) -> (o[1] = u[1] / 0 - u[1] / 0; nothing), [:t], [:x];
                   provenance=:strong_formula, optional=false, label="nan rule"),
              scale(2.0, :downstream, :t)]
     res = resolve_rules(Dict(:x => 1.0), rules; targets=[:t, :downstream])
 
-    @test !haskey(res.vals, :t)          # nothing merely *looking* known lands in the buffer
-    @test !haskey(res.vals, :downstream) # so the poison does not spread
-    @test res.nonfinite == [1]
-    @test !res.fired[1]
-    # reported as unfired with nothing missing — the caller reads `nonfinite` to say why
-    @test only(res.unfired) == (; rule=1, unknown=Symbol[])
+    # the rule ran, so it fired and wrote — suppressing the write would only hide the origin
+    @test res.fired == [true, true]
+    @test isnan(res.vals[:t])
+    @test isnan(res.vals[:downstream]) # the poison spreads, by design
+    @test isempty(res.unfired)
+    # both are reported, each credited to the rule that wrote it
+    @test res.nonfinite == [(; sym=:downstream, rule=2), (; sym=:t, rule=1)]
+end
+
+@testset "a NaN inside a block does not stall the fixpoint" begin
+    # `_agree(NaN, NaN)` has to hold, or `_store!` would see the value move on every pass and
+    # `_resolve_block!` would burn `maxpasses` and error out
+    cyc = [rule((o, u) -> (o[1] = u[1] * NaN; nothing), [:a], [:b];
+                provenance=:strong_formula, optional=false),
+           rule((o, u) -> (o[1] = u[1] + 1; nothing), [:b], [:a];
+                provenance=:strong_formula, optional=false),
+           scale(1.0, :b, :seed)]
+    res = resolve_rules(Dict(:seed => 1.0), cyc; targets=[:a, :b])
+    # `:b` is seeded 1.0 by the `:derived` rule, then overwritten NaN by the strong one that
+    # reads `:a` — the poison closes the cycle and the block still settles
+    @test isnan(res.vals[:a]) && isnan(res.vals[:b])
+    @test [nf.sym for nf in res.nonfinite] == [:a, :b]
 end
 
 @testset "unfired rules name what they are missing" begin
