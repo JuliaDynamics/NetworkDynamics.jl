@@ -485,7 +485,7 @@ end
         @test state[:x] ≈ 0.3     # (1.5 - 20*0) / 5
         @test state[:v] ≈ 1.0
         @test !haskey(state, :y)  # the pin is init-time scratch, never part of the state
-        @test occursin("(pinned observable)", out)
+        @test occursin("(obs)", out)
         @test occursin("No free variables!", out)
     end
 
@@ -550,7 +550,7 @@ end
             additional_guessformula=[pin_y_g, calc_x_g],
             verbose=true, io)
         out = String(take!(io))
-        @test occursin("(pinned observable)", out)   # marked in the guess rows
+        @test occursin("(obs)", out)   # marked in the guess rows
         @test occursin("NonlinearLeastSquaresProblem", out)  # x stays free, unlike initformula
         @test state[:x] ≈ 0.3 atol=1e-8
         @test !haskey(state, :y)

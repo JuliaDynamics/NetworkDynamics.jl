@@ -876,7 +876,7 @@ function _formula_row(s, val, prev; op, fixed=nothing, pin=false, label=nothing)
     else
         ""
     end
-    pin && (note = strip(note * " (pinned observable)"))
+    pin && (note = strip(note * " (obs)"))
     via = isnothing(label) ? "" : "(via $label)"
     ":$s &$op $v &$note &$via"
 end
