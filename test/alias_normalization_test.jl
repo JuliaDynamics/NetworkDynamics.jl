@@ -326,36 +326,62 @@ end
         @test eq(mk(@initconstraint :u_r - 0.5), mk(@initconstraint :θ + 0.5))
     end
 
-    # An override may name any member of the class and must beat the value the class holds,
-    # whichever member the metadata used — one case per carrier, as above.
-    @testset "placement invariance: a default override" begin
-        # the metadata value is the wrong one (u_r must equal i_r = 0.5 for steady state),
-        # so only an override that lands on the class gets this to init at all
-        mk(ov) = let v = base!(freshvm()); set_default!(v, :u_r, 0.1)
-            initialize_component(v; default_overrides=ov, verbose=false)
+    # An override names a *slot*, so it beats the metadata value on the symbol it names.
+    # `θ ~ -u_r` is a scaled relation and not an alias, so :θ and :u_r are different slots:
+    # an override on :θ is an ordinary value on an observable and travels to :u_r through
+    # the inverse rule, where it fills an empty symbol but yields to one that already
+    # carries a value. That is the accepted cost of "alias means alias".
+    @testset "default override on a scaled alias fills, but does not displace" begin
+        free = let v = base!(freshvm())    # u_r carries no default
+            initialize_component(v; default_overrides=Dict(:θ => -0.5), verbose=false)
         end
-        canon = mk(Dict(:u_r => 0.5))
-        alias = mk(Dict(:θ => -0.5))
-        @test eq(canon, alias)
-        @test alias[:u_r] ≈ 0.5    # the override, not the 0.1 from metadata
+        @test free[:u_r] ≈ 0.5
+        @test !haskey(free, :θ)
+
+        # ... and the same override against a default on :u_r loses to it. The disagreement
+        # stays visible: :θ is a value on an observable, so the final state is checked against it.
+        io = IOBuffer()
+        taken = let v = base!(freshvm()); set_default!(v, :u_r, 0.5)
+            initialize_component(v; default_overrides=Dict(:θ => -0.1), verbose=false, io)
+        end
+        @test taken[:u_r] ≈ 0.5
+        @test occursin("θ", String(take!(io)))
+
+        # an override on the canonical symbol itself does displace, as always
+        canon = let v = base!(freshvm()); set_default!(v, :u_r, 0.1)
+            initialize_component(v; default_overrides=Dict(:u_r => 0.5), verbose=false)
+        end
+        @test canon[:u_r] ≈ 0.5
     end
 
-    @testset "guess override on an alias beats the metadata guess" begin
-        # guesses only seed the solve, so the working dict is the only place the override
-        # is observable — the solution is the same either way
-        g = Ref{Any}()
-        v = base!(freshvm()); set_guess!(v, :u_r, 0.1)
-        initialize_component(v; guess_overrides=Dict(:θ => -0.7), verbose=false, _final_guesses=g)
-        @test g[][:u_r] ≈ 0.7
-        @test !haskey(g[], :θ)
+    @testset "guess override on a scaled alias fills, but does not displace" begin
+        # guesses only seed the solve, so the working dict is the only place this is observable
+        function mk(v)
+            g = Ref{Any}()
+            initialize_component(v; guess_overrides=Dict(:θ => -0.7), verbose=false, _final_guesses=g)
+            g[]
+        end
+        free = mk(base!(freshvm()))
+        @test free[:u_r] ≈ 0.7
+        @test free[:θ] ≈ -0.7   # the seed stays in the dict; a guess on an observable is inert
+
+        taken = mk(let v = base!(freshvm()); set_guess!(v, :u_r, 0.1); v end)
+        @test taken[:u_r] ≈ 0.1   # the metadata guess
     end
 
-    @testset "a removal marker reaches the class through any member" begin
-        d = Ref{Any}()
-        v = base!(freshvm()); set_default!(v, :u_r, 0.5); set_guess!(v, :u_r, 0.1)
-        initialize_component(v; default_overrides=Dict(:θ => nothing), verbose=false, _final_defaults=d)
-        @test !haskey(d[], :u_r)   # the default is gone, u_r is free and solved for again
-        @test !haskey(d[], :θ)
+    @testset "a removal marker names one slot" begin
+        function mk(ov)
+            d = Ref{Any}()
+            v = base!(freshvm())
+            set_default!(v, :u_r, 0.5); set_guess!(v, :u_r, 0.1)
+            initialize_component(v; default_overrides=ov, verbose=false, _final_defaults=d)
+            d[]
+        end
+        # naming the scaled member removes nothing — :θ has no default of its own
+        @test mk(Dict(:θ => nothing))[:u_r] ≈ 0.5
+        # naming the symbol that carries the default does remove it: u_r goes free and is
+        # solved back to i_r = 0.5 from its guess
+        @test !haskey(mk(Dict(:u_r => nothing)), :u_r)
     end
 
     @testset "write-back: alias readable as factor * canonical" begin
