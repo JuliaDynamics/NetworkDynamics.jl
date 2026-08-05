@@ -69,23 +69,16 @@ end
 
 Precedence of a value's provenance, higher wins:
 
-    :strong_formula > :provided > :guess > :derived > :weak_formula
+    :strong_formula > :provided > :guess_formula > :guess > :derived > :weak_formula
 
-`:derived` is what a rule of the graph produces from other values. It sits *below* `:provided`
-because an observed or output equation is definitional — it computes a value, it does not
-assert one, so it must never displace something the user wrote down. It sits *above*
-`:weak_formula` because a weak formula's purpose is to yield to anything that actually
-determines its target, and a derived value determines it.
-
-`:guess` is a starting point rather than a value, and only the guess pass ever produces one.
-It sits between the two: below `:provided`, since anything the init pass determined is not up
-for guessing, but *above* `:derived`, so that a number the user (or a guess formula) put
-forward is not silently replaced by one the model equations merely happen to be able to
-compute from other guesses.
+A formula outranks the value class it refines. `:derived` (produced by a rule) is definitional
+rather than asserted, so it stays below anything the user wrote down — a guess included — but
+above `:weak_formula`, whose whole purpose is to yield to whatever determines its target.
 """
 function _precedence(provenance::Symbol)
-    provenance === :strong_formula ? 5 :
-    provenance === :provided       ? 4 :
+    provenance === :strong_formula ? 6 :
+    provenance === :provided       ? 5 :
+    provenance === :guess_formula  ? 4 :
     provenance === :guess          ? 3 :
     provenance === :derived        ? 2 :
     provenance === :weak_formula   ? 1 :
@@ -112,15 +105,13 @@ Canonicalizing renames, same order and same length, so the payload needs no arit
 permutation — it just presents the buffers under the original names. A scaled relation is not
 an alias and never reaches here; it is an invertible pair of rules in the graph.
 
-A `GuessFormula` writes at `:guess`: a guess is a seed, not an assertion, so it yields to
-anything the init pass determined, while still outranking a value the model equations merely
-derived. Two guesses meeting is not a contradiction — that half of the policy is
-`resolve_rules`' `overwrite_equal`.
+A `GuessFormula` writes at `:guess_formula`: it refines an existing guess, but yields to
+anything the init pass determined.
 """
 ResolutionRule(f::InitFormula, am::AliasMap) =
     _wrap_formula(f, am; provenance=f.weak ? :weak_formula : :strong_formula)
 ResolutionRule(f::GuessFormula, am::AliasMap) =
-    _wrap_formula(f, am; provenance=:guess)
+    _wrap_formula(f, am; provenance=:guess_formula)
 
 function _wrap_formula(f, am; provenance)
     outsym = _canonical_names(f.outsym, am, f)
@@ -198,7 +189,7 @@ function ResolutionResult(vals, provenance, nrules::Int)
 end
 
 """
-    resolve_rules(vals, rules; targets, seedprov, overwrite_equal, maxpasses) -> ResolutionResult
+    resolve_rules(vals, rules; targets, seedprov, maxpasses) -> ResolutionResult
 
 Resolve everything derivable from `vals` by firing rules whose inputs are known, in an order
 derived from the rules themselves. `vals` is the root set and is **not** mutated: the result
@@ -215,15 +206,13 @@ The walk:
    condensation in topological order. Singleton blocks fire at most once; multi-member blocks
    are re-scanned until nothing changes, with readiness deciding which member goes first.
 4. Write policy per target, comparing the rule's provenance `rp` against the target's current
-   `tp`: empty slot → write; `tp > rp` → yield silently; `tp == rp` → tolerance check, recorded
-   as a conflict on disagreement; `tp < rp` → overwrite.
+   `tp`: empty slot → write; `tp > rp` → yield, recorded; `tp == rp` → tolerance check, recorded
+   as a conflict on disagreement; `tp < rp` → overwrite, recorded as a yield for the loser.
 
-`overwrite_equal=true` relaxes the equal-precedence case to an overwrite without a check, which
-is what the guess pass wants: refining a guess is desirable, not a contradiction.
+Whether a recorded conflict is an error is up to the caller — the guess pass ignores them.
 """
 function resolve_rules(vals, rules::AbstractVector;
-                       targets=nothing, seedprov=Returns(:provided),
-                       overwrite_equal=false, maxpasses=1000)
+                       targets=nothing, seedprov=Returns(:provided), maxpasses=1000)
     values = Dict{Symbol,Float64}(vals)
     provenance = Dict{Symbol,Symbol}(s => seedprov(s) for s in keys(values))
 
@@ -237,9 +226,9 @@ function resolve_rules(vals, rules::AbstractVector;
         if length(block) == 1
             # a rule cannot read its own output, so a singleton block has no self-loop and
             # gets exactly one chance
-            _try_fire!(res, rules, only(block); overwrite_equal)
+            _try_fire!(res, rules, only(block))
         else
-            _resolve_block!(res, rules, block; overwrite_equal, maxpasses)
+            _resolve_block!(res, rules, block; maxpasses)
         end
     end
 
@@ -332,13 +321,13 @@ end
 # results get repaired. That cannot run away either, because an overwrite strictly raises the
 # target's provenance and the precedence levels are bounded. `maxpasses` guards a hole in that
 # argument, it is not part of the design.
-function _resolve_block!(res, rules, block; overwrite_equal, maxpasses)
+function _resolve_block!(res, rules, block; maxpasses)
     overwritten = Set{Symbol}()
     for _ in 1:maxpasses
         changed = false
         for i in block
             res.fired[i] && continue
-            _try_fire!(res, rules, i; overwrite_equal, overwritten) && (changed = true)
+            _try_fire!(res, rules, i; overwritten) && (changed = true)
         end
         changed || return nothing
         if !isempty(overwritten)
@@ -356,7 +345,7 @@ function _resolve_block!(res, rules, block; overwrite_equal, maxpasses)
 end
 
 # Returns whether the rule fired. Firing depends on readiness (all inputs set?)
-function _try_fire!(res, rules, i; overwrite_equal, overwritten=nothing)
+function _try_fire!(res, rules, i; overwritten=nothing)
     r = rules[i]
     all(s -> haskey(res.vals, s), r.sym) || return false
 
@@ -366,7 +355,7 @@ function _try_fire!(res, rules, i; overwrite_equal, overwritten=nothing)
 
     res.fired[i] = true
     for (k, s) in enumerate(r.outsym)
-        _write_value!(res, s, out[k], r.provenance, i; overwrite_equal, overwritten)
+        _write_value!(res, s, out[k], r.provenance, i; overwritten)
     end
     true
 end
@@ -375,7 +364,7 @@ end
 # topological order has already put every writer of `s` ahead of every reader of it, so an
 # overwrite here can never strand a value someone computed from the old one — outside a block,
 # where `_resolve_block!` re-arms the readers instead.
-function _write_value!(res, s, v, provenance, i; overwrite_equal, overwritten)
+function _write_value!(res, s, v, provenance, i; overwritten)
     if !haskey(res.vals, s)
         _store!(res, s, v, provenance, i; overwritten=nothing)
         return nothing
@@ -387,7 +376,7 @@ function _write_value!(res, s, v, provenance, i; overwrite_equal, overwritten)
         # for a weak formula this *is* the outcome the caller wants to report.
         push!(res.yields, (; sym=s, offered=v, rule=i))
         return nothing
-    elseif held == offered && !overwrite_equal
+    elseif held == offered
         # equal precedence is a check, never a write — that is what bounds the block fixpoint, and it
         # is the free half of the consistency checking that pruning otherwise costs us
         _agree(res.vals[s], v) ||
@@ -401,9 +390,8 @@ function _write_value!(res, s, v, provenance, i; overwrite_equal, overwritten)
 end
 
 # `overwritten` collects what a block has to re-read, so the test is whether the *value* moved,
-# not whether the precedence did — an `overwrite_equal` write strands every result computed
-# from the old number just as a precedence-raising one does. Tolerance rather than `!=`
-# deliberately: a value jittering in the last bits would otherwise re-arm its readers forever.
+# not whether the precedence did. Tolerance rather than `!=`: a value jittering in the last bits
+# would otherwise re-arm its readers forever.
 function _store!(res, s, v, provenance, i; overwritten)
     if !isnothing(overwritten) && haskey(res.vals, s) && !_agree(res.vals[s], v)
         push!(overwritten, s)

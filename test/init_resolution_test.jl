@@ -20,7 +20,8 @@ scale(factor, out, in; kw...) = rule((o, u) -> (o[1] = factor * u[1]; nothing), 
                                               provenance=:nonsense, optional=true)
 
     # tiers are symbols, but they are ordered
-    @test _precedence(:strong_formula) > _precedence(:provided) > _precedence(:guess) >
+    @test _precedence(:strong_formula) > _precedence(:provided) >
+          _precedence(:guess_formula) > _precedence(:guess) >
           _precedence(:derived) > _precedence(:weak_formula)
 
     # concrete, so a Vector{ResolutionRule} is not a Vector{Any} in disguise
@@ -42,7 +43,7 @@ end
     @test out == [6.0]
 
     @test ResolutionRule(@initformula(weak = true, :alias_out = :alias_in), am).provenance == :weak_formula
-    @test ResolutionRule(@guessformula(:alias_out = :alias_in), am).provenance == :guess
+    @test ResolutionRule(@guessformula(:alias_out = :alias_in), am).provenance == :guess_formula
 
     # two members of one alias class in one list are one variable, not two — on either end
     am2 = AliasMap(:a => :x, :b => :x)

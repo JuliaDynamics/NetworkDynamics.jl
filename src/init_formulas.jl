@@ -635,15 +635,12 @@ Guess-formula sibling of [`extend_knowns_by_formulas!`](@ref): extend `guesses` 
 everything the resolution graph derives from the component's `:obsrules` together with the
 user's guess `formulas`.
 
-Same executor, different roots. The **full output of the init pass** (`defaults`) is seeded as
-`:provided` — everything it determined outranks any guess and is never moved — while a value
-already sitting in `guesses` is seeded at `:guess`, the very rank a `GuessFormula` writes at.
-With `overwrite_equal=true` a guess formula therefore *refines* an existing guess instead of
-colliding with it: a guess is a seed, not an assertion. Which of two guess formulas writing one
-symbol wins is deliberately unspecified.
+Same executor, different roots: the full init output (`defaults`) seeds at `:provided`, a
+pre-existing guess at `:guess`. So a `GuessFormula` refines a guess but never moves what init
+determined, and an obs rule (`:derived`) may fill a symbol nothing else reaches but never
+replaces a guess. Which of two guess formulas writing one symbol wins is unspecified.
 
-An observed equation stays `:derived` and hence *below* the guesses: it may fill a symbol
-nothing else reaches, but it never replaces a guess that was handed to us.
+Conflicts are ignored — guesses are inconsistent by construction.
 """
 function extend_guesses_by_formulas!(guesses, defaults, cf, formulas;
                                      am=get_aliasmap(cf), t=NaN, targets=nothing,
@@ -659,8 +656,7 @@ function extend_guesses_by_formulas!(guesses, defaults, cf, formulas;
     rules = _resolution_rules(cf, formulas, am, seed, settable)
     isempty(rules) && return guesses
 
-    # the init output is bound, a pre-existing guess is not; `:guess` is what a `GuessFormula`
-    # rule writes at, so with `overwrite_equal` a formula may refine it
+    # the init output is bound, a pre-existing guess is not
     bound = Set{Symbol}(keys(defaults))
     if !isnan(t)
         seed[:t] = t # `t` so that formulas and observables can read it
@@ -668,10 +664,11 @@ function extend_guesses_by_formulas!(guesses, defaults, cf, formulas;
     end
     seedprov = s -> s ∈ bound ? :provided : :guess
     # final targets: prune away any symbol already known and known to be not overwritten
-    targets = _prune_resolution_targets(targets, rules, seed; seedprov, overwrite_equal=true)
+    targets = _prune_resolution_targets(targets, rules, seed; seedprov)
     # actually resolve rules (result stored in res)
-    res = resolve_rules(seed, rules; targets, seedprov, overwrite_equal=true)
-    _check_resolution(res, rules; error_unresolvable, verbose, io, type="GuessFormula")
+    res = resolve_rules(seed, rules; targets, seedprov)
+    _check_resolution(res, rules; error_unresolvable, verbose, io,
+                      type="GuessFormula", check_conflicts=false)
 
     verbose && _print_resolution(res, rules, guesses, settable;
                                  io, type="GuessFormula", op="≈", fixed=defaults)
@@ -737,7 +734,7 @@ function _resolution_rules(cf, formulas, am, knowns, settable)
 end
 
 """
-    _prune_resolution_targets(targets, rules, vals; seedprov, overwrite_equal) -> Set{Symbol}
+    _prune_resolution_targets(targets, rules, vals; seedprov) -> Set{Symbol}
 
 Targets are what the rules are pruned for. Narrows `targets` down to:
 - the ones written by some rule
@@ -746,13 +743,11 @@ Targets are what the rules are pruned for. Narrows `targets` down to:
 (for example, a user provided default can only be changed by a strong formula, so
 we can remove it as target UNLESS there is such a strong formula in the ruleset)
 
-`seedprov` is what the seed's entries are worth, mirroring `resolve_rules`' `seed_provenance`:
-the init pass provides everything, the guess pass only the init output (the rest is a guess,
-which a guess rule of equal rank may still refine). The comparison is therefore the same one
-`_write_value!` makes — equal rank changes nothing unless `overwrite_equal`.
+`seedprov` values the seed entries, like in `resolve_rules` (init pass: everything `:provided`;
+guess pass: only the init output). Same comparison `_write_value!` makes — equal rank is a
+check, so it can never change the value.
 """
-function _prune_resolution_targets(targets, rules, vals;
-                                   seedprov=Returns(:provided), overwrite_equal=false)
+function _prune_resolution_targets(targets, rules, vals; seedprov=Returns(:provided))
     best = Dict{Symbol,Int}()
     for r in rules, s in r.outsym
         best[s] = max(get(best, s, 0), _precedence(r.provenance))
@@ -764,7 +759,7 @@ function _prune_resolution_targets(targets, rules, vals;
         # `haskey`, matching `resolve_rules`: a seeded NaN is a value like any other
         if haskey(vals, s)
             held = _precedence(seedprov(s))
-            (held > rank || (held == rank && !overwrite_equal)) && continue
+            held >= rank && continue
         end
         push!(kept, s)
     end
@@ -774,12 +769,14 @@ end
 # Caller-side policy, the half `resolve_rules` deliberately does not have: a rule that left one
 # of its outputs unknown, two rules of equal precedence disagreeing about one, a required rule
 # that turned out not to be needed, and values that came out non-finite.
-function _check_resolution(res, rules; error_unresolvable, verbose, io, type="InitFormula")
+# `check_conflicts=false` for the guess pass: guesses are inconsistent by construction.
+function _check_resolution(res, rules; error_unresolvable, verbose, io,
+                           type="InitFormula", check_conflicts=true)
     _check_pruned(res, rules; error_unresolvable, verbose, io, type)
     _check_yielded(res, rules; verbose, io, type)
     _check_nonfinite(res, rules; error_unresolvable, verbose, io)
 
-    if !isempty(res.conflicts)
+    if check_conflicts && !isempty(res.conflicts)
         rows = ["$(_rule_ref(rules[c.rule])) computed :$(c.sym) = $(c.offered), \
                  but it already held $(c.held)" for c in res.conflicts]
         msg = "Inconsistent initialization values:\n" * join("  - " .* rows, "\n")
@@ -853,7 +850,7 @@ function _check_pruned(res, rules; error_unresolvable, verbose, io, type)
         if outranked
             verbose && printstyled(io, " - $type: $(_rule_ref(r)) yields, \
                                         its target $(r.outsym) is already determined\n")
-        elseif r.provenance === :weak_formula || r.provenance === :guess
+        elseif r.provenance === :weak_formula || r.provenance === :guess_formula
             # a rule that yields *by design* never warns for being unread — a library spelling
             # out a backward chain as weak or guess rules would drown the log in them
             verbose && printstyled(io, " - $type: $(_rule_ref(r)) had no effect, \
