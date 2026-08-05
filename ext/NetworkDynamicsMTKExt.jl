@@ -399,6 +399,12 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     # always expand connections before simplification
     _sys = ModelingToolkitBase.expand_connections(_sys)
     iv = only(independent_variables(_sys))
+    # `:t` as the name of time is assumed in a lot of places rather than threaded around —
+    # `_seed_values` seeds the resolution graph under it, the initialization diagnostics
+    # special-case it. Assert it once here instead of carrying the name through the metadata.
+    getname(iv) === :t || throw(ArgumentError(
+        "The independent variable of $(nameof(_sys)) is :$(getname(iv)); NetworkDynamics \
+         requires it to be named `t`."))
 
     # assume_io_coupling means, we expect a direct dependency chain output -> input
     # we fake this, by replacing all inputs with `input + implicit_output(outputs...)`

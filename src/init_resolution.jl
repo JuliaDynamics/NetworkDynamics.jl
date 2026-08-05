@@ -135,6 +135,9 @@ policy: it records what happened and leaves erroring, warning or ignoring to the
 - `vals` — the resolved values, a fresh `Dict{Symbol,Float64}`. Directly usable as the
   `defaults`/`guesses` dict downstream.
 - `provenance` — where every entry of `vals` came from.
+- `writer` — which rule wrote each entry, as an index into the rule vector; a seeded entry that
+  no rule touched has no key here. Provenance alone does not identify the writer (two formulas
+  share one), so this is what a diagnostic must key on to credit a value to a rule.
 - `fired` / `pruned` — per rule, indexed like the rule vector handed to `resolve_rules`.
 - `unfired` — non-optional rules that never ran, with the inputs still unknown. This is the
   "to compute `:δ`, provide one of {…}" material. A rule that *ran* and had all of its writes
@@ -149,11 +152,25 @@ policy: it records what happened and leaves erroring, warning or ignoring to the
 struct ResolutionResult
     vals::Dict{Symbol,Float64}
     provenance::Dict{Symbol,Symbol}
+    writer::Dict{Symbol,Int}
     fired::BitVector
     pruned::BitVector
     unfired::Vector{@NamedTuple{rule::Int, unknown::Vector{Symbol}}}
     nonfinite::Vector{Int}
     conflicts::Vector{@NamedTuple{sym::Symbol, held::Float64, offered::Float64, rule::Int}}
+end
+
+function ResolutionResult(vals, provenance, nrules::Int)
+    ResolutionResult(
+        vals,
+        provenance,
+        Dict{Symbol,Int}(),
+        falses(nrules),
+        falses(nrules),
+        @NamedTuple{rule::Int, unknown::Vector{Symbol}}[],
+        Int[],
+        @NamedTuple{sym::Symbol, held::Float64, offered::Float64, rule::Int}[]
+    )
 end
 
 """
@@ -199,9 +216,7 @@ function resolve_rules(vals, rules::AbstractVector;
         provenance[s] = seed_provenance
     end
 
-    res = ResolutionResult(values, provenance, falses(length(rules)), falses(length(rules)),
-                           @NamedTuple{rule::Int, unknown::Vector{Symbol}}[], Int[],
-                           @NamedTuple{sym::Symbol, held::Float64, offered::Float64, rule::Int}[])
+    res = ResolutionResult(values, provenance, length(rules))
     isempty(rules) && return res
 
     g = rule_graph(rules)
@@ -317,8 +332,9 @@ function _resolve_block!(res, rules, block; overwrite_equal, maxpasses)
             empty!(overwritten)
         end
     end
-    error("Resolution of a rule block did not settle within $maxpasses passes. This should not \
-           happen — please report it, together with the model that produced it.")
+    error("Resolution of a rule block did not settle within $maxpasses passes: the values of \
+           $(unique(Symbol[s for i in block for s in rules[i].outsym])) keep changing. This \
+           should not happen — please report it, together with the model that produced it.")
 end
 
 # Returns whether the rule fired. A rule that ran but produced a non-finite output counts as
@@ -334,7 +350,8 @@ function _try_fire!(res, rules, i; overwrite_equal, overwritten=nothing)
     r.f(out, u)
 
     if any(!isfinite, out)
-        push!(res.nonfinite, i)
+        # one entry per rule, however many passes of a block it fails in
+        i ∈ res.nonfinite || push!(res.nonfinite, i)
         return false
     end
 
@@ -351,8 +368,7 @@ end
 # where `_resolve_block!` re-arms the readers instead.
 function _write_value!(res, s, v, provenance, i; overwrite_equal, overwritten)
     if !haskey(res.vals, s)
-        res.vals[s] = v
-        res.provenance[s] = provenance
+        _store!(res, s, v, provenance, i; overwritten=nothing)
         return nothing
     end
     held = _precedence(res.provenance[s])
@@ -366,8 +382,20 @@ function _write_value!(res, s, v, provenance, i; overwrite_equal, overwritten)
             push!(res.conflicts, (; sym=s, held=res.vals[s], offered=v, rule=i))
         return nothing
     end
-    isnothing(overwritten) || held < offered && push!(overwritten, s)
+    _store!(res, s, v, provenance, i; overwritten)
+    nothing
+end
+
+# `overwritten` collects what a block has to re-read, so the test is whether the *value* moved,
+# not whether the precedence did — an `overwrite_equal` write strands every result computed
+# from the old number just as a precedence-raising one does. Tolerance rather than `!=`
+# deliberately: a value jittering in the last bits would otherwise re-arm its readers forever.
+function _store!(res, s, v, provenance, i; overwritten)
+    if !isnothing(overwritten) && haskey(res.vals, s) && !_agree(res.vals[s], v)
+        push!(overwritten, s)
+    end
     res.vals[s] = v
     res.provenance[s] = provenance
+    res.writer[s] = i
     nothing
 end

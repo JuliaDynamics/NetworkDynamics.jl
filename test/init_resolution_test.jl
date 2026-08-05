@@ -43,13 +43,19 @@ end
     @test ResolutionRule(@initformula(weak = true, :alias_out = :alias_in), am).provenance == :weak_formula
     @test ResolutionRule(@guessformula(:alias_out = :alias_in), am).provenance == :weak_formula
 
-    # two members of one alias class in one list are one variable, not two
+    # two members of one alias class in one list are one variable, not two — on either end
     am2 = AliasMap(:a => :x, :b => :x)
     collapsing = @initformula begin
         :a = 1.0
         :b = 2.0
     end
     @test_throws ArgumentError ResolutionRule(collapsing, am2)
+    @test_throws ArgumentError ResolutionRule(@initformula(:out = :a + :b), am2)
+
+    # and the case the canonicalization *creates*: two names that look independent in the
+    # formula but land on one symbol across the two ends, which is a rule reading its own output
+    @test_throws ArgumentError ResolutionRule(@initformula(:x = 2 * :alias_in), am)
+    @test_throws ArgumentError ResolutionRule(@initformula(:alias_in = 2 * :x), am)
 end
 
 @testset "rule graph" begin
