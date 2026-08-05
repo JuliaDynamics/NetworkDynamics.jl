@@ -104,8 +104,8 @@ end
 function _show_recipe(io::IO, @nospecialize(c))
     if isnothing(c.prettyprint)
         # strip trailing default-valued fields so the result stays a valid constructor call:
-        # `nothing` (prettyprint/derived_from) and `weak=false`. A non-default `weak=true` stays,
-        # keeping the preceding `nothing`s so the positional call still lines up.
+        # `nothing` (prettyprint) and `weak=false`. A non-default `weak=true` stays, keeping the
+        # preceding `nothing` so the positional call still lines up.
         print(io, replace(repr(c), r"(, (nothing|false))+\)$" => ")"))
     else
         print(io, c.prettyprint)
@@ -333,13 +333,10 @@ struct InitFormula{F}
     outsym::Vector{Symbol}   # output symbols (from LHS of assignments)
     sym::Vector{Symbol}      # input symbols (from RHS of assignments)
     prettyprint::Union{Nothing,String}
-    # set by `normalize` to the untouched user-written formula this one was derived from,
-    # `nothing` for user-written formulas themselves. See [`normalize`](@ref).
-    derived_from::Union{Nothing,InitFormula}
     weak::Bool # don't overwrite set defaults
     label::Union{Nothing,String} # short line identifier (just verbose application)
 
-    function InitFormula(f::F, outsym::Vector{Symbol}, sym::Vector{Symbol}, prettyprint::Union{Nothing,String}, derived_from::Union{Nothing,InitFormula}, weak::Bool=false, label::Union{Nothing,String}=nothing) where F
+    function InitFormula(f::F, outsym::Vector{Symbol}, sym::Vector{Symbol}, prettyprint::Union{Nothing,String}, weak::Bool=false, label::Union{Nothing,String}=nothing) where F
         # Check for self-dependencies (formula depending on its own output)
         self_deps = intersect(sym, outsym)
         if !isempty(self_deps)
@@ -350,11 +347,11 @@ struct InitFormula{F}
         if weak && length(outsym) != 1
             throw(ArgumentError("A weak InitFormula must have exactly one output symbol (got $outsym)."))
         end
-        new{F}(f, outsym, sym, prettyprint, derived_from, weak, label)
+        new{F}(f, outsym, sym, prettyprint, weak, label)
     end
 end
-InitFormula(f, outsym, sym; weak::Bool=false, label=nothing) = InitFormula(f, outsym, sym, nothing, nothing, weak, label)
-InitFormula(f, outsym, sym, prettyprint; weak::Bool=false, label=nothing) = InitFormula(f, outsym, sym, prettyprint, nothing, weak, label)
+InitFormula(f, outsym, sym; weak::Bool=false, label=nothing) = InitFormula(f, outsym, sym, nothing, weak, label)
+InitFormula(f, outsym, sym, prettyprint; weak::Bool=false, label=nothing) = InitFormula(f, outsym, sym, prettyprint, weak, label)
 
 dim(c::InitFormula) = length(c.outsym)
 
@@ -398,22 +395,19 @@ struct GuessFormula{F}
     outsym::Vector{Symbol}   # output symbols (from LHS of assignments)
     sym::Vector{Symbol}      # input symbols (from RHS of assignments)
     prettyprint::Union{Nothing,String}
-    # set by `normalize` to the untouched user-written formula this one was derived from,
-    # `nothing` for user-written formulas themselves. See [`normalize`](@ref).
-    derived_from::Union{Nothing,GuessFormula}
     label::Union{Nothing,String}  # one-line `(via …)` provenance for the verbose log, see `InitFormula.label`
 
-    function GuessFormula(f::F, outsym::Vector{Symbol}, sym::Vector{Symbol}, prettyprint::Union{Nothing,String}, derived_from::Union{Nothing,GuessFormula}, label::Union{Nothing,String}=nothing) where F
+    function GuessFormula(f::F, outsym::Vector{Symbol}, sym::Vector{Symbol}, prettyprint::Union{Nothing,String}, label::Union{Nothing,String}=nothing) where F
         # Check for self-dependencies (formula depending on its own output)
         self_deps = intersect(sym, outsym)
         if !isempty(self_deps)
             throw(ArgumentError("GuessFormula cannot depend on its own output symbols: $self_deps"))
         end
-        new{F}(f, outsym, sym, prettyprint, derived_from, label)
+        new{F}(f, outsym, sym, prettyprint, label)
     end
 end
-GuessFormula(f, outsym, sym; label=nothing) = GuessFormula(f, outsym, sym, nothing, nothing, label)
-GuessFormula(f, outsym, sym, prettyprint; label=nothing) = GuessFormula(f, outsym, sym, prettyprint, nothing, label)
+GuessFormula(f, outsym, sym; label=nothing) = GuessFormula(f, outsym, sym, nothing, label)
+GuessFormula(f, outsym, sym, prettyprint; label=nothing) = GuessFormula(f, outsym, sym, prettyprint, label)
 
 dim(c::GuessFormula) = length(c.outsym)
 
@@ -423,20 +417,7 @@ function Base.show(io::IO, ::MIME"text/plain", @nospecialize(c::GuessFormula))
     _show_formula(io, c)
 end
 
-# A normalized formula carries symbol lists the user never wrote, so printing its own
-# `prettyprint` (which spells the original symbols) alone would misrepresent it. Show the
-# original recipe and append the symbols actually in play. `derived_from` is never nested,
-# so this recurses once.
-function _show_formula(io::IO, @nospecialize(c))
-    if isnothing(c.derived_from)
-        _show_recipe(io, c)
-    else
-        _show_formula(io, c.derived_from)
-        orig = c.derived_from
-        print(io, "\n(normalized: $(c.sym) → $(c.outsym), \
-                   derived from $(orig.sym) → $(orig.outsym))")
-    end
-end
+_show_formula(io::IO, @nospecialize(c)) = _show_recipe(io, c)
 
 """
    @initformula
@@ -573,10 +554,10 @@ end
 assert_initformula_compat(cf::ComponentModel, c::InitFormula) = _assert_formula_compat(cf, c)
 assert_guessformula_compat(cf::ComponentModel, c::GuessFormula) = _assert_formula_compat(cf, c)
 
-# Inputs may be observables: they are expanded to their settable roots at init time, see
-# `normalize`. Outputs may be observables too — as pure aliases they canonicalize onto a
-# settable symbol, and as genuinely algebraic observables the write *pins* them as an
-# init-time dataflow node, see `pinned_obssyms`.
+# Inputs may be observables: the resolution graph computes them from what is known, or reads
+# them directly where another formula writes them. Outputs may be observables too — as pure
+# aliases they canonicalize onto a settable symbol, and as genuinely algebraic observables the
+# write is an assertion about the model, checked post-solve.
 function _assert_formula_compat(cf::ComponentModel, c::Union{InitFormula,GuessFormula})
     label = c isa InitFormula ? "InitFormula" : "GuessFormula"
     settable = settable_symbols(cf)
@@ -597,111 +578,6 @@ function _assert_formula_compat(cf::ComponentModel, c::Union{InitFormula,GuessFo
 end
 
 """
-    topological_sort_formulas(formulas::Vector{Init/GuessFormula}) -> Vector{Init/GuessFormula}
-
-Sort formulas in topological order based on their dependencies. This ensures that
-formulas are applied in the correct order, where each formula's input symbols are
-available before it executes.
-
-A formula B depends on formula A if any of B's input symbols are produced by A's output symbols.
-The function returns the formulas reordered such that dependencies are satisfied.
-"""
-function topological_sort_formulas(formulas)
-    n = length(formulas)
-    n <= 1 && return copy(formulas)
-
-    type = if first(formulas) isa InitFormula
-        "InitFormula"
-    elseif first(formulas) isa GuessFormula
-        "GuessFormula"
-    else
-        throw(ArgumentError("Expected a vector of InitFormula or GuessFormula, got $(typeof(first(formulas)))"))
-    end
-
-    # Check for output symbol conflicts
-    all_outputs = Symbol[]
-    for formula in formulas
-        append!(all_outputs, formula.outsym)
-    end
-
-    if !allunique(all_outputs)
-        conflicts = [s for s in unique(all_outputs) if count(==(s), all_outputs) > 1]
-        # A weak writer yields to a `default` or a *strong* co-writer (both drop it earlier), so
-        # reaching here means the colliding writers are all weak — a genuine ambiguity.
-        hint = if any(f -> f isa InitFormula && f.weak && !isdisjoint(f.outsym, conflicts), formulas)
-            "\nThe colliding formulas are `weak`: a weak formula yields to a default or a strong \
-             writer, but here only weak writers target the symbol. Give the target a default, or \
-             drop one of the writers."
-        else
-            ""
-        end
-        throw(ArgumentError("Multiple $(type)s set the same symbol(s): $conflicts$hint"))
-    end
-
-    # Build dependency graph using Graphs.jl
-    g = SimpleDiGraph(n)
-
-    # Add edges: i → j means formula j depends on formula i
-    # (formula j must run after formula i)
-    for i in 1:n, j in 1:n
-        if i != j
-            # Check if formula j depends on formula i
-            # i.e., j's input symbols intersect with i's output symbols
-            if !isdisjoint(formulas[j].sym, formulas[i].outsym)
-                add_edge!(g, i, j)
-            end
-        end
-    end
-
-    # Perform topological sort
-    try
-        sorted_indices = Graphs.topological_sort(g)
-        if length(sorted_indices) != n
-            # This shouldn't happen with a proper topological sort implementation,
-            # but let's be safe
-            throw(ArgumentError(_circular_dependency_msg(formulas, g, type)))
-        end
-        return formulas[sorted_indices]
-    catch e
-        if e isa ErrorException && occursin("graph contains at least one loop", string(e))
-            throw(ArgumentError(_circular_dependency_msg(formulas, g, type)))
-        else
-            rethrow(e)
-        end
-    end
-end
-
-function _circular_dependency_msg(formulas, g, type)
-    # cycle count is bounded by the (small) number of formulas on one component; take the
-    # shortest witness, one is enough to explain the failure
-    cycles = Graphs.simplecycles_limited_length(g, Graphs.nv(g))
-    isempty(cycles) && return "Circular dependency detected in $(type)s"
-    cycle = argmin(length, cycles)
-
-    rows = map(eachindex(cycle)) do i
-        from = formulas[cycle[i]]
-        to = formulas[cycle[mod1(i + 1, length(cycle))]]
-        shared = intersect(to.sym, from.outsym)
-        "  $(_cycle_ref(from)) writes $shared, read by $(_cycle_ref(to))"
-    end
-    normalized = filter(i -> !isnothing(formulas[i].derived_from), cycle)
-    note = if isempty(normalized)
-        ""
-    else
-        "\nSome of them were normalized, i.e. their inputs are the settable roots of the \
-         observables they were written against: \
-         $(join(("$(_cycle_ref(formulas[i])) was written to read $(formulas[i].derived_from.sym)" for i in normalized), ", ")). \
-         An observable which is written by a formula of this initialization becomes a pin and \
-         is read directly instead of being expanded to its roots — so an edge above may \
-         disappear once the observable it runs through is written by a formula."
-    end
-    "Circular dependency detected between $(length(cycle)) $(type)s:\n" * join(rows, "\n") * note
-end
-# `_formula_ref`'s prose form ("for [:x]") does not survive mid-sentence next to a `writes`,
-# so name a formula by its quoted recipe where it has one
-_cycle_ref(f) = isnothing(f.label) ? "the formula for $(f.outsym)" : "`$(f.label)`"
-
-"""
     extend_knowns_by_formulas!(knowns, cf, formulas; am, t, targets, error_unresolvable, verbose, io)
 
 Extend `knowns` in place by everything the resolution graph derives from it: the component's
@@ -719,12 +595,18 @@ function extend_knowns_by_formulas!(knowns, cf, formulas;
                                     am=get_aliasmap(cf), t=NaN, targets=nothing,
                                     error_unresolvable=true, verbose=false, io=stdout)
     settable = settable_symbols(cf)
-    if isnothing(targets)
-        targets = settable
-    end
     # collect rules (user formulas + obs rules)
     rules = _resolution_rules(cf, formulas, am, knowns, settable)
     isempty(rules) && return knowns
+    if isnothing(targets)
+        # Everything settable, plus what a user formula writes. A formula writing an *observable*
+        # asserts something about the model: the value has no slot, but it is checked against the
+        # solved state afterwards (`broken_observable_defaults`), so the rule is worth running
+        # even though nothing in the component reads it. Observed rules are deliberately not
+        # seeded this way — nothing but a formula ever reads an observable, so they stay
+        # prunable, which is what keeps a plain component free.
+        targets = settable ∪ Set(s for r in rules if _is_user_rule(r) for s in r.outsym)
+    end
 
     seed = Dict{Symbol,Float64}(knowns)
     isnan(t) || (seed[:t] = t) # `t` so that formulas and observables can read it
@@ -975,110 +857,6 @@ function _resolution_hint(res, rules, unknown)
     join(parts, ", ")
 end
 
-# A weak formula yields — and is dropped — when its (canonical) target already carries a
-# `default` or is written by a *strong* formula (`strong_outputs`): an InitFormula always fires,
-# so a strong writer pins the target and the weak default is redundant. The default check is on
-# `default` only, never `init` — a weak formula persists its own output as an `init`, and testing
-# `init` here would self-block it on reinit. Weak formulas are single-output by construction, so
-# a drop never strands a uniquely-pinned sibling output.
-function drop_weak_formulas(formulas, defaults, strong_outputs=(); verbose=false, io=stdout)
-    any(f -> f isa InitFormula && f.weak, formulas) || return formulas
-    kept = empty(formulas)
-    for f in formulas
-        if !f.weak
-            push!(kept, f)
-            continue
-        end
-        @assert length(f.outsym) == 1 "weak InitFormula must be single-output (enforced at construction)"
-        s = only(f.outsym)
-        if haskey(defaults, s) || s in strong_outputs
-            ref = isnothing(f.label) ? "weak formula for :$s" : f.label
-            verbose && printstyled(io, " - InitFormula: $ref yields to \
-                $(haskey(defaults, s) ? "existing default :$s = $(defaults[s])" : "a strong formula writing :$s")\n")
-        else
-            push!(kept, f)
-        end
-    end
-    kept
-end
-
-function apply_init_formulas!(defaults, formulas_unsorted; verbose=false, io=stdout,
-                              error_unresolvable=true, pinned=Set{Symbol}())
-    # Convert tuple to vector if necessary
-    formulas_vec = formulas_unsorted isa Tuple ? collect(formulas_unsorted) : formulas_unsorted
-    formulas = topological_sort_formulas(formulas_vec)
-
-    rows = String[]
-    for f in formulas
-        out = SymbolicView(zeros(length(f.outsym)), f.outsym)
-        # ensure all input symbols are in defaults
-        invals = map(f.sym) do s
-            haskey(defaults, s) ? defaults[s] : NaN
-        end
-        if any(v -> ismissing(v) || isnothing(v) || isnan(v), invals)
-            if error_unresolvable
-                throw(ArgumentError("InitFormula requires all input symbols to be initialized, but found NaN/missing/nothing in inputs: $(f.sym .=> invals)" * _unresolved_note(f)))
-            else
-                verbose && printstyled(io, " - InitFormula: skipping formula $(_formula_ref(f)) with unresolvable inputs: $(f.sym .=> invals)$(_unresolved_note(f))\n")
-                continue
-            end
-        end
-        in = SymbolicView(invals, f.sym)
-        if !_run_formula!(out, f, in, "InitFormula"; verbose, io, error_unresolvable)
-            continue
-        end
-        for s in f.outsym
-            val = out[s]
-            verbose && push!(rows, _formula_row(s, val, defaults; op="=", pin=s ∈ pinned, label=f.label))
-            defaults[s] = val
-        end
-    end
-    verbose && print_aligned_group(io, "InitFormulas set:", rows)
-    return defaults
-end
-function apply_guess_formulas!(guesses, defaults, formulas_unsorted; verbose=false, io=stdout,
-                               error_unresolvable=true, pinned=Set{Symbol}())
-    # Convert tuple to vector if necessary
-    formulas_vec = formulas_unsorted isa Tuple ? collect(formulas_unsorted) : formulas_unsorted
-    formulas = topological_sort_formulas(formulas_vec)
-
-    rows = String[]
-    for f in formulas
-        out = SymbolicView(zeros(length(f.outsym)), f.outsym)
-        # Layered lookup: defaults (fixed) take precedence over guesses
-        invals = map(f.sym) do s
-            if haskey(defaults, s)
-                defaults[s]  # Use fixed default value if available
-            elseif haskey(guesses, s)
-                guesses[s]   # Otherwise use guess value
-            else
-                NaN
-            end
-        end
-        # Validate inputs are not NaN/missing/nothing
-        if any(v -> ismissing(v) || isnothing(v) || isnan(v), invals)
-            if error_unresolvable
-                throw(ArgumentError("GuessFormula requires all input symbols to be initialized, but found NaN/missing/nothing in inputs: $(f.sym .=> invals)" * _unresolved_note(f)))
-            else
-                verbose && printstyled(io, " - GuessFormula: skipping formula $(_formula_ref(f)) with unresolvable inputs: $(f.sym .=> invals)$(_unresolved_note(f))\n")
-                continue
-            end
-        end
-        in = SymbolicView(invals, f.sym)
-        if !_run_formula!(out, f, in, "GuessFormula"; verbose, io, error_unresolvable)
-            continue
-        end
-        # Update guesses dictionary (NOT defaults!)
-        for s in f.outsym
-            val = out[s]
-            verbose && push!(rows, _formula_row(s, val, guesses; op="≈", fixed=defaults, pin=s ∈ pinned, label=f.label))
-            guesses[s] = val
-        end
-    end
-    verbose && print_aligned_group(io, "GuessFormulas set:", rows)
-    return guesses
-end
-
 # One aligned row for a formula that wrote `val` onto `:s`, annotated with what it did
 # relative to what was there: nothing for a fresh write, the previous value if it changed
 # one, or a no-effect note when a fixed default (guesses only) shadows the write. `label` (the
@@ -1096,40 +874,6 @@ function _formula_row(s, val, prev; op, fixed=nothing, pin=false, label=nothing)
     pin && (note = strip(note * " (pinned observable)"))
     via = isnothing(label) ? "" : "(via $label)"
     ":$s &$op $v &$note &$via"
-end
-
-# Runs `f`, returning whether its outputs may be used. A normalized formula only discovers
-# during the gather that an observable input expands to NaN, which is an unresolvable input
-# like any other — so it lands here rather than escaping, and is treated exactly as the
-# up-front dict lookup treats a missing value.
-function _run_formula!(out, f, u, label; verbose, io, error_unresolvable)
-    try
-        f(out, u)
-        true
-    catch e
-        e isa UnresolvableExpansionError || rethrow()
-        if error_unresolvable
-            throw(ArgumentError("$label for $(f.outsym): $(e.msg)" * _unresolved_note(f)))
-        end
-        verbose && printstyled(io, " - $label: skipping formula $(_formula_ref(f)), $(e.msg)$(_unresolved_note(f))\n")
-        false
-    end
-end
-
-# Short human reference to a formula for the verbose log's prose lines (skips, weak-drops): its
-# `label` when it has one, else a `for [:out…]` fallback naming the output symbols.
-_formula_ref(f) = isnothing(f.label) ? "for $(f.outsym)" : f.label
-
-# A normalized formula reads the settable *roots* of what the user asked for, so the symbols
-# named in an unresolvable-input message are not the ones they wrote. Say where they came
-# from, and name the fix: a default on the observable itself would not help, since formulas
-# read observables from the model rather than from the dict.
-function _unresolved_note(f)
-    orig = f.derived_from
-    isnothing(orig) && return ""
-    "\nNote: this formula was normalized, its inputs $(f.sym) are the settable roots of the \
-     originally requested $(orig.sym). Defaults on observables are not consumed as formula \
-     inputs — provide defaults for the roots instead."
 end
 
 _vcattable(t::Tuple) = collect(t)

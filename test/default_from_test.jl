@@ -120,7 +120,7 @@ end
 
 @testset "NWState(nw) re-application drops weak formulas (yields to a user default)" begin
     # Regression guard for `_get_appropriate_dict` (`src/symbolicindexing.jl`): building an
-    # `NWState(nw)` re-applies a component's init formulas, and must run `drop_weak_formulas`
+    # `NWState(nw)` re-applies a component's init formulas, and must let a weak one yield
     # exactly like `initialize_component` — otherwise a weak formula fires unconditionally and
     # clobbers a user default it is supposed to defer to. inj1 carries a weak `initf_weak` on `Sn`
     # (rating weakly follows the base `S_b`); base is 100. (Same shape a future `default_from`

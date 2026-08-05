@@ -1323,9 +1323,9 @@ end
 
     @testset "conflicting formula targets" begin
         # two initf entries forcing the same raw target to different values is a compile
-        # error; two entries on different members of one alias class both compile and are
-        # reported by the init-time duplicate-writer check, once normalization has collapsed
-        # the class (formulas are ejected raw, all classification happens at init).
+        # error; two entries on different members of one alias class both compile, and the
+        # disagreement is caught at init time — as a value collision on the symbol the class
+        # canonicalizes onto (formulas are ejected raw, all classification happens at init).
         @component function conflict_inner(; name)
             @parameters a=1.0
             @variables begin
@@ -1349,9 +1349,15 @@ end
         @test length(get_initformulas(vm)) == 2
         err = try; initialize_component(vm; verbose=false); catch e; e; end
         @test err isa ArgumentError
-        @test occursin("Multiple InitFormulas set the same symbol", sprint(showerror, err))
+        msg = sprint(showerror, err)
+        @test occursin("Inconsistent initialization values", msg)
+        @test occursin(":c₊x", msg)   # the canonical name of the class both writers land on
     end
 end
+
+# which observables the attached init formulas target — the fact these testsets are after,
+# spelled without the machinery that used to compute it
+_obs_targets(vm) = Set(s for f in get_initformulas(vm) for s in f.outsym if s ∈ obssym(vm))
 
 @testset "set_initf: system-level init formulas" begin
     # the backward-flow showcase: the child knows only its own inverse (initf on x reads
@@ -1383,7 +1389,8 @@ end
         @named ctrl = pin_ctrl()
         vm = VertexModel(ctrl, [:i], [:o]; verbose=false)
         @test :pi₊y ∈ obssym(vm)
-        @test NetworkDynamics.pinned_obssyms(vm) == Set([:pi₊y])
+        # the formula targets the observable itself, no expansion onto its roots
+        @test _obs_targets(vm) == Set([:pi₊y])
 
         io = IOBuffer()
         state = initialize_component(vm;
@@ -1404,7 +1411,7 @@ end
         end
         @named outer = pin_outer()
         vm = VertexModel(outer, [:iin], [:oout]; verbose=false)
-        @test NetworkDynamics.pinned_obssyms(vm) == Set([:ctrl₊pi₊y])
+        @test _obs_targets(vm) == Set([:ctrl₊pi₊y])
         state = initialize_component(vm;
             default_overrides=Dict(:iin => 0.5, :oout => 1.0), verbose=false)
         @test state[:ctrl₊pi₊x] ≈ 0.3
@@ -1470,7 +1477,7 @@ end
         end
         @named ctrl = ctrl_aliasvar()
         vm = VertexModel(ctrl, [:i], [:o]; verbose=false)
-        @test NetworkDynamics.pinned_obssyms(vm) == Set([:y_wish])
+        @test _obs_targets(vm) == Set([:y_wish])
         state = initialize_component(vm;
             default_overrides=Dict(:i => 0.5, :o => 1.0), verbose=false)
         @test state[:pi₊x] ≈ 0.3
@@ -1630,10 +1637,10 @@ end
 end
 
 @testset "guessf for eliminated variables survives as a raw formula" begin
-    # `z` is algebraically eliminated (z = 2x) into a scaled-alias observable. The guess
-    # formula is ejected raw, targeting `z` as written; at init time `normalize` transports
-    # it onto the surviving symbol through the aliasmap. (This used to be skipped with a
-    # warning when formulas were resolved symbolically at compile time.)
+    # `z` is algebraically eliminated (z = 2x) into a scaled observable. The guess formula is
+    # ejected raw, targeting `z` as written; at init time the resolution graph carries it onto
+    # the surviving symbol. (This used to be skipped with a warning when formulas were resolved
+    # symbolically at compile time.)
     @component function vertex_with_eliminated_guessf(; name)
         @parameters u_init = 1.0
         @variables x(t) y(t) [guess=1.0] z(t) [guessf=2*u_init]
@@ -1646,10 +1653,11 @@ end
     f = only(get_guessformulas(vm))
     @test f.outsym == [:z]      # raw target, the alias key
     @test f.sym == [:u_init]
-    n = NetworkDynamics.normalize(f, get_aliasmap(vm), vm)
-    @test n.outsym == [:x]      # ... lands on the settable survivor at init time
+    # `z ~ 2x` is a scaled relation, not an alias, so no rename transports the guess onto the
+    # surviving state. The graph's inverse rule does: the formula writes :z, `x = z/2` takes it
+    # from there, and only then does a settable symbol carry the value.
     guesses = Dict{Symbol,Float64}()
-    NetworkDynamics.apply_guess_formulas!(guesses, Dict(:u_init => 1.0), [n])
+    NetworkDynamics.extend_guesses_by_formulas!(guesses, Dict(:u_init => 1.0), vm, [f])
     @test guesses[:x] ≈ 1.0     # z = 2x = 2*u_init  =>  x = u_init
 
     # the constant guess for `y` is preserved as plain metadata

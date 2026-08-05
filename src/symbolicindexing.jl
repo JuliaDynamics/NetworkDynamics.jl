@@ -179,13 +179,11 @@ function NWState(thing;
 
     return s
 end
-# Values and formulas are alias-normalized here for the same reason `initialize_component`
-# does it: which member of an alias class a value was written against is an accident of MTK's
-# reduction, and must not decide whether the value survives. Without it the `valid_keys`
-# filter below would silently drop a default placed on an alias, and a formula reading an
-# observable would look for roots the dict still spells under their alias names.
-#
-# Both are no-ops with an empty aliasmap (the non-MTK case), see `normalize`.
+# Values are alias-normalized here for the same reason `initialize_component` does it: which
+# member of an alias class a value was written against is an accident of MTK's reduction, and
+# must not decide whether the value survives — without it the `valid_keys` filter below would
+# silently drop a default placed on an alias. A no-op with an empty aliasmap (the non-MTK
+# case); formulas need no such pass, the rules canonicalize their symbol lists themselves.
 function _get_appropriate_dict(cidx, cm; guess, apply_formulas, verbose, additional_initformula=nothing)
     am = get_aliasmap(cm)
     defaults = normalize_valuedict(am, get_defaults_or_inits_dict(cm); what=:default, verbose)
