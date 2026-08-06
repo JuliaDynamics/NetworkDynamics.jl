@@ -272,6 +272,7 @@ When we try to build this model, we get an error:
 ```@example mtk
 try #hide
 VertexModel(ind, [:p₊i], [:p₊v])
+@assert false "Expected to throw" #hide
 catch e #hide
     @assert e isa NetworkDynamics.RHSDifferentialsError #hide
     printstyled("ERROR: ", color=:light_red, bold=true) #hide
