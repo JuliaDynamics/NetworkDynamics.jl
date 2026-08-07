@@ -184,6 +184,9 @@ end
 # filter below. Does nothing without an aliasmap.
 function _get_appropriate_dict(cidx, cm; guess, apply_formulas, verbose, additional_initformula=nothing)
     am = get_aliasmap(cm)
+    # states and parameters: all an `NWState` can hold, hence both what the passes below aim at
+    # and what survives the filter at the end
+    valid_keys = Set(vcat(sym(cm), psym(cm)))
     defaults = normalize_valuedict(am, get_defaults_or_inits_dict(cm); what=:default, verbose)
     # fold the network-resolved `default_from` weak formulas (passed per component by the
     # constructor) into the component's own init formulas, so a `default_from` copy also
@@ -195,8 +198,7 @@ function _get_appropriate_dict(cidx, cm; guess, apply_formulas, verbose, additio
         # called even without formulas: a `default` on a scaled alias only reaches its canonical
         # symbol through the graph, and that has to happen before `valid_keys` drops it
         extend_knowns_by_formulas!(defaults, cm, combined_initf;
-                                   am, targets=Set(vcat(sym(cm), psym(cm))),
-                                   error_unresolvable=false, verbose)
+                                   am, targets=valid_keys, error_unresolvable=false, verbose)
     end
     if guess
         guesses = normalize_valuedict(am, get_guesses_dict(cm); what=:guess, on_conflict=:keepfirst, verbose)
@@ -205,14 +207,11 @@ function _get_appropriate_dict(cidx, cm; guess, apply_formulas, verbose, additio
             verbose && !isnothing(guessf) && println("Applying GuessFormulas for $(cidx) ($(cm.name))...")
             # unconditional for the same reason as the init pass above
             extend_guesses_by_formulas!(guesses, defaults, cm, guessf;
-                                        am, targets=Set(vcat(sym(cm), psym(cm))),
-                                        error_unresolvable=false, verbose)
+                                        am, targets=valid_keys, error_unresolvable=false, verbose)
         end
         defaults = merge(guesses, defaults) # defaults overwrite guesses
     end
-    # limit dict to only psym and sym of component; this is also what discards the
-    # init-time scratch values of pinned observables
-    valid_keys = Set(vcat(sym(cm), psym(cm)))
+    # this filter is also what discards the init-time scratch values of pinned observables
     filter!(p -> p.first ∈ valid_keys, defaults)
 end
 
