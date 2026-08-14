@@ -398,12 +398,22 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
 
     # always expand connections before simplification
     _sys = ModelingToolkitBase.expand_connections(_sys)
-    iv = only(independent_variables(_sys))
-    # lots of places just assume time is called `:t` instead of threading the name around,
-    # so assert it once here
-    getname(iv) === :t || throw(ArgumentError(
-        "The independent variable of $(nameof(_sys)) is :$(getname(iv)); NetworkDynamics \
-         requires it to be named `t`."))
+    _ivcand = independent_variables(_sys)
+    if length(_ivcand) == 1
+        iv = only(independent_variables(_sys))
+        # lots of places just assume time is called `:t` instead of threading the name around,
+        # so assert it once here
+        getname(iv) === :t || throw(ArgumentError(
+            "The independent variable of $(nameof(_sys)) is :$(getname(iv)); NetworkDynamics \
+            requires it to be named `t`."))
+    elseif length(_ivcand) > 1
+        throw(ArgumentError(
+            "The system $(nameof(_sys)) has multiple independent variables: \
+            $(getname.(ivcand)). NetworkDynamics only supports a single independent variable."))
+    else
+        # its probably t
+        iv = ModelingToolkitBase.t_nounits
+    end
 
     # assume_io_coupling means, we expect a direct dependency chain output -> input
     # we fake this, by replacing all inputs with `input + implicit_output(outputs...)`
