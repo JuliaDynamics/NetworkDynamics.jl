@@ -833,8 +833,9 @@ function _dedupe_resolved(resolved; fail::Symbol, kind)
         # a weak entry yields to a strong writer on the same target: drop the weak ones whenever
         # a strong one exists (any rhs), so weak+strong never reads as a conflict below
         any(g -> !g.weak, group) && (group = filter(g -> !g.weak, group))
-        # sort strong-first, then by rhs: among identical duplicates a strong writer wins
-        chosen = first(sort(group; by = g -> (g.weak, repr(g.rhs))))
+        # sort strong-first, required before optional, then by rhs: among identical duplicates
+        # the one with the fewest escape hatches wins, rather than whoever came first
+        chosen = first(sort(group; by = g -> (g.weak, g.optional, repr(g.rhs))))
         length(group) == 1 && (push!(kept, chosen); continue)
         if all(g -> isequal(g.rhs, chosen.rhs), group)
             push!(kept, chosen)

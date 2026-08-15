@@ -409,7 +409,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     elseif length(_ivcand) > 1
         throw(ArgumentError(
             "The system $(nameof(_sys)) has multiple independent variables: \
-            $(getname.(ivcand)). NetworkDynamics only supports a single independent variable."))
+            $(getname.(_ivcand)). NetworkDynamics only supports a single independent variable."))
     else
         # its probably t
         iv = ModelingToolkitBase.t_nounits

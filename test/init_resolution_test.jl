@@ -85,8 +85,6 @@ end
 end
 
 @testset "non-finite seeds are ordinary values" begin
-    # "unknown" means the key is missing, so `NaN` and `Inf` are seeded like any other number.
-    # `nothing`/`missing` never get here, `_numeric_seed` turns them away one level up.
     res = resolve_rules(Dict(:a => 1.0, :b => NaN, :e => Inf), ResolutionRule[])
     @test keys(res.vals) == Set([:a, :b, :e])
     @test res.provenance[:b] == :provided
