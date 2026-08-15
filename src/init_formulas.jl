@@ -774,7 +774,7 @@ function _check_resolution(res, rules; error_unresolvable, verbose, io,
     _check_pruned(res, rules; error_unresolvable, verbose, io, type)
     _check_skipped(res, rules; verbose, io, type)
     _check_yielded(res, rules; verbose, io, type)
-    _check_nonfinite(res, rules; error_unresolvable, verbose, io)
+    _check_nonfinite(res, rules; verbose, io)
 
     if check_conflicts && !isempty(res.conflicts)
         rows = ["$(_rule_ref(rules[c.rule])) computed :$(c.sym) = $(c.offered), \
@@ -789,9 +789,8 @@ function _check_resolution(res, rules; error_unresolvable, verbose, io,
 
     for u in res.unfired
         r = rules[u.rule]
-        # not firing is a failure only if something is still unknown — with duplicate writers
-        # allowed, the other one may simply have got there first
-        all(s -> haskey(res.vals, s), r.outsym) && continue
+        # `unfired` only holds rules that are neither optional nor pruned, so a rule landing
+        # here was asked to run and could not — a failure no matter what else wrote its target
         msg = "$type $(_rule_ref(r)) could not be resolved: its inputs are unknown: \
                $(_resolution_hint(res, rules, u.unknown))."
         if error_unresolvable
@@ -834,16 +833,16 @@ function _check_yielded(res, rules; verbose, io, type)
     nothing
 end
 
-# warn for on nonfininte values
-function _check_nonfinite(res, rules; error_unresolvable, verbose, io)
-    isempty(res.nonfinite) && return nothing
-    (error_unresolvable || verbose) || return nothing
+# NaN/Inf is a value like any other here, so this is a hint and never a warning: a component
+# may legitimately carry an infinite default. Only shown under `verbose`, where the values
+# themselves are printed anyway and this just names the likely cause.
+function _check_nonfinite(res, rules; verbose, io)
+    (verbose && !isempty(res.nonfinite)) || return nothing
     rows = map(res.nonfinite) do nf
         src = iszero(nf.rule) ? "provided" : "computed by $(_rule_ref(rules[nf.rule]))"
         ":$(nf.sym) &= $(res.vals[nf.sym]) &($src)"
     end
-    printstyled(io, " - WARNING: ", color=:yellow)
-    printstyled(io, "non-finite values, which poison everything derived from them. A common \
+    printstyled(io, " - non-finite values, which poison everything derived from them. A common \
                      cause is an observable with an explicit time dependence and no `t` \
                      passed to the initialization.\n")
     print_aligned_rows(io, rows)
