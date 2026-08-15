@@ -174,10 +174,12 @@ function resolve_rules(vals, rules::AbstractVector;
     res = ResolutionResult(values, provenance, length(rules))
 
     g = rule_graph(rules)
-    keep = _prune_rules(g, rules, targets)
-    res.pruned .= .!keep
+    # Mutually dependent rules collapse into one group. Tarjan lists the groups readers-first,
+    # which is the order pruning wants and the reverse of the order they have to fire in.
+    sccs = map(sort!, Graphs.strongly_connected_components_tarjan(g))
+    blocks = _prune_blocks!(res.pruned, g, rules, sccs, targets)
 
-    for block in _rule_blocks(g, keep)
+    for block in Iterators.reverse(blocks)
         if length(block) == 1
             # there are no self-loops, so a lone rule gets exactly one chance
             _try_fire!(res, rules, only(block))
@@ -228,26 +230,34 @@ function rule_graph(rules)
     g
 end
 
-# walk backwards from the rules writing a target and keep everything reachable.
-# `targets === nothing` keeps all rules.
-function _prune_rules(g, rules, targets)
-    isnothing(targets) && return trues(length(rules))
+# Return the groups that can contribute to `targets`, in the order they came in, and mark the rest
+# in `pruned`. The groups are the condensation of `g`, a DAG, and they arrive readers-first, so one
+# forward walk settles every group after the groups it feeds: a group stays if it writes a target
+# itself, or if some group it feeds stayed. Everything starts out pruned and is cleared once it
+# proves itself, so the `pruned[j]` a group reads has already been decided.
+#
+# A group is kept or dropped whole. Rules in one group are mutually reachable, so as soon as one
+# of them reaches a target every other one does too, via the first.
+function _prune_blocks!(pruned, g, rules, blocks, targets)
+    if isnothing(targets) # keep everything
+        pruned .= false
+        return blocks
+    end
 
     targetset = Set{Symbol}(targets)
-    seeds = [i for (i, r) in enumerate(rules) if !isdisjoint(r.outsym, targetset)]
-    keep = falses(length(rules))
-    for v in Graphs.BFSIterator(g, seeds; neighbors_type=Graphs.inneighbors)
-        keep[v::Int] = true # the iterator's eltype is `Any`
+    pruned .= true
+    kept_blocks = Vector{Int}[]
+    for block in blocks
+        stays = any(block) do i
+            !isdisjoint(rules[i].outsym, targetset) ||
+                any(j -> !pruned[j], Graphs.outneighbors(g, i))
+        end
+        if stays
+            pruned[block] .= false
+            push!(kept_blocks, block)
+        end
     end
-    keep
-end
-
-# Groups of mutually dependent rules, in execution order. Pruning has to happen before Tarjan
-# runs, otherwise the groups come out bigger than they really are.
-function _rule_blocks(g, keep)
-    sg, vmap = Graphs.induced_subgraph(g, findall(keep))
-    sccs = reverse(Graphs.strongly_connected_components_tarjan(sg))
-    [sort!(vmap[scc]) for scc in sccs]
+    kept_blocks
 end
 
 # Rules in a cycle cannot be put in order, so the group is re-scanned until nothing changes and
