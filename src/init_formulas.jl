@@ -600,10 +600,10 @@ See [`_resolution_rules`](@ref) for when the pass runs at all.
 function extend_knowns_by_formulas!(knowns, cf, formulas;
                                     am=get_aliasmap(cf), t=NaN, targets=nothing,
                                     error_unresolvable=true, verbose=false, io=stdout)
-    settable = settable_symbols(cf)
     # collect rules (user formulas + obs rules)
-    rules = _resolution_rules(cf, formulas, am, knowns, settable)
+    rules = _resolution_rules(cf, formulas, am, s -> haskey(knowns, s))
     isempty(rules) && return knowns
+    settable = settable_symbols(cf)   # after the guard: nothing above it needs the set
     if isnothing(targets)
         # include outputs of user formulas in targets so no user rule is dropped
         targets = settable ∪ Set(s for r in rules if _is_user_rule(r) for s in r.outsym)
@@ -642,16 +642,16 @@ guesses are inconsistent by construction.
 function extend_guesses_by_formulas!(guesses, defaults, cf, formulas;
                                      am=get_aliasmap(cf), t=NaN, targets=nothing,
                                      error_unresolvable=true, verbose=false, io=stdout)
+    # collect rules (user formulas + obs rules) before anything else, so a component with
+    # nothing to resolve pays for neither the seed nor the settable set
+    rules = _resolution_rules(cf, formulas, am, s -> haskey(guesses, s) || haskey(defaults, s))
+    isempty(rules) && return guesses
     settable = settable_symbols(cf)
-    if isnothing(targets)
-        targets = settable
-    end
+    isnothing(targets) && (targets = settable)
+
     # layered seed, `defaults` over `guesses` — the same lookup the guess pass always had
     seed = Dict{Symbol,Float64}(guesses)
     merge!(seed, defaults)
-    # collect rules (user formulas + obs rules)
-    rules = _resolution_rules(cf, formulas, am, seed, settable)
-    isempty(rules) && return guesses
 
     # the init output is bound, a pre-existing guess is not
     bound = Set{Symbol}(keys(defaults))
@@ -703,25 +703,31 @@ function _print_resolution(res, rules, knowns, settable; io, type="InitFormula",
 end
 
 """
-    _resolution_rules(cf, formulas, am, knowns, settable) -> Vector{ResolutionRule}
+    _resolution_rules(cf, formulas, am, hasvalue) -> Vector{ResolutionRule}
 
 The rule bucket to apply. Init stays cheap when there is nothing to resolve, so the bucket is
 non-empty only if
 
 - the user provided a formula, or
-- some value sits on a non-settable symbol — a `default` on the observable `y` of `y ~ -x`
-  reaches the state `x` only through the inverse rule.
+- some value sits on an observable — a `default` on the observable `y` of `y ~ -x` reaches the
+  state `x` only through the inverse rule.
+
+`hasvalue(s)` answers "does `s` carry a value", asked about the observables rather than the other
+way round: this runs per component on every `NWState`, so it must not build anything.
 
 Obs rules go first so a user formula wins the arbitration between two rules ready in the same
 pass.
 """
-function _resolution_rules(cf, formulas, am, knowns, settable)
+function _resolution_rules(cf, formulas, am, hasvalue)
     hasformulas = !isnothing(formulas) && !isempty(formulas)
-    if !hasformulas && all(s -> s ∈ settable, keys(knowns))
+    if !hasformulas && !any(hasvalue, obssym(cf))
         return ResolutionRule[]
     end
 
-    rules = collect(ResolutionRule, get_obsrules(cf))
+    obsrules = get_obsrules(cf)
+    rules = ResolutionRule[]
+    sizehint!(rules, length(obsrules) + (hasformulas ? length(formulas) : 0))
+    append!(rules, obsrules)
     if hasformulas
         for f in formulas
             push!(rules, ResolutionRule(f, am))
