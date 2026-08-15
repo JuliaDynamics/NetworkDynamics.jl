@@ -63,6 +63,10 @@ function _precedence(provenance::Symbol)
     throw(ArgumentError("Unknown value provenance :$provenance"))
 end
 
+# A rule is never mutated after construction, so copying one buys nothing, while deep-copying the
+# generated function inside it is very slow. Same deal as `System`/`Equation` in the MTK ext.
+dealias_metadata(r::ResolutionRule) = r
+
 # prefer the label, `rule for [:out…]` reads badly mid-sentence
 _rule_ref(r::ResolutionRule) = isnothing(r.label) ? "rule for $(r.outsym)" : "`$(r.label)`"
 
@@ -85,7 +89,8 @@ ResolutionRule(f::GuessFormula, am::AliasMap) =
 function _wrap_formula(f, am; provenance, optional)
     outsym = _canonical_names(f.outsym, am, f)
     sym = _canonical_names(f.sym, am, f)
-    origout, origin = f.outsym, f.sym
+    # tuples up front: SymbolicView would rebuild them on every call otherwise
+    origout, origin = Tuple(f.outsym), Tuple(f.sym)
     payload = function (out::Vector{Float64}, u::Vector{Float64})
         f.f(SymbolicView(out, origout), SymbolicView(u, origin))
         nothing
