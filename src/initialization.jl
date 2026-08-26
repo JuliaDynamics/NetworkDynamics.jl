@@ -238,6 +238,15 @@ function initialization_problem(cf::T,
             idxs = findall(!isequal(:none), bound_types)
             printstyled(io, " - Apply positivity/negativity conserving variable transformation on $(freesym[idxs]) to satisfy bounds.\n")
         end
+        # `u^2` has zero slope at zero, so a guess sitting exactly on the bound is a point the
+        # solver can never step away from. Move those a bit inside the bound instead.
+        for (s, bt) in zip(freesym, bound_types)
+            bt === :none && continue
+            (haskey(guesses, s) && iszero(guesses[s])) || continue
+            guesses[s] = bt === :pos ? 1e-4 : -1e-4
+            verbose && printstyled(io, " - Guess for :$s sits on the bound where the transformation \
+                cannot move it, start from $(guesses[s]) instead.\n")
+        end
         boundT! = (u) -> begin
             for i in eachindex(u, bound_types)
                 if bound_types[i] == :pos
@@ -514,6 +523,9 @@ by applying a coordinate transformation. This behavior can be suppressed by sett
 The following transformations are used:
 - (a, b) intervals where both a and b are positive are transformed to `u^2`/`sqrt(u)`
 - (a, b) intervals where both a and b are negative are transformed to `-u^2`/`sqrt(-u)`
+
+Both transformations are stationary at zero, so a guess of exactly `0` would keep the solver
+pinned to the bound. Such guesses are started a small distance inside the bound instead.
 """
 function initialize_component(cf;
                              defaults=get_defaults_dict(cf),

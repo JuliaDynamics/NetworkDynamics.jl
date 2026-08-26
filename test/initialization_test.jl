@@ -277,6 +277,43 @@ end
     @test b.allocs == 1
 end
 
+@testset "guess sitting exactly on a bound" begin
+    # The bound transformation is stationary at zero, so a guess of exactly 0 gives the solver a
+    # variable it cannot move at all -- it stays on the bound whatever the residual asks for.
+    # Lagrange multipliers of a complementarity formulation are the typical case: `guess=0`,
+    # `bounds=(0, Inf)`.
+    function multiplier_vertex(; target=0.5, bounds=(0, Inf))
+        vm = VertexModel(; f=(dx, x, in, p, t) -> (dx[1] = p[1] - target; nothing),
+                           g=1, sym=[:x => 0.0], psym=[:λ], insym=[:i], name=:on_bound)
+        set_default!(vm, :i, 0.0)
+        set_guess!(vm, :λ, 0.0)
+        set_bounds!(vm, :λ, bounds)
+        vm
+    end
+
+    s = initialize_component(multiplier_vertex(); verbose=false)
+    @test s[:λ] ≈ 0.5
+
+    # the offset is only for the transformed variables, and only reported when it happens
+    buf = IOBuffer()
+    initialize_component(multiplier_vertex(); verbose=true, io=buf)
+    @test contains(String(take!(buf)), "sits on the bound")
+
+    vm = multiplier_vertex()
+    set_guess!(vm, :λ, 0.1)
+    initialize_component(vm; verbose=true, io=buf)
+    @test !contains(String(take!(buf)), "sits on the bound")
+
+    # without the transformation the guess is not a stationary point and stays untouched
+    initialize_component(multiplier_vertex(); verbose=true, io=buf,
+                         apply_bound_transformation=false)
+    @test !contains(String(take!(buf)), "sits on the bound")
+
+    # same thing mirrored onto the negative side
+    vm = multiplier_vertex(; target=-0.5, bounds=(-Inf, 0))
+    @test initialize_component(vm; verbose=false)[:λ] ≈ -0.5
+end
+
 @testset "Test edge initialization" begin
     @mtkmodel StaticPowerLine begin
         @variables begin
