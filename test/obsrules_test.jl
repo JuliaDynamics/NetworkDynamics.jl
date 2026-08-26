@@ -46,6 +46,10 @@ RULES = get_obsrules(VM)
 # rules as `out => in` pairs, which is all most assertions below care about
 pairs_of(rules) = [(only(r.outsym) => r.sym) for r in rules]
 
+# a rule reads its variables in whatever order `get_variables` hands them back, so anything
+# with more than one input has to be checked without an order
+hasrule(rules, out, ins) = any(r -> only(r.outsym) == out && Set(r.sym) == Set(ins), rules)
+
 @testset "which equations become which rules" begin
     @test has_obsrules(VM)
     @test RULES isa Vector{ResolutionRule}
@@ -71,14 +75,12 @@ pairs_of(rules) = [(only(r.outsym) => r.sym) for r in rules]
 
     # the independent variable is an ordinary input, but never an output: it is an argument
     # of the model, not an unknown of it
-    @test (:timed => [:u_r, :t]) in P
+    @test hasrule(RULES, :timed, [:u_r, :t])
     @test !any(p -> first(p) == :t, P)
 
-    # a multi-root rule reads its variables in whatever order `get_variables` hands them back
-    summedrule = only(filter(r -> r.outsym == [:summed], RULES))
-    @test Set(summedrule.sym) == Set([:u_r, :u_i, :Vset])
+    @test hasrule(RULES, :summed, [:u_r, :u_i, :Vset])
     @test (:konst => Symbol[]) in P
-    @test (:P => [:u_r, :nl]) in P
+    @test hasrule(RULES, :P, [:u_r, :nl])
 
     # `:observed` stays exactly what `obsf` computes; the rules are a second view of the same
     # equations, never a rewrite of them
