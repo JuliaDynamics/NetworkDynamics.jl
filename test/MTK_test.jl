@@ -1323,9 +1323,9 @@ end
 
     @testset "conflicting formula targets" begin
         # two initf entries forcing the same raw target to different values is a compile
-        # error; two entries on different members of one alias class both compile and are
-        # reported by the init-time duplicate-writer check, once normalization has collapsed
-        # the class (formulas are ejected raw, all classification happens at init).
+        # error; two entries on different members of one alias class both compile, and the
+        # disagreement is caught at init time — as a value collision on the symbol the class
+        # canonicalizes onto (formulas are ejected raw, all classification happens at init).
         @component function conflict_inner(; name)
             @parameters a=1.0
             @variables begin
@@ -1349,8 +1349,19 @@ end
         @test length(get_initformulas(vm)) == 2
         err = try; initialize_component(vm; verbose=false); catch e; e; end
         @test err isa ArgumentError
-        @test occursin("Multiple InitFormulas set the same symbol", sprint(showerror, err))
+        msg = sprint(showerror, err)
+        @test occursin("Inconsistent initialization values", msg)
+        @test occursin(":c₊x", msg)   # the canonical name of the class both writers land on
     end
+end
+
+# The pins of the attached init formulas — the fact these testsets are after. A rule
+# canonicalizes its targets, so a formula writing an alias of a settable symbol lands on that
+# symbol and is an ordinary write; what is left without a slot is a pin.
+function _obs_targets(vm)
+    am, settable = get_aliasmap(vm), NetworkDynamics.settable_symbols(vm)
+    Set(s for f in get_initformulas(vm)
+          for s in NetworkDynamics.ResolutionRule(f, am).outsym if s ∉ settable)
 end
 
 @testset "set_initf: system-level init formulas" begin
@@ -1383,7 +1394,8 @@ end
         @named ctrl = pin_ctrl()
         vm = VertexModel(ctrl, [:i], [:o]; verbose=false)
         @test :pi₊y ∈ obssym(vm)
-        @test NetworkDynamics.pinned_obssyms(vm) == Set([:pi₊y])
+        # the formula targets the observable itself, no expansion onto its roots
+        @test _obs_targets(vm) == Set([:pi₊y])
 
         io = IOBuffer()
         state = initialize_component(vm;
@@ -1404,7 +1416,7 @@ end
         end
         @named outer = pin_outer()
         vm = VertexModel(outer, [:iin], [:oout]; verbose=false)
-        @test NetworkDynamics.pinned_obssyms(vm) == Set([:ctrl₊pi₊y])
+        @test _obs_targets(vm) == Set([:ctrl₊pi₊y])
         state = initialize_component(vm;
             default_overrides=Dict(:iin => 0.5, :oout => 1.0), verbose=false)
         @test state[:ctrl₊pi₊x] ≈ 0.3
@@ -1470,7 +1482,7 @@ end
         end
         @named ctrl = ctrl_aliasvar()
         vm = VertexModel(ctrl, [:i], [:o]; verbose=false)
-        @test NetworkDynamics.pinned_obssyms(vm) == Set([:y_wish])
+        @test _obs_targets(vm) == Set([:y_wish])
         state = initialize_component(vm;
             default_overrides=Dict(:i => 0.5, :o => 1.0), verbose=false)
         @test state[:pi₊x] ≈ 0.3
@@ -1630,10 +1642,10 @@ end
 end
 
 @testset "guessf for eliminated variables survives as a raw formula" begin
-    # `z` is algebraically eliminated (z = 2x) into a scaled-alias observable. The guess
-    # formula is ejected raw, targeting `z` as written; at init time `normalize` transports
-    # it onto the surviving symbol through the aliasmap. (This used to be skipped with a
-    # warning when formulas were resolved symbolically at compile time.)
+    # `z` is algebraically eliminated (z = 2x) into a scaled observable. The guess formula is
+    # ejected raw, targeting `z` as written; at init time the resolution graph carries it onto
+    # the surviving symbol. (This used to be skipped with a warning when formulas were resolved
+    # symbolically at compile time.)
     @component function vertex_with_eliminated_guessf(; name)
         @parameters u_init = 1.0
         @variables x(t) y(t) [guess=1.0] z(t) [guessf=2*u_init]
@@ -1646,10 +1658,11 @@ end
     f = only(get_guessformulas(vm))
     @test f.outsym == [:z]      # raw target, the alias key
     @test f.sym == [:u_init]
-    n = NetworkDynamics.normalize(f, get_aliasmap(vm), vm)
-    @test n.outsym == [:x]      # ... lands on the settable survivor at init time
+    # `z ~ 2x` is a scaled relation, not an alias, so no rename transports the guess onto the
+    # surviving state. The graph's inverse rule does: the formula writes :z, `x = z/2` takes it
+    # from there, and only then does a settable symbol carry the value.
     guesses = Dict{Symbol,Float64}()
-    NetworkDynamics.apply_guess_formulas!(guesses, Dict(:u_init => 1.0), [n])
+    NetworkDynamics.extend_guesses_by_formulas!(guesses, Dict(:u_init => 1.0), vm, [f])
     @test guesses[:x] ≈ 1.0     # z = 2x = 2*u_init  =>  x = u_init
 
     # the constant guess for `y` is preserved as plain metadata
@@ -1718,7 +1731,7 @@ end
     # Comparison is on the symbolic rhs, so identical definitions dedupe silently, while
     # genuinely conflicting ones warn (guesses) or error (bindings) per the `fail` kw.
     @variables a(t) b(t)
-    mk(target, rhs; weak=false) = (; src=rhs, target, rhs, input_symbolic=Any[], input_names=Symbol[], weak)
+    mk(target, rhs; weak=false, optional=false) = (; src=rhs, target, rhs, input_symbolic=Any[], input_names=Symbol[], weak, optional)
 
     # distinct targets: all kept
     @test length(mtkext._dedupe_resolved([mk(:x, a), mk(:y, b)]; fail=:warn, kind="G")) == 2
@@ -1739,6 +1752,10 @@ end
     end
     # two *weak* writers with differing rhs stay a genuine conflict
     @test_throws "conflicting definitions" mtkext._dedupe_resolved([mk(:x, a; weak=true), mk(:x, b; weak=true)]; fail=:error, kind="I")
+
+    # among identical definitions the required one survives, whichever way round they come
+    @test only(mtkext._dedupe_resolved([mk(:x, a; optional=true), mk(:x, a)]; fail=:error, kind="I")).optional == false
+    @test only(mtkext._dedupe_resolved([mk(:x, a), mk(:x, a; optional=true)]; fail=:error, kind="I")).optional == false
 
     # conflicting definitions (same target, differing rhs), fail=:warn → keep one + warn
     local kept
@@ -2139,7 +2156,9 @@ end
     end
 end
 
-@testset "AliasMap extraction" begin
+@testset "AliasMap and scaled relations" begin
+    # `_match_scaled_var` decides which equations `build_obsrules` can invert. It has nothing
+    # to do with the AliasMap: a scaled relation is not an alias.
     @testset "_match_scaled_var acceptance" begin
         @variables x(t) y(t)
         @parameters k V
@@ -2149,7 +2168,7 @@ end
         @test mtkext._match_scaled_var(2.5x)   == (2.5, :x)
         @test mtkext._match_scaled_var(-2.5x)  == (-2.5, :x)
         @test mtkext._match_scaled_var(x/2)    == (0.5, :x)
-        @test mtkext._match_scaled_var(V)      == (1.0, :V) # parameters are settable, so they alias
+        @test mtkext._match_scaled_var(V)      == (1.0, :V) # a parameter is an ordinary root
         # ...everything else stays an ordinary observable
         @test mtkext._match_scaled_var(x + 1)  === nothing # affine
         @test mtkext._match_scaled_var(x + y)  === nothing # sum
@@ -2162,12 +2181,15 @@ end
         @test mtkext._match_scaled_var(Num(1.0)) === nothing # no variable at all
     end
 
-    @testset "extraction from compiled component" begin
+    # The map holds the clusters `pick_best_alias_names` consolidated: several names for one
+    # variable. Everything the model merely *relates* stays out of it.
+    @testset "map from pick_best_alias_names" begin
         @mtkmodel AliasTestBus begin
             @variables begin
                 u_r(t) = 1.0
+                term_u_r(t)     # a second name for the state
+                meas_u_r(t)     # a third, one hop further out
                 θ(t)
-                scaled(t)
                 nl(t)
                 Vmeas(t)
                 i_r(t), [input=true]
@@ -2178,10 +2200,11 @@ end
             end
             @equations begin
                 Dt(u_r) ~ -u_r + i_r
-                θ ~ -u_r        # sign flipped alias of a state
-                scaled ~ 2*θ    # chain: scaled = 2*θ = -2*u_r
-                nl ~ u_r^2      # not an alias
-                Vmeas ~ Vset    # alias of a parameter
+                term_u_r ~ u_r  # identity alias
+                meas_u_r ~ term_u_r
+                θ ~ -u_r        # sign flipped: a relation between two variables, not an alias
+                nl ~ u_r^2      # not an alias either
+                Vmeas ~ Vset    # a parameter defines an observable, it does not alias it
                 P ~ u_r + nl
             end
         end
@@ -2189,23 +2212,23 @@ end
         vm = VertexModel(atb, [:i_r], [:P])
 
         am = get_aliasmap(vm)
-        @test am == AliasMap(:θ      => (-1.0, :u_r),
-                             :scaled => (-2.0, :u_r), # factors multiply along the chain
-                             :Vmeas  => (1.0, :Vset))
-        @test !haskey(am, :nl)
+        @test am == AliasMap(:term_u_r => :u_r, :meas_u_r => :u_r)
 
-        # structural invariants: aliases are observables, roots are settable
+        # structural invariants: aliases are observables, canonicals are settable
         settable = NetworkDynamics.settable_symbols(vm)
         @test all(k -> k ∈ NetworkDynamics.obssym(vm), keys(am))
         @test all(k -> k ∉ settable, keys(am))
-        @test all(v -> v[2] ∈ settable, values(am))
+        @test all(v -> v ∈ settable, values(am))
 
-        # the extracted factors must agree with what the obs function actually computes
+        # members of a class carry the same value, which is what makes the map a rename
         set_default!(vm, :i_r, 0.5)
         set_default!(vm, :u_r, 0.8)
-        for (alias, (factor, canonical)) in am
-            @test get_initial_state(vm, alias) ≈ factor * get_initial_state(vm, canonical)
+        for (alias, canonical) in am
+            @test get_initial_state(vm, alias) ≈ get_initial_state(vm, canonical)
         end
+
+        # what the model relates but does not rename is a rule of the graph, not a map entry
+        @test !haskey(am, :θ) && !haskey(am, :nl) && !haskey(am, :Vmeas)
     end
 
     @testset "no aliases in ordinary components" begin

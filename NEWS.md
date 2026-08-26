@@ -1,5 +1,24 @@
 # NetworkDynamics Release Notes
 
+## v1.2.0 Changelog
+
+Initialization-time formula resolution is now a single dependency graph
+([#387](https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/387)). Init formulas, guess
+formulas, observed equations and output equations all describe the same thing — `out = f(in…)` —
+so they go into one bucket of rules and the execution order falls out of which symbols are
+already known. This replaces the old approach of expanding observables into the formulas that
+read them.
+
+- **Optional `InitFormula`s** (kwarg `optional=true`, `set_initf(…; optional=true)`, or the
+  `[initf_optional = <expr>]` variable option): a formula whose inputs never become known is
+  skipped instead of failing the initialization. Where `weak` yields on the *target* (a value is
+  already there), `optional` yields on the *inputs*. The two are independent and combinable.
+- An observable reached through a *scaled* alias (`y ~ -x`) is now resolved by the graph in both
+  directions instead of being folded into the aliasmap, so which way the scaling applies is
+  decided per query. A value written on `y` still reaches the state `x`, on the init path and on
+  the `NWState` path alike.
+- **`bounds` written on a scaled alias no longer move onto the underlying state.** That is a theoretical breakage from v1.1 but i am sure nothing depends on it.
+
 ## v1.1.0 Changelog
 
 Cross-component initialization metadata for per-unit / base-value handling: three separate

@@ -21,7 +21,8 @@ using SymbolicIndexingInterface: SymbolicIndexingInterface as SII
 using NetworkDynamics: NetworkDynamics, set_metadata!, ComponentPostprocessing,
                        PureFeedForward, FeedForward, NoFeedForward, PureStateMap,
                        MultipleOutputWrapper, inline_repr, multiline_repr,
-                       AliasMap, set_aliasmap!, settable_symbols,
+                       AliasMap, set_aliasmap!,
+                       ResolutionRule, set_obsrules!,
                        assert_initformula_compat, assert_guessformula_compat
 import NetworkDynamics: VertexModel, EdgeModel, AnnotatedSym, InitFormula, add_initformula!, GuessFormula, add_guessformula!
 
@@ -135,7 +136,8 @@ function VertexModel(
             obsf, mass_matrix, ff=gen.fftype, name, extin=extin_nwidx,
             allow_output_sym_clash=true, kwargs...)
     set_metadata!(c, :observed, gen.observed)
-    set_aliasmap!(c, extract_aliasmap(c, gen.observed))
+    set_aliasmap!(c, gen.aliasmap)
+    set_obsrules!(c, build_obsrules(gen.observed, gen.outputeqs, gen.aliasmap, gen.iv))
     set_metadata!(c, :equations, gen.equations)
     set_metadata!(c, :full_equations, gen.full_equations)
     set_metadata!(c, :outputeqs, gen.outputeqs)
@@ -292,7 +294,8 @@ function EdgeModel(
             obsf, mass_matrix, ff=gen.fftype, name, extin=extin_nwidx,
             allow_output_sym_clash=true, kwargs...)
     set_metadata!(c, :observed, gen.observed)
-    set_aliasmap!(c, extract_aliasmap(c, gen.observed))
+    set_aliasmap!(c, gen.aliasmap)
+    set_obsrules!(c, build_obsrules(gen.observed, gen.outputeqs, gen.aliasmap, gen.iv))
     set_metadata!(c, :equations, gen.equations)
     set_metadata!(c, :full_equations, gen.full_equations)
     set_metadata!(c, :outputeqs, gen.outputeqs)
@@ -395,7 +398,22 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
 
     # always expand connections before simplification
     _sys = ModelingToolkitBase.expand_connections(_sys)
-    iv = only(independent_variables(_sys))
+    _ivcand = independent_variables(_sys)
+    if length(_ivcand) == 1
+        iv = only(independent_variables(_sys))
+        # lots of places just assume time is called `:t` instead of threading the name around,
+        # so assert it once here
+        getname(iv) === :t || throw(ArgumentError(
+            "The independent variable of $(nameof(_sys)) is :$(getname(iv)); NetworkDynamics \
+            requires it to be named `t`."))
+    elseif length(_ivcand) > 1
+        throw(ArgumentError(
+            "The system $(nameof(_sys)) has multiple independent variables: \
+            $(getname.(_ivcand)). NetworkDynamics only supports a single independent variable."))
+    else
+        # its probably t
+        iv = ModelingToolkitBase.t_nounits
+    end
 
     # assume_io_coupling means, we expect a direct dependency chain output -> input
     # we fake this, by replacing all inputs with `input + implicit_output(outputs...)`
@@ -419,7 +437,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     remove_implicit_output_fn!(eqs)
     remove_implicit_output_fn!(obseqs_sorted)
 
-    eqs, obseqs_sorted, states = pick_best_alias_names(eqs, obseqs_sorted, states, alloutputs, allinputs; verbose)
+    eqs, obseqs_sorted, states, aliasmap = pick_best_alias_names(eqs, obseqs_sorted, states, alloutputs, allinputs; verbose)
 
     # check that there are no rhs differentials in the equations
     if !isempty(rhs_differentials(vcat(eqs, obseqs_sorted)))
@@ -540,6 +558,8 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         full_equations = [eq.lhs ~ fixpoint_sub(eq.rhs, obs_subs) for eq in eqs],
         full_outputeqs = [eq.lhs ~ fixpoint_sub(eq.rhs, obs_subs) for eq in outeqs],
         observed=obseqs_sorted,
+        aliasmap,
+        iv,
         odesystem_simplified=sys,
         params,
         unused_params,

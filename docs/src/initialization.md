@@ -266,12 +266,12 @@ Reach for `set_initf` when the rule comes from *outside* the block that owns the
 
 The precedence above — formula beats default — is the right one for *deriving* a quantity: the formula knows more than whatever standalone value the component happened to ship with. It is the wrong one for *defaulting* a quantity, where the rule should read "use this **unless** the user pinned something else". That inverse precedence is what a **weak** formula expresses.
 
-A weak formula is **dropped** at initialization when its target is already backed by
+A weak formula **yields** when its target is already backed by
 
 - a `default` on the component (or a `default_overrides` entry passed to the init call), or
 - a strong (non-weak) formula writing the same symbol.
 
-Otherwise it fires exactly like a plain `InitFormula`. Because dropping is all-or-nothing, a weak formula must have exactly **one** output symbol — a multi-output weak rule could strand a sibling output that nothing else pins, so it is rejected at construction. Two weak formulas competing for the same target with nothing to break the tie is a genuine ambiguity and errors.
+Otherwise it fires exactly like a plain `InitFormula`. Yielding is decided per target, so a weak formula writing several symbols can lose one of them and still deliver the rest. Two weak formulas competing for the same target both fire; if they disagree, the mismatch is reported as an inconsistency.
 
 The core-API spelling is a keyword on the macro (and on the [`InitFormula`](@ref) constructor):
 
@@ -291,6 +291,36 @@ sys = set_initf(sys, sub.V_base => V_nom; weak=true)  # ... attached from outsid
 ```
 
 The check is deliberately against `default` only, never `init`: a weak formula persists its own output as `init` metadata, so consulting `init` would make it block itself whenever the component is re-initialized.
+
+#### [Optional Formulas: Rules That May Not Run](@id optional-initformulas)
+
+Weakness is about the *target*: the value is already there, so step aside. **Optional** is the other side of the same coin — it is about the *inputs*. An optional formula whose inputs never become known is simply skipped, where an ordinary formula would fail the initialization with "could not be resolved".
+
+The two flags are independent and can be combined.
+
+This is what lets a reusable block ship **both directions** of a relation and let the surrounding model decide which one runs. A lag block whose steady state is `y = K*u` knows the output from the input and the input from the output; which of the two is computable depends on where the outer model anchors the operating point, and the block cannot know that:
+
+```julia
+@component function Lag(; name)
+    @parameters K=1.5 T=2.0
+    @variables u(t)
+    @variables y(t) [initf_optional = K * u]   # forward:  output from input
+    @variables x(t) [guess=0.0]
+    sys = System([D(x) ~ (u - x)/T, y ~ K*x], t; name)
+    set_initf(sys, u => y / K; optional=true)   # backward: input from output
+end
+```
+
+Anchor the output and the backward rule fires; anchor the input and the forward one does; anchor neither and both are skipped without complaint. Whichever direction runs first, the other one lands on a value that is already there and becomes a consistency check of the pair against the model's own equations.
+
+The core-API spelling is `optional=true`, on the macro and on the [`InitFormula`](@ref) constructor:
+
+```@example compinit
+optional_formula = @initformula optional=true begin
+    :y = :K * :u
+end
+nothing #hide
+```
 
 #### [Backward-Flow Initialization: Formulas That Find Each Other](@id backward-flow-init)
 
@@ -346,8 +376,7 @@ Guess formulas operate later in the initialization pipeline than init formulas. 
 While InitFormulas use defaults to update other defaults, GuessFormulas update guesses based on other defaults and guesses (if some variable has a default and guess defined, the default takes precedence).
 They act **after** the InitFormulas, thus having access to the updated defaults.
 
-Similar to InitFormulas, NetworkDyanmics makes sure that there are no circular dependencies between guess formulas and you can't have multiple guess formulas updating the same variables.
-It performs some topological sorting on multiple guesses to update in order.
+Similar to InitFormulas, NetworkDynamics works out the order in which the guess formulas have to run from their inputs and outputs. Two guess formulas writing the same variable are allowed — a guess is a starting point, not an assertion, so refining one is legitimate and which of the two wins is unspecified.
 
 **Basic Usage**: Use the [`@guessformula`](@ref) macro with the same assignment syntax as init formulas:
 
@@ -412,7 +441,7 @@ The scope keyword names the neighbor to read from:
 | `:src` / `:dst` | edge parameters | the src / dst vertex of that edge |
 | `:hub` | vertex parameters of an [injector node](@ref injector-nodes) | the vertex the injector hangs off, via its [`LoopbackConnection`](@ref) |
 
-Resolution happens once the network exists — as a pre-pass of [`initialize_componentwise`](@ref) and of the [`NWState`](@ref) constructor — and the copied value is baked into a [weak](@ref weak-initformulas) [`InitFormula`](@ref). That yields the intended semantics: the parameter follows its neighbor but stays independently settable, because any `default` on it (or a `default_overrides` entry) drops the weak formula. On the source side a `default_overrides` entry is honored as well, so a network-level base-power override propagates to everything that follows it.
+Resolution happens once the network exists — as a pre-pass of [`initialize_componentwise`](@ref) and of the [`NWState`](@ref) constructor — and the copied value is baked into a [weak](@ref weak-initformulas) [`InitFormula`](@ref). That yields the intended semantics: the parameter follows its neighbor but stays independently settable, because any `default` on it (or a `default_overrides` entry) makes the weak formula yield. On the source side a `default_overrides` entry is honored as well, so a network-level base-power override propagates to everything that follows it.
 
 Misuse is reported rather than silently ignored: `default_from` on a non-parameter, a scope that does not fit the component type (`:src`/`:dst` on a vertex, `:hub` on an edge or on a non-injector vertex), or a source symbol which is not a parameter of the source vertex all **error**. A resolvable source that simply carries no value yet is **skipped**, leaving the target's own default in place.
 

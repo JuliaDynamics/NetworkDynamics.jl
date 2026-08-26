@@ -277,6 +277,43 @@ end
     @test b.allocs == 1
 end
 
+@testset "guess sitting exactly on a bound" begin
+    # The bound transformation is stationary at zero, so a guess of exactly 0 gives the solver a
+    # variable it cannot move at all -- it stays on the bound whatever the residual asks for.
+    # Lagrange multipliers of a complementarity formulation are the typical case: `guess=0`,
+    # `bounds=(0, Inf)`.
+    function multiplier_vertex(; target=0.5, bounds=(0, Inf))
+        vm = VertexModel(; f=(dx, x, in, p, t) -> (dx[1] = p[1] - target; nothing),
+                           g=1, sym=[:x => 0.0], psym=[:λ], insym=[:i], name=:on_bound)
+        set_default!(vm, :i, 0.0)
+        set_guess!(vm, :λ, 0.0)
+        set_bounds!(vm, :λ, bounds)
+        vm
+    end
+
+    s = initialize_component(multiplier_vertex(); verbose=false)
+    @test s[:λ] ≈ 0.5
+
+    # the offset is only for the transformed variables, and only reported when it happens
+    buf = IOBuffer()
+    initialize_component(multiplier_vertex(); verbose=true, io=buf)
+    @test contains(String(take!(buf)), "sits on the bound")
+
+    vm = multiplier_vertex()
+    set_guess!(vm, :λ, 0.1)
+    initialize_component(vm; verbose=true, io=buf)
+    @test !contains(String(take!(buf)), "sits on the bound")
+
+    # without the transformation the guess is not a stationary point and stays untouched
+    initialize_component(multiplier_vertex(); verbose=true, io=buf,
+                         apply_bound_transformation=false)
+    @test !contains(String(take!(buf)), "sits on the bound")
+
+    # same thing mirrored onto the negative side
+    vm = multiplier_vertex(; target=-0.5, bounds=(-Inf, 0))
+    @test initialize_component(vm; verbose=false)[:λ] ≈ -0.5
+end
+
 @testset "Test edge initialization" begin
     @mtkmodel StaticPowerLine begin
         @variables begin
@@ -822,120 +859,7 @@ end
     end
 end
 
-@testset "apply_guess_formulas! tests - KEY DIFFERENCE: Layered lookup" begin
-    using NetworkDynamics: apply_guess_formulas!
-
-    @testset "Basic formula application with layered lookup" begin
-        # Test that defaults take priority over guesses
-        gf1 = @guessformula :voltage_mag = sqrt(:u_r^2 + :u_i^2)
-
-        defaults = Dict(:u_r => 3.0, :u_i => 4.0)
-        guesses = Dict(:u_r => 100.0, :u_i => 200.0)  # Should be ignored
-
-        apply_guess_formulas!(guesses, defaults, [gf1]; verbose=true)
-
-        # Formula should use defaults (3.0, 4.0), not guesses (100.0, 200.0)
-        @test guesses[:voltage_mag] ≈ 5.0  # sqrt(3^2 + 4^2)
-        # Defaults remain unchanged
-        @test defaults[:u_r] == 3.0
-        @test defaults[:u_i] == 4.0
-        # Original guesses remain unchanged
-        @test guesses[:u_r] == 100.0
-        @test guesses[:u_i] == 200.0
-    end
-
-    @testset "Layered lookup: defaults prioritized, guesses fallback" begin
-        # Test that formulas read from defaults first, then guesses
-        gf1 = @guessformula :result = :from_default + :from_guess
-
-        defaults = Dict(:from_default => 10.0)  # Only one value in defaults
-        guesses = Dict(:from_guess => 5.0)      # Other value in guesses
-
-        apply_guess_formulas!(guesses, defaults, [gf1]; verbose=true)
-
-        @test guesses[:result] ≈ 15.0  # 10 (from defaults) + 5 (from guesses)
-        # Original dicts unchanged except for new result
-        @test defaults[:from_default] == 10.0
-        @test guesses[:from_guess] == 5.0
-    end
-
-    @testset "GuessFormulas write to guesses, not defaults" begin
-        # Test that GuessFormulas only modify guesses dict
-        gf1 = @guessformula :new_value = :input * 3
-
-        defaults = Dict(:input => 7.0)
-        guesses = Dict{Symbol,Float64}()
-
-        apply_guess_formulas!(guesses, defaults, [gf1]; verbose=true)
-
-        # New value goes to guesses
-        @test guesses[:new_value] ≈ 21.0
-        # Defaults unchanged
-        @test defaults == Dict(:input => 7.0)
-    end
-
-    @testset "Overwriting existing guesses" begin
-        # Test that formulas can overwrite existing guesses
-        gf1 = @guessformula :existing_guess = :new_value * 3
-
-        defaults = Dict(:new_value => 7.0)
-        guesses = Dict(:existing_guess => 100.0)  # Will be overwritten
-
-        apply_guess_formulas!(guesses, defaults, [gf1]; verbose=true)
-
-        # updating while also having a default
-        defaults[:existing_guess] = 42
-        apply_guess_formulas!(guesses, defaults, [gf1]; verbose=true)
-
-        @test guesses[:existing_guess] ≈ 21.0  # 7 * 3, overwrites original 100.0
-    end
-
-    @testset "Error handling" begin
-        # Test missing input symbol (not in defaults or guesses)
-        gf_missing = @guessformula :output = :missing_symbol + 1
-        defaults = Dict(:other => 5.0)
-        guesses = Dict{Symbol,Float64}()
-
-        @test_throws ArgumentError apply_guess_formulas!(guesses, defaults, [gf_missing]; verbose=false)
-
-        # Test NaN input in defaults
-        gf_nan = @guessformula :output = :input + 1
-        defaults_nan = Dict(:input => NaN)
-        guesses_nan = Dict{Symbol,Float64}()
-
-        @test_throws ArgumentError apply_guess_formulas!(defaults_nan, guesses_nan, [gf_nan]; verbose=false)
-    end
-
-    @testset "Complex dependency chain with layered lookup" begin
-        # Test dependencies reading from both defaults and guesses
-        gf_root = @guessformula :shared = :from_default * :from_guess
-        gf_branch1 = @guessformula :result1 = :shared + 1
-        gf_branch2 = @guessformula :temp = :shared - 1
-        gf_final = @guessformula :result2 = :temp * 3
-
-        defaults = Dict(:from_default => 4.0)
-        guesses = Dict(:from_guess => 2.0)
-
-        apply_guess_formulas!(guesses, defaults, [gf_final, gf_branch1, gf_root, gf_branch2]; verbose=false)
-
-        @test guesses[:shared] ≈ 8.0      # 4 * 2
-        @test guesses[:result1] ≈ 9.0     # 8 + 1
-        @test guesses[:temp] ≈ 7.0        # 8 - 1
-        @test guesses[:result2] ≈ 21.0    # 7 * 3
-        # Defaults unchanged
-        @test defaults == Dict(:from_default => 4.0)
-    end
-
-    @testset "Circular dependency detection" begin
-        # This should fail during topological sorting
-        gf1 = @guessformula :a = :b + 1
-        gf2 = @guessformula :b = :a + 1
-        defaults = Dict(:start => 1.0)
-        guesses = Dict{Symbol,Float64}()
-
-        @test_throws "Circular dependency detected between 2 GuessFormulas" apply_guess_formulas!(guesses, defaults, [gf1, gf2]; verbose=false)
-    end
-
+@testset "GuessFormula metadata" begin
     @testset "has_guessformula, set_guessformula!, and get_guessformulas" begin
         swing_model = Lib.swing_mtk()
 
@@ -1033,224 +957,6 @@ end
 
         @test get_guess(vm, :swing₊V) ≈ sqrt(1.0^2 + 0.1^2)
         @test get_guess(vm, :swing₊θ) ≈ atan(0.1, 1.0)
-    end
-end
-
-@testset "Topological sorting of InitFormulas" begin
-    using NetworkDynamics: topological_sort_formulas
-
-    @testset "Independent formulas" begin
-        # Test formulas with no dependencies - order should be preserved
-        f1 = @initformula :a = :x + 1
-        f2 = @initformula :b = :y + 2
-        f3 = @initformula :c = :z * 3
-
-        formulas = [f1, f2, f3]
-        sorted = topological_sort_formulas(formulas)
-
-        @test [f.outsym for f in sorted] == [[:c], [:b], [:a]]
-    end
-
-    @testset "Linear dependency chain" begin
-        # A depends on B, B depends on C: C → B → A
-        f_a = @initformula :final = :intermediate + 10    # depends on B
-        f_b = @initformula :intermediate = :base * 2      # depends on C
-        f_c = @initformula :base = :input + 1             # independent
-
-        formulas = [f_a, f_b, f_c]  # wrong order
-        sorted = topological_sort_formulas(formulas)
-
-        # Should be reordered as C, B, A
-        @test [f.outsym[1] for f in sorted] == [:base, :intermediate, :final]
-    end
-
-    @testset "Tree dependencies" begin
-        # Multiple formulas depend on root formula
-        f_root = @initformula :shared = :input * 2
-        f_branch1 = @initformula :result1 = :shared + 1
-        f_branch2 = @initformula :result2 = :shared - 1
-        f_branch3 = @initformula :result3 = :shared * 3
-
-        formulas = [f_branch2, f_branch1, f_root, f_branch3]  # mixed order
-        sorted = topological_sort_formulas(formulas)
-
-        # Root should come first
-        @test sorted[1].outsym == [:shared]
-        # Other three can be in any order after root
-        rest_outputs = Set([f.outsym[1] for f in sorted[2:end]])
-        @test rest_outputs == Set([:result1, :result2, :result3])
-    end
-
-    @testset "Complex dependency graph" begin
-        # More complex: A→B→D, A→C→D
-        f_a = @initformula :start = :input
-        f_b = @initformula :path1 = :start + 1
-        f_c = @initformula :path2 = :start * 2
-        f_d = @initformula :end = :path1 + :path2
-
-        formulas = [f_d, f_c, f_b, f_a]  # reverse order
-        sorted = topological_sort_formulas(formulas)
-
-        # A must come first, D must come last
-        @test sorted[1].outsym == [:start]
-        @test sorted[end].outsym == [:end]
-
-        # B and C must come after A but before D
-        middle_outputs = Set([f.outsym[1] for f in sorted[2:end-1]])
-        @test middle_outputs == Set([:path1, :path2])
-    end
-
-    @testset "Error cases" begin
-        # Test output symbol conflicts
-        f1 = @initformula :conflict = :x + 1
-        f2 = @initformula :conflict = :y + 2  # Same output symbol
-        @test_throws ArgumentError topological_sort_formulas([f1, f2])
-
-        # Test self-dependency - should fail at construction time
-        @test_throws ArgumentError @initformula :self = :self + 1
-
-        # Test circular dependency
-        f_cycle1 = @initformula :a = :b + 1
-        f_cycle2 = @initformula :b = :a + 1
-        @test_throws ArgumentError topological_sort_formulas([f_cycle1, f_cycle2])
-
-        # Test longer cycle A→B→C→A
-        f_a = @initformula :a = :c + 1
-        f_b = @initformula :b = :a + 1
-        f_c = @initformula :c = :b + 1
-        @test_throws ArgumentError topological_sort_formulas([f_a, f_b, f_c])
-    end
-
-    @testset "Edge cases" begin
-        # Empty vector
-        @test topological_sort_formulas(InitFormula[]) == InitFormula[]
-
-        # Single formula
-        f = @initformula :single = :input
-        @test topological_sort_formulas([f]) == [f]
-
-        # Two independent formulas
-        f1 = @initformula :first = :x
-        f2 = @initformula :second = :y
-        sorted = topological_sort_formulas([f1, f2])
-        @test length(sorted) == 2
-        @test sorted[1].outsym ∈ [[:first], [:second]]
-        @test sorted[2].outsym ∈ [[:first], [:second]]
-        @test sorted[1].outsym != sorted[2].outsym
-    end
-end
-
-@testset "apply_init_formulas! tests" begin
-    using NetworkDynamics: apply_init_formulas!, topological_sort_formulas
-
-    @testset "Basic formula application" begin
-        # Test basic functionality with independent formulas
-        f1 = @initformula :voltage_mag = sqrt(:u_r^2 + :u_i^2)
-        f2 = @initformula :power = :u_r * :i_r + :u_i * :i_i
-
-        defaults = Dict(:u_r => 3.0, :u_i => 4.0, :i_r => 2.0, :i_i => 1.0)
-
-        result = apply_init_formulas!(defaults, [f1, f2]; verbose=true)
-
-        @test result[:voltage_mag] ≈ 5.0  # sqrt(3^2 + 4^2)
-        @test result[:power] ≈ 10.0       # 3*2 + 4*1
-        @test result[:u_r] == 3.0         # original values preserved
-        @test result[:u_i] == 4.0
-        @test result[:i_r] == 2.0
-        @test result[:i_i] == 1.0
-    end
-
-    @testset "Overwriting existing defaults" begin
-        # Test that formulas can overwrite existing defaults
-        f1 = @initformula :existing = :new_value * 3
-
-        defaults = Dict(:existing => 100.0, :new_value => 7.0)
-
-        # Test with verbose output
-        result = apply_init_formulas!(defaults, [f1]; verbose=true)
-
-        @test result[:existing] ≈ 21.0  # 7 * 3, overwrites original 100.0
-        @test result[:new_value] == 7.0
-    end
-
-    @testset "Multiple output formula" begin
-        # Test formula with multiple outputs
-        f_multi = @initformula begin
-            :mag = sqrt(:x^2 + :y^2)
-            :angle = atan(:y, :x)
-        end
-
-        defaults = Dict(:x => 1.0, :y => 1.0)
-
-        result = apply_init_formulas!(defaults, [f_multi]; verbose=true)
-
-        @test result[:mag] ≈ sqrt(2.0)
-        @test result[:angle] ≈ π/4
-    end
-
-    @testset "Error handling" begin
-        # Test missing input symbol
-        f_missing = @initformula :output = :missing_symbol + 1
-        defaults = Dict(:other => 5.0)
-
-        @test_throws ArgumentError apply_init_formulas!(defaults, [f_missing]; verbose=false)
-
-        # Test NaN input
-        f_nan = @initformula :output = :input + 1
-        defaults_nan = Dict(:input => NaN)
-
-        @test_throws ArgumentError apply_init_formulas!(defaults_nan, [f_nan]; verbose=false)
-
-        # Test missing input
-        f_missing_val = @initformula :output = :input + 1
-        defaults_missing = Dict(:input => missing)
-
-        @test_throws ArgumentError apply_init_formulas!(defaults_missing, [f_missing_val]; verbose=false)
-
-        # Test nothing input
-        f_nothing = @initformula :output = :input + 1
-        defaults_nothing = Dict(:input => nothing)
-
-        @test_throws ArgumentError apply_init_formulas!(defaults_nothing, [f_nothing]; verbose=false)
-    end
-
-    @testset "Complex dependency chain" begin
-        # Test more complex dependencies: root → branch1, root → branch2 → final
-        f_root = @initformula :shared = :input * 2
-        f_branch1 = @initformula :result1 = :shared + 1
-        f_branch2 = @initformula :temp = :shared - 1
-        f_final = @initformula :result2 = :temp * 3
-
-        defaults = Dict(:input => 4.0)
-
-        # Mix up the order to test topological sorting
-        result = apply_init_formulas!(defaults, [f_final, f_branch1, f_root, f_branch2]; verbose=false)
-
-        @test result[:shared] ≈ 8.0      # 4 * 2
-        @test result[:result1] ≈ 9.0     # 8 + 1
-        @test result[:temp] ≈ 7.0        # 8 - 1
-        @test result[:result2] ≈ 21.0    # 7 * 3
-    end
-
-    @testset "Empty formulas list" begin
-        # Test with empty formulas list
-        defaults = Dict(:x => 1.0, :y => 2.0)
-        original = copy(defaults)
-
-        result = apply_init_formulas!(defaults, []; verbose=false)
-
-        @test result == original  # Should be unchanged
-    end
-
-    @testset "Circular dependency detection" begin
-        # This should fail during topological sorting
-        f1 = @initformula :a = :b + 1
-        f2 = @initformula :b = :a + 1
-        defaults = Dict(:start => 1.0)
-
-        @test_throws ArgumentError apply_init_formulas!(defaults, [f1, f2]; verbose=false)
-        # the message spells the cycle out rather than just its existence
-        @test_throws ["Circular dependency detected between 2 InitFormulas", "writes [:a], read by"] apply_init_formulas!(defaults, [f1, f2]; verbose=false)
     end
 end
 

@@ -14,6 +14,7 @@ gen₊terminal₊u_r`).  This pass:
    (less deeply nested).
 4. Applies the substitution `nonmain → main` throughout `eqs`, `obseqs`, and `states`,
    and reinserts canonical `nonmain ~ main` alias observations.
+5. Returns the resulting [`AliasMap`](@ref) alongside them.
 """
 function pick_best_alias_names(eqs, obseqs, states, outputs, inputs; verbose)
     # 1. Find the alias pairs
@@ -60,12 +61,14 @@ function pick_best_alias_names(eqs, obseqs, states, outputs, inputs; verbose)
     end
     alias_subs = Dict()
     new_alias_obs = Equation[]
+    alias_pairs_kept = Tuple{ST,ST}[] # (alias, main), filtered into the AliasMap below
     for group in groups
         sorted = sort!(collect(group), by=sortf)
         main = first(sorted)
         for r in @view(sorted[2:end])
             alias_subs[r] = main
             push!(new_alias_obs, r ~ main)
+            push!(alias_pairs_kept, (r, main))
         end
         if verbose
             str *= "\n  $main replaces $(inline_repr(sorted[2:end]))"
@@ -87,7 +90,22 @@ function pick_best_alias_names(eqs, obseqs, states, outputs, inputs; verbose)
     states_new = Symbolics.substitute.(states, Ref(alias_subs))
     allunique(states_new) || error("Alias elimination resulted in duplicate state names: $(inline_repr(states_new))! This should never happen.")
 
-    eqs_new, obseqs_new, states_new
+    # 5. The alias map, from the very groups picked above.
+    aliasmap = let
+        # settable symbols keep their slot and are never recorded as an alias of something else.
+        # They stay un-aliased and their `alias ~ main` relation becomes an ordinary rule pair.
+        settable = union(inset, outset)
+        # a canonical needs somewhere to live: a slot, or at least a defining equation
+        known = union(Set(states_new), settable, Set(eq.lhs for eq in obseqs_new))
+        am = AliasMap()
+        for (alias, main) in alias_pairs_kept
+            (alias ∈ settable || main ∉ known) && continue
+            am[getname(alias)] = getname(main)
+        end
+        am
+    end
+
+    eqs_new, obseqs_new, states_new, aliasmap
 end
 """
     _alias_connected_components(pairs)

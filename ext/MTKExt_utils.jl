@@ -333,11 +333,11 @@ function NetworkDynamics.set_mtk_defaults(sys::System, pairs)
 end
 
 # docstring lives in utils.jl
-function NetworkDynamics.set_initf(sys::System, pairs::Pair...; weak::Bool=false)
+function NetworkDynamics.set_initf(sys::System, pairs::Pair...; weak::Bool=false, optional::Bool=false)
     isempty(pairs) && return sys
     _assert_single_variable_targets("set_initf", pairs)
     existing = SymbolicUtils.getmetadata(sys, NetworkDynamics.SystemInitFormulas, _sysformula_entries())
-    combined = vcat(existing, [(; target=unwrap(t), expr=unwrap(e), weak) for (t, e) in pairs])
+    combined = vcat(existing, [(; target=unwrap(t), expr=unwrap(e), weak, optional) for (t, e) in pairs])
     SymbolicUtils.setmetadata(sys, NetworkDynamics.SystemInitFormulas, combined)
 end
 
@@ -346,13 +346,13 @@ function NetworkDynamics.set_guessf(sys::System, pairs::Pair...)
     isempty(pairs) && return sys
     _assert_single_variable_targets("set_guessf", pairs)
     existing = SymbolicUtils.getmetadata(sys, NetworkDynamics.SystemGuessFormulas, _sysformula_entries())
-    combined = vcat(existing, [(; target=unwrap(t), expr=unwrap(e), weak=false) for (t, e) in pairs])
+    combined = vcat(existing, [(; target=unwrap(t), expr=unwrap(e), weak=false, optional=false) for (t, e) in pairs])
     SymbolicUtils.setmetadata(sys, NetworkDynamics.SystemGuessFormulas, combined)
 end
 
-# system-level init/guess formulas are stored as `(; target, expr, weak)` entries so the weak
-# flag rides alongside the recipe (see `_collect_formula_metadata`).
-_sysformula_entries() = @NamedTuple{target::Any, expr::Any, weak::Bool}[]
+# system-level init/guess formulas are stored as `(; target, expr, weak, optional)` entries so the
+# formula flags ride alongside the recipe (see `_collect_formula_metadata`).
+_sysformula_entries() = @NamedTuple{target::Any, expr::Any, weak::Bool, optional::Bool}[]
 
 function _assert_single_variable_targets(fname, pairs)
     for (target, _) in pairs
@@ -466,9 +466,24 @@ core API's `weak` kwarg is preferred where it applies.
 """
 struct VariableInitFormulaWeak end
 
-Symbolics.option_to_metadata_type(::Val{:initf})      = VariableInitFormula
-Symbolics.option_to_metadata_type(::Val{:initf_weak}) = VariableInitFormulaWeak
-Symbolics.option_to_metadata_type(::Val{:guessf})     = VariableGuessFormula
+"""
+    VariableInitFormulaOptional
+
+Metadata type behind the `initf_optional` variable option:
+`@variables x(t) [initf_optional = <expr>]` declares an *optional* [`InitFormula`](@ref) —
+identical to `initf`, except that failing to resolve its inputs is not an error, the formula is
+simply skipped. A block can therefore ship both directions of a relation and let whichever one
+the surrounding model anchors do the work.
+
+Weak and optional are independent (`weak` yields to a value that is already there, `optional`
+gives up when the inputs never arrive); combine them through [`set_initf`](@ref).
+"""
+struct VariableInitFormulaOptional end
+
+Symbolics.option_to_metadata_type(::Val{:initf})          = VariableInitFormula
+Symbolics.option_to_metadata_type(::Val{:initf_weak})     = VariableInitFormulaWeak
+Symbolics.option_to_metadata_type(::Val{:initf_optional}) = VariableInitFormulaOptional
+Symbolics.option_to_metadata_type(::Val{:guessf})         = VariableGuessFormula
 
 """
     ParameterBoundTo
@@ -575,10 +590,10 @@ end
     collect_initf(sys)
     collect_guessf(sys)
 
-Collect the `initf`/`initf_weak`/`guessf` variable metadata and the
+Collect the `initf`/`initf_weak`/`initf_optional`/`guessf` variable metadata and the
 [`set_initf`](@ref)/[`set_guessf`](@ref) system metadata of `sys` and all its subsystems into a
-list of `(; target, expr, weak)` entries, namespaced to the level of `sys` (`weak` is always
-`false` for guesses). Deliberately a list, not a dict: a target carrying both a variable-level
+list of `(; target, expr, weak, optional)` entries, namespaced to the level of `sys` (both flags
+are always `false` for guesses). Deliberately a list, not a dict: a target carrying both a variable-level
 and a system-level recipe must surface as two entries, so `_dedupe_resolved` can dedupe them
 when identical and error/warn when they conflict — never silently prefer one.
 
@@ -591,13 +606,14 @@ the same strategy MTK's own `bindings`/`guesses` accessors use. `set_initf`/`set
 are written in the local names of the system they were attached to, so the same recursion
 namespaces them correctly too.
 """
-# `weak_var_type` is the metadata type whose presence marks a *weak* formula (`initf_weak`);
-# `nothing` for guesses, which have no weak variant.
-collect_initf(sys)  = _collect_formula_metadata(sys, VariableInitFormula,  NetworkDynamics.SystemInitFormulas;  weak_var_type=VariableInitFormulaWeak)
+# `flag_var_types` maps a flag of the collected formulas to the metadata type spelling it
+# (`initf_weak`, `initf_optional`); empty for guesses, which have no such variants.
+collect_initf(sys)  = _collect_formula_metadata(sys, VariableInitFormula,  NetworkDynamics.SystemInitFormulas;
+                                                flag_var_types=(; weak=VariableInitFormulaWeak, optional=VariableInitFormulaOptional))
 collect_guessf(sys) = _collect_formula_metadata(sys, VariableGuessFormula, NetworkDynamics.SystemGuessFormulas)
 
-function _collect_formula_metadata(sys, VarMetaType, SysMetaKey; weak_var_type=nothing)
-    entries = @NamedTuple{target::Any, expr::Any, weak::Bool}[]
+function _collect_formula_metadata(sys, VarMetaType, SysMetaKey; flag_var_types=(;))
+    entries = _sysformula_entries()
     # a subsystem variable referenced in this level's equations shows up in this level's
     # unknowns too, still carrying its metadata — but with the expression in the *subsystem's*
     # local names. Only the recursion below sees it in the right namespace, so it must be
@@ -614,21 +630,22 @@ function _collect_formula_metadata(sys, VarMetaType, SysMetaKey; weak_var_type=n
         u ∈ subvars && continue
         if SymbolicUtils.hasmetadata(u, VarMetaType)
             expr = _fix_mtkmodel_formula(sys, SymbolicUtils.getmetadata(u, VarMetaType), u, _localvars)
-            push!(entries, (; target=u, expr, weak=false))
+            push!(entries, (; target=u, expr, weak=false, optional=false))
         end
-        if !isnothing(weak_var_type) && SymbolicUtils.hasmetadata(u, weak_var_type)
-            expr = _fix_mtkmodel_formula(sys, SymbolicUtils.getmetadata(u, weak_var_type), u, _localvars)
-            push!(entries, (; target=u, expr, weak=true))
+        for (flag, VarFlagType) in pairs(flag_var_types)
+            SymbolicUtils.hasmetadata(u, VarFlagType) || continue
+            expr = _fix_mtkmodel_formula(sys, SymbolicUtils.getmetadata(u, VarFlagType), u, _localvars)
+            push!(entries, (; target=u, expr, weak=(flag === :weak), optional=(flag === :optional)))
         end
     end
     for e in SymbolicUtils.getmetadata(sys, SysMetaKey, _sysformula_entries())
-        push!(entries, (; target=unwrap(e.target), expr=unwrap(e.expr), weak=e.weak))
+        push!(entries, (; target=unwrap(e.target), expr=unwrap(e.expr), weak=e.weak, optional=e.optional))
     end
     for subsys in ModelingToolkitBase.get_systems(sys)
-        for e in _collect_formula_metadata(subsys, VarMetaType, SysMetaKey; weak_var_type)
+        for e in _collect_formula_metadata(subsys, VarMetaType, SysMetaKey; flag_var_types)
             push!(entries, (; target=ModelingToolkitBase.namespace_expr(e.target, subsys),
                               expr=ModelingToolkitBase.namespace_expr(e.expr, subsys),
-                              weak=e.weak))
+                              weak=e.weak, optional=e.optional))
         end
     end
     entries
@@ -683,7 +700,7 @@ function _metadata_to_formulas(entries, ::Type{FT}; fail::Symbol, kind::String) 
 
     resolved = Any[]
     for e in entries
-        r = _resolve_formula(e.target, e.expr; kind, weak=e.weak)
+        r = _resolve_formula(e.target, e.expr; kind, weak=e.weak, optional=e.optional)
         r === nothing && continue
         push!(resolved, r)
     end
@@ -742,10 +759,10 @@ end
 
 # Shape one `lhs => rhs` pair into a `(target, rhs, inputs)` form, or skip it (with a
 # warning) when it structurally cannot become a formula. Deliberately *raw*: target and
-# inputs keep the names the user wrote, so classification and observable expansion happen at
-# init time in `normalize` — one resolution path, shared with hand-attached formulas.
+# inputs keep the names the user wrote and the resolution graph sorts them out at init time,
+# the same way it does for hand-attached formulas.
 # Existence of the raw names is checked at attach time (`add_initformula_lenient!` etc.).
-function _resolve_formula(lhs_sym, rhs_expr; kind, weak::Bool=false)
+function _resolve_formula(lhs_sym, rhs_expr; kind, weak::Bool=false, optional::Bool=false)
     lhs_vars = get_variables(lhs_sym)
     if length(lhs_vars) != 1 || !isequal(only(lhs_vars), unwrap(lhs_sym))
         @warn "$kind target $lhs_sym is not a single variable. Skip."
@@ -756,13 +773,13 @@ function _resolve_formula(lhs_sym, rhs_expr; kind, weak::Bool=false)
     input_symbolic = collect(get_variables(rhs_expr))
     input_names    = Symbol[getname(s) for s in input_symbolic]
     # no raw self-dependency (the formula constructors throw on it); a dependency hidden
-    # behind an observable is only detectable at init time, where `normalize` reports it
+    # behind an observable only shows up at init time, as a rule that never fires
     if target ∈ input_names
         @warn "$kind for $lhs_sym depends on its own target. Skip."
         return nothing
     end
 
-    (; src=lhs_sym, target, rhs=unwrap(rhs_expr), input_symbolic, input_names, weak)
+    (; src=lhs_sym, target, rhs=unwrap(rhs_expr), input_symbolic, input_names, weak, optional)
 end
 
 """
@@ -816,8 +833,9 @@ function _dedupe_resolved(resolved; fail::Symbol, kind)
         # a weak entry yields to a strong writer on the same target: drop the weak ones whenever
         # a strong one exists (any rhs), so weak+strong never reads as a conflict below
         any(g -> !g.weak, group) && (group = filter(g -> !g.weak, group))
-        # sort strong-first, then by rhs: among identical duplicates a strong writer wins
-        chosen = first(sort(group; by = g -> (g.weak, repr(g.rhs))))
+        # sort strong-first, required before optional, then by rhs: among identical duplicates
+        # the one with the fewest escape hatches wins, rather than whoever came first
+        chosen = first(sort(group; by = g -> (g.weak, g.optional, repr(g.rhs))))
         length(group) == 1 && (push!(kept, chosen); continue)
         if all(g -> isequal(g.rhs, chosen.rhs), group)
             push!(kept, chosen)
@@ -849,64 +867,14 @@ function _build_formula(::Type{FT}, r) where {FT}
     # `repr` prints a numeric coefficient times a variable as juxtaposition (`3x`); with the
     # variable now a `:sym` that would read as a range (`3:x`), so restore the explicit `*`.
     rhsstring = replace(rhsstring, r"(?<=[0-9.]):(?=[A-Za-z_])" => " * :")
-    # bake the (resolved, post-dedupe) `weak` flag straight into the header so `prettyprint`
-    # is the complete copy-pasteable recipe — see `_show_recipe`. guessf has no weak variant.
-    header = (FT === InitFormula && r.weak) ? "$macroname weak=true" : macroname
+    # bake the (resolved, post-dedupe) flags straight into the header so `prettyprint`
+    # is the complete copy-pasteable recipe — see `_show_recipe`. guessf has no such variants.
+    opts = FT === InitFormula ? [o for (o, on) in (("weak=true", r.weak), ("optional=true", r.optional)) if on] : String[]
+    header = isempty(opts) ? macroname : "$macroname $(join(opts, " "))"
     prettyprint = "$header begin\n    $(repr(r.target)) = $(rhsstring)\nend"
     label = "$(r.target) = $(replace(repr(r.rhs), r"\(t\)" => ""))"
-    FT === InitFormula ? FT(f, [r.target], r.input_names, prettyprint; weak=r.weak, label) :
+    FT === InitFormula ? FT(f, [r.target], r.input_names, prettyprint; weak=r.weak, optional=r.optional, label) :
                          FT(f, [r.target], r.input_names, prettyprint; label)
-end
-
-"""
-    extract_aliasmap(c::ComponentModel, obseqs::Vector{Equation})
-
-Extracts the `AliasMap` of a compiled component from its observed equations, i.e.
-every observable which is a pure `factor * symbol` alias.
-
-Note that `pick_best_alias_names` already consolidates *identity* alias groups onto a single
-representative and re-inserts direct `alias ~ main` observations; what remains for us are the
-scaled/sign-flipped aliases (`get_alias` matches no coefficient) plus chains through them.
-
-A chain either reaches a settable symbol — the usual case — or bottoms out on an observable
-whose own equation is not a pure alias (a sum, say). That terminal observable is a valid
-canonical too: it is where `generate_obs_expansion` bottoms out anyway, so recording it
-unifies the names of a class whose shared value has no storage slot at all. See
-[`AliasMap`](@ref) for what that buys and what it costs.
-
-Anything that is not a pure scaled alias — affine (`x + 1`), sums, nonlinear terms, symbolic
-coefficients — stays an ordinary observable.
-"""
-function extract_aliasmap(c::NetworkDynamics.ComponentModel, obseqs)
-    settable = settable_symbols(c)
-    obs = NetworkDynamics.obssym(c)
-
-    # one-step links only; resolved transitively below
-    steps = Dict{Symbol,Tuple{Float64,Symbol}}()
-    for eq in obseqs
-        m = _match_scaled_var(eq.rhs)
-        isnothing(m) && continue
-        steps[getname(eq.lhs)] = m
-    end
-
-    am = AliasMap()
-    for alias in keys(steps)
-        # a settable symbol must never be recorded as an alias of another settable symbol;
-        # keep both un-aliased instead (`assert_aliasmap_compat` would reject the entry)
-        if alias ∈ settable
-            @debug "Not aliasing :$alias, it is a settable symbol of the component."
-            continue
-        end
-        factor, canonical = _resolve_alias(alias, steps, settable, Symbol[])
-        # `a ~ 2*t` matches as a scaled alias of the independent variable, which is neither
-        # settable nor an observable — no canonical, hence no entry
-        if canonical ∉ settable && canonical ∉ obs
-            @debug "Not aliasing :$alias, its root :$canonical is neither settable nor an observable."
-            continue
-        end
-        am[alias] = (factor, canonical)
-    end
-    am
 end
 
 # Match `ex` against `factor * var` with a numeric, nonzero `factor` and a single variable.
@@ -932,94 +900,76 @@ function _match_scaled_var(ex)
     (Float64(factor), getname(v))
 end
 
-# Follow one-step links until the chain ends, multiplying factors along the way
-# (`obs2 ~ -obs1`, `obs1 ~ 2x` ⇒ `(-2.0, :x)`). It ends on the first settable symbol, or else
-# on the first symbol without a further link — the terminal observable, which is the
-# canonical of a class that has no settable member. Only ever called for an `s` which has a
-# link, so it always resolves.
-function _resolve_alias(s, steps, settable, visiting)
-    if s ∈ visiting
-        error("Cyclic alias chain detected at :$s via $(join(visiting, " → ")). \
-               Observed equations are topologically sorted, this should never happen.")
-    end
-    factor, target = steps[s]
-    (target ∈ settable || !haskey(steps, target)) && return (factor, target)
+"""
+    build_obsrules(obseqs, outputeqs, am::AliasMap, iv) -> Vector{ResolutionRule}
 
-    push!(visiting, s)
-    rest = _resolve_alias(target, steps, settable, visiting)
-    pop!(visiting)
-    (factor * rest[1], rest[2])
+Turns the symbolic equations of a compiled component into the `:derived` rules of the resolution
+graph: one per observed and per output equation, plus the inverse of every relation `y ~ k*x`.
+
+Both directions are kept because which end of `i_r ~ -term_i_r` determines the other depends on
+the query, not on the model. Time is never inverted onto, it is an argument of the model.
+
+This is a separate view of `:observed`/`:outputeqs` and never rewrites them.
+"""
+function build_obsrules(obseqs, outputeqs, am::AliasMap, iv)
+    ivname = getname(iv)
+    rules = ResolutionRule[]
+    for eq in Iterators.flatten((obseqs, outputeqs))
+        haskey(am, getname(eq.lhs)) && continue # the re-inserted `alias ~ main` observation
+        _push_eq_rules!(rules, eq, ivname)
+    end
+    rules
 end
 
-"""
-    generate_obs_expansion(cf::ComponentModel, syms::Vector{Symbol}; stop_at) -> (roots, f)
+function _push_eq_rules!(rules, eq, ivname)
+    lhsname = getname(eq.lhs)
 
-MTK implementation of the core stub; see `NetworkDynamics.generate_obs_expansion` for the
-contract. Expansion is a plain `fixpoint_sub` against the stored `:observed` equations:
-they are acyclic, and the output-defining equations are absent from them, so substituting
-to a fixpoint necessarily bottoms out on settable symbols (plus the independent variable).
-Equations whose lhs name is in `stop_at` are excluded from the substitution set, so the
-fixpoint additionally bottoms out on those symbols.
-
-The independent variable is split off from the roots and passed to the closure separately —
-callers source root values from the defaults/guesses dicts, where a `t` has no business
-being. Symbols with no observed equation never enter the symbolic part at all; they are
-copied through by index, which spares us reconstructing a symbolic variable for them.
-"""
-function NetworkDynamics.generate_obs_expansion(cf::NetworkDynamics.ComponentModel, syms::Vector{Symbol};
-                                                stop_at=Set{Symbol}())
-    if !NetworkDynamics.has_metadata(cf, :observed)
-        throw(ArgumentError("Cannot expand $syms: component :$(cf.name) has no `:observed` \
-                             metadata. Only components compiled from ModelingToolkit carry \
-                             the symbolic observed equations needed for expansion."))
-    end
-    obseqs = NetworkDynamics.get_metadata(cf, :observed)
-    obseqs = filter(eq -> getname(eq.lhs) ∉ stop_at, obseqs)
-    subs = OrderedDict(eq.lhs => eq.rhs for eq in obseqs)
-    byname = Dict(getname(eq.lhs) => eq.lhs for eq in obseqs)
-
-    obsidx = findall(s -> haskey(byname, s), syms)
-    plainidx = findall(s -> !haskey(byname, s), syms)
-    exprs = [fixpoint_sub(subs[byname[syms[i]]], subs) for i in obsidx]
-
-    iv = only(independent_variables(NetworkDynamics.get_metadata(cf, :odesystem_simplified)))
-    # `get_variables` hands back a set, so collect before flattening
-    symroots = unique(reduce(vcat, [collect(get_variables(ex)) for ex in exprs]; init=[]))
-    filter!(v -> !isequal(v, iv), symroots)
-    rootnames = getname.(symroots)
-
-    _warn_unsettable_roots(cf, rootnames, stop_at)
-
-    # plain symbols are their own roots; `unique` because a formula may well read both a
-    # settable symbol and an alias of it
-    roots = unique(vcat(rootnames, syms[plainidx]))
-    pos = Dict(s => i for (i, s) in enumerate(roots))
-    symrootpos = [pos[n] for n in rootnames]
-    plainpos = [pos[syms[i]] for i in plainidx]
-
-    g = isempty(exprs) ? nothing : build_function(exprs, symroots, iv; expression=Val(false))[1]
-    n = length(syms)
-    expand = function (rootvals, t)
-        out = Vector{Float64}(undef, n)
-        isnothing(g) || (out[obsidx] .= g(view(rootvals, symrootpos), t))
-        for (k, i) in enumerate(plainidx)
-            out[i] = rootvals[plainpos[k]]
+    m = _match_scaled_var(eq.rhs)
+    if !isnothing(m)
+        factor, varname = m
+        if varname == lhsname
+            # `out ~ out` may appear -> skip
+            isone(factor) && return rules
+            _self_reference_error(eq)
         end
-        out
+        push!(rules, _derived_rule(_scaled_payload(factor), lhsname, [varname]))
+        # `ramp ~ 2t` must not invert
+        if varname != ivname
+            push!(rules, _derived_rule(_scaled_payload(inv(factor)), varname, [lhsname];
+                                       label="inverse of :$lhsname"))
+        end
+        return rules
     end
-    (roots, expand)
+
+    vars = collect(get_variables(eq.rhs))
+    if isempty(vars)
+        val = unwrap_const(Symbolics.value(eq.rhs))
+        if val isa Number
+            # `Float64` so all constant payloads share one closure type, see `_const_payload`
+            push!(rules, _derived_rule(_const_payload(Float64(val)), lhsname, Symbol[]))
+        end
+        return rules
+    end
+
+    syms = getname.(vars)
+    lhsname ∈ syms && _self_reference_error(eq)
+
+    f = build_function([eq.rhs], vars; expression=Val(false))[2]
+    push!(rules, _derived_rule(f, lhsname, syms))
 end
 
-# Mirrors the `obs_deps ⊆ params ∪ inputs ∪ unknowns` warning in `generate_io_function`: a
-# root that is not settable cannot be sourced from the defaults dict, so the formula reading
-# it will skip. Warn rather than throw — the skip is already diagnosed downstream. Symbols
-# the expansion was asked to stop at are deliberate roots, not accidents — never warn on them.
-function _warn_unsettable_roots(cf, rootnames, stop_at)
-    unsettable = setdiff(rootnames, settable_symbols(cf), stop_at)
-    isempty(unsettable) && return nothing
-    @warn "Observable expansion for :$(cf.name) bottomed out on non-settable symbol(s) \
-           $(collect(unsettable)). Formulas reading them will be skipped."
-end
+_self_reference_error(eq) =
+    error("Equation $eq is self-referential: its lhs appears in its rhs. Such an equation \
+           constrains its lhs rather than defining it and must not be an observed or output \
+           equation; the lhs has to be defined in terms of other variables/parameters/observables.")
+
+# most observed equations have one of these two shapes, so give them a hand-written closure
+# instead of a compiled one. One closure each means one type each, however many rules there are.
+_scaled_payload(factor) = (out, u) -> (out[1] = factor * u[1]; nothing)
+_const_payload(value) = (out, _) -> (out[1] = value; nothing)
+
+_derived_rule(f, out, syms; label=nothing) =
+    ResolutionRule(f, [out], syms; provenance=:derived, optional=true, label)
 
 function NetworkDynamics.multiline_repr(eqs::Vector{Equation}; prefix="")
     lines = map(eqs) do eq

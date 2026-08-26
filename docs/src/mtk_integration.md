@@ -244,61 +244,13 @@ VertexModel(kirchhoff, [:i_sum], [:v], assume_io_coupling=true)
 nothing # hide
 ```
 
-### Troubleshooting: Derivatives in RHS
-Closely related to the fully implicit outputs are situations where **derivatives of input** states appear on the right hand side of equations.
-
-Let's consider the case where we want to model an inductance to ground in the electrical network
-example we started above:
-```@example mtk
-@mtkmodel InductanceToGround begin
-    @components begin
-        p = NWTerminal()
-    end
-    @variables begin
-        i(t), [description="Current through inductor", output=true]
-    end
-    @parameters begin
-        L = 1.0
-    end
-    @equations begin
-        p.i ~ i
-        L*D(i) ~ p.v
-    end
-end
-@named ind = InductanceToGround()
-nothing #hide
-```
-When we try to build this model, we get an error:
-```@example mtk
-try #hide
-VertexModel(ind, [:p₊i], [:p₊v])
-catch e #hide
-    @assert e isa NetworkDynamics.RHSDifferentialsError #hide
-    printstyled("ERROR: ", color=:light_red, bold=true) #hide
-    Base.showerror(IOContext(stdout, :color => true), e) #hide
-end #hide
-nothing #hide
-```
-Which can be solved by adding the `assume_io_coupling=true` flag:
-```@example mtk
-VertexModel(ind, [:p₊i], [:p₊v], assume_io_coupling=true)
-```
-What happens is, that MTK solves `p.i ~ i` for `i` and plugs that into the second equation,
-which requires the derivative of our input `p.i`! Passing `assume_io_coupling=true` essentially
-inserts a fake dependency of that equation on the output `p.v`:
-```
-p.i + implicit_output(p.v) ~ i
-```
-Therefore, MTK cannot resolve for `i` anymore and leaves the equation as a constraint.
-
-
 !!! note "Be careful with non-feed-forward edges"
     Using `implicit_output` and `assume_io_coupling` **assumes** that there is some direct feedback mechanism $input = f(output)$.
     That is not always the case!
-    For example, consider a small electrical network where the edge itself is modeled as an inductance.
-    In that case, both sides of `p.i ~ i` are defined as a differential equation and thus smooth.
+    For example, consider a node model with a current balance $0 = i_{edge} + i_{node}$ in a small electrical network where the edge itself is modeled as an inductance.
+    In that case, both currents are defined by differential equations and thus smooth.
     You *cannot* fulfill this constraint by changing the voltage.
-    In those scenarios, you'd need to introduce a capacitor to ground at the node model, relaxing the constraint $0 = i_{edge} + i_{node}$ to something like $C\,\frac{d}{dt}v_{node} = i_{edge} + i_{node}$.
+    In those scenarios, you'd need to introduce a capacitor to ground at the node model, relaxing the constraint to something like $C\,\frac{d}{dt}v_{node} = i_{edge} + i_{node}$.
 
 ## Register Postprocessing Functions
 MTK models are "composite" by design, i.e. your toplevel model might consist of multiple internal components.

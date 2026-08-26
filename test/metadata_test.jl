@@ -524,7 +524,7 @@ end
     cf = Lib.swing_mtk()
 
     @testset "roundtrip" begin
-        am = AliasMap(:Pdamping => (-1.0, :ω))
+        am = AliasMap(:Pdamping => :ω)
         set_aliasmap!(cf, am)
         @test has_aliasmap(cf)
         @test get_aliasmap(cf) == am
@@ -543,28 +543,24 @@ end
 
     @testset "check rejects invalid maps" begin
         # canonical target is not settable
-        @test_throws ArgumentError set_aliasmap!(cf, AliasMap(:Pdamping => (1.0, :nope)))
-        # canonical target is an observable, which is not settable either
-        @test_throws ArgumentError set_aliasmap!(cf, AliasMap(:Pdamping => (1.0, :Pdamping)))
+        @test_throws ArgumentError set_aliasmap!(cf, AliasMap(:Pdamping => :nope))
+        # a canonical observable must be terminal, not itself an alias key
+        @test_throws ArgumentError set_aliasmap!(cf, AliasMap(:Pdamping => :Pdamping))
         # alias key is itself settable
-        @test_throws ArgumentError set_aliasmap!(cf, AliasMap(:θ => (1.0, :ω)))
-        # degenerate factors
-        @test_throws ArgumentError set_aliasmap!(cf, AliasMap(:Pdamping => (0.0, :ω)))
-        @test_throws ArgumentError set_aliasmap!(cf, AliasMap(:Pdamping => (Inf, :ω)))
-        @test_throws ArgumentError set_aliasmap!(cf, AliasMap(:Pdamping => (NaN, :ω)))
+        @test_throws ArgumentError set_aliasmap!(cf, AliasMap(:θ => :ω))
         # wrong type
-        @test_throws ArgumentError set_aliasmap!(cf, Dict(:Pdamping => :ω))
+        @test_throws ArgumentError set_aliasmap!(cf, Dict(:Pdamping => 1.0))
         @test !has_aliasmap(cf) # none of the above may have been stored
 
         # check=false bypasses validation
-        set_aliasmap!(cf, AliasMap(:θ => (0.0, :nope)); check=false)
-        @test get_aliasmap(cf) == AliasMap(:θ => (0.0, :nope))
+        set_aliasmap!(cf, AliasMap(:θ => :nope); check=false)
+        @test get_aliasmap(cf) == AliasMap(:θ => :nope)
         delete_aliasmap!(cf)
     end
 
     @testset "network forwarding" begin
         nw = basenetwork()
-        am = AliasMap(:Pdamping => (-1.0, :ω))
+        am = AliasMap(:Pdamping => :ω)
         set_aliasmap!(nw, VIndex(1), am)
         @test has_aliasmap(nw, VIndex(1))
         @test get_aliasmap(nw, VIndex(1)) == am

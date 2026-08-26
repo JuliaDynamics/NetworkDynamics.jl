@@ -24,7 +24,7 @@ using SciMLBase: VectorContinuousCallback, CallbackSet, DiscreteCallback
 using DiffEqCallbacks: DiffEqCallbacks
 using DiffEqBase: BrownFullBasicInit
 using MacroTools: postwalk, @capture
-using ConstructionBase: ConstructionBase, setproperties
+using ConstructionBase: ConstructionBase
 using Accessors: Accessors, @set
 using ADTypes: AutoForwardDiff, AutoFiniteDiff, AutoReverseDiff
 using DifferentiationInterface: DifferentiationInterface as DI
@@ -92,6 +92,8 @@ export @guessformula, GuessFormula
 include("init_formulas.jl")
 
 include("alias_normalization.jl")
+
+include("init_resolution.jl")
 
 # spinners for initialization
 include("spinners.jl")

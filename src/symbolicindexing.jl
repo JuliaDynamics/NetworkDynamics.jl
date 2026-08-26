@@ -179,38 +179,39 @@ function NWState(thing;
 
     return s
 end
-# Values and formulas are alias-normalized here for the same reason `initialize_component`
-# does it: which member of an alias class a value was written against is an accident of MTK's
-# reduction, and must not decide whether the value survives. Without it the `valid_keys`
-# filter below would silently drop a default placed on an alias, and a formula reading an
-# observable would look for roots the dict still spells under their alias names.
-#
-# Both are no-ops with an empty aliasmap (the non-MTK case), see `normalize`.
+# Values are alias-normalized here, like in `initialize_component`: which member of an alias
+# class a value was written against should not decide whether it survives the `valid_keys`
+# filter below. Does nothing without an aliasmap.
 function _get_appropriate_dict(cidx, cm; guess, apply_formulas, verbose, additional_initformula=nothing)
     am = get_aliasmap(cm)
+    # states and parameters: all an `NWState` can hold, hence both what the passes below aim at
+    # and what survives the filter at the end
+    valid_keys = Set(vcat(sym(cm), psym(cm)))
     defaults = normalize_valuedict(am, get_defaults_or_inits_dict(cm); what=:default, verbose)
     # fold the network-resolved `default_from` weak formulas (passed per component by the
     # constructor) into the component's own init formulas, so a `default_from` copy also
     # materializes on reconstruction — same combined set `initialize_component` uses.
     metadata_initf = has_initformula(cm) ? get_initformulas(cm) : nothing
     combined_initf = apply_formulas ? collect_formulas(metadata_initf, additional_initformula) : nothing
-    if !isnothing(combined_initf)
-        verbose && println("Applying InitFormulas for $(cidx) ($(cm.name))...")
-        extend_knowns_by_formulas!(defaults, cm, combined_initf; am, error_unresolvable=false, verbose)
+    if apply_formulas
+        verbose && !isnothing(combined_initf) && println("Applying InitFormulas for $(cidx) ($(cm.name))...")
+        # called even without formulas: a `default` on a scaled alias only reaches its canonical
+        # symbol through the graph, and that has to happen before `valid_keys` drops it
+        extend_knowns_by_formulas!(defaults, cm, combined_initf;
+                                   am, targets=valid_keys, error_unresolvable=false, verbose)
     end
     if guess
         guesses = normalize_valuedict(am, get_guesses_dict(cm); what=:guess, on_conflict=:keepfirst, verbose)
-        if apply_formulas && has_guessformula(cm)
-            verbose && println("Applying GuessFormulas for $(cidx) ($(cm.name))...")
-            extend_guesses_by_formulas!(guesses, defaults, cm, get_guessformulas(cm);
-                                        am, init_pinned=pinned_obssyms(combined_initf, cm),
-                                        error_unresolvable=false, verbose)
+        if apply_formulas
+            guessf = has_guessformula(cm) ? get_guessformulas(cm) : nothing
+            verbose && !isnothing(guessf) && println("Applying GuessFormulas for $(cidx) ($(cm.name))...")
+            # unconditional for the same reason as the init pass above
+            extend_guesses_by_formulas!(guesses, defaults, cm, guessf;
+                                        am, targets=valid_keys, error_unresolvable=false, verbose)
         end
         defaults = merge(guesses, defaults) # defaults overwrite guesses
     end
-    # limit dict to only psym and sym of component; this is also what discards the
-    # init-time scratch values of pinned observables
-    valid_keys = Set(vcat(sym(cm), psym(cm)))
+    # this filter is also what discards the init-time scratch values of pinned observables
     filter!(p -> p.first ∈ valid_keys, defaults)
 end
 

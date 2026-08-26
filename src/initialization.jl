@@ -238,6 +238,15 @@ function initialization_problem(cf::T,
             idxs = findall(!isequal(:none), bound_types)
             printstyled(io, " - Apply positivity/negativity conserving variable transformation on $(freesym[idxs]) to satisfy bounds.\n")
         end
+        # `u^2` has zero slope at zero, so a guess sitting exactly on the bound is a point the
+        # solver can never step away from. Move those a bit inside the bound instead.
+        for (s, bt) in zip(freesym, bound_types)
+            bt === :none && continue
+            (haskey(guesses, s) && iszero(guesses[s])) || continue
+            guesses[s] = bt === :pos ? 1e-4 : -1e-4
+            verbose && printstyled(io, " - Guess for :$s sits on the bound where the transformation \
+                cannot move it, start from $(guesses[s]) instead.\n")
+        end
         boundT! = (u) -> begin
             for i in eachindex(u, bound_types)
                 if bound_types[i] == :pos
@@ -514,6 +523,9 @@ by applying a coordinate transformation. This behavior can be suppressed by sett
 The following transformations are used:
 - (a, b) intervals where both a and b are positive are transformed to `u^2`/`sqrt(u)`
 - (a, b) intervals where both a and b are negative are transformed to `-u^2`/`sqrt(-u)`
+
+Both transformations are stationary at zero, so a guess of exactly `0` would keep the solver
+pinned to the bound. Such guesses are started a small distance inside the bound instead.
 """
 function initialize_component(cf;
                              defaults=get_defaults_dict(cf),
@@ -562,21 +574,17 @@ function initialize_component(cf;
     metadata_initformulas = has_initformula(cf) ? get_initformulas(cf) : nothing
     combined_initformulas = collect_formulas(metadata_initformulas, additional_initformula)
 
-    # The pin-set is a property of the complete formula set and must be known before any
-    # formula is normalized: readers stop their input expansion at every observable some
-    # other formula of this very init writes. Init formulas run first and must not depend
-    # on a guess writer, so their frontier contains the init pins only; guess formulas see
-    # both (init pins through the defaults-before-guesses lookup, guess pins from guesses).
-    pinned = pinned_obssyms(combined_initformulas, cf)
+    # observables which already carry a value before the pass. Afterwards a formula is the only
+    # other thing that can have put one there, which is how the check below tells them apart.
+    predefined_obs = Set(s for s in keys(defaults) if s ∈ obssym(cf))
 
-    # seed `defaults` (default-only here) with the resolved formula outputs; `pinned` is reused by
-    # the guess block below, so it stays computed in this scope and is threaded in.
-    extend_knowns_by_formulas!(defaults, cf, combined_initformulas; am, t, pinned, verbose, io)
+    # seed `defaults` (default-only here) with everything the resolution graph derives
+    extend_knowns_by_formulas!(defaults, cf, combined_initformulas; am, t, verbose, io)
 
     metadata_guessformulas = has_guessformula(cf) ? get_guessformulas(cf) : nothing
     combined_guessformulas = collect_formulas(metadata_guessformulas, additional_guessformula)
-    # guess frontier = init pins (reused from above) ∪ guess pins; see `extend_guesses_by_formulas!`
-    extend_guesses_by_formulas!(guesses, defaults, cf, combined_guessformulas; am, t, init_pinned=pinned, verbose, io)
+    # second graph over the same obs rules, rooted in the full output of the init pass
+    extend_guesses_by_formulas!(guesses, defaults, cf, combined_guessformulas; am, t, verbose, io)
 
     metadata_constraint = has_initconstraint(cf) ? get_initconstraints(cf) : nothing
     combined_constraint = merge_initconstraints(metadata_constraint, additional_initconstraint)
@@ -693,7 +701,7 @@ function initialize_component(cf;
         broken_obs = broken_observable_defaults(cf, init_state, observable_defaults; t)
         if !isempty(broken_obs)
             broken_msgs = map(broken_obs) do (sym, def, val)
-                origin = sym ∈ pinned ? "pinned by InitFormula" : "default"
+                origin = sym ∈ predefined_obs ? "default" : "pinned by InitFormula"
                 "  $sym = $val ($origin: $def)"
             end
             fullmsg = "Initialized model has observables that differ from their specified values:" *

@@ -98,14 +98,14 @@ function Base.show(io::IO, ::MIME"text/plain", @nospecialize(c::InitConstraint))
     _show_recipe(io, c)
 end
 
-# `prettyprint` is the complete authored recipe — a weak `InitFormula`'s header already carries
-# `weak=true` (baked in at construction, see `_formula_macro`/`_build_formula`), so show just
-# prints it. Without one (raw constructor) fall back to `repr`.
+# `prettyprint` is the complete authored recipe — a weak or optional `InitFormula`'s header
+# already carries the flag (baked in at construction, see `_formula_macro`/`_build_formula`), so
+# show just prints it. Without one (raw constructor) fall back to `repr`.
 function _show_recipe(io::IO, @nospecialize(c))
     if isnothing(c.prettyprint)
         # strip trailing default-valued fields so the result stays a valid constructor call:
-        # `nothing` (prettyprint/derived_from) and `weak=false`. A non-default `weak=true` stays,
-        # keeping the preceding `nothing`s so the positional call still lines up.
+        # `nothing` (prettyprint) and the `false` flags. A flag that is set stays, keeping the
+        # preceding `nothing` so the positional call still lines up.
         print(io, replace(repr(c), r"(, (nothing|false))+\)$" => ")"))
     else
         print(io, c.prettyprint)
@@ -326,6 +326,10 @@ a vector of input symbols `sym` that are used in the formulas, and an optional p
         out[:Vset] = sqrt(u[:u_r]^2 + u[:u_i]^2)
     end
 
+Two independent flags say what may go wrong with it. `weak` yields on the target side: the
+value is already there, so step aside. `optional` yields on the source side: the inputs never
+became known, so skip the formula instead of failing the initialization.
+
 See also [`@initformula`](@ref) for a macro to create such formulas.
 """
 struct InitFormula{F}
@@ -333,35 +337,28 @@ struct InitFormula{F}
     outsym::Vector{Symbol}   # output symbols (from LHS of assignments)
     sym::Vector{Symbol}      # input symbols (from RHS of assignments)
     prettyprint::Union{Nothing,String}
-    # set by `normalize` to the untouched user-written formula this one was derived from,
-    # `nothing` for user-written formulas themselves. See [`normalize`](@ref).
-    derived_from::Union{Nothing,InitFormula}
     weak::Bool # don't overwrite set defaults
+    optional::Bool # may stay unresolved
     label::Union{Nothing,String} # short line identifier (just verbose application)
 
-    function InitFormula(f::F, outsym::Vector{Symbol}, sym::Vector{Symbol}, prettyprint::Union{Nothing,String}, derived_from::Union{Nothing,InitFormula}, weak::Bool=false, label::Union{Nothing,String}=nothing) where F
+    function InitFormula(f::F, outsym::Vector{Symbol}, sym::Vector{Symbol}, prettyprint::Union{Nothing,String}, weak::Bool=false, optional::Bool=false, label::Union{Nothing,String}=nothing) where F
         # Check for self-dependencies (formula depending on its own output)
         self_deps = intersect(sym, outsym)
         if !isempty(self_deps)
             throw(ArgumentError("InitFormula cannot depend on its own output symbols: $self_deps"))
         end
-        # weak defaulting is single-target: a weak formula is dropped whole when its target is
-        # already backed, so a multi-output weak could strand a uniquely-pinned sibling output.
-        if weak && length(outsym) != 1
-            throw(ArgumentError("A weak InitFormula must have exactly one output symbol (got $outsym)."))
-        end
-        new{F}(f, outsym, sym, prettyprint, derived_from, weak, label)
+        new{F}(f, outsym, sym, prettyprint, weak, optional, label)
     end
 end
-InitFormula(f, outsym, sym; weak::Bool=false, label=nothing) = InitFormula(f, outsym, sym, nothing, nothing, weak, label)
-InitFormula(f, outsym, sym, prettyprint; weak::Bool=false, label=nothing) = InitFormula(f, outsym, sym, prettyprint, nothing, weak, label)
+InitFormula(f, outsym, sym; weak::Bool=false, optional::Bool=false, label=nothing) = InitFormula(f, outsym, sym, nothing, weak, optional, label)
+InitFormula(f, outsym, sym, prettyprint; weak::Bool=false, optional::Bool=false, label=nothing) = InitFormula(f, outsym, sym, prettyprint, weak, optional, label)
 
 dim(c::InitFormula) = length(c.outsym)
 
 (c::InitFormula)(out, u) = c.f(out, SymbolicView(u, c.sym))
 
 function Base.show(io::IO, ::MIME"text/plain", @nospecialize(c::InitFormula))
-    _show_formula(io, c)
+    _show_recipe(io, c)
 end
 
 """
@@ -398,44 +395,26 @@ struct GuessFormula{F}
     outsym::Vector{Symbol}   # output symbols (from LHS of assignments)
     sym::Vector{Symbol}      # input symbols (from RHS of assignments)
     prettyprint::Union{Nothing,String}
-    # set by `normalize` to the untouched user-written formula this one was derived from,
-    # `nothing` for user-written formulas themselves. See [`normalize`](@ref).
-    derived_from::Union{Nothing,GuessFormula}
     label::Union{Nothing,String}  # one-line `(via …)` provenance for the verbose log, see `InitFormula.label`
 
-    function GuessFormula(f::F, outsym::Vector{Symbol}, sym::Vector{Symbol}, prettyprint::Union{Nothing,String}, derived_from::Union{Nothing,GuessFormula}, label::Union{Nothing,String}=nothing) where F
+    function GuessFormula(f::F, outsym::Vector{Symbol}, sym::Vector{Symbol}, prettyprint::Union{Nothing,String}, label::Union{Nothing,String}=nothing) where F
         # Check for self-dependencies (formula depending on its own output)
         self_deps = intersect(sym, outsym)
         if !isempty(self_deps)
             throw(ArgumentError("GuessFormula cannot depend on its own output symbols: $self_deps"))
         end
-        new{F}(f, outsym, sym, prettyprint, derived_from, label)
+        new{F}(f, outsym, sym, prettyprint, label)
     end
 end
-GuessFormula(f, outsym, sym; label=nothing) = GuessFormula(f, outsym, sym, nothing, nothing, label)
-GuessFormula(f, outsym, sym, prettyprint; label=nothing) = GuessFormula(f, outsym, sym, prettyprint, nothing, label)
+GuessFormula(f, outsym, sym; label=nothing) = GuessFormula(f, outsym, sym, nothing, label)
+GuessFormula(f, outsym, sym, prettyprint; label=nothing) = GuessFormula(f, outsym, sym, prettyprint, label)
 
 dim(c::GuessFormula) = length(c.outsym)
 
 (c::GuessFormula)(out, u) = c.f(out, SymbolicView(u, c.sym))
 
 function Base.show(io::IO, ::MIME"text/plain", @nospecialize(c::GuessFormula))
-    _show_formula(io, c)
-end
-
-# A normalized formula carries symbol lists the user never wrote, so printing its own
-# `prettyprint` (which spells the original symbols) alone would misrepresent it. Show the
-# original recipe and append the symbols actually in play. `derived_from` is never nested,
-# so this recurses once.
-function _show_formula(io::IO, @nospecialize(c))
-    if isnothing(c.derived_from)
-        _show_recipe(io, c)
-    else
-        _show_formula(io, c.derived_from)
-        orig = c.derived_from
-        print(io, "\n(normalized: $(c.sym) → $(c.outsym), \
-                   derived from $(orig.sym) → $(orig.outsym))")
-    end
+    _show_recipe(io, c)
 end
 
 """
@@ -454,19 +433,28 @@ is equal to
         out[:Vset] = sqrt(u[:u_r]^2 + u[:u_i]^2)
         out[:Pset] = u[:u_r] * u[:i_r] + u[:u_i] * u[:i_i]
     end
+
+Takes the [`InitFormula`](@ref) flags as leading options:
+
+    @initformula weak=true :Sn = :S_b          # yield if :Sn already has a value
+    @initformula optional=true :y = :K * :u    # skip if :u never becomes known
 """
 macro initformula(args...)
     isempty(args) && throw(ArgumentError("@initformula expects a formula block"))
     ex = last(args)
     weak = false
+    optional = false
     for opt in args[1:end-1]
         if opt isa Expr && opt.head == :(=) && opt.args[1] === :weak
             weak = opt.args[2]
+        elseif opt isa Expr && opt.head == :(=) && opt.args[1] === :optional
+            optional = opt.args[2]
         else
-            throw(ArgumentError("@initformula: unexpected option `$opt`, only `weak=true/false` is supported"))
+            throw(ArgumentError("@initformula: unexpected option `$opt`, only `weak=true/false` \
+                                 and `optional=true/false` are supported"))
         end
     end
-    _formula_macro(InitFormula, ex; weak)
+    _formula_macro(InitFormula, ex; weak, optional)
 end
 
 
@@ -512,13 +500,16 @@ In a nutshell: wrap every QuoteNote symbol either in u[:sym] or out[:sym]
 some thinks will break!
 for example: set!(:out, :in) -> set!(u[:out], u[:in])
 =#
-function _formula_macro(type, ex; weak=false)
+function _formula_macro(type, ex; weak=false, optional=false)
     if ex isa QuoteNode || ex.head != :block
         ex = Base.remove_linenums!(Expr(:block, ex))
     end
 
     macroname = type === InitFormula ? "@initformula" : "@guessformula"
-    header = (type === InitFormula && weak === true) ? "$macroname weak=true" : macroname
+    # the header is the recipe `_show_recipe` prints back, so it repeats the options as given
+    opts = [o for (o, on) in (("weak=true", weak), ("optional=true", optional))
+            if type === InitFormula && on === true]
+    header = isempty(opts) ? macroname : "$macroname $(join(opts, " "))"
     s = _macro_source_string(header, ex)
     lbl = _auto_formula_label(ex)
 
@@ -561,9 +552,10 @@ function _formula_macro(type, ex; weak=false)
             nothing
         end
     end
-    # only InitFormula carries `weak`; GuessFormula's constructor has no such kwarg
+    # only InitFormula carries the flags; a GuessFormula is weak and optional by nature
     if type === InitFormula
-        :($(type)($closure, $output_syms, $input_syms, $s; weak = $(esc(weak)), label = $lbl))
+        :($(type)($closure, $output_syms, $input_syms, $s;
+                  weak = $(esc(weak)), optional = $(esc(optional)), label = $lbl))
     else
         :($(type)($closure, $output_syms, $input_syms, $s; label = $lbl))
     end
@@ -573,10 +565,8 @@ end
 assert_initformula_compat(cf::ComponentModel, c::InitFormula) = _assert_formula_compat(cf, c)
 assert_guessformula_compat(cf::ComponentModel, c::GuessFormula) = _assert_formula_compat(cf, c)
 
-# Inputs may be observables: they are expanded to their settable roots at init time, see
-# `normalize`. Outputs may be observables too — as pure aliases they canonicalize onto a
-# settable symbol, and as genuinely algebraic observables the write *pins* them as an
-# init-time dataflow node, see `pinned_obssyms`.
+# Observables are allowed on both ends. As an input the graph computes them, as an output the
+# formula either lands on an aliased symbol or asserts something that is checked after the solve.
 function _assert_formula_compat(cf::ComponentModel, c::Union{InitFormula,GuessFormula})
     label = c isa InitFormula ? "InitFormula" : "GuessFormula"
     settable = settable_symbols(cf)
@@ -597,260 +587,311 @@ function _assert_formula_compat(cf::ComponentModel, c::Union{InitFormula,GuessFo
 end
 
 """
-    topological_sort_formulas(formulas::Vector{Init/GuessFormula}) -> Vector{Init/GuessFormula}
+    extend_knowns_by_formulas!(knowns, cf, formulas; am, t, targets, error_unresolvable, verbose, io)
 
-Sort formulas in topological order based on their dependencies. This ensures that
-formulas are applied in the correct order, where each formula's input symbols are
-available before it executes.
+Extend `knowns` in place by whatever the component's `:obsrules` and the user's init `formulas`
+can derive from it, using [`resolve_rules`](@ref).
 
-A formula B depends on formula A if any of B's input symbols are produced by A's output symbols.
-The function returns the formulas reordered such that dependencies are satisfied.
-"""
-function topological_sort_formulas(formulas)
-    n = length(formulas)
-    n <= 1 && return copy(formulas)
+`targets` narrows down what is worth computing, e.g. an `NWState` only cares about states and
+parameters. With `t=NaN` no time is given, and a rule reading `:t` simply does not fire.
 
-    type = if first(formulas) isa InitFormula
-        "InitFormula"
-    elseif first(formulas) isa GuessFormula
-        "GuessFormula"
-    else
-        throw(ArgumentError("Expected a vector of InitFormula or GuessFormula, got $(typeof(first(formulas)))"))
-    end
-
-    # Check for output symbol conflicts
-    all_outputs = Symbol[]
-    for formula in formulas
-        append!(all_outputs, formula.outsym)
-    end
-
-    if !allunique(all_outputs)
-        conflicts = [s for s in unique(all_outputs) if count(==(s), all_outputs) > 1]
-        # A weak writer yields to a `default` or a *strong* co-writer (both drop it earlier), so
-        # reaching here means the colliding writers are all weak — a genuine ambiguity.
-        hint = if any(f -> f isa InitFormula && f.weak && !isdisjoint(f.outsym, conflicts), formulas)
-            "\nThe colliding formulas are `weak`: a weak formula yields to a default or a strong \
-             writer, but here only weak writers target the symbol. Give the target a default, or \
-             drop one of the writers."
-        else
-            ""
-        end
-        throw(ArgumentError("Multiple $(type)s set the same symbol(s): $conflicts$hint"))
-    end
-
-    # Build dependency graph using Graphs.jl
-    g = SimpleDiGraph(n)
-
-    # Add edges: i → j means formula j depends on formula i
-    # (formula j must run after formula i)
-    for i in 1:n, j in 1:n
-        if i != j
-            # Check if formula j depends on formula i
-            # i.e., j's input symbols intersect with i's output symbols
-            if !isdisjoint(formulas[j].sym, formulas[i].outsym)
-                add_edge!(g, i, j)
-            end
-        end
-    end
-
-    # Perform topological sort
-    try
-        sorted_indices = Graphs.topological_sort(g)
-        if length(sorted_indices) != n
-            # This shouldn't happen with a proper topological sort implementation,
-            # but let's be safe
-            throw(ArgumentError(_circular_dependency_msg(formulas, g, type)))
-        end
-        return formulas[sorted_indices]
-    catch e
-        if e isa ErrorException && occursin("graph contains at least one loop", string(e))
-            throw(ArgumentError(_circular_dependency_msg(formulas, g, type)))
-        else
-            rethrow(e)
-        end
-    end
-end
-
-function _circular_dependency_msg(formulas, g, type)
-    # cycle count is bounded by the (small) number of formulas on one component; take the
-    # shortest witness, one is enough to explain the failure
-    cycles = Graphs.simplecycles_limited_length(g, Graphs.nv(g))
-    isempty(cycles) && return "Circular dependency detected in $(type)s"
-    cycle = argmin(length, cycles)
-
-    rows = map(eachindex(cycle)) do i
-        from = formulas[cycle[i]]
-        to = formulas[cycle[mod1(i + 1, length(cycle))]]
-        shared = intersect(to.sym, from.outsym)
-        "  $(_cycle_ref(from)) writes $shared, read by $(_cycle_ref(to))"
-    end
-    normalized = filter(i -> !isnothing(formulas[i].derived_from), cycle)
-    note = if isempty(normalized)
-        ""
-    else
-        "\nSome of them were normalized, i.e. their inputs are the settable roots of the \
-         observables they were written against: \
-         $(join(("$(_cycle_ref(formulas[i])) was written to read $(formulas[i].derived_from.sym)" for i in normalized), ", ")). \
-         An observable which is written by a formula of this initialization becomes a pin and \
-         is read directly instead of being expanded to its roots — so an edge above may \
-         disappear once the observable it runs through is written by a formula."
-    end
-    "Circular dependency detected between $(length(cycle)) $(type)s:\n" * join(rows, "\n") * note
-end
-# `_formula_ref`'s prose form ("for [:x]") does not survive mid-sentence next to a `writes`,
-# so name a formula by its quoted recipe where it has one
-_cycle_ref(f) = isnothing(f.label) ? "the formula for $(f.outsym)" : "`$(f.label)`"
-
-"""
-    extend_knowns_by_formulas!(knowns, cf, formulas; am, t, pinned, error_unresolvable, verbose, io)
-
-Extend `knowns` in place by applying init `formulas`: [`normalize`](@ref) each,
-[`drop_weak_formulas`](@ref) whose target is already backed (a value in `knowns` or a strong
-co-writer), then [`apply_init_formulas!`](@ref) the survivors. No-op when `formulas` is `nothing`.
-
-Shared by `initialize_component` and the `NWState` reconstruction (`_get_appropriate_dict`) so the
-normalize/weak-drop/pin-set rule is single-sourced. The callers differ only in what they pass as
-`knowns`: `initialize_component` the default-only dict (weak formulas re-fire on reinit), `NWState`
-defaults-and-inits (reproduces the post-init state).
+See [`_resolution_rules`](@ref) for when the pass runs at all.
 """
 function extend_knowns_by_formulas!(knowns, cf, formulas;
-                                    am=get_aliasmap(cf), t=NaN,
-                                    pinned=pinned_obssyms(formulas, cf),
+                                    am=get_aliasmap(cf), t=NaN, targets=nothing,
                                     error_unresolvable=true, verbose=false, io=stdout)
-    isnothing(formulas) && return knowns
-    normed = [normalize(f, am, cf; t, pinned) for f in formulas]
-    # a weak formula also yields to a *strong* co-writer on the same target (see
-    # `drop_weak_formulas`); computed post-normalize so the outputs are canonical
-    strong_out = Set(s for f in normed if !f.weak for s in f.outsym)
-    kept = drop_weak_formulas(normed, knowns, strong_out; verbose, io)
-    isempty(kept) || apply_init_formulas!(knowns, kept; error_unresolvable, verbose, io, pinned)
+    # collect rules (user formulas + obs rules)
+    rules = _resolution_rules(cf, formulas, am, s -> haskey(knowns, s))
+    isempty(rules) && return knowns
+    settable = settable_symbols(cf)   # after the guard: nothing above it needs the set
+    if isnothing(targets)
+        # include outputs of user formulas in targets so no user rule is dropped
+        targets = settable ∪ Set(s for r in rules if _is_user_rule(r) for s in r.outsym)
+    end
+
+    seed = Dict{Symbol,Float64}(knowns)
+    isnan(t) || (seed[:t] = t) # `t` so that formulas and observables can read it
+    # final targets: prune away any symbol already known and known to be not overwritten
+    targets = _prune_resolution_targets(targets, rules, seed)
+    # actually resolve rules (result stored in res)
+    res = resolve_rules(seed, rules; targets)
+    _check_resolution(res, rules; error_unresolvable, verbose, io)
+
+    verbose && _print_resolution(res, rules, knowns, settable; io)
+    for (s, v) in res.vals
+        p = res.provenance[s]
+        p === :provided && continue # an untouched seed, already in `knowns`
+        # a `:derived` observable is a scratch value of the walk; one written by a formula is a
+        # pin, which does belong in `knowns`
+        (s ∈ settable || p !== :derived) || continue
+        knowns[s] = v
+    end
     return knowns
 end
 
 """
-    extend_guesses_by_formulas!(guesses, defaults, cf, formulas; am, t, init_pinned, error_unresolvable, verbose, io)
+    extend_guesses_by_formulas!(guesses, defaults, cf, formulas; am, t, targets, error_unresolvable, verbose, io)
 
-Guess-formula sibling of [`extend_knowns_by_formulas!`](@ref): `normalize` and apply the guess
-`formulas` to `guesses` in place. No-op when `formulas` is `nothing`. Separate from the init pass
-because [`apply_guess_formulas!`](@ref) is a layered two-dict write (reads `defaults`-before-
-`guesses`, fixed values win) and there is no weak-drop (`GuessFormula` has no `weak`).
+Guess-formula sibling of [`extend_knowns_by_formulas!`](@ref), same executor but seeded with both
+`defaults` and `guesses`.
+
+Anything the init pass determined is off limits here. A guess formula may overwrite an existing
+guess, an observed equation may only fill a symbol nothing else reached. Conflicts are ignored,
+guesses are inconsistent by construction.
 """
 function extend_guesses_by_formulas!(guesses, defaults, cf, formulas;
-                                     am=get_aliasmap(cf), t=NaN, init_pinned=Set{Symbol}(),
+                                     am=get_aliasmap(cf), t=NaN, targets=nothing,
                                      error_unresolvable=true, verbose=false, io=stdout)
-    isnothing(formulas) && return guesses
-    # frontier = init pins that actually landed in `defaults`, plus the guess pins. Init pins are
-    # intersected with `keys(defaults)` because an init formula skipped on unresolvable inputs
-    # (the NWState path) leaves its observable unwritten, so a guess reading it must expand to
-    # roots. Guess pins stay the full static set — all guesses normalize before any is applied.
-    guess_pinned = (init_pinned ∩ keys(defaults)) ∪ pinned_obssyms(formulas, cf)
-    normed = [normalize(f, am, cf; t, pinned=guess_pinned) for f in formulas]
-    apply_guess_formulas!(guesses, defaults, normed; error_unresolvable, verbose, io, pinned=guess_pinned)
+    # collect rules (user formulas + obs rules) before anything else, so a component with
+    # nothing to resolve pays for neither the seed nor the settable set
+    rules = _resolution_rules(cf, formulas, am, s -> haskey(guesses, s) || haskey(defaults, s))
+    isempty(rules) && return guesses
+    settable = settable_symbols(cf)
+    isnothing(targets) && (targets = settable)
+
+    # layered seed, `defaults` over `guesses` — the same lookup the guess pass always had
+    seed = Dict{Symbol,Float64}(guesses)
+    merge!(seed, defaults)
+
+    # the init output is bound, a pre-existing guess is not
+    bound = Set{Symbol}(keys(defaults))
+    if !isnan(t)
+        seed[:t] = t # `t` so that formulas and observables can read it
+        push!(bound, :t)
+    end
+    seedprov = s -> s ∈ bound ? :provided : :guess
+    # final targets: prune away any symbol already known and known to be not overwritten
+    targets = _prune_resolution_targets(targets, rules, seed; seedprov)
+    # actually resolve rules (result stored in res)
+    res = resolve_rules(seed, rules; targets, seedprov)
+    _check_resolution(res, rules; error_unresolvable, verbose, io,
+                      type="GuessFormula", check_conflicts=false)
+
+    verbose && _print_resolution(res, rules, guesses, settable;
+                                 io, type="GuessFormula", op="≈", fixed=defaults)
+    for (s, v) in res.vals
+        p = res.provenance[s]
+        p === :provided && continue # bound by the init pass (or the seeded `t`), not a guess
+        (s ∈ settable || p !== :derived) || continue
+        guesses[s] = v
+    end
     return guesses
 end
 
-# A weak formula yields — and is dropped — when its (canonical) target already carries a
-# `default` or is written by a *strong* formula (`strong_outputs`): an InitFormula always fires,
-# so a strong writer pins the target and the weak default is redundant. The default check is on
-# `default` only, never `init` — a weak formula persists its own output as an `init`, and testing
-# `init` here would self-block it on reinit. Weak formulas are single-output by construction, so
-# a drop never strands a uniquely-pinned sibling output.
-function drop_weak_formulas(formulas, defaults, strong_outputs=(); verbose=false, io=stdout)
-    any(f -> f isa InitFormula && f.weak, formulas) || return formulas
-    kept = empty(formulas)
-    for f in formulas
-        if !f.weak
-            push!(kept, f)
-            continue
+# Must run *before* the writeback, so `knowns` still holds the value each row reports as "(was
+# …)". Two groups: what the user's formulas asserted, and what the model's own equations
+# determined on the way — the latter is new with the graph.
+function _print_resolution(res, rules, knowns, settable; io, type="InitFormula", op="=", fixed=nothing)
+    formula_rows = String[]
+    for (i, r) in enumerate(rules)
+        _is_user_rule(r) || continue
+        for s in r.outsym
+            # `res.writer`, not the provenance: two same-tier formulas share a provenance, and a
+            # formula that never fired keeps none of its outputs — neither may claim the write
+            get(res.writer, s, 0) == i || continue
+            push!(formula_rows, _formula_row(s, res.vals[s], knowns;
+                                             op, fixed, pin=s ∉ settable, label=r.label))
         end
-        @assert length(f.outsym) == 1 "weak InitFormula must be single-output (enforced at construction)"
-        s = only(f.outsym)
-        if haskey(defaults, s) || s in strong_outputs
-            ref = isnothing(f.label) ? "weak formula for :$s" : f.label
-            verbose && printstyled(io, " - InitFormula: $ref yields to \
-                $(haskey(defaults, s) ? "existing default :$s = $(defaults[s])" : "a strong formula writing :$s")\n")
-        else
-            push!(kept, f)
+    end
+    print_aligned_group(io, "$(type)s set:", formula_rows)
+
+    derived_rows = [_formula_row(s, v, knowns; op, fixed)
+                    for (s, v) in sort!(collect(res.vals); by=first)
+                    if res.provenance[s] === :derived && s ∈ settable]
+    print_aligned_group(io, "Derived from the component's own equations:", derived_rows)
+    nothing
+end
+
+"""
+    _resolution_rules(cf, formulas, am, hasvalue) -> Vector{ResolutionRule}
+
+The rule bucket to apply. Init stays cheap when there is nothing to resolve, so the bucket is
+non-empty only if
+
+- the user provided a formula, or
+- some value sits on an observable — a `default` on the observable `y` of `y ~ -x` reaches the
+  state `x` only through the inverse rule.
+
+`hasvalue(s)` answers "does `s` carry a value", asked about the observables rather than the other
+way round: this runs per component on every `NWState`, so it must not build anything.
+
+Obs rules go first so a user formula wins the arbitration between two rules ready in the same
+pass.
+"""
+function _resolution_rules(cf, formulas, am, hasvalue)
+    hasformulas = !isnothing(formulas) && !isempty(formulas)
+    if !hasformulas && !any(hasvalue, obssym(cf))
+        return ResolutionRule[]
+    end
+
+    obsrules = get_obsrules(cf)
+    rules = ResolutionRule[]
+    sizehint!(rules, length(obsrules) + (hasformulas ? length(formulas) : 0))
+    append!(rules, obsrules)
+    if hasformulas
+        for f in formulas
+            push!(rules, ResolutionRule(f, am))
         end
+    end
+    rules
+end
+
+"""
+    _prune_resolution_targets(targets, rules, vals; seedprov) -> Set{Symbol}
+
+Targets are what the rules are pruned for. Narrows `targets` down to:
+- the ones written by some rule
+- MINUS the symbols which are already in `vals` and outrank the rules writing them
+
+(for example, a user provided default can only be changed by a strong formula, so
+we can remove it as target UNLESS there is such a strong formula in the ruleset)
+
+`seedprov` says what the entries of `vals` are worth, same as in `resolve_rules`.
+"""
+function _prune_resolution_targets(targets, rules, vals; seedprov=Returns(:provided))
+    best = Dict{Symbol,Int}()
+    for r in rules, s in r.outsym
+        best[s] = max(get(best, s, 0), _precedence(r.provenance))
+    end
+
+    kept = Set{Symbol}()
+    for (s, rank) in best
+        s ∈ targets || continue
+        # `haskey`, matching `resolve_rules`: a seeded NaN is a value like any other
+        if haskey(vals, s)
+            held = _precedence(seedprov(s))
+            held >= rank && continue
+        end
+        push!(kept, s)
     end
     kept
 end
 
-function apply_init_formulas!(defaults, formulas_unsorted; verbose=false, io=stdout,
-                              error_unresolvable=true, pinned=Set{Symbol}())
-    # Convert tuple to vector if necessary
-    formulas_vec = formulas_unsorted isa Tuple ? collect(formulas_unsorted) : formulas_unsorted
-    formulas = topological_sort_formulas(formulas_vec)
+# Decide what the recorded problems mean — `resolve_rules` itself never errors or warns.
+# `check_conflicts=false` for the guess pass, guesses are inconsistent by construction.
+function _check_resolution(res, rules; error_unresolvable, verbose, io,
+                           type="InitFormula", check_conflicts=true)
+    _check_pruned(res, rules; error_unresolvable, verbose, io, type)
+    _check_skipped(res, rules; verbose, io, type)
+    _check_yielded(res, rules; verbose, io, type)
+    _check_nonfinite(res, rules; verbose, io)
 
-    rows = String[]
-    for f in formulas
-        out = SymbolicView(zeros(length(f.outsym)), f.outsym)
-        # ensure all input symbols are in defaults
-        invals = map(f.sym) do s
-            haskey(defaults, s) ? defaults[s] : NaN
-        end
-        if any(v -> ismissing(v) || isnothing(v) || isnan(v), invals)
-            if error_unresolvable
-                throw(ArgumentError("InitFormula requires all input symbols to be initialized, but found NaN/missing/nothing in inputs: $(f.sym .=> invals)" * _unresolved_note(f)))
-            else
-                verbose && printstyled(io, " - InitFormula: skipping formula $(_formula_ref(f)) with unresolvable inputs: $(f.sym .=> invals)$(_unresolved_note(f))\n")
-                continue
-            end
-        end
-        in = SymbolicView(invals, f.sym)
-        if !_run_formula!(out, f, in, "InitFormula"; verbose, io, error_unresolvable)
-            continue
-        end
-        for s in f.outsym
-            val = out[s]
-            verbose && push!(rows, _formula_row(s, val, defaults; op="=", pin=s ∈ pinned, label=f.label))
-            defaults[s] = val
+    if check_conflicts && !isempty(res.conflicts)
+        rows = ["$(_rule_ref(rules[c.rule])) computed :$(c.sym) = $(c.offered), \
+                 but it already held $(c.held)" for c in res.conflicts]
+        msg = "Inconsistent initialization values:\n" * join("  - " .* rows, "\n")
+        if error_unresolvable
+            throw(ArgumentError(msg))
+        else
+            verbose && printstyled(io, " - $msg\n"; color=:yellow)
         end
     end
-    verbose && print_aligned_group(io, "InitFormulas set:", rows)
-    return defaults
+
+    for u in res.unfired
+        r = rules[u.rule]
+        # `unfired` only holds rules that are neither optional nor pruned, so a rule landing
+        # here was asked to run and could not — a failure no matter what else wrote its target
+        msg = "$type $(_rule_ref(r)) could not be resolved: its inputs are unknown: \
+               $(_resolution_hint(res, rules, u.unknown))."
+        if error_unresolvable
+            throw(ArgumentError(msg))
+        else
+            verbose && printstyled(io, " - skipping: $msg\n")
+        end
+    end
+    nothing
 end
-function apply_guess_formulas!(guesses, defaults, formulas_unsorted; verbose=false, io=stdout,
-                               error_unresolvable=true, pinned=Set{Symbol}())
-    # Convert tuple to vector if necessary
-    formulas_vec = formulas_unsorted isa Tuple ? collect(formulas_unsorted) : formulas_unsorted
-    formulas = topological_sort_formulas(formulas_vec)
+# An optional user rule that never ran. `res.unfired` leaves these out — not running is what
+# optional means — but the log should still show that the formula was there and did nothing.
+function _check_skipped(res, rules; verbose, io, type)
+    verbose || return nothing
+    for (i, r) in enumerate(rules)
+        (r.optional && _is_user_rule(r) && !res.fired[i] && !res.pruned[i]) || continue
+        unknown = [s for s in r.sym if !haskey(res.vals, s)]
+        printstyled(io, " - $type: $(_rule_ref(r)) skipped, it is optional and \
+                         $unknown never became known\n")
+    end
+    nothing
+end
 
-    rows = String[]
-    for f in formulas
-        out = SymbolicView(zeros(length(f.outsym)), f.outsym)
-        # Layered lookup: defaults (fixed) take precedence over guesses
-        invals = map(f.sym) do s
-            if haskey(defaults, s)
-                defaults[s]  # Use fixed default value if available
-            elseif haskey(guesses, s)
-                guesses[s]   # Otherwise use guess value
-            else
-                NaN
-            end
+# A user rule whose write was outranked. Pruning catches the same thing earlier where the rule
+# writes *only* outranked targets, but a rule that also feeds something live survives pruning and
+# yields at the write instead — reporting both keeps a weak formula's yield visible either way.
+function _check_yielded(res, rules; verbose, io, type)
+    verbose || return nothing
+    seen = Set{Tuple{Int,Symbol}}()
+    for y in res.yields
+        r = rules[y.rule]
+        (_is_user_rule(r) && (y.rule, y.sym) ∉ seen) || continue
+        push!(seen, (y.rule, y.sym))
+        # the *final* value, which is the one that superseded this rule whichever way round the
+        # two fired — `offered` is what this rule wanted, and saying both is the point
+        printstyled(io, " - $type: $(_rule_ref(r)) yields on :$(y.sym) = \
+                         $(str_significant(res.vals[y.sym]; sigdigits=5)) \
+                         (would have set $(str_significant(y.offered; sigdigits=5)))\n")
+    end
+    nothing
+end
+
+# NaN/Inf is a value like any other here, so this is a hint and never a warning: a component
+# may legitimately carry an infinite default. Only shown under `verbose`, where the values
+# themselves are printed anyway and this just names the likely cause.
+function _check_nonfinite(res, rules; verbose, io)
+    (verbose && !isempty(res.nonfinite)) || return nothing
+    rows = map(res.nonfinite) do nf
+        src = iszero(nf.rule) ? "provided" : "computed by $(_rule_ref(rules[nf.rule]))"
+        ":$(nf.sym) &= $(res.vals[nf.sym]) &($src)"
+    end
+    printstyled(io, " - non-finite values, which poison everything derived from them. A common \
+                     cause is an observable with an explicit time dependence and no `t` \
+                     passed to the initialization.\n")
+    print_aligned_rows(io, rows)
+    nothing
+end
+# Complain about user formulas that got pruned away. Obs rules are pruned all the time, that is
+# the whole point of `targets`, so they never show up here.
+function _check_pruned(res, rules; error_unresolvable, verbose, io, type)
+    for (i, r) in enumerate(rules)
+        (res.pruned[i] && _is_user_rule(r)) || continue
+        # "pruned" covers two very different stories: the rule yielded because its targets are
+        # already determined, or nothing reads what it writes
+        outranked = all(r.outsym) do s
+            haskey(res.vals, s) && _precedence(res.provenance[s]) > _precedence(r.provenance)
         end
-        # Validate inputs are not NaN/missing/nothing
-        if any(v -> ismissing(v) || isnothing(v) || isnan(v), invals)
-            if error_unresolvable
-                throw(ArgumentError("GuessFormula requires all input symbols to be initialized, but found NaN/missing/nothing in inputs: $(f.sym .=> invals)" * _unresolved_note(f)))
-            else
-                verbose && printstyled(io, " - GuessFormula: skipping formula $(_formula_ref(f)) with unresolvable inputs: $(f.sym .=> invals)$(_unresolved_note(f))\n")
-                continue
-            end
-        end
-        in = SymbolicView(invals, f.sym)
-        if !_run_formula!(out, f, in, "GuessFormula"; verbose, io, error_unresolvable)
-            continue
-        end
-        # Update guesses dictionary (NOT defaults!)
-        for s in f.outsym
-            val = out[s]
-            verbose && push!(rows, _formula_row(s, val, guesses; op="≈", fixed=defaults, pin=s ∈ pinned, label=f.label))
-            guesses[s] = val
+        if outranked
+            verbose && printstyled(io, " - $type: $(_rule_ref(r)) yields, \
+                                        its target $(r.outsym) is already determined\n")
+        elseif r.optional || r.provenance === :weak_formula || r.provenance === :guess_formula
+            # these are meant to be droppable, so no warning; a library full of them would
+            # otherwise drown the log
+            verbose && printstyled(io, " - $type: $(_rule_ref(r)) had no effect, \
+                                        nothing reads $(r.outsym)\n")
+        elseif error_unresolvable # the init path; `NWState` prunes such rules routinely
+            printstyled(io, " - WARNING: ", color=:yellow)
+            printstyled(io, "$(_rule_ref(r)) had no effect: nothing in this component reads \
+                             $(r.outsym), so it cannot change any state, parameter or \
+                             output.\n")
+        else
+            verbose && printstyled(io, " - skipping: $(_rule_ref(r)), nothing reads \
+                                        $(r.outsym)\n")
         end
     end
-    verbose && print_aligned_group(io, "GuessFormulas set:", rows)
-    return guesses
+    nothing
+end
+# One level backwards from each missing input: either nothing computes it, or something does
+# but is itself starved — the "to compute :δ, provide one of {…}" material.
+function _resolution_hint(res, rules, unknown)
+    parts = map(unknown) do s
+        src = [r for r in rules if s ∈ r.outsym]
+        isempty(src) && return ":$s (nothing computes it, provide it directly)"
+        need = unique(Symbol[x for r in src for x in r.sym if !haskey(res.vals, x)])
+        isempty(need) && return ":$s"
+        # `t` is the one missing input nobody can provide a default for — it is a call argument
+        :t ∈ need && return ":$s (equations that depend explicitly on time need a concrete \
+                               `t`, which this initialization was not given)"
+        ":$s (computable from $need)"
+    end
+    join(parts, ", ")
 end
 
 # One aligned row for a formula that wrote `val` onto `:s`, annotated with what it did
@@ -867,43 +908,9 @@ function _formula_row(s, val, prev; op, fixed=nothing, pin=false, label=nothing)
     else
         ""
     end
-    pin && (note = strip(note * " (pinned observable)"))
+    pin && (note = strip(note * " (obs)"))
     via = isnothing(label) ? "" : "(via $label)"
     ":$s &$op $v &$note &$via"
-end
-
-# Runs `f`, returning whether its outputs may be used. A normalized formula only discovers
-# during the gather that an observable input expands to NaN, which is an unresolvable input
-# like any other — so it lands here rather than escaping, and is treated exactly as the
-# up-front dict lookup treats a missing value.
-function _run_formula!(out, f, u, label; verbose, io, error_unresolvable)
-    try
-        f(out, u)
-        true
-    catch e
-        e isa UnresolvableExpansionError || rethrow()
-        if error_unresolvable
-            throw(ArgumentError("$label for $(f.outsym): $(e.msg)" * _unresolved_note(f)))
-        end
-        verbose && printstyled(io, " - $label: skipping formula $(_formula_ref(f)), $(e.msg)$(_unresolved_note(f))\n")
-        false
-    end
-end
-
-# Short human reference to a formula for the verbose log's prose lines (skips, weak-drops): its
-# `label` when it has one, else a `for [:out…]` fallback naming the output symbols.
-_formula_ref(f) = isnothing(f.label) ? "for $(f.outsym)" : f.label
-
-# A normalized formula reads the settable *roots* of what the user asked for, so the symbols
-# named in an unresolvable-input message are not the ones they wrote. Say where they came
-# from, and name the fix: a default on the observable itself would not help, since formulas
-# read observables from the model rather than from the dict.
-function _unresolved_note(f)
-    orig = f.derived_from
-    isnothing(orig) && return ""
-    "\nNote: this formula was normalized, its inputs $(f.sym) are the settable roots of the \
-     originally requested $(orig.sym). Defaults on observables are not consumed as formula \
-     inputs — provide defaults for the roots instead."
 end
 
 _vcattable(t::Tuple) = collect(t)

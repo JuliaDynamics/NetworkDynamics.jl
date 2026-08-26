@@ -958,8 +958,8 @@ get_aliasmap(nw::Network, idx::ECIndex) = get_aliasmap(getcomp(nw, idx))
     set_aliasmap!(nw::Network, idx::Union{VIndex,EIndex}, am; check=true)
 
 Sets the [`AliasMap`](@ref) for the component. Overwrites any existing map.
-With `check=true`, validates the map against the component: factors must be finite and
-nonzero, canonical targets must be settable and alias keys must not be.
+With `check=true`, validates the map against the component: canonical targets must be
+settable (or a terminal observable) and alias keys must not be.
 
 See also: [`get_aliasmap`](@ref), [`delete_aliasmap!`](@ref).
 """
@@ -988,6 +988,48 @@ delete_aliasmap!(c::ComponentModel) = delete_metadata!(c, :aliasmap)
 delete_aliasmap!(nw::Network, idx::VCIndex) = delete_aliasmap!(getcomp(nw, idx))
 delete_aliasmap!(nw::Network, idx::ECIndex) = delete_aliasmap!(getcomp(nw, idx))
 
+####
+#### Observed/output rules
+####
+
+"""
+    has_obsrules(c::ComponentModel)
+    has_obsrules(nw::Network, idx::Union{VIndex,EIndex})
+
+Checks if the component carries the [`ResolutionRule`](@ref)s derived from its observed and
+output equations. Only components compiled from ModelingToolkit carry them.
+
+See also: [`get_obsrules`](@ref), [`set_obsrules!`](@ref).
+"""
+has_obsrules(c::ComponentModel) = has_metadata(c, :obsrules)
+has_obsrules(nw::Network, idx::VCIndex) = has_obsrules(getcomp(nw, idx))
+has_obsrules(nw::Network, idx::ECIndex) = has_obsrules(getcomp(nw, idx))
+
+"""
+    get_obsrules(c::ComponentModel)
+    get_obsrules(nw::Network, idx::Union{VIndex,EIndex})
+
+Gets the component's observed/output [`ResolutionRule`](@ref)s, or an *empty* vector if it has
+none, so callers do not have to branch on [`has_obsrules`](@ref).
+
+See also: [`has_obsrules`](@ref), [`set_obsrules!`](@ref).
+"""
+function get_obsrules(c::ComponentModel)
+    has_obsrules(c) ? get_metadata(c, :obsrules)::Vector{ResolutionRule} : ResolutionRule[]
+end
+get_obsrules(nw::Network, idx::VCIndex) = get_obsrules(getcomp(nw, idx))
+get_obsrules(nw::Network, idx::ECIndex) = get_obsrules(getcomp(nw, idx))
+
+"""
+    set_obsrules!(c::ComponentModel, rules)
+
+Sets the observed/output [`ResolutionRule`](@ref)s of the component, overwriting any existing
+ones. Called by the ModelingToolkit extension at component compile time.
+
+See also: [`has_obsrules`](@ref), [`get_obsrules`](@ref).
+"""
+set_obsrules!(c::ComponentModel, rules) =
+    set_metadata!(c, :obsrules, collect(ResolutionRule, rules))
 
 
 # generate methods and docstrings for position and marker

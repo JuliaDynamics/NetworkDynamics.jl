@@ -66,12 +66,20 @@ using NetworkDynamics: VIndex, EIndex, VPIndex, EPIndex, _resolve_colon, Filteri
     @test filter(s->SII.is_parameter(nw,s), SII.all_symbols(nw)) == SII.parameter_symbols(nw)
     @test filter(s->SII.is_variable(nw,s), SII.all_symbols(nw)) == SII.variable_symbols(nw)
 
-    # sol[obs] does not work, because obs has two timeseries: Continuous and Discrete
-    # it is unclear, whether it should return onlye discre values or for all sol.t
-    @test_broken sol[EIndex(1,:P)]
-    @test_broken sol[EIndex(2,:P)]
-    @test_broken sol[EIndex(3,:P)]
-    @test_broken sol[EIndex(1:3,:P)] == sol[[EIndex(1,:P),EIndex(2,:P),EIndex(3,:P)]]
+    # An observable lives on two timeseries here, the continuous states and the discrete
+    # parameters. SII refused that combination until 0.3.53; since then it evaluates the
+    # observable at every saved time, using the parameters in effect at that time.
+    if pkgversion(SII) ≥ v"0.3.53"
+        @test sol[EIndex(1,:P)] ≈ sol(sol.t, idxs=EIndex(1,:P)).u
+        @test sol[EIndex(2,:P)] ≈ sol(sol.t, idxs=EIndex(2,:P)).u
+        @test sol[EIndex(3,:P)] ≈ sol(sol.t, idxs=EIndex(3,:P)).u
+        @test sol[EIndex(1:3,:P)] == sol[[EIndex(1,:P),EIndex(2,:P),EIndex(3,:P)]]
+    else
+        @test_broken sol[EIndex(1,:P)] isa Vector
+        @test_broken sol[EIndex(2,:P)] isa Vector
+        @test_broken sol[EIndex(3,:P)] isa Vector
+        @test_broken sol[EIndex(1:3,:P)] == sol[[EIndex(1,:P),EIndex(2,:P),EIndex(3,:P)]]
+    end
     @test sol(sol.t, idxs=EIndex(1:3,:P)) == sol(sol.t, idxs=[EIndex(1,:P),EIndex(2,:P),EIndex(3,:P)])
     @test sol(sol.t, idxs=EIndex(1:3,:₋P)) == sol(sol.t, idxs=[EIndex(1,:₋P),EIndex(2,:₋P),EIndex(3,:₋P)])
     @test sol(sol.t, idxs=EIndex(1,:P)).u == -1* sol(sol.t, idxs=EIndex(1,:₋P)).u

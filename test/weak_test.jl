@@ -1,7 +1,7 @@
 using NetworkDynamics
 using NetworkDynamics: psym, get_initformulas,
-                      drop_weak_formulas, apply_init_formulas!, topological_sort_formulas,
-                      normalize, get_aliasmap, initialize_component!,
+                      ResolutionRule, resolve_rules, AliasMap,
+                      extend_knowns_by_formulas!, get_aliasmap, initialize_component!,
                       get_default_or_init, has_default, has_init, set_default!, set_guess!
 using ModelingToolkitBase
 using ModelingToolkitBase: t_nounits as t, D_nounits as D, System, @variables, @parameters, @named
@@ -60,82 +60,73 @@ end
     rawstrong = InitFormula((o,u)->nothing, [:Sn], [:S_b]; weak=false)
     rw = sprint(show, MIME"text/plain"(), rawweak)
     @test !occursin("[weak]", rw)
-    @test occursin(", nothing, nothing, true)", rw)   # weak shown, positionally valid
+    @test occursin(", nothing, true)", rw)   # weak shown, positionally valid
     @test endswith(sprint(show, MIME"text/plain"(), rawstrong), "[:Sn], [:S_b])")  # trimmed
 end
 
-@testset "drop_weak_formulas: fire vs. yield" begin
-    wf = @initformula weak=true begin :Sn = :S_b end
+@testset "weak: fire vs. yield" begin
+    # Weakness is no longer a pre-pass that drops the formula, it is two things the resolution
+    # graph does anyway: a target that already carries a value outranks a weak writer, so the
+    # rule prunes; with nothing on the target the rule is the only writer and fires.
+    vm = VertexModel(_weakdev(), [:i], [:o]; verbose=false)
+    wf = only(get_initformulas(vm))
 
-    # no default on the target -> kept, and it fires
-    d1 = Dict{Symbol,Float64}(:S_b => 100.0)
-    kept = drop_weak_formulas([wf], d1)
-    @test length(kept) == 1
-    apply_init_formulas!(d1, kept)
-    @test d1[:Sn] == 100.0
+    # no default on the target -> it fires
+    d1 = Dict{Symbol,Float64}(:p_src => 100.0)
+    extend_knowns_by_formulas!(d1, vm, [wf])
+    @test d1[:p] == 100.0
 
-    # target already carries a default -> dropped, yields (verbose still accounts for it)
-    d2 = Dict{Symbol,Float64}(:S_b => 100.0, :Sn => 250.0)
+    # target already carries a default -> the rule prunes and the default stands
+    d2 = Dict{Symbol,Float64}(:p_src => 100.0, :p => 250.0)
     log = sprint() do io
-        @test isempty(drop_weak_formulas([wf], d2; verbose=true, io))
+        extend_knowns_by_formulas!(d2, vm, [wf]; verbose=true, io)
     end
-    @test occursin("yields to existing default", log)
-    apply_init_formulas!(d2, drop_weak_formulas([wf], d2))
-    @test d2[:Sn] == 250.0
+    @test d2[:p] == 250.0
+    @test occursin("yields", log)
 
-    # a strong formula is never touched by the drop, default or not
-    sf = @initformula begin :Sn = :S_b end
-    @test length(drop_weak_formulas([sf], d2)) == 1
-
-    # a weak formula also yields to a *strong* formula writing the same target (strong_outputs),
-    # even with no default: an InitFormula always fires, so the strong writer pins it
-    d3 = Dict{Symbol,Float64}(:S_b => 100.0)
-    log3 = sprint() do io
-        @test isempty(drop_weak_formulas([wf], d3, Set([:Sn]); verbose=true, io))
-    end
-    @test occursin("yields to a strong formula", log3)
-    # but with neither a default nor a strong writer it stays and fires
-    @test length(drop_weak_formulas([wf], d3, Set{Symbol}())) == 1
+    # a strong formula on the same target wins, and the weak one yields silently — no default
+    # needed, `:strong_formula` simply outranks `:weak_formula` at the write
+    d3 = Dict{Symbol,Float64}(:p_src => 100.0)
+    extend_knowns_by_formulas!(d3, vm, [wf, @initformula :p = :p_src + 1])
+    @test d3[:p] == 101.0
 end
 
-@testset "weak formulas are single-output (constructor rejects multi-output)" begin
-    # weak defaulting is single-target: a multi-output weak formula is rejected at construction,
-    # which is what makes the drop pin-safe (it can never strand a uniquely-pinned sibling output)
-    @test_throws ArgumentError (@initformula weak=true begin
+@testset "a weak formula may write several outputs" begin
+    # weakness is decided per target at the write, so a weak formula writing two symbols can
+    # lose one of them and still deliver the other — it is never dropped as a whole
+    f = @initformula weak=true begin
         :a = :src
-        :b = :src
-    end)
-    # a strong multi-output formula is still fine
-    @test length((@initformula begin
-        :a = :src
-        :b = :src
-    end).outsym) == 2
+        :b = 2 * :src
+    end
+    @test length(f.outsym) == 2
+
+    rules = [ResolutionRule(f, AliasMap())]
+    res = resolve_rules(Dict(:src => 3.0, :a => 100.0), rules; targets=Set([:a, :b]))
+    @test res.vals[:a] == 100.0   # the provided value outranks the weak write
+    @test res.vals[:b] == 6.0     # ... while the sibling is written as usual
 end
 
 @testset "weak yields to a strong co-writer on one target" begin
     strong = @initformula begin :Sn = :S_b end
     weak   = @initformula weak=true begin :Sn = :S_b end
-    # strong writes :Sn -> the weak one is dropped (yields), the strong one survives, no error
-    kept = drop_weak_formulas([strong, weak], Dict{Symbol,Float64}(), Set([:Sn]))
-    @test length(kept) == 1
-    @test !only(kept).weak
+    # both rules fire; the weak write lands on a `:strong_formula` value and yields silently —
+    # an equal-rank landing would be a check, a lower-rank one is not even that
+    res = resolve_rules(Dict(:S_b => 100.0), [ResolutionRule(weak, AliasMap()),
+                                              ResolutionRule(strong, AliasMap())])
+    @test res.vals[:Sn] == 100.0
+    @test res.provenance[:Sn] == :strong_formula
+    @test isempty(res.conflicts)
 
-    # two *weak* writers on one target (no strong, no default) is a genuine over-determination
+    # two *weak* writers on one target used to be rejected structurally, before any value
+    # existed. Now it is an ordinary equal-rank collision: agreeing is fine, and only a
+    # disagreement is reported — as a conflict naming both values.
     weak2 = @initformula weak=true begin :Sn = :S_b + 1 end
-    err = try
-        topological_sort_formulas([weak, weak2]); nothing
-    catch e
-        e
-    end
-    @test err isa ArgumentError
-    @test occursin("weak", sprint(showerror, err))
-end
-
-@testset "normalize preserves weak" begin
-    vm = VertexModel(_weakdev(), [:i], [:o]; verbose=false)
-    wf = @initformula weak=true begin :p = :p_src end
-    nf = normalize(wf, get_aliasmap(vm), vm)
-    @test nf.weak == true
+    conflicting = resolve_rules(Dict(:S_b => 100.0), [ResolutionRule(weak, AliasMap()),
+                                                      ResolutionRule(weak2, AliasMap())])
+    c = only(conflicting.conflicts)
+    # which of the two became the assignment and which the check is deliberately unspecified
+    @test c.sym == :Sn
+    @test Set([c.held, c.offered]) == Set([100.0, 101.0])
 end
 
 @testset "E2E component: weak fires, reinit re-fires, never freezes into a default" begin

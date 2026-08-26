@@ -9,24 +9,25 @@ using Test
 # compiled component and hence MTK.
 
 @testset "canonicalize" begin
-    am = AliasMap(:θ => (-1.0, :u_r), :s => (2.5, :x))
+    am = AliasMap(:θ => :u_r, :s => :x)
 
-    @test canonicalize(am, :θ) == (-1.0, :u_r)
-    @test canonicalize(am, :s) == (2.5, :x)
+    @test canonicalize(am, :θ) == :u_r
+    @test canonicalize(am, :s) == :x
 
     # everything which is not an alias key passes through untouched (I4): canonical
     # symbols, non-alias observables and symbols unknown to any component alike
-    @test canonicalize(am, :u_r) == (1.0, :u_r)
-    @test canonicalize(am, :nonalias_obs) == (1.0, :nonalias_obs)
-    @test canonicalize(am, :totally_unknown) == (1.0, :totally_unknown)
-    @test canonicalize(AliasMap(), :θ) == (1.0, :θ)
+    @test canonicalize(am, :u_r) == :u_r
+    @test canonicalize(am, :nonalias_obs) == :nonalias_obs
+    @test canonicalize(am, :totally_unknown) == :totally_unknown
+    @test canonicalize(AliasMap(), :θ) == :θ
 end
 
 @testset "normalize_valuedict" begin
     @testset "moves values onto the canonical symbol" begin
-        am = AliasMap(:θ => (-1.0, :u_r), :s => (2.5, :x))
+        # members of a class are one variable, so the value travels untouched
+        am = AliasMap(:θ => :u_r, :s => :x)
         d = Dict(:θ => 0.3, :s => 5.0, :u_i => 1.0)
-        @test normalize_valuedict(am, d) == Dict(:u_r => -0.3, :x => 2.0, :u_i => 1.0)
+        @test normalize_valuedict(am, d) == Dict(:u_r => 0.3, :x => 5.0, :u_i => 1.0)
         @test d == Dict(:θ => 0.3, :s => 5.0, :u_i => 1.0) # I3: input untouched
     end
 
@@ -36,19 +37,18 @@ end
         @test normalize_valuedict(AliasMap(), d) === d
         # non-alias keys survive a non-empty map, so `broken_observable_defaults` keeps
         # seeing defaults placed on genuinely algebraic observables
-        @test normalize_valuedict(AliasMap(:other => (1.0, :x)), d) == d
+        @test normalize_valuedict(AliasMap(:other => :x), d) == d
     end
 
-    @testset "collisions are sign-aware (I5)" begin
-        am = AliasMap(:a => (-1.0, :b))
+    @testset "collisions (I5)" begin
+        am = AliasMap(:a => :b)
 
-        # a = 1.0 and b = -1.0 under `a ~ -b` describe the same state, so they merge
-        @test normalize_valuedict(am, Dict(:a => 1.0, :b => -1.0)) == Dict(:b => -1.0)
-        # ... and would be a contradiction without the sign
-        @test_throws ArgumentError normalize_valuedict(am, Dict(:a => 1.0, :b => 1.0))
+        # one variable, so its members must simply carry the same value
+        @test normalize_valuedict(am, Dict(:a => 1.0, :b => 1.0)) == Dict(:b => 1.0)
+        @test_throws ArgumentError normalize_valuedict(am, Dict(:a => 1.0, :b => -1.0))
 
         # tolerances: agreement is approximate, roundoff between the two must not throw
-        @test normalize_valuedict(am, Dict(:a => 1.0, :b => -1.0 - 1e-14))[:b] ≈ -1.0
+        @test normalize_valuedict(am, Dict(:a => 1.0, :b => 1.0 + 1e-14))[:b] ≈ 1.0
 
         err = try
             normalize_valuedict(am, Dict(:a => 1.0, :b => 5.0); what=:default)
@@ -59,7 +59,7 @@ end
         @test err isa ArgumentError
         msg = sprint(showerror, err)
         @test occursin("default", msg)
-        for s in [":a", ":b", "1", "5", "-1"] # both symbols, both raw and both moved values
+        for s in [":a", ":b", "1", "5"] # both symbols and both values
             @test occursin(s, msg)
         end
     end
@@ -67,24 +67,24 @@ end
     @testset "collision resolution is deterministic" begin
         # values agree only approximately, so which one survives must not depend on hash
         # order: the canonical symbol wins over any alias ...
-        am = AliasMap(:a => (-1.0, :b))
+        am = AliasMap(:a => :b)
         for _ in 1:20
-            @test normalize_valuedict(am, Dict(:a => -1.0, :b => 1.0 + 1e-14))[:b] == 1.0 + 1e-14
+            @test normalize_valuedict(am, Dict(:a => 1.0, :b => 1.0 + 1e-14))[:b] == 1.0 + 1e-14
         end
         # ... and between two aliases the sorted-first one does
-        am2 = AliasMap(:a => (1.0, :x), :z => (1.0, :x))
+        am2 = AliasMap(:a => :x, :z => :x)
         for _ in 1:20
             @test normalize_valuedict(am2, Dict(:a => 1.0, :z => 1.0 + 1e-14))[:x] == 1.0
         end
     end
 
     @testset "on_conflict=:keepfirst drops instead of erroring (guesses)" begin
-        am = AliasMap(:a => (-1.0, :b))
+        am = AliasMap(:a => :b)
         # inconsistent members would throw under :error, but a soft seed just keeps one
         @test normalize_valuedict(am, Dict(:a => 1.0, :b => 5.0); on_conflict=:keepfirst) ==
               Dict(:b => 5.0)  # value on the canonical symbol wins
         # deterministic winner between two aliases: sorted-first
-        am2 = AliasMap(:a => (1.0, :x), :z => (1.0, :x))
+        am2 = AliasMap(:a => :x, :z => :x)
         for _ in 1:20
             @test normalize_valuedict(am2, Dict(:a => 1.0, :z => 7.0); on_conflict=:keepfirst) ==
                   Dict(:x => 1.0)
@@ -95,12 +95,12 @@ end
         @test occursin("conflicting dropped", out) && occursin("a", out) && occursin("b", out)
         @test sprint(io -> normalize_valuedict(am, d; on_conflict=:keepfirst, io)) == ""
         # agreeing members still merge silently (no spurious drop line)
-        out2 = sprint(io -> normalize_valuedict(am, Dict(:a => 1.0, :b => -1.0); on_conflict=:keepfirst, verbose=true, io))
+        out2 = sprint(io -> normalize_valuedict(am, Dict(:a => 1.0, :b => 1.0); on_conflict=:keepfirst, verbose=true, io))
         @test !occursin("dropped", out2)
     end
 
     @testset "nothing markers follow their key" begin
-        am = AliasMap(:a => (-1.0, :b))
+        am = AliasMap(:a => :b)
         d = Dict{Symbol,Union{Float64,Nothing}}(:a => nothing, :c => 1.0)
         @test normalize_valuedict(am, d) == Dict(:b => nothing, :c => 1.0)
         # two removal markers in one class agree, remove-vs-set does not
@@ -108,7 +108,7 @@ end
     end
 
     @testset "verbose reports the moves" begin
-        am = AliasMap(:θ => (-1.0, :u_r))
+        am = AliasMap(:θ => :u_r)
         out = sprint() do io
             normalize_valuedict(am, Dict(:θ => 0.3); what=:default, verbose=true, io)
         end
@@ -119,20 +119,19 @@ end
 end
 
 @testset "normalize_bounds" begin
-    @testset "scaling and endpoint swap" begin
-        am = AliasMap(:θ => (-1.0, :u_r), :s => (2.5, :x))
+    @testset "moves intervals onto the canonical symbol" begin
+        # both endpoints travel untouched: an alias is the same variable
+        am = AliasMap(:θ => :u_r, :s => :x)
         d = Dict(:θ => (-1.0, 2.0), :s => (5.0, 10.0), :u_i => (0.0, 1.0))
-        # a negative factor flips the interval, so the endpoints swap
-        @test normalize_bounds(am, d) == Dict(:u_r => (-2.0, 1.0), :x => (2.0, 4.0), :u_i => (0.0, 1.0))
+        @test normalize_bounds(am, d) == Dict(:u_r => (-1.0, 2.0), :x => (5.0, 10.0), :u_i => (0.0, 1.0))
         @test d[:θ] == (-1.0, 2.0) # I3
     end
 
     @testset "collisions" begin
-        am = AliasMap(:a => (-1.0, :b))
-        # (-1, 2) on :a is the same interval as (-2, 1) on :b
-        @test normalize_bounds(am, Dict(:a => (-1.0, 2.0), :b => (-2.0, 1.0))) == Dict(:b => (-2.0, 1.0))
+        am = AliasMap(:a => :b)
+        @test normalize_bounds(am, Dict(:a => (-1.0, 2.0), :b => (-1.0, 2.0))) == Dict(:b => (-1.0, 2.0))
         # one endpoint off is enough to conflict
-        @test_throws ArgumentError normalize_bounds(am, Dict(:a => (-1.0, 2.0), :b => (-2.0, 9.0)))
+        @test_throws ArgumentError normalize_bounds(am, Dict(:a => (-1.0, 2.0), :b => (-1.0, 9.0)))
     end
 
     @testset "pass-through" begin
@@ -147,14 +146,12 @@ end
 using ModelingToolkitBase
 using ModelingToolkitBase: t_nounits as t, D_nounits as Dt
 using SciCompDSL
-using NetworkDynamics: generate_obs_expansion, settable_symbols, obssym, normalize,
-                       get_aliasmap, delete_aliasmap!, apply_init_formulas!,
-                       apply_guess_formulas!, topological_sort_formulas, dim,
-                       delete_metadata!, pinned_obssyms
+using NetworkDynamics: settable_symbols, obssym, get_aliasmap, delete_aliasmap!,
+                       dim, delete_metadata!, ResolutionRule
 using Graphs: path_graph
 
-# One bus carrying every shape normalization has to tell apart: a sign-flipped alias, an
-# alias chain, an alias of a parameter, a genuinely algebraic (non-alias) observable, a
+# One bus carrying every shape the resolution graph has to tell apart: a sign-flipped relation,
+# a chain of them, an observable defined by a parameter, a genuinely algebraic observable, a
 # multi-root one, and one that depends explicitly on time.
 @mtkmodel AliasNormBus begin
     @variables begin
@@ -170,11 +167,11 @@ using Graphs: path_graph
     @equations begin
         Dt(u_r) ~ -u_r + i_r
         Dt(u_i) ~ -u_i
-        θ ~ -u_r                    # sign flipped alias of a state
+        θ ~ -u_r                    # sign flipped relation to a state
         scaled ~ 2*θ                # chain: scaled = 2θ = -2*u_r
-        nl ~ u_r^2                  # not an alias
-        Vmeas ~ Vset                # alias of a parameter
-        summed ~ u_r + u_i + Vset   # multi-root, not an alias
+        nl ~ u_r^2                  # not invertible
+        Vmeas ~ Vset                # defined by a parameter
+        summed ~ u_r + u_i + Vset   # multi-root
         timed ~ u_r * t             # explicitly time dependent
         P ~ u_r + nl
     end
@@ -183,336 +180,6 @@ end
 const VM = VertexModel(_anb, [:i_r], [:P])
 const AM = get_aliasmap(VM)
 
-@testset "generate_obs_expansion" begin
-    @testset "expands to settable roots" begin
-        # chain through the sign-flipped alias: scaled = 2θ = -2*u_r
-        roots, f = generate_obs_expansion(VM, [:scaled])
-        @test roots == [:u_r]
-        @test f([3.0], NaN) ≈ [-6.0]
-
-        roots, f = generate_obs_expansion(VM, [:summed])
-        @test Set(roots) == Set([:u_r, :u_i, :Vset])
-        vals = [Dict(:u_r => 2.0, :u_i => 0.5, :Vset => 1.5)[r] for r in roots]
-        @test f(vals, NaN) ≈ [4.0]
-    end
-
-    @testset "symbols without an observed equation are their own root" begin
-        roots, f = generate_obs_expansion(VM, [:u_r, :Vset])
-        @test roots == [:u_r, :Vset]
-        @test f([7.0, 9.0], NaN) ≈ [7.0, 9.0]
-    end
-
-    # this is what lets `normalize` hand over a formula's whole input list in one sweep
-    @testset "one sweep over mixed symbols, roots deduplicated" begin
-        roots, f = generate_obs_expansion(VM, [:θ, :u_r, :nl])
-        @test roots == [:u_r]
-        @test f([3.0], NaN) ≈ [-3.0, 3.0, 9.0]
-    end
-
-    @testset "time is an argument, never a root" begin
-        roots, f = generate_obs_expansion(VM, [:timed])
-        @test roots == [:u_r]
-        @test f([2.0], 5.0) ≈ [10.0]
-    end
-
-    @testset "components without observed equations" begin
-        cf = VertexModel(f=(du, u, in, p, t) -> du .= u, g=1:1, sym=[:x], outsym=[:o])
-        @test_throws ArgumentError generate_obs_expansion(cf, [:x])
-    end
-
-    @testset "stop_at halts expansion at pinned symbols" begin
-        # scaled = 2θ, but θ is a frontier symbol now: it must survive as the root even
-        # though it is neither settable nor equation-free
-        roots, f = @test_nowarn generate_obs_expansion(VM, [:scaled]; stop_at=Set([:θ]))
-        @test roots == [:θ]
-        @test f([3.0], NaN) ≈ [6.0]
-
-        # a stopped symbol requested directly is its own root, identity pass-through
-        roots, f = generate_obs_expansion(VM, [:θ]; stop_at=Set([:θ]))
-        @test roots == [:θ]
-        @test f([0.5], NaN) ≈ [0.5]
-
-        # mixed sweep: one sym stops at the frontier, the other expands past it as usual
-        roots, f = generate_obs_expansion(VM, [:scaled, :nl]; stop_at=Set([:θ]))
-        @test Set(roots) == Set([:θ, :u_r])
-        vals = [Dict(:θ => -2.0, :u_r => 3.0)[r] for r in roots]
-        @test f(vals, NaN) ≈ [-4.0, 9.0]
-
-        # empty frontier is exactly the default behavior
-        roots, f = generate_obs_expansion(VM, [:scaled]; stop_at=Set{Symbol}())
-        @test roots == [:u_r]
-        @test f([3.0], NaN) ≈ [-6.0]
-    end
-end
-
-@testset "normalize(::InitFormula)" begin
-    @testset "identity fast path returns ===" begin
-        f = @initformula :Vset = :u_r + :u_i
-        @test normalize(f, AM, VM) === f
-        @test normalize(f, AliasMap(), VM) === f
-    end
-
-    @testset "sign-flipped alias output" begin
-        f = @initformula :θ = 0.25          # θ = -u_r, so u_r must end up at -0.25
-        n = normalize(f, AM, VM)
-        @test n.outsym == [:u_r]
-        @test n.derived_from === f
-        d = Dict{Symbol,Float64}()
-        apply_init_formulas!(d, [n])
-        @test d == Dict(:u_r => -0.25)
-    end
-
-    @testset "sign-flipped alias input" begin
-        f = @initformula :Vset = :θ
-        n = normalize(f, AM, VM)
-        @test n.sym == [:u_r]
-        d = Dict{Symbol,Float64}(:u_r => 3.0)
-        apply_init_formulas!(d, [n])
-        @test d[:Vset] ≈ -3.0
-    end
-
-    # the formula reads an observable nobody pinned a default on; it runs anyway, from the
-    # defaults of the roots
-    @testset "expansion of a genuinely algebraic obs input" begin
-        f = @initformula :P = :summed * 2
-        n = normalize(f, AM, VM)
-        @test Set(n.sym) == Set([:u_r, :u_i, :Vset])
-        d = Dict{Symbol,Float64}(:u_r => 1.0, :u_i => 2.0, :Vset => 4.0)
-        apply_init_formulas!(d, [n])
-        @test d[:P] ≈ 14.0
-    end
-
-    @testset "time-dependent obs input" begin
-        f = @initformula :P = :timed        # timed = u_r * t
-        d = Dict{Symbol,Float64}(:u_r => 3.0)
-        apply_init_formulas!(d, [normalize(f, AM, VM; t=2.0)])
-        @test d[:P] ≈ 6.0
-
-        # roots resolved but t did not. This is an unresolvable *input*, just noticed one
-        # layer deeper, so the caller decides: initialize_component errors ...
-        err = try
-            apply_init_formulas!(Dict{Symbol,Float64}(:u_r => 3.0), [normalize(f, AM, VM)])
-        catch e
-            e
-        end
-        @test err isa ArgumentError
-        @test occursin("depend explicitly on time", sprint(showerror, err))
-
-        # ... and NWState skips (see the NWState testset)
-        d = Dict{Symbol,Float64}(:u_r => 3.0)
-        @test_nowarn apply_init_formulas!(d, [normalize(f, AM, VM)]; error_unresolvable=false)
-        @test !haskey(d, :P)
-    end
-end
-
-@testset "normalize: structural errors" begin
-    @testset "output which is not translatable" begin
-        f = InitFormula([:nl], [:u_i]) do out, u   # :nl = u_r^2, no slot to write to
-            out[:nl] = u[:u_i]
-        end
-        @test_throws ArgumentError normalize(f, AM, VM)
-    end
-
-    @testset "two outputs collapsing onto one canonical symbol" begin
-        f = InitFormula([:θ, :u_r], [:u_i]) do out, u
-            out[:θ] = u[:u_i]
-            out[:u_r] = u[:u_i]
-        end
-        err = try; normalize(f, AM, VM); catch e; e; end
-        @test err isa ArgumentError
-        @test occursin("u_r", sprint(showerror, err))
-    end
-
-    # neither of these overlaps on the raw symbol lists — normalization is what uncovers them
-    @testset "hidden self-dependency" begin
-        alias_induced = @initformula :θ = :u_r * 2        # writes -u_r, reads u_r
-        err = try; normalize(alias_induced, AM, VM); catch e; e; end
-        @test err isa ArgumentError
-        msg = sprint(showerror, err)
-        @test occursin("writes :θ, i.e. :u_r", msg)    # names raw and canonical
-        # nothing expanded here, so the hint must blame the alias class, not a missing formula
-        @test occursin("members of one alias class are one variable", msg)
-        @test !occursin("stop expanding", msg)
-
-        # same, but with an observable input around which does *not* cause the overlap
-        mixed = @initformula :θ = :u_r + :Vmeas
-        @test occursin("members of one alias class are one variable",
-                       sprint(showerror, try; normalize(mixed, AM, VM); catch e; e; end))
-
-        expansion_induced = @initformula :u_r = :summed   # summed = u_r + u_i + Vset
-        @test_throws ArgumentError normalize(expansion_induced, AM, VM)
-    end
-end
-
-# A formula writing a settable symbol and one reading an observable of it share no raw
-# symbol, so before normalization the DAG had no edge between them and the order was
-# arbitrary. This is the central point of the whole exercise.
-@testset "normalize: dependency through an observable" begin
-    A = @initformula :u_i = 5.0
-    B = @initformula :P = :summed                        # summed = u_r + u_i + Vset
-    nA, nB = normalize(A, AM, VM), normalize(B, AM, VM)
-    @test isdisjoint(A.sym, B.outsym) && isdisjoint(B.sym, A.outsym) # no raw edge
-    @test topological_sort_formulas([nB, nA]) == [nA, nB]
-
-    d = Dict{Symbol,Float64}(:u_r => 1.0, :Vset => 2.0)
-    apply_init_formulas!(d, [nB, nA])
-    @test d[:u_i] == 5.0
-    @test d[:P] ≈ 8.0    # 1 + 5 + 2: B saw A's freshly written value
-end
-
-# An observable written by an InitFormula is "pinned": it becomes an init-time dataflow
-# node. Readers stop expansion at it and consume the written value instead of the defining
-# equation — this is what makes backward flow through a model possible (a parent formula
-# states what a child's output must be, the child's formula inverts its own equation).
-@testset "pinned observables" begin
-    @testset "pin classification and the write path" begin
-        w = @initformula :nl = :u_r + 1      # nl = u_r^2 is a non-alias obs
-        r = @initformula :Vset = :nl
-        a = @initformula :θ = 0.5            # alias output — canonicalizes, no pin
-
-        @test pinned_obssyms([w, r, a], VM) == Set([:nl])
-        @test pinned_obssyms(nothing, VM) == Set{Symbol}()
-
-        # without the pin declared, writing the obs still throws...
-        @test_throws ArgumentError normalize(w, AM, VM)
-        # ... with it, there is nothing left to rewrite on either formula
-        @test normalize(w, AM, VM; pinned=Set([:nl])) === w
-        @test normalize(r, AM, VM; pinned=Set([:nl])) === r
-    end
-
-    @testset "expansion stops at a pin along the way" begin
-        h = @initformula :Vset = :scaled     # scaled = 2θ
-        n = normalize(h, AM, VM; pinned=Set([:θ]))
-        @test n.sym == [:θ]
-    end
-
-    @testset "writer → reader dataflow through the pin" begin
-        w = @initformula :nl = :u_r + 1
-        r = @initformula :Vset = :nl
-        pins = pinned_obssyms([w, r], VM)
-        nfs = [normalize(f, AM, VM; pinned=pins) for f in [r, w]]  # wrong order on purpose
-        @test only(topological_sort_formulas(nfs)[1].outsym) == :nl
-        d = Dict{Symbol,Float64}(:u_r => 2.0)
-        apply_init_formulas!(d, nfs)
-        @test d[:nl] ≈ 3.0
-        @test d[:Vset] ≈ 3.0
-    end
-
-    @testset "two writers of one pin are duplicate writers" begin
-        w1 = @initformula :nl = :u_r + 1
-        w2 = @initformula :nl = 5.0
-        pins = pinned_obssyms([w1, w2], VM)
-        nfs = [normalize(f, AM, VM; pinned=pins) for f in [w1, w2]]
-        @test_throws ArgumentError topological_sort_formulas(nfs)
-    end
-
-    @testset "GuessFormulas pin too, as hints" begin
-        # a guess formula may write a pin (it lands in the guesses dict) and read one; the
-        # frontier for guess formulas is the union of init and guess pins
-        gw = @guessformula :nl = :u_r + 1
-        gr = @guessformula :Vset = :nl
-        @test pinned_obssyms([gw, gr], VM) == Set([:nl])
-        @test normalize(gw, AM, VM; pinned=Set([:nl])) === gw
-        @test normalize(gr, AM, VM; pinned=Set([:nl])) === gr
-        @test add_guessformula!(copy(VM), gw) !== nothing
-
-        guesses = Dict{Symbol,Float64}()
-        apply_guess_formulas!(guesses, Dict(:u_r => 2.0), [gw, gr])
-        @test guesses[:nl] ≈ 3.0
-        @test guesses[:Vset] ≈ 3.0
-
-        # an init pin on the same symbol shadows the guess pin: defaults take precedence
-        guesses = Dict{Symbol,Float64}()
-        apply_guess_formulas!(guesses, Dict(:u_r => 2.0, :nl => 10.0), [gw, gr])
-        @test guesses[:Vset] ≈ 10.0
-    end
-end
-
-# Reading through one's own pin is a genuine cycle — the pin stops the expansion, so the
-# formula's effective inputs contain its own output. Needs an obs-of-obs, which the main
-# fixture doesn't have.
-@mtkmodel PinSelfDepBus begin
-    @variables begin
-        x(t) = 1.0
-        y(t); yplus(t)
-        i(t), [input=true]
-        o(t), [output=true]
-    end
-    @parameters begin
-        K = 2.0
-    end
-    @equations begin
-        Dt(x) ~ -x + i
-        y ~ K * x          # parameter factor: not an alias
-        yplus ~ y + 1
-        o ~ x
-    end
-end
-@testset "self-dependency through one's own pin" begin
-    @named _psd = PinSelfDepBus()
-    VMsd = VertexModel(_psd, [:i], [:o])
-    f = @initformula :y = :yplus - 1   # yplus stops at pinned :y → reads what it writes
-    err = try; normalize(f, get_aliasmap(VMsd), VMsd; pinned=Set([:y])); catch e; e; end
-    @test err isa ArgumentError
-    msg = sprint(showerror, err)
-    @test occursin("depends on its own", msg)
-    # the hint must name the observable the cycle runs through, and must *not* offer a pin:
-    # the formula writes the pin itself
-    @test occursin(":yplus is an observable depending on :y", msg)
-    @test occursin("no further formula breaks the loop", msg)
-    @test !occursin("stop expanding", msg)
-end
-
-# The governor-without-machine shape: a formula reads an observable which is downstream of
-# its own output. Absent a second formula pinning that observable it expands straight back
-# onto the output, and the message has to name it as the thing to pin.
-@testset "self-dependency through an unpinned observable" begin
-    f = @initformula :Vset = :summed - :u_r - :u_i
-    err = try; normalize(f, AM, VM); catch e; e; end
-    @test err isa ArgumentError
-    msg = sprint(showerror, err)
-    @test occursin("depends on its own output", msg)
-    @test occursin(":summed is an observable depending on", msg)
-    @test occursin("stop expanding :summed by declaring an InitFormula for it", msg)
-
-    # a guess formula pins with a guess formula, so the suggestion follows the kind
-    gerr = try; normalize((@guessformula :Vset = :summed), AM, VM); catch e; e; end
-    @test occursin("declaring a GuessFormula for it", sprint(showerror, gerr))
-
-    # and pinning `:summed` — i.e. adding the formula that writes it — resolves the cycle:
-    # nothing expands anymore, so `normalize` hands back the very same formula
-    pins = pinned_obssyms([f, (@initformula :summed = 2 * :u_r)], VM)
-    @test pins == Set([:summed])
-    @test normalize(f, AM, VM; pinned=pins) === f
-end
-
-@testset "normalize(::GuessFormula)" begin
-    f = @guessformula :P = :summed
-    n = normalize(f, AM, VM)
-    @test n.outsym == [:P]
-    @test Set(n.sym) == Set([:u_r, :u_i, :Vset])
-
-    # root lookup keeps the documented defaults-before-guesses priority
-    guesses = Dict{Symbol,Float64}(:u_i => 100.0)
-    apply_guess_formulas!(guesses, Dict{Symbol,Float64}(:u_r => 1.0, :u_i => 2.0, :Vset => 4.0), [n])
-    @test guesses[:P] ≈ 7.0
-    guesses = Dict{Symbol,Float64}(:u_i => 10.0)
-    apply_guess_formulas!(guesses, Dict{Symbol,Float64}(:u_r => 1.0, :Vset => 4.0), [n])
-    @test guesses[:P] ≈ 15.0
-
-    # aliased output lands on the canonical symbol, and in `guesses` only
-    g = normalize((@guessformula :θ = :u_i), AM, VM)
-    @test g.outsym == [:u_r]
-    guesses = Dict{Symbol,Float64}()
-    defaults = Dict{Symbol,Float64}(:u_i => 4.0)
-    apply_guess_formulas!(guesses, defaults, [g])
-    @test guesses[:u_r] ≈ -4.0
-    @test !haskey(defaults, :u_r)
-end
-
-# InitConstraints are deliberately left alone: they are evaluated against a full candidate
-# state, so the observable mapping already reads an alias correctly, and `c.sym` feeds
-# nothing structural (only `dim` does). This pins that the untouched path is correct.
 @testset "InitConstraint needs no normalization" begin
     c = @initconstraint :θ + :u_i     # θ = -u_r
     @test :θ ∈ obssym(VM)             # ... reached through the observable mapping
@@ -549,40 +216,6 @@ end
     @test add_guessformula!(bare, @guessformula :θ = :u_i) !== nothing
 end
 
-@testset "normalize: provenance" begin
-    f = @initformula :θ = :Vmeas + :u_i   # writes -u_r; reads Vset, u_i
-    before = (copy(f.sym), copy(f.outsym), f.prettyprint)
-    n = normalize(f, AM, VM)
-
-    @testset "I3: the original is never mutated" begin
-        @test (f.sym, f.outsym, f.prettyprint) == before
-        @test f.derived_from === nothing
-        @test n.derived_from === f
-        @test n.sym !== f.sym    # nor does the copy share its vectors
-    end
-
-    @testset "show reports the original recipe plus what is actually in play" begin
-        s = sprint(show, MIME"text/plain"(), n)
-        @test occursin(f.prettyprint, s)
-        @test occursin("(normalized: [:Vset, :u_i] → [:u_r], derived from [:Vmeas, :u_i] → [:θ])", s)
-        # constructor-built objects (no prettyprint) survive too
-        plain = InitFormula([:θ], [:u_i]) do out, u
-            out[:θ] = u[:u_i]
-        end
-        @test occursin("normalized:", sprint(show, MIME"text/plain"(), normalize(plain, AM, VM)))
-    end
-
-    @testset "unresolvable roots point back at what was asked for" begin
-        nb = normalize((@initformula :P = :summed), AM, VM)
-        d = Dict{Symbol,Float64}(:u_r => 1.0, :Vset => 2.0) # :u_i missing
-        err = try; apply_init_formulas!(d, [nb]); catch e; e; end
-        @test err isa ArgumentError
-        msg = sprint(showerror, err)
-        @test occursin("u_i", msg)      # the root that is actually missing
-        @test occursin("summed", msg)   # ... and the symbol the user wrote
-        @test occursin("Defaults on observables are not consumed", msg)
-    end
-end
 
 # `NWState` fills states/parameters from defaults and formulas, so it normalizes for the
 # same reasons `initialize_component` does — see `_get_appropriate_dict`.
@@ -600,13 +233,17 @@ end
         @test NWState(twonode(v))[VIndex(1, :u_r)] ≈ -0.3
     end
 
-    @testset "contradicting members of one alias class are caught" begin
+    @testset "contradicting members of a scaled pair: the settable one wins" begin
+        # `θ ~ -u_r` is not an alias, it is an invertible *rule*. Two values on the two ends are
+        # therefore two independent roots, and the inverse rule's attempt to write the second
+        # one yields to it silently — see "Precedence" in the design. It used to be one alias
+        # class and an error.
         v = freshvm()
         set_default!(v, :θ, 0.3)
-        set_default!(v, :u_r, 1.0)  # -0.3 vs 1.0, one variable, two values
-        @test_throws ArgumentError NWState(twonode(v))
+        set_default!(v, :u_r, 1.0)  # -0.3 vs 1.0
+        @test NWState(twonode(v))[VIndex(1, :u_r)] ≈ 1.0
 
-        v2 = freshvm()              # ... while agreeing ones merge silently
+        v2 = freshvm()              # ... agreeing ones are indistinguishable from that
         set_default!(v2, :θ, 0.3)
         set_default!(v2, :u_r, -0.3)
         @test NWState(twonode(v2))[VIndex(1, :u_r)] ≈ -0.3
@@ -689,36 +326,62 @@ end
         @test eq(mk(@initconstraint :u_r - 0.5), mk(@initconstraint :θ + 0.5))
     end
 
-    # An override may name any member of the class and must beat the value the class holds,
-    # whichever member the metadata used — one case per carrier, as above.
-    @testset "placement invariance: a default override" begin
-        # the metadata value is the wrong one (u_r must equal i_r = 0.5 for steady state),
-        # so only an override that lands on the class gets this to init at all
-        mk(ov) = let v = base!(freshvm()); set_default!(v, :u_r, 0.1)
-            initialize_component(v; default_overrides=ov, verbose=false)
+    # An override names a *slot*, so it beats the metadata value on the symbol it names.
+    # `θ ~ -u_r` is a scaled relation and not an alias, so :θ and :u_r are different slots:
+    # an override on :θ is an ordinary value on an observable and travels to :u_r through
+    # the inverse rule, where it fills an empty symbol but yields to one that already
+    # carries a value. That is the accepted cost of "alias means alias".
+    @testset "default override on a scaled alias fills, but does not displace" begin
+        free = let v = base!(freshvm())    # u_r carries no default
+            initialize_component(v; default_overrides=Dict(:θ => -0.5), verbose=false)
         end
-        canon = mk(Dict(:u_r => 0.5))
-        alias = mk(Dict(:θ => -0.5))
-        @test eq(canon, alias)
-        @test alias[:u_r] ≈ 0.5    # the override, not the 0.1 from metadata
+        @test free[:u_r] ≈ 0.5
+        @test !haskey(free, :θ)
+
+        # ... and the same override against a default on :u_r loses to it. The disagreement
+        # stays visible: :θ is a value on an observable, so the final state is checked against it.
+        io = IOBuffer()
+        taken = let v = base!(freshvm()); set_default!(v, :u_r, 0.5)
+            initialize_component(v; default_overrides=Dict(:θ => -0.1), verbose=false, io)
+        end
+        @test taken[:u_r] ≈ 0.5
+        @test occursin("θ", String(take!(io)))
+
+        # an override on the canonical symbol itself does displace, as always
+        canon = let v = base!(freshvm()); set_default!(v, :u_r, 0.1)
+            initialize_component(v; default_overrides=Dict(:u_r => 0.5), verbose=false)
+        end
+        @test canon[:u_r] ≈ 0.5
     end
 
-    @testset "guess override on an alias beats the metadata guess" begin
-        # guesses only seed the solve, so the working dict is the only place the override
-        # is observable — the solution is the same either way
-        g = Ref{Any}()
-        v = base!(freshvm()); set_guess!(v, :u_r, 0.1)
-        initialize_component(v; guess_overrides=Dict(:θ => -0.7), verbose=false, _final_guesses=g)
-        @test g[][:u_r] ≈ 0.7
-        @test !haskey(g[], :θ)
+    @testset "guess override on a scaled alias fills, but does not displace" begin
+        # guesses only seed the solve, so the working dict is the only place this is observable
+        function mk(v)
+            g = Ref{Any}()
+            initialize_component(v; guess_overrides=Dict(:θ => -0.7), verbose=false, _final_guesses=g)
+            g[]
+        end
+        free = mk(base!(freshvm()))
+        @test free[:u_r] ≈ 0.7
+        @test free[:θ] ≈ -0.7   # the seed stays in the dict; a guess on an observable is inert
+
+        taken = mk(let v = base!(freshvm()); set_guess!(v, :u_r, 0.1); v end)
+        @test taken[:u_r] ≈ 0.1   # the metadata guess
     end
 
-    @testset "a removal marker reaches the class through any member" begin
-        d = Ref{Any}()
-        v = base!(freshvm()); set_default!(v, :u_r, 0.5); set_guess!(v, :u_r, 0.1)
-        initialize_component(v; default_overrides=Dict(:θ => nothing), verbose=false, _final_defaults=d)
-        @test !haskey(d[], :u_r)   # the default is gone, u_r is free and solved for again
-        @test !haskey(d[], :θ)
+    @testset "a removal marker names one slot" begin
+        function mk(ov)
+            d = Ref{Any}()
+            v = base!(freshvm())
+            set_default!(v, :u_r, 0.5); set_guess!(v, :u_r, 0.1)
+            initialize_component(v; default_overrides=ov, verbose=false, _final_defaults=d)
+            d[]
+        end
+        # naming the scaled member removes nothing — :θ has no default of its own
+        @test mk(Dict(:θ => nothing))[:u_r] ≈ 0.5
+        # naming the symbol that carries the default does remove it: u_r goes free and is
+        # solved back to i_r = 0.5 from its guess
+        @test !haskey(mk(Dict(:u_r => nothing)), :u_r)
     end
 
     @testset "write-back: alias readable as factor * canonical" begin
@@ -757,10 +420,10 @@ end
         set_default!(v, :nl, 4.0)   # pinned on the observable itself
         add_initformula!(v, @initformula :Vset = :nl)
         err = try; initialize_component(v; verbose=false); catch e; e end
-        @test err isa ArgumentError
-        msg = sprint(showerror, err)
-        @test occursin("roots of the originally requested [:nl]", msg)
-        @test occursin("provide defaults for the roots", msg)
+        # `nl ~ u_r^2` is not invertible, so the value on :nl reaches nothing: the formula reads
+        # :nl as the graph computes it, and with :u_r unknown the rule simply never fires
+        @test err isa NetworkDynamics.ComponentInitError
+        @test occursin("u_r", sprint(showerror, err))
     end
 
     # I1: a hand-built, non-MTK component has no aliasmap and no observable-input formulas, so
@@ -822,7 +485,7 @@ end
         @test state[:x] ≈ 0.3     # (1.5 - 20*0) / 5
         @test state[:v] ≈ 1.0
         @test !haskey(state, :y)  # the pin is init-time scratch, never part of the state
-        @test occursin("(pinned observable)", out)
+        @test occursin("(obs)", out)
         @test occursin("No free variables!", out)
     end
 
@@ -843,9 +506,11 @@ end
         catch e; e; end
         @test err isa ArgumentError
         msg = sprint(showerror, err)
-        @test occursin("depends on its own output", msg)
-        @test occursin(":y is an observable depending on", msg)
-        @test occursin("stop expanding :y by declaring an InitFormula for it", msg)
+        # nothing is expanded any more, so this is no longer a self-dependency: the reader's
+        # input :y is computed from the very symbol it writes, so neither rule ever becomes
+        # ready and the message names the cycle by naming what :y needs
+        @test occursin("could not be resolved", msg)
+        @test occursin(":y (computable from [:x])", msg)
     end
 
     @testset "a wrong unread pin trips the consistency warning" begin
@@ -885,7 +550,7 @@ end
             additional_guessformula=[pin_y_g, calc_x_g],
             verbose=true, io)
         out = String(take!(io))
-        @test occursin("(pinned observable)", out)   # marked in the guess rows
+        @test occursin("(obs)", out)   # marked in the guess rows
         @test occursin("NonlinearLeastSquaresProblem", out)  # x stays free, unlike initformula
         @test state[:x] ≈ 0.3 atol=1e-8
         @test !haskey(state, :y)
@@ -1027,8 +692,8 @@ end
     am = get_aliasmap(GB)
 
     # Efd and Pm survive as the control states, the machine-side names are their aliases
-    @test am[:machine₊Efd] == (1.0, :avr₊Efd)
-    @test am[:machine₊Pm]  == (1.0, :gov₊Pm)
+    @test am[:machine₊Efd] == :avr₊Efd
+    @test am[:machine₊Pm]  == :gov₊Pm
 
     # the machine back-init produces Efd/Pm/θ from the terminal condition; the controls
     # back-compute their setpoints from Efd/Pm
@@ -1047,15 +712,6 @@ end
         set_default!(v, :i_r, ir); set_default!(v, :i_i, ii)
         set_default!(v, :machine₊ω, 0.0)
         v
-    end
-
-    @testset "back-init sorts before the controls after normalization" begin
-        nM, nA, nG = normalize(fM, am, GB), normalize(fA, am, GB), normalize(fG, am, GB)
-        # no shared *raw* symbol → before normalization the DAG has no edge and order is free
-        @test isdisjoint(fA.sym, fM.outsym) && isdisjoint(fG.sym, fM.outsym)
-        # normalization collapses the alias classes, so both controls now depend on M
-        @test :avr₊Efd in nA.sym && :gov₊Pm in nG.sym
-        @test first(topological_sort_formulas([nA, nG, nM])).outsym == nM.outsym
     end
 
     @testset "end-to-end init reproduces the hand-computed reference" begin
@@ -1098,8 +754,8 @@ end
         err = try; initialize_component(v; verbose=false, warn=false); catch e; e; end
         @test err isa ArgumentError
         msg = sprint(showerror, err)
-        @test occursin("requires all input symbols to be initialized", msg)
-        @test occursin(":gov₊Pm => NaN", msg)
+        @test occursin("could not be resolved: its inputs are unknown", msg)
+        @test occursin("nothing computes it, provide it directly", msg)
         @test !occursin("depends on its own output", msg)
     end
 
@@ -1201,12 +857,15 @@ end
 
     @testset "the class is detected, with a deterministic canonical" begin
         @test obssym(OAB) == [:consumer₊inp_u, :producer₊out_u]
-        @test get_aliasmap(OAB)[:producer₊out_u] == (1.0, :consumer₊inp_u)
+        @test get_aliasmap(OAB)[:producer₊out_u] == :consumer₊inp_u
     end
 
     @testset "the pin is one node under both names" begin
-        @test pinned_obssyms([demand_producer_name, invert], OAB) == Set([:consumer₊inp_u])
-        @test pinned_obssyms([demand_consumer_name, invert], OAB) == Set([:consumer₊inp_u])
+        # the rules canonicalize their own symbol lists, so which member the user wrote against
+        # no longer decides whether writer and reader meet
+        am = get_aliasmap(OAB)
+        @test only(ResolutionRule(demand_producer_name, am).outsym) == :consumer₊inp_u
+        @test only(ResolutionRule(demand_consumer_name, am).outsym) == :consumer₊inp_u
     end
 
     # y = 1 ⇒ demanded out_u = 2 ⇒ x1 = x2 = 2/(K1+K2) = 2 ⇒ r1 = r2 = 2, residual 0.
@@ -1242,13 +901,22 @@ end
     end
 
     @testset "two members of the class are two writers of one node" begin
+        # Both spellings write the same node, which used to be rejected structurally. It is now
+        # an ordinary equal-rank collision: these two agree, so the redundancy is accepted and
+        # the init is the same as with either one alone.
+        state = initialize_component(OAB;
+            additional_initformula=[demand_producer_name, demand_consumer_name, invert],
+            verbose=false)
+        @test all(state[k] ≈ v for (k, v) in reference)
+
+        # ... and a *disagreeing* pair is caught, by value rather than by structure
+        contradiction = @initformula :consumer₊inp_u = 3.0 * :consumer₊y
         err = try
             initialize_component(OAB;
-                additional_initformula=[demand_producer_name, demand_consumer_name, invert],
+                additional_initformula=[demand_producer_name, contradiction, invert],
                 verbose=false)
         catch e; e end
         @test err isa ArgumentError
-        # both writers land on the canonical name of the class
         @test occursin("consumer₊inp_u", sprint(showerror, err))
     end
 end
