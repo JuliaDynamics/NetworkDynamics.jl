@@ -123,11 +123,16 @@ function warn_missing_features(sys)
         @warn "Model has explicit init equation. Those are currently ignored by NetworkDynamics.jl."
     end
 
-    calls = filter(iscall, parameters(sys) ∪ unknowns(sys))
+    ps = parameters(sys)
+    calls = filter(iscall, ps ∪ unknowns(sys))
     any(x -> operation(x) === Base.getindex, calls) && @warn "NetworkDynamics does not support vector-variables or vector-parameters in MTK models. Detected: $(join(repr.(filter(x -> operation(x) === Base.getindex, calls)), ", "))"
 
-    has_discretes = any(unknowns(sys)) do s
-        s.metadata[Symbolics.VariableSource][1] == :discretes
+    # `VariableSource` records which macro declared a symbol; `@discretes` marks its own.
+    # Discretes are parameters, and a symbol that never went through such a macro carries
+    # no source at all.
+    has_discretes = any(ps) do s
+        src = SymbolicUtils.getmetadata(s, Symbolics.VariableSource, nothing)
+        src isa NTuple{2,Symbol} && first(src) === :discretes
     end
     if has_discretes
         @warn "Model contains variables defined via @discretes. This is not supported in NetworkDynamics. \
