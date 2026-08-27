@@ -11,6 +11,7 @@ using SparseConnectivityTracer
 using StableRNGs
 using OrdinaryDiffEqRosenbrock
 using OrdinaryDiffEqNonlinearSolve
+using NonlinearSolve # for AutoFiniteDiff
 using SparseArrays
 @__MODULE__()==Main ? includet(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl")) : (const Lib = Main.Lib)
 
@@ -136,9 +137,13 @@ end
     prob_d = ODEProblem(nw_d, s0_d, (0.0, 10.0))
     prob_sparse_d = ODEProblem(nw_sparse_d, s0_d, (0.0, 10.0))
 
-    SAVE_INITALG = BrownFullBasicInit(nlsolve=FastShortcutNonlinearPolyalg(; autodiff=AutoFiniteDiff()))
-    solve(prob_d, Rodas5P(); initializealg=SAVE_INITALG) # DI.jacobian! scalar indexing again, i gues  fixed by (1)?
-    solve(prob_sparse_d, Rodas5P(; linsolve=KrylovJL_GMRES())) # ERROR: CanonicalIndexError: setindex! not defined for CuSparseMatrixCSC{Float64, Int32}
+    # SAVE_INITALG = BrownFullBasicInit(nlsolve=FastShortcutNonlinearPolyalg(; autodiff=AutoFiniteDiff()))
+    # solve(prob_d, Rodas5P(); initializealg=SAVE_INITALG) # DI.jacobian! scalar indexing again, i gues  fixed by (1)?
+    # solve(prob_sparse_d, Rodas5P(; linsolve=KrylovJL_GMRES())) # ERROR: CanonicalIndexError: setindex! not defined for CuSparseMatrixCSC{Float64, Int32}
+
+    solve(prob_d, Rodas5P())
+    solve(prob_sparse_d, Rodas5P(; linsolve=NonlinearSolve.KrylovJL_GMRES()))
+    solve(prob_sparse_d, Rodas5P()) # spares arrays extension not loaded -> set_all_nzval overload missing
 
     # NEEDS
     # which would probably help with lots of the error classes
