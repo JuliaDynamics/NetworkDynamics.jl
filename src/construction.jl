@@ -202,7 +202,7 @@ function Network(g::AbstractGraph,
 
         @assert isdense(im)
         mass_matrix = construct_mass_matrix(im)
-        N = ForwardDiff.pickchunksize(max(im.lastidx_dynamic, im.lastidx_p))
+        N = ad_chunksize(im)
         caches = (; output = DiffCache(zeros(im.lastidx_out), N),
                     aggregation = DiffCache(zeros(im.lastidx_aggr), N),
                     external = DiffCache(zeros(im.lastidx_extbuf), N))

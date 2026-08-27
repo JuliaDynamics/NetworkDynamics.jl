@@ -477,7 +477,7 @@ end
 function _batch_condition(ccw::ContinuousCallbackWrapper)
     usymidxs = collect_c_or_a_indices(ccw, getcondition, :sym)
     psymidxs = collect_c_or_a_indices(ccw, getcondition, :psym)
-    ucache = DiffCache(zeros(length(usymidxs)), 12)
+    ucache = DiffCache(zeros(length(usymidxs)), ad_chunksize(ccw.nw.im))
 
     obsf = SII.observed(ccw.nw, usymidxs)
     pidxs = SII.parameter_index.(Ref(ccw.nw), psymidxs)
@@ -660,7 +660,7 @@ end
 function _batch_condition(dcw::DiscreteCallbackWrapper)
     usymidxs = collect_c_or_a_indices(dcw, getcondition, :sym)
     psymidxs = collect_c_or_a_indices(dcw, getcondition, :psym)
-    ucache = DiffCache(zeros(length(usymidxs)), 12)
+    ucache = DiffCache(zeros(length(usymidxs)), ad_chunksize(dcw.nw.im))
 
     obsf = SII.observed(dcw.nw, usymidxs)
     pidxs = SII.parameter_index.(Ref(dcw.nw), psymidxs)
@@ -698,7 +698,7 @@ function _batch_affect(dcw::DiscreteCallbackWrapper)
     # Setup for condition re-evaluation
     cusymidxs = collect_c_or_a_indices(dcw, getcondition, :sym)
     cpsymidxs = collect_c_or_a_indices(dcw, getcondition, :psym)
-    cucache = DiffCache(zeros(length(cusymidxs)), 12)
+    cucache = DiffCache(zeros(length(cusymidxs)), ad_chunksize(dcw.nw.im))
     cobsf = SII.observed(dcw.nw, cusymidxs)
     cpidxs = SII.parameter_index.(Ref(dcw.nw), cpsymidxs)
 

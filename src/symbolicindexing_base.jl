@@ -673,7 +673,8 @@ function SII.observed(nw::Network, snis)
         end
     end
 
-    obsoutcache = DiffCache(Vector{Float64}(undef, total_obs_dim)) # big cache for all obs outputs
+    # big cache for all obs outputs; it is filled with the same eltype as the network buffers
+    obsoutcache = DiffCache(Vector{Float64}(undef, total_obs_dim), ad_chunksize(nw.im))
     if isscalar
         (u, p, t; kwargs...) -> begin
             outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs=needsbuf, kwargs...)
