@@ -12,8 +12,9 @@ import NetworkDynamics: aggregate!
 using RuntimeGeneratedFunctions: RuntimeGeneratedFunctions, RuntimeGeneratedFunction
 
 using CUDA: CuArray, CuVector
-using CUDA.CUSPARSE: CuSparseMatrixCSC
+using CUDA.CUSPARSE: CuSparseMatrixCSC, CuSparseMatrixCSR
 using LinearAlgebra: LinearAlgebra, mul!, transpose
+using SparseArrays: AbstractSparseMatrix
 using Adapt: Adapt, adapt
 
 # main entry for bringing Network to GPU
@@ -44,7 +45,7 @@ function Adapt.adapt_structure(to, n::Network)
     exT = typeof(executionstyle(n))
     loopbackmap = _adapt_loopbackmap(to, n.loopbackmap)
     extmap = adapt(to, n.extmap)
-    jac_prototype = adapt(to, n.jac_prototype)
+    jac_prototype = _adapt_jac_prototype(to, n.jac_prototype)
 
     Network(exT, vb, layer, n.im, caches, mm, gbp, loopbackmap, extmap, jac_prototype)
 end
@@ -169,6 +170,18 @@ _adapt_rgf(w::Fiducial) = Fiducial(_adapt_rgf(w.src), _adapt_rgf(w.dst))
 _adapt_rgf(rgf::RuntimeGeneratedFunction{<:Any,<:Any,<:Any,<:Any,<:Nothing}) = rgf
 _adapt_rgf(rgf::RuntimeGeneratedFunction) = RuntimeGeneratedFunctions.drop_expr(rgf)
 _adapt_rgf(f) = f
+
+####
+#### Adapt Jacobian prototype
+####
+# CSR rather than the CSC an `adapt` of a `SparseMatrixCSC` would give: it is the layout the
+# GPU sparse solvers want. cuDSS refuses CSC outright and cuSOLVER's sparse QR only takes
+# CSR, so a CSC prototype leaves Krylov as the only option. Convert here instead of
+# teaching `adapt` about CPU sparse matrices, which would be piracy.
+_adapt_jac_prototype(to, ::Nothing) = nothing
+function _adapt_jac_prototype(to::Type{<:CuArray{T}}, jac::AbstractSparseMatrix) where {T}
+    CuSparseMatrixCSR{T}(jac)
+end
 
 ####
 #### utils
