@@ -1,5 +1,6 @@
 using CUDA
 using CUDA.CUSPARSE
+using CUDSS # LinearSolve only offers a direct sparse device solve once this is loaded
 using Adapt
 using NetworkDynamics
 using StableRNGs
@@ -8,10 +9,13 @@ using Graphs
 using Random
 using Test
 using SparseConnectivityTracer
-using StableRNGs
 using OrdinaryDiffEqRosenbrock
 using OrdinaryDiffEqNonlinearSolve
 using NonlinearSolve # for AutoFiniteDiff
+using NonlinearSolve: NewtonRaphson, KrylovJL_GMRES, LUFactorization, QRFactorization
+using OrdinaryDiffEqSDIRK: KenCarp4, TRBDF2
+using OrdinaryDiffEqNonlinearSolve: BrownFullBasicInit
+using SciMLBase
 using SparseArrays
 @__MODULE__()==Main ? includet(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl")) : (const Lib = Main.Lib)
 
@@ -114,41 +118,84 @@ nw2_d(dx_d1, x0_d1, p_d1, NaN)
     @test pflat(adapted_s0) isa CuArray{Float32}
 end
 
+# One device solve, so that every configuration below is a single test line rather than a
+# commented-out block. Returns whether the solve succeeded; a configuration that errors is
+# reported by `@test_broken` just like one that returns false.
+#
+# `layout` picks the Jacobian prototype: `:dense` sets none at all, `:csr` is what `adapt`
+# gives and the only layout with a direct sparse solver on the device, `:csc` is the other
+# cuSPARSE layout, which always falls back to Krylov.
+#
+# `maxiters` is far below the solver default on purpose. A configuration that crawls should
+# come back as a failure rather than eat the whole CI budget.
+function run_on_gpu(nw, s0; T, layout, solver, linsolve=nothing, initializealg=nothing,
+                    tspan=(0.0, 1.0), maxiters=2000)
+    nw_d = adapt(CuArray{T}, layout === :dense ? copy(nw) : set_jac_prototype!(copy(nw)))
+    layout === :csc && set_jac_prototype!(nw_d, CuSparseMatrixCSC(nw_d.jac_prototype))
+    prob = ODEProblem(nw_d, adapt(CuArray{T}, s0), tspan)
+    alg = isnothing(linsolve) ? solver() : solver(; linsolve)
+    kwargs = isnothing(initializealg) ? (;) : (; initializealg)
+    sol = solve(prob, alg; maxiters, kwargs...)
+    SciMLBase.successful_retcode(sol)
+end
+
+# Every entry is one test line; `broken` marks what is known not to work today. The list is
+# deliberately shorter than the full product of the options — each new combination compiles a
+# fresh solver specialisation, which is what the runtime here is spent on.
+gpu_configs = [
+    (; name="Float64 dense Rodas5P",     T=Float64, layout=:dense, solver=Rodas5P,  broken=false),
+    (; name="Float64 dense Rodas5P GMRES", T=Float64, layout=:dense, solver=Rodas5P, broken=false,
+       linsolve=KrylovJL_GMRES()),
+    (; name="Float64 dense KenCarp4",    T=Float64, layout=:dense, solver=KenCarp4, broken=false),
+    (; name="Float64 dense TRBDF2 GMRES", T=Float64, layout=:dense, solver=TRBDF2,  broken=false,
+       linsolve=KrylovJL_GMRES()),
+    # CSC has no direct solver on the device at all: LinearSolve warns and hands over to Krylov.
+    (; name="Float64 CSC Rodas5P",       T=Float64, layout=:csc,   solver=Rodas5P,  broken=false),
+    (; name="Float64 CSC KenCarp4",      T=Float64, layout=:csc,   solver=KenCarp4, broken=false),
+    # CSR is what `adapt` produces. With CUDSS loaded the default linsolve is a real cuDSS LU,
+    # and `QRFactorization` reaches cuSOLVER's sparse QR.
+    (; name="Float64 CSR Rodas5P cuDSS", T=Float64, layout=:csr,   solver=Rodas5P,  broken=false),
+    (; name="Float64 CSR Rodas5P cuDSS LU", T=Float64, layout=:csr, solver=Rodas5P, broken=false,
+       linsolve=LUFactorization()),
+    (; name="Float64 CSR Rodas5P cuSOLVER QR", T=Float64, layout=:csr, solver=Rodas5P, broken=false,
+       linsolve=QRFactorization()),
+    (; name="Float64 CSR KenCarp4",      T=Float64, layout=:csr,   solver=KenCarp4, broken=false),
+    (; name="Float64 CSR TRBDF2 GMRES",  T=Float64, layout=:csr,   solver=TRBDF2,   broken=false,
+       linsolve=KrylovJL_GMRES()),
+    # A sparse prototype plus an explicit init nlsolve dies compiling a device broadcast that
+    # stores a `Dual` into a float view. Independent of the eltype.
+    (; name="Float64 CSR Rodas5P NewtonRaphson init", T=Float64, layout=:csr, solver=Rodas5P,
+       broken=true, initializealg=BrownFullBasicInit(nlsolve=NewtonRaphson())),
+    # Float32 never gets past DAE initialization, whatever the layout or the init algorithm.
+    (; name="Float32 dense Rodas5P",     T=Float32, layout=:dense, solver=Rodas5P,  broken=true),
+    (; name="Float32 CSR Rodas5P",       T=Float32, layout=:csr,   solver=Rodas5P,  broken=true),
+]
+
 @testset "actual GPU solve" begin
     nw, s0 = Lib.powergridlike_network(; execution=KAExecution{true}(), aggregator=SparseAggregator(+))
     s0.v[3, :Pset] = -1.2 # force some dynamics
     s0.v[5, :u_i] = -1 # force reinit
 
+    # host reference: initialization actually has to do something
     prob = ODEProblem(nw, s0, (0.0, 10.0))
     @test prob.f.jac_prototype == nothing
     sol = solve(prob, Rodas5P())
     @test sol(0.0, idxs=VIndex(5, :u_i)) != -1 # reinit happend
 
     nw_sparse = set_jac_prototype!(copy(nw))
-    prob_sparse = ODEProblem(nw_sparse, s0, (0.0, 1.0))
-    @test prob_sparse.f.jac_prototype isa SparseMatrixCSC
-    solve(prob_sparse, Rodas5P())
+    @test ODEProblem(nw_sparse, s0, (0.0, 1.0)).f.jac_prototype isa SparseMatrixCSC
+    @test adapt(CuArray{Float64}, nw_sparse).jac_prototype isa CuSparseMatrixCSR
 
-    # device variants
-    s0_d = adapt(CuArray{Float64}, s0)
-    nw_d = adapt(CuArray{Float64}, nw)
-    nw_sparse_d = adapt(CuArray{Float64}, nw_sparse)
-    nw_sparse_d.jac_prototype isa CuSparseMatrixCSC
-    prob_d = ODEProblem(nw_d, s0_d, (0.0, 10.0))
-    prob_sparse_d = ODEProblem(nw_sparse_d, s0_d, (0.0, 10.0))
-
-    # SAVE_INITALG = BrownFullBasicInit(nlsolve=FastShortcutNonlinearPolyalg(; autodiff=AutoFiniteDiff()))
-    # solve(prob_d, Rodas5P(); initializealg=SAVE_INITALG) # DI.jacobian! scalar indexing again, i gues  fixed by (1)?
-    # solve(prob_sparse_d, Rodas5P(; linsolve=KrylovJL_GMRES())) # ERROR: CanonicalIndexError: setindex! not defined for CuSparseMatrixCSC{Float64, Int32}
-
-    solve(prob_d, Rodas5P())
-    solve(prob_sparse_d, Rodas5P(; linsolve=NonlinearSolve.KrylovJL_GMRES()))
-    solve(prob_sparse_d, Rodas5P()) # spares arrays extension not loaded -> set_all_nzval overload missing
-
-    # NEEDS
-    # which would probably help with lots of the error classes
-    # https://github.com/JuliaDiff/ForwardDiff.jl/pull/816
-
+    for cfg in gpu_configs
+        kwargs = Base.structdiff(cfg, (; name=nothing, broken=nothing))
+        @testset "$(cfg.name)" begin
+            if cfg.broken
+                @test_broken run_on_gpu(nw, s0; kwargs...)
+            else
+                @test run_on_gpu(nw, s0; kwargs...)
+            end
+        end
+    end
 end
 
 
