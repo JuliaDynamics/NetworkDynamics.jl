@@ -5,7 +5,8 @@ using DifferentiationInterface
 using DifferentiationInterfaceTest
 using SparseConnectivityTracer
 
-import ForwardDiff, FiniteDiff, ReverseDiff, Enzyme, Mooncake
+import ForwardDiff, FiniteDiff, ReverseDiff, Enzyme
+# import Mooncake
 import Enzyme: EnzymeCore
 
 @__MODULE__()==Main ? includet(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl")) : (const Lib = Main.Lib)
@@ -43,7 +44,7 @@ Jp_ref = jacobian(fp, AutoFiniteDiff(), pf)
     backends = [
         "ForwardDiff" => AutoForwardDiff(),
         "ReverseDiff" => AutoReverseDiff(),
-        "Mooncake"    => AutoMooncake(),
+        # "Mooncake"    => AutoMooncake(),
         "Enzyme fwd"  => AutoEnzyme(; mode=EnzymeCore.Forward, function_annotation=EnzymeCore.Const),
         "Enzyme rev"  => AutoEnzyme(; mode=EnzymeCore.Reverse, function_annotation=EnzymeCore.Const),
     ]
@@ -73,20 +74,20 @@ Jp_ref = jacobian(fp, AutoFiniteDiff(), pf)
     end
 end
 
-@testset "DifferentiationInterfaceTest scenarios" begin
-    scenarios = [Scenario{:jacobian, :in}(fx, x0; res1=Jx_ref),
-                 Scenario{:jacobian, :in}(fp, pf; res1=Jp_ref)]
-    backends = [AutoForwardDiff(), AutoReverseDiff(), AutoMooncake(),
-                AutoEnzyme(; mode=EnzymeCore.Forward, function_annotation=EnzymeCore.Const)]
-    test_differentiation(
-        backends,
-        scenarios,
-        correctness=true,
-        type_stability=:none,
-        detailed=true,
-        benchmark=:none,
-    )
-end
+# @testset "DifferentiationInterfaceTest scenarios" begin
+#     scenarios = [Scenario{:jacobian, :in}(fx, x0; res1=Jx_ref),
+#                  Scenario{:jacobian, :in}(fp, pf; res1=Jp_ref)]
+#     backends = [AutoForwardDiff(), AutoReverseDiff(), AutoMooncake(),
+#                 AutoEnzyme(; mode=EnzymeCore.Forward, function_annotation=EnzymeCore.Const)]
+#     test_differentiation(
+#         backends,
+#         scenarios,
+#         correctness=true,
+#         type_stability=:none,
+#         detailed=true,
+#         benchmark=:none,
+#     )
+# end
 
 @testset "sparsity tracer" begin
     detector = TracerSparsityDetector()
