@@ -1,17 +1,3 @@
-module NetworkDynamicsSparsityExt
-
-using SparseConnectivityTracer: TracerSparsityDetector, jacobian_sparsity
-using NetworkDynamics: NetworkDynamics, Network, NWState, uflat, pflat,
-                       EdgeModel, VertexModel, dim, pdim,
-                       Symmetric, AntiSymmetric, Directed, Fiducial,
-                       executionstyle, SequentialAggregator, Aggregator, KAAggregator,
-                       ComponentBatch, indim, outdim, extdim, fftype
-using MacroTools: postwalk
-using RuntimeGeneratedFunctions: RuntimeGeneratedFunctions, RuntimeGeneratedFunction, @RuntimeGeneratedFunction
-using ForwardDiff: ForwardDiff
-using Accessors: @set
-RuntimeGeneratedFunctions.init(@__MODULE__)
-
 struct RemainingConditionalsException <: Exception end
 
 """
@@ -52,9 +38,9 @@ the forward-diff jacobian. This check will be disabled with a warning for large 
     which alters the semantics but keeps the conservative sparsity pattern. Nested conditionals
     are collapsed from the inside out.
 
-See also [`NetworkDynamics.set_jac_prototype!`](@ref).
+See also [`set_jac_prototype!`](@ref).
 """
-function NetworkDynamics.get_jac_prototype(
+function get_jac_prototype(
     nw_original::Network;
     check=:auto, make_compatible=true, verbose=true, showerror=false,
     dense=nothing, remove_conditions=nothing, # deprecated
@@ -211,7 +197,7 @@ function _test_SCT_compat(batch; error=false, showerror)
             u = view(allinputs, urange)
             ins = map(i -> view(allinputs, inranges[i]), 1:length(inranges))
             p = view(allinputs, prange)
-            NetworkDynamics.apply_compf(batch.compf, du, u, ins, p, allinputs[end])
+            apply_compf(batch.compf, du, u, ins, p, allinputs[end])
             nothing
         end
 
@@ -241,7 +227,7 @@ function _test_SCT_compat(batch; error=false, showerror)
         u = view(allinputs, urange)
         ins = map(i -> view(allinputs, inranges[i]), 1:length(inranges))
         p = view(allinputs, prange)
-        NetworkDynamics.apply_compg(fftype(batch), batch.compg, outs, u, ins, p, allinputs[end])
+        apply_compg(fftype(batch), batch.compg, outs, u, ins, p, allinputs[end])
         nothing
     end
 
@@ -376,7 +362,7 @@ _compatible_exstyle(nw) = executionstyle(nw)
 # KAAggregator is known to be incompatible
 _needs_new_aggregator(nw) = nw.layer.aggregator isa KAAggregator
 _new_aggregator(x::KAAggregator) = SequentialAggregator(x.f)
-_new_aggregator(x::Aggregator) = NetworkDynamics.get_aggr_constructor(x)
+_new_aggregator(x::Aggregator) = get_aggr_constructor(x)
 
 
 function _generic_dense_f(dx, args...)
@@ -403,5 +389,3 @@ function _generic_dense_vertexg(o1, args...)
     end
     nothing
 end
-
-end # module

@@ -25,6 +25,10 @@ Optional keyword arguments:
     Check if the components alias eachother and create copies if necessary.
     This is necessary if the same component model is referenced in multiple places in the Network but you want to
     dynamicially asign metadata, such as initialization information to specific instances.
+ - `sparse=false`:
+    Detect the Jacobian sparsity pattern and store it in the network, which lets stiff solvers
+    and the initialization use sparse linear algebra. Equivalent to calling
+    [`set_jac_prototype!`](@ref) afterwards, see also [`get_jac_prototype`](@ref).
  - `verbose=false`:
     Show additional information during construction.
 """
@@ -35,7 +39,9 @@ function Network(g::AbstractGraph,
                  aggregator=execution isa SequentialExecution ? SequentialAggregator(+) : PolyesterAggregator(+),
                  check_graphelement=true,
                  dealias=false,
+                 sparse=false,
                  verbose=false)
+    @argcheck sparse isa Bool "`sparse` must be `true` or `false`."
     # TimerOutputs.reset_timer!()
     @timeit_debug "Construct Network" begin
         # collect all vertex/edgf to vector
@@ -232,6 +238,7 @@ function Network(g::AbstractGraph,
 
     end
     # TimerOutputs.print_timer()
+    sparse && set_jac_prototype!(nw)
     return nw
 end
 
@@ -471,6 +478,9 @@ end
 
 Rebuild the Network with same graph and vertex/edge models but possibly different kwargs.
 If `copy_components=true` (default) then the vertex and edge models are copied.
+
+A network built from one which carries a Jacobian sparsity pattern carries one too. Pass
+`sparse=false` to drop it.
 """
 function Network(nw::Network;
                  g = nothing,
@@ -499,10 +509,17 @@ function Network(nw::Network;
                    :aggregator => get_aggr_constructor(nw.layer.aggregator),
                    :check_graphelement => true,
                    :dealias => false,
+                   # a network built from a sparse one stays sparse
+                   :sparse => !isnothing(nw.jac_prototype),
                    :verbose => false)
     for (k, v) in kwargs
         _kwargs[k] = v
     end
+
+    # If the structure did not change the pattern cannot have changed either, so hand the old
+    # one over rather than paying for the detection a second time.
+    reuse_prototype = _kwargs[:sparse] === true && structurally_identical && !isnothing(nw.jac_prototype)
+    reuse_prototype && (_kwargs[:sparse] = false)
 
     # check, that we actually provide all of the arguments
     # mainly so we don't forget to add it here if we introduce new kw arg to main constructor
@@ -516,8 +533,7 @@ function Network(nw::Network;
 
     new_nw = Network(g, vertexm, edgem; _kwargs...)
 
-    # Copy jac_prototype if structure is unchanged
-    if structurally_identical && !isnothing(nw.jac_prototype)
+    if reuse_prototype
         getfield(new_nw, :jac_prototype)[] = nw.jac_prototype
     end
 

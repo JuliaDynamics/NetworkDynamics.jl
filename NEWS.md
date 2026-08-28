@@ -14,6 +14,12 @@ when it is loaded somewhere in the process.
   the sparse `W` silently grows on first use, which breaks a GPU sparse solver that has already
   factorized the prototype symbolically. `get_jac_prototype` still reports the detected pattern
   unchanged, structural zeros on the diagonal included.
+- **`SparseConnectivityTracer` is now a regular dependency** instead of a weak one, and the
+  sparsity detection moved from `ext/NetworkDynamicsSparsityExt.jl` into `src/sparsity.jl`.
+  `get_jac_prototype` and `set_jac_prototype!` work without loading anything extra.
+- **`Network(...; sparse=true)`** detects the Jacobian sparsity pattern and stores it right
+  away, equivalent to calling `set_jac_prototype!` on the finished network. The default stays
+  `false`; a future `:auto` may change that.
 - **Nested conditionals no longer defeat the sparsity detection.** The if/else rewrite works on
   conditionals in value position and runs bottom-up, so nested `ifelse` and `elseif` chains
   collapse instead of pushing the whole component onto the dense fallback.

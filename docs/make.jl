@@ -10,7 +10,6 @@ using ModelingToolkitBase
 using DataFrames: DataFrames
 using DocumenterInterLinks
 using Electron
-using SparseConnectivityTracer
 
 
 @info "Create global electron window"
@@ -37,12 +36,11 @@ end
 
 mtkext = Base.get_extension(NetworkDynamics, :NetworkDynamicsMTKExt)
 dfext = Base.get_extension(NetworkDynamics, :NetworkDynamicsDataFramesExt)
-sparsityext = Base.get_extension(NetworkDynamics, :NetworkDynamicsSparsityExt)
 
 doc = makedocs(;
     root=joinpath(pkgdir(NetworkDynamics), "docs"),
     sitename="NetworkDynamics",
-    modules=[NetworkDynamics, mtkext, dfext, sparsityext, NetworkDynamicsInspector],
+    modules=[NetworkDynamics, mtkext, dfext, NetworkDynamicsInspector],
     linkcheck=true, # checks if external links resolve
     pagesonly=true,
     plugins=[links],

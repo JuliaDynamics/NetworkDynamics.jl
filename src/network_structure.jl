@@ -375,7 +375,6 @@ Compute and set the Jacobian prototype for a NetworkDynamics network.
 
 This is a convenience function that automatically computes the Jacobian sparsity pattern
 using `get_jac_prototype` and stores it in the network object.
-Needs `SparseConnectivityTracer` to be loaded!
 
 # Arguments
 - `nw::Network`: The NetworkDynamics network to modify
@@ -388,6 +387,7 @@ set_jac_prototype!(nw) # computs sparsity pattern and stores in network
 prob = ODEProblem(nw, x0, (0.0, 1.0), p0)
 sol = solve(prob, Rodas5P())
 ```
+Alternative see `sparse` kw arg in `Network` constructor.
 
 See also: [`get_jac_prototype`](@ref)
 """

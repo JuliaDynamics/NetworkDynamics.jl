@@ -1,6 +1,5 @@
 using NetworkDynamics
 using SparseArrays
-using SparseConnectivityTracer
 using Graphs
 using OrdinaryDiffEqRosenbrock
 using OrdinaryDiffEqNonlinearSolve
@@ -12,7 +11,6 @@ using ModelingToolkitBase
 using ModelingToolkitBase: D_nounits as Dt, t_nounits as t
 using SciCompDSL
 using InteractiveUtils: subtypes
-SE = Base.get_extension(NetworkDynamics, :NetworkDynamicsSparsityExt)
 
 @__MODULE__()==Main ? includet(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl")) : (const Lib = Main.Lib)
 
@@ -190,6 +188,28 @@ end
     @test Matrix(nw2.jac_prototype) == Bool[1 0 0; 1 1 0; 0 1 1]
 end
 
+@testset "sparse keyword" begin
+    v = VertexModel(f=(dx,x,in,p,t)->(dx[1]=in[1]), g=1, dim=1, pdim=0, sym=[:x], insym=[:i])
+    e = EdgeModel(g=Directed((o,vs,vd,p,t)->(o[1]=vs[1])), outdim=1, pdim=0)
+
+    nw = Network(path_digraph(3), v, e)
+    @test isnothing(nw.jac_prototype)
+
+    nw_sparse = Network(path_digraph(3), v, e; sparse=true)
+    @test Matrix(nw_sparse.jac_prototype) == Bool[1 0 0; 1 1 0; 0 1 1]
+
+    # the copy constructor forwards it like any other kwarg
+    @test Matrix(Network(nw; sparse=true).jac_prototype) == Bool[1 0 0; 1 1 0; 0 1 1]
+
+    # ... and a network built from a sparse one stays sparse, structure change or not
+    @test Network(nw_sparse).jac_prototype == nw_sparse.jac_prototype
+    nw_big = Network(nw_sparse; g=path_digraph(4), vertexm=v, edgem=e)
+    @test Matrix(nw_big.jac_prototype) == Bool[1 0 0 0; 1 1 0 0; 0 1 1 0; 0 0 1 1]
+    @test isnothing(Network(nw_sparse; sparse=false).jac_prototype)
+
+    @test_throws ArgumentError Network(path_digraph(3), v, e; sparse=:auto)
+end
+
 
 @testset "test filter conditionals" begin
     compare_expr(a, b) = Base.remove_linenums!(a) == Base.remove_linenums!(b)
@@ -205,7 +225,7 @@ end
     end + begin
         falsepath
     end)
-    @test compare_expr(SE.filter_conditionals_expr(assigment), target)
+    @test compare_expr(NetworkDynamics.filter_conditionals_expr(assigment), target)
 
     nested = :(dest = if cond; if cond2; inner1; else; inner2; end; else; falsepath; end)
     nested_target = :(dest = begin
@@ -217,7 +237,7 @@ end
     end + begin
         falsepath
     end)
-    @test compare_expr(SE.filter_conditionals_expr(nested), nested_target)
+    @test compare_expr(NetworkDynamics.filter_conditionals_expr(nested), nested_target)
 
     with_elseif = :(if cond; truepath; elseif cond2; true2; else; falsepath; end)
     elseif_target = :(begin
@@ -227,18 +247,18 @@ end
     end + begin
         falsepath
     end))
-    @test compare_expr(SE.filter_conditionals_expr(with_elseif), elseif_target)
+    @test compare_expr(NetworkDynamics.filter_conditionals_expr(with_elseif), elseif_target)
 
     # both branches must be a single value expression, otherwise summing them is meaningless
     multi_statement = :(dest = if cond; truepath1; truepath2; else; falsepath; end)
-    @test_throws SE.RemainingConditionalsException SE.filter_conditionals_expr(multi_statement)
+    @test_throws NetworkDynamics.RemainingConditionalsException NetworkDynamics.filter_conditionals_expr(multi_statement)
 
     with_assignment = :(dest = if cond; x = truepath; else; x = falsepath; end)
-    @test_throws SE.RemainingConditionalsException SE.filter_conditionals_expr(with_assignment)
+    @test_throws NetworkDynamics.RemainingConditionalsException NetworkDynamics.filter_conditionals_expr(with_assignment)
 
     # without an else branch there is nothing to sum
     without_else = :(dest = if cond; truepath; end)
-    @test_throws SE.RemainingConditionalsException SE.filter_conditionals_expr(without_else)
+    @test_throws NetworkDynamics.RemainingConditionalsException NetworkDynamics.filter_conditionals_expr(without_else)
 end
 
 @testset "fixpoint solver selection" begin
