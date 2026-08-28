@@ -47,7 +47,7 @@ function SciMLBase.ODEProblem(
     add_comp_cb=Dict(),
     add_nw_cb=nothing,
     override_cb=nothing,
-    initializealg=default_dae_init_alg(nw),
+    initializealg=default_dae_init_alg(nw, isempty(args) ? Float64 : eltype(first(args))),
     kwargs...
 )
 
@@ -69,6 +69,15 @@ function SciMLBase.ODEProblem(
         throw(ArgumentError("Cannot pass `override_cb` together with `add_comp_cb` or `add_nw_cb`. When overriding the default network callbacks, no additional callbacks are allowed."))
     end
 
+    # warn on wrong tspan type
+    if length(args) >= 2
+        Tu, Tt = eltype(args[1]), eltype(args[2])
+        if Tu <: AbstractFloat && Tt <: AbstractFloat && Tu !== Tt
+            @warn "Network state is $Tu but tspan is $Tt. Solving tends to fail with an \
+                   unrelated-looking autodiff error; use a $Tu tspan, e.g. $((zero(Tu), one(Tu)))."
+        end
+    end
+
     if !isnothing(override_cb)
         finalcallback = override_cb
     else
@@ -84,9 +93,10 @@ function SciMLBase.ODEProblem(
 end
 
 """
-    default_dae_init_alg(nw::Network)
+    default_dae_init_alg(nw::Network, T=Float64; kwargs...)
 
-Initialization algorithm used by `ODEProblem(nw, ...)`.
+Initialization algorithm used by `ODEProblem(nw, ...)`, which passes the state eltype as `T`.
+Keywords go to `BrownFullBasicInit` last, so they override everything described below.
 
 For a mass-matrix DAE this runs a nonlinear solve over the algebraic variables, once per
 `solve` and again after every reinitializing callback. With a `jac_prototype` on the network
@@ -96,12 +106,24 @@ method: the default polyalg starts with Broyden, which ignores the pattern entir
 The `autodiff` choice is not free. With a pattern present, DAE initialization currently only
 works with finite differences, so we ask for that explicitly instead of inheriting whatever
 the solver would pick.
+
+`abstol` follows `T`, because the DiffEqBase default of 1e-10 is unreachable in anything
+less precise than Float64.
 """
-function default_dae_init_alg(nw::Network)
-    isnothing(nw.jac_prototype) && return BrownFullBasicInit()
-    BrownFullBasicInit(;
-        nlsolve=FastShortcutNonlinearPolyalg(;
-            must_use_jacobian=Val(true), autodiff=AutoFiniteDiff()))
+function default_dae_init_alg(nw::Network, T=Float64; kwargs...)
+    # DiffEqBase defaults abstol to 1e-10, which sits below `eps(Float32)`, so a single
+    # precision solve can never reach it. Loosen with the precision, never tighten past 1e-10.
+    abstol = if T <: AbstractFloat
+        max(1e-10, eps(T)^(3//4))
+    else
+        1e-10
+    end
+    nlsolve = if isnothing(nw.jac_prototype)
+        nothing
+    else
+        FastShortcutNonlinearPolyalg(; must_use_jacobian=Val(true), autodiff=AutoFiniteDiff())
+    end
+    BrownFullBasicInit(; abstol, nlsolve, kwargs...)
 end
 
 """

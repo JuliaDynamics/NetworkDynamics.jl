@@ -11,10 +11,9 @@ using Test
 using SparseConnectivityTracer
 using OrdinaryDiffEqRosenbrock
 using OrdinaryDiffEqNonlinearSolve
-using NonlinearSolve # for AutoFiniteDiff
-using NonlinearSolve: NewtonRaphson, KrylovJL_GMRES, LUFactorization, QRFactorization
+using NonlinearSolve # so the DAE init polyalg is available
+using NonlinearSolve: KrylovJL_GMRES, LUFactorization, QRFactorization
 using OrdinaryDiffEqSDIRK: KenCarp4, TRBDF2
-using OrdinaryDiffEqNonlinearSolve: BrownFullBasicInit
 using SciMLBase
 using SparseArrays
 @__MODULE__()==Main ? includet(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl")) : (const Lib = Main.Lib)
@@ -126,16 +125,22 @@ end
 # gives and the only layout with a direct sparse solver on the device, `:csc` is the other
 # cuSPARSE layout, which always falls back to Krylov.
 #
+# The DAE initialization algorithm is deliberately not a knob here. `ODEProblem` on a
+# `NWState` picks it via `default_dae_init_alg`, which reacts to the prototype and to `T`,
+# and that choice is the one we want under test.
+#
+# `tspan` follows `T`. A Float64 tspan over a Float32 state has no ForwardDiff wrapper for
+# the Rosenbrock time gradient, which fails as `FirstAutodiffTgradError`.
+#
 # `maxiters` is far below the solver default on purpose. A configuration that crawls should
 # come back as a failure rather than eat the whole CI budget.
-function run_on_gpu(nw, s0; T, layout, solver, linsolve=nothing, initializealg=nothing,
-                    tspan=(0.0, 1.0), maxiters=2000)
+function run_on_gpu(nw, s0; T, layout, solver, linsolve=nothing,
+                    tspan=(zero(T), one(T)), maxiters=2000)
     nw_d = adapt(CuArray{T}, layout === :dense ? copy(nw) : set_jac_prototype!(copy(nw)))
     layout === :csc && set_jac_prototype!(nw_d, CuSparseMatrixCSC(nw_d.jac_prototype))
     prob = ODEProblem(nw_d, adapt(CuArray{T}, s0), tspan)
     alg = isnothing(linsolve) ? solver() : solver(; linsolve)
-    kwargs = isnothing(initializealg) ? (;) : (; initializealg)
-    sol = solve(prob, alg; maxiters, kwargs...)
+    sol = solve(prob, alg; maxiters)
     SciMLBase.successful_retcode(sol)
 end
 
@@ -149,9 +154,9 @@ gpu_configs = [
     (; name="Float64 dense KenCarp4",    T=Float64, layout=:dense, solver=KenCarp4, broken=false),
     (; name="Float64 dense TRBDF2 GMRES", T=Float64, layout=:dense, solver=TRBDF2,  broken=false,
        linsolve=KrylovJL_GMRES()),
-    # CSC has no direct solver on the device at all: LinearSolve warns and hands over to Krylov.
+    # `adapt` never produces CSC, so one line is enough: it only guards the hand-built case,
+    # where there is no direct device solver at all and LinearSolve warns and uses Krylov.
     (; name="Float64 CSC Rodas5P",       T=Float64, layout=:csc,   solver=Rodas5P,  broken=false),
-    (; name="Float64 CSC KenCarp4",      T=Float64, layout=:csc,   solver=KenCarp4, broken=false),
     # CSR is what `adapt` produces. With CUDSS loaded the default linsolve is a real cuDSS LU,
     # and `QRFactorization` reaches cuSOLVER's sparse QR.
     (; name="Float64 CSR Rodas5P cuDSS", T=Float64, layout=:csr,   solver=Rodas5P,  broken=false),
@@ -162,13 +167,10 @@ gpu_configs = [
     (; name="Float64 CSR KenCarp4",      T=Float64, layout=:csr,   solver=KenCarp4, broken=false),
     (; name="Float64 CSR TRBDF2 GMRES",  T=Float64, layout=:csr,   solver=TRBDF2,   broken=false,
        linsolve=KrylovJL_GMRES()),
-    # A sparse prototype plus an explicit init nlsolve dies compiling a device broadcast that
-    # stores a `Dual` into a float view. Independent of the eltype.
-    (; name="Float64 CSR Rodas5P NewtonRaphson init", T=Float64, layout=:csr, solver=Rodas5P,
-       broken=true, initializealg=BrownFullBasicInit(nlsolve=NewtonRaphson())),
-    # Float32 never gets past DAE initialization, whatever the layout or the init algorithm.
-    (; name="Float32 dense Rodas5P",     T=Float32, layout=:dense, solver=Rodas5P,  broken=true),
-    (; name="Float32 CSR Rodas5P",       T=Float32, layout=:csr,   solver=Rodas5P,  broken=true),
+    # Float32 needs the eltype to reach both the init tolerance and `tspan`, see
+    # `default_dae_init_alg` and the `tspan` default above.
+    (; name="Float32 dense Rodas5P",     T=Float32, layout=:dense, solver=Rodas5P,  broken=false),
+    (; name="Float32 CSR Rodas5P",       T=Float32, layout=:csr,   solver=Rodas5P,  broken=false),
 ]
 
 @testset "actual GPU solve" begin
