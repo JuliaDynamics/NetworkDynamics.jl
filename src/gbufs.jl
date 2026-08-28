@@ -17,8 +17,7 @@ function EagerGBufProvider(im::IndexManager, batches)
         map[im.e_gbufr[i].dst] .= im.v_out[e.dst]
     end
 
-    N = ForwardDiff.pickchunksize(max(im.lastidx_dynamic, im.lastidx_p))
-    EagerGBufProvider(map, DiffCache(Float64.(map), N))
+    EagerGBufProvider(map, DiffCache(Float64.(map), ad_chunksize(im)))
 end
 
 get_gbuf(bufp::EagerGBufProvider, o) = get_tmp(bufp.diffcache, o)

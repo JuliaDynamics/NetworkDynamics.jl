@@ -153,11 +153,10 @@ _adapt_rgf(f) = f
 ####
 # define similar to adapt_structure for DiffCache without type piracy
 function _adapt_diffcache(to, c::DiffCache)
-    du = adapt(to, c.du)
-    dual_du = adapt(to, c.dual_du)
-    # PreallocationTools 1.x added the `warn_on_resize` field to `DiffCache`; pass all
-    # fields positionally to hit the struct constructor (not the `(u, siz, chunks)` one).
-    DiffCache(du, dual_du, c.any_du, c.warn_on_resize)
+    # The chunk size is not kept in the struct, but the dual buffer holds `chunk+1` scalars
+    # per element of `du`, which is enough to allocate an equally sized one on the device.
+    chunk = isempty(c.du) ? 0 : length(c.dual_du) ÷ length(c.du) - 1
+    DiffCache(adapt(to, c.du), chunk)
 end
 
 end

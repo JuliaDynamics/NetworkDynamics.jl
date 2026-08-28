@@ -79,6 +79,11 @@ end
 dim(im::IndexManager) = im.lastidx_dynamic
 pdim(im::IndexManager) = im.lastidx_p
 
+# Chunk size for every preallocated dual cache belonging to a network: the number of partials
+# ForwardDiff picks when differentiating the network with respect to states or parameters.
+# Guessing too low is not an error, it just makes the first AD call resize the cache and warn.
+ad_chunksize(im::IndexManager) = ForwardDiff.pickchunksize(max(dim(im), pdim(im)))
+
 
 struct Network{EX<:ExecutionStyle,G,NL,VTup,MM,CT,GBT,LM,EM}
     "vertex batches of same function"
