@@ -12,7 +12,7 @@ using Atomix: Atomix
 using Polyester: Polyester
 using Mixers: Mixers
 using LinearAlgebra: LinearAlgebra, UniformScaling, BLAS
-using SparseArrays: SparseArrays, sparse, SparseMatrixCSC, AbstractSparseMatrix
+using SparseArrays: SparseArrays, sparse, SparseMatrixCSC, AbstractSparseMatrix, nonzeros
 using StyledStrings: StyledStrings, @styled_str
 using RecursiveArrayTools: RecursiveArrayTools, DiffEqArray
 using FastClosures: @closure
