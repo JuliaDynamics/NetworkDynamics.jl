@@ -149,6 +149,45 @@ end
     nw2 = Network(g, v, valvet2)
     j2 = get_jac_prototype(nw2) # should fall bakc to dense
     @test j1 == j2 # no diff in that case
+
+    @mtkmodel NestedValveToggle begin
+        @variables begin
+            p_src(t), [description="pressure at src"]
+            p_dst(t), [description="pressure at dst"]
+            q(t), [description="flow through valve"]
+        end
+        @parameters begin
+            K=1, [description="conductance of valve"]
+            active=1, [description="active state of valve"]
+        end
+        @equations begin
+            q ~ ifelse(active > 0,
+                       ifelse(p_src - p_dst > 0, K * (p_src - p_dst), 2 * K * (p_src - p_dst)),
+                       0)
+        end
+    end
+    @named nested_mtk = NestedValveToggle()
+    nested = EdgeModel(nested_mtk, [:p_src], [:p_dst], AntiSymmetric([:q]))
+    nw3 = Network(g, v, nested)
+    j3 = get_jac_prototype(nw3) # nested conditionals collapse from the inside out
+    @test j1 == j3
+end
+
+@testset "stored prototype has a full diagonal" begin
+    # vertex 1 has no incoming edge, so dx1 truly does not depend on x1
+    v = VertexModel(f=(dx,x,in,p,t)->(dx[1]=in[1]), g=1, dim=1, pdim=0, sym=[:x], insym=[:i])
+    e = EdgeModel(g=Directed((o,vs,vd,p,t)->(o[1]=vs[1])), outdim=1, pdim=0)
+    nw = Network(path_digraph(3), v, e)
+
+    # get_jac_prototype reports that faithfully, set_jac_prototype! fills it up for the solver
+    @test Matrix(get_jac_prototype(nw)) == Bool[0 0 0; 1 0 0; 0 1 0]
+    set_jac_prototype!(nw)
+    @test Matrix(nw.jac_prototype) == Bool[1 0 0; 1 1 0; 0 1 1]
+
+    # a hand written prototype gets the same treatment
+    nw2 = Network(path_digraph(3), v, e)
+    set_jac_prototype!(nw2, sparse(Bool[0 0 0; 1 0 0; 0 1 0]))
+    @test Matrix(nw2.jac_prototype) == Bool[1 0 0; 1 1 0; 0 1 1]
 end
 
 
@@ -168,8 +207,38 @@ end
     end)
     @test compare_expr(SE.filter_conditionals_expr(assigment), target)
 
+    nested = :(dest = if cond; if cond2; inner1; else; inner2; end; else; falsepath; end)
+    nested_target = :(dest = begin
+        begin
+            inner1
+        end + begin
+            inner2
+        end
+    end + begin
+        falsepath
+    end)
+    @test compare_expr(SE.filter_conditionals_expr(nested), nested_target)
+
     with_elseif = :(if cond; truepath; elseif cond2; true2; else; falsepath; end)
-    @test_throws SE.RemainingConditionalsException SE.filter_conditionals_expr(with_elseif)
+    elseif_target = :(begin
+        truepath
+    end + (begin
+        true2
+    end + begin
+        falsepath
+    end))
+    @test compare_expr(SE.filter_conditionals_expr(with_elseif), elseif_target)
+
+    # both branches must be a single value expression, otherwise summing them is meaningless
+    multi_statement = :(dest = if cond; truepath1; truepath2; else; falsepath; end)
+    @test_throws SE.RemainingConditionalsException SE.filter_conditionals_expr(multi_statement)
+
+    with_assignment = :(dest = if cond; x = truepath; else; x = falsepath; end)
+    @test_throws SE.RemainingConditionalsException SE.filter_conditionals_expr(with_assignment)
+
+    # without an else branch there is nothing to sum
+    without_else = :(dest = if cond; truepath; end)
+    @test_throws SE.RemainingConditionalsException SE.filter_conditionals_expr(without_else)
 end
 
 @testset "fixpoint solver selection" begin

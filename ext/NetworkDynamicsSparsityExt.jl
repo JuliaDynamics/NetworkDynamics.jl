@@ -6,7 +6,7 @@ using NetworkDynamics: NetworkDynamics, Network, NWState, uflat, pflat,
                        Symmetric, AntiSymmetric, Directed, Fiducial,
                        executionstyle, SequentialAggregator, Aggregator, KAAggregator,
                        ComponentBatch, indim, outdim, extdim, fftype
-using MacroTools: @capture, postwalk
+using MacroTools: postwalk
 using RuntimeGeneratedFunctions: RuntimeGeneratedFunctions, RuntimeGeneratedFunction, @RuntimeGeneratedFunction
 using ForwardDiff: ForwardDiff
 using Accessors: @set
@@ -49,7 +49,8 @@ the forward-diff jacobian. This check will be disabled with a warning for large 
     ```
     a = expr1 + expr2
     ```
-    which alters the semantics but keeps the conservative sparsity pattern.
+    which alters the semantics but keeps the conservative sparsity pattern. Nested conditionals
+    are collapsed from the inside out.
 
 See also [`NetworkDynamics.set_jac_prototype!`](@ref).
 """
@@ -132,37 +133,34 @@ function get_compatible_batch(batch::ComponentBatch{T}, i; verbose, showerror) w
 
     verbose && println("$type $i containing $(length((batch.indices))) components not directly SCT compatible! Pass `showerror=true` to see full stacktraces, hide message with verbose=false.")
 
-    # stage 1, try to replace conditionals
+    # stage 1, try to replace conditionals. `filter_conditionals` hands back the very same
+    # function when there is nothing to rewrite, which is also what we fall back to when it
+    # gives up, so an unchanged function means "retesting would tell us nothing new".
     retest = false
-    if !fworks && batch.compf isa RuntimeGeneratedFunction
-        verbose && println(" - try to filter conditionals in RuntimeGeneratedFunction compf...")
-        local newf
-        try
-            newf = filter_conditionals(batch.compf)
+    if !fworks
+        verbose && println(" - try to filter conditionals in compf...")
+        newf = try
+            filter_conditionals(batch.compf)
         catch e
             verbose && println(" - Failed to remove conditionals from compf: $e")
-            newf = nothing
+            batch.compf
         end
-        if !isnothing(newf)
+        if newf !== batch.compf
             batch = @set batch.compf = newf
             retest = true
         end
     end
     if !gworks
-        local newg
-        try
-            newg = filter_conditionals(batch.compg) # only does something for RGF wrappers
+        verbose && println(" - try to filter conditionals in compg...")
+        newg = try
+            filter_conditionals(batch.compg)
         catch e
-            newg = nothing
+            verbose && println(" - Failed to remove conditionals from compg: $e")
+            batch.compg
         end
-        if newg !== batch.compg #
-            verbose && println(" - try to filter conditionals in RuntimeGeneratedFunctions compg...")
-            if isnothing(newg)
-                verbose && println(" - Failed to remove conditionals from compg: $e")
-            else
-                batch = @set batch.compg = newg
-                retest = true
-            end
+        if newg !== batch.compg
+            batch = @set batch.compg = newg
+            retest = true
         end
     end
 
@@ -313,13 +311,16 @@ function filter_conditionals(w::Fiducial)
     end
 end
 
+# Replace every conditional which only picks between two values by the sum of both branches.
+# That is numerically wrong, but the result now depends on both sides, which is what a
+# conservative sparsity pattern needs. `postwalk` works bottom-up, so a nested conditional is
+# already a plain expression by the time its parent is looked at.
 function filter_conditionals_expr(expr)
     had_conditionals = false
     newex = postwalk(expr) do ex
-        if @capture(ex, lhs_ = if cond_; true_ex_; else; false_ex_; end)
+        if _is_value_conditional(ex)
             had_conditionals = true
-            # :($lhs = ifelse($cond, $true_ex, $false_ex))
-            :($lhs = $true_ex + $false_ex)
+            :($(ex.args[2]) + $(ex.args[3]))
         else
             ex
         end
@@ -340,6 +341,23 @@ function filter_conditionals_expr(expr)
         return newex
     else
         throw(RemainingConditionalsException())
+    end
+end
+
+# A conditional we may collapse: it has an else branch and both branches are plain values.
+# A branch that assigns to something is left alone, since the rewrite would run it
+# unconditionally and change what later code reads.
+function _is_value_conditional(ex)
+    ex isa Expr && ex.head in (:if, :elseif) && length(ex.args) == 3 || return false
+    _is_pure_value(ex.args[2]) && _is_pure_value(ex.args[3])
+end
+function _is_pure_value(ex)
+    ex isa Expr || return true
+    if ex.head === :block
+        stmts = filter(s -> !(s isa LineNumberNode), ex.args)
+        length(stmts) == 1 && _is_pure_value(only(stmts))
+    else
+        ex.head ∉ (:(=), :return, :for, :while, :function)
     end
 end
 
