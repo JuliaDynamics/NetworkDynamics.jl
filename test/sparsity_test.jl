@@ -1,13 +1,16 @@
 using NetworkDynamics
 using SparseArrays
-using SparseConnectivityTracer
 using Graphs
 using OrdinaryDiffEqRosenbrock
+using OrdinaryDiffEqNonlinearSolve
+using NonlinearSolve: NewtonRaphson
+using LinearAlgebra: Diagonal
+using SteadyStateDiffEq: SteadyStateDiffEq, SteadyStateProblem
+using SciMLBase: solve
 using ModelingToolkitBase
 using ModelingToolkitBase: D_nounits as Dt, t_nounits as t
 using SciCompDSL
 using InteractiveUtils: subtypes
-SE = Base.get_extension(NetworkDynamics, :NetworkDynamicsSparsityExt)
 
 @__MODULE__()==Main ? includet(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl")) : (const Lib = Main.Lib)
 
@@ -144,6 +147,67 @@ end
     nw2 = Network(g, v, valvet2)
     j2 = get_jac_prototype(nw2) # should fall bakc to dense
     @test j1 == j2 # no diff in that case
+
+    @mtkmodel NestedValveToggle begin
+        @variables begin
+            p_src(t), [description="pressure at src"]
+            p_dst(t), [description="pressure at dst"]
+            q(t), [description="flow through valve"]
+        end
+        @parameters begin
+            K=1, [description="conductance of valve"]
+            active=1, [description="active state of valve"]
+        end
+        @equations begin
+            q ~ ifelse(active > 0,
+                       ifelse(p_src - p_dst > 0, K * (p_src - p_dst), 2 * K * (p_src - p_dst)),
+                       0)
+        end
+    end
+    @named nested_mtk = NestedValveToggle()
+    nested = EdgeModel(nested_mtk, [:p_src], [:p_dst], AntiSymmetric([:q]))
+    nw3 = Network(g, v, nested)
+    j3 = get_jac_prototype(nw3) # nested conditionals collapse from the inside out
+    @test j1 == j3
+end
+
+@testset "stored prototype has a full diagonal" begin
+    # vertex 1 has no incoming edge, so dx1 truly does not depend on x1
+    v = VertexModel(f=(dx,x,in,p,t)->(dx[1]=in[1]), g=1, dim=1, pdim=0, sym=[:x], insym=[:i])
+    e = EdgeModel(g=Directed((o,vs,vd,p,t)->(o[1]=vs[1])), outdim=1, pdim=0)
+    nw = Network(path_digraph(3), v, e)
+
+    # get_jac_prototype reports that faithfully, set_jac_prototype! fills it up for the solver
+    @test Matrix(get_jac_prototype(nw)) == Bool[0 0 0; 1 0 0; 0 1 0]
+    set_jac_prototype!(nw)
+    @test Matrix(nw.jac_prototype) == Bool[1 0 0; 1 1 0; 0 1 1]
+
+    # a hand written prototype gets the same treatment
+    nw2 = Network(path_digraph(3), v, e)
+    set_jac_prototype!(nw2, sparse(Bool[0 0 0; 1 0 0; 0 1 0]))
+    @test Matrix(nw2.jac_prototype) == Bool[1 0 0; 1 1 0; 0 1 1]
+end
+
+@testset "sparse keyword" begin
+    v = VertexModel(f=(dx,x,in,p,t)->(dx[1]=in[1]), g=1, dim=1, pdim=0, sym=[:x], insym=[:i])
+    e = EdgeModel(g=Directed((o,vs,vd,p,t)->(o[1]=vs[1])), outdim=1, pdim=0)
+
+    nw = Network(path_digraph(3), v, e)
+    @test isnothing(nw.jac_prototype)
+
+    nw_sparse = Network(path_digraph(3), v, e; sparse=true)
+    @test Matrix(nw_sparse.jac_prototype) == Bool[1 0 0; 1 1 0; 0 1 1]
+
+    # the copy constructor forwards it like any other kwarg
+    @test Matrix(Network(nw; sparse=true).jac_prototype) == Bool[1 0 0; 1 1 0; 0 1 1]
+
+    # ... and a network built from a sparse one stays sparse, structure change or not
+    @test Network(nw_sparse).jac_prototype == nw_sparse.jac_prototype
+    nw_big = Network(nw_sparse; g=path_digraph(4), vertexm=v, edgem=e)
+    @test Matrix(nw_big.jac_prototype) == Bool[1 0 0 0; 1 1 0 0; 0 1 1 0; 0 0 1 1]
+    @test isnothing(Network(nw_sparse; sparse=false).jac_prototype)
+
+    @test_throws ArgumentError Network(path_digraph(3), v, e; sparse=:auto)
 end
 
 
@@ -161,8 +225,112 @@ end
     end + begin
         falsepath
     end)
-    @test compare_expr(SE.filter_conditionals_expr(assigment), target)
+    @test compare_expr(NetworkDynamics.filter_conditionals_expr(assigment), target)
+
+    nested = :(dest = if cond; if cond2; inner1; else; inner2; end; else; falsepath; end)
+    nested_target = :(dest = begin
+        begin
+            inner1
+        end + begin
+            inner2
+        end
+    end + begin
+        falsepath
+    end)
+    @test compare_expr(NetworkDynamics.filter_conditionals_expr(nested), nested_target)
 
     with_elseif = :(if cond; truepath; elseif cond2; true2; else; falsepath; end)
-    @test_throws SE.RemainingConditionalsException SE.filter_conditionals_expr(with_elseif)
+    elseif_target = :(begin
+        truepath
+    end + (begin
+        true2
+    end + begin
+        falsepath
+    end))
+    @test compare_expr(NetworkDynamics.filter_conditionals_expr(with_elseif), elseif_target)
+
+    # both branches must be a single value expression, otherwise summing them is meaningless
+    multi_statement = :(dest = if cond; truepath1; truepath2; else; falsepath; end)
+    @test_throws NetworkDynamics.RemainingConditionalsException NetworkDynamics.filter_conditionals_expr(multi_statement)
+
+    with_assignment = :(dest = if cond; x = truepath; else; x = falsepath; end)
+    @test_throws NetworkDynamics.RemainingConditionalsException NetworkDynamics.filter_conditionals_expr(with_assignment)
+
+    # without an else branch there is nothing to sum
+    without_else = :(dest = if cond; truepath; end)
+    @test_throws NetworkDynamics.RemainingConditionalsException NetworkDynamics.filter_conditionals_expr(without_else)
+end
+
+@testset "fixpoint solver selection" begin
+    g = watts_strogatz(100, 4, 0.1; seed=1)
+    v = VertexModel(; f=(dv, x, esum, p, t) -> (dv[1] = p[1] - x[1]^3 + esum[1]; nothing),
+                    g=1:1, dim=1, pdim=1, sym=[:x], psym=[:p => 0.1])
+    e = EdgeModel(; g=AntiSymmetric((e, vs, vd, p, t) -> (e[1] = p[1]*(vs[1] - vd[1]); nothing)),
+                  outdim=1, pdim=1, psym=[:k => 1.0])
+    nw = Network(g, v, e)
+
+    @test NetworkDynamics.default_fixpoint_alg(nw) isa SteadyStateDiffEq.SSRootfind
+    s_ref = find_fixpoint(nw)
+
+    set_jac_prototype!(nw; verbose=false)
+    @test !(NetworkDynamics.default_fixpoint_alg(nw) isa SteadyStateDiffEq.SSRootfind)
+    @test uflat(find_fixpoint(nw)) ≈ uflat(s_ref) rtol=1e-6
+
+    # nothing means "you decide", an explicit alg still wins
+    @test uflat(find_fixpoint(nw; alg=nothing)) ≈ uflat(s_ref) rtol=1e-6
+    @test uflat(find_fixpoint(nw; alg=SteadyStateDiffEq.SSRootfind())) ≈ uflat(s_ref) rtol=1e-6
+
+    # the chosen alg must actually build jacobians rather than falling into Broyden
+    s0 = NWState(nw; ufill=0.1)
+    prob = SteadyStateProblem(NetworkDynamics.NetworkFixedT(nw, NaN), uflat(s0), pflat(s0))
+    @test solve(prob, NetworkDynamics.default_fixpoint_alg(nw)).stats.njacs > 0
+    @test solve(prob, SteadyStateDiffEq.SSRootfind()).stats.njacs == 0
+
+    # ...and it must do so with sparse coloring, not dense AD
+    @test_logs solve(prob, NetworkDynamics.default_fixpoint_alg(nw))
+end
+
+
+@testset "DAE initialization solver selection" begin
+    # one differential state x and one algebraic state y per vertex
+    g = watts_strogatz(100, 4, 0.1; seed=1)
+    vf = function(dv, v, esum, p, t)
+        dv[1] = -v[1] + v[2] + esum[1]
+        dv[2] = v[2]^3 + v[2] - v[1] - p[1]
+        nothing
+    end
+    v = VertexModel(; f=vf, g=1:1, dim=2, pdim=1, sym=[:x, :y], psym=[:p => 0.5],
+                    mass_matrix=Diagonal([1.0, 0.0]))
+    e = EdgeModel(; g=AntiSymmetric((e, vs, vd, p, t) -> (e[1] = p[1]*(vs[1] - vd[1]); nothing)),
+                  outdim=1, pdim=1, psym=[:k => 1.0])
+    nw = Network(g, v, e)
+
+    @test NetworkDynamics.default_dae_init_alg(nw) isa BrownFullBasicInit
+    @test isnothing(NetworkDynamics.default_dae_init_alg(nw).nlsolve)
+
+    set_jac_prototype!(nw; verbose=false)
+    @test !isnothing(NetworkDynamics.default_dae_init_alg(nw).nlsolve)
+
+    # y=0 is inconsistent, so the initialization actually has to solve
+    s0 = NWState(nw)
+    s0.v[:, :x] .= 0.1
+    s0.v[:, :y] .= 0.0
+
+    integ = init(ODEProblem(nw, uflat(s0), (0.0, 1.0), pflat(s0)), Rodas5P())
+    y = integ.u[2:2:end]
+    x = integ.u[1:2:end]
+    @test maximum(abs, y.^3 .+ y .- x .- 0.5) < 1e-12   # constraints satisfied
+
+    # Upstream (OrdinaryDiffEqNonlinearSolve): `_initialize_dae!` decides whether to
+    # allocate dual work buffers with `alg_autodiff(alg) isa AutoForwardDiff`, which is
+    # false once `prepare_user_sparsity` has wrapped the AD type in `AutoSparse` -- i.e.
+    # exactly when a `jac_prototype` is present. A ForwardDiff-based `nlsolve` then writes
+    # Duals into Float64 buffers. `default_dae_init_alg` pins `AutoFiniteDiff` because of
+    # this. When this test stops being broken, drop that pin.
+    @test_broken begin
+        prob = ODEProblem(nw, uflat(s0), (0.0, 1.0), pflat(s0);
+                          initializealg=BrownFullBasicInit(nlsolve=NewtonRaphson()))
+        init(prob, Rodas5P())
+        true
+    end
 end

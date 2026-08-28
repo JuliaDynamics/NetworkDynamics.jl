@@ -1,5 +1,29 @@
 # NetworkDynamics Release Notes
 
+## unreleased
+
+- **`find_fixpoint` and DAE initialization now select a sparsity-aware nonlinear solver** when the
+  network carries a `jac_prototype`, via `NetworkDynamics.default_fixpoint_alg` and
+  `NetworkDynamics.default_dae_init_alg`; `find_fixpoint`'s `alg` defaults to `nothing`
+  meaning "let NetworkDynamics decide", and an explicit `alg` still overrides. This also makes
+  `SparseMatrixColorings` a dependency, since NonlinearSolve only enables sparse-AD coloring
+  when it is loaded somewhere in the process.
+- **`set_jac_prototype!` now stores a pattern with a full diagonal**, whether it computed the
+  pattern itself or was handed one. Solvers size the iteration matrix `W = M/γ - J` from the
+  prototype, and `W` has a diagonal whatever the mass matrix looks like. Without those entries
+  the sparse `W` silently grows on first use, which breaks a GPU sparse solver that has already
+  factorized the prototype symbolically. `get_jac_prototype` still reports the detected pattern
+  unchanged, structural zeros on the diagonal included.
+- **`SparseConnectivityTracer` is now a regular dependency** instead of a weak one, and the
+  sparsity detection moved from `ext/NetworkDynamicsSparsityExt.jl` into `src/sparsity.jl`.
+  `get_jac_prototype` and `set_jac_prototype!` work without loading anything extra.
+- **`Network(...; sparse=true)`** detects the Jacobian sparsity pattern and stores it right
+  away, equivalent to calling `set_jac_prototype!` on the finished network. The default stays
+  `false`; a future `:auto` may change that.
+- **Nested conditionals no longer defeat the sparsity detection.** The if/else rewrite works on
+  conditionals in value position and runs bottom-up, so nested `ifelse` and `elseif` chains
+  collapse instead of pushing the whole component onto the dense fallback.
+
 ## v1.2.0 Changelog
 
 Initialization-time formula resolution is now a single dependency graph

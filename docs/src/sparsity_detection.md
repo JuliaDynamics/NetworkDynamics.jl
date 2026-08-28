@@ -20,6 +20,16 @@ set_jac_prototype!(nw; kwargs_for_get_jac_prototype...)
 prob = ODEProblem(nw, x0, (0.0, 1.0), p0)  # automatically uses stored prototype
 ```
 
+The `sparse=true` keyword of [`Network`](@ref) does the same thing during construction:
+
+```julia
+nw = Network(g, vertexmodels, edgemodels; sparse=true)
+```
+
+Note that the stored pattern always carries a full diagonal, even where the Jacobian is
+structurally zero there, because solvers size the iteration matrix `W = M/γ - J` from it.
+`get_jac_prototype` itself reports the detected pattern unchanged.
+
 The `get_jac_prototype` function will operate on batches of identical components.
 If the user provided component functions are **not SCT compatible**, it'll first try to
 resolve `if..else..end` statements in MTK-generated code and fall back to dense component functions.
@@ -30,7 +40,7 @@ from the Network sparsity rather than the component sparsity.
 
 A key feature of NetworkDynamics.jl's sparsity detection is the ability to automatically handle conditional statements in MTK component functions.
 
-The conditional `if...else...end` statements generated in the codegen phase will be replaced by equivalent `ifelse(..,..,..)` statements which can be handled by SCT.
+The conditional `if...else...end` statements generated in the codegen phase are replaced by the sum of both branches. That is numerically wrong, but it is only ever used for tracing, and it makes the result depend on both sides, which is what a conservative sparsity pattern needs. Nested conditionals collapse from the inside out.
 
 !!! details "Setup code"
     ```@example sparsity

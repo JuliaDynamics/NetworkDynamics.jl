@@ -32,7 +32,10 @@ constructs and solves the steady state problem, returning the solution as an `NW
   - `AbstractVector`: Flat parameter vector
 
 ## Keyword Arguments
-- `alg=SSRootfind()`: Steady state solver algorithm from NonlinearSolve.jl
+- `alg=nothing`: Steady state solver algorithm from NonlinearSolve.jl. If `nothing`, gets
+  set to `NetworkDynamics.default_fixpoint_alg(nw)`, which picks a Jacobian-based solver
+  when the network carries a `jac_prototype` (see [`set_jac_prototype!`](@ref)) and lets
+  NonlinearSolve decide otherwise.
 - `t=NaN`: Time at which to evaluate the system (for time-dependent networks)
 - Additional `kwargs` are passed to the SciML `solve` function
 
@@ -71,7 +74,8 @@ function Base.getproperty(nw::NetworkFixedT, s::Symbol)
 end
 
 function find_fixpoint(nw::Network, x0::AbstractVector, p::AbstractVector;
-                       alg=SSRootfind(), t=NaN, kwargs...)
+                       alg=nothing, t=NaN, kwargs...)
+    alg = isnothing(alg) ? default_fixpoint_alg(nw) : alg
     nw_fixed_t = NetworkFixedT(nw, t)
 
     du = zeros(length(x0))
@@ -141,6 +145,18 @@ function find_fixpoint(nw::Network, x0::AbstractVector, p::AbstractVector;
         """))
     end
     NWState(nw, sol.u, NWParameter(nw, p))
+end
+
+# Without a sparsity pattern we have no reason to overrule NonlinearSolve. With one, the
+# default polyalg is a bad fit: it opens with Broyden/Klement, which carry a dense
+# approximate Jacobian and ignore the pattern entirely. Forcing the Jacobian-based stages
+# lets the sparse Newton path (and its coloring) actually run.
+function default_fixpoint_alg(nw::Network)
+    if isnothing(nw.jac_prototype)
+        SSRootfind()
+    else
+        FastShortcutNonlinearPolyalg(; must_use_jacobian=Val(true))
+    end
 end
 
 function initialization_problem(cf::T,

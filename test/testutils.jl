@@ -1,7 +1,6 @@
 using CUDA
 using Adapt
 using NetworkDynamics: iscudacompatible, NaiveAggregator
-using SparseConnectivityTracer
 
 """
 Test utility, which rebuilds the Network with all different execution styles and compares the

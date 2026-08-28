@@ -24,6 +24,9 @@ using SciMLBase: VectorContinuousCallback, CallbackSet, DiscreteCallback
 using DiffEqCallbacks: DiffEqCallbacks
 using DiffEqBase: BrownFullBasicInit
 using MacroTools: postwalk, @capture
+using RuntimeGeneratedFunctions: RuntimeGeneratedFunctions, RuntimeGeneratedFunction,
+                                 @RuntimeGeneratedFunction
+using SparseConnectivityTracer: TracerSparsityDetector, jacobian_sparsity
 using ConstructionBase: ConstructionBase
 using Accessors: Accessors, @set
 using ADTypes: AutoForwardDiff, AutoFiniteDiff, AutoReverseDiff
@@ -41,6 +44,8 @@ using InteractiveUtils: subtypes
 import SymbolicIndexingInterface as SII
 using SymbolicIndexingInterface: variable_symbols, parameter_symbols
 using StaticArrays: StaticArrays, SVector
+
+RuntimeGeneratedFunctions.init(@__MODULE__)
 
 export implicit_output, ComponentPostprocessing, set_mtk_defaults
 export set_initf, SystemInitFormulas
@@ -99,7 +104,10 @@ include("init_resolution.jl")
 include("spinners.jl")
 
 using OrderedCollections: OrderedDict
-using NonlinearSolve: NonlinearFunction, NonlinearLeastSquaresProblem, FastShortcutNLLSPolyalg
+using NonlinearSolve: NonlinearFunction, NonlinearLeastSquaresProblem,
+                      FastShortcutNLLSPolyalg, FastShortcutNonlinearPolyalg
+# NonlinearSolve only enables sparse-AD coloring when SparseMatrixColorings is loaded
+using SparseMatrixColorings: SparseMatrixColorings
 using LinearSolve: QRFactorization
 using SteadyStateDiffEq: SteadyStateProblem, SSRootfind
 export find_fixpoint, set_interface_defaults!
@@ -107,6 +115,10 @@ export initialize_component, initialize_component!, init_residual
 export initialize_componentwise, initialize_componentwise!, interface_values
 export NetworkInitError, ComponentInitError
 include("initialization.jl")
+include("default_from.jl")
+
+export get_jac_prototype
+include("sparsity.jl")
 
 export has_metadata, get_metadata, set_metadata!, delete_metadata!, strip_metadata!
 export has_default, get_default, set_default!, delete_default!, set_defaults!, strip_defaults!
@@ -144,12 +156,10 @@ include("doctor.jl")
 export LoopbackConnection
 include("post_utils.jl")
 
-include("default_from.jl")
-
-export describe_vertices, describe_edges, get_jac_prototype
+export describe_vertices, describe_edges
 function describe_vertices end
 function describe_edges end
-function get_jac_prototype end
+
 #=
 using StyledStrings
 s1 = styled"{bright_red:brred} {bright_green:brgreen} {bright_yellow:bryellow} {bright_blue:brblue} {bright_magenta:brmagenta} {bright_cyan:brcyan} {bright_black:brblack} {bright_white:brwhite}";
@@ -175,11 +185,6 @@ function __init__()
                 ext = Base.get_extension(NetworkDynamics, :NetworkDynamicsDataFramesExt)
                 if isnothing(ext)
                     printstyled(io, "\nLoad `DataFrames` in order to use `describe_vertices` and `describe_edges`."; bold=true, color=:red)
-                end
-            elseif exc.f ∈ (get_jac_prototype,)
-                ext = Base.get_extension(NetworkDynamics, :NetworkDynamicsSparsityExt)
-                if isnothing(ext)
-                    printstyled(io, "\nLoad `SparseConnectivityTracer` in order to use `get_jac_prototype`."; bold=true, color=:red)
                 end
             end
         end

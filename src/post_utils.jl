@@ -36,7 +36,9 @@ The `initializealg` keyword is stored in the problem and forwarded to `solve`/`i
 Note that the default `BrownFullBasicInit()` deliberately differs from the
 OrdinaryDiffEq default: NetworkDynamics models frequently contain algebraic
 constraints (mass-matrix DAEs), for which `BrownFullBasicInit()` fixes up
-inconsistent initial conditions. Pass `initializealg=...` explicitly to override.
+inconsistent initial conditions. If the network carries a `jac_prototype` the
+initialization additionally gets a sparsity-aware nonlinear solver, see
+`NetworkDynamics.default_dae_init_alg`. Pass `initializealg=...` explicitly to override.
 
 $callback_keyword_docs
 """
@@ -45,7 +47,7 @@ function SciMLBase.ODEProblem(
     add_comp_cb=Dict(),
     add_nw_cb=nothing,
     override_cb=nothing,
-    initializealg=BrownFullBasicInit(),
+    initializealg=default_dae_init_alg(nw),
     kwargs...
 )
 
@@ -79,6 +81,27 @@ function SciMLBase.ODEProblem(
     end
 
     SciMLBase.ODEProblem(SciMLBase.ODEFunction(nw), args...; callback=finalcallback, initializealg, kwargs...)
+end
+
+"""
+    default_dae_init_alg(nw::Network)
+
+Initialization algorithm used by `ODEProblem(nw, ...)`.
+
+For a mass-matrix DAE this runs a nonlinear solve over the algebraic variables, once per
+`solve` and again after every reinitializing callback. With a `jac_prototype` on the network
+that solve can use the sparsity pattern, but only if it is pushed onto a Jacobian-based
+method: the default polyalg starts with Broyden, which ignores the pattern entirely.
+
+The `autodiff` choice is not free. With a pattern present, DAE initialization currently only
+works with finite differences, so we ask for that explicitly instead of inheriting whatever
+the solver would pick.
+"""
+function default_dae_init_alg(nw::Network)
+    isnothing(nw.jac_prototype) && return BrownFullBasicInit()
+    BrownFullBasicInit(;
+        nlsolve=FastShortcutNonlinearPolyalg(;
+            must_use_jacobian=Val(true), autodiff=AutoFiniteDiff()))
 end
 
 """

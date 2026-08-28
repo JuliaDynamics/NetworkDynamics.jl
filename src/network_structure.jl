@@ -353,12 +353,18 @@ Set the Jacobian prototype for a NetworkDynamics network.
 This function stores a pre-computed Jacobian sparsity pattern in the network object,
 which can be used by ODE solvers to improve performance during integration.
 
+The stored pattern always gets a full diagonal, even where the Jacobian is structurally
+zero there: solvers size the iteration matrix `W = M/γ - J` from the prototype, and `W` has
+a diagonal whatever the mass matrix looks like. Without those entries the sparse `W` grows
+the first time it is filled, which breaks a GPU solver that has already factorized the
+prototype symbolically.
+
 # Arguments
 - `nw::Network`: The NetworkDynamics network to modify
 - `jac::SparseMatrixCSC{Bool,Int}`: A sparse matrix representing the Jacobian sparsity pattern
 """
 function set_jac_prototype!(nw::Network, jac::SparseMatrixCSC{Bool,Int})
-    getfield(nw,:jac_prototype)[] = jac
+    getfield(nw, :jac_prototype)[] = jac .| sparse(LinearAlgebra.I, size(jac)...)
     nw
 end
 
@@ -369,7 +375,6 @@ Compute and set the Jacobian prototype for a NetworkDynamics network.
 
 This is a convenience function that automatically computes the Jacobian sparsity pattern
 using `get_jac_prototype` and stores it in the network object.
-Needs `SparseConnectivityTracer` to be loaded!
 
 # Arguments
 - `nw::Network`: The NetworkDynamics network to modify
@@ -382,6 +387,7 @@ set_jac_prototype!(nw) # computs sparsity pattern and stores in network
 prob = ODEProblem(nw, x0, (0.0, 1.0), p0)
 sol = solve(prob, Rodas5P())
 ```
+Alternative see `sparse` kw arg in `Network` constructor.
 
 See also: [`get_jac_prototype`](@ref)
 """
