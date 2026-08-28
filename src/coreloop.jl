@@ -109,8 +109,8 @@ function get_buffers(nw, u, p, t; initbufs=true, kwargs...)
 end
 
 @inline function process_batches!(::SequentialExecution, fg, filt::F, batches, inbufs, duopt) where {F}
-    unrolled_foreach(filt, batches) do batch
-        (du, u, o, p, t) = duopt
+    (du, u, o, p, t) = duopt
+    unrolled_foreach(filt, batches, fg, inbufs, du, u, o, p, t) do batch, fg, inbufs, du, u, o, p, t
         for i in 1:length(batch)
             _type = dispatchT(batch)
             apply_comp!(_type, fg, batch, i, du, u, o, inbufs, p, t)
@@ -119,8 +119,8 @@ end
 end
 
 @inline function process_batches!(::ThreadedExecution, fg, filt::F, batches, inbufs, duopt) where {F}
-    unrolled_foreach(filt, batches) do batch
-        (du, u, o, p, t) = duopt
+    (du, u, o, p, t) = duopt
+    unrolled_foreach(filt, batches, fg, inbufs, du, u, o, p, t) do batch, fg, inbufs, du, u, o, p, t
         Threads.@threads for i in 1:length(batch)
             _type = dispatchT(batch)
             apply_comp!(_type, fg, batch, i, du, u, o, inbufs, p, t)
@@ -129,8 +129,8 @@ end
 end
 
 @inline function process_batches!(::PolyesterExecution, fg, filt::F, batches, inbufs, duopt) where {F}
-    unrolled_foreach(filt, batches) do batch
-        (du, u, o, p, t) = duopt
+    (du, u, o, p, t) = duopt
+    unrolled_foreach(filt, batches, fg, inbufs, du, u, o, p, t) do batch, fg, inbufs, du, u, o, p, t
         Polyester.@batch for i in 1:length(batch)
             _type = dispatchT(batch)
             apply_comp!(_type, fg, batch, i, du, u, o, inbufs, p, t)
