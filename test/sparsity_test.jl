@@ -3,6 +3,11 @@ using SparseArrays
 using SparseConnectivityTracer
 using Graphs
 using OrdinaryDiffEqRosenbrock
+using OrdinaryDiffEqNonlinearSolve
+using NonlinearSolve: NewtonRaphson
+using LinearAlgebra: Diagonal
+using SteadyStateDiffEq: SteadyStateDiffEq, SteadyStateProblem
+using SciMLBase: solve
 using ModelingToolkitBase
 using ModelingToolkitBase: D_nounits as Dt, t_nounits as t
 using SciCompDSL
@@ -165,4 +170,78 @@ end
 
     with_elseif = :(if cond; truepath; elseif cond2; true2; else; falsepath; end)
     @test_throws SE.RemainingConditionalsException SE.filter_conditionals_expr(with_elseif)
+end
+
+@testset "fixpoint solver selection" begin
+    g = watts_strogatz(100, 4, 0.1; seed=1)
+    v = VertexModel(; f=(dv, x, esum, p, t) -> (dv[1] = p[1] - x[1]^3 + esum[1]; nothing),
+                    g=1:1, dim=1, pdim=1, sym=[:x], psym=[:p => 0.1])
+    e = EdgeModel(; g=AntiSymmetric((e, vs, vd, p, t) -> (e[1] = p[1]*(vs[1] - vd[1]); nothing)),
+                  outdim=1, pdim=1, psym=[:k => 1.0])
+    nw = Network(g, v, e)
+
+    @test NetworkDynamics.default_fixpoint_alg(nw) isa SteadyStateDiffEq.SSRootfind
+    s_ref = find_fixpoint(nw)
+
+    set_jac_prototype!(nw; verbose=false)
+    @test !(NetworkDynamics.default_fixpoint_alg(nw) isa SteadyStateDiffEq.SSRootfind)
+    @test uflat(find_fixpoint(nw)) ≈ uflat(s_ref) rtol=1e-6
+
+    # nothing means "you decide", an explicit alg still wins
+    @test uflat(find_fixpoint(nw; alg=nothing)) ≈ uflat(s_ref) rtol=1e-6
+    @test uflat(find_fixpoint(nw; alg=SteadyStateDiffEq.SSRootfind())) ≈ uflat(s_ref) rtol=1e-6
+
+    # the chosen alg must actually build jacobians rather than falling into Broyden
+    s0 = NWState(nw; ufill=0.1)
+    prob = SteadyStateProblem(NetworkDynamics.NetworkFixedT(nw, NaN), uflat(s0), pflat(s0))
+    @test solve(prob, NetworkDynamics.default_fixpoint_alg(nw)).stats.njacs > 0
+    @test solve(prob, SteadyStateDiffEq.SSRootfind()).stats.njacs == 0
+
+    # ...and it must do so with sparse coloring, not dense AD
+    @test_logs solve(prob, NetworkDynamics.default_fixpoint_alg(nw))
+end
+
+
+@testset "DAE initialization solver selection" begin
+    # one differential state x and one algebraic state y per vertex
+    g = watts_strogatz(100, 4, 0.1; seed=1)
+    vf = function(dv, v, esum, p, t)
+        dv[1] = -v[1] + v[2] + esum[1]
+        dv[2] = v[2]^3 + v[2] - v[1] - p[1]
+        nothing
+    end
+    v = VertexModel(; f=vf, g=1:1, dim=2, pdim=1, sym=[:x, :y], psym=[:p => 0.5],
+                    mass_matrix=Diagonal([1.0, 0.0]))
+    e = EdgeModel(; g=AntiSymmetric((e, vs, vd, p, t) -> (e[1] = p[1]*(vs[1] - vd[1]); nothing)),
+                  outdim=1, pdim=1, psym=[:k => 1.0])
+    nw = Network(g, v, e)
+
+    @test NetworkDynamics.default_dae_init_alg(nw) isa BrownFullBasicInit
+    @test isnothing(NetworkDynamics.default_dae_init_alg(nw).nlsolve)
+
+    set_jac_prototype!(nw; verbose=false)
+    @test !isnothing(NetworkDynamics.default_dae_init_alg(nw).nlsolve)
+
+    # y=0 is inconsistent, so the initialization actually has to solve
+    s0 = NWState(nw)
+    s0.v[:, :x] .= 0.1
+    s0.v[:, :y] .= 0.0
+
+    integ = init(ODEProblem(nw, uflat(s0), (0.0, 1.0), pflat(s0)), Rodas5P())
+    y = integ.u[2:2:end]
+    x = integ.u[1:2:end]
+    @test maximum(abs, y.^3 .+ y .- x .- 0.5) < 1e-12   # constraints satisfied
+
+    # Upstream (OrdinaryDiffEqNonlinearSolve): `_initialize_dae!` decides whether to
+    # allocate dual work buffers with `alg_autodiff(alg) isa AutoForwardDiff`, which is
+    # false once `prepare_user_sparsity` has wrapped the AD type in `AutoSparse` -- i.e.
+    # exactly when a `jac_prototype` is present. A ForwardDiff-based `nlsolve` then writes
+    # Duals into Float64 buffers. `default_dae_init_alg` pins `AutoFiniteDiff` because of
+    # this. When this test stops being broken, drop that pin.
+    @test_broken begin
+        prob = ODEProblem(nw, uflat(s0), (0.0, 1.0), pflat(s0);
+                          initializealg=BrownFullBasicInit(nlsolve=NewtonRaphson()))
+        init(prob, Rodas5P())
+        true
+    end
 end

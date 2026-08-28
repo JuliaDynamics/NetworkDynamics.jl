@@ -1,5 +1,14 @@
 # NetworkDynamics Release Notes
 
+## unreleased
+
+`find_fixpoint` and DAE initialization now select a sparsity-aware nonlinear solver when the
+network carries a `jac_prototype`, via `NetworkDynamics.default_fixpoint_alg` and
+`NetworkDynamics.default_dae_init_alg`; `find_fixpoint`'s `alg` defaults to `nothing`
+meaning "let NetworkDynamics decide", and an explicit `alg` still overrides. This also makes
+`SparseMatrixColorings` a dependency, since NonlinearSolve only enables sparse-AD coloring
+when it is loaded somewhere in the process.
+
 ## v1.2.0 Changelog
 
 Initialization-time formula resolution is now a single dependency graph

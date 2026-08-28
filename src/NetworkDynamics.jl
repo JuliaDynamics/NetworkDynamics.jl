@@ -99,7 +99,10 @@ include("init_resolution.jl")
 include("spinners.jl")
 
 using OrderedCollections: OrderedDict
-using NonlinearSolve: NonlinearFunction, NonlinearLeastSquaresProblem, FastShortcutNLLSPolyalg
+using NonlinearSolve: NonlinearFunction, NonlinearLeastSquaresProblem,
+                      FastShortcutNLLSPolyalg, FastShortcutNonlinearPolyalg
+# NonlinearSolve only enables sparse-AD coloring when SparseMatrixColorings is loaded
+using SparseMatrixColorings: SparseMatrixColorings
 using LinearSolve: QRFactorization
 using SteadyStateDiffEq: SteadyStateProblem, SSRootfind
 export find_fixpoint, set_interface_defaults!
