@@ -3,11 +3,11 @@
 ## unreleased
 
 - **`find_fixpoint` and DAE initialization now select a sparsity-aware nonlinear solver** when the
-network carries a `jac_prototype`, via `NetworkDynamics.default_fixpoint_alg` and
-`NetworkDynamics.default_dae_init_alg`; `find_fixpoint`'s `alg` defaults to `nothing`
-meaning "let NetworkDynamics decide", and an explicit `alg` still overrides. This also makes
-`SparseMatrixColorings` a dependency, since NonlinearSolve only enables sparse-AD coloring
-when it is loaded somewhere in the process.
+  network carries a `jac_prototype`, via `NetworkDynamics.default_fixpoint_alg` and
+  `NetworkDynamics.default_dae_init_alg`; `find_fixpoint`'s `alg` defaults to `nothing`
+  meaning "let NetworkDynamics decide", and an explicit `alg` still overrides. This also makes
+  `SparseMatrixColorings` a dependency, since NonlinearSolve only enables sparse-AD coloring
+  when it is loaded somewhere in the process.
 - **`set_jac_prototype!` now stores a pattern with a full diagonal**, whether it computed the
   pattern itself or was handed one. Solvers size the iteration matrix `W = M/γ - J` from the
   prototype, and `W` has a diagonal whatever the mass matrix looks like. Without those entries
