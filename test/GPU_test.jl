@@ -14,8 +14,10 @@ using OrdinaryDiffEqNonlinearSolve
 using NonlinearSolve # so the DAE init polyalg is available
 using NonlinearSolve: KrylovJL_GMRES, LUFactorization, QRFactorization
 using OrdinaryDiffEqSDIRK: KenCarp4, TRBDF2
+using OrdinaryDiffEqBDF: QNDF
 using SciMLBase
 using SparseArrays
+using LinearAlgebra: diag
 @__MODULE__()==Main ? includet(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl")) : (const Lib = Main.Lib)
 
 rng = StableRNG(1)
@@ -141,7 +143,15 @@ function run_on_gpu(nw, s0; T, layout, solver, linsolve=nothing,
     prob = ODEProblem(nw_d, adapt(CuArray{T}, s0), tspan)
     alg = isnothing(linsolve) ? solver() : solver(; linsolve)
     sol = solve(prob, alg; maxiters)
-    SciMLBase.successful_retcode(sol)
+    SciMLBase.successful_retcode(sol) || return false
+
+    # `s0` is algebraically inconsistent on purpose, so a retcode alone would not show that
+    # initialization ran on the device. The algebraic rows of `f` must vanish at the
+    # initialized state; on the raw `s0` that residual is order 10.
+    du = similar(prob.u0)
+    nw_d(du, sol(first(tspan)), prob.p, first(tspan))
+    algebraic = findall(iszero, diag(nw.mass_matrix))
+    maximum(abs, Array(du)[algebraic]) < sqrt(eps(T))
 end
 
 # Every entry is one test line; `broken` marks what is known not to work today. The list is
@@ -167,10 +177,13 @@ gpu_configs = [
     (; name="Float64 CSR KenCarp4",      T=Float64, layout=:csr,   solver=KenCarp4, broken=false),
     (; name="Float64 CSR TRBDF2 GMRES",  T=Float64, layout=:csr,   solver=TRBDF2,   broken=false,
        linsolve=KrylovJL_GMRES()),
+    # The only multistep method here, so the only one keeping a solution history on the device.
+    (; name="Float64 CSR QNDF",          T=Float64, layout=:csr,   solver=QNDF,     broken=false),
     # Float32 needs the eltype to reach both the init tolerance and `tspan`, see
     # `default_dae_init_alg` and the `tspan` default above.
     (; name="Float32 dense Rodas5P",     T=Float32, layout=:dense, solver=Rodas5P,  broken=false),
     (; name="Float32 CSR Rodas5P",       T=Float32, layout=:csr,   solver=Rodas5P,  broken=false),
+    (; name="Float32 CSR QNDF",          T=Float32, layout=:csr,   solver=QNDF,     broken=false),
 ]
 
 @testset "actual GPU solve" begin
