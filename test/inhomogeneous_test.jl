@@ -63,3 +63,32 @@ estates1 = sol_st_ver(sol_st_ver.t[end], idxs=EIndex(1:ne(g),:o))
 estates2 = NWState(diff_network_st_ver, sol_st_ver.u[end]).e[1:ne(g),:o]
 estates3 = NWState(sol_st_ver, sol_st_ver.u[end]).e[1:ne(g),:o]
 @test estates1 == estates2 == estates3
+
+
+####
+#### Many distinct component models
+####
+# Above `MAX_UNROLLED_BATCHES` the batches live in a Vector instead of a Tuple and each
+# batch call becomes a dynamic dispatch. That must not cost an allocation per batch:
+# the rhs allocation count has to stay flat as the network grows.
+let
+    manyvertex(c) = VertexModel(; f=(dv, v, esum, p, t) -> (dv[1] = esum[1] - c*v[1]; nothing),
+                                g=StateMask(1:1), dim=1, pdim=0)
+    function manynetwork(N)
+        g = watts_strogatz(N, 4, 0.0)  # ring lattice, β=0 => deterministic
+        # a distinct closure per vertex => one batch per vertex
+        Network(g, [manyvertex(i/N) for i in 1:N], staticedge;
+                execution=SequentialExecution{false}())
+    end
+    function rhs_allocs(nw)
+        x0 = rand(dim(nw)); dx = similar(x0)
+        nw(dx, x0, nothing, 0.0)
+        @allocations nw(dx, x0, nothing, 0.0)
+    end
+
+    small = manynetwork(2 * NetworkDynamics.MAX_UNROLLED_BATCHES)
+    large = manynetwork(8 * NetworkDynamics.MAX_UNROLLED_BATCHES)
+    @test length(small.vertexbatches) > NetworkDynamics.MAX_UNROLLED_BATCHES
+    @test small.vertexbatches isa AbstractVector
+    @test rhs_allocs(small) == rhs_allocs(large) ≤ 4
+end

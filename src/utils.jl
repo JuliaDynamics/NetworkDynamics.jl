@@ -53,11 +53,19 @@ _subscript(i) = Char(0x02080 + i)
     @inline unrolled_foreach(f, filter, Base.tail(t), args...)
 end
 @inline unrolled_foreach(f::F1, filter::F2, t::Tuple{}, args::Vararg{Any,K}) where {F1,F2,K} = nothing
-# Abstract Vector, no unrolling
+# Abstract Vector, no unrolling. The element type is unknown here, so calling `f` is a
+# dynamic dispatch and every argument has to be a heap object. `args` therefore travels
+# as one `Ref` built before the loop: splatting it into the call instead would box the
+# non-pointer parts (`t`, the buffer tuple) once per element.
 @inline function unrolled_foreach(f::F1, filter::F2, t::AbstractVector, args::Vararg{Any,K}) where {F1,F2,K}
+    boxed = Ref(args)
     for el in t
-        filter(el) && @noinline f(el, args...) #noinline as function barrier for unknown batch type
+        filter(el) && _apply_boxed(f, el, boxed) # function barrier for unknown batch type
     end
+    nothing
+end
+@noinline function _apply_boxed(f::F, el, boxed::Base.RefValue) where {F}
+    f(el, boxed[]...)
     nothing
 end
 # no filter

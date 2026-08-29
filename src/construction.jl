@@ -1,3 +1,9 @@
+# Batches are kept in a tuple so the core loop can unroll over them and stay type
+# stable. Past 32 elements inference gives up on the tuple, every batch call turns
+# into a dynamic dispatch and the loop gets both slower and allocating -- beyond
+# that a plain Vector (one dispatch per batch, but nothing to infer) wins.
+const MAX_UNROLLED_BATCHES = 25
+
 """
     Network([g,] vertexf, edgef; kwarg...)
 
@@ -179,11 +185,11 @@ function Network(g::AbstractGraph,
                 VertexBatch(im, idxs; verbose)
             end
 
-            if length(vertexbatches) ≤ 50
+            if length(vertexbatches) ≤ MAX_UNROLLED_BATCHES
                 vertexbatches = Tuple(vertexbatches)
             else
                 verbose &&
-                    println(" $(length(vertexbatches)) > 50 unique indices: don't unroll!")
+                    println(" $(length(vertexbatches)) > $MAX_UNROLLED_BATCHES unique indices: don't unroll!")
             end
         end
 
@@ -192,11 +198,11 @@ function Network(g::AbstractGraph,
             edgebatches = map(eidxs) do idxs
                 EdgeBatch(im, idxs; verbose)
             end
-            if length(edgebatches) ≤ 50
+            if length(edgebatches) ≤ MAX_UNROLLED_BATCHES
                 edgebatches = Tuple(edgebatches)
             else
                 verbose &&
-                    println("$(length(edgebatches)) > 50 unique edges: don't unroll!")
+                    println("$(length(edgebatches)) > $MAX_UNROLLED_BATCHES unique edges: don't unroll!")
             end
         end
 
