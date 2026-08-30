@@ -44,16 +44,28 @@ end
 subscript(N) = String(_subscript.(reverse(digits(N))))
 _subscript(i) = Char(0x02080 + i)
 
-@inline function unrolled_foreach(f::F1, filter::F2, t::Tuple) where {F1,F2}
-    filter(first(t)) && f(first(t))
-    @inline unrolled_foreach(f, filter, Base.tail(t))
+# Trailing `args` are forwarded to `f` instead of being captured by it. Callers that
+# differentiate through `f` need this: a closure capturing constant and active data
+# together is opaque to Enzyme's activity analysis, while arguments are tracked one
+# by one. Pass no args to get the plain `f(element)` form.
+@inline function unrolled_foreach(f::F1, filter::F2, t::Tuple, args::Vararg{Any,K}) where {F1,F2,K}
+    filter(first(t)) && f(first(t), args...)
+    @inline unrolled_foreach(f, filter, Base.tail(t), args...)
 end
-@inline unrolled_foreach(f::F1, filter::F2, t::Tuple{}) where {F1,F2} = nothing
-# Abstract Vector, no unrolling
-@inline function unrolled_foreach(f::F1, filter::F2, t::AbstractVector) where {F1,F2}
+@inline unrolled_foreach(f::F1, filter::F2, t::Tuple{}, args::Vararg{Any,K}) where {F1,F2,K} = nothing
+# Abstract Vector, no unrolling. The element type is unknown here, so calling `f` is a
+# dynamic dispatch and every argument has to be a heap object. `args` therefore travels
+# as one `Ref` built before the loop: splatting it into the call instead would box the
+# non-pointer parts (`t`, the buffer tuple) once per element.
+@inline function unrolled_foreach(f::F1, filter::F2, t::AbstractVector, args::Vararg{Any,K}) where {F1,F2,K}
+    boxed = Ref(args)
     for el in t
-        filter(el) && @noinline f(el) #noinline as function barrier for unknown batch type
+        filter(el) && _apply_boxed(f, el, boxed) # function barrier for unknown batch type
     end
+    nothing
+end
+@noinline function _apply_boxed(f::F, el, boxed::Base.RefValue) where {F}
+    f(el, boxed[]...)
     nothing
 end
 # no filter
