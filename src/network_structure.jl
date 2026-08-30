@@ -103,7 +103,7 @@ struct Network{EX<:ExecutionStyle,G,NL,VTup,MM,CT,GBT,LM,EM}
     "map to gather external inputs"
     extmap::EM
     "sparsity pattern"
-    jac_prototype::Ref{Union{Nothing,SparseMatrixCSC{Bool,Int}}}
+    jac_prototype::Ref{Union{Nothing,AbstractSparseMatrix}}
     function Network(ex, vb, nl, im, caches, mm, gbufp, loopmap, extmap, jac_prototype)
         new{
             ex,typeof(im.g),typeof(nl), typeof(vb),
@@ -346,7 +346,7 @@ function Base.getproperty(nw::Network, s::Symbol)
 end
 
 """
-    set_jac_prototype!(nw::Network, jac::SparseMatrixCSC{Bool,Int})
+    set_jac_prototype!(nw::Network, jac::AbstractSparseMatrix)
 
 Set the Jacobian prototype for a NetworkDynamics network.
 
@@ -361,10 +361,15 @@ prototype symbolically.
 
 # Arguments
 - `nw::Network`: The NetworkDynamics network to modify
-- `jac::SparseMatrixCSC{Bool,Int}`: A sparse matrix representing the Jacobian sparsity pattern
+- `jac::AbstractSparseMatrix`: A sparse matrix representing the Jacobian sparsity pattern
 """
-function set_jac_prototype!(nw::Network, jac::SparseMatrixCSC{Bool,Int})
-    getfield(nw, :jac_prototype)[] = jac .| sparse(LinearAlgebra.I, size(jac)...)
+function set_jac_prototype!(nw::Network, jac::AbstractSparseMatrix)
+    # `+ I` adds the missing diagonal *structure* and works on every layout, host and device
+    # alike. It doubles the entries that were already there, so flatten the values afterwards:
+    # only the pattern is ever read.
+    jac = jac + LinearAlgebra.I
+    nonzeros(jac) .= one(eltype(jac))
+    getfield(nw, :jac_prototype)[] = jac
     nw
 end
 

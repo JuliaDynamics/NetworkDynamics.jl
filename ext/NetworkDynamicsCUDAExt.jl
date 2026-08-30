@@ -7,9 +7,14 @@ using NetworkDynamics: Network, NetworkLayer, ComponentBatch,
                        AntiSymmetric, Symmetric, Directed, Fiducial
 using NetworkDynamics.PreallocationTools: DiffCache
 using NetworkDynamics: KernelAbstractions as KA
+using NetworkDynamics.ForwardDiff: Dual
+import NetworkDynamics: aggregate!
 using RuntimeGeneratedFunctions: RuntimeGeneratedFunctions, RuntimeGeneratedFunction
 
-using CUDA: CuArray
+using CUDA: CuArray, CuVector
+using CUDA.CUSPARSE: CuSparseMatrixCSC, CuSparseMatrixCSR
+using LinearAlgebra: LinearAlgebra, mul!, transpose
+using SparseArrays: AbstractSparseMatrix
 using Adapt: Adapt, adapt
 
 # main entry for bringing Network to GPU
@@ -40,8 +45,9 @@ function Adapt.adapt_structure(to, n::Network)
     exT = typeof(executionstyle(n))
     loopbackmap = _adapt_loopbackmap(to, n.loopbackmap)
     extmap = adapt(to, n.extmap)
+    jac_prototype = _adapt_jac_prototype(to, n.jac_prototype)
 
-    Network(exT, vb, layer, n.im, caches, mm, gbp, loopbackmap, extmap, getfield(n, :jac_prototype))
+    Network(exT, vb, layer, n.im, caches, mm, gbp, loopbackmap, extmap, jac_prototype)
 end
 
 Adapt.@adapt_structure NetworkLayer
@@ -72,6 +78,23 @@ function Adapt.adapt_structure(to::Type{<:CuArray{<:AbstractFloat}}, am::Aggrega
 end
 
 Adapt.@adapt_structure SparseAggregator
+
+# cuSPARSE only provides SpMV for BLAS float types, so `mul!(::CuVector{<:Dual}, ::CuSparseMatrix,
+# ::CuVector{<:Dual})` silently falls back to LinearAlgebra's generic matvec, which scalar-indexes
+# the device arrays. A Dual is a packed tuple of `Tv` (value + partials), so we reinterpret the dual
+# vectors as dense `Tv` matrices with one column per dual and let cuSPARSE do a dense*sparse
+# product instead: aggᵀ += outᵀ * mᵀ.
+function aggregate!(a::SparseAggregator{<:CuSparseMatrixCSC{Tv}},
+                    aggbuf::CuVector{D}, out::CuVector{D}) where {Tv,D<:Dual}
+    if !iszero(rem(sizeof(D), sizeof(Tv))) || !isbitstype(D)
+        throw(ArgumentError("SparseAggregator on GPU cannot handle dual type $D with matrix eltype $Tv."))
+    end
+    K = sizeof(D) ÷ sizeof(Tv) # 1 value + N partials (recursively for nested duals)
+    outm = reshape(reinterpret(Tv, out), K, length(out))
+    aggm = reshape(reinterpret(Tv, aggbuf), K, length(aggbuf))
+    mul!(aggm, outm, transpose(a.m), true, true)
+    nothing
+end
 
 
 ####
@@ -147,6 +170,18 @@ _adapt_rgf(w::Fiducial) = Fiducial(_adapt_rgf(w.src), _adapt_rgf(w.dst))
 _adapt_rgf(rgf::RuntimeGeneratedFunction{<:Any,<:Any,<:Any,<:Any,<:Nothing}) = rgf
 _adapt_rgf(rgf::RuntimeGeneratedFunction) = RuntimeGeneratedFunctions.drop_expr(rgf)
 _adapt_rgf(f) = f
+
+####
+#### Adapt Jacobian prototype
+####
+# CSR rather than the CSC an `adapt` of a `SparseMatrixCSC` would give: it is the layout the
+# GPU sparse solvers want. cuDSS refuses CSC outright and cuSOLVER's sparse QR only takes
+# CSR, so a CSC prototype leaves Krylov as the only option. Convert here instead of
+# teaching `adapt` about CPU sparse matrices, which would be piracy.
+_adapt_jac_prototype(to, ::Nothing) = nothing
+function _adapt_jac_prototype(to::Type{<:CuArray{T}}, jac::AbstractSparseMatrix) where {T}
+    CuSparseMatrixCSR{T}(jac)
+end
 
 ####
 #### utils

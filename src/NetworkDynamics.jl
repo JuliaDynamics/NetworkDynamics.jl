@@ -12,7 +12,7 @@ using Atomix: Atomix
 using Polyester: Polyester
 using Mixers: Mixers
 using LinearAlgebra: LinearAlgebra, UniformScaling, BLAS
-using SparseArrays: SparseArrays, sparse, SparseMatrixCSC
+using SparseArrays: SparseArrays, sparse, SparseMatrixCSC, AbstractSparseMatrix, nonzeros
 using StyledStrings: StyledStrings, @styled_str
 using RecursiveArrayTools: RecursiveArrayTools, DiffEqArray
 using FastClosures: @closure
@@ -31,6 +31,7 @@ using ConstructionBase: ConstructionBase
 using Accessors: Accessors, @set
 using ADTypes: AutoForwardDiff, AutoFiniteDiff, AutoReverseDiff
 using DifferentiationInterface: DifferentiationInterface as DI
+using GPUArraysCore: @allowscalar
 
 @static if VERSION ≥ v"1.11.0-0"
     using Base: AnnotatedIOBuffer, AnnotatedString
