@@ -1,0 +1,24 @@
+name: Pin CPU target
+description: >
+  Make Julia compile for a fixed microarchitecture instead of `native`, so precompilation
+  caches survive being moved between runners. Julia has no env var for this, only the `-C`
+  flag, so we put a wrapper in front of `julia` on the PATH. Everything Julia spawns itself
+  (Pkg's precompile workers, the ParallelTestRunner workers) picks the flag up from
+  `Base.julia_cmd()`, so the wrapper only has to catch the outermost call.
+
+inputs:
+  target:
+    description: Value for the `-C`/`--cpu-target` flag.
+    default: x86-64-v3
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        mkdir -p "$HOME/julia-shim"
+        printf '#!/usr/bin/env bash\nexec %s -C %s "$@"\n' "$(which julia)" "${{ inputs.target }}" \
+          > "$HOME/julia-shim/julia"
+        chmod +x "$HOME/julia-shim/julia"
+        echo "$HOME/julia-shim" >> "$GITHUB_PATH"
+        julia -e 'println("host cpu: ", Sys.CPU_NAME)'
