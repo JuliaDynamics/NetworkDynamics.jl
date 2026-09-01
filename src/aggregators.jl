@@ -30,7 +30,8 @@ function aggregate!(a::NaiveAggregator, aggbuf, data)
     _aggregate!(a, a.batches, aggbuf, data)
 end
 function _aggregate!(a::NaiveAggregator, batches, aggbuf, data)
-    unrolled_foreach(batches) do batch
+    # buffers travel as arguments rather than in the closure, see `unrolled_foreach`
+    unrolled_foreach(nofilt, batches, a, aggbuf, data) do batch, a, aggbuf, data
         im = a.im
         for eidx in batch.indices
             edge = im.edgevec[eidx]

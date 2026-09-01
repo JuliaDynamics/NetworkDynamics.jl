@@ -1,7 +1,13 @@
 # NetworkDynamics Release Notes
 
-## unreleased
+## v1.3.0 Changelog
 
+- **Initialization values now travel across a two-term algebraic constraint.** An equation
+  `0 ~ a*x + b*y` with numeric coefficients determines either symbol from the other, so both
+  directions join the resolution graph next to the observed and output equations — this is how
+  a provided interface current reaches an injector through the KCL of a bus. Wider constraints
+  are left alone. Where such a rule determines a settable state, that state is no longer handed
+  to the nonlinear solver.
 - **`find_fixpoint` accepts a solve that stalls just short of convergence.** NonlinearSolve
   terminates at `≈3e-13`, tight enough that a larger network can miss it on cancellation noise
   and report `Stalled` with a perfectly good residual. A non-success return code is now only an

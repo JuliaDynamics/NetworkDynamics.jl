@@ -35,6 +35,7 @@ Optional keyword arguments:
     Detect the Jacobian sparsity pattern and store it in the network, which lets stiff solvers
     and the initialization use sparse linear algebra. Equivalent to calling
     [`set_jac_prototype!`](@ref) afterwards, see also [`get_jac_prototype`](@ref).
+    The detection reports what it is doing only if `verbose` is set.
  - `verbose=false`:
     Show additional information during construction.
 """
@@ -244,7 +245,7 @@ function Network(g::AbstractGraph,
 
     end
     # TimerOutputs.print_timer()
-    sparse && set_jac_prototype!(nw)
+    sparse && set_jac_prototype!(nw; verbose)
     return nw
 end
 
@@ -485,7 +486,8 @@ end
 Rebuild the Network with same graph and vertex/edge models but possibly different kwargs.
 If `copy_components=true` (default) then the vertex and edge models are copied.
 
-A network built from one which carries a Jacobian sparsity pattern carries one too. Pass
+A network built from one which carries a Jacobian sparsity pattern carries one too: an
+unchanged structure hands the old pattern over, a changed one detects it anew. Pass
 `sparse=false` to drop it.
 """
 function Network(nw::Network;
