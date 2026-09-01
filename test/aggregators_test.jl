@@ -11,6 +11,9 @@ using Symbolics
 
 @__MODULE__()==Main ? includet(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl")) : (const Lib = Main.Lib)
 
+# the dummy components used here would not survive the component checks
+NetworkDynamics.CHECK_COMPONENT[] = false
+
 @testset "compare different aggregators" begin
     fv = (dv, v, ein, p, t) -> nothing
     vtypes = [VertexModel(; f=fv, dim=2, g=1:2),
@@ -89,3 +92,5 @@ end
     @test NetworkDynamics._appropriate_zero([x,y,z]) isa Num
     @test NetworkDynamics._appropriate_zero(Any[x,y,z]) isa Float64
 end
+
+NetworkDynamics.CHECK_COMPONENT[] = true
