@@ -906,22 +906,26 @@ function _match_scaled_var(ex)
 end
 
 """
-    build_obsrules(obseqs, outputeqs, am::AliasMap, iv) -> Vector{ResolutionRule}
+    build_obsrules(obseqs, outputeqs, eqs, am::AliasMap, iv) -> Vector{ResolutionRule}
 
 Turns the symbolic equations of a compiled component into the `:derived` rules of the resolution
-graph: one per observed and per output equation, plus the inverse of every relation `y ~ k*x`.
+graph: one per observed and per output equation, plus the inverse of every relation `y ~ k*x`,
+plus both directions of every algebraic equation `0 ~ a*x + b*y`.
 
 Both directions are kept because which end of `i_r ~ -term_i_r` determines the other depends on
 the query, not on the model. Time is never inverted onto, it is an argument of the model.
 
-This is a separate view of `:observed`/`:outputeqs` and never rewrites them.
+This is a separate view of `:observed`/`:outputeqs`/`:equations` and never rewrites them.
 """
-function build_obsrules(obseqs, outputeqs, am::AliasMap, iv)
+function build_obsrules(obseqs, outputeqs, eqs, am::AliasMap, iv)
     ivname = getname(iv)
     rules = ResolutionRule[]
     for eq in Iterators.flatten((obseqs, outputeqs))
         haskey(am, getname(eq.lhs)) && continue # the re-inserted `alias ~ main` observation
         _push_eq_rules!(rules, eq, ivname)
+    end
+    for eq in eqs
+        _push_constraint_rules!(rules, eq, ivname)
     end
     rules
 end
@@ -961,6 +965,43 @@ function _push_eq_rules!(rules, eq, ivname)
 
     f = build_function([eq.rhs], vars; expression=Val(false))[2]
     push!(rules, _derived_rule(f, lhsname, syms))
+end
+
+# An algebraic equation relating exactly two symbols determines either one from the other, so
+# both directions become rules. Everything wider is left alone: with two unknowns still in the
+# equation there is nothing a rule could compute, and that is the multi-injector bus case.
+function _push_constraint_rules!(rules, eq, ivname)
+    m = _match_binary_relation(eq)
+    isnothing(m) && return rules
+    (a, x), (b, y) = m
+    x == ivname || push!(rules, _derived_rule(_scaled_payload(-b / a), x, [y];
+                                              label="constraint on :$x"))
+    y == ivname || push!(rules, _derived_rule(_scaled_payload(-a / b), y, [x];
+                                              label="constraint on :$y"))
+    rules
+end
+
+# Match an equation against `0 ~ a*x + b*y` with numeric, nonzero `a`/`b` and exactly two
+# variables; returns `((a, xname), (b, yname))` or `nothing`. Coefficients built from parameters
+# are deliberately not accepted — same line `_match_scaled_var` draws.
+# Differential rows never match: their lhs is `D(x)` rather than 0.
+function _match_binary_relation(eq)
+    isequal(unwrap_const(eq.lhs), 0) || return nothing
+    vars = get_variables(eq.rhs)
+    length(vars) == 2 || return nothing
+    x, y = vars
+
+    _a, rest, islinear = Symbolics.linear_expansion(eq.rhs, x)
+    islinear || return nothing
+    _b, _offset, islinear = Symbolics.linear_expansion(rest, y)
+    islinear || return nothing
+
+    a, b, offset = unwrap_const(_a), unwrap_const(_b), unwrap_const(_offset)
+    (a isa Number && b isa Number && offset isa Number) || return nothing
+    iszero(offset) || return nothing
+    (isfinite(a) && !iszero(a) && isfinite(b) && !iszero(b)) || return nothing
+
+    ((Float64(a), getname(x)), (Float64(b), getname(y)))
 end
 
 _self_reference_error(eq) =

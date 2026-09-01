@@ -157,7 +157,7 @@ end
 sys = Swing(name=:swing)
 vf = VertexModel(sys, [:i_r, :i_i], [:u_r, :u_i])
 ```
-You can see in the provided [metadata](@ref) that we've set `default` values for the node outputs `u_r`, `u_i`, the node inputs `i_r`, `i_i`, and most parameters.
+You can see in the provided [metadata](@ref Metadata) that we've set `default` values for the node outputs `u_r`, `u_i`, the node inputs `i_r`, `i_i`, and most parameters.
 For some states and parameters, we've only provided a `guess` rather than a default.
 Variables that only have `guess`es are considered "tunable" for the initialization algorithm.
 

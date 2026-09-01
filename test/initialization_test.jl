@@ -35,6 +35,11 @@ using NetworkDynamics: SubtaskError
 
     s1 = find_fixpoint(nd, p; alg=DynamicSS(Rodas5P()))
     @test isapprox(diff(s0.v[1:nv(g),:θ]), diff(s1.v[1:nv(g),:θ]); atol=1e-8)
+
+    # tolerances reach the solver: a loose one stops it well short of the default
+    s2 = find_fixpoint(nd, p; abstol=1e-2, reltol=1e-2)
+    resid(s) = (du = zeros(length(uflat(s))); nd(du, uflat(s), pflat(s), NaN); maximum(abs, du))
+    @test resid(s2) > resid(s0)
 end
 
 @testset "test component initialization" begin
