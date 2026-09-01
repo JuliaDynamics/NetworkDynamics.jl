@@ -4,6 +4,10 @@ using Graphs
 using LinearAlgebra: LinearAlgebra
 using Chairmarks: @b
 using ForwardDiff
+using Test
+
+# most components here are dummies which would not survive the component checks
+NetworkDynamics.CHECK_COMPONENT[] = false
 
 @testset "graphless constructor" begin
     g = (out, in, p, t) -> nothing
@@ -568,3 +572,5 @@ end
     CT = eltype(nw(nothing, u32, dualp32, Float32(t0); RET=Val(:buf_init))[1])
     @test CT == typeof(dualp32[1])
 end
+
+NetworkDynamics.CHECK_COMPONENT[] = true
