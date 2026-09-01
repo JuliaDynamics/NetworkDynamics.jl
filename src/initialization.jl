@@ -37,6 +37,11 @@ constructs and solves the steady state problem, returning the solution as an `NW
   when the network carries a `jac_prototype` (see [`set_jac_prototype!`](@ref)) and lets
   NonlinearSolve decide otherwise.
 - `t=NaN`: Time at which to evaluate the system (for time-dependent networks)
+- `tol=1e-10`: Residual below which the result is accepted even when the solver reports a
+  non-success return code. The solver keeps its own (much tighter) termination tolerances and
+  still converges as far as it can; this only decides whether stopping short counts as an
+  error. NonlinearSolve gives up at `≈3e-13`, which a large network can miss on cancellation
+  noise alone. Pass `abstol`/`reltol` to move where the solver itself stops.
 - Additional `kwargs` are passed to the SciML `solve` function
 
 ## Returns
@@ -74,7 +79,7 @@ function Base.getproperty(nw::NetworkFixedT, s::Symbol)
 end
 
 function find_fixpoint(nw::Network, x0::AbstractVector, p::AbstractVector;
-                       alg=nothing, t=NaN, kwargs...)
+                       alg=nothing, t=NaN, tol=1e-10, kwargs...)
     alg = isnothing(alg) ? default_fixpoint_alg(nw) : alg
     nw_fixed_t = NetworkFixedT(nw, t)
 
@@ -131,14 +136,16 @@ function find_fixpoint(nw::Network, x0::AbstractVector, p::AbstractVector;
     prob = SteadyStateProblem(nw_fixed_t, x0, p)
     sol = SciMLBase.solve(prob, alg; kwargs...)
     resid = maximum(abs.(sol.resid))
-    if !SciMLBase.successful_retcode(sol.retcode)
+    # A stalled solve that is nonetheless accurate is fine: the retcode says the solver ran out
+    # of progress, `tol` says whether the point it reached is a fixpoint.
+    if !SciMLBase.successful_retcode(sol.retcode) && !(resid < tol)
         throw(NetworkInitError("""
-        Could not find fixpoint, solver returned $(sol.retcode) with residual $(resid) (alg=$(alg))! For debugging, \
+        Could not find fixpoint, solver returned $(sol.retcode) with residual $(resid) > tol=$(tol) (alg=$(alg))! For debugging, \
         it is advised to manually construct the steady state problem and try \
         different solvers/arguments:
 
         prob = SteadyStateProblem(nw, uflat(nwstate), pflat(nwpara))
-        sol = solve(prob, alg; kwargs...)
+        sol = solve(prob, alg$(_solve_kwargs_str(kwargs)))
         x0 = NWState(nw, sol.u)
 
         For detail see https://docs.sciml.ai/NonlinearSolve/stable/native/steadystatediffeq/
@@ -146,6 +153,9 @@ function find_fixpoint(nw::Network, x0::AbstractVector, p::AbstractVector;
     end
     NWState(nw, sol.u, NWParameter(nw, p))
 end
+
+_solve_kwargs_str(kwargs) = isempty(kwargs) ? "; kwargs..." :
+    "; " * join(("$k=$(repr(v))" for (k, v) in pairs(kwargs)), ", ")
 
 # Without a sparsity pattern we have no reason to overrule NonlinearSolve. With one, the
 # default polyalg is a bad fit: it opens with Broyden/Klement, which carry a dense

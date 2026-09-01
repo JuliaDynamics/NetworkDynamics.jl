@@ -2,6 +2,11 @@
 
 ## unreleased
 
+- **`find_fixpoint` accepts a solve that stalls just short of convergence.** NonlinearSolve
+  terminates at `≈3e-13`, tight enough that a larger network can miss it on cancellation noise
+  and report `Stalled` with a perfectly good residual. A non-success return code is now only an
+  error if the residual also misses the new `tol=1e-10` keyword. The solver's own tolerances are
+  untouched, so it still converges as far as it can.
 - **`find_fixpoint` and DAE initialization now select a sparsity-aware nonlinear solver** when the
   network carries a `jac_prototype`, via `NetworkDynamics.default_fixpoint_alg` and
   `NetworkDynamics.default_dae_init_alg`; `find_fixpoint`'s `alg` defaults to `nothing`

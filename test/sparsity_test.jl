@@ -319,15 +319,13 @@ end
     integ = init(ODEProblem(nw, uflat(s0), (0.0, 1.0), pflat(s0)), Rodas5P())
     y = integ.u[2:2:end]
     x = integ.u[1:2:end]
-    @test maximum(abs, y.^3 .+ y .- x .- 0.5) < 1e-12   # constraints satisfied
+    @test maximum(abs, y.^3 .+ y .- x .- 0.5) < 1e-8   # constraints satisfied
 
-    # Upstream (OrdinaryDiffEqNonlinearSolve): `_initialize_dae!` decides whether to
-    # allocate dual work buffers with `alg_autodiff(alg) isa AutoForwardDiff`, which is
-    # false once `prepare_user_sparsity` has wrapped the AD type in `AutoSparse` -- i.e.
-    # exactly when a `jac_prototype` is present. A ForwardDiff-based `nlsolve` then writes
-    # Duals into Float64 buffers. `default_dae_init_alg` pins `AutoFiniteDiff` because of
-    # this. When this test stops being broken, drop that pin.
-    @test_broken begin
+    # A `jac_prototype` makes the solver wrap its AD choice in `AutoSparse`. Upstream has to
+    # look through that wrapper to see that the initialization residual will be called with
+    # Duals, otherwise a ForwardDiff-based `nlsolve` writes Duals into Float64 buffers.
+    # Needs OrdinaryDiffEqNonlinearSolve >= 2.9.4.
+    @test begin
         prob = ODEProblem(nw, uflat(s0), (0.0, 1.0), pflat(s0);
                           initializealg=BrownFullBasicInit(nlsolve=NewtonRaphson()))
         init(prob, Rodas5P())

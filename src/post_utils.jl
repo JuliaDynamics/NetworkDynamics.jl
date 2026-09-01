@@ -92,16 +92,25 @@ For a mass-matrix DAE this runs a nonlinear solve over the algebraic variables, 
 `solve` and again after every reinitializing callback. With a `jac_prototype` on the network
 that solve can use the sparsity pattern, but only if it is pushed onto a Jacobian-based
 method: the default polyalg starts with Broyden, which ignores the pattern entirely.
-
-The `autodiff` choice is not free. With a pattern present, DAE initialization currently only
-works with finite differences, so we ask for that explicitly instead of inheriting whatever
-the solver would pick.
 """
 function default_dae_init_alg(nw::Network)
     isnothing(nw.jac_prototype) && return BrownFullBasicInit()
     BrownFullBasicInit(;
         nlsolve=FastShortcutNonlinearPolyalg(;
-            must_use_jacobian=Val(true), autodiff=AutoFiniteDiff()))
+            must_use_jacobian=Val(true), autodiff=_dae_init_autodiff()))
+end
+
+# A sparsity pattern makes the solver wrap its AD choice in `AutoSparse`. Up to
+# OrdinaryDiffEqNonlinearSolve 2.9.3 the DAE initialization does not look through that
+# wrapper, concludes the residual is never called with Duals and hands ForwardDiff plain
+# Float64 buffers. Finite differences sidestep that; `nothing` leaves the choice to the
+# solver, which picks ForwardDiff.
+const ODE_NLSOLVE_PKGID = Base.PkgId(
+    Base.UUID("127b3ac7-2247-4354-8eb6-78cf4e7c58e8"), "OrdinaryDiffEqNonlinearSolve")
+function _dae_init_autodiff()
+    Base.root_module_exists(ODE_NLSOLVE_PKGID) || return AutoFiniteDiff()
+    version = pkgversion(Base.root_module(ODE_NLSOLVE_PKGID))
+    isnothing(version) || version < v"2.9.4" ? AutoFiniteDiff() : nothing
 end
 
 """
