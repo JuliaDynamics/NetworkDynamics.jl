@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Initialization · NetworkDynamics</title><meta name="title" content="Initialization · NetworkDynamics"/><meta property="og:title" content="Initialization · NetworkDynamics"/><meta property="twitter:title" content="Initialization · NetworkDynamics"/><meta name="description" content="Documentation for NetworkDynamics."/><meta property="og:description" content="Documentation for NetworkDynamics."/><meta property="twitter:description" content="Documentation for NetworkDynamics."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script><link href="../../assets/custom.css" rel="stylesheet" type="text/css"/></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">NetworkDynamics</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">General</a></li><li><a class="tocitem" href="../../mathematical_model/">Mathematical Model</a></li><li><a class="tocitem" href="../../network_construction/">Network Construction</a></li><li><a class="tocitem" href="../../data_structure/">Data Structure</a></li><li><span class="tocitem">Features</span><ul><li><a class="tocitem" href="../../symbolic_indexing/">Symbolic Indexing</a></li><li><a class="tocitem" href="../../metadata/">Metadata</a></li><li><a class="tocitem" href="../../initialization/">Initialization</a></li><li><a class="tocitem" href="../../callbacks/">Callbacks and Events</a></li><li><a class="tocitem" href="../../mtk_integration/">ModelingToolkit Integration</a></li><li><a class="tocitem" href="../../injector_nodes/">Injector Nodes</a></li><li><a class="tocitem" href="../../sparsity_detection/">Sparsity Detection</a></li><li><a class="tocitem" href="../../external_inputs/">External Inputs</a></li><li><a class="tocitem" href="../../inspector/">Interactive Solution Inspection</a></li></ul></li><li><a class="tocitem" href="../../API/">API</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../getting_started_with_network_dynamics/">Getting Started</a></li><li><a class="tocitem" href="../heterogeneous_system/">Heterogeneous Systems</a></li><li class="is-active"><a class="tocitem" href>Initialization</a><ul class="internal"><li><a class="tocitem" href="#Node-Models"><span>Node Models</span></a></li><li><a class="tocitem" href="#Edge-Models"><span>Edge Models</span></a></li><li><a class="tocitem" href="#Defining-a-Static-Model-for-Initialization"><span>Defining a Static Model for Initialization</span></a></li><li><a class="tocitem" href="#Defining-a-Dynamic-Model"><span>Defining a Dynamic Model</span></a></li><li><a class="tocitem" href="#Initializing-the-Dynamic-Model-with-the-Static-Solution"><span>Initializing the Dynamic Model with the Static Solution</span></a></li><li><a class="tocitem" href="#Simulating-the-Dynamic-Model"><span>Simulating the Dynamic Model</span></a></li><li><a class="tocitem" href="#Visualizing-the-Results"><span>Visualizing the Results</span></a></li></ul></li><li><a class="tocitem" href="../cascading_failure/">Cascading Failure</a></li><li><a class="tocitem" href="../gas_network/">Gas Network</a></li><li><a class="tocitem" href="../stress_on_truss/">Stress on Truss</a></li><li><a class="tocitem" href="../directed_and_weighted_graphs/">Directed and Weighted Graphs</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Tutorials</a></li><li class="is-active"><a href>Initialization</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Initialization</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaDynamics/NetworkDynamics.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaDynamics/NetworkDynamics.jl/blob/main/docs/examples/init_tutorial.jl" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="init-tutorial"><a class="docs-heading-anchor" href="#init-tutorial">Tutorial on Stepwise Initialization of a Complex Model</a><a id="init-tutorial-1"></a><a class="docs-heading-anchor-permalink" href="#init-tutorial" title="Permalink"></a></h1><p>This example demonstrates how to initialize a complex network model with both static and dynamic components. The models are closely related to the ones used in the <a href="../gas_network/#gas-example">gas network example</a>, but greatly simplified for the sake of this tutorial. We&#39;ll create a gas network model with three nodes and pipes connecting them, and show how to:</p><ol><li>Create static models for initialization</li><li>Find a steady-state solution</li><li>Create corresponding dynamic models</li><li>Initialize the dynamic models with the steady-state solution</li><li>Simulate the system with dynamic behavior</li></ol><p>This script can be downloaded as a normal Julia script <a href="../init_tutorial.jl">here</a>.</p><p>First, let&#39;s import the necessary packages:</p><pre><code class="language-julia hljs">using NetworkDynamics
+using ModelingToolkit
+using ModelingToolkit: t_nounits as t, D_nounits as D
+using OrdinaryDiffEqTsit5
+using CairoMakie</code></pre><h2 id="Node-Models"><a class="docs-heading-anchor" href="#Node-Models">Node Models</a><a id="Node-Models-1"></a><a class="docs-heading-anchor-permalink" href="#Node-Models" title="Permalink"></a></h2><p>We&#39;ll start by defining our node models using ModelingToolkit. First, let&#39;s create a template for common states and equations in all gas nodes:</p><pre><code class="language-julia hljs">@mtkmodel GasNode begin
+    @variables begin
+        p(t), [description=&quot;Pressure&quot;] # node output
+        q̃_nw(t), [description=&quot;aggregated flow from pipes into node&quot;] # node input
+        q̃_inj(t), [description=&quot;flow injected into the network&quot;]
+    end
+    @equations begin
+        q̃_inj ~ -q̃_nw
+    end
+end</code></pre><p>Now we&#39;ll define three specific node types:</p><p><strong>A) A constant pressure node that forces pressure to maintain a specific value</strong></p><pre><code class="language-julia hljs">@mtkmodel ConstantPressureNode begin
+    @extend GasNode()
+    @parameters begin
+        p_set, [description=&quot;Constant pressure setpoint&quot;]
+    end
+    @equations begin
+        p ~ p_set
+    end
+end</code></pre><p><strong>B) A static prosumer node which forces a certain flow</strong></p><div class="admonition is-info" id="Fully-Implicit-Output-88518cd39eecfc91"><header class="admonition-header">Fully Implicit Output<a class="admonition-anchor" href="#Fully-Implicit-Output-88518cd39eecfc91" title="Permalink"></a></header><div class="admonition-body"><p>We need to use <code>implicit_output(p)</code> to handle the fully implicit pressure output. See <a href="../../mtk_integration/#Fully-Implicit-Outputs">fully implicit outputs</a> for details.</p></div></div><pre><code class="language-julia hljs">@mtkmodel StaticProsumerNode begin
+    @extend GasNode()
+    @parameters begin
+        q̃_prosumer, [description=&quot;flow injected by prosumer&quot;]
+    end
+    @equations begin
+        -q̃_nw ~ q̃_prosumer + implicit_output(p)
+    end
+end</code></pre><p><strong>C) A dynamic prosumer node with compliance, which introduces dynamic behavior to the pressure state</strong></p><pre><code class="language-julia hljs">@mtkmodel DynamicProsumerNode begin
+    @extend GasNode()
+    @parameters begin
+        q̃_prosumer, [description=&quot;flow injected by prosumer&quot;]
+        C=0.1, [description=&quot;Compliance&quot;]
+    end
+    @equations begin
+        C*D(p) ~ q̃_prosumer + q̃_nw
+    end
+end</code></pre><p><strong>D) A pressure control node that tries to maintain a set pressure by adjusting its injection</strong></p><pre><code class="language-julia hljs">@mtkmodel PressureControlNode begin
+    @extend GasNode()
+    @parameters begin
+        p_set, [description=&quot;Pressure setpoint&quot;, guess=1]
+        K_p=1, [description=&quot;Proportional gain&quot;]
+        K_i=1, [description=&quot;Integral gain&quot;]
+        C=0.1, [description=&quot;Compliance&quot;]
+    end
+    @variables begin
+        Δp(t), [description=&quot;Pressure error&quot;]
+        ξ(t), [description=&quot;Integral state&quot;, guess=0]
+        q̃_prosumer(t), [description=&quot;flow injected by producer&quot;]
+    end
+    @equations begin
+        Δp ~ p_set - p
+        D(ξ) ~ Δp
+        q̃_prosumer ~ K_p*Δp + K_i*ξ
+        C*D(p) ~ q̃_prosumer + q̃_nw
+    end
+end</code></pre><h2 id="Edge-Models"><a class="docs-heading-anchor" href="#Edge-Models">Edge Models</a><a id="Edge-Models-1"></a><a class="docs-heading-anchor-permalink" href="#Edge-Models" title="Permalink"></a></h2><p>Now we&#39;ll define our edge models, starting with a template for the pipe:</p><pre><code class="language-julia hljs">@mtkmodel GasPipe begin
+    @variables begin
+        q̃(t), [description=&quot;flow through pipe&quot;] #output
+        p_src(t), [description=&quot;pressure at start of pipe&quot;] #input
+        p_dst(t), [description=&quot;pressure at end of pipe&quot;] #input
+    end
+end</code></pre><p>Next, we define a dynamic pipe with inertia (a simple delayed model):</p><pre><code class="language-julia hljs">@mtkmodel DynamicPipe begin
+    @extend GasPipe()
+    @parameters begin
+        R=0.1, [description=&quot;Resistance&quot;]
+        M=0.1, [description=&quot;Inertia&quot;]
+    end
+    @equations begin
+        M*D(q̃) ~ (p_src - p_dst)/R - q̃ # some simple delayed model
+    end
+end</code></pre><p>And finally, a quasistatic pipe model for initialization purposes. This model equals the dynamic model at steady state, making it ideal for finding initial conditions:</p><pre><code class="language-julia hljs">@mtkmodel QuasistaticPipe begin
+    @extend GasPipe()
+    @parameters begin
+        R=0.1, [description=&quot;Resistance&quot;]
+    end
+    @equations begin
+        q̃ ~ (p_src - p_dst)/R
+    end
+end</code></pre><h2 id="Defining-a-Static-Model-for-Initialization"><a class="docs-heading-anchor" href="#Defining-a-Static-Model-for-Initialization">Defining a Static Model for Initialization</a><a id="Defining-a-Static-Model-for-Initialization-1"></a><a class="docs-heading-anchor-permalink" href="#Defining-a-Static-Model-for-Initialization" title="Permalink"></a></h2><p>Our first step is to define a static model that we&#39;ll use to find the steady-state solution. This is a crucial step for initializing complex dynamic models.</p><p>Step 1: Define all the components of our static model First, node 1 is our producer which will later be a controlled producer. For initialization, we use a static model:</p><pre><code class="language-julia hljs">@named v1_mod_static = ConstantPressureNode(p_set=1)
+v1_static = VertexModel(v1_mod_static, [:q̃_nw], [:p], vidx=1)
+
+# Nodes 2 and 3 are consumers. For them, we&#39;ll use static prosumer models:
+@named v2_mod_static = StaticProsumerNode(q̃_prosumer=-0.6) # consumer
+v2_static = VertexModel(v2_mod_static, [:q̃_nw], [:p], vidx=2)
+
+@named v3_mod_static = StaticProsumerNode(q̃_prosumer=-0.4) # consumer
+v3_static = VertexModel(v3_mod_static, [:q̃_nw], [:p], vidx=3)</code></pre><p>Now we define the static pipe models connecting our nodes:</p><pre><code class="language-julia hljs">@named p_mod_static = QuasistaticPipe()
+p12_static = EdgeModel(p_mod_static, [:p_src], [:p_dst], AntiSymmetric([:q̃]), src=1, dst=2)
+p13_static = EdgeModel(p_mod_static, [:p_src], [:p_dst], AntiSymmetric([:q̃]), src=1, dst=3)
+p23_static = EdgeModel(p_mod_static, [:p_src], [:p_dst], AntiSymmetric([:q̃]), src=2, dst=3)</code></pre><p>Assemble all components into a static network:</p><pre><code class="language-julia hljs">nw_static = Network([v1_static, v2_static, v3_static], [p12_static, p13_static, p23_static])</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Network with 2 states and 6 parameters
+ ├─ 3 vertices (2 unique types)
+ └─ 3 edges (1 unique type)
+Edge-Aggregation using SequentialAggregator(+)</code></pre><p>Create an initial guess for the steady state and modify it with reasonable values:</p><pre><code class="language-julia hljs">u_static_guess = NWState(nw_static)
+u_static_guess.v[2, :p] = 1.0
+u_static_guess.v[3, :p] = 1.0</code></pre><p>Find the steady-state solution using our initial guess:</p><pre><code class="language-julia hljs">u_static = find_fixpoint(nw_static, u_static_guess)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">NWState{Vector{Float64}} of Network (3 vertices, 3 edges)
+  ├─ VIndex(2, :p) =&gt; 0.9466666666666667
+  └─ VIndex(3, :p) =&gt; 0.9533333333333334<span class="sgr90">
+ p = NWParameter([1.0, -0.6, -0.4, 0.1, 0.1, 0.1])
+ t = nothing</span></code></pre><h2 id="Defining-a-Dynamic-Model"><a class="docs-heading-anchor" href="#Defining-a-Dynamic-Model">Defining a Dynamic Model</a><a id="Defining-a-Dynamic-Model-1"></a><a class="docs-heading-anchor-permalink" href="#Defining-a-Dynamic-Model" title="Permalink"></a></h2><p>Now we&#39;ll define our dynamic model using more complex components:</p><pre><code class="language-julia hljs">@named v1_mod_dyn = PressureControlNode()
+v1_dyn = VertexModel(v1_mod_dyn, [:q̃_nw], [:p], vidx=1)
+
+@named v2_mod_dyn = DynamicProsumerNode(q̃_prosumer=-0.6)
+v2_dyn = VertexModel(v2_mod_dyn, [:q̃_nw], [:p], vidx=2)
+
+@named v3_mod_dyn = DynamicProsumerNode(q̃_prosumer=-0.4)
+v3_dyn = VertexModel(v3_mod_dyn, [:q̃_nw], [:p], vidx=3)</code></pre><p>Create dynamic pipe models with inertia:</p><pre><code class="language-julia hljs">@named p_mod_dyn = DynamicPipe()
+p12_dyn = EdgeModel(p_mod_dyn, [:p_src], [:p_dst], AntiSymmetric([:q̃]), src=1, dst=2)
+p13_dyn = EdgeModel(p_mod_dyn, [:p_src], [:p_dst], AntiSymmetric([:q̃]), src=1, dst=3)
+p23_dyn = EdgeModel(p_mod_dyn, [:p_src], [:p_dst], AntiSymmetric([:q̃]), src=2, dst=3)</code></pre><p>Assemble the dynamic network:</p><pre><code class="language-julia hljs">nw_dyn = Network([v1_dyn, v2_dyn, v3_dyn], [p12_dyn, p13_dyn, p23_dyn])</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Network with 7 states and 14 parameters
+ ├─ 3 vertices (2 unique types)
+ └─ 3 edges (1 unique type)
+Edge-Aggregation using SequentialAggregator(+)</code></pre><h2 id="Initializing-the-Dynamic-Model-with-the-Static-Solution"><a class="docs-heading-anchor" href="#Initializing-the-Dynamic-Model-with-the-Static-Solution">Initializing the Dynamic Model with the Static Solution</a><a id="Initializing-the-Dynamic-Model-with-the-Static-Solution-1"></a><a class="docs-heading-anchor-permalink" href="#Initializing-the-Dynamic-Model-with-the-Static-Solution" title="Permalink"></a></h2><p>Now comes the important part: we need to initialize the dynamic model with the results from the static model. To do so, we need to make use of two functions:</p><ol><li><a href="../../API/#NetworkDynamics.interface_values"><code>interface_values</code></a>: Extracts all interface values (inputs and outputs) from a network state</li><li><a href="../../API/#NetworkDynamics.initialize_componentwise!"><code>initialize_componentwise!</code></a>: Initializes all components in a network one by one</li></ol><p>First, we extract all interface values from our static solution:</p><pre><code class="language-julia hljs">interface_vals = interface_values(u_static)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">OrderedCollections.OrderedDict{NetworkDynamics.SymbolicIndex{Int64, Symbol}, Float64} with 18 entries:
+  VIndex(1, :q̃_nw)  =&gt; -1.0
+  VIndex(1, :p)     =&gt; 1.0
+  VIndex(2, :q̃_nw)  =&gt; 0.6
+  VIndex(2, :p)     =&gt; 0.946667
+  VIndex(3, :q̃_nw)  =&gt; 0.4
+  VIndex(3, :p)     =&gt; 0.953333
+  EIndex(1, :p_src) =&gt; 1.0
+  EIndex(1, :p_dst) =&gt; 0.946667
+  EIndex(1, :₋q̃)    =&gt; -0.533333
+  EIndex(1, :q̃)     =&gt; 0.533333
+  EIndex(2, :p_src) =&gt; 1.0
+  EIndex(2, :p_dst) =&gt; 0.953333
+  EIndex(2, :₋q̃)    =&gt; -0.466667
+  EIndex(2, :q̃)     =&gt; 0.466667
+  EIndex(3, :p_src) =&gt; 0.946667
+  EIndex(3, :p_dst) =&gt; 0.953333
+  EIndex(3, :₋q̃)    =&gt; 0.0666667
+  EIndex(3, :q̃)     =&gt; -0.0666667</code></pre><p>Next, we initialize the dynamic model using these interface values as defaults:</p><pre><code class="language-julia hljs">u0_dyn = initialize_componentwise!(nw_dyn, default_overrides=interface_vals, verbose=true)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">NWState{Vector{Float64}} of Network (3 vertices, 3 edges)
+  ├─ VIndex(1, :p)  =&gt; 1.0
+  ├─ VIndex(1, :ξ)  =&gt; 0.9999999999999997
+  ├─ VIndex(2, :p)  =&gt; 0.9466666666666667
+  ├─ VIndex(3, :p)  =&gt; 0.9533333333333334
+  ├─ EIndex(1, :q̃)  =&gt; 0.5333333333333334
+  ├─ EIndex(2, :q̃)  =&gt; 0.46666666666666634
+  └─ EIndex(3, :q̃)  =&gt; -0.0666666666666671<span class="sgr90">
+ p = NWParameter([1.0, 1.0, 1.0, 0.1, -0.6, 0.1, -0.4, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
+ t = nothing</span></code></pre><p>Internally, this function uses <a href="../../API/#NetworkDynamics.initialize_component!"><code>initialize_component!</code></a> on every single component. For each component, it overwrites the <code>default</code>s to be consistent with the interface values of the static model. Therefore, we ensure that the dynamic model is initialized near the steady state of the static model.</p><p>We can inspect individual components if needed:</p><pre><code class="language-julia hljs">dump_initial_state(nw_dyn[VIndex(1)])</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr1">Inputs:</span>
+  q̃_nw        = <span class="sgr34">-1</span>
+<span class="sgr1">States:</span>
+  p           = <span class="sgr34"> 1</span>
+  ξ           = <span class="sgr33"> 1</span>   (guess  0)
+<span class="sgr1">Outputs:</span>
+  p           = <span class="sgr34"> 1</span>
+<span class="sgr1">Parameters:</span>
+  C           = <span class="sgr34"> 0.1</span>
+  K_i         = <span class="sgr34"> 1</span>
+  K_p         = <span class="sgr34"> 1</span>
+  p_set       = <span class="sgr33"> 1</span>   (guess  1)
+<span class="sgr1">Observed:</span>
+  q̃_inj       =  1
+  q̃_prosumer  =  1
+  Δp          =  0</code></pre><p>Let&#39;s verify that our initialization is correct by checking that the derivatives are close to zero:</p><pre><code class="language-julia hljs">du = ones(dim(nw_dyn))
+nw_dyn(du, uflat(u0_dyn), pflat(u0_dyn), 0.0)
+extrema(du .- zeros(dim(nw_dyn))) # very close to zero, confirming we have a steady state!</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(-7.771561172376096e-15, 5.551115123125783e-15)</code></pre><p>Alternatively, we can used the <a href="../../API/#NetworkDynamics.isfixpoint"><code>isfixpoint</code></a> function to check if the state is a fixpoint:</p><pre><code class="language-julia hljs">@assert isfixpoint(nw_dyn, u0_dyn)</code></pre><h2 id="Simulating-the-Dynamic-Model"><a class="docs-heading-anchor" href="#Simulating-the-Dynamic-Model">Simulating the Dynamic Model</a><a id="Simulating-the-Dynamic-Model-1"></a><a class="docs-heading-anchor-permalink" href="#Simulating-the-Dynamic-Model" title="Permalink"></a></h2><p>With our properly initialized model, we can now simulate the system to observe its behavior. To make the simulation more interesting, we&#39;ll introduce a disturbance to see how the system responds from its steady state.</p><p>We&#39;ll use a callback to increase consumer demand at a specific time. For more information on callbacks, see the documentation on <a href="../../callbacks/#Callbacks">Callbacks</a>.</p><pre><code class="language-julia hljs">affect = ComponentAffect([], [:q̃_prosumer]) do u, p, ctx
+    @info &quot;Increase consumer demand at t=$(ctx.t)&quot;
+    p[:q̃_prosumer] -= 0.1
+end
+cb = PresetTimeComponentCallback([1.0], affect)
+set_callback!(nw_dyn[VIndex(2)], cb) # attach disturbance to second node</code></pre><p>Create and solve the ODE problem with the callback. Note that we&#39;re using the flat representation of our initialized state (via <code>uflat</code> and <code>pflat</code>) as input to the ODE solver:</p><pre><code class="language-julia hljs">prob = ODEProblem(nw_dyn, copy(uflat(u0_dyn)), (0, 7), copy(pflat(u0_dyn));
+    callback=get_callbacks(nw_dyn))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr38_2" style="color:#56b6c2">ODEProblem</span> with uType <span class="sgr38_2" style="color:#56b6c2">Vector{Float64}</span> and tType <span class="sgr38_2" style="color:#56b6c2">Int64</span>. In-place: <span class="sgr38_2" style="color:#56b6c2">true</span>
+Non-trivial mass matrix: <span class="sgr38_2" style="color:#56b6c2">false</span>
+timespan: (0, 7)
+u0: 7-element Vector{Float64}:
+  1.0
+  0.9999999999999997
+  0.9466666666666667
+  0.9533333333333334
+  0.5333333333333334
+  0.46666666666666634
+ -0.0666666666666671</code></pre><p>For less boilerplate, we can also use a <a href="../../API/#SciMLBase.ODEProblem-Tuple{Network, NWState, Any}">NetworkDynamics specific problem constructor</a> which extracts flat arrays and callbacks automatically:</p><pre><code class="language-julia hljs">prob = ODEProblem(nw_dyn, u0_dyn, (0, 7))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr38_2" style="color:#56b6c2">ODEProblem</span> with uType <span class="sgr38_2" style="color:#56b6c2">Vector{Float64}</span> and tType <span class="sgr38_2" style="color:#56b6c2">Int64</span>. In-place: <span class="sgr38_2" style="color:#56b6c2">true</span>
+Non-trivial mass matrix: <span class="sgr38_2" style="color:#56b6c2">false</span>
+timespan: (0, 7)
+u0: 7-element Vector{Float64}:
+  1.0
+  0.9999999999999997
+  0.9466666666666667
+  0.9533333333333334
+  0.5333333333333334
+  0.46666666666666634
+ -0.0666666666666671</code></pre><p>The system can then be solved:</p><pre><code class="language-julia hljs">sol = solve(prob, Tsit5())</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"><span class="sgr36"><span class="sgr1">[ Info: </span></span>Increase consumer demand at t=1.0</code></pre><h2 id="Visualizing-the-Results"><a class="docs-heading-anchor" href="#Visualizing-the-Results">Visualizing the Results</a><a id="Visualizing-the-Results-1"></a><a class="docs-heading-anchor-permalink" href="#Visualizing-the-Results" title="Permalink"></a></h2><p>Finally, let&#39;s visualize the results of our simulation. The plots show how our gas network responds to the increased consumer demand at t=1:</p><ol><li><p><strong>Pressure at nodes</strong>: We see a pressure drop at all nodes after the disturbance before the pressure is stabilized by the controller.</p></li><li><p><strong>Injection by producer</strong>: Node 1 increases its injection to compensate for the higher demand.</p></li><li><p><strong>Consumption by consumers</strong>: The solid lines show the actual flows at nodes 2 and 3, while the dashed lines show the set consumer demands. At t=1, we see the step change in consumer demand at node 2.</p></li><li><p><strong>Flows through pipes</strong>: Shows how the flows in all pipes adjust to the new demand pattern.</p></li></ol><pre><code class="language-julia hljs">let
+    fig = Figure(size=(1000,1000))
+    ax = Axis(fig[1, 1]; title=&quot;Pressure at nodes&quot;)
+    for i in 1:3
+        lines!(ax, sol; idxs=VIndex(i, :p), label=&quot;Node $i&quot;, color=Cycled(i))
+    end
+
+    ax = Axis(fig[2, 1]; title=&quot;Injection by producer&quot;)
+    lines!(ax, sol; idxs=VIndex(1, :q̃_inj), label=&quot;Node 1&quot;, color=Cycled(1))
+
+    ax = Axis(fig[3, 1]; title=&quot;Consumption by consumers&quot;)
+    for i in 2:3
+        lines!(ax, sol; idxs=@obsex(-1*VIndex(i, :q̃_inj)), label=&quot;Node $i&quot;, color=Cycled(i))
+        lines!(ax, sol; idxs=@obsex(-1*VIndex(i, :q̃_prosumer)), label=&quot;Node $i&quot;, linestyle=:dash, color=Cycled(i))
+    end
+
+    ax = Axis(fig[4, 1]; title=&quot;Flows through pipes&quot;)
+    for i in 1:3
+        lines!(ax, sol; idxs=@obsex(abs(EIndex(i, :q̃))), label=&quot;Pipe $i&quot;, color=Cycled(i))
+    end
+
+    fig
+end</code></pre><img src="92a700e2.svg" alt="Example block output"/><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../heterogeneous_system/">« Heterogeneous Systems</a><a class="docs-footer-nextpage" href="../cascading_failure/">Cascading Failure »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Friday 30 January 2026 17:38">Friday 30 January 2026</span>. Using Julia version 1.12.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

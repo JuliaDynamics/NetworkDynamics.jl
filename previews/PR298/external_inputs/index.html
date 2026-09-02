@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>External Inputs · NetworkDynamics</title><meta name="title" content="External Inputs · NetworkDynamics"/><meta property="og:title" content="External Inputs · NetworkDynamics"/><meta property="twitter:title" content="External Inputs · NetworkDynamics"/><meta name="description" content="Documentation for NetworkDynamics."/><meta property="og:description" content="Documentation for NetworkDynamics."/><meta property="twitter:description" content="Documentation for NetworkDynamics."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">NetworkDynamics</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">General</a></li><li><a class="tocitem" href="../mathematical_model/">Mathematical Model</a></li><li><a class="tocitem" href="../network_construction/">Network Construction</a></li><li><a class="tocitem" href="../data_structure/">Data Structure</a></li><li><span class="tocitem">Features</span><ul><li><a class="tocitem" href="../symbolic_indexing/">Symbolic Indexing</a></li><li><a class="tocitem" href="../metadata/">Metadata</a></li><li><a class="tocitem" href="../initialization/">Initialization</a></li><li><a class="tocitem" href="../callbacks/">Callbacks and Events</a></li><li><a class="tocitem" href="../mtk_integration/">ModelingToolkit Integration</a></li><li><a class="tocitem" href="../sparsity_detection/">Sparsity Detection</a></li><li class="is-active"><a class="tocitem" href>External Inputs</a><ul class="internal"><li><a class="tocitem" href="#Usage"><span>Usage</span></a></li><li><a class="tocitem" href="#Limitations"><span>Limitations</span></a></li><li><a class="tocitem" href="#Example"><span>Example</span></a></li></ul></li><li><a class="tocitem" href="../inspector/">Interactive Solution Inspection</a></li></ul></li><li><a class="tocitem" href="../API/">API</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../generated/getting_started_with_network_dynamics/">Getting Started</a></li><li><a class="tocitem" href="../generated/heterogeneous_system/">Heterogeneous Systems</a></li><li><a class="tocitem" href="../generated/init_tutorial/">Initialization</a></li><li><a class="tocitem" href="../generated/cascading_failure/">Cascading Failure</a></li><li><a class="tocitem" href="../generated/gas_network/">Gas Network</a></li><li><a class="tocitem" href="../generated/stress_on_truss/">Stress on Truss</a></li><li><a class="tocitem" href="../generated/directed_and_weighted_graphs/">Directed and Weighted Graphs</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Features</a></li><li class="is-active"><a href>External Inputs</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>External Inputs</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaDynamics/NetworkDynamics.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaDynamics/NetworkDynamics.jl/blob/main/docs/src/external_inputs.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="External-Inputs"><a class="docs-heading-anchor" href="#External-Inputs">External Inputs</a><a id="External-Inputs-1"></a><a class="docs-heading-anchor-permalink" href="#External-Inputs" title="Permalink"></a></h1><p>External inputs for components are way to pass signals between components outside of the network structure. The most common usecase for that are control systems: make your vertex <code>i</code> depend on some state of vertex <code>j</code>.</p><p>If used, this will essentially wides the number of received inputs of a component function. I.e. the baseline mathematical models for vertex models</p><p class="math-container">\[\begin{aligned}
+M^{\mathrm v}\,\frac{\mathrm{d}}{\mathrm{d}t}x^{\mathrm v} &amp;= f^{\mathrm v}(u^{\mathrm v}, i^{\mathrm v}, i^{\mathrm{ext}}, p^{\mathrm v}, t)\\
+y^{\mathrm v} &amp;= g^{\mathrm v}(u^{\mathrm v}, i^{\mathrm v}, i^{\mathrm{ext}}, p^{\mathrm v}, t)
+\end{aligned}\]</p><pre><code class="language-julia hljs">fᵥ(dxᵥ, xᵥ, e_aggr, ext, pᵥ, t)
+gᵥ(yᵥ, xᵥ, [e_aggr, ext,] pᵥ, t)</code></pre><p>and edge models</p><p class="math-container">\[\begin{aligned}
+M^{\mathrm e}\,\frac{\mathrm{d}}{\mathrm{d}t}x^{\mathrm e} &amp;= f^{\mathrm e}(u^{\mathrm e}, y^{\mathrm v}_{\mathrm{src}}, y^{\mathrm v}_{\mathrm{dst}}, i^{\mathrm{ext}}, p^{\mathrm e}, t)\\
+y^{\mathrm e}_{\mathrm{dst}} &amp;= g_\mathrm{dst}^{\mathrm e}(u^{\mathrm e}, y^{\mathrm v}_{\mathrm{src}}, y^{\mathrm v}_{\mathrm{dst}}, i^{\mathrm{ext}}, p^{\mathrm e}, t)\\
+y^{\mathrm e}_{\mathrm{src}} &amp;= g_\mathrm{src}^{\mathrm e}(u^{\mathrm e}, y^{\mathrm v}_{\mathrm{src}}, y^{\mathrm v}_{\mathrm{dst}}, i^{\mathrm{ext}}, p^{\mathrm e}, t)
+\end{aligned}\]</p><pre><code class="language-julia hljs">fₑ(dxₑ, xₑ, v_src, v_dst, ext, pₑ, t)
+gₑ(y_src, y_dst, xᵥ, [v_src, v_dst, ext,] pₑ, t)</code></pre><p>change. You may still oomit the input section from <code>g</code> according to the different <a href="../mathematical_model/#Feed-Forward-Behavior">Feed Forward Behavior</a>s. However you either have to use <em>all</em> inputs (including <code>ext</code>) or none.</p><h2 id="Usage"><a class="docs-heading-anchor" href="#Usage">Usage</a><a id="Usage-1"></a><a class="docs-heading-anchor-permalink" href="#Usage" title="Permalink"></a></h2><p>Vertex and Edge models with external inputs can be created using the <code>extin</code> keyword of the <a href="../API/#NetworkDynamics.EdgeModel-Tuple{}"><code>EdgeModel</code></a> and <a href="../API/#NetworkDynamics.VertexModel-Tuple{}"><code>VertexModel</code></a> constructors.</p><p>You need to pass a vector of <code>SymbolicIndices</code> (<a href="../API/#NetworkDynamics.VIndex"><code>VIndex</code></a> and <a href="../API/#NetworkDynamics.EIndex"><code>EIndex</code></a>), e.g. </p><pre><code class="language-julia hljs">VertexModel(... , extin=[VIndex(12,:x), VIndex(9, :x)], ...)</code></pre><p>means your vertex receives a 2 dimensional external input vector with the states <code>x</code> of vertices 12 and 9. See below for hands on example.</p><h2 id="Limitations"><a class="docs-heading-anchor" href="#Limitations">Limitations</a><a id="Limitations-1"></a><a class="docs-heading-anchor-permalink" href="#Limitations" title="Permalink"></a></h2><p>There are some limitations in place. You can only reference <strong>states</strong> (i.e. things that appear in <code>xᵥ</code> or <code>xₑ</code> of some component model) or <strong>outputs of non-feed-forward components</strong>, i.e. states <code>yᵥ</code> or <code>yₑ</code> of some component model which does not have feed forward behavior in their <code>g</code> function.</p><h2 id="Example"><a class="docs-heading-anchor" href="#Example">Example</a><a id="Example-1"></a><a class="docs-heading-anchor-permalink" href="#Example" title="Permalink"></a></h2><p>As an example system, we&#39;ll consider two capacitors with a resistor between them. Vertex 1 <code>v1</code> has a controllable current source.  Using a PI controller for the current source, it tries to keep the voltage at the  second vertex stable under the disturbance of some time periodic current sind at <code>v2</code>.</p><pre><code class="nohighlight hljs">
+                  v1    Resistor   v2
+PI controlled   ─→─o─←────MMM────→─o─→─ time dependent 
+current source     ┴               ┴    current sink
+                   ┬               ┬
+                   ⏚               ⏚</code></pre><p>The example will be implemented 2 times: in plain NetworkDynamcics and using MTK.</p><h3 id="Plain-NetworkDynamics"><a class="docs-heading-anchor" href="#Plain-NetworkDynamics">Plain NetworkDynamics</a><a id="Plain-NetworkDynamics-1"></a><a class="docs-heading-anchor-permalink" href="#Plain-NetworkDynamics" title="Permalink"></a></h3><p>First we define the resistor:</p><pre><code class="language-julia hljs">using NetworkDynamics
+using OrdinaryDiffEqTsit5
+using CairoMakie
+
+function resistor_g(idst, vsrc, vdst, (R,), t)
+    idst[1] = (vsrc[1] - vdst[1])/R
+end
+resistor = EdgeModel(g=AntiSymmetric(resistor_g),
+                     outsym=:i, insym=:v, psym=:R=&gt;0.1,
+                     src=:source, dst=:load, name=:resistor)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">EdgeModel <span class="sgr1">:resistor</span> <span class="sgr94">PureFeedForward()</span> @ Edge source=&gt;load
+ ├─ 1/1 inputs:  src=[src₊v] dst=[dst₊v]
+ ├─   0 states:  []  
+ ├─ 1/1 outputs: src=[₋i] dst=[i]
+ └─   1 param:   [R=0.1]</code></pre><p>Then we define the &quot;load&quot; vertex with sinusoidial load profile:</p><pre><code class="language-julia hljs">function f_load(dv, v, iin, (C,), t)
+    dv[1] = 1/C*(iin[1] - (1 + 0.1*sin(t)))
+end
+load = VertexModel(f=f_load, g=1,
+                   sym=:V=&gt;0.5, insym=:i, psym=:C=&gt;1,
+                   vidx=2, name=:load)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">VertexModel <span class="sgr1">:load</span> <span class="sgr94">PureStateMap()</span> @ Vertex 2
+ ├─ 1 input:  [i]
+ ├─ 1 state:  [V=0.5]
+ ├─ 1 output: [V=0.5]
+ └─ 1 param:  [C=1]</code></pre><p>Lastly, we define the &quot;source&quot; vertex</p><pre><code class="language-julia hljs">function f_source(dv, v, iin, extin, (C,Vref,Ki,Kp), t)
+    Δ = Vref - extin[1]      # tracking error
+    dv[2] = Δ                # integrator state of PI
+    i_inj = Kp*Δ + Ki*v[2]   # controller output
+    dv[1] = 1/C*(iin[1] + i_inj)
+end
+source = VertexModel(f=f_source, g=1,
+                     sym=[:V=&gt;0.5,:ξ=&gt;0], insym=:i,
+                     psym=[:C=&gt;1, :Vref=&gt;1, :Ki=&gt;0.5, :Kp=&gt;10],
+                     extin=[VIndex(:load, :V)],
+                     vidx=1, name=:source)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">VertexModel <span class="sgr1">:source</span> <span class="sgr94">PureStateMap()</span> @ Vertex 1
+ ├─ 1 input:  [i]
+ ├─ 2 states: [V=0.5, ξ=0]
+ ├─ 1 output: [V=0.5]
+ ├─ 4 params: [C=1, Vref=1, Ki=0.5, Kp=10]
+ └─ 1 ext in: [VIndex(:load, :V)]</code></pre><p>Then we can create the network and simulate:</p><pre><code class="language-julia hljs">nw = Network([source, load], [resistor])
+u0 = NWState(nw) # everything has default values
+prob = ODEProblem(nw, uflat(u0), (0,100), pflat(u0))
+sol = solve(prob, Tsit5())
+
+fig, ax, p = lines(sol, idxs=VIndex(:load, :V), label=&quot;Voltage @ load&quot;);
+lines!(ax, sol, idxs=VPIndex(:source, :Vref), label=&quot;Reference&quot;, color=Cycled(2));
+axislegend(ax; position=:rb);</code></pre><img src="53aea94e.png" alt="Example block output"/><h3 id="MTK-Models"><a class="docs-heading-anchor" href="#MTK-Models">MTK Models</a><a id="MTK-Models-1"></a><a class="docs-heading-anchor-permalink" href="#MTK-Models" title="Permalink"></a></h3><p>First we define the resistor:</p><pre><code class="language-julia hljs">using NetworkDynamics
+using OrdinaryDiffEqTsit5
+using ModelingToolkit
+using ModelingToolkit: t_nounits as t, D_nounits as Dt
+using CairoMakie
+
+@mtkmodel Resistor begin
+    @variables begin
+        i(t), [description=&quot;Current at dst end&quot;]
+        V_src(t), [description=&quot;Voltage at src end&quot;]
+        V_dst(t), [description=&quot;Voltage at dst end&quot;]
+    end
+    @parameters begin
+        R=0.1, [description=&quot;Resistance&quot;]
+    end
+    @equations begin
+        i ~ (V_src - V_dst)/R
+    end
+end
+@named resistor = Resistor()
+resistor_edge = EdgeModel(resistor, [:V_src], [:V_dst], AntiSymmetric([:i]); src=:load, dst=:source)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">EdgeModel <span class="sgr1">:resistor</span> <span class="sgr94">PureFeedForward()</span> @ Edge load=&gt;source
+ ├─ 1/1 inputs:  src=[V_src] dst=[V_dst]
+ ├─   0 states:  []  
+ ├─ 1/1 outputs: src=[₋i] dst=[i]
+ └─   1 param:   [R=0.1]</code></pre><p>Then we define the &quot;load&quot; vertex with sinusoidial load profile:</p><pre><code class="language-julia hljs">@mtkmodel Load begin
+    @variables begin
+        V(t)=0.5, [description=&quot;Voltage&quot;]
+        i_load(t), [description=&quot;Load current&quot;]
+        i_grid(t), [description=&quot;Current from grid&quot;]
+    end
+    @parameters begin
+        C=1, [description=&quot;Capacitance&quot;]
+    end
+    @equations begin
+        i_load ~ 1 + 0.1*sin(t)
+        Dt(V) ~ 1/C*(i_grid - i_load)
+    end
+end
+@named load = Load()
+load_vertex = VertexModel(load, [:i_grid], [:V]; vidx=2)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">VertexModel <span class="sgr1">:load</span> <span class="sgr94">PureStateMap()</span> @ Vertex 2
+ ├─ 1 input:  [i_grid]
+ ├─ 1 state:  [V=0.5]
+ ├─ 1 output: [V=0.5]
+ └─ 1 param:  [C=1]</code></pre><p>Lastly, we define the &quot;source&quot; vertex</p><pre><code class="language-julia hljs">@mtkmodel Source begin
+    @variables begin
+        V(t)=0.5, [description=&quot;Voltage&quot;]
+        ξ(t)=0, [description=&quot;Integrator state&quot;]
+        i_grid(t), [description=&quot;Current from grid&quot;]
+        i_source(t), [description=&quot;Current from source&quot;]
+        Δ(t), [description=&quot;Tracking Error&quot;]
+        V_load(t), [description=&quot;Voltage at load&quot;]
+    end
+    @parameters begin
+        C=1, [description=&quot;Capacitance&quot;]
+        Vref=1, [description=&quot;Reference voltage&quot;]
+        Ki=0.5, [description=&quot;Integral gain&quot;]
+        Kp=10, [description=&quot;Proportional gain&quot;]
+    end
+    @equations begin
+        Δ ~ Vref - V_load
+        Dt(ξ) ~ Δ
+        i_source ~ Kp*Δ + Ki*ξ
+        Dt(V) ~ 1/C*(i_grid + i_source)
+    end
+end
+@named source = Source()
+source_vertex = VertexModel(source, [:i_grid], [:V];
+                            extin=[:V_load =&gt; VIndex(:load, :V)], vidx=1)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">VertexModel <span class="sgr1">:source</span> <span class="sgr94">PureStateMap()</span> @ Vertex 1
+ ├─ 1 input:  [i_grid]
+ ├─ 2 states: [ξ=0, V=0.5]
+ ├─ 1 output: [V=0.5]
+ ├─ 4 params: [C=1, Ki=0.5, Vref=1, Kp=10]
+ └─ 1 ext in: [VIndex(:load, :V)]</code></pre><p>Then we can create the network and simulate:</p><pre><code class="language-julia hljs">nw = Network([source_vertex, load_vertex], [resistor_edge])
+u0 = NWState(nw) # everything has default values
+prob = ODEProblem(nw, uflat(u0), (0,100), pflat(u0))
+sol = solve(prob, Tsit5())
+
+let
+    fig = Figure();
+    ax1 = Axis(fig[1,1]);
+    lines!(ax1, sol, idxs=VIndex(:load, :V), label=&quot;Voltage @ load&quot;);
+    lines!(ax1, sol, idxs=VPIndex(:source, :Vref), label=&quot;Reference&quot;, color=Cycled(2));
+    axislegend(ax1; position=:rb);
+    ax2 = Axis(fig[2,1]);
+    lines!(ax2, sol, idxs=VIndex(:load, :i_load), label=&quot;load current&quot;);
+    lines!(ax2, sol, idxs=VIndex(:source, :i_source), label=&quot;source current&quot;, color=Cycled(2));
+    axislegend(ax2);
+    fig
+end</code></pre><img src="105b0980.png" alt="Example block output"/><p>Using MTK for modeling, we can also inspect the currents <code>i_load</code> and <code>i_source</code> the MTK interface preserves the <a href="../symbolic_indexing/#Observables">Observables</a>.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../sparsity_detection/">« Sparsity Detection</a><a class="docs-footer-nextpage" href="../inspector/">Interactive Solution Inspection »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.14.1 on <span class="colophon-date" title="Monday 4 August 2025 12:51">Monday 4 August 2025</span>. Using Julia version 1.11.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

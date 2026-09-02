@@ -1,0 +1,21 @@
+#!/bin/bash
+
+# Function to check if a command is available
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# Check for latexmk
+if ! command_exists latexmk; then
+    echo "Error: 'latexmk' is not installed or not in your PATH."
+    exit 1
+fi
+
+# Check for pdf2svg
+if ! command_exists pdf2svg; then
+    echo "Error: 'pdf2svg' is not installed or not in your PATH."
+    exit 1
+fi
+
+latexmk -pdflua -shell-escape mathmodel.tex
+latexmk -C

@@ -1,0 +1,9 @@
+pre:has(.language-asciiart) {
+  border: none !important;
+  background: none !important;
+  line-height: 1.2;
+}
+
+pre:has(.language-asciiart) button {
+  display: none;
+}
