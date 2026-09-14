@@ -51,7 +51,8 @@ jobs:
         with:
           fetch-depth: 0 # fetch all history
       - uses: julia-actions/setup-julia@v2
-      - uses: julia-actions/cache@v2
+      # No depot cache: it would be scoped to this PR and the benchmark script updates packages
+      # anyway, so it hardly ever hits while taking ~1.5 GB of the repo's cache space.
       - uses: hexaeder/julia-buildpkg@main
       - name: Run benchmarks
         env:
