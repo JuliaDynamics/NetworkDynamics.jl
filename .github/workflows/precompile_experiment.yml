@@ -1,0 +1,70 @@
+name: Precompile experiment
+# Throwaway workflow: how much do precompile workloads cost and what do they save?
+# No depot cache, so the first test run starts cold. The second test run in the same job then
+# sees a warm depot on the same machine, which is what a CI cache hit looks like.
+on:
+  push:
+    branches:
+      - exp/precompile-workloads
+  workflow_dispatch:
+env:
+  JULIA_CPU_TARGET: x86-64-v3
+jobs:
+  test:
+    name: ${{ matrix.variant }} - Julia ${{ matrix.version }} - rep ${{ matrix.rep }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        variant:
+          - A_workloads_on
+          - B_workloads_off
+          - C_plotting_off
+        version:
+          - 'lts'
+          - '1'
+        rep: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ matrix.version }}
+          arch: x64
+      - name: Report host
+        run: |
+          julia -e 'println("host cpu: ", Sys.CPU_NAME, "  threads: ", Sys.CPU_THREADS, "  julia: ", VERSION)'
+          nproc; free -g
+      - name: Write preferences for variant
+        shell: bash
+        run: |
+          case "${{ matrix.variant }}" in
+            A_workloads_on)
+              prefs=""
+              ;;
+            B_workloads_off)
+              prefs=$'[PrecompileTools]\nprecompile_workloads = false\n'
+              ;;
+            C_plotting_off)
+              prefs=""
+              for p in Makie CairoMakie WGLMakie Plots DataFrames JET JuliaFormatter HTTP; do
+                prefs+=$'['"$p"$']\nprecompile_workload = false\n\n'
+              done
+              ;;
+          esac
+          # Pkg.test copies the preferences of the active test env into its sandbox
+          printf '%s' "$prefs" > LocalPreferences.toml
+          printf '%s' "$prefs" > test/LocalPreferences.toml
+          echo "--- test/LocalPreferences.toml"; cat test/LocalPreferences.toml
+      - uses: hexaeder/julia-buildpkg@main
+      - name: Test run 1 (cold depot)
+        uses: julia-actions/julia-runtest@v1
+        continue-on-error: true
+        with:
+          coverage: false
+          test_args: '--verbose'
+      - name: Test run 2 (warm depot)
+        uses: julia-actions/julia-runtest@v1
+        continue-on-error: true
+        with:
+          coverage: false
+          test_args: '--verbose'
