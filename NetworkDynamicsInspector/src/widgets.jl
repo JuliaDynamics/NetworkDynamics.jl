@@ -312,7 +312,7 @@ end
 
 function RoundedLabel(value; sigdigits=2, style=Styles(), attributes...)
     styled = Styles(style, "font-size" => "1rem")
-    str = @lift NetworkDynamics.str_significant($value; sigdigits=$sigdigits)
+    str = map(v -> NetworkDynamics.str_significant(v; sigdigits), value)
     return DOM.span(str; style=styled)
 end
 
