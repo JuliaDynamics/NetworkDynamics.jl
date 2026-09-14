@@ -10,7 +10,7 @@ on:
 # Fix the microarch the precompile caches are written for, so a depot cache filled on one runner
 # still loads on the next. See the longer note in tests.yml.
 env:
-  JULIA_CPU_TARGET: x86-64-v3
+  JULIA_CPU_TARGET: "generic;haswell,-xsaveopt,clone_all;x86-64-v4,-rdrnd,base(1)"
 concurrency:
   # Skip intermediate builds: always.
   group: ${{ github.workflow }}-${{ github.ref }}
