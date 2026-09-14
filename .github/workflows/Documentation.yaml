@@ -7,9 +7,10 @@ on:
     tags: '*'
   pull_request:
   workflow_dispatch:
-# GitHub's runner pool mixes microarchitectures (znver3, skylake, sapphirerapids, ...) and Julia
-# refuses to load a pkgimage built for features the host lacks, so a depot cache filled on one
-# runner is useless on the next. `pin-cpu-target` below is what stops that.
+# Fix the microarch the precompile caches are written for, so a depot cache filled on one runner
+# still loads on the next. See the longer note in tests.yml.
+env:
+  JULIA_CPU_TARGET: x86-64-v3
 concurrency:
   # Skip intermediate builds: always.
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -30,7 +31,6 @@ jobs:
       - uses: julia-actions/setup-julia@v2
         with:
           version: 1
-      - uses: ./.github/actions/pin-cpu-target
       - uses: julia-actions/cache@v3
       - name: Configure doc environment
         shell: julia --project=docs --color=yes {0}

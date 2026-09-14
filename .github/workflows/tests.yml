@@ -7,7 +7,11 @@ on:
   workflow_dispatch:
 # GitHub's runner pool mixes microarchitectures (znver3, skylake, sapphirerapids, ...) and Julia
 # refuses to load a pkgimage built for features the host lacks, so a depot cache filled on one
-# runner is useless on the next. `pin-cpu-target` below is what stops that.
+# runner is useless on the next. `JULIA_CPU_TARGET` is what stops that: it fixes the microarch
+# the precompile caches are written for, while code compiled during the run itself stays native.
+# Every x64 runner GitHub currently hands out supports v3.
+env:
+  JULIA_CPU_TARGET: x86-64-v3
 concurrency:
   # Skip intermediate builds: always.
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -38,13 +42,23 @@ jobs:
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
-      - uses: ./.github/actions/pin-cpu-target
+      # Re-running the job with GitHub's debug logging also asks Julia to say why it rejected a
+      # precompile cache. Far too noisy to leave on: it prints a line per module loaded.
+      - name: Report host CPU, enable loading debug on rerun
+        shell: bash
+        run: |
+          julia -e 'println("host cpu: ", Sys.CPU_NAME)'
+          if [ "${RUNNER_DEBUG:-}" = "1" ]; then
+            echo "JULIA_DEBUG=loading" >> "$GITHUB_ENV"
+          fi
       - uses: julia-actions/cache@v3
       - uses: hexaeder/julia-buildpkg@main
       # coverage only on the release version, one codecov upload is enough
       - uses: julia-actions/julia-runtest@v1
         with:
           coverage: ${{ matrix.version == '1' }}
+          # ParallelTestRunner forwards ARGS; --verbose adds per-file init/compile timings
+          test_args: '--verbose'
       - uses: julia-actions/julia-processcoverage@v1
         if: matrix.version == '1'
       - uses: codecov/codecov-action@v4
@@ -80,7 +94,6 @@ jobs:
       - uses: julia-actions/setup-julia@v2
         with:
           version: 1
-      - uses: ./.github/actions/pin-cpu-target
       - uses: julia-actions/cache@v3
       - uses: hexaeder/julia-buildpkg@main
         with:
@@ -119,7 +132,6 @@ jobs:
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
-      - uses: ./.github/actions/pin-cpu-target
       - uses: julia-actions/cache@v3
       - uses: hexaeder/julia-buildpkg@main
       - name: Extract PowerDynamics branch from PR
