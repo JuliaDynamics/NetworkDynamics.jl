@@ -1,5 +1,8 @@
 # NetworkDynamics Release Notes
 
+## unreleased
+- `chk_component` warns on allocations in f or g function of model
+
 ## v1.3.0 Changelog
 
 - **Initialization values now travel across a two-term algebraic constraint.** An equation

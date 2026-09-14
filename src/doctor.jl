@@ -169,6 +169,13 @@ function chk_component(c::ComponentModel)
         @warn "Component model allocates similar arrays to $(join(similars, ", "))!"
     end
 
+    fbytes, gbytes = _component_allocations(c, length(du), length.(ins), length.(outs), length(p))
+    if fbytes > 0 || gbytes > 0
+        @warn "Component model :$(c.name) allocates on every call (f: $fbytes bytes, g: $gbytes bytes). \
+               This slows down the whole network. For MTK models, check the generated code with \
+               `NetworkDynamics.pretty_f` for array expressions like `array_literal`."
+    end
+
     # smoketest for observed function
     if !isnothing(c.obsf)
         out = zeros(length(obssym(c)))
@@ -182,6 +189,38 @@ function chk_component(c::ComponentModel)
         end
     end
     nothing
+end
+
+"""
+    _component_allocations(c, dim, indims, outdims, pdim)
+
+Measure the bytes `f` and `g` allocate per call. The arguments are views into plain vectors,
+the same types the coreloop passes, so this matches what the network will see.
+Returns `(0, 0)` if a call errors, the access-tracker check above reports those.
+"""
+function _component_allocations(c, dim, indims, outdims, pdim)
+    _view(n) = view(rand(n), 1:n)
+    du, u = _view(dim), _view(dim)
+    # like the coreloop, pass nothing instead of an empty parameter view
+    p = iszero(pdim) ? nothing : _view(pdim)
+    ins = map(_view, indims)
+    outs = map(_view, outdims)
+    t = 0.0
+    try
+        f = compf(c)
+        fbytes = isnothing(f) ? 0 : _allocations(apply_compf, f, du, u, ins, p, t)
+        gp = fftype(c) == PureStateMap() ? nothing : p
+        gbytes = _allocations(apply_compg, fftype(c), compg(c), outs, u, ins, gp, t)
+        return fbytes, gbytes
+    catch
+        return 0, 0
+    end
+end
+
+# function barrier, so dispatch on the component types doesn't count as allocation
+@noinline function _allocations(apply::A, args...) where {A}
+    apply(args...)
+    @allocated apply(args...)
 end
 
 _ninout(::EdgeModel) = 2
