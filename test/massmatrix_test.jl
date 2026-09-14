@@ -3,6 +3,9 @@ using Graphs
 using Test
 using LinearAlgebra
 
+# the dummy components used here would not survive the component checks
+NetworkDynamics.CHECK_COMPONENT[] = false
+
 N = 5
 g = star_digraph(N)
 add_edge!(g, 2, 3)
@@ -43,3 +46,5 @@ MM[7, 6] = 1
     @test all(Network(g, static_vertex, ode_edge_list).mass_matrix .==
                [zeros(N, N) zeros(N, 7); zeros(7, N) MM])
 end
+
+NetworkDynamics.CHECK_COMPONENT[] = true

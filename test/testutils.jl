@@ -1,6 +1,26 @@
+using Test
+using IOCapture
 using CUDA
 using Adapt
+using InteractiveUtils: subtypes
+using SciMLBase: ODEProblem
+using NetworkDynamics
 using NetworkDynamics: iscudacompatible, NaiveAggregator
+
+"""
+Include a test file into `mod` and throw its printed output away, unless something in the file
+failed. Otherwise ParallelTestRunner echoes the output of every single file after the run.
+"""
+function quiet_include(mod, path)
+    c = IOCapture.capture(; rethrow=Union{}, color=true) do
+        Base.include(mod, path)
+    end
+    (c.error || _anynonpass(Test.get_testset())) && print(c.output)
+    c.error && throw(CapturedException(c.value, c.backtrace))
+    nothing
+end
+_anynonpass(res) = res isa Test.Fail || res isa Test.Error
+_anynonpass(ts::Test.AbstractTestSet) = any(_anynonpass, ts.results)
 
 """
 Test utility, which rebuilds the Network with all different execution styles and compares the

@@ -227,7 +227,7 @@ if !isnothing(baseline)
     display(comp)
 
     res = test_return_values(comp)
-    failed = res.anynonpass
+    failed = Test.anynonpass(res) # needs julia 1.13+
 
     if !args[Symbol("no-plot")]
         figpath = joinpath(original_path, args[:prefix] * "comparison.pdf")
