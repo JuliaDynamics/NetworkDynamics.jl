@@ -10,7 +10,8 @@ const MAX_UNROLLED_BATCHES = 25
 Construct a `Network` object from a graph `g` and edge and component models `vertexf` and `edgef`.
 
 Arguments:
- - `g::AbstractGraph`: The graph on which the network is defined.
+ - `g::AbstractGraph`: The graph on which the network is defined, a `SimpleGraph`, `SimpleDiGraph`
+    or `NetworkDynamics.ComponentGraph` (which allows parallel edges).
     Optional, can be ommittet if all component models have a defined `graphelement`.
     See `vidx` and `src`/`dst` keywors for [`VertexModel`](@ref) and [`EdgeModel`](@ref) constructors respectively.
  - `vertexm`:
@@ -38,6 +39,15 @@ Optional keyword arguments:
     The detection reports what it is doing only if `verbose` is set.
  - `verbose=false`:
     Show additional information during construction.
+
+Keyword arguments only for the graphless constructor:
+ - `warn_order=true`:
+    Warn if the vertex or edge models are reordered to match the graph.
+ - `legacy_graph=true`:
+    If no two edges share the same ordered endpoints, build a `SimpleGraph` (all `src < dst`) or
+    `SimpleDiGraph` and sort the edge models into `edges(g)` order. Parallel edges, or
+    `legacy_graph=false`, give a `ComponentGraph` where the edge index is the position in the
+    input list.
 """
 function Network(g::AbstractGraph,
                  vertexm::Union{VertexModel,Vector{<:VertexModel}},
@@ -63,34 +73,26 @@ function Network(g::AbstractGraph,
         @argcheck length(_vertexm) == nv(g)
         @argcheck length(_edgem) == ne(g)
 
-        # search for vertex models with feed forward
-        if CHECK_COMPONENT[] && any(hasff, _vertexm)
-            errorstring = ""
-            ffvertices = findall(hasff, _vertexm)
-            nbs = map(ffvertices) do i
-                Graphs.all_neighbors(g, i)
-            end
+        if CHECK_COMPONENT[]
+            eidx = findall(is_loopback, _edgem)
+            simpleedges = collect(edges(g))[eidx]
+            degrees = Graphs.degree(g) # counts parallel edges
+            loopback_srcs = Set(e.src for e in simpleedges)
+
+            # the only edge at a ff vertex must be a loopback edge starting there
             ERRORMSG = "Feed forward vertex models are only allowed as leave nodes (1 neighbor) \
                         with single `LoopbackConnection` from satelite to cluster node! In other \
                         scenarios can use `ff_to_constraint(vf)` on the vertex model to turn \
                         feed forward outputs into algebraic states."
-            # test all have one neighbor
-            if any(n -> length(n) != 1, nbs)
-                throw(ArgumentError(ERRORMSG))
+            for v in findall(hasff, _vertexm)
+                (degrees[v] == 1 && v ∈ loopback_srcs) || throw(ArgumentError(ERRORMSG))
             end
 
-            # test all have loopback from ff vert to cluster
-            eidx = findall(is_loopback, _edgem)
-            simpleedges = collect(edges(g))[eidx]
-            all(zip(ffvertices, only.(nbs))) do (src, dst)
-                SimpleEdge(src, dst) ∈ simpleedges
-            end || throw(ArgumentError(ERRORMSG))
-
-            # check that all looback edges have origin at leaf node
+            # every loopback edge must be the only edge at its injector
             for (i, e) in zip(eidx, simpleedges)
-                if Graphs.degree(g, e.src) != 1
-                    throw(ArgumentError("All LoopbackConnection edges must originate from leaf nodes! \
-                                     Found at least one going from hub to leaf: $(_edgem[i])"))
+                if degrees[e.src] != 1
+                    throw(ArgumentError("All LoopbackConnection edges must originate from leaf nodes \
+                                     (exactly one edge)! Found at least one violating edge: $(_edgem[i])"))
                 end
             end
         end
@@ -269,7 +271,7 @@ function _component_hash(c::ComponentModel)
     ))
 end
 
-function Network(vertexfs, edgefs; warn_order=true, kwargs...)
+function Network(vertexfs, edgefs; warn_order=true, legacy_graph=true, kwargs...)
     vertexfs = vertexfs isa VertexModel ? [vertexfs] : vertexfs
     edgefs   = edgefs isa EdgeModel     ? [edgefs]   : edgefs
     @argcheck all(has_graphelement, edgefs) "All edge models must have assigned `graphelement` to implicitly construct graph!"
@@ -299,32 +301,29 @@ function Network(vertexfs, edgefs; warn_order=true, kwargs...)
         end
         SimpleEdge(src, dst)
     end
-    if !allunique(simpleedges)
-        msg = "Some edge models have the same `graphelement`!"
-        alldup = filter(x -> length(x) > 1, find_identical(simpleedges))
-        for dup in alldup
-            msg *= "\n - Edges $dup refer to same element $(simpleedges[first(dup)])"
-        end
-        throw(ArgumentError(msg))
-    end
-    edict = Dict(simpleedges .=> edgefs)
 
-    # if all src < dst then we can use SimpleGraph, else digraph
-    g = if all(e -> e.src < e.dst, simpleedges)
-        SimpleGraph(length(vertexfs))
+    # Parallel edges need a ComponentGraph which keeps the input order. Everything else is
+    # converted to SimpleGraph/SimpleDiGraph, whose edges(g) order decides the edge indices.
+    cg = ComponentGraph(length(vertexfs), simpleedges)
+    gtype = legacy_graph ? legacy_graph_type(cg) : :none
+
+    if gtype == :none
+        g = cg
+        efs_ordered = collect(edgefs)
     else
-        SimpleDiGraph(length(vertexfs))
-    end
-    for edge in simpleedges
-        if g isa SimpleDiGraph && has_edge(g, edge.dst, edge.src)
-            @warn "Edges $(edge.src) -> $(edge.dst) and $(edge.dst) -> $(edge.src) are both present in the graph!"
+        g = gtype == :simple ? SimpleGraph(length(vertexfs)) : SimpleDiGraph(length(vertexfs))
+        for edge in simpleedges
+            if g isa SimpleDiGraph && has_edge(g, edge.dst, edge.src)
+                @warn "Edges $(edge.src) -> $(edge.dst) and $(edge.dst) -> $(edge.src) are both present in the graph!"
+            end
+            r = add_edge!(g, edge)
+            r || error("Could not add edge $(edge) to graph $(g)!")
         end
-        r = add_edge!(g, edge)
-        r || error("Could not add edge $(edge) to graph $(g)!")
+        edict = Dict(simpleedges .=> edgefs)
+        efs_ordered = [edict[k] for k in edges(g)]
     end
 
     vfs_ordered = [vdict[k] for k in vertices(g)]
-    efs_ordered = [edict[k] for k in edges(g)]
     if warn_order && any(vfs_ordered .!== vertexfs)
         @warn "Order of vertex models was changed to match the natural ordering of vertices in graph (as in `vertices(g)`)! \
                Concretely, this means that `nw[VIndex(1)]` referencs the vertex with `vidxs=1` \

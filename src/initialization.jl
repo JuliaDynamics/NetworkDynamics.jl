@@ -1520,6 +1520,9 @@ function interface_values(s::NWState)
     OrderedDict(interface_syms .=> s[interface_syms])
 end
 
+# same vertices and same edges at the same indices, regardless of the graph type
+_same_topology(a::Network, b::Network) = nv(a) == nv(b) && a.im.edgevec == b.im.edgevec
+
 """
     set_interface_defaults!(nw::Network, s::NWState; verbose=false)
 
@@ -1534,7 +1537,7 @@ with a simpler -- possibly static -- network and "transfer" the steady state
 interface values to the full network.
 """
 function set_interface_defaults!(nw::Network, s::NWState; verbose=false)
-    @argcheck s.nw.im.g == nw.im.g "Graphs musst have the same structure!"
+    @argcheck _same_topology(s.nw, nw) "Graphs musst have the same structure (same edges in the same order)!"
     verbose && println("Setting the interface defaults:")
     values = Dict{SymbolicIndex, Float64}()
     for (idxs, _Index, comp) in ((1:nv(nw), VIndex, "Vertex"), (1:ne(nw), EIndex, "Edge"))
