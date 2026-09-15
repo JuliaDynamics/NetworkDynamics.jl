@@ -2,6 +2,15 @@
 
 ## unreleased
 - `chk_component` warns on allocations in f or g function of model
+- **DAE (re)initialization starts with Newton also without a `jac_prototype`.**
+  The default `initializealg` of `ODEProblem(nw, ...)` now always uses the Jacobian-based
+  polyalg (NewtonRaphson, then TrustRegion and LevenbergMarquardt) instead of the upstream
+  default, which opens with Broyden. After an event Broyden could take hundreds of iterations
+  and, on last-bit floating point differences, land on a different root than Newton. The
+  internal `default_dae_init_alg` is removed.
+- `OrdinaryDiffEqNonlinearSolve` is now a weak dependency, only to require at least v2.9.4
+  whenever it is loaded. Older versions broke ForwardDiff in the DAE initialization of
+  networks with a `jac_prototype`.
 
 ## v1.3.0 Changelog
 
