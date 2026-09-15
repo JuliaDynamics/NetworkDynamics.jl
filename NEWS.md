@@ -1,6 +1,11 @@
 # NetworkDynamics Release Notes
 
 ## unreleased
+- **Parallel edges.** Several edge models may now connect the same pair of vertices. The
+  graphless constructor builds a `NetworkDynamics.ComponentGraph` in that case and keeps the edge
+  models in input order. Inputs without parallel edges still produce a `SimpleGraph` or
+  `SimpleDiGraph` as before, unless `legacy_graph=false` is passed. `EIndex(src => dst)` throws
+  if it matches more than one edge.
 - `chk_component` warns on allocations in f or g function of model
 - **DAE (re)initialization starts with Newton also without a `jac_prototype`.**
   The default `initializealg` of `ODEProblem(nw, ...)` now always uses the Jacobian-based

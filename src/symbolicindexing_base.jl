@@ -265,9 +265,15 @@ function resolvecompidx(im::IndexManager, sni::EIndex{<:Pair})
         throw(ArgumentError("Could not resolve edge destination $dst"))
     end
 
-    eidx = findfirst(im.edgevec) do e
+    eidxs = findall(im.edgevec) do e
         e.src == src_i && e.dst == dst_i
     end
+    if length(eidxs) > 1
+        throw(ArgumentError("Ambiguous Index: Network contains $(length(eidxs)) parallel edges \
+            from $(src) => $(dst) (edge indices $(eidxs))! Address them by integer index \
+            `EIndex(i)` or by unique name instead."))
+    end
+    eidx = isempty(eidxs) ? nothing : only(eidxs)
     if isnothing(eidx)
         reverse = findfirst(im.edgevec) do e
             e.src == dst_i && e.dst == src_i

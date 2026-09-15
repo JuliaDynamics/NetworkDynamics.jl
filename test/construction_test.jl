@@ -38,8 +38,10 @@ NetworkDynamics.CHECK_COMPONENT[] = false
     @test nw.im.g == graph
 
     set_graphelement!(e3, (;src=1,dst=2))
-    # same graphelement on multiple edges
-    @test_throws ArgumentError Network([v1,v2,v3], [e1,e2,e3])
+    # same graphelement on multiple edges gives a multigraph in input order
+    nw = @test_logs (:warn, r"Order of vertex models") Network([v1,v2,v3], [e1,e2,e3])
+    @test nw.im.g isa NetworkDynamics.ComponentGraph
+    @test nw.im.edgem == [e1,e2,e3]
 
     set_graphelement!(e3, (;src=2,dst=1))
     Network([v1,v2,v3], [e1,e2,e3]) # throws waring about 1->2 and 2->1 beeing present

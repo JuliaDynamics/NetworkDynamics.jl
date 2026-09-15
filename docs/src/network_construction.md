@@ -32,6 +32,22 @@ EdgeModel(; ..., src=1, dst=2)     # places edge between 1 and 2
 EdgeModel(; ..., src=:v1, dst=:v2) # places edge between vertices with names `:v1` and `:v2`
 ```
 
+### Parallel Edges
+Several edge models may connect the same pair of vertices, for example parallel lines between two buses.
+Each of them is an independent edge with its own states, parameters and outputs.
+```julia
+nw = Network(vertexm, [EdgeModel(; ..., src=1, dst=2, name=:line_a),
+                       EdgeModel(; ..., src=1, dst=2, name=:line_b)])
+```
+In that case the graphless constructor builds a `NetworkDynamics.ComponentGraph` instead of a
+`SimpleGraph` or `SimpleDiGraph`, and the edge index is simply the position in the provided list.
+Without parallel edges, the edges are sorted into the order of `edges(g)` of a
+`SimpleGraph`/`SimpleDiGraph` as before. Pass `legacy_graph=false` to always get the input order,
+which keeps indices stable if parallel edges are added later.
+
+Since `EIndex(1 => 2)` would be ambiguous for parallel edges it throws an error there; address
+such edges by their integer index or by a unique name instead.
+
 ## Building `VertexModel`s
 This chapter will walk you through the most important aspects of defining a custom vertex model. For a list of all keyword arguments please check out the docstring of [`VertexModel`](@ref).
 

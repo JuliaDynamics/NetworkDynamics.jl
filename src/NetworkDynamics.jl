@@ -62,6 +62,8 @@ include("component_functions.jl")
 export ExecutionStyle, SequentialExecution, KAExecution, ThreadedExecution, PolyesterExecution
 include("executionstyles.jl")
 
+include("component_graph.jl")
+
 export Network, get_graph, set_jac_prototype!
 include("network_structure.jl")
 
