@@ -25,7 +25,7 @@ The callback system supports three keyword arguments that control how callbacks 
         add_comp_cb=Dict(),
         add_nw_cb=nothing,
         override_cb=nothing,
-        initializealg=BrownFullBasicInit(),
+        initializealg=BrownFullBasicInit(; nlsolve=FastShortcutNonlinearPolyalg(; must_use_jacobian=Val(true))),
         kwargs...
     )
 
@@ -33,12 +33,11 @@ Custom constructor for creating ODEProblem base of a `Network`-Object.
 Its main purpose is to automatically handle callback construction from the component level callbacks.
 
 The `initializealg` keyword is stored in the problem and forwarded to `solve`/`init`.
-Note that the default `BrownFullBasicInit()` deliberately differs from the
-OrdinaryDiffEq default: NetworkDynamics models frequently contain algebraic
-constraints (mass-matrix DAEs), for which `BrownFullBasicInit()` fixes up
-inconsistent initial conditions. If the network carries a `jac_prototype` the
-initialization additionally gets a sparsity-aware nonlinear solver, see
-`NetworkDynamics.default_dae_init_alg`. Pass `initializealg=...` explicitly to override.
+Its default differs from OrdinaryDiffEq: it is `BrownFullBasicInit`, which fixes up
+inconsistent algebraic states of mass-matrix DAEs, and it only uses nonlinear solvers
+that build the true Jacobian (Newton, TrustRegion, LevenbergMarquardt), not Broyden.
+This also applies to the reinitialization after callbacks. Pass `initializealg=...`
+explicitly to override.
 
 $callback_keyword_docs
 """
@@ -47,7 +46,7 @@ function SciMLBase.ODEProblem(
     add_comp_cb=Dict(),
     add_nw_cb=nothing,
     override_cb=nothing,
-    initializealg=default_dae_init_alg(nw),
+    initializealg=BrownFullBasicInit(; nlsolve=FastShortcutNonlinearPolyalg(; must_use_jacobian=Val(true))),
     kwargs...
 )
 
@@ -81,36 +80,6 @@ function SciMLBase.ODEProblem(
     end
 
     SciMLBase.ODEProblem(SciMLBase.ODEFunction(nw), args...; callback=finalcallback, initializealg, kwargs...)
-end
-
-"""
-    default_dae_init_alg(nw::Network)
-
-Initialization algorithm used by `ODEProblem(nw, ...)`.
-
-For a mass-matrix DAE this runs a nonlinear solve over the algebraic variables, once per
-`solve` and again after every reinitializing callback. With a `jac_prototype` on the network
-that solve can use the sparsity pattern, but only if it is pushed onto a Jacobian-based
-method: the default polyalg starts with Broyden, which ignores the pattern entirely.
-"""
-function default_dae_init_alg(nw::Network)
-    isnothing(nw.jac_prototype) && return BrownFullBasicInit()
-    BrownFullBasicInit(;
-        nlsolve=FastShortcutNonlinearPolyalg(;
-            must_use_jacobian=Val(true), autodiff=_dae_init_autodiff()))
-end
-
-# A sparsity pattern makes the solver wrap its AD choice in `AutoSparse`. Up to
-# OrdinaryDiffEqNonlinearSolve 2.9.3 the DAE initialization does not look through that
-# wrapper, concludes the residual is never called with Duals and hands ForwardDiff plain
-# Float64 buffers. Finite differences sidestep that; `nothing` leaves the choice to the
-# solver, which picks ForwardDiff.
-const ODE_NLSOLVE_PKGID = Base.PkgId(
-    Base.UUID("127b3ac7-2247-4354-8eb6-78cf4e7c58e8"), "OrdinaryDiffEqNonlinearSolve")
-function _dae_init_autodiff()
-    Base.root_module_exists(ODE_NLSOLVE_PKGID) || return AutoFiniteDiff()
-    version = pkgversion(Base.root_module(ODE_NLSOLVE_PKGID))
-    isnothing(version) || version < v"2.9.4" ? AutoFiniteDiff() : nothing
 end
 
 """

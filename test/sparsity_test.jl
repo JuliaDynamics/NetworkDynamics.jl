@@ -305,11 +305,17 @@ end
                   outdim=1, pdim=1, psym=[:k => 1.0])
     nw = Network(g, v, e)
 
-    @test NetworkDynamics.default_dae_init_alg(nw) isa BrownFullBasicInit
-    @test isnothing(NetworkDynamics.default_dae_init_alg(nw).nlsolve)
+    # without a pattern the dense Newton path has to work as well
+    let s0 = NWState(nw)
+        s0.v[:, :x] .= 0.1
+        s0.v[:, :y] .= 0.0
+        integ = init(ODEProblem(nw, uflat(s0), (0.0, 1.0), pflat(s0)), Rodas5P())
+        y = integ.u[2:2:end]
+        x = integ.u[1:2:end]
+        @test maximum(abs, y.^3 .+ y .- x .- 0.5) < 1e-8
+    end
 
     set_jac_prototype!(nw; verbose=false)
-    @test !isnothing(NetworkDynamics.default_dae_init_alg(nw).nlsolve)
 
     # y=0 is inconsistent, so the initialization actually has to solve
     s0 = NWState(nw)
@@ -324,7 +330,6 @@ end
     # A `jac_prototype` makes the solver wrap its AD choice in `AutoSparse`. Upstream has to
     # look through that wrapper to see that the initialization residual will be called with
     # Duals, otherwise a ForwardDiff-based `nlsolve` writes Duals into Float64 buffers.
-    # Needs OrdinaryDiffEqNonlinearSolve >= 2.9.4.
     @test begin
         prob = ODEProblem(nw, uflat(s0), (0.0, 1.0), pflat(s0);
                           initializealg=BrownFullBasicInit(nlsolve=NewtonRaphson()))
