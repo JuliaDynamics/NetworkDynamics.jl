@@ -112,6 +112,15 @@ function NetworkDynamics.describe_edges(nw::Network, extras...; parameters=true,
         name = map(v->last(v).name, pairs),
         batch = map(idx -> findfirst(batch -> idx ∈ batch.indices, nw.layer.edgebatches), first.(pairs)),
     )
+    # mark parallel edges as "k/n", the column only exists if there are any
+    multiplicity = NetworkDynamics.edge_multiplicity(nw.im.edgevec)
+    if any(m -> m[2] > 1, multiplicity)
+        parallel = map(first.(pairs)) do idx
+            k, n = multiplicity[idx]
+            n > 1 ? "$k/$n" : ""
+        end
+        DataFrames.insertcols!(basedf, :srcdst, :parallel => parallel; after=true)
+    end
 
     dfs = [basedf,]
     if parameters

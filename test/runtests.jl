@@ -42,6 +42,7 @@ if !BUILDKITE
     includetest!("quality_test.jl");
     includetest!("utils_test.jl");
     includetest!("construction_test.jl");
+    includetest!("multiedge_test.jl");
     includetest!("aggregators_test.jl");
     includetest!("massmatrix_test.jl");
     includetest!("initialization_test.jl");
