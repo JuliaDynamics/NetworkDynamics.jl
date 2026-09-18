@@ -219,18 +219,18 @@ end
 end
 
 @testset "metadata initf + initf_weak on one target: weak yields to strong" begin
-    # a target carrying both a strong `initf` and a weak `initf_weak` keeps only the strong one
-    # (weak yields to a strong writer, no conflict error) — whether the two rhs match or differ.
-    strong_wins(strong_rhs) = begin
+    # a strong `initf` and a weak `initf_weak` on one target: with an identical rhs they merge
+    # into the strong one, with differing rhs both are attached and the weak one yields at init
+    p_formulas(strong_rhs) = begin
         @named sub = _weakdev(name=:sub)   # child already carries `initf_weak = p_src` on p
         @variables z(t) = 0.0
         parent = System([D(z) ~ -z], t; name=:par, systems=[sub])   # steady state z=0 (= default)
         parent = set_initf(parent, sub.p => strong_rhs(sub))
         vp = VertexModel(parent, [:sub₊i], [:sub₊o]; verbose=false)
-        only(filter(f -> f.outsym == [:sub₊p], collect(get_initformulas(vp))))
+        filter(f -> f.outsym == [:sub₊p], collect(get_initformulas(vp)))
     end
-    @test strong_wins(sub -> sub.p_src).weak == false        # identical rhs
-    @test strong_wins(sub -> sub.p_src + 10).weak == false   # differing rhs
+    @test only(p_formulas(sub -> sub.p_src)).weak == false                       # identical rhs
+    @test sort([f.weak for f in p_formulas(sub -> sub.p_src + 10)]) == [false, true]   # differing rhs
 
     # and end to end: the strong value wins at init, the weak default stands down
     @named sub = _weakdev(name=:sub)

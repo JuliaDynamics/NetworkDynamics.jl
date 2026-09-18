@@ -404,7 +404,7 @@ end
 sys = set_guessf(sys, sub.x => sub.p)          # seed a subsystem's state from outside
 ```
 
-`guessf` reads as "at initialization, *guess* this symbol from that expression". Because a guess is only a hint, it differs from `initf` in two ways: conflicting recipes for one target are a warning (not an error), and a formula whose inputs cannot be resolved is silently skipped. That skip is what makes `guessf` compose with a scalar `guess`: give a variable both `guess=0` (the fallback seed) and `guessf=<expr>` (the refined value), and the formula is used whenever it resolves while the scalar remains as a safe default. A symbolic value given to the plain `guess` option is rejected — spell it as `guessf` instead.
+`guessf` reads as "at initialization, *guess* this symbol from that expression". Because a guess is only a hint, it differs from `initf` in two ways: of several differing recipes for one target only one is kept (with a warning), and a formula whose inputs cannot be resolved is silently skipped. That skip is what makes `guessf` compose with a scalar `guess`: give a variable both `guess=0` (the fallback seed) and `guessf=<expr>` (the refined value), and the formula is used whenever it resolves while the scalar remains as a safe default. A symbolic value given to the plain `guess` option is rejected — spell it as `guessf` instead.
 
 ## [Sharing Parameter Values Between Components](@id parameter-sharing)
 

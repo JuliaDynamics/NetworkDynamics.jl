@@ -14,7 +14,6 @@ rule(f, outsym, sym; provenance=:derived, optional=true, label=nothing) =
 scale(factor, out, in; kw...) = rule((o, u) -> (o[1] = factor * u[1]; nothing), [out], [in]; kw...)
 
 @testset "rule construction" begin
-    @test_throws ArgumentError rule((o, u) -> nothing, [:x], [:x])
     @test_throws ArgumentError ResolutionRule((o, u) -> nothing, [:x], [:y];
                                               provenance=:nonsense, optional=true)
 
@@ -59,10 +58,9 @@ end
     @test_throws ArgumentError ResolutionRule(collapsing, am2)
     @test_throws ArgumentError ResolutionRule(@initformula(:out = :a + :b), am2)
 
-    # and the case the canonicalization *creates*: two names that look independent in the
-    # formula but land on one symbol across the two ends, which is a rule reading its own output
-    @test_throws ArgumentError ResolutionRule(@initformula(:x = 2 * :alias_in), am)
-    @test_throws ArgumentError ResolutionRule(@initformula(:alias_in = 2 * :x), am)
+    # across the two ends it is fine: the rule reads its own output and becomes a check
+    selfref = ResolutionRule(@initformula(:x = 2 * :alias_in), am)
+    @test selfref.outsym == selfref.sym == [:x]
 end
 
 @testset "rule graph" begin
@@ -216,6 +214,39 @@ end
     # duplicate-writer check rejected outright
     agree = [scale(2.0, :q, :p), scale(2.0, :q, :p)]
     @test isempty(resolve_rules(Dict(:p => 1.0), agree; targets=[:q]).conflicts)
+end
+
+@testset "a rule reading its own output only checks it" begin
+    # the alias case: `x = y` with y ≡ x, whatever the rank, just confirms x
+    for provenance in (:strong_formula, :weak_formula)
+        res = resolve_rules(Dict(:x => 1.0), [scale(1.0, :x, :x; provenance, optional=false)])
+        @test res.fired == [true]
+        @test res.vals[:x] == 1.0 && res.provenance[:x] == :provided
+        @test isempty(res.conflicts) && isempty(res.unfired)
+    end
+
+    # a strong rule outranks the provided value but must not overwrite it with `f(x)`
+    res = resolve_rules(Dict(:x => 1.0), [scale(2.0, :x, :x; provenance=:strong_formula)])
+    @test res.vals[:x] == 1.0
+    @test only(res.conflicts) == (; sym=:x, held=1.0, offered=2.0, rule=1)
+
+    # a weak one yields as usual
+    res = resolve_rules(Dict(:x => 1.0), [scale(2.0, :x, :x; provenance=:weak_formula)])
+    @test isempty(res.conflicts)
+    @test only(res.yields) == (; sym=:x, offered=2.0, rule=1)
+
+    # without a value it never fires, which only matters if it is required
+    res = resolve_rules(Dict{Symbol,Float64}(), [scale(1.0, :x, :x; optional=false)])
+    @test only(res.unfired) == (; rule=1, unknown=[:x])
+    @test isempty(resolve_rules(Dict{Symbol,Float64}(), [scale(1.0, :x, :x)]).unfired)
+
+    # inside a cycle it re-checks after an overwrite, against the final value
+    rules = [scale(1.0, :x, :x; provenance=:strong_formula),
+             scale(3.0, :x, :p; provenance=:strong_formula),
+             scale(1.0, :p, :x)]
+    res = resolve_rules(Dict(:x => 1.0, :p => 1.0), rules)
+    @test res.vals[:x] == 3.0
+    @test isempty(res.conflicts)
 end
 
 @testset "a non-finite output fires and propagates" begin
