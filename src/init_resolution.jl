@@ -18,6 +18,9 @@ payload is a plain `f(out, u)` on vectors, which is the shape `build_function` g
 - `optional` — whether it is fine for this rule to never fire.
 - `label` — short name for diagnostics.
 
+A rule may read one of its own outputs, which happens when an alias folds a formula onto itself.
+It can only fire once that value is known, so it merely checks it.
+
 `optional` and a low `provenance` are two different escape hatches: the first lets a rule not run
 at all, the second lets it run and lose.
 
@@ -33,10 +36,6 @@ struct ResolutionRule
     label::Union{Nothing,String}
 
     function ResolutionRule(f, outsym, sym; provenance, optional, label=nothing)
-        self_deps = intersect(sym, outsym)
-        if !isempty(self_deps)
-            throw(ArgumentError("ResolutionRule cannot depend on its own output: $self_deps"))
-        end
         _precedence(provenance) # reject an unknown provenance here rather than mid-walk
         new(f, collect(Symbol, outsym), collect(Symbol, sym), provenance, optional, label)
     end
@@ -181,7 +180,7 @@ function resolve_rules(vals, rules::AbstractVector;
 
     for block in Iterators.reverse(blocks)
         if length(block) == 1
-            # there are no self-loops, so a lone rule gets exactly one chance
+            # a lone rule gets exactly one chance, a self-loop only means it checks its own input
             _try_fire!(res, rules, only(block))
         else
             _resolve_block!(res, rules, block; maxpasses)
@@ -224,7 +223,7 @@ function rule_graph(rules)
     for (j, r) in enumerate(rules), s in r.sym
         haskey(writers, s) || continue
         for i in writers[s]
-            add_edge!(g, i, j) # a self-edge is impossible, a rule cannot read its own output
+            add_edge!(g, i, j)
         end
     end
     g
@@ -300,13 +299,14 @@ function _try_fire!(res, rules, i; overwritten=nothing)
 
     res.fired[i] = true
     for (k, s) in enumerate(r.outsym)
-        _write_value!(res, s, out[k], r.provenance, i; overwritten)
+        _write_value!(res, s, out[k], r.provenance, i; overwritten, check_only = s ∈ r.sym)
     end
     true
 end
 
-# The write policy, and the only place where precedence is decided.
-function _write_value!(res, s, v, provenance, i; overwritten)
+# The write policy, and the only place where precedence is decided. A `check_only` write never
+# stores, it compares like an equal-rank write would.
+function _write_value!(res, s, v, provenance, i; overwritten, check_only=false)
     if !haskey(res.vals, s)
         _store!(res, s, v, provenance, i; overwritten=nothing)
         return nothing
@@ -317,7 +317,7 @@ function _write_value!(res, s, v, provenance, i; overwritten)
         # recorded, not silent: for a weak formula this *is* the outcome to report
         push!(res.yields, (; sym=s, offered=v, rule=i))
         return nothing
-    elseif held == offered
+    elseif held == offered || check_only
         # same rank never overwrites, we only check that the two agree
         _agree(res.vals[s], v) ||
             push!(res.conflicts, (; sym=s, held=res.vals[s], offered=v, rule=i))

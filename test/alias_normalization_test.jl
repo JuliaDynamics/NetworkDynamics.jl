@@ -920,3 +920,24 @@ end
         @test occursin("consumer₊inp_u", sprint(showerror, err))
     end
 end
+
+@testset "formula folded onto itself by an alias" begin
+    # `y ~ x` makes y an alias of the state, so `x = f(y)` reads its own output
+    function selfref(rhs; name, kw...)
+        @variables x(t) y(t) out(t) [output=true] u(t) [input=true]
+        sys = System([Dt(x) ~ u - x, y ~ x, out ~ 2x], t; name)
+        set_initf(sys, x => rhs(y); kw...)
+    end
+    function init(rhs; x=nothing, kw...)
+        v = VertexModel(selfref(rhs; name=:s, kw...), [:u], [:out])
+        set_default!(v, :u, 2.0)
+        isnothing(x) || set_default!(v, :x, x)
+        initialize_component(v; verbose=false)
+    end
+
+    @test get_aliasmap(VertexModel(selfref(identity; name=:s), [:u], [:out])) == Dict(:y => :x)
+    @test init(identity; x=2.0)[:x] == 2.0
+    @test_throws r"Inconsistent" init(y -> 2y; x=2.0)
+    @test init(y -> 2y; x=2.0, weak=true)[:x] == 2.0
+    @test_throws r"could not be resolved" init(identity; x=nothing)
+end
