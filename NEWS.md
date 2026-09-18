@@ -16,6 +16,10 @@
 - `OrdinaryDiffEqNonlinearSolve` is now a weak dependency, only to require at least v2.9.4
   whenever it is loaded. Older versions broke ForwardDiff in the DAE initialization of
   networks with a `jac_prototype`.
+- Fix: MTK models may carry several differing `initf` for one target (e.g. two weak, optional
+  recipes recovering a state from either its input or its output). Previously this errored at
+  `VertexModel` construction; now initialization decides which one fires and reports a
+  disagreement. A weak `initf` is also no longer dropped next to an optional strong one.
 
 ## v1.3.0 Changelog
 

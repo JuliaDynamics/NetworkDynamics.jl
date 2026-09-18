@@ -600,7 +600,7 @@ Collect the `initf`/`initf_weak`/`initf_optional`/`guessf` variable metadata and
 list of `(; target, expr, weak, optional)` entries, namespaced to the level of `sys` (both flags
 are always `false` for guesses). Deliberately a list, not a dict: a target carrying both a variable-level
 and a system-level recipe must surface as two entries, so `_dedupe_resolved` can dedupe them
-when identical and error/warn when they conflict — never silently prefer one.
+when identical — never silently prefer one.
 
 Must be called on the **hierarchical** (pre-flattening) system: `renamespace` renames a
 symbol but does not descend into the expressions stored in its metadata, so the formula of a
@@ -693,14 +693,14 @@ Turn the `(; target, expr, weak)` entries collected by
 be unknowns, parameters, inputs — or observables, in which case the formula *pins* the
 observable as an init-time dataflow node.
 
-An InitFormula is a constraint (not a hint), so conflicting definitions for the same raw
-target are a genuine over-determination and raise an error. A GuessFormula is only a
-convergence hint, so conflicting definitions are deduped with a warning, never fatal.
+Several differing InitFormulas for the same raw target are all kept; the initialization decides
+which one fires, and reports a disagreement between them. Differing GuessFormulas for one target
+are only hints, so just one of them is kept, with a warning.
 """
-initf_to_initformulas(entries)   = _metadata_to_formulas(entries, InitFormula;  fail=:error, kind="initf")
-guessf_to_guessformulas(entries) = _metadata_to_formulas(entries, GuessFormula; fail=:warn,  kind="guessf")
+initf_to_initformulas(entries)   = _metadata_to_formulas(entries, InitFormula;  conflict=:keep, kind="initf")
+guessf_to_guessformulas(entries) = _metadata_to_formulas(entries, GuessFormula; conflict=:warn, kind="guessf")
 
-function _metadata_to_formulas(entries, ::Type{FT}; fail::Symbol, kind::String) where {FT}
+function _metadata_to_formulas(entries, ::Type{FT}; conflict::Symbol, kind::String) where {FT}
     (isnothing(entries) || isempty(entries)) && return nothing
 
     resolved = Any[]
@@ -710,7 +710,7 @@ function _metadata_to_formulas(entries, ::Type{FT}; fail::Symbol, kind::String) 
         push!(resolved, r)
     end
 
-    resolved = _dedupe_resolved(resolved; fail, kind=string(nameof(FT)))
+    resolved = _dedupe_resolved(resolved; conflict, kind=string(nameof(FT)))
     isempty(resolved) ? nothing : [_build_formula(FT, r) for r in resolved]
 end
 
@@ -760,7 +760,7 @@ end
 #
 # Both an InitFormula and a GuessFormula are "set `target := f(inputs)`" objects, so the
 # resolution, conflict-deduplication and function-building are identical; only the conflict
-# policy (`fail`: error for initf, warn for guessf) differs between the two.
+# policy (`conflict`: keep all for initf, warn for guessf) differs between the two.
 
 # Shape one `lhs => rhs` pair into a `(target, rhs, inputs)` form, or skip it (with a
 # warning) when it structurally cannot become a formula. Deliberately *raw*: target and
@@ -821,36 +821,37 @@ function add_guessformula_lenient!(c, formula)
     nothing
 end
 
-# Collapse entries with the same raw target. Identical definitions (equal rhs) are always
-# safe to dedupe silently. Genuinely *conflicting* definitions (same target, differing rhs)
-# are a warning for guesses (`fail=:warn`, only a hint) but an error for initf
-# (`fail=:error`, two constraints forcing one state). Comparison is on the symbolic rhs, not
-# the prettyprint. Note this is syntactic and name-level: two formulas targeting different
-# members of one alias class both survive here, and the init-time duplicate-writer check
-# reports them once normalization has collapsed the class.
-function _dedupe_resolved(resolved; fail::Symbol, kind)
+# Merge entries with the same raw target and an identical rhs into one; the merged entry is
+# weak (or optional) only if all of them were. Entries with differing rhs are a real choice.
+# For initf all of them are kept (`conflict=:keep`): which one fires, yields or disagrees is
+# decided at init time, once values exist. Guesses keep just one and warn (`conflict=:warn`).
+function _dedupe_resolved(resolved; conflict::Symbol, kind)
     by_target = OrderedDict{Symbol,Vector{Any}}()
     for r in resolved
         push!(get!(() -> Any[], by_target, r.target), r)
     end
     kept = Any[]
     for (target, group) in by_target
-        # a weak entry yields to a strong writer on the same target: drop the weak ones whenever
-        # a strong one exists (any rhs), so weak+strong never reads as a conflict below
-        any(g -> !g.weak, group) && (group = filter(g -> !g.weak, group))
-        # sort strong-first, required before optional, then by rhs: among identical duplicates
-        # the one with the fewest escape hatches wins, rather than whoever came first
-        chosen = first(sort(group; by = g -> (g.weak, g.optional, repr(g.rhs))))
-        length(group) == 1 && (push!(kept, chosen); continue)
-        if all(g -> isequal(g.rhs, chosen.rhs), group)
-            push!(kept, chosen)
-            @debug "$kind: $(length(group)) identical definitions for $target; keeping one."
-            continue
-        else
-            push!(kept, chosen)
-            msg = "$kind: conflicting definitions target $target (differing right-hand \
+        # like `unique` by rhs, but a duplicate upgrades the kept entry: strong beats weak,
+        # required beats optional
+        variants = Any[]
+        for g in group
+            i = findfirst(v -> isequal(v.rhs, g.rhs), variants)
+            if isnothing(i)
+                push!(variants, g)
+            else
+                v = variants[i]
+                variants[i] = merge(v, (; weak = v.weak && g.weak, optional = v.optional && g.optional))
+                @debug "$kind: identical definitions for $target; keeping one."
+            end
+        end
+        if length(variants) > 1 && conflict === :warn
+            chosen = first(sort(variants; by = v -> repr(v.rhs)))
+            @warn "$kind: conflicting definitions target $target (differing right-hand \
                    sides). Keeping $(repr(chosen.rhs)); dropping the rest."
-            fail === :error ? error(msg) : @warn msg
+            push!(kept, chosen)
+        else
+            append!(kept, variants)
         end
     end
     kept

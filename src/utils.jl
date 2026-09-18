@@ -575,6 +575,7 @@ target carrying a `default` at init time drops the formula), the system-level co
 Pass `optional=true` for formulas that may fail to resolve: unknown inputs skip the formula
 instead of failing the initialization, which is how a block ships both directions of a relation
 and lets the surrounding model decide which one runs (`initf_optional` as a variable option).
+Several formulas may target the same symbol; if more than one fires, their values must agree.
 
 `set_initf` exists for the case the variable option cannot express: the target belongs to a
 *subsystem*. Most importantly, a parent can set the init value of a child variable which
@@ -617,9 +618,9 @@ system's own variable:
 `set_guessf` is the guess-side counterpart of [`set_initf`](@ref) and exists for the same
 reason: the variable option cannot express a target that belongs to a *subsystem*, or an
 observable a parent wants to seed. A guess is only a *hint* — it lands among the guesses,
-seeds the solver, and is never consistency-checked — so unlike `set_initf`, conflicting
-definitions for one target are a warning, not an error, and a formula whose inputs cannot be
-resolved is silently skipped (leaving any scalar `guess` as the fallback).
+seeds the solver, and is never consistency-checked — so of several differing definitions for
+one target only one is kept (with a warning), and a formula whose inputs cannot be resolved is
+silently skipped (leaving any scalar `guess` as the fallback).
 
 The function is **non-mutating** (system metadata is immutable), so the result must be
 rebound:

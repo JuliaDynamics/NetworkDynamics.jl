@@ -1439,7 +1439,7 @@ end
         @test f.sym == [:a]
     end
 
-    @testset "conflict with a variable-option initf on the same target errors" begin
+    @testset "differing initf on the same target are all kept, disagreement fails init" begin
         @component function initf_conflict(; name)
             @parameters a=1.0
             @variables begin
@@ -1450,7 +1450,60 @@ end
             set_initf(sys, x => 3a)   # different recipe for the same raw target
         end
         @named sys = initf_conflict()
-        @test_throws "conflicting definitions" VertexModel(sys, [], [:y]; verbose=false)
+        vm = VertexModel(sys, [], [:y]; verbose=false)
+        @test length(get_initformulas(vm)) == 2
+        @test_throws "Inconsistent initialization values" initialize_component!(vm; verbose=false)
+    end
+
+    @testset "two weak initf on one target: either input direction" begin
+        # the state can be recovered from the input or from the output, whichever is known
+        @component function two_way(; name)
+            @parameters k=2.0
+            @variables begin
+                u(t), [input=true, guess=0]
+                x(t), [guess=0]
+                y(t), [output=true, guess=0]
+            end
+            sys = System([Dt(x) ~ u - x, y ~ k*x], t; name)
+            sys = set_initf(sys, x => u; weak=true, optional=true)
+            set_initf(sys, x => y/k; weak=true, optional=true)
+        end
+        @named sys = two_way()
+        vm = VertexModel(sys, [:u], [:y]; verbose=false)
+        @test length(get_initformulas(vm)) == 2
+
+        vm_u = copy(vm); set_default!(vm_u, :u, 1.5)
+        initialize_component!(vm_u; verbose=false)
+        @test get_initial_state(vm_u, :x) ≈ 1.5
+        @test get_initial_state(vm_u, :y) ≈ 3.0
+
+        vm_y = copy(vm); set_default!(vm_y, :y, 4.0)
+        initialize_component!(vm_y; verbose=false)
+        @test get_initial_state(vm_y, :x) ≈ 2.0
+        @test get_initial_state(vm_y, :u) ≈ 2.0
+    end
+
+    @testset "weak initf is the fallback for an optional strong one" begin
+        # the optional formula reads the input `u`, which is only found by the nonlinear solve,
+        # so it never fires and the weak one has to deliver `b`
+        @component function fallback(; name)
+            @parameters a=1.0 b
+            @variables begin
+                u(t), [input=true, guess=1]
+                x(t), [guess=1]
+                y(t), [output=true]
+            end
+            sys = System([Dt(x) ~ u - a*x, y ~ b*x], t; name)
+            sys = set_initf(sys, b => 3u; optional=true)
+            set_initf(sys, b => 5a; weak=true)
+        end
+        @named sys = fallback()
+        vm = VertexModel(sys, [:u], [:y]; verbose=false)
+        @test length(get_initformulas(vm)) == 2
+        set_default!(vm, :y, 10.0)
+        initialize_component!(vm; verbose=false)
+        @test get_initial_state(vm, :b) ≈ 5.0
+        @test get_initial_state(vm, :x) ≈ 2.0
     end
 
     @testset "eager validation and appending" begin
@@ -1727,45 +1780,41 @@ end
 end
 
 @testset "_dedupe_resolved conflict policy" begin
-    # `_dedupe_resolved` collapses resolved (target, rhs) entries that share a target.
-    # Comparison is on the symbolic rhs, so identical definitions dedupe silently, while
-    # genuinely conflicting ones warn (guesses) or error (bindings) per the `fail` kw.
+    # `_dedupe_resolved` merges resolved (target, rhs) entries that share a target and rhs.
+    # Differing rhs are all kept for initf (`conflict=:keep`, init time decides) and reduced to
+    # one with a warning for guesses (`conflict=:warn`).
     @variables a(t) b(t)
     mk(target, rhs; weak=false, optional=false) = (; src=rhs, target, rhs, input_symbolic=Any[], input_names=Symbol[], weak, optional)
 
     # distinct targets: all kept
-    @test length(mtkext._dedupe_resolved([mk(:x, a), mk(:y, b)]; fail=:warn, kind="G")) == 2
+    @test length(mtkext._dedupe_resolved([mk(:x, a), mk(:y, b)]; conflict=:warn, kind="G")) == 2
 
-    # identical definitions for the same target: deduped to one, and NOT an error even
-    # under fail=:error (equal rhs is a harmless alias-merge duplicate, not a conflict)
-    @test length(mtkext._dedupe_resolved([mk(:x, a), mk(:x, a)]; fail=:error, kind="I")) == 1
+    # identical definitions for the same target: merged into one
+    @test length(mtkext._dedupe_resolved([mk(:x, a), mk(:x, a)]; conflict=:keep, kind="I")) == 1
 
-    # a weak writer yields to a strong one on the same target (order-independent); all-weak
-    # duplicates stay weak
-    @test only(mtkext._dedupe_resolved([mk(:x, a; weak=true), mk(:x, a)]; fail=:error, kind="I")).weak == false
-    @test only(mtkext._dedupe_resolved([mk(:x, a), mk(:x, a; weak=true)]; fail=:error, kind="I")).weak == false
-    @test only(mtkext._dedupe_resolved([mk(:x, a; weak=true), mk(:x, a; weak=true)]; fail=:error, kind="I")).weak == true
+    # the merged entry is weak/optional only if all of them were, whichever way round they come
+    @test only(mtkext._dedupe_resolved([mk(:x, a; weak=true), mk(:x, a)]; conflict=:keep, kind="I")).weak == false
+    @test only(mtkext._dedupe_resolved([mk(:x, a), mk(:x, a; weak=true)]; conflict=:keep, kind="I")).weak == false
+    @test only(mtkext._dedupe_resolved([mk(:x, a; weak=true), mk(:x, a; weak=true)]; conflict=:keep, kind="I")).weak == true
+    @test only(mtkext._dedupe_resolved([mk(:x, a; optional=true), mk(:x, a)]; conflict=:keep, kind="I")).optional == false
+    @test only(mtkext._dedupe_resolved([mk(:x, a), mk(:x, a; optional=true)]; conflict=:keep, kind="I")).optional == false
 
-    # weak yields to a strong writer even with a *differing* rhs — no conflict, the strong wins
-    let r = only(mtkext._dedupe_resolved([mk(:x, a), mk(:x, b; weak=true)]; fail=:error, kind="I"))
-        @test !r.weak && isequal(r.rhs, a)
+    # differing rhs for initf: all kept, flags untouched, whatever the weak/optional mix
+    let kept = mtkext._dedupe_resolved([mk(:x, a; weak=true), mk(:x, b; weak=true)]; conflict=:keep, kind="I")
+        @test length(kept) == 2 && all(r -> r.weak, kept)
     end
-    # two *weak* writers with differing rhs stay a genuine conflict
-    @test_throws "conflicting definitions" mtkext._dedupe_resolved([mk(:x, a; weak=true), mk(:x, b; weak=true)]; fail=:error, kind="I")
+    let kept = mtkext._dedupe_resolved([mk(:x, a; optional=true), mk(:x, b; weak=true)]; conflict=:keep, kind="I")
+        @test length(kept) == 2
+        @test only(filter(r -> r.weak, kept)).rhs === b
+    end
+    @test length(mtkext._dedupe_resolved([mk(:x, a), mk(:x, b)]; conflict=:keep, kind="I")) == 2
 
-    # among identical definitions the required one survives, whichever way round they come
-    @test only(mtkext._dedupe_resolved([mk(:x, a; optional=true), mk(:x, a)]; fail=:error, kind="I")).optional == false
-    @test only(mtkext._dedupe_resolved([mk(:x, a), mk(:x, a; optional=true)]; fail=:error, kind="I")).optional == false
-
-    # conflicting definitions (same target, differing rhs), fail=:warn → keep one + warn
+    # differing rhs for guesses: keep one + warn
     local kept
     @test_logs (:warn, r"conflicting definitions target x") match_mode=:any begin
-        kept = mtkext._dedupe_resolved([mk(:x, a), mk(:x, b)]; fail=:warn, kind="G")
+        kept = mtkext._dedupe_resolved([mk(:x, a), mk(:x, b)]; conflict=:warn, kind="G")
     end
     @test length(kept) == 1
-
-    # conflicting definitions, fail=:error → throw
-    @test_throws "conflicting definitions" mtkext._dedupe_resolved([mk(:x, a), mk(:x, b)]; fail=:error, kind="I")
 end
 
 @testset "getproperty_symbolic resolves flat ₊-named leaf variable" begin
