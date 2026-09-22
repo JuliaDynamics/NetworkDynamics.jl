@@ -58,6 +58,31 @@ NetworkDynamics.CHECK_COMPONENT[] = false
     set_graphelement!(e2, 3=>2)
     nw = Network([v1,v2,v3], [e1,e2,e3])
     @test nw.im.unique_vnames == Dict(:v3=>3)
+
+    # construct network without edges
+    v1 = VertexModel(; g, outdim=2, metadata=Dict(:graphelement => 1), name=:v1)
+    v2 = VertexModel(; g, outdim=2, metadata=Dict(:graphelement => 2), name=:v2)
+    nw = Network([v1, v2], [])
+    @test nw.im.unique_vnames == Dict(:v1=>1, :v2=>2)
+    @test nw.im.unique_enames == Dict()
+end
+
+@testset "graph constructor" begin
+    g = (out, in, p, t) -> nothing
+    v1 = VertexModel(; g, outdim=2)
+    v2 = VertexModel(; g, outdim=2)
+
+    # edgeless construction from graph
+    nw = Network(SimpleGraph(2), v1, [])
+    @test nw isa Network
+    nw = Network(SimpleGraph(2), [v1, v2], [])
+    @test nw isa Network
+
+    ge = (out, src, dst, p, t) -> nothing
+    e1 = EdgeModel(; g=ge, outdim=1)
+
+    @test_throws ArgumentError Network(SimpleGraph(2), v1, [e1])
+    @test_throws ArgumentError Network(SimpleGraph(2), v1, e1)
 end
 
 @testset "massmatrix construction test" begin

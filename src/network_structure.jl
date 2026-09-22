@@ -61,7 +61,7 @@ function _aliased_hashes(T, cfs, aliastype)
             h = hash(c)
             hashdict[c] = (; idxs=idxs, hash=h)
         end
-    elseif aliastype == :all
+    elseif aliastype == :all && length(cfs) > 0
         c = first(cfs)
         hashdict[c] =(; idxs=collect(eachindex(cfs)), hash=hash(c))
     end
