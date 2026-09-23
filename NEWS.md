@@ -20,6 +20,7 @@
   recipes recovering a state from either its input or its output). Previously this errored at
   `VertexModel` construction; now initialization decides which one fires and reports a
   disagreement. A weak `initf` is also no longer dropped next to an optional strong one.
+- Networks without edges can be built by passing an empty edge list, e.g. `Network(g, vm, [])` or `Network(vms, [])`.
 
 ## v1.3.0 Changelog
 

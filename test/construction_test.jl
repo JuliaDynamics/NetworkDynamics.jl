@@ -83,6 +83,13 @@ end
     @test nw isa Network
     @test nw.im.edepth == 2
 
+    # rhs of an edgeless network sees zero input
+    vf = VertexModel(; f=(dx, x, i, p, t) -> (dx .= i .- x), g=1:2, sym=[:x1, :x2], insym=[:a, :b])
+    nw = Network(SimpleGraph(2), vf, [])
+    du = zeros(dim(nw))
+    nw(du, ones(dim(nw)), Float64[], 0.0)
+    @test du == -ones(4)
+
     ge = (out, src, dst, p, t) -> nothing
     e1 = EdgeModel(; g=ge, outdim=1)
 
