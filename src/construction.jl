@@ -125,7 +125,13 @@ function Network(g::AbstractGraph,
             throw(ArgumentError("All edge models must have the same output dimension!"))
         end
         vdepth = outdim(first(_vertexm))
-        edepth = length(_edgem) > 0 ? outdim_dst(first(_edgem)) : maximum(indim, _vertexm)
+        edepth = if length(_edgem) > 0
+            outdim_dst(first(_edgem))
+        else
+            maximum(_vertexm) do vertm
+                hasindim(vertm) ? indim(vertm) : 0
+            end
+        end
 
         dynstates = mapreduce(dim, +, Iterators.flatten((_vertexm,_edgem)))
 

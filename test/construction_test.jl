@@ -75,8 +75,13 @@ end
     # edgeless construction from graph
     nw = Network(SimpleGraph(2), v1, [])
     @test nw isa Network
+    @test nw.im.edepth == 0
+
+    v1 = VertexModel(; g, outdim=2, insym=[:a, :b])
+    v2 = VertexModel(; g, outdim=2, indim=1)
     nw = Network(SimpleGraph(2), [v1, v2], [])
     @test nw isa Network
+    @test nw.im.edepth == 2
 
     ge = (out, src, dst, p, t) -> nothing
     e1 = EdgeModel(; g=ge, outdim=1)
