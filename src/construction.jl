@@ -51,7 +51,7 @@ Keyword arguments only for the graphless constructor:
 """
 function Network(g::AbstractGraph,
                  vertexm::Union{VertexModel,Vector{<:VertexModel}},
-                 edgem::Union{EdgeModel,Vector{<:EdgeModel}};
+                 edgem::Union{EdgeModel,Vector};
                  execution=SequentialExecution{true}(),
                  aggregator=execution isa SequentialExecution ? SequentialAggregator(+) : PolyesterAggregator(+),
                  check_graphelement=true,
@@ -63,13 +63,20 @@ function Network(g::AbstractGraph,
     @timeit_debug "Construct Network" begin
         # collect all vertex/edgf to vector
         all_same_v = vertexm isa VertexModel
-        all_same_e = edgem isa EdgeModel
+        all_same_e = edgem isa EdgeModel || ne(g) == 0
         maybecopy = dealias ? copy : identity
         _vertexm = all_same_v ? [maybecopy(vertexm) for _ in vertices(g)] : vertexm
-        _edgem   = all_same_e ? [maybecopy(edgem) for _ in edges(g)] : edgem
+        _edgem   = if ne(g) == 0
+            EdgeModel[]
+        elseif all_same_e
+            [maybecopy(edgem) for _ in edges(g)]
+        else
+            edgem
+        end
 
         @argcheck _vertexm isa Vector{<:VertexModel} "Expected VertexModels, got $(eltype(_vertexm))"
-        @argcheck _edgem isa Vector{<:EdgeModel} "Expected EdgeModels, got $(eltype(_vertexm))"
+        @argcheck _edgem isa Vector{<:EdgeModel} "Expected EdgeModels, got $(eltype(_edgem))"
+        @argcheck ne(g) > 0 || (edgem isa Vector && length(edgem) == 0) "Expected empty set of EdgeModels, got $edgem"
         @argcheck length(_vertexm) == nv(g)
         @argcheck length(_edgem) == ne(g)
 
@@ -118,7 +125,13 @@ function Network(g::AbstractGraph,
             throw(ArgumentError("All edge models must have the same output dimension!"))
         end
         vdepth = outdim(first(_vertexm))
-        edepth = outdim_dst(first(_edgem))
+        edepth = if length(_edgem) > 0
+            outdim_dst(first(_edgem))
+        else
+            maximum(_vertexm) do vertm
+                hasindim(vertm) ? indim(vertm) : 0
+            end
+        end
 
         dynstates = mapreduce(dim, +, Iterators.flatten((_vertexm,_edgem)))
 
@@ -159,7 +172,7 @@ function Network(g::AbstractGraph,
                             end
                         end
                     end
-                elseif has_graphelement(edgem)
+                elseif length(_edgem) > 0 && has_graphelement(edgem)
                     @warn "Provided edge model has assigned `graphelement` metadata. \
                     but is used for all edges. The `graphelement` will be ignored."
                 end
@@ -175,7 +188,7 @@ function Network(g::AbstractGraph,
             end
         end
         @timeit_debug "batch identical edges" begin
-            eidxs = if all_same_e
+            eidxs = if all_same_e && ne(g) > 0
                 [collect(1:ne(g))]
             else
                 _find_identical_components(_edgem)
@@ -273,7 +286,13 @@ end
 
 function Network(vertexfs, edgefs; warn_order=true, legacy_graph=true, kwargs...)
     vertexfs = vertexfs isa VertexModel ? [vertexfs] : vertexfs
-    edgefs   = edgefs isa EdgeModel     ? [edgefs]   : edgefs
+    edgefs   = if edgefs isa EdgeModel
+        [edgefs]
+    elseif length(edgefs) == 0
+        EdgeModel[]
+    else
+        edgefs
+    end
     @argcheck all(has_graphelement, edgefs) "All edge models must have assigned `graphelement` to implicitly construct graph!"
     # vertices must either all have unique names or all have graphelement set
     if all(has_graphelement, vertexfs)
@@ -292,7 +311,7 @@ function Network(vertexfs, edgefs; warn_order=true, legacy_graph=true, kwargs...
     # find unique mappings from name => graphelement
     vnamedict = unique_mappings(getproperty.(vertexfs, :name), vidxs)
 
-    simpleedges = map(edgefs) do e
+    simpleedges::Vector{SimpleEdge{Int}} = map(edgefs) do e
         ge = get_graphelement(e)
         src = get(vnamedict, ge.src, ge.src)
         dst = get(vnamedict, ge.dst, ge.dst)
