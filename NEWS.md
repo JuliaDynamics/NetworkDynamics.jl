@@ -1,6 +1,7 @@
 # NetworkDynamics Release Notes
 
 ## unreleased
+- improvements to the simplification pipeline around removing algebraic states
 - **Parallel edges.** Several edge models may now connect the same pair of vertices. The
   graphless constructor builds a `NetworkDynamics.ComponentGraph` in that case and keeps the edge
   models in input order. Inputs without parallel edges still produce a `SimpleGraph` or

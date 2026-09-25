@@ -891,6 +891,179 @@ end
     @test isequal(only(red_obs).rhs, (2*sx).val)
 end
 
+@testset "Solving groups: literal pivots, chained solution, unsolved core" begin
+    @variables x(t) y(t) z(t)
+    @parameters a c g b1 b2 b3
+    sts = [x.val, y.val, z.val]
+    # evaluate the solution chain in order
+    function eval_chain(sol, vals)
+        vals = Dict{Any,Any}(Symbolics.unwrap(k) => v for (k, v) in vals)
+        for eq in sol
+            vals[eq.lhs] = mtkext.unwrap_const(mtkext.substitute(eq.rhs, vals))
+        end
+        vals
+    end
+    # plug the evaluated chain into the given equations
+    function check_chain(eqs, sol, vals)
+        vals = eval_chain(sol, vals)
+        [mtkext.unwrap_const(mtkext.substitute(eq.rhs - eq.lhs, vals)) for eq in eqs]
+    end
+
+    # 3-cycle with unit diagonal: one unknown is eliminated on its literal pivot and
+    # refers to the others by name, the remaining pair is solved by Cramer's rule
+    eqs = [0 ~ x + a*y - b1, 0 ~ y + c*z - b2, 0 ~ z + g*x - b3]
+    (; observed, residual_idx) = mtkext._solve_scc(eqs, sts)
+    @test isempty(residual_idx)
+    vals = Dict(a=>0.3, c=>-0.7, g=>0.5, b1=>1.1, b2=>0.4, b3=>-0.9)
+    @test check_chain(eqs, observed, vals) ≈ zeros(3) atol=1e-12
+    @test count(eq -> !isdisjoint(mtkext.get_variables(eq.rhs), sts), observed) ≥ 1
+
+    # no literal coefficient: Cramer's rule, must not divide by R even though R = 0
+    @parameters R X
+    eqs = [0 ~ R*x + X*y - b1, 0 ~ -X*x + R*y + c*z, 0 ~ a*x + g*z - b2]
+    (; observed, residual_idx) = mtkext._solve_scc(eqs, sts)
+    @test isempty(residual_idx)
+    vals = Dict(R=>0.0, X=>0.3, a=>2.0, c=>0.5, g=>-0.3, b1=>1.1, b2=>0.4)
+    @test check_chain(eqs, observed, vals) ≈ zeros(3) atol=1e-12
+
+    # also for 4 unknowns: a stator-like block with R on the diagonal, no literals at all
+    @variables x4(t)
+    @parameters k
+    sts4 = [sts; x4.val]
+    bs = [1.1, 0.4, -0.3, 0.8]
+    eqs = [0 ~ R*x + X*y + k*z - bs[1], 0 ~ -X*x + R*y + k*x4 - bs[2],
+           0 ~ k*x + R*z + X*x4 - bs[3], 0 ~ k*y - X*z + R*x4 - bs[4]]
+    (; observed, residual_idx) = mtkext._solve_scc(eqs, sts4)
+    @test isempty(residual_idx)
+    vals = eval_chain(observed, Dict(R=>0.0, X=>0.3, k=>0.7))
+    sol4 = [0 0.3 0.7 0; -0.3 0 0 0.7; 0.7 0 0 0.3; 0 0.7 -0.3 0] \ bs
+    @test [vals[s] for s in sts4] ≈ sol4
+
+    # long cycles have no size limit as long as there are literal pivots
+    @variables q1(t) q2(t) q3(t) q4(t) q5(t) q6(t) q7(t)
+    qs = [q1, q2, q3, q4, q5, q6, q7]
+    eqs = [0 ~ qs[i] + (i+1)*qs[mod1(i+1, 7)] - i for i in 1:7]
+    (; observed, residual_idx) = mtkext._solve_scc(eqs, Symbolics.unwrap.(qs))
+    @test isempty(residual_idx)
+    @test check_chain(eqs, observed, Dict()) ≈ zeros(7) atol=1e-10
+
+    # Not linear in all unknowns together: the literal pivots are still eliminated,
+    # the rest stays a constraint in its original form
+    for eqs in ([0 ~ z + x*y - a, 0 ~ x + z - b1, 0 ~ y + x - c],
+                [0 ~ x + z + y^2 - a, 0 ~ y + z - b1, 0 ~ z + x + y - c])
+        (; observed, residual_idx, torn) = mtkext._solve_scc(eqs, sts)
+        @test length(observed) == 2 && length(residual_idx) == 1
+        core = only(torn)
+        solved_rows = eqs[setdiff(1:3, residual_idx)]
+        @test check_chain(solved_rows, observed, Dict(a=>2.0, b1=>0.5, c=>-0.3, core=>0.7)) ≈ zeros(2) atol=1e-12
+
+        red_eqs, red_obs, red_states = _reduce_equations(eqs, Equation[], [x, y, z])
+        @test length(red_eqs) == 1 && length(red_obs) == 2 && length(red_states) == 1
+    end
+
+    # No literal pivot at all: the bilinear row stays, one of its unknowns is torn and
+    # the linear rows are solved for the others
+    @parameters p1 p2 p3 p4 p5 p6 q1 q2
+    eqs = [0 ~ x*y + k*z - 1, 0 ~ p1*x + p2*y + p3*z - q1, 0 ~ p4*x + p5*y + p6*z - q2]
+    (; observed, residual_idx, torn) = mtkext._solve_scc(eqs, sts)
+    @test residual_idx == [1] && length(observed) == 2
+    vals = Dict(k=>0.4, p1=>1.1, p2=>0.3, p3=>-0.6, p4=>0.2, p5=>0.9, p6=>0.5, q1=>1.0, q2=>-0.5)
+    @test check_chain(eqs[2:3], observed, merge(vals, Dict(only(torn)=>0.7))) ≈ zeros(2) atol=1e-12
+    red_eqs, red_obs, red_states = _reduce_equations(eqs, Equation[], [x, y, z])
+    @test length(red_eqs) == 1 && length(red_obs) == 2 && length(red_states) == 1
+
+    # the torn unknown is one of the bilinear row, not x4 which only appears in linear rows
+    eqs = [0 ~ x*y + k*z - 1, 0 ~ p1*x + p2*y + p3*z + p4*x4 - q1,
+           0 ~ p5*x + p6*y + R*z + X*x4 - q2, 0 ~ g*x + a*y + c*z + b1*x4 - b2]
+    (; observed, residual_idx, torn) = mtkext._solve_scc(eqs, sts4)
+    @test residual_idx == [1] && length(observed) == 3
+    @test !isequal(only(torn), x4.val)
+    vals = merge(vals, Dict(R=>0.3, X=>-0.8, g=>0.6, a=>1.2, c=>-0.4, b1=>0.9, b2=>0.1))
+    @test check_chain(eqs[2:4], observed, merge(vals, Dict(only(torn)=>0.7))) ≈ zeros(3) atol=1e-12
+
+    # 7 unknowns, but only 5 linear rows to solve by Cramer's rule
+    vs = [only(@variables $(Symbol(:v, i))(t)) for i in 1:7]
+    ps = [only(@parameters $(Symbol(:p, i))) for i in 1:11]
+    @parameters q3 q4 q5
+    v1, v2, v3, v4, v5, v6, v7 = vs
+    eqs = [0 ~ v1*v2 + a*v3 - 1, 0 ~ v4*v5 + b1*v6 - 1,
+           0 ~ ps[1]*v1 + ps[2]*v7 - q1, 0 ~ ps[3]*v2 + ps[4]*v7 - q2, 0 ~ ps[5]*v3 + ps[6]*v1 - q3,
+           0 ~ ps[7]*v4 + ps[8]*v7 - q4, 0 ~ ps[9]*v6 + ps[10]*v5 + ps[11]*v7 - q5]
+    (; observed, residual_idx, torn) = mtkext._solve_scc(eqs, Symbolics.unwrap.(vs))
+    @test residual_idx == [1, 2] && length(observed) == 5
+    @test !any(s -> isequal(s, v7.val), torn)
+    vals = Dict{Any,Float64}(p => 0.5 + 0.1i for (i, p) in enumerate(ps))
+    merge!(vals, Dict(q1=>1.0, q2=>-0.5, q3=>0.3, q4=>0.8, q5=>-1.1, torn[1]=>0.7, torn[2]=>-0.2))
+    @test check_chain(eqs[3:7], observed, vals) ≈ zeros(5) atol=1e-12
+
+    # Densely coupled groups beyond 5 unknowns are solved only while the solution stays
+    # small. Without that limit, the solutions of this group would reach thousands of
+    # leaves. The rest stays constraints, also in later rounds.
+    n = 12
+    ds = [only(@variables $(Symbol(:d, i))(t)) for i in 1:n]
+    ks = [only(@parameters $(Symbol(:κ, i))) for i in 1:3n]
+    eqs = [0 ~ ds[i] + ks[3i-2]*ds[mod1(i+1, n)] + ks[3i-1]*ds[mod1(i+3, n)] + ks[3i]*ds[mod1(i+7, n)] - i
+           for i in 1:n]
+    red_eqs, red_obs, red_states = _reduce_equations(eqs, Equation[], ds)
+    @test !isempty(red_obs) && !isempty(red_eqs)
+    @test all(o -> mtkext._nleaves(o.rhs) <= 64, red_obs)
+
+    # a block of coupled derivatives: the chain must not leave a derivative on
+    # the rhs of a state equation
+    eqs = [0 ~ Dt(x) + a*Dt(y) - b1*x, 0 ~ Dt(y) + c*Dt(z) - b2*y, 0 ~ Dt(z) + g*Dt(x) - b3*z]
+    red_eqs, red_obs, red_states = _reduce_equations(eqs, Equation[], [x, y, z])
+    @test length(red_eqs) == 3 && isempty(red_obs)
+    @test !any(eq -> any(mtkext.isdifferential, mtkext.get_variables(eq.rhs)), red_eqs)
+    vals = Dict(a=>0.3, c=>-0.7, g=>0.5, b1=>1.1, b2=>0.4, b3=>-0.9, x=>0.2, y=>-1.3, z=>0.8)
+    dx = Dict(only(mtkext.arguments(eq.lhs)) => mtkext.unwrap_const(mtkext.substitute(eq.rhs, vals)) for eq in red_eqs)
+    @test [dx[s.val] for s in (x, y, z)] ≈ [1 0.3 0; 0 1 -0.7; 0.5 0 1] \ [1.1*0.2, 0.4*-1.3, -0.9*0.8]
+
+    # Derivatives can't stay unsolved, so a larger coupled block has no size limit
+    n = 6
+    ws = [only(@variables $(Symbol(:w, i))(t)) for i in 1:n]
+    λs = [only(@parameters $(Symbol(:λ, i))) for i in 1:3n]
+    offsets = (1, 2, 4)
+    eqs = [0 ~ Dt(ws[i]) + sum(λs[3i-3+k]*Dt(ws[mod1(i+o, n)]) for (k, o) in enumerate(offsets)) - i*ws[i]
+           for i in 1:n]
+    red_eqs, red_obs, red_states = _reduce_equations(eqs, Equation[], ws)
+    @test length(red_eqs) == n && isempty(red_obs)
+    vals = Dict{Any,Float64}(λ => 0.1 + 0.05i for (i, λ) in enumerate(λs))
+    merge!(vals, Dict(w => 0.3i - 1 for (i, w) in enumerate(ws)))
+    dw = Dict(only(mtkext.arguments(eq.lhs)) => mtkext.unwrap_const(mtkext.substitute(eq.rhs, vals)) for eq in red_eqs)
+    M = zeros(n, n)
+    for i in 1:n
+        M[i, i] = 1
+        for (k, o) in enumerate(offsets)
+            M[i, mod1(i+o, n)] += vals[λs[3i-3+k]]
+        end
+    end
+    @test [dw[w.val] for w in ws] ≈ M \ [i*vals[w] for (i, w) in enumerate(ws)]
+
+    # A row with an unknown derivative only solves for derivatives, so a group never
+    # mixes both kinds. Here D(x) is solved first, and y in a later round.
+    @parameters T T1 T2 f1 f2
+    eqs = [0 ~ T*Dt(x) - y - x, 0 ~ y^3 + y + k*Dt(x) - c]
+    @test_throws AssertionError mtkext._solve_scc(eqs, [Dt(x).val, y.val])
+    red_eqs, red_obs, red_states = _reduce_equations(eqs, Equation[], [x, y])
+    @test length(red_eqs) == 2 && isempty(red_obs)
+    @test count(eq -> mtkext.isdifferential(eq.lhs), red_eqs) == 1
+    @test !any(eq -> any(mtkext.isdifferential, mtkext.get_variables(eq.rhs)), red_eqs)
+
+    # The first row is not linear, so the joint solve would have to tear a derivative.
+    # D(x) is solved on its parameter coefficient instead.
+    eqs = [0 ~ T1*Dt(x) - Dt(y)^2 - x, 0 ~ T2*Dt(y) - y]
+    (; observed, residual_idx) = mtkext._solve_scc(eqs, [Dt(x).val, Dt(y).val])
+    @test isempty(residual_idx)
+    @test check_chain(eqs, observed, Dict(T1=>0.5, T2=>2.0, x=>0.2, y=>-1.3)) ≈ zeros(2) atol=1e-12
+
+    # a mass matrix block is solved jointly, dividing by T1 would fail at T1 = 0
+    eqs = [0 ~ T1*Dt(x) + k*Dt(y) - f1, 0 ~ k*Dt(x) + T2*Dt(y) - f2]
+    (; observed, residual_idx) = mtkext._solve_scc(eqs, [Dt(x).val, Dt(y).val])
+    @test isempty(residual_idx)
+    vals = eval_chain(observed, Dict(T1=>0.0, T2=>0.5, k=>0.7, f1=>1.0, f2=>-0.4))
+    @test [vals[Dt(x).val], vals[Dt(y).val]] ≈ [0 0.7; 0.7 0.5] \ [1.0, -0.4]
+end
+
 @testset "FF-blocking in reduce_equations" begin
     # Setup: u_r, u_i are outputs (e.g. bus voltages), i_r, i_i are inputs (currents)
     # n is a non-output internal state, p1/p2 are pure parameters
@@ -2202,6 +2375,31 @@ end
         set_default!(vm, :i_r, -0.45)
         set_default!(vm, :i_i, 0.1)
         initialize_component(vm);
+    end
+
+    @testset "current source model with R_s = 0" begin
+        # the stator equations form a linear block with R_s on the diagonal,
+        # solving it must not divide by R_s
+        @named gen = SauerPaiMachine() # R_s = 0 by default
+        cs = VertexModel(gen, [:u_r, :u_i], [:i_r, :i_i]; ff_to_constraint=false)
+        vs = VertexModel(gen, [:i_r, :i_i], [:u_r, :u_i])
+        for vm in (cs, vs)
+            set_default!(vm, :vf, 1.5)
+            set_default!(vm, :τ_m, 0.8)
+        end
+        pvec(vm) = [get_default(vm, s) for s in psym(vm)]
+        xs = Dict(:ψ″_q=>0.3, :ψ″_d=>0.9, :E′_d=>0.4, :E′_q=>1.0, :ω=>1.0, :δ=>0.6)
+        u = [1.0, 0.1]
+
+        i = zeros(2)
+        cs.g(i, [xs[s] for s in sym(cs)], u, pvec(cs), 0.0)
+        @test all(isfinite, i)
+
+        # the voltage source model fed with that current must be consistent with u
+        xv = merge(xs, Dict(:u_r=>u[1], :u_i=>u[2]))
+        dx = zeros(dim(vs))
+        vs.f(dx, [xv[s] for s in sym(vs)], i, pvec(vs), 0.0)
+        @test dx[vs.mass_matrix.diag .== 0] ≈ zeros(2) atol=1e-12
     end
 end
 

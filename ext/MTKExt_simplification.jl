@@ -287,9 +287,10 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
     end
 
     # iteratively match states and move solved equations to obs_unsrtd
+    size_limits = Dict{ST,Int}()
     while !isempty(eqs)
         before = hash((eqs, obs_unsrtd, match_states))
-        eqs, obs_unsrtd, match_states = _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_inputs, verbose)
+        eqs, obs_unsrtd, match_states = _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_inputs, size_limits, verbose)
         before == hash((eqs, obs_unsrtd, match_states)) && break
     end
 
@@ -313,7 +314,7 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
     return eqs, _topological_sort(obs_unsrtd), nodiff(match_states)
 end
 
-function _match_and_solve(eqs, obs_unsrtd, match_states::Vector, all_states::Vector; outset, ff_inputs, verbose)
+function _match_and_solve(eqs, obs_unsrtd, match_states::Vector, all_states::Vector; outset, ff_inputs, size_limits, verbose)
     non_extended_states = length(match_states)
     coeff, has_input, match_states, extra_match_states = _build_coeff_mat(eqs, obs_unsrtd, match_states, all_states; ff_inputs)
 
@@ -366,6 +367,7 @@ function _match_and_solve(eqs, obs_unsrtd, match_states::Vector, all_states::Vec
     sccs = _solve_plan(solvable_eq_idx, coeff_sorted, sorted_match_sts, has_input, is_output; verbose)
 
     solved_eq_idx = Int[]
+    solved_sts = Set{ST}()
 
     for (gi, scc) in enumerate(sccs)
         # scc is a Vector of indices into linear_matches; linear_matches[k] = (i,i)
@@ -374,29 +376,36 @@ function _match_and_solve(eqs, obs_unsrtd, match_states::Vector, all_states::Vec
         expander = selective_expander(obs_unsrtd, scc_sts_i; expand_diffs=true)
         scc_eqs_i = expander(eqs[scc_idx])
 
-        try
-            sol = _symbolic_linear_solve_clean(scc_eqs_i, scc_sts_i)
-            append!(obs_unsrtd, scc_sts_i .~ sol)
-            append!(solved_eq_idx, scc_idx)
-            if verbose
-                if length(scc) == 1
-                    str *= "\nSolved group $gi for $(only(scc_sts_i)) (trivial)"
-                else
-                    str *= "\nSolved group $gi for $(inline_repr(scc_sts_i))"
-                    str *= "\n" * multiline_repr(OrderedDict(scc_sts_i .=> sol), prefix="  ")
-                end
+        # a group may be solved only partially, its residual equations stay as they are
+        limit = _group_size_limit(scc_eqs_i, scc_sts_i, size_limits)
+        res = _solve_scc(scc_eqs_i, scc_sts_i; limit)
+        append!(obs_unsrtd, res.observed)
+        append!(solved_eq_idx, scc_idx[setdiff(eachindex(scc_idx), res.residual_idx)])
+        union!(solved_sts, setdiff(scc_sts_i, res.torn))
+        # the next round would see the rest with the solution expanded into it, so the
+        # limit sticks with the remaining unknowns
+        if res.cut
+            for s in res.torn
+                size_limits[s] = limit
             end
-        catch err
-            if verbose
-                str *= "\n\nFailed to solve group $gi for $(inline_repr(scc_sts_i)): $err"
+        end
+        if verbose
+            why = res.cut ? "stopped at size limit of $limit" : "no pivot and no joint solution for the rest"
+            if isempty(res.observed)
+                str *= "\n\nFailed to solve group $gi for $(inline_repr(scc_sts_i)) ($why)"
+            elseif length(scc) == 1
+                str *= "\nSolved group $gi for $(only(scc_sts_i)) (trivial)"
+            else
+                partially = isempty(res.residual_idx) ? "" : " partially, $(length(res.residual_idx)) equations left ($why)"
+                str *= "\nSolved group $gi for $(inline_repr(scc_sts_i))$partially"
+                str *= "\n" * multiline_repr(res.observed, prefix="  ")
             end
         end
     end
     verbose && @info str
 
-    sort!(solved_eq_idx)
-    deleteat!(eqs, solved_eq_idx)
-    deleteat!(sorted_match_sts, solved_eq_idx)
+    deleteat!(eqs, sort!(solved_eq_idx))
+    filter!(s -> s ∉ solved_sts, sorted_match_sts)
 
     ####
     #### Handle solved extra states (conflicting solutions for D(x) vs x)
@@ -448,17 +457,30 @@ function _match_and_solve(eqs, obs_unsrtd, match_states::Vector, all_states::Vec
                 known_diffs[diffop(obseq.lhs)] = Symbolics.expand_derivatives(diffop(obseq.rhs))
             end
         end
-        if !(required_diffs ⊆ keys(known_diffs))
-            throw(RHSDifferentialsError([repr(only(d.args)) for d in setdiff(required_diffs, keys(known_diffs))]))
-        elseif verbose
-            @info "Substitute known differentials: " * multiline_repr(known_diffs)
-        end
+        verbose && @info "Substitute known differentials: " * multiline_repr(known_diffs)
         for (i, eq) in pairs(eqs)
             eqs[i] = fixpoint_sub(eq, known_diffs)
+        end
+        # checked after substitution: expanding an observed derivative can bring in the
+        # derivative of an unknown
+        unknown_diffs = filter(isdifferential, Symbolics.get_variables(eqs))
+        if !isempty(unknown_diffs)
+            throw(RHSDifferentialsError([repr(only(d.args)) for d in unknown_diffs]))
         end
     end
 
     return eqs, obs_unsrtd, sorted_match_sts
+end
+# Solving a large group can blow up the expressions. Groups of up to 5 unknowns are
+# solved without a limit, for larger ones the solution may grow to a few times the
+# size of the largest equation. A group which contains leftovers of an earlier cut
+# keeps that limit. Derivatives have no limit, since they can't stay unsolved.
+function _group_size_limit(eqs, sts, size_limits)
+    any(isdifferential, sts) && return nothing
+    inherited = [size_limits[s] for s in sts if haskey(size_limits, s)]
+    isempty(inherited) || return minimum(inherited)
+    length(sts) <= 5 && return nothing
+    max(64, 4 * maximum(eq -> _nleaves(eq.rhs - eq.lhs), eqs))
 end
 
 """
@@ -644,34 +666,177 @@ function _insert_sorted!(obseqs, eq::Equation)
     last_dependency = isnothing(idx) ? 0 : idx
     insert!(obseqs, last_dependency+1, eq)
 end
-# Solve a small linear system using Cramer's rule for n≤2, falling back to
-# symbolic_linear_solve for larger systems. Cramer's rule puts det(A) as the
-# single common denominator, avoiding spurious intermediate divisions (e.g.
-# dividing by one component of a complex current when the natural denominator
-# is the magnitude squared).
-function _symbolic_linear_solve_clean(scc_eqs, scc_sts)
-    n = length(scc_sts)
-    if n > 2
-        if n >= 6
-            @warn "Encountered a strongly connected component with $n states. Skip solving! Please report issue with the full model which caused this as it probably means there is a bug in NetworkDynamics simplificaiton code. In the mean time, try `mtkcompile=true` with ModelingToolkit loaded for a more robust simplification."
-            error()
+# Solve a group of equations for its unknowns, as far as that is possible without
+# spurious denominators. A plain LU happily pivots on a parameter like a stator
+# resistance and then divides by it, even though det(A) stays finite when that
+# parameter is zero. So we go in three steps:
+#
+# 1. Eliminate unknowns whose coefficient is a number literal, one by one. This is exact
+#    and works in nonlinear rows as well.
+# 2. Solve the linear rows jointly by Cramer's rule, so det(A) is the only symbolic
+#    denominator. The other rows stay as constraints, on just as many torn unknowns.
+# 3. Derivatives can't stay unsolved. If one is left, it may divide by its coefficient,
+#    and we continue with step 1.
+#
+# A group is either all derivatives or all algebraic unknowns: as long as a row contains
+# an unknown derivative, `_build_coeff_mat` only lets it solve for derivatives.
+#
+# Returns the solution as observed equations in evaluation order and the indices of the
+# residual equations. Those stay as constraints on the torn unknowns, which are the ones
+# not part of the solution. No solution may grow beyond `limit` leaves, `cut` tells
+# whether that stopped the solve.
+function _solve_scc(eqs, sts; limit=nothing)
+    @assert allequal(isdifferential, sts) "a group mixes derivatives and algebraic unknowns"
+    derivatives = any(isdifferential, sts)
+    torn = collect(sts)
+    residual_idx = collect(eachindex(eqs))
+    # each solved unknown refers to the ones solved after it by name, so this is kept
+    # in reverse order of solving, which is the order of evaluation
+    solved = Equation[]
+    cut = false
+    while !isempty(residual_idx)
+        subs = Dict{ST,ST}(eq.lhs => eq.rhs for eq in solved)
+        rows = ST[fixpoint_sub(eqs[r].rhs - eqs[r].lhs, subs) for r in residual_idx]
+
+        # 1. literal pivots are exact, even in nonlinear rows
+        pivot, skipped = _find_pivot(rows, torn, limit; literal=true)
+        if !isnothing(pivot)
+            pushfirst!(solved, torn[pivot.j] ~ pivot.x)
+            deleteat!(torn, pivot.j)
+            deleteat!(residual_idx, pivot.i)
+            continue
         end
-        return Symbolics.symbolic_linear_solve(scc_eqs, scc_sts)
+
+        # 2. solve the linear rows jointly, the other rows stay (tearing)
+        core = _solve_core(rows, torn)
+        if !isnothing(core) && all(ex -> _within_limit(ex, limit), core.x)
+            prepend!(solved, torn[core.cols] .~ core.x)
+            deleteat!(torn, core.cols)
+            deleteat!(residual_idx, core.rows)
+            break
+        end
+
+        # 3. a derivative can't stay unsolved, so it may divide by its coefficient
+        if derivatives
+            pivot, skipped = _find_pivot(rows, torn, limit; literal=false)
+            if !isnothing(pivot)
+                pushfirst!(solved, torn[pivot.j] ~ pivot.x)
+                deleteat!(torn, pivot.j)
+                deleteat!(residual_idx, pivot.i)
+                continue
+            end
+        end
+
+        # nothing worked, a core which exists at this point was too big
+        cut = skipped || !isnothing(core)
+        break
     end
-    # extract coefficient matrix A and RHS b from  0 ~ expr  (i.e. expr = 0)
-    exprs = [eq.rhs - eq.lhs for eq in scc_eqs]
-    A = Symbolics.jacobian(exprs, collect(scc_sts))
-    zero_subs = Dict(s => 0 for s in scc_sts)
-    b = [-Symbolics.substitute(e, zero_subs) for e in exprs]
-    # Cramer's rule
-    sol = if n == 1
-        [b[1] / A[1,1]]
-    else  # n == 2
-        det = A[1,1]*A[2,2] - A[1,2]*A[2,1]
-        [(A[2,2]*b[1] - A[1,2]*b[2]) / det,
-         (A[1,1]*b[2] - A[2,1]*b[1]) / det]
+
+    # solved differentials become state equations again later, so no observed
+    # equation may refer to them: substitute their solution instead
+    diffsubs = Dict{ST,ST}()
+    observed = map(solved) do eq
+        rhs = isempty(diffsubs) ? eq.rhs : substitute(eq.rhs, diffsubs)
+        isdifferential(eq.lhs) && (diffsubs[eq.lhs] = rhs)
+        eq.lhs ~ rhs
+    end
+    (; observed, residual_idx, torn, cut)
+end
+# Find an unknown sts[j] which appears in rows[i] as `a*sts[j] + rest`, and return
+# (; i, j, x=-rest/a). The rest of the row may be nonlinear. With `literal`, `a` has to be
+# a number, otherwise any coefficient free of `sts` will do.
+# Prefer ±1 and then the pivot whose elimination touches the fewest other entries
+# (Markowitz count), to limit fill-in. The second return value tells whether a pivot was
+# skipped for exceeding the size limit.
+function _find_pivot(rows, sts, limit; literal)
+    coeffs = [LinearExpander(s)(r) for r in rows, s in sts]
+    appears((a, _, lin)) = !lin || !_is_literal_zero(a)
+    admissible(a) = literal ? unwrap_const(a) isa Number : isdisjoint(get_variables(a), sts)
+    nnz_row = [count(appears, coeffs[i, :]) for i in axes(coeffs, 1)]
+    nnz_col = [count(appears, coeffs[:, j]) for j in axes(coeffs, 2)]
+    candidates = Tuple{NTuple{2,Int},Int,Int}[]
+    for i in axes(coeffs, 1), j in axes(coeffs, 2)
+        a, _, lin = coeffs[i, j]
+        lin && !_is_literal_zero(a) && admissible(a) || continue
+        key = (_is_literal_unit(a) ? 0 : 1, (nnz_row[i]-1)*(nnz_col[j]-1))
+        push!(candidates, (key, i, j))
+    end
+    for (_, i, j) in sort!(candidates)
+        a, rest, _ = coeffs[i, j]
+        x = -rest/a
+        _within_limit(x, limit) && return (; i, j, x), false
+    end
+    nothing, !isempty(candidates)
+end
+# Solve the rows which are linear in all of `sts` together by Cramer's rule, for up to 5
+# such rows. For every other row one unknown stays unsolved (torn) and is treated like a
+# parameter by the linear rows. Among the valid choices, prefer torn unknowns which appear
+# in the other rows, then the smallest det. Differentials are never torn.
+# Returns the solved rows, the solved unknowns and their solution, or `nothing`.
+function _solve_core(rows, sts)
+    m = length(sts)
+    lin = Int[]
+    Arows = Matrix{ST}[]
+    c = ST[]
+    for (i, row) in pairs(rows)
+        Ai, ci, islinear = Symbolics.linear_expansion([row], sts)
+        # linear_expansion accepts a term like x*y as linear, with y in the coefficient of x
+        islinear && all(a -> isdisjoint(get_variables(a), sts), Ai) || continue
+        push!(lin, i)
+        push!(Arows, Ai)
+        push!(c, only(ci))
+    end
+    isempty(lin) && return nothing
+    length(lin) > 5 && return nothing
+    # each choice of torn unknowns costs a determinant
+    binomial(m, length(lin)) > 100 && return nothing
+    A = reduce(vcat, Arows)
+    nonlin_vars = mapreduce(i -> get_variables(rows[i]), union, setdiff(eachindex(rows), lin); init=Set{ST}())
+
+    best = nothing
+    for torn in _combinations(m, m - length(lin))
+        any(isdifferential, sts[torn]) && continue
+        cols = setdiff(1:m, torn)
+        detA = _det(A[:, cols])
+        _is_literal_zero(detA) && continue
+        key = (count(j -> sts[j] ∉ nonlin_vars, torn), _nleaves(detA))
+        if isnothing(best) || key < best.key
+            best = (; key, torn, cols, detA)
+        end
+    end
+    isnothing(best) && return nothing
+    (; torn, cols, detA) = best
+    b = [-c[r] - sum((A[r, j]*sts[j] for j in torn); init=0) for r in axes(A, 1)]
+    (; rows=lin, cols, x=_cramer(A[:, cols], b, detA))
+end
+# All k-subsets of 1:m, ordered by their largest elements first
+function _combinations(m, k)
+    k == 0 && return [Int[]]
+    m < k && return Vector{Int}[]
+    vcat(_combinations(m-1, k), [push!(c, m) for c in _combinations(m-1, k-1)])
+end
+# xᵢ = det(Aᵢ)/det(A), where Aᵢ is A with column i replaced by b
+function _cramer(A, b, detA)
+    map(axes(A, 2)) do i
+        Ai = copy(A)
+        Ai[:, i] = b
+        _det(Ai) / detA
     end
 end
+_det(A) = Symbolics.unwrap(LinearAlgebra.det(Symbolics.Num.(A); laplace=true))
+
+_within_limit(ex, limit) = isnothing(limit) || _nleaves(ex) <= limit
+# Leaves of the expression tree. Shared subtrees count each time they appear, as they
+# would in generated code, but are only walked once.
+function _nleaves(ex, cache=IdDict{Any,Int}())
+    iscall(ex) || return 1
+    get!(cache, ex) do
+        sum(arg -> _nleaves(arg, cache), arguments(ex); init=0)
+    end
+end
+
+_is_literal_zero(a) = (a = unwrap_const(a); a isa Number && iszero(a))
+_is_literal_unit(a) = (a = unwrap_const(a); a isa Number && isone(abs(a)))
 
 """
 Dependency type of an equation w.r.t. a state variable:
@@ -710,16 +875,13 @@ function _build_coeff_mat(lineqs, obseqs, match_states::Vector, all_states::Vect
         a, b, lin = linex(eq)
         if !lin
             return :unsolvable
-        elseif isequal(unwrap_const(a), 0)
+        elseif _is_literal_zero(a)
             return :none
+        elseif _is_literal_unit(a)
+            return :explicit
         else
-            a_val = unwrap_const(a)
-            if a_val isa Number && (isequal(a_val, 1) || isequal(a_val, -1))
-                return :explicit
-            else
-                coeff_vars = get_variables_deriv(a_val)
-                return isdisjoint(coeff_vars, all_states_set) ? :linear_const : :linear_state
-            end
+            coeff_vars = get_variables_deriv(unwrap_const(a))
+            return isdisjoint(coeff_vars, all_states_set) ? :linear_const : :linear_state
         end
     end
 
