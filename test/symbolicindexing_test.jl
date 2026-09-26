@@ -381,7 +381,7 @@ end
             if b.allocs != 0
                 println(idx, " => ", b.allocs, " allocations")
             end
-            @test b.allocs <= 2 # 2 are used to create an array
+            @test b.allocs <= 3 # 2 are used to create an array, coverage runs on 1.13.1 add a third
         end
         @info "Test parameter_index"
         for idx in idxtypes
@@ -390,7 +390,7 @@ end
             if b.allocs != 0
                 println(idx, " => ", b.allocs, " allocations")
             end
-            @test b.allocs <= 2 # 2 are used to create an array
+            @test b.allocs <= 3 # 2 are used to create an array, coverage runs on 1.13.1 add a third
         end
         @info "Test observed"
         for idx in idxtypes
