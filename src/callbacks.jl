@@ -409,6 +409,30 @@ function collect_c_or_a_indices(cw::CallbackWrapper, accessor, u_or_p)
 end
 
 ####
+#### observed function shared by the callback wrappers
+####
+# The observed function of a callback batch. It sits in an untyped field, so the callback type
+# doesn't carry the network type. The call through it is dynamic, and a dynamic call has to
+# allocate a box for a plain Float64 argument. So the time is passed in a `Ref` that is allocated
+# once, and the closure reads it back out.
+struct CallbackObsf
+    f::Any
+    tref::Base.RefValue{Float64}
+end
+function CallbackObsf(obsf)
+    f = (u, p, tref, out) -> obsf(u, p, tref[], out)
+    CallbackObsf(f, Ref(0.0))
+end
+function (o::CallbackObsf)(u, p, t, out)
+    if t isa Float64
+        o.tref[] = t
+        o.f(u, p, o.tref, out)
+    else
+        o.f(u, p, Ref(t), out)
+    end
+end
+
+####
 #### wrapping of continuous callbacks
 ####
 struct ContinuousCallbackWrapper{T<:ComponentCallback,C,ST<:SymbolicIndex} <: CallbackWrapper
@@ -479,7 +503,7 @@ function _batch_condition(ccw::ContinuousCallbackWrapper)
     psymidxs = collect_c_or_a_indices(ccw, getcondition, :psym)
     ucache = DiffCache(zeros(length(usymidxs)), ad_chunksize(ccw.nw.im))
 
-    obsf = SII.observed(ccw.nw, usymidxs)
+    obsf = CallbackObsf(SII.observed(ccw.nw, usymidxs))
     pidxs = SII.parameter_index.(Ref(ccw.nw), psymidxs)
 
     if any(isnothing, pidxs)
@@ -662,7 +686,7 @@ function _batch_condition(dcw::DiscreteCallbackWrapper)
     psymidxs = collect_c_or_a_indices(dcw, getcondition, :psym)
     ucache = DiffCache(zeros(length(usymidxs)), ad_chunksize(dcw.nw.im))
 
-    obsf = SII.observed(dcw.nw, usymidxs)
+    obsf = CallbackObsf(SII.observed(dcw.nw, usymidxs))
     pidxs = SII.parameter_index.(Ref(dcw.nw), psymidxs)
 
     if any(isnothing, pidxs)
@@ -699,7 +723,7 @@ function _batch_affect(dcw::DiscreteCallbackWrapper)
     cusymidxs = collect_c_or_a_indices(dcw, getcondition, :sym)
     cpsymidxs = collect_c_or_a_indices(dcw, getcondition, :psym)
     cucache = DiffCache(zeros(length(cusymidxs)), ad_chunksize(dcw.nw.im))
-    cobsf = SII.observed(dcw.nw, cusymidxs)
+    cobsf = CallbackObsf(SII.observed(dcw.nw, cusymidxs))
     cpidxs = SII.parameter_index.(Ref(dcw.nw), cpsymidxs)
 
     # Setup for affect execution
