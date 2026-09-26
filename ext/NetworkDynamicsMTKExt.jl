@@ -21,7 +21,7 @@ using SymbolicIndexingInterface: SymbolicIndexingInterface as SII
 using NetworkDynamics: NetworkDynamics, set_metadata!, ComponentPostprocessing,
                        PureFeedForward, FeedForward, NoFeedForward, PureStateMap,
                        MultipleOutputWrapper, inline_repr, multiline_repr,
-                       AliasMap, set_aliasmap!,
+                       AliasMap,
                        ResolutionRule, set_obsrules!,
                        assert_initformula_compat, assert_guessformula_compat
 import NetworkDynamics: VertexModel, EdgeModel, AnnotatedSym, InitFormula, add_initformula!, GuessFormula, add_guessformula!
@@ -134,9 +134,8 @@ function VertexModel(
     mass_matrix = gen.mass_matrix
     c = VertexModel(;f, g, sym, insym, outsym, psym, obssym,
             obsf, mass_matrix, ff=gen.fftype, name, extin=extin_nwidx,
-            allow_output_sym_clash=true, kwargs...)
+            aliasmap=gen.aliasmap, allow_output_sym_clash=true, kwargs...)
     set_metadata!(c, :observed, gen.observed)
-    set_aliasmap!(c, gen.aliasmap)
     set_obsrules!(c, build_obsrules(gen.observed, gen.outputeqs, gen.equations, gen.aliasmap, gen.iv))
     set_metadata!(c, :equations, gen.equations)
     set_metadata!(c, :full_equations, gen.full_equations)
@@ -292,9 +291,8 @@ function EdgeModel(
     mass_matrix = gen.mass_matrix
     c = EdgeModel(;f, g, sym, insym, outsym, psym, obssym,
             obsf, mass_matrix, ff=gen.fftype, name, extin=extin_nwidx,
-            allow_output_sym_clash=true, kwargs...)
+            aliasmap=gen.aliasmap, allow_output_sym_clash=true, kwargs...)
     set_metadata!(c, :observed, gen.observed)
-    set_aliasmap!(c, gen.aliasmap)
     set_obsrules!(c, build_obsrules(gen.observed, gen.outputeqs, gen.equations, gen.aliasmap, gen.iv))
     set_metadata!(c, :equations, gen.equations)
     set_metadata!(c, :full_equations, gen.full_equations)

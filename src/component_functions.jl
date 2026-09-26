@@ -265,6 +265,7 @@ struct VertexModel <: ComponentModel
     # observed
     obsf::Any
     obssym::Vector{Symbol}
+    aliasmap::Dict{Symbol,Symbol} # an `AliasMap`, empty if the component has no aliases
     # metadata
     symmetadata::Dict{Symbol,Dict{Symbol, Any}}
     metadata::Dict{Symbol,Any}
@@ -293,6 +294,7 @@ Optional Arguments:
 - `vidx`: Index of the vertex in the graph, enables graphless constructor.
 - `ff`: `FeedForwardType` of component. Will be typically infered from `g` automaticially.
 - `obssym`/`obsf`: Define additional "observable" states.
+- `aliasmap`: [`AliasMap`](@ref) of observables which are pure aliases of other symbols.
 - `symmetadata`/`metadata`: Provide prefilled metadata dictionaries.
 - `extin=nothing`:
    Define "external" inputs for the model with Network indices, i.e. `extin=[VIndex(7,:x), ..]`.
@@ -320,6 +322,7 @@ struct EdgeModel <: ComponentModel
     # observed
     obsf::Any
     obssym::Vector{Symbol}
+    aliasmap::Dict{Symbol,Symbol} # an `AliasMap`, empty if the component has no aliases
     # metadata
     symmetadata::Dict{Symbol,Dict{Symbol, Any}}
     metadata::Dict{Symbol,Any}
@@ -351,6 +354,7 @@ Optional Arguments:
 - `src`/`dst`: Index or name of the vertices at src and dst end. Enables graphless constructor.
 - `ff`: `FeedForwardType` of component. Will be typically infered from `g` automaticially.
 - `obssym`/`obsf`: Define additional "observable" states.
+- `aliasmap`: [`AliasMap`](@ref) of observables which are pure aliases of other symbols.
 - `symmetadata`/`metadata`: Provide prefilled metadata dictionaries.
 - `extin=nothing`:
    Define "external" inputs for the model with Network indices, i.e. `extin=[VIndex(7,:x), ..]`.
@@ -521,6 +525,14 @@ extdim(c::ComponentModel) = has_external_input(c) ? length(extin(c)) : 0
 outsym_flat(c::ComponentModel) = c._outsym_flat
 obssym_all(c::ComponentModel) = c._obssym_all
 
+"""
+    get_aliasmap(c::ComponentModel)
+    get_aliasmap(nw::Network, idx::Union{VIndex,EIndex})
+
+Gets the [`AliasMap`](@ref) of the component. It is empty if the component has no aliases.
+"""
+get_aliasmap(c::ComponentModel) = c.aliasmap
+
 # normalized means, that we'll always return a tuple of values, thus we can generalize better over Edges/Vertices
 insym_normalized(c::EdgeModel) = values(insym(c))
 insym_normalized(c::VertexModel) = (insym(c),)
@@ -609,6 +621,7 @@ Base.@nospecializeinfer function _construct_comp(::Type{T}, @nospecialize(kwargs
     end
 
     c = T(args...)
+    isempty(c.aliasmap) || assert_aliasmap_compat(c, c.aliasmap)
     check && chk_component(c; ad=false)
     return c
 end
@@ -964,6 +977,11 @@ Base.@nospecializeinfer function _fill_defaults(T, @nospecialize(kwargs))
             throw(ArgumentError("Mass matrix must be a vector, square matrix,\
                                     a uniform scaling, or scalar. Got $(mm)."))
         end
+    end
+
+    am = get!(dict, :aliasmap, AliasMap())
+    if !(am isa AbstractDict{Symbol,Symbol})
+        throw(ArgumentError("Alias map must be an AliasMap, got $(typeof(am))."))
     end
 
     ####

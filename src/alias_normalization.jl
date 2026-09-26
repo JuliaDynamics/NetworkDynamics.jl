@@ -21,7 +21,7 @@ input port) canonicalizes onto its *terminal observable* instead: nothing can be
 there, but the names unify, so a formula writing one member and one reading another meet on
 the same symbol.
 
-Stored as component metadata under the key `:aliasmap`, see [`set_aliasmap!`](@ref).
+Passed to the component constructors as the `aliasmap` keyword, see [`get_aliasmap`](@ref).
 """
 const AliasMap = Dict{Symbol, Symbol}
 

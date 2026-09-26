@@ -305,6 +305,9 @@ subsym_has_idx(sym::Symbol, syms) = sym ∈ syms
 subsym_has_idx(idx::NumericSubIndex{Int}, syms) = 1 ≤ idx.idx ≤ length(syms)
 subsym_to_idx(sym::Symbol, syms) = findfirst(isequal(sym), syms)
 subsym_to_idx(idx::NumericSubIndex{Int}, _) = idx.idx
+# aliases are looked up under their canonical name
+canonical_subidx(cf, sym::Symbol) = canonicalize(get_aliasmap(cf), sym)
+canonical_subidx(_, idx) = idx
 
 ####
 #### Iterator/Broadcast interface for ArraySymbolic types
@@ -396,7 +399,7 @@ end
 _is_variable(nw::Network, sni) = false
 function _is_variable(nw::Network, sni::POTENTIAL_SCALAR_SIDX)
     cf = getcomp(nw, sni)
-    return subsym_has_idx(sni.subidx, sym(cf))
+    return subsym_has_idx(canonical_subidx(cf, sni.subidx), sym(cf))
 end
 
 function SII.variable_index(nw::Network, sni)
@@ -411,7 +414,7 @@ end
 function _variable_index(nw::Network, sni::POTENTIAL_SCALAR_SIDX)
     cf = getcomp(nw, sni)
     range = getcomprange(nw, sni)
-    idx = subsym_to_idx(sni.subidx, sym(cf))
+    idx = subsym_to_idx(canonical_subidx(cf, sni.subidx), sym(cf))
     isnothing(idx) ? nothing : range[idx]
 end
 
@@ -452,7 +455,7 @@ end
 _is_parameter(nw::Network, sni) = false
 function _is_parameter(nw::Network, sni::POTENTIAL_SCALAR_PIDX)
     cf = getcomp(nw, sni)
-    return subsym_has_idx(sni.subidx, psym(cf))
+    return subsym_has_idx(canonical_subidx(cf, sni.subidx), psym(cf))
 end
 
 function SII.parameter_index(nw::Network, sni)
@@ -467,7 +470,7 @@ end
 function _parameter_index(nw::Network, sni::POTENTIAL_SCALAR_PIDX)
     cf = getcomp(nw, sni)
     range = getcompprange(nw, sni)
-    idx = subsym_to_idx(sni.subidx, psym(cf))
+    idx = subsym_to_idx(canonical_subidx(cf, sni.subidx), psym(cf))
     isnothing(idx) ? nothing : range[idx]
 end
 
