@@ -1,7 +1,8 @@
 struct InitFuncWrapper
     f::Any
 end
-(w::InitFuncWrapper)(args...) = w.f(args...)
+# fixed arity: a varargs call would allocate the argument tuple
+(w::InitFuncWrapper)(du, u, p) = w.f(du, u, p)
 
 struct NetworkInitError <: Exception
     msg::String

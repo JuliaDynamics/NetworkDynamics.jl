@@ -279,7 +279,7 @@ end
         apply_bound_transformation=true);
     du = zeros(length(prob.f.resid_prototype));
     b = @b $(prob.f)($du, $(prob.u0), nothing) evals=2
-    @test b.allocs == 1
+    @test b.allocs == 0
 end
 
 @testset "guess sitting exactly on a bound" begin
@@ -600,7 +600,7 @@ end
         apply_bound_transformation=true);
     du = zeros(length(prob.f.resid_prototype));
     b = @b $(prob.f.f)($du, $(prob.u0), nothing) evals=2
-    @test b.allocs == 1
+    @test b.allocs == 0
 
     @test_throws ArgumentError set_initconstraint!(vm, @initconstraint :wrong_symbol)
 
