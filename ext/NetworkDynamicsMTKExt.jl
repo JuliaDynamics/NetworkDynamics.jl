@@ -21,7 +21,7 @@ using SymbolicIndexingInterface: SymbolicIndexingInterface as SII
 using NetworkDynamics: NetworkDynamics, set_metadata!, ComponentPostprocessing,
                        PureFeedForward, FeedForward, NoFeedForward, PureStateMap,
                        MultipleOutputWrapper, inline_repr, multiline_repr,
-                       AliasMap, set_aliasmap!,
+                       AliasMap,
                        ResolutionRule, set_obsrules!,
                        assert_initformula_compat, assert_guessformula_compat
 import NetworkDynamics: VertexModel, EdgeModel, AnnotatedSym, InitFormula, add_initformula!, GuessFormula, add_guessformula!
@@ -134,9 +134,8 @@ function VertexModel(
     mass_matrix = gen.mass_matrix
     c = VertexModel(;f, g, sym, insym, outsym, psym, obssym,
             obsf, mass_matrix, ff=gen.fftype, name, extin=extin_nwidx,
-            allow_output_sym_clash=true, kwargs...)
+            aliasmap=gen.aliasmap, allow_output_sym_clash=true, kwargs...)
     set_metadata!(c, :observed, gen.observed)
-    set_aliasmap!(c, gen.aliasmap)
     set_obsrules!(c, build_obsrules(gen.observed, gen.outputeqs, gen.equations, gen.aliasmap, gen.iv))
     set_metadata!(c, :equations, gen.equations)
     set_metadata!(c, :full_equations, gen.full_equations)
@@ -292,9 +291,8 @@ function EdgeModel(
     mass_matrix = gen.mass_matrix
     c = EdgeModel(;f, g, sym, insym, outsym, psym, obssym,
             obsf, mass_matrix, ff=gen.fftype, name, extin=extin_nwidx,
-            allow_output_sym_clash=true, kwargs...)
+            aliasmap=gen.aliasmap, allow_output_sym_clash=true, kwargs...)
     set_metadata!(c, :observed, gen.observed)
-    set_aliasmap!(c, gen.aliasmap)
     set_obsrules!(c, build_obsrules(gen.observed, gen.outputeqs, gen.equations, gen.aliasmap, gen.iv))
     set_metadata!(c, :equations, gen.equations)
     set_metadata!(c, :full_equations, gen.full_equations)
@@ -538,8 +536,10 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
 
     obsstates = [eq.lhs for eq in obseqs_sorted]
     if !isempty(obsstates)
-        obsformulas = _get_formulas([s ~ s for s in obsstates], obs_subs)
-        _, obsf_ip = build_function(obsformulas, states, inputss..., params, iv; cse=false, expression)
+        obsmask = unwrap(Symbolics.variable(:ˍ₋obsmask))
+        obsformulas, columns, needs_input = _get_masked_obsformulas(obsstates, obs_subs, allinputs, obsmask)
+        _, _obsf = build_function(obsformulas, states, inputss..., params, iv, obsmask; cse=false, expression)
+        obsf_ip = NetworkDynamics.DependencyAwareObsf(_obsf, columns, needs_input)
     else
         obsf_ip = nothing
     end
@@ -592,8 +592,54 @@ function _get_formulas(eqs, obs_subs)
     # implicit eqs have 0 lhs, explicit eqs are already captured via assignment, output their lhs
     out = [isequal(unwrap_const(eq.lhs), 0) ? eq.rhs : eq.lhs for eq in eqs]
 
-    [Let(vcat(obs_assignments, eqs_assignments), out[1], false), out[2:end]...]
+    formulas = Any[Let(vcat(obs_assignments, eqs_assignments), out[1], false)]
+    append!(formulas, @view out[2:end])
 end
+
+# Like `_get_formulas` for the observables, but every assignment is guarded by `mask`.
+# Also returns what `DependencyAwareObsf` needs: per observable, the assignments it needs and
+# whether one of them reads an input.
+function _get_masked_obsformulas(obsstates, obs_subs, allinputs, mask)
+    # filter out obs_subs which are not needed for any observable
+    deps = _collect_deps_on_obs(obsstates, obs_subs)
+    assigned = [k for k in keys(obs_subs) if k ∈ deps]
+    assignments = map(enumerate(assigned)) do (j, k)
+        Assignment(k, ifelse(_obs_required(mask, j), obs_subs[k], NaN))
+    end
+
+    # position of each assigned symbol, also its bit in the mask
+    assignment_index = Dict(k => j for (j, k) in enumerate(assigned))
+    assignment_rhs_syms = [_all_rhs_symbols(obs_subs[k]) for k in assigned]
+
+    # for each assignment, mark itself and every assignment it needs. The assignments are
+    # topologically sorted, so the columns of its dependencies are already complete.
+    assignment_columns = Vector{BitVector}(undef, length(assigned))
+    for (j, syms) in enumerate(assignment_rhs_syms)
+        col = falses(length(assigned))
+        col[j] = true
+        for s in syms
+            haskey(assignment_index, s) || continue
+            dep = assignment_index[s]
+            dep < j || error("Observed assignments are not topologically sorted.")
+            NetworkDynamics._or!(col, assignment_columns[dep])
+        end
+        assignment_columns[j] = col
+    end
+    obs_columns = [assignment_columns[assignment_index[s]] for s in obsstates]
+
+    # an observable needs the inputs if any of its assignments reads one
+    inputs = Set{ST}(allinputs) # including ext inputs
+    assignment_reads_input = BitVector(any(∈(inputs), syms) for syms in assignment_rhs_syms)
+    obs_needs_input = BitVector(any(assignment_reads_input .& col) for col in obs_columns)
+
+    formulas = Any[Let(assignments, obsstates[1], false)]
+    append!(formulas, @view obsstates[2:end])
+    formulas, obs_columns, obs_needs_input
+end
+_obs_required(::Nothing, j) = true
+_obs_required(mask, j) = @inbounds mask[j]
+Symbolics.@register_symbolic _obs_required(mask, j::Int)::Bool
+
 function _collect_deps_on_obs(terms, obs_subs)
     deps = Set{ST}()
     for term in terms
