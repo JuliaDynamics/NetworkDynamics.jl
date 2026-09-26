@@ -292,6 +292,12 @@ PolyesterAggregator
 KAAggregator
 ```
 
+## Component and Network Checks
+```@docs
+chk_component
+chk_network
+```
+
 ## Utils
 ```@docs
 SciMLBase.ODEProblem(::NetworkDynamics.Network, ::NetworkDynamics.NWState, ::Any)

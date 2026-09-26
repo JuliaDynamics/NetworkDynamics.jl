@@ -609,7 +609,7 @@ Base.@nospecializeinfer function _construct_comp(::Type{T}, @nospecialize(kwargs
     end
 
     c = T(args...)
-    check && chk_component(c)
+    check && chk_component(c; ad=false)
     return c
 end
 

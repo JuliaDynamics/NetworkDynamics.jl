@@ -150,7 +150,7 @@ include("linear_analysis.jl")
 include("show.jl")
 
 const CHECK_COMPONENT = Ref(true)
-export chk_component
+export chk_component, chk_network
 include("doctor.jl")
 
 # additional utils, which depend on specific types beeing defined so they should be

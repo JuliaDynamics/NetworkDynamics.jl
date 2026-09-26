@@ -7,7 +7,13 @@
   models in input order. Inputs without parallel edges still produce a `SimpleGraph` or
   `SimpleDiGraph` as before, unless `legacy_graph=false` is passed. `EIndex(src => dst)` throws
   if it matches more than one edge.
-- `chk_component` warns on allocations in f or g function of model
+- `chk_component` reports allocations in f or g function of model
+- `chk_component(c; ad=true)` also calls f and g with ForwardDiff Duals and reports if they error
+  or allocate only for Duals. Construction runs the check without this Dual pass.
+- New `chk_network(nw)` checks the network rhs for allocations with Float64 and Duals and lists
+  the component batches which allocate.
+- Fix: calling the network with Duals allocated on every call, due to the unspecialized element
+  type in the cache getters.
 - **DAE (re)initialization starts with Newton also without a `jac_prototype`.**
   The default `initializealg` of `ODEProblem(nw, ...)` now always uses the Jacobian-based
   polyalg (NewtonRaphson, then TrustRegion and LevenbergMarquardt) instead of the upstream

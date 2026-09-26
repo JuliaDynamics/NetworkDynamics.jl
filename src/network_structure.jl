@@ -147,7 +147,9 @@ Extracts the underlying graph of the network.
 """
 get_graph(nw::Network) = nw.im.g
 
-function get_output_cache(nw::Network, T)
+# `::Type{T}` makes Julia specialize on T, which it doesn't for a Type argument that is only
+# passed on. Otherwise `get_tmp` is dispatched at runtime and boxes the Dual buffers.
+function get_output_cache(nw::Network, ::Type{T}) where {T}
     if T <: AbstractFloat && eltype(nw.caches.output.du) != T
         throw(ArgumentError("Network caches are initialized with $(eltype(nw.caches.output.du)) \
             but is used for $T data! This means you probably used `adapt` on the Network to handle \
@@ -157,8 +159,8 @@ function get_output_cache(nw::Network, T)
     o = get_tmp(nw.caches.output, T)
     fill!(o, convert(eltype(o), NaN))
 end
-get_aggregation_cache(nw::Network, T) = get_tmp(nw.caches.aggregation, T)
-function get_extinput_cache(nw::Network, T)
+get_aggregation_cache(nw::Network, ::Type{T}) where {T} = get_tmp(nw.caches.aggregation, T)
+function get_extinput_cache(nw::Network, ::Type{T}) where {T}
     ext = get_tmp(nw.caches.external, T)
     fill!(ext, convert(eltype(ext), NaN))
 end
