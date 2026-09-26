@@ -77,13 +77,15 @@ vm = VertexModel(daov, [:i], [:o]; extin=[:e => VIndex(2, :x)])
 
     # `required=` builds its mask on every call, the other styles must not allocate. This is
     # measured behind a function barrier, `@b` does not see an unspecialized varargs call.
-    allocs_plain(o, out, args) = @allocated o(out, args...)
-    allocs_mask(o, out, args, mask) = @allocated o(out, args...; mask)
+    # The arguments are passed one by one like the real callers do, splatting a tuple into
+    # the call allocates on Julia 1.10.
+    allocs_plain(o, out, u, i, e, p, t) = @allocated o(out, u, i, e, p, t)
+    allocs_mask(o, out, u, i, e, p, t, mask) = @allocated o(out, u, i, e, p, t; mask)
     out = zeros(6)
     mask = assignment_mask(o, [2, 3])
-    allocs_plain(o, out, args); allocs_mask(o, out, args, mask)
-    @test allocs_plain(o, out, args) == 0
-    @test allocs_mask(o, out, args, mask) == 0
+    allocs_plain(o, out, args...); allocs_mask(o, out, args..., mask)
+    @test allocs_plain(o, out, args...) == 0
+    @test allocs_mask(o, out, args..., mask) == 0
 
     # copies share the obsf, components from the same system are equal
     vm2 = VertexModel(daov, [:i], [:o]; extin=[:e => VIndex(2, :x)])

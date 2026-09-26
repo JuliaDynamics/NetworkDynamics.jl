@@ -862,8 +862,8 @@ function (owb::EdgeObsfunBatch)(ret, u, outbuf, aggbuf, extbuf, p, t)
     nothing
 end
 # a mask only exists if the obsf supports it
-_obsf_with_mask(obsf, ::Nothing, args...) = obsf(args...)
-_obsf_with_mask(obsf, mask, args...) = obsf(args...; mask)
+_obsf_with_mask(obsf::F, ::Nothing, args::Vararg{Any,N}) where {F,N} = obsf(args...)
+_obsf_with_mask(obsf::F, mask, args::Vararg{Any,N}) where {F,N} = obsf(args...; mask)
 
 ####
 #### Default values
