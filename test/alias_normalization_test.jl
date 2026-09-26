@@ -146,9 +146,10 @@ end
 using ModelingToolkitBase
 using ModelingToolkitBase: t_nounits as t, D_nounits as Dt
 using SciCompDSL
-using NetworkDynamics: settable_symbols, obssym, get_aliasmap, delete_aliasmap!,
+using NetworkDynamics: settable_symbols, obssym, get_aliasmap,
                        dim, delete_metadata!, ResolutionRule
 using Graphs: path_graph
+import SymbolicIndexingInterface as SII
 
 # One bus carrying every shape the resolution graph has to tell apart: a sign-flipped relation,
 # a chain of them, an observable defined by a parameter, a genuinely algebraic observable, a
@@ -210,8 +211,7 @@ end
 
     # with no aliasmap, an obs-targeting formula is still attachable — it degrades from
     # "transported to the canonical symbol" to "pin on the obs"
-    bare = copy(VM)
-    delete_aliasmap!(bare)
+    bare = VertexModel(VM; aliasmap=AliasMap())
     @test add_initformula!(bare, @initformula :θ = :u_i) !== nothing
     @test add_guessformula!(bare, @guessformula :θ = :u_i) !== nothing
 end
@@ -940,4 +940,50 @@ end
     @test_throws r"Inconsistent" init(y -> 2y; x=2.0)
     @test init(y -> 2y; x=2.0, weak=true)[:x] == 2.0
     @test_throws r"could not be resolved" init(identity; x=nothing)
+end
+
+@testset "symbolic indexing through aliases" begin
+    @component function AliasVertex(; name)
+        @variables begin
+            x(t)=1
+            i(t), [input=true]
+            o(t), [output=true]
+            xa(t)
+            pa(t)
+            oa(t)
+        end
+        @parameters K=2
+        System([Dt(x) ~ -K*x + i, o ~ x^2, xa ~ x, pa ~ K, oa ~ o], t; name)
+    end
+    v = VertexModel(AliasVertex(; name=:av), [:i], [:o])
+    @test get_aliasmap(v) == AliasMap(:xa => :x, :oa => :o)
+    # MTK does not record parameter aliases, pass one by hand to cover that path as well
+    v = VertexModel(v; aliasmap=AliasMap(:xa => :x, :oa => :o, :pa => :K))
+
+    edge = EdgeModel(g=AntiSymmetric((y, u_s, u_d, p, t) -> y .= u_d .- u_s), outsym=[:y], insym=[:o])
+    nw = Network(path_graph(2), v, edge)
+    xa, pa, oa = VIndex(1, :xa), VIndex(1, :pa), VIndex(1, :oa)
+
+    # aliases of states and parameters classify as their slot, but stay observables as well
+    @test SII.is_variable(nw, xa)
+    @test SII.variable_index(nw, xa) == SII.variable_index(nw, VIndex(1, :x))
+    @test SII.is_parameter(nw, pa)
+    @test SII.parameter_index(nw, pa) == SII.parameter_index(nw, VIndex(1, :K))
+    @test SII.is_observed(nw, xa) && SII.is_observed(nw, pa)
+    @test xa ∉ SII.variable_symbols(nw)
+    @test pa ∉ SII.parameter_symbols(nw)
+    # an output alias is only an observable
+    @test !SII.is_variable(nw, oa) && SII.is_observed(nw, oa)
+
+    s = NWState(nw)
+    s[xa] = 3.0
+    @test s[VIndex(1, :x)] == 3.0
+    s[pa] = 5.0
+    @test s.p[VIndex(1, :K)] == 5.0
+    @test s[oa] == 9.0
+
+    # reading state and parameter aliases skips the buffer fill
+    outbuf() = NetworkDynamics.PreallocationTools.get_tmp(nw.caches.output, Float64)
+    @test SII.observed(nw, [xa, pa])(uflat(s), pflat(s), 0.0) == [3.0, 5.0]
+    @test all(isnan, outbuf())
 end
