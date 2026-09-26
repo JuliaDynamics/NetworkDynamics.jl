@@ -340,7 +340,7 @@ SciMLBase.__has_sys(nw::Network) = true
 SciMLBase.__has_jac_prototype(nw::Network) = !isnothing(nw.jac_prototype)
 function Base.getproperty(nw::Network, s::Symbol)
     if s===:sys
-        nw
+        NetworkSys(nw)
     elseif s===:jac_prototype
         getfield(nw, :jac_prototype)[]
     else

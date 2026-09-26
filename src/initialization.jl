@@ -71,7 +71,7 @@ SciMLBase.__has_sys(nw::NetworkFixedT) = true
 SciMLBase.__has_jac_prototype(nw::NetworkFixedT) = !isnothing(nw.nw.jac_prototype)
 function Base.getproperty(nw::NetworkFixedT, s::Symbol)
     if s===:sys
-        nw.nw
+        NetworkSys(nw.nw)
     elseif s===:jac_prototype
         getfield(nw.nw, :jac_prototype)[]
     else
