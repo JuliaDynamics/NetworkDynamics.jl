@@ -157,7 +157,8 @@ function get_output_cache(nw::Network, ::Type{T}) where {T}
             of type $T"))
     end
     o = get_tmp(nw.caches.output, T)
-    fill!(o, convert(eltype(o), NaN))
+    eltype(o) <: AbstractFloat && fill!(o, convert(eltype(o), NaN))
+    o
 end
 get_aggregation_cache(nw::Network, ::Type{T}) where {T} = get_tmp(nw.caches.aggregation, T)
 function get_extinput_cache(nw::Network, ::Type{T}) where {T}
