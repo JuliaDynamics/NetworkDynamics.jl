@@ -58,6 +58,7 @@ export FeedForwardType, PureFeedForward, FeedForward, NoFeedForward, PureStateMa
 export dim, sym, pdim, psym, obssym, hasinsym, insym, hasindim, indim,
        outdim, outsym, fftype, metadata, symmetadata
 include("component_functions.jl")
+include("dependency_aware_obsf.jl")
 
 export ExecutionStyle, SequentialExecution, KAExecution, ThreadedExecution, PolyesterExecution
 include("executionstyles.jl")

@@ -51,6 +51,7 @@ if !BUILDKITE
     includetest!("alias_normalization_test.jl");
     includetest!("init_resolution_test.jl");
     includetest!("obsrules_test.jl");
+    includetest!("dependency_aware_obsf_test.jl");
     includetest!("linear_analysis_test.jl");
     includetest!("show_test.jl");
     includetest!("spinners_test.jl");

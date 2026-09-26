@@ -618,6 +618,9 @@ function SII.observed(nw::Network, snis)
     total_obs_dim = 0
     obsfunwrappers = Dict{SymbolicIndex, ObsfunWrapper}()
     obsindex = Vector{Int}()
+    # the obsf always receives the buffers, but they only need to be filled if a requested
+    # observable actually reads an input
+    obs_needs_buf = false
 
     for (i, sni) in enumerate(_snis)
         if SII.is_variable(nw, sni)
@@ -641,6 +644,8 @@ function SII.observed(nw::Network, snis)
                     wrapper = obsfunwrappers[key]
                 end
                 arraymapping[i] = (OBS_TYPE, wrapper.outr[idx])
+                push!(wrapper.required_obsidxs, idx) # for depenceny aware obs eval
+                obs_needs_buf |= requires_input(obsf(cf), idx)
             elseif hasinsym(cf) && sni.subidx ∈ insym_all(cf) # found in input
                 if sni isa VIndex
                     idx = findfirst(isequal(sni.subidx), insym_all(cf))
@@ -662,7 +667,7 @@ function SII.observed(nw::Network, snis)
             end
         end
     end
-    needsbuf = any(m -> m[1] ∈ (OUT_TYPE, AGG_TYPE, OBS_TYPE), arraymapping)
+    needsbuf = obs_needs_buf || any(m -> m[1] ∈ (OUT_TYPE, AGG_TYPE), arraymapping)
 
     # create a tuple (or vector if many) batches (identical obsf per batch)
     batched_obsf = if isempty(obsfunwrappers)
@@ -755,6 +760,7 @@ struct ObsfunWrapper
     edstr::Union{UnitRange{Int}, Nothing} # edge
     extr::UnitRange{Int}
     pr::UnitRange{Int}
+    required_obsidxs::Vector{Int} # requested observables, used for the assignment mask
 end
 function get_obsfun_wrapper(nw::Network, cf::VertexModel, vi, prev_last_idx)
     N = length(cf.obssym)
@@ -766,7 +772,7 @@ function get_obsfun_wrapper(nw::Network, cf::VertexModel, vi, prev_last_idx)
     extr = nw.im.v_ext[vi]
     pr   = nw.im.v_para[vi]
     _obsf = obsf(cf)
-    wrap = ObsfunWrapper(:vertex, _obsf, outr, ur, aggr, nothing, nothing, extr, pr)
+    wrap = ObsfunWrapper(:vertex, _obsf, outr, ur, aggr, nothing, nothing, extr, pr, Int[])
     return wrap, last_idstx
 end
 function get_obsfun_wrapper(nw::Network, cf::EdgeModel, ei, prev_last_idx)
@@ -781,15 +787,17 @@ function get_obsfun_wrapper(nw::Network, cf::EdgeModel, ei, prev_last_idx)
     extr    = nw.im.e_ext[ei]
     pr      = nw.im.e_para[ei]
     _obsf = obsf(cf)
-    wrap = ObsfunWrapper(:edge, _obsf, outr, ur, nothing, esrcr, edstr, extr, pr)
+    wrap = ObsfunWrapper(:edge, _obsf, outr, ur, nothing, esrcr, edstr, extr, pr, Int[])
     return wrap, last_idstx
 end
 function batchequal(a::ObsfunWrapper, b::ObsfunWrapper)
     a.type == b.type && a.obsf == b.obsf
 end
 
-struct VertexObsfunBatch{O, HAS_EXT}
+# `masks` holds one assignment mask per member (`nothing` if the obsf can't skip observables)
+struct VertexObsfunBatch{O, HAS_EXT, M}
     obsf::O
+    masks::M
     outrs::Vector{UnitRange{Int}}
     urs::Vector{UnitRange{Int}}
     aggrs::Vector{UnitRange{Int}}
@@ -797,8 +805,9 @@ struct VertexObsfunBatch{O, HAS_EXT}
     prs::Vector{UnitRange{Int}}
 end
 
-struct EdgeObsfunBatch{O, HAS_EXT}
+struct EdgeObsfunBatch{O, HAS_EXT, M}
     obsf::O
+    masks::M
     outrs::Vector{UnitRange{Int}}
     urs::Vector{UnitRange{Int}}
     esrcrs::Vector{UnitRange{Int}}
@@ -814,14 +823,15 @@ function create_obsfun_batch(wrappers)
     urs   = [w.ur for w in wrappers]
     extrs = [w.extr for w in wrappers]
     prs   = [w.pr for w in wrappers]
+    masks = [assignment_mask(obsf, w.required_obsidxs) for w in wrappers]
 
     if type == :vertex
         aggrs = [w.aggr for w in wrappers]
-        VertexObsfunBatch{typeof(obsf), hasext}(obsf, outrs, urs, aggrs, extrs, prs)
+        VertexObsfunBatch{typeof(obsf), hasext, typeof(masks)}(obsf, masks, outrs, urs, aggrs, extrs, prs)
     else # type == :edge
         esrcrs = [w.esrcr for w in wrappers]
         edstrs = [w.edstr for w in wrappers]
-        EdgeObsfunBatch{typeof(obsf), hasext}(obsf, outrs, urs, esrcrs, edstrs, extrs, prs)
+        EdgeObsfunBatch{typeof(obsf), hasext, typeof(masks)}(obsf, masks, outrs, urs, esrcrs, edstrs, extrs, prs)
     end
 end
 has_external_input(ow::VertexObsfunBatch{O,HAS_EXT}) where {O,HAS_EXT} = HAS_EXT
@@ -833,7 +843,7 @@ function (owb::VertexObsfunBatch)(ret, u, outbuf, aggbuf, extbuf, p, t)
         else
             (view(aggbuf, owb.aggrs[i]), )
         end
-        owb.obsf(view(ret, owb.outrs[i]), view(u, owb.urs[i]), ins..., view(p, owb.prs[i]), t)
+        _obsf_with_mask(owb.obsf, owb.masks[i], view(ret, owb.outrs[i]), view(u, owb.urs[i]), ins..., view(p, owb.prs[i]), t)
     end
     nothing
 end
@@ -844,10 +854,13 @@ function (owb::EdgeObsfunBatch)(ret, u, outbuf, aggbuf, extbuf, p, t)
         else
             (view(outbuf, owb.esrcrs[i]), view(outbuf, owb.edstrs[i]))
         end
-        owb.obsf(view(ret, owb.outrs[i]), view(u, owb.urs[i]), ins..., view(p, owb.prs[i]), t)
+        _obsf_with_mask(owb.obsf, owb.masks[i], view(ret, owb.outrs[i]), view(u, owb.urs[i]), ins..., view(p, owb.prs[i]), t)
     end
     nothing
 end
+# a mask only exists if the obsf supports it
+_obsf_with_mask(obsf, ::Nothing, args...) = obsf(args...)
+_obsf_with_mask(obsf, mask, args...) = obsf(args...; mask)
 
 ####
 #### Default values
