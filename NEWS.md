@@ -1,6 +1,16 @@
 # NetworkDynamics Release Notes
 
-## unreleased
+## v1.4.0 Changelog
+
+- **Observed functions only evaluate what is needed.** MTK components now know which observables
+  depend on which, and which of them read the component inputs. `SII.observed` only evaluates the
+  observables that were asked for and what they depend on. More importantly, it only runs the
+  full network RHS to fill the input buffers if a requested observable actually reads an input.
+  This mostly helps callbacks, which may read an observable at every interpolation point.
+- **Aliases of states and parameters resolve directly to their slot.** If `terminal.u ~ u` for a
+  state `u`, reading `terminal.u` no longer goes through the observed function. The alias map is
+  now a regular field of the component models, set with the `aliasmap` constructor keyword;
+  `set_aliasmap!`, `delete_aliasmap!` and `has_aliasmap` are removed.
 - improvements to the simplification pipeline around removing algebraic states
 - **Parallel edges.** Several edge models may now connect the same pair of vertices. The
   graphless constructor builds a `NetworkDynamics.ComponentGraph` in that case and keeps the edge
