@@ -294,7 +294,7 @@ Optional Arguments:
 - `vidx`: Index of the vertex in the graph, enables graphless constructor.
 - `ff`: `FeedForwardType` of component. Will be typically infered from `g` automaticially.
 - `obssym`/`obsf`: Define additional "observable" states.
-- `aliasmap`: [`AliasMap`](@ref) of observables which are pure aliases of other symbols.
+- `aliasmap`: AliasMap of observables which are pure aliases of other symbols.
 - `symmetadata`/`metadata`: Provide prefilled metadata dictionaries.
 - `extin=nothing`:
    Define "external" inputs for the model with Network indices, i.e. `extin=[VIndex(7,:x), ..]`.
@@ -354,7 +354,7 @@ Optional Arguments:
 - `src`/`dst`: Index or name of the vertices at src and dst end. Enables graphless constructor.
 - `ff`: `FeedForwardType` of component. Will be typically infered from `g` automaticially.
 - `obssym`/`obsf`: Define additional "observable" states.
-- `aliasmap`: [`AliasMap`](@ref) of observables which are pure aliases of other symbols.
+- `aliasmap`: AliasMap of observables which are pure aliases of other symbols.
 - `symmetadata`/`metadata`: Provide prefilled metadata dictionaries.
 - `extin=nothing`:
    Define "external" inputs for the model with Network indices, i.e. `extin=[VIndex(7,:x), ..]`.
