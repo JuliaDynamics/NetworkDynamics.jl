@@ -85,40 +85,64 @@ pdim(im::IndexManager) = im.lastidx_p
 ad_chunksize(im::IndexManager) = ForwardDiff.pickchunksize(max(dim(im), pdim(im)))
 
 
-struct Network{EX<:ExecutionStyle,G,NL,VTup,MM,CT,GBT,LM,EM}
+# Everything the RHS reads, in one object. The core is callable and does the actual work of the
+# network call, see `coreloop.jl`.
+struct NetworkCore{EX,VB,NL,GBT,LM,EM,C}
+    "execution style"
+    ex::EX
     "vertex batches of same function"
-    vertexbatches::VTup
+    vertexbatches::VB
     "network layer"
     layer::NL
-    "index manager"
-    im::IndexManager{G}
-    "lazy cache pool"
-    caches::@NamedTuple{output::CT,aggregation::CT,external::CT}
-    "mass matrix"
-    mass_matrix::MM
     "Gather buffer provider (lazy or eager)"
     gbufprovider::GBT
     "map for loopback edge gather"
     loopbackmap::LM
     "map to gather external inputs"
     extmap::EM
-    "sparsity pattern"
-    jac_prototype::Ref{Union{Nothing,SparseMatrixCSC{Bool,Int}}}
-    function Network(ex, vb, nl, im, caches, mm, gbufp, loopmap, extmap, jac_prototype)
-        new{
-            ex,typeof(im.g),typeof(nl), typeof(vb),
-            typeof(mm),eltype(caches),typeof(gbufp),
-            typeof(loopmap),typeof(extmap)
-        }(
-            vb, nl, im, caches, mm, gbufp, loopmap, extmap, jac_prototype
-        )
-    end
-end
-function ConstructionBase.constructorof(::Type{<:Network{EX}}) where {EX}
-    return (args...) -> Network(EX, args...)
+    "lazy cache pool"
+    caches::C
 end
 
-executionstyle(::Network{ex}) where {ex} = ex()
+# The core holds the component functions, so its type differs for every network. By default the
+# network holds it untyped: code taking a network then compiles once for all networks, and the
+# network call reaches the typed core through a function barrier. A `fullytyped` network holds
+# the core typed and has no barrier.
+struct Network{G,MM,TB,CR}
+    "index manager"
+    im::IndexManager{G}
+    "mass matrix"
+    mass_matrix::MM
+    "sparsity pattern"
+    jac_prototype::Ref{Union{Nothing,SparseMatrixCSC{Bool,Int}}}
+    "buffer to hand the time to an untyped core, `nothing` if fully typed"
+    tbuf::TB
+    "everything the RHS needs, see `NetworkCore`"
+    core::CR
+    function Network(core::NetworkCore, im, mm, jac_prototype; fullytyped=false)
+        jacref = if jac_prototype isa Ref
+            jac_prototype
+        else
+            Ref{Union{Nothing,SparseMatrixCSC{Bool,Int}}}(jac_prototype)
+        end
+        if fullytyped
+            new{typeof(im.g),typeof(mm),Nothing,typeof(core)}(im, mm, jacref, nothing, core)
+        else
+            # long enough for a Dual time with as many partials as ForwardDiff picks at most
+            FT = eltype(core.caches.output.du)
+            tbuf = zeros(FT, ForwardDiff.DEFAULT_CHUNK_THRESHOLD + 1)
+            new{typeof(im.g),typeof(mm),typeof(tbuf),Any}(im, mm, jacref, tbuf, core)
+        end
+    end
+end
+function ConstructionBase.constructorof(::Type{<:Network{G,MM,TB,CR}}) where {G,MM,TB,CR}
+    # the time buffer is rebuilt
+    return (im, mm, jac, _, core) -> Network(core, im, mm, jac; fullytyped=CR !== Any)
+end
+isfullytyped(::Network{G,MM,TB,CR}) where {G,MM,TB,CR} = CR !== Any
+
+executionstyle(nw::Network) = executionstyle(nw.core)
+executionstyle(nwc::NetworkCore) = nwc.ex
 nvbatches(::Network) = length(vertexbatches)
 
 """
@@ -149,22 +173,27 @@ get_graph(nw::Network) = nw.im.g
 
 # `::Type{T}` makes Julia specialize on T, which it doesn't for a Type argument that is only
 # passed on. Otherwise `get_tmp` is dispatched at runtime and boxes the Dual buffers.
-function get_output_cache(nw::Network, ::Type{T}) where {T}
-    if T <: AbstractFloat && eltype(nw.caches.output.du) != T
-        throw(ArgumentError("Network caches are initialized with $(eltype(nw.caches.output.du)) \
+function get_output_cache(nwc::NetworkCore, ::Type{T}) where {T}
+    if T <: AbstractFloat && eltype(nwc.caches.output.du) != T
+        throw(ArgumentError("Network caches are initialized with $(eltype(nwc.caches.output.du)) \
             but is used for $T data! This means you probably used `adapt` on the Network to handle \
-            $(eltype(nw.caches.output.du)) arrays, but now you're calling the `nw`-function with some arguments \
+            $(eltype(nwc.caches.output.du)) arrays, but now you're calling the `nw`-function with some arguments \
             of type $T"))
     end
-    o = get_tmp(nw.caches.output, T)
+    o = get_tmp(nwc.caches.output, T)
     eltype(o) <: AbstractFloat && fill!(o, convert(eltype(o), NaN))
     o
 end
-get_aggregation_cache(nw::Network, ::Type{T}) where {T} = get_tmp(nw.caches.aggregation, T)
-function get_extinput_cache(nw::Network, ::Type{T}) where {T}
-    ext = get_tmp(nw.caches.external, T)
+get_aggregation_cache(nwc::NetworkCore, ::Type{T}) where {T} = get_tmp(nwc.caches.aggregation, T)
+function get_extinput_cache(nwc::NetworkCore, ::Type{T}) where {T}
+    ext = get_tmp(nwc.caches.external, T)
     fill!(ext, convert(eltype(ext), NaN))
 end
+
+# The caches behind `get_buffers`. Code which calls `get_buffers` repeatedly should hold on to
+# these instead of the core, which would specialize it on the network.
+buffer_caches(nw::Network) = buffer_caches(nw.core)
+buffer_caches(nwc::NetworkCore) = (; nwc.caches, nwc.extmap)
 
 iscudacompatible(nw::Network) = iscudacompatible(executionstyle(nw)) && iscudacompatible(nw.layer.aggregator)
 
@@ -343,6 +372,9 @@ function Base.getproperty(nw::Network, s::Symbol)
         NetworkSys(nw)
     elseif s===:jac_prototype
         getfield(nw, :jac_prototype)[]
+    elseif s in fieldnames(NetworkCore)
+        # the fields of the core, for code off the hot path
+        getfield(getfield(nw, :core), s)
     else
         getfield(nw, s)
     end

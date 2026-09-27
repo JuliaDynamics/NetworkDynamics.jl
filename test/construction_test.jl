@@ -579,10 +579,30 @@ end
     b = @b $(nw)($du, $u, $p, $t0)
     @test b.allocs == 0
 
-    b = @b NetworkDynamics.get_buffers($nw, $u, $p, $0; initbufs=true)
+    bc = NetworkDynamics.buffer_caches(nw)
+    b = @b NetworkDynamics.get_buffers($nw, $bc, $u, $p, $0; initbufs=true)
     @test b.allocs == 0
-    b = @b NetworkDynamics.get_buffers($nw, $u, $p, $0; initbufs=false)
+    b = @b NetworkDynamics.get_buffers($nw, $bc, $u, $p, $0; initbufs=false)
     @test b.allocs == 0
+
+    # a Dual time goes through the time buffer of the untyped network
+    @test !NetworkDynamics.isfullytyped(nw)
+    dualt = ForwardDiff.Dual{Nothing}(0.1, 1.0)
+    dudual = zeros(typeof(dualt), dim(nw))
+    b = @b $(nw)($dudual, $u, $p, $dualt)
+    @test b.allocs == 0
+
+    # the fully typed network gives the same result without the barrier
+    nwt = Network(nw; fullytyped=true)
+    @test NetworkDynamics.isfullytyped(nwt)
+    @test NetworkDynamics.isfullytyped(copy(nwt))
+    du_t = zeros(dim(nw))
+    nw(du, u, p, 0.1); nwt(du_t, u, p, 0.1)
+    @test du == du_t
+    b = @b $(nwt)($du, $u, $p, $t0)
+    @test b.allocs == 0
+    nw(dudual, u, p, dualt); dudual_t = zero(dudual); nwt(dudual_t, u, p, dualt)
+    @test dudual == dudual_t
 
     # test cache creation for different input types
     du32 = rand(Float32, length(du))
@@ -594,17 +614,17 @@ end
     # if t gets Float64 that does not change the cachetype type
     @test_throws "caches are initialized" nw(du32, u32, p32, Float32(t0))
     # if u or p get Float64 that promotes the cachetype to Float64
-    @test eltype(nw(nothing, u32, p, 0.0; RET=Val(:buf_init))[1]) == Float64
-    @test eltype(nw(nothing, u, p32, 0.0; RET=Val(:buf_init))[1]) == Float64
+    @test eltype(NetworkDynamics.get_buffers(nw, u32, p, 0.0)[1]) == Float64
+    @test eltype(NetworkDynamics.get_buffers(nw, u, p32, 0.0)[1]) == Float64
 
     # if t is a Dual, we need to promote indeed
     dualt0 = ForwardDiff.Dual(t0)
-    CT = eltype(nw(nothing, u32, p32, dualt0; RET=Val(:buf_init))[1])
+    CT = eltype(NetworkDynamics.get_buffers(nw, u32, p32, dualt0)[1])
     @test CT == typeof(dualt0)
 
     # if u or p are Duals, we need to promote too
     dualp32 = ForwardDiff.Dual.(p32, one.(p32))  # Dual{Nothing,Float32,1}; N=0 has no preallocated dual buffer
-    CT = eltype(nw(nothing, u32, dualp32, Float32(t0); RET=Val(:buf_init))[1])
+    CT = eltype(NetworkDynamics.get_buffers(nw, u32, dualp32, Float32(t0))[1])
     @test CT == typeof(dualp32[1])
 end
 

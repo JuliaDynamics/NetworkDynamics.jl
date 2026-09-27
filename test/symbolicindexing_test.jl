@@ -648,7 +648,7 @@ end
     end
     b = @b SII.observed($nw, $idxs2) # 12 7 10 5 14
     if VERSION ≥ v"1.11"
-        @test b.allocs <= 16
+        @test b.allocs <= 17 # one is the boxed `buffer_caches` of the untyped network
     end
 
     obsf1 = SII.observed(nw, idxs1)

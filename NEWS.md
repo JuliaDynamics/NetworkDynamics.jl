@@ -24,6 +24,13 @@
   the component batches which allocate.
 - Fix: calling the network with Duals allocated on every call, due to the unspecialized element
   type in the cache getters.
+- **`ODEProblem(nw, ...)` uses `FullSpecialize` by default.** SciML's `AutoSpecialize` limits
+  ForwardDiff to chunk size 1, so a sparse Jacobian took one RHS pass per color. On IEEE39 the
+  solve gets about 40 % faster. `specialize=SciMLBase.AutoSpecialize` restores the old behavior.
+- **A new network reuses the compiled solver.** The `Network` type no longer carries the component
+  functions; the RHS reaches them through a function barrier (30–40 ns per call). On IEEE39 the
+  first solve of a second network dropped from 17 s to 0.4 s. Reuse needs the same graph type,
+  mass matrix type and float type. `Network(...; fullytyped=true)` restores the fully typed network.
 - **DAE (re)initialization starts with Newton also without a `jac_prototype`.**
   The default `initializealg` of `ODEProblem(nw, ...)` now always uses the Jacobian-based
   polyalg (NewtonRaphson, then TrustRegion and LevenbergMarquardt) instead of the upstream

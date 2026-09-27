@@ -39,6 +39,11 @@ Optional keyword arguments:
     The detection reports what it is doing only if `verbose` is set.
  - `verbose=false`:
     Show additional information during construction.
+ - `fullytyped=false`:
+    By default the `Network` type does not carry the component functions, so code working on
+    networks (including the solver) compiles once and is reused for other networks. The network
+    call then goes through a function barrier, which costs a few ns per call. `fullytyped=true`
+    puts everything into the type and avoids the barrier.
 
 Keyword arguments only for the graphless constructor:
  - `warn_order=true`:
@@ -57,7 +62,8 @@ function Network(g::AbstractGraph,
                  check_graphelement=true,
                  dealias=false,
                  sparse=false,
-                 verbose=false)
+                 verbose=false,
+                 fullytyped=false)
     @argcheck sparse isa Bool "`sparse` must be `true` or `false`."
     # TimerOutputs.reset_timer!()
     @timeit_debug "Construct Network" begin
@@ -246,17 +252,8 @@ function Network(g::AbstractGraph,
         # create map for external inputs
         extmap = has_external_input(im) ? ExtMap(im) : nothing
 
-        nw = Network(
-            typeof(execution),
-            vertexbatches,
-            nl, im,
-            caches,
-            mass_matrix,
-            gbufprovider,
-            loopback_map,
-            extmap,
-            Ref{Union{Nothing,SparseMatrixCSC{Bool,Int}}}(nothing),
-        )
+        core = NetworkCore(execution, vertexbatches, nl, gbufprovider, loopback_map, extmap, caches)
+        nw = Network(core, im, mass_matrix, nothing; fullytyped)
 
     end
     # TimerOutputs.print_timer()
@@ -537,7 +534,8 @@ function Network(nw::Network;
                    :dealias => false,
                    # a network built from a sparse one stays sparse
                    :sparse => !isnothing(nw.jac_prototype),
-                   :verbose => false)
+                   :verbose => false,
+                   :fullytyped => isfullytyped(nw))
     for (k, v) in kwargs
         _kwargs[k] = v
     end

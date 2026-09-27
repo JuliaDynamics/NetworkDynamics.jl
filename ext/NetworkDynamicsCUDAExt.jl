@@ -1,5 +1,5 @@
 module NetworkDynamicsCUDAExt
-using NetworkDynamics: Network, NetworkLayer, ComponentBatch,
+using NetworkDynamics: Network, NetworkCore, NetworkLayer, ComponentBatch, isfullytyped,
                        KAAggregator, AggregationMap, SparseAggregator,
                        LazyGBufProvider, EagerGBufProvider, LazyGBuf,
                        dispatchT, iscudacompatible, executionstyle, ExtMap,
@@ -37,11 +37,11 @@ function Adapt.adapt_structure(to, n::Network)
     caches = (;output = _adapt_diffcache(to, n.caches.output),
               aggregation = _adapt_diffcache(to, n.caches.aggregation),
               external = _adapt_diffcache(to, n.caches.external))
-    exT = typeof(executionstyle(n))
     loopbackmap = _adapt_loopbackmap(to, n.loopbackmap)
     extmap = adapt(to, n.extmap)
 
-    Network(exT, vb, layer, n.im, caches, mm, gbp, loopbackmap, extmap, getfield(n, :jac_prototype))
+    core = NetworkCore(executionstyle(n), vb, layer, gbp, loopbackmap, extmap, caches)
+    Network(core, n.im, mm, getfield(n, :jac_prototype); fullytyped=isfullytyped(n))
 end
 
 Adapt.@adapt_structure NetworkLayer

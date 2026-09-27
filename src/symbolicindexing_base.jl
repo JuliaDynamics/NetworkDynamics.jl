@@ -689,9 +689,11 @@ function SII.observed(nw::Network, snis)
 
     # big cache for all obs outputs; it is filled with the same eltype as the network buffers
     obsoutcache = DiffCache(Vector{Float64}(undef, total_obs_dim), ad_chunksize(nw.im))
+    # capture the buffer caches, not the core: the core would specialize the closure on the network
+    bufcaches = buffer_caches(nw)
     if isscalar
         (u, p, t; kwargs...) -> begin
-            outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs=needsbuf, kwargs...)
+            outbuf, aggbuf, extbuf = get_buffers(nw, bufcaches, u, p, t; initbufs=needsbuf, kwargs...)
 
             outcache = PreallocationTools.get_tmp(obsoutcache, eltype(outbuf))
             unrolled_foreach(batched_obsf) do batch
@@ -707,7 +709,7 @@ function SII.observed(nw::Network, snis)
         end
     else
         (u, p, t, out=Vector{cachetype(u, p, t)}(undef, length(_snis)); kwargs...) -> begin
-            outbuf, aggbuf, extbuf = get_buffers(nw, u, p, t; initbufs=needsbuf, kwargs...)
+            outbuf, aggbuf, extbuf = get_buffers(nw, bufcaches, u, p, t; initbufs=needsbuf, kwargs...)
 
             outcache = PreallocationTools.get_tmp(obsoutcache, eltype(outbuf))
             unrolled_foreach(batched_obsf) do batch

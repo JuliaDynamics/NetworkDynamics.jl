@@ -511,4 +511,42 @@ end
         @test length(triggered_nw) == 2  # Network callback triggered
         @test triggered_nw ≈ [1.0, 2.0] atol=1e-10
     end
+
+    @testset "specialize keyword and network type" begin
+        # the network specific types (component functions) live in the core
+        corestr = string(typeof(nw_with_cb.core))
+        prob_full = ODEProblem(nw_with_cb, s0_with_cb, tspan)
+        prob_auto = ODEProblem(nw_with_cb, s0_with_cb, tspan; specialize=SciMLBase.AutoSpecialize)
+        @test SciMLBase.specialization(prob_full.f) == SciMLBase.FullSpecialize
+        @test SciMLBase.specialization(prob_auto.f) == SciMLBase.AutoSpecialize
+        @test prob_full.f.mass_matrix == prob_auto.f.mass_matrix
+
+        # symbolic indexing goes through a thin wrapper around the network
+        @test prob_full.f.sys isa NetworkDynamics.NetworkSys
+        @test extract_nw(prob_full) === extract_nw(prob_auto) === nw_with_cb
+
+        # the core type stays out of the callbacks and the integrator
+        @test !occursin(corestr, string(typeof(prob_full.kwargs[:callback])))
+        integ_full = init(prob_full, Tsit5())
+        integ_auto = init(prob_auto, Tsit5())
+        @test !occursin(corestr, string(typeof(integ_full)))
+        @test !occursin(corestr, string(typeof(integ_auto)))
+        @test extract_nw(integ_auto) === nw_with_cb
+
+        # a fully typed network puts it back, so the check above can fail
+        nw_typed = Network(nw_with_cb; fullytyped=true)
+        @test string(typeof(nw_typed.core)) == corestr
+        @test occursin(corestr, string(typeof(init(ODEProblem(nw_typed, uflat(s0_with_cb), tspan, pflat(s0_with_cb)), Tsit5()))))
+
+        embedded_triggered[] = 0.0
+        sol_full = solve(prob_full, Tsit5())
+        @test embedded_triggered[] > 0
+        embedded_triggered[] = 0.0
+        sol_auto = solve(prob_auto, Tsit5())
+        @test embedded_triggered[] > 0
+        @test sol_full.t == sol_auto.t
+        @test sol_full.u == sol_auto.u
+        @test extract_nw(sol_auto) === nw_with_cb
+        @test sol_auto(1.0; idxs=VIndex(1, :θ)) == sol_full(1.0; idxs=VIndex(1, :θ))
+    end
 end

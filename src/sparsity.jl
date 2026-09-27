@@ -6,7 +6,7 @@ struct RemainingConditionalsException <: Exception end
 Compute the sparsity pattern of the Jacobian matrix for a NetworkDynamics network.
 
 This function uses `SparseConnectivityTracer.jl` (SCT) to detect the sparsity pattern of the Jacobian
-matrix of the network's dynamics function. The resulting sparsity pattern can be used to 
+matrix of the network's dynamics function. The resulting sparsity pattern can be used to
 improve the performance of ODE solvers by providing structural information about the system.
 
 On a per-batch basis (i.e. once per unique component), the function will attempt to get the
@@ -76,8 +76,8 @@ function get_jac_prototype(
     end
 
     # replace both vertex and edge batches with compatible versions
-    _nw = @set nw_compat.vertexbatches = vbatches
-    nw = @set _nw.layer.edgebatches = ebatches
+    _nw = @set nw_compat.core.vertexbatches = vbatches
+    nw = @set _nw.core.layer.edgebatches = ebatches
 
     s0 = NWState(nw)
     wrap = let nw=nw, p=pflat(s0)
