@@ -103,6 +103,9 @@ struct NetworkCore{EX,VB,NL,GBT,LM,EM,C}
     "lazy cache pool"
     caches::C
 end
+# spelled out because `fieldnames` does not constant fold in `getproperty` on Julia 1.10
+const _CORE_FIELDS = (:ex, :vertexbatches, :layer, :gbufprovider, :loopbackmap, :extmap, :caches)
+@assert _CORE_FIELDS == fieldnames(NetworkCore)
 
 # The core holds the component functions, so its type differs for every network. By default the
 # network holds it untyped: code taking a network then compiles once for all networks, and the
@@ -372,7 +375,7 @@ function Base.getproperty(nw::Network, s::Symbol)
         nw
     elseif s===:jac_prototype
         getfield(nw, :jac_prototype)[]
-    elseif s in fieldnames(NetworkCore)
+    elseif s in _CORE_FIELDS
         # the fields of the core, for code off the hot path
         getfield(getfield(nw, :core), s)
     else
