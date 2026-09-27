@@ -333,14 +333,6 @@ Base.broadcastable(s::NWState) = Ref(s)
 
 SII.symbolic_container(s::NWState) = s.nw
 SII.symbolic_container(s::NWParameter) = s.nw
-
-# The `sys` of an ODEFunction built from a network. The field is untyped on purpose: it keeps
-# the network type out of the problem and integrator types. Symbolic indexing forwards to the
-# network through `symbolic_container`.
-struct NetworkSys
-    nw::Network
-end
-SII.symbolic_container(s::NetworkSys) = s.nw
 SII.state_values(s::NWState) = s.uflat
 SII.state_values(s::NWParameter) = error("Parameter type does not hold State values.")
 SII.parameter_values(s::NWState) = s.p isa NWParameter ? SII.parameter_values(s.p) : s.p
@@ -1036,7 +1028,6 @@ function extract_nw(inpr)
     extract_nw(sc)
 end
 extract_nw(nw::Network) = nw
-extract_nw(s::NetworkSys) = s.nw
 extract_nw(sol::SciMLBase.AbstractSolution) = extract_nw(sol.prob)
 extract_nw(prob::SciMLBase.ODEProblem) = extract_nw(prob.f)
 extract_nw(f::SciMLBase.ODEFunction) = extract_nw(f.sys)

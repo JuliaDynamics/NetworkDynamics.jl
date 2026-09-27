@@ -521,8 +521,8 @@ end
         @test SciMLBase.specialization(prob_auto.f) == SciMLBase.AutoSpecialize
         @test prob_full.f.mass_matrix == prob_auto.f.mass_matrix
 
-        # symbolic indexing goes through a thin wrapper around the network
-        @test prob_full.f.sys isa NetworkDynamics.NetworkSys
+        # symbolic indexing goes through the network itself
+        @test prob_full.f.sys === prob_auto.f.sys === nw_with_cb
         @test extract_nw(prob_full) === extract_nw(prob_auto) === nw_with_cb
 
         # the core type stays out of the callbacks and the integrator
