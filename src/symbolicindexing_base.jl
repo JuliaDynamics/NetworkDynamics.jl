@@ -680,11 +680,11 @@ function SII.observed(nw::Network, snis)
     elseif length(obsfunwrappers) > 1
         obswrappers = collect(values(obsfunwrappers))
         identical_clusters = find_identical(obswrappers; equality=batchequal)
-        if length(identical_clusters) < 20
-            Tuple(create_obsfun_batch(view(obswrappers, cluster)) for cluster in identical_clusters)
-        else
-            [create_obsfun_batch(view(obswrappers, cluster)) for cluster in identical_clusters]
-        end
+        batches = [create_obsfun_batch(view(obswrappers, cluster)) for cluster in identical_clusters]
+        # order by type rather than position, so the same models give the same closure type in
+        # every network
+        sort!(batches; by=b -> hash(typeof(b)))
+        length(batches) < 20 ? Tuple(batches) : batches
     end
 
     # big cache for all obs outputs; it is filled with the same eltype as the network buffers

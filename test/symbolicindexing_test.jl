@@ -661,6 +661,44 @@ end
     @test b.allocs == 0
 end
 
+@testset "observed closure type does not depend on the network" begin
+    vslack = Lib.dqbus_slack()
+    vpv = Lib.dqbus_pv(Pset=1.5, Vset=1.0)
+    vpq = Lib.dqbus_pq(Pset=-1.0, Qset=-0.1)
+    vswing = Lib.dqbus_swing()
+    e = Lib.dqline(X=0.1, R=0.01)
+    # same models at other positions, other topology, and an extra model nobody observes
+    nw1 = Network(path_graph(4), [vslack, vpv, vpq, vswing], e; dealias=true)
+    nw2 = Network(cycle_graph(6), [vpq, vswing, vpv, Lib.dqbus_swing_and_load(), vslack, vpq], e; dealias=true)
+    @test typeof(nw1) == typeof(nw2)
+    @test typeof(nw1.core) != typeof(nw2.core)
+
+    function closure_types(syms1, syms2)
+        f1, f2 = SII.observed(nw1, syms1), SII.observed(nw2, syms2)
+        @test !occursin(string(typeof(nw1.core)), string(typeof(f1)))
+        @test !occursin(string(typeof(nw2.core)), string(typeof(f2)))
+        typeof(f1), typeof(f2)
+    end
+
+    # one observed model plus a state, an input and an output
+    T1, T2 = closure_types(
+        [VIndex(3, :Pinj), VIndex(3, :u_mag), VIndex(4, :θ), VIndex(2, :i_r), VIndex(3, :u_r)],
+        [VIndex(1, :Pinj), VIndex(6, :u_mag), VIndex(2, :θ), VIndex(3, :i_r), VIndex(6, :u_r)])
+    @test T1 == T2
+    T1, T2 = closure_types(VIndex(3, :Pinj), VIndex(6, :Pinj))
+    @test T1 == T2
+
+    # several observed models, vertices and edges: the batches are sorted by type
+    T1, T2 = closure_types(
+        [VIndex(3, :Pinj), VIndex(2, :Qinj), VIndex(1, :u_mag), EIndex(1, :src_P)],
+        [VIndex(6, :Pinj), VIndex(3, :Qinj), VIndex(5, :u_mag), EIndex(4, :src_P)])
+    @test T1 == T2
+
+    # a fully typed network puts its core into the closure
+    nw1t = Network(nw1; fullytyped=true)
+    @test occursin(string(typeof(nw1t.core)), string(typeof(SII.observed(nw1t, VIndex(3, :Pinj)))))
+end
+
 @testset "test edge indexing with Pair syntax" begin
     # Create a simple network with named vertices for testing
     v1 = Lib.kuramoto_second(name=:v1)
