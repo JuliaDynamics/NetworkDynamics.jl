@@ -381,7 +381,7 @@ end
             if b.allocs != 0
                 println(idx, " => ", b.allocs, " allocations")
             end
-            @test b.allocs <= 3 # 2 are used to create an array, coverage runs on 1.13.1 add a third
+            @test b.allocs <= 4 # 2 for the array, 2 if the broadcast was compiled un-inlined earlier
         end
         @info "Test parameter_index"
         for idx in idxtypes
@@ -390,7 +390,7 @@ end
             if b.allocs != 0
                 println(idx, " => ", b.allocs, " allocations")
             end
-            @test b.allocs <= 3 # 2 are used to create an array, coverage runs on 1.13.1 add a third
+            @test b.allocs <= 4 # 2 for the array, 2 if the broadcast was compiled un-inlined earlier
         end
         @info "Test observed"
         for idx in idxtypes
