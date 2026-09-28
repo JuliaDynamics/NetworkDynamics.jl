@@ -50,14 +50,15 @@ end
 
 function Base.push!(log::ParameterLog{T}, p::AbstractVector) where {T}
     p isa Vector || (p = Array(p))
-    log.nsaves += 1
-    if log.nsaves == 1
+    if iszero(log.nsaves)
+        log.nsaves = 1
         log.base = copy(p)
         log.head = copy(p)
         log.tracks = Vector{Vector{Tuple{Int,T}}}(undef, length(p))
         return log
     end
     length(p) == length(log.head) || throw(DimensionMismatch("Parameter vector changed size."))
+    log.nsaves += 1
     for j in eachindex(p)
         isequal(p[j], log.head[j]) && continue
         log.head[j] = p[j]

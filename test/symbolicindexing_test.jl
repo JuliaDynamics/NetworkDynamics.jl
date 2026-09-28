@@ -584,6 +584,7 @@ end
     @test log[7] == [7.0, 5, 9, 0]
 
     @test_throws DimensionMismatch push!(log, zeros(5))
+    @test length(log) == 7 # a failed push leaves the log untouched
     @test_throws BoundsError log[8]
 
     # compare against dense copies, NaN and signed zeros included
