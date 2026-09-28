@@ -531,19 +531,23 @@ function SII.with_updated_parameter_timeseries_values(nw::Network, params, args:
     @assert length(args) == 1 "Did not expect more than 1 timeseries here, please report issue."
     tsidx, p = args[1]
     @assert tsidx == DEFAULT_PARA_TS_IDX "Did not expect the passed timeseries to have other index then 1, please report issue."
-    params .= p
+    if p isa ParameterSnapshot && !(params isa Vector)
+        p = copy(p) # rebuild on the CPU first, e.g. for GPU params
+    end
+    copyto!(params, p)
 end
 
 
 function SciMLBase.create_parameter_timeseries_collection(nw::Network, p::AbstractVector, tspan)
-    data = DiffEqArray(Vector{eltype(p)}[copy(p)], Float64[tspan[begin]])
+    data = DiffEqArray(ParameterLog(p), Float64[tspan[begin]])
     tsc = SII.ParameterTimeseriesCollection((data,), copy(p))
     return tsc
 end
 
+# no copy needed, pushing to the ParameterLog only stores the changed values
 function SciMLBase.get_saveable_values(nw::Network, p::AbstractVector, timeseries_idx)
     @assert timeseries_idx == DEFAULT_PARA_TS_IDX # nothing else makes sense
-    copy(p)
+    p
 end
 """
     save_parameters!(integrator::SciMLBase.DEIntegrator)

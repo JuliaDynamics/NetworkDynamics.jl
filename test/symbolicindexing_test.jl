@@ -4,6 +4,7 @@ using OrdinaryDiffEqTsit5
 using Chairmarks
 using Test
 using Symbolics
+using StableRNGs
 import SymbolicIndexingInterface as SII
 using NetworkDynamics: VIndex, EIndex, VPIndex, EPIndex, _resolve_colon, FilteringProxy
 
@@ -548,6 +549,59 @@ end
     @test SII.get_all_timeseries_indexes(nw, VIndex(1,:u)) == Set([SII.ContinuousTimeseries()])
     @test SII.get_all_timeseries_indexes(nw, VPIndex(1,:p1)) == Set([1])
     @test SII.get_all_timeseries_indexes(nw, [VIndex(1,:u), VPIndex(1,:p1)]) == Set([SII.ContinuousTimeseries(), 1])
+end
+
+@testset "ParameterLog" begin
+    PL = NetworkDynamics.ParameterLog
+    # p₂ changes three times, p₁ and p₄ once, p₃ never
+    ps = [[1.0, 2, 3, 4], [1.0, 5, 3, 4], [1.0, 6, 3, 0], [1.0, 5, 3, 0], [7.0, 5, 3, 0]]
+    log = PL(ps[1])
+    foreach(p -> push!(log, p), ps[2:end])
+    @test length(log) == 5
+    @test log.tracks[1] == [(5, 7.0)]
+    @test log.tracks[2] == [(2, 5.0), (3, 6.0), (4, 5.0)]
+    @test !isassigned(log.tracks, 3)
+    @test log.tracks[4] == [(3, 0.0)]
+    @test log[3][2] == 6.0
+    @test all(collect(log[n]) == ps[n] for n in eachindex(ps)) # single entries
+    @test all(copy(log[n]) == ps[n] for n in eachindex(ps))    # full rebuild
+
+    # a save without changes adds a snapshot but no entries
+    push!(log, ps[end])
+    @test length(log) == 6
+    @test log[6] == ps[end]
+    @test length(log.tracks[2]) == 3
+
+    # the log keeps its own copy of the pushed values
+    p = [7.0, 5, 9, 0]
+    push!(log, p)
+    p[3] = 100
+    @test log[7][3] == 9.0
+
+    c = copy(log)
+    push!(c, zeros(4))
+    @test length(log) == 7 && length(c) == 8
+    @test log[7] == [7.0, 5, 9, 0]
+
+    @test_throws DimensionMismatch push!(log, zeros(5))
+    @test length(log) == 7 # a failed push leaves the log untouched
+    @test_throws BoundsError log[8]
+
+    # compare against dense copies, NaN and signed zeros included
+    rng = StableRNG(1)
+    P = 50
+    p = rand(rng, P)
+    dense = [copy(p)]
+    log = PL(p)
+    for _ in 2:200
+        for _ in 1:rand(rng, 0:3)
+            p[rand(rng, 1:P)] = rand(rng, (NaN, 0.0, -0.0, rand(rng)))
+        end
+        push!(dense, copy(p))
+        push!(log, p)
+    end
+    @test all(isequal(collect(log[n]), dense[n]) for n in eachindex(dense))
+    @test all(isequal(copy(log[n]), dense[n]) for n in eachindex(dense))
 end
 
 # test named vertices and edges

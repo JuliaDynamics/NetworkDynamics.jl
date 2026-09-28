@@ -12,6 +12,9 @@
   bookkeeping changes which do not introduce a discontinuity. If several affects fire at the same
   time, one asking for the reset is enough; parameter changes are saved either way.
 - Batched affects fill their observed buffer once per event instead of once per member.
+- `save_parameters!` no longer stores a full copy of the parameter vector. The solution keeps the
+  initial parameters plus a list of the values which changed, which makes frequent parameter
+  changes in large networks much cheaper in memory.
 - **Observed functions only evaluate what is needed.** MTK components now know which observables
   depend on which, and which of them read the component inputs. `SII.observed` only evaluates the
   observables that were asked for and what they depend on. More importantly, it only runs the

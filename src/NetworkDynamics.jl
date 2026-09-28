@@ -81,6 +81,7 @@ export VIndex, EIndex, VPIndex, EPIndex
 export ParamIdx, StateIdx
 export save_parameters!, extract_nw
 export variable_symbols, parameter_symbols
+include("parameter_log.jl")
 include("symbolicindexing_base.jl")
 
 export NWState, NWParameter, uflat, pflat
