@@ -382,6 +382,12 @@ end
         @test sol[VPIndex(1, :ups)] == [0, 0, 1, 1, 2]
         @test sol[VPIndex(1, :downs)] == [0, 1, 1, 2, 2]
         @test sol.discretes[1].t[2:end] ≈ [π, 2π, 3π, 4π] atol=1e-3
+        # the saved parameters only record the two counters of vertex 1
+        plog = sol.discretes[1].u
+        @test plog isa NetworkDynamics.ParameterLog
+        @test count(j -> isassigned(plog.tracks, j), eachindex(plog.tracks)) == 2
+        s = NWState(sol, 3.5π)
+        @test s.p.v[1, :ups] == 1 && s.p.v[1, :downs] == 2
     end
 
     @testset "batching" begin
