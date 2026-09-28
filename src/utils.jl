@@ -277,6 +277,48 @@ function _sym_to_int(x::SymbolicView, idx)
     throw(ArgumentError("Invalid index $idx for SymbolicView($(x.syms))"))
 end
 
+"""
+    WriteThrough(buf, u, p, uidx, pidx, syms, changed)
+
+Backing vector for the `u` of a callback affect. Reads come from the snapshot `buf`, a write to
+slot `i` additionally lands in `u[uidx[i]]` or `p[pidx[i]]`. Slots with neither (observed, inputs,
+outputs) are read only. `changed` is a two-element flag vector recording whether a state or a
+parameter was written; it is preallocated by the caller so the view itself stays immutable.
+"""
+struct WriteThrough{T,B,U,P,I,N} <: AbstractVector{T}
+    buf::B
+    u::U
+    p::P
+    uidx::I
+    pidx::I
+    syms::NTuple{N,Symbol}
+    changed::Vector{Bool}
+end
+function WriteThrough(buf, u, p, uidx, pidx, syms::NTuple{N,Symbol}, changed) where {N}
+    WriteThrough{eltype(buf),typeof(buf),typeof(u),typeof(p),typeof(uidx),N}(
+        buf, u, p, uidx, pidx, syms, changed)
+end
+uchanged(w::WriteThrough) = w.changed[1]
+pchanged(w::WriteThrough) = w.changed[2]
+Base.size(w::WriteThrough) = size(w.buf)
+Base.IndexStyle(::Type{<:WriteThrough}) = IndexLinear()
+Base.getindex(w::WriteThrough, i::Int) = w.buf[i]
+function Base.setindex!(w::WriteThrough, val, i::Int)
+    ui = w.uidx[i]
+    pj = w.pidx[i]
+    if ui > 0
+        w.changed[1] |= w.buf[i] != val
+        w.u[ui] = val
+    elseif pj > 0
+        w.changed[2] |= w.buf[i] != val
+        w.p[pj] = val
+    else
+        throw(ArgumentError("Cannot set $(w.syms[i]) in affect: only states and parameters are \
+            writable, inputs, outputs and observed are read only."))
+    end
+    w.buf[i] = val
+end
+
 # temp variable to splice docstring into ArgumentError in MTK Ext
 const implicit_output_docstring = """
 This is a helper function to define MTK models with **fully implicit outputs**.

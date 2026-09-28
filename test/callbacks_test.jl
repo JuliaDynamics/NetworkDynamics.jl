@@ -1,4 +1,8 @@
 using NetworkDynamics
+using NetworkDynamics: wrap_component_callbacks, get_callbacks, getcondition, getaffect, getaffect_neg,
+                       condition_dim, condition_urange, condition_outrange, affect_dim, affect_urange,
+                       collect_c_or_a_indices, AffectAccess, shortrepr,
+                       _batch_condition, _scalar_member_affect, _batch_vector_affect, _gather
 using Graphs
 using OrdinaryDiffEqTsit5
 using Chairmarks
@@ -47,27 +51,22 @@ end
     cb = ContinuousComponentCallback(cond, affect)
     set_callback!.(nw.im.edgem, Ref(cb))
 
-    batches = NetworkDynamics.wrap_component_callbacks(nw);
+    batches = wrap_component_callbacks(nw);
     @test length(batches) == 1
     cbb = only(batches);
 
-    @test NetworkDynamics.condition_dim(cbb) == 3
-    @test NetworkDynamics.condition_pdim(cbb) == 2
-    @test all(NetworkDynamics.affect_dim.(Ref(cbb), NetworkDynamics.getaffect, 1:7) .== 0)
-    @test all(NetworkDynamics.affect_pdim.(Ref(cbb), NetworkDynamics.getaffect, 1:7) .== 1)
+    # internally sym and psym form one list
+    @test condition_dim(cbb) == 5
+    @test all(affect_dim.(Ref(cbb), getaffect, 1:7) .== 1)
 
-    @test NetworkDynamics.condition_urange.(Ref(cbb), 1:length(cbb)) == [1:3,4:6,7:9,10:12,13:15,16:18,19:21]
-    @test NetworkDynamics.condition_prange.(Ref(cbb), 1:length(cbb)) == [1:2,3:4,5:6,7:8,9:10,11:12,13:14]
-    @test NetworkDynamics.affect_urange.(Ref(cbb), NetworkDynamics.getaffect, 1:length(cbb)) == [1:0 for i in 1:7]
-    @test NetworkDynamics.affect_prange.(Ref(cbb), NetworkDynamics.getaffect, 1:length(cbb)) == [1:1,2:2,3:3,4:4,5:5,6:6,7:7]
-    @test NetworkDynamics.condition_outrange.(Ref(cbb), 1:length(cbb)) == [1:1,2:2,3:3,4:4,5:5,6:6,7:7]
+    @test condition_urange.(Ref(cbb), 1:length(cbb)) == [1:5,6:10,11:15,16:20,21:25,26:30,31:35]
+    @test affect_urange.(Ref(cbb), getaffect, 1:length(cbb)) == [1:1,2:2,3:3,4:4,5:5,6:6,7:7]
+    @test condition_outrange.(Ref(cbb), 1:length(cbb)) == [1:1,2:2,3:3,4:4,5:5,6:6,7:7]
 
-    @test NetworkDynamics.collect_c_or_a_indices(cbb, NetworkDynamics.getcondition, :sym) == collect(Iterators.flatten(collect(EIndex(i, [:P, :₋P, :srcθ])) for i in 1:7))
-    @test NetworkDynamics.collect_c_or_a_indices(cbb, NetworkDynamics.getcondition, :psym) == collect(Iterators.flatten(collect(EPIndex(i, [:limit, :K])) for i in 1:7))
-    @test NetworkDynamics.collect_c_or_a_indices(cbb, NetworkDynamics.getaffect, :sym) == []
-    @test NetworkDynamics.collect_c_or_a_indices(cbb, NetworkDynamics.getaffect, :psym) == collect(EPIndex(i, :active) for i in 1:7)
+    @test collect_c_or_a_indices(cbb, getcondition) == collect(Iterators.flatten(collect(EIndex(i, [:P, :₋P, :srcθ, :limit, :K])) for i in 1:7))
+    @test collect_c_or_a_indices(cbb, getaffect) == collect(EIndex(i, :active) for i in 1:7)
 
-    batchcond = NetworkDynamics._batch_condition(cbb)
+    batchcond = _batch_condition(cbb)
     out = zeros(7)
     fill!(out, NaN)
     s0 = NWState(nw)
@@ -104,37 +103,29 @@ end
 end
 
 @testset "show functions for callbacks" begin
+    nop = (args...) -> nothing
+    new = ContinuousComponentCallback(ComponentCondition(nop, [:P, :limit]), ComponentAffect(nop, [:P, :active]))
+    legacy = ContinuousComponentCallback(ComponentCondition(nop, [:P], [:limit]), ComponentAffect(nop, [:P], [:active]))
+    @test shortrepr(new) == shortrepr(legacy) == "(:P, :limit) affecting (:P, :active)"
+    @test repr("text/plain", new) == "ContinuousComponentCallback((:P, :limit) affecting (:P, :active))"
+    updown = ContinuousComponentCallback(ComponentCondition(nop, [:P]), ComponentAffect(nop, [:active]);
+                                         affect_neg! = ComponentAffect(nop, [:P, :limit]))
+    @test shortrepr(updown) == "(:P) affecting (:active, :P, :limit)"
+    vec = VectorContinuousComponentCallback(ComponentCondition(nop, [:θ]), ComponentAffect(nop, [:ω, :D]), 2)
+    @test repr("text/plain", vec) == "VectorContinuousComponentCallback((:θ) affecting (:ω, :D), len=2)"
+    pt = PresetTimeComponentCallback(1.0, ComponentAffect(nop, [], [:Pmech]))
+    @test shortrepr(pt) == "(:Pmech) affected at t=1.0"
+
     nw = basenetwork()
-    v = nw.im.vertexm[1]
+    e = nw.im.edgem[1]
+    set_callback!(e, new)
+    add_callback!(e, legacy)
+    @test count("(:P, :limit) affecting (:P, :active)", repr("text/plain", e)) == 2
+    @test occursin("callback", repr("text/plain", nw))
 
-    empty_function = (args...) -> nothing
-    cond = ComponentCondition(empty_function, [:θ, :ω], [])
-    affect = ComponentAffect(empty_function, [:θ, :ω],[])
-    cb = VectorContinuousComponentCallback(cond, affect, 2)
-    add_callback!(v, cb)
-    show(stdout, MIME"text/plain"(), v)
-    cond = ComponentCondition(empty_function, [:θ], [])
-    affect = ComponentAffect(empty_function, [],[:M])
-    cb2 = ContinuousComponentCallback(cond, affect)
-    add_callback!(v, cb2)
-    show(stdout, MIME"text/plain"(), v)
-    show(stdout, MIME"text/plain"(), nw)
-
-    cond = ComponentCondition(empty_function, [:θ], [])
-    affect = ComponentAffect(empty_function, [:ω],[])
-    affect_neg = ComponentAffect(empty_function, [:θ], [:M])
-    cb3 = ContinuousComponentCallback(cond, affect; affect_neg! = affect_neg)
-    show(stdout, MIME"text/plain"(), cb3)
-
-    cond = ComponentCondition(empty_function, [:θ], [])
-    affect = ComponentAffect(empty_function, [:ω],[])
-    cb3 = ContinuousComponentCallback(cond, affect; affect_neg! = nothing)
-    show(stdout, MIME"text/plain"(), cb3)
-
-    # test delete
-    @test delete_callbacks!(v)
-    @test !has_callback(v)
-    @test !delete_callbacks!(v)
+    @test delete_callbacks!(e)
+    @test !has_callback(e)
+    @test !delete_callbacks!(e)
 end
 
 @testset "vector callbacks" begin
@@ -161,7 +152,7 @@ end
     set_callback!(nw.im.vertexm[1], ccb)
     set_callback!(nw.im.vertexm[2], ccb)
 
-    cbbs = NetworkDynamics.wrap_component_callbacks(nw);
+    cbbs = wrap_component_callbacks(nw);
     @test length(cbbs) == 1
 
     nwcb = get_callbacks(nw);
@@ -202,66 +193,291 @@ end
         (θ=0.17999999999999997, ω=0.13070953683042436, t=3.3585329163801663, vidx=2, event_idx=1)
         (θ=0.18000000000000013, ω=-0.09014601420085934, t=4.213717530716612, vidx=2, event_idx=1)
     ]
-    for (e, re) in zip(events, ref_events)
-        @test e.vidx == re.vidx
-        @test e.event_idx == re.event_idx
-        @test abs(e.θ - re.θ) < 1e-4
-        @test abs(e.ω - re.ω) < 1e-4
-        @test abs(e.t - re.t) < 1e-4
+    function check_events(events)
+        @test length(events) == length(ref_events)
+        for (e, re) in zip(events, ref_events)
+            @test e.vidx == re.vidx
+            @test e.event_idx == re.event_idx
+            @test abs(e.θ - re.θ) < 1e-4
+            @test abs(e.ω - re.ω) < 1e-4
+            @test abs(e.t - re.t) < 1e-4
+        end
+    end
+    check_events(events)
+
+    # the same scenario in the single list form, the affect also reads a parameter and an observed
+    empty!(events)
+    cond2 = ComponentCondition([:θ, :ω, :D]) do out, u, t
+        out[1] = 0.18*u[:D] - abs(u[:θ])
+        out[2] = -0.2*u[:D] - u[:ω]
+    end
+    affect2 = ComponentAffect([:θ, :ω, :D, :Pdamping]) do u, event_signs, ctx
+        @test u[:Pdamping] ≈ -u[:D] * u[:ω]
+        for i in eachindex(event_signs)
+            event_signs[i] == 0 && continue
+            push!(events, (;θ=u[:θ], ω=u[:ω], t=ctx.t, vidx=ctx.vidx, event_idx=i))
+        end
+    end
+    vcb = VectorContinuousComponentCallback(cond2, affect2, 2)
+    set_callback!(nw.im.vertexm[1], vcb)
+    set_callback!(nw.im.vertexm[2], vcb)
+    cbb = only(wrap_component_callbacks(nw))
+    @test condition_outrange.(Ref(cbb), 1:2) == [1:2, 3:4]
+    solve(ODEProblem(nw, u0, (0, 10.0), pflat(p0)), Tsit5())
+    check_events(events)
+
+    # the vector affect writes a state and a parameter
+    nw = basenetwork()
+    wcond = ComponentCondition([:ω]) do out, u, t
+        out[1] = u[:ω] - 0.05
+        out[2] = -u[:ω] - 0.05
+    end
+    waffect = ComponentAffect([:ω, :D]) do u, event_signs, ctx
+        u[:ω] = 0
+        u[:D] = 2
+    end
+    set_callback!(nw.im.vertexm[2], VectorContinuousComponentCallback(wcond, waffect, 2))
+    s0 = NWState(nw)
+    s0.p.v[2, :Pmech] = 2.5 # accelerate vertex 2
+    sol = solve(ODEProblem(nw, s0, (0, 5)), Tsit5())
+    D = sol[VPIndex(2, :D)]
+    @test length(D) ≥ 2
+    @test D[1] == 0.1 && all(==(2), D[2:end])
+    tfire = sol.discretes[1].t[2]
+    @test sol(tfire; idxs=VIndex(2, :ω), continuity=:left) ≈ 0.05
+    @test sol(tfire; idxs=VIndex(2, :ω), continuity=:right) == 0
+
+    # the batched vector affect is allocation free
+    cbb = only(wrap_component_callbacks(nw))
+    integ = init(ODEProblem(nw, s0, (0, 5)), Tsit5())
+    vbatch = _batch_vector_affect(cbb)
+    signs = Int8[1, 0]
+    vbatch(integ, signs)
+    @test (@b $vbatch($integ, $signs)).allocs == 0
+end
+
+@testset "single symbol list callbacks" begin
+    # the line tripping scenario from above, with a lower limit on two lines
+    function solve_tripping(cb)
+        nw = basenetwork()
+        set_callback!.(nw.im.edgem, Ref(cb))
+        s0 = NWState(nw)
+        s0.p.e[5, :limit] = 0.7
+        s0.p.e[6, :limit] = 0.7
+        s0.p.v[1, :Pmech] = 0.5
+        nw, solve(ODEProblem(nw, s0, (0, 10)), Tsit5())
+    end
+
+    @testset "continuous callback reading observed, input and parameter" begin
+        seen = []
+        cond = ComponentCondition([:P, :limit]) do u, t
+            abs(u[:P]) - u[:limit]
+        end
+        affect = ComponentAffect([:P, :active, :limit, :srcθ]) do u, ctx
+            @test abs(u[:P]) ≈ u[:limit] atol=1e-6
+            @test u[:srcθ] ≈ ctx.integrator[VIndex(ctx.src, :θ)]
+            push!(seen, (ctx.t, ctx.eidx))
+            u[:active] = 0
+            @test u[:active] == 0 # the snapshot follows the write
+            @test_throws ArgumentError u[:P] = 0.0    # output
+            @test_throws ArgumentError u[:srcθ] = 0.0 # input
+        end
+        nw, sol = solve_tripping(ContinuousComponentCallback(cond, affect))
+
+        # reference trips from the legacy form of the same callback
+        @test last.(seen) == [5, 7, 6, 4, 3, 2, 1]
+        @test first.(seen) ≈ [1.4839602700694718, 1.5682604084132876, 2.296184166113089, 2.3841068948960435,
+                              2.438238941620517, 3.1356685492339857, 3.2051417467390775] atol=1e-4
+        @test sol(10; idxs=EIndex(5, :P)) == 0
+
+        cbb = only(wrap_component_callbacks(nw))
+        batchcond = _batch_condition(cbb)
+        out = fill(NaN, 7)
+        s0 = NWState(nw)
+        b = @b $batchcond($out, $(uflat(s0)), NaN, $((; p=pflat(s0))))
+        @test b.allocs == 0
+        @test out ≈ abs.(s0.e[1:7, :P]) .- s0.p.e[1:7, :limit]
+
+        # gather and affect are allocation free, in the new and in the legacy form
+        function affect_allocs(affect)
+            nw = basenetwork()
+            set_callback!.(nw.im.edgem, Ref(ContinuousComponentCallback(cond, affect)))
+            cbb = only(wrap_component_callbacks(nw))
+            integ = init(ODEProblem(nw, NWState(nw), (0, 1.0)), Tsit5())
+            acc, batchaff = _scalar_member_affect(cbb, getaffect)
+            scratch = _gather(acc, integ)
+            batchaff(integ, scratch, 3) # afterwards the write changes nothing
+            (@b _gather($acc, $integ)).allocs, (@b $batchaff($integ, $scratch, 3)).allocs
+        end
+        @test affect_allocs(ComponentAffect([:P, :active, :srcθ]) do u, ctx; u[:active] = 0 end) == (0, 0)
+        @test affect_allocs(ComponentAffect([:P, :srcθ], [:active]) do u, p, ctx; p[:active] = 0 end) == (0, 0)
+    end
+
+    @testset "vertex affect: read input and observed, write state and parameter" begin
+        nw = basenetwork()
+        seen = []
+        affect = ComponentAffect([:θ, :ω, :Pmech, :P, :Pdamping, :D]) do u, ctx
+            push!(seen, (; P=u[:P], Pdamping=u[:Pdamping], ω=u[:ω], D=u[:D]))
+            @test u[:P] ≈ ctx.integrator[VIndex(ctx.vidx, :P)]
+            u[:ω] = 0.1
+            u[:Pmech] = 0.0
+        end
+        set_callback!(nw.im.vertexm[2], PresetTimeComponentCallback(1.0, affect))
+        s0 = NWState(nw)
+        s0.v[:, :ω] .= 0.01 # get some damping
+        sol = solve(ODEProblem(nw, s0, (0, 2)), Tsit5())
+
+        e = only(seen)
+        @test e.Pdamping ≈ -e.D * e.ω
+        @test e.D == 0.1
+
+        # both writes went into the integrator
+        i1 = findlast(==(1.0), sol.t)
+        @test sol[VIndex(2, :ω)][i1] == 0.1
+        @test sol[VIndex(2, :ω)][i1-1] ≈ e.ω
+        @test sol(1.5; idxs=VPIndex(2, :Pmech)) == 0.0
+    end
+
+    @testset "discrete callback with parameter in condition" begin
+        nw = basenetwork()
+        fired = []
+        cond = ComponentCondition([:ω, :Pmech]) do u, t
+            t > 0.5 && u[:Pmech] > 0
+        end
+        affect = ComponentAffect([:Pmech, :ω]) do u, ctx
+            push!(fired, (ctx.t, ctx.vidx))
+            u[:Pmech] = 0
+            u[:ω] = 0.1
+        end
+        cb = DiscreteComponentCallback(cond, affect)
+        set_callback!.(nw.im.vertexm, Ref(cb))
+        @test length(wrap_component_callbacks(nw)) == 1
+        sol = solve(ODEProblem(nw, NWState(nw), (0, 2)), Tsit5())
+
+        # vertex 2 and 5 fire in the same step
+        @test last.(fired) == [2, 5]
+        @test fired[1][1] == fired[2][1] > 0.5
+        @test sol[VPIndex(2, :Pmech)] == [1.5, 0]
+        @test sol[VPIndex(5, :Pmech)] == [1.5, 0]
+        i = findlast(==(fired[1][1]), sol.t)
+        @test sol[VIndex(2, :ω)][i] == sol[VIndex(5, :ω)][i] == 0.1
+    end
+
+    @testset "continuous callback with affect_neg" begin
+        f = (du, u, in, p, t) -> begin
+            du[1] = -sin(t)
+            du[2] = cos(t)
+        end
+        vm = VertexModel(; f, g=1:2, dim=2, indim=2, sym=[:cos=>1, :sin=>0], psym=[:ups=>0, :downs=>0])
+        em = EdgeModel(; g=AntiSymmetric((out, in) -> out .= 0), outdim=2, indim=2)
+        nw = Network(path_graph(2), vm, em; dealias=true)
+
+        cond = ComponentCondition((u, t) -> u[:sin], [:sin])
+        up = ComponentAffect([:ups]) do u, ctx; u[:ups] += 1 end
+        down = ComponentAffect([:downs, :cos]) do u, ctx; u[:downs] += 1 end
+        cb = ContinuousComponentCallback(cond, up; affect_neg! = down)
+        s0 = NWState(nw)
+        sol = solve(ODEProblem(nw, s0, (0, 4π+0.1); add_comp_cb=VIndex(1)=>cb), Tsit5())
+        # sin starts at 0, so the crossings are down at π, 3π and up at 2π, 4π
+        @test sol[VPIndex(1, :ups)] == [0, 0, 1, 1, 2]
+        @test sol[VPIndex(1, :downs)] == [0, 1, 1, 2, 2]
+        @test sol.discretes[1].t[2:end] ≈ [π, 2π, 3π, 4π] atol=1e-3
+    end
+
+    @testset "batching" begin
+        nw = basenetwork()
+        # legacy conditions with the same function batch, even if built separately
+        legacyf = (u, p, t) -> u[1] - p[1]
+        affect = ComponentAffect((u, p, ctx) -> nothing, [], [:active])
+        for e in nw.im.edgem
+            set_callback!(e, ContinuousComponentCallback(ComponentCondition(legacyf, [:P], [:limit]), affect))
+        end
+        @test length(wrap_component_callbacks(nw)) == 1
+        # ... also if the legacy symbols differ, each member resolves its own names
+        set_callback!(nw.im.edgem[1], ContinuousComponentCallback(ComponentCondition(legacyf, [:₋P], [:limit]), affect))
+        cbb = only(wrap_component_callbacks(nw))
+        @test collect_c_or_a_indices(cbb, getcondition)[1:4] == [EIndex(1, :₋P), EIndex(1, :limit), EIndex(2, :P), EIndex(2, :limit)]
+        s0 = NWState(nw)
+        out = zeros(7)
+        _batch_condition(cbb)(out, uflat(s0), 0.0, (; p=pflat(s0)))
+        @test out[1] ≈ s0.e[1, :₋P] - s0.p.e[1, :limit]
+        @test out[2] ≈ s0.e[2, :P] - s0.p.e[2, :limit]
+        # different lengths still split
+        set_callback!(nw.im.edgem[1], ContinuousComponentCallback(ComponentCondition(legacyf, [:₋P, :P], [:limit]), affect))
+        @test length(wrap_component_callbacks(nw)) == 2
+
+        # single list conditions with the same function and length batch, the symbols may differ
+        f = (u, t) -> u[1] - u[2]
+        aff = ComponentAffect((u, ctx) -> nothing, [:active])
+        for (i, e) in pairs(nw.im.edgem)
+            syms = isodd(i) ? [:P, :limit] : [:₋P, :K]
+            set_callback!(e, ContinuousComponentCallback(ComponentCondition(f, syms), aff))
+        end
+        cbb = only(wrap_component_callbacks(nw))
+        @test collect_c_or_a_indices(cbb, getcondition)[1:4] == [EIndex(1, :P), EIndex(1, :limit), EIndex(2, :₋P), EIndex(2, :K)]
+        s0 = NWState(nw)
+        out = zeros(7)
+        _batch_condition(cbb)(out, uflat(s0), 0.0, (; p=pflat(s0)))
+        @test out[1] ≈ s0.e[1, :P] - s0.p.e[1, :limit]
+        @test out[2] ≈ s0.e[2, :₋P] - s0.p.e[2, :K]
     end
 end
 
 @testset "wrong symboltype test" begin
     nw = basenetwork()
+    nop = (args...) -> nothing
 
-    # invalid pram in condition u
-    # invalid obs in affect u
-    cond = ComponentCondition((args...)->nothing, [:P, :₋P, :srcθ, :limit], [:limit, :K])
-    affect = ComponentAffect((args...)->nothing, [:₋P],[:active])
-    cb = ContinuousComponentCallback(cond, affect)
-    set_callback!.(nw.im.edgem, Ref(cb); check=false);
-    cbb = only(NetworkDynamics.wrap_component_callbacks(nw));
-    # oserved can handle parameters now!
-    # @test_throws ArgumentError NetworkDynamics._batch_condition(cbb)
-    @test_throws ArgumentError NetworkDynamics._batch_affect(cbb, NetworkDynamics.getaffect)
-
-    # invalid state in condition p
-    cond = ComponentCondition((args...)->nothing, [:P, :₋P, :srcθ], [:limit, :K, :P])
-    affect = ComponentAffect((args...)->nothing, [],[:active, :₋P])
-    cb = ContinuousComponentCallback(cond, affect)
-    set_callback!.(nw.im.edgem, Ref(cb); check=false);
-    cbb = only(NetworkDynamics.wrap_component_callbacks(nw));
-    @test_throws ArgumentError NetworkDynamics._batch_condition(cbb)
-    @test_throws ArgumentError NetworkDynamics._batch_affect(cbb, NetworkDynamics.getaffect)
-
-    # test on set_callback
-    cond = ComponentCondition((args...)->nothing, [:P, :₋P, :srcθ, :limit], [:limit, :K])
-    affect = ComponentAffect((args...)->nothing, [],[:active])
-    cb = ContinuousComponentCallback(cond, affect)
-    @test_throws ArgumentError set_callback!(nw.im.edgem[1], cb)
-    cond = ComponentCondition((args...)->nothing, [:P, :₋P, :srcθ], [:limit, :K, :P])
-    affect = ComponentAffect((args...)->nothing, [],[:active])
-    cb = ContinuousComponentCallback(cond, affect)
-    @test_throws ArgumentError set_callback!(nw.im.edgem[1], cb)
-    cond = ComponentCondition((args...)->nothing, [:P, :₋P, :srcθ], [:limit, :K])
-    affect = ComponentAffect((args...)->nothing, [:₋P],[:active])
-    cb = ContinuousComponentCallback(cond, affect)
-    @test_throws ArgumentError set_callback!(nw.im.edgem[1], cb)
-    cond = ComponentCondition((args...)->nothing, [:P, :₋P, :srcθ], [:limit, :K])
-    affect = ComponentAffect((args...)->nothing, [],[:active, :P])
-    cb = ContinuousComponentCallback(cond, affect)
-    @test_throws ArgumentError set_callback!(nw.im.edgem[1], cb)
-
-    # test conditions for negative affect
-    affect  = ComponentAffect((args...)->nothing, [],[])
-    cond = ComponentCondition((args...)->nothing, [:P, :₋P, :srcθ], [:limit, :K])
-    affect_neg! = ComponentAffect((args...)->nothing, [:₋P],[:active])
+    # every named symbol is fine anywhere: param in condition sym, observed/input/output in
+    # affect sym, state or observed in the legacy psym
+    cond = ComponentCondition(nop, [:P, :₋P, :srcθ, :limit], [:limit, :K, :P])
+    affect = ComponentAffect(nop, [:₋P, :srcθ],[:active, :Δθ])
+    affect_neg! = ComponentAffect(nop, [:P], [:limit])
     cb = ContinuousComponentCallback(cond, affect; affect_neg!)
-    @test_throws ArgumentError set_callback!(nw.im.edgem[1], cb)
-    cond = ComponentCondition((args...)->nothing, [:P, :₋P, :srcθ], [:limit, :K])
-    affect_neg! = ComponentAffect((args...)->nothing, [],[:active, :P])
-    cb = ContinuousComponentCallback(cond, affect; affect_neg!)
-    @test_throws ArgumentError set_callback!(nw.im.edgem[1], cb)
+    set_callback!.(nw.im.edgem, Ref(cb))
+    cbb = only(wrap_component_callbacks(nw))
+    @test _batch_condition(cbb) isa Function
+    @test _scalar_member_affect(cbb, getaffect) isa Tuple{AffectAccess, Function}
+    @test _scalar_member_affect(cbb, getaffect_neg) isa Tuple{AffectAccess, Function}
+    @test get_callbacks(nw) isa SciMLBase.DECallback
+
+    cond = ComponentCondition(nop, [:θ, :ω, :P, :Pdamping, :M])
+    affect = ComponentAffect(nop, [:θ, :P, :Pdamping, :Pmech])
+    set_callback!(nw.im.vertexm[1], DiscreteComponentCallback(cond, affect))
+    set_callback!(nw.im.vertexm[2], PresetTimeComponentCallback(1.0, affect))
+    @test has_callback(nw.im.vertexm[1]) && has_callback(nw.im.vertexm[2])
+
+    # undefined symbols throw on set_callback!
+    good_cond = ComponentCondition(nop, [:P, :limit])
+    good_aff = ComponentAffect(nop, [:active])
+    bad_cond = ComponentCondition(nop, [:P, :doesnotexist])
+    bad_aff = ComponentAffect(nop, [:active, :doesnotexist])
+    e1 = nw.im.edgem[1]
+    @test_throws ArgumentError set_callback!(e1, ContinuousComponentCallback(bad_cond, good_aff))
+    @test_throws ArgumentError set_callback!(e1, ContinuousComponentCallback(good_cond, bad_aff))
+    @test_throws ArgumentError set_callback!(e1, ContinuousComponentCallback(good_cond, good_aff; affect_neg! = bad_aff))
+    # legacy form
+    @test_throws ArgumentError set_callback!(e1, ContinuousComponentCallback(
+        ComponentCondition(nop, [:P], [:doesnotexist]), ComponentAffect(nop, [], [:active])))
+    # a symbol of a vertex is not a symbol of the edge
+    @test_throws ArgumentError set_callback!(e1, PresetTimeComponentCallback(1.0, ComponentAffect(nop, [:ω])))
+
+    # without the check, undefined symbols throw when the batch is built
+    nw = basenetwork()
+    cb = ContinuousComponentCallback(bad_cond, bad_aff; affect_neg! = bad_aff)
+    set_callback!.(nw.im.edgem, Ref(cb); check=false)
+    cbb = only(wrap_component_callbacks(nw))
+    @test_throws ArgumentError _batch_condition(cbb)
+    @test_throws ArgumentError _scalar_member_affect(cbb, getaffect)
+    @test_throws ArgumentError _scalar_member_affect(cbb, getaffect_neg)
+    @test_throws ArgumentError get_callbacks(nw)
+
+    @test_throws ArgumentError AffectAccess(nw, [EIndex(1, :active), EIndex(1, :doesnotexist)])
+    @test_throws ArgumentError AffectAccess(nw, [VIndex(1, :θ), VPIndex(1, :doesnotexist)])
+    acc = AffectAccess(nw, [VIndex(1, :θ), VIndex(1, :Pmech), VPIndex(1, :D), VIndex(1, :P), VIndex(1, :Pdamping)])
+    @test acc.uidx[1] > 0 && acc.pidx[1] == 0 # state
+    @test acc.uidx[2] == 0 && acc.pidx[2] > 0 # param through VIndex
+    @test acc.uidx[3] == 0 && acc.pidx[3] > 0 # param through VPIndex
+    @test acc.uidx[4:5] == [0, 0] && acc.pidx[4:5] == [0, 0] # input and observed
 end
 
 @testset "check callbacks with different affneg" begin
@@ -371,6 +587,97 @@ end
     sol = solve(prob, Tsit5());
     @test sin_up ≈ [2, 4] atol=1e-3
     @test isempty(sin_down)
+end
+
+@testset "callback constructors reject wrong arity" begin
+    # a legacy (u, p, t) function passes the ComponentCondition arity check as f!(out, u, t),
+    # so the callback constructors have to catch it
+    f3 = (u, p, t) -> u[1] - p[1]
+    a3 = (u, p, ctx) -> nothing
+    c = ComponentCondition(f3, [:P, :limit])
+    a = ComponentAffect(a3, [:active])
+    @test_throws ArgumentError ContinuousComponentCallback(c, a)
+    @test_throws ArgumentError DiscreteComponentCallback(c, a)
+    @test_throws ArgumentError PresetTimeComponentCallback([1.0], a)
+    # the other way round: scalar signatures in a vector callback
+    cs = ComponentCondition((u, t) -> 0.0, [:P])
+    as = ComponentAffect((u, ctx) -> nothing, [:P])
+    @test_throws ArgumentError VectorContinuousComponentCallback(cs, as, 2)
+    @test VectorContinuousComponentCallback(ComponentCondition((out, u, t) -> nothing, [:P]),
+                                            ComponentAffect((u, signs, ctx) -> nothing, [:P]), 2) isa VectorContinuousComponentCallback
+    # legacy forms define both arities and pass everywhere
+    cl = ComponentCondition(f3, [:P], [:limit])
+    al = ComponentAffect(a3, [], [:active])
+    @test ContinuousComponentCallback(cl, al) isa ContinuousComponentCallback
+    @test DiscreteComponentCallback(cl, al) isa DiscreteComponentCallback
+    @test PresetTimeComponentCallback([1.0], al) isa PresetTimeComponentCallback
+    @test VectorContinuousComponentCallback(cl, al, 2) isa VectorContinuousComponentCallback
+end
+
+@testset "ctx.dt_reset opt out" begin
+    counter = ComponentAffect([:Pmech]) do u, ctx
+        u[:Pmech] = u[:Pmech] + 1e-3 # bookkeeping change, keep the step
+        ctx.dt_reset[] = false
+    end
+    kick = ComponentAffect([:ω]) do u, ctx
+        u[:ω] = u[:ω] + 0.05
+    end
+    # an opted out affect alone keeps the step, a second affect asking for the reset wins
+    nw1 = basenetwork()
+    set_callback!(nw1.im.vertexm[1], PresetTimeComponentCallback([1.0], counter))
+    sol1 = solve(ODEProblem(nw1, NWState(nw1), (0, 2.0)), Tsit5())
+    nw2 = basenetwork()
+    set_callback!(nw2.im.vertexm[1], PresetTimeComponentCallback([1.0], counter))
+    set_callback!(nw2.im.vertexm[2], PresetTimeComponentCallback([1.0], kick))
+    sol2 = solve(ODEProblem(nw2, NWState(nw2), (0, 2.0)), Tsit5())
+    i1 = findlast(==(1.0), sol1.t); i2 = findlast(==(1.0), sol2.t) # the event time is saved twice
+    step1 = sol1.t[i1+1] - 1.0
+    step2 = sol2.t[i2+1] - 1.0
+    @test step1 > 10*step2 # with the reset the first step after the event is tiny
+    @test sol1[VPIndex(1, :Pmech)][end] ≈ -1 + 1e-3 # parameter change was still saved
+    @test length(sol1[VPIndex(1, :Pmech)]) == 2
+
+    # discrete batch: two members fire together, one opts out, the other one asks for the reset
+    nw3 = basenetwork()
+    fired = Int[]
+    dc_out = DiscreteComponentCallback(ComponentCondition([:θ]) do u, t; t > 1.0 && u[:θ] < 1e3 end,
+        ComponentAffect([:Pmech]) do u, ctx
+            push!(fired, ctx.vidx)
+            u[:Pmech] = 100.0 # stop firing again
+            ctx.vidx == 1 && (ctx.dt_reset[] = false)
+        end)
+    set_callback!(nw3.im.vertexm[1], dc_out)
+    set_callback!(nw3.im.vertexm[2], dc_out)
+    @test length(wrap_component_callbacks(nw3)) == 1
+    sol3 = solve(ODEProblem(nw3, NWState(nw3), (0, 2.0)), Tsit5())
+    @test sort(fired) == [1, 2]
+    it = findfirst(t -> t > 1.0, sol3.t)
+    @test sol3.t[it+1] - sol3.t[it] < 1e-3 # vertex 2 forced the reset
+
+    # continuous batch: both members cross at t=1, reset and parameter save happen once per event
+    cc_cond = ComponentCondition([:θ]) do u, t; t - 1.0 end
+    function solve_cc(optout)
+        nw = basenetwork()
+        aff = ComponentAffect([:Pmech]) do u, ctx
+            u[:Pmech] = u[:Pmech] + 1e-3
+            ctx.vidx in optout && (ctx.dt_reset[] = false)
+        end
+        cb = ContinuousComponentCallback(cc_cond, aff)
+        set_callback!(nw.im.vertexm[1], cb)
+        set_callback!(nw.im.vertexm[2], cb)
+        @test length(wrap_component_callbacks(nw)) == 1
+        solve(ODEProblem(nw, NWState(nw), (0, 2.0)), Tsit5())
+    end
+    sol_one = solve_cc([1])     # only vertex 2 asks for the reset
+    sol_both = solve_cc([1, 2]) # nobody does
+    i_one = findlast(==(1.0), sol_one.t); i_both = findlast(==(1.0), sol_both.t)
+    # one member is enough for the reset, without it the step continues undisturbed
+    @test sol_both.t[i_both+1] > sol_one.t[i_one+1]
+    for sol in (sol_one, sol_both), v in 1:2
+        ts = sol[VPIndex(v, :Pmech)]
+        @test length(ts) == 2 # initial value and one save at the event
+        @test ts[end] ≈ ts[1] + 1e-3
+    end
 end
 
 @testset "symbolic view test" begin

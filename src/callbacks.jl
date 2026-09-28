@@ -16,60 +16,57 @@ implementations of this abstract type.
 abstract type ComponentCallback end
 
 """
-    ComponentCondition(f::Function, sym, psym)
+    ComponentCondition(f::Function, sym)
 
 Creates a callback condition for a [`ComponentCallback`].
-- `f`: The condition function. Must be a function of the form `out=f(u, p, t)`
+- `f`: The condition function. Must be a function of the form `out=f(u, t)`
   when used for [`ContinuousComponentCallback`](@ref) or
-  [`DiscreteComponentCallback`](@ref) and `f!(out, u, p, t)` when used for
+  [`DiscreteComponentCallback`](@ref) and `f!(out, u, t)` when used for
   [`VectorContinuousComponentCallback`](@ref).
   - Arguments of `f`
-    - `u`: The current value of the selected `sym` states, provided as a [`SymbolicView`](@ref) object.
-    - `p`: The current value of the selected `psym` parameters.
+    - `u`: The current values of the selected `sym` symbols, provided as a [`SymbolicView`](@ref) object.
     - `t`: The current simulation time.
-- `sym`: A vector or tuple of symbols, which represent **states** (including
-  inputs, outputs, observed) of the component model. Determines, which states will
-  be available through parameter `u` in the callback condition function `f`.
-- `psym`: A vector or tuple of symbols, which represent **parameters** of the component mode.
-  Determines, which parameters will be available in the condition function `f`
+- `sym`: A vector or tuple of symbols naming **states, parameters, inputs, outputs or observed**
+  of the component model. Determines which values will be available through `u` in `f`.
 
 # Example
 Consider a component model with states `[:u1, :u2]`, inputs `[:i]`, outputs
 `[:o]` and parameters `[:p1, :p2]`.
 
-    ComponentCondition([:u1, :o], [:p1]) do u, p, t
-        # access states symbolically or via int index
+    ComponentCondition([:u1, :o, :p1]) do u, t
+        # access values symbolically or via int index
         u[:u1] == u[1]
         u[:o] == u[2]
-        p[:p1] == p[1]
-        # the states/prameters `:u2`, `:i` and `:p2` are not available as
-        # they are not listed in the `sym` and `psym` arguments.
+        u[:p1] == u[3]
+        # `:u2`, `:i` and `:p2` are not available as they are not listed in `sym`.
     end
+
+The legacy form `ComponentCondition(f, sym, psym)` with `f(u, p, t)` is still supported.
 """
-struct ComponentCondition{C,DIM,PDIM}
+struct ComponentCondition{C,DIM}
     f::C
     sym::NTuple{DIM,Symbol}
-    psym::NTuple{PDIM,Symbol}
-    function ComponentCondition(f, sym, psym)
-        if !hasmethod(f, Tuple{SymbolicView, SymbolicView, Float64}) &&
-           !hasmethod(f, Tuple{Vector{Float64}, SymbolicView, SymbolicView, Float64})
+    function ComponentCondition(f, sym)
+        if !hasmethod(f, Tuple{SymbolicView, Float64}) &&
+           !hasmethod(f, Tuple{Vector{Float64}, SymbolicView, Float64})
             throw(ArgumentError(
-                "The provided affect function has no method defined for (u, p, t). Available method signatures are:\n$(methods(f))\n"
+                "The provided condition function has no method defined for (u, t). Available method signatures are:\n$(methods(f))\n"
             ))
         end
-        new{typeof(f), length(sym), length(psym)}(f, Tuple(sym), Tuple(psym))
+        new{typeof(f), length(sym)}(f, Tuple(sym))
     end
 end
 
 """
-    ComponentAffect(f::Function, sym, psym)
+    ComponentAffect(f::Function, sym)
 
-Creates a callback condition for a [`ComponentCallback`].
-- `f`: The affect function. Must be a function of the form `f(u, p, [event_signs], ctx)` where `event_signs`
+Creates a callback affect for a [`ComponentCallback`].
+- `f`: The affect function. Must be a function of the form `f(u, [event_signs], ctx)` where `event_signs`
   is only available in [`VectorContinuousComponentCallback`](@ref).
   - Arguments of `f`
-    - `u`: The current (mutable) value of the selected `sym` states, provided as a [`SymbolicView`](@ref) object.
-    - `p`: The current (mutable) value of the selected `psym` parameters.
+    - `u`: The current values of the selected `sym` symbols, provided as a [`SymbolicView`](@ref) object.
+      Entries which are states or parameters of the component can be written to, all other entries
+      (inputs, outputs, observed) are read only.
     - `event_signs`: Only for [`VectorContinuousComponentCallback`](@ref): a length-`len` vector of
       `Int8`s encoding, for each condition output `i`, whether it crossed (`0` no crossing, `+1` upcrossing,
       `-1` downcrossing). The affect resolves the direction and any simultaneous crossings itself.
@@ -79,34 +76,39 @@ Creates a callback condition for a [`ComponentCallback`].
        - `ctx.src`/`ctx.dst`: src and dst indices (only for edge models).
        - `ctx.integrator`: The integrator object. Use [`extract_nw`](@ref) to obtain the network.
        - `ctx.t=ctx.integrator.t`: The current simulation time.
-- `sym`: A vector or tuple of symbols, which represent **states** (**excluding**
-  inputs, outputs, observed) of the component model. Determines, which states will
-  be available through parameter `u` in the callback condition function `f`.
-- `psym`: A vector or tuple of symbols, which represent **parameters** of the component mode.
-  Determines, which parameters will be available in the condition function `f`
+       - `ctx.dt_reset::Ref{Bool}`: Set `ctx.dt_reset[] = false` to skip the automatic
+         [`SciMLBase.auto_dt_reset!`](@extref) after a change of `u`. Meant for affects which
+         only store a value and don't introduce a discontinuity; parameter changes are saved either way.
+         If several affects fire at the same time, one of them asking for the reset is enough.
+- `sym`: A vector or tuple of symbols naming **states, parameters, inputs, outputs or observed**
+  of the component model. Determines which values will be available through `u` in `f`.
+
+The values in `u` are a snapshot taken when the affect fires. Writing a state or parameter updates
+the integrator immediately, but observed entries which depend on it are not recomputed.
 
 # Example
 Consider a component model with states `[:u1, :u2]`, inputs `[:i]`, outputs
 `[:o]` and parameters `[:p1, :p2]`.
 
-    ComponentAffect([:u1, :o], [:p1]) do u, p, ctx
+    ComponentAffect([:u1, :p1, :o]) do u, ctx
         u[:u1] = 0 # change the state
-        p[:p1] = 1 # change the parameter
+        u[:p1] = u[:o] # change the parameter based on the observed
         @info "Changed :u1 and :p1 on vertex \$(ctx.vidx)" # access context
     end
+
+The legacy form `ComponentAffect(f, sym, psym)` with `f(u, p, ctx)` is still supported.
 """
-struct ComponentAffect{A,DIM,PDIM}
+struct ComponentAffect{A,DIM}
     f::A
     sym::NTuple{DIM,Symbol}
-    psym::NTuple{PDIM,Symbol}
-    function ComponentAffect(f, sym, psym)
-        if !hasmethod(f, Tuple{SymbolicView, SymbolicView, NamedTuple}) &&
-           !hasmethod(f, Tuple{Vector{Float64}, SymbolicView, SymbolicView, NamedTuple})
+    function ComponentAffect(f, sym)
+        if !hasmethod(f, Tuple{SymbolicView, NamedTuple}) &&
+           !hasmethod(f, Tuple{SymbolicView, AbstractVector{Int8}, NamedTuple})
             throw(ArgumentError(
-                "The provided affect function has no method defined for (u, p, ctx). Available method signatures are:\n$(methods(f))\n"
+                "The provided affect function has no method defined for (u, ctx). Available method signatures are:\n$(methods(f))\n"
             ))
         end
-        new{typeof(f), length(sym), length(psym)}(f, Tuple(sym), Tuple(psym))
+        new{typeof(f), length(sym)}(f, Tuple(sym))
     end
 end
 
@@ -136,6 +138,9 @@ struct ContinuousComponentCallback{
     kwargs::NamedTuple
 end
 function ContinuousComponentCallback(condition, affect; affect_neg! = affect, kwargs...)
+    _assert_scalar_signature(condition) # (u, t)
+    _assert_scalar_signature(affect)    # (u, ctx)
+    isnothing(affect_neg!) || _assert_scalar_signature(affect_neg!) # (u, ctx)
     ContinuousComponentCallback(condition, affect, affect_neg!, NamedTuple(kwargs))
 end
 
@@ -174,6 +179,8 @@ struct VectorContinuousComponentCallback{
     kwargs::NamedTuple
 end
 function VectorContinuousComponentCallback(condition, affect, len; kwargs...)
+    _assert_vector_signature(condition) # (out, u, t)
+    _assert_vector_signature(affect)    # (u, event_signs, ctx)
     VectorContinuousComponentCallback(condition, affect, len, NamedTuple(kwargs))
 end
 
@@ -198,6 +205,8 @@ struct DiscreteComponentCallback{C<:ComponentCondition,A<:ComponentAffect} <: Co
     kwargs::NamedTuple
 end
 function DiscreteComponentCallback(condition, affect; kwargs...)
+    _assert_scalar_signature(condition) # (u, t)
+    _assert_scalar_signature(affect)    # (u, ctx)
     DiscreteComponentCallback(condition, affect, NamedTuple(kwargs))
 end
 
@@ -221,7 +230,34 @@ struct PresetTimeComponentCallback{T,A} <: ComponentCallback
     kwargs::NamedTuple
 end
 function PresetTimeComponentCallback(ts, affect; kwargs...)
+    _assert_scalar_signature(affect) # (u, ctx)
     PresetTimeComponentCallback(ts, affect, NamedTuple(kwargs))
+end
+
+# The condition/affect constructors accept both the scalar and the vector arity, so a function
+# with the old `(u, p, t)` shape would silently pass as a vector `(out, u, t)`. The callback
+# constructors know which arity they need and catch that here.
+function _assert_scalar_signature(c::ComponentCondition)
+    hasmethod(c.f, Tuple{SymbolicView, Float64}) && return
+    throw(ArgumentError("The condition function must have the signature f(u, t) for this callback \
+        type. Got a function with signatures:\n$(methods(c.f))\n\
+        If it has the form f(u, p, t), use ComponentCondition(f, sym, psym) or move the parameters into the symbol list."))
+end
+function _assert_vector_signature(c::ComponentCondition)
+    hasmethod(c.f, Tuple{Vector{Float64}, SymbolicView, Float64}) && return
+    throw(ArgumentError("The condition function must have the signature f!(out, u, t) for a vector \
+        callback. Got a function with signatures:\n$(methods(c.f))\n"))
+end
+function _assert_scalar_signature(a::ComponentAffect)
+    hasmethod(a.f, Tuple{SymbolicView, NamedTuple}) && return
+    throw(ArgumentError("The affect function must have the signature f(u, ctx) for this callback \
+        type. Got a function with signatures:\n$(methods(a.f))\n\
+        If it has the form f(u, p, ctx), use ComponentAffect(f, sym, psym) or move the parameters into the symbol list."))
+end
+function _assert_vector_signature(a::ComponentAffect)
+    hasmethod(a.f, Tuple{SymbolicView, AbstractVector{Int8}, NamedTuple}) && return
+    throw(ArgumentError("The affect function must have the signature f(u, event_signs, ctx) for a vector \
+        callback. Got a function with signatures:\n$(methods(a.f))\n"))
 end
 
 # accessors
@@ -365,48 +401,32 @@ abstract type CallbackWrapper end
 Base.length(cw::CallbackWrapper) = length(cw.callbacks)
 cbtype(cw::CallbackWrapper) = eltype(cw.callbacks)
 
-@inline condition_dim(cw::CallbackWrapper)  = first(cw.callbacks).condition.sym  |> length
-@inline condition_pdim(cw::CallbackWrapper) = first(cw.callbacks).condition.psym |> length
+@inline condition_dim(cw::CallbackWrapper) = first(cw.callbacks).condition.sym |> length
 
-@inline affect_dim(cw::CallbackWrapper, aff_or_cond, i)  = aff_or_cond(cw.callbacks[i]).sym  |> length
-@inline affect_pdim(cw::CallbackWrapper, aff_or_cond, i) = aff_or_cond(cw.callbacks[i]).psym |> length
+@inline affect_dim(cw::CallbackWrapper, aff_or_cond, i) = aff_or_cond(cw.callbacks[i]).sym |> length
 @inline function affect_dim(cw::CallbackWrapper, _::typeof(getaffect_neg), i)
     affect_neg = getaffect_neg(cw.callbacks[i])
     isnothing(affect_neg) ? 0 : length(affect_neg.sym)
 end
-@inline function affect_pdim(cw::CallbackWrapper, _::typeof(getaffect_neg), i)
-    affect_neg = getaffect_neg(cw.callbacks[i])
-    isnothing(affect_neg) ? 0 : length(affect_neg.psym)
-end
 
-@inline condition_urange(cw::CallbackWrapper, i) = (1 + (i-1)*condition_dim(cw))  : i*condition_dim(cw)
-@inline condition_prange(cw::CallbackWrapper, i) = (1 + (i-1)*condition_pdim(cw)) : i*condition_pdim(cw)
+@inline condition_urange(cw::CallbackWrapper, i) = (1 + (i-1)*condition_dim(cw)) : i*condition_dim(cw)
 @inline function affect_urange(cw::CallbackWrapper, aff_or_affneg, i)
     offset = sum(j -> affect_dim(cw, aff_or_affneg, j), 1:(i-1), init=0) # collect dimension before
     offset + 1 : offset + affect_dim(cw, aff_or_affneg, i)
 end
-@inline function affect_prange(cw::CallbackWrapper, aff_or_affneg, i)
-    offset = sum(j -> affect_pdim(cw, aff_or_affneg, j), 1:(i-1), init=0) # collect dimension before
-    offset + 1 : offset + affect_pdim(cw, aff_or_affneg, i)
-end
 
-function collect_c_or_a_indices(cw::CallbackWrapper, accessor, u_or_p)
+# flat list of symbolic indices for all members of the batch, in slot order
+function collect_c_or_a_indices(cw::CallbackWrapper, accessor)
     sidxs = SymbolicIndex[]
     for (component, cb) in zip(cw.components, cw.callbacks)
         if accessor == getaffect_neg && accessor(cb) === nothing
             continue
         end
-        syms = getproperty(accessor(cb), u_or_p)
-        symidxtype = if component isa VIndex
-            u_or_p == :sym ? VIndex : VPIndex
-        else
-            u_or_p ==:sym ? EIndex : EPIndex
-        end
-        sidx = collect(symidxtype(component.compidx, syms))
-        append!(sidxs, sidx)
+        append!(sidxs, _symidxs(component, accessor(cb).sym))
     end
     sidxs
 end
+_symidxs(component::SymbolicIndex, syms) = collect(idxtype(component)(component.compidx, syms))
 
 ####
 #### observed function shared by the callback wrappers
@@ -430,6 +450,57 @@ function (o::CallbackObsf)(u, p, t, out)
     else
         o.f(u, p, Ref(t), out)
     end
+end
+
+####
+#### gather and write-through for affects
+####
+# An affect gets its `u` from a scratch buffer which is filled by the observed function of all
+# requested symbols. Each slot knows where a write should land in `integrator.u` or
+# `integrator.p`, so states and parameters are writable while everything else is read only.
+struct AffectAccess{DC}
+    obsf::CallbackObsf
+    cache::DC
+    uidx::Vector{Int} # position in u, 0 if the slot is no state
+    pidx::Vector{Int} # position in p, 0 if the slot is no parameter
+    changed::Vector{Bool} # [state written, parameter written], reset per fire
+    dt_reset::Base.RefValue{Bool} # exposed as ctx.dt_reset, affects may opt out of the step reset
+end
+function AffectAccess(nw, symidxs)
+    missing = filter(s -> !(SII.is_variable(nw, s) || SII.is_parameter(nw, s) || SII.is_observed(nw, s)), symidxs)
+    if !isempty(missing)
+        throw(ArgumentError("Cannot build callback as it contains references to undefined symbols: $(missing)"))
+    end
+    obsf = CallbackObsf(SII.observed(nw, symidxs))
+    cache = DiffCache(zeros(length(symidxs)), ad_chunksize(nw.im))
+    uidx = Int[something(SII.variable_index(nw, s), 0) for s in symidxs]
+    pidx = Int[something(SII.parameter_index(nw, s), 0) for s in symidxs]
+    AffectAccess(obsf, cache, uidx, pidx, [false, false], Ref(true))
+end
+function _gather(acc::AffectAccess, integrator)
+    scratch = PreallocationTools.get_tmp(acc.cache, integrator.u)
+    acc.obsf(integrator.u, integrator.p, integrator.t, scratch)
+    scratch
+end
+function _affect_view(acc::AffectAccess, scratch, integrator, range, syms)
+    fill!(acc.changed, false)
+    acc.dt_reset[] = true
+    wt = WriteThrough(view(scratch, range), integrator.u, integrator.p,
+                      view(acc.uidx, range), view(acc.pidx, range), syms, acc.changed)
+    SymbolicView(wt, syms)
+end
+# Several members of a batch may fire at the same event time. Each affect reports whether it
+# wants a step reset and whether it changed a parameter, the batch collects the flags and
+# acts once per event: one member asking for the reset is enough.
+function _affect_flags(u::SymbolicView{<:Any,<:WriteThrough}, ctx)
+    wt = u.v
+    dt_reset = ctx.dt_reset[] && (uchanged(wt) || pchanged(wt))
+    (dt_reset, pchanged(wt))
+end
+function _finish_affects!(integrator, dt_reset::Bool, pchanged::Bool)
+    dt_reset && SciMLBase.auto_dt_reset!(integrator)
+    pchanged && save_parameters!(integrator)
+    nothing
 end
 
 ####
@@ -457,8 +528,6 @@ end
 # Continuous-specific functions (for vector callbacks)
 condition_outrange(ccw::ContinuousCallbackWrapper, i) = (1 + (i-1)*ccw.sublen) : i*ccw.sublen
 
-cbidx_from_outidx(ccw::ContinuousCallbackWrapper, outidx) = div(outidx-1, ccw.sublen) + 1
-
 # generate VectorContinuousCallback from a ContinuousCallbackWrapper
 #
 # SciMLBase>=3 dropped `affect_neg!` from `VectorContinuousCallback`; instead the
@@ -476,62 +545,32 @@ function to_callback(ccw::ContinuousCallbackWrapper)
     cond = _batch_condition(ccw)
 
     len = ccw.sublen * length(ccw.callbacks)
-    if cbtype(ccw) <: ContinuousComponentCallback
-        pos_affect = _batch_affect(ccw, getaffect)
-        neg_affect = _batch_affect(ccw, getaffect_neg)
-        affect = _updown_affect(pos_affect, neg_affect)
+    affect = if cbtype(ccw) <: ContinuousComponentCallback
+        _batch_scalar_affect(ccw)
     else # VectorContinuousComponentCallback
-        affect = _batch_vector_affect(ccw)
+        _batch_vector_affect(ccw)
     end
     VectorContinuousCallback(cond, affect, len; kwargs...)
 end
-function _updown_affect(pos_affect::P, neg_affect::N) where {P,N}
-    (integrator, event_signs) -> begin
-        for oidx in eachindex(event_signs)
-            s = event_signs[oidx]
-            if s > 0
-                pos_affect(integrator, oidx)
-            elseif s < 0
-                neg_affect(integrator, oidx)
-            end
-        end
-        nothing
-    end
-end
 function _batch_condition(ccw::ContinuousCallbackWrapper)
-    usymidxs = collect_c_or_a_indices(ccw, getcondition, :sym)
-    psymidxs = collect_c_or_a_indices(ccw, getcondition, :psym)
-    ucache = DiffCache(zeros(length(usymidxs)), ad_chunksize(ccw.nw.im))
-
-    obsf = CallbackObsf(SII.observed(ccw.nw, usymidxs))
-    pidxs = SII.parameter_index.(Ref(ccw.nw), psymidxs)
-
-    if any(isnothing, pidxs)
-        nidxs = findall(isnothing, pidxs)
-        missing_p = psymidxs[nidxs]
-        throw(ArgumentError("Cannot build callback as it contains refrences to undefined parameters $(missing_p)"))
-    end
+    symidxs = collect_c_or_a_indices(ccw, getcondition)
+    ucache = DiffCache(zeros(length(symidxs)), ad_chunksize(ccw.nw.im))
+    obsf = CallbackObsf(SII.observed(ccw.nw, symidxs))
 
     (out, u, t, integrator) -> begin
         us = PreallocationTools.get_tmp(ucache, u)
         obsf(u, integrator.p, t, us) # fills us inplace
 
         for i in 1:length(ccw)
-            # symbolic view into u
             uv = view(us, condition_urange(ccw, i))
             _u = SymbolicView(uv, ccw.callbacks[i].condition.sym)
 
-            # symbolic view into p
-            pidxsv = view(pidxs, condition_prange(ccw, i))
-            pv = view(integrator.p, pidxsv)
-            _p = SymbolicView(pv, ccw.callbacks[i].condition.psym)
-
             if cbtype(ccw) <: ContinuousComponentCallback
                 oidx = only(condition_outrange(ccw, i))
-                out[oidx] = ccw.condition(_u, _p, t)
+                out[oidx] = ccw.condition(_u, t)
             elseif cbtype(ccw) <: VectorContinuousComponentCallback
                 @views _out = out[condition_outrange(ccw, i)]
-                ccw.condition(_out, _u, _p, t)
+                ccw.condition(_out, _u, t)
             else
                 error()
             end
@@ -539,114 +578,73 @@ function _batch_condition(ccw::ContinuousCallbackWrapper)
         nothing
     end
 end
-function _batch_affect(ccw::ContinuousCallbackWrapper, aff_or_affneg::F) where {F}
-    usymidxs = collect_c_or_a_indices(ccw, aff_or_affneg, :sym)
-    psymidxs = collect_c_or_a_indices(ccw, aff_or_affneg, :psym)
-
-    uidxs = SII.variable_index.(Ref(ccw.nw), usymidxs)
-    pidxs = SII.parameter_index.(Ref(ccw.nw), psymidxs)
-
-    if any(isnothing, uidxs) || any(isnothing, pidxs)
-        missing_u = []
-        if any(isnothing, uidxs)
-            nidxs = findall(isnothing, uidxs)
-            append!(missing_u, usymidxs[nidxs])
-        end
-        missing_p = []
-        if any(isnothing, pidxs)
-            nidxs = findall(isnothing, pidxs)
-            append!(missing_p, psymidxs[nidxs])
-        end
-        throw(ArgumentError(
-            "Cannot build callback as it contains refrences to undefined symbols:\n"*
-            (isempty(missing_u) ? "" : "Missing state symbols: $(missing_u)\n")*
-            (isempty(missing_p) ? "" : "Missing param symbols: $(missing_p)\n")
-        ))
-    end
-
-    (integrator, outidx) -> begin
-        i = cbidx_from_outidx(ccw, outidx)
-
-        # if affect is nothing just return
-        if aff_or_affneg === getaffect_neg && isnothing(getaffect_neg(ccw.callbacks[i]))
-            return
-        end
-
-        uidxsv = view(uidxs, affect_urange(ccw, aff_or_affneg, i))
-        uv = view(integrator.u, uidxsv)
-        _u = SymbolicView(uv, aff_or_affneg(ccw.callbacks[i]).sym)
-
-        pidxsv = view(pidxs, affect_prange(ccw, aff_or_affneg, i))
-        pv = view(integrator.p, pidxsv)
-        _p = SymbolicView(pv, aff_or_affneg(ccw.callbacks[i]).psym)
-
-        ctx = get_ctx(integrator, ccw.components[i])
-
-        uhash = hash(uv)
-        phash = hash(pv)
-        aff_or_affneg(ccw.callbacks[i]).f(_u, _p, ctx)
-        pchanged = hash(pv) != phash
-        uchanged = hash(uv) != uhash
-
-        (pchanged || uchanged) && SciMLBase.auto_dt_reset!(integrator)
-        pchanged && save_parameters!(integrator)
-    end
-end
-
-# affect builder for `VectorContinuousComponentCallback` batches. In contrast to the
-# scalar `_batch_affect`, this fires each component's affect at most once per event time,
-# passing the length-`sublen` slice of `event_signs` for that component (`0`/`+1`/`-1`).
-function _batch_vector_affect(ccw::ContinuousCallbackWrapper)
-    usymidxs = collect_c_or_a_indices(ccw, getaffect, :sym)
-    psymidxs = collect_c_or_a_indices(ccw, getaffect, :psym)
-
-    uidxs = SII.variable_index.(Ref(ccw.nw), usymidxs)
-    pidxs = SII.parameter_index.(Ref(ccw.nw), psymidxs)
-
-    if any(isnothing, uidxs) || any(isnothing, pidxs)
-        missing_u = []
-        if any(isnothing, uidxs)
-            nidxs = findall(isnothing, uidxs)
-            append!(missing_u, usymidxs[nidxs])
-        end
-        missing_p = []
-        if any(isnothing, pidxs)
-            nidxs = findall(isnothing, pidxs)
-            append!(missing_p, psymidxs[nidxs])
-        end
-        throw(ArgumentError(
-            "Cannot build callback as it contains refrences to undefined symbols:\n"*
-            (isempty(missing_u) ? "" : "Missing state symbols: $(missing_u)\n")*
-            (isempty(missing_p) ? "" : "Missing param symbols: $(missing_p)\n")
-        ))
-    end
+# affect builder for `ContinuousComponentCallback` batches. Each member owns one output slot, so
+# the index into `event_signs` is the member index and the sign picks its up or down affect.
+# The snapshots are taken once per event, so all members see the state before any affect ran.
+function _batch_scalar_affect(ccw::ContinuousCallbackWrapper)
+    pos_acc, pos_affect = _scalar_member_affect(ccw, getaffect)
+    neg_acc, neg_affect = _scalar_member_affect(ccw, getaffect_neg)
 
     (integrator, event_signs) -> begin
+        pos_scratch = any(>(0), event_signs) ? _gather(pos_acc, integrator) : nothing
+        neg_scratch = any(<(0), event_signs) ? _gather(neg_acc, integrator) : nothing
+        any_dt_reset = false
+        any_pchanged = false
+        for i in eachindex(event_signs)
+            s = event_signs[i]
+            dt_reset, pchanged = if s > 0
+                pos_affect(integrator, pos_scratch, i)
+            elseif s < 0
+                neg_affect(integrator, neg_scratch, i)
+            else
+                (false, false)
+            end
+            any_dt_reset |= dt_reset
+            any_pchanged |= pchanged
+        end
+        _finish_affects!(integrator, any_dt_reset, any_pchanged)
+    end
+end
+# returns the access object and a per-member affect; the caller gathers the scratch once per event
+function _scalar_member_affect(ccw::ContinuousCallbackWrapper, aff_or_affneg::F) where {F}
+    acc = AffectAccess(ccw.nw, collect_c_or_a_indices(ccw, aff_or_affneg))
+
+    affect_fn = (integrator, scratch, i) -> begin
+        affect = aff_or_affneg(ccw.callbacks[i])
+        isnothing(affect) && return (false, false) # affect_neg may be absent
+
+        _u = _affect_view(acc, scratch, integrator, affect_urange(ccw, aff_or_affneg, i), affect.sym)
+        ctx = get_ctx(integrator, ccw.components[i], acc)
+        affect.f(_u, ctx)
+        _affect_flags(_u, ctx)
+    end
+    acc, affect_fn
+end
+
+# affect builder for `VectorContinuousComponentCallback` batches. Each member owns `sublen`
+# output slots, several of which may cross at once. Its affect is still called only once and
+# receives the whole slice of `event_signs` (`0`/`+1`/`-1`) to sort out directions itself.
+function _batch_vector_affect(ccw::ContinuousCallbackWrapper)
+    acc = AffectAccess(ccw.nw, collect_c_or_a_indices(ccw, getaffect))
+
+    (integrator, event_signs) -> begin
+        scratch = _gather(acc, integrator)
+        any_dt_reset = false
+        any_pchanged = false
         for i in 1:length(ccw)
             outrange = condition_outrange(ccw, i)
             any(oidx -> !iszero(event_signs[oidx]), outrange) || continue
 
-            uidxsv = view(uidxs, affect_urange(ccw, getaffect, i))
-            uv = view(integrator.u, uidxsv)
-            _u = SymbolicView(uv, getaffect(ccw.callbacks[i]).sym)
-
-            pidxsv = view(pidxs, affect_prange(ccw, getaffect, i))
-            pv = view(integrator.p, pidxsv)
-            _p = SymbolicView(pv, getaffect(ccw.callbacks[i]).psym)
-
-            ctx = get_ctx(integrator, ccw.components[i])
+            affect = getaffect(ccw.callbacks[i])
+            _u = _affect_view(acc, scratch, integrator, affect_urange(ccw, getaffect, i), affect.sym)
+            ctx = get_ctx(integrator, ccw.components[i], acc)
             signs = view(event_signs, outrange)
-
-            uhash = hash(uv)
-            phash = hash(pv)
-            getaffect(ccw.callbacks[i]).f(_u, _p, signs, ctx)
-            pchanged = hash(pv) != phash
-            uchanged = hash(uv) != uhash
-
-            (pchanged || uchanged) && SciMLBase.auto_dt_reset!(integrator)
-            pchanged && save_parameters!(integrator)
+            affect.f(_u, signs, ctx)
+            dt_reset, pchanged = _affect_flags(_u, ctx)
+            any_dt_reset |= dt_reset
+            any_pchanged |= pchanged
         end
-        nothing
+        _finish_affects!(integrator, any_dt_reset, any_pchanged)
     end
 end
 
@@ -675,127 +673,53 @@ function DiscreteCallbackWrapper(nw, components, callbacks)
 end
 
 # generate a DiscreteCallback from a DiscreteCallbackWrapper
+#
+# A `DiscreteCallback` condition is a single Bool, so the batch fires if any member does. The
+# solver calls the affect right after a true condition on the same state, so the condition
+# records which members fired in `fired` and the affect just reads it back.
 function to_callback(dcw::DiscreteCallbackWrapper)
     kwargs = first(dcw.callbacks).kwargs
-    cond = _batch_condition(dcw)
-    affect = _batch_affect(dcw)
+    fired = fill(false, length(dcw))
+    cond = _batch_condition(dcw, fired)
+    affect = _batch_affect(dcw, fired)
     DiscreteCallback(cond, affect; kwargs...)
 end
-function _batch_condition(dcw::DiscreteCallbackWrapper)
-    usymidxs = collect_c_or_a_indices(dcw, getcondition, :sym)
-    psymidxs = collect_c_or_a_indices(dcw, getcondition, :psym)
-    ucache = DiffCache(zeros(length(usymidxs)), ad_chunksize(dcw.nw.im))
-
-    obsf = CallbackObsf(SII.observed(dcw.nw, usymidxs))
-    pidxs = SII.parameter_index.(Ref(dcw.nw), psymidxs)
-
-    if any(isnothing, pidxs)
-        nidxs = findall(isnothing, pidxs)
-        missing_p = psymidxs[nidxs]
-        throw(ArgumentError("Cannot build callback as it contains refrences to undefined parameters $(missing_p)"))
-    end
+function _batch_condition(dcw::DiscreteCallbackWrapper, fired)
+    symidxs = collect_c_or_a_indices(dcw, getcondition)
+    ucache = DiffCache(zeros(length(symidxs)), ad_chunksize(dcw.nw.im))
+    obsf = CallbackObsf(SII.observed(dcw.nw, symidxs))
 
     (u, t, integrator) -> begin
         us = PreallocationTools.get_tmp(ucache, u)
         obsf(u, integrator.p, t, us) # fills us inplace
 
-        # OR logic: return true if ANY component condition is true
         for i in 1:length(dcw)
-            # symbolic view into u
             uv = view(us, condition_urange(dcw, i))
             _u = SymbolicView(uv, dcw.callbacks[i].condition.sym)
-
-            # symbolic view into p
-            pidxsv = view(pidxs, condition_prange(dcw, i))
-            pv = view(integrator.p, pidxsv)
-            _p = SymbolicView(pv, dcw.callbacks[i].condition.psym)
-
-            # If any condition is true, trigger the callback
-            if dcw.condition(_u, _p, t)
-                return true
-            end
+            fired[i] = dcw.condition(_u, t)
         end
-        return false
+        return any(fired)
     end
 end
-function _batch_affect(dcw::DiscreteCallbackWrapper)
-    # Setup for condition re-evaluation
-    cusymidxs = collect_c_or_a_indices(dcw, getcondition, :sym)
-    cpsymidxs = collect_c_or_a_indices(dcw, getcondition, :psym)
-    cucache = DiffCache(zeros(length(cusymidxs)), ad_chunksize(dcw.nw.im))
-    cobsf = CallbackObsf(SII.observed(dcw.nw, cusymidxs))
-    cpidxs = SII.parameter_index.(Ref(dcw.nw), cpsymidxs)
-
-    # Setup for affect execution
-    ausymidxs = collect_c_or_a_indices(dcw, getaffect, :sym)
-    apsymidxs = collect_c_or_a_indices(dcw, getaffect, :psym)
-
-    auidxs = SII.variable_index.(Ref(dcw.nw), ausymidxs)
-    apidxs = SII.parameter_index.(Ref(dcw.nw), apsymidxs)
-
-    if any(isnothing, auidxs) || any(isnothing, apidxs)
-        missing_u = []
-        if any(isnothing, auidxs)
-            nidxs = findall(isnothing, auidxs)
-            append!(missing_u, ausymidxs[nidxs])
-        end
-        missing_p = []
-        if any(isnothing, apidxs)
-            nidxs = findall(isnothing, apidxs)
-            append!(missing_p, apsymidxs[nidxs])
-        end
-        throw(ArgumentError(
-            "Cannot build callback as it contains refrences to undefined symbols:\n"*
-            (isempty(missing_u) ? "" : "Missing state symbols: $(missing_u)\n")*
-            (isempty(missing_p) ? "" : "Missing param symbols: $(missing_p)\n")
-        ))
-    end
+function _batch_affect(dcw::DiscreteCallbackWrapper, fired)
+    acc = AffectAccess(dcw.nw, collect_c_or_a_indices(dcw, getaffect))
 
     (integrator) -> begin
-        # Re-evaluate all conditions to determine which affects to execute
-        # the affects might mutate p, therfor we ceate a copy to evaluate all
-        # conditions on the unaltered state!
-        cus = PreallocationTools.get_tmp(cucache, integrator.u)
-        cobsf(integrator.u, integrator.p, integrator.t, cus)
-        cps = copy(integrator.p)
-
-        any_uchanged = false
+        scratch = _gather(acc, integrator)
+        any_dt_reset = false
         any_pchanged = false
-
         for i in 1:length(dcw)
-            # Re-evaluate condition for component i
-            cuv = view(cus, condition_urange(dcw, i))
-            c_u = SymbolicView(cuv, dcw.callbacks[i].condition.sym)
-            cpidxsv = view(cpidxs, condition_prange(dcw, i))
-            cpv = view(cps, cpidxsv)
-            c_p = SymbolicView(cpv, dcw.callbacks[i].condition.psym)
+            fired[i] || continue
 
-            # Only execute affect if condition is true
-            if dcw.condition(c_u, c_p, integrator.t)
-                # Execute affect for component i
-                auidxsv = view(auidxs, affect_urange(dcw, getaffect, i))
-                auv = view(integrator.u, auidxsv)
-                a_u = SymbolicView(auv, getaffect(dcw.callbacks[i]).sym)
-
-                apidxsv = view(apidxs, affect_prange(dcw, getaffect, i))
-                apv = view(integrator.p, apidxsv)
-                a_p = SymbolicView(apv, getaffect(dcw.callbacks[i]).psym)
-
-                ctx = get_ctx(integrator, dcw.components[i])
-
-                uhash = hash(auv)
-                phash = hash(apv)
-                getaffect(dcw.callbacks[i]).f(a_u, a_p, ctx)
-                pchanged = hash(apv) != phash
-                uchanged = hash(auv) != uhash
-
-                any_uchanged = any_uchanged || uchanged
-                any_pchanged = any_pchanged || pchanged
-            end
+            affect = getaffect(dcw.callbacks[i])
+            _u = _affect_view(acc, scratch, integrator, affect_urange(dcw, getaffect, i), affect.sym)
+            ctx = get_ctx(integrator, dcw.components[i], acc)
+            affect.f(_u, ctx)
+            dt_reset, pchanged = _affect_flags(_u, ctx)
+            any_dt_reset |= dt_reset
+            any_pchanged |= pchanged
         end
-
-        (any_uchanged || any_pchanged) && SciMLBase.auto_dt_reset!(integrator)
-        any_pchanged && save_parameters!(integrator)
+        _finish_affects!(integrator, any_dt_reset, any_pchanged)
     end
 end
 
@@ -822,49 +746,35 @@ function to_callback(ptcw::PresetTimeCallbackWrapper)
     kwargs = callback.kwargs
     ts = callback.ts
 
-    # Create affect function for the single component
-    uidxtype = component isa EIndex ? EIndex : VIndex
-    pidxtype = component isa EIndex ? EPIndex : VPIndex
-    usymidxs = uidxtype(component.compidx, getaffect(callback).sym)
-    psymidxs = pidxtype(component.compidx, getaffect(callback).psym)
+    affect = getaffect(callback)
+    symidxs = _symidxs(component, affect.sym)
+    acc = AffectAccess(ptcw.nw, symidxs)
 
-    uidxs = SII.variable_index.(Ref(ptcw.nw), usymidxs)
-    pidxs = SII.parameter_index.(Ref(ptcw.nw), psymidxs)
-
-    affect = (integrator) -> begin
-        uv = view(integrator.u, uidxs)
-        _u = SymbolicView(uv, getaffect(callback).sym)
-        pv = view(integrator.p, pidxs)
-        _p = SymbolicView(pv, getaffect(callback).psym)
-        ctx = get_ctx(integrator, component)
-
-        uhash = hash(uv)
-        phash = hash(pv)
-        getaffect(callback).f(_u, _p, ctx)
-        pchanged = hash(pv) != phash
-        uchanged = hash(uv) != uhash
-
-        (pchanged || uchanged) && SciMLBase.auto_dt_reset!(integrator)
-        pchanged && save_parameters!(integrator)
+    affect_fn = (integrator) -> begin
+        scratch = _gather(acc, integrator)
+        _u = _affect_view(acc, scratch, integrator, 1:length(symidxs), affect.sym)
+        ctx = get_ctx(integrator, component, acc)
+        affect.f(_u, ctx)
+        _finish_affects!(integrator, _affect_flags(_u, ctx)...)
     end
 
-    DiffEqCallbacks.PresetTimeCallback(ts, affect; kwargs...)
+    DiffEqCallbacks.PresetTimeCallback(ts, affect_fn; kwargs...)
 end
 
 
 ####
 #### generate the context for the callback effects
 ####
-function get_ctx(integrator, sym::VIndex)
+function get_ctx(integrator, sym::VIndex, acc::AffectAccess)
     nw = extract_nw(integrator)
     idx = sym.compidx
-    (; integrator, t=integrator.t, model=nw[sym], vidx=idx)
+    (; integrator, t=integrator.t, model=nw[sym], vidx=idx, dt_reset=acc.dt_reset)
 end
-function get_ctx(integrator, sym::EIndex)
+function get_ctx(integrator, sym::EIndex, acc::AffectAccess)
     nw = extract_nw(integrator)
     idx = sym.compidx
     edge = nw.im.edgevec[idx]
-    (; integrator, t=integrator.t, model=nw[sym], eidx=idx, src=edge.src, dst=edge.dst)
+    (; integrator, t=integrator.t, model=nw[sym], eidx=idx, src=edge.src, dst=edge.dst, dt_reset=acc.dt_reset)
 end
 
 ####
@@ -873,40 +783,18 @@ end
 assert_cb_compat(comp::ComponentModel, t::Tuple) = assert_cb_compat.(Ref(comp), t)
 function assert_cb_compat(comp::ComponentModel, cb)
     insym = hasinsym(comp) ? insym_all(comp) : []
-    all_obssym = Set(sym(comp)) ∪ Set(comp.obssym) ∪ insym ∪ outsym_flat(comp)
-    pcond = s -> s in comp.psym
-    ucond_cond = s -> s in all_obssym
-    ucond_affect = s -> s in comp.sym
+    named = Set(sym(comp)) ∪ Set(psym(comp)) ∪ Set(comp.obssym) ∪ insym ∪ outsym_flat(comp)
 
     hints = String[]
-    if !(cb isa PresetTimeComponentCallback)
-        if !(all(ucond_cond, cb.condition.sym))
-            invalid = filter(!ucond_cond, cb.condition.sym)
-            push!(hints, "All u symbols in the callback condition must be observed or variable. Found invalid $invalid !⊆ $all_obssym.")
-        end
-        if !(all(pcond, cb.condition.psym))
-            invalid = filter(!pcond, cb.condition.psym)
-            push!(hints, "All p symbols in the callback condition must be parameters. Found invalid $invalid !⊆ $(comp.psym).")
-        end
+    check = (what, syms) -> begin
+        invalid = filter(∉(named), syms)
+        isempty(invalid) && return
+        push!(hints, "All symbols in the callback $what must be states, parameters, inputs, outputs or observed of the component. Found invalid $invalid !⊆ $named.")
     end
-    # check valid affect sym and psym
-    if !(all(ucond_affect, getaffect(cb).sym))
-        invalid = filter(!ucond_affect, getaffect(cb).sym)
-        push!(hints, "All u symbols in the callback affect must be variables (in contrast to condition, observables are not allowed here). Found invalid $invalid !⊆ $(comp.sym).")
-    end
-    if !(all(pcond, getaffect(cb).psym))
-        invalid = filter(!pcond, getaffect(cb).psym)
-        push!(hints, "All p symbols in the callback affect must be parameters. Found invalid $invalid !⊆ $(comp.psym).")
-    end
+    cb isa PresetTimeComponentCallback || check("condition", cb.condition.sym)
+    check("affect", getaffect(cb).sym)
     if cb isa ContinuousComponentCallback && !isnothing(getaffect_neg(cb)) && getaffect_neg(cb) != getaffect(cb)
-        if getaffect_neg(cb) != getaffect(cb) && !(all(ucond_affect, getaffect_neg(cb).sym))
-            invalid = filter(!ucond_affect, getaffect_neg(cb).sym)
-            push!(hints, "All u symbols in the callback affect_neg! must be variables (in contrast to condition, observables are not allowed here). Found invalid $invalid !⊆ $(comp.sym).")
-        end
-        if getaffect_neg(cb) != getaffect(cb) && !(all(pcond, getaffect_neg(cb).psym))
-            invalid = filter(!pcond, getaffect_neg(cb).psym)
-            push!(hints, "All p symbols in the callback affect_neg! must be parameters. Found invalid $invalid !⊆ $(comp.psym).")
-        end
+        check("affect_neg!", getaffect_neg(cb).sym)
     end
     if !isempty(hints)
         pushfirst!(hints, "The callback is not compatible with the component model $(comp). Issues found:")

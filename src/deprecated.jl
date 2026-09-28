@@ -70,3 +70,56 @@ function find_fixpoint(nw::Network,
     s0 = NWState(nw, uflat(x0), pflat(p), x0.t)
     find_fixpoint(nw, s0; kwargs...)
 end
+
+# Deprecated split-list callback constructors `ComponentCondition(f, sym, psym)` with `f(u, p, t)`
+# and `ComponentAffect(f, sym, psym)` with `f(u, p, ctx)`. Internally there is only one symbol
+# list, so the adapters slice the combined view back into a `u` and a `p` part. The adapters
+# hold nothing but the user function, so callbacks with the same function still batch.
+function ComponentCondition(f, sym, psym)
+    if !hasmethod(f, Tuple{SymbolicView, SymbolicView, Float64}) &&
+       !hasmethod(f, Tuple{Vector{Float64}, SymbolicView, SymbolicView, Float64})
+        throw(ArgumentError(
+            "The provided condition function has no method defined for (u, p, t). Available method signatures are:\n$(methods(f))\n"
+        ))
+    end
+    lc = LegacyCondition{typeof(f), length(sym), length(psym)}(f)
+    ComponentCondition(lc, (sym..., psym...))
+end
+function ComponentAffect(f, sym, psym)
+    if !hasmethod(f, Tuple{SymbolicView, SymbolicView, NamedTuple}) &&
+       !hasmethod(f, Tuple{SymbolicView, SymbolicView, AbstractVector{Int8}, NamedTuple})
+        throw(ArgumentError(
+            "The provided affect function has no method defined for (u, p, ctx). Available method signatures are:\n$(methods(f))\n"
+        ))
+    end
+    la = LegacyAffect{typeof(f), length(sym), length(psym)}(f)
+    ComponentAffect(la, (sym..., psym...))
+end
+
+struct LegacyCondition{F,N,M}
+    f::F
+end
+struct LegacyAffect{F,N,M}
+    f::F
+end
+@inline function _split_legacy(::Union{LegacyCondition{F,N,M},LegacyAffect{F,N,M}}, u::SymbolicView) where {F,N,M}
+    _u = SymbolicView(view(u.v, 1:N), ntuple(i -> u.syms[i], Val(N)))
+    _p = SymbolicView(view(u.v, N+1:N+M), ntuple(i -> u.syms[N+i], Val(M)))
+    _u, _p
+end
+function (lc::LegacyCondition)(u, t)
+    _u, _p = _split_legacy(lc, u)
+    lc.f(_u, _p, t)
+end
+function (lc::LegacyCondition)(out, u, t)
+    _u, _p = _split_legacy(lc, u)
+    lc.f(out, _u, _p, t)
+end
+function (la::LegacyAffect)(u, ctx)
+    _u, _p = _split_legacy(la, u)
+    la.f(_u, _p, ctx)
+end
+function (la::LegacyAffect)(u, signs, ctx)
+    _u, _p = _split_legacy(la, u)
+    la.f(_u, _p, signs, ctx)
+end
