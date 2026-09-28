@@ -895,20 +895,16 @@ end
 function _print_condsyms(io, @nospecialize(cb::ComponentCallback))
     print(io, "(")
     _print_syms(io, cb.condition.sym, true)
-    _print_syms(io, cb.condition.psym, isempty(cb.condition.sym))
     print(io, ")")
 end
 function _print_affectsyms(io, @nospecialize(cb::ComponentCallback))
     print(io, "(")
     if !(cb isa ContinuousComponentCallback) || getaffect_neg(cb) === nothing || getaffect_neg(cb) == getaffect(cb)
         syms = getaffect(cb).sym
-        psyms = getaffect(cb).psym
     else
         syms = vcat(collect(getaffect(cb).sym), collect(getaffect_neg(cb).sym)) |> unique!
-        psyms = vcat(collect(getaffect(cb).psym), collect(getaffect_neg(cb).psym)) |> unique!
     end
     _print_syms(io, syms, true)
-    _print_syms(io, psyms, isempty(cb.affect.sym))
     print(io, ")")
 end
 function _print_syms(io, syms, isfirst)

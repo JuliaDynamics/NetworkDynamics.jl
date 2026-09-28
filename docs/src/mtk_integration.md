@@ -330,9 +330,9 @@ function attach_limint_callback!(cf, namespace)
     satmax = Symbol(namespace, "₊_callback_sat_max")
     satmin = Symbol(namespace, "₊_callback_sat_min")
 
-    condition = ComponentCondition([min, max, out, forcing], [satmax, satmin]) do _out, u, p, _
-        insatmax = !iszero(p[satmax])
-        insatmin = !iszero(p[satmin])
+    condition = ComponentCondition([min, max, out, forcing, satmax, satmin]) do _out, u, _
+        insatmax = !iszero(u[satmax])
+        insatmin = !iszero(u[satmin])
 
         upcrossing_max =  u[out] - u[max]
         upcrossing_min = -u[out] + u[min]
@@ -352,30 +352,30 @@ function attach_limint_callback!(cf, namespace)
     # A single affect handles all three conditions. `event_signs[i]` tells us for each
     # condition output `i` whether it crossed and in which direction: `0` no crossing,
     # `+1` upcrossing, `-1` downcrossing.
-    affect = ComponentAffect([], [satmax, satmin]) do u, p, event_signs, ctx
+    affect = ComponentAffect([satmax, satmin]) do u, event_signs, ctx
         if event_signs[1] > 0 # upper saturation upcrossing
             println("$namespace: /⎺ reached upper saturation at $(round(ctx.t, digits=4))s")
-            p[satmax] = 1.0
-            p[satmin] = 0.0
+            u[satmax] = 1.0
+            u[satmin] = 0.0
         end
         if event_signs[2] > 0 # lower saturation upcrossing
             println("$namespace: \\_ reached lower saturation at $(round(ctx.t, digits=4))s")
-            p[satmax] = 0.0
-            p[satmin] = 1.0
+            u[satmax] = 0.0
+            u[satmin] = 1.0
         end
         if event_signs[3] > 0
             # forcing went from negative to positive, i.e. we leave lower saturation
-            insatmin = !iszero(p[satmin])
+            insatmin = !iszero(u[satmin])
             if insatmin
                 println("$namespace: _/ left lower saturation at $(round(ctx.t, digits=4))s")
-                p[satmin] = 0.0
+                u[satmin] = 0.0
             end
         elseif event_signs[3] < 0
             # forcing went from positive to negative, i.e. we leave upper saturation
-            insatmax = !iszero(p[satmax])
+            insatmax = !iszero(u[satmax])
             if insatmax
                 println("$namespace: ⎺\\ left upper saturation at $(round(ctx.t, digits=4))s")
-                p[satmax] = 0.0
+                u[satmax] = 0.0
             end
         end
     end

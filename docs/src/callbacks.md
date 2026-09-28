@@ -14,7 +14,7 @@ refer to the [Cascading Failure](@ref) example.
 !!! warning
     The `ODEProblem` contains a reference to exactly one copy of the *flat parameter array*.
     If you use callbacks to change those parameters (as we often do), it is advised to
-    `copy` the parameter array before passing it to the ODEProblem! 
+    `copy` the parameter array before passing it to the ODEProblem!
     Also, this means you need to be careful when using the same `prob` for multiple subsequent
     `solve` calls, as the initial state of the `prob` object might have changed!
 
@@ -35,36 +35,34 @@ This internally generates a [`PresetTimeCallback`](@extref DiffEqCallbacks.Prese
 
 
 ### Defining the Callback
-To construct a condition function, you need to tell network dynamics which states and parameters you'd like to "observe" within the condition. Within the actual condition, those states will be made available:
+To construct a condition function, you need to tell NetworkDynamics which symbols of the component you'd like to "observe" within the condition. Any named symbol of the component model works: states, parameters, inputs, outputs and observed. Within the actual condition, those values are made available through `u`:
 ```julia
-condition = ComponentCond([:x, :y], [:p1, :p2]) do u, p, t
+condition = ComponentCondition([:x, :y, :p1]) do u, t
     u[:x]  == u[1] # access a state or observable :x at current time
-    p[:p2] == p[2] # access a parameter at current time
-    return some_condition(u[:x], u[:y], ...)
+    u[:p1] == u[3] # parameters are listed like any other symbol
+    return some_condition(u[:x], u[:y], u[:p1])
 end
 ```
 In case of a `VectorContinuousComponentCallback`, the function signature looks slightly different:
 ```julia
-vectorcondition = ComponentCond([:x, :y], [:p1, :p2]) do out, u, p, t
-    out[1] = some_condition(u[...], p[...])
-    out[2] = some_condition(u[...], p[...])
+vectorcondition = ComponentCondition([:x, :y, :p1]) do out, u, t
+    out[1] = some_condition(u[...])
+    out[2] = some_condition(u[...])
     return nothing
 end
 ```
-Note that the `syms` argument (here `[:x, :y]`) can be used to reference **any**
-named state of the component model, this includes "ordinary" states, observed,
-inputs and outputs.
-The arguments `u` and `p` will be passed as [`SymbolicView`](@ref) objects, which mean
-it is possible to use the getindex syntax to acces the desired states by name.
+The argument `u` will be passed as a [`SymbolicView`](@ref) object, which means
+it is possible to use the getindex syntax to access the desired values by name.
 
-The affect takes a similar form:
+The affect takes the same kind of symbol list:
 ```julia
-affect = ComponentAffect([:u], [:p]) do u, p, ctx
-   t = ctx.t # extract data from context
-   obs = NWState(ctx.integrator)[VIndex(ctx.vidx, :obs)] # extract some observed state from context
+affect = ComponentAffect([:u, :p, :obs]) do u, ctx
+   t = ctx.t          # extract data from context
+   u[:u] = u[:obs]    # states and parameters are writable, observed are readable
+   u[:p] = 0
    println("Trigger affect at t=$t")
 end
-vectoraffect = ComponentAffect([:u], [:p]) do u, p, event_signs, ctx
+vectoraffect = ComponentAffect([:u, :p]) do u, event_signs, ctx
     for i in eachindex(event_signs)
         event_signs[i] == 0 && continue # skip outputs that did not cross
         if i == 1
@@ -76,8 +74,17 @@ vectoraffect = ComponentAffect([:u], [:p]) do u, p, event_signs, ctx
     end
 end
 ```
-Notably, the `syms` (here `:u`) can *exclusively* refer to "ordinary" states, since they are now writable.
-However the affect gets passed a `ctx` "context" object, which is a named tuple which holds additional context like the integrator object, the component model, the index of the component model, the current time and so on. Please refer to the [`ComponentAffect`](@ref) docstring for a detailed list.
+Entries of `u` which are states or parameters of the component can be written to, all other
+entries (inputs, outputs, observed) are read only. The values in `u` are a snapshot taken when
+the affect fires: writing a state or parameter updates the integrator immediately, but an
+observed entry which depends on it is not recomputed within the same affect.
+
+The affect gets passed a `ctx` "context" object, which is a named tuple which holds additional context like the integrator object, the component model, the index of the component model, the current time and so on. Please refer to the [`ComponentAffect`](@ref) docstring for a detailed list.
+
+!!! note "Legacy form with separate parameter list"
+    Earlier versions took two symbol lists, `ComponentCondition(f, sym, psym)` with `f(u, p, t)`
+    and `ComponentAffect(f, sym, psym)` with `f(u, p, ctx)`, where `p` gave access to the
+    parameters. This form is still accepted and behaves as before.
 
 Lastly we need to define the actual callback object using [`ContinuousComponentCallback`](@ref)/[`VectorContinuousComponentCallback`](@ref):
 ```julia
@@ -110,6 +117,8 @@ keyword arguments `add_comp_cb`, `add_nw_cb`, and `override_cb`. See the [`ODEPr
 
 When executing component callbacks, NetworkDynamics automatically checks whether states or parameters
 changed during the affect and calls [`SciMLBase.auto_dt_reset!`](@extref) and [`save_parameters!`](@ref) if necessary.
+An affect which only does bookkeeping, for example counting events in a parameter, can keep the
+current step size by setting `ctx.dt_reset[] = false`. The parameter change is saved either way.
 
 
 ## Normal DiffEq Callbacks
