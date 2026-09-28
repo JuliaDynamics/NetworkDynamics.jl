@@ -90,4 +90,6 @@ else
 end
 
 # empty when the lines above were sent to a REPL one by one, those tests already ran
-isempty(testsuite) || runtests(NetworkDynamics, ARGS; testsuite, init_worker_code)
+# every worker holds a full MTK session (~2.5 GB), so more than 4 run out of memory locally
+args = any(startswith("--jobs"), ARGS) ? ARGS : [ARGS; "--jobs=$(min(4, Sys.CPU_THREADS))"]
+isempty(testsuite) || runtests(NetworkDynamics, args; testsuite, init_worker_code)

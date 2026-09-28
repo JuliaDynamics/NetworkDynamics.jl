@@ -26,6 +26,7 @@ The callback system supports three keyword arguments that control how callbacks 
         add_nw_cb=nothing,
         override_cb=nothing,
         initializealg=BrownFullBasicInit(; nlsolve=FastShortcutNonlinearPolyalg(; must_use_jacobian=Val(true))),
+        specialize=SciMLBase.FullSpecialize,
         kwargs...
     )
 
@@ -39,6 +40,10 @@ that build the true Jacobian (Newton, TrustRegion, LevenbergMarquardt), not Broy
 This also applies to the reinitialization after callbacks. Pass `initializealg=...`
 explicitly to override.
 
+The `specialize` keyword sets the specialization of the `ODEFunction`. The default
+`FullSpecialize` lets ForwardDiff use its full chunk size for the Jacobian. `AutoSpecialize`
+wraps the RHS in a function wrapper, which limits ForwardDiff to chunk size 1.
+
 $callback_keyword_docs
 """
 function SciMLBase.ODEProblem(
@@ -47,6 +52,7 @@ function SciMLBase.ODEProblem(
     add_nw_cb=nothing,
     override_cb=nothing,
     initializealg=BrownFullBasicInit(; nlsolve=FastShortcutNonlinearPolyalg(; must_use_jacobian=Val(true))),
+    specialize=SciMLBase.FullSpecialize,
     kwargs...
 )
 
@@ -79,7 +85,8 @@ function SciMLBase.ODEProblem(
         end
     end
 
-    SciMLBase.ODEProblem(SciMLBase.ODEFunction(nw), args...; callback=finalcallback, initializealg, kwargs...)
+    f = SciMLBase.ODEFunction{true, specialize}(nw)
+    SciMLBase.ODEProblem(f, args...; callback=finalcallback, initializealg, kwargs...)
 end
 
 """
