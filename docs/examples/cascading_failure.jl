@@ -95,18 +95,18 @@ nothing #hide #md
 #=
 ## Component-based Callbacks
 
-For the component based callback we need to define a condtion and an affect.
-Both functions take three inputs:
-  - the actual function `f`
-  - the states which to be accessed `sym`
-  - the parameters to be accessed `psym`
+For the component based callback we need to define a condition and an affect.
+Both take the actual function `f` and a list of the component symbols to be
+accessed. Any named symbol works: states, parameters, inputs, outputs and
+observed. Here the condition reads the observed flow `P` and the parameter
+`limit`, the affect writes the parameter `K`.
 =#
-cond = ComponentCondition([:P], [:limit]) do u, p, t
-    abs(u[:P]) - p[:limit]
+cond = ComponentCondition([:P, :limit]) do u, t
+    abs(u[:P]) - u[:limit]
 end
-affect = ComponentAffect([], [:K]) do u, p, ctx
+affect = ComponentAffect([:K]) do u, ctx
     println("Line $(ctx.eidx) tripped at t=$(ctx.integrator.t)")
-    p[:K] = 0
+    u[:K] = 0
 end
 edge_cb = ContinuousComponentCallback(cond, affect)
 #=

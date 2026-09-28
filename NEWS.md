@@ -2,6 +2,16 @@
 
 ## v1.4.0 Changelog
 
+- **Component callbacks take a single symbol list.** `ComponentCondition(f, syms)` with
+  `f(u, t)` and `ComponentAffect(f, syms)` with `f(u, ctx)`; the list may name states,
+  parameters, inputs, outputs and observed alike, all reachable through `u`. In an affect the
+  states and parameters are writable, everything else is read only, so affects can now react to
+  observed values directly. The values are a snapshot taken when the affect fires. The old
+  `(f, sym, psym)` forms with `f(u, p, t)` and `f(u, p, ctx)` still work but warn once.
+- Affects can opt out of the automatic step-size reset with `ctx.dt_reset[] = false`, meant for
+  bookkeeping changes which do not introduce a discontinuity. If several affects fire at the same
+  time, one asking for the reset is enough; parameter changes are saved either way.
+- Batched affects fill their observed buffer once per event instead of once per member.
 - **Observed functions only evaluate what is needed.** MTK components now know which observables
   depend on which, and which of them read the component inputs. `SII.observed` only evaluates the
   observables that were asked for and what they depend on. More importantly, it only runs the

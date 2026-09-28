@@ -76,6 +76,7 @@ end
 # list, so the adapters slice the combined view back into a `u` and a `p` part. The adapters
 # hold nothing but the user function, so callbacks with the same function still batch.
 function ComponentCondition(f, sym, psym)
+    @warn "ComponentCondition(f, sym, psym) with f(u, p, t) is deprecated, list the parameters in a single symbol list and use f(u, t) instead." maxlog=1
     if !hasmethod(f, Tuple{SymbolicView, SymbolicView, Float64}) &&
        !hasmethod(f, Tuple{Vector{Float64}, SymbolicView, SymbolicView, Float64})
         throw(ArgumentError(
@@ -86,6 +87,7 @@ function ComponentCondition(f, sym, psym)
     ComponentCondition(lc, (sym..., psym...))
 end
 function ComponentAffect(f, sym, psym)
+    @warn "ComponentAffect(f, sym, psym) with f(u, p, ctx) is deprecated, list the parameters in a single symbol list and use f(u, ctx) instead." maxlog=1
     if !hasmethod(f, Tuple{SymbolicView, SymbolicView, NamedTuple}) &&
        !hasmethod(f, Tuple{SymbolicView, SymbolicView, AbstractVector{Int8}, NamedTuple})
         throw(ArgumentError(

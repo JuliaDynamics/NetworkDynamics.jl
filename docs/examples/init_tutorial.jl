@@ -288,9 +288,9 @@ responds from its steady state.
 We'll use a callback to increase consumer demand at a specific time. For more information on
 callbacks, see the documentation on [Callbacks](@ref).
 =#
-affect = ComponentAffect([], [:q̃_prosumer]) do u, p, ctx
+affect = ComponentAffect([:q̃_prosumer]) do u, ctx
     @info "Increase consumer demand at t=$(ctx.t)"
-    p[:q̃_prosumer] -= 0.1
+    u[:q̃_prosumer] -= 0.1
 end
 cb = PresetTimeComponentCallback([1.0], affect)
 set_callback!(nw_dyn[VIndex(2)], cb) # attach disturbance to second node

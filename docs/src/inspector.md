@@ -39,12 +39,12 @@ First, we need to define the system we want to inspect.
         set_marker!(vs[4], :dtriangle)
         set_marker!(vs[5], :utriangle)
 
-        cond = ComponentCondition([:P, :₋P, :srcθ], [:limit, :K]) do u, p, t
-            abs(u[:P]) - p[:limit]
+        cond = ComponentCondition([:P, :limit]) do u, t
+            abs(u[:P]) - u[:limit]
         end
-        affect = ComponentAffect([],[:active]) do u, p, ctx
+        affect = ComponentAffect([:active]) do u, ctx
             @info "Trip line $(ctx.eidx) between $(ctx.src) and $(ctx.dst) at t=$(ctx.t)"
-            p[:active] = 0
+            u[:active] = 0
         end
         cb = ContinuousComponentCallback(cond, affect)
         set_callback!.(ls, Ref(cb))
