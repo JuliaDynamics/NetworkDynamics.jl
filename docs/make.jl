@@ -23,6 +23,11 @@ links = InterLinks(
     "DiffEqCallbacks" => "https://docs.sciml.ai/DiffEqCallbacks/stable/",
 )
 
+# logos live in the top-level logo folder, Documenter picks them up from assets
+for logo in ("logo.svg", "logo-dark.svg", "logo-animated.svg", "logo-animated-dark.svg", "preview.png")
+    cp(joinpath(pkgdir(NetworkDynamics), "logo", logo), joinpath(@__DIR__, "src", "assets", logo); force=true)
+end
+
 # generate examples
 example_dir = joinpath(@__DIR__, "examples")
 outdir = joinpath(@__DIR__, "src", "generated")
@@ -69,10 +74,12 @@ doc = makedocs(;
             "Gas Network" => "generated/gas_network.md",
             "Stress on Truss" => "generated/stress_on_truss.md",
             "Directed and Weighted Graphs" => "generated/directed_and_weighted_graphs.md",
+            "Cyclic Competition (the Logo)" => "generated/logo.md",
         ]
     ],
     draft=haskey(ENV, "DOCUMENTER_DRAFT"),
-    format = Documenter.HTML(ansicolor = true, size_threshold=1_000_000, assets=String["assets/custom.css"]),
+    format = Documenter.HTML(ansicolor = true, size_threshold=1_000_000, assets=String["assets/custom.css"],
+                             canonical="https://juliadynamics.github.io/NetworkDynamics.jl/stable/"),
     warnonly=true,
     debug=true, # return doc object
 )
