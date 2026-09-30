@@ -1,4 +1,5 @@
-# NetworkDynamics.jl
+![NetworkDynamics Banner](./logo/banner-animated-dark.svg#gh-dark-mode-only)
+![NetworkDynamics Banner](./logo/banner-animated.svg#gh-light-mode-only)
 
 [![](https://img.shields.io/badge/docs-dev-blue.svg)](https://juliadynamics.github.io/NetworkDynamics.jl/dev/)
 [![](https://img.shields.io/badge/docs-stable-blue.svg)](https://juliadynamics.github.io/NetworkDynamics.jl/stable)

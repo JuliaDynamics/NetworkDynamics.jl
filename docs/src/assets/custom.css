@@ -7,3 +7,8 @@ pre:has(.language-asciiart) {
 pre:has(.language-asciiart) button {
   display: none;
 }
+
+/* increase logo size */
+div#documenter .docs-sidebar .docs-logo > img {
+    max-height: 8rem !important; /* important to override in darkmode */
+}
