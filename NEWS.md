@@ -25,6 +25,13 @@
   now a regular field of the component models, set with the `aliasmap` constructor keyword;
   `set_aliasmap!`, `delete_aliasmap!` and `has_aliasmap` are removed.
 - improvements to the simplification pipeline around removing algebraic states
+- **Outputs fed forward from an input become algebraic states.** When a vertex output depends
+  algebraically on the input, the ND-native MTK simplification now keeps that output as state
+  and the input equation as residual, e.g. the bus voltage and the current balance. The
+  observables of such components no longer read the input, so callback conditions on them
+  don't need the network buffers. The algebraic states of MTK components may change, e.g. PSS/E
+  machines now keep `busbar₊u_r`, `busbar₊u_i` instead of the stator currents. If making the
+  outputs states would cost more states than the old tear, the old tear is kept.
 - **Parallel edges.** Several edge models may now connect the same pair of vertices. The
   graphless constructor builds a `NetworkDynamics.ComponentGraph` in that case and keeps the edge
   models in input order. Inputs without parallel edges still produce a `SimpleGraph` or

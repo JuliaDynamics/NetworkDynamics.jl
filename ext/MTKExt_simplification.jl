@@ -288,10 +288,11 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
 
     # iteratively match states and move solved equations to obs_unsrtd
     size_limits = Dict{ST,Int}()
+    # a round which solves nothing may still reorder the states, that doesn't count as progress
     while !isempty(eqs)
-        before = hash((eqs, obs_unsrtd, match_states))
+        before = hash((eqs, obs_unsrtd, Set(match_states)))
         eqs, obs_unsrtd, match_states = _match_and_solve(eqs, obs_unsrtd, match_states, all_states; outset, ff_inputs, size_limits, verbose)
-        before == hash((eqs, obs_unsrtd, match_states)) && break
+        before == hash((eqs, obs_unsrtd, Set(match_states))) && break
     end
 
     # last set: bring solved diffeqs back to eqs
@@ -315,6 +316,7 @@ function reduce_equations(eqs::Vector{Equation}, obseqs::Vector{Equation}, state
 end
 
 function _match_and_solve(eqs, obs_unsrtd, match_states::Vector, all_states::Vector; outset, ff_inputs, size_limits, verbose)
+    # classify how each equation depends on each unknown, and which equations read an input
     non_extended_states = length(match_states)
     coeff, has_input, match_states, extra_match_states = _build_coeff_mat(eqs, obs_unsrtd, match_states, all_states; ff_inputs)
 
@@ -328,44 +330,54 @@ function _match_and_solve(eqs, obs_unsrtd, match_states::Vector, all_states::Vec
         @info str
     end
 
-    solvable_matches, bk_matches = _match_equations_to_states(coeff)
-    @assert length(solvable_matches) + length(bk_matches) == length(match_states)
+    # unknowns which are outputs or feed an already observed output
+    output_like = symbolic_dependencies(obs_unsrtd, outset)
+    is_output = [s ∈ output_like for s in match_states]
 
-    # Reorder states so that sorted_sts[i] is the state matched to equation i.
-    # Also permute coeff columns consistently so coeff_sorted[i,j] still means
-    # "equation i depends on sorted_sts[j]".
-    state_perm = [-1 for i in 1:length(match_states)]
-    for (eqi, si) in Iterators.flatten((solvable_matches, bk_matches))
-        state_perm[eqi] = si
-    end
-    sorted_match_sts = match_states[state_perm]
-    coeff_sorted = coeff[:, state_perm]
-
-    # Solvable indices: rows whose matched state has a linear coefficient.
-    # After reordering, match i is always at diagonal position i.
-    solvable_eq_idx = sort!([eqi for (eqi, _) in solvable_matches])
-
-    if verbose
-        str = "Found $(length(solvable_matches)) solvable matches for $(length(eqs)) eqs"
-        states_eqs_matching = OrderedDict(sorted_match_sts[i] => eqs[i] for i in solvable_eq_idx)
-        str *= "\n" * multiline_repr(states_eqs_matching, prefix="  ")
-    end
-
-    # assert that all differential states have a linear match
-    diffidx = findall(isdifferential, sorted_match_sts)
-    linear_idx_set = Set(solvable_eq_idx)
-    if !(Set(diffidx) ⊆ linear_idx_set)
-        unmatched = sorted_match_sts[setdiff(diffidx, linear_idx_set)]
-        verbose && @info str
+    # classic plan: match equations to unknowns, then tear matches on feed-forward paths
+    matching = _match_equations_to_states(coeff)
+    plan = _solve_plan(matching, coeff, match_states, has_input, is_output; verbose)
+    if isnothing(plan)
+        unmatched = setdiff(filter(isdifferential, match_states), (match_states[j] for (_, j) in matching.solvable))
         error("Could not match all differential states to equations! Unmatched differentials:\n" *
               multiline_repr(unmatched, prefix="  "))
     end
 
-    # similar to has_input property for equations we need is_output for states which influence output states
-    output_like = symbolic_dependencies(obs_unsrtd, outset)
-    is_output = [s ∈ output_like for s in sorted_match_sts]
-    sccs = _solve_plan(solvable_eq_idx, coeff_sorted, sorted_match_sts, has_input, is_output; verbose)
+    # The plan tore for feed-forward: try again with the tainted outputs as states, so the
+    # candidate may keep the input equations as residuals instead (Norton form). Its own
+    # tearing can reveal more tainted outputs, so repeat. The candidate is kept only if it
+    # costs no extra states.
+    if !isempty(plan.tainted_outputs)
+        promoted = Int[]
+        candidate = plan
+        while !isnothing(candidate)
+            new = setdiff(candidate.tainted_outputs, promoted)
+            isempty(new) && break
+            append!(promoted, new)
+            ccoeff = copy(coeff)
+            ccoeff[:, promoted] .= :pseudo
+            # distances always refer to the classic plan, it has the natural solve directions
+            cmatching = _match_equations_to_states(ccoeff; rowdist=plan.rowdist)
+            candidate = _solve_plan(cmatching, ccoeff, match_states, has_input, is_output; verbose)
+        end
+        if !isnothing(candidate) && candidate.ntorn <= plan.ntorn
+            verbose && @info "Outputs fed forward from the input become states: $(inline_repr(match_states[promoted]))"
+            plan = candidate
+        elseif verbose
+            @info "Keeping the classic tear, outputs $(inline_repr(match_states[promoted])) as states would add states"
+        end
+    end
 
+    # from here on only the chosen plan matters: which groups get solved for which unknowns
+    (; sccs, solvable_eq_idx, sorted_match_sts) = plan
+
+    if verbose
+        str = "Found $(length(solvable_eq_idx)) solvable matches for $(length(eqs)) eqs"
+        states_eqs_matching = OrderedDict(sorted_match_sts[i] => eqs[i] for i in solvable_eq_idx)
+        str *= "\n" * multiline_repr(states_eqs_matching, prefix="  ")
+    end
+
+    # solve the groups in dependency order, solutions become observed equations
     solved_eq_idx = Int[]
     solved_sts = Set{ST}()
 
@@ -404,6 +416,7 @@ function _match_and_solve(eqs, obs_unsrtd, match_states::Vector, all_states::Vec
     end
     verbose && @info str
 
+    # what is left are the residual equations and the unknowns which stay states
     deleteat!(eqs, sort!(solved_eq_idx))
     filter!(s -> s ∉ solved_sts, sorted_match_sts)
 
@@ -484,10 +497,21 @@ function _group_size_limit(eqs, sts, size_limits)
 end
 
 """
-    _solve_plan(solvable_eq_idx, coeff, sorted_sts, has_input, is_output) -> sccs
+    _solve_plan(matching, coeff, match_states, has_input, is_output) -> plan
 
 Determine which solvable matched pairs should actually be solved and return them as SCCs
-in dependency-first topological order.
+in dependency-first topological order. Returns `nothing` if a differential state has no
+solvable match.
+
+The plan is a named tuple with
+- `sccs`: groups of indices into `solvable_eq_idx`, in solve order,
+- `solvable_eq_idx`, `sorted_match_sts`: equation `i` is matched to `sorted_match_sts[i]`,
+- `ntorn`: number of unknowns which stay unsolved,
+- `tainted_outputs`: algebraic columns of `match_states` which are output-like and depend on
+  an input row in this matching, i.e. the outputs the tearing had to cut off from the input,
+- `rowdist`: per equation, the number of solve steps from an input row (0 for rows which
+  read an input, the number of equations if the input doesn't reach it). Only filled if
+  there are tainted outputs, empty otherwise.
 
 Two dependency graphs are built: `g_solvable` (solvable dependencies between matched
 pairs) and `g_unsolvable` (nonlinear dependencies). An initial SCC decomposition of
@@ -503,9 +527,26 @@ paths. Candidates are ranked by a three-level cost:
 SCCs are then recomputed on the non-forbidden subgraph and returned in dependency-first
 topological order.
 """
-function _solve_plan(solvable_eq_idx, coeff, sorted_sts, has_input, is_output; verbose)
+function _solve_plan(matching, coeff, match_states, has_input, is_output; verbose)
+    # reorder states so that match i is always at diagonal position i
+    state_perm = zeros(Int, length(match_states))
+    for (eqi, si) in Iterators.flatten((matching.solvable, matching.bookkeeping))
+        state_perm[eqi] = si
+    end
+    sorted_sts = match_states[state_perm]
+    coeff = coeff[:, state_perm]
+    is_output = is_output[state_perm]
+
+    solvable_eq_idx = sort!([eqi for (eqi, _) in matching.solvable])
+    solvable_set = Set(solvable_eq_idx)
+    all(i -> !isdifferential(sorted_sts[i]) || i ∈ solvable_set, eachindex(sorted_sts)) || return nothing
+
     n = length(solvable_eq_idx)
-    n == 0 && return Vector{Vector{Int}}[]
+    tainted_outputs = Int[]
+    rowdist = Int[]
+    result(sccs) = (; sccs, solvable_eq_idx, sorted_match_sts=sorted_sts,
+                    ntorn=length(match_states) - sum(length, sccs; init=0), tainted_outputs, rowdist)
+    n == 0 && return result(Vector{Int}[])
 
     g_solvable   = Graphs.SimpleDiGraph(n)
     g_unsolvable = Graphs.SimpleDiGraph(n)
@@ -553,7 +594,7 @@ function _solve_plan(solvable_eq_idx, coeff, sorted_sts, has_input, is_output; v
     end
 
     # return if no need to break cycles
-    isempty(forbidden_connections) && return sccs
+    isempty(forbidden_connections) && return result(sccs)
 
     # Search in g_combined (solvable ∪ unsolvable) because cycles may use a mix
     # of solvable and unsolvable edges (e.g. through implicit_output barriers).
@@ -562,6 +603,25 @@ function _solve_plan(solvable_eq_idx, coeff, sorted_sts, has_input, is_output; v
         for p in Graphs.all_simple_paths(g_combined, src, dsts)
             push!(pathes_to_break, p)
         end
+    end
+    # return if no cycles detected
+    isempty(pathes_to_break) && return result(sccs)
+
+    # collect all ff outputs in tainted_outputs
+    for path in pathes_to_break
+        output, input = first(path), last(path)
+        output ∈ out_sinks && input ∈ ff_sources || continue
+        c = solvable_eq_idx[output]
+        if !isdifferential(sorted_sts[c]) && !any(==(:fake), view(coeff, :, c))
+            push!(tainted_outputs, state_perm[c])
+        end
+    end
+    unique!(tainted_outputs)
+
+    # estimate how far downstream eqs are from the inputs, so matching can prefer tearing
+    # tainted outputs close to input
+    if !isempty(tainted_outputs)
+        append!(rowdist, _input_distance(g_combined, ff_sources, solvable_eq_idx, coeff, has_input))
     end
 
     if verbose
@@ -576,9 +636,6 @@ function _solve_plan(solvable_eq_idx, coeff, sorted_sts, has_input, is_output; v
             end
         end
     end
-
-    # return if no cycles detected
-    isempty(pathes_to_break) && return sccs
 
     # Classify each match by diagonal coefficient type.
     # Lower cost = better candidate to keep as residual (tearing variable).
@@ -644,7 +701,32 @@ function _solve_plan(solvable_eq_idx, coeff, sorted_sts, has_input, is_output; v
         @info str
     end
 
-    return sccs
+    return result(sccs)
+end
+# Distance of every row from the input rows: 0 for rows which read an input, the steps along
+# `g_combined` for solved rows, one more than the closest solved row it reads for the others,
+# and the number of rows where the input doesn't reach.
+function _input_distance(g_combined, ff_sources, solvable_eq_idx, coeff, has_input)
+    nrows = size(coeff, 1)
+    rowdist = fill(nrows, nrows)
+    d = Graphs.gdistances(Graphs.reverse(g_combined), collect(ff_sources))
+    for (i, r) in enumerate(solvable_eq_idx)
+        if d[i] < typemax(Int)
+            rowdist[r] = d[i]
+        end
+    end
+    for r in setdiff(axes(coeff, 1), solvable_eq_idx)
+        if has_input[r]
+            rowdist[r] = 0
+            continue
+        end
+        for c in solvable_eq_idx
+            if coeff[r, c] !== :none
+                rowdist[r] = min(rowdist[r], rowdist[c] + 1)
+            end
+        end
+    end
+    rowdist
 end
 function _insert_sorted!(obseqs, newobs)
     # newobs must be in topological order (dependencies before dependents).
@@ -845,6 +927,9 @@ Dependency type of an equation w.r.t. a state variable:
   :linear_const — linear in the state; coefficient is free of states (constant/parameter-only)
   :linear_state — linear in the state; coefficient involves other states (risky denominator)
   :unsolvable   — unsolvable in the state (e.g. x^2, sin(x))
+  :fake         — fake equation × extended state, the rows and columns this marks only
+                  exist to square the matrix when an equation holds nothing but extended
+                  states (the algebraic `x` of a differential state)
 """
 function _build_coeff_mat(lineqs, obseqs, match_states::Vector, all_states::Vector; ff_inputs=Set())
     @assert length(lineqs) == length(match_states)
@@ -922,7 +1007,7 @@ function _build_coeff_mat(lineqs, obseqs, match_states::Vector, all_states::Vect
         coeff = coeff[mask, mask]
         extended_match_states = extended_match_states[mask]
         # make sure that "fake" equations get taken by extended states if possible
-        coeff[length(lineqs)+1:end, length(match_states)+1:end] .= :nonlinear
+        coeff[length(lineqs)+1:end, length(match_states)+1:end] .= :fake
     else
         # don't keep the extended stuff
         coeff = coeff[1:length(lineqs), 1:length(match_states)]
@@ -938,40 +1023,54 @@ function _build_coeff_mat(lineqs, obseqs, match_states::Vector, all_states::Vect
 end
 
 """
-    _match_equations_to_states(coeff) -> (solvable, bookkeeping)
+    _match_equations_to_states(coeff; rowdist=nothing) -> (; solvable, bookkeeping)
 
-Single-pass min-cost maximum-cardinality bipartite matching via the Hungarian
-algorithm.  The cost matrix encodes a strict five-level priority hierarchy:
+Single-pass min-cost maximum-cardinality bipartite matching via the Hungarian algorithm.
+The cost of a matching is ordered lexicographically:
 
-| edge type       | cost       | meaning                                   |
-|-----------------|------------|-------------------------------------------|
-| `:explicit`     | 0          | coefficient is ±1; trivial solve          |
-| `:linear_const` | 1          | safe to solve; constant coefficient       |
-| `:linear_state` | 2          | solvable but coefficient involves states  |
-| `:unsolvable`   | 2(n+1)+1   | bookkeeping only; tracks dependency       |
-| `:none`         | C_nl²      | last resort; state absent from eq         |
+1. fewest `:none` pairs, then fewest `:unsolvable` pairs, i.e. as many solvable (or
+   `:pseudo`) pairs as possible,
+2. fewest extended states solved for (the columns marked by `:fake`), since that means
+   index reduction,
+3. smallest total `rowdist` over the `:pseudo` pairs,
+4. fewest divisions: `:explicit` (0) before `:linear_const` (1) before `:linear_state` (2).
 
-where `n = size(coeff, 1)` (always square).  The sentinel gaps guarantee that
-the Hungarian solution maximises solvable-match cardinality first, then
-prefers `:explicit` over `:linear_const` over `:linear_state`, then prefers
-`:unsolvable` over `:none` for bookkeeping — all in one call.
+A `:pseudo` entry means "this row may be the residual of this column", the column stays
+a state. It counts like a solvable pair, but is returned as bookkeeping. Fake rows can't
+be a residual, and `:fake` entries themselves are bookkeeping.
 
-Both return values are `Vector{Tuple{Int,Int}}` of `(row, col)` pairs.
-Solvable pairs have `cost ≤ 2`; bookkeeping pairs have `cost > 2`.
+Both fields are `Vector{Tuple{Int,Int}}` of `(row, col)` pairs.
 """
-function _match_equations_to_states(coeff)
+function _match_equations_to_states(coeff; rowdist=nothing)
     n = size(coeff, 1)  # always square
-    C_nl   = 2*(n + 1) + 1   # > n*2 = max total solvable cost
-    C_none = C_nl^2           # > n*C_nl = max total unsolvable cost
+    fakerow = [any(==(:fake), view(coeff, i, :)) for i in 1:n]
+    extcol  = [any(==(:fake), view(coeff, :, j)) for j in 1:n]
+    npseudo = count(j -> any(==(:pseudo), view(coeff, :, j)), 1:n)
+    maxdist = isnothing(rowdist) ? 0 : maximum(rowdist; init=0)
+
+    # every level exceeds the total of all levels below it
+    W      = 2*n + 1                                    # > n*2 = max total class cost
+    C_ext  = Base.Checked.checked_mul(W, npseudo*maxdist + 1)
+    C_nl   = Base.Checked.checked_mul(n + 1, C_ext)
+    C_none = Base.Checked.checked_mul(n + 1, C_nl)
+    Base.Checked.checked_mul(n, C_none) # the Hungarian sums up to n entries
 
     cost = Matrix{Int}(undef, n, n)
     for i in 1:n, j in 1:n
-        cost[i, j] = @match coeff[i, j] begin
-            :explicit     => 0
-            :linear_const => 1
-            :linear_state => 2
-            :unsolvable    => C_nl
-            _             => C_none
+        type = coeff[i, j]
+        ext = extcol[j] ? C_ext : 0
+        cost[i, j] = if type === :explicit
+            ext
+        elseif type === :linear_const
+            ext + 1
+        elseif type === :linear_state
+            ext + 2
+        elseif type === :pseudo && !fakerow[i]
+            W * rowdist[i]
+        elseif type === :unsolvable
+            C_nl
+        else
+            C_none
         end
     end
 
@@ -981,10 +1080,10 @@ function _match_equations_to_states(coeff)
     bookkeeping = Tuple{Int,Int}[]
     for i in 1:n
         j = assignment[i]
-        push!(cost[i, j] <= 2 ? solvable : bookkeeping, (i, j))
+        issolvable = coeff[i, j] ∈ (:explicit, :linear_const, :linear_state)
+        push!(issolvable ? solvable : bookkeeping, (i, j))
     end
-    assignment, total_cost = hungarian(cost)
-    return solvable, bookkeeping
+    return (; solvable, bookkeeping)
 end
 
 
