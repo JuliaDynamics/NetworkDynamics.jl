@@ -1344,6 +1344,56 @@ end
     @test !any(v.obsf.needs_input)
 end
 
+@testset "fed-forward outputs: promotion rounds and matcher" begin
+    @variables x1(t) x2(t) a(t) b(t) c(t) d(t) y1(t) y2(t) i1(t) i2(t)
+    @parameters k1 k2
+    sts = [x1, x2, a, b, c, d, y1, y2]
+
+    # found by random search: only y2 is fed forward at first. Once y2 is a state, the input
+    # row defines c, which reaches y1 through a, so y1 is promoted in a second round
+    eqs = [
+        Dt(x1) ~ c - x1
+        Dt(x2) ~ -x2 + y2
+        0 ~ a - c*k1
+        0 ~ -d*k2 + b^3
+        0 ~ -y1 - a*k2
+        0 ~ d*k1 - y1^3
+        0 ~ -b*k2 + y1^3
+        0 ~ -i2 - c*k2 + k1*y2
+    ]
+    red_eqs, red_obs, red_states = _reduce_equations(eqs, Equation[], sts;
+        outset=[y1, y2], ff_inputs=[i1, i2])
+    @test Set(red_states) == Set([x1.val, x2.val, y1.val, y2.val])
+    @test all(eq -> isdisjoint(get_variables(eq.rhs), [i1.val, i2.val]), red_obs)
+    @test topologicical_sorted(red_obs)
+
+    # found by random search: on this degenerate system a round which solves nothing only
+    # reorders the states, the reduction has to stop there instead of looping forever
+    eqs = [
+        Dt(x1) ~ a - x1
+        Dt(x2) ~ -x2 + y1
+        0 ~ a*k1 - b*k1
+        0 ~ b - d^3
+        0 ~ -k1*y1 + c^3
+        0 ~ d - y2^3
+        0 ~ -a*k1 - c*k1
+        0 ~ -i1 - a*k2 - c*k2
+    ]
+    red_eqs, red_obs, red_states = _reduce_equations(eqs, Equation[], sts;
+        outset=[y1, y2], ff_inputs=[i1, i2])
+    @test length(red_states) == length(red_eqs)
+
+    # solving the extended column 2 would avoid a division, but it is ranked below
+    m = mtkext._match_equations_to_states([:linear_state :explicit; :none :fake])
+    @test m.solvable == [(1, 1)]
+    @test m.bookkeeping == [(2, 2)]
+
+    # a pseudo pair is bookkeeping and goes to the row closest to the input
+    m = mtkext._match_equations_to_states([:pseudo :explicit; :pseudo :explicit]; rowdist=[3, 0])
+    @test m.solvable == [(1, 2)]
+    @test m.bookkeeping == [(2, 1)]
+end
+
 @testset "Test get_alias function" begin
     @variables a(t) b(t) c(t)
     @parameters p
