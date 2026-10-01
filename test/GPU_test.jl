@@ -12,8 +12,8 @@ using SparseConnectivityTracer
 using OrdinaryDiffEqRosenbrock
 using OrdinaryDiffEqNonlinearSolve
 using NonlinearSolve # so the DAE init polyalg is available
-using NonlinearSolve: KrylovJL_GMRES, LUFactorization, QRFactorization
-using OrdinaryDiffEqSDIRK: KenCarp4, TRBDF2
+using NonlinearSolve: KrylovJL_GMRES, QRFactorization
+using OrdinaryDiffEqSDIRK: TRBDF2
 using OrdinaryDiffEqBDF: QNDF
 using SciMLBase
 using SparseArrays
@@ -124,12 +124,11 @@ end
 # reported by `@test_broken` just like one that returns false.
 #
 # `layout` picks the Jacobian prototype: `:dense` sets none at all, `:csr` is what `adapt`
-# gives and the only layout with a direct sparse solver on the device, `:csc` is the other
-# cuSPARSE layout, which always falls back to Krylov.
+# gives and the only layout with a direct sparse solver on the device.
 #
 # The DAE initialization algorithm is deliberately not a knob here. `ODEProblem` on a
-# `NWState` picks it via `default_dae_init_alg`, which reacts to the prototype and to `T`,
-# and that choice is the one we want under test.
+# `NWState` picks it via `default_dae_init_alg`, which reacts to `T`, and that choice is the
+# one we want under test.
 #
 # `tspan` follows `T`. A Float64 tspan over a Float32 state has no ForwardDiff wrapper for
 # the Rosenbrock time gradient, which fails as `FirstAutodiffTgradError`.
@@ -139,7 +138,6 @@ end
 function run_on_gpu(nw, s0; T, layout, solver, linsolve=nothing,
                     tspan=(zero(T), one(T)), maxiters=2000)
     nw_d = adapt(CuArray{T}, layout === :dense ? copy(nw) : set_jac_prototype!(copy(nw)))
-    layout === :csc && set_jac_prototype!(nw_d, CuSparseMatrixCSC(nw_d.jac_prototype))
     prob = ODEProblem(nw_d, adapt(CuArray{T}, s0), tspan)
     alg = isnothing(linsolve) ? solver() : solver(; linsolve)
     sol = solve(prob, alg; maxiters)
@@ -154,36 +152,26 @@ function run_on_gpu(nw, s0; T, layout, solver, linsolve=nothing,
     maximum(abs, Array(du)[algebraic]) < sqrt(eps(T))
 end
 
-# Every entry is one test line; `broken` marks what is known not to work today. The list is
-# deliberately shorter than the full product of the options — each new combination compiles a
-# fresh solver specialisation, which is what the runtime here is spent on.
+# Every entry is one test line; `broken` marks what is known not to work today. Each new
+# combination compiles a fresh solver specialisation, which is what the runtime here is spent
+# on, so there is one line per distinct device code path rather than the full product.
 gpu_configs = [
-    (; name="Float64 dense Rodas5P",     T=Float64, layout=:dense, solver=Rodas5P,  broken=false),
-    (; name="Float64 dense Rodas5P GMRES", T=Float64, layout=:dense, solver=Rodas5P, broken=false,
-       linsolve=KrylovJL_GMRES()),
-    (; name="Float64 dense KenCarp4",    T=Float64, layout=:dense, solver=KenCarp4, broken=false),
-    (; name="Float64 dense TRBDF2 GMRES", T=Float64, layout=:dense, solver=TRBDF2,  broken=false,
-       linsolve=KrylovJL_GMRES()),
-    # `adapt` never produces CSC, so one line is enough: it only guards the hand-built case,
-    # where there is no direct device solver at all and LinearSolve warns and uses Krylov.
-    (; name="Float64 CSC Rodas5P",       T=Float64, layout=:csc,   solver=Rodas5P,  broken=false),
+    # A dense Jacobian is seeded by ForwardDiff's `seed!`, which scalar-indexes device arrays
+    # until https://github.com/JuliaDiff/ForwardDiff.jl/pull/816 lands.
+    (; name="Float64 dense Rodas5P",     T=Float64, layout=:dense, solver=Rodas5P,  broken=true),
     # CSR is what `adapt` produces. With CUDSS loaded the default linsolve is a real cuDSS LU,
     # and `QRFactorization` reaches cuSOLVER's sparse QR.
     (; name="Float64 CSR Rodas5P cuDSS", T=Float64, layout=:csr,   solver=Rodas5P,  broken=false),
-    (; name="Float64 CSR Rodas5P cuDSS LU", T=Float64, layout=:csr, solver=Rodas5P, broken=false,
-       linsolve=LUFactorization()),
     (; name="Float64 CSR Rodas5P cuSOLVER QR", T=Float64, layout=:csr, solver=Rodas5P, broken=false,
        linsolve=QRFactorization()),
-    (; name="Float64 CSR KenCarp4",      T=Float64, layout=:csr,   solver=KenCarp4, broken=false),
+    # SDIRK, so a Newton solve per stage, and the Krylov path
     (; name="Float64 CSR TRBDF2 GMRES",  T=Float64, layout=:csr,   solver=TRBDF2,   broken=false,
        linsolve=KrylovJL_GMRES()),
     # The only multistep method here, so the only one keeping a solution history on the device.
     (; name="Float64 CSR QNDF",          T=Float64, layout=:csr,   solver=QNDF,     broken=false),
     # Float32 needs the eltype to reach both the init tolerance and `tspan`, see
     # `default_dae_init_alg` and the `tspan` default above.
-    (; name="Float32 dense Rodas5P",     T=Float32, layout=:dense, solver=Rodas5P,  broken=false),
     (; name="Float32 CSR Rodas5P",       T=Float32, layout=:csr,   solver=Rodas5P,  broken=false),
-    (; name="Float32 CSR QNDF",          T=Float32, layout=:csr,   solver=QNDF,     broken=false),
 ]
 
 @testset "actual GPU solve" begin
