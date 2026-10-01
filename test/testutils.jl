@@ -65,7 +65,9 @@ function test_execution_styles(prob)
     exsaggs = [(ex, agg) for ex in styles for agg in aggregators]
 
     @testset "Test Execution Styles and Aggregators" begin
-        for (execution, aggregator) in exsaggs
+        # the CPU styles are covered by the regular CI, buildkite is only there for the GPU
+        cpu_exsaggs = haskey(ENV, "BUILDKITE") ? [] : exsaggs
+        for (execution, aggregator) in cpu_exsaggs
             _nw = Network(nw; execution, aggregator=aggregator(nw.layer.aggregator.f))
             _du = zeros(eltype(u), length(u))
             try

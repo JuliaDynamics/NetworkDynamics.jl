@@ -117,7 +117,7 @@ struct Network{G,MM,TB,CR}
     "mass matrix"
     mass_matrix::MM
     "sparsity pattern"
-    jac_prototype::Ref{Union{Nothing,SparseMatrixCSC{Bool,Int}}}
+    jac_prototype::Ref{Union{Nothing,AbstractSparseMatrix}}
     "buffer to hand the time to an untyped core, `nothing` if fully typed"
     tbuf::TB
     "everything the RHS needs, see `NetworkCore`"
@@ -126,7 +126,7 @@ struct Network{G,MM,TB,CR}
         jacref = if jac_prototype isa Ref
             jac_prototype
         else
-            Ref{Union{Nothing,SparseMatrixCSC{Bool,Int}}}(jac_prototype)
+            Ref{Union{Nothing,AbstractSparseMatrix}}(jac_prototype)
         end
         if fullytyped
             new{typeof(im.g),typeof(mm),Nothing,typeof(core)}(im, mm, jacref, nothing, core)

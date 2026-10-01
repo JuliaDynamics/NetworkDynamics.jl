@@ -419,7 +419,7 @@ function Base.show(io::IO, mime::MIME"text/plain", @nospecialize(s::NWState))
             print(buf, "&")
             show(buf, mime, sym)
             print(buf, " &&=> ")
-            if isassigned(s.uflat, i)
+            @allowscalar if isassigned(s.uflat, i)
                 show(buf, mime, s.uflat[i])
             else
                 print(buf, "#undef")
@@ -460,7 +460,7 @@ function Base.show(io::IO, mime::MIME"text/plain", @nospecialize(p::NWParameter)
         print(io, "Parameter{$(typeof(pflat(p)))} of ")
         show(ioc, mime, p.nw)
 
-        strvec = map(SII.parameter_symbols(p.nw), eachindex(p.pflat)) do sym, i
+        @allowscalar strvec = map(SII.parameter_symbols(p.nw), eachindex(p.pflat)) do sym, i
             buf = AnnotatedIOBuffer()
             print(buf, "&")
             show(buf, mime, sym)
@@ -529,7 +529,7 @@ function Base.show(io::IO, mime::MIME"text/plain", fp::FilteringProxy)
 
     indices, types = generate_indices(fp; return_types=true)
     _val_to_str(x) = isnan(x) ? "NaN (undefined?)" : str_significant(x; sigdigits=8, phantom_minus=true)
-    value_str = try
+    value_str = @allowscalar try
         # try to resolve all at once (faster)
         values = fp.data[indices]
         map(_val_to_str, indices)
