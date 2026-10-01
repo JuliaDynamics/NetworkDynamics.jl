@@ -2654,3 +2654,83 @@ end
     dfdx = ForwardDiff.derivative(x -> (du = [zero(x)]; NetworkDynamics.compf(vm)(du, [x], [i], [a], 0.0); du[1]), x)
     @test dfdx ≈ -2a*x
 end
+
+@testset "stacked edge outputs get one contiguous view" begin
+    e_mtk = Lib.dqline(R=0.01, X=0.1)
+    @test NetworkDynamics.compg(e_mtk) isa NetworkDynamics.MultipleOutputWrapper{<:Any,2}
+
+    # the same line written by hand, so its g gets src and dst outputs separately
+    function _dqline_g!(osrc, odst, src, dst, p, t)
+        R, X, active = p
+        idst = active / complex(R, X) * (complex(src[1], src[2]) - complex(dst[1], dst[2]))
+        odst[1] = real(idst); odst[2] = imag(idst)
+        osrc[1] = -real(idst); osrc[2] = -imag(idst)
+        nothing
+    end
+    e_hand = EdgeModel(g=_dqline_g!,
+        insym=(src=[:src_u_r, :src_u_i], dst=[:dst_u_r, :dst_u_i]),
+        outsym=(src=[:src_i_r, :src_i_i], dst=[:dst_i_r, :dst_i_i]),
+        psym=[:R, :X, :active])
+
+    g = complete_graph(4)
+    v = Lib.dqbus_swing()
+    nw_mtk = Network(g, v, e_mtk)
+    nw_hand = Network(g, v, e_hand)
+
+    rng = StableRNG(1)
+    u = rand(rng, dim(nw_mtk))
+    p_mtk = NWParameter(nw_mtk)
+    pflat(p_mtk) .= rand(rng, pdim(nw_mtk))
+    p_hand = NWParameter(nw_hand)
+    p_hand.v[:, :] = p_mtk.v[:, :]
+    for sym in (:R, :X, :active)
+        p_hand.e[:, sym] = p_mtk.e[:, sym]
+    end
+
+    du_mtk = zeros(dim(nw_mtk)); du_hand = zeros(dim(nw_hand))
+    nw_mtk(du_mtk, u, pflat(p_mtk), 0.0)
+    nw_hand(du_hand, u, pflat(p_hand), 0.0)
+    @test du_mtk ≈ du_hand
+
+    s_mtk = NWState(nw_mtk, u, pflat(p_mtk))
+    s_hand = NWState(nw_hand, u, pflat(p_hand))
+    for sym in (:src_i_r, :src_i_i, :dst_i_r, :dst_i_i)
+        @test s_mtk.e[:, sym] ≈ s_hand.e[:, sym]
+    end
+
+    jac(nw, p) = ForwardDiff.jacobian((du, u) -> nw(du, u, p, 0.0), zeros(length(u)), u)
+    @test jac(nw_mtk, pflat(p_mtk)) ≈ jac(nw_hand, pflat(p_hand))
+
+    prob = ODEProblem(nw_mtk, u, (0.0, 1.0), pflat(p_mtk))
+    Main.test_execution_styles(prob)
+
+    # a stacked g which refuses an ArrayPartition, so every coreloop has to hand it a single view
+    function _stacked_only!(out, src, dst, p, t)
+        out isa SubArray || error("expected one contiguous view, got $(typeof(out))")
+        out[1] = src[1] - dst[1]
+        out[2] = dst[1] - src[1]
+        nothing
+    end
+    stackedg = NetworkDynamics.MultipleOutputWrapper{PureFeedForward(),2,typeof(_stacked_only!)}(_stacked_only!)
+    # outputs which are not back-to-back still get the ArrayPartition
+    @test_throws ErrorException stackedg([NaN], [NaN], [1.0], [2.0], nothing, 0.0)
+
+    # the construction-time check calls g with separate tracker outputs and only warns
+    e_stacked = @test_logs (:warn, r"expected one contiguous view") EdgeModel(g=stackedg,
+        insym=(src=[:a_src], dst=[:a_dst]), outsym=(src=[:o_src], dst=[:o_dst]))
+    nw_stacked = Network(complete_graph(4), Lib.diffusion_vertex(), e_stacked)
+    u = rand(StableRNG(2), dim(nw_stacked))
+    du_ref = zeros(dim(nw_stacked))
+    nw_stacked(du_ref, u, Float64[], 0.0)
+    @test !iszero(du_ref)
+    for ex in (SequentialExecution{false}(), KAExecution{true}(), KAExecution{false}(),
+               ThreadedExecution{true}(), ThreadedExecution{false}())
+        _nw = Network(nw_stacked; execution=ex)
+        _du = zeros(dim(_nw))
+        _nw(_du, u, Float64[], 0.0)
+        @test _du ≈ du_ref
+    end
+    # Not checked for Polyester: when it gets worker threads it turns the buffers into PtrArrays,
+    # whose slices are not merged, but when it runs serially it passes the views through. Which
+    # one happens depends on free threads, so the result would be flaky.
+end
