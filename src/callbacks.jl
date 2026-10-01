@@ -80,6 +80,11 @@ Creates a callback affect for a [`ComponentCallback`].
          [`SciMLBase.auto_dt_reset!`](@extref) after a change of `u`. Meant for affects which
          only store a value and don't introduce a discontinuity; parameter changes are saved either way.
          If several affects fire at the same time, one of them asking for the reset is enough.
+       - `ctx.derivative_discontinuity::Ref{Bool}`: Set `ctx.derivative_discontinuity[] = false` if the
+         affect leaves the right-hand side unchanged, e.g. it only writes bookkeeping parameters.
+         The solver then continues as if the event was a plain tstop, without reinitialization or
+         step reset (see [`SciMLBase.derivative_discontinuity!`](@extref)). If several affects
+         fire at the same time, one of them reporting a discontinuity is enough.
 - `sym`: A vector or tuple of symbols naming **states, parameters, inputs, outputs or observed**
   of the component model. Determines which values will be available through `u` in `f`.
 
@@ -527,6 +532,7 @@ struct AffectAccess{DC}
     pidx::Vector{Int} # position in p, 0 if the slot is no parameter
     changed::Vector{Bool} # [state written, parameter written], reset per fire
     dt_reset::Base.RefValue{Bool} # exposed as ctx.dt_reset, affects may opt out of the step reset
+    discontinuity::Base.RefValue{Bool} # exposed as ctx.derivative_discontinuity
 end
 function AffectAccess(nw, symidxs)
     missing = filter(s -> !(SII.is_variable(nw, s) || SII.is_parameter(nw, s) || SII.is_observed(nw, s)), symidxs)
@@ -537,7 +543,7 @@ function AffectAccess(nw, symidxs)
     cache = DiffCache(zeros(length(symidxs)), ad_chunksize(nw.im))
     uidx = Int[something(SII.variable_index(nw, s), 0) for s in symidxs]
     pidx = Int[something(SII.parameter_index(nw, s), 0) for s in symidxs]
-    AffectAccess(obsf, cache, uidx, pidx, [false, false], Ref(true))
+    AffectAccess(obsf, cache, uidx, pidx, [false, false], Ref(true), Ref(true))
 end
 function _gather(acc::AffectAccess, integrator)
     scratch = PreallocationTools.get_tmp(acc.cache, integrator.u)
@@ -547,21 +553,38 @@ end
 function _affect_view(acc::AffectAccess, scratch, integrator, range, syms)
     fill!(acc.changed, false)
     acc.dt_reset[] = true
+    acc.discontinuity[] = true
     wt = WriteThrough(view(scratch, range), integrator.u, integrator.p,
                       view(acc.uidx, range), view(acc.pidx, range), syms, acc.changed)
     SymbolicView(wt, syms)
 end
-# Several members of a batch may fire at the same event time. Each affect reports whether it
-# wants a step reset and whether it changed a parameter, the batch collects the flags and
-# acts once per event: one member asking for the reset is enough.
+# Several members of a batch may fire at the same event time. Each affect reports what it did
+# and what it asks from the solver, the batch combines the flags with `|` and acts once per
+# event: one member asking for something is enough.
+struct AffectFlags
+    changed::Bool # some state or parameter was written
+    pchanged::Bool
+    dt_reset::Bool
+    discontinuity::Bool
+end
+AffectFlags() = AffectFlags(false, false, false, false)
+function Base.:|(a::AffectFlags, b::AffectFlags)
+    AffectFlags(a.changed | b.changed, a.pchanged | b.pchanged,
+                a.dt_reset | b.dt_reset, a.discontinuity | b.discontinuity)
+end
 function _affect_flags(u::SymbolicView{<:Any,<:WriteThrough}, ctx)
     wt = u.v
-    dt_reset = ctx.dt_reset[] && (uchanged(wt) || pchanged(wt))
-    (dt_reset, pchanged(wt))
+    changed = uchanged(wt) || pchanged(wt)
+    discontinuity = ctx.derivative_discontinuity[]
+    # without a discontinuity there is no reason to reset the step
+    dt_reset = ctx.dt_reset[] && discontinuity && changed
+    AffectFlags(changed, pchanged(wt), dt_reset, discontinuity)
 end
-function _finish_affects!(integrator, dt_reset::Bool, pchanged::Bool)
-    dt_reset && SciMLBase.auto_dt_reset!(integrator)
-    pchanged && save_parameters!(integrator)
+function _finish_affects!(integrator, flags::AffectFlags)
+    flags.dt_reset && SciMLBase.auto_dt_reset!(integrator)
+    flags.pchanged && save_parameters!(integrator)
+    # DiffEq assumes a discontinuity after every affect unless told otherwise
+    flags.discontinuity || SciMLBase.derivative_discontinuity!(integrator, false)
     nothing
 end
 
@@ -649,21 +672,16 @@ function _batch_scalar_affect(ccb::ContinuousBatch)
     (integrator, event_signs) -> begin
         pos_scratch = any(>(0), event_signs) ? _gather(pos_acc, integrator) : nothing
         neg_scratch = any(<(0), event_signs) ? _gather(neg_acc, integrator) : nothing
-        any_dt_reset = false
-        any_pchanged = false
+        flags = AffectFlags()
         for i in eachindex(event_signs)
             s = event_signs[i]
-            dt_reset, pchanged = if s > 0
-                pos_affect(integrator, pos_scratch, i)
+            if s > 0
+                flags |= pos_affect(integrator, pos_scratch, i)
             elseif s < 0
-                neg_affect(integrator, neg_scratch, i)
-            else
-                (false, false)
+                flags |= neg_affect(integrator, neg_scratch, i)
             end
-            any_dt_reset |= dt_reset
-            any_pchanged |= pchanged
         end
-        _finish_affects!(integrator, any_dt_reset, any_pchanged)
+        _finish_affects!(integrator, flags)
     end
 end
 # returns the access object and a per-member affect; the caller gathers the scratch once per event
@@ -672,7 +690,7 @@ function _scalar_member_affect(ccb::ContinuousBatch, aff_or_affneg::F) where {F}
 
     affect_fn = (integrator, scratch, i) -> begin
         affect = aff_or_affneg(ccb.callbacks[i])
-        isnothing(affect) && return (false, false) # affect_neg may be absent
+        isnothing(affect) && return AffectFlags() # affect_neg may be absent
 
         _u = _affect_view(acc, scratch, integrator, affect_urange(ccb, aff_or_affneg, i), affect.sym)
         ctx = get_ctx(integrator, ccb.components[i], acc)
@@ -690,8 +708,7 @@ function _batch_vector_affect(ccb::ContinuousBatch)
 
     (integrator, event_signs) -> begin
         scratch = _gather(acc, integrator)
-        any_dt_reset = false
-        any_pchanged = false
+        flags = AffectFlags()
         for i in 1:length(ccb)
             outrange = condition_outrange(ccb, i)
             any(oidx -> !iszero(event_signs[oidx]), outrange) || continue
@@ -701,11 +718,9 @@ function _batch_vector_affect(ccb::ContinuousBatch)
             ctx = get_ctx(integrator, ccb.components[i], acc)
             signs = view(event_signs, outrange)
             affect.f(_u, signs, ctx)
-            dt_reset, pchanged = _affect_flags(_u, ctx)
-            any_dt_reset |= dt_reset
-            any_pchanged |= pchanged
+            flags |= _affect_flags(_u, ctx)
         end
-        _finish_affects!(integrator, any_dt_reset, any_pchanged)
+        _finish_affects!(integrator, flags)
     end
 end
 
@@ -753,8 +768,7 @@ function _batch_affect(dcb::DiscreteBatch, fired)
     acc = AffectAccess(dcb.nw, collect_c_or_a_indices(dcb, getaffect))
     (integrator) -> begin
         scratch = _gather(acc, integrator)
-        dt_reset, pchanged, _ = _apply_fired!(dcb, acc, scratch, fired, integrator)
-        _finish_affects!(integrator, dt_reset, pchanged)
+        _finish_affects!(integrator, _apply_fired!(dcb, acc, scratch, fired, integrator))
     end
 end
 
@@ -771,12 +785,9 @@ function _eval_conditions!(dcb::DiscreteBatch, obsf, ucache, fired, u, t, integr
     return any(fired)
 end
 
-# run the affects of all fired members against the gathered `scratch`, returns the collected
-# flags and whether any affect wrote something at all
+# run the affects of all fired members against the gathered `scratch`, returns the collected flags
 function _apply_fired!(dcb::DiscreteBatch, acc, scratch, fired, integrator)
-    any_dt_reset = false
-    any_pchanged = false
-    any_changed = false
+    flags = AffectFlags()
     for i in 1:length(dcb)
         fired[i] || continue
 
@@ -784,12 +795,9 @@ function _apply_fired!(dcb::DiscreteBatch, acc, scratch, fired, integrator)
         _u = _affect_view(acc, scratch, integrator, affect_urange(dcb, getaffect, i), affect.sym)
         ctx = get_ctx(integrator, dcb.components[i], acc)
         affect.f(_u, ctx)
-        dt_reset, pchanged = _affect_flags(_u, ctx)
-        any_dt_reset |= dt_reset
-        any_pchanged |= pchanged
-        any_changed |= uchanged(_u.v) || pchanged
+        flags |= _affect_flags(_u, ctx)
     end
-    any_dt_reset, any_pchanged, any_changed
+    flags
 end
 
 ####
@@ -832,10 +840,9 @@ mutable struct EventIteration{DC,AA}
     acc::Vector{AA}
     maxiter::Int
     onfail::Symbol
-    # collected from the affects: step reset and parameter save over all rounds of an instant,
-    # and whether anything was written in the current round
-    dt_reset::Bool
-    pchanged::Bool
+    # collected from the affects over all rounds of an instant, and whether anything was
+    # written in the current round
+    flags::AffectFlags
     changed::Bool
 end
 function EventIteration(ib::IterativeBatches)
@@ -844,7 +851,7 @@ function EventIteration(ib::IterativeBatches)
     condaccess = [_condition_access(b) for b in batches]
     acc = [AffectAccess(b.nw, collect_c_or_a_indices(b, getaffect)) for b in batches]
     EventIteration(batches, fired, first.(condaccess), last.(condaccess), acc,
-                   ib.maxiter, ib.onfail, false, false, false)
+                   ib.maxiter, ib.onfail, AffectFlags(), false)
 end
 # called as condition
 (e::EventIteration)(u, t, integrator) = _any_fires!(e, integrator)
@@ -866,8 +873,7 @@ function _batch_fires!(dcb::DiscreteBatch, e::EventIteration, k, integrator)
 end
 
 function _iterate_events!(e::EventIteration, integrator)
-    e.dt_reset = false
-    e.pchanged = false
+    e.flags = AffectFlags()
     settled = false
     nround = 0
     while nround < e.maxiter
@@ -904,16 +910,15 @@ function _iterate_events!(e::EventIteration, integrator)
     if !settled
         _report_unsettled(e, integrator, nround)
     end
-    _finish_affects!(integrator, e.dt_reset, e.pchanged)
+    _finish_affects!(integrator, e.flags)
 end
 
 function _batch_apply!(dcb::DiscreteBatch, e::EventIteration, k, integrator)
     acc = e.acc[k]
     scratch = PreallocationTools.get_tmp(acc.cache, integrator.u)
-    dt_reset, pchanged, changed = _apply_fired!(dcb, acc, scratch, e.fired[k], integrator)
-    e.dt_reset |= dt_reset
-    e.pchanged |= pchanged
-    e.changed |= changed
+    flags = _apply_fired!(dcb, acc, scratch, e.fired[k], integrator)
+    e.flags |= flags
+    e.changed |= flags.changed
     nothing
 end
 
@@ -974,7 +979,7 @@ function to_callback(ptb::PresetTimeBatch)
         _u = _affect_view(acc, scratch, integrator, 1:length(symidxs), affect.sym)
         ctx = get_ctx(integrator, component, acc)
         affect.f(_u, ctx)
-        _finish_affects!(integrator, _affect_flags(_u, ctx)...)
+        _finish_affects!(integrator, _affect_flags(_u, ctx))
     end
 
     DiffEqCallbacks.PresetTimeCallback(ts, affect_fn; kwargs...)
@@ -987,13 +992,15 @@ end
 function get_ctx(integrator, sym::VIndex, acc::AffectAccess)
     nw = extract_nw(integrator)
     idx = sym.compidx
-    (; integrator, t=integrator.t, model=nw[sym], vidx=idx, dt_reset=acc.dt_reset)
+    (; integrator, t=integrator.t, model=nw[sym], vidx=idx, dt_reset=acc.dt_reset,
+       derivative_discontinuity=acc.discontinuity)
 end
 function get_ctx(integrator, sym::EIndex, acc::AffectAccess)
     nw = extract_nw(integrator)
     idx = sym.compidx
     edge = nw.im.edgevec[idx]
-    (; integrator, t=integrator.t, model=nw[sym], eidx=idx, src=edge.src, dst=edge.dst, dt_reset=acc.dt_reset)
+    (; integrator, t=integrator.t, model=nw[sym], eidx=idx, src=edge.src, dst=edge.dst, dt_reset=acc.dt_reset,
+       derivative_discontinuity=acc.discontinuity)
 end
 
 ####

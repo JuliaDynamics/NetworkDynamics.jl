@@ -735,6 +735,34 @@ end
     end
 end
 
+@testset "ctx.derivative_discontinuity opt out" begin
+    # Both vertices fire in one discrete batch at the tstop. The affect rewrites a parameter with
+    # its own value, so the rhs stays the same.
+    function solve_noop(optout)
+        nw = basenetwork()
+        cond = ComponentCondition((u, t) -> t == 1.0, [:Pmech])
+        aff = ComponentAffect([:Pmech]) do u, ctx
+            u[:Pmech] = u[:Pmech]
+            ctx.vidx in optout && (ctx.derivative_discontinuity[] = false)
+        end
+        if !isnothing(optout)
+            foreach(v -> set_callback!(nw.im.vertexm[v], DiscreteComponentCallback(cond, aff)), 1:2)
+            @test length(wrap_component_callbacks(nw)) == 1
+        end
+        s0 = NWState(nw)
+        s0.v[1, :ω] += 0.1
+        solve(ODEProblem(nw, s0, (0, 2.0)), Tsit5(); tstops=[1.0])
+    end
+    sol_plain = solve_noop(nothing)
+    sol_out = solve_noop([1, 2])
+    sol_one = solve_noop([1])
+    # without a discontinuity the solver continues as if the event was a plain tstop
+    @test unique(sol_out.t) == sol_plain.t
+    @test sol_out.stats.nf == sol_plain.stats.nf
+    # one member reporting a discontinuity is enough
+    @test sol_one.stats.nf > sol_plain.stats.nf
+end
+
 @testset "symbolic view test" begin
     a = collect(1:10)
     v = SymbolicView(view(a,1:3), (:a,:b,:c))

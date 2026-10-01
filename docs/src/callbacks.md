@@ -119,6 +119,9 @@ When executing component callbacks, NetworkDynamics automatically checks whether
 changed during the affect and calls [`SciMLBase.auto_dt_reset!`](@extref) and [`save_parameters!`](@ref) if necessary.
 An affect which only does bookkeeping, for example counting events in a parameter, can keep the
 current step size by setting `ctx.dt_reset[] = false`. The parameter change is saved either way.
+If the affect does not change the right-hand side at all, `ctx.derivative_discontinuity[] = false`
+goes one step further: the solver continues as if the event was a plain tstop, without
+reinitialization or step reset.
 
 
 ## Event Iteration
