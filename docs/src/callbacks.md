@@ -32,6 +32,9 @@ In contrast, the "vector" version has an in-place condition which writes `len` o
 
 There is a special type [`PresetTimeComponentCallback`](@ref) which has no explicit condition and triggers the affect at given times.
 This internally generates a [`PresetTimeCallback`](@extref DiffEqCallbacks.PresetTimeCallback) object from `DiffEqCallbacks.jl`.
+Preset time callbacks with the same `ts` and keyword arguments share one `PresetTimeCallback`,
+also across components. Their affects all read one snapshot taken before the first of them
+writes, so if two of them write the same symbol, the last write wins.
 
 
 ### Defining the Callback
