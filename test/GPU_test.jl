@@ -13,8 +13,7 @@ using OrdinaryDiffEqRosenbrock
 using OrdinaryDiffEqNonlinearSolve
 using NonlinearSolve # so the DAE init polyalg is available
 using NonlinearSolve: KrylovJL_GMRES, QRFactorization
-using OrdinaryDiffEqSDIRK: TRBDF2
-using OrdinaryDiffEqBDF: QNDF
+using OrdinaryDiffEqBDF: FBDF
 using SciMLBase
 using SparseArrays
 using LinearAlgebra: diag
@@ -164,11 +163,9 @@ gpu_configs = [
     (; name="Float64 CSR Rodas5P cuDSS", T=Float64, layout=:csr,   solver=Rodas5P,  broken=false),
     (; name="Float64 CSR Rodas5P cuSOLVER QR", T=Float64, layout=:csr, solver=Rodas5P, broken=false,
        linsolve=QRFactorization()),
-    # SDIRK, so a Newton solve per stage, and the Krylov path
-    (; name="Float64 CSR TRBDF2 GMRES",  T=Float64, layout=:csr,   solver=TRBDF2,   broken=false,
+    # BDF, so a solution history on the device, and the Krylov path
+    (; name="Float64 CSR FBDF GMRES",    T=Float64, layout=:csr,   solver=FBDF,     broken=false,
        linsolve=KrylovJL_GMRES()),
-    # The only multistep method here, so the only one keeping a solution history on the device.
-    (; name="Float64 CSR QNDF",          T=Float64, layout=:csr,   solver=QNDF,     broken=false),
     # Float32 needs the eltype to reach both the init tolerance and `tspan`, see
     # `default_dae_init_alg` and the `tspan` default above.
     (; name="Float32 CSR Rodas5P",       T=Float32, layout=:csr,   solver=Rodas5P,  broken=false),
