@@ -384,7 +384,7 @@ function Base.getproperty(nw::Network, s::Symbol)
 end
 
 """
-    set_jac_prototype!(nw::Network, jac::AbstractSparseMatrix)
+    set_jac_prototype!(nw::Network, jac::SparseMatrixCSC{Bool,Int})
 
 Set the Jacobian prototype for a NetworkDynamics network.
 
@@ -399,15 +399,10 @@ prototype symbolically.
 
 # Arguments
 - `nw::Network`: The NetworkDynamics network to modify
-- `jac::AbstractSparseMatrix`: A sparse matrix representing the Jacobian sparsity pattern
+- `jac::SparseMatrixCSC{Bool,Int}`: A sparse matrix representing the Jacobian sparsity pattern
 """
-function set_jac_prototype!(nw::Network, jac::AbstractSparseMatrix)
-    # `+ I` adds the missing diagonal *structure* and works on every layout, host and device
-    # alike. It doubles the entries that were already there, so flatten the values afterwards:
-    # only the pattern is ever read.
-    jac = jac + LinearAlgebra.I
-    nonzeros(jac) .= one(eltype(jac))
-    getfield(nw, :jac_prototype)[] = jac
+function set_jac_prototype!(nw::Network, jac::SparseMatrixCSC{Bool,Int})
+    getfield(nw, :jac_prototype)[] = jac .| sparse(LinearAlgebra.I, size(jac)...)
     nw
 end
 
