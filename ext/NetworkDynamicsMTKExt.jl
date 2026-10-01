@@ -510,7 +510,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     # now generate the actual functions
     if !isempty(eqs)
         formulas = _get_formulas(eqs, obs_subs)
-        _, f_ip = build_function(formulas, states, inputss..., params, iv; cse=false, expression)
+        _, f_ip = build_function(formulas, states, inputss..., params, iv; cse=false, conv=literal_pow_conv, expression)
     else
         f_ip = nothing
     end
@@ -526,7 +526,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     elseif fftype isa PureStateMap
         (states,)
     end
-    _, _g_ip = build_function(gformulas, gformargs...; cse=false, expression)
+    _, _g_ip = build_function(gformulas, gformargs...; cse=false, conv=literal_pow_conv, expression)
     # for more than 1 output, wrap function in MultipleOutputWrapper
     g_ip = if length(outputss) == 1
         _g_ip
@@ -538,7 +538,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     if !isempty(obsstates)
         obsmask = unwrap(Symbolics.variable(:ˍ₋obsmask))
         obsformulas, columns, needs_input = _get_masked_obsformulas(obsstates, obs_subs, allinputs, obsmask)
-        _, _obsf = build_function(obsformulas, states, inputss..., params, iv, obsmask; cse=false, expression)
+        _, _obsf = build_function(obsformulas, states, inputss..., params, iv, obsmask; cse=false, conv=literal_pow_conv, expression)
         obsf_ip = NetworkDynamics.DependencyAwareObsf(_obsf, columns, needs_input)
     else
         obsf_ip = nothing

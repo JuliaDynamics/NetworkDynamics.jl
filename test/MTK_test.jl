@@ -8,6 +8,9 @@ using Graphs
 using Chairmarks: @b
 using Test
 using SciCompDSL
+using ForwardDiff: ForwardDiff
+using StableRNGs: StableRNG
+using Symbolics: Symbolics
 mtkext = Base.get_extension(NetworkDynamics, :NetworkDynamicsMTKExt)
 
 @testset "get_variables_deriv test" begin
@@ -2601,4 +2604,53 @@ end
             @test isempty(get_aliasmap(c))
         end
     end
+end
+
+@testset "integer powers are generated as literal_pow" begin
+    @mtkmodel PowVertex begin
+        @variables begin
+            x(t) = 1.0
+            i(t), [input=true]
+            o(t), [output=true]
+        end
+        @parameters begin
+            a = 2.0
+        end
+        @equations begin
+            Dt(x) ~ -a*x^2 + i^3
+            o ~ x^2 - 1/x^2 + x^2.5
+        end
+    end
+    @named powvertex = PowVertex()
+    vm = VertexModel(powvertex, [:i], [:o])
+
+    getex = NetworkDynamics.RuntimeGeneratedFunctions.get_expression
+    _calls(f, ex) = false
+    _calls(f, ex::Expr) = (ex.head === :call && ex.args[1] === f) || any(a -> _calls(f, a), ex.args)
+    _intpow(ex) = false
+    _intpow(ex::Expr) = (ex.head === :call && ex.args[1] === (^) && ex.args[end] isa Integer) || any(_intpow, ex.args)
+    for f in (NetworkDynamics.compf(vm), NetworkDynamics.compg(vm))
+        @test !_intpow(getex(f))
+        @test _calls(Base.literal_pow, getex(f))
+    end
+
+    # Canary: plain Symbolics still emits `(^)(x, 2)`. Once this fails, upstream codegen handles
+    # integer powers itself and `literal_pow_conv` in the MTK extension can be removed.
+    let
+        @variables z
+        ex = getex(Symbolics.build_function([z^2], [z]; cse=false, expression=Val(false))[2])
+        @test _intpow(ex) && !_calls(Base.literal_pow, ex)
+    end
+
+    x, i, a = 1.3, 0.7, 2.0
+    du = [NaN]
+    NetworkDynamics.compf(vm)(du, [x], [i], [a], 0.0)
+    @test du[1] ≈ -a*x^2 + i^3
+    o = [NaN]
+    NetworkDynamics.compg(vm)(o, [x], [a], 0.0)
+    @test o[1] ≈ x^2 - 1/x^2 + x^2.5
+
+    # ForwardDiff has its own literal_pow for Duals
+    dfdx = ForwardDiff.derivative(x -> (du = [zero(x)]; NetworkDynamics.compf(vm)(du, [x], [i], [a], 0.0); du[1]), x)
+    @test dfdx ≈ -2a*x
 end
