@@ -185,7 +185,7 @@ function VectorContinuousComponentCallback(condition, affect, len; kwargs...)
 end
 
 """
-    DiscreteComponentCallback(condition, affect; kwargs...)
+    DiscreteComponentCallback(condition, affect; iterative=false, kwargs...)
 
 Connect a [`ComponentCondition`](@ref) and a [`ComponentAffect`](@ref) to a
 discrete callback which can be attached to a component model using
@@ -198,16 +198,31 @@ The `kwargs` will be forwarded to the `DiscreteCallback` when the component base
 callbacks are collected for the whole network using [`get_callbacks(::Network)`](@ref).
 [`DiffEq.jl docs`](https://docs.sciml.ai/DiffEqDocs/stable/features/callback_functions/)
 for available options.
+
+With `iterative=true` the callback joins the network's event iteration: all iterative callbacks
+run together after the other network callbacks at an event instant. They run in rounds. In each
+round all conditions see the same state and all fired affects read one snapshot. Rounds repeat
+until no condition fires anymore. See the [Event Iteration](@ref) section in the docs.
+The condition of an iterative callback should be a predicate on the current state alone, such as
+"the stored memory contradicts the input", so that the affect which fixes the inconsistency also
+makes the condition false. The affect should read and write only through `u`, not through
+`ctx.integrator`. Iterative callbacks take no `kwargs`.
 """
 struct DiscreteComponentCallback{C<:ComponentCondition,A<:ComponentAffect} <: ComponentCallback
     condition::C
     affect::A
     kwargs::NamedTuple
+    iterative::Bool
 end
-function DiscreteComponentCallback(condition, affect; kwargs...)
+function DiscreteComponentCallback(condition, affect; iterative=false, kwargs...)
     _assert_scalar_signature(condition) # (u, t)
     _assert_scalar_signature(affect)    # (u, ctx)
-    DiscreteComponentCallback(condition, affect, NamedTuple(kwargs))
+    if iterative && !isempty(kwargs)
+        throw(ArgumentError("Iterative discrete callbacks run as part of one shared callback and \
+            take no DiffEq keywords, got $(keys(kwargs)). The reinitialization between rounds \
+            uses the `initializealg` of the solve."))
+    end
+    DiscreteComponentCallback(condition, affect, NamedTuple(kwargs), iterative)
 end
 
 """
@@ -266,9 +281,12 @@ getcondition(cb::ContinuousComponentCallback) = cb.condition
 getcondition(cb::VectorContinuousComponentCallback) = cb.condition
 getaffect(cb::ComponentCallback) = cb.affect
 getaffect_neg(cb::ContinuousComponentCallback) = cb.affect_neg
+isiterative(cb::ComponentCallback) = false
+isiterative(cb::DiscreteComponentCallback) = cb.iterative
 
 """
-    get_callbacks(nw::Network, additional_callbacks=Dict())::CallbackSet
+    get_callbacks(nw::Network, additional_callbacks=Dict();
+                  event_maxiter=10, event_failure=:warn)::CallbackSet
 
 Returns a `CallbackSet` composed of all the "component-based" callbacks in the metadata of the
 Network components.
@@ -279,38 +297,66 @@ You can inject additional callbacks at that stage by passing
     get_callbacks(nw, Dict(VIndex(1)=>cb1, EIndex(2)=>cb2))
 
 which won't be stored in the metadata of the component.
+
+At an event instant, preset-time callbacks run before the other discrete callbacks, and the
+iterative discrete callbacks (see [`DiscreteComponentCallback`](@ref)) run last. Discrete
+callbacks you add to the returned set by hand run after the iterative ones. Pass them as
+`add_nw_cb` to the `ODEProblem` instead, which sorts them into the same order.
+`event_maxiter` bounds the number of rounds of the event iteration. If the iterative callbacks
+still fire after that, `event_failure=:warn` keeps the last state and warns, `:error` throws.
 """
-function get_callbacks(nw::Network, additional_callbacks=Dict())
+function get_callbacks(nw::Network, additional_callbacks=Dict(); kwargs...)
     aliased_changed(nw; warn=true)
-    cbbs = wrap_component_callbacks(nw, additional_callbacks)
-    if isempty(cbbs)
+    cbbs = wrap_component_callbacks(nw, additional_callbacks; kwargs...)
+
+    discrete_cb = []
+    continuous_cb = []
+    for batch in cbbs
+        cb = to_callback(batch)
+        if cb isa SciMLBase.AbstractContinuousCallback
+            push!(continuous_cb, cb)
+        elseif cb isa SciMLBase.AbstractDiscreteCallback
+            push!(discrete_cb, cb)
+        else
+            error("Unknown callback type, should never be reached. Please report this issue.")
+        end
+    end
+    sort!(discrete_cb; by=_discrete_rank, alg=Base.Sort.DEFAULT_STABLE)
+
+    ncb = length(continuous_cb) + length(discrete_cb)
+    if ncb == 0
         return nothing
-    elseif length(cbbs) == 1
-        return to_callback(only(cbbs))
+    elseif ncb == 1
+        return only(vcat(continuous_cb, discrete_cb))
     else
         # we split in discrete and continuous manually, otherwise the CallbackSet
         # construction can take forever
-        discrete_cb = []
-        continuous_cb = []
-        for batch in cbbs
-            cb = to_callback(batch)
-            if cb isa SciMLBase.AbstractContinuousCallback
-                push!(continuous_cb, cb)
-            elseif cb isa SciMLBase.AbstractDiscreteCallback
-                push!(discrete_cb, cb)
-            else
-                error("Unknown callback type, should never be reached. Please report this issue.")
-            end
-        end
-        CallbackSet(Tuple(continuous_cb), Tuple(discrete_cb));
+        return CallbackSet(Tuple(continuous_cb), Tuple(discrete_cb))
+    end
+end
+
+# Order the discrete callbacks of a set: preset-time callbacks first, so every later one sees
+# their jump, then all others, and the event iteration last. The order within a group is kept.
+# Used again after other callbacks were combined with the ones from `get_callbacks`.
+function sort_discrete_callbacks(cbs::CallbackSet)
+    discrete = sort!(collect(cbs.discrete_callbacks); by=_discrete_rank, alg=Base.Sort.DEFAULT_STABLE)
+    CallbackSet(cbs.continuous_callbacks, Tuple(discrete))
+end
+function _discrete_rank(cb)
+    if cb isa DiscreteCallback && cb.condition isa DiffEqCallbacks.PresetTimeFunction
+        return 0
+    elseif cb isa DiscreteCallback && cb.affect! isa EventIteration
+        return 2
+    else
+        return 1
     end
 end
 
 ####
 #### identifying callbacks which can be combined into batches
 ####
-wrap_component_callbacks(nw, additional_cb::Pair) = wrap_component_callbacks(nw, Dict(additional_cb))
-function wrap_component_callbacks(nw, additional_callbacks=Dict())
+wrap_component_callbacks(nw, additional_cb::Pair; kwargs...) = wrap_component_callbacks(nw, Dict(additional_cb); kwargs...)
+function wrap_component_callbacks(nw, additional_callbacks=Dict(); event_maxiter=10, event_failure=:warn)
     components = SymbolicIndex{Int,Nothing}[]
     callbacks = ComponentCallback[]
     for (comp, cb) in additional_callbacks
@@ -340,6 +386,12 @@ function wrap_component_callbacks(nw, additional_callbacks=Dict())
             push!(callbacks, cb)
         end
     end
+    # the iterative callbacks are pulled out first, they form one set of their own
+    iter = findall(isiterative, callbacks)
+    itercomps, itercbs = components[iter], callbacks[iter]
+    deleteat!(components, iter)
+    deleteat!(callbacks, iter)
+
     # group the callbacks such that they are in groups which are "batchequal"
     # batchequal groups can be wrapped into a single callback
     idx_per_type = find_identical(callbacks; equality=_batchequal)
@@ -359,6 +411,9 @@ function wrap_component_callbacks(nw, additional_callbacks=Dict())
             error("Unknown callback type, should never be reached. Please report this issue.")
         end
         push!(batches, cb)
+    end
+    if !isempty(itercbs)
+        push!(batches, IterativeBatches(nw, itercomps, itercbs; maxiter=event_maxiter, onfail=event_failure))
     end
     return batches
 end
@@ -691,40 +746,200 @@ function to_callback(dcb::DiscreteBatch)
 end
 function _batch_condition(dcb::DiscreteBatch, fired)
     obsf, ucache = _condition_access(dcb)
-
-    (u, t, integrator) -> begin
-        us = PreallocationTools.get_tmp(ucache, u)
-        obsf(u, integrator.p, t, us) # fills us inplace
-
-        for i in 1:length(dcb)
-            uv = view(us, condition_urange(dcb, i))
-            _u = SymbolicView(uv, dcb.callbacks[i].condition.sym)
-            fired[i] = dcb.conditions[i](_u, t)
-        end
-        return any(fired)
-    end
+    (u, t, integrator) -> _eval_conditions!(dcb, obsf, ucache, fired, u, t, integrator)
 end
 function _batch_affect(dcb::DiscreteBatch, fired)
     acc = AffectAccess(dcb.nw, collect_c_or_a_indices(dcb, getaffect))
-
     (integrator) -> begin
         scratch = _gather(acc, integrator)
-        any_dt_reset = false
-        any_pchanged = false
-        for i in 1:length(dcb)
-            fired[i] || continue
-
-            affect = getaffect(dcb.callbacks[i])
-            _u = _affect_view(acc, scratch, integrator, affect_urange(dcb, getaffect, i), affect.sym)
-            ctx = get_ctx(integrator, dcb.components[i], acc)
-            affect.f(_u, ctx)
-            dt_reset, pchanged = _affect_flags(_u, ctx)
-            any_dt_reset |= dt_reset
-            any_pchanged |= pchanged
-        end
-        _finish_affects!(integrator, any_dt_reset, any_pchanged)
+        dt_reset, pchanged, _ = _apply_fired!(dcb, acc, scratch, fired, integrator)
+        _finish_affects!(integrator, dt_reset, pchanged)
     end
 end
+# evaluate the conditions of all members into `fired`, returns whether any fired
+function _eval_conditions!(dcb::DiscreteBatch, obsf, ucache, fired, u, t, integrator)
+    us = PreallocationTools.get_tmp(ucache, u)
+    obsf(u, integrator.p, t, us) # fills us inplace
+
+    for i in 1:length(dcb)
+        uv = view(us, condition_urange(dcb, i))
+        _u = SymbolicView(uv, dcb.callbacks[i].condition.sym)
+        fired[i] = dcb.conditions[i](_u, t)
+    end
+    return any(fired)
+end
+# run the affects of all fired members against the gathered `scratch`, returns the collected
+# flags and whether any affect wrote something at all
+function _apply_fired!(dcb::DiscreteBatch, acc, scratch, fired, integrator)
+    any_dt_reset = false
+    any_pchanged = false
+    any_changed = false
+    for i in 1:length(dcb)
+        fired[i] || continue
+
+        affect = getaffect(dcb.callbacks[i])
+        _u = _affect_view(acc, scratch, integrator, affect_urange(dcb, getaffect, i), affect.sym)
+        ctx = get_ctx(integrator, dcb.components[i], acc)
+        affect.f(_u, ctx)
+        dt_reset, pchanged = _affect_flags(_u, ctx)
+        any_dt_reset |= dt_reset
+        any_pchanged |= pchanged
+        any_changed |= uchanged(_u.v) || pchanged
+    end
+    any_dt_reset, any_pchanged, any_changed
+end
+
+####
+#### the iterative discrete callbacks
+####
+# All iterative discrete callbacks of a network run as one DiffEq callback, the last one at an
+# event instant. Its affect runs the event iteration: all fired affects of a round read one
+# snapshot, then the DAE is reinitialized and the conditions are checked again, until nothing
+# fires. The members are batched like normal discrete callbacks.
+struct IterativeBatches
+    batches::Vector{Any} # of DiscreteBatch
+    maxiter::Int
+    onfail::Symbol
+end
+function IterativeBatches(nw::Network, components, callbacks; maxiter, onfail)
+    if onfail ∉ (:warn, :error)
+        throw(ArgumentError("event_failure must be :warn or :error, got $(repr(onfail))."))
+    end
+    maxiter ≥ 1 || throw(ArgumentError("event_maxiter must be at least 1, got $maxiter."))
+    idx_per_type = find_identical(callbacks; equality=_batchequal)
+    batches = Any[DiscreteBatch(nw, components[idxs], callbacks[idxs]) for idxs in idx_per_type]
+    IterativeBatches(batches, maxiter, onfail)
+end
+
+function to_callback(ib::IterativeBatches)
+    e = EventIteration(ib)
+    # the set leaves a consistent state, DiffEq needs no reinit after it
+    DiscreteCallback(e, e; initializealg=SciMLBase.NoInit())
+end
+
+# Condition and affect of the event iteration in one object. The condition check fills the `fired` vectors and
+# the first round of the affect starts from there.
+# Each untyped batch is reached through one dynamic call, which only gets the batch, this object
+# and the index. Passing the buffers directly would box them on every call.
+mutable struct EventIteration{DC,AA}
+    batches::Vector{Any}
+    fired::Vector{Vector{Bool}}
+    condobsf::Vector{CallbackObsf}
+    condcache::Vector{DC}
+    acc::Vector{AA}
+    maxiter::Int
+    onfail::Symbol
+    # collected from the affects: step reset and parameter save over all rounds of an instant,
+    # and whether anything was written in the current round
+    dt_reset::Bool
+    pchanged::Bool
+    changed::Bool
+end
+function EventIteration(ib::IterativeBatches)
+    batches = ib.batches
+    fired = [fill(false, length(b)) for b in batches]
+    condaccess = [_condition_access(b) for b in batches]
+    acc = [AffectAccess(b.nw, collect_c_or_a_indices(b, getaffect)) for b in batches]
+    EventIteration(batches, fired, first.(condaccess), last.(condaccess), acc,
+                   ib.maxiter, ib.onfail, false, false, false)
+end
+# called as condition
+(e::EventIteration)(u, t, integrator) = _any_fires!(e, integrator)
+# called as affect
+(e::EventIteration)(integrator) = _iterate_events!(e, integrator)
+
+# Evaluates every batch, no short circuit, so all `fired` vectors are up to date afterwards.
+function _any_fires!(e::EventIteration, integrator)
+    anyfired = false
+    for k in eachindex(e.batches)
+        anyfired |= _batch_fires!(e.batches[k], e, k, integrator)::Bool
+    end
+    anyfired
+end
+# DiffEq passes `integrator.u` and `integrator.t` to the condition anyway. Reading `t` here keeps it
+# out of the dynamic call, which would have to box it.
+function _batch_fires!(dcb::DiscreteBatch, e::EventIteration, k, integrator)
+    _eval_conditions!(dcb, e.condobsf[k], e.condcache[k], e.fired[k], integrator.u, integrator.t, integrator)
+end
+
+function _iterate_events!(e::EventIteration, integrator)
+    e.dt_reset = false
+    e.pchanged = false
+    settled = false
+    nround = 0
+    while nround < e.maxiter
+        nround += 1
+        # Gather the snapshots of all batches with fired members, then run the fired affects
+        # against them. `get_tmp` in `_batch_apply!` hands out the buffer `_gather` filled.
+        for k in eachindex(e.batches)
+            if any(e.fired[k])
+                _gather(e.acc[k], integrator)
+            end
+        end
+        e.changed = false
+        for k in eachindex(e.batches)
+            if any(e.fired[k])
+                _batch_apply!(e.batches[k], e, k, integrator)
+            end
+        end
+
+        # If nothing was written, the conditions would fire exactly as before.
+        if !e.changed
+            break
+        end
+        # A failed reinit sets the retcode, the solver stops after this callback.
+        if !_reinit_dae!(integrator)
+            settled = true
+            break
+        end
+        # Refill the `fired` vectors for the next round, stop if none is set.
+        if !_any_fires!(e, integrator)
+            settled = true
+            break
+        end
+    end
+    if !settled
+        _report_unsettled(e, integrator, nround)
+    end
+    _finish_affects!(integrator, e.dt_reset, e.pchanged)
+end
+
+function _batch_apply!(dcb::DiscreteBatch, e::EventIteration, k, integrator)
+    acc = e.acc[k]
+    scratch = PreallocationTools.get_tmp(acc.cache, integrator.u)
+    dt_reset, pchanged, changed = _apply_fired!(dcb, acc, scratch, e.fired[k], integrator)
+    e.dt_reset |= dt_reset
+    e.pchanged |= pchanged
+    e.changed |= changed
+    nothing
+end
+
+# Same reinitialization DiffEq runs after a callback, with the solve's `initializealg`.
+function _reinit_dae!(integrator)
+    if !hasproperty(integrator, :isdae) || !integrator.isdae
+        return true
+    end
+    SciMLBase.initialize_dae!(integrator)
+    integrator.sol.retcode != SciMLBase.ReturnCode.InitialFailure
+end
+
+function _report_unsettled(e::EventIteration, integrator, nround)
+    firing = String[]
+    for (batch, fired) in zip(e.batches, e.fired), i in eachindex(fired)
+        fired[i] && push!(firing, _compstr(batch.components[i]))
+    end
+    unique!(firing)
+    msg = "Event iteration at t=$(integrator.t) did not settle after $nround of at most \
+        $(e.maxiter) rounds. Iterative callbacks still firing on: $(join(firing, ", ")). \
+        Keeping the state of the last round."
+    if e.onfail == :error
+        error(msg)
+    end
+    @warn msg
+    nothing
+end
+_compstr(c::VIndex) = "VIndex($(c.compidx))"
+_compstr(c::EIndex) = "EIndex($(c.compidx))"
 
 ####
 #### preset time callbacks

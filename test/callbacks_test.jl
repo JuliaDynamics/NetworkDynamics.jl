@@ -2,9 +2,14 @@ using NetworkDynamics
 using NetworkDynamics: wrap_component_callbacks, get_callbacks, getcondition, getaffect, getaffect_neg,
                        condition_dim, condition_urange, condition_outrange, affect_dim, affect_urange,
                        collect_c_or_a_indices, AffectAccess, shortrepr,
-                       _batch_condition, _scalar_member_affect, _batch_vector_affect, _gather
+                       _batch_condition, _scalar_member_affect, _batch_vector_affect, _gather,
+                       IterativeBatches
 using Graphs
 using OrdinaryDiffEqTsit5
+using OrdinaryDiffEqRosenbrock
+using OrdinaryDiffEqNonlinearSolve
+using LinearAlgebra: Diagonal
+using SciMLBase
 using Chairmarks
 using Test
 using ModelingToolkitBase
@@ -905,5 +910,276 @@ end
         @test sol_full.u == sol_auto.u
         @test extract_nw(sol_auto) === nw_with_cb
         @test sol_auto(1.0; idxs=VIndex(1, :θ)) == sol_full(1.0; idxs=VIndex(1, :θ))
+    end
+end
+
+@testset "iterative discrete callbacks" begin
+    # a ramp x' = 1 from x(0) = 0, the parameters are the memory of the discrete blocks
+    function ramp_vertex(; psym=[:flag=>0, :held=>-1, :above=>0])
+        VertexModel(; f=(dx, x, ein, p, t) -> (dx[1] = 1.0; nothing), g=1, sym=[:x=>0], psym)
+    end
+    function one_vertex_nw(v)
+        Network(SimpleGraph(1), [v], EdgeModel[])
+    end
+    isolve(nw; alg=Tsit5(), kwargs...) = solve(ODEProblem(nw, NWState(nw), (0, 2); kwargs...), alg; dtmax=0.1)
+
+    @testset "order independence" begin
+        # a hysteresis switches `flag` when x crosses 1, a sample-and-hold stores `flag` on the same crossing
+        blocks(iterative) = (DiscreteComponentCallback(
+            ComponentCondition([:x, :flag]) do u, t
+                iszero(u[:flag]) ? u[:x] > 1 : u[:x] < 1
+            end,
+            ComponentAffect([:flag]) do u, ctx
+                u[:flag] = 1 - u[:flag]
+            end; iterative),
+        DiscreteComponentCallback(
+            ComponentCondition([:x, :above]) do u, t
+                iszero(u[:above]) ? u[:x] > 1 : u[:x] < 1
+            end,
+            ComponentAffect([:held, :above, :flag]) do u, ctx
+                u[:held] = u[:flag]
+                u[:above] = 1 - u[:above]
+            end; iterative))
+        function held(iterative, hystfirst)
+            hyst, hold = blocks(iterative)
+            v = ramp_vertex()
+            set_callback!(v, hystfirst ? (hyst, hold) : (hold, hyst))
+            nw = one_vertex_nw(v)
+            cbb = wrap_component_callbacks(nw)
+            iterative && @test only(cbb) isa IterativeBatches && length(only(cbb).batches) == 2
+            sol = isolve(nw)
+            @test sol[VPIndex(1, :flag)][end] == 1
+            sol[VPIndex(1, :held)][end]
+        end
+        # synchronous: the hold stores the flag from before the switch, whatever the order
+        @test held(true, true) == held(true, false) == 0
+        # as plain discrete callbacks the batches run one after the other
+        @test held(false, true) == 1
+        @test held(false, false) == 0
+    end
+
+    @testset "cascade within one instant" begin
+        # a block sets the limit to zero, a limited state above the limit is put onto it at the same t
+        fired = []
+        block = DiscreteComponentCallback(
+            ComponentCondition([:x, :blocked]) do u, t
+                iszero(u[:blocked]) && u[:x] > 1
+            end,
+            ComponentAffect([:blocked, :lim]) do u, ctx
+                push!(fired, (:block, ctx.t))
+                u[:blocked] = 1
+                u[:lim] = 0.5
+            end; iterative=true)
+        limit = DiscreteComponentCallback(
+            ComponentCondition([:x, :lim]) do u, t
+                u[:x] > u[:lim]
+            end,
+            ComponentAffect([:x, :lim]) do u, ctx
+                push!(fired, (:limit, ctx.t))
+                u[:x] = u[:lim]
+            end; iterative=true)
+        for cbs in ((block, limit), (limit, block))
+            empty!(fired)
+            # x stops at its limit, p[2] = lim
+            f = (dx, x, ein, p, t) -> (dx[1] = x[1] < p[2] ? 1.0 : 0.0; nothing)
+            v = VertexModel(; f, g=1, sym=[:x=>0], psym=[:blocked=>0, :lim=>10])
+            set_callback!(v, cbs)
+            nw = one_vertex_nw(v)
+            sol = isolve(nw)
+            @test first.(fired) == [:block, :limit]
+            @test fired[1][2] == fired[2][2]
+            it = findlast(==(fired[1][2]), sol.t)
+            @test sol[VIndex(1, :x)][it] == 0.5
+            @test length(sol[VPIndex(1, :lim)]) == 2 # one parameter save per instant
+        end
+    end
+
+    @testset "jump from a network level callback" begin
+        # a plain discrete callback steps `inp` in the first step after t=0.5, it is sorted behind the
+        # component callbacks. The iterative block still reacts at the same instant.
+        function run(iterative; preset=false)
+            fired = Float64[]
+            cb = DiscreteComponentCallback(
+                ComponentCondition([:inp, :flag]) do u, t
+                    iszero(u[:flag]) && u[:inp] > 0.5
+                end,
+                ComponentAffect([:flag]) do u, ctx
+                    push!(fired, ctx.t)
+                    u[:flag] = 1
+                    ctx.dt_reset[] = false # bookkeeping only, avoids a dt reset right at the tstop
+                end; iterative)
+            v = ramp_vertex(psym=[:inp=>0, :flag=>0])
+            set_callback!(v, cb)
+            nw = one_vertex_nw(v)
+            pidx = NetworkDynamics.SII.parameter_index(nw, VPIndex(1, :inp))
+            tstep = Ref(NaN)
+            stepaffect = integrator -> begin
+                tstep[] = integrator.t
+                integrator.p[pidx] = 1
+                save_parameters!(integrator)
+            end
+            step = if preset
+                PresetTimeCallback(0.5, stepaffect)
+            else
+                DiscreteCallback((u, t, integrator) -> t ≥ 0.5 && isnan(tstep[]), stepaffect)
+            end
+            isolve(nw; add_nw_cb=step)
+            only(fired), tstep[]
+        end
+        fired, tstep = run(true)
+        @test fired == tstep
+        fired, tstep = run(false)
+        @test fired > tstep # runs before the network level callback, sees the jump one step late
+        # a preset-time callback from `add_nw_cb` is sorted to the front, so everybody sees it
+        @test run(true; preset=true) == (0.5, 0.5)
+        @test run(false; preset=true) == (0.5, 0.5)
+    end
+
+    @testset "preset-time component callbacks run first" begin
+        fired = Float64[]
+        cb = DiscreteComponentCallback(
+            ComponentCondition([:inp, :flag]) do u, t
+                iszero(u[:flag]) && u[:inp] > 0.5
+            end,
+            ComponentAffect([:flag]) do u, ctx
+                push!(fired, ctx.t)
+                u[:flag] = 1
+                ctx.dt_reset[] = false
+            end)
+        step = PresetTimeComponentCallback(0.5, ComponentAffect([:inp]) do u, ctx
+            u[:inp] = 1
+            ctx.dt_reset[] = false
+        end)
+        v = ramp_vertex(psym=[:inp=>0, :flag=>0])
+        set_callback!(v, (cb, step)) # registered after the discrete callback
+        nw = one_vertex_nw(v)
+        isolve(nw)
+        @test only(fired) == 0.5
+    end
+
+    @testset "DAE reinit between rounds" begin
+        # 0 = k⋅x - y, the first block flips k, the second one reacts to the new algebraic y
+        fired = []
+        flip = DiscreteComponentCallback(
+            ComponentCondition([:x, :flag1]) do u, t
+                iszero(u[:flag1]) && u[:x] > 1
+            end,
+            ComponentAffect([:k, :flag1]) do u, ctx
+                push!(fired, (:flip, ctx.t))
+                u[:k] = -1
+                u[:flag1] = 1
+            end; iterative=true)
+        react = DiscreteComponentCallback(
+            ComponentCondition([:y, :flag2]) do u, t
+                iszero(u[:flag2]) && u[:y] < 0
+            end,
+            ComponentAffect([:flag2]) do u, ctx
+                push!(fired, (:react, ctx.t))
+                u[:flag2] = 1
+            end; iterative=true)
+        f = (du, u, ein, p, t) -> begin
+            du[1] = 1.0
+            du[2] = p[1] * u[1] - u[2]
+            nothing
+        end
+        v = VertexModel(; f, g=1, sym=[:x=>0, :y=>0], psym=[:k=>1, :flag1=>0, :flag2=>0],
+            mass_matrix=Diagonal([1, 0]))
+        set_callback!(v, (flip, react))
+        nw = one_vertex_nw(v)
+        sol = isolve(nw; alg=Rodas5P())
+        @test SciMLBase.successful_retcode(sol)
+        @test first.(fired) == [:flip, :react]
+        @test fired[1][2] == fired[2][2]
+        it = findlast(==(fired[1][2]), sol.t)
+        @test sol[VIndex(1, :y)][it] ≈ -sol[VIndex(1, :x)][it]
+    end
+
+    @testset "bounded iteration" begin
+        toggle = DiscreteComponentCallback(
+            ComponentCondition([:x]) do u, t
+                u[:x] > 1
+            end,
+            ComponentAffect([:flag]) do u, ctx
+                u[:flag] = 1 - u[:flag]
+            end; iterative=true)
+        v = ramp_vertex(psym=[:flag=>0])
+        set_callback!(v, toggle)
+        nw = one_vertex_nw(v)
+        @test_logs (:warn, r"after 3 of at most 3 rounds.*VIndex\(1\)") match_mode=:any isolve(nw; event_maxiter=3)
+        @test_throws ErrorException isolve(nw; event_failure=:error)
+        @test_throws ArgumentError isolve(nw; event_failure=:foo)
+
+        # an affect that writes nothing would loop forever, it is reported after the first round
+        noop = DiscreteComponentCallback(
+            ComponentCondition([:x]) do u, t
+                u[:x] > 1
+            end,
+            ComponentAffect([:flag]) do u, ctx
+                u[:flag] = 0
+            end; iterative=true)
+        set_callback!(v, noop)
+        nw = one_vertex_nw(v)
+        @test_logs (:warn, r"after 1 of at most 10 rounds") match_mode=:any isolve(nw)
+    end
+
+    @testset "assembly" begin
+        c = ComponentCondition([:x]) do u, t; u[:x] > 1 end
+        a = ComponentAffect([:flag]) do u, ctx; u[:flag] = 1 end
+        @test_throws ArgumentError DiscreteComponentCallback(c, a; iterative=true, save_positions=(false, false))
+        @test_throws ArgumentError DiscreteComponentCallback(c, a; iterative=true, initializealg=SciMLBase.NoInit())
+        @test contains(repr(MIME"text/plain"(), DiscreteComponentCallback(c, a; iterative=true)), "iterative")
+
+        # closures from one place share a batch, also with different captures
+        mkcond(lim) = ComponentCondition([:x]) do u, t; u[:x] > lim end
+        v1 = ramp_vertex(psym=[:flag=>0]); v2 = ramp_vertex(psym=[:flag=>0])
+        set_callback!(v1, DiscreteComponentCallback(mkcond(1), a; iterative=true))
+        set_callback!(v2, DiscreteComponentCallback(mkcond(2), a; iterative=true))
+        nw = Network(SimpleGraph(2), [v1, v2], EdgeModel[])
+        @test length(only(wrap_component_callbacks(nw)).batches) == 1
+        set_callback!(v1, DiscreteComponentCallback(mkcond(1), a))
+        set_callback!(v2, DiscreteComponentCallback(mkcond(2), a))
+        nw = Network(SimpleGraph(2), [v1, v2], EdgeModel[])
+        @test length(wrap_component_callbacks(nw)) == 1
+
+        # order at an instant: preset first, then other discrete, then add_nw_cb, the iterative set last
+        v = ramp_vertex(psym=[:flag=>0, :inp=>0])
+        disc = DiscreteComponentCallback(ComponentCondition([:x]) do u, t; false end, a)
+        iter = DiscreteComponentCallback(c, a; iterative=true)
+        cont = ContinuousComponentCallback(ComponentCondition([:x]) do u, t; u[:x] - 1 end, a)
+        preset = PresetTimeComponentCallback(0.5, ComponentAffect([:inp]) do u, ctx; u[:inp] = 1 end)
+        set_callback!(v, (iter, disc, cont, preset))
+        nw = one_vertex_nw(v)
+        cbs = get_callbacks(nw)
+        @test length(cbs.continuous_callbacks) == 1
+        dcbs = cbs.discrete_callbacks
+        @test length(dcbs) == 3
+        @test dcbs[1].condition isa DiffEqCallbacks.PresetTimeFunction
+        @test dcbs[end].initializealg isa SciMLBase.NoInit
+        user = DiscreteCallback((u, t, integrator) -> false, integrator -> nothing)
+        userpreset = PresetTimeCallback(0.7, integrator -> nothing)
+        prob = ODEProblem(nw, NWState(nw), (0, 1); add_nw_cb=CallbackSet(user, userpreset))
+        dcbs = prob.kwargs[:callback].discrete_callbacks
+        @test length(dcbs) == 5
+        @test dcbs[1].condition isa DiffEqCallbacks.PresetTimeFunction # the component one
+        @test dcbs[2] === userpreset
+        @test dcbs[4] === user
+        @test dcbs[5].initializealg isa SciMLBase.NoInit
+    end
+
+    @testset "quiet step does not allocate" begin
+        a = ComponentAffect([:flag]) do u, ctx; u[:flag] = 1 end
+        mkcond(lim) = ComponentCondition([:x]) do u, t; u[:x] > lim end
+        v = ramp_vertex(psym=[:flag=>0])
+        set_callback!(v, (DiscreteComponentCallback(mkcond(1), a; iterative=true),
+                          DiscreteComponentCallback(ComponentCondition([:x]) do u, t; u[:x] < -1 end, a; iterative=true)))
+        nw = one_vertex_nw(v)
+        cb = get_callbacks(nw)
+        integrator = SciMLBase.init(ODEProblem(nw, NWState(nw), (0, 1)), Tsit5())
+        function count_allocs(cond, integrator)
+            cond(integrator.u, integrator.t, integrator)
+            @allocated cond(integrator.u, integrator.t, integrator)
+        end
+        @test !cb.condition(integrator.u, integrator.t, integrator)
+        @test count_allocs(cb.condition, integrator) == 0
     end
 end
