@@ -342,6 +342,7 @@ function sort_discrete_callbacks(cbs::CallbackSet)
     discrete = sort!(collect(cbs.discrete_callbacks); by=_discrete_rank, alg=Base.Sort.DEFAULT_STABLE)
     CallbackSet(cbs.continuous_callbacks, Tuple(discrete))
 end
+
 function _discrete_rank(cb)
     if cb isa DiscreteCallback && cb.condition isa DiffEqCallbacks.PresetTimeFunction
         return 0
@@ -756,6 +757,7 @@ function _batch_affect(dcb::DiscreteBatch, fired)
         _finish_affects!(integrator, dt_reset, pchanged)
     end
 end
+
 # evaluate the conditions of all members into `fired`, returns whether any fired
 function _eval_conditions!(dcb::DiscreteBatch, obsf, ucache, fired, u, t, integrator)
     us = PreallocationTools.get_tmp(ucache, u)
@@ -768,6 +770,7 @@ function _eval_conditions!(dcb::DiscreteBatch, obsf, ucache, fired, u, t, integr
     end
     return any(fired)
 end
+
 # run the affects of all fired members against the gathered `scratch`, returns the collected
 # flags and whether any affect wrote something at all
 function _apply_fired!(dcb::DiscreteBatch, acc, scratch, fired, integrator)
@@ -926,7 +929,7 @@ end
 function _report_unsettled(e::EventIteration, integrator, nround)
     firing = String[]
     for (batch, fired) in zip(e.batches, e.fired), i in eachindex(fired)
-        fired[i] && push!(firing, _compstr(batch.components[i]))
+        fired[i] && push!(firing, repr(batch.components[i]))
     end
     unique!(firing)
     msg = "Event iteration at t=$(integrator.t) did not settle after $nround of at most \
@@ -938,8 +941,6 @@ function _report_unsettled(e::EventIteration, integrator, nround)
     @warn msg
     nothing
 end
-_compstr(c::VIndex) = "VIndex($(c.compidx))"
-_compstr(c::EIndex) = "EIndex($(c.compidx))"
 
 ####
 #### preset time callbacks
