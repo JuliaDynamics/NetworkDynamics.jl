@@ -79,6 +79,11 @@ includetest!("inhomogeneous_test.jl");
 # the docs should work with MTK loaded
 for file in readdir(joinpath(TESTDIR, "..", "docs", "examples"))
     endswith(file, ".jl") || continue
+    # on buildkite only the examples which check the execution styles touch the GPU
+    if BUILDKITE
+        src = read(joinpath(TESTDIR, "..", "docs", "examples", file), String)
+        occursin("test_execution_styles", src) || continue
+    end
     includetest!("../docs/examples/" * file);
 end;
 
