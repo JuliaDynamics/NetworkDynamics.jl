@@ -1160,11 +1160,10 @@ end
     @test length(red_eqs) == 2      # both original equations preserved intact
 
     # H: 4-SCC FF chain: input→LC→LS→LS→LC→output
-    # cn1, cn2 are dynamic states whose values appear as coefficients,
-    # making SCCs 2 and 3 :linear_state respectively.
-    # Both SCC2 and SCC3 are :linear_state with equal cost; the index tiebreaker
-    # selects SCC2 (lower equation index) as the forbidden match.
-    # → SCC2 must be forbidden; SCCs 1, 3 and 4 must still be solved.
+    # cn1, cn2 are dynamic states whose values appear as coefficients. The output c4
+    # becomes the state and the input equation the residual. Everything is computed
+    # backwards from c4 without dividing by cn1 or cn2 (c3 = c4, c2 = cn2*c3, c1 = cn1*c2),
+    # so no observed equation reads the input.
     @variables c1(t) c2(t) c3(t) c4(t) cn1(t) cn2(t)
     @parameters c_inp
     ff_chain_eqs = [
@@ -1181,8 +1180,9 @@ end
         outset=[c4], ff_inputs=Set([c_inp]), verbose=false)
     obs_lhs = Set(eq.lhs for eq in red_obs)
 
-    @test length(red_states) == 3
-    @test red_eqs[3] ∈ ff_chain_eqs[4:5] # one of the state coeff should stae
+    @test Set(red_states) == Set([cn1.val, cn2.val, c4.val])
+    @test red_eqs[3] == ff_chain_eqs[3]
+    @test all(eq -> c_inp.val ∉ get_variables(eq.rhs), red_obs)
     @test topologicical_sorted(red_obs)
 end
 
@@ -1276,6 +1276,122 @@ end
     @test length(red_eqs) == 2
     @test length(red_obs) == 14
     @test topologicical_sorted(red_obs)
+end
+
+@testset "fed-forward outputs become states" begin
+    # Thevenin-style injector: current in, voltage out, controller reads the voltage.
+    # The output u has to become an algebraic state, but the residual should be the
+    # current equation (Norton form), so that V, I and m are functions of the states.
+    @variables x(t) i(t) u(t) I(t) V(t) m(t) z(t) y1(t) y2(t)
+    @parameters k R T a b
+    eqs = [
+        T*Dt(x) ~ -x + 1 - m
+        I ~ k*i
+        V ~ x - R*I
+        0 ~ u - k*V
+        m ~ V^2
+    ]
+    red_eqs, red_obs, red_states = _reduce_equations(
+        eqs, Equation[], [x, I, V, u, m];
+        outset=[u], ff_inputs=[i])
+    @test Set(red_states) == Set([x.val, u.val])
+    residual = only(filter(eq -> !mtkext.isdifferential(eq.lhs), red_eqs))
+    @test isequal(residual, 0 ~ I - k*i)
+    @test all(eq -> i.val ∉ get_variables(eq.rhs), red_obs)
+    obs = Dict(eq.lhs => eq.rhs for eq in red_obs)
+    @test isequal(obs[V.val], u/k)
+    @test topologicical_sorted(red_obs)
+
+    # without an inverse of the terminal equation the pseudo-edge to u's own row wins,
+    # which is the classic tear
+    eqs_nl = [
+        T*Dt(x) ~ -x + 1 - m
+        I ~ k*i
+        V ~ x - R*I
+        0 ~ u - k*V^2
+        m ~ V^2
+    ]
+    red_eqs, red_obs, red_states = _reduce_equations(
+        eqs_nl, Equation[], [x, I, V, u, m];
+        outset=[u], ff_inputs=[i])
+    @test Set(red_states) == Set([x.val, u.val])
+    residual = only(filter(eq -> !mtkext.isdifferential(eq.lhs), red_eqs))
+    @test isequal(residual, 0 ~ u - k*V^2)
+
+    # the input reaches both outputs through z: tearing z alone is one state less than
+    # making both outputs states, so the classic tear is kept
+    eqs_bn = [
+        0 ~ z - k*i
+        0 ~ y1 - a*z
+        0 ~ y2 - b*z
+    ]
+    red_eqs, red_obs, red_states = _reduce_equations(
+        eqs_bn, Equation[], [z, y1, y2];
+        outset=[y1, y2], ff_inputs=[i])
+    @test isequal(red_states, [z.val])
+    @test all(eq -> i.val ∉ get_variables(eq.rhs), red_obs)
+
+    # without the ff constraint nothing changes
+    red_eqs, red_obs, red_states = _reduce_equations(
+        eqs, Equation[], [x, I, V, u, m];
+        outset=[u], ff_inputs=[])
+    @test isequal(red_states, [x.val])
+
+    # end to end through the constructor
+    @named toy = System(eqs, t)
+    v = VertexModel(toy, [:i], [:u])
+    @test Set(sym(v)) == Set([:x, :u])
+    @test !any(v.obsf.needs_input)
+end
+
+@testset "fed-forward outputs: promotion rounds and matcher" begin
+    @variables x1(t) x2(t) a(t) b(t) c(t) d(t) y1(t) y2(t) i1(t) i2(t)
+    @parameters k1 k2
+    sts = [x1, x2, a, b, c, d, y1, y2]
+
+    # found by random search: only y2 is fed forward at first. Once y2 is a state, the input
+    # row defines c, which reaches y1 through a, so y1 is promoted in a second round
+    eqs = [
+        Dt(x1) ~ c - x1
+        Dt(x2) ~ -x2 + y2
+        0 ~ a - c*k1
+        0 ~ -d*k2 + b^3
+        0 ~ -y1 - a*k2
+        0 ~ d*k1 - y1^3
+        0 ~ -b*k2 + y1^3
+        0 ~ -i2 - c*k2 + k1*y2
+    ]
+    red_eqs, red_obs, red_states = _reduce_equations(eqs, Equation[], sts;
+        outset=[y1, y2], ff_inputs=[i1, i2])
+    @test Set(red_states) == Set([x1.val, x2.val, y1.val, y2.val])
+    @test all(eq -> isdisjoint(get_variables(eq.rhs), [i1.val, i2.val]), red_obs)
+    @test topologicical_sorted(red_obs)
+
+    # found by random search: on this degenerate system a round which solves nothing only
+    # reorders the states, the reduction has to stop there instead of looping forever
+    eqs = [
+        Dt(x1) ~ a - x1
+        Dt(x2) ~ -x2 + y1
+        0 ~ a*k1 - b*k1
+        0 ~ b - d^3
+        0 ~ -k1*y1 + c^3
+        0 ~ d - y2^3
+        0 ~ -a*k1 - c*k1
+        0 ~ -i1 - a*k2 - c*k2
+    ]
+    red_eqs, red_obs, red_states = _reduce_equations(eqs, Equation[], sts;
+        outset=[y1, y2], ff_inputs=[i1, i2])
+    @test length(red_states) == length(red_eqs)
+
+    # solving the extended column 2 would avoid a division, but it is ranked below
+    m = mtkext._match_equations_to_states([:linear_state :explicit; :none :fake])
+    @test m.solvable == [(1, 1)]
+    @test m.bookkeeping == [(2, 2)]
+
+    # a pseudo pair is bookkeeping and goes to the row closest to the input
+    m = mtkext._match_equations_to_states([:pseudo :explicit; :pseudo :explicit]; rowdist=[3, 0])
+    @test m.solvable == [(1, 2)]
+    @test m.bookkeeping == [(2, 1)]
 end
 
 @testset "Test get_alias function" begin

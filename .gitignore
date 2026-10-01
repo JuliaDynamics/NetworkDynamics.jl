@@ -25,3 +25,12 @@ benchmark/*.txt
 /NetworkDynamicsInspector/assets/tomselect.css
 /NetworkDynamicsInspector/assets/tomselect.js
 /NetworkDynamicsInspector/assets/tomselect.bundled.js
+
+# animations recorded by examples/tests (e.g. truss.mp4) in whatever cwd they ran
+*.mp4
+# user-local preferences (e.g. precompile_workload = false)
+LocalPreferences.toml
+# Bonito asset cache from local doc builds
+/docs/bonito/
+# Windows download markers
+*:Zone.Identifier
