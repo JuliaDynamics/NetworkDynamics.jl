@@ -498,7 +498,9 @@ struct ComponentPostprocessing end
 Wrapper type to wrap a g-output function which works on a single output, a stacked
 vector of all outputs.
 
-Used by MTK generated component functions.
+Used by MTK generated component functions. If the outputs are back-to-back views into the
+same vector (as in the coreloop), the stacked vector is a single view, otherwise an
+`ArrayPartition`.
 """
 struct MultipleOutputWrapper{FF, N, G} <: Function
     g::G
@@ -512,11 +514,29 @@ fftype(::MultipleOutputWrapper{FF}) where {FF} = FF
 end
 @inline function (g::MultipleOutputWrapper{FF, N})(args...) where {FF, N}
     @inbounds begin
-        _out = RecursiveArrayTools.ArrayPartition(args[1:N])
+        outs = args[1:N]
         _args = args[N+1:end]
     end
-    g.g(_out, _args...)
+    merged = _merged_view(outs)
+    if isnothing(merged)
+        g.g(RecursiveArrayTools.ArrayPartition(outs), _args...)
+    else
+        g.g(merged, _args...)
+    end
     nothing
+end
+
+# one view over all outputs if they are back-to-back slices of the same vector, else `nothing`
+_merged_view(outs) = nothing
+@inline function _merged_view(outs::Tuple{S,Vararg{S}}) where {S<:SubArray{<:Any,1,<:Any,Tuple{UnitRange{Int}},true}}
+    p = parent(first(outs))
+    r = only(parentindices(first(outs)))
+    for k in 2:length(outs)
+        rk = only(parentindices(outs[k]))
+        (parent(outs[k]) === p && first(rk) == last(r) + 1) || return nothing
+        r = first(r):last(rk)
+    end
+    view(p, r)
 end
 
 

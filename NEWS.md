@@ -65,6 +65,10 @@
   `VertexModel` construction; now initialization decides which one fires and reports a
   disagreement. A weak `initf` is also no longer dropped next to an optional strong one.
 - Networks without edges can be built by passing an empty edge list, e.g. `Network(g, vm, [])` or `Network(vms, [])`.
+- **Faster MTK components.** Integer powers like `x^2` in generated code now go through
+  `Base.literal_pow` (plain multiplication) instead of the generic, much slower integer power.
+  MTK edges also write their src and dst outputs through one contiguous view. Together this made
+  the RHS of a large PowerDynamics network about 4× faster, with identical results.
 
 ## v1.3.0 Changelog
 
