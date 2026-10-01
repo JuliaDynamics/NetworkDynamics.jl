@@ -12,6 +12,9 @@
   bookkeeping changes which do not introduce a discontinuity. If several affects fire at the same
   time, one asking for the reset is enough; parameter changes are saved either way.
 - Batched affects fill their observed buffer once per event instead of once per member.
+- Component callbacks batch by the type of their condition, not by the identical function. Closures
+  created at one place, e.g. a `do` block in a model constructor, now share a batch even if they
+  capture different values. Members of a batch read one snapshot when they fire together.
 - `save_parameters!` no longer stores a full copy of the parameter vector. The solution keeps the
   initial parameters plus a list of the values which changed, which makes frequent parameter
   changes in large networks much cheaper in memory.

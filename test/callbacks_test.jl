@@ -426,6 +426,50 @@ end
         _batch_condition(cbb)(out, uflat(s0), 0.0, (; p=pflat(s0)))
         @test out[1] ≈ s0.e[1, :P] - s0.p.e[1, :limit]
         @test out[2] ≈ s0.e[2, :₋P] - s0.p.e[2, :K]
+
+        # closures from one place batch, each member keeps its own captures
+        mkcond(c) = ComponentCondition((u, t) -> u[1] - c, [:P])
+        for (i, e) in pairs(nw.im.edgem)
+            set_callback!(e, ContinuousComponentCallback(mkcond(i), aff))
+        end
+        cbb = only(wrap_component_callbacks(nw))
+        _batch_condition(cbb)(out, uflat(s0), 0.0, (; p=pflat(s0)))
+        @test out ≈ [s0.e[i, :P] - i for i in 1:7]
+    end
+
+    @testset "closures capturing the namespace batch" begin
+        # like a block in a component library: the callback is built per instance and captures the
+        # namespaced symbols, so every instance has its own closure, all of the same type
+        function limit_callback(ns, lim)
+            x = Symbol(ns, :₊x)
+            hit = Symbol(ns, :₊hit)
+            cond = ComponentCondition([x, hit]) do u, t
+                iszero(u[hit]) && u[x] > lim
+            end
+            affect = ComponentAffect([hit]) do u, ctx
+                u[hit] = ctx.t
+            end
+            DiscreteComponentCallback(cond, affect)
+        end
+        function block(ns, lim)
+            v = VertexModel(; f=(dx, x, ein, p, t) -> (dx[1] = 1.0; nothing), g=1,
+                sym=[Symbol(ns, :₊x)=>0], psym=[Symbol(ns, :₊hit)=>0])
+            set_callback!(v, limit_callback(ns, lim))
+            v
+        end
+        nw = Network(SimpleGraph(2), [block(:a, 0.5), block(:b, 1.5)], EdgeModel[])
+        cba = only(get_callbacks(nw.im.vertexm[1]))
+        cbb = only(get_callbacks(nw.im.vertexm[2]))
+        @test cba.condition.f !== cbb.condition.f
+        @test NetworkDynamics._batchequal(cba, cbb)
+        @test length(wrap_component_callbacks(nw)) == 1
+
+        # each member still evaluates with its own captures
+        sol = solve(ODEProblem(nw, NWState(nw), (0, 2)), Tsit5(); dtmax=0.1)
+        ta = sol[VPIndex(1, :a₊hit)][end]
+        tb = sol[VPIndex(2, :b₊hit)][end]
+        @test 0.5 < ta < 0.61
+        @test 1.5 < tb < 1.61
     end
 end
 

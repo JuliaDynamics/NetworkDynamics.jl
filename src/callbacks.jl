@@ -348,13 +348,13 @@ function wrap_component_callbacks(nw, additional_callbacks=Dict())
         batchcomps = components[typeidx]
         batchcbs = callbacks[typeidx]
         if first(batchcbs) isa Union{ContinuousComponentCallback, VectorContinuousComponentCallback}
-            cb = ContinuousCallbackWrapper(nw, batchcomps, batchcbs)
+            cb = ContinuousBatch(nw, batchcomps, batchcbs)
         elseif first(batchcbs) isa DiscreteComponentCallback
-            cb = DiscreteCallbackWrapper(nw, batchcomps, batchcbs)
+            cb = DiscreteBatch(nw, batchcomps, batchcbs)
         elseif first(batchcbs) isa PresetTimeComponentCallback
             # PresetTimeCallbacks cannot be batched - must be single component
             @assert length(batchcbs) == 1 "PresetTimeComponentCallback cannot be batched"
-            cb = PresetTimeCallbackWrapper(nw, only(batchcomps), only(batchcbs))
+            cb = PresetTimeBatch(nw, only(batchcomps), only(batchcbs))
         else
             error("Unknown callback type, should never be reached. Please report this issue.")
         end
@@ -379,10 +379,9 @@ function _batchequal(a::DiscreteComponentCallback, b::DiscreteComponentCallback)
     _batchequal(a.kwargs, b.kwargs)       || return false
     return true
 end
-function _batchequal(a::ComponentCondition, b::ComponentCondition)
-    typeof(a) == typeof(b) || return false
-    a.f === b.f
-end
+# Conditions of the same type batch, also closures from one place with different captures. The
+# batches keep them in a `Vector{C}`, so calling them stays type stable.
+_batchequal(a::ComponentCondition, b::ComponentCondition) = typeof(a) == typeof(b)
 function _batchequal(a::NamedTuple, b::NamedTuple)
     length(a) == length(b) || return false
     for (k, v) in pairs(a)
@@ -392,33 +391,32 @@ function _batchequal(a::NamedTuple, b::NamedTuple)
     return true
 end
 
-# a callback wrapper is a container, which wraps a network, a component callback
-# and a component index. It is used for bookkeeping to know to which component
-# each callback belongs to
-abstract type CallbackWrapper end
+# A callback batch holds batch-equal component callbacks together with their component indices.
+# It only describes the batch, `to_callback` builds the actual DiffEq callback from it.
+abstract type CallbackBatch end
 
-# Generic functions for all CallbackWrappers with components and callbacks fields
-Base.length(cw::CallbackWrapper) = length(cw.callbacks)
-cbtype(cw::CallbackWrapper) = eltype(cw.callbacks)
+# Generic functions for all CallbackBatches with components and callbacks fields
+Base.length(batch::CallbackBatch) = length(batch.callbacks)
+cbtype(batch::CallbackBatch) = eltype(batch.callbacks)
 
-@inline condition_dim(cw::CallbackWrapper) = first(cw.callbacks).condition.sym |> length
+@inline condition_dim(batch::CallbackBatch) = first(batch.callbacks).condition.sym |> length
 
-@inline affect_dim(cw::CallbackWrapper, aff_or_cond, i) = aff_or_cond(cw.callbacks[i]).sym |> length
-@inline function affect_dim(cw::CallbackWrapper, _::typeof(getaffect_neg), i)
-    affect_neg = getaffect_neg(cw.callbacks[i])
+@inline affect_dim(batch::CallbackBatch, aff_or_cond, i) = aff_or_cond(batch.callbacks[i]).sym |> length
+@inline function affect_dim(batch::CallbackBatch, _::typeof(getaffect_neg), i)
+    affect_neg = getaffect_neg(batch.callbacks[i])
     isnothing(affect_neg) ? 0 : length(affect_neg.sym)
 end
 
-@inline condition_urange(cw::CallbackWrapper, i) = (1 + (i-1)*condition_dim(cw)) : i*condition_dim(cw)
-@inline function affect_urange(cw::CallbackWrapper, aff_or_affneg, i)
-    offset = sum(j -> affect_dim(cw, aff_or_affneg, j), 1:(i-1), init=0) # collect dimension before
-    offset + 1 : offset + affect_dim(cw, aff_or_affneg, i)
+@inline condition_urange(batch::CallbackBatch, i) = (1 + (i-1)*condition_dim(batch)) : i*condition_dim(batch)
+@inline function affect_urange(batch::CallbackBatch, aff_or_affneg, i)
+    offset = sum(j -> affect_dim(batch, aff_or_affneg, j), 1:(i-1), init=0) # collect dimension before
+    offset + 1 : offset + affect_dim(batch, aff_or_affneg, i)
 end
 
 # flat list of symbolic indices for all members of the batch, in slot order
-function collect_c_or_a_indices(cw::CallbackWrapper, accessor)
+function collect_c_or_a_indices(batch::CallbackBatch, accessor)
     sidxs = SymbolicIndex[]
-    for (component, cb) in zip(cw.components, cw.callbacks)
+    for (component, cb) in zip(batch.components, batch.callbacks)
         if accessor == getaffect_neg && accessor(cb) === nothing
             continue
         end
@@ -429,7 +427,7 @@ end
 _symidxs(component::SymbolicIndex, syms) = collect(idxtype(component)(component.compidx, syms))
 
 ####
-#### observed function shared by the callback wrappers
+#### observed function shared by the callback batches
 ####
 # The observed function of a callback batch. It sits in an untyped field, so the callback type
 # doesn't carry the network type. The call through it is dynamic, and a dynamic call has to
@@ -450,6 +448,14 @@ function (o::CallbackObsf)(u, p, t, out)
     else
         o.f(u, p, Ref(t), out)
     end
+end
+
+# observed function and buffer for the condition symbols of all members of a batch
+function _condition_access(batch::CallbackBatch)
+    symidxs = collect_c_or_a_indices(batch, getcondition)
+    obsf = CallbackObsf(SII.observed(batch.nw, symidxs))
+    ucache = DiffCache(zeros(length(symidxs)), ad_chunksize(batch.nw.im))
+    obsf, ucache
 end
 
 ####
@@ -504,16 +510,16 @@ function _finish_affects!(integrator, dt_reset::Bool, pchanged::Bool)
 end
 
 ####
-#### wrapping of continuous callbacks
+#### batches of continuous callbacks
 ####
-struct ContinuousCallbackWrapper{T<:ComponentCallback,C,ST<:SymbolicIndex} <: CallbackWrapper
+struct ContinuousBatch{T<:ComponentCallback,C,ST<:SymbolicIndex} <: CallbackBatch
     nw::Network
     components::Vector{ST}
     callbacks::Vector{T}
     sublen::Int # length of each callback
-    condition::C
+    conditions::Vector{C}
 end
-function ContinuousCallbackWrapper(nw, components, callbacks)
+function ContinuousBatch(nw, components, callbacks)
     if !isconcretetype(eltype(components))
         components = [c for c in components]
     end
@@ -521,14 +527,15 @@ function ContinuousCallbackWrapper(nw, components, callbacks)
         callbacks = [cb for cb in callbacks]
     end
     sublen = eltype(callbacks) <: ContinuousComponentCallback ? 1 : first(callbacks).len
-    condition = first(callbacks).condition.f
-    ContinuousCallbackWrapper(nw, components, callbacks, sublen, condition)
+    C = typeof(first(callbacks).condition.f)
+    conditions = C[cb.condition.f for cb in callbacks]
+    ContinuousBatch(nw, components, callbacks, sublen, conditions)
 end
 
 # Continuous-specific functions (for vector callbacks)
-condition_outrange(ccw::ContinuousCallbackWrapper, i) = (1 + (i-1)*ccw.sublen) : i*ccw.sublen
+condition_outrange(ccb::ContinuousBatch, i) = (1 + (i-1)*ccb.sublen) : i*ccb.sublen
 
-# generate VectorContinuousCallback from a ContinuousCallbackWrapper
+# generate VectorContinuousCallback from a ContinuousBatch
 #
 # SciMLBase>=3 dropped `affect_neg!` from `VectorContinuousCallback`; instead the
 # affect receives an `event_signs::Vector{Int8}` of length `len` (`+1` upcrossing,
@@ -540,37 +547,35 @@ condition_outrange(ccw::ContinuousCallbackWrapper, i) = (1 + (i-1)*ccw.sublen) :
 #   occupies a single output slot and we dispatch per crossing direction.
 # - `VectorContinuousComponentCallback` has a single `affect` which receives the slice of
 #   `event_signs` belonging to the component and resolves direction/simultaneity itself.
-function to_callback(ccw::ContinuousCallbackWrapper)
-    kwargs = first(ccw.callbacks).kwargs
-    cond = _batch_condition(ccw)
+function to_callback(ccb::ContinuousBatch)
+    kwargs = first(ccb.callbacks).kwargs
+    cond = _batch_condition(ccb)
 
-    len = ccw.sublen * length(ccw.callbacks)
-    affect = if cbtype(ccw) <: ContinuousComponentCallback
-        _batch_scalar_affect(ccw)
+    len = ccb.sublen * length(ccb.callbacks)
+    affect = if cbtype(ccb) <: ContinuousComponentCallback
+        _batch_scalar_affect(ccb)
     else # VectorContinuousComponentCallback
-        _batch_vector_affect(ccw)
+        _batch_vector_affect(ccb)
     end
     VectorContinuousCallback(cond, affect, len; kwargs...)
 end
-function _batch_condition(ccw::ContinuousCallbackWrapper)
-    symidxs = collect_c_or_a_indices(ccw, getcondition)
-    ucache = DiffCache(zeros(length(symidxs)), ad_chunksize(ccw.nw.im))
-    obsf = CallbackObsf(SII.observed(ccw.nw, symidxs))
+function _batch_condition(ccb::ContinuousBatch)
+    obsf, ucache = _condition_access(ccb)
 
     (out, u, t, integrator) -> begin
         us = PreallocationTools.get_tmp(ucache, u)
         obsf(u, integrator.p, t, us) # fills us inplace
 
-        for i in 1:length(ccw)
-            uv = view(us, condition_urange(ccw, i))
-            _u = SymbolicView(uv, ccw.callbacks[i].condition.sym)
+        for i in 1:length(ccb)
+            uv = view(us, condition_urange(ccb, i))
+            _u = SymbolicView(uv, ccb.callbacks[i].condition.sym)
 
-            if cbtype(ccw) <: ContinuousComponentCallback
-                oidx = only(condition_outrange(ccw, i))
-                out[oidx] = ccw.condition(_u, t)
-            elseif cbtype(ccw) <: VectorContinuousComponentCallback
-                @views _out = out[condition_outrange(ccw, i)]
-                ccw.condition(_out, _u, t)
+            if cbtype(ccb) <: ContinuousComponentCallback
+                oidx = only(condition_outrange(ccb, i))
+                out[oidx] = ccb.conditions[i](_u, t)
+            elseif cbtype(ccb) <: VectorContinuousComponentCallback
+                @views _out = out[condition_outrange(ccb, i)]
+                ccb.conditions[i](_out, _u, t)
             else
                 error()
             end
@@ -581,9 +586,9 @@ end
 # affect builder for `ContinuousComponentCallback` batches. Each member owns one output slot, so
 # the index into `event_signs` is the member index and the sign picks its up or down affect.
 # The snapshots are taken once per event, so all members see the state before any affect ran.
-function _batch_scalar_affect(ccw::ContinuousCallbackWrapper)
-    pos_acc, pos_affect = _scalar_member_affect(ccw, getaffect)
-    neg_acc, neg_affect = _scalar_member_affect(ccw, getaffect_neg)
+function _batch_scalar_affect(ccb::ContinuousBatch)
+    pos_acc, pos_affect = _scalar_member_affect(ccb, getaffect)
+    neg_acc, neg_affect = _scalar_member_affect(ccb, getaffect_neg)
 
     (integrator, event_signs) -> begin
         pos_scratch = any(>(0), event_signs) ? _gather(pos_acc, integrator) : nothing
@@ -606,15 +611,15 @@ function _batch_scalar_affect(ccw::ContinuousCallbackWrapper)
     end
 end
 # returns the access object and a per-member affect; the caller gathers the scratch once per event
-function _scalar_member_affect(ccw::ContinuousCallbackWrapper, aff_or_affneg::F) where {F}
-    acc = AffectAccess(ccw.nw, collect_c_or_a_indices(ccw, aff_or_affneg))
+function _scalar_member_affect(ccb::ContinuousBatch, aff_or_affneg::F) where {F}
+    acc = AffectAccess(ccb.nw, collect_c_or_a_indices(ccb, aff_or_affneg))
 
     affect_fn = (integrator, scratch, i) -> begin
-        affect = aff_or_affneg(ccw.callbacks[i])
+        affect = aff_or_affneg(ccb.callbacks[i])
         isnothing(affect) && return (false, false) # affect_neg may be absent
 
-        _u = _affect_view(acc, scratch, integrator, affect_urange(ccw, aff_or_affneg, i), affect.sym)
-        ctx = get_ctx(integrator, ccw.components[i], acc)
+        _u = _affect_view(acc, scratch, integrator, affect_urange(ccb, aff_or_affneg, i), affect.sym)
+        ctx = get_ctx(integrator, ccb.components[i], acc)
         affect.f(_u, ctx)
         _affect_flags(_u, ctx)
     end
@@ -624,20 +629,20 @@ end
 # affect builder for `VectorContinuousComponentCallback` batches. Each member owns `sublen`
 # output slots, several of which may cross at once. Its affect is still called only once and
 # receives the whole slice of `event_signs` (`0`/`+1`/`-1`) to sort out directions itself.
-function _batch_vector_affect(ccw::ContinuousCallbackWrapper)
-    acc = AffectAccess(ccw.nw, collect_c_or_a_indices(ccw, getaffect))
+function _batch_vector_affect(ccb::ContinuousBatch)
+    acc = AffectAccess(ccb.nw, collect_c_or_a_indices(ccb, getaffect))
 
     (integrator, event_signs) -> begin
         scratch = _gather(acc, integrator)
         any_dt_reset = false
         any_pchanged = false
-        for i in 1:length(ccw)
-            outrange = condition_outrange(ccw, i)
+        for i in 1:length(ccb)
+            outrange = condition_outrange(ccb, i)
             any(oidx -> !iszero(event_signs[oidx]), outrange) || continue
 
-            affect = getaffect(ccw.callbacks[i])
-            _u = _affect_view(acc, scratch, integrator, affect_urange(ccw, getaffect, i), affect.sym)
-            ctx = get_ctx(integrator, ccw.components[i], acc)
+            affect = getaffect(ccb.callbacks[i])
+            _u = _affect_view(acc, scratch, integrator, affect_urange(ccb, getaffect, i), affect.sym)
+            ctx = get_ctx(integrator, ccb.components[i], acc)
             signs = view(event_signs, outrange)
             affect.f(_u, signs, ctx)
             dt_reset, pchanged = _affect_flags(_u, ctx)
@@ -649,15 +654,15 @@ function _batch_vector_affect(ccw::ContinuousCallbackWrapper)
 end
 
 ####
-#### wrapping of discrete callbacks
+#### batches of discrete callbacks
 ####
-struct DiscreteCallbackWrapper{ST,T,C} <: CallbackWrapper
+struct DiscreteBatch{ST,T,C} <: CallbackBatch
     nw::Network
-    components::Vector{ST}  # Changed to support batching
-    callbacks::Vector{T}    # Changed to support batching
-    condition::C            # Store condition function to avoid dynamic dispatch
+    components::Vector{ST}
+    callbacks::Vector{T}
+    conditions::Vector{C}
 end
-function DiscreteCallbackWrapper(nw, components, callbacks)
+function DiscreteBatch(nw, components, callbacks)
     @assert nw isa Network
     @assert all(c -> c isa SymbolicIndex, components)
     @assert all(cb -> cb isa DiscreteComponentCallback, callbacks)  # Only DiscreteComponentCallback
@@ -667,53 +672,51 @@ function DiscreteCallbackWrapper(nw, components, callbacks)
     if !isconcretetype(eltype(callbacks))
         callbacks = [cb for cb in callbacks]
     end
-    # Extract condition function - all callbacks in batch have identical conditions
-    condition = first(callbacks).condition.f
-    DiscreteCallbackWrapper{eltype(components),eltype(callbacks),typeof(condition)}(nw, components, callbacks, condition)
+    C = typeof(first(callbacks).condition.f)
+    conditions = C[cb.condition.f for cb in callbacks]
+    DiscreteBatch{eltype(components),eltype(callbacks),C}(nw, components, callbacks, conditions)
 end
 
-# generate a DiscreteCallback from a DiscreteCallbackWrapper
+# generate a DiscreteCallback from a DiscreteBatch
 #
 # A `DiscreteCallback` condition is a single Bool, so the batch fires if any member does. The
 # solver calls the affect right after a true condition on the same state, so the condition
 # records which members fired in `fired` and the affect just reads it back.
-function to_callback(dcw::DiscreteCallbackWrapper)
-    kwargs = first(dcw.callbacks).kwargs
-    fired = fill(false, length(dcw))
-    cond = _batch_condition(dcw, fired)
-    affect = _batch_affect(dcw, fired)
+function to_callback(dcb::DiscreteBatch)
+    kwargs = first(dcb.callbacks).kwargs
+    fired = fill(false, length(dcb))
+    cond = _batch_condition(dcb, fired)
+    affect = _batch_affect(dcb, fired)
     DiscreteCallback(cond, affect; kwargs...)
 end
-function _batch_condition(dcw::DiscreteCallbackWrapper, fired)
-    symidxs = collect_c_or_a_indices(dcw, getcondition)
-    ucache = DiffCache(zeros(length(symidxs)), ad_chunksize(dcw.nw.im))
-    obsf = CallbackObsf(SII.observed(dcw.nw, symidxs))
+function _batch_condition(dcb::DiscreteBatch, fired)
+    obsf, ucache = _condition_access(dcb)
 
     (u, t, integrator) -> begin
         us = PreallocationTools.get_tmp(ucache, u)
         obsf(u, integrator.p, t, us) # fills us inplace
 
-        for i in 1:length(dcw)
-            uv = view(us, condition_urange(dcw, i))
-            _u = SymbolicView(uv, dcw.callbacks[i].condition.sym)
-            fired[i] = dcw.condition(_u, t)
+        for i in 1:length(dcb)
+            uv = view(us, condition_urange(dcb, i))
+            _u = SymbolicView(uv, dcb.callbacks[i].condition.sym)
+            fired[i] = dcb.conditions[i](_u, t)
         end
         return any(fired)
     end
 end
-function _batch_affect(dcw::DiscreteCallbackWrapper, fired)
-    acc = AffectAccess(dcw.nw, collect_c_or_a_indices(dcw, getaffect))
+function _batch_affect(dcb::DiscreteBatch, fired)
+    acc = AffectAccess(dcb.nw, collect_c_or_a_indices(dcb, getaffect))
 
     (integrator) -> begin
         scratch = _gather(acc, integrator)
         any_dt_reset = false
         any_pchanged = false
-        for i in 1:length(dcw)
+        for i in 1:length(dcb)
             fired[i] || continue
 
-            affect = getaffect(dcw.callbacks[i])
-            _u = _affect_view(acc, scratch, integrator, affect_urange(dcw, getaffect, i), affect.sym)
-            ctx = get_ctx(integrator, dcw.components[i], acc)
+            affect = getaffect(dcb.callbacks[i])
+            _u = _affect_view(acc, scratch, integrator, affect_urange(dcb, getaffect, i), affect.sym)
+            ctx = get_ctx(integrator, dcb.components[i], acc)
             affect.f(_u, ctx)
             dt_reset, pchanged = _affect_flags(_u, ctx)
             any_dt_reset |= dt_reset
@@ -724,13 +727,13 @@ function _batch_affect(dcw::DiscreteCallbackWrapper, fired)
 end
 
 ####
-#### wrapping of preset time callbacks
+#### preset time callbacks
 ####
-struct PresetTimeCallbackWrapper{ST,T}
+struct PresetTimeBatch{ST,T}
     nw::Network
     component::ST   # Single component - PresetTime callbacks cannot be batched
     callback::T     # Single callback - PresetTime callbacks cannot be batched
-    function PresetTimeCallbackWrapper(nw, component::SymbolicIndex, callback::PresetTimeComponentCallback)
+    function PresetTimeBatch(nw, component::SymbolicIndex, callback::PresetTimeComponentCallback)
         @assert nw isa Network
         @assert component isa SymbolicIndex
         @assert callback isa PresetTimeComponentCallback
@@ -739,16 +742,16 @@ struct PresetTimeCallbackWrapper{ST,T}
     end
 end
 
-# generate a PresetTimeCallback from a PresetTimeCallbackWrapper
-function to_callback(ptcw::PresetTimeCallbackWrapper)
-    callback = ptcw.callback
-    component = ptcw.component
+# generate a PresetTimeCallback from a PresetTimeBatch
+function to_callback(ptb::PresetTimeBatch)
+    callback = ptb.callback
+    component = ptb.component
     kwargs = callback.kwargs
     ts = callback.ts
 
     affect = getaffect(callback)
     symidxs = _symidxs(component, affect.sym)
-    acc = AffectAccess(ptcw.nw, symidxs)
+    acc = AffectAccess(ptb.nw, symidxs)
 
     affect_fn = (integrator) -> begin
         scratch = _gather(acc, integrator)
