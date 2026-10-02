@@ -1,0 +1,14 @@
+pre:has(.language-asciiart) {
+  border: none !important;
+  background: none !important;
+  line-height: 1.2;
+}
+
+pre:has(.language-asciiart) button {
+  display: none;
+}
+
+/* increase logo size */
+div#documenter .docs-sidebar .docs-logo > img {
+    max-height: 8rem !important; /* important to override in darkmode */
+}
