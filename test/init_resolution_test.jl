@@ -266,7 +266,7 @@ end
 
 @testset "a NaN inside a block does not stall the fixpoint" begin
     # `_agree(NaN, NaN)` has to hold, or `_store!` would see the value move on every pass and
-    # `_resolve_block!` would burn `maxpasses` and error out
+    # `_iterate_block!` would run out of passes and error out
     cyc = [rule((o, u) -> (o[1] = u[1] * NaN; nothing), [:a], [:b];
                 provenance=:strong_formula, optional=false),
            rule((o, u) -> (o[1] = u[1] + 1; nothing), [:b], [:a];
@@ -313,13 +313,13 @@ end
     @test isempty(res.conflicts)
 
     # both strong, so the second one *does* raise :n above the seed, which re-arms the first
-    # rule and repairs its stale result. The repaired value disagrees, and that inconsistency
-    # is reported rather than iterated forever.
+    # rule and repairs its stale result. The repair comes back around to :n and disagrees, and
+    # that inconsistency is reported rather than iterated forever.
     raising = [scale(2.0, :m, :n; provenance=:strong_formula, optional=false),
                scale(0.6, :n, :m; provenance=:strong_formula, optional=false)]
     res2 = resolve_rules(Dict(:n => 1.0), raising; targets=[:m, :n])
-    @test res2.vals[:n] ≈ 1.2
-    @test only(res2.conflicts).sym == :m
+    @test res2.vals[:n] ≈ 1.2 && res2.vals[:m] ≈ 2.4
+    @test only(res2.conflicts).sym == :n
 
     # a consistent cycle closes cleanly: 0.5 * 2 == 1
     consistent = [scale(2.0, :m, :n; provenance=:strong_formula, optional=false),
@@ -327,6 +327,74 @@ end
     res3 = resolve_rules(Dict(:n => 1.0), consistent; targets=[:m, :n])
     @test res3.vals[:m] ≈ 2.0
     @test isempty(res3.conflicts)
+end
+
+@testset "a re-fired rule replaces its own stale value" begin
+    # x = 0 lets `y = x` fire, then the derived x = 2z overwrites it. `y = x` fires again and
+    # its new y = 2 replaces the y = 0 it wrote itself.
+    rules = [rule((o, u) -> (o[1] = 0.0), [:x], Symbol[]; provenance=:weak_formula, label="x = 0"),
+             scale(1.0, :y, :x; provenance=:weak_formula, label="y = x"),
+             scale(2.0, :x, :z; optional=false),
+             rule((o, u) -> (o[1] = u[1] + 0*u[2]), [:z], [:w, :y]; optional=false)]
+    res = resolve_rules(Dict(:w => 1.0), rules)
+    @test isempty(res.conflicts)
+    @test res.vals[:y] == 2.0
+    @test only(res.yields) == (; sym=:x, offered=0.0, rule=1)
+
+    # a different rule at the same rank is judged on the final y
+    disagree = [rules; rule((o, u) -> (o[1] = 0*u[1]), [:y], [:z]; provenance=:weak_formula)]
+    res = resolve_rules(Dict(:w => 1.0), disagree)
+    @test only(res.conflicts) == (; sym=:y, held=2.0, offered=0.0, rule=5)
+    agree = [rules; rule((o, u) -> (o[1] = 2.0 + 0*u[1]), [:y], [:z]; provenance=:weak_formula)]
+    @test isempty(resolve_rules(Dict(:w => 1.0), agree).conflicts)
+
+    # two writers of y, the one reading q only sees the moved x after q moved too. The verdict
+    # must not depend on which of them wrote first.
+    two = [rule((o, u) -> (o[1] = 0.0), [:x], Symbol[]; provenance=:weak_formula),
+           rule((o, u) -> (o[1] = u[1] + 0*u[2]), [:y], [:x, :q]; provenance=:weak_formula),
+           scale(1.0, :y, :x; provenance=:weak_formula),
+           scale(2.0, :x, :z; optional=false),
+           rule((o, u) -> (o[1] = u[1] + 0*u[2]), [:z], [:w, :y]; optional=false),
+           scale(1.0, :q, :z; optional=false)]
+    for order in ([1, 2, 3, 4, 5, 6], [1, 3, 2, 4, 5, 6])
+        res = resolve_rules(Dict(:w => 1.0), two[order])
+        @test isempty(res.conflicts)
+        @test res.vals[:y] == 2.0
+    end
+end
+
+@testset "a risen value computed from a stale input is refreshed" begin
+    # both guesses get overwritten. x = 2z first rises over its guess while z is still the guess
+    # z = 5, so x = 10 is stale once z moves and has to be replaced by x = 2.
+    rules = [rule((o, u) -> (o[1] = 0.0), [:x], Symbol[]; provenance=:weak_formula),
+             rule((o, u) -> (o[1] = 5.0), [:z], Symbol[]; provenance=:weak_formula),
+             scale(2.0, :x, :z; optional=false),
+             scale(1.0, :y, :x; optional=false),
+             rule((o, u) -> (o[1] = u[1] + 0*u[2]), [:z], [:w, :y]; optional=false)]
+    res = resolve_rules(Dict(:w => 1.0), rules)
+    @test isempty(res.conflicts)
+    @test res.vals == Dict(:w => 1.0, :x => 2.0, :y => 2.0, :z => 1.0)
+end
+
+@testset "an inconsistent loop in a larger block" begin
+    # a = 2d around a loop of four: it keeps doubling while re-arming is allowed, then every rule
+    # whose input moved since it last fired disagrees
+    loop = [scale(2.0, :a, :d; provenance=:strong_formula, optional=false),
+            scale(1.0, :b, :a; provenance=:strong_formula, optional=false),
+            scale(1.0, :c, :b; provenance=:strong_formula, optional=false),
+            scale(1.0, :d, :c; provenance=:strong_formula, optional=false)]
+    res = resolve_rules(Dict(:d => 1.0), loop)
+    @test res.vals == Dict(:a => 4.0, :b => 4.0, :c => 4.0, :d => 2.0)
+    @test only(res.conflicts) == (; sym=:d, held=2.0, offered=4.0, rule=4)
+end
+
+@testset "a long chain settles however it is ordered" begin
+    # each rule waits for the one after it, so the first firings alone take n passes
+    n = 1100
+    chain = [scale(1.0, Symbol(:v, i), Symbol(:v, i + 1)) for i in 1:n]
+    push!(chain, scale(1.0, Symbol(:v, n + 1), :v1; provenance=:weak_formula))
+    res = resolve_rules(Dict(:v1 => 1.0), chain)
+    @test res.vals[Symbol(:v, n)] == 1.0
 end
 
 @testset "the plan does not depend on hash order" begin
