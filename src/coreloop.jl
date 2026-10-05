@@ -119,8 +119,8 @@ function (nwc::NetworkCore)(::Val{cacheT}, du, u, p, t, perturb, perturb_maps, R
 
     RET isa Val{:buf_init} && return nothing
 
-    # vf for vertices without ff
-    process_batches!(ex, Val{:f}(), !hasff, nwc.vertexbatches, (aggbuf, extbuf), duopt)
+    # vf for all vertices (including FF/injector type)
+    process_batches!(ex, Val{:f}(), nofilt, nwc.vertexbatches, (aggbuf, extbuf), duopt)
 
     # process batches might be async so sync before next step
     ex isa KAExecution && KernelAbstractions.synchronize(get_backend(du))

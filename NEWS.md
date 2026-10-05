@@ -79,6 +79,7 @@
   `Base.literal_pow` (plain multiplication) instead of the generic, much slower integer power.
   MTK edges also write their src and dst outputs through one contiguous view. Together this made
   the RHS of a large PowerDynamics network about 4× faster, with identical results.
+- Fix: injector nodes with both states and feed forward never evaluated their `f`, so their states stayed frozen.
 
 ## v1.3.0 Changelog
 
