@@ -148,3 +148,30 @@ sol2 = solve(prob2, Tsit5(), saveat=0.1)
 
 @test sol1[VIndex(2,:p₊v)] ≈ sol2[VIndex(2, :cap₊p₊v)] atol=1e-5
 @test sol1[VIndex(4,:p₊i)] ≈ sol2[VIndex(2, :inductor₊p₊i)] atol=1e-5
+
+# Injector with states AND feed forward: its f has to run as well
+let
+    hubf(du, u, i, p, t) = (du[1] = i[1] - u[1]; nothing)
+    hub = VertexModel(f=hubf, g=1, sym=[:v], insym=[:i], name=:hub)
+    injf(du, u, v, p, t) = (du[1] = 1 - u[1]; nothing)
+    injg(y, u, v, p, t) = (y[1] = u[1] + 0.1*v[1]; nothing)
+    inj = VertexModel(f=injf, g=injg, sym=[:x], insym=[:v], outsym=[:i], name=:inj)
+    @test NetworkDynamics.hasff(inj)
+
+    g = SimpleDiGraph(2); add_edge!(g, 2, 1)
+    lb = LoopbackConnection(; potential=[:v], flow=[:i], src=:inj, dst=:hub)
+    nw = Network(g, [hub, inj], [lb])
+
+    s0 = NWState(nw)
+    s0.v[:hub, :v] = 0.5
+    s0.v[:inj, :x] = 0.2
+    du = zeros(dim(nw))
+    nw(du, uflat(s0), pflat(s0), 0.0)
+    # the loopback flips the sign of the injected current
+    @test du == [-(0.2 + 0.1*0.5) - 0.5, 1 - 0.2]
+
+    prob = ODEProblem(nw, s0, (0.0, 10.0))
+    Main.test_execution_styles(prob) # testing all ex styles #src
+    sol = solve(prob, Tsit5())
+    @test sol[VIndex(:inj, :x)][end] ≈ 1 - 0.8*exp(-10) rtol=1e-4
+end
