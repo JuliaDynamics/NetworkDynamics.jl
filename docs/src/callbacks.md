@@ -121,6 +121,54 @@ An affect which only does bookkeeping, for example counting events in a paramete
 current step size by setting `ctx.dt_reset[] = false`. The parameter change is saved either way.
 
 
+## Event Iteration
+Discrete logic such as hysteresis switches, timers or sample-and-hold blocks keeps its memory in
+parameters which callbacks set. Such blocks are meant to act synchronously. At one event instant
+they should all see the same state, and one block's switch may cause another block to switch at
+the same instant. Plain discrete callbacks don't work like that: separate callbacks run one after
+another, so the result depends on their order, and a cascade within one instant is only noticed
+in the next step.
+
+For this, a discrete callback can join the event iteration of the network:
+```julia
+cb = DiscreteComponentCallback(condition, affect; iterative=true)
+```
+All iterative callbacks of the network run together as one set, after every other callback at an
+event instant. They run in rounds:
+
+1. All conditions are evaluated on the same state.
+2. The affects of all fired callbacks run. They all read one snapshot, taken before the first of
+   them writes.
+3. If the network is a DAE, its algebraic states are reinitialized with the `initializealg` of
+   the solve. Then the next round starts at step 1.
+
+The loop ends as soon as no condition fires anymore. Step size reset and parameter saving happen
+once for the whole instant.
+
+Because the conditions are evaluated several times within one instant, they should be predicates
+on the current state alone, for example "the stored switch state contradicts the input". The
+affect which fixes the inconsistency then also makes its own condition false.
+Iterative affects should read and write only through `u`. Writes through `ctx.integrator` are
+invisible to the iteration, so they trigger no reinit and no further round.
+
+The order of the callbacks at an event instant is:
+1. the continuous callback which found the earliest root, if any,
+2. the preset-time callbacks,
+3. the other discrete callbacks,
+4. the iterative set.
+
+The callbacks passed as `add_nw_cb` to the `ODEProblem` are sorted into the same groups. Within a
+group, the network's own callbacks come first.
+
+So the event iteration reacts to the jumps of all other callbacks. This holds when the callbacks
+come from the `ODEProblem` constructor. If you combine `get_callbacks(nw)` with your own callbacks
+in a `CallbackSet` by hand, your discrete callbacks run after the iterative set.
+If the set still fires after `event_maxiter` rounds (default 10), it keeps the state of the last
+round and warns, naming the components which still fire. Pass `event_failure=:error` to throw
+instead. Both are keyword arguments of [`get_callbacks`](@ref) and of the `ODEProblem`
+constructor.
+
+
 ## Normal DiffEq Callbacks
 Besides component based callbacks, it is also possible to use "normal" DiffEq
 callbacks together with `NetworkDynamics.jl`.

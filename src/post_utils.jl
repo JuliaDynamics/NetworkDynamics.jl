@@ -18,6 +18,11 @@ The callback system supports three keyword arguments that control how callbacks 
 - **`override_cb`**: A callback or `CallbackSet` that completely replaces all network callbacks.
   When set, both `add_comp_cb` and `add_nw_cb` must be empty/nothing (enforced by ArgumentError).
   Use this for complete control over the callback system.
+
+At an event instant, the discrete callbacks of the network and of `add_nw_cb` are ordered by
+kind: preset-time callbacks first, then all other discrete callbacks, and the iterative discrete
+callbacks last. So the event iteration reacts to the changes of all others. `event_maxiter` and `event_failure` are forwarded to
+[`get_callbacks`](@ref).
 """
 
 """
@@ -25,6 +30,8 @@ The callback system supports three keyword arguments that control how callbacks 
         add_comp_cb=Dict(),
         add_nw_cb=nothing,
         override_cb=nothing,
+        event_maxiter=10,
+        event_failure=:warn,
         initializealg=BrownFullBasicInit(; nlsolve=FastShortcutNonlinearPolyalg(; must_use_jacobian=Val(true))),
         specialize=SciMLBase.FullSpecialize,
         kwargs...
@@ -51,6 +58,8 @@ function SciMLBase.ODEProblem(
     add_comp_cb=Dict(),
     add_nw_cb=nothing,
     override_cb=nothing,
+    event_maxiter=10,
+    event_failure=:warn,
     initializealg=BrownFullBasicInit(; nlsolve=FastShortcutNonlinearPolyalg(; must_use_jacobian=Val(true))),
     specialize=SciMLBase.FullSpecialize,
     kwargs...
@@ -77,11 +86,11 @@ function SciMLBase.ODEProblem(
     if !isnothing(override_cb)
         finalcallback = override_cb
     else
-        nw_callback = get_callbacks(nw, add_comp_cb)
+        nw_callback = get_callbacks(nw, add_comp_cb; event_maxiter, event_failure)
         if isnothing(add_nw_cb)
             finalcallback = nw_callback
         else
-            finalcallback = SciMLBase.CallbackSet(nw_callback, add_nw_cb)
+            finalcallback = sort_discrete_callbacks(SciMLBase.CallbackSet(nw_callback, add_nw_cb))
         end
     end
 

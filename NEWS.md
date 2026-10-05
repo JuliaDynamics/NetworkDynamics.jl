@@ -12,6 +12,16 @@
   bookkeeping changes which do not introduce a discontinuity. If several affects fire at the same
   time, one asking for the reset is enough; parameter changes are saved either way.
 - Batched affects fill their observed buffer once per event instead of once per member.
+- **Event iteration.** `DiscreteComponentCallback(cond, affect; iterative=true)` joins the
+  network's event iteration. All iterative callbacks run last at an event instant, in synchronous
+  rounds: every condition sees the same state and every fired affect reads one snapshot. Between
+  rounds a DAE is reinitialized, and the rounds repeat until no condition fires. `event_maxiter`
+  and `event_failure` on `get_callbacks`/`ODEProblem` bound the loop.
+- Component callbacks batch by the type of their condition, not by the identical function. Closures
+  created at one place, e.g. a `do` block in a model constructor, now share a batch even if they
+  capture different values. Members of a batch read one snapshot when they fire together.
+- Preset-time callbacks now run before the other discrete callbacks at an instant, so every
+  discrete condition sees their jump. This includes preset-time callbacks passed as `add_nw_cb`.
 - `save_parameters!` no longer stores a full copy of the parameter vector. The solution keeps the
   initial parameters plus a list of the values which changed, which makes frequent parameter
   changes in large networks much cheaper in memory.

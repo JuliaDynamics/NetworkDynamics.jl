@@ -73,8 +73,7 @@ end
 
 # Deprecated split-list callback constructors `ComponentCondition(f, sym, psym)` with `f(u, p, t)`
 # and `ComponentAffect(f, sym, psym)` with `f(u, p, ctx)`. Internally there is only one symbol
-# list, so the adapters slice the combined view back into a `u` and a `p` part. The adapters
-# hold nothing but the user function, so callbacks with the same function still batch.
+# list, so the adapters slice the combined view back into a `u` and a `p` part.
 function ComponentCondition(f, sym, psym)
     @warn "ComponentCondition(f, sym, psym) with f(u, p, t) is deprecated, list the parameters in a single symbol list and use f(u, t) instead." maxlog=1
     if !hasmethod(f, Tuple{SymbolicView, SymbolicView, Float64}) &&

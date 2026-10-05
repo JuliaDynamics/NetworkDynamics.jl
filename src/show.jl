@@ -874,6 +874,7 @@ function Base.show(io::IO, ::MIME"text/plain", @nospecialize(cb::ComponentCallba
     if cb isa VectorContinuousComponentCallback
         print(io, ", len=", cb.len)
     end
+    isiterative(cb) && print(io, ", iterative")
     print(io, ")")
 end
 
