@@ -150,7 +150,7 @@ function ResolutionResult(vals, provenance, nrules::Int)
 end
 
 """
-    resolve_rules(vals, rules; targets, seedprov, maxpasses) -> ResolutionResult
+    resolve_rules(vals, rules; targets, seedprov) -> ResolutionResult
 
 Resolve everything that follows from `vals` by firing rules whose inputs are known. `vals` itself
 is not modified.
@@ -159,14 +159,15 @@ The walk:
 
 1. Seed the known values, each at the rank `seedprov` gives it.
 2. Drop the rules that cannot contribute to `targets`.
-3. Order the rules with Tarjan and walk them, re-scanning cyclic groups until they settle.
+3. Order the rules with Tarjan and walk them, re-scanning cyclic groups until they settle. A
+   cyclic group's conflicts are judged on its settled values.
 4. Write each output, unless something of higher rank is already sitting there. Equal rank is a
-   consistency check rather than a write.
+   consistency check rather than a write, unless a rule in a cycle replaces its own stale value.
 
 Conflicts are only recorded; the caller decides whether they are an error.
 """
 function resolve_rules(vals, rules::AbstractVector;
-                       targets=nothing, seedprov=Returns(:provided), maxpasses=1000)
+                       targets=nothing, seedprov=Returns(:provided))
     values = Dict{Symbol,Float64}(vals)
     provenance = Dict{Symbol,Symbol}(s => seedprov(s) for s in keys(values))
 
@@ -183,7 +184,7 @@ function resolve_rules(vals, rules::AbstractVector;
             # a lone rule gets exactly one chance, a self-loop only means it checks its own input
             _try_fire!(res, rules, only(block))
         else
-            _resolve_block!(res, rules, block; maxpasses)
+            _resolve_block!(res, rules, block)
         end
     end
 
@@ -260,43 +261,68 @@ function _prune_blocks!(pruned, g, rules, blocks, targets)
 end
 
 # Rules in a cycle cannot be put in order, so the group is re-scanned until nothing changes and
-# whichever rule happens to have its inputs ready goes first. An overwrite re-arms everyone who
-# read the old value.
+# whichever rule happens to have its inputs ready goes first. While it iterates, a rule may see
+# stale values, so its conflicts and yields are only judged once the block has settled: every
+# fired rule is evaluated once more on the final values.
+function _resolve_block!(res, rules, block)
+    nconflicts, nyields = length(res.conflicts), length(res.yields)
+    _iterate_block!(res, rules, block)
+    resize!(res.conflicts, nconflicts)
+    # a rule outside the block keeps its yield, it lost to a final value
+    deleteat!(res.yields, [k for k in nyields+1:length(res.yields) if res.yields[k].rule ∈ block])
+    for i in block
+        res.fired[i] && _verify!(res, rules, i)
+    end
+    nothing
+end
+# A value that moves re-arms everyone who read it, and the re-armed rule replaces what it wrote
+# itself. A change needs at most one pass per other rule to travel along the block, so re-arming
+# stops n - 1 passes after the last rank rise. That is what ends an inconsistent loop.
 #
-# This settles because a rule fires at most once and an overwrite always raises the target's
-# rank. `maxpasses` is only a safety net.
-function _resolve_block!(res, rules, block; maxpasses)
+# Ranks only rise on a rule's first firing, so the last rise happens within n passes. Re-arming
+# stops n - 1 quiet passes later, and the block settles within 2n + 2 passes.
+function _iterate_block!(res, rules, block)
+    n = length(block)
     overwritten = Set{Symbol}()
-    for _ in 1:maxpasses
+    blocksyms = unique(s for i in block for s in rules[i].outsym)
+    rank() = sum(s -> haskey(res.vals, s) ? _precedence(res.provenance[s]) : 0, blocksyms)
+    lastrank, quiet = rank(), 0
+    for _ in 1:2n+2
         changed = false
         for i in block
             res.fired[i] && continue
             _try_fire!(res, rules, i; overwritten) && (changed = true)
         end
         changed || return nothing
-        if !isempty(overwritten)
+        newrank = rank()
+        quiet = newrank > lastrank ? 0 : quiet + 1
+        lastrank = newrank
+        if quiet < n - 1
             for i in block
-                res.fired[i] || continue
-                isdisjoint(rules[i].sym, overwritten) && continue
-                res.fired[i] = false # its inputs moved, its result is stale
+                if !isdisjoint(rules[i].sym, overwritten)
+                    res.fired[i] = false # its inputs moved, its result is stale
+                end
             end
-            empty!(overwritten)
         end
+        empty!(overwritten)
     end
-    error("Resolution of a rule block did not settle within $maxpasses passes: the values of \
-           $(unique(Symbol[s for i in block for s in rules[i].outsym])) keep changing. This \
-           should not happen — please report it, together with the model that produced it.")
+    error("Internal error: a rule block did not settle within $(2n + 2) passes, the values of \
+           $blocksyms keep changing. Please report it, together with the model that produced it.")
+end
+# Report what rule `i` disagrees with or loses to on the final values.
+function _verify!(res, rules, i)
+    r = rules[i]
+    out = _run_rule(r, res.vals)
+    for (k, s) in enumerate(r.outsym)
+        _write_value!(res, s, out[k], r.provenance, i; overwritten=nothing, check_only=true)
+    end
 end
 
 # Returns whether the rule fired. Firing depends on readiness (all inputs set?)
 function _try_fire!(res, rules, i; overwritten=nothing)
     r = rules[i]
     all(s -> haskey(res.vals, s), r.sym) || return false
-
-    u = Float64[res.vals[s] for s in r.sym]
-    out = zeros(Float64, length(r.outsym))
-    r.f(out, u)
-
+    out = _run_rule(r, res.vals)
     res.fired[i] = true
     for (k, s) in enumerate(r.outsym)
         _write_value!(res, s, out[k], r.provenance, i; overwritten, check_only = s ∈ r.sym)
@@ -304,9 +330,16 @@ function _try_fire!(res, rules, i; overwritten=nothing)
     true
 end
 
+function _run_rule(r::ResolutionRule, vals)
+    u = Float64[vals[s] for s in r.sym]
+    out = zeros(Float64, length(r.outsym))
+    r.f(out, u)
+    out
+end
+
 # The write policy, and the only place where precedence is decided. A `check_only` write never
 # stores, it compares like an equal-rank write would.
-function _write_value!(res, s, v, provenance, i; overwritten, check_only=false)
+function _write_value!(res, s, v, provenance, i; overwritten, check_only)
     if !haskey(res.vals, s)
         _store!(res, s, v, provenance, i; overwritten=nothing)
         return nothing
@@ -316,6 +349,10 @@ function _write_value!(res, s, v, provenance, i; overwritten, check_only=false)
     if held > offered
         # recorded, not silent: for a weak formula this *is* the outcome to report
         push!(res.yields, (; sym=s, offered=v, rule=i))
+        return nothing
+    elseif held == offered && !check_only && get(res.writer, s, 0) == i
+        # only a re-armed rule in a cycle gets here, its own old value is stale
+        _store!(res, s, v, provenance, i; overwritten)
         return nothing
     elseif held == offered || check_only
         # same rank never overwrites, we only check that the two agree
