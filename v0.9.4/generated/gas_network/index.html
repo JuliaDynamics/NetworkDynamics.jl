@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Gas Network · NetworkDynamics</title><meta name="title" content="Gas Network · NetworkDynamics"/><meta property="og:title" content="Gas Network · NetworkDynamics"/><meta property="twitter:title" content="Gas Network · NetworkDynamics"/><meta name="description" content="Documentation for NetworkDynamics."/><meta property="og:description" content="Documentation for NetworkDynamics."/><meta property="twitter:description" content="Documentation for NetworkDynamics."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">NetworkDynamics</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">General</a></li><li><a class="tocitem" href="../../mathematical_model/">Mathematical Model</a></li><li><a class="tocitem" href="../../network_construction/">Network Construction</a></li><li><span class="tocitem">Features</span><ul><li><a class="tocitem" href="../../symbolic_indexing/">Symbolic Indexing</a></li><li><a class="tocitem" href="../../metadata/">Metadata</a></li><li><a class="tocitem" href="../../initialization/">Initialization</a></li><li><a class="tocitem" href="../../mtk_integration/">ModelingToolkit Integration</a></li><li><a class="tocitem" href="../../external_inputs/">External Inputs</a></li></ul></li><li><a class="tocitem" href="../../API/">API</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../getting_started_with_network_dynamics/">Getting Started</a></li><li><a class="tocitem" href="../directed_and_weighted_graphs/">Directed and Weighted Graphs</a></li><li><a class="tocitem" href="../heterogeneous_system/">Heterogeneous Systems</a></li><li><a class="tocitem" href="../cascading_failure/">Cascading Failure</a></li><li><a class="tocitem" href="../stress_on_truss/">Stress on Truss</a></li><li class="is-active"><a class="tocitem" href>Gas Network</a><ul class="internal"><li><a class="tocitem" href="#Node-Models"><span>Node Models</span></a></li><li><a class="tocitem" href="#Pipe-Model"><span>Pipe Model</span></a></li><li><a class="tocitem" href="#Parametrization"><span>Parametrization</span></a></li><li><a class="tocitem" href="#Load-Profile"><span>Load Profile</span></a></li><li><a class="tocitem" href="#Building-the-Network"><span>Building the Network</span></a></li><li><a class="tocitem" href="#Finding-a-Steady-State"><span>Finding a Steady State</span></a></li><li><a class="tocitem" href="#Solving-the-ODE"><span>Solving the ODE</span></a></li><li><a class="tocitem" href="#Inspect-the-Solution"><span>Inspect the Solution</span></a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Tutorials</a></li><li class="is-active"><a href>Gas Network</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Gas Network</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaDynamics/NetworkDynamics.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaDynamics/NetworkDynamics.jl/blob/main/docs/examples/gas_network.jl" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Dynamic-Flow-in-simple-Gas-Network"><a class="docs-heading-anchor" href="#Dynamic-Flow-in-simple-Gas-Network">Dynamic Flow in simple Gas Network</a><a id="Dynamic-Flow-in-simple-Gas-Network-1"></a><a class="docs-heading-anchor-permalink" href="#Dynamic-Flow-in-simple-Gas-Network" title="Permalink"></a></h1><p>This Example is based on the paper</p><blockquote><p>Albertus J. Malan, Lukas Rausche, Felix Strehle, Sören Hohmann, Port-Hamiltonian Modelling for Analysis and Control of Gas Networks, IFAC-PapersOnLine, Volume 56, Issue 2, 2023, https://doi.org/10.1016/j.ifacol.2023.10.193.</p></blockquote><p>and tries replicate a simple simulation of flow in a 3-node gas network.</p><p>This example can be dowloaded as a normal Julia script <a href="../gas_network.jl">here</a>.</p><p>We start by importing the necessary packages:</p><pre><code class="language-julia hljs">using NetworkDynamics
+using ModelingToolkit
+using DynamicQuantities
+using ModelingToolkit: D as Dt, t as t
+using Test
+using StaticArrays
+using LinearInterpolations
+using OrdinaryDiffEqTsit5
+using CairoMakie</code></pre><h2 id="Node-Models"><a class="docs-heading-anchor" href="#Node-Models">Node Models</a><a id="Node-Models-1"></a><a class="docs-heading-anchor-permalink" href="#Node-Models" title="Permalink"></a></h2><p>In this example, we use the equation based modeling using <code>ModelingToolkit.jl</code>. To verify the equations on a basic level we also provide units to eveything to perform dimensionality checks.</p><p>There are 2 node models used in the paper. The first node type has a constant pressure. Additionally, we ad some &quot;internal&quot; state <code>q̃_inj</code> which we want to plot later (see also <a href="../../symbolic_indexing/#Observables">Observables</a>).</p><pre><code class="language-julia hljs">@mtkmodel ConstantPressureNode begin
+    @parameters begin
+        p_set, [description=&quot;Constant pressure setpoint&quot;, unit=u&quot;Pa&quot;]
+    end
+    @variables begin
+        p(t) = p_set, [description=&quot;Pressure&quot;, unit=u&quot;Pa&quot;, output=true]
+        q̃_nw(t), [description=&quot;aggregated flow from pipes into node&quot;, unit=u&quot;m^3/s&quot;, input=true]
+        q̃_inj(t), [description=&quot;internal state for introspection&quot;, unit=u&quot;m^3/s&quot;]
+    end
+    @equations begin
+        p ~ p_set
+        q̃_inj ~ -q̃_nw
+    end
+end</code></pre><p>The second node model is a variable pressure node. It has one output state (the pressure) and one input state, the aggregated flows from the connected pipes. As an internal state we have the injected flow from our source/load. The source/load behaviour itself is provided via a time dependent function.</p><pre><code class="language-julia hljs">@mtkmodel VariablePressureNode begin
+    @structural_parameters begin
+        load_profile # time dependent load profile
+    end
+    @parameters begin
+        C, [description=&quot;Lumped capacitance of connected pipes&quot;, unit=u&quot;m^4 * s^2 / kg&quot;]
+    end
+    @variables begin
+        p(t)=5e6, [description=&quot;Pressure&quot;, unit=u&quot;Pa&quot;, output=true]
+        q̃_inj(t), [description=&quot;external injection into node&quot;, unit=u&quot;m^3/s&quot;]
+        q̃_nw(t), [description=&quot;aggregated flow from pipes into node&quot;, unit=u&quot;m^3/s&quot;, input=true]
+    end
+    @equations begin
+        q̃_inj ~ load_profile(t)
+        C * Dt(p) ~ q̃_inj + q̃_nw # (30)
+    end
+end</code></pre><h2 id="Pipe-Model"><a class="docs-heading-anchor" href="#Pipe-Model">Pipe Model</a><a id="Pipe-Model-1"></a><a class="docs-heading-anchor-permalink" href="#Pipe-Model" title="Permalink"></a></h2><p>The pipe is modeld as a first order ODE for the volumetric flow at the <code>dst</code> end. It has two inputs: the pressure at the source and and the pressure at the destination end. Later on, we&#39;ll specify the model to be antisymmetric, thus the flow is calculated explicitly for the destination end, but the source end will just recive just that times (-1).</p><pre><code class="language-julia hljs">@mtkmodel Pipe begin
+    @parameters begin
+        L, [description=&quot;Length of pipe&quot;, unit=u&quot;m&quot;]
+        D, [description=&quot;Diameter of pipe&quot;, unit=u&quot;m&quot;]
+        A, [description=&quot;Cross-sectional area of pipe&quot;, unit=u&quot;m^2&quot;]
+        sinθ, [description=&quot;Angle of inclination&quot; ]
+        γ, [description=&quot;Friction efficiency factor&quot;]
+        η, [description=&quot;Dynamic viscosity&quot;, unit=u&quot;kg/(m*s)&quot;]
+        r, [description=&quot;Pipe roughness&quot;, unit=u&quot;m&quot;]
+        g, [description=&quot;Gravitational acceleration&quot;, unit=u&quot;m/s^2&quot;]
+        T, [description=&quot;simulation temperature&quot;, unit=u&quot;K&quot;]
+        Tc, [description=&quot;crictical temperature&quot;, unit=u&quot;K&quot;]
+        pc, [description=&quot;critical pressure&quot;, unit=us&quot;Pa&quot;]
+        Rs, [description=&quot;Specific gas constant for natural gas&quot;, unit=us&quot;J/(kg*K)&quot;]
+        c̃, [description=&quot;Speed of sound in fluid at standard conditions&quot;, unit=u&quot;m/s&quot;]
+        ρ̃, [description=&quot;standard density&quot;, unit=u&quot;kg/m^3&quot;]
+        p̃, [description=&quot;standard pressure&quot;, unit=us&quot;Pa&quot;]
+    end
+    @variables begin
+        p_src(t), [description=&quot;Pressure at source end&quot;, unit=us&quot;Pa&quot;, input=true]
+        p_dst(t), [description=&quot;Pressure at destination end&quot;, unit=us&quot;Pa&quot;, input=true]
+        q̃(t)=1, [description=&quot;Flow through pipe&quot;, unit=u&quot;m^3/s&quot;, output=true]
+        Re(t), [description=&quot;Reynolds number&quot;]
+        λ(t), [description=&quot;Friction factor&quot;]
+        λe(t), [description=&quot;Effective friction factor&quot;]
+        pM(t), [description=&quot;mean pressure&quot;, unit=us&quot;Pa&quot;]
+        Z(t), [description=&quot;compressibility factor&quot;]
+        ρ(t), [description=&quot;density&quot;, unit=u&quot;kg/m^3&quot;]
+        c(t), [description=&quot;speed of sound&quot;, unit=u&quot;m/s&quot;]
+    end
+    @equations begin
+        Z ~ 1 - 3.52 * pM/pc * exp(-2.26*(T/Tc)) + 0.274 * (pM/pc)^2 * exp(-1.878*(T/Tc)) # (5)
+        ρ ~ pM / (Rs * T * Z) # (4)
+
+        # TODO: Whats the correct speed of sound?
+        c ~ sqrt(T * Rs * Z) # (4) # pressure/temp dependent
+        # c ~ c̃                   # &quot;standard&quot; speed of sound based on standard conditions
+
+        # TODO: Whats the correct Reynolds number?
+        Re ~ (ρ * abs(q̃*p̃/pM) * D) / (η * A) # (6) # based &quot;actual&quot; conditions
+        # Re ~ (ρ̃ * abs(q̃) * D) / (η * A) # (6)   # based on standard conditions
+
+        λ ~ ifelse(Re &lt; 2300,
+            64/Re, # laminar (7)
+            (2*log10(4.518/Re * log10(Re/7) + r/(3.71*D)))^(-2) # turbulent (8)
+        )
+        λe ~ λ/γ^2 # (10)
+        pM ~ 2/3*(p_src + p_dst - (p_src*p_dst)/(p_src + p_dst)) # (20)
+
+        Dt(q̃) ~ A/(L*ρ̃)*(-(λe * ρ̃^2 * c^2 * L * abs(q̃))/(2 * D * A^2 * pM) * q̃ - (g * L * sinθ)/(c^2) * pM + (p_src - p_dst)) # (31)
+    end
+end</code></pre><h2 id="Parametrization"><a class="docs-heading-anchor" href="#Parametrization">Parametrization</a><a id="Parametrization-1"></a><a class="docs-heading-anchor-permalink" href="#Parametrization" title="Permalink"></a></h2><p>The parameterization turned out to be a bit tricky. There might be errors in there.</p><p>Some of them are quite cleare and explicitly given.</p><pre><code class="language-julia hljs">g = 9.81u&quot;m/s^2&quot;       # that we just know
+Rs = 518.28u&quot;J/(kg*K)&quot; # Specific gas constant for natural gas
+η  = 1e-5u&quot;kg/(m*s)&quot;   # Dynamic viscosity
+pc = 46.5u&quot;bar&quot;        # Critical pressure
+p̃  = 1.01325u&quot;bar&quot;     # standard pressure
+Tc = 190.55u&quot;K&quot;        # critical temperature
+T̃  = 273.15u&quot;K&quot;        # standard temperature
+T  = 278u&quot;K&quot;           # simulation temperature
+γ  = 0.98              # friction efficiency factor
+r  = 0.012u&quot;mm&quot;        # pipe roughness
+D  = 0.6u&quot;m&quot;           # pipe diameter
+
+# TODO: here is switched the lenths l12 and l13. The results are better. Is this a mistake in the paper?
+L₁₂ = 90u&quot;km&quot;
+L₁₃ = 80u&quot;km&quot;
+L₂₃ = 100u&quot;km&quot;
+Δh₁ = 0u&quot;km&quot;           # this value is different for different sims in the paper
+p₁_set = 50u&quot;bar&quot;</code></pre><p>The geometric parameters for the pipes can be directly derived.</p><pre><code class="language-julia hljs">A = π/4 * D^2
+sinθ₁₂ = ustrip(Δh₁ / L₁₂)
+sinθ₁₃ = ustrip(Δh₁ / L₁₃)
+sinθ₂₃ = 0.0</code></pre><p>Lastly, we need to calculate the compressibility factor, the speed of sound and the density at standard conditions:</p><pre><code class="language-julia hljs">Z̃ = 1 - 3.52 * p̃/pc * exp(-2.26*(T̃/Tc)) + 0.274 * (p̃/pc)^2 * exp(-1.878*(T̃/Tc)) # (5)
+c̃ = sqrt(T̃ * Rs * Z̃) # (4) at standard conditions
+ρ̃ = p̃ / (Rs * T̃ * Z̃) # (4) at standard conditions</code></pre><p>The equivalent &quot;pressure capacity&quot; at the nodes is calculated as a sum of the connected pipe parameters according to (28).</p><p>Here use defintions based on the speed and &quot;standard&quot; conditions.</p><pre><code class="language-julia hljs">C₂ = L₁₂*A/(2*ρ̃*c̃^2) + L₂₃*A/(2*ρ̃*c̃^2) # (28)
+C₃ = L₁₃*A/(2*ρ̃*c̃^2) + L₂₃*A/(2*ρ̃*c̃^2) # (28)</code></pre><p>Alternatively, we could calculate <code>Z2</code> and <code>Z3</code> based on the actuel pressure and simulation temperature. Then we could calculated the speed of sound for the &quot;correct&quot; conditions at the node. It seems to have very little effect on the actual results so I kept it simple.</p><h2 id="Load-Profile"><a class="docs-heading-anchor" href="#Load-Profile">Load Profile</a><a id="Load-Profile-1"></a><a class="docs-heading-anchor-permalink" href="#Load-Profile" title="Permalink"></a></h2><p>The paper specifies the load profile at two nodes. We use the package <a href="https://github.com/jw3126/LinearInterpolations.jl"><code>LinearInterpolations.jl</code></a> to get a callable object which represents this picewise linear interpolation.</p><p>However, this function is not Symbolics.jl compatible, so we need to stop Symbolics.jl/ModelingToolkit.jl from tracing it. To do so, we use <code>@register_symbolic</code> to declare it as a symbolic function which is treated as a blackbox.</p><p>Additionally, we need to tell ModelingToolkit about the units of this object. This is just used for the static unit check during construction of the model. Later one, when we generate the Julia code from the symbolic reepresentation all units will be stripped.</p><div class="admonition is-info"><header class="admonition-header">Discontinuities in RHS</header><div class="admonition-body"><p>The picewise linear interpolated function creates discontinuities in the RHS of the system. However since we know the times exactly, we can handle this by simply giving a list of explicit tstops to the solve command, to make sure those are hit exactly.</p></div></div><pre><code class="language-julia hljs">load2(t) = -Interpolate(SA[0, 4, 12, 20, 24]*3600, SA[20, 30, 10, 30, 20], extrapolate=LinearInterpolations.Constant(20))(t)
+load3(t) = -Interpolate(SA[0, 4, 12, 20, 24]*3600, SA[40, 50, 30, 50, 40], extrapolate=LinearInterpolations.Constant(40))(t)
+@register_symbolic load2(t)
+@register_symbolic load3(t)
+ModelingToolkit.get_unit(op::typeof(load2), _) = u&quot;m^3/s&quot;
+ModelingToolkit.get_unit(op::typeof(load3), _) = u&quot;m^3/s&quot;</code></pre><h2 id="Building-the-Network"><a class="docs-heading-anchor" href="#Building-the-Network">Building the Network</a><a id="Building-the-Network-1"></a><a class="docs-heading-anchor-permalink" href="#Building-the-Network" title="Permalink"></a></h2><p>To bild the Network we first need to define the components. This is a two step process:</p><ul><li>first create the symbolic <code>ODESystem</code> using ModelingToolkit</li><li>secondly build a NetworkDynamics component model (<a href="../../API/#NetworkDynamics.VertexModel-Tuple{}"><code>VertexModel</code></a>/<a href="../../API/#NetworkDynamics.EdgeModel-Tuple{}"><code>EdgeModel</code></a>) based on the symbolic system.</li></ul><p>In the first step we can use the keyword arguments to pass &quot;default&quot; values for our parameters and states. Those values will be automaticially transfered to the metadata of the component model the second step.</p><p>The second step requires to define the interface variables, i.e. what are the &quot;input&quot; states of your component model and what are the &quot;output&quot; states. For <code>VertexModel</code> the input state is the aggregated flow of all connected pipes. The output state is the pressure of the node.</p><pre><code class="language-julia hljs">@named v1_mtk = ConstantPressureNode(p_set=p₁_set)
+v1 = VertexModel(v1_mtk, [:q̃_nw], [:p]; name=:v1, vidx=1)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">VertexModel <span class="sgr1">:v1</span> <span class="sgr94">NoFeedForward()</span> @ Vertex 1
+ ├─ 1 input:  [q̃_nw]
+ ├─ 0 states: []
+ ├─ 1 output: [p=5e6]
+ └─ 1 param:  [p_set=5e6]</code></pre><pre><code class="language-julia hljs">@named v2_mtk = VariablePressureNode(C=C₂, load_profile=load2)
+v2 = VertexModel(v2_mtk, [:q̃_nw], [:p]; name=:v2, vidx=2)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">VertexModel <span class="sgr1">:v2</span> <span class="sgr94">PureStateMap()</span> @ Vertex 2
+ ├─ 1 input:  [q̃_nw]
+ ├─ 1 state:  [p=5e6]
+ ├─ 1 output: [p=5e6]
+ └─ 1 param:  [C=0.26509]</code></pre><pre><code class="language-julia hljs">@named v3_mtk = VariablePressureNode(C=C₃, load_profile=load3)
+v3 = VertexModel(v3_mtk, [:q̃_nw], [:p]; name=:v3, vidx=3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">VertexModel <span class="sgr1">:v3</span> <span class="sgr94">PureStateMap()</span> @ Vertex 3
+ ├─ 1 input:  [q̃_nw]
+ ├─ 1 state:  [p=5e6]
+ ├─ 1 output: [p=5e6]
+ └─ 1 param:  [C=0.25114]</code></pre><p>For the edge Model we have two inputs: the pressure on both source and destination end. There is a single output state: the volumetric flow. However we also need to tell NetworkDynamics about the coupling type. In this case we use <code>AntiSymmetric</code>, which meas that the source end will recieve the same flow, just inverted sign.</p><pre><code class="language-julia hljs">@named e12_mtk = Pipe(; L=L₁₂, sinθ=sinθ₁₂, D, A, γ, η, r, g, T, Tc, pc, Rs, c̃, ρ̃, p̃)
+@named e13_mtk = Pipe(; L=L₁₃, sinθ=sinθ₁₃, D, A, γ, η, r, g, T, Tc, pc, Rs, c̃, ρ̃, p̃)
+@named e23_mtk = Pipe(; L=L₂₃, sinθ=sinθ₂₃, D, A, γ, η, r, g, T, Tc, pc, Rs, c̃, ρ̃, p̃)
+
+e12 = EdgeModel(e12_mtk, [:p_src], [:p_dst], AntiSymmetric([:q̃]); name=:e12, src=1, dst=2)
+e13 = EdgeModel(e13_mtk, [:p_src], [:p_dst], AntiSymmetric([:q̃]); name=:e13, src=1, dst=3)
+e23 = EdgeModel(e23_mtk, [:p_src], [:p_dst], AntiSymmetric([:q̃]); name=:e23, src=2, dst=3)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">EdgeModel <span class="sgr1">:e23</span> <span class="sgr94">PureStateMap()</span> @ Edge 2=&gt;3
+ ├─ 1/1 inputs:  src=[p_src] dst=[p_dst]
+ ├─   1 state:   [q̃=1]
+ ├─ 1/1 outputs: src=[₋q̃] dst=[q̃=1]
+ └─  14 params:  [ρ̃=0.71788, T=278, Rs=518.28, L=1e5, γ=0.98, D=0.6, p̃=1.0132e5, pc=4.65e6, η=1e-5, sinθ=0, Tc=190.55, A=0.28274, r=1.2e-5, g=9.81]</code></pre><p>To build the network object we just need to pass the vertices and edges to the constructor.</p><p>Note that we&#39;ve used the <code>vidx</code> and <code>src</code>/<code>dst</code> keywords in the constructors to define for each component to which &quot;part&quot; of the network it belongs.</p><p>This means, the constructor can automaticially construct a graph based on those informations and we don&#39;t need to pass it explicitly.</p><pre><code class="language-julia hljs">nw = Network([v1, v2, v3], [e12, e13, e23])</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Network with 5 states and 45 parameters
+ ├─ 3 vertices (3 unique types)
+ └─ 3 edges (1 unique type)
+Edge-Aggregation using SequentialAggregator(+)</code></pre><p>As a result, we recive a network with 3 unique types (v2 and v3 are similar but structurally different, because both functions capure a unique loadprofile function).</p><h2 id="Finding-a-Steady-State"><a class="docs-heading-anchor" href="#Finding-a-Steady-State">Finding a Steady State</a><a id="Finding-a-Steady-State-1"></a><a class="docs-heading-anchor-permalink" href="#Finding-a-Steady-State" title="Permalink"></a></h2><p>To simulate the systme, we first need to find a steadystate. As a &quot;guess&quot; for that we create a <code>NWState</code> object from the network. This will allocate flat arrays for states <code>u</code> and parameters <code>p</code> and fill them with the default values.</p><pre><code class="language-julia hljs">uguess = NWState(nw)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">NWState{Vector{Float64}} of Network (3 vertices, 3 edges)
+  ├─ VIndex(2, :p)  =&gt; 5.0e6
+  ├─ VIndex(3, :p)  =&gt; 5.0e6
+  ├─ EIndex(1, :q̃)  =&gt; 1.0
+  ├─ EIndex(2, :q̃)  =&gt; 1.0
+  └─ EIndex(3, :q̃)  =&gt; 1.0
+ p = NWParameter([5.0e6, 0.265094, 0.251141, 0.717884, 278.0, 518.28, 90000.0, 0.98, 0.6, 101325.0  …  0.98, 0.6, 101325.0, 4.65e6, 1.0e-5, 0.0, 190.55, 0.282743, 1.2e-5, 9.81])
+ t = nothing</code></pre><p>This is not a steadystate of the system however. To find a true steadystate we want to ensure that the lhs of the system is zero. We can solve for a steady state numerically by defining a Nonlinear Rootfind problem.</p><p>To do so, we need to wrap the Network object in a closure.</p><pre><code class="language-julia hljs">nwwrap = (du, u, p) -&gt; begin
+    nw(du, u, p, 0)
+    nothing
+end
+initprob = NonlinearProblem(nwwrap, uflat(uguess), pflat(uguess))
+initsol = solve(initprob)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">retcode: Success
+u: 5-element Vector{Float64}:
+  4.895109070989141e6
+  4.883573000934716e6
+ 28.277070738768998
+ 31.722929261231005
+  8.277070738768998</code></pre><p>We can create a new <code>NWState</code> object by wrapping the solution from the nonlinear problem and the original prameters in a new <code>NWState</code> object.</p><pre><code class="language-julia hljs">u0 = NWState(nw, initsol.u, uguess.p)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">NWState{Vector{Float64}} of Network (3 vertices, 3 edges)
+  ├─ VIndex(2, :p)  =&gt; 4.895109070989141e6
+  ├─ VIndex(3, :p)  =&gt; 4.883573000934716e6
+  ├─ EIndex(1, :q̃)  =&gt; 28.277070738768998
+  ├─ EIndex(2, :q̃)  =&gt; 31.722929261231005
+  └─ EIndex(3, :q̃)  =&gt; 8.277070738768998
+ p = NWParameter([5.0e6, 0.265094, 0.251141, 0.717884, 278.0, 518.28, 90000.0, 0.98, 0.6, 101325.0  …  0.98, 0.6, 101325.0, 4.65e6, 1.0e-5, 0.0, 190.55, 0.282743, 1.2e-5, 9.81])
+ t = nothing</code></pre><h2 id="Solving-the-ODE"><a class="docs-heading-anchor" href="#Solving-the-ODE">Solving the ODE</a><a id="Solving-the-ODE-1"></a><a class="docs-heading-anchor-permalink" href="#Solving-the-ODE" title="Permalink"></a></h2><p>Using this as our initial state we can create the actual <code>ODEProblem</code>. Since the ode allways operates on flat state and aprameter arrays we use <code>uflat</code> and <code>pflat</code> to extract them.</p><pre><code class="language-julia hljs">prob = ODEProblem(nw, uflat(u0), (0.0,24*3600), copy(pflat(u0)))
+sol = solve(prob, Tsit5(), tstops=[0,4,12,20,24]*3600)</code></pre><h2 id="Inspect-the-Solution"><a class="docs-heading-anchor" href="#Inspect-the-Solution">Inspect the Solution</a><a id="Inspect-the-Solution-1"></a><a class="docs-heading-anchor-permalink" href="#Inspect-the-Solution" title="Permalink"></a></h2><p>Inspecting the solution is all which is left to do.</p><pre><code class="language-julia hljs">xticks = ((0:4:24)*3600, string.(0:4:24)) # its nice to display hours
+fig = begin
+    _fig = Figure()
+    row = 1
+    ax = Axis(_fig[row, 1]; xlabel=&quot;time [h]&quot;, ylabel=&quot;pressure [Pa]&quot;, title=&quot;Pressure at nodes&quot;, xticks)
+    xlims!(ax, sol.t[begin], sol.t[end])
+    ylims!(ax, 47.9e5, 49.9e5)
+    for i in 1:3
+        lines!(ax, sol, idxs=vidxs(nw, i, :p); label=&quot;v$i&quot;, color=Cycled(i))
+    end
+    axislegend(ax)
+    row += 1
+
+    ax = Axis(_fig[row, 1]; xlabel=&quot;time [h]&quot;, ylabel=&quot;flow [m³/s]&quot;, title=&quot;Flow through pipes&quot;, xticks)
+    xlims!(ax, sol.t[begin], sol.t[end])
+    ylims!(ax, 16, 44)
+    for i in 1:2
+        lines!(ax, sol, idxs=eidxs(nw, i, :q̃); label=&quot;e$i flow&quot;, color=Cycled(i))
+    end
+    axislegend(ax, position=:rb)
+    row += 1
+    _fig
+end</code></pre><img src="01fa86ce.svg" alt="Example block output"/><p>Notably, the &quot;internal&quot; states defined in the symbolic models are not &quot;states&quot; in the sense of the ODE. For example, we captured the load profile in the <code>q̃_inj</code> state of the <code>VariablePressureNode</code>. The only dynamic state of the model however is <code>p</code>. Using the &quot;observables&quot; mechanism from SciML, which is implemented by NetworkDynamics, we can reconstruct those &quot;optimized&quot; states which have been removed symbolicially. Here we plot the reconstructed load profile of nodes 2 and 3. Also, we know that node 1 is infinetly stiff, acting as an infinite source of volumetric flow. We can reconstruct this flow too.</p><pre><code class="language-julia hljs">fig = begin
+    _fig = Figure()
+    row = 1
+    ax = Axis(_fig[row, 1]; xlabel=&quot;time [h]&quot;, ylabel=&quot;flow [m³/s]&quot;, title=&quot;Flow at nodes&quot;, xticks)
+    xlims!(ax, sol.t[begin], sol.t[end])
+    lines!(ax, sol, idxs=vidxs(nw, 1, :q̃_inj); label=&quot;v1 compensation&quot;, color=Cycled(1))
+    for i in 2:3
+        lines!(ax, sol, idxs=vidxs(nw, i, :q̃_inj); label=&quot;v$i load profile&quot;, color=Cycled(i))
+    end
+    axislegend(ax, position=:rc)
+    _fig
+end</code></pre><img src="7e17ff91.svg" alt="Example block output"/><p>Lastly we want to observe two internal states of the pipes: the Reynolds number and the mean pressure. We see, that we&#39;re purely in the turbulent flow regime.</p><pre><code class="language-julia hljs">fig = begin
+    _fig = Figure()
+    row = 1
+    ax = Axis(_fig[row, 1]; xlabel=&quot;time [h]&quot;, ylabel=&quot;Reynolds number&quot;, title=&quot;Reynolds number&quot;, xticks)
+    xlims!(ax, sol.t[begin], sol.t[end])
+    for i in 1:3
+        lines!(ax, sol, idxs=eidxs(nw, i, :Re); label=&quot;e $i&quot;, color=Cycled(i))
+    end
+    hlines!(ax, 2300, color=:black, linestyle=:dash, label=&quot;L/T transition&quot;)
+    axislegend(ax, position=:rb)
+    row += 1
+
+    ax = Axis(_fig[row, 1]; xlabel=&quot;time [h]&quot;, ylabel=&quot;Mean pressure [Pa]&quot;, title=&quot;Mean pressure in pipes&quot;, xticks)
+    xlims!(ax, sol.t[begin], sol.t[end])
+    for i in 1:3
+        lines!(ax, sol, idxs=eidxs(nw, i, :pM); label=&quot;e $i&quot;, color=Cycled(i))
+    end
+    axislegend(ax, position=:rb)
+    _fig
+end</code></pre><img src="89553eb2.svg" alt="Example block output"/><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../stress_on_truss/">« Stress on Truss</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.0 on <span class="colophon-date" title="Wednesday 15 January 2025 18:38">Wednesday 15 January 2025</span>. Using Julia version 1.11.2.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
