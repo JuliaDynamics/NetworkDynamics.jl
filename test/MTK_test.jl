@@ -1347,6 +1347,48 @@ end
     @test !any(v.obsf.needs_input)
 end
 
+@testset "fed-forward outputs: no division by a state" begin
+    # Power flow PV bus: current in, voltage out. Keeping the current balance as the residual
+    # would solve jr from the power equation, which divides by ur. That residual has a pole at
+    # ur = 0 which Newton can't cross, so the power equation has to stay the residual.
+    @variables ur(t) ui(t) ir(t) ii(t) jr(t) ji(t)
+    @parameters P V
+    eqs = [
+        P ~ ur*jr + ui*ji
+        V^2 ~ ur^2 + ui^2
+        0 ~ ir + jr
+        0 ~ ii + ji
+    ]
+    red_eqs, red_obs, red_states = _reduce_equations(
+        eqs, Equation[], [ur, ui, jr, ji];
+        outset=[ur, ui], ff_inputs=[ir, ii])
+    @test Set(red_states) == Set([ur.val, ui.val])
+    obs = Dict(eq.lhs => eq.rhs for eq in red_obs)
+    @test isequal(obs[jr.val], -ir)
+    @test isequal(obs[ji.val], -ii)
+
+    @named pv = System(eqs, t)
+    v = VertexModel(pv, [:ir, :ii], [:ur, :ui])
+    @test Set(sym(v)) == Set([:ur, :ui])
+
+    # the Norton form needs I = u/z here, so the classic tear stays
+    @variables x1(t) x2(t) y(t) z(t) I(t) u(t) i(t)
+    eqs = [
+        Dt(x1) ~ -x1 + u
+        Dt(x2) ~ -x2 + 1
+        y ~ 1 + x1^2
+        z ~ x2
+        0 ~ y*I - i
+        0 ~ u - z*I
+    ]
+    red_eqs, red_obs, red_states = _reduce_equations(
+        eqs, Equation[], [x1, x2, y, z, I, u];
+        outset=[u], ff_inputs=[i])
+    @test Set(red_states) == Set([x1.val, x2.val, I.val])
+    obs = Dict(eq.lhs => eq.rhs for eq in red_obs)
+    @test isequal(obs[u.val], z*I)
+end
+
 @testset "fed-forward outputs: promotion rounds and matcher" begin
     @variables x1(t) x2(t) a(t) b(t) c(t) d(t) y1(t) y2(t) i1(t) i2(t)
     @parameters k1 k2
