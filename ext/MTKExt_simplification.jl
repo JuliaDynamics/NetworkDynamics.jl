@@ -346,7 +346,7 @@ function _match_and_solve(eqs, obs_unsrtd, match_states::Vector, all_states::Vec
     # The plan tore for feed-forward: try again with the tainted outputs as states, so the
     # candidate may keep the input equations as residuals instead (Norton form). Its own
     # tearing can reveal more tainted outputs, so repeat. The candidate is kept only if it
-    # costs no extra states.
+    # costs no extra states and no extra divisions by states.
     if !isempty(plan.tainted_outputs)
         promoted = Int[]
         candidate = plan
@@ -360,11 +360,11 @@ function _match_and_solve(eqs, obs_unsrtd, match_states::Vector, all_states::Vec
             cmatching = _match_equations_to_states(ccoeff; rowdist=plan.rowdist)
             candidate = _solve_plan(cmatching, ccoeff, match_states, has_input, is_output; verbose)
         end
-        if !isnothing(candidate) && candidate.ntorn <= plan.ntorn
+        if !isnothing(candidate) && candidate.ntorn <= plan.ntorn && candidate.ndiv <= plan.ndiv
             verbose && @info "Outputs fed forward from the input become states: $(inline_repr(match_states[promoted]))"
             plan = candidate
         elseif verbose
-            @info "Keeping the classic tear, outputs $(inline_repr(match_states[promoted])) as states would add states"
+            @info "Keeping the classic tear, outputs $(inline_repr(match_states[promoted])) as states would add states or divisions by states"
         end
     end
 
@@ -512,6 +512,7 @@ The plan is a named tuple with
 - `rowdist`: per equation, the number of solve steps from an input row (0 for rows which
   read an input, the number of equations if the input doesn't reach it). Only filled if
   there are tainted outputs, empty otherwise.
+- `ndiv`: number of solved unknowns which divide by an expression of other states.
 
 Two dependency graphs are built: `g_solvable` (solvable dependencies between matched
 pairs) and `g_unsolvable` (nonlinear dependencies). An initial SCC decomposition of
@@ -545,7 +546,8 @@ function _solve_plan(matching, coeff, match_states, has_input, is_output; verbos
     tainted_outputs = Int[]
     rowdist = Int[]
     result(sccs) = (; sccs, solvable_eq_idx, sorted_match_sts=sorted_sts,
-                    ntorn=length(match_states) - sum(length, sccs; init=0), tainted_outputs, rowdist)
+                    ntorn=length(match_states) - sum(length, sccs; init=0), tainted_outputs, rowdist,
+                    ndiv=count(r -> coeff[r, r] === :linear_state, solvable_eq_idx[k] for scc in sccs for k in scc))
     n == 0 && return result(Vector{Int}[])
 
     g_solvable   = Graphs.SimpleDiGraph(n)
