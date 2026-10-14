@@ -70,7 +70,7 @@ jobs:
           echo '</details>' >> body.md
           echo '' >> body.md
       - name: Upload plot
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         id: artifact-upload-step
         with:
           name: comparison.pdf
