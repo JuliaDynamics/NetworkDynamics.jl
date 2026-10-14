@@ -80,7 +80,7 @@ jobs:
           echo '${{ steps.artifact-upload-step.outputs.artifact-url }}' >> benchmark/body.md
       - uses: int128/hide-comment-action@v1 # hide all previous comments
       - name: Comment on PR
-        uses: peter-evans/create-or-update-comment@v3
+        uses: peter-evans/create-or-update-comment@v5
         with:
           issue-number: ${{ github.event.pull_request.number }}
           body-path: benchmark/body.md
