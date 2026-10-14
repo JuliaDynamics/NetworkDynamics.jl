@@ -22,7 +22,8 @@ Please open an [issue](https://github.com/JuliaDynamics/NetworkDynamics.jl/issue
 report contains
 
 - a minimal example that reproduces the problem, ideally something we can copy into a fresh REPL,
-- the full error message and stack trace, or a description of what you expected instead,
+- the full error message and stack trace, or, if there is no error, what you expected to happen
+  instead,
 - the output of `versioninfo()` and `Pkg.status()`.
 
 ## Proposing changes
@@ -40,7 +41,7 @@ Pull requests should
 - update the docstrings and documentation if the API changes.
 
 Contributions written with the help of AI tools are welcome. You are responsible for the code
-you submit, so please check and understand what the tool produced. Keep the changes local and
+you submit, so please check and understand what the tool produced. Keep the changes focused and
 brief, and leave unrelated code alone.
 
 ## Running the tests

@@ -9,17 +9,18 @@ the solvers of [DifferentialEquations.jl](https://github.com/SciML/DifferentialE
 ## Why NetworkDynamics.jl?
 
 Many systems in science and engineering are networks of interacting units: power grids,
-oscillator networks, gas and heat networks or mechanical structures. Realistic models of such
-systems are often heterogeneous, mix differential and algebraic equations, and consist of
-thousands of components. Writing the right-hand side of such a model by hand quickly becomes
-impractical. Fully symbolic tools treat the whole network as one big system of equations, which
-can get challenging for large systems, because the clear structure of the network is lost on the
-way.
+oscillator networks, gas and heat networks, mechanical structures or some models in
+neuroscience. Realistic models of such systems are often heterogeneous, mix differential and
+algebraic equations, and consist of thousands of components. Writing the right-hand side of such
+a model by hand quickly becomes impractical. Fully symbolic tools treat the whole network as one
+big system of equations, which can get challenging for large systems, because the clear structure
+of the network is lost on the way.
 
 NetworkDynamics.jl keeps the components separate from the topology. Instead of throwing that
 structure away, it builds on it: components can be initialized one by one, states are indexed by
-their position in the graph, and it is easy to iterate over different dynamical realizations of
-your components.
+their position in the graph, and one component model is easily swapped for another. It is aimed
+at researchers in complex systems, energy systems and related fields who need to simulate,
+initialize and analyze such networks.
 
 The main features are:
 
@@ -41,20 +42,25 @@ If you prefer to look at some concrete code first check out the [Getting Started
 
 ## Installation
 
-1. Install Julia:
--   [Julia Installation](https://julialang.org/install/)
--   Find your OS and follow the instructions for the installation
-
+1. Install Julia by following the [installation instructions](https://julialang.org/install/)
+   for your operating system.
 2. Install NetworkDynamics.jl with Julia's package manager:
-```julia-repl
-(v1.11) pkg> add NetworkDynamics
-```
+   ```julia-repl
+   pkg> add NetworkDynamics
+   ```
 
 If you are new to Julia, the PowerDynamics.jl documentation has a
 [three-part introduction](https://juliaenergy.github.io/PowerDynamics.jl/stable/julia_setup/)
 covering the setup, package environments and how to structure a research project. It is
 written for PowerDynamics.jl, but most of it applies to NetworkDynamics.jl as well.
 For more on how to use Julia, see [Modern Julia Workflows](https://modernjuliaworkflows.org/).
+
+
+## Contributing and support
+
+Questions, bug reports and contributions are welcome. See the
+[contributing guide](contributing.md) for how to get help, report issues and contribute code, and
+for who maintains the package.
 
 
 ## Reproducibility

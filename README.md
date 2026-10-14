@@ -16,17 +16,18 @@ the solvers of [DifferentialEquations.jl](https://github.com/SciML/DifferentialE
 ## Why NetworkDynamics.jl?
 
 Many systems in science and engineering are networks of interacting units: power grids,
-oscillator networks, gas and heat networks or mechanical structures. Realistic models of such
-systems are often heterogeneous, mix differential and algebraic equations, and consist of
-thousands of components. Writing the right-hand side of such a model by hand quickly becomes
-impractical. Fully symbolic tools treat the whole network as one big system of equations, which
-can get challenging for large systems, because the clear structure of the network is lost on the
-way.
+oscillator networks, gas and heat networks, mechanical structures or some models in
+neuroscience. Realistic models of such systems are often heterogeneous, mix differential and
+algebraic equations, and consist of thousands of components. Writing the right-hand side of such
+a model by hand quickly becomes impractical. Fully symbolic tools treat the whole network as one
+big system of equations, which can get challenging for large systems, because the clear structure
+of the network is lost on the way.
 
 NetworkDynamics.jl keeps the components separate from the topology. Instead of throwing that
 structure away, it builds on it: components can be initialized one by one, states are indexed by
-their position in the graph, and it is easy to iterate over different dynamical realizations of
-your components.
+their position in the graph, and one component model is easily swapped for another. It is aimed
+at researchers in complex systems, energy systems and related fields who need to simulate,
+initialize and analyze such networks.
 
 The main features are:
 
@@ -91,7 +92,7 @@ how to get help, report issues and contribute code, and for who maintains the pa
 
 If you use NetworkDynamics.jl in your research publications, please cite our [paper](https://aip.scitation.org/doi/10.1063/5.0051387).
 
-```latex
+```bibtex
 @article{NetworkDynamics.jl-2021,
 	author = {Lindner, Michael and Lincoln, Lucas and Drauschke, Fenja and Koulen, Julia M. and Würfel, Hans and Plietzsch, Anton and Hellmann, Frank},
 	doi = {10.1063/5.0051387},

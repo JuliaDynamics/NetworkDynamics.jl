@@ -82,7 +82,7 @@ doc = makedocs(;
             "Directed and Weighted Graphs" => "generated/directed_and_weighted_graphs.md",
             "Cyclic Competition (the Logo)" => "generated/logo.md",
         ],
-        "contributing.md",
+        "Contributing" => "contributing.md",
     ],
     draft=haskey(ENV, "DOCUMENTER_DRAFT"),
     format = Documenter.HTML(ansicolor = true, size_threshold=1_000_000, assets=String["assets/custom.css"],
