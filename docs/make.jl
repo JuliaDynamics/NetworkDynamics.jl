@@ -28,6 +28,12 @@ for logo in ("logo.svg", "logo-dark.svg", "logo-animated.svg", "logo-animated-da
     cp(joinpath(pkgdir(NetworkDynamics), "logo", logo), joinpath(@__DIR__, "src", "assets", logo); force=true)
 end
 
+# CONTRIBUTING.md lives in the repo root, "Edit on GitHub" should point there
+open(joinpath(@__DIR__, "src", "contributing.md"), "w") do io
+    println(io, "```@meta\nEditURL = \"../../CONTRIBUTING.md\"\n```")
+    write(io, read(joinpath(pkgdir(NetworkDynamics), "CONTRIBUTING.md")))
+end
+
 # generate examples
 example_dir = joinpath(@__DIR__, "examples")
 outdir = joinpath(@__DIR__, "src", "generated")
@@ -75,7 +81,8 @@ doc = makedocs(;
             "Stress on Truss" => "generated/stress_on_truss.md",
             "Directed and Weighted Graphs" => "generated/directed_and_weighted_graphs.md",
             "Cyclic Competition (the Logo)" => "generated/logo.md",
-        ]
+        ],
+        "contributing.md",
     ],
     draft=haskey(ENV, "DOCUMENTER_DRAFT"),
     format = Documenter.HTML(ansicolor = true, size_threshold=1_000_000, assets=String["assets/custom.css"],

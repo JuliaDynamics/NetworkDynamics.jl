@@ -20,6 +20,7 @@ benchmark/*.txt
 /docs/src/assets/logo-animated.svg
 /docs/src/assets/logo-animated-dark.svg
 /docs/src/assets/preview.png
+/docs/src/contributing.md
 
 # ignore downloadable assets
 /NetworkDynamicsInspector/assets/tomselect.css
