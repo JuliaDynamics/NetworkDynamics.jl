@@ -32,7 +32,7 @@ callbacks last. So the event iteration reacts to the changes of all others. `eve
         override_cb=nothing,
         event_maxiter=10,
         event_failure=:warn,
-        initializealg=BrownFullBasicInit(; nlsolve=FastShortcutNonlinearPolyalg(; must_use_jacobian=Val(true))),
+        initializealg=default_dae_init_alg(eltype(u0)),
         specialize=SciMLBase.FullSpecialize,
         kwargs...
     )
@@ -44,8 +44,8 @@ The `initializealg` keyword is stored in the problem and forwarded to `solve`/`i
 Its default differs from OrdinaryDiffEq: it is `BrownFullBasicInit`, which fixes up
 inconsistent algebraic states of mass-matrix DAEs, and it only uses nonlinear solvers
 that build the true Jacobian (Newton, TrustRegion, LevenbergMarquardt), not Broyden.
-This also applies to the reinitialization after callbacks. Pass `initializealg=...`
-explicitly to override.
+This also applies to the reinitialization after callbacks. Its `abstol` loosens for state
+types less precise than `Float64`. Pass `initializealg=...` explicitly to override.
 
 The `specialize` keyword sets the specialization of the `ODEFunction`. The default
 `FullSpecialize` lets ForwardDiff use its full chunk size for the Jacobian. `AutoSpecialize`
@@ -60,7 +60,7 @@ function SciMLBase.ODEProblem(
     override_cb=nothing,
     event_maxiter=10,
     event_failure=:warn,
-    initializealg=BrownFullBasicInit(; nlsolve=FastShortcutNonlinearPolyalg(; must_use_jacobian=Val(true))),
+    initializealg=default_dae_init_alg(isempty(args) ? Float64 : eltype(first(args))),
     specialize=SciMLBase.FullSpecialize,
     kwargs...
 )
@@ -83,6 +83,15 @@ function SciMLBase.ODEProblem(
         throw(ArgumentError("Cannot pass `override_cb` together with `add_comp_cb` or `add_nw_cb`. When overriding the default network callbacks, no additional callbacks are allowed."))
     end
 
+    # warn on wrong tspan type
+    if length(args) >= 2
+        Tu, Tt = eltype(args[1]), eltype(args[2])
+        if Tu <: AbstractFloat && Tt <: AbstractFloat && Tu !== Tt
+            @warn "Network state is $Tu but tspan is $Tt. Solving tends to fail with an \
+                   unrelated-looking autodiff error; use a $Tu tspan, e.g. $((zero(Tu), one(Tu)))."
+        end
+    end
+
     if !isnothing(override_cb)
         finalcallback = override_cb
     else
@@ -96,6 +105,13 @@ function SciMLBase.ODEProblem(
 
     f = SciMLBase.ODEFunction{true, specialize}(nw)
     SciMLBase.ODEProblem(f, args...; callback=finalcallback, initializealg, kwargs...)
+end
+
+# `BrownFullBasicInit` with Jacobian-based nlsolvers only. The DiffEqBase abstol of 1e-10 is
+# out of reach below Float64, so it loosens with the precision of the state.
+function default_dae_init_alg(T=Float64)
+    abstol = T <: AbstractFloat ? max(1e-10, eps(T)^(3//4)) : 1e-10
+    BrownFullBasicInit(; abstol, nlsolve=FastShortcutNonlinearPolyalg(; must_use_jacobian=Val(true)))
 end
 
 """
