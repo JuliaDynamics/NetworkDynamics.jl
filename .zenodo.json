@@ -5,14 +5,14 @@
 
   "creators": [
     {
-      "name": "Lindner, Michael",
-      "affiliation": "Technische Universität Berlin",
-      "orcid": "0000-0001-9697-7577"
-    },
-    {
       "name": "Würfel, Hans",
       "affiliation": "Potsdam Institute for Climate Impact Research (PIK)",
       "orcid": "0000-0003-2431-5480"
+    },
+    {
+      "name": "Lindner, Michael",
+      "affiliation": "Technische Universität Berlin",
+      "orcid": "0000-0001-9697-7577"
     },
     {
       "name": "Hellmann, Frank",

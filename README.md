@@ -5,18 +5,18 @@
 [![](https://img.shields.io/badge/docs-stable-blue.svg)](https://juliadynamics.github.io/NetworkDynamics.jl/stable)
 [![DOI](https://zenodo.org/badge/169404414.svg)](https://doi.org/10.5281/zenodo.4396192)
 
-A package for working with dynamical systems on complex networks. NetworkDynamics.jl provides an interface between [Graphs.jl](https://github.com/JuliaGraphs/Graphs.jl) and [DifferentialEquations.jl](https://github.com/JuliaDiffEq/DifferentialEquations.jl).
+A package for working with dynamical systems on complex networks. NetworkDynamics.jl provides an interface between [Graphs.jl](https://github.com/JuliaGraphs/Graphs.jl) and [DifferentialEquations.jl](https://github.com/SciML/DifferentialEquations.jl).
 It allows modeling of dynamical processes on networks using a *modular* approach: meaning that the overall network dynamics are composed based on dynamical models for the *nodes* and the *edges*.
 The dynamical behavior of those components are described by differential algebraic equations with inputs and outputs.
 
-Typical usecases for this modeling appraoch are diffusion processes, oscillator networks or power grids.
+Typical use cases for this modeling approach are diffusion processes, oscillator networks or power grids.
 
 ## Getting started
 
 Check out our [documentation](https://juliadynamics.github.io/NetworkDynamics.jl/dev/).
 A good place to start is the page on the [mathematical model](https://juliadynamics.github.io/NetworkDynamics.jl/dev/mathematical_model/). For a more hands-on approach check out the [getting started example](https://juliadynamics.github.io/NetworkDynamics.jl/dev/generated/getting_started_with_network_dynamics/).
 
-An [introductory talk](https://www.youtube.com/watch?v=GrmnbDYr6mM) for an older version of this package was recorded for JuliaCon2020. Be aware that the API change significantly since then, but it can still give some insights into usecases of the package.
+An [introductory talk](https://www.youtube.com/watch?v=GrmnbDYr6mM) for an older version of this package was recorded for JuliaCon2020. Be aware that the API has changed significantly since then, but it can still give some insights into use cases of the package.
 
 ## Benchmarks
 
