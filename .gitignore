@@ -13,6 +13,7 @@ benchmark/*.md
 benchmark/*.data
 benchmark/*.txt
 /benchmark/*.pdf
+/benchmark/*.png
 /docs/src/generated/
 /docs/src/assets/.auctex-auto/
 /docs/src/assets/logo.svg
