@@ -20,7 +20,7 @@ align_conditional = true
 align_pair_arrow = true
 align_matrix = true
 
-# ignore = ["docs/examples", "oldexamples", "test/oldtests"]
+# ignore = ["docs/examples"]
 
 # indent = 4,
 # margin = 92,
