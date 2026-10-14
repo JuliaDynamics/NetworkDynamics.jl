@@ -87,7 +87,9 @@ function get_jac_prototype(
         end
     end
 
-    detector = TracerSparsityDetector()
+    # A BitSet is as wide as its largest index, which makes the default tracer quadratic in
+    # the network size. A Set only stores the few indices each state actually depends on.
+    detector = TracerSparsityDetector(; gradient_pattern_type=Set{Int})
     jac = jacobian_sparsity(wrap, similar(uflat(s0)), uflat(s0), detector)
 
     # compare with a forward diff jacobian to ensure sparsity pattern is correct
