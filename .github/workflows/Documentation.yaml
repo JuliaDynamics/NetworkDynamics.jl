@@ -28,7 +28,7 @@ jobs:
           sudo apt update
           sudo apt install -y xvfb mesa-utils mesa-vulkan-drivers dbus x11-xserver-utils
       - uses: actions/checkout@v7
-      - uses: julia-actions/setup-julia@v2
+      - uses: julia-actions/setup-julia@v3
         with:
           version: 1
       - uses: julia-actions/cache@v3
