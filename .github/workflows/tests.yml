@@ -38,7 +38,7 @@ jobs:
         arch:
           - x64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.version }}
@@ -91,7 +91,7 @@ jobs:
           eval $(dbus-launch)
           export DBUS_SESSION_BUS_ADDRESS
           export DBUS_SESSION_BUS_PID
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v2
         with:
           version: 1
@@ -128,7 +128,7 @@ jobs:
         arch:
           - x64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.version }}
@@ -161,7 +161,7 @@ jobs:
             echo "Not a pull request, using main branch"
             echo "powerdynamics_branch=main" >> $GITHUB_OUTPUT
           fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: JuliaEnergy/PowerDynamics.jl
           ref: ${{ steps.extract-branch.outputs.powerdynamics_branch }}

@@ -47,7 +47,7 @@ jobs:
     if: needs.check_skip.outputs.skip == 'false' # Skip the job if '[no benchmark]' is found
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # fetch all history
       - uses: julia-actions/setup-julia@v2
