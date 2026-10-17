@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Sparsity Detection · NetworkDynamics</title><meta name="title" content="Sparsity Detection · NetworkDynamics"/><meta property="og:title" content="Sparsity Detection · NetworkDynamics"/><meta property="twitter:title" content="Sparsity Detection · NetworkDynamics"/><meta name="description" content="Documentation for NetworkDynamics."/><meta property="og:description" content="Documentation for NetworkDynamics."/><meta property="twitter:description" content="Documentation for NetworkDynamics."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">NetworkDynamics</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">General</a></li><li><a class="tocitem" href="../mathematical_model/">Mathematical Model</a></li><li><a class="tocitem" href="../network_construction/">Network Construction</a></li><li><a class="tocitem" href="../data_structure/">Data Structure</a></li><li><span class="tocitem">Features</span><ul><li><a class="tocitem" href="../symbolic_indexing/">Symbolic Indexing</a></li><li><a class="tocitem" href="../metadata/">Metadata</a></li><li><a class="tocitem" href="../initialization/">Initialization</a></li><li><a class="tocitem" href="../callbacks/">Callbacks and Events</a></li><li><a class="tocitem" href="../mtk_integration/">ModelingToolkit Integration</a></li><li class="is-active"><a class="tocitem" href>Sparsity Detection</a><ul class="internal"><li><a class="tocitem" href="#Core-Function"><span>Core Function</span></a></li><li><a class="tocitem" href="#Example:-Handling-Conditional-Statements"><span>Example: Handling Conditional Statements</span></a></li><li><a class="tocitem" href="#Performance-Benefits"><span>Performance Benefits</span></a></li><li><a class="tocitem" href="#Troubleshooting"><span>Troubleshooting</span></a></li></ul></li><li><a class="tocitem" href="../external_inputs/">External Inputs</a></li><li><a class="tocitem" href="../inspector/">Interactive Solution Inspection</a></li></ul></li><li><a class="tocitem" href="../API/">API</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../generated/getting_started_with_network_dynamics/">Getting Started</a></li><li><a class="tocitem" href="../generated/heterogeneous_system/">Heterogeneous Systems</a></li><li><a class="tocitem" href="../generated/init_tutorial/">Initialization</a></li><li><a class="tocitem" href="../generated/cascading_failure/">Cascading Failure</a></li><li><a class="tocitem" href="../generated/gas_network/">Gas Network</a></li><li><a class="tocitem" href="../generated/stress_on_truss/">Stress on Truss</a></li><li><a class="tocitem" href="../generated/directed_and_weighted_graphs/">Directed and Weighted Graphs</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Features</a></li><li class="is-active"><a href>Sparsity Detection</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Sparsity Detection</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaDynamics/NetworkDynamics.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaDynamics/NetworkDynamics.jl/blob/main/docs/src/sparsity_detection.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Sparsity-Detection"><a class="docs-heading-anchor" href="#Sparsity-Detection">Sparsity Detection</a><a id="Sparsity-Detection-1"></a><a class="docs-heading-anchor-permalink" href="#Sparsity-Detection" title="Permalink"></a></h1><p>NetworkDynamics.jl can automatically detect and exploit the sparsity structure of the Jacobian matrix to significantly improve the performance of ODE solvers. This feature uses <a href="https://github.com/adrhill/SparseConnectivityTracer.jl">SparseConnectivityTracer.jl</a> to analyze the network&#39;s dynamics and create a sparse Jacobian prototype that modern solvers can use for more efficient linear algebra operations.</p><p>The sparsity detection is particularly beneficial for:</p><ul><li>Large networks where the Jacobian matrix is sparse</li><li>Stiff systems that require implicit solvers</li><li>Networks with complex component interactions</li><li>Components with conditional statements that complicate automatic differentiation</li></ul><h2 id="Core-Function"><a class="docs-heading-anchor" href="#Core-Function">Core Function</a><a id="Core-Function-1"></a><a class="docs-heading-anchor-permalink" href="#Core-Function" title="Permalink"></a></h2><p>The main interface is the <a href="../API/#NetworkDynamics.get_jac_prototype"><code>get_jac_prototype</code></a> function, which take the a <code>Network</code> object as an argument and returns a sparse boolean matrix containing the sparsity pattern.</p><p>The sparsity pattern can be passed to ODE solvers to improve performance:</p><pre><code class="language-julia hljs">f_ode = ODEFunction(nw; jac_prototype=get_jac_prototype(nw))
+prob = ODEProblem(f_ode, x0, (0.0, 1.0), p0)
+sol = solve(prob, Rodas5P())</code></pre><p>Alternatively, you can store the sparsity pattern directly in the network:</p><pre><code class="language-julia hljs">set_jac_prototype!(nw; kwargs_for_get_jac_prototype...)
+prob = ODEProblem(nw, x0, (0.0, 1.0), p0)  # automatically uses stored prototype</code></pre><h2 id="Example:-Handling-Conditional-Statements"><a class="docs-heading-anchor" href="#Example:-Handling-Conditional-Statements">Example: Handling Conditional Statements</a><a id="Example:-Handling-Conditional-Statements-1"></a><a class="docs-heading-anchor-permalink" href="#Example:-Handling-Conditional-Statements" title="Permalink"></a></h2><p>A key feature of NetworkDynamics.jl&#39;s sparsity detection is the ability to handle conditional statements in component functions. This is particularly useful for ModelingToolkit-based components that use <code>ifelse</code> statements.</p><p>The conditional statements will be resolved in favor of a &quot;global&quot; sparsity pattern by replacing them temporarily with <code>trueblock + falseblock</code> which is then inferable by SparseConnectivityTracer.jl.</p><details class="admonition is-details" id="Setup-code-1e3c742157ed978a"><summary class="admonition-header">Setup code<a class="admonition-anchor" href="#Setup-code-1e3c742157ed978a" title="Permalink"></a></summary><div class="admonition-body"><pre><code class="language-julia hljs">using NetworkDynamics, ModelingToolkit, Graphs
+using SparseArrays, OrdinaryDiffEqRosenbrock, OrdinaryDiffEqNonlinearSolve
+using ModelingToolkit: D_nounits as Dt, t_nounits as t</code></pre></div></details><pre><code class="language-julia hljs"># Define a component with conditional logic
+@mtkmodel ValveModel begin
+    @variables begin
+        p_src(t), [description=&quot;source pressure&quot;]
+        p_dst(t), [description=&quot;destination pressure&quot;]
+        q(t), [description=&quot;flow through valve&quot;]
+    end
+    @parameters begin
+        K=1, [description=&quot;conductance&quot;]
+        active=1, [description=&quot;valve state&quot;]
+    end
+    @equations begin
+        q ~ ifelse(active &gt; 0, K * (p_src - p_dst), 0)
+    end
+end
+
+@mtkmodel NodeModel begin
+    @variables begin
+        p(t)=1, [description=&quot;pressure&quot;]
+        q_nw(t), [description=&quot;network flow&quot;]
+    end
+    @parameters begin
+        C=1, [description=&quot;capacitance&quot;]
+        q_ext, [description=&quot;external flow&quot;]
+    end
+    @equations begin
+        C*Dt(p) ~ q_ext + q_nw
+    end
+end</code></pre><pre><code class="language-julia hljs"># Create network
+@named valve = ValveModel()
+@named node = NodeModel()
+
+g = wheel_graph(10)
+v = VertexModel(node, [:q_nw], [:p])
+e = EdgeModel(valve, [:p_src], [:p_dst], AntiSymmetric([:q]))
+
+nw = Network(g, v, e)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Network with 10 states and 56 parameters
+ ├─ 10 vertices (1 unique type)
+ └─ 18 edges (1 unique type)
+Edge-Aggregation using SequentialAggregator(+)</code></pre><pre><code class="language-julia hljs"># This will fail due to conditional statements
+try
+    get_jac_prototype(nw)
+catch
+    println(&quot;Error: Sparsity detection failed due to conditional statements&quot;)
+end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Error: Sparsity detection failed due to conditional statements</code></pre><pre><code class="language-julia hljs"># This works by removing conditionals
+jac_prototype = get_jac_prototype(nw; remove_conditions=true)
+
+# Store the prototype directly in the network
+set_jac_prototype!(nw, jac_prototype)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Network with 10 states and 56 parameters
+ ├─ 10 vertices (1 unique type)
+ └─ 18 edges (1 unique type)
+Edge-Aggregation using SequentialAggregator(+)
+Jacobian prototype defined: <span class="sgr34">46.0% sparsity</span></code></pre><h2 id="Performance-Benefits"><a class="docs-heading-anchor" href="#Performance-Benefits">Performance Benefits</a><a id="Performance-Benefits-1"></a><a class="docs-heading-anchor-permalink" href="#Performance-Benefits" title="Permalink"></a></h2><p>Using sparsity detection can significantly improve solver performance, especially for large networks and stiff systems:</p><pre><code class="language-julia hljs">using OrdinaryDiffEqRosenbrock, Chairmarks
+
+# Create a large sparse network for benchmarking
+g_large = grid([20, 20])  # 400 nodes in a 2D grid (very sparse)
+nw_large = Network(g_large, v, e)
+
+# Setup initial conditions and parameters
+s0 = NWState(nw_large)
+s0.v[:, :p] .= randn(400)  # random initial pressures
+
+p0 = NWParameter(nw_large)
+p0.v[:, :q_ext] .= randn(400)  # small external flow</code></pre><p>The network is now ready for benchmarking. Let&#39;s first time the solution without sparsity detection:</p><pre><code class="language-julia hljs"># Without sparsity detection (dense Jacobian)
+prob_dense = ODEProblem(nw_large, uflat(s0), (0.0, 1.0), pflat(p0))
+@b solve($prob_dense, Rodas5P()) seconds=1</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">102.578 ms (415 allocs: 16.201 MiB)</code></pre><p>Now let&#39;s enable sparsity detection:</p><pre><code class="language-julia hljs">jac = get_jac_prototype(nw_large; remove_conditions=true)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">400×400 SparseArrays.SparseMatrixCSC{Bool, Int64} with 1920 stored entries:
+⎡⠻⣦⡑⢄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎤
+⎢⠑⢌⠻⣦⡑⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠑⢬⡻⣮⡳⢄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠙⢎⠻⣦⡑⢄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠑⢌⠻⣦⡑⢄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠑⢌⠻⣦⡑⢄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠑⢌⠻⣦⡑⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠑⢬⡻⣮⠳⢄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢆⠻⣦⠑⢄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠑⢄⠻⣦⠑⢄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠑⢄⠻⣦⠑⢄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠑⢄⠻⣦⠱⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠑⢦⡻⣮⡓⢄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢌⠻⣦⡑⢄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠑⢌⠻⣦⡑⢄⠀⠀⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠑⢌⠻⣦⡑⢄⠀⠀⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠑⢌⠻⣦⡱⣄⠀⠀⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠑⢮⡻⣮⡓⢄⠀⠀⎥
+⎢⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢌⠻⣦⡑⢄⎥
+⎣⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠑⢌⠻⣦⎦</code></pre><p>The pattern already shows that the Jacobian is really sparse due to the sparse network connections.</p><pre><code class="language-julia hljs">set_jac_prototype!(nw_large, jac)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Network with 400 states and 2320 parameters
+ ├─ 400 vertices (1 unique type)
+ └─ 760 edges (1 unique type)
+Edge-Aggregation using SequentialAggregator(+)
+Jacobian prototype defined: <span class="sgr34">1.2% sparsity</span></code></pre><p>Now we can benchmark the sparse version:</p><pre><code class="language-julia hljs"># Solve with sparsity detection
+prob_sparse = ODEProblem(nw_large, uflat(s0), (0.0, 1.0), pflat(p0))
+@b solve($prob_sparse, Rodas5P()) seconds=1</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">11.094 ms (1424 allocs: 5.299 MiB)</code></pre><p>For this network, we see a substantial speedup due to the sparse solver!</p><h2 id="Troubleshooting"><a class="docs-heading-anchor" href="#Troubleshooting">Troubleshooting</a><a id="Troubleshooting-1"></a><a class="docs-heading-anchor-permalink" href="#Troubleshooting" title="Permalink"></a></h2><p><strong>Sparsity detection fails with conditional statements:</strong></p><ul><li>Use <code>remove_conditions=true</code> to handle <code>ifelse</code> statements in MTK components</li><li>For specific problematic components, pass a vector of indices: <code>remove_conditions=[EIndex(1), VIndex(2)]</code></li></ul><p><strong>Detection fails for complex components:</strong></p><ul><li>Use <code>dense=true</code> to treat all components as dense (fallback option)</li><li>For specific components, use <code>dense=[EIndex(1)]</code> to treat only those components as dense</li></ul><p><strong>Performance doesn&#39;t improve:</strong></p><ul><li>Sparsity detection is most beneficial for large networks (&gt;50 nodes) with sparse connectivity</li><li>Dense networks or small systems may not see significant speedup</li><li>Ensure you&#39;re using a solver that can exploit sparsity (e.g., <code>Rodas5P</code>, <code>FBDF</code>)</li></ul><p>The sparsity detection feature requires the <code>SparseConnectivityTracer.jl</code> package, which needs to be loaded manually! </p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../mtk_integration/">« ModelingToolkit Integration</a><a class="docs-footer-nextpage" href="../external_inputs/">External Inputs »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.14.1 on <span class="colophon-date" title="Friday 10 October 2025 19:26">Friday 10 October 2025</span>. Using Julia version 1.12.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
