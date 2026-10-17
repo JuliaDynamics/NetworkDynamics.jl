@@ -32,6 +32,9 @@ In contrast, the "vector" version has an in-place condition which writes `len` o
 
 There is a special type [`PresetTimeComponentCallback`](@ref) which has no explicit condition and triggers the affect at given times.
 This internally generates a [`PresetTimeCallback`](@extref DiffEqCallbacks.PresetTimeCallback) object from `DiffEqCallbacks.jl`.
+Preset time callbacks with the same `ts` and keyword arguments share one `PresetTimeCallback`,
+also across components. Their affects all read one snapshot taken before the first of them
+writes, so if two of them write the same symbol, the last write wins.
 
 
 ### Defining the Callback
@@ -119,6 +122,9 @@ When executing component callbacks, NetworkDynamics automatically checks whether
 changed during the affect and calls [`SciMLBase.auto_dt_reset!`](@extref) and [`save_parameters!`](@ref) if necessary.
 An affect which only does bookkeeping, for example counting events in a parameter, can keep the
 current step size by setting `ctx.dt_reset[] = false`. The parameter change is saved either way.
+If the affect does not change the right-hand side at all, `ctx.derivative_discontinuity[] = false`
+goes one step further: the solver continues as if the event was a plain tstop, without
+reinitialization or step reset.
 
 
 ## Event Iteration

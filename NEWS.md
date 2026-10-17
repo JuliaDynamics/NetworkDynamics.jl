@@ -11,6 +11,8 @@
 - Affects can opt out of the automatic step-size reset with `ctx.dt_reset[] = false`, meant for
   bookkeeping changes which do not introduce a discontinuity. If several affects fire at the same
   time, one asking for the reset is enough; parameter changes are saved either way.
+- Affects which leave the right-hand side unchanged can set `ctx.derivative_discontinuity[] = false`.
+  The solver then continues as if the event was a plain tstop, without reinitialization.
 - Batched affects fill their observed buffer once per event instead of once per member.
 - **Event iteration.** `DiscreteComponentCallback(cond, affect; iterative=true)` joins the
   network's event iteration. All iterative callbacks run last at an event instant, in synchronous
@@ -20,6 +22,8 @@
 - Component callbacks batch by the type of their condition, not by the identical function. Closures
   created at one place, e.g. a `do` block in a model constructor, now share a batch even if they
   capture different values. Members of a batch read one snapshot when they fire together.
+- `PresetTimeComponentCallback`s with equal `ts` and keyword arguments share one
+  `PresetTimeCallback`, also across components.
 - Preset-time callbacks now run before the other discrete callbacks at an instant, so every
   discrete condition sees their jump. This includes preset-time callbacks passed as `add_nw_cb`.
 - `save_parameters!` no longer stores a full copy of the parameter vector. The solution keeps the
