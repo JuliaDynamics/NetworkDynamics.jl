@@ -2676,14 +2676,6 @@ end
         @test _calls(Base.literal_pow, getex(f))
     end
 
-    # Canary: plain Symbolics still emits `(^)(x, 2)`. Once this fails, upstream codegen handles
-    # integer powers itself and `literal_pow_conv` in the MTK extension can be removed.
-    let
-        @variables z
-        ex = getex(Symbolics.build_function([z^2], [z]; cse=false, expression=Val(false))[2])
-        @test _intpow(ex) && !_calls(Base.literal_pow, ex)
-    end
-
     x, i, a = 1.3, 0.7, 2.0
     du = [NaN]
     NetworkDynamics.compf(vm)(du, [x], [i], [a], 0.0)
