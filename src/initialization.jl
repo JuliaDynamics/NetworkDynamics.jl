@@ -1194,7 +1194,7 @@ dynamic_model = create_dynamic_network(...)
 dyn_state = initialize_componentwise(dynamic_model, default_overrides=interface_vals)
 
 # Simulate the dynamic model from this initialized state
-prob = ODEProblem(dynamic_model, uflat(dyn_state), tspan, pflat(dyn_state))
+prob = ODEProblem(dynamic_model, dyn_state, tspan)
 sol = solve(prob)
 ```
 

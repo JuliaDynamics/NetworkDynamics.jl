@@ -1,6 +1,6 @@
 # Symbolic Indexing
 
-By using SciML's [`SymbolicIndexingInterface.jl`](https://github.com/SciML/SymbolicIndexingInterface.jl), `ND.jl` 
+By using SciML's [`SymbolicIndexingInterface.jl`](https://github.com/SciML/SymbolicIndexingInterface.jl), `ND.jl`
 provides numerous methods to access and change variables and parameters.
 
 ## Provide Symbol Names
@@ -20,7 +20,7 @@ function _vertexf!(dv, v, esum, p, t)
 end
 vertexf = VertexModel(f=_vertexf!, g=1, sym=[:storage])
 ```
-When constructing component models using ModelingToolkitBase, the variable names are extracted automatically. 
+When constructing component models using ModelingToolkitBase, the variable names are extracted automatically.
 
 
 ## Fundamental Symbolic Indices
@@ -42,8 +42,8 @@ For numeric indexing, use [`StateIdx`](@ref) and [`ParamIdx`](@ref) wrappers:
     nw = Network(g, vertexf, edgef)
     s = NWState(nw)
     s.v[:,:storage] .= randn(5)
-    prob = ODEProblem(nw, uflat(s), (0,2), pflat(s))
-    sol = solve(prob, Tsit5()) 
+    prob = ODEProblem(nw, s, (0,2))
+    sol = solve(prob, Tsit5())
     nothing #hide
     ```
 
@@ -115,7 +115,7 @@ No default values were provided in the network components, so the state array is
 
 We can set those values like this:
 ```@example si
-s[VIndex(:, :storage)] .= randn(5) # set the (initial) storage for all vertices 
+s[VIndex(:, :storage)] .= randn(5) # set the (initial) storage for all vertices
 s #hide
 ```
 For both `NWState` and `NWParameter` objects, there is a more convenient way to access the variables and parameters using the [`FilteringProxy`](@ref) interface.
@@ -146,8 +146,8 @@ We can confirm the update by inspecting the values again:
 s.v
 ```
 
-You can always access the flat representations by calling [`uflat`](@ref) and [`pflat`](@ref). The ordering of elements 
-in these flat arrays corresponds exactly to the order returned by [`variable_symbols`](@ref) and 
+You can always access the flat representations by calling [`uflat`](@ref) and [`pflat`](@ref). The ordering of elements
+in these flat arrays corresponds exactly to the order returned by [`variable_symbols`](@ref) and
 [`parameter_symbols`](@ref) respectively.
 
 !!! note
@@ -160,7 +160,7 @@ The [`FilteringProxy`](@ref) system provides an intuitive way to explore and acc
 
 ## Observables
 Sometimes, the "states" you're interested in aren't really states in the DAE sense but rather
-algebraic derivations from DAE states, parameters, and time -- in accordance with the naming in 
+algebraic derivations from DAE states, parameters, and time -- in accordance with the naming in
 the `SciML` ecosystem, these values are called Observables.
 
 A prime example of Observables are edge/vertex-outputs, such as the `flow` in the edge model defined above.
@@ -168,8 +168,8 @@ It is also possible to define additional Observables manually by using the `obss
 on the `EdgeModel`/`VertexModel` constructors.
 When building models using ModelingToolkitBase, the reduced algebraic states will be preserved automatically as observables.
 
-Observables can be accessed like any other state. For example, the flows in the network don't show up in the state array 
-but can be accessed in all the ways discussed above. 
+Observables can be accessed like any other state. For example, the flows in the network don't show up in the state array
+but can be accessed in all the ways discussed above.
 For example:
 ```@example si
 plot(sol; idxs=eidxs(nw, :, :flow))
@@ -186,7 +186,7 @@ For example, we can directly plot the storage difference with respect to storage
 plot(sol; idxs=@obsex(vidxs(nw,:,:storage) .- VIndex(1,:storage)))
 ```
 
-Other examples include calculating the magnitude and argument of complex values that are modeled using real and 
+Other examples include calculating the magnitude and argument of complex values that are modeled using real and
 imaginary parts.
 ```
 @obsex mag = sqrt(VIndex(1, :u_r)^2 + VIndex(2, :u_i)^2)
@@ -204,7 +204,7 @@ idxs = SII.variable_index(nw, vidxs(nw, 1:2, :storage))
 uflat(s)[idxs] == s.v[1:2, :storage]
 ```
 Analogous with parameters:
-```@example si  
+```@example si
 idxs = SII.parameter_index(nw, [EIndex(1, :K), EIndex(2, :K)])
 pflat(s)[idxs] == s.p.e[1:2, :K]
 ```

@@ -1183,3 +1183,32 @@ end
         @test count_allocs(cb.condition, integrator) == 0
     end
 end
+
+@testset "solves work on a copy of the parameters" begin
+    v = VertexModel(; f=(dx, x, ein, p, t) -> (dx[1] = 1 - x[1]; nothing), g=1, sym=[:x=>0], psym=[:k=>0, :c=>0])
+    bump = ComponentAffect([:k]) do u, ctx
+        u[:k] += 1
+    end
+    set_callback!(v, PresetTimeComponentCallback(1.0, bump))
+    nw = Network(SimpleGraph(1), [v], EdgeModel[])
+    prob = ODEProblem(nw, NWState(nw), (0.0, 2.0))
+
+    sol1 = solve(prob, Tsit5())
+    sol2 = solve(prob, Tsit5())
+    @test prob.p == [0.0, 0.0]
+    @test sol1(2.0; idxs=VPIndex(1, :k)) == sol2(2.0; idxs=VPIndex(1, :k)) == 1.0
+
+    # continuing from the end keeps the changed parameters
+    s_end = NWState(sol1, sol1.t[end])
+    @test s_end.p[VPIndex(1, :k)] == 1.0
+    sol3 = solve(ODEProblem(nw, s_end, (2.0, 3.0)), Tsit5())
+    @test sol3(3.0; idxs=VPIndex(1, :k)) == 1.0
+
+    # a user alias keeps its other fields, an explicit alias_p wins
+    prob = ODEProblem(nw, NWState(nw), (0.0, 2.0); alias=SciMLBase.ODEAliasSpecifier(alias_u0=true))
+    @test prob.kwargs[:alias].alias_p == false
+    @test prob.kwargs[:alias].alias_u0 == true
+    prob = ODEProblem(nw, NWState(nw), (0.0, 2.0); alias=SciMLBase.ODEAliasSpecifier(alias_p=true))
+    solve(prob, Tsit5())
+    @test prob.p == [1.0, 0.0]
+end

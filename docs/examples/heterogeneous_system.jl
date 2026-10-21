@@ -48,15 +48,12 @@ p.v[:, :ω0] = ω
 nothing #hide #md
 
 #=
-Here, the index pairing `:, :ω` is used to index state ω for all node indices.
+Here, the index pairing `:, :ω0` is used to index the parameter ω0 for all node indices.
 
-The parameter object contains information about the network structure. For the
-actual problem definition we need to throw away this wrapper and use the
-flat-vector representation of the parameters `pflat(p)`. Note that `pflat(p)`
-
-Similarily, we could use `NWState(nw)` to create an indexable wrapper of the
-initial state. However in this case we can also fill create the flat state
-array manually:
+Similarly, we could use `NWState(nw)` to create an indexable wrapper of the
+initial state. However, in this case we can also create the flat state array
+manually. Since the state is then a plain vector, we pass the parameters as a
+plain vector as well, using `pflat(p)`:
 =#
 x0 = collect(1:N) ./ N
 x0 .-= sum(x0) ./ N
@@ -149,9 +146,9 @@ state.p.v[2:8, :ω0] = p.v[2:8, :ω0]
 nothing #hide #md
 
 #=
-For the problem construction, we need to convert the nested stuctures to flat arrays using the [`uflat`](@ref) and [`pflat`](@ref) methods.
+The problem constructor takes the `NWState` object directly.
 =#
-prob_hetero = ODEProblem(nw_hetero!, uflat(state), tspan, pflat(state))
+prob_hetero = ODEProblem(nw_hetero!, state, tspan)
 Main.test_execution_styles(prob_hetero) # testing all ex styles #src
 sol_hetero = solve(prob_hetero, Tsit5());
 nothing #hide #md

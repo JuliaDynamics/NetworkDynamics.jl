@@ -250,7 +250,7 @@ set by combining both Callbacks manually.
 =#
 u0 = NWState(nw)
 cbset = CallbackSet(trip_cb, trip_first_cb)
-prob = ODEProblem(nw, uflat(u0), (0,6), pflat(u0); add_nw_cb=cbset)
+prob = ODEProblem(nw, u0, (0,6); add_nw_cb=cbset)
 Main.test_execution_styles(prob) # testing all ex styles #src
 sol2 = solve(prob, Tsit5());
 ## we want to test the reconstruction of the observables # hide

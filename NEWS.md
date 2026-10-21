@@ -2,6 +2,11 @@
 
 ## v1.4.0 Changelog
 
+- **Solves no longer change `prob.p`.** Callbacks in ND often keep discrete state in parameters, and
+  the solver used to change `prob.p` in place, so a second solve of the same problem silently
+  started from where the first one ended. The `ODEProblem` constructor now stores
+  `alias=ODEAliasSpecifier(alias_p=false)`, so every solve works on a copy. For the parameters at
+  the end of a solution, use `NWState(sol, sol.t[end])` instead of `prob.p`.
 - **Component callbacks take a single symbol list.** `ComponentCondition(f, syms)` with
   `f(u, t)` and `ComponentAffect(f, syms)` with `f(u, ctx)`; the list may name states,
   parameters, inputs, outputs and observed alike, all reachable through `u`. In an affect the

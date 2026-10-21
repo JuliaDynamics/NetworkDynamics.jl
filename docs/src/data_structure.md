@@ -20,7 +20,7 @@ A typical workflow is the following:
 2. Create a network (see [Network Construction](@ref)).
 3. Generate a state `s = NWState(nw)` which will be prefilled with the default values from the component metadata (see [Symbolic Indexing](@ref)).
 4. Change the values of `s`, i.e., `s.v[1,:x] = 1.0`: This changes the **underlying flat array** but not the metadata of the models.
-5. Build a problem with the updated flat arrays using `uflat(s)` and `pflat(s)`.
+5. Build a problem from the updated state with `ODEProblem(nw, s, tspan)`.
 
 ## Accessing Components
 Per default, the models are not copied on Network construction:
@@ -50,7 +50,7 @@ nothing #hide
 ```
 
 !!! note "Aliasing of component models"
-    Since components are not copied, multiple entries in the vertex and edge lists might point to the same instance of a model. 
+    Since components are not copied, multiple entries in the vertex and edge lists might point to the same instance of a model.
     ```@example data_structure
     nw = Network(complete_graph(3), [v1,v2,v1], e)
     v1 === nw[VIndex(1)] === nw[VIndex(3)]
@@ -64,4 +64,4 @@ nothing #hide
     ```
 
 ## Extracting a `Network`-object from Containers
-`NetworkDynamics.jl` provides a [`extract_nw`](@ref) function, to get a reference to the wrapped `Network` object from different containers, such as solution objects or [integrator objects](https://docs.sciml.ai/DiffEqDocs/stable/basics/integrator). 
+`NetworkDynamics.jl` provides a [`extract_nw`](@ref) function, to get a reference to the wrapped `Network` object from different containers, such as solution objects or [integrator objects](https://docs.sciml.ai/DiffEqDocs/stable/basics/integrator).

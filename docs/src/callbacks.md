@@ -11,13 +11,6 @@ as a general reference.
 This page is introducing the general concepts, for a hands on example of a simulation with callbacks
 refer to the [Cascading Failure](@ref) example.
 
-!!! warning
-    The `ODEProblem` contains a reference to exactly one copy of the *flat parameter array*.
-    If you use callbacks to change those parameters (as we often do), it is advised to
-    `copy` the parameter array before passing it to the ODEProblem!
-    Also, this means you need to be careful when using the same `prob` for multiple subsequent
-    `solve` calls, as the initial state of the `prob` object might have changed!
-
 ## Component-based Callback functions
 In practice, events often act locally, meaning they only depend and act on a
 specific component or type of component. `NetworkDynamics.jl` provides a way of
@@ -168,6 +161,19 @@ round and warns, naming the components which still fire. Pass `event_failure=:er
 instead. Both are keyword arguments of [`get_callbacks`](@ref) and of the `ODEProblem`
 constructor.
 
+## Parameters across Solves
+Callbacks often change parameters, for example when a limiter activates or a line trips. So every
+solve of a problem built with the `ODEProblem` constructor of NetworkDynamics works on a copy of
+the parameters, and the problem keeps its initial ones. Solving the same problem twice gives the
+same result.
+
+To continue a simulation, build a new problem from the end of the solution:
+```julia
+sol = solve(prob, Rodas5P())
+prob2 = ODEProblem(nw, NWState(sol, sol.t[end]), (sol.t[end], 20.0))
+```
+This is also the way to get the parameters at the end of a solution, `prob.p` still holds the
+initial ones.
 
 ## Normal DiffEq Callbacks
 Besides component based callbacks, it is also possible to use "normal" DiffEq

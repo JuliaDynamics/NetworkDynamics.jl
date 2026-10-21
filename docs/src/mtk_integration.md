@@ -157,7 +157,7 @@ and solve the system.
 
 ```@example mtk
 u0 = NWState(nw) # generate state based on default values
-prob = ODEProblem(nw, uflat(u0), (0, 10.0), pflat(u0))
+prob = ODEProblem(nw, u0, (0, 10.0))
 sol = solve(prob, Tsit5())
 
 # plot the solution
