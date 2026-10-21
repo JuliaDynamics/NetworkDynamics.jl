@@ -31,10 +31,10 @@ change. You may still oomit the input section from `g` according to the differen
 ## Usage
 Vertex and Edge models with external inputs can be created using the `extin` keyword of the [`EdgeModel`](@ref) and [`VertexModel`](@ref) constructors.
 
-You need to pass a vector of `SymbolicIndices` ([`VIndex`](@ref) and [`EIndex`](@ref)), e.g. 
+You need to pass a vector of `SymbolicIndices` ([`VIndex`](@ref) and [`EIndex`](@ref)), e.g.
 ```julia
 VertexModel(... , extin=[VIndex(12,:x), VIndex(9, :x)], ...)
-``` 
+```
 means your vertex receives a 2 dimensional external input vector with the states `x` of vertices 12 and 9.
 See below for hands on example.
 
@@ -43,14 +43,14 @@ There are some limitations in place. You can only reference **states** (i.e. thi
 
 ## Example
 As an example system, we'll consider two capacitors with a resistor between them.
-Vertex 1 `v1` has a controllable current source. 
-Using a PI controller for the current source, it tries to keep the voltage at the 
+Vertex 1 `v1` has a controllable current source.
+Using a PI controller for the current source, it tries to keep the voltage at the
 second vertex stable under the disturbance of some time periodic current sind at `v2`.
 
 ```
 
                   v1    Resistor   v2
-PI controlled   ─→─o─←────MMM────→─o─→─ time dependent 
+PI controlled   ─→─o─←────MMM────→─o─→─ time dependent
 current source     ┴               ┴    current sink
                    ┬               ┬
                    ⏚               ⏚
@@ -69,8 +69,8 @@ using CairoMakie
 function resistor_g(idst, vsrc, vdst, (R,), t)
     idst[1] = (vsrc[1] - vdst[1])/R
 end
-resistor = EdgeModel(g=AntiSymmetric(resistor_g), 
-                     outsym=:i, insym=:v, psym=:R=>0.1, 
+resistor = EdgeModel(g=AntiSymmetric(resistor_g),
+                     outsym=:i, insym=:v, psym=:R=>0.1,
                      src=:source, dst=:load, name=:resistor)
 ```
 
@@ -79,7 +79,7 @@ Then we define the "load" vertex with sinusoidial load profile:
 function f_load(dv, v, iin, (C,), t)
     dv[1] = 1/C*(iin[1] - (1 + 0.1*sin(t)))
 end
-load = VertexModel(f=f_load, g=1, 
+load = VertexModel(f=f_load, g=1,
                    sym=:V=>0.5, insym=:i, psym=:C=>1,
                    vidx=2, name=:load)
 ```
@@ -91,17 +91,17 @@ function f_source(dv, v, iin, extin, (C,Vref,Ki,Kp), t)
     i_inj = Kp*Δ + Ki*v[2]   # controller output
     dv[1] = 1/C*(iin[1] + i_inj)
 end
-source = VertexModel(f=f_source, g=1, 
-                     sym=[:V=>0.5,:ξ=>0], insym=:i, 
+source = VertexModel(f=f_source, g=1,
+                     sym=[:V=>0.5,:ξ=>0], insym=:i,
                      psym=[:C=>1, :Vref=>1, :Ki=>0.5, :Kp=>10],
-                     extin=[VIndex(:load, :V)], 
+                     extin=[VIndex(:load, :V)],
                      vidx=1, name=:source)
 ```
 Then we can create the network and simulate:
 ```@example extin
 nw = Network([source, load], [resistor])
 u0 = NWState(nw) # everything has default values
-prob = ODEProblem(nw, uflat(u0), (0,100), pflat(u0))
+prob = ODEProblem(nw, u0, (0,100))
 sol = solve(prob, Tsit5())
 
 fig, ax, p = lines(sol, idxs=VIndex(:load, :V), label="Voltage @ load");
@@ -181,14 +181,14 @@ Lastly, we define the "source" vertex
     end
 end
 @named source = Source()
-source_vertex = VertexModel(source, [:i_grid], [:V]; 
+source_vertex = VertexModel(source, [:i_grid], [:V];
                             extin=[:V_load => VIndex(:load, :V)], vidx=1)
 ```
 Then we can create the network and simulate:
 ```@example extin_mtk
 nw = Network([source_vertex, load_vertex], [resistor_edge])
 u0 = NWState(nw) # everything has default values
-prob = ODEProblem(nw, uflat(u0), (0,100), pflat(u0))
+prob = ODEProblem(nw, u0, (0,100))
 sol = solve(prob, Tsit5())
 
 let
@@ -205,7 +205,3 @@ let
 end
 ```
 Using MTK for modeling, we can also inspect the currents `i_load` and `i_source` the MTK interface preserves the [Observables](@ref).
-
-
-
-

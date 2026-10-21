@@ -130,7 +130,7 @@ The network is now ready for benchmarking. Let's first time the solution without
 
 ```@example sparsity
 # Without sparsity detection (dense Jacobian)
-prob_dense = ODEProblem(nw_large, uflat(s0), (0.0, 1.0), pflat(p0))
+prob_dense = ODEProblem(nw_large, s0, (0.0, 1.0), p0)
 @b solve($prob_dense, Rodas5P()) evals=1
 ```
 
@@ -147,7 +147,7 @@ set_jac_prototype!(nw_large, jac)
 Now we can benchmark the sparse version:
 ```@example sparsity
 # Solve with sparsity detection
-prob_sparse = ODEProblem(nw_large, uflat(s0), (0.0, 1.0), pflat(p0))
+prob_sparse = ODEProblem(nw_large, s0, (0.0, 1.0), p0)
 @b solve($prob_sparse, Rodas5P(linsolve=KLUFactorization())) evals=1
 ```
 
