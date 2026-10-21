@@ -34,6 +34,7 @@ callbacks last. So the event iteration reacts to the changes of all others. `eve
         event_failure=:warn,
         initializealg=default_dae_init_alg(eltype(u0)),
         specialize=SciMLBase.FullSpecialize,
+        alias=SciMLBase.ODEAliasSpecifier(alias_p=false),
         kwargs...
     )
 
@@ -51,6 +52,13 @@ The `specialize` keyword sets the specialization of the `ODEFunction`. The defau
 `FullSpecialize` lets ForwardDiff use its full chunk size for the Jacobian. `AutoSpecialize`
 wraps the RHS in a function wrapper, which limits ForwardDiff to chunk size 1.
 
+ND.jl overrides the default `alias` behavior of DiffEq.jl. We pass `alias_p=false`, which means
+every solve gets its own copy of the parameters. That's important because many models use
+parameters to store discrete state, and callbacks change them during the solve. Use
+`NWState(sol, t)` to get the state and parameters at any point of the solution.
+If you pass your own `ODEAliasSpecifier` without `alias_p`, it gets `alias_p=false`
+as well. An `alias` passed to `solve` replaces the stored one completely.
+
 $callback_keyword_docs
 """
 function SciMLBase.ODEProblem(
@@ -62,6 +70,7 @@ function SciMLBase.ODEProblem(
     event_failure=:warn,
     initializealg=default_dae_init_alg(isempty(args) ? Float64 : eltype(first(args))),
     specialize=SciMLBase.FullSpecialize,
+    alias=nothing,
     kwargs...
 )
 
@@ -104,8 +113,19 @@ function SciMLBase.ODEProblem(
     end
 
     f = SciMLBase.ODEFunction{true, specialize}(nw)
-    SciMLBase.ODEProblem(f, args...; callback=finalcallback, initializealg, kwargs...)
+    alias = _default_alias(alias)
+    SciMLBase.ODEProblem(f, args...; callback=finalcallback, initializealg, alias, kwargs...)
 end
+
+# Callbacks keep discrete state in `p`, so unless the user decides otherwise every solve gets
+# its own copy of it.
+_default_alias(::Nothing) = SciMLBase.ODEAliasSpecifier(; alias_p=false)
+function _default_alias(alias::SciMLBase.ODEAliasSpecifier)
+    isnothing(alias.alias_p) || return alias
+    fields = (f => getfield(alias, f) for f in fieldnames(typeof(alias)))
+    SciMLBase.ODEAliasSpecifier(; fields..., alias_p=false)
+end
+_default_alias(alias) = alias
 
 # `BrownFullBasicInit` with Jacobian-based nlsolvers only. The DiffEqBase abstol of 1e-10 is
 # out of reach below Float64, so it loosens with the precision of the state.
@@ -120,7 +140,7 @@ end
 
 This is a simple wrapper which:
 - extracts the flat state and parameter vectors from `s0` (and `p0` if provided)
-- makes a copy of the parameter vector to avoid side effects due to callbacks
+- copies the parameter vector, so the problem and `s0` don't share it
 - constructs the callbacks from the network and combines them with any additional callbacks
 
 $callback_keyword_docs
