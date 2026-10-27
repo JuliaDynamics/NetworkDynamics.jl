@@ -1,6 +1,7 @@
 # Code generation emits `x^2` as a call to the function object `^`, which Julia never lowers to
 # `Base.literal_pow`. The generic integer power behind it is slow, so we rewrite those calls after
-# `toexpr`. Pass as `conv` to every `build_function` which produces runtime code.
+# `toexpr`. Pass as `conv` to the `build_function` calls which produce runtime code (f and g use
+# `build_fg` instead).
 # SymbolicUtils ≥ 4.52 does this itself, so this can go once that is the compat floor.
 literal_pow_conv(ex, st) = _literal_pow(Symbolics.toexpr(ex, st))
 _literal_pow(x) = x

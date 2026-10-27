@@ -2648,7 +2648,7 @@ end
     end
 end
 
-@testset "integer powers are generated as literal_pow" begin
+@testset "integer powers are generated as products" begin
     @mtkmodel PowVertex begin
         @variables begin
             x(t) = 1.0
@@ -2669,12 +2669,15 @@ end
     getex = NetworkDynamics.RuntimeGeneratedFunctions.get_expression
     _calls(f, ex) = false
     _calls(f, ex::Expr) = (ex.head === :call && ex.args[1] === f) || any(a -> _calls(f, a), ex.args)
-    _intpow(ex) = false
-    _intpow(ex::Expr) = (ex.head === :call && ex.args[1] === (^) && ex.args[end] isa Integer) || any(_intpow, ex.args)
     for f in (NetworkDynamics.compf(vm), NetworkDynamics.compg(vm))
-        @test !_intpow(getex(f))
-        @test _calls(Base.literal_pow, getex(f))
+        @test !_calls(^, getex(f))
+        @test !_calls(Base.literal_pow, getex(f))
     end
+    # only the non-integer power is left as a call (NaNMath.pow)
+    _pow(ex) = false
+    _pow(ex::Expr) = (ex.head === :call && ex.args[1] isa Function && nameof(ex.args[1]) === :pow) || any(_pow, ex.args)
+    @test !_pow(getex(NetworkDynamics.compf(vm)))
+    @test _pow(getex(NetworkDynamics.compg(vm)))
 
     x, i, a = 1.3, 0.7, 2.0
     du = [NaN]
@@ -2684,9 +2687,86 @@ end
     NetworkDynamics.compg(vm)(o, [x], [a], 0.0)
     @test o[1] ≈ x^2 - 1/x^2 + x^2.5
 
-    # ForwardDiff has its own literal_pow for Duals
     dfdx = ForwardDiff.derivative(x -> (du = [zero(x)]; NetworkDynamics.compf(vm)(du, [x], [i], [a], 0.0); du[1]), x)
     @test dfdx ≈ -2a*x
+
+    # arguments are bound to locals, the only indexed writes go to the output
+    _argwrite(ex) = false
+    _argwrite(ex::Expr) = (ex.head === :(=) && Meta.isexpr(ex.args[1], :ref) && ex.args[1].args[1] !== :ˍ₋out) ||
+        any(_argwrite, ex.args)
+    for f in (NetworkDynamics.compf(vm), NetworkDynamics.compg(vm))
+        @test !_argwrite(getex(f))
+    end
+end
+
+@testset "assignments are sunk into if arms" begin
+    getex = NetworkDynamics.RuntimeGeneratedFunctions.get_expression
+    _has(f, ex) = false
+    _has(f, ex::Expr) = f(ex) || any(a -> _has(f, a), ex.args)
+    _callsin(ex) = Meta.isexpr(ex, :call) && endswith(string(ex.args[1]), "sin")
+    _ifwithsin(ex) = Meta.isexpr(ex, :if) && _has(_callsin, ex)
+
+    # `y` is only needed in one arm, so `sin` is only computed there
+    @mtkmodel SinkOne begin
+        @variables begin
+            x(t) = 1.0
+            y(t)
+            o(t), [output=true]
+        end
+        @equations begin
+            Dt(x) ~ -x
+            y ~ sin(x)
+            o ~ ifelse(x > 0, y, 0.0)
+        end
+    end
+    @named sinkone = SinkOne()
+    vm = VertexModel(sinkone, [], [:o])
+    @test _has(_ifwithsin, getex(NetworkDynamics.compg(vm)))
+    out = [NaN]
+    for x in (1.0, -1.0)
+        NetworkDynamics.compg(vm)(out, [x])
+        @test out[1] ≈ (x > 0 ? sin(x) : 0.0)
+    end
+
+    # `y` is also an output, so it has to stay outside of the arm
+    @mtkmodel SinkTwo begin
+        @variables begin
+            x(t) = 1.0
+            y(t)
+            o1(t), [output=true]
+            o2(t), [output=true]
+        end
+        @equations begin
+            Dt(x) ~ -x
+            y ~ sin(x)
+            o1 ~ y
+            o2 ~ ifelse(x > 0, y, 0.0)
+        end
+    end
+    @named sinktwo = SinkTwo()
+    vm = VertexModel(sinktwo, [], [:o1, :o2])
+    out = [NaN, NaN]
+    for x in (1.0, -1.0)
+        NetworkDynamics.compg(vm)(out, [x])
+        @test out ≈ [sin(x), x > 0 ? sin(x) : 0.0]
+    end
+
+    # code the pass can't handle is left alone: a name assigned twice, an `if` inside a generator
+    sink = Base.get_extension(NetworkDynamics, :NetworkDynamicsMTKExt)._sink_assignments
+    stmts(fex) = filter(x -> !(x isa LineNumberNode), fex.args[2].args)
+    twice = :(function (ˍ₋out, a)
+        s = a[1]
+        y = s + 1
+        s = 2s
+        ˍ₋out[1] = s + y
+    end)
+    @test sink(twice) === twice
+    gen = :(function (ˍ₋out, a)
+        c = sin(a[1])
+        w = sum((if k > 1; c; else 0.0; end) for k in 1:3)
+        ˍ₋out[1] = w
+    end)
+    @test stmts(sink(gen))[1] == :(c = sin(a[1]))
 end
 
 @testset "stacked edge outputs get one contiguous view" begin

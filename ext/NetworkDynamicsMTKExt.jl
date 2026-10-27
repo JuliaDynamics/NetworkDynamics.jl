@@ -10,7 +10,7 @@ using ArgCheck: @argcheck
 using Graphs: Graphs
 using Hungarian: Hungarian, hungarian
 using LinearAlgebra: LinearAlgebra, Diagonal, I, UniformScaling
-using SymbolicUtils.Code: Let, Assignment, unwrap_const
+using SymbolicUtils.Code: Let, Assignment, Func, DestructuredArgs, unwrap_const
 using Moshi: Moshi
 using Moshi.Match: @match
 using Accessors: @reset
@@ -29,6 +29,7 @@ import NetworkDynamics: VertexModel, EdgeModel, AnnotatedSym, InitFormula, add_i
 const ST = SymbolicUtils.BasicSymbolicImpl.var"typeof(BasicSymbolicImpl)"{SymbolicUtils.SymReal}
 
 include("MTKExt_utils.jl")
+include("MTKExt_codegen.jl")
 include("MTKExt_simplification.jl")
 
 import NetworkDynamics: implicit_output, RHSDifferentialsError
@@ -506,17 +507,13 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
         @info "Parameters $(unused_params) do not appear in equations of f and g and will be marked as unused."
     end
 
-    # TODO: explore Symbolics/SymbolicUtils CSE
     # now generate the actual functions
     if !isempty(eqs)
-        formulas = _get_formulas(eqs, obs_subs)
-        _, f_ip = build_function(formulas, states, inputss..., params, iv; cse=false, conv=literal_pow_conv, expression)
+        f_ip = build_fg(eqs, obs_subs, (states, inputss..., params, iv); expression)
     else
         f_ip = nothing
     end
 
-    # find all observable assignments necessary for outeqs
-    gformulas = _get_formulas(outeqs, obs_subs)
     gformargs = if fftype isa PureFeedForward
         (inputss..., params, iv)
     elseif fftype isa FeedForward
@@ -526,7 +523,7 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     elseif fftype isa PureStateMap
         (states,)
     end
-    _, _g_ip = build_function(gformulas, gformargs...; cse=false, conv=literal_pow_conv, expression)
+    _g_ip = build_fg(outeqs, obs_subs, gformargs; expression)
     # for more than 1 output, wrap function in MultipleOutputWrapper
     g_ip = if length(outputss) == 1
         _g_ip
@@ -568,35 +565,8 @@ function generate_io_function(_sys, inputss::Tuple, outputss::Tuple;
     )
 end
 
-function _get_formulas(eqs, obs_subs)
-    # Bit hacky, we're building a function like this,
-    # where all (necessary) obs and eqs are contained in the begin block of the first output
-    # out[1] = begin
-    #     obs1   = ...
-    #     obs2   = ...
-    #     ...
-    #     state1 = ...
-    #     state2 = ...
-    #     ...
-    #     state1 # ends up in out[1]
-    # end
-    # out[2] = state2
-    # ...
-    isempty(eqs) && return []
-    obsdeps = _collect_deps_on_obs([eq.rhs for eq in eqs], obs_subs)
-    obs_assignments = [Assignment(k, v) for (k,v) in obs_subs if k ∈ obsdeps]
-
-    # implicit equations do not become assignments (lhs is 0), so we use the rhs directly for output
-    eqs_assignments = [Assignment(eq.lhs, eq.rhs) for eq in eqs
-                          if !isequal(eq.lhs, eq.rhs) && !isequal(unwrap_const(eq.lhs), 0)]
-    # implicit eqs have 0 lhs, explicit eqs are already captured via assignment, output their lhs
-    out = [isequal(unwrap_const(eq.lhs), 0) ? eq.rhs : eq.lhs for eq in eqs]
-
-    formulas = Any[Let(vcat(obs_assignments, eqs_assignments), out[1], false)]
-    append!(formulas, @view out[2:end])
-end
-
-# Like `_get_formulas` for the observables, but every assignment is guarded by `mask`.
+# Like `_get_formulas` (MTKExt_codegen.jl) for the observables, but every assignment is guarded
+# by `mask`.
 # Also returns what `DependencyAwareObsf` needs: per observable, the assignments it needs and
 # whether one of them reads an input.
 function _get_masked_obsformulas(obsstates, obs_subs, allinputs, mask)
