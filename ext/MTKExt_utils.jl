@@ -312,9 +312,21 @@ function NetworkDynamics.set_mtk_defaults(sys::System, pairs)
     # construction. Values forwarded through this function arrive too late for that pass,
     # so they are classified here instead.
     bindings_changed = false
-    for (s, v) in zip(symbols, defs)
+    for (name, s, v) in zip(names, symbols, defs)
         us = unwrap(s)
-        if SII.symbolic_type(v) === SII.NotSymbolic()
+        # like `@variables x(t)=nothing`, `nothing` means no default
+        if isnothing(v)
+            # a subsystem keeps its own default, which `initial_conditions` merges back in
+            if occursin(ModelingToolkitBase.NAMESPACE_SEPARATOR, string(name))
+                throw(ArgumentError("Cannot remove the default of $name with `nothing`, only defaults \
+                    of the system's own variables can be removed."))
+            end
+            delete!(defdict, us)
+            if haskey(binddict, us)
+                delete!(binddict, us)
+                bindings_changed = true
+            end
+        elseif SII.symbolic_type(v) === SII.NotSymbolic()
             defdict[s] = v
             if haskey(binddict, us)
                 delete!(binddict, us)

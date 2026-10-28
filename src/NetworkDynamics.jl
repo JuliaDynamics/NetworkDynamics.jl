@@ -23,7 +23,7 @@ using Static: Static, StaticInt
 using SciMLBase: VectorContinuousCallback, CallbackSet, DiscreteCallback
 using DiffEqCallbacks: DiffEqCallbacks
 using DiffEqBase: BrownFullBasicInit
-using MacroTools: postwalk, @capture
+using MacroTools: MacroTools, postwalk, @capture
 using RuntimeGeneratedFunctions: RuntimeGeneratedFunctions, RuntimeGeneratedFunction,
                                  @RuntimeGeneratedFunction
 using SparseConnectivityTracer: TracerSparsityDetector, jacobian_sparsity
@@ -51,6 +51,7 @@ RuntimeGeneratedFunctions.init(@__MODULE__)
 export implicit_output, ComponentPostprocessing, set_mtk_defaults
 export set_initf, SystemInitFormulas
 export set_guessf, SystemGuessFormulas
+export @cached_component
 include("utils.jl")
 
 export VertexModel, EdgeModel

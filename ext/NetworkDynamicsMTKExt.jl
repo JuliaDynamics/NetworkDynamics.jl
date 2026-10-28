@@ -14,6 +14,7 @@ using SymbolicUtils.Code: Let, Assignment, Func, DestructuredArgs, unwrap_const
 using Moshi: Moshi
 using Moshi.Match: @match
 using Accessors: @reset
+using NetworkDynamics: MacroTools
 using SymbolicUtils: SymbolicUtils
 using OrderedCollections: OrderedDict
 using SymbolicIndexingInterface: SymbolicIndexingInterface as SII
@@ -32,6 +33,7 @@ include("MTKExt_utils.jl")
 include("MTKExt_codegen.jl")
 include("MTKExt_simplification.jl")
 include("MTKExt_cache.jl")
+include("MTKExt_cached_component.jl")
 
 import NetworkDynamics: implicit_output, RHSDifferentialsError
 Symbolics.@register_symbolic implicit_output(x)

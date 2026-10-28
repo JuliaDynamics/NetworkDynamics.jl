@@ -27,6 +27,7 @@ NetworkDynamics.with_mtk_model_cache
 NetworkDynamics.set_mtk_model_cache!
 NetworkDynamics.wipe_mtk_model_cache!
 NetworkDynamics.mtk_cache_stats
+@cached_component
 ```
 
 ### Output Function Helpers/Wrappers

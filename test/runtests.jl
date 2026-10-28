@@ -58,6 +58,7 @@ if !BUILDKITE
     includetest!("sparsity_test.jl");
     includetest!("MTK_test.jl");
     includetest!("mtk_cache_test.jl");
+    includetest!("cached_component_test.jl");
     includetest!("bound_to_test.jl");
     includetest!("weak_test.jl");
     includetest!("optional_formula_test.jl");
