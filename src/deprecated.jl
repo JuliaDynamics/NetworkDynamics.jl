@@ -124,3 +124,12 @@ function (la::LegacyAffect)(u, signs, ctx)
     _u, _p = _split_legacy(la, u)
     la.f(_u, _p, signs, ctx)
 end
+
+# Deprecated names of the MTK cache API
+@deprecate set_mtk_model_cache!(args...; kwargs...) set_mtk_cache!(args...; kwargs...) false
+@deprecate with_mtk_model_cache(args...) with_mtk_cache(args...) false
+@deprecate wipe_mtk_model_cache!() wipe_mtk_cache!() false
+function mtk_model_cache_enabled()
+    Base.depwarn("`mtk_model_cache_enabled()` is deprecated, use `mtk_cache_mode() !== :off` instead.", :mtk_model_cache_enabled)
+    mtk_cache_mode() !== :off
+end

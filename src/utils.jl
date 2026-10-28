@@ -558,12 +558,11 @@ end
 function LOOPOBACK_G end
 
 # cache stubs
-function set_mtk_model_cache! end
-function wipe_mtk_model_cache! end
-function with_mtk_model_cache end
+function set_mtk_cache! end
+function wipe_mtk_cache! end
+function with_mtk_cache end
 function mtk_cache_stats end
-function mtk_model_cache_enabled end
-function mtk_model_cache_mode end
+function mtk_cache_mode end
 
 """
     set_mtk_defaults(sys::System, pairs) -> System
@@ -620,7 +619,7 @@ function set_mtk_defaults end
     end
 
 Define a component constructor whose systems are cached, an opt-in feature controlled by
-[`NetworkDynamics.set_mtk_model_cache!`](@ref). With the cache on, the first call with a given
+[`NetworkDynamics.set_mtk_cache!`](@ref). With the cache on, the first call with a given
 set of structural arguments builds the system and caches it. Every later call with the same
 structural arguments reuses it, only renaming it and applying its own defaults. Constructors
 that are expensive to build, for example because they call `simplify`, become cheap to call
@@ -643,7 +642,7 @@ called inside the body.
     end
 end
 
-NetworkDynamics.set_mtk_model_cache!(:on)
+NetworkDynamics.set_mtk_cache!(:on)
 Lag(; name=:lag1, T=0.5, y=1.0)  # builds the system
 Lag(; name=:lag2, T=0.2)         # reused, with T = 0.2
 ```
@@ -678,7 +677,7 @@ subsystem, breaks the promise: reused systems keep the value of the first call.
 # Checking
 
 In `:check` mode, every reused system is also built from scratch and compared, which catches
-broken promises. Set it for a whole build with [`NetworkDynamics.with_mtk_model_cache`](@ref),
+broken promises. Set it for a whole build with [`NetworkDynamics.with_mtk_cache`](@ref),
 or for a single call with `cache=:check`.
 
 # Rules
@@ -687,7 +686,7 @@ or for a single call with `cache=:check`.
 - Cached systems are shared, so they must not be mutated in place. Out-of-place changes like
   [`set_initf`](@ref) are fine.
 - After editing the code that a cached component calls, for example with Revise, call
-  [`NetworkDynamics.wipe_mtk_model_cache!`](@ref). Editing the cached component itself is
+  [`NetworkDynamics.wipe_mtk_cache!`](@ref). Editing the cached component itself is
   detected automatically.
 """
 macro cached_component(fdef)

@@ -1,5 +1,5 @@
-# The mode of both caches, `:off`, `:on` or `:check`, see `set_mtk_model_cache!`.
-const MODEL_CACHE_MODE = Ref(:off)
+# The mode of both caches, `:off`, `:on` or `:check`, see `set_mtk_cache!`.
+const MTK_CACHE_MODE = Ref(:off)
 
 # The properties which make up the structure of a system. Two systems are structurally equal
 # when all of them agree, recursing through `systems`. Names, guesses, descriptions and most
@@ -116,9 +116,9 @@ function ThreadsafeCache(name; maxsize=500)
 end
 
 # the structure of a system to the output of `generate_io_function`
-const COMPILE_CACHE = ThreadsafeCache("MTK Model Cache")
+const COMPILE_CACHE = ThreadsafeCache("Compile Cache")
 # a `@cached_component` call to the system the user's function built
-const COMPONENT_CACHE = ThreadsafeCache("Cached Component")
+const COMPONENT_CACHE = ThreadsafeCache("Component Cache")
 const ALL_CACHES = (COMPILE_CACHE, COMPONENT_CACHE)
 
 # Returns the cached value for `key`, calling `f` to fill the entry on a miss. Other tasks
@@ -248,7 +248,7 @@ function generate_io_function_cached(sys, inputss, outputss; verbose=false, mtkc
     build() = generate_io_function(sys, inputss, outputss; verbose, mtkcompile, kwargs...)
     # Verbose builds run fresh so that all their messages show up. The key only knows what ND's
     # own simplification reads, so `mtkcompile` builds are not cached.
-    mode = MODEL_CACHE_MODE[]
+    mode = MTK_CACHE_MODE[]
     if mode === :off || verbose || mtkcompile
         return build()
     end
@@ -262,9 +262,9 @@ function generate_io_function_cached(sys, inputss, outputss; verbose=false, mtkc
     if hit && mode === :check
         rebuilt = build()
         diff = [k for k in keys(rebuilt) if !_samebuild(gen[k], rebuilt[k])]
-        isempty(diff) || error("MTK model cache returned a different build for system $(getname(sys)), \
+        isempty(diff) || error("The MTK compile cache returned a different build for system $(getname(sys)), \
             differing in $(join(diff, ", ")). Please report this as a bug. \
-            `NetworkDynamics.set_mtk_model_cache!(:off)` switches the cache off.")
+            `NetworkDynamics.set_mtk_cache!(:off)` switches the cache off.")
     end
     # the containers which end up in the component are not shared with the cache
     fresh = map(copy, (; gen.obsrules, gen.aliasmap, gen.observed, gen.equations,
@@ -293,23 +293,23 @@ function _samebuild(a, b)
 end
 
 """
-    NetworkDynamics.set_mtk_model_cache!(mode; maxsize=nothing)
+    NetworkDynamics.set_mtk_cache!(mode; maxsize=nothing)
 
-Set the mode of the MTK model cache:
-- `:off` (default): every component is built from scratch. Switching off also empties the cache.
-- `:on`: components with the same structure as an earlier one reuse its generated functions.
+Set the mode of the MTK cache. It has two parts: the compile cache lets a [`VertexModel`](@ref) or
+[`EdgeModel`](@ref) reuse the generated functions of an earlier `System` with the same structure,
+and the component cache lets constructors defined with [`@cached_component`](@ref) reuse the
+systems they built.
+- `:off` (default): everything is built from scratch. Switching off also empties both caches.
+- `:on`: both caches are used.
 - `:check`: like `:on`, but every cache hit is also built from scratch and compared with the cached
   result. Errors if they differ. This is slow and meant for debugging.
 
-`true` and `false` stand for `:on` and `:off`. `maxsize` sets how many distinct models the cache
-keeps (500 by default).
+`true` and `false` stand for `:on` and `:off`. `maxsize` sets how many entries each of the two
+caches keeps (500 by default).
 
-The mode also applies to constructors defined with [`@cached_component`](@ref), which keep their
-own cache of the same size.
-
-See also [`NetworkDynamics.with_mtk_model_cache`](@ref).
+See also [`NetworkDynamics.with_mtk_cache`](@ref).
 """
-function NetworkDynamics.set_mtk_model_cache!(mode; maxsize=nothing)
+function NetworkDynamics.set_mtk_cache!(mode; maxsize=nothing)
     mode = cache_mode(mode)
     for cache in ALL_CACHES
         @lock cache.lock begin
@@ -319,7 +319,7 @@ function NetworkDynamics.set_mtk_model_cache!(mode; maxsize=nothing)
             mode === :off && empty!(cache.entries)
         end
     end
-    MODEL_CACHE_MODE[] = mode
+    MTK_CACHE_MODE[] = mode
 end
 cache_mode(use::Bool) = use ? :on : :off
 function cache_mode(mode::Symbol)
@@ -328,26 +328,26 @@ function cache_mode(mode::Symbol)
 end
 
 """
-    NetworkDynamics.wipe_mtk_model_cache!()
+    NetworkDynamics.wipe_mtk_cache!()
 
-Empty the MTK model cache and the cache of [`@cached_component`](@ref) constructors. Needed when
+Empty both parts of the MTK cache (see [`NetworkDynamics.set_mtk_cache!`](@ref)). Needed when
 the code generating models changes within a session, for example when editing NetworkDynamics or
 a cached component with Revise.
 """
-function NetworkDynamics.wipe_mtk_model_cache!()
+function NetworkDynamics.wipe_mtk_cache!()
     foreach(empty!, ALL_CACHES)
     nothing
 end
 
 """
-    NetworkDynamics.with_mtk_model_cache(f, mode=:on)
+    NetworkDynamics.with_mtk_cache(f, mode=:on)
 
-Run `f` with the MTK model cache in the given mode (see [`NetworkDynamics.set_mtk_model_cache!`](@ref))
+Run `f` with the MTK cache in the given mode (see [`NetworkDynamics.set_mtk_cache!`](@ref))
 and restore the previous mode afterwards. Also resets the counters of
 [`NetworkDynamics.mtk_cache_stats`](@ref).
 
 ```julia
-NetworkDynamics.with_mtk_model_cache(false) do
+NetworkDynamics.with_mtk_cache(false) do
     # code which builds mtk models without the cache
 end
 ```
@@ -359,33 +359,34 @@ guesses and other metadata are always read from the new system. Warnings of the 
 up once, when the cache entry is filled. Builds with `verbose=true` or `mtkcompile=true` bypass
 the cache. The cache is thread safe, so components can be built concurrently.
 
-See also [`NetworkDynamics.set_mtk_model_cache!`](@ref), [`NetworkDynamics.wipe_mtk_model_cache!`](@ref).
+See also [`NetworkDynamics.set_mtk_cache!`](@ref), [`NetworkDynamics.wipe_mtk_cache!`](@ref).
 """
-function NetworkDynamics.with_mtk_model_cache(f, mode=:on)
-    oldmode = MODEL_CACHE_MODE[]
+function NetworkDynamics.with_mtk_cache(f, mode=:on)
+    oldmode = MTK_CACHE_MODE[]
     foreach(reset_counts!, ALL_CACHES)
-    NetworkDynamics.set_mtk_model_cache!(mode)
+    NetworkDynamics.set_mtk_cache!(mode)
     try
         f()
     finally
-        NetworkDynamics.set_mtk_model_cache!(oldmode)
+        NetworkDynamics.set_mtk_cache!(oldmode)
     end
 end
 
 """
     NetworkDynamics.mtk_cache_stats()
 
-Print statistics about the MTK model cache and the cache of [`@cached_component`](@ref)
-constructors since the session started or since the last
-[`NetworkDynamics.with_mtk_model_cache`](@ref) block began.
+Print statistics about both parts of the MTK cache since the session started or since the last
+[`NetworkDynamics.with_mtk_cache`](@ref) block began. Besides hits and misses, it estimates the
+time the cache saved and lists the entries which were never hit.
 """
 function NetworkDynamics.mtk_cache_stats()
     foreach(print_stats, ALL_CACHES)
 end
 
-function NetworkDynamics.mtk_model_cache_enabled()
-    MODEL_CACHE_MODE[] !== :off
-end
+"""
+    NetworkDynamics.mtk_cache_mode()
 
-# the default of the `cache` kwarg of `@cached_component` constructors
-NetworkDynamics.mtk_model_cache_mode() = MODEL_CACHE_MODE[]
+Return the current mode of the MTK cache, `:off`, `:on` or `:check`. See
+[`NetworkDynamics.set_mtk_cache!`](@ref).
+"""
+NetworkDynamics.mtk_cache_mode() = MTK_CACHE_MODE[]

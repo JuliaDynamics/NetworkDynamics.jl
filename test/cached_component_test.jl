@@ -121,8 +121,8 @@ end
 end
 
 @testset "hits differ only in name and defaults" begin
-    NetworkDynamics.with_mtk_model_cache() do
-        NetworkDynamics.wipe_mtk_model_cache!()
+    NetworkDynamics.with_mtk_cache() do
+        NetworkDynamics.wipe_mtk_cache!()
         a = TestMachine(; name=:a, M=2.0)
         b = TestMachine(; name=:b, D=0.5)
         c = TestMachine(; name=:c, T=0.3)
@@ -160,8 +160,8 @@ end
 
 @testset "explicit kwargs and @structural" begin
     @test occursin("A lag, as in the docstring", string(@doc TestLag))
-    NetworkDynamics.with_mtk_model_cache(:check) do
-        NetworkDynamics.wipe_mtk_model_cache!()
+    NetworkDynamics.with_mtk_cache(:check) do
+        NetworkDynamics.wipe_mtk_cache!()
         # every value of an explicit kwarg is its own entry
         TestGain(; name=:a)
         TestGain(; name=:b)
@@ -200,8 +200,8 @@ end
 end
 
 @testset "a projection which hides a structural choice" begin
-    NetworkDynamics.with_mtk_model_cache() do
-        NetworkDynamics.wipe_mtk_model_cache!()
+    NetworkDynamics.with_mtk_cache() do
+        NetworkDynamics.wipe_mtk_cache!()
         TestBadLag(; name=:a, T=0)
         # the hit has no parameter `K`
         @test_throws ArgumentError TestBadLag(; name=:b, T=0.5, K=2.0)
@@ -213,8 +213,8 @@ end
 end
 
 @testset "check mode" begin
-    NetworkDynamics.with_mtk_model_cache(:check) do
-        NetworkDynamics.wipe_mtk_model_cache!()
+    NetworkDynamics.with_mtk_cache(:check) do
+        NetworkDynamics.wipe_mtk_cache!()
         TestMachine(; name=:a, M=2.0)
         b = TestMachine(; name=:b, D=0.5, T=0.3)
         TestBus(; name=:bus1)
@@ -235,8 +235,8 @@ end
     end
 
     # without the check, the derived default stays stale
-    NetworkDynamics.with_mtk_model_cache(:on) do
-        NetworkDynamics.wipe_mtk_model_cache!()
+    NetworkDynamics.with_mtk_cache(:on) do
+        NetworkDynamics.wipe_mtk_cache!()
         TestDerived(; name=:a, T=1.0)
         @test defaultof(TestDerived(; name=:b, T=2.0), :K) == 1.0
         @test defaultof(TestDerived(; name=:b, T=2.0, cache=:off), :K) == 0.5
@@ -270,8 +270,8 @@ end
 end
 
 @testset "constructor variants" begin
-    NetworkDynamics.with_mtk_model_cache(:check) do
-        NetworkDynamics.wipe_mtk_model_cache!()
+    NetworkDynamics.with_mtk_cache(:check) do
+        NetworkDynamics.wipe_mtk_cache!()
         TestPlain(; name=:a)
         TestPlain(; name=:b)
         p = TestPlain(; name=:c, a=1.5)
@@ -284,7 +284,7 @@ end
         @test_throws r"TestGuess.*differs from a fresh build in its.*guesses" TestGuess(; name=:b, g=2.0)
 
     end
-    NetworkDynamics.with_mtk_model_cache() do
+    NetworkDynamics.with_mtk_cache() do
         @test_throws r"requested again while it was being built" TestChain(; name=:chain)
         # the failed builds leave no entries behind
         @test isempty(mtkext.COMPONENT_CACHE.entries)
@@ -292,18 +292,18 @@ end
 end
 
 @testset "the cache kwarg and cache lifetime" begin
-    NetworkDynamics.with_mtk_model_cache() do
-        NetworkDynamics.wipe_mtk_model_cache!()
+    NetworkDynamics.with_mtk_cache() do
+        NetworkDynamics.wipe_mtk_cache!()
         TestMachine(; name=:a)
         TestMachine(; name=:b, cache=:off)
         @test component_counts() == (1, 0)
         @test length(mtkext.COMPONENT_CACHE.entries) == 1
         stats = IOCapture.capture(NetworkDynamics.mtk_cache_stats).output
-        @test occursin(r"Cached Component Stats:\n  Entries:  1.*\n  Misses:   1\n  Hits:     0", stats)
-        NetworkDynamics.wipe_mtk_model_cache!()
+        @test occursin(r"Component Cache Stats:\n  Entries:  1.*\n  Misses:   1\n  Hits:     0", stats)
+        NetworkDynamics.wipe_mtk_cache!()
         @test isempty(mtkext.COMPONENT_CACHE.entries)
         TestMachine(; name=:a)
-        NetworkDynamics.with_mtk_model_cache(false) do
+        NetworkDynamics.with_mtk_cache(false) do
             @test isempty(mtkext.COMPONENT_CACHE.entries)
             TestMachine(; name=:a)
         end
@@ -311,7 +311,7 @@ end
     end
 
     # the kwarg overrides the global mode for one call
-    NetworkDynamics.wipe_mtk_model_cache!()
+    NetworkDynamics.wipe_mtk_cache!()
     TestMachine(; name=:a)
     @test isempty(mtkext.COMPONENT_CACHE.entries)
     TestMachine(; name=:a, cache=true)
@@ -319,7 +319,7 @@ end
     TestDerived(; name=:a, T=1.0, cache=:on)
     @test_throws r"TestDerived.*differs from a fresh build" TestDerived(; name=:b, T=2.0, cache=:check)
     @test_throws r"Cache mode must be" TestMachine(; name=:a, cache=:maybe)
-    NetworkDynamics.wipe_mtk_model_cache!()
+    NetworkDynamics.wipe_mtk_cache!()
 end
 
 # outputs and state derivatives at random but reproducible inputs
@@ -331,9 +331,9 @@ end
 
 @testset "a cached component compiles like a plain one" begin
     build() = VertexModel(TestBus(; name=:bus, machine₊M=2.0, machine₊T=0.5), [:P], [:θ])
-    plain = NetworkDynamics.with_mtk_model_cache(build, false)
-    cached = NetworkDynamics.with_mtk_model_cache() do
-        NetworkDynamics.wipe_mtk_model_cache!()
+    plain = NetworkDynamics.with_mtk_cache(build, false)
+    cached = NetworkDynamics.with_mtk_cache() do
+        NetworkDynamics.wipe_mtk_cache!()
         TestBus(; name=:other)
         build()
     end

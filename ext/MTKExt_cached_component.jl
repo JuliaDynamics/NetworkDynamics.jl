@@ -16,7 +16,7 @@
 #     function _lag_build(; name, lag=true, T=1.0)
 #         ...body...
 #     end
-#     Base.@__doc__ function Lag(; name, lag=true, T=1.0, cache=NetworkDynamics.mtk_model_cache_mode(), _defaults...)
+#     Base.@__doc__ function Lag(; name, lag=true, T=1.0, cache=NetworkDynamics.mtk_cache_mode(), _defaults...)
 #         NetworkDynamics.load_cached_component(
 #             () -> _lag_build(; name, lag, T);  # the builder function
 #             key = (Lag, 0x5f3a..., (lag, iszero(T))),  # constructor, token, implicit and explicit structural
@@ -67,7 +67,7 @@ function NetworkDynamics.cached_component_expr(mod, fdef)
     defaults = gensym(:defaults)
     key = :(($fname, $(rand(UInt)), ($(implicit_structural...), $(explicit_structural...))))
     keynames = Tuple(map(string, [implicit_structural; explicit_structural]))
-    cachekw = Expr(:kw, :cache, :($(GlobalRef(NetworkDynamics, :mtk_model_cache_mode))()))
+    cachekw = Expr(:kw, :cache, :($(GlobalRef(NetworkDynamics, :mtk_cache_mode))()))
     def[:kwargs] = Any[kwargs..., cachekw, :($defaults...)]
     def[:body] = quote
         $(GlobalRef(NetworkDynamics, :load_cached_component))(() -> $buildname(; $(kwnames...));
@@ -215,7 +215,7 @@ function _check_cached(hit, fresh, modelname)
         which differs from a fresh build in its $(join(diff, ", ")). Probably a `@structural` \
         expression hides a structural choice, a keyword argument reaches the system other than by \
         name, or the code of a constructor changed since the cache was filled \
-        (`wipe_mtk_model_cache!()`). `cache=:off` skips the cache for a single call.")
+        (`wipe_mtk_cache!()`). `cache=:off` skips the cache for a single call.")
 end
 _dict_isequal(a, b) = isequal(Dict(a), Dict(b))
 

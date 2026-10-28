@@ -23,10 +23,11 @@ VertexModel(::ModelingToolkitBase.System, ::Any, ::Any)
 EdgeModel(::ModelingToolkitBase.System, ::Any, ::Any, ::Any, ::Any)
 EdgeModel(::ModelingToolkitBase.System, ::Any, ::Any, ::Any)
 ComponentPostprocessing
-NetworkDynamics.with_mtk_model_cache
-NetworkDynamics.set_mtk_model_cache!
-NetworkDynamics.wipe_mtk_model_cache!
+NetworkDynamics.with_mtk_cache
+NetworkDynamics.set_mtk_cache!
+NetworkDynamics.wipe_mtk_cache!
 NetworkDynamics.mtk_cache_stats
+NetworkDynamics.mtk_cache_mode
 @cached_component
 ```
 
