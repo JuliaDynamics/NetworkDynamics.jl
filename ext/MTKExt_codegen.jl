@@ -56,7 +56,7 @@ function _build_bound(assignments, outs, args; cse, expression)
     f_ip
 end
 _with_bindings(arg) = arg
-_with_bindings(d::DestructuredArgs) = DestructuredArgs(d.elems, d.inds, d.name, d.inbounds, true)
+_with_bindings(d::DestructuredArgs) = DestructuredArgs(d.elems, d.name; d.inds, d.inbounds, create_bindings=true)
 
 function _get_formulas(eqs, obs_subs)
     obsdeps = _collect_deps_on_obs([eq.rhs for eq in eqs], obs_subs)
@@ -82,7 +82,7 @@ function _get_masked_obsformulas(obsstates, obs_subs, allinputs, mask)
     deps = _collect_deps_on_obs(obsstates, obs_subs)
     assigned = [k for k in keys(obs_subs) if k ∈ deps]
     assignments = map(enumerate(assigned)) do (j, k)
-        Assignment(k, ifelse(_obs_required(mask, j), powers_to_products(obs_subs[k]), NaN))
+        Assignment(k, ifelse(_obs_required(mask, j), obs_subs[k], NaN))
     end
 
     # position of each assigned symbol, also its bit in the mask

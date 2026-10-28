@@ -2697,8 +2697,33 @@ end
     for f in (NetworkDynamics.compf(vm), NetworkDynamics.compg(vm))
         @test !_argwrite(getex(f))
     end
+
+    # the obsf has no CSE, so a power of a compound base must not repeat the base
+    @mtkmodel ObsPowVertex begin
+        @variables begin
+            x(t) = 1.0
+            o(t), [output=true]
+            p(t)
+        end
+        @equations begin
+            Dt(x) ~ -x
+            o ~ x
+            p ~ (sin(x) + cos(x))^8
+        end
+    end
+    @named obspowvertex = ObsPowVertex()
+    vm = VertexModel(obspowvertex, [], [:o])
+    _count(f, ex) = 0
+    _count(f, ex::Expr) = f(ex) + sum(a -> _count(f, a), ex.args; init=0)
+    _callsin(ex) = Meta.isexpr(ex, :call) && endswith(string(ex.args[1]), "sin")
+    @test _count(_callsin, getex(NetworkDynamics.obsf(vm).f)) == 1
+    out = zeros(length(obssym(vm)))
+    NetworkDynamics.obsf(vm)(out, [0.3], Float64[], Float64[], 0.0)
+    @test out[findfirst(==(:p), obssym(vm))] ≈ (sin(0.3) + cos(0.3))^8
 end
 
+strict_sqrt(x) = x >= 0 ? sqrt(x) : error("strict_sqrt out of domain: $x")
+Symbolics.@register_symbolic strict_sqrt(x)
 @testset "assignments are sunk into if arms" begin
     getex = NetworkDynamics.RuntimeGeneratedFunctions.get_expression
     _has(f, ex) = false
@@ -2751,6 +2776,27 @@ end
         @test out ≈ [sin(x), x > 0 ? sin(x) : 0.0]
     end
 
+    # plain `ifelse` may evaluate both arms, `ifelse_branching` only the taken one, even though
+    # `strict_sqrt(x)` is shared by two conditionals
+    @mtkmodel BranchVertex begin
+        @variables begin
+            x(t) = 1.0
+            o(t), [output=true]
+        end
+        @equations begin
+            Dt(x) ~ -x
+            o ~ Symbolics.ifelse_branching(x > 0, strict_sqrt(x), 0.0) +
+                Symbolics.ifelse_branching(x > 0, 2strict_sqrt(x), 0.0)
+        end
+    end
+    @named branchvertex = BranchVertex()
+    vm = VertexModel(branchvertex, [], [:o])
+    out = [NaN]
+    for x in (4.0, -1.0)
+        NetworkDynamics.compg(vm)(out, [x])
+        @test out[1] ≈ (x > 0 ? 3sqrt(x) : 0.0)
+    end
+
     # code the pass can't handle is left alone: a name assigned twice, an `if` inside a generator
     sink = Base.get_extension(NetworkDynamics, :NetworkDynamicsMTKExt)._sink_assignments
     stmts(fex) = filter(x -> !(x isa LineNumberNode), fex.args[2].args)
@@ -2767,6 +2813,45 @@ end
         ˍ₋out[1] = w
     end)
     @test stmts(sink(gen))[1] == :(c = sin(a[1]))
+end
+
+# The sink pass silently leaves code alone if a name is assigned twice. Generated code should
+# never do that, so we check it for realistic components.
+@testset "generated code assigns every name once" begin
+    getex = NetworkDynamics.RuntimeGeneratedFunctions.get_expression
+    _assigned!(names, ex) = names
+    function _assigned!(names, ex::Expr)
+        Meta.isexpr(ex, :(=)) && ex.args[1] isa Symbol && push!(names, ex.args[1])
+        foreach(a -> _assigned!(names, a), ex.args)
+        names
+    end
+    _unwrap(f::NetworkDynamics.MultipleOutputWrapper) = f.g
+    _unwrap(f::NetworkDynamics.DependencyAwareObsf) = f.f
+    _unwrap(f) = f
+
+    # an output which another output reads used to be assigned twice
+    @mtkmodel OutReadsOut begin
+        @variables begin
+            x(t) = 1.0
+            o1(t), [output=true]
+            o2(t), [output=true]
+        end
+        @equations begin
+            Dt(x) ~ -x
+            o1 ~ sin(x)
+            o2 ~ ifelse(x > 0, 2o1, 0.0)
+        end
+    end
+    @named outreadsout = OutReadsOut()
+
+    comps = [VertexModel(outreadsout, [], [:o1, :o2]),
+             Lib.dqbus_slack(), Lib.dqbus_pv(), Lib.dqbus_pq(), Lib.dqbus_swing(), Lib.dqbus_swing_and_load(),
+             Lib.dqbus_shunt_hub(), Lib.dqbus_swing_injector(), Lib.dqbus_pq_injector(), Lib.dqline(R=0.01, X=0.1),
+             Lib.pu_dqhub(name=:hub), Lib.pu_dqswing_injector(name=:inj), Lib.pu_dqline()]
+    for c in comps, f in (NetworkDynamics.compf(c), NetworkDynamics.compg(c), NetworkDynamics.obsf(c))
+        isnothing(f) && continue
+        @test allunique(_assigned!(Symbol[], getex(_unwrap(f))))
+    end
 end
 
 @testset "stacked edge outputs get one contiguous view" begin
