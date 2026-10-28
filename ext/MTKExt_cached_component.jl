@@ -119,10 +119,7 @@ end
 #### Cache
 ####
 
-# Cache from (constructor, token, structural values) to the system the user's function built.
-# It shares the lock, the mode and the size limit with `MTK_CACHE`.
-const CTOR_CACHE = OrderedDict{Any, CacheEntry}()
-const CTOR_CACHE_COUNTS = (hits=Ref(0), misses=Ref(0), waitings=Ref(0))
+# The constructor calls go into `COMPONENT_CACHE`, which is defined next to the compile cache.
 
 # Called by the code `@cached_component` generates. `build()` runs the user's function, `key`
 # holds the constructor, its token and the structural values, and `kwargs` the explicit kwargs.
@@ -136,7 +133,7 @@ function NetworkDynamics.load_cached_component(build; key, mode, name, kwargs, d
     # values which are equal but of different type, like 1 and 1.0, are different keys
     typedkey = (key[1], key[2], map(v -> (typeof(v), v), key[3]))
     hit = true
-    cached = threadsafe_cache_load!(CTOR_CACHE, CTOR_CACHE_COUNTS, typedkey) do
+    cached = get!(COMPONENT_CACHE, typedkey) do
         hit = false
         sys = _built(build, gui)
         _warn_overridden(sys, kwargs, modelname)

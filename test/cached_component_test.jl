@@ -8,7 +8,7 @@ using Test
 using IOCapture: IOCapture
 mtkext = Base.get_extension(NetworkDynamics, :NetworkDynamicsMTKExt)
 
-ctor_counts() = (mtkext.CTOR_CACHE_COUNTS.misses[], mtkext.CTOR_CACHE_COUNTS.hits[])
+component_counts() = (mtkext.COMPONENT_CACHE.misses, mtkext.COMPONENT_CACHE.hits)
 freshhash(sys) = mtkext._structural_hash(sys, zero(UInt))
 # symbols of `sys` as they appear in its own equations, e.g. `machine₊M`
 sym(sys, name) = mtkext.getproperty_symbolic(sys, name; might_contain_toplevel_ns=false)
@@ -126,7 +126,7 @@ end
         a = TestMachine(; name=:a, M=2.0)
         b = TestMachine(; name=:b, D=0.5)
         c = TestMachine(; name=:c, T=0.3)
-        @test ctor_counts() == (1, 2)
+        @test component_counts() == (1, 2)
         @test nameof.((a, b, c)) == (:a, :b, :c)
         # hits share the cached equations, which match an uncached build
         @test ModelingToolkitBase.get_eqs(a) === ModelingToolkitBase.get_eqs(c)
@@ -166,18 +166,18 @@ end
         TestGain(; name=:a)
         TestGain(; name=:b)
         g = TestGain(; name=:c, k=2.0)
-        @test ctor_counts() == (2, 1)
+        @test component_counts() == (2, 1)
         @test defaultof(g, :k) == 2.0
 
         # a projected kwarg which names a symbol is applied on the hit, an unused one is quiet
         TestLag(; name=:a, T=0.5)
         @test defaultof(TestLag(; name=:b, T=0.2), :T) == 0.2
         @test isempty(ModelingToolkitBase.get_ps(@test_logs TestLag(; name=:c, T=0)))
-        @test ctor_counts() == (4, 2)
+        @test component_counts() == (4, 2)
 
         # values of different type are different choices
         @test defaultof(TestGain(; name=:d, k=1), :k) === 1
-        @test ctor_counts() == (5, 2)
+        @test component_counts() == (5, 2)
 
         # several expressions, also as a block
         TestTwo(; name=:a, T=0.5, lag=true)
@@ -185,7 +185,7 @@ end
         @test defaultof(b, :T) == 0.2
         @test length(ModelingToolkitBase.get_eqs(TestTwo(; name=:c, T=0, lag=true))) == 1
         @test length(ModelingToolkitBase.get_eqs(TestTwo(; name=:d, T=0.2, lag=false))) == 1
-        @test ctor_counts() == (8, 3)
+        @test component_counts() == (8, 3)
 
         # `T=nothing` falls into the same structural class as `T=1` and removes the default
         TestOptLag(; name=:a, T=1.0)
@@ -220,7 +220,7 @@ end
         TestBus(; name=:bus1)
         TestBus(; name=:bus2, machine₊M=3.0)
         # the bus hits the machine, and so does its fresh build in the check
-        @test ctor_counts() == (2, 4)
+        @test component_counts() == (2, 4)
         @test defaultof(b, :T) == 0.3
 
         TestBadLag(; name=:a, T=0.5)
@@ -278,7 +278,7 @@ end
         @test (defaultof(p, :a), defaultof(p, :b)) == (1.5, 3.0)
         @test length(ModelingToolkitBase.get_ps(TestPlain(; name=:d, a=3.0))) == 1
         @test_throws TypeError TestPlain(; name=:e, a=1)
-        @test ctor_counts() == (3, 1)
+        @test component_counts() == (3, 1)
 
         @test_logs TestGuess(; name=:a, g=1.0)
         @test_throws r"TestGuess.*differs from a fresh build in its.*guesses" TestGuess(; name=:b, g=2.0)
@@ -287,7 +287,7 @@ end
     NetworkDynamics.with_mtk_model_cache() do
         @test_throws r"requested again while it was being built" TestChain(; name=:chain)
         # the failed builds leave no entries behind
-        @test isempty(mtkext.CTOR_CACHE)
+        @test isempty(mtkext.COMPONENT_CACHE.entries)
     end
 end
 
@@ -296,26 +296,26 @@ end
         NetworkDynamics.wipe_mtk_model_cache!()
         TestMachine(; name=:a)
         TestMachine(; name=:b, cache=:off)
-        @test ctor_counts() == (1, 0)
-        @test length(mtkext.CTOR_CACHE) == 1
+        @test component_counts() == (1, 0)
+        @test length(mtkext.COMPONENT_CACHE.entries) == 1
         stats = IOCapture.capture(NetworkDynamics.mtk_cache_stats).output
         @test occursin(r"Cached Component Stats:\n  Entries:  1.*\n  Misses:   1\n  Hits:     0", stats)
         NetworkDynamics.wipe_mtk_model_cache!()
-        @test isempty(mtkext.CTOR_CACHE)
+        @test isempty(mtkext.COMPONENT_CACHE.entries)
         TestMachine(; name=:a)
         NetworkDynamics.with_mtk_model_cache(false) do
-            @test isempty(mtkext.CTOR_CACHE)
+            @test isempty(mtkext.COMPONENT_CACHE.entries)
             TestMachine(; name=:a)
         end
-        @test ctor_counts() == (0, 0) # the nested block reset the counters
+        @test component_counts() == (0, 0) # the nested block reset the counters
     end
 
     # the kwarg overrides the global mode for one call
     NetworkDynamics.wipe_mtk_model_cache!()
     TestMachine(; name=:a)
-    @test isempty(mtkext.CTOR_CACHE)
+    @test isempty(mtkext.COMPONENT_CACHE.entries)
     TestMachine(; name=:a, cache=true)
-    @test length(mtkext.CTOR_CACHE) == 1
+    @test length(mtkext.COMPONENT_CACHE.entries) == 1
     TestDerived(; name=:a, T=1.0, cache=:on)
     @test_throws r"TestDerived.*differs from a fresh build" TestDerived(; name=:b, T=2.0, cache=:check)
     @test_throws r"Cache mode must be" TestMachine(; name=:a, cache=:maybe)
@@ -337,7 +337,7 @@ end
         TestBus(; name=:other)
         build()
     end
-    @test ctor_counts() == (2, 1)
+    @test component_counts() == (2, 1)
     for fn in (:name, :sym, :psym, :obssym, :insym, :outsym, :mass_matrix, :symmetadata)
         @test isequal(getfield(plain, fn), getfield(cached, fn))
     end

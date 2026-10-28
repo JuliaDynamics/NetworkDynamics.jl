@@ -48,6 +48,8 @@ function fg_output(c)
     (outs, du)
 end
 
+compile_counts() = (mtkext.COMPILE_CACHE.misses, mtkext.COMPILE_CACHE.hits)
+
 # Builds `ctor()` with the cache switched off, and twice into an empty cache (miss, then hit).
 function fresh_miss_hit(ctor)
     fresh = NetworkDynamics.with_mtk_model_cache(ctor, false)
@@ -55,11 +57,9 @@ function fresh_miss_hit(ctor)
         NetworkDynamics.wipe_mtk_model_cache!()
         ctor(), ctor()
     end
-    @test mtkext.CACHE_MISSES[] == 1
-    @test mtkext.CACHE_HITS[] == 1
+    @test compile_counts() == (1, 1)
     fresh, miss, hit
 end
-cache_counts() = (mtkext.CACHE_MISSES[], mtkext.CACHE_HITS[])
 
 @testset "cache is off by default" begin
     @test mtkext.MODEL_CACHE_MODE[] === :off
@@ -148,7 +148,7 @@ Base.show(io::IO, ::CacheTestQuietGain) = print(io, "gain")
     s1, s2 = opsys(CacheTestGain(1.0)), opsys(CacheTestGain(2.0))
     fresh = NetworkDynamics.with_mtk_model_cache(() -> (build(s1), build(s2)), false)
     cached = NetworkDynamics.with_mtk_model_cache(() -> (build(s1), build(s2)))
-    @test cache_counts() == (2, 0)
+    @test compile_counts() == (2, 0)
     @test !isequal(fresh[1], fresh[2])
     @test isequal(cached, fresh)
 
@@ -182,7 +182,7 @@ end
         [VertexModel(psys(v...), [:i], [:y]) for v in variants]
     end
     # numeric defaults share an entry, each binding needs its own
-    @test cache_counts() == (3, 2)
+    @test compile_counts() == (3, 2)
     for (f, c) in zip(fresh, cached)
         @test isempty(model_diff(f, c))
         @test isequal(fg_output(f), fg_output(c))
@@ -202,9 +202,9 @@ end
     NetworkDynamics.with_mtk_model_cache() do
         @test_logs (:warn, r"conflicting definitions") VertexModel(conflicting(), [:i], [:y])
         @test_logs VertexModel(conflicting(), [:i], [:y])
-        @test cache_counts() == (1, 1)
+        @test compile_counts() == (1, 1)
         @test_logs (:info,) match_mode=:any VertexModel(conflicting(), [:i], [:y]; verbose=true)
-        @test cache_counts() == (1, 1)
+        @test compile_counts() == (1, 1)
     end
 end
 
@@ -218,8 +218,8 @@ end
         NetworkDynamics.wipe_mtk_model_cache!()
         VertexModel(mtksys(), [:i], [:y]; mtkcompile=true)
         VertexModel(mtksys(), [:i], [:y]; mtkcompile=true)
-        @test cache_counts() == (0, 0)
-        @test isempty(mtkext.MTK_CACHE)
+        @test compile_counts() == (0, 0)
+        @test isempty(mtkext.COMPILE_CACHE.entries)
     end
 end
 
@@ -228,7 +228,7 @@ end
         @variables x(t)=1 i(t) y(t)
         System([Dt(x) ~ -n*x + i, y ~ x], t; name=:sized)
     end
-    oldsize = mtkext.MTK_CACHE_SIZE[]
+    oldsize = mtkext.COMPILE_CACHE.maxsize
     try
         NetworkDynamics.with_mtk_model_cache() do
             NetworkDynamics.set_mtk_model_cache!(true; maxsize=2)
@@ -237,12 +237,12 @@ end
             VertexModel(sizedsys(2), [:i], [:y])
             VertexModel(sizedsys(1), [:i], [:y]) # 1 is now the most recently used
             VertexModel(sizedsys(3), [:i], [:y]) # evicts 2
-            @test length(mtkext.MTK_CACHE) == 2
-            @test cache_counts() == (3, 1)
+            @test length(mtkext.COMPILE_CACHE.entries) == 2
+            @test compile_counts() == (3, 1)
             VertexModel(sizedsys(1), [:i], [:y])
-            @test cache_counts() == (3, 2)
+            @test compile_counts() == (3, 2)
             VertexModel(sizedsys(2), [:i], [:y])
-            @test cache_counts() == (4, 2)
+            @test compile_counts() == (4, 2)
         end
     finally
         NetworkDynamics.set_mtk_model_cache!(mtkext.MODEL_CACHE_MODE[]; maxsize=oldsize)
@@ -253,7 +253,7 @@ end
         VertexModel(sizedsys(1), [:i], [:y])
         NetworkDynamics.with_mtk_model_cache(false) do
             @test !NetworkDynamics.mtk_model_cache_enabled()
-            @test isempty(mtkext.MTK_CACHE)
+            @test isempty(mtkext.COMPILE_CACHE.entries)
         end
         @test mtkext.MODEL_CACHE_MODE[] === :on
     end
@@ -265,7 +265,7 @@ end
         for _ in 1:2
             @test_throws Exception VertexModel(sizedsys(1), [:i], [:nonexistent])
         end
-        @test isempty(mtkext.MTK_CACHE)
+        @test isempty(mtkext.COMPILE_CACHE.entries)
     end
 end
 
@@ -280,11 +280,11 @@ end
         NetworkDynamics.wipe_mtk_model_cache!()
         VertexModel(checksys(), [:i], [:y])
         hit = VertexModel(checksys(), [:i], [:y])
-        @test cache_counts() == (1, 1)
+        @test compile_counts() == (1, 1)
         @test isempty(model_diff(fresh, hit))
 
         # a corrupted entry is caught on the next hit
-        entry = only(values(mtkext.MTK_CACHE))
+        entry = only(values(mtkext.COMPILE_CACHE.entries))
         @variables z(t)
         entry.value = (; entry.value..., observed=[entry.value.observed; z ~ 0])
         @test_throws r"different build.*observed" VertexModel(checksys(), [:i], [:y])
@@ -303,6 +303,6 @@ end
         sys = concsys()
         fetch.([Threads.@spawn VertexModel(sys, [:i], [:y]) for _ in 1:8])
     end
-    @test cache_counts() == (1, 7)
+    @test compile_counts() == (1, 7)
     @test all(c -> isempty(model_diff(fresh, c)), built)
 end

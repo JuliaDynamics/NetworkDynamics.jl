@@ -1,12 +1,5 @@
-# Session-wide cache from the structure of a system to the output of `generate_io_function`.
-# Beyond `MTK_CACHE_SIZE[]` entries, the least recently used ones are dropped.
-# The mode is `:off`, `:on` or `:check`, see `set_mtk_model_cache!`.
+# The mode of both caches, `:off`, `:on` or `:check`, see `set_mtk_model_cache!`.
 const MODEL_CACHE_MODE = Ref(:off)
-const MTK_CACHE_SIZE = Ref(500)
-const CACHE_LOCK = ReentrantLock()
-const CACHE_HITS = Ref(0)
-const CACHE_MISSES = Ref(0)
-const CACHE_WAITINGS = Ref(0)
 
 # The properties which make up the structure of a system. Two systems are structurally equal
 # when all of them agree, recursing through `systems`. Names, guesses, descriptions and most
@@ -99,31 +92,48 @@ mutable struct CacheEntry
     value::Any
 end
 
-# insertion order doubles as recency order, the front is dropped first
-const MTK_CACHE = OrderedDict{UInt, CacheEntry}()
-const MTK_CACHE_COUNTS = (hits=CACHE_HITS, misses=CACHE_MISSES, waitings=CACHE_WAITINGS)
+# A session-wide LRU cache which several tasks can fill at once. Beyond `maxsize` entries, the
+# least recently used ones are dropped. The lock is never held while a value is built.
+mutable struct ThreadsafeCache{K}
+    const name::String
+    const lock::ReentrantLock
+    # insertion order doubles as recency order, the front is dropped first
+    const entries::OrderedDict{K, CacheEntry}
+    maxsize::Int
+    hits::Int
+    misses::Int
+    waitings::Int
+end
+function ThreadsafeCache{K}(name; maxsize=500) where {K}
+    ThreadsafeCache{K}(name, ReentrantLock(), OrderedDict{K, CacheEntry}(), maxsize, 0, 0, 0)
+end
+
+# the structure of a system to the output of `generate_io_function`
+const COMPILE_CACHE = ThreadsafeCache{UInt}("MTK Model Cache")
+# a `@cached_component` call to the system the user's function built
+const COMPONENT_CACHE = ThreadsafeCache{Any}("Cached Component")
+const ALL_CACHES = (COMPILE_CACHE, COMPONENT_CACHE)
 
 # Returns the cached value for `key`, calling `f` to fill the entry on a miss. Other tasks
 # asking for the same key wait for that build. If it fails, they call `f` themselves.
-# `counts` holds the hit, miss and waiting counters belonging to `cache`.
-function threadsafe_cache_load!(f, cache, counts, key)
-    entry, isowner = @lock CACHE_LOCK begin
-        entry = get(cache, key, nothing)
+function Base.get!(f, cache::ThreadsafeCache, key)
+    entry, isowner = @lock cache.lock begin
+        entry = get(cache.entries, key, nothing)
         if isnothing(entry)
-            counts.misses[] += 1
-            entry = cache[key] = CacheEntry(Base.Event(), current_task(), nothing)
-            while length(cache) > MTK_CACHE_SIZE[]
-                delete!(cache, first(keys(cache)))
+            cache.misses += 1
+            entry = cache.entries[key] = CacheEntry(Base.Event(), current_task(), nothing)
+            while length(cache.entries) > cache.maxsize
+                delete!(cache.entries, first(keys(cache.entries)))
             end
             entry, true
         else
-            counts.hits[] += 1
+            cache.hits += 1
             if isnothing(entry.value)
-                counts.waitings[] += 1
+                cache.waitings += 1
             end
             # move to the back
-            delete!(cache, key)
-            cache[key] = entry
+            delete!(cache.entries, key)
+            cache.entries[key] = entry
             entry, false
         end
     end
@@ -131,13 +141,13 @@ function threadsafe_cache_load!(f, cache, counts, key)
     if isowner
         try
             value = f()
-            @lock CACHE_LOCK begin
+            @lock cache.lock begin
                 entry.value = value
                 entry.owner = nothing
             end
         catch
-            @lock CACHE_LOCK begin
-                get(cache, key, nothing) === entry && delete!(cache, key)
+            @lock cache.lock begin
+                get(cache.entries, key, nothing) === entry && delete!(cache.entries, key)
             end
             rethrow()
         finally
@@ -154,6 +164,29 @@ function threadsafe_cache_load!(f, cache, counts, key)
     isnothing(entry.value) ? f() : entry.value
 end
 
+function Base.empty!(cache::ThreadsafeCache)
+    @lock cache.lock empty!(cache.entries)
+    cache
+end
+
+function reset_counts!(cache::ThreadsafeCache)
+    @lock cache.lock begin
+        cache.hits = cache.misses = cache.waitings = 0
+    end
+    cache
+end
+
+function print_stats(cache::ThreadsafeCache)
+    @lock cache.lock begin
+        (; hits, misses, waitings) = cache
+        println(cache.name, " Stats:")
+        println("  Entries:  ", length(cache.entries), " (max ", cache.maxsize, ")")
+        println("  Misses:   ", misses)
+        println("  Hits:     ", hits, " (", waitings, " after waiting)")
+        println("  Hit Rate: ", round(hits / max(hits + misses, 1) * 100, digits=2), "%")
+    end
+end
+
 # `generate_io_function`, reused for systems with the same structure. Callers read all
 # per-instance data (defaults, guesses, metadata) from `sys`.
 function generate_io_function_cached(sys, inputss, outputss; verbose=false, mtkcompile=false, kwargs...)
@@ -166,7 +199,7 @@ function generate_io_function_cached(sys, inputss, outputss; verbose=false, mtkc
     end
     hit = true
     key = _structural_key(sys, inputss, outputss, kwargs)
-    gen = threadsafe_cache_load!(MTK_CACHE, MTK_CACHE_COUNTS, key) do
+    gen = get!(COMPILE_CACHE, key) do
         hit = false
         build()
     end
@@ -216,16 +249,15 @@ See also [`NetworkDynamics.with_mtk_model_cache`](@ref).
 """
 function NetworkDynamics.set_mtk_model_cache!(mode; maxsize=nothing)
     mode = cache_mode(mode)
-    @lock CACHE_LOCK begin
-        if !isnothing(maxsize)
-            MTK_CACHE_SIZE[] = maxsize
+    for cache in ALL_CACHES
+        @lock cache.lock begin
+            if !isnothing(maxsize)
+                cache.maxsize = maxsize
+            end
+            mode === :off && empty!(cache.entries)
         end
-        if mode === :off
-            empty!(MTK_CACHE)
-            empty!(CTOR_CACHE)
-        end
-        MODEL_CACHE_MODE[] = mode
     end
+    MODEL_CACHE_MODE[] = mode
 end
 cache_mode(use::Bool) = use ? :on : :off
 function cache_mode(mode::Symbol)
@@ -241,10 +273,7 @@ the code generating models changes within a session, for example when editing Ne
 a cached component with Revise.
 """
 function NetworkDynamics.wipe_mtk_model_cache!()
-    @lock CACHE_LOCK begin
-        empty!(MTK_CACHE)
-        empty!(CTOR_CACHE)
-    end
+    foreach(empty!, ALL_CACHES)
     nothing
 end
 
@@ -272,12 +301,7 @@ See also [`NetworkDynamics.set_mtk_model_cache!`](@ref), [`NetworkDynamics.wipe_
 """
 function NetworkDynamics.with_mtk_model_cache(f, mode=:on)
     oldmode = MODEL_CACHE_MODE[]
-    @lock CACHE_LOCK begin
-        CACHE_HITS[] = 0
-        CACHE_MISSES[] = 0
-        CACHE_WAITINGS[] = 0
-        foreach(c -> c[] = 0, CTOR_CACHE_COUNTS)
-    end
+    foreach(reset_counts!, ALL_CACHES)
     NetworkDynamics.set_mtk_model_cache!(mode)
     try
         f()
@@ -294,19 +318,7 @@ constructors since the session started or since the last
 [`NetworkDynamics.with_mtk_model_cache`](@ref) block began.
 """
 function NetworkDynamics.mtk_cache_stats()
-    @lock CACHE_LOCK begin
-        println("MTK Model Cache Stats:")
-        println("  Entries:  ", length(MTK_CACHE), " (max ", MTK_CACHE_SIZE[], ")")
-        println("  Misses:   ", CACHE_MISSES[])
-        println("  Hits:     ", CACHE_HITS[], " (", CACHE_WAITINGS[], " after waiting)")
-        println("  Hit Rate: ", round(CACHE_HITS[] / max(CACHE_HITS[] + CACHE_MISSES[], 1) * 100, digits=2), "%")
-        (; hits, misses, waitings) = map(getindex, CTOR_CACHE_COUNTS)
-        println("Cached Component Stats:")
-        println("  Entries:  ", length(CTOR_CACHE), " (max ", MTK_CACHE_SIZE[], ")")
-        println("  Misses:   ", misses)
-        println("  Hits:     ", hits, " (", waitings, " after waiting)")
-        println("  Hit Rate: ", round(hits / max(hits + misses, 1) * 100, digits=2), "%")
-    end
+    foreach(print_stats, ALL_CACHES)
 end
 
 function NetworkDynamics.mtk_model_cache_enabled()
