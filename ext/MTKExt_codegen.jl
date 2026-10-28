@@ -1,10 +1,58 @@
-# Builds f or g with SymbolicUtils' CSE. Observables and equations are a single `Let` around the
-# output writes, and every argument element is bound to a named local (`state1 = ˍ₋arg1[1]`).
-# `sink_conv` then moves each assignment down to where it is first needed.
+# Builds f or g. For `Dt(x) ~ -y*k`, `y ~ sin(x)` and `o ~ ifelse(x > 0, y, 0)` the generated g
+# looks roughly like this:
+#
+#     function g(out, u)
+#         x = u[1]                    # argument elements become named locals
+#         ##cse#1 = 0 < x
+#         o = if ##cse#1
+#             ##cse#2 = sin(x)        # only computed in the branch which needs it
+#             y = ##cse#2
+#             y
+#         else
+#             0
+#         end
+#         out[1] = o                  # all output writes at the end
+#         out
+#     end
 function build_fg(eqs, obs_subs, args; expression)
     assignments, outs = _get_formulas(eqs, obs_subs)
+    _build_bound(assignments, outs, args; cse=true, expression)
+end
+
+# The obsf takes an extra mask argument which says which observed assignments to compute, see
+# `DependencyAwareObsf`. No CSE here: it would move work shared by two observables out of their
+# mask guards. With the observables `a ~ 2x` and `b ~ a + k`:
+#
+#     function obsf(out, u, in, p, t, mask)
+#         a = if mask[1]              # every observed assignment has its own bit
+#             x = u[1]
+#             2x
+#         else
+#             NaN
+#         end
+#         b = if mask[2]              # set together with mask[1], as b needs a
+#             k = p[1]
+#             a + k
+#         else
+#             NaN
+#         end
+#         out[1] = a
+#         out[2] = b
+#         out
+#     end
+function build_obsf(obsstates, obs_subs, allinputs, args; expression)
+    obsmask = unwrap(Symbolics.variable(:ˍ₋obsmask))
+    assignments, columns, needs_input = _get_masked_obsformulas(obsstates, obs_subs, allinputs, obsmask)
+    f_ip = _build_bound(assignments, obsstates, (args..., obsmask); cse=false, expression)
+    NetworkDynamics.DependencyAwareObsf(f_ip, columns, needs_input)
+end
+
+# The assignments are a single `Let` around the output writes, and every argument element is bound
+# to a named local (`state1 = ˍ₋arg1[1]`). `sink_conv` then moves each assignment down to where it
+# is first needed.
+function _build_bound(assignments, outs, args; cse, expression)
     wrap = fex -> Func(map(_with_bindings, fex.args), fex.kwargs, Let(assignments, fex.body, false), fex.pre)
-    _, f_ip = build_function(outs, args...; cse=true, wrap_code=(wrap, wrap), conv=sink_conv, expression)
+    _, f_ip = build_function(outs, args...; cse, wrap_code=(wrap, wrap), conv=sink_conv, expression)
     f_ip
 end
 _with_bindings(arg) = arg
@@ -27,6 +75,49 @@ function _get_formulas(eqs, obs_subs)
     assignments = [Assignment(a.lhs, topow(a.rhs)) for a in vcat(obs_assignments, eqs_assignments)]
     assignments, map(topow, outs)
 end
+
+# Like `_get_formulas` for the observables, but every assignment is guarded by `mask`.
+# Also returns what `DependencyAwareObsf` needs: per observable, the assignments it needs and
+# whether one of them reads an input.
+function _get_masked_obsformulas(obsstates, obs_subs, allinputs, mask)
+    # filter out obs_subs which are not needed for any observable
+    deps = _collect_deps_on_obs(obsstates, obs_subs)
+    assigned = [k for k in keys(obs_subs) if k ∈ deps]
+    topow = SymbolicUtils.Postwalk(_power_to_product)
+    assignments = map(enumerate(assigned)) do (j, k)
+        Assignment(k, ifelse(_obs_required(mask, j), topow(obs_subs[k]), NaN))
+    end
+
+    # position of each assigned symbol, also its bit in the mask
+    assignment_index = Dict(k => j for (j, k) in enumerate(assigned))
+    assignment_rhs_syms = [_all_rhs_symbols(obs_subs[k]) for k in assigned]
+
+    # for each assignment, mark itself and every assignment it needs. The assignments are
+    # topologically sorted, so the columns of its dependencies are already complete.
+    assignment_columns = Vector{BitVector}(undef, length(assigned))
+    for (j, syms) in enumerate(assignment_rhs_syms)
+        col = falses(length(assigned))
+        col[j] = true
+        for s in syms
+            haskey(assignment_index, s) || continue
+            dep = assignment_index[s]
+            dep < j || error("Observed assignments are not topologically sorted.")
+            NetworkDynamics._or!(col, assignment_columns[dep])
+        end
+        assignment_columns[j] = col
+    end
+    obs_columns = [assignment_columns[assignment_index[s]] for s in obsstates]
+
+    # an observable needs the inputs if any of its assignments reads one
+    inputs = Set{ST}(allinputs) # including ext inputs
+    assignment_reads_input = BitVector(any(∈(inputs), syms) for syms in assignment_rhs_syms)
+    obs_needs_input = BitVector(any(assignment_reads_input .& col) for col in obs_columns)
+
+    assignments, obs_columns, obs_needs_input
+end
+_obs_required(::Nothing, j) = true
+_obs_required(mask, j) = @inbounds mask[j]
+Symbolics.@register_symbolic _obs_required(mask, j::Int)::Bool
 
 function _power_to_product(ex)
     iscall(ex) && operation(ex) === (^) || return ex
