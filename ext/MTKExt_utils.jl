@@ -621,16 +621,15 @@ function _collect_formula_metadata(sys, VarMetaType, SysMetaKey; flag_var_types=
     # a subsystem variable referenced in this level's equations shows up in this level's
     # unknowns too, still carrying its metadata — but with the expression in the *subsystem's*
     # local names. Only the recursion below sees it in the right namespace, so it must be
-    # skipped here.
-    subvars = Set{ST}()
-    for subsys in ModelingToolkitBase.get_systems(sys)
-        for v in vcat(ModelingToolkitBase.get_unknowns(subsys), ModelingToolkitBase.get_ps(subsys))
-            push!(subvars, unwrap(ModelingToolkitBase.namespace_expr(v, subsys)))
-        end
-    end
+    # skipped here. Most variables carry no formula, so the set is only built when needed.
+    subvars = nothing
     _localvars = Dict{Symbol,Any}() # cache to store potentail roots (for mtkmodel bug recorvery)
     for v in vcat(ModelingToolkitBase.get_unknowns(sys), ModelingToolkitBase.get_ps(sys))
         u = unwrap(v)
+        _has_formula_metadata(u, VarMetaType, flag_var_types) || continue
+        if isnothing(subvars)
+            subvars = _namespaced_subsystem_vars(sys)
+        end
         u ∈ subvars && continue
         if SymbolicUtils.hasmetadata(u, VarMetaType)
             expr = _fix_mtkmodel_formula(sys, SymbolicUtils.getmetadata(u, VarMetaType), u, _localvars)
@@ -653,6 +652,19 @@ function _collect_formula_metadata(sys, VarMetaType, SysMetaKey; flag_var_types=
         end
     end
     entries
+end
+
+_has_formula_metadata(u, VarMetaType, flag_var_types) =
+    SymbolicUtils.hasmetadata(u, VarMetaType) || any(T -> SymbolicUtils.hasmetadata(u, T), flag_var_types)
+
+function _namespaced_subsystem_vars(sys)
+    subvars = Set{ST}()
+    for subsys in ModelingToolkitBase.get_systems(sys)
+        for v in vcat(ModelingToolkitBase.get_unknowns(subsys), ModelingToolkitBase.get_ps(subsys))
+            push!(subvars, unwrap(ModelingToolkitBase.namespace_expr(v, subsys)))
+        end
+    end
+    subvars
 end
 
 # Recover from the `@mtkmodel` footgun: a metadata option written as a *bare identifier*

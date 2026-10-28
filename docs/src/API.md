@@ -24,6 +24,8 @@ EdgeModel(::ModelingToolkitBase.System, ::Any, ::Any, ::Any, ::Any)
 EdgeModel(::ModelingToolkitBase.System, ::Any, ::Any, ::Any)
 ComponentPostprocessing
 NetworkDynamics.with_mtk_model_cache
+NetworkDynamics.set_mtk_model_cache!
+NetworkDynamics.wipe_mtk_model_cache!
 NetworkDynamics.mtk_cache_stats
 ```
 

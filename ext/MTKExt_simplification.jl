@@ -1168,7 +1168,7 @@ function simplify_with_mtkcompile(_sys, allinputs, alloutputs; verbose)
     # create states vector in correct ordering
     states = match_diff_states(eqs, unknowns(sys))
 
-    sys, eqs, obseqs_sorted, states, params
+    eqs, obseqs_sorted, states, params
 end
 
 function simplify_without_mtkcompile(_sys, allinputs, alloutputs; verbose, ff_to_constraint)
@@ -1204,7 +1204,7 @@ function simplify_without_mtkcompile(_sys, allinputs, alloutputs; verbose, ff_to
         outset=Set{ST}(alloutputs), ff_inputs, verbose
     )
 
-    sys, eqs, obseqs, states, params
+    eqs, obseqs, states, params
 end
 
 isdifferential(s) = iscall(unwrap(s)) && operation(unwrap(s)) isa Differential

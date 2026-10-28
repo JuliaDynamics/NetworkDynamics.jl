@@ -419,9 +419,9 @@ vm = VertexModel(testcomp, [:in], [:out])
 ```
 we see the callback was generated and attached automatically.
 
-## Model Caching (Experimental)
+## Model Caching
 
-When building large networks with many identical component types, the compilation of ModelingToolkit systems can become a performance bottleneck. NetworkDynamics provides an experimental caching mechanism to avoid redundant compilation of identical MTK models.
+When building large networks with many identical component types, the compilation of ModelingToolkit systems can become a performance bottleneck. NetworkDynamics therefore caches the generated functions of MTK models: a second `System` with the same structure reuses them, while defaults, guesses and other metadata are still taken from the new system. The cache is off by default. Switch it on with `NetworkDynamics.set_mtk_model_cache!(:on)`, or use `:check` to also rebuild every cache hit and compare it with the cached result.
 
 ```@docs; canonical=false
 NetworkDynamics.with_mtk_model_cache

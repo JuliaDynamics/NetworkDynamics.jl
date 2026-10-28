@@ -1,0 +1,233 @@
+# Session-wide cache from the structure of a system to the output of `generate_io_function`.
+# Beyond `MTK_CACHE_SIZE[]` entries, the least recently used ones are dropped.
+# The mode is `:off`, `:on` or `:check`, see `set_mtk_model_cache!`.
+const MODEL_CACHE_MODE = Ref(:off)
+const MTK_CACHE_SIZE = Ref(500)
+const CACHE_LOCK = ReentrantLock()
+const CACHE_HITS = Ref(0)
+const CACHE_MISSES = Ref(0)
+const CACHE_WAITINGS = Ref(0)
+
+# Keys compare their parts with `isequal`: symbolic expressions structurally, the operations
+# inside them by identity. The hash is computed once up front.
+struct StructuralKey
+    parts::Tuple
+    hash::UInt
+end
+StructuralKey(parts::Tuple) = StructuralKey(parts, hash(parts))
+Base.hash(k::StructuralKey, h::UInt) = hash(k.hash, h)
+Base.isequal(a::StructuralKey, b::StructuralKey) = a.hash == b.hash && isequal(a.parts, b.parts)
+
+# `value` stays `nothing` until the task which created the entry has built it
+mutable struct CacheEntry
+    const ready::Base.Event
+    value::Any
+end
+
+# insertion order doubles as recency order, the front is dropped first
+const MTK_CACHE = OrderedDict{StructuralKey, CacheEntry}()
+
+# Returns the cached value for `key`, calling `f` to fill the entry on a miss. Other tasks
+# asking for the same key wait for that build. If it fails, they call `f` themselves.
+function threadsafe_cache_load!(f, key)
+    entry, isowner = @lock CACHE_LOCK begin
+        entry = get(MTK_CACHE, key, nothing)
+        if isnothing(entry)
+            CACHE_MISSES[] += 1
+            entry = MTK_CACHE[key] = CacheEntry(Base.Event(), nothing)
+            while length(MTK_CACHE) > MTK_CACHE_SIZE[]
+                delete!(MTK_CACHE, first(keys(MTK_CACHE)))
+            end
+            entry, true
+        else
+            CACHE_HITS[] += 1
+            if isnothing(entry.value)
+                CACHE_WAITINGS[] += 1
+            end
+            # move to the back
+            delete!(MTK_CACHE, key)
+            MTK_CACHE[key] = entry
+            entry, false
+        end
+    end
+
+    if isowner
+        try
+            value = f()
+            @lock CACHE_LOCK entry.value = value
+        catch
+            @lock CACHE_LOCK begin
+                get(MTK_CACHE, key, nothing) === entry && delete!(MTK_CACHE, key)
+            end
+            rethrow()
+        finally
+            notify(entry.ready)
+        end
+    else
+        wait(entry.ready)
+    end
+    isnothing(entry.value) ? f() : entry.value
+end
+
+# `generate_io_function`, reused for systems with the same structure. Callers read all
+# per-instance data (defaults, guesses, metadata) from `sys`.
+function generate_io_function_cached(sys, inputss, outputss; verbose=false, kwargs...)
+    build() = generate_io_function(sys, inputss, outputss; verbose, kwargs...)
+    # verbose builds run fresh so that all their messages show up
+    mode = MODEL_CACHE_MODE[]
+    if mode === :off || verbose
+        return build()
+    end
+    hit = true
+    gen = threadsafe_cache_load!(_structural_key(sys, inputss, outputss, kwargs)) do
+        hit = false
+        build()
+    end
+    if hit && mode === :check
+        rebuilt = build()
+        diff = [k for k in keys(rebuilt) if !_samebuild(gen[k], rebuilt[k])]
+        isempty(diff) || error("MTK model cache returned a different build for system $(getname(sys)), \
+            differing in $(join(diff, ", ")). Please report this as a bug. \
+            `NetworkDynamics.set_mtk_model_cache!(:off)` switches the cache off.")
+    end
+    # the containers which end up in the component are not shared with the cache
+    fresh = map(copy, (; gen.obsrules, gen.aliasmap, gen.observed, gen.equations,
+                         gen.full_equations, gen.outputeqs, gen.full_outputeqs, gen.mass_matrix))
+    (; gen..., fresh...)
+end
+
+# Compares a cache hit with a fresh build. Generated functions count as equal when their types
+# agree, since the type of a RuntimeGeneratedFunction carries the hash of its body.
+function _samebuild(a, b)
+    if a isa AbstractVector && b isa AbstractVector
+        length(a) == length(b) && all(i -> _samebuild(a[i], b[i]), eachindex(a, b))
+    elseif a isa Union{ResolutionRule, InitFormula, GuessFormula, NetworkDynamics.DependencyAwareObsf}
+        typeof(a) == typeof(b) && all(fn -> _samebuild(getfield(a, fn), getfield(b, fn)), fieldnames(typeof(a)))
+    elseif a isa Function
+        typeof(a) == typeof(b)
+    else
+        isequal(a, b)
+    end
+end
+
+# Everything `generate_io_function` reads from `sys` except numeric defaults and guesses.
+# Init and guess formulas end up in generated code, so they are part of the key.
+function _structural_key(sys, inputss, outputss, kwargs)
+    expanded = ModelingToolkitBase.expand_connections(sys)
+    us = unknowns(expanded)
+    ps = parameters(expanded)
+    parts = (
+        copy(equations(expanded)),
+        copy(observed(expanded)),
+        Dict(ModelingToolkitBase.bindings(expanded)),
+        us, ps, independent_variables(expanded),
+        collect_initf(sys), collect_guessf(sys),
+        map(x -> getname.(x), inputss), map(x -> getname.(x), outputss),
+        NamedTuple(kwargs),
+    )
+    # mtkcompile also reads variable metadata, e.g. `irreducible`
+    if get(kwargs, :mtkcompile, false)
+        parts = (parts..., map(Symbolics.metadata, us), map(Symbolics.metadata, ps))
+    end
+    StructuralKey(parts)
+end
+
+"""
+    NetworkDynamics.set_mtk_model_cache!(mode; maxsize=nothing)
+
+Set the mode of the MTK model cache:
+- `:off` (default): every component is built from scratch. Switching off also empties the cache.
+- `:on`: components with the same structure as an earlier one reuse its generated functions.
+- `:check`: like `:on`, but every cache hit is also built from scratch and compared with the cached
+  result. Errors if they differ. This is slow and meant for debugging.
+
+`true` and `false` stand for `:on` and `:off`. `maxsize` sets how many distinct models the cache
+keeps (500 by default).
+
+See also [`NetworkDynamics.with_mtk_model_cache`](@ref).
+"""
+function NetworkDynamics.set_mtk_model_cache!(mode; maxsize=nothing)
+    mode = _cache_mode(mode)
+    @lock CACHE_LOCK begin
+        if !isnothing(maxsize)
+            MTK_CACHE_SIZE[] = maxsize
+        end
+        if mode === :off
+            empty!(MTK_CACHE)
+        end
+        MODEL_CACHE_MODE[] = mode
+    end
+end
+_cache_mode(use::Bool) = use ? :on : :off
+function _cache_mode(mode::Symbol)
+    mode in (:off, :on, :check) || throw(ArgumentError("Cache mode must be :off, :on or :check, got :$mode."))
+    mode
+end
+
+"""
+    NetworkDynamics.wipe_mtk_model_cache!()
+
+Empty the MTK model cache. Needed when the code generating models changes within a session,
+for example when editing NetworkDynamics with Revise.
+"""
+function NetworkDynamics.wipe_mtk_model_cache!()
+    @lock CACHE_LOCK empty!(MTK_CACHE)
+    nothing
+end
+
+"""
+    NetworkDynamics.with_mtk_model_cache(f, mode=:on)
+
+Run `f` with the MTK model cache in the given mode (see [`NetworkDynamics.set_mtk_model_cache!`](@ref))
+and restore the previous mode afterwards. Also resets the counters of
+[`NetworkDynamics.mtk_cache_stats`](@ref).
+
+```julia
+NetworkDynamics.with_mtk_model_cache(false) do
+    # code which builds mtk models without the cache
+end
+```
+
+The cache is off by default. When it is on and a [`VertexModel`](@ref) or [`EdgeModel`](@ref) is built from
+a `System` with the same equations, variables, bindings, init and guess formulas and
+inputs/outputs as an earlier one, the generated functions and equations are reused. Defaults,
+guesses and other metadata are always read from the new system. Warnings of the build only show
+up once, when the cache entry is filled; builds with `verbose=true` bypass the cache. The cache
+is thread safe, so components can be built concurrently.
+
+See also [`NetworkDynamics.set_mtk_model_cache!`](@ref), [`NetworkDynamics.wipe_mtk_model_cache!`](@ref).
+"""
+function NetworkDynamics.with_mtk_model_cache(f, mode=:on)
+    oldmode = MODEL_CACHE_MODE[]
+    @lock CACHE_LOCK begin
+        CACHE_HITS[] = 0
+        CACHE_MISSES[] = 0
+        CACHE_WAITINGS[] = 0
+    end
+    NetworkDynamics.set_mtk_model_cache!(mode)
+    try
+        f()
+    finally
+        NetworkDynamics.set_mtk_model_cache!(oldmode)
+    end
+end
+
+"""
+    NetworkDynamics.mtk_cache_stats()
+
+Print statistics about the MTK model cache since the session started or since the last
+[`NetworkDynamics.with_mtk_model_cache`](@ref) block began.
+"""
+function NetworkDynamics.mtk_cache_stats()
+    @lock CACHE_LOCK begin
+        println("MTK Model Cache Stats:")
+        println("  Entries:  ", length(MTK_CACHE), " (max ", MTK_CACHE_SIZE[], ")")
+        println("  Misses:   ", CACHE_MISSES[])
+        println("  Hits:     ", CACHE_HITS[], " (", CACHE_WAITINGS[], " after waiting)")
+        println("  Hit Rate: ", round(CACHE_HITS[] / max(CACHE_HITS[] + CACHE_MISSES[], 1) * 100, digits=2), "%")
+    end
+end
+
+function NetworkDynamics.mtk_model_cache_enabled()
+    MODEL_CACHE_MODE[] !== :off
+end
