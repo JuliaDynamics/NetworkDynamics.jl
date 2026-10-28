@@ -1,18 +1,3 @@
-# Code generation emits `x^2` as a call to the function object `^`, which Julia never lowers to
-# `Base.literal_pow`. The generic integer power behind it is slow, so we rewrite those calls after
-# `toexpr`. Pass as `conv` to the `build_function` calls which produce runtime code (the component
-# functions f, g and obsf come from MTKExt_codegen.jl instead).
-# SymbolicUtils ≥ 4.52 does this itself, so this can go once that is the compat floor.
-literal_pow_conv(ex, st) = _literal_pow(Symbolics.toexpr(ex, st))
-_literal_pow(x) = x
-function _literal_pow(ex::Expr)
-    args = map(_literal_pow, ex.args)
-    if ex.head === :call && length(args) == 3 && args[1] === (^) && args[3] isa Int
-        return Expr(:call, Base.literal_pow, ^, args[2], Val(args[3]))
-    end
-    Expr(ex.head, args...)
-end
-
 """
     eq_type(eq::Equation)
 
@@ -877,7 +862,7 @@ end
 # rather than an `@initformula` call — it reads nicer and keeps the two origins consistent.
 function _build_formula(::Type{FT}, r) where {FT}
     macroname = "@" * lowercase(string(nameof(FT)))
-    f = Symbolics.build_function([r.rhs], r.input_symbolic; expression=Val(false), conv=literal_pow_conv)[2]
+    f = Symbolics.build_function([r.rhs], r.input_symbolic; expression=Val(false))[2]
 
     # spell the inputs as the `:sym` the macro form uses, in place of the symbolic variables
     rhsstring = repr(r.rhs)
@@ -978,7 +963,7 @@ function _push_eq_rules!(rules, eq, ivname)
     syms = getname.(vars)
     lhsname ∈ syms && _self_reference_error(eq)
 
-    f = build_function([eq.rhs], vars; expression=Val(false), conv=literal_pow_conv)[2]
+    f = build_function([eq.rhs], vars; expression=Val(false))[2]
     push!(rules, _derived_rule(f, lhsname, syms))
 end
 
