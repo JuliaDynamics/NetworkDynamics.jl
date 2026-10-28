@@ -70,10 +70,8 @@ function _get_formulas(eqs, obs_subs)
     # implicit eqs have 0 lhs, explicit eqs are already captured via assignment, output their lhs
     outs = [isequal(unwrap_const(eq.lhs), 0) ? eq.rhs : eq.lhs for eq in eqs]
 
-    # integer powers become plain products, so no `pow` call is left in the generated code
-    topow = SymbolicUtils.Postwalk(_power_to_product)
-    assignments = [Assignment(a.lhs, topow(a.rhs)) for a in vcat(obs_assignments, eqs_assignments)]
-    assignments, map(topow, outs)
+    assignments = [Assignment(a.lhs, powers_to_products(a.rhs)) for a in vcat(obs_assignments, eqs_assignments)]
+    assignments, map(powers_to_products, outs)
 end
 
 # Like `_get_formulas` for the observables, but every assignment is guarded by `mask`.
@@ -83,9 +81,8 @@ function _get_masked_obsformulas(obsstates, obs_subs, allinputs, mask)
     # filter out obs_subs which are not needed for any observable
     deps = _collect_deps_on_obs(obsstates, obs_subs)
     assigned = [k for k in keys(obs_subs) if k ∈ deps]
-    topow = SymbolicUtils.Postwalk(_power_to_product)
     assignments = map(enumerate(assigned)) do (j, k)
-        Assignment(k, ifelse(_obs_required(mask, j), topow(obs_subs[k]), NaN))
+        Assignment(k, ifelse(_obs_required(mask, j), powers_to_products(obs_subs[k]), NaN))
     end
 
     # position of each assigned symbol, also its bit in the mask
@@ -119,6 +116,9 @@ _obs_required(::Nothing, j) = true
 _obs_required(mask, j) = @inbounds mask[j]
 Symbolics.@register_symbolic _obs_required(mask, j::Int)::Bool
 
+# Integer powers become plain products. Generated code would call `^` with an integer exponent,
+# which is a slow generic function, and with CSE the exponent even ends up in a variable.
+powers_to_products(ex) = SymbolicUtils.Postwalk(_power_to_product)(ex)
 function _power_to_product(ex)
     iscall(ex) && operation(ex) === (^) || return ex
     x, n = arguments(ex)
@@ -126,9 +126,8 @@ function _power_to_product(ex)
     n isa Integer && n >= 2 || return ex
     _power_product(x, n, SymbolicUtils.symtype(ex))
 end
-# x^n by repeated squaring, so x^100 takes 8 multiplications. A plain `x^n` would not do: CSE
-# binds the exponent to a variable, and a power with a variable exponent is a slow generic call.
-# A raw `Term` keeps `x*x` from collapsing back into `x^2`.
+# x^n by repeated squaring, so x^100 takes 8 multiplications. A raw `Term` keeps `x*x` from
+# collapsing back into `x^2`.
 function _power_product(x, n, T)
     n == 1 && return x
     half = _power_product(x, n ÷ 2, T)
