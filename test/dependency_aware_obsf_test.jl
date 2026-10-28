@@ -6,6 +6,7 @@ using Graphs
 using Chairmarks
 using Test
 import SymbolicIndexingInterface as SII
+using Symbolics: Symbolics
 
 @__MODULE__()==Main ? includet(joinpath(pkgdir(NetworkDynamics), "test", "ComponentLibrary.jl")) : (const Lib = Main.Lib)
 
@@ -92,6 +93,26 @@ vm = VertexModel(daov, [:i], [:o]; extin=[:e => VIndex(2, :x)])
     @test obsf(copy(vm)) === o
     @test obsf(vm2) == o
     @test hash(obsf(vm2)) == hash(o)
+end
+
+dao_calls = Ref(0)
+dao_count(x) = (dao_calls[] += 1; x)
+Symbolics.@register_symbolic dao_count(x)
+@testset "masked observables are not computed" begin
+    # `p` and `q` share `dao_count(x)`, which CSE must not pull out of their guards
+    @variables x(t)=1 i(t) [input=true] o(t) [output=true] p(t) q(t) r(t)
+    eqs = [Dt(x) ~ -x + i, o ~ x, p ~ 2dao_count(x), q ~ 3dao_count(x), r ~ x + 1]
+    @named sharedv = System(eqs, t)
+    vm = VertexModel(sharedv, [:i], [:o])
+    o = obsf(vm)
+    args = ([1.5], [0.7], Float64[], 0.0)
+    out = zeros(3)
+    dao_calls[] = 0
+    o(out, args...; required=[findfirst(==(:r), obssym(vm))])
+    @test dao_calls[] == 0
+    o(out, args...)
+    @test out[findfirst(==(:p), obssym(vm))] ≈ 3.0
+    @test dao_calls[] > 0
 end
 
 @testset "input check follows ff_to_constraint" begin
