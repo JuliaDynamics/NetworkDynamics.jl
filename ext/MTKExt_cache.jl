@@ -8,15 +8,93 @@ const CACHE_HITS = Ref(0)
 const CACHE_MISSES = Ref(0)
 const CACHE_WAITINGS = Ref(0)
 
-# Keys compare their parts with `isequal`: symbolic expressions structurally, the operations
-# inside them by identity. The hash is computed once up front.
-struct StructuralKey
-    parts::Tuple
-    hash::UInt
+# The properties which make up the structure of a system. Two systems are structurally equal
+# when all of them agree, recursing through `systems`. Names, guesses, descriptions and most
+# defaults are not on the list, those are read from each instance.
+const STRUCTURAL_PROPERTIES = (
+    eqs = ModelingToolkitBase.get_eqs,
+    unknowns = ModelingToolkitBase.get_unknowns,
+    ps = ModelingToolkitBase.get_ps,
+    iv = ModelingToolkitBase.get_iv,
+    observed = ModelingToolkitBase.get_observed,
+    bindings = ModelingToolkitBase.get_bindings,
+    connector_type = ModelingToolkitBase.get_connector_type,
+    ignored_connections = ModelingToolkitBase.get_ignored_connections,
+    initf = s -> SymbolicUtils.getmetadata(s, NetworkDynamics.SystemInitFormulas, nothing),
+    guessf = s -> SymbolicUtils.getmetadata(s, NetworkDynamics.SystemGuessFormulas, nothing),
+    postprocessing = s -> SymbolicUtils.getmetadata(s, ComponentPostprocessing, nothing),
+    systems = ModelingToolkitBase.get_systems,
+)
+
+# Symbols hash without their metadata, so the key collects the variable metadata which the
+# build reads on top. With `mtkcompile` all of it counts.
+const STRUCTURAL_VAR_METADATA = (
+    VariableInitFormula,
+    VariableInitFormulaWeak,
+    VariableInitFormulaOptional,
+    VariableGuessFormula,
+    ModelingToolkitBase.VariableConnectType,
+    ModelingToolkitBase.VariableInput,
+    ModelingToolkitBase.VariableOutput
+)
+
+# The key is a hash of the structure of `sys` and of the other arguments of
+# `generate_io_function`. With 64 bits, collisions between a few hundred entries are too
+# unlikely to be worth comparing the systems themselves.
+function _structural_key(sys, inputss, outputss, kwargs)
+    args = (
+        map(x -> getname.(x), inputss),
+        map(x -> getname.(x), outputss),
+        NamedTuple(kwargs)
+    )
+    _structural_hash(sys, hash(args), get(kwargs, :mtkcompile, false))
 end
-StructuralKey(parts::Tuple) = StructuralKey(parts, hash(parts))
-Base.hash(k::StructuralKey, h::UInt) = hash(k.hash, h)
-Base.isequal(a::StructuralKey, b::StructuralKey) = a.hash == b.hash && isequal(a.parts, b.parts)
+
+# Hashes every structural property of `sys`, then the metadata of its variables. The name of
+# `sys` itself does not count, children are hashed together with their name.
+function _structural_hash(sys, h::UInt, mtkcompile)
+    # build incremental hash of all structural properties (recurses on system)
+    for (name, prop) in pairs(STRUCTURAL_PROPERTIES)
+        h = _hash_property(name, prop(sys), h, mtkcompile)
+    end
+    # build incremental hash of all variable metadata
+    # if mtkcompile is true, hash ALL metadata
+    for vars in (ModelingToolkitBase.get_unknowns(sys), ModelingToolkitBase.get_ps(sys))
+        for v in vars
+            h = hash(_var_metadata(v, mtkcompile), h)
+        end
+    end
+    # parameters of a domain connector which have a default get bound across its connections
+    if ModelingToolkitBase.is_domain_connector(sys)
+        ics = ModelingToolkitBase.get_initial_conditions(sys)
+        h = hash(map(p -> !isnothing(get(ics, p, nothing)), ModelingToolkitBase.get_ps(sys)), h)
+    end
+    h
+end
+function _hash_property(name, x, h, mtkcompile)
+    if name === :systems
+        foldl((h, child) -> _hash_child(child, h, mtkcompile), x; init=h)
+    elseif name === :eqs || name === :observed
+        foldl((h, eq) -> hash(_comparable_eq(eq), h), x; init=h)
+    else
+        hash(x, h)
+    end
+end
+_hash_child(child, h, mtkcompile) = _structural_hash(child, hash(nameof(child), h), mtkcompile)
+
+# The systems in a connection equation hash by identity. Their names are enough to describe
+# the connection, since the systems themselves are hashed as children.
+function _comparable_eq(eq::Equation)
+    lhs, rhs = unwrap_const(eq.lhs), unwrap_const(eq.rhs)
+    lhs isa ModelingToolkitBase.Connection && rhs isa ModelingToolkitBase.Connection || return eq
+    conns = map(s -> s isa ModelingToolkitBase.AbstractSystem ? nameof(s) : s, rhs.systems)
+    (lhs.systems, conns)
+end
+
+function _var_metadata(v, mtkcompile)
+    mtkcompile && return Symbolics.metadata(unwrap(v))
+    map(K -> SymbolicUtils.getmetadata(v, K, nothing), STRUCTURAL_VAR_METADATA)
+end
 
 # `value` stays `nothing` until the task which created the entry has built it
 mutable struct CacheEntry
@@ -25,7 +103,7 @@ mutable struct CacheEntry
 end
 
 # insertion order doubles as recency order, the front is dropped first
-const MTK_CACHE = OrderedDict{StructuralKey, CacheEntry}()
+const MTK_CACHE = OrderedDict{UInt, CacheEntry}()
 
 # Returns the cached value for `key`, calling `f` to fill the entry on a miss. Other tasks
 # asking for the same key wait for that build. If it fails, they call `f` themselves.
@@ -110,28 +188,6 @@ function _samebuild(a, b)
     end
 end
 
-# Everything `generate_io_function` reads from `sys` except numeric defaults and guesses.
-# Init and guess formulas end up in generated code, so they are part of the key.
-function _structural_key(sys, inputss, outputss, kwargs)
-    expanded = ModelingToolkitBase.expand_connections(sys)
-    us = unknowns(expanded)
-    ps = parameters(expanded)
-    parts = (
-        copy(equations(expanded)),
-        copy(observed(expanded)),
-        Dict(ModelingToolkitBase.bindings(expanded)),
-        us, ps, independent_variables(expanded),
-        collect_initf(sys), collect_guessf(sys),
-        map(x -> getname.(x), inputss), map(x -> getname.(x), outputss),
-        NamedTuple(kwargs),
-    )
-    # mtkcompile also reads variable metadata, e.g. `irreducible`
-    if get(kwargs, :mtkcompile, false)
-        parts = (parts..., map(Symbolics.metadata, us), map(Symbolics.metadata, ps))
-    end
-    StructuralKey(parts)
-end
-
 """
     NetworkDynamics.set_mtk_model_cache!(mode; maxsize=nothing)
 
@@ -189,8 +245,8 @@ end
 ```
 
 The cache is off by default. When it is on and a [`VertexModel`](@ref) or [`EdgeModel`](@ref) is built from
-a `System` with the same equations, variables, bindings, init and guess formulas and
-inputs/outputs as an earlier one, the generated functions and equations are reused. Defaults,
+a `System` with the same equations, variables, bindings, init and guess formulas, subsystems
+and inputs/outputs as an earlier one, the generated functions and equations are reused. Defaults,
 guesses and other metadata are always read from the new system. Warnings of the build only show
 up once, when the cache entry is filled; builds with `verbose=true` bypass the cache. The cache
 is thread safe, so components can be built concurrently.
