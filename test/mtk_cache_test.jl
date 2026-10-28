@@ -208,16 +208,19 @@ end
     end
 end
 
-@testset "mtkcompile path" begin
+@testset "mtkcompile builds bypass the cache" begin
     function mtksys()
         @variables x(t)=1 i(t) y(t) z(t)
         @parameters a=1
         System([Dt(x) ~ -a*x + i, z ~ 2x, y ~ z], t; name=:mtksys)
     end
-    fresh, miss, hit = fresh_miss_hit(() -> VertexModel(mtksys(), [:i], [:y]; mtkcompile=true))
-    @test isempty(model_diff(fresh, miss))
-    @test isempty(model_diff(fresh, hit))
-    @test isequal(fg_output(fresh), fg_output(hit))
+    NetworkDynamics.with_mtk_model_cache() do
+        NetworkDynamics.wipe_mtk_model_cache!()
+        VertexModel(mtksys(), [:i], [:y]; mtkcompile=true)
+        VertexModel(mtksys(), [:i], [:y]; mtkcompile=true)
+        @test cache_counts() == (0, 0)
+        @test isempty(mtkext.MTK_CACHE)
+    end
 end
 
 @testset "cache lifetime" begin

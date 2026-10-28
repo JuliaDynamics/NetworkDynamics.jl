@@ -27,7 +27,7 @@ const STRUCTURAL_PROPERTIES = (
 )
 
 # Symbols hash without their metadata, so the key collects the variable metadata which the
-# build reads on top. With `mtkcompile` all of it counts.
+# build reads on top.
 const STRUCTURAL_VAR_METADATA = (
     VariableInitFormula,
     VariableInitFormulaWeak,
@@ -47,21 +47,21 @@ function _structural_key(sys, inputss, outputss, kwargs)
         map(x -> getname.(x), outputss),
         NamedTuple(kwargs)
     )
-    _structural_hash(sys, hash(args), get(kwargs, :mtkcompile, false))
+    _structural_hash(sys, hash(args))
 end
 
 # Hashes every structural property of `sys`, then the metadata of its variables. The name of
 # `sys` itself does not count, children are hashed together with their name.
-function _structural_hash(sys, h::UInt, mtkcompile)
+function _structural_hash(sys, h::UInt)
     # build incremental hash of all structural properties (recurses on system)
     for (name, prop) in pairs(STRUCTURAL_PROPERTIES)
-        h = _hash_property(name, prop(sys), h, mtkcompile)
+        h = _hash_property(name, prop(sys), h)
     end
-    # build incremental hash of all variable metadata
-    # if mtkcompile is true, hash ALL metadata
+    # build incremental hash of the variable metadata the build reads
     for vars in (ModelingToolkitBase.get_unknowns(sys), ModelingToolkitBase.get_ps(sys))
         for v in vars
-            h = hash(_var_metadata(v, mtkcompile), h)
+            var_metadata = map(K -> SymbolicUtils.getmetadata(v, K, nothing), STRUCTURAL_VAR_METADATA)
+            h = hash(var_metadata, h)
         end
     end
     # parameters of a domain connector which have a default get bound across its connections
@@ -71,16 +71,16 @@ function _structural_hash(sys, h::UInt, mtkcompile)
     end
     h
 end
-function _hash_property(name, x, h, mtkcompile)
+function _hash_property(name, x, h)
     if name === :systems
-        foldl((h, child) -> _hash_child(child, h, mtkcompile), x; init=h)
+        foldl((h, child) -> _hash_child(child, h), x; init=h)
     elseif name === :eqs || name === :observed
         foldl((h, eq) -> hash(_comparable_eq(eq), h), x; init=h)
     else
         hash(x, h)
     end
 end
-_hash_child(child, h, mtkcompile) = _structural_hash(child, hash(nameof(child), h), mtkcompile)
+_hash_child(child, h) = _structural_hash(child, hash(nameof(child), h))
 
 # The systems in a connection equation hash by identity. Their names are enough to describe
 # the connection, since the systems themselves are hashed as children.
@@ -89,11 +89,6 @@ function _comparable_eq(eq::Equation)
     lhs isa ModelingToolkitBase.Connection && rhs isa ModelingToolkitBase.Connection || return eq
     conns = map(s -> s isa ModelingToolkitBase.AbstractSystem ? nameof(s) : s, rhs.systems)
     (lhs.systems, conns)
-end
-
-function _var_metadata(v, mtkcompile)
-    mtkcompile && return Symbolics.metadata(unwrap(v))
-    map(K -> SymbolicUtils.getmetadata(v, K, nothing), STRUCTURAL_VAR_METADATA)
 end
 
 # `value` stays `nothing` until the task which created the entry has built it
@@ -149,11 +144,12 @@ end
 
 # `generate_io_function`, reused for systems with the same structure. Callers read all
 # per-instance data (defaults, guesses, metadata) from `sys`.
-function generate_io_function_cached(sys, inputss, outputss; verbose=false, kwargs...)
-    build() = generate_io_function(sys, inputss, outputss; verbose, kwargs...)
-    # verbose builds run fresh so that all their messages show up
+function generate_io_function_cached(sys, inputss, outputss; verbose=false, mtkcompile=false, kwargs...)
+    build() = generate_io_function(sys, inputss, outputss; verbose, mtkcompile, kwargs...)
+    # Verbose builds run fresh so that all their messages show up. The key only knows what ND's
+    # own simplification reads, so `mtkcompile` builds are not cached.
     mode = MODEL_CACHE_MODE[]
-    if mode === :off || verbose
+    if mode === :off || verbose || mtkcompile
         return build()
     end
     hit = true
@@ -248,8 +244,8 @@ The cache is off by default. When it is on and a [`VertexModel`](@ref) or [`Edge
 a `System` with the same equations, variables, bindings, init and guess formulas, subsystems
 and inputs/outputs as an earlier one, the generated functions and equations are reused. Defaults,
 guesses and other metadata are always read from the new system. Warnings of the build only show
-up once, when the cache entry is filled; builds with `verbose=true` bypass the cache. The cache
-is thread safe, so components can be built concurrently.
+up once, when the cache entry is filled. Builds with `verbose=true` or `mtkcompile=true` bypass
+the cache. The cache is thread safe, so components can be built concurrently.
 
 See also [`NetworkDynamics.set_mtk_model_cache!`](@ref), [`NetworkDynamics.wipe_mtk_model_cache!`](@ref).
 """
