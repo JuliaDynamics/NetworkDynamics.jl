@@ -20,6 +20,7 @@
 #         NetworkDynamics.load_cached_component(
 #             () -> _lag_build(; name, lag, T);  # the builder function
 #             key = (Lag, 0x5f3a..., (lag, iszero(T))),  # constructor, token, implicit and explicit structural
+#             keynames = ("lag", "iszero(T)"),           # labels the structural values in the stats
 #             mode = cache,                              # :off, :on or :check
 #             name,
 #             kwargs = (; lag, T),                       # applied like defaults where they name a symbol
@@ -65,11 +66,13 @@ function NetworkDynamics.cached_component_expr(mod, fdef)
     # edited constructor does not hit entries of its old version.
     defaults = gensym(:defaults)
     key = :(($fname, $(rand(UInt)), ($(implicit_structural...), $(explicit_structural...))))
+    keynames = Tuple(map(string, [implicit_structural; explicit_structural]))
     cachekw = Expr(:kw, :cache, :($(GlobalRef(NetworkDynamics, :mtk_model_cache_mode))()))
     def[:kwargs] = Any[kwargs..., cachekw, :($defaults...)]
     def[:body] = quote
         $(GlobalRef(NetworkDynamics, :load_cached_component))(() -> $buildname(; $(kwnames...));
             key = $key,
+            keynames = $keynames,
             mode = cache,
             name,
             kwargs = (; $(setdiff(kwnames, (:name,))...)),
@@ -123,17 +126,19 @@ end
 
 # Called by the code `@cached_component` generates. `build()` runs the user's function, `key`
 # holds the constructor, its token and the structural values, and `kwargs` the explicit kwargs.
-function NetworkDynamics.load_cached_component(build; key, mode, name, kwargs, defaults, gui)
+function NetworkDynamics.load_cached_component(build; key, keynames, mode, name, kwargs, defaults, gui)
     mode = cache_mode(mode)
     modelname = nameof(first(key))
     if mode === :off
         return _finish(_built(build, gui), kwargs, defaults)
     end
 
-    # values which are equal but of different type, like 1 and 1.0, are different keys
-    typedkey = (key[1], key[2], map(v -> (typeof(v), v), key[3]))
+    # Values which are equal but of different type, like 1 and 1.0, are different keys. Only the
+    # hash is stored, so mutating an argument after the call can't change the stored key.
+    timedkey = @timed hash((key[1], key[2], map(v -> (typeof(v), v), key[3])))
     hit = true
-    cached = get!(COMPONENT_CACHE, typedkey) do
+    label() = string(modelname, "(", join(map(_keylabel, keynames, key[3]), ", "), ")")
+    cached = get!(COMPONENT_CACHE, timedkey.value; label, keytime=timedkey) do
         hit = false
         sys = _built(build, gui)
         _warn_overridden(sys, kwargs, modelname)
@@ -147,6 +152,11 @@ function NetworkDynamics.load_cached_component(build; key, mode, name, kwargs, d
         _check_cached(sys, _finish(_built(build, gui), kwargs, defaults), modelname)
     end
     sys
+end
+
+function _keylabel(name, value)
+    str = sprint(show, value; context=:compact => true)
+    string(name, "=", length(str) > 30 ? first(str, 29) * "…" : str)
 end
 
 # The user's function returns a plain system, which gets the GUI metadata `@component` would set.

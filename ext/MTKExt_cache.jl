@@ -85,49 +85,62 @@ function _comparable_eq(eq::Equation)
 end
 
 # `value` stays `nothing` until `owner`, the task which created the entry, has built it.
-# The owner is dropped then, so that the entry doesn't keep the task alive.
+# The owner is dropped then, so that the entry doesn't keep the task alive. The label, the
+# timings and the hits are only there for `print_stats`. `keytime` adds up the time spent on
+# computing the key over all calls which ended up at this entry.
 mutable struct CacheEntry
     const ready::Base.Event
+    const label::String
     owner::Union{Task, Nothing}
     value::Any
+    buildtime::Float64
+    compiletime::Float64
+    keytime::Float64
+    hits::Int
 end
 
 # A session-wide LRU cache which several tasks can fill at once. Beyond `maxsize` entries, the
 # least recently used ones are dropped. The lock is never held while a value is built.
-mutable struct ThreadsafeCache{K}
+mutable struct ThreadsafeCache
     const name::String
     const lock::ReentrantLock
     # insertion order doubles as recency order, the front is dropped first
-    const entries::OrderedDict{K, CacheEntry}
+    const entries::OrderedDict{UInt, CacheEntry}
     maxsize::Int
     hits::Int
     misses::Int
     waitings::Int
 end
-function ThreadsafeCache{K}(name; maxsize=500) where {K}
-    ThreadsafeCache{K}(name, ReentrantLock(), OrderedDict{K, CacheEntry}(), maxsize, 0, 0, 0)
+function ThreadsafeCache(name; maxsize=500)
+    ThreadsafeCache(name, ReentrantLock(), OrderedDict{UInt, CacheEntry}(), maxsize, 0, 0, 0)
 end
 
 # the structure of a system to the output of `generate_io_function`
-const COMPILE_CACHE = ThreadsafeCache{UInt}("MTK Model Cache")
+const COMPILE_CACHE = ThreadsafeCache("MTK Model Cache")
 # a `@cached_component` call to the system the user's function built
-const COMPONENT_CACHE = ThreadsafeCache{Any}("Cached Component")
+const COMPONENT_CACHE = ThreadsafeCache("Cached Component")
 const ALL_CACHES = (COMPILE_CACHE, COMPONENT_CACHE)
 
 # Returns the cached value for `key`, calling `f` to fill the entry on a miss. Other tasks
 # asking for the same key wait for that build. If it fails, they call `f` themselves.
-function Base.get!(f, cache::ThreadsafeCache, key)
+# For the statistics, `keytime` is the `@timed` computation of the key, and `label()` describes
+# the entry. It is only called on a miss.
+function Base.get!(f, cache::ThreadsafeCache, key::UInt; label=() -> "", keytime=nothing)
+    keytime = isnothing(keytime) ? 0.0 : _runtime(keytime)
     entry, isowner = @lock cache.lock begin
         entry = get(cache.entries, key, nothing)
         if isnothing(entry)
             cache.misses += 1
-            entry = cache.entries[key] = CacheEntry(Base.Event(), current_task(), nothing)
+            entry = CacheEntry(Base.Event(), label(), current_task(), nothing, NaN, NaN, keytime, 0)
+            cache.entries[key] = entry
             while length(cache.entries) > cache.maxsize
                 delete!(cache.entries, first(keys(cache.entries)))
             end
             entry, true
         else
             cache.hits += 1
+            entry.hits += 1
+            entry.keytime += keytime
             if isnothing(entry.value)
                 cache.waitings += 1
             end
@@ -140,9 +153,11 @@ function Base.get!(f, cache::ThreadsafeCache, key)
 
     if isowner
         try
-            value = f()
+            timed = @timed f()
             @lock cache.lock begin
-                entry.value = value
+                entry.buildtime = timed.time
+                entry.compiletime = _compiletime(timed)
+                entry.value = timed.value
                 entry.owner = nothing
             end
         catch
@@ -172,19 +187,59 @@ end
 function reset_counts!(cache::ThreadsafeCache)
     @lock cache.lock begin
         cache.hits = cache.misses = cache.waitings = 0
+        foreach(values(cache.entries)) do e
+            e.hits = 0
+            e.keytime = 0.0
+        end
     end
     cache
 end
 
-function print_stats(cache::ThreadsafeCache)
+# Besides the counters, this estimates the time the cache saved: each hit is worth the time its
+# entry took to build, without compilation, and every call costs the time spent on its key.
+# Compile time is counted for all threads at once, so with concurrent builds this is rough.
+function print_stats(cache::ThreadsafeCache; n=10)
     @lock cache.lock begin
         (; hits, misses, waitings) = cache
+        built = filter(e -> !isnothing(e.value), collect(values(cache.entries)))
+        runtime(e) = e.buildtime - e.compiletime
+        avoided(e) = e.hits * runtime(e)
+        saved(e) = avoided(e) - e.keytime
         println(cache.name, " Stats:")
-        println("  Entries:  ", length(cache.entries), " (max ", cache.maxsize, ")")
+        println("  Entries:  ", length(cache.entries), " (max ", cache.maxsize, "), built in ",
+                _fmt_time(sum(e -> e.buildtime, built; init=0.0)), ", of which ",
+                _fmt_time(sum(e -> e.compiletime, built; init=0.0)), " compiling")
         println("  Misses:   ", misses)
         println("  Hits:     ", hits, " (", waitings, " after waiting)")
         println("  Hit Rate: ", round(hits / max(hits + misses, 1) * 100, digits=2), "%")
+        println("  Saved:    ≈ ", _fmt_time(sum(saved, built; init=0.0)), " (",
+                _fmt_time(sum(avoided, built; init=0.0)), " of builds avoided, ",
+                _fmt_time(sum(e -> e.keytime, built; init=0.0)), " spent on keys)")
+
+        withhits = sort!(filter(e -> e.hits > 0, built); by=saved, rev=true)
+        if !isempty(withhits)
+            println("  Most time saved (hits × build time without compilation − key time):")
+            for e in first(withhits, n)
+                println("    ", rpad(_fmt_time(saved(e)), 9), lpad(e.hits, 5), " × ",
+                        rpad(_fmt_time(runtime(e)), 9), " − ", rpad(_fmt_time(e.keytime), 9), " ", e.label)
+            end
+            length(withhits) > n && println("    … and ", length(withhits) - n, " more")
+        end
+        nohits = filter(e -> e.hits == 0, built)
+        if !isempty(nohits)
+            labels = map(e -> e.label, first(nohits, n))
+            more = length(nohits) > n ? ", …" : ""
+            println("  Without hits (", length(nohits), "): ", join(labels, ", "), more)
+        end
     end
+end
+# Julia 1.10 doesn't report compile time
+_compiletime(timed) = get(timed, :compile_time, 0.0)
+_runtime(timed) = timed.time - _compiletime(timed)
+
+function _fmt_time(t)
+    str(x) = NetworkDynamics.str_significant(x; sigdigits=3)
+    t < 1e-3 ? string(str(t * 1e6), " µs") : t < 1 ? string(str(t * 1e3), " ms") : string(str(t), " s")
 end
 
 # `generate_io_function`, reused for systems with the same structure. Callers read all
@@ -198,8 +253,9 @@ function generate_io_function_cached(sys, inputss, outputss; verbose=false, mtkc
         return build()
     end
     hit = true
-    key = _structural_key(sys, inputss, outputss, kwargs)
-    gen = get!(COMPILE_CACHE, key) do
+    timedkey = @timed _structural_key(sys, inputss, outputss, kwargs)
+    label() = _system_label(sys)
+    gen = get!(COMPILE_CACHE, timedkey.value; label, keytime=timedkey) do
         hit = false
         build()
     end
@@ -214,6 +270,12 @@ function generate_io_function_cached(sys, inputss, outputss; verbose=false, mtkc
     fresh = map(copy, (; gen.obsrules, gen.aliasmap, gen.observed, gen.equations,
                          gen.full_equations, gen.outputeqs, gen.full_outputeqs, gen.mass_matrix))
     (; gen..., fresh...)
+end
+
+# The name of the first system with this structure, and its constructor if MTK recorded one.
+function _system_label(sys)
+    gui = ModelingToolkitBase.get_gui_metadata(sys)
+    isnothing(gui) ? string(getname(sys)) : string(getname(sys), " (", gui.type.name, ")")
 end
 
 # Compares a cache hit with a fresh build. Generated functions count as equal when their types
