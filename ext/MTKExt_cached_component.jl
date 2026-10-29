@@ -6,6 +6,9 @@
 # plain build function. The constructor under the user's name also takes the defaults, computes
 # the key and calls `load_cached_component`, which runs the build function on a miss.
 #
+# Neither function specializes on the argument types. A constructor body is long symbolic code,
+# and compiling it again for every combination of keyword types (`T=1` and `T=1.0`) is expensive.
+#
 #     @cached_component function Lag(; name, lag=true, T=1.0)
 #         @structural iszero(T)
 #         ...body...
@@ -13,12 +16,14 @@
 #
 # becomes roughly
 #
-#     function _lag_build(; name, lag=true, T=1.0)
+#     Base.@nospecializeinfer function _lag_build(name, lag, T)
+#         @nospecialize
 #         ...body...
 #     end
 #     Base.@__doc__ function Lag(; name, lag=true, T=1.0, cache=NetworkDynamics.mtk_cache_mode(), _defaults...)
+#         # (plus the meta of `@nospecialize` and `@nospecializeinfer`)
 #         NetworkDynamics.load_cached_component(
-#             () -> _lag_build(; name, lag, T);  # the builder function
+#             _lag_build, (name, lag, T);  # the build function and its arguments
 #             key = (Lag, 0x5f3a..., (lag, iszero(T))),  # constructor, token, implicit and explicit structural
 #             keynames = ("lag", "iszero(T)"),           # labels the structural values in the stats
 #             mode = cache,                              # :off, :on or :check
@@ -37,14 +42,16 @@ function NetworkDynamics.cached_component_expr(mod, fdef)
 
     kwargs = get(def, :kwargs, Any[])
     kwnames = Symbol[]
+    buildargs = Any[]
     for kw in kwargs
-        kwname, _, slurp, _ = MacroTools.splitarg(kw)
+        kwname, kwtype, slurp, _ = MacroTools.splitarg(kw)
         if slurp
             error("$fname slurps `$kwname...`. @cached_component takes the defaults itself and \
                 applies them to the finished system, so remove them from the signature and drop the \
                 call to `set_mtk_defaults`.")
         end
         push!(kwnames, kwname)
+        push!(buildargs, :($kwname::$kwtype))
     end
     :name in kwnames || error("@cached_component constructor $fname needs a `name` keyword argument.")
     :cache in kwnames && error("`cache` is reserved by @cached_component, rename it in $fname.")
@@ -56,10 +63,9 @@ function NetworkDynamics.cached_component_expr(mod, fdef)
     :name in mentioned && error("`name` can't be structural in $fname.")
     implicit_structural = setdiff(kwnames, mentioned, (:name,))
 
-    builddef = copy(def)
     buildname = Symbol("#", fname, "#build")
-    builddef[:name] = buildname
-    builddef[:body] = body
+    builddef = Dict{Symbol,Any}(:name => buildname, :args => buildargs, :kwargs => Any[],
+        :body => Expr(:block, Expr(:meta, :nospecialize), body))
 
     # The defaults get a hidden name, so that the `@structural` expressions can't read them. A
     # random token changes whenever the definition is evaluated anew, e.g. by Revise, so that an
@@ -70,7 +76,9 @@ function NetworkDynamics.cached_component_expr(mod, fdef)
     cachekw = Expr(:kw, :cache, :($(GlobalRef(NetworkDynamics, :mtk_cache_mode))()))
     def[:kwargs] = Any[kwargs..., cachekw, :($defaults...)]
     def[:body] = quote
-        $(GlobalRef(NetworkDynamics, :load_cached_component))(() -> $buildname(; $(kwnames...));
+        $(Expr(:meta, :nospecialize))
+        $(Expr(:meta, :nospecializeinfer))
+        $(GlobalRef(NetworkDynamics, :load_cached_component))($buildname, ($(kwnames...),);
             key = $key,
             keynames = $keynames,
             mode = cache,
@@ -80,7 +88,7 @@ function NetworkDynamics.cached_component_expr(mod, fdef)
             gui = $(QuoteNode(GlobalRef(mod, fname))))
     end
     quote
-        $(MacroTools.combinedef(builddef))
+        $(Expr(:macrocall, GlobalRef(Base, Symbol("@nospecializeinfer")), nothing, MacroTools.combinedef(builddef)))
         Base.@__doc__ $(MacroTools.combinedef(def))
     end
 end
@@ -124,23 +132,25 @@ end
 
 # The constructor calls go into `COMPONENT_CACHE`, which is defined next to the compile cache.
 
-# Called by the code `@cached_component` generates. `build()` runs the user's function, `key`
-# holds the constructor, its token and the structural values, and `kwargs` the explicit kwargs.
-function NetworkDynamics.load_cached_component(build; key, keynames, mode, name, kwargs, defaults, gui)
+# Called by the code `@cached_component` generates. `build(args...)` runs the user's function,
+# `key` holds the constructor, its token and the structural values, and `kwargs` the explicit
+# kwargs. Like the generated code, this doesn't specialize on the argument types, which also
+# keeps the closures below untyped.
+Base.@nospecializeinfer function NetworkDynamics.load_cached_component(build, args;
+        key, keynames, mode, name, kwargs, defaults, gui)
+    @nospecialize
     mode = cache_mode(mode)
     modelname = nameof(first(key))
     if mode === :off
-        return _finish(_built(build, gui), kwargs, defaults)
+        return _finish(_built(build, args, gui), kwargs, defaults)
     end
 
-    # Values which are equal but of different type, like 1 and 1.0, are different keys. Only the
-    # hash is stored, so mutating an argument after the call can't change the stored key.
-    timedkey = @timed hash((key[1], key[2], map(v -> (typeof(v), v), key[3])))
+    timedkey = @timed _key_hash(key)
     hit = true
     label() = string(modelname, "(", join(map(_keylabel, keynames, key[3]), ", "), ")")
     cached = get!(COMPONENT_CACHE, timedkey.value; label, keytime=timedkey) do
         hit = false
-        sys = _built(build, gui)
+        sys = _built(build, args, gui)
         _warn_overridden(sys, kwargs, modelname)
         sys
     end
@@ -149,19 +159,34 @@ function NetworkDynamics.load_cached_component(build; key, keynames, mode, name,
     hit && @reset sys.name = name
     sys = _finish(sys, kwargs, defaults)
     if hit && mode === :check
-        _check_cached(sys, _finish(_built(build, gui), kwargs, defaults), modelname)
+        _check_cached(sys, _finish(_built(build, args, gui), kwargs, defaults), modelname)
     end
     sys
 end
 
+# Values which are equal but of different type, like 1 and 1.0, are different keys. Only the
+# hash is stored, so mutating an argument after the call can't change the stored key.
+function _key_hash(key)
+    @nospecialize
+    h = hash(key[2], hash(key[1]))
+    vals = key[3]
+    for i in 1:nfields(vals)
+        v = getfield(vals, i)
+        h = hash(v, hash(typeof(v), h))
+    end
+    h
+end
+
 function _keylabel(name, value)
+    @nospecialize
     str = sprint(show, value; context=:compact => true)
     string(name, "=", length(str) > 30 ? first(str, 29) * "…" : str)
 end
 
 # The user's function returns a plain system, which gets the GUI metadata `@component` would set.
-function _built(build, gui)
-    sys = build()
+function _built(build, args, gui)
+    @nospecialize
+    sys = build(args...)
     if isnothing(ModelingToolkitBase.get_gui_metadata(sys))
         @reset sys.gui_metadata = ModelingToolkitBase.GUIMetadata(gui)
     end
@@ -171,6 +196,7 @@ end
 # Applies the defaults to a built system. Explicit kwargs which name a symbol of the system count
 # as defaults too, on every path, so that a hit is the same as a fresh build.
 function _finish(sys, kwargs, defaults)
+    @nospecialize
     applied = filter(k -> _names_symbol(sys, k), collect(keys(kwargs)))
     NetworkDynamics.set_mtk_defaults(sys, (; kwargs[Tuple(applied)]..., defaults...))
 end
@@ -178,6 +204,7 @@ end
 # An explicit kwarg whose value replaces a different value the body gave its symbol is probably
 # a mistake, since the body's value never shows up.
 function _warn_overridden(sys, kwargs, modelname)
+    @nospecialize
     ics = initial_conditions(sys)
     for (k, v) in pairs(kwargs)
         _names_symbol(sys, k) || continue

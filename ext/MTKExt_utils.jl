@@ -289,9 +289,11 @@ end
 
 # docstring lives in utils.jl
 function NetworkDynamics.set_mtk_defaults(sys::System, pairs)
+    @nospecialize
     isempty(pairs) && return sys
-    defs = values(pairs)
-    names = keys(pairs)
+    # plain vectors, so that the rest isn't compiled again for every type of `pairs`
+    defs = collect(Any, values(pairs))
+    names = collect(Symbol, keys(pairs))
     symbols = map(names) do name
         try
             getproperty_symbolic(sys, name; might_contain_toplevel_ns=false)

@@ -659,7 +659,8 @@ influence the system.
 
 Sometimes a structural argument is also a default, for example the `T` in the lag above.
 Whenever a structural argument matches the name of a symbol of the system, it is applied after
-the body, as all other defaults are.
+the body, as all other defaults are. Unlike the other defaults, one that names no symbol of the
+built system is dropped silently instead of raising an error.
 
 # Projecting with `@structural`
 
