@@ -169,6 +169,99 @@ end
     nw3 = Network(g, v, nested)
     j3 = get_jac_prototype(nw3) # nested conditionals collapse from the inside out
     @test j1 == j3
+
+    # the edges have no states, so a dense g gives the same pattern; check the batches instead
+    compg(nw) = NetworkDynamics.get_compatible_batch(only(nw.layer.edgebatches), 1; verbose=false, showerror=false).compg
+    @test compg(nw) !== NetworkDynamics._generic_dense_edgeg
+    @test compg(nw2) === NetworkDynamics._generic_dense_edgeg
+    @test compg(nw3) !== NetworkDynamics._generic_dense_edgeg
+end
+
+@testset "conditionals with sunk CSE assignments" begin
+    # CSE moves `k*sin(x) + i` into the true branch of the generated `if`, so the arms hold
+    # assignments and not just values
+    @mtkmodel BranchyNode begin
+        @variables begin
+            x(t)=1
+            y(t)=1
+            i(t)
+            o(t)
+        end
+        @parameters begin
+            k=1
+            active=1
+        end
+        @equations begin
+            Dt(x) ~ ifelse(active > 0, k*sin(x) + i, -x)
+            Dt(y) ~ -y
+            o ~ x
+        end
+    end
+    @named bn = BranchyNode()
+    v = VertexModel(bn, [:i], [:o])
+    e = EdgeModel(g=AntiSymmetric((o,vs,vd,p,t)->(o[1]=vs[1]-vd[1])), outdim=1, pdim=0)
+    nw = Network(path_graph(2), v, e)
+
+    batch = NetworkDynamics.get_compatible_batch(only(nw.vertexbatches), 1; verbose=false, showerror=false)
+    @test batch.compf !== NetworkDynamics._generic_dense_f
+
+    # states are [y₁, x₁, y₂, x₂], a dense f would couple y to x and to the neighbour
+    @test variable_symbols(nw) == [VIndex(1, :y), VIndex(1, :x), VIndex(2, :y), VIndex(2, :x)]
+    @test Matrix(get_jac_prototype(nw; verbose=false)) == Bool[1 0 0 0
+                                                              0 1 0 1
+                                                              0 0 1 0
+                                                              0 1 0 1]
+
+    # CSE computes the condition above the `if`. Once the `if` is gone that line is unread,
+    # and it has to go too, since the tracer has no `&`.
+    @mtkmodel AndNode begin
+        @variables begin
+            x(t)=1
+            y(t)=1
+            i(t)
+            o(t)
+        end
+        @parameters begin
+            k=1
+            active=1
+        end
+        @equations begin
+            Dt(x) ~ ifelse((active > 0) & (x > 0), k*sin(x) + i, -x)
+            Dt(y) ~ -y
+            o ~ x
+        end
+    end
+    @named an = AndNode()
+    nw_and = Network(path_graph(2), VertexModel(an, [:i], [:o]), e)
+    batch = NetworkDynamics.get_compatible_batch(only(nw_and.vertexbatches), 1; verbose=false, showerror=false)
+    @test batch.compf !== NetworkDynamics._generic_dense_f
+    @test Matrix(get_jac_prototype(nw_and; verbose=false)) == Bool[1 0 0 0
+                                                                  0 1 0 1
+                                                                  0 0 1 0
+                                                                  0 1 0 1]
+
+    # an MTK edge with separate src and dst outputs has its g in a `MultipleOutputWrapper`
+    @mtkmodel TwoSidedValve begin
+        @variables begin
+            p_src(t)
+            p_dst(t)
+            q_src(t)
+            q_dst(t)
+        end
+        @parameters begin
+            active=1
+        end
+        @equations begin
+            q_dst ~ ifelse(active > 0, sin(p_src - p_dst), 0)
+            q_src ~ -q_dst
+        end
+    end
+    @named tsv = TwoSidedValve()
+    etsv = EdgeModel(tsv, [:p_src], [:p_dst], [:q_src], [:q_dst])
+    @test etsv.g isa NetworkDynamics.MultipleOutputWrapper
+    nw_tsv = Network(path_graph(2), VertexModel(bn, [:i], [:o]), etsv)
+    batch = NetworkDynamics.get_compatible_batch(only(nw_tsv.layer.edgebatches), 1; verbose=false, showerror=false)
+    @test batch.compg !== NetworkDynamics._generic_dense_edgeg
 end
 
 @testset "stored prototype has a full diagonal" begin
@@ -259,6 +352,39 @@ end
     # without an else branch there is nothing to sum
     without_else = :(dest = if cond; truepath; end)
     @test_throws NetworkDynamics.RemainingConditionalsException NetworkDynamics.filter_conditionals_expr(without_else)
+
+    # assignments to names which are assigned nowhere else may run unconditionally
+    sunk = :(dest = if cond; a = f(x); a + 1; else; b = g(y); b; end)
+    sunk_target = :(dest = begin
+        a = f(x)
+        a + 1
+    end + begin
+        b = g(y)
+        b
+    end)
+    @test compare_expr(NetworkDynamics.filter_conditionals_expr(sunk), sunk_target)
+
+    sunk_nested = :(dest = if cond; a = if cond2; c = f(x); c; else; y; end; a; else; z; end)
+    sunk_nested_target = :(dest = begin
+        a = begin
+            c = f(x)
+            c
+        end + begin
+            y
+        end
+        a
+    end + begin
+        z
+    end)
+    @test compare_expr(NetworkDynamics.filter_conditionals_expr(sunk_nested), sunk_nested_target)
+
+    # but not if the name is assigned elsewhere too, the later readers would miss a dependency
+    reassigned = :(begin; a = h(u); dest = if cond; a = f(x); a; else; y; end; out = a; end)
+    @test_throws NetworkDynamics.RemainingConditionalsException NetworkDynamics.filter_conditionals_expr(reassigned)
+
+    # writes into arrays are never moved out of their branch
+    arraywrite = :(dest = if cond; out[1] = f(x); x; else; y; end)
+    @test_throws NetworkDynamics.RemainingConditionalsException NetworkDynamics.filter_conditionals_expr(arraywrite)
 end
 
 @testset "fixpoint solver selection" begin

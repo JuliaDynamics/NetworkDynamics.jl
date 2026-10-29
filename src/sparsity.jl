@@ -36,7 +36,8 @@ the forward-diff jacobian. This check will be disabled with a warning for large 
     a = expr1 + expr2
     ```
     which alters the semantics but keeps the conservative sparsity pattern. Nested conditionals
-    are collapsed from the inside out.
+    are collapsed from the inside out. Assignments to fresh local variables inside the branches
+    are allowed, they then run unconditionally.
 
 See also [`set_jac_prototype!`](@ref).
 """
@@ -298,15 +299,20 @@ function filter_conditionals(w::Fiducial)
         w
     end
 end
+function filter_conditionals(w::MultipleOutputWrapper{FF,N}) where {FF,N}
+    g = filter_conditionals(w.g)
+    g !== w.g ? MultipleOutputWrapper{FF,N,typeof(g)}(g) : w
+end
 
 # Replace every conditional which only picks between two values by the sum of both branches.
 # That is numerically wrong, but the result now depends on both sides, which is what a
 # conservative sparsity pattern needs. `postwalk` works bottom-up, so a nested conditional is
 # already a plain expression by the time its parent is looked at.
 function filter_conditionals_expr(expr)
+    reassigned = _reassigned_names(expr)
     had_conditionals = false
     newex = postwalk(expr) do ex
-        if _is_value_conditional(ex)
+        if _is_value_conditional(ex, reassigned)
             had_conditionals = true
             :($(ex.args[2]) + $(ex.args[3]))
         else
@@ -326,28 +332,70 @@ function filter_conditionals_expr(expr)
     if !had_conditionals && !remaining_ifs
         return expr
     elseif had_conditionals && !remaining_ifs
-        return newex
+        return _drop_dead_assignments(newex)
     else
         throw(RemainingConditionalsException())
     end
 end
 
-# A conditional we may collapse: it has an else branch and both branches are plain values.
-# A branch that assigns to something is left alone, since the rewrite would run it
-# unconditionally and change what later code reads.
-function _is_value_conditional(ex)
+# A conditional we may collapse: it has an else branch and both branches end in a value.
+# Before that value a branch may assign to local names, like the CSE codegen does when it
+# sinks a computation into the branch that needs it. The rewrite runs those assignments
+# unconditionally, which is harmless as long as nothing else assigns the same name.
+function _is_value_conditional(ex, reassigned)
     ex isa Expr && ex.head in (:if, :elseif) && length(ex.args) == 3 || return false
-    _is_pure_value(ex.args[2]) && _is_pure_value(ex.args[3])
+    _is_value_branch(ex.args[2], reassigned) && _is_value_branch(ex.args[3], reassigned)
 end
-function _is_pure_value(ex)
-    ex isa Expr || return true
-    if ex.head === :block
-        stmts = filter(s -> !(s isa LineNumberNode), ex.args)
-        length(stmts) == 1 && _is_pure_value(only(stmts))
-    else
-        ex.head ∉ (:(=), :return, :for, :while, :function)
+function _is_value_branch(ex, reassigned)
+    Meta.isexpr(ex, :block) || return _is_pure_value(ex)
+    stmts = filter(s -> !(s isa LineNumberNode), ex.args)
+    isempty(stmts) && return false
+    assignments, value = stmts[1:end-1], stmts[end]
+    all(s -> _is_single_assignment(s, reassigned), assignments) && _is_value_branch(value, reassigned)
+end
+function _is_single_assignment(ex, reassigned)
+    _is_symbol_assignment(ex) || return false
+    ex.args[1] ∉ reassigned && _is_pure_value(ex.args[2])
+end
+_is_pure_value(ex) = !(ex isa Expr) || ex.head ∉ (:(=), :block, :return, :for, :while, :function)
+function _reassigned_names(expr)
+    seen = Set{Symbol}()
+    reassigned = Set{Symbol}()
+    postwalk(expr) do ex
+        if _is_symbol_assignment(ex)
+            s = ex.args[1]
+            s ∈ seen && push!(reassigned, s)
+            push!(seen, s)
+        end
+        ex
+    end
+    reassigned
+end
+_is_symbol_assignment(ex) = Meta.isexpr(ex, :(=)) && ex.args[1] isa Symbol
+
+# Once a conditional is collapsed, nothing reads its condition any more. CSE computes the
+# condition in its own assignment though, and that can still fail on tracers (there is no `&`
+# for them). So we drop assignments nobody reads, until there are none left.
+function _drop_dead_assignments(ex)
+    while true
+        reads = _read_names!(Set{Symbol}(), ex)
+        newex = postwalk(ex) do e
+            # the last statement of a block is its value, so it stays
+            Meta.isexpr(e, :block) && !isempty(e.args) || return e
+            keep = filter(s -> !(_is_symbol_assignment(s) && s.args[1] ∉ reads), e.args[1:end-1])
+            Expr(:block, keep..., e.args[end])
+        end
+        newex == ex && return newex
+        ex = newex
     end
 end
+_read_names!(reads, s::Symbol) = push!(reads, s)
+function _read_names!(reads, ex::Expr)
+    args = _is_symbol_assignment(ex) ? ex.args[2:2] : ex.args
+    foreach(a -> _read_names!(reads, a), args)
+    reads
+end
+_read_names!(reads, _) = reads
 
 function _to_compatible_execution_scheme(nw_original)
     newex = _compatible_exstyle(nw_original)
