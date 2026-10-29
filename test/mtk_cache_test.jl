@@ -6,6 +6,7 @@ using Symbolics: SymbolicUtils
 using Symbolics: Symbolics
 using StableRNGs: StableRNG
 using Test
+using IOCapture: IOCapture
 mtkext = Base.get_extension(NetworkDynamics, :NetworkDynamicsMTKExt)
 
 # Field-by-field comparison of two component models, returns the names of the differing fields.
@@ -48,16 +49,21 @@ function fg_output(c)
     (outs, du)
 end
 
-compile_counts() = (mtkext.COMPILE_CACHE.misses, mtkext.COMPILE_CACHE.hits)
+# (misses, hits) as `print_stats` counts them, from the built entries in the cache
+function compile_counts()
+    built = filter(e -> !isnothing(e.value), collect(values(mtkext.COMPILE_CACHE.entries)))
+    (length(built), sum(e -> e.hits, built; init=0))
+end
 
 # Builds `ctor()` with the cache switched off, and twice into an empty cache (miss, then hit).
 function fresh_miss_hit(ctor)
     fresh = NetworkDynamics.with_mtk_cache(ctor, false)
     miss, hit = NetworkDynamics.with_mtk_cache() do
         NetworkDynamics.wipe_mtk_cache!()
-        ctor(), ctor()
+        built = ctor(), ctor()
+        @test compile_counts() == (1, 1)
+        built
     end
-    @test compile_counts() == (1, 1)
     fresh, miss, hit
 end
 
@@ -147,8 +153,11 @@ Base.show(io::IO, ::CacheTestQuietGain) = print(io, "gain")
 
     s1, s2 = opsys(CacheTestGain(1.0)), opsys(CacheTestGain(2.0))
     fresh = NetworkDynamics.with_mtk_cache(() -> (build(s1), build(s2)), false)
-    cached = NetworkDynamics.with_mtk_cache(() -> (build(s1), build(s2)))
-    @test compile_counts() == (2, 0)
+    cached = NetworkDynamics.with_mtk_cache() do
+        built = build(s1), build(s2)
+        @test compile_counts() == (2, 0)
+        built
+    end
     @test !isequal(fresh[1], fresh[2])
     @test isequal(cached, fresh)
 
@@ -179,10 +188,11 @@ end
         [VertexModel(psys(v...), [:i], [:y]) for v in variants]
     end
     cached = NetworkDynamics.with_mtk_cache() do
-        [VertexModel(psys(v...), [:i], [:y]) for v in variants]
+        built = [VertexModel(psys(v...), [:i], [:y]) for v in variants]
+        # numeric defaults share an entry, each binding needs its own
+        @test compile_counts() == (3, 2)
+        built
     end
-    # numeric defaults share an entry, each binding needs its own
-    @test compile_counts() == (3, 2)
     for (f, c) in zip(fresh, cached)
         @test isempty(model_diff(f, c))
         @test isequal(fg_output(f), fg_output(c))
@@ -238,11 +248,15 @@ end
             VertexModel(sizedsys(1), [:i], [:y]) # 1 is now the most recently used
             VertexModel(sizedsys(3), [:i], [:y]) # evicts 2
             @test length(mtkext.COMPILE_CACHE.entries) == 2
-            @test compile_counts() == (3, 1)
+            @test compile_counts() == (2, 1)
+            @test mtkext.COMPILE_CACHE.evictions == 1
             VertexModel(sizedsys(1), [:i], [:y])
-            @test compile_counts() == (3, 2)
-            VertexModel(sizedsys(2), [:i], [:y])
-            @test compile_counts() == (4, 2)
+            @test compile_counts() == (2, 2)
+            VertexModel(sizedsys(2), [:i], [:y]) # evicts 3
+            @test compile_counts() == (2, 2)
+            @test mtkext.COMPILE_CACHE.evictions == 2
+            stats = IOCapture.capture(NetworkDynamics.mtk_cache_stats).output
+            @test occursin("2 entries evicted at maxsize 2", stats)
         end
     finally
         NetworkDynamics.set_mtk_cache!(NetworkDynamics.mtk_cache_mode(); maxsize=oldsize)
@@ -301,9 +315,10 @@ end
     built = NetworkDynamics.with_mtk_cache() do
         NetworkDynamics.wipe_mtk_cache!()
         sys = concsys()
-        fetch.([Threads.@spawn VertexModel(sys, [:i], [:y]) for _ in 1:8])
+        cs = fetch.([Threads.@spawn VertexModel(sys, [:i], [:y]) for _ in 1:8])
+        @test compile_counts() == (1, 7)
+        cs
     end
-    @test compile_counts() == (1, 7)
     @test all(c -> isempty(model_diff(fresh, c)), built)
 end
 

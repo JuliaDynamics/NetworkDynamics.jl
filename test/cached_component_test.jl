@@ -8,7 +8,11 @@ using Test
 using IOCapture: IOCapture
 mtkext = Base.get_extension(NetworkDynamics, :NetworkDynamicsMTKExt)
 
-component_counts() = (mtkext.COMPONENT_CACHE.misses, mtkext.COMPONENT_CACHE.hits)
+# (misses, hits) as `print_stats` counts them, from the built entries in the cache
+function component_counts()
+    built = filter(e -> !isnothing(e.value), collect(values(mtkext.COMPONENT_CACHE.entries)))
+    (length(built), sum(e -> e.hits, built; init=0))
+end
 freshhash(sys) = mtkext._structural_hash(sys, zero(UInt))
 # symbols of `sys` as they appear in its own equations, e.g. `machine₊M`
 sym(sys, name) = mtkext.getproperty_symbolic(sys, name; might_contain_toplevel_ns=false)
@@ -299,7 +303,7 @@ end
         @test component_counts() == (1, 0)
         @test length(mtkext.COMPONENT_CACHE.entries) == 1
         stats = IOCapture.capture(NetworkDynamics.mtk_cache_stats).output
-        @test occursin(r"Component Cache Stats:\n  Entries:  1.*\n  Misses:   1\n  Hits:     0", stats)
+        @test occursin(r"Component Cache Stats:\n  Entries:  1 .*\n  Hits:     0 ", stats)
         NetworkDynamics.wipe_mtk_cache!()
         @test isempty(mtkext.COMPONENT_CACHE.entries)
         TestMachine(; name=:a)
@@ -307,7 +311,8 @@ end
             @test isempty(mtkext.COMPONENT_CACHE.entries)
             TestMachine(; name=:a)
         end
-        @test component_counts() == (0, 0) # the nested block reset the counters
+        @test component_counts() == (0, 0) # switching off at the end of the block emptied the cache
+        @test occursin("Component Cache Stats: no entries", IOCapture.capture(NetworkDynamics.mtk_cache_stats).output)
     end
 
     # the kwarg overrides the global mode for one call
@@ -335,9 +340,10 @@ end
     cached = NetworkDynamics.with_mtk_cache() do
         NetworkDynamics.wipe_mtk_cache!()
         TestBus(; name=:other)
-        build()
+        c = build()
+        @test component_counts() == (2, 1)
+        c
     end
-    @test component_counts() == (2, 1)
     for fn in (:name, :sym, :psym, :obssym, :insym, :outsym, :mass_matrix, :symmetadata)
         @test isequal(getfield(plain, fn), getfield(cached, fn))
     end

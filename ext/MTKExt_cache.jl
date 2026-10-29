@@ -107,12 +107,10 @@ mutable struct ThreadsafeCache
     # insertion order doubles as recency order, the front is dropped first
     const entries::OrderedDict{UInt, CacheEntry}
     maxsize::Int
-    hits::Int
-    misses::Int
-    waitings::Int
+    evictions::Int
 end
 function ThreadsafeCache(name; maxsize=500)
-    ThreadsafeCache(name, ReentrantLock(), OrderedDict{UInt, CacheEntry}(), maxsize, 0, 0, 0)
+    ThreadsafeCache(name, ReentrantLock(), OrderedDict{UInt, CacheEntry}(), maxsize, 0)
 end
 
 # the structure of a system to the output of `generate_io_function`
@@ -130,20 +128,16 @@ function Base.get!(f, cache::ThreadsafeCache, key::UInt; label=() -> "", keytime
     entry, isowner = @lock cache.lock begin
         entry = get(cache.entries, key, nothing)
         if isnothing(entry)
-            cache.misses += 1
             entry = CacheEntry(Base.Event(), label(), current_task(), nothing, NaN, NaN, keytime, 0)
             cache.entries[key] = entry
             while length(cache.entries) > cache.maxsize
                 delete!(cache.entries, first(keys(cache.entries)))
+                cache.evictions += 1
             end
             entry, true
         else
-            cache.hits += 1
             entry.hits += 1
             entry.keytime += keytime
-            if isnothing(entry.value)
-                cache.waitings += 1
-            end
             # move to the back
             delete!(cache.entries, key)
             cache.entries[key] = entry
@@ -186,7 +180,7 @@ end
 
 function reset_counts!(cache::ThreadsafeCache)
     @lock cache.lock begin
-        cache.hits = cache.misses = cache.waitings = 0
+        cache.evictions = 0
         foreach(values(cache.entries)) do e
             e.hits = 0
             e.keytime = 0.0
@@ -195,33 +189,29 @@ function reset_counts!(cache::ThreadsafeCache)
     cache
 end
 
-# Besides the counters, this estimates the time the cache saved: each hit is worth the time its
-# entry took to build, without compilation, and every call costs the time spent on its key.
-# Compile time is counted for all threads at once, so with concurrent builds this is rough.
+# All stats are read off the entries in the cache: every built entry was a miss, and the hits
+# are summed over them. Entries which were dropped take their stats with them.
 function print_stats(cache::ThreadsafeCache; n=10)
     @lock cache.lock begin
-        (; hits, misses, waitings) = cache
         built = filter(e -> !isnothing(e.value), collect(values(cache.entries)))
-        runtime(e) = e.buildtime - e.compiletime
-        avoided(e) = e.hits * runtime(e)
-        saved(e) = avoided(e) - e.keytime
-        println(cache.name, " Stats:")
-        println("  Entries:  ", length(cache.entries), " (max ", cache.maxsize, "), built in ",
-                _fmt_time(sum(e -> e.buildtime, built; init=0.0)), ", of which ",
-                _fmt_time(sum(e -> e.compiletime, built; init=0.0)), " compiling")
-        println("  Misses:   ", misses)
-        println("  Hits:     ", hits, " (", waitings, " after waiting)")
-        println("  Hit Rate: ", round(hits / max(hits + misses, 1) * 100, digits=2), "%")
-        println("  Saved:    ≈ ", _fmt_time(sum(saved, built; init=0.0)), " (",
-                _fmt_time(sum(avoided, built; init=0.0)), " of builds avoided, ",
-                _fmt_time(sum(e -> e.keytime, built; init=0.0)), " spent on keys)")
+        misses = length(built)
+        hits = sum(e -> e.hits, built; init=0)
+        if isempty(built)
+            println(cache.name, " Stats: no entries")
+        else
+            println(cache.name, " Stats:")
+            println("  Entries:  ", misses, " (max ", cache.maxsize, "), built in ",
+                    _fmt_time(sum(e -> e.buildtime, built)), ", of which ",
+                    _fmt_time(sum(e -> e.compiletime, built)), " compiling")
+            println("  Hits:     ", hits, " (", round(hits / (hits + misses) * 100, digits=1),
+                    "% hit rate), keys took ", _fmt_time(sum(e -> e.keytime, built)))
+        end
 
-        withhits = sort!(filter(e -> e.hits > 0, built); by=saved, rev=true)
+        withhits = sort!(filter(e -> e.hits > 0, built); by=e -> e.hits, rev=true)
         if !isempty(withhits)
-            println("  Most time saved (hits × build time without compilation − key time):")
+            println("  Most hits (hits × build time):")
             for e in first(withhits, n)
-                println("    ", rpad(_fmt_time(saved(e)), 9), lpad(e.hits, 5), " × ",
-                        rpad(_fmt_time(runtime(e)), 9), " − ", rpad(_fmt_time(e.keytime), 9), " ", e.label)
+                println("    ", lpad(e.hits, 5), " × ", rpad(_fmt_time(e.buildtime), 9), " ", e.label)
             end
             length(withhits) > n && println("    … and ", length(withhits) - n, " more")
         end
@@ -230,6 +220,10 @@ function print_stats(cache::ThreadsafeCache; n=10)
             labels = map(e -> e.label, first(nohits, n))
             more = length(nohits) > n ? ", …" : ""
             println("  Without hits (", length(nohits), "): ", join(labels, ", "), more)
+        end
+        if cache.evictions > 0
+            println("  ", cache.evictions, " entries evicted at maxsize ", cache.maxsize,
+                    ", consider a larger maxsize")
         end
     end
 end
@@ -343,8 +337,9 @@ end
     NetworkDynamics.with_mtk_cache(f, mode=:on)
 
 Run `f` with the MTK cache in the given mode (see [`NetworkDynamics.set_mtk_cache!`](@ref))
-and restore the previous mode afterwards. Also resets the counters of
-[`NetworkDynamics.mtk_cache_stats`](@ref).
+and restore the previous mode afterwards. Also resets the hit counts of
+[`NetworkDynamics.mtk_cache_stats`](@ref). Since the stats describe the entries currently in the
+cache, and switching the cache off empties it, print them inside the block.
 
 ```julia
 NetworkDynamics.with_mtk_cache(false) do
@@ -375,9 +370,9 @@ end
 """
     NetworkDynamics.mtk_cache_stats()
 
-Print statistics about both parts of the MTK cache since the session started or since the last
-[`NetworkDynamics.with_mtk_cache`](@ref) block began. Besides hits and misses, it estimates the
-time the cache saved and lists the entries which were never hit.
+Print statistics about both parts of the MTK cache: the entries with their build times and hits,
+and the entries which were never hit. The stats describe the entries currently in the cache, so
+print them inside a [`NetworkDynamics.with_mtk_cache`](@ref) block.
 """
 function NetworkDynamics.mtk_cache_stats()
     foreach(print_stats, ALL_CACHES)
