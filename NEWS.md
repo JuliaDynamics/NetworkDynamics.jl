@@ -2,6 +2,20 @@
 
 ## v1.4.0 Changelog
 
+- **Reworked MTK cache with a global mode.** `set_mtk_cache!(:on)` makes building a
+  `VertexModel` or `EdgeModel` from a `System` with the same structure as an earlier one reuse the
+  generated functions and equations, while defaults, guesses and other metadata are still read
+  from the new system. `:check` also rebuilds every hit and errors if it differs from the cached
+  result; `:off` is the default. The cache key now includes bindings and init/guess formulas, so
+  instances differing only in `set_initf` no longer share the first instance's formulas.
+  `with_mtk_cache` restores the previous mode instead of switching the cache off. Warnings
+  of a build only show when the cache entry is filled. The `:odesystem_simplified` metadata is no
+  longer set.
+- The cache functions are renamed, the old names still work but are deprecated:
+  `set_mtk_model_cache!` → `set_mtk_cache!`, `with_mtk_model_cache` → `with_mtk_cache`,
+  `wipe_mtk_model_cache!` → `wipe_mtk_cache!`, and `mtk_model_cache_enabled()` → `mtk_cache_mode()`,
+  which returns the mode. `mtk_cache_stats` lists the entries in the cache with their build times
+  and hits, and the entries which were never hit.
 - **Solves no longer change `prob.p`.** Callbacks in ND often keep discrete state in parameters, and
   the solver used to change `prob.p` in place, so a second solve of the same problem silently
   started from where the first one ended. The `ODEProblem` constructor now stores

@@ -558,11 +558,11 @@ end
 function LOOPOBACK_G end
 
 # cache stubs
-function set_mtk_model_cache! end
-function wipe_mtk_model_cache! end
-function with_mtk_model_cache end
+function set_mtk_cache! end
+function wipe_mtk_cache! end
+function with_mtk_cache end
 function mtk_cache_stats end
-function mtk_model_cache_enabled end
+function mtk_cache_mode end
 
 """
     set_mtk_defaults(sys::System, pairs) -> System
@@ -588,8 +588,9 @@ be rebound:
 
     sys = set_mtk_defaults(sys, defaults)
 
-Does nothing if `pairs` is empty. Throws an `ArgumentError` if a name cannot be
-resolved in the system.
+Does nothing if `pairs` is empty. A value of `nothing` removes the default, as in
+`@variables x(t)=nothing`, but only for the system's own variables. Throws an `ArgumentError` if
+a name cannot be resolved in the system.
 
 Requires the `ModelingToolkit` extension to be loaded.
 
@@ -609,6 +610,96 @@ end
 See also: [`set_initf`](@ref), which follows the same non-mutating convention.
 """
 function set_mtk_defaults end
+
+"""
+    @cached_component function Model(; name, structural_args...)
+        @structural ...   # optional
+        ...
+        return sys
+    end
+
+Define a component constructor whose systems are cached, an opt-in feature controlled by
+[`NetworkDynamics.set_mtk_cache!`](@ref). With the cache on, the first call with a given
+set of structural arguments builds the system and caches it. Every later call with the same
+structural arguments reuses it, only renaming it and applying its own defaults. Constructors
+that are expensive to build, for example because they call `simplify`, become cheap to call
+many times.
+
+The constructor takes one extra keyword argument, `cache`, which defaults to the global mode.
+It overrides the mode for a single call: `cache=:off` builds from scratch, and `cache=:check`
+builds from scratch and compares with the cached system. It doesn't reach cached components
+called inside the body.
+
+```julia
+@cached_component function Lag(; name, T=1.0)
+    @structural iszero(T)
+    @variables u(t) y(t)
+    if iszero(T)
+        System([y ~ u], t; name)
+    else
+        @parameters T = T
+        System([Dt(y) ~ (u - y) / T], t; name)
+    end
+end
+
+NetworkDynamics.set_mtk_cache!(:on)
+Lag(; name=:lag1, T=0.5, y=1.0)  # builds the system
+Lag(; name=:lag2, T=0.2)         # reused, with T = 0.2
+```
+
+# Structural arguments and defaults
+
+The keyword arguments in the signature are the structural arguments. Every distinct value
+(including its type, so `1` and `1.0` differ) gets its own cached system.
+
+The constructor created by `@cached_component` also takes arbitrary additional keyword
+arguments. Those are applied to the system as defaults using [`set_mtk_defaults`](@ref), so
+defaults of subsystems use their namespaced name, like `machine₊M=2`. They cannot structurally
+influence the system.
+
+Sometimes a structural argument is also a default, for example the `T` in the lag above.
+Whenever a structural argument matches the name of a symbol of the system, it is applied after
+the body, as all other defaults are. Unlike the other defaults, one that names no symbol of the
+built system is dropped silently instead of raising an error.
+
+# Projecting with `@structural`
+
+Often only part of an argument's value is structural. For the lag above, only "is `T` zero"
+changes the system. The optional `@structural` line, the first in the body, says that: an
+argument used in a `@structural` expression enters the cache key only through that
+expression. A bare name, like `@structural pss`, keys on the full value, which is the same as
+leaving it out.
+
+The `@structural` line is a promise that the system's structure depends on nothing else
+about these arguments. If a projected argument names a symbol, its value still arrives through
+the rule above. Any other use of a projected value, like `K = 1/T` or passing `T` on to a
+subsystem, breaks the promise: reused systems keep the value of the first call.
+
+# Checking
+
+In `:check` mode, every reused system is also built from scratch and compared, which catches
+broken promises. Set it for a whole build with [`NetworkDynamics.with_mtk_cache`](@ref),
+or for a single call with `cache=:check`.
+
+# Rules
+
+- `name` may only be used as the name of the returned system.
+- Cached systems are shared, so they must not be mutated in place. Out-of-place changes like
+  [`set_initf`](@ref) are fine.
+- After editing the code that a cached component calls, for example with Revise, call
+  [`NetworkDynamics.wipe_mtk_cache!`](@ref). Editing the cached component itself is
+  detected automatically.
+"""
+macro cached_component(fdef)
+    if isnothing(Base.get_extension(@__MODULE__, :NetworkDynamicsMTKExt))
+        error("@cached_component needs the ModelingToolkit extension, load ModelingToolkit first.")
+    end
+    esc(cached_component_expr(__module__, fdef))
+end
+
+# both implemented in the MTK extension
+function cached_component_expr end
+function load_cached_component end
 
 """
     SystemInitFormulas
