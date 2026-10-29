@@ -183,7 +183,7 @@ function _warn_overridden(sys, kwargs, modelname)
         _names_symbol(sys, k) || continue
         sym = getproperty_symbolic(sys, k; might_contain_toplevel_ns=false)
         built = haskey(ics, sym) ? unwrap_const(ics[sym]) : get(ModelingToolkitBase.get_bindings(sys), unwrap(sym), nothing)
-        if !isequal(built, v)
+        if !isnothing(built) && !isequal(built, v)
             @warn "Keyword argument $k of cached component $modelname names a symbol of the system, \
                 so it is applied as its default and replaces the value $built set in the body."
         end
