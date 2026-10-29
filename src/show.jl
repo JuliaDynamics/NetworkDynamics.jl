@@ -139,7 +139,7 @@ function print_states_params(io, @nospecialize(c::ComponentModel), styling)
     # PowerDynamics metadata display
     if has_metadata(c, :pfinitconstraint)
         constraints = get_metadata(c, :pfinitconstraint)
-        constraints_tuple = constraints isa Tuple ? constraints : (constraints,)
+        constraints_tuple = constraints isa Union{Tuple,AbstractVector} ? constraints : (constraints,)
         total_eqs = sum(constraint.dim for constraint in constraints_tuple)
         num, word = maybe_plural(total_eqs, "add. pf init eq.", "add. pf init eqs.")
         constraint_word = length(constraints_tuple) == 1 ? "constraint" : "constraints"
@@ -154,7 +154,7 @@ function print_states_params(io, @nospecialize(c::ComponentModel), styling)
         num, word = maybe_plural(length(cbs), "callback")
         str = ""
         str *= styled"$num &$word: &&$(shortrepr(first(cbs)))"
-        for cb in Base.tail(cbs)
+        for cb in Iterators.drop(cbs, 1)
             str *= styled"\n&&&$(shortrepr(cb))"
         end
         push!(info, str)
@@ -303,7 +303,7 @@ end
 function _collect_formulalike(@nospecialize(c::ComponentModel), key)
     has_metadata(c, key) || return Any[]
     f = get_metadata(c, key)
-    collect(Any, f isa Tuple ? f : (f,))
+    collect(Any, f isa Union{Tuple,AbstractVector} ? f : (f,))
 end
 
 # PowerDynamics' PFInitFormulas act on the same defaults as the plain InitFormulas and

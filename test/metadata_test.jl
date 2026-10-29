@@ -223,7 +223,7 @@ end
     )
     set_callback!(nw, VIndex(1), cb)
     @test has_callback(nw, VIndex(1))
-    @test get_callbacks(nw, VIndex(1)) == (cb,)
+    @test get_callbacks(nw, VIndex(1)) == [cb]
 
     cb2 = ContinuousComponentCallback(
         ComponentCondition(fakefun, [], []),

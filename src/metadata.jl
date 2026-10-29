@@ -543,6 +543,36 @@ set_graphelement!(nw::Network, idx::VCIndex, value) = set_graphelement!(getcomp(
 set_graphelement!(nw::Network, idx::ECIndex, value) = set_graphelement!(getcomp(nw, idx), value)
 
 ####
+#### Lists of callbacks, constraints and formulas
+####
+
+# Callbacks, init constraints, init formulas and guess formulas are stored as a `Vector{T}` in the
+# metadata. The setters take a single item, a tuple or a vector and always store a fresh vector, so
+# adding to the list can push to it without touching a vector the caller still holds.
+function _as_list(::Type{T}, x, what) where {T}
+    @nospecialize x
+    x isa T && return T[x]
+    if x isa Union{Tuple,AbstractVector} && all(i -> i isa T, x)
+        return collect(T, x)
+    end
+    throw(ArgumentError("$what must be a $T or a collection of $T objects, got $(typeof(x))."))
+end
+
+# metadata set by hand may still hold a single item or a tuple
+function _get_list(c::ComponentModel, key, ::Type{T}) where {T}
+    x = get_metadata(c, key)
+    x isa Vector{T} ? x : _as_list(T, x, string(key))
+end
+
+# Appends `item` unless it is already in the list. Returns whether it was added.
+function _add_to_list!(c::ComponentModel, key, ::Type{T}, item) where {T}
+    list = has_metadata(c, key) ? _get_list(c, key, T) : T[]
+    item ∈ list && return false
+    set_metadata!(c, key, push!(list, item))
+    return true
+end
+
+####
 #### Callbacks
 ####
 
@@ -560,12 +590,9 @@ has_callback(nw::Network, idx::ECIndex) = has_callback(getcomp(nw, idx))
     get_callbacks(c::ComponentModel)
     get_callbacks(nw::Network, idx::Union{VIndex,EIndex})
 
-Gets all callback functions for the component. Wraps in tuple, even if there is only a single one.
+Gets all callback functions for the component as a vector, even if there is only a single one.
 """
-function get_callbacks(c::ComponentModel)
-    cb = get_metadata(c, :callback)
-    cb isa ComponentCallback ? (cb,) : cb
-end
+get_callbacks(c::ComponentModel) = _get_list(c, :callback, ComponentCallback)
 get_callbacks(nw::Network, idx::VCIndex) = get_callbacks(getcomp(nw, idx))
 get_callbacks(nw::Network, idx::ECIndex) = get_callbacks(getcomp(nw, idx))
 
@@ -577,11 +604,9 @@ Sets the callback function for the component. Overwrites any existing callback.
 See also [`add_callback!`](@ref).
 """
 function set_callback!(c::ComponentModel, cb; check=true)
-    if !(cb isa ComponentCallback) && !(cb isa Tuple && all(c -> c isa ComponentCallback, cb))
-        throw(ArgumentError("Callback must be a ComponentCallback or a tuple of ComponentCallbacks, got $(typeof(cb))."))
-    end
-    check && assert_cb_compat(c, cb)
-    set_metadata!(c, :callback, cb)
+    cbs = _as_list(ComponentCallback, cb, "Callback")
+    check && assert_cb_compat(c, cbs)
+    set_metadata!(c, :callback, cbs)
 end
 set_callback!(nw::Network, idx::VCIndex, cb; kw...) = set_callback!(getcomp(nw, idx), cb; kw...)
 set_callback!(nw::Network, idx::ECIndex, cb; kw...) = set_callback!(getcomp(nw, idx), cb; kw...)
@@ -594,10 +619,10 @@ Adds a callback function to the component. Does not overwrite existing callbacks
 See also [`set_callback!`](@ref).
 """
 function add_callback!(c::ComponentModel, cb; check=true)
-    check && assert_cb_compat(c, cb)
-    cbs = cb isa ComponentCallback ? (cb,) : cb
-    newcb = has_callback(c) ? (get_callbacks(c)..., cbs...) : cbs
-    set_metadata!(c, :callback, newcb)
+    cbs = _as_list(ComponentCallback, cb, "Callback")
+    check && assert_cb_compat(c, cbs)
+    list = has_callback(c) ? get_callbacks(c) : ComponentCallback[]
+    set_metadata!(c, :callback, append!(list, cbs))
 end
 add_callback!(nw::Network, idx::VCIndex, cb; kw...) = add_callback!(getcomp(nw, idx), cb; kw...)
 add_callback!(nw::Network, idx::ECIndex, cb; kw...) = add_callback!(getcomp(nw, idx), cb; kw...)
@@ -636,14 +661,11 @@ has_initconstraint(nw::Network, idx::ECIndex) = has_initconstraint(getcomp(nw, i
     get_initconstraints(c::ComponentModel)
     get_initconstraints(nw::Network, idx::Union{VIndex,EIndex})
 
-Gets all initialization constraints for the component. Returns a tuple, even if there is only a single constraint.
+Gets all initialization constraints for the component as a vector, even if there is only a single constraint.
 
 See also: [`has_initconstraint`](@ref), [`set_initconstraint!`](@ref), [`add_initconstraint!`](@ref).
 """
-function get_initconstraints(c::ComponentModel)
-    constraint = get_metadata(c, :initconstraint)
-    constraint isa InitConstraint ? (constraint,) : constraint
-end
+get_initconstraints(c::ComponentModel) = _get_list(c, :initconstraint, InitConstraint)
 get_initconstraints(nw::Network, idx::VCIndex) = get_initconstraints(getcomp(nw, idx))
 get_initconstraints(nw::Network, idx::ECIndex) = get_initconstraints(getcomp(nw, idx))
 
@@ -652,24 +674,14 @@ get_initconstraints(nw::Network, idx::ECIndex) = get_initconstraints(getcomp(nw,
     set_initconstraint!(nw::Network, idx::Union{VIndex,EIndex}, constraint; check=true)
 
 Sets the initialization constraint(s) for the component. Overwrites any existing constraints.
-`constraint` can be a single `InitConstraint` or a tuple of `InitConstraint` objects.
+`constraint` can be a single `InitConstraint` or a tuple or vector of them.
 
 See also: [`add_initconstraint!`](@ref), [`get_initconstraints`](@ref), [`delete_initconstraints!`](@ref).
 """
 function set_initconstraint!(c::ComponentModel, constraint; check=true)
-    if !(constraint isa InitConstraint) && !(constraint isa Tuple && all(c -> c isa InitConstraint, constraint))
-        throw(ArgumentError("Constraint must be an InitConstraint or a tuple of InitConstraint objects, got $(typeof(constraint))."))
-    end
-    if check
-        if constraint isa InitConstraint
-            assert_initconstraint_compat(c, constraint)
-        else
-            for constr in constraint
-                assert_initconstraint_compat(c, constr)
-            end
-        end
-    end
-    set_metadata!(c, :initconstraint, constraint)
+    list = _as_list(InitConstraint, constraint, "Constraint")
+    check && foreach(constr -> assert_initconstraint_compat(c, constr), list)
+    set_metadata!(c, :initconstraint, list)
 end
 set_initconstraint!(nw::Network, idx::VCIndex, constraint; kw...) = set_initconstraint!(getcomp(nw, idx), constraint; kw...)
 set_initconstraint!(nw::Network, idx::ECIndex, constraint; kw...) = set_initconstraint!(getcomp(nw, idx), constraint; kw...)
@@ -688,18 +700,7 @@ function add_initconstraint!(c::ComponentModel, constraint; check=true)
         throw(ArgumentError("Constraint must be an InitConstraint, got $(typeof(constraint))."))
     end
     check && assert_initconstraint_compat(c, constraint)
-
-    if has_initconstraint(c)
-        existing_constraints = get_initconstraints(c)
-
-        constraint ∈ existing_constraints && return false
-
-        new_constraints = (existing_constraints..., constraint)
-        set_metadata!(c, :initconstraint, new_constraints)
-    else
-        set_metadata!(c, :initconstraint, (constraint,))
-    end
-    return true
+    _add_to_list!(c, :initconstraint, InitConstraint, constraint)
 end
 add_initconstraint!(nw::Network, idx::VCIndex, constraint; kw...) = add_initconstraint!(getcomp(nw, idx), constraint; kw...)
 add_initconstraint!(nw::Network, idx::ECIndex, constraint; kw...) = add_initconstraint!(getcomp(nw, idx), constraint; kw...)
@@ -738,14 +739,11 @@ has_initformula(nw::Network, idx::ECIndex) = has_initformula(getcomp(nw, idx))
     get_initformulas(c::ComponentModel)
     get_initformulas(nw::Network, idx::Union{VIndex,EIndex})
 
-Gets all initialization formulas for the component. Returns a tuple, even if there is only a single formula.
+Gets all initialization formulas for the component as a vector, even if there is only a single formula.
 
 See also: [`has_initformula`](@ref), [`set_initformula!`](@ref), [`add_initformula!`](@ref).
 """
-function get_initformulas(c::ComponentModel)
-    formula = get_metadata(c, :initformula)
-    formula isa InitFormula ? (formula,) : formula
-end
+get_initformulas(c::ComponentModel) = _get_list(c, :initformula, InitFormula)
 get_initformulas(nw::Network, idx::VCIndex) = get_initformulas(getcomp(nw, idx))
 get_initformulas(nw::Network, idx::ECIndex) = get_initformulas(getcomp(nw, idx))
 
@@ -754,24 +752,14 @@ get_initformulas(nw::Network, idx::ECIndex) = get_initformulas(getcomp(nw, idx))
     set_initformula!(nw::Network, idx::Union{VIndex,EIndex}, formula; check=true)
 
 Sets the initialization formula(s) for the component. Overwrites any existing formulas.
-`formula` can be a single `InitFormula` or a tuple of `InitFormula` objects.
+`formula` can be a single `InitFormula` or a tuple or vector of them.
 
 See also: [`add_initformula!`](@ref), [`get_initformulas`](@ref), [`delete_initformulas!`](@ref).
 """
 function set_initformula!(c::ComponentModel, formula; check=true)
-    if !(formula isa InitFormula) && !(formula isa Tuple && all(f -> f isa InitFormula, formula))
-        throw(ArgumentError("Formula must be an InitFormula or a tuple of InitFormula objects, got $(typeof(formula))."))
-    end
-    if check
-        if formula isa InitFormula
-            assert_initformula_compat(c, formula)
-        else
-            for f in formula
-                assert_initformula_compat(c, f)
-            end
-        end
-    end
-    set_metadata!(c, :initformula, formula)
+    list = _as_list(InitFormula, formula, "Formula")
+    check && foreach(f -> assert_initformula_compat(c, f), list)
+    set_metadata!(c, :initformula, list)
 end
 set_initformula!(nw::Network, idx::VCIndex, formula; kw...) = set_initformula!(getcomp(nw, idx), formula; kw...)
 set_initformula!(nw::Network, idx::ECIndex, formula; kw...) = set_initformula!(getcomp(nw, idx), formula; kw...)
@@ -790,18 +778,7 @@ function add_initformula!(c::ComponentModel, formula; check=true)
         throw(ArgumentError("Formula must be an InitFormula, got $(typeof(formula))."))
     end
     check && assert_initformula_compat(c, formula)
-
-    if has_initformula(c)
-        existing_formulas = get_initformulas(c)
-
-        formula ∈ existing_formulas && return false
-
-        new_formulas = (existing_formulas..., formula)
-        set_metadata!(c, :initformula, new_formulas)
-    else
-        set_metadata!(c, :initformula, (formula,))
-    end
-    return true
+    _add_to_list!(c, :initformula, InitFormula, formula)
 end
 add_initformula!(nw::Network, idx::VCIndex, formula; kw...) = add_initformula!(getcomp(nw, idx), formula; kw...)
 add_initformula!(nw::Network, idx::ECIndex, formula; kw...) = add_initformula!(getcomp(nw, idx), formula; kw...)
@@ -840,14 +817,11 @@ has_guessformula(nw::Network, idx::ECIndex) = has_guessformula(getcomp(nw, idx))
     get_guessformulas(c::ComponentModel)
     get_guessformulas(nw::Network, idx::Union{VIndex,EIndex})
 
-Gets all guess formulas for the component. Returns a tuple, even if there is only a single formula.
+Gets all guess formulas for the component as a vector, even if there is only a single formula.
 
 See also: [`has_guessformula`](@ref), [`set_guessformula!`](@ref), [`add_guessformula!`](@ref).
 """
-function get_guessformulas(c::ComponentModel)
-    formula = get_metadata(c, :guessformula)
-    formula isa GuessFormula ? (formula,) : formula
-end
+get_guessformulas(c::ComponentModel) = _get_list(c, :guessformula, GuessFormula)
 get_guessformulas(nw::Network, idx::VCIndex) = get_guessformulas(getcomp(nw, idx))
 get_guessformulas(nw::Network, idx::ECIndex) = get_guessformulas(getcomp(nw, idx))
 
@@ -856,24 +830,14 @@ get_guessformulas(nw::Network, idx::ECIndex) = get_guessformulas(getcomp(nw, idx
     set_guessformula!(nw::Network, idx::Union{VIndex,EIndex}, formula; check=true)
 
 Sets the guess formula(s) for the component. Overwrites any existing formulas.
-`formula` can be a single `GuessFormula` or a tuple of `GuessFormula` objects.
+`formula` can be a single `GuessFormula` or a tuple or vector of them.
 
 See also: [`add_guessformula!`](@ref), [`get_guessformulas`](@ref), [`delete_guessformulas!`](@ref).
 """
 function set_guessformula!(c::ComponentModel, formula; check=true)
-    if !(formula isa GuessFormula) && !(formula isa Tuple && all(f -> f isa GuessFormula, formula))
-        throw(ArgumentError("Formula must be a GuessFormula or a tuple of GuessFormula objects, got $(typeof(formula))."))
-    end
-    if check
-        if formula isa GuessFormula
-            assert_guessformula_compat(c, formula)
-        else
-            for f in formula
-                assert_guessformula_compat(c, f)
-            end
-        end
-    end
-    set_metadata!(c, :guessformula, formula)
+    list = _as_list(GuessFormula, formula, "Formula")
+    check && foreach(f -> assert_guessformula_compat(c, f), list)
+    set_metadata!(c, :guessformula, list)
 end
 set_guessformula!(nw::Network, idx::VCIndex, formula; kw...) = set_guessformula!(getcomp(nw, idx), formula; kw...)
 set_guessformula!(nw::Network, idx::ECIndex, formula; kw...) = set_guessformula!(getcomp(nw, idx), formula; kw...)
@@ -892,18 +856,7 @@ function add_guessformula!(c::ComponentModel, formula; check=true)
         throw(ArgumentError("Formula must be a GuessFormula, got $(typeof(formula))."))
     end
     check && assert_guessformula_compat(c, formula)
-
-    if has_guessformula(c)
-        existing_formulas = get_guessformulas(c)
-
-        formula ∈ existing_formulas && return false
-
-        new_formulas = (existing_formulas..., formula)
-        set_metadata!(c, :guessformula, new_formulas)
-    else
-        set_metadata!(c, :guessformula, (formula,))
-    end
-    return true
+    _add_to_list!(c, :guessformula, GuessFormula, formula)
 end
 add_guessformula!(nw::Network, idx::VCIndex, formula; kw...) = add_guessformula!(getcomp(nw, idx), formula; kw...)
 add_guessformula!(nw::Network, idx::ECIndex, formula; kw...) = add_guessformula!(getcomp(nw, idx), formula; kw...)
