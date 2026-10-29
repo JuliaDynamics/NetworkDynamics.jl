@@ -291,8 +291,8 @@ end
 
 Set the mode of the MTK cache. It has two parts: the compile cache lets a [`VertexModel`](@ref) or
 [`EdgeModel`](@ref) reuse the generated functions of an earlier `System` with the same structure,
-and the component cache lets constructors defined with [`@cached_component`](@ref) reuse the
-systems they built.
+and the component cache lets constructors defined with
+[`@cached_component`](@ref NetworkDynamics.@cached_component) reuse the systems they built.
 - `:off` (default): everything is built from scratch. Switching off also empties both caches.
 - `:on`: both caches are used.
 - `:check`: like `:on`, but every cache hit is also built from scratch and compared with the cached

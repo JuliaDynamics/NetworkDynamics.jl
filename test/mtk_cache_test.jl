@@ -161,9 +161,7 @@ Base.show(io::IO, ::CacheTestQuietGain) = print(io, "gain")
     @test !isequal(fresh[1], fresh[2])
     @test isequal(cached, fresh)
 
-    # Closures and callables which print alike. RuntimeGeneratedFunctions identifies a function
-    # body by its printed form, so their generated code collides even without the cache. Only
-    # the cache key can be tested here.
+    # closures and callables which print alike still get distinct keys and distinct code
     key(sys) = mtkext._structural_key(sys, ([:i],), ([:y],), pairs((; ff_to_constraint=true)))
     closure(k) = x -> k * x
     q1, q2 = opsys(CacheTestQuietGain(1.0)), opsys(CacheTestQuietGain(2.0))
@@ -173,7 +171,7 @@ Base.show(io::IO, ::CacheTestQuietGain) = print(io, "gain")
     @test isequal(key(q1), key(opsys(CacheTestQuietGain(1.0))))
     @test !isequal(key(c1), key(c2))
     fresh = NetworkDynamics.with_mtk_cache(() -> (build(c1), build(c2)), false)
-    @test_broken !isequal(fresh[1], fresh[2])
+    @test !isequal(fresh[1], fresh[2])
 end
 
 @testset "defaults stay per instance, bindings are structural" begin
