@@ -139,7 +139,7 @@ function print_states_params(io, @nospecialize(c::ComponentModel), styling)
     # PowerDynamics metadata display
     if has_metadata(c, :pfinitconstraint)
         constraints = get_metadata(c, :pfinitconstraint)
-        constraints_tuple = constraints isa Tuple ? constraints : (constraints,)
+        constraints_tuple = constraints isa Union{Tuple,AbstractVector} ? constraints : (constraints,)
         total_eqs = sum(constraint.dim for constraint in constraints_tuple)
         num, word = maybe_plural(total_eqs, "add. pf init eq.", "add. pf init eqs.")
         constraint_word = length(constraints_tuple) == 1 ? "constraint" : "constraints"
@@ -154,7 +154,7 @@ function print_states_params(io, @nospecialize(c::ComponentModel), styling)
         num, word = maybe_plural(length(cbs), "callback")
         str = ""
         str *= styled"$num &$word: &&$(shortrepr(first(cbs)))"
-        for cb in Base.tail(cbs)
+        for cb in Iterators.drop(cbs, 1)
             str *= styled"\n&&&$(shortrepr(cb))"
         end
         push!(info, str)
@@ -303,7 +303,7 @@ end
 function _collect_formulalike(@nospecialize(c::ComponentModel), key)
     has_metadata(c, key) || return Any[]
     f = get_metadata(c, key)
-    collect(Any, f isa Tuple ? f : (f,))
+    collect(Any, f isa Union{Tuple,AbstractVector} ? f : (f,))
 end
 
 # PowerDynamics' PFInitFormulas act on the same defaults as the plain InitFormulas and
@@ -769,7 +769,13 @@ function _print_tree_element(io, treesym, sublinesym, s, prefix, infix)
     end
 end
 
-function align_strings(_vecofstr::AbstractVector{<:AbstractString}; padding=:alternating)
+# The string helpers below work on poorly typed values. A package which adds a `string`, `*` or
+# `convert(String, …)` method invalidates their code, so they are called behind an inference
+# barrier: the invalidation then stops at the helper and doesn't reach the large functions that
+# print with them.
+align_strings(v; padding=:alternating) = Base.inferencebarrier(_align_strings)(v; padding)::Vector{<:AbstractString}
+
+function _align_strings(_vecofstr::AbstractVector{<:AbstractString}; padding=:alternating)
     # FIXME: workaround for github.com/JuliaLang/StyledStrings.jl/issues/64
     @static if VERSION > v"1.10"
         vecofstr = _vecofstr
@@ -789,7 +795,7 @@ function align_strings(_vecofstr::AbstractVector{<:AbstractString}; padding=:alt
             i += 1
         end
     end
-    alig = align_strings(splitted; padding)
+    alig = _align_strings(splitted; padding)
 
     @assert issorted(newlines)
     while !isempty(newlines)
@@ -799,7 +805,7 @@ function align_strings(_vecofstr::AbstractVector{<:AbstractString}; padding=:alt
     end
     alig
 end
-function align_strings(vecofvec::AbstractVector{<:AbstractVector}; padding=:alternating)
+function _align_strings(vecofvec::AbstractVector{<:AbstractVector}; padding=:alternating)
     isempty(vecofvec) && return String[]
     depth = maximum(length.(vecofvec))
     maxlength = zeros(Int,depth)
@@ -920,21 +926,24 @@ end
 
 inline_repr(arr::Set) = "Set(" * join(string.(arr), ", ") * ")"
 inline_repr(arr::AbstractArray) = "[" * join(string.(arr), ", ") * "]"
-function multiline_repr(dict::AbstractDict; prefix="")
+# behind a barrier like `align_strings`
+multiline_repr(x; prefix="") = Base.inferencebarrier(_multiline_repr)(x; prefix)::String
+
+function _multiline_repr(dict::AbstractDict; prefix="")
     lines = String[]
     for (k,v) in dict
         str = prefix * string(k) * " &=> " * string(v)
         push!(lines, str)
     end
-    join(align_strings(lines), "\n")
+    join(_align_strings(lines), "\n")
 end
-function multiline_repr(arr::AbstractArray; prefix="")
+function _multiline_repr(arr::AbstractArray; prefix="")
     join([prefix*repr(a) for a in arr], "\n")
 end
-function multiline_repr(arr::Vector{<:Pair}; prefix="")
+function _multiline_repr(arr::Vector{<:Pair}; prefix="")
     d = OrderedDict()
     for p in arr
         d[p.first] = p.second
     end
-    multiline_repr(d; prefix)
+    _multiline_repr(d; prefix)
 end
