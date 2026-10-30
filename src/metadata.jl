@@ -604,6 +604,7 @@ Sets the callback function for the component. Overwrites any existing callback.
 See also [`add_callback!`](@ref).
 """
 function set_callback!(c::ComponentModel, cb; check=true)
+    @nospecialize cb
     cbs = _as_list(ComponentCallback, cb, "Callback")
     check && assert_cb_compat(c, cbs)
     set_metadata!(c, :callback, cbs)
@@ -619,6 +620,7 @@ Adds a callback function to the component. Does not overwrite existing callbacks
 See also [`set_callback!`](@ref).
 """
 function add_callback!(c::ComponentModel, cb; check=true)
+    @nospecialize cb
     cbs = _as_list(ComponentCallback, cb, "Callback")
     check && assert_cb_compat(c, cbs)
     list = has_callback(c) ? get_callbacks(c) : ComponentCallback[]
@@ -679,6 +681,7 @@ Sets the initialization constraint(s) for the component. Overwrites any existing
 See also: [`add_initconstraint!`](@ref), [`get_initconstraints`](@ref), [`delete_initconstraints!`](@ref).
 """
 function set_initconstraint!(c::ComponentModel, constraint; check=true)
+    @nospecialize constraint
     list = _as_list(InitConstraint, constraint, "Constraint")
     check && foreach(constr -> assert_initconstraint_compat(c, constr), list)
     set_metadata!(c, :initconstraint, list)
@@ -757,6 +760,7 @@ Sets the initialization formula(s) for the component. Overwrites any existing fo
 See also: [`add_initformula!`](@ref), [`get_initformulas`](@ref), [`delete_initformulas!`](@ref).
 """
 function set_initformula!(c::ComponentModel, formula; check=true)
+    @nospecialize formula
     list = _as_list(InitFormula, formula, "Formula")
     check && foreach(f -> assert_initformula_compat(c, f), list)
     set_metadata!(c, :initformula, list)
@@ -835,6 +839,7 @@ Sets the guess formula(s) for the component. Overwrites any existing formulas.
 See also: [`add_guessformula!`](@ref), [`get_guessformulas`](@ref), [`delete_guessformulas!`](@ref).
 """
 function set_guessformula!(c::ComponentModel, formula; check=true)
+    @nospecialize formula
     list = _as_list(GuessFormula, formula, "Formula")
     check && foreach(f -> assert_guessformula_compat(c, f), list)
     set_metadata!(c, :guessformula, list)

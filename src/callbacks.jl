@@ -1001,6 +1001,7 @@ end
 ####
 assert_cb_compat(comp::ComponentModel, t::Union{Tuple,AbstractVector}) = foreach(cb -> assert_cb_compat(comp, cb), t)
 function assert_cb_compat(comp::ComponentModel, cb)
+    @nospecialize cb
     insym = hasinsym(comp) ? insym_all(comp) : []
     named = Set(sym(comp)) ∪ Set(psym(comp)) ∪ Set(comp.obssym) ∪ insym ∪ outsym_flat(comp)
 
