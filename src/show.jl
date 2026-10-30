@@ -773,7 +773,7 @@ end
 # `convert(String, …)` method invalidates their code, so they are called behind an inference
 # barrier: the invalidation then stops at the helper and doesn't reach the large functions that
 # print with them.
-align_strings(v; padding=:alternating) = Base.inferencebarrier(_align_strings)(v; padding)::Vector{String}
+align_strings(v; padding=:alternating) = Base.inferencebarrier(_align_strings)(v; padding)::Vector{<:AbstractString}
 
 function _align_strings(_vecofstr::AbstractVector{<:AbstractString}; padding=:alternating)
     # FIXME: workaround for github.com/JuliaLang/StyledStrings.jl/issues/64
