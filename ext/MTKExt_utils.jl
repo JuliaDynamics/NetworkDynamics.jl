@@ -1043,11 +1043,11 @@ _const_payload(value) = (out, _) -> (out[1] = value; nothing)
 _derived_rule(f, out, syms; label=nothing) =
     ResolutionRule(f, [out], syms; provenance=:derived, optional=true, label)
 
-function NetworkDynamics.multiline_repr(eqs::Vector{Equation}; prefix="")
+function NetworkDynamics._multiline_repr(eqs::Vector{Equation}; prefix="")
     lines = map(eqs) do eq
         prefix * repr(eq.lhs) * " &~ " * repr(eq.rhs)
     end
-    join(NetworkDynamics.align_strings(lines), "\n")
+    join(NetworkDynamics._align_strings(lines), "\n")
 end
 
 function _compare_mtkcompile(VEModel, args, kwargs)
