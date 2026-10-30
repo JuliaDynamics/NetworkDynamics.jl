@@ -177,14 +177,14 @@ function _key_hash(key)
     h
 end
 
-function _keylabel(name, value)
+Base.@nospecializeinfer function _keylabel(name, value)
     @nospecialize
     str = sprint(show, value; context=:compact => true)
     string(name, "=", length(str) > 30 ? first(str, 29) * "…" : str)
 end
 
 # The user's function returns a plain system, which gets the GUI metadata `@component` would set.
-function _built(build, args, gui)
+Base.@nospecializeinfer function _built(build, args, gui)
     @nospecialize
     sys = build(args...)
     if isnothing(ModelingToolkitBase.get_gui_metadata(sys))
@@ -195,7 +195,7 @@ end
 
 # Applies the defaults to a built system. Explicit kwargs which name a symbol of the system count
 # as defaults too, on every path, so that a hit is the same as a fresh build.
-function _finish(sys, kwargs, defaults)
+Base.@nospecializeinfer function _finish(sys, kwargs, defaults)
     @nospecialize
     applied = filter(k -> _names_symbol(sys, k), collect(keys(kwargs)))
     NetworkDynamics.set_mtk_defaults(sys, (; kwargs[Tuple(applied)]..., defaults...))
@@ -203,7 +203,7 @@ end
 
 # An explicit kwarg whose value replaces a different value the body gave its symbol is probably
 # a mistake, since the body's value never shows up.
-function _warn_overridden(sys, kwargs, modelname)
+Base.@nospecializeinfer function _warn_overridden(sys, kwargs, modelname)
     @nospecialize
     ics = initial_conditions(sys)
     for (k, v) in pairs(kwargs)

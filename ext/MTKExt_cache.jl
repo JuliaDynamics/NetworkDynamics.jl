@@ -123,12 +123,15 @@ const ALL_CACHES = (COMPILE_CACHE, COMPONENT_CACHE)
 # asking for the same key wait for that build. If it fails, they call `f` themselves.
 # For the statistics, `keytime` is the `@timed` computation of the key, and `label()` describes
 # the entry. It is only called on a miss.
-function Base.get!(f, cache::ThreadsafeCache, key::UInt; label=() -> "", keytime=nothing)
+# Neither `f` nor `label` is specialized on. The closures of `load_cached_component` capture the
+# user's build function, and inferring through them would compile each model's build again.
+Base.@nospecializeinfer function Base.get!(@nospecialize(f), cache::ThreadsafeCache, key::UInt;
+        @nospecialize(label=() -> ""), keytime=nothing)
     keytime = isnothing(keytime) ? 0.0 : _runtime(keytime)
     entry, isowner = @lock cache.lock begin
         entry = get(cache.entries, key, nothing)
         if isnothing(entry)
-            entry = CacheEntry(Base.Event(), label(), current_task(), nothing, NaN, NaN, keytime, 0)
+            entry = CacheEntry(Base.Event(), label()::String, current_task(), nothing, NaN, NaN, keytime, 0)
             cache.entries[key] = entry
             while length(cache.entries) > cache.maxsize
                 delete!(cache.entries, first(keys(cache.entries)))
