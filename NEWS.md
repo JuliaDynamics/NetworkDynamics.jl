@@ -101,6 +101,10 @@
 - Fix: injector nodes with both states and feed forward never evaluated their `f`, so their states stayed frozen.
 - Fix: the sparsity detection now also rewrites conditionals in MTK edges with separate src and
   dst outputs, instead of falling back to a dense `g`.
+- `get_initformulas`, `get_guessformulas`, `get_initconstraints` and `get_callbacks` return a
+  vector instead of a tuple. The setters still accept a single item, a tuple or a vector.
+  `InitFormula` and `GuessFormula` lost their type parameter. Both changes cut the compile time
+  of building and initializing large networks.
 
 ## v1.3.0 Changelog
 

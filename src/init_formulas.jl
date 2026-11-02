@@ -332,8 +332,8 @@ became known, so skip the formula instead of failing the initialization.
 
 See also [`@initformula`](@ref) for a macro to create such formulas.
 """
-struct InitFormula{F}
-    f::F
+struct InitFormula
+    f::Any # only called once per initialization, so no type parameter
     outsym::Vector{Symbol}   # output symbols (from LHS of assignments)
     sym::Vector{Symbol}      # input symbols (from RHS of assignments)
     prettyprint::Union{Nothing,String}
@@ -341,17 +341,17 @@ struct InitFormula{F}
     optional::Bool # may stay unresolved
     label::Union{Nothing,String} # short line identifier (just verbose application)
 
-    function InitFormula(f::F, outsym::Vector{Symbol}, sym::Vector{Symbol}, prettyprint::Union{Nothing,String}, weak::Bool=false, optional::Bool=false, label::Union{Nothing,String}=nothing) where F
+    function InitFormula(@nospecialize(f), outsym::Vector{Symbol}, sym::Vector{Symbol}, prettyprint::Union{Nothing,String}, weak::Bool=false, optional::Bool=false, label::Union{Nothing,String}=nothing)
         # Check for self-dependencies (formula depending on its own output)
         self_deps = intersect(sym, outsym)
         if !isempty(self_deps)
             throw(ArgumentError("InitFormula cannot depend on its own output symbols: $self_deps"))
         end
-        new{F}(f, outsym, sym, prettyprint, weak, optional, label)
+        new(f, outsym, sym, prettyprint, weak, optional, label)
     end
 end
-InitFormula(f, outsym, sym; weak::Bool=false, optional::Bool=false, label=nothing) = InitFormula(f, outsym, sym, nothing, weak, optional, label)
-InitFormula(f, outsym, sym, prettyprint; weak::Bool=false, optional::Bool=false, label=nothing) = InitFormula(f, outsym, sym, prettyprint, weak, optional, label)
+InitFormula(@nospecialize(f), outsym, sym; weak::Bool=false, optional::Bool=false, label=nothing) = InitFormula(f, outsym, sym, nothing, weak, optional, label)
+InitFormula(@nospecialize(f), outsym, sym, prettyprint; weak::Bool=false, optional::Bool=false, label=nothing) = InitFormula(f, outsym, sym, prettyprint, weak, optional, label)
 
 dim(c::InitFormula) = length(c.outsym)
 
@@ -390,24 +390,24 @@ When evaluating a GuessFormula, input symbols are looked up with this priority:
 
 See also [`@guessformula`](@ref) for a macro to create such formulas.
 """
-struct GuessFormula{F}
-    f::F
+struct GuessFormula
+    f::Any # only called once per initialization, so no type parameter
     outsym::Vector{Symbol}   # output symbols (from LHS of assignments)
     sym::Vector{Symbol}      # input symbols (from RHS of assignments)
     prettyprint::Union{Nothing,String}
     label::Union{Nothing,String}  # one-line `(via …)` provenance for the verbose log, see `InitFormula.label`
 
-    function GuessFormula(f::F, outsym::Vector{Symbol}, sym::Vector{Symbol}, prettyprint::Union{Nothing,String}, label::Union{Nothing,String}=nothing) where F
+    function GuessFormula(@nospecialize(f), outsym::Vector{Symbol}, sym::Vector{Symbol}, prettyprint::Union{Nothing,String}, label::Union{Nothing,String}=nothing)
         # Check for self-dependencies (formula depending on its own output)
         self_deps = intersect(sym, outsym)
         if !isempty(self_deps)
             throw(ArgumentError("GuessFormula cannot depend on its own output symbols: $self_deps"))
         end
-        new{F}(f, outsym, sym, prettyprint, label)
+        new(f, outsym, sym, prettyprint, label)
     end
 end
-GuessFormula(f, outsym, sym; label=nothing) = GuessFormula(f, outsym, sym, nothing, label)
-GuessFormula(f, outsym, sym, prettyprint; label=nothing) = GuessFormula(f, outsym, sym, prettyprint, label)
+GuessFormula(@nospecialize(f), outsym, sym; label=nothing) = GuessFormula(f, outsym, sym, nothing, label)
+GuessFormula(@nospecialize(f), outsym, sym, prettyprint; label=nothing) = GuessFormula(f, outsym, sym, prettyprint, label)
 
 dim(c::GuessFormula) = length(c.outsym)
 
@@ -913,14 +913,14 @@ function _formula_row(s, val, prev; op, fixed=nothing, pin=false, label=nothing)
     ":$s &$op $v &$note &$via"
 end
 
-_vcattable(t::Tuple) = collect(t)
-_vcattable(x) = x # Formula types and AbstractVector
-
-# Generic formula collection function (works for InitFormula, GuessFormula, etc.)
+# Collects formulas from single formulas, tuples and vectors into a new vector (works for
+# InitFormula, GuessFormula, etc.)
 collect_formulas(::Nothing, ::Nothing) = nothing
-collect_formulas(::Nothing, f) = vcat(_vcattable(f))
-collect_formulas(f, ::Nothing) = vcat(_vcattable(f))
-collect_formulas(a, b) = vcat(_vcattable(a), _vcattable(b))
+collect_formulas(::Nothing, f) = _formula_vec(f)
+collect_formulas(f, ::Nothing) = _formula_vec(f)
+collect_formulas(a, b) = vcat(_formula_vec(a), _formula_vec(b))
+_formula_vec(f::Union{InitFormula,GuessFormula}) = [f]
+_formula_vec(fs) = collect(fs)
 
 merge_initconstraints(::Nothing, ::Nothing) = nothing
 merge_initconstraints(::Nothing, c::InitConstraint) = c

@@ -624,7 +624,7 @@ end
 
 using PrecompileTools: @compile_workload
 @compile_workload begin
-    # include("MTKExt_precomp_workload.jl")
+    include("MTKExt_precomp_workload.jl")
 end
 
 end
