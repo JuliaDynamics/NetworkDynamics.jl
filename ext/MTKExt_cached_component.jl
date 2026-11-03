@@ -165,10 +165,11 @@ Base.@nospecializeinfer function NetworkDynamics.load_cached_component(build, ar
 end
 
 # Values which are equal but of different type, like 1 and 1.0, are different keys. Only the
-# hash is stored, so mutating an argument after the call can't change the stored key.
+# hash is stored, so mutating an argument after the call can't change the stored key. The
+# registered global contexts are part of every key.
 function _key_hash(key)
     @nospecialize
-    h = hash(key[2], hash(key[1]))
+    h = NetworkDynamics.context_hash(hash(key[2], hash(key[1])))
     vals = key[3]
     for i in 1:nfields(vals)
         v = getfield(vals, i)

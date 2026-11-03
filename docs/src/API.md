@@ -26,6 +26,7 @@ ComponentPostprocessing
 NetworkDynamics.with_mtk_cache
 NetworkDynamics.set_mtk_cache!
 NetworkDynamics.wipe_mtk_cache!
+NetworkDynamics.register_cache_context!
 NetworkDynamics.mtk_cache_stats
 NetworkDynamics.mtk_cache_mode
 @cached_component

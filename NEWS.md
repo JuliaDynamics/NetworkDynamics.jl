@@ -16,6 +16,9 @@
   `wipe_mtk_model_cache!` → `wipe_mtk_cache!`, and `mtk_model_cache_enabled()` → `mtk_cache_mode()`,
   which returns the mode. `mtk_cache_stats` lists the entries in the cache with their build times
   and hits, and the entries which were never hit.
+- `register_cache_context!` makes global state part of the key of the component cache, so a
+  `@cached_component` whose body reads a package-wide setting is rebuilt when that setting
+  changes instead of returning a model built under the old one.
 - **Solves no longer change `prob.p`.** Callbacks in ND often keep discrete state in parameters, and
   the solver used to change `prob.p` in place, so a second solve of the same problem silently
   started from where the first one ended. The `ODEProblem` constructor now stores
