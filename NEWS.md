@@ -78,8 +78,9 @@
   solve gets about 40 % faster. `specialize=SciMLBase.AutoSpecialize` restores the old behavior.
 - **A new network reuses the compiled solver.** The `Network` type no longer carries the component
   functions; the RHS reaches them through a function barrier (30–40 ns per call). On IEEE39 the
-  first solve of a second network dropped from 17 s to 0.4 s. Reuse needs the same graph type,
-  mass matrix type and float type. `Network(...; fullytyped=true)` restores the fully typed network.
+  first solve of a second network dropped from 17 s to 0.4 s. Graph and mass matrix are stored
+  untyped as well, so `Network` has only the type parameters `{TB,CR}` and reuse just needs the
+  same float type. `Network(...; fullytyped=true)` restores the fully typed core.
 - **DAE (re)initialization starts with Newton also without a `jac_prototype`.**
   The default `initializealg` of `ODEProblem(nw, ...)` now always uses the Jacobian-based
   polyalg (NewtonRaphson, then TrustRegion and LevenbergMarquardt) instead of the upstream

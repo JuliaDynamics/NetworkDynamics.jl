@@ -266,7 +266,7 @@ is_injector(im::IndexManager, vidx::Int) = vidx ∈ im._injector_vidxs
 function gen_loopback_map(im::IndexManager)
     outindex = Int[]
     aggindex = Int[]
-    for i in 1:ne(im.g)
+    for i in 1:ne(im)
         is_loopback(im.edgem[i]) || continue
         e = im.edgevec[i]
         # we want to copy from dst output to src input
