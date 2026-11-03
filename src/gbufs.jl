@@ -11,7 +11,7 @@ struct EagerGBufProvider{MT,C} <: GBufProvider
 end
 
 function EagerGBufProvider(im::IndexManager, batches)
-    map = zeros(Int, ne(im.g) * im.vdepth * 2)
+    map = zeros(Int, ne(im) * im.vdepth * 2)
     for (i, e) in pairs(im.edgevec)
         map[im.e_gbufr[i].src] .= im.v_out[e.src]
         map[im.e_gbufr[i].dst] .= im.v_out[e.dst]
@@ -43,8 +43,8 @@ struct LazyGBuf{LBP,UT}
 end
 
 function LazyGBufProvider(im::IndexManager, _)
-    e_src = Vector{UnitRange{Int}}(undef, ne(im.g))
-    e_dst = Vector{UnitRange{Int}}(undef, ne(im.g))
+    e_src = Vector{UnitRange{Int}}(undef, ne(im))
+    e_dst = Vector{UnitRange{Int}}(undef, ne(im))
     for (i, e) in pairs(im.edgevec)
         e_src[i] = im.v_out[e.src]
         e_dst[i] = im.v_out[e.dst]

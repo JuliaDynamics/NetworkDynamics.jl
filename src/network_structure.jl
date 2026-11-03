@@ -1,5 +1,5 @@
-mutable struct IndexManager{G}
-    g::G
+mutable struct IndexManager
+    g::AbstractGraph
     edgevec::Vector{SimpleEdge{Int64}}
     # positions of vertex data
     v_data::Vector{UnitRange{Int}}  # v data in flat states
@@ -36,21 +36,23 @@ mutable struct IndexManager{G}
         unique_enames = unique_mappings(getproperty.(edgem, :name), 1:ne(g))
         evec = collect(edges(g))
         _inj = _find_injector_vidxs(evec, edgem)
-        new{typeof(g)}(g, evec,
-                       (Vector{UnitRange{Int}}(undef, nv(g)) for i in 1:5)...,
-                       Vector{UnitRange{Int}}(undef, ne(g)),
-                       Vector{@NamedTuple{src::UnitRange{Int},dst::UnitRange{Int}}}(undef, ne(g)),
-                       Vector{UnitRange{Int}}(undef, ne(g)),
-                       Vector{@NamedTuple{src::UnitRange{Int},dst::UnitRange{Int}}}(undef, ne(g)),
-                       Vector{UnitRange{Int}}(undef, ne(g)),
-                       edepth, vdepth,
-                       0, 0, 0, 0, 0, 0,
-                       vertexm, edgem,
-                       aliased_vertexm_hashes,
-                       aliased_edgem_hashes,
-                       unique_vnames,
-                       unique_enames,
-                       _inj)
+        new(
+            g, evec,
+            (Vector{UnitRange{Int}}(undef, nv(g)) for i in 1:5)...,
+            Vector{UnitRange{Int}}(undef, ne(g)),
+            Vector{@NamedTuple{src::UnitRange{Int},dst::UnitRange{Int}}}(undef, ne(g)),
+            Vector{UnitRange{Int}}(undef, ne(g)),
+            Vector{@NamedTuple{src::UnitRange{Int},dst::UnitRange{Int}}}(undef, ne(g)),
+            Vector{UnitRange{Int}}(undef, ne(g)),
+            edepth, vdepth,
+            0, 0, 0, 0, 0, 0,
+            vertexm, edgem,
+            aliased_vertexm_hashes,
+            aliased_edgem_hashes,
+            unique_vnames,
+            unique_enames,
+            _inj
+        )
     end
 end
 function _aliased_hashes(T, cfs, aliastype)
@@ -110,12 +112,13 @@ const _CORE_FIELDS = (:ex, :vertexbatches, :layer, :gbufprovider, :loopbackmap, 
 # The core holds the component functions, so its type differs for every network. By default the
 # network holds it untyped: code taking a network then compiles once for all networks, and the
 # network call reaches the typed core through a function barrier. A `fullytyped` network holds
-# the core typed and has no barrier.
-struct Network{G,MM,TB,CR}
+# the core typed and has no barrier. Graph and mass matrix are never read on the hot path, so
+# they are untyped either way.
+struct Network{TB,CR}
     "index manager"
-    im::IndexManager{G}
+    im::IndexManager
     "mass matrix"
-    mass_matrix::MM
+    mass_matrix::Any
     "sparsity pattern"
     jac_prototype::Ref{Union{Nothing,AbstractSparseMatrix}}
     "buffer to hand the time to an untyped core, `nothing` if fully typed"
@@ -129,20 +132,20 @@ struct Network{G,MM,TB,CR}
             Ref{Union{Nothing,AbstractSparseMatrix}}(jac_prototype)
         end
         if fullytyped
-            new{typeof(im.g),typeof(mm),Nothing,typeof(core)}(im, mm, jacref, nothing, core)
+            new{Nothing,typeof(core)}(im, mm, jacref, nothing, core)
         else
             # long enough for a Dual time with as many partials as ForwardDiff picks at most
             FT = eltype(core.caches.output.du)
             tbuf = zeros(FT, ForwardDiff.DEFAULT_CHUNK_THRESHOLD + 1)
-            new{typeof(im.g),typeof(mm),typeof(tbuf),Any}(im, mm, jacref, tbuf, core)
+            new{typeof(tbuf),Any}(im, mm, jacref, tbuf, core)
         end
     end
 end
-function ConstructionBase.constructorof(::Type{<:Network{G,MM,TB,CR}}) where {G,MM,TB,CR}
+function ConstructionBase.constructorof(::Type{<:Network{TB,CR}}) where {TB,CR}
     # the time buffer is rebuilt
     return (im, mm, jac, _, core) -> Network(core, im, mm, jac; fullytyped=CR !== Any)
 end
-isfullytyped(::Network{G,MM,TB,CR}) where {G,MM,TB,CR} = CR !== Any
+isfullytyped(::Network{TB,CR}) where {TB,CR} = CR !== Any
 
 executionstyle(nw::Network) = executionstyle(nw.core)
 executionstyle(nwc::NetworkCore) = nwc.ex
@@ -163,8 +166,11 @@ Returns the number of parameters in the network,
 corresponts to the length of the flat parameter vector.
 """
 pdim(nw::Network) = pdim(nw.im)
-Graphs.nv(nw::Network) = nv(nw.im.g)
-Graphs.ne(nw::Network) = ne(nw.im.g)
+Graphs.nv(nw::Network) = nv(nw.im)
+Graphs.ne(nw::Network) = ne(nw.im)
+# the index vectors are sized at construction, this stays inferred without a typed graph
+Graphs.nv(im::IndexManager) = length(im.v_data)
+Graphs.ne(im::IndexManager) = length(im.e_data)
 Base.broadcastable(nw::Network) = Ref(nw)
 
 """

@@ -15,13 +15,13 @@ for example
 """
 abstract type Aggregator end
 
-struct NaiveAggregator{F,ETup,G} <: Aggregator
-    im::IndexManager{G}
+struct NaiveAggregator{F,ETup} <: Aggregator
+    im::IndexManager
     batches::ETup
     f::F
     function NaiveAggregator(im, batches, f)
         tup = Tuple(batches)
-        new{typeof(f),typeof(tup),typeof(im.g)}(im, tup, f)
+        new{typeof(f),typeof(tup)}(im, tup, f)
     end
 end
 NaiveAggregator(f) = (im, batches) -> NaiveAggregator(im, batches, f)
