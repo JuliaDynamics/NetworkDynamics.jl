@@ -564,6 +564,52 @@ function with_mtk_cache end
 function mtk_cache_stats end
 function mtk_cache_mode end
 
+# Replaced as a whole on every change, so lookups can read it without the lock.
+const CACHE_CONTEXTS = Ref(Pair{Symbol,Any}[])
+const CACHE_CONTEXTS_LOCK = ReentrantLock()
+
+"""
+    NetworkDynamics.register_cache_context!(name::Symbol, f)
+    NetworkDynamics.register_cache_context!(name::Symbol, nothing)
+
+Make global state part of the key of the component cache. The cache calls `f()` for every
+lookup and hashes the result into the key, so a cached component built under one value is not
+reused under another.
+
+Use it for package-wide settings that change how models are built, like a global per-unit
+base or a switch between two realizations of a block, which component bodies read instead of
+taking them as keyword arguments. A package typically registers its settings in `__init__`.
+Registering again under the same `name` replaces `f`, `nothing` removes it. Every change
+empties the cache.
+
+`f` must be cheap, and its result must hash by value.
+
+```julia
+const MY_BASE = Ref(100.0)
+function __init__()
+    NetworkDynamics.register_cache_context!(:MyPackage_base, () -> MY_BASE[])
+end
+```
+"""
+function register_cache_context!(name::Symbol, f)
+    @lock CACHE_CONTEXTS_LOCK begin
+        contexts = filter(c -> first(c) !== name, CACHE_CONTEXTS[])
+        isnothing(f) || push!(contexts, name => f)
+        CACHE_CONTEXTS[] = contexts
+    end
+    # no methods means the MTK extension isn't loaded, so there is no cache to empty
+    hasmethod(wipe_mtk_cache!, Tuple{}) && wipe_mtk_cache!()
+    nothing
+end
+
+function context_hash(h::UInt)
+    for (name, f) in CACHE_CONTEXTS[]
+        v = f()
+        h = hash(v, hash(typeof(v), hash(name, h)))
+    end
+    h
+end
+
 """
     set_mtk_defaults(sys::System, pairs) -> System
 
@@ -686,6 +732,8 @@ or for a single call with `cache=:check`.
 - `name` may only be used as the name of the returned system.
 - Cached systems are shared, so they must not be mutated in place. Out-of-place changes like
   [`set_initf`](@ref) are fine.
+- The body must not depend on global state, unless that state is registered with
+  [`NetworkDynamics.register_cache_context!`](@ref).
 - After editing the code that a cached component calls, for example with Revise, call
   [`NetworkDynamics.wipe_mtk_cache!`](@ref). Editing the cached component itself is
   detected automatically.

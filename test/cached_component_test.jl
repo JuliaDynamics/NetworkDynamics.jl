@@ -370,3 +370,53 @@ end
     end))
     @test_throws r"remove them from the signature" expand(:(function F(; name, defaults...) end))
 end
+
+GLOBAL_GAIN = Ref(1.0)
+TEST_KIND = Ref{Real}(1)
+@cached_component function GlobalGain(; name)
+    @variables x(t)=0
+    @parameters K=GLOBAL_GAIN[]
+    System([Dt(x) ~ -K*x], t; name)
+end
+@testset "global cache context" begin
+    NetworkDynamics.with_mtk_cache() do
+        NetworkDynamics.wipe_mtk_cache!()
+        try
+            # unregistered, the global is captured by the first build
+            @test defaultof(GlobalGain(; name=:g), :K) == 1.0
+            GLOBAL_GAIN[] = 2.0
+            @test defaultof(GlobalGain(; name=:g), :K) == 1.0
+
+            # registering empties the cache, so the stale 1.0 entry is gone
+            NetworkDynamics.register_cache_context!(:test_gain, () -> GLOBAL_GAIN[])
+            @test defaultof(GlobalGain(; name=:g), :K) == 2.0
+            GLOBAL_GAIN[] = 3.0
+            @test defaultof(GlobalGain(; name=:g), :K) == 3.0
+            @test component_counts() == (2, 0)
+            GLOBAL_GAIN[] = 2.0 # the entry for the old value is still there
+            @test defaultof(GlobalGain(; name=:g), :K) == 2.0
+            @test component_counts() == (2, 1)
+
+            # registering again replaces, `nothing` removes, both empty the cache
+            NetworkDynamics.register_cache_context!(:test_gain, () -> 2 * GLOBAL_GAIN[])
+            @test count(c -> first(c) === :test_gain, NetworkDynamics.CACHE_CONTEXTS[]) == 1
+            @test component_counts() == (0, 0)
+            @test defaultof(GlobalGain(; name=:g), :K) == 2.0
+            NetworkDynamics.register_cache_context!(:test_gain, nothing)
+            @test !any(c -> first(c) === :test_gain, NetworkDynamics.CACHE_CONTEXTS[])
+            GLOBAL_GAIN[] = 4.0
+            @test defaultof(GlobalGain(; name=:g), :K) == 4.0
+
+            # equal values of different type are different keys
+            NetworkDynamics.register_cache_context!(:test_kind, () -> TEST_KIND[])
+            TEST_KIND[] = 1
+            h = NetworkDynamics.context_hash(zero(UInt))
+            TEST_KIND[] = 1.0
+            @test NetworkDynamics.context_hash(zero(UInt)) != h
+        finally
+            NetworkDynamics.register_cache_context!(:test_gain, nothing)
+            NetworkDynamics.register_cache_context!(:test_kind, nothing)
+            GLOBAL_GAIN[] = 1.0
+        end
+    end
+end
