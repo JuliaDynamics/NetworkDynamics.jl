@@ -68,3 +68,35 @@ end
     @named edge = EdgeExt()
     edgem = EdgeModel(edge, :srcin, :dstin, Directed(:out); extin=[:extin1 => VIndex(2,:a), :extin2 => VIndex(2,:a)])
 end
+
+@testset "external input referencing an output which is not a state" begin
+    # vertex 2 has state x and output o = 2x, which is not a state
+    vsrc = VertexModel(f=(dv, v, esum, p, t) -> dv[1] = 0, g=(out, v, p, t) -> out[1] = 2v[1],
+                       sym=[:x], outsym=[:o], dim=1, outdim=1)
+    # vertex 1 integrates o, the MTK edge outputs o
+    vdst = VertexModel(f=(dv, v, esum, ext, p, t) -> dv[1] = ext[1], g=1, sym=[:y], dim=1,
+                       extin=[VIndex(2, :o)])
+    @mtkmodel EdgeOutExt begin
+        @variables begin
+            srcin(t)
+            dstin(t)
+            ext(t)
+            out(t)
+        end
+        @equations begin
+            out ~ ext
+        end
+    end
+    @named edge = EdgeOutExt()
+    em = EdgeModel(edge, :srcin, :dstin, AntiSymmetric(:out); extin=[:ext => VIndex(2, :o)])
+
+    nw = Network(path_graph(2), [vdst, vsrc], em)
+    s = NWState(nw)
+    s.v[1, :y] = 0.0
+    s.v[2, :x] = 1.5
+    du = zeros(dim(nw))
+    nw(du, uflat(s), pflat(s), 0.0)
+    @test s.v[2, :o] == 3.0
+    @test NWState(nw, du).v[1, :y] == 3.0
+    @test s.e[1, :out] == 3.0
+end
