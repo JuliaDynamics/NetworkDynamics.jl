@@ -16,6 +16,9 @@
   `wipe_mtk_model_cache!` → `wipe_mtk_cache!`, and `mtk_model_cache_enabled()` → `mtk_cache_mode()`,
   which returns the mode. `mtk_cache_stats` lists the entries in the cache with their build times
   and hits, and the entries which were never hit.
+- **Cached component constructors.** `@cached_component` defines a component constructor like
+  `@component` does, but with the cache on it builds each `System` only once per set of
+  structural keyword arguments.
 - `register_cache_context!` makes global state part of the key of the component cache, so a
   `@cached_component` whose body reads a package-wide setting is rebuilt when that setting
   changes instead of returning a model built under the old one.
@@ -98,10 +101,11 @@
   `VertexModel` construction; now initialization decides which one fires and reports a
   disagreement. A weak `initf` is also no longer dropped next to an optional strong one.
 - Networks without edges can be built by passing an empty edge list, e.g. `Network(g, vm, [])` or `Network(vms, [])`.
-- **Faster MTK components.** Integer powers like `x^2` in generated code now go through
-  `Base.literal_pow` (plain multiplication) instead of the generic, much slower integer power.
-  MTK edges also write their src and dst outputs through one contiguous view. Together this made
-  the RHS of a large PowerDynamics network about 4× faster, with identical results.
+- **Faster MTK components.** Integer powers like `x^2` in generated code are now written out as
+  products instead of calling the generic, much slower integer power. The generated functions
+  also compute common subexpressions only once. MTK edges write their src and dst outputs
+  through one contiguous view. Together this made the RHS of a large PowerDynamics network
+  about 4× faster, with identical results.
 - Fix: injector nodes with both states and feed forward never evaluated their `f`, so their states stayed frozen.
 - Fix: the sparsity detection now also rewrites conditionals in MTK edges with separate src and
   dst outputs, instead of falling back to a dense `g`.

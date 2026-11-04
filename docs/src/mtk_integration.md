@@ -421,7 +421,64 @@ we see the callback was generated and attached automatically.
 
 ## Model Caching
 
-When building large networks with many identical component types, the compilation of ModelingToolkit systems can become a performance bottleneck. NetworkDynamics therefore caches the generated functions of MTK models: a second `System` with the same structure reuses them, while defaults, guesses and other metadata are still taken from the new system. The cache is off by default. Switch it on with `NetworkDynamics.set_mtk_cache!(:on)`, or use `:check` to also rebuild every cache hit and compare it with the cached result.
+Building a network from MTK models takes time in two places. Constructing the `System` of a
+component can already be slow for large hierarchical models. Turning that system into a
+`VertexModel` or `EdgeModel` then simplifies it and generates code. In a network with many
+similar components most of this work repeats, so NetworkDynamics can cache both steps. The cache
+is off by default:
+
+```@example mtk
+NetworkDynamics.set_mtk_cache!(:on)
+nothing #hide
+```
+
+The **compile cache** works for every MTK model. A `VertexModel` or `EdgeModel` built from a
+`System` with the same structure as an earlier one reuses the generated functions and
+equations. Defaults, guesses and other metadata are still read from the new system, so systems
+which only differ in their parameter values share one compilation.
+
+The **component cache** works for constructors defined with
+[`@cached_component`](@ref NetworkDynamics.@cached_component) instead of `@component`. Such a
+constructor builds its `System` only once for each value of the keyword arguments in its
+signature, and later calls reuse it with their own name and defaults. Here, only whether `T` is
+zero changes the structure of the model, which the `@structural` line tells the cache:
+
+```@example mtk
+@cached_component function LagNode(; name, T=1.0)
+    @structural iszero(T)
+    @variables u(t) [input=true] y(t) [output=true]
+    if iszero(T)
+        System([y ~ u], t; name)
+    else
+        @parameters T = T
+        System([D(y) ~ (u - y) / T], t; name)
+    end
+end
+nothing #hide
+```
+
+Ten nodes with different time constants then share one system and one compiled model:
+
+```@example mtk
+vms = [VertexModel(LagNode(; name=Symbol(:lag, i), T=0.1i), [:u], [:y]) for i in 1:10]
+NetworkDynamics.mtk_cache_stats()
+```
+
+A cached system is shared by every call which hits it, so the body of a cached component has to
+follow a few rules. It must not depend on anything but its keyword arguments, and arguments
+projected by `@structural` must not be used in any other way. Global settings a body reads can be
+made part of the cache key with [`NetworkDynamics.register_cache_context!`](@ref). The
+docstring of [`@cached_component`](@ref NetworkDynamics.@cached_component) lists all rules.
+
+Breaking one of them makes a hit return a wrong model without any error. The `:check` mode
+catches that: it rebuilds every hit from scratch and errors if the result differs from the
+cached one. It is slow, but a good setting for a test suite. A single call can also choose its
+mode with the `cache` keyword, e.g. `LagNode(; name=:lag, T=0.5, cache=:check)`.
+
+```@example mtk
+NetworkDynamics.set_mtk_cache!(:off) #hide
+nothing #hide
+```
 
 ```@docs; canonical=false
 NetworkDynamics.with_mtk_cache

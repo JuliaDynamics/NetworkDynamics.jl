@@ -27,7 +27,11 @@ Add a test file:
 function includetest!(file)
     path = joinpath(TESTDIR, file)
     if any(f -> f.func === :include || f.func === :_include, stacktrace())
-        testsuite[file] = :(Main.quiet_include(@__MODULE__, $path))
+        testsuite[file] = quote
+            # every cache hit is rebuilt and compared, unless the file sets a mode itself
+            Main.NetworkDynamics.set_mtk_cache!(:check)
+            Main.quiet_include(@__MODULE__, $path)
+        end
     else
         Core.eval(Main, init_worker_code) # no worker to set up here
         @testset "$file" begin include(path) end

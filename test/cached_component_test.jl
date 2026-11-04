@@ -7,6 +7,8 @@ using StableRNGs: StableRNG
 using Test
 using IOCapture: IOCapture
 mtkext = Base.get_extension(NetworkDynamics, :NetworkDynamicsMTKExt)
+# these tests count builds and hits, so they start from the default mode instead of :check
+NetworkDynamics.set_mtk_cache!(:off)
 
 # (misses, hits) as `print_stats` counts them, from the built entries in the cache
 function component_counts()
