@@ -113,6 +113,8 @@
   vector instead of a tuple. The setters still accept a single item, a tuple or a vector.
   `InitFormula` and `GuessFormula` lost their type parameter. Both changes cut the compile time
   of building and initializing large networks.
+- Fix: external inputs which reference an output of a component that is not a state, e.g.
+  `extin=[VIndex(2, :o)]`, failed at `Network` construction.
 
 ## v1.3.0 Changelog
 
