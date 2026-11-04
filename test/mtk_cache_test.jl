@@ -8,6 +8,8 @@ using StableRNGs: StableRNG
 using Test
 using IOCapture: IOCapture
 mtkext = Base.get_extension(NetworkDynamics, :NetworkDynamicsMTKExt)
+# these tests count builds and hits, so they start from the default mode instead of :check
+NetworkDynamics.set_mtk_cache!(:off)
 
 # Field-by-field comparison of two component models, returns the names of the differing fields.
 # Generated functions are compared by type, which contains the hash of their body.
