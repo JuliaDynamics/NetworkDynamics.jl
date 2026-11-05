@@ -115,7 +115,7 @@ function warn_missing_features(sys)
     cev = _collect_continuous_events(sys)
     dev = _collect_discrete_events(sys)
     if !isempty(cev) || !isempty(dev)
-        @warn "MTK-Model $(sys.name) contains events. They will be ignored by NetworkDynamics.jl. Use ComponentCallbacks on a component level for that!"
+        @warn "MTK-Model $(nameof(sys)) contains events. They will be ignored by NetworkDynamics.jl. Use ComponentCallbacks on a component level for that!"
     end
 
     if !isempty(ModelingToolkitBase.initialization_equations(sys))
