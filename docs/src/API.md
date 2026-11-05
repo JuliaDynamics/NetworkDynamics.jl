@@ -70,8 +70,9 @@ PureStateMap
 ### Network Parameter Object
 ```@docs
 NWParameter
-NWParameter(::Any)
+NWParameter(::Network)
 NWParameter(::NWParameter)
+NWParameter(::NWState)
 NWParameter(::SciMLBase.DEIntegrator)
 pflat
 parameter_symbols
@@ -80,9 +81,9 @@ parameter_symbols
 ### Network State Object
 ```@docs
 NWState
-NWState(::Any)
+NWState(::Network)
 NWState(::NWState)
-NWState(::NWParameter)
+NWState(::NWParameter, ::AbstractVector)
 NWState(::SciMLBase.DEIntegrator)
 uflat
 variable_symbols

@@ -441,7 +441,25 @@ end
         @test isequal(_init_flat(T, 10, filltype(T)), [missing for _ in 1:10])
         @test isequal(pflat(NWState(nw)), pflat(NWParameter(nw)))
         p = NWParameter(nw)
-        @test isequal(pflat(NWState(p; ufill=0)), pflat(p))
+        @test isequal(pflat(@test_logs (:warn, r"deprecated") NWState(p; ufill=0)), pflat(p))
+
+        # NWParameter(s) copies s.p
+        s = NWState(sol, 0.5)
+        p2 = NWParameter(s)
+        @test pflat(p2) == pflat(s) && pflat(p2) !== pflat(s)
+        @test_throws ArgumentError NWParameter(NWState(nw, uflat(s)))
+
+        # NWState(p, u) keeps p
+        s = NWState(p2, uflat(s))
+        @test s.p === p2
+
+        # anything but a Network is deprecated for the metadata constructors
+        @test_logs (:warn, r"deprecated") NWState(prob)
+        @test_logs (:warn, r"deprecated") NWState(sol)
+        @test_logs (:warn, r"deprecated") NWParameter(prob)
+        @test_logs (:warn, r"deprecated") NWParameter(sol)
+        @test_logs (:warn, r"deprecated") NWState(NWState(nw).v)
+        @test isequal(uflat(@test_logs (:warn,) NWState(prob)), uflat(NWState(nw)))
     end
 
     @testset "Test NWParameter/NWstate access" begin

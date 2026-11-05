@@ -133,3 +133,37 @@ function mtk_model_cache_enabled()
     Base.depwarn("`mtk_model_cache_enabled()` is deprecated, use `mtk_cache_mode() !== :off` instead.", :mtk_model_cache_enabled)
     mtk_cache_mode() !== :off
 end
+
+# Deprecated `NWState(x)`/`NWParameter(x)` for anything `extract_nw` understands. They only use
+# the network of `x` and fill from metadata, even if `x` carries values (prob, sol, ...).
+function NWState(thing; kwargs...)
+    @warn "NWState(x::$(nameof(typeof(thing)))) is deprecated: it ignores the values in `x` and \
+           fills the state from the metadata of the network. Use `NWState(extract_nw(x))` for \
+           that, or pass the values explicitly, e.g. `NWState(sol, t)` or \
+           `NWState(extract_nw(prob), prob.u0, prob.p)`."
+    NWState(extract_nw(thing); kwargs...)
+end
+function NWParameter(thing; kwargs...)
+    @warn "NWParameter(x::$(nameof(typeof(thing)))) is deprecated: it ignores the values in `x` \
+           and fills the parameters from the metadata of the network. Use \
+           `NWParameter(extract_nw(x))` for that, or pass the values explicitly, e.g. \
+           `NWParameter(extract_nw(prob), prob.p)`."
+    NWParameter(extract_nw(thing); kwargs...)
+end
+
+# Deprecated: states from the `default` metadata, sharing the given parameter object.
+function NWState(p::NWParameter; utype=Vector{Float64}, ufill=filltype(utype), default=true)
+    @warn "NWState(p::NWParameter) is deprecated. Use `NWState(p, uflat)` to combine `p` with \
+           given states, e.g. `NWState(p, uflat(NWState(p.nw)))` for states from the metadata."
+    nw = p.nw
+    uflat = _init_flat(utype, dim(nw), ufill)
+    s = NWState(nw, uflat, p, nothing)
+    default || return s
+    defaults = SII.default_values(nw)
+    for (i, k) in enumerate(SII.variable_symbols(nw))
+        if haskey(defaults, k)
+            uflat[i] = defaults[k]
+        end
+    end
+    return s
+end
