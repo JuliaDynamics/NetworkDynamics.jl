@@ -813,19 +813,19 @@ function _resolve_formula(lhs_sym, rhs_expr; kind, weak::Bool=false, optional::B
 end
 
 """
-    add_initformula_lenient!(c, formula)
-    add_guessformula_lenient!(c, formula)
+    add_initformula_lenient!(c, formula; symbolcache=nothing)
+    add_guessformula_lenient!(c, formula; symbolcache=nothing)
 
 Attach an MTK-lowered formula to a compiled component, demoting the compatibility check to a
 warn-and-skip. Lowering is best effort: a recipe whose target or inputs did not survive
 simplification (or which references the independent variable directly) must not fail
 compilation — the model works without it, the initialization just knows less. Only the
 compatibility check is caught; the attach itself runs unchecked, having already been
-validated.
+validated. When attaching many formulas, pass one `NetworkDynamics.formula_symbolcache(c)`.
 """
-function add_initformula_lenient!(c, formula)
+function add_initformula_lenient!(c, formula; symbolcache=nothing)
     try
-        assert_initformula_compat(c, formula)
+        assert_initformula_compat(c, formula; symbolcache)
     catch e
         e isa ArgumentError || rethrow()
         @warn "Skipping an InitFormula which does not fit the compiled component :$(c.name): $(e.msg)" formula
@@ -834,9 +834,9 @@ function add_initformula_lenient!(c, formula)
     add_initformula!(c, formula; check=false)  # already validated
     nothing
 end
-function add_guessformula_lenient!(c, formula)
+function add_guessformula_lenient!(c, formula; symbolcache=nothing)
     try
-        assert_guessformula_compat(c, formula)
+        assert_guessformula_compat(c, formula; symbolcache)
     catch e
         e isa ArgumentError || rethrow()
         @warn "Skipping a GuessFormula which does not fit the compiled component :$(c.name): $(e.msg)" formula

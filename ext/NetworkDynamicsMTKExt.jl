@@ -147,11 +147,12 @@ function VertexModel(
     set_metadata!(c, :full_outputeqs, gen.full_outputeqs)
     set_metadata!(c, :odesystem, sys)
 
+    symbolcache = NetworkDynamics.formula_symbolcache(c)
     for formula in something(gen.initformulas, ())
-        add_initformula_lenient!(c, formula)
+        add_initformula_lenient!(c, formula; symbolcache)
     end
     for formula in something(gen.guessformulas, ())
-        add_guessformula_lenient!(c, formula)
+        add_guessformula_lenient!(c, formula; symbolcache)
     end
 
     # apply postprocessing functions from subcomponent metadata
@@ -303,11 +304,12 @@ function EdgeModel(
     set_metadata!(c, :full_outputeqs, gen.full_outputeqs)
     set_metadata!(c, :odesystem, sys)
 
+    symbolcache = NetworkDynamics.formula_symbolcache(c)
     for formula in something(gen.initformulas, ())
-        add_initformula_lenient!(c, formula)
+        add_initformula_lenient!(c, formula; symbolcache)
     end
     for formula in something(gen.guessformulas, ())
-        add_guessformula_lenient!(c, formula)
+        add_guessformula_lenient!(c, formula; symbolcache)
     end
 
     # apply postprocessing functions from subcomponent metadata

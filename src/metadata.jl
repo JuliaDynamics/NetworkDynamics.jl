@@ -762,7 +762,10 @@ See also: [`add_initformula!`](@ref), [`get_initformulas`](@ref), [`delete_initf
 function set_initformula!(c::ComponentModel, formula; check=true)
     @nospecialize formula
     list = _as_list(InitFormula, formula, "Formula")
-    check && foreach(f -> assert_initformula_compat(c, f), list)
+    if check
+        symbolcache = formula_symbolcache(c)
+        foreach(f -> assert_initformula_compat(c, f; symbolcache), list)
+    end
     set_metadata!(c, :initformula, list)
 end
 set_initformula!(nw::Network, idx::VCIndex, formula; kw...) = set_initformula!(getcomp(nw, idx), formula; kw...)
@@ -841,7 +844,10 @@ See also: [`add_guessformula!`](@ref), [`get_guessformulas`](@ref), [`delete_gue
 function set_guessformula!(c::ComponentModel, formula; check=true)
     @nospecialize formula
     list = _as_list(GuessFormula, formula, "Formula")
-    check && foreach(f -> assert_guessformula_compat(c, f), list)
+    if check
+        symbolcache = formula_symbolcache(c)
+        foreach(f -> assert_guessformula_compat(c, f; symbolcache), list)
+    end
     set_metadata!(c, :guessformula, list)
 end
 set_guessformula!(nw::Network, idx::VCIndex, formula; kw...) = set_guessformula!(getcomp(nw, idx), formula; kw...)
