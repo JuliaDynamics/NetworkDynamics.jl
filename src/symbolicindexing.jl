@@ -72,14 +72,26 @@ end
 
 Create `NWParameter` object from `integrator`.
 """
-NWParameter(int::SciMLBase.DEIntegrator) = NWParameter(int, int.p)
+function NWParameter(int::SciMLBase.DEIntegrator; kwargs...)
+    _no_integrator_kwargs(kwargs)
+    NWParameter(int, int.p)
+end
 
 """
-    NWParameter(prob::SciMLBase.ODEProblem)
+    NWParameter(prob::SciMLBase.ODEProblem; ptype=typeof(prob.p))
 
 Create `NWParameter` object from a copy of the parameters of `prob`.
 """
-NWParameter(prob::SciMLBase.ODEProblem) = NWParameter(prob, copy(prob.p))
+function NWParameter(prob::SciMLBase.ODEProblem; ptype=typeof(prob.p))
+    NWParameter(prob, _convertorcopy(ptype, prob.p))
+end
+
+# the integrator constructors share the arrays of the integrator, so there is nothing to convert
+function _no_integrator_kwargs(kwargs)
+    isempty(kwargs) && return
+    throw(ArgumentError("Constructing NWState/NWParameter from an integrator takes no keyword \
+                         arguments, got $(join(keys(kwargs), ", "))."))
+end
 
 
 """
@@ -252,14 +264,19 @@ end
 
 Create `NWState` object from `integrator`.
 """
-NWState(int::SciMLBase.DEIntegrator) = NWState(int, int.u, int.p, int.t)
+function NWState(int::SciMLBase.DEIntegrator; kwargs...)
+    _no_integrator_kwargs(kwargs)
+    NWState(int, int.u, int.p, int.t)
+end
 
 """
-    NWState(prob::SciMLBase.ODEProblem)
+    NWState(prob::SciMLBase.ODEProblem; utype=typeof(prob.u0), ptype=typeof(prob.p))
 
 Create `NWState` object from copies of `u0` and `p` of `prob`, at the first time of `tspan`.
 """
-NWState(prob::SciMLBase.ODEProblem) = NWState(prob, copy(prob.u0), copy(prob.p), prob.tspan[1])
+function NWState(prob::SciMLBase.ODEProblem; utype=typeof(prob.u0), ptype=typeof(prob.p))
+    NWState(prob, _convertorcopy(utype, prob.u0), _convertorcopy(ptype, prob.p), prob.tspan[1])
+end
 
 """
     NWState(sol::SciMLBase.AbstractODESolution, t)

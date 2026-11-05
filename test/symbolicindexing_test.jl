@@ -460,6 +460,14 @@ end
         @test s.t == prob.tspan[1]
         p3 = NWParameter(prob)
         @test pflat(p3) == prob.p && pflat(p3) !== prob.p
+        # keywords don't fall through to the deprecated metadata constructor
+        s32 = @test_logs NWState(prob; utype=Vector{Float32}, ptype=Vector{Float32})
+        @test uflat(s32) isa Vector{Float32} && uflat(s32) ≈ prob.u0
+        @test pflat(s32) isa Vector{Float32} && pflat(s32) ≈ prob.p
+        @test pflat(@test_logs NWParameter(prob; ptype=Vector{Float32})) isa Vector{Float32}
+        int = init(prob, Tsit5())
+        @test_throws ArgumentError NWState(int; utype=Vector{Float32})
+        @test_throws ArgumentError NWParameter(int; ptype=Vector{Float32})
 
         # anything else is deprecated for the metadata constructors
         @test_logs (:warn, r"deprecated") NWState(sol)
