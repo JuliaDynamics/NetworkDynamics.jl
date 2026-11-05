@@ -453,13 +453,19 @@ end
         s = NWState(p2, uflat(s))
         @test s.p === p2
 
-        # anything but a Network is deprecated for the metadata constructors
-        @test_logs (:warn, r"deprecated") NWState(prob)
+        # NWState(prob) and NWParameter(prob) copy the values of prob
+        s = NWState(prob)
+        @test uflat(s) == prob.u0 && uflat(s) !== prob.u0
+        @test pflat(s) == prob.p && pflat(s) !== prob.p
+        @test s.t == prob.tspan[1]
+        p3 = NWParameter(prob)
+        @test pflat(p3) == prob.p && pflat(p3) !== prob.p
+
+        # anything else is deprecated for the metadata constructors
         @test_logs (:warn, r"deprecated") NWState(sol)
-        @test_logs (:warn, r"deprecated") NWParameter(prob)
         @test_logs (:warn, r"deprecated") NWParameter(sol)
         @test_logs (:warn, r"deprecated") NWState(NWState(nw).v)
-        @test isequal(uflat(@test_logs (:warn,) NWState(prob)), uflat(NWState(nw)))
+        @test isequal(uflat(@test_logs (:warn,) NWState(sol)), uflat(NWState(nw)))
     end
 
     @testset "Test NWParameter/NWstate access" begin

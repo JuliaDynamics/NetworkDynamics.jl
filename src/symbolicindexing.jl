@@ -74,6 +74,13 @@ Create `NWParameter` object from `integrator`.
 """
 NWParameter(int::SciMLBase.DEIntegrator) = NWParameter(int, int.p)
 
+"""
+    NWParameter(prob::SciMLBase.ODEProblem)
+
+Create `NWParameter` object from a copy of the parameters of `prob`.
+"""
+NWParameter(prob::SciMLBase.ODEProblem) = NWParameter(prob, copy(prob.p))
+
 
 """
     NWState(nw_or_nw_wrapper, uflat, [pflat], [t])
@@ -246,6 +253,13 @@ end
 Create `NWState` object from `integrator`.
 """
 NWState(int::SciMLBase.DEIntegrator) = NWState(int, int.u, int.p, int.t)
+
+"""
+    NWState(prob::SciMLBase.ODEProblem)
+
+Create `NWState` object from copies of `u0` and `p` of `prob`, at the first time of `tspan`.
+"""
+NWState(prob::SciMLBase.ODEProblem) = NWState(prob, copy(prob.u0), copy(prob.p), prob.tspan[1])
 
 """
     NWState(sol::SciMLBase.AbstractODESolution, t)

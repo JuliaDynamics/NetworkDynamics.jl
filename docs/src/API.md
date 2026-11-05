@@ -74,6 +74,7 @@ NWParameter(::Network)
 NWParameter(::NWParameter)
 NWParameter(::NWState)
 NWParameter(::SciMLBase.DEIntegrator)
+NWParameter(::SciMLBase.ODEProblem)
 pflat
 parameter_symbols
 ```
@@ -85,6 +86,7 @@ NWState(::Network)
 NWState(::NWState)
 NWState(::NWParameter, ::AbstractVector)
 NWState(::SciMLBase.DEIntegrator)
+NWState(::SciMLBase.ODEProblem)
 uflat
 variable_symbols
 ```

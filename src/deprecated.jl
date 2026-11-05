@@ -135,19 +135,18 @@ function mtk_model_cache_enabled()
 end
 
 # Deprecated `NWState(x)`/`NWParameter(x)` for anything `extract_nw` understands. They only use
-# the network of `x` and fill from metadata, even if `x` carries values (prob, sol, ...).
+# the network of `x` and fill from metadata, even if `x` carries values (sol, ...).
 function NWState(thing; kwargs...)
     @warn "NWState(x::$(nameof(typeof(thing)))) is deprecated: it ignores the values in `x` and \
            fills the state from the metadata of the network. Use `NWState(extract_nw(x))` for \
-           that, or pass the values explicitly, e.g. `NWState(sol, t)` or \
-           `NWState(extract_nw(prob), prob.u0, prob.p)`."
+           that, or pass the values explicitly, e.g. `NWState(sol, t)`."
     NWState(extract_nw(thing); kwargs...)
 end
 function NWParameter(thing; kwargs...)
     @warn "NWParameter(x::$(nameof(typeof(thing)))) is deprecated: it ignores the values in `x` \
            and fills the parameters from the metadata of the network. Use \
-           `NWParameter(extract_nw(x))` for that, or pass the values explicitly, e.g. \
-           `NWParameter(extract_nw(prob), prob.p)`."
+           `NWParameter(extract_nw(x))` for that, or take the parameters of a state, e.g. \
+           `NWParameter(NWState(sol, t))`."
     NWParameter(extract_nw(thing); kwargs...)
 end
 
