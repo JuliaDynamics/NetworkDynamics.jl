@@ -37,16 +37,15 @@ Base.eltype(p::NWParameter) = eltype(p.pflat)
 Base.length(s::NWParameter) = length(s.pflat)
 
 """
-    NWParameter(nw_or_nw_wrapper;
+    NWParameter(nw::Network;
                 ptype=Vector{Float64}, pfill=filltype(ptype), default=true)
 
-Creates "empty" `NWParameter` object for the Network/Wrapper `nw` with flat type `ptype`.
+Creates "empty" `NWParameter` object for the Network `nw` with flat type `ptype`.
 The array will be prefilled with `pfill` (defaults to NaN).
 
 If `default=true` the default parameter values attached to the network components will be loaded.
 """
-function NWParameter(thing; ptype=Vector{Float64}, pfill=filltype(ptype), default=true)
-    nw = extract_nw(thing)
+function NWParameter(nw::Network; ptype=Vector{Float64}, pfill=filltype(ptype), default=true)
     pflat = _init_flat(ptype, pdim(nw), pfill)
     p = NWParameter(nw, pflat)
     default || return p
@@ -73,7 +72,26 @@ end
 
 Create `NWParameter` object from `integrator`.
 """
-NWParameter(int::SciMLBase.DEIntegrator) = NWParameter(int, int.p)
+function NWParameter(int::SciMLBase.DEIntegrator; kwargs...)
+    _no_integrator_kwargs(kwargs)
+    NWParameter(int, int.p)
+end
+
+"""
+    NWParameter(prob::SciMLBase.ODEProblem; ptype=typeof(prob.p))
+
+Create `NWParameter` object from a copy of the parameters of `prob`.
+"""
+function NWParameter(prob::SciMLBase.ODEProblem; ptype=typeof(prob.p))
+    NWParameter(prob, _convertorcopy(ptype, prob.p))
+end
+
+# the integrator constructors share the arrays of the integrator, so there is nothing to convert
+function _no_integrator_kwargs(kwargs)
+    isempty(kwargs) && return
+    throw(ArgumentError("Constructing NWState/NWParameter from an integrator takes no keyword \
+                         arguments, got $(join(keys(kwargs), ", "))."))
+end
 
 
 """
@@ -117,15 +135,21 @@ struct NWState{U,P,T,NW<:Network}
     end
 end
 
+"""
+    NWState(p::NWParameter, uflat)
+
+Wrap `uflat` together with the parameter object `p` (not copied).
+"""
+NWState(p::NWParameter, uflat::AbstractVector) = NWState(p.nw, uflat, p)
 
 """
-    NWState(nw_or_nw_wrapper;
+    NWState(nw::Network;
             utype=Vector{Float64}, ufill=filltype(utype),
             ptype=Vector{Float64}, pfill=filltype(ptype),
             default=true, guess=false, apply_formulas=true,
             verbose=false)
 
-Creates "empty" `NWState` object for the Network/Wrapper `nw` with flat types
+Creates "empty" `NWState` object for the Network `nw` with flat types
 `utype` & `ptype`. The arrays will be prefilled with `ufill` and `pfill`
 respectively (defaults to NaN).
 
@@ -147,16 +171,14 @@ observable which depends explicitly on time is skipped like any other unresolvab
 If `verbose=true`, print information about which formulas are applied and which
 values are set or skipped.
 """
-function NWState(thing;
+function NWState(nw::Network;
                  utype=Vector{Float64}, ufill=filltype(utype),
                  ptype=Vector{Float64}, pfill=filltype(ptype),
                  default=true, guess=false, apply_formulas=true,
                  verbose=false)
-    nw = extract_nw(thing)
-    t = nothing
     uflat = _init_flat(utype, dim(nw), ufill)
     p = NWParameter(nw; ptype, pfill, default=false)
-    s = NWState(nw,uflat,p,t)
+    s = NWState(nw, uflat, p, nothing)
     default || return s
 
     # resolve `default_from` metadata into per-component weak InitFormulas
@@ -228,25 +250,13 @@ function NWState(s::NWState;
 end
 
 """
-    NWState(p::NWParameter; utype=Vector{Float64}, ufill=filltype(utype), default=true)
+    NWParameter(s::NWState; ptype=typeof(pflat(s)))
 
-Create `NWState` based on existing `NWParameter` object.
-
-See [`NWState(nw; ...)`](@ref NWState) for the meaning of `guess` and `init`.
+Copy the parameters of state `s`.
 """
-function NWState(p::NWParameter; utype=Vector{Float64}, ufill=filltype(utype), default=true)
-    t = nothing
-    nw = p.nw
-    uflat = _init_flat(utype, dim(nw), ufill)
-    s = NWState(nw,uflat,p,t)
-    default || return s
-    defaults = SII.default_values(nw)
-    for (i, k) in enumerate(SII.variable_symbols(nw))
-        if haskey(defaults, k)
-            uflat[i] = defaults[k]
-        end
-    end
-    return s
+function NWParameter(s::NWState; kwargs...)
+    isnothing(s.p) && throw(ArgumentError("NWState has no parameters attached."))
+    NWParameter(s.p; kwargs...)
 end
 
 """
@@ -254,7 +264,19 @@ end
 
 Create `NWState` object from `integrator`.
 """
-NWState(int::SciMLBase.DEIntegrator) = NWState(int, int.u, int.p, int.t)
+function NWState(int::SciMLBase.DEIntegrator; kwargs...)
+    _no_integrator_kwargs(kwargs)
+    NWState(int, int.u, int.p, int.t)
+end
+
+"""
+    NWState(prob::SciMLBase.ODEProblem; utype=typeof(prob.u0), ptype=typeof(prob.p))
+
+Create `NWState` object from copies of `u0` and `p` of `prob`, at the first time of `tspan`.
+"""
+function NWState(prob::SciMLBase.ODEProblem; utype=typeof(prob.u0), ptype=typeof(prob.p))
+    NWState(prob, _convertorcopy(utype, prob.u0), _convertorcopy(ptype, prob.p), prob.tspan[1])
+end
 
 """
     NWState(sol::SciMLBase.AbstractODESolution, t)

@@ -1,6 +1,6 @@
 # Sparsity Detection
 
-NetworkDynamics.jl can automatically detect and exploit the sparsity structure of the Jacobian matrix to significantly improve the performance of ODE solvers. This feature uses [SparseConnectivityTracer.jl](https://github.com/adrhill/SparseConnectivityTracer.jl) to analyze the network's dynamics and create a sparse Jacobian prototype that modern solvers can use for more efficient linear algebra operations.
+NetworkDynamics.jl can automatically detect and exploit the sparsity structure of the Jacobian matrix to significantly improve the performance of ODE solvers. This feature uses [SparseConnectivityTracer.jl](https://github.com/JuliaDiff/SparseConnectivityTracer.jl) to analyze the network's dynamics and create a sparse Jacobian prototype that modern solvers can use for more efficient linear algebra operations.
 
 The sparsity detection is particularly beneficial for:
 - Large networks where the Jacobian matrix is sparse

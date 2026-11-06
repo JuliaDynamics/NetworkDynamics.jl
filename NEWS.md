@@ -115,6 +115,19 @@
   of building and initializing large networks.
 - Fix: external inputs which reference an output of a component that is not a state, e.g.
   `extin=[VIndex(2, :o)]`, failed at `Network` construction.
+- **`NWState(x)` and `NWParameter(x)` only fill from metadata for a `Network`.** For anything else
+  (solution, `IndexingProxy`, ...) they are deprecated, since they ignored the values `x` carries
+  and silently returned the metadata defaults. Use `NWState(extract_nw(x))` or pass the values,
+  e.g. `NWState(sol, t)`.
+- `NWState(p::NWParameter)` is deprecated. Use `NWState(p, uflat)` to combine `p` with given
+  states.
+
+### Behavior changes
+
+- `NWState(prob)` and `NWParameter(prob)` for an `ODEProblem` now return copies of `prob.u0` and
+  `prob.p` (at `t = prob.tspan[1]`) instead of the metadata defaults.
+- `NWParameter(s::NWState)` now returns a copy of `s.p` instead of the metadata defaults.
+- `NWState(p::NWParameter, uflat)` keeps `p` instead of dropping the parameters.
 
 ## v1.3.0 Changelog
 

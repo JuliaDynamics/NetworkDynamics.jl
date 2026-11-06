@@ -441,7 +441,39 @@ end
         @test isequal(_init_flat(T, 10, filltype(T)), [missing for _ in 1:10])
         @test isequal(pflat(NWState(nw)), pflat(NWParameter(nw)))
         p = NWParameter(nw)
-        @test isequal(pflat(NWState(p; ufill=0)), pflat(p))
+        @test isequal(pflat(@test_logs (:warn, r"deprecated") NWState(p; ufill=0)), pflat(p))
+
+        # NWParameter(s) copies s.p
+        s = NWState(sol, 0.5)
+        p2 = NWParameter(s)
+        @test pflat(p2) == pflat(s) && pflat(p2) !== pflat(s)
+        @test_throws ArgumentError NWParameter(NWState(nw, uflat(s)))
+
+        # NWState(p, u) keeps p
+        s = NWState(p2, uflat(s))
+        @test s.p === p2
+
+        # NWState(prob) and NWParameter(prob) copy the values of prob
+        s = NWState(prob)
+        @test uflat(s) == prob.u0 && uflat(s) !== prob.u0
+        @test pflat(s) == prob.p && pflat(s) !== prob.p
+        @test s.t == prob.tspan[1]
+        p3 = NWParameter(prob)
+        @test pflat(p3) == prob.p && pflat(p3) !== prob.p
+        # keywords don't fall through to the deprecated metadata constructor
+        s32 = @test_logs NWState(prob; utype=Vector{Float32}, ptype=Vector{Float32})
+        @test uflat(s32) isa Vector{Float32} && uflat(s32) ≈ prob.u0
+        @test pflat(s32) isa Vector{Float32} && pflat(s32) ≈ prob.p
+        @test pflat(@test_logs NWParameter(prob; ptype=Vector{Float32})) isa Vector{Float32}
+        int = init(prob, Tsit5())
+        @test_throws ArgumentError NWState(int; utype=Vector{Float32})
+        @test_throws ArgumentError NWParameter(int; ptype=Vector{Float32})
+
+        # anything else is deprecated for the metadata constructors
+        @test_logs (:warn, r"deprecated") NWState(sol)
+        @test_logs (:warn, r"deprecated") NWParameter(sol)
+        @test_logs (:warn, r"deprecated") NWState(NWState(nw).v)
+        @test isequal(uflat(@test_logs (:warn,) NWState(sol)), uflat(NWState(nw)))
     end
 
     @testset "Test NWParameter/NWstate access" begin

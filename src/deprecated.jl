@@ -133,3 +133,40 @@ function mtk_model_cache_enabled()
     Base.depwarn("`mtk_model_cache_enabled()` is deprecated, use `mtk_cache_mode() !== :off` instead.", :mtk_model_cache_enabled)
     mtk_cache_mode() !== :off
 end
+
+# Deprecated `NWState(x)`/`NWParameter(x)` for anything `extract_nw` understands. They only use
+# the network of `x` and fill from metadata, even if `x` carries values (sol, ...).
+# The custom `_id` makes `maxlog` count per type of `x` instead of once overall.
+function NWState(thing; kwargs...)
+    @warn("NWState(x::$(nameof(typeof(thing)))) is deprecated: it ignores the values in `x` and \
+           fills the state from the metadata of the network. Use `NWState(extract_nw(x))` for \
+           that, or pass the values explicitly, e.g. `NWState(sol, t)`.",
+          maxlog=1, _id=Symbol(:NWState_deprecated_, nameof(typeof(thing))))
+    NWState(extract_nw(thing); kwargs...)
+end
+function NWParameter(thing; kwargs...)
+    @warn("NWParameter(x::$(nameof(typeof(thing)))) is deprecated: it ignores the values in `x` \
+           and fills the parameters from the metadata of the network. Use \
+           `NWParameter(extract_nw(x))` for that, or take the parameters of a state, e.g. \
+           `NWParameter(NWState(sol, t))`.",
+          maxlog=1, _id=Symbol(:NWParameter_deprecated_, nameof(typeof(thing))))
+    NWParameter(extract_nw(thing); kwargs...)
+end
+
+# Deprecated: states from the `default` metadata, sharing the given parameter object.
+function NWState(p::NWParameter; utype=Vector{Float64}, ufill=filltype(utype), default=true)
+    @warn("NWState(p::NWParameter) is deprecated. Use `NWState(p, uflat)` to combine `p` with \
+           given states, e.g. `NWState(p, uflat(NWState(p.nw; apply_formulas=false)))` for the \
+           state defaults.", maxlog=1)
+    nw = p.nw
+    uflat = _init_flat(utype, dim(nw), ufill)
+    s = NWState(nw, uflat, p, nothing)
+    default || return s
+    defaults = SII.default_values(nw)
+    for (i, k) in enumerate(SII.variable_symbols(nw))
+        if haskey(defaults, k)
+            uflat[i] = defaults[k]
+        end
+    end
+    return s
+end
