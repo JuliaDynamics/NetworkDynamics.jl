@@ -122,18 +122,13 @@ function warn_missing_features(sys)
         @warn "Model has explicit init equation. Those are currently ignored by NetworkDynamics.jl."
     end
 
+    # flattening is costly, so the variables of each level are checked first and the
+    # flattened ones only collected to name the culprits
+    _has_unsupported_variables(sys) || return
     vars = parameters(sys) ∪ unknowns(sys)
-    calls = filter(iscall, vars)
-    any(x -> operation(x) === Base.getindex, calls) && @warn "NetworkDynamics does not support vector-variables or vector-parameters in MTK models. Detected: $(join(repr.(filter(x -> operation(x) === Base.getindex, calls)), ", "))"
+    any(_is_vector_variable, vars) && @warn "NetworkDynamics does not support vector-variables or vector-parameters in MTK models. Detected: $(join(repr.(filter(_is_vector_variable, vars)), ", "))"
 
-    # `@discretes` symbols land in `parameters` or `unknowns` depending on how the `System`
-    # was built, so check both. `VariableSource` is the macro that declared a symbol;
-    # anything not from a variable macro carries no source.
-    has_discretes = any(vars) do s
-        src = SymbolicUtils.getmetadata(s, Symbolics.VariableSource, nothing)
-        src isa NTuple{2,Symbol} && first(src) === :discretes
-    end
-    if has_discretes
+    if any(_is_discrete, vars)
         @warn "Model contains variables defined via @discretes. This is not supported in NetworkDynamics. \
         For discretely changing variables use normal @parameters with callbacks on the component level."
     end
@@ -149,6 +144,21 @@ function _collect_discrete_events(sys)
         ModelingToolkitBase.get_discrete_events(sys),
         [_collect_discrete_events(sys) for sys in ModelingToolkitBase.get_systems(sys)]...
     )
+end
+function _has_unsupported_variables(sys)
+    found = false
+    _foreach_level(sys) do s, _
+        vars = Iterators.flatten((ModelingToolkitBase.get_unknowns(s), _own_parameters(s)))
+        found = found || any(v -> _is_vector_variable(v) || _is_discrete(v), vars)
+    end
+    found
+end
+_is_vector_variable(v) = iscall(v) && operation(v) === Base.getindex
+# `@discretes` symbols land in `parameters` or `unknowns` depending on how the `System` was
+# built, so both are checked. `VariableSource` is the macro that declared a symbol.
+function _is_discrete(v)
+    src = SymbolicUtils.getmetadata(v, Symbolics.VariableSource, nothing)
+    src isa NTuple{2,Symbol} && first(src) === :discretes
 end
 
 function check_metadata(exprs)
