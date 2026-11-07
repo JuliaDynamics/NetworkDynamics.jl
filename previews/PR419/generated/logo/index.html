@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Cyclic Competition (the Logo) · NetworkDynamics</title><meta name="title" content="Cyclic Competition (the Logo) · NetworkDynamics"/><meta property="og:title" content="Cyclic Competition (the Logo) · NetworkDynamics"/><meta property="twitter:title" content="Cyclic Competition (the Logo) · NetworkDynamics"/><meta name="description" content="Documentation for NetworkDynamics."/><meta property="og:description" content="Documentation for NetworkDynamics."/><meta property="twitter:description" content="Documentation for NetworkDynamics."/><meta property="og:url" content="https://juliadynamics.github.io/NetworkDynamics.jl/stable/generated/logo/"/><meta property="twitter:url" content="https://juliadynamics.github.io/NetworkDynamics.jl/stable/generated/logo/"/><link rel="canonical" href="https://juliadynamics.github.io/NetworkDynamics.jl/stable/generated/logo/"/><meta property="og:image" content="https://juliadynamics.github.io/NetworkDynamics.jl/stable/assets/preview.png"/><meta property="twitter:image" content="https://juliadynamics.github.io/NetworkDynamics.jl/stable/assets/preview.png"/><meta property="twitter:card" content="summary_large_image"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script><link href="../../assets/custom.css" rel="stylesheet" type="text/css"/></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img class="docs-light-only" src="../../assets/logo.svg" alt="NetworkDynamics logo"/><img class="docs-dark-only" src="../../assets/logo-dark.svg" alt="NetworkDynamics logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">NetworkDynamics</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">General</a></li><li><a class="tocitem" href="../../mathematical_model/">Mathematical Model</a></li><li><a class="tocitem" href="../../network_construction/">Network Construction</a></li><li><a class="tocitem" href="../../data_structure/">Data Structure</a></li><li><span class="tocitem">Features</span><ul><li><a class="tocitem" href="../../symbolic_indexing/">Symbolic Indexing</a></li><li><a class="tocitem" href="../../metadata/">Metadata</a></li><li><a class="tocitem" href="../../initialization/">Initialization</a></li><li><a class="tocitem" href="../../callbacks/">Callbacks and Events</a></li><li><a class="tocitem" href="../../mtk_integration/">ModelingToolkit Integration</a></li><li><a class="tocitem" href="../../injector_nodes/">Injector Nodes</a></li><li><a class="tocitem" href="../../sparsity_detection/">Sparsity Detection</a></li><li><a class="tocitem" href="../../external_inputs/">External Inputs</a></li><li><a class="tocitem" href="../../inspector/">Interactive Solution Inspection</a></li></ul></li><li><a class="tocitem" href="../../API/">API</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../getting_started_with_network_dynamics/">Getting Started</a></li><li><a class="tocitem" href="../heterogeneous_system/">Heterogeneous Systems</a></li><li><a class="tocitem" href="../init_tutorial/">Initialization</a></li><li><a class="tocitem" href="../cascading_failure/">Cascading Failure</a></li><li><a class="tocitem" href="../gas_network/">Gas Network</a></li><li><a class="tocitem" href="../stress_on_truss/">Stress on Truss</a></li><li><a class="tocitem" href="../directed_and_weighted_graphs/">Directed and Weighted Graphs</a></li><li class="is-active"><a class="tocitem" href>Cyclic Competition (the Logo)</a><ul class="internal"><li><a class="tocitem" href="#A-Single-Node:-May–Leonard-Competition"><span>A Single Node: May–Leonard Competition</span></a></li><li><a class="tocitem" href="#The-Edges:-Diffusion"><span>The Edges: Diffusion</span></a></li><li><a class="tocitem" href="#The-Network"><span>The Network</span></a></li><li><a class="tocitem" href="#Visualization"><span>Visualization</span></a></li><li><a class="tocitem" href="#Finding-the-Loop"><span>Finding the Loop</span></a></li><li><a class="tocitem" href="#The-Logo"><span>The Logo</span></a></li><li><a class="tocitem" href="#Starting-from-Noise"><span>Starting from Noise</span></a></li><li><a class="tocitem" href="#Exporting-the-Logo"><span>Exporting the Logo</span></a></li></ul></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Tutorials</a></li><li class="is-active"><a href>Cyclic Competition (the Logo)</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Cyclic Competition (the Logo)</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/JuliaDynamics/NetworkDynamics.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/JuliaDynamics/NetworkDynamics.jl/blob/main/docs/examples/logo.jl" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Cyclic-Competition-(the-Logo)"><a class="docs-heading-anchor" href="#Cyclic-Competition-(the-Logo)">Cyclic Competition (the Logo)</a><a id="Cyclic-Competition-(the-Logo)-1"></a><a class="docs-heading-anchor-permalink" href="#Cyclic-Competition-(the-Logo)" title="Permalink"></a></h1><p>This example builds the animated NetworkDynamics.jl logo: a network of three loosely coupled areas that take turns showing the three Julia colors. This example can be downloaded as a normal Julia script <a href="../logo.jl">here</a>.</p><div style="text-align: center">
+<img class="docs-light-only" src="../../assets/logo-animated.svg" width="30%" alt="logo animation"/>
+<img class="docs-dark-only" src="../../assets/logo-animated-dark.svg" width="30%" alt="logo animation"/>
+</div><p>The idea is to show the three Julia colors taking turns. For that we need a dynamical system with three populations where one of them is dominant at all times, and where the dominance switches rather quickly from one to the next.</p><pre><code class="language-julia hljs">using NetworkDynamics
+using Graphs
+using OrdinaryDiffEqTsit5
+using StableRNGs
+using CairoMakie
+using GraphMakie</code></pre><h2 id="A-Single-Node:-May–Leonard-Competition"><a class="docs-heading-anchor" href="#A-Single-Node:-May–Leonard-Competition">A Single Node: May–Leonard Competition</a><a id="A-Single-Node:-May–Leonard-Competition-1"></a><a class="docs-heading-anchor-permalink" href="#A-Single-Node:-May–Leonard-Competition" title="Permalink"></a></h2><p>The classic model for this is the three-species competition of May and Leonard:</p><blockquote><p>May, R. M., &amp; Leonard, W. J. (1975). Nonlinear aspects of competition between three species. SIAM Journal on Applied Mathematics, 29(2), 243-253.</p></blockquote><p>With the densities <span>$x = (r, g, p)$</span> of the red, green and purple species, each species grows logistically but is suppressed by the other two, weakly by its prey and strongly by its predator:</p><p class="math-container">\[\begin{aligned}
+\dot r &amp;= r\,(1 - r - α\,p - β\,g) + ε + Φ_r\\
+\dot g &amp;= g\,(1 - g - α\,r - β\,p) + ε + Φ_g\\
+\dot p &amp;= p\,(1 - p - α\,g - β\,r) + ε + Φ_p
+\end{aligned}\]</p><p>For <span>$α &lt; 1 &lt; β$</span> and <span>$α + β &gt; 2$</span>, none of the &quot;pure&quot; states can hold: a tiny amount of the next species is always able to invade, which gives a rock-paper-scissors cycle (green invades red, purple invades green and red invades purple). The small immigration rate <span>$ε$</span> keeps every species alive and sets how long each color lasts. <span>$Φ$</span> is the input from the network, which we will need later.</p><pre><code class="language-julia hljs">function may_leonard!(dx, x, Φ, (α, β, ε), t)
+    r, g, p = x
+    dx[1] = r * (1 - r - α * p - β * g) + ε + Φ[1]
+    dx[2] = g * (1 - g - α * r - β * p) + ε + Φ[2]
+    dx[3] = p * (1 - p - α * g - β * r) + ε + Φ[3]
+    nothing
+end
+vm = VertexModel(; f=may_leonard!, g=1:3, sym=[:r, :g, :p], insym=[:Φr, :Φg, :Φp],
+                 psym=[:α=&gt;0.3, :β=&gt;2.0, :ε=&gt;1e-10], name=:may_leonard)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">VertexModel <span class="sgr1">:may_leonard</span> <span class="sgr94">PureStateMap()</span>
+ ├─ 3 inputs:  [Φr, Φg, Φp]
+ ├─ 3 states:  [r, g, p]
+ ├─ 3 outputs: [r, g, p]
+ └─ 3 params:  [α=0.3, β=2, ε=1e-10]</code></pre><p>Before we put this on a network, we simulate a single, uncoupled node. The model function can be reused directly for a plain <code>ODEProblem</code> by setting the input to zero.</p><pre><code class="language-julia hljs">julia_colors = [RGBf(0.796, 0.235, 0.200), RGBf(0.220, 0.596, 0.149), RGBf(0.584, 0.345, 0.698)]
+
+single_node!(dx, x, p, t) = may_leonard!(dx, x, (0.0, 0.0, 0.0), p, t)
+sol_node = solve(ODEProblem(single_node!, [0.5, 0.3, 0.2], (0, 250), (0.3, 2.0, 1e-10)), Tsit5();
+                 abstol=1e-12, reltol=1e-8)
+
+ts = range(0, 250, 2000)
+xs = sol_node(ts)
+fig = Figure(size=(800, 225))
+ax = Axis(fig[1, 1]; xlabel=&quot;time&quot;, ylabel=&quot;density&quot;)
+for i in 1:3
+    lines!(ax, ts, xs[i, :]; color=julia_colors[i], linewidth=3)
+end
+fig</code></pre><img src="42c743c5.svg" alt="Example block output"/><p>At all times one species dominates, and the switch to the next one is fast.</p><h2 id="The-Edges:-Diffusion"><a class="docs-heading-anchor" href="#The-Edges:-Diffusion">The Edges: Diffusion</a><a id="The-Edges:-Diffusion-1"></a><a class="docs-heading-anchor-permalink" href="#The-Edges:-Diffusion" title="Permalink"></a></h2><p>We are in NetworkDynamics, so we need a network. The obvious choice for the coupling is diffusion: if a species dominates one node, it leaks towards the neighboring nodes, <span>$Φ_{dst} = D\,(x_{src} - x_{dst})$</span>. Since the source receives the same flow with opposite sign, this is an <a href="../../API/#NetworkDynamics.AntiSymmetric"><code>AntiSymmetric</code></a> coupling.</p><pre><code class="language-julia hljs">function migration!(e, xsrc, xdst, (D,), t)
+    e .= D .* (xsrc .- xdst)
+    nothing
+end
+migration = EdgeModel(; g=AntiSymmetric(migration!), outsym=[:Φr, :Φg, :Φp],
+                      psym=[:D=&gt;0.02], name=:migration)</code></pre><h2 id="The-Network"><a class="docs-heading-anchor" href="#The-Network">The Network</a><a id="The-Network-1"></a><a class="docs-heading-anchor-permalink" href="#The-Network" title="Permalink"></a></h2><p>The graph is the RTS-GMLC test grid:</p><blockquote><p>Barrows, C. et al. (2020). The IEEE Reliability Test System: A Proposed 2019 Update. IEEE Transactions on Power Systems, 35(1), 119-127. https://github.com/GridMod/RTS-GMLC</p></blockquote><p>It consists of three almost identical areas with 24 buses each (one area has an extra bus) and only five tie lines between them. The node positions are a hand-tuned stress layout.</p><pre><code class="language-julia hljs">edgelist = [1=&gt;2, 1=&gt;3, 1=&gt;5, 2=&gt;4, 2=&gt;6, 3=&gt;9, 3=&gt;24, 4=&gt;9, 5=&gt;10, 6=&gt;10, 7=&gt;8, 7=&gt;27, 8=&gt;9, 8=&gt;10, 9=&gt;11, 9=&gt;12, 10=&gt;11, 10=&gt;12, 11=&gt;13, 11=&gt;14, 12=&gt;13, 12=&gt;23, 13=&gt;23, 13=&gt;39, 14=&gt;16, 15=&gt;16, 15=&gt;21, 15=&gt;24, 16=&gt;17, 16=&gt;19, 17=&gt;18, 17=&gt;22, 18=&gt;21, 19=&gt;20, 20=&gt;23, 21=&gt;22, 21=&gt;73, 23=&gt;41, 25=&gt;26, 25=&gt;27, 25=&gt;29, 26=&gt;28, 26=&gt;30, 27=&gt;33, 27=&gt;48, 28=&gt;33, 29=&gt;34, 30=&gt;34, 31=&gt;32, 32=&gt;33, 32=&gt;34, 33=&gt;35, 33=&gt;36, 34=&gt;35, 34=&gt;36, 35=&gt;37, 35=&gt;38, 36=&gt;37, 36=&gt;47, 37=&gt;47, 38=&gt;40, 39=&gt;40, 39=&gt;45, 39=&gt;48, 40=&gt;41, 40=&gt;43, 41=&gt;42, 41=&gt;46, 42=&gt;45, 43=&gt;44, 44=&gt;47, 45=&gt;46, 47=&gt;66, 49=&gt;50, 49=&gt;51, 49=&gt;53, 50=&gt;52, 50=&gt;54, 51=&gt;57, 51=&gt;72, 52=&gt;57, 53=&gt;58, 54=&gt;58, 55=&gt;56, 56=&gt;57, 56=&gt;58, 57=&gt;59, 57=&gt;60, 58=&gt;59, 58=&gt;60, 59=&gt;61, 59=&gt;62, 60=&gt;61, 60=&gt;71, 61=&gt;71, 62=&gt;64, 63=&gt;64, 63=&gt;69, 63=&gt;72, 64=&gt;65, 64=&gt;67, 65=&gt;66, 65=&gt;70, 66=&gt;69, 67=&gt;68, 68=&gt;71, 69=&gt;70, 71=&gt;73]
+g = SimpleGraph(73)
+for (i, j) in edgelist
+    add_edge!(g, i, j)
+end
+area = [fill(1, 24); fill(2, 24); fill(3, 25)]
+
+pos = Point2f[(0.03, 0.699), (0.159, 0.769), (-0.015, 0.545), (0.123, 0.631), (0.219, 0.662), (0.317, 0.677), (0.453, 0.239), (0.333, 0.408), (0.153, 0.499), (0.261, 0.528), (0.104, 0.412), (0.23, 0.433), (0.257, 0.319), (-0.061, 0.433), (-0.292, 0.34), (-0.213, 0.402), (-0.372, 0.447), (-0.484, 0.312), (-0.125, 0.306), (0.025, 0.284), (-0.419, 0.236), (-0.501, 0.411), (0.161, 0.292), (-0.185, 0.498), (0.656, 0.004), (0.751, -0.109), (0.5, 0.04), (0.652, -0.107), (0.583, -0.18), (0.686, -0.273), (0.69, -0.4), (0.586, -0.283), (0.483, -0.132), (0.486, -0.286), (0.394, -0.177), (0.376, -0.276), (0.311, -0.352), (0.369, -0.042), (0.368, 0.177), (0.313, 0.088), (0.347, 0.275), (0.55, 0.371), (0.208, -0.033), (0.18, -0.186), (0.552, 0.271), (0.45, 0.377), (0.213, -0.32), (0.518, 0.139), (-0.637, -0.595), (-0.81, -0.48), (-0.497, -0.517), (-0.751, -0.331), (-0.725, -0.427), (-0.843, -0.292), (-0.803, -0.595), (-0.652, -0.496), (-0.583, -0.371), (-0.655, -0.302), (-0.497, -0.31), (-0.628, -0.184), (-0.532, -0.158), (-0.358, -0.399), (-0.192, -0.536), (-0.21, -0.405), (-0.058, -0.435), (0.085, -0.413), (-0.265, -0.269), (-0.376, -0.148), (-0.015, -0.526), (-0.028, -0.625), (-0.511, -0.061), (-0.343, -0.584), (-0.495, 0.095)]
+nw = Network(g, vm, migration)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Network with 219 states and 327 parameters
+ ├─ 73 vertices (1 unique type)
+ └─ 108 edges (1 unique type)
+Edge-Aggregation using SequentialAggregator(+)</code></pre><p>Every line uses the same migration model. To make three separate zones, the tie lines between the areas get a much smaller diffusion constant than the lines inside an area. This leaves us with two free parameters, <span>$D_\mathrm{inner}$</span> and <span>$D_\mathrm{tie}$</span>.</p><pre><code class="language-julia hljs">tielines = findall(e -&gt; area[src(e)] != area[dst(e)], collect(edges(g)))
+
+function coupled_problem(u0, Dinner, Dtie; tspan)
+    s0 = NWState(nw, u0, NWParameter(nw))
+    s0.p.e[:, :D] .= Dinner
+    s0.p.e[tielines, :D] .= Dtie
+    ODEProblem(nw, s0, tspan)
+end</code></pre><h2 id="Visualization"><a class="docs-heading-anchor" href="#Visualization">Visualization</a><a id="Visualization-1"></a><a class="docs-heading-anchor-permalink" href="#Visualization" title="Permalink"></a></h2><p>To show a node, we use the Julia color of its dominant species. If the two strongest species are close, the color fades towards gray, so a node in the middle of a switch appears gray. The flat state vector holds <span>$(r, g, p)$</span> node by node, so node <span>$i$</span> is found at <code>3i-2:3i</code>.</p><pre><code class="language-julia hljs">function nodecolor(x)
+    a, b = sortperm(x; rev=true)[1:2]
+    d = clamp((x[a] - x[b]) / (x[a] + x[b]), 0, 1)^1.5
+    d * julia_colors[a] + (1 - d) * RGBf(0.62, 0.62, 0.62)
+end
+nodecolors(u) = [nodecolor(u[3i-2:3i]) for i in 1:nv(g)]
+
+# sizes relative to the axis, so the network looks the same in every figure
+function networkplot!(ax, colors)
+    edge_width = lift(vp -&gt; widths(vp)[1] / 210, ax.scene.viewport)
+    graphplot!(ax, g; layout=pos, node_color=colors, node_size=0.085, node_attr=(; markerspace=:data),
+               edge_width, edge_color=(:gray60, 0.8))
+    limits!(ax, extrema(first.(pos)) .+ (-0.1, 0.1), extrema(last.(pos)) .+ (-0.1, 0.1))
+    hidedecorations!(ax); hidespines!(ax)
+    ax
+end</code></pre><p>We start from the Julia colors: green on top, red bottom left and purple bottom right.</p><pre><code class="language-julia hljs">julia_start = Dict(1 =&gt; [0.01, 1, 0.01], 2 =&gt; [0.01, 0.01, 1], 3 =&gt; [1, 0.01, 0.01])
+u0_julia = reduce(vcat, julia_start[area[i]] for i in 1:nv(g))
+
+fig = Figure(size=(120, 120); figure_padding=2)
+networkplot!(Axis(fig[1, 1]; aspect=DataAspect()), nodecolors(u0_julia))
+fig</code></pre><img src="f40e2e6e.svg" alt="Example block output"/><h2 id="Finding-the-Loop"><a class="docs-heading-anchor" href="#Finding-the-Loop">Finding the Loop</a><a id="Finding-the-Loop-1"></a><a class="docs-heading-anchor-permalink" href="#Finding-the-Loop" title="Permalink"></a></h2><p>A logo animation should loop, so we are looking for a periodic orbit: starting from the three Julia colors, the network should settle into a limit cycle. Whether it does depends on the two diffusion constants. Too much coupling synchronizes the whole network, while too little lets the nodes drift apart and the areas break up. After some trial and error, <span>$D_\mathrm{inner} = 0.025$</span> and <span>$D_\mathrm{tie} = 2\cdot 10^{-5}$</span> work well.</p><p>To find the period, we use a Poincaré section: a <code>ContinuousCallback</code> records the full state whenever node 1 turns green (<span>$g_1 = r_1$</span> with <span>$g_1$</span> increasing). If node 1 turns green <span>$k$</span> times per period, every <span>$k$</span>-th of these section points is the same.</p><pre><code class="language-julia hljs">Dinner, Dtie = 0.025, 2e-5
+
+# sample the full state whenever node 1 turns green
+section_times = Float64[]
+section_points = Vector{Float64}[]
+green_minus_red(u, t, integrator) = u[2] - u[1]
+function record_state!(integrator)
+    push!(section_times, integrator.t)
+    push!(section_points, copy(integrator.u))
+end
+# affect_neg! = nothing: only react when g₁ - r₁ crosses zero upwards
+turns_green = ContinuousCallback(green_minus_red, record_state!;
+                                 affect_neg! = nothing, save_positions=(false, false))
+
+solve(coupled_problem(u0_julia, Dinner, Dtie; tspan=(0, 6000)), Tsit5(); callback=turns_green,
+      save_everystep=false, abstol=1e-12, reltol=1e-8)</code></pre><p>After the transient, we compare the last section point with each of the nine before it. Nine is just a guess that covers a few periods of any short cycle.</p><pre><code class="language-julia hljs">return_distance = [maximum(abs, section_points[end] - section_points[end-k]) for k in 1:9]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">9-element Vector{Float64}:
+ 0.9937175841368288
+ 0.8682289069777012
+ 1.552006445582066e-8
+ 0.9937175841230977
+ 0.8682289088019495
+ 1.8742214447087235e-8
+ 0.9937175836258167
+ 0.8682289227030084
+ 3.8549101577523004e-8</code></pre><p>Every third return comes back to the same state, so node 1 turns green three times per period. The last section point is our starting point on the cycle, and the time between it and the point three returns earlier is the period <span>$T$</span>.</p><pre><code class="language-julia hljs">k = findfirst(&lt;(1e-6), return_distance)
+z = section_points[end]
+T = section_times[end] - section_times[end-k]</code></pre><p>To see how the areas trade colors, we simulate exactly one period, starting on the section. A &quot;strip plot&quot; shows each node as one row (sorted by area) and time from left to right.</p><pre><code class="language-julia hljs">sol = solve(coupled_problem(z, Dinner, Dtie; tspan=(0, T)), Tsit5(); abstol=1e-12, reltol=1e-8,
+            saveat=range(0, T, 2001))
+
+function stripplot!(ax, sol, ts)
+    C = reduce(hcat, nodecolors(sol(t)) for t in ts)
+    image!(ax, (ts[begin], ts[end]), (0.5, nv(g) + 0.5), permutedims(C[sortperm(area), :]))
+    hideydecorations!(ax)
+end
+fig = Figure(size=(900, 300))
+stripplot!(Axis(fig[1, 1]; xlabel=&quot;time&quot;), sol, range(0, T, 800))
+fig</code></pre><img src="499900e8.svg" alt="Example block output"/><p>The areas mostly show three different colors, but the switches are not perfectly aligned: waves start at the tie lines and run through the areas, and now and then two areas share a color.</p><h2 id="The-Logo"><a class="docs-heading-anchor" href="#The-Logo">The Logo</a><a id="The-Logo-1"></a><a class="docs-heading-anchor-permalink" href="#The-Logo" title="Permalink"></a></h2><p>For the animation we look for the moment that looks most like the Julia logo, i.e. where the densities of green in area 1, purple in area 2 and red in area 3 are largest. We start a few time units later, when the next switch has already started in some of the nodes, which looks a bit more organic. Since we simulate exactly one period from there, the animation loops seamlessly.</p><pre><code class="language-julia hljs">logo_score(u) = sum(u[3i-3+findfirst(&gt;(0.5), julia_start[area[i]])] for i in 1:nv(g)) / nv(g)
+t_julia = sol.t[argmax(logo_score.(sol.u))]
+u_logo = sol(mod(t_julia + 6, T))
+sol_logo = solve(coupled_problem(u_logo, Dinner, Dtie; tspan=(0, T)), Tsit5(); abstol=1e-12, reltol=1e-8,
+                 saveat=range(0, T, 2001))
+
+fig = Figure(size=(700, 700))
+t = Observable(0.0)
+networkplot!(Axis(fig[1, 1]; aspect=DataAspect()), @lift(nodecolors(sol_logo($t))))
+logo_speed = 7.5 # time units per second of video
+frames = range(0, T, round(Int, T / logo_speed * 30) + 1)[1:end-1]
+record(fig, &quot;logo.mp4&quot;, frames; framerate=30) do _t
+    t[] = _t
+end</code></pre><p><video src="../logo.mp4" controls="true" title="logo animation"><a href="../logo.mp4">logo animation</a></video></p><h2 id="Starting-from-Noise"><a class="docs-heading-anchor" href="#Starting-from-Noise">Starting from Noise</a><a id="Starting-from-Noise-1"></a><a class="docs-heading-anchor-permalink" href="#Starting-from-Noise" title="Permalink"></a></h2><p>What happens if we do not start from the Julia colors, but from random densities? In the beginning the network is turbulent and mostly gray. After a while coherent patches appear, spread through the areas and the network settles. There are three typical outcomes: the logo cycle from above, global synchronization where all areas share one color, and a &quot;chimera&quot; where two areas cycle while the third never commits to a color. Out of 60 random starts, about a quarter end in the logo cycle, a third synchronize and a third become a chimera.</p><p>We classify the outcome over the last few hundred time units. An area is decided if its nodes have a clear winner most of the time.</p><pre><code class="language-julia hljs">function outcome(sol; window=300)
+    us = sol.u[sol.t .&gt;= sol.t[end] - window]
+    decided = map(1:3) do a
+        nodes = findall(==(a), area)
+        sum(maximum(u[3i-2:3i]) &gt; 0.9 for u in us, i in nodes) / (length(us) * length(nodes))
+    end
+    minimum(decided) &lt; 0.1 &amp;&amp; count(&gt;(0.5), decided) == 2 &amp;&amp; return :chimera
+    # winners of the three areas, if every area has a single winner
+    winners = map(us) do u
+        w = [unique(argmax(u[3i-2:3i]) for i in findall(==(a), area)) for a in 1:3]
+        all(length.(w) .== 1) ? first.(w) : nothing
+    end
+    count(w -&gt; !isnothing(w) &amp;&amp; allunique(w), winners) &gt; 0.1 * length(us) &amp;&amp; return :cycle
+    # synchronized areas switch slightly out of step, so we only ask for coherent areas
+    count(!isnothing, winners) &gt; 0.9 * length(us) &amp;&amp; return :sync
+    :undecided
+end</code></pre><p>The seeds below were picked to show one example of each outcome.</p><pre><code class="language-julia hljs">seeds = [35 =&gt; &quot;logo cycle&quot;, 30 =&gt; &quot;synchronization&quot;, 19 =&gt; &quot;chimera&quot;]
+Trandom = 2400.0
+random_sols = map(seeds) do (seed, _)
+    u0 = rand(StableRNG(seed), length(u0_julia))
+    solve(coupled_problem(u0, Dinner, Dtie; tspan=(0, Trandom)), Tsit5(); abstol=1e-12, reltol=1e-8,
+          saveat=0:0.5:Trandom)
+end
+outcome.(random_sols)</code></pre><pre><code class="language-julia hljs">fig = Figure(size=(1200, 440))
+t = Observable(0.0)
+for (j, ((_, label), rsol)) in enumerate(zip(seeds, random_sols))
+    networkplot!(Axis(fig[1, j]; aspect=DataAspect(), title=label, titlesize=20), @lift(nodecolors(rsol($t))))
+end
+Label(fig[2, :], @lift(&quot;t = $(round(Int, $t))&quot;); fontsize=16, tellwidth=false)
+speed = 80
+record(fig, &quot;random_starts.mp4&quot;, range(0, Trandom, round(Int, Trandom / speed * 24) + 1);
+       framerate=24, compression=32, px_per_unit=1) do _t
+    t[] = _t
+end</code></pre><p><video src="../random_starts.mp4" controls="true" title="three random starts"><a href="../random_starts.mp4">three random starts</a></video></p><h2 id="Exporting-the-Logo"><a class="docs-heading-anchor" href="#Exporting-the-Logo">Exporting the Logo</a><a id="Exporting-the-Logo-1"></a><a class="docs-heading-anchor-permalink" href="#Exporting-the-Logo" title="Permalink"></a></h2><p>This page is the source of the logo files in the top-level <code>logo</code> folder: static and animated logos and banners for light and dark backgrounds, and a preview image. The PNGs and GIFs are rendered by CairoMakie. The SVGs take edges and text from CairoMakie and get their own circles, which are animated with CSS keyframes over one period. By default the files go into the current directory; to update the checked-in versions, switch <code>EXPORT_PATH</code> to the logo folder. On CI the export is skipped.</p><details class="admonition is-details">
+<summary class="admonition-header">Export code</summary>
+<div class="admonition-body"><pre><code class="language-julia hljs">EXPORT_PATH = &quot;.&quot;
+# EXPORT_PATH = joinpath(pkgdir(NetworkDynamics), &quot;logo&quot;)
+
+# Tamil MN ships with macOS (and matches PowerDynamics), elsewhere we fall back to Makie&#39;s bold font
+banner_font = isnothing(Makie.FreeTypeAbstraction.findfont(&quot;Tamil MN&quot;; bold=true)) ? :bold : &quot;Tamil MN Bold&quot;
+themes = (light=(edge=RGBAf(0.6, 0.6, 0.6, 0.8), text=:black),
+          dark=(edge=RGBAf(0.55, 0.55, 0.55, 0.8), text=:white))
+
+# data limits of the network plot and the pixel box that keeps its aspect ratio at a given height
+xlims = extrema(first.(pos)) .+ (-0.1, 0.1)
+ylims = extrema(last.(pos)) .+ (-0.1, 0.1)
+function networkbox(H)
+    w, h = H, H * (ylims[2] - ylims[1]) / (xlims[2] - xlims[1])
+    (x=0.0, y=(H - h) / 2, w, h)
+end
+
+# The figure draws edges and text. Nodes are drawn here for PNGs, and added separately for SVGs.
+function brand_figure(kind, theme; nodes=true, colors=nodecolors(u_logo), H=400, backgroundcolor=:transparent)
+    lines = kind == :banner ? [&quot;NetworkDynamics.jl&quot;] : kind == :preview ? [&quot;Network&quot;, &quot;Dynamics.jl&quot;] : String[]
+    W = isempty(lines) ? H : 3H # cropped to the text below
+    fig = Figure(size=(W, H); backgroundcolor, figure_padding=0)
+    box = networkbox(H)
+    ax = Axis(fig; bbox=BBox(box.x, box.x + box.w, box.y, box.y + box.h), backgroundcolor=:transparent)
+    graphplot!(ax, g; layout=pos, node_color=colors, node_size=nodes ? 0.085 : 0.0,
+               node_attr=(; markerspace=:data), edge_width=box.w / 100, edge_color=theme.edge)
+    limits!(ax, xlims, ylims)
+    hidedecorations!(ax); hidespines!(ax)
+    fontsize = length(lines) == 1 ? 0.38H : 0.3H
+    right = H
+    for (j, line) in enumerate(lines)
+        y = H / 2 + (length(lines) + 1 - 2j) * 0.55 * fontsize
+        t = text!(fig.scene, Point2f(1.07H, y); text=line, fontsize, font=banner_font, color=theme.text,
+                  align=(:left, :center))
+        bb = Makie.boundingbox(t, :pixel)
+        right = max(right, bb.origin[1] + bb.widths[1])
+    end
+    isempty(lines) || resize!(fig, ceil(Int, right + 0.05H), H)
+    fig, box
+end
+
+hexcolor(c) = &quot;#&quot; * join(string(round(Int, 255 * clamp(x, 0, 1)); base=16, pad=2) for x in (c.r, c.g, c.b))
+
+# keyframes (fraction of the period, color) per node, dropping frames that linear blending reproduces
+function node_keyframes(i; n=751, tol=2 / 255)
+    τs = range(0, 1, n)
+    cs = [nodecolor(sol_logo(τ * T)[3i-2:3i]) for τ in τs]
+    keep = [1]
+    for j in 3:n
+        a = keep[end]
+        ok = all(a+1:j-1) do m
+            w = (τs[m] - τs[a]) / (τs[j] - τs[a])
+            c = (1 - w) * cs[a] + w * cs[j]
+            max(abs(c.r - cs[m].r), abs(c.g - cs[m].g), abs(c.b - cs[m].b)) &lt;= tol
+        end
+        ok || push!(keep, j - 1)
+    end
+    push!(keep, n)
+    [(τs[j], cs[j]) for j in keep]
+end
+
+# circles in SVG coordinates (y points down), optionally with one CSS animation per node
+function svg_nodes(box, H; animated, duration=T / logo_speed)
+    # Makie&#39;s :circle marker has a diameter of 0.705 times the marker size
+    r = 0.705 * 0.085 / 2 * box.w / (xlims[2] - xlims[1])
+    css = IOBuffer()
+    circles = IOBuffer()
+    for i in 1:nv(g)
+        cx = box.x + (pos[i][1] - xlims[1]) / (xlims[2] - xlims[1]) * box.w
+        cy = H - (box.y + (pos[i][2] - ylims[1]) / (ylims[2] - ylims[1]) * box.h)
+        println(circles, &quot;&lt;circle class=\&quot;n$i\&quot; cx=\&quot;$(round(cx; digits=2))\&quot; cy=\&quot;$(round(cy; digits=2))\&quot; r=\&quot;$(round(r; digits=2))\&quot; fill=\&quot;$(hexcolor(nodecolor(u_logo[3i-2:3i])))\&quot;/&gt;&quot;)
+        animated || continue
+        frames = join((&quot;$(round(100τ; digits=2))%{fill:$(hexcolor(c))}&quot; for (τ, c) in node_keyframes(i)), &quot;&quot;)
+        println(css, &quot;@keyframes n$i{$frames}.n$i{animation:n$i $(round(duration; digits=3))s linear infinite}&quot;)
+    end
+    style = animated ? &quot;&lt;style&gt;\n$(String(take!(css)))@media (prefers-reduced-motion: reduce){circle{animation:none}}\n&lt;/style&gt;\n&quot; : &quot;&quot;
+    style * &quot;&lt;g&gt;\n&quot; * String(take!(circles)) * &quot;&lt;/g&gt;\n&quot;
+end
+
+function export_svg(file, kind, theme; animated)
+    fig, box = brand_figure(kind, theme; nodes=false)
+    path = joinpath(EXPORT_PATH, file)
+    save(path, fig; pt_per_unit=0.75)
+    svg = read(path, String)
+    H = fig.scene.viewport[].widths[2]
+    write(path, replace(svg, r&quot;&lt;/svg&gt;\s*$&quot; =&gt; svg_nodes(box, H; animated) * &quot;&lt;/svg&gt;\n&quot;))
+end
+
+# CairoMakie writes premultiplied colors into transparent PNGs, which darkens everything that is
+# semi-transparent, so we divide the alpha back out
+function export_png(file, kind, theme; kwargs...)
+    fig, _ = brand_figure(kind, theme; kwargs...)
+    path = joinpath(EXPORT_PATH, file)
+    save(path, fig; px_per_unit=1)
+    img = map(Makie.FileIO.load(path)) do c
+        a = Float32(Makie.Colors.alpha(c))
+        iszero(a) ? RGBAf(0, 0, 0, 0) : RGBAf(min(c.r / a, 1), min(c.g / a, 1), min(c.b / a, 1), a)
+    end
+    save(path, img)
+end
+
+function export_gif(file, kind, theme; fps=15, kwargs...)
+    colors = Observable(nodecolors(u_logo))
+    fig, _ = brand_figure(kind, theme; colors, kwargs...)
+    frames = range(0, T, round(Int, T / logo_speed * fps) + 1)[1:end-1]
+    record(fig, joinpath(EXPORT_PATH, file), frames; framerate=fps, px_per_unit=1) do τ
+        colors[] = nodecolors(sol_logo(τ))
+    end
+end
+
+# logos and banners are transparent, the preview and the gif need an opaque background
+# (skipped on CI, where nobody would pick up the files)
+if get(ENV, &quot;CI&quot;, &quot;false&quot;) != &quot;true&quot;
+    for (suffix, theme, bg) in ((&quot;&quot;, themes.light, :white), (&quot;-dark&quot;, themes.dark, :black))
+        for kind in (:logo, :banner)
+            export_svg(&quot;$kind$suffix.svg&quot;, kind, theme; animated=false)
+            export_svg(&quot;$kind-animated$suffix.svg&quot;, kind, theme; animated=true)
+            export_png(&quot;$kind$suffix.png&quot;, kind, theme)
+        end
+        export_png(&quot;preview$suffix.png&quot;, :preview, theme; backgroundcolor=bg)
+        export_gif(&quot;logo-animated$suffix.gif&quot;, :logo, theme; backgroundcolor=bg)
+    end
+end</code></pre></div></details><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../directed_and_weighted_graphs/">« Directed and Weighted Graphs</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Thursday 8 October 2026 15:53">Thursday 8 October 2026</span>. Using Julia version 1.13.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
