@@ -92,72 +92,11 @@ function VertexModel(
         return _compare_mtkcompile(VertexModel, args, kwargs)
     end
 
-    warn_missing_features(sys)
-    sys = resolve_bound_to(sys)
     inputs = inputs isa AbstractVector ? inputs : [inputs]
     outputs = outputs isa AbstractVector ? outputs : [outputs]
 
-    if isnothing(extin)
-        extin_nwidx = nothing
-        ins = (inputs, )
-    else
-        extin_sym, extin_nwidx = _split_extin(extin)
-        ins = (inputs, extin_sym)
-    end
-
-    gen = generate_io_function_cached(sys, ins, (outputs,); verbose, ff_to_constraint, assume_io_coupling, mtkcompile)
-
-    f = gen.f
-    g = gen.g
-    obsf = gen.obsf
-
-    sysdefaults = initial_conditions(sys)
-    sysguesses = ModelingToolkitBase.guesses(sys)
-    _sym = getname.(gen.states)
-    sym = [s => _get_metadata(sys, s, sysdefaults, sysguesses) for s in _sym]
-
-    _psym = getname.(gen.params)
-    psym = map(gen.params) do p
-        pname = getname(p)
-        md = _get_metadata(sys, pname, sysdefaults, sysguesses)
-        if p in gen.unused_params
-            md[:unused] = true
-        end
-        pname => md
-    end
-
-    _obssym = getname.(gen.obsstates)
-    obssym = [s => _get_metadata(sys, s, sysdefaults, sysguesses) for s in _obssym]
-
-    _insym = getname.(inputs)
-    insym = [s => _get_metadata(sys, s, sysdefaults, sysguesses) for s in _insym]
-
-    _outsym = getname.(outputs)
-    outsym = [s => _get_metadata(sys, s, sysdefaults, sysguesses) for s in _outsym]
-
-    mass_matrix = gen.mass_matrix
-    c = VertexModel(;f, g, sym, insym, outsym, psym, obssym,
-            obsf, mass_matrix, ff=gen.fftype, name, extin=extin_nwidx,
-            aliasmap=gen.aliasmap, allow_output_sym_clash=true, kwargs...)
-    set_metadata!(c, :observed, gen.observed)
-    set_obsrules!(c, gen.obsrules)
-    set_metadata!(c, :equations, gen.equations)
-    set_metadata!(c, :full_equations, gen.full_equations)
-    set_metadata!(c, :outputeqs, gen.outputeqs)
-    set_metadata!(c, :full_outputeqs, gen.full_outputeqs)
-    set_metadata!(c, :odesystem, sys)
-
-    symbolcache = NetworkDynamics.formula_symbolcache(c)
-    for formula in something(gen.initformulas, ())
-        add_initformula_lenient!(c, formula; symbolcache)
-    end
-    for formula in something(gen.guessformulas, ())
-        add_guessformula_lenient!(c, formula; symbolcache)
-    end
-
-    # apply postprocessing functions from subcomponent metadata
-    apply_component_postprocessing!(c)
-    c
+    _mtk_component(VertexModel, sys, (inputs,), (outputs,);
+                   verbose, name, ff_to_constraint, assume_io_coupling, extin, mtkcompile, kwargs...)
 end
 
 """
@@ -221,18 +160,8 @@ function EdgeModel(
         return _compare_mtkcompile(EdgeModel, args, kwargs)
     end
 
-    warn_missing_features(sys)
-    sys = resolve_bound_to(sys)
     srcin = srcin isa AbstractVector ? srcin : [srcin]
     dstin = dstin isa AbstractVector ? dstin : [dstin]
-
-    if isnothing(extin)
-        extin_nwidx = nothing
-        ins = (srcin, dstin)
-    else
-        extin_sym, extin_nwidx = _split_extin(extin)
-        ins = (srcin, dstin, extin_sym)
-    end
 
     singlesided = isnothing(srcout)
     if singlesided && !(dstout isa AnnotatedSym)
@@ -246,62 +175,58 @@ function EdgeModel(
         dstout = NetworkDynamics.sym(dstout)
         outs = (dstout, )
     else
+        gwrap = identity
         srcout = srcout isa AbstractVector ? srcout : [srcout]
-        dstout = dstout isa AbstractVector ? dstout : [dstin]
+        dstout = dstout isa AbstractVector ? dstout : [dstout]
         outs = (srcout, dstout)
     end
 
-    gen = generate_io_function_cached(sys, ins, outs; verbose, ff_to_constraint, assume_io_coupling, mtkcompile)
+    _mtk_component(EdgeModel, sys, (srcin, dstin), outs; gwrap,
+                   verbose, name, ff_to_constraint, assume_io_coupling, extin, mtkcompile, kwargs...)
+end
 
-    f = gen.f
-    g = singlesided ? gwrap(gen.g) : gen.g
-    obsf = gen.obsf
+# The shared body of the `VertexModel` and `EdgeModel` constructors for a `System`. `ins` and
+# `outs` are tuples of symbol vectors: a single one for a vertex, src and dst for an edge. A
+# single-sided edge has only dst outputs, and its `g` gets wrapped with `gwrap`.
+function _mtk_component(T, sys, ins, outs; gwrap=identity, verbose, name, ff_to_constraint,
+                        assume_io_coupling, extin, mtkcompile, kwargs...)
+    warn_missing_features(sys)
+    mdcache = symbol_metadata_cache(sys)
+    sys = resolve_bound_to(sys, mdcache)
 
-    sysdefaults = initial_conditions(sys)
-    sysguesses = ModelingToolkitBase.guesses(sys)
-    _sym = getname.(gen.states)
-    sym = [s => _get_metadata(sys, s, sysdefaults, sysguesses) for s in _sym]
-
-    _psym = getname.(gen.params)
-    psym = map(gen.params) do p
-        pname = getname(p)
-        md = _get_metadata(sys, pname, sysdefaults, sysguesses)
-        if p in gen.unused_params
-            md[:unused] = true
-        end
-        pname => md
-    end
-
-    _obssym = getname.(gen.obsstates)
-    obssym = [s => _get_metadata(sys, s, sysdefaults, sysguesses) for s in _obssym]
-
-    _insym_src = getname.(srcin)
-    insym_src = [s => _get_metadata(sys, s, sysdefaults, sysguesses)  for s in _insym_src]
-    _insym_dst = getname.(dstin)
-    insym_dst = [s => _get_metadata(sys, s, sysdefaults, sysguesses)  for s in _insym_dst]
-    insym = (;src=insym_src, dst=insym_dst)
-
-    if singlesided
-        _outsym_dst = getname.(dstout)
-        outsym = [s => _get_metadata(sys, s, sysdefaults, sysguesses)  for s in _outsym_dst]
+    if isnothing(extin)
+        extin_nwidx = nothing
+        genins = ins
     else
-        _outsym_src = getname.(srcout)
-        outsym_src = [s => _get_metadata(sys, s, sysdefaults, sysguesses)  for s in _outsym_src]
-        _outsym_dst = getname.(dstout)
-        outsym_dst = [s => _get_metadata(sys, s, sysdefaults, sysguesses)  for s in _outsym_dst]
-        outsym = (;src=outsym_src, dst=outsym_dst)
+        extin_sym, extin_nwidx = _split_extin(extin)
+        genins = (ins..., extin_sym)
     end
+    gen = generate_io_function_cached(
+        sys, genins, outs;
+        verbose, ff_to_constraint, assume_io_coupling, mtkcompile
+    )
 
-    mass_matrix = gen.mass_matrix
-    c = EdgeModel(;f, g, sym, insym, outsym, psym, obssym,
-            obsf, mass_matrix, ff=gen.fftype, name, extin=extin_nwidx,
-            aliasmap=gen.aliasmap, allow_output_sym_clash=true, kwargs...)
+    # prepare symmetata for component from cache + :unsed metatata from gen
+    symmetadata = component_symmetadata(mdcache, gen, ins, outs)
+    sym    = getname.(gen.states)
+    psym   = getname.(gen.params)
+    obssym = getname.(gen.obsstates)
+    insym  = _io_symbols(T, ins)
+    outsym = _io_symbols(T, outs)
+
+    c = T(;
+        f=gen.f, g=gwrap(gen.g), obsf=gen.obsf,
+        sym, psym, obssym, insym, outsym, symmetadata,
+        mass_matrix=gen.mass_matrix, ff=gen.fftype, name, extin=extin_nwidx,
+        aliasmap=gen.aliasmap, allow_output_sym_clash=true, kwargs...
+    )
+
     set_metadata!(c, :observed, gen.observed)
-    set_obsrules!(c, gen.obsrules)
     set_metadata!(c, :equations, gen.equations)
     set_metadata!(c, :full_equations, gen.full_equations)
     set_metadata!(c, :outputeqs, gen.outputeqs)
     set_metadata!(c, :full_outputeqs, gen.full_outputeqs)
+    set_obsrules!(c, gen.obsrules)
     set_metadata!(c, :odesystem, sys)
 
     symbolcache = NetworkDynamics.formula_symbolcache(c)
@@ -316,53 +241,11 @@ function EdgeModel(
     apply_component_postprocessing!(c)
     c
 end
-
-"""
-For a given system and name, extract all the relevant meta we want to keep for the component model.
-
-since defaults(sys) and guesses(sys) is relativly expensive those need to be provided
-"""
-function _get_metadata(sys, name, alldefaults, allguesses)
-    md = Dict{Symbol,Any}()
-    sym = try
-        getproperty_symbolic(sys, name; might_contain_toplevel_ns=false)
-    catch e
-        if !endswith(string(name), "ˍt") # known for "internal" derivatives
-            @warn "Could not extract metadata for $name $(e.msg)"
-        end
-        return md
-    end
-    if haskey(alldefaults, sym)
-        def = unwrap_const(alldefaults[sym])
-        md[:default] = def
-    end
-
-    if haskey(allguesses, sym)
-        guess = unwrap_const(allguesses[sym])
-        if is_symbolic_constant(guess)
-            md[:guess] = symbolic_constant_value(guess)
-        else
-            throw(ArgumentError(
-                "Symbolic guess `$name => $guess` is not supported: the `guess` option only \
-                 takes constant values. Use the `guessf` variable option \
-                 (`@variables $name [guessf = $guess]`) or `set_guessf` to declare a guess \
-                 formula instead."))
-        end
-    end
-
-    if ModelingToolkitBase.hasbounds(sym)
-        md[:bounds] = ModelingToolkitBase.getbounds(sym)
-    end
-    if ModelingToolkitBase.hasdescription(sym)
-        md[:description] = ModelingToolkitBase.getdescription(sym)
-    end
-
-    default_from = Symbolics.getmetadata(unwrap(sym), ParameterDefaultFrom, nothing)
-    if !isnothing(default_from)
-        # arrives as a `(:src, :busbar₊S_b)` tuple of QuoteNodes from @mtkmodel/@component
-        md[:default_from] = normalize_default_from(default_from)
-    end
-    md
+# a vertex has one list of inputs and outputs, an edge src and dst (or only dst outputs)
+_io_symbols(::Type{VertexModel}, io) = getname.(only(io))
+function _io_symbols(::Type{EdgeModel}, io)
+    length(io) == 1 && return getname.(only(io))
+    (; src=getname.(io[1]), dst=getname.(io[2]))
 end
 
 function _split_extin(extin)
