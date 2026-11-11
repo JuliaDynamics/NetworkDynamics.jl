@@ -74,6 +74,27 @@ Jp_ref = jacobian(fp, AutoFiniteDiff(), pf)
     end
 end
 
+@testset "reverse mode through MTK edges with src and dst outputs" begin
+    # the MTK line has its g in a `MultipleOutputWrapper`, which once aborted Enzyme reverse mode
+    nw_mtk = Network(complete_graph(4), Lib.dqbus_swing(), Lib.dqline(R=0.01, X=0.1))
+    @test NetworkDynamics.compg(nw_mtk.im.edgem[1]) isa NetworkDynamics.MultipleOutputWrapper{<:Any,2}
+    u_mtk = rand(dim(nw_mtk))
+    p_mtk = rand(pdim(nw_mtk))
+    fx_mtk! = (du, u) -> nw_mtk(du, u, p_mtk, 0.0)
+    fp_mtk! = (du, p) -> nw_mtk(du, u_mtk, p, 0.0)
+    Jx_mtk = jacobian(fx_mtk!, zeros(dim(nw_mtk)), AutoFiniteDiff(), u_mtk)
+    Jp_mtk = jacobian(fp_mtk!, zeros(dim(nw_mtk)), AutoFiniteDiff(), p_mtk)
+    backends = Pair{String,Any}["ReverseDiff" => AutoReverseDiff()]
+    # on Julia 1.10 Enzyme asks for runtime activity here
+    if VERSION ≥ v"1.13"
+        push!(backends, "Enzyme rev" => AutoEnzyme(; mode=EnzymeCore.Reverse, function_annotation=EnzymeCore.Const))
+    end
+    @testset "$name" for (name, backend) in backends
+        @test jacobian(fx_mtk!, zeros(dim(nw_mtk)), backend, u_mtk) ≈ Jx_mtk rtol=1e-5
+        @test jacobian(fp_mtk!, zeros(dim(nw_mtk)), backend, p_mtk) ≈ Jp_mtk rtol=1e-5
+    end
+end
+
 # @testset "DifferentiationInterfaceTest scenarios" begin
 #     scenarios = [Scenario{:jacobian, :in}(fx, x0; res1=Jx_ref),
 #                  Scenario{:jacobian, :in}(fp, pf; res1=Jp_ref)]

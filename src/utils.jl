@@ -498,9 +498,9 @@ struct ComponentPostprocessing end
 Wrapper type to wrap a g-output function which works on a single output, a stacked
 vector of all outputs.
 
-Used by MTK generated component functions. If the outputs are back-to-back views into the
-same vector (as in the coreloop), the stacked vector is a single view, otherwise an
-`ArrayPartition`.
+Used by MTK generated component functions. In the coreloop the outputs are back-to-back views
+into the same vector, and the stacked vector is a single view over them. Outputs of other types
+(e.g. separate vectors) are stacked as an `ArrayPartition`.
 """
 struct MultipleOutputWrapper{FF, N, G} <: Function
     g::G
@@ -512,32 +512,27 @@ fftype(::MultipleOutputWrapper{FF}) where {FF} = FF
     g.g(out, args...)
     nothing
 end
-@inline function (g::MultipleOutputWrapper{FF, N})(args...) where {FF, N}
-    @inbounds begin
-        outs = args[1:N]
-        _args = args[N+1:end]
-    end
-    merged = _merged_view(outs)
-    if isnothing(merged)
-        g.g(RecursiveArrayTools.ArrayPartition(outs), _args...)
-    else
-        g.g(merged, _args...)
-    end
+@inline function (g::MultipleOutputWrapper{FF, N})(args::Vararg{Any, M}) where {FF, N, M}
+    _outs = ntuple(i -> args[i], Val(N))
+    _args = ntuple(i -> args[N + i], Val(M - N))
+    g.g(_stacked_outputs(_outs), _args...)
     nothing
 end
 
-# one view over all outputs if they are back-to-back slices of the same vector, else `nothing`
-_merged_view(outs) = nothing
-@inline function _merged_view(outs::Tuple{S,Vararg{S}}) where {S<:SubArray{<:Any,1,<:Any,Tuple{UnitRange{Int}},true}}
+# The return type depends only on the type of `outs`, so the call above stays type stable.
+@inline function _stacked_outputs(outs::Tuple{S,Vararg{S}}) where {S<:SubArray{<:Any,1,<:Any,Tuple{UnitRange{Int}},true}}
     p = parent(first(outs))
     r = only(parentindices(first(outs)))
     for k in 2:length(outs)
         rk = only(parentindices(outs[k]))
-        (parent(outs[k]) === p && first(rk) == last(r) + 1) || return nothing
+        if parent(outs[k]) !== p || first(rk) != last(r) + 1
+            throw(ArgumentError("MultipleOutputWrapper: output views must be back-to-back slices of the same vector"))
+        end
         r = first(r):last(rk)
     end
     view(p, r)
 end
+_stacked_outputs(outs) = RecursiveArrayTools.ArrayPartition(outs)
 
 
 struct RHSDifferentialsError <: Exception
