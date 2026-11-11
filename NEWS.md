@@ -2,139 +2,135 @@
 
 ## v1.4.0 Changelog
 
-- **Reworked MTK cache with a global mode.** `set_mtk_cache!(:on)` makes building a
-  `VertexModel` or `EdgeModel` from a `System` with the same structure as an earlier one reuse the
-  generated functions and equations, while defaults, guesses and other metadata are still read
-  from the new system. `:check` also rebuilds every hit and errors if it differs from the cached
-  result; `:off` is the default. The cache key now includes bindings and init/guess formulas, so
-  instances differing only in `set_initf` no longer share the first instance's formulas.
-  `with_mtk_cache` restores the previous mode instead of switching the cache off. Warnings
-  of a build only show when the cache entry is filled. The `:odesystem_simplified` metadata is no
-  longer set.
-- The cache functions are renamed, the old names still work but are deprecated:
-  `set_mtk_model_cache!` → `set_mtk_cache!`, `with_mtk_model_cache` → `with_mtk_cache`,
-  `wipe_mtk_model_cache!` → `wipe_mtk_cache!`, and `mtk_model_cache_enabled()` → `mtk_cache_mode()`,
-  which returns the mode. `mtk_cache_stats` lists the entries in the cache with their build times
-  and hits, and the entries which were never hit.
-- **Cached component constructors.** `@cached_component` defines a component constructor like
-  `@component` does, but with the cache on it builds each `System` only once per set of
-  structural keyword arguments.
-- `register_cache_context!` makes global state part of the key of the component cache, so a
-  `@cached_component` whose body reads a package-wide setting is rebuilt when that setting
-  changes instead of returning a model built under the old one.
-- **Solves no longer change `prob.p`.** Callbacks in ND often keep discrete state in parameters, and
-  the solver used to change `prob.p` in place, so a second solve of the same problem silently
-  started from where the first one ended. The `ODEProblem` constructor now stores
-  `alias=ODEAliasSpecifier(alias_p=false)`, so every solve works on a copy. For the parameters at
-  the end of a solution, use `NWState(sol, sol.t[end])` instead of `prob.p`.
-- **Component callbacks take a single symbol list.** `ComponentCondition(f, syms)` with
-  `f(u, t)` and `ComponentAffect(f, syms)` with `f(u, ctx)`; the list may name states,
-  parameters, inputs, outputs and observed alike, all reachable through `u`. In an affect the
-  states and parameters are writable, everything else is read only, so affects can now react to
-  observed values directly. The values are a snapshot taken when the affect fires. The old
-  `(f, sym, psym)` forms with `f(u, p, t)` and `f(u, p, ctx)` still work but warn once.
-- Affects can opt out of the automatic step-size reset with `ctx.dt_reset[] = false`, meant for
-  bookkeeping changes which do not introduce a discontinuity. If several affects fire at the same
-  time, one asking for the reset is enough; parameter changes are saved either way.
-- Affects which leave the right-hand side unchanged can set `ctx.derivative_discontinuity[] = false`.
-  The solver then continues as if the event was a plain tstop, without reinitialization.
-- Batched affects fill their observed buffer once per event instead of once per member.
-- **Event iteration.** `DiscreteComponentCallback(cond, affect; iterative=true)` joins the
-  network's event iteration. All iterative callbacks run last at an event instant, in synchronous
-  rounds: every condition sees the same state and every fired affect reads one snapshot. Between
-  rounds a DAE is reinitialized, and the rounds repeat until no condition fires. `event_maxiter`
-  and `event_failure` on `get_callbacks`/`ODEProblem` bound the loop.
-- Component callbacks batch by the type of their condition, not by the identical function. Closures
-  created at one place, e.g. a `do` block in a model constructor, now share a batch even if they
-  capture different values. Members of a batch read one snapshot when they fire together.
-- `PresetTimeComponentCallback`s with equal `ts` and keyword arguments share one
-  `PresetTimeCallback`, also across components.
-- Preset-time callbacks now run before the other discrete callbacks at an instant, so every
-  discrete condition sees their jump. This includes preset-time callbacks passed as `add_nw_cb`.
-- `save_parameters!` no longer stores a full copy of the parameter vector. The solution keeps the
-  initial parameters plus a list of the values which changed, which makes frequent parameter
-  changes in large networks much cheaper in memory.
-- **Observed functions only evaluate what is needed.** MTK components now know which observables
-  depend on which, and which of them read the component inputs. `SII.observed` only evaluates the
-  observables that were asked for and what they depend on. More importantly, it only runs the
-  full network RHS to fill the input buffers if a requested observable actually reads an input.
-  This mostly helps callbacks, which may read an observable at every interpolation point.
-- **Aliases of states and parameters resolve directly to their slot.** If `terminal.u ~ u` for a
-  state `u`, reading `terminal.u` no longer goes through the observed function. The alias map is
-  now a regular field of the component models, set with the `aliasmap` constructor keyword;
-  `set_aliasmap!`, `delete_aliasmap!` and `has_aliasmap` are removed.
-- improvements to the simplification pipeline around removing algebraic states
-- **Outputs fed forward from an input become algebraic states.** When a vertex output depends
-  algebraically on the input, the ND-native MTK simplification now keeps that output as state
-  and the input equation as residual, e.g. the bus voltage and the current balance. The
-  observables of such components no longer read the input, so callback conditions on them
-  don't need the network buffers. The algebraic states of MTK components may change, e.g. PSS/E
-  machines now keep `busbar₊u_r`, `busbar₊u_i` instead of the stator currents. If making the
-  outputs states would cost more states than the old tear, the old tear is kept.
-- **Parallel edges.** Several edge models may now connect the same pair of vertices. The
-  graphless constructor builds a `NetworkDynamics.ComponentGraph` in that case and keeps the edge
-  models in input order. Inputs without parallel edges still produce a `SimpleGraph` or
-  `SimpleDiGraph` as before, unless `legacy_graph=false` is passed. `EIndex(src => dst)` throws
-  if it matches more than one edge.
-- `chk_component` reports allocations in f or g function of model
-- `chk_component(c; ad=true)` also calls f and g with ForwardDiff Duals and reports if they error
-  or allocate only for Duals. Construction runs the check without this Dual pass.
-- New `chk_network(nw)` checks the network rhs for allocations with Float64 and Duals and lists
-  the component batches which allocate.
-- Fix: calling the network with Duals allocated on every call, due to the unspecialized element
-  type in the cache getters.
-- **`ODEProblem(nw, ...)` uses `FullSpecialize` by default.** SciML's `AutoSpecialize` limits
-  ForwardDiff to chunk size 1, so a sparse Jacobian took one RHS pass per color. On IEEE39 the
-  solve gets about 40 % faster. `specialize=SciMLBase.AutoSpecialize` restores the old behavior.
-- **A new network reuses the compiled solver.** The `Network` type no longer carries the component
-  functions; the RHS reaches them through a function barrier (30–40 ns per call). On IEEE39 the
-  first solve of a second network dropped from 17 s to 0.4 s. Graph and mass matrix are stored
-  untyped as well, so `Network` has only the type parameters `{TB,CR}` and reuse just needs the
-  same float type. `Network(...; fullytyped=true)` restores the fully typed core.
-- **DAE (re)initialization starts with Newton also without a `jac_prototype`.**
-  The default `initializealg` of `ODEProblem(nw, ...)` now always uses the Jacobian-based
-  polyalg (NewtonRaphson, then TrustRegion and LevenbergMarquardt) instead of the upstream
-  default, which opens with Broyden. After an event Broyden could take hundreds of iterations
-  and, on last-bit floating point differences, land on a different root than Newton. The
-  internal `default_dae_init_alg` is removed.
-- `OrdinaryDiffEqNonlinearSolve` is now a weak dependency, only to require at least v2.9.4
-  whenever it is loaded. Older versions broke ForwardDiff in the DAE initialization of
-  networks with a `jac_prototype`.
-- Fix: MTK models may carry several differing `initf` for one target (e.g. two weak, optional
-  recipes recovering a state from either its input or its output). Previously this errored at
-  `VertexModel` construction; now initialization decides which one fires and reports a
-  disagreement. A weak `initf` is also no longer dropped next to an optional strong one.
-- Networks without edges can be built by passing an empty edge list, e.g. `Network(g, vm, [])` or `Network(vms, [])`.
-- **Faster MTK components.** Integer powers like `x^2` in generated code are now written out as
-  products instead of calling the generic, much slower integer power. The generated functions
-  also compute common subexpressions only once. MTK edges write their src and dst outputs
-  through one contiguous view. Together this made the RHS of a large PowerDynamics network
-  about 4× faster, with identical results.
-- Fix: injector nodes with both states and feed forward never evaluated their `f`, so their states stayed frozen.
-- Fix: the sparsity detection now also rewrites conditionals in MTK edges with separate src and
-  dst outputs, instead of falling back to a dense `g`.
+### Component cache
+
+- **Reworked MTK cache with a global mode** ([#433], [#441]). With `set_mtk_cache!(:on)`, a
+  `System` with the same structure as an earlier one reuses its generated functions, while
+  defaults, guesses and other metadata are still read from the new system. `:check` rebuilds
+  every hit and errors if it differs. `mtk_cache_stats` lists the entries with build times and
+  hits.
+- The cache functions are renamed to `set_mtk_cache!`, `with_mtk_cache`, `wipe_mtk_cache!` and
+  `mtk_cache_mode`. The old names are deprecated ([#433]).
+- **`@cached_component`** defines a component constructor like `@component`, but with the cache
+  on it builds each `System` only once per set of structural keyword arguments ([#438]).
+  `register_cache_context!` adds package-wide settings read in such a body to the cache key ([#437]).
+
+### Callbacks
+
+- **Component callbacks take a single symbol list** ([#410]). `ComponentCondition(f, syms)` with
+  `f(u, t)` and `ComponentAffect(f, syms)` with `f(u, ctx)`. The list may name states,
+  parameters, inputs, outputs and observables, so affects can react to observed values directly.
+  The old `(f, sym, psym)` forms still work but warn once.
+- **Event iteration** ([#416]). `DiscreteComponentCallback(cond, affect; iterative=true)` runs in
+  synchronous rounds at an event instant until no condition fires, with a DAE reinitialization
+  between rounds. `event_maxiter` and `event_failure` bound the loop.
+- Affects can skip the step-size reset with `ctx.dt_reset[] = false` ([#410]), and the
+  reinitialization with `ctx.derivative_discontinuity[] = false` ([#419]).
+- Callbacks batch by the type of their condition, so closures created at one place share a batch
+  ([#416]). `PresetTimeComponentCallback`s with equal `ts` share one `PresetTimeCallback` ([#419]).
+- Preset-time callbacks run before the other discrete callbacks at an instant, so those see the
+  jump ([#416]).
+- `save_parameters!` stores only the changed values instead of a full copy of the parameters ([#411]).
+
+### Models and networks
+
+- **Parallel edges** ([#403]). Several edge models may connect the same pair of vertices; the
+  graphless constructor then builds a `NetworkDynamics.ComponentGraph`. `EIndex(src => dst)`
+  throws if it matches more than one edge.
+- Networks without edges can be built from an empty edge list, e.g. `Network(vms, [])` ([#405]).
+- **Outputs fed forward from the input become algebraic states** in the MTK simplification, with
+  the input equation as residual, e.g. the bus voltage and the current balance ([#406], [#414],
+  [#421]). Their observables no longer read the input. The algebraic states of such components
+  change, e.g. PSS/E machines now keep `busbar₊u_r`, `busbar₊u_i` instead of the stator currents.
+- **Solving on the GPU** ([#392]). A network adapted to CUDA can be solved end to end, with a
+  `CuSparseMatrixCSR` Jacobian prototype for the sparse solvers on the device. Component
+  callbacks don't run on the device yet.
+- Enzyme reverse-mode AD works through MTK edges ([#443]).
+- `chk_component` reports allocations in f and g, with `ad=true` also for Duals. The new
+  `chk_network(nw)` does the same for the network rhs ([#400], [#407]).
+
+### Performance
+
+- **A new network reuses the compiled solver** ([#409], [#436]). `Network` only keeps the type
+  parameters `{TB,CR}`; on IEEE39 the first solve of a second network drops from 17 s to 0.4 s.
+  `Network(...; fullytyped=true)` restores the fully typed version.
+- **`ODEProblem(nw, ...)` uses `FullSpecialize` by default** ([#409]), so sparse Jacobians no
+  longer run at chunk size 1. About 40 % faster on IEEE39; `specialize=SciMLBase.AutoSpecialize`
+  restores the old behavior.
+- **Faster MTK components** ([#415], [#432]). Integer powers are written out as products, common
+  subexpressions are computed once and edges write their outputs through one view. The rhs of a
+  large PowerDynamics network got about 4× faster.
+- **Observed functions only evaluate what is needed** ([#408]), and only run the network rhs if a
+  requested observable reads an input. Aliases of states and parameters resolve directly to
+  their slot.
+- Shorter compile times when building and initializing large networks ([#435]).
+
+### Fixes
+
+- DAE (re)initialization starts with Newton also without a `jac_prototype`. The upstream default
+  started with Broyden, which could land on a different root after an event ([#402]).
+- Several differing `initf` for one target no longer error at construction; initialization
+  decides which one fires and reports a disagreement ([#404]).
+- Init formulas in a loop: a rule which fires again replaces its own earlier value instead of
+  reporting a conflict with it ([#418]).
+- Injector nodes with states and feed forward never evaluated their `f` ([#417]).
+- Calling the network with Duals allocated on every call ([#407]).
+- The sparsity detection fell back to a dense `g` for conditionals in MTK edges with separate src
+  and dst outputs ([#434]).
+- External inputs referencing an output which is not a state, e.g. `VIndex(2, :o)`, failed at
+  construction ([#439]).
+- `ODEProblem` without callbacks no longer stores `callback=nothing`, which broke
+  SciMLSensitivity ([#443]).
+
+### Breaking and behavior changes
+
+- **Solves no longer change `prob.p`** ([#431]). Every solve works on a copy; for the parameters
+  at the end of a solution use `NWState(sol, sol.t[end])`.
+- **`NWState(x)` and `NWParameter(x)` only fill from metadata for a `Network`** ([#440]). For an
+  `ODEProblem` they copy `prob.u0` and `prob.p`, `NWParameter(s::NWState)` copies `s.p`, and
+  other arguments are deprecated. `NWState(p::NWParameter)` is deprecated too, use
+  `NWState(p, uflat)`, which now keeps `p`.
+- `mtkcompile=true` and `:compare` throw if ModelingToolkit is not loaded, instead of silently
+  skipping the structural simplification ([#442]).
 - `get_initformulas`, `get_guessformulas`, `get_initconstraints` and `get_callbacks` return a
-  vector instead of a tuple. The setters still accept a single item, a tuple or a vector.
-  `InitFormula` and `GuessFormula` lost their type parameter. Both changes cut the compile time
-  of building and initializing large networks.
-- Fix: external inputs which reference an output of a component that is not a state, e.g.
-  `extin=[VIndex(2, :o)]`, failed at `Network` construction.
-- **`NWState(x)` and `NWParameter(x)` only fill from metadata for a `Network`.** For anything else
-  (solution, `IndexingProxy`, ...) they are deprecated, since they ignored the values `x` carries
-  and silently returned the metadata defaults. Use `NWState(extract_nw(x))` or pass the values,
-  e.g. `NWState(sol, t)`.
-- `NWState(p::NWParameter)` is deprecated. Use `NWState(p, uflat)` to combine `p` with given
-  states.
+  vector instead of a tuple. `InitFormula` and `GuessFormula` lost their type parameter ([#435]).
+- The cache key includes bindings and init/guess formulas, so components differing only in
+  `set_initf` no longer share formulas. The `:odesystem_simplified` metadata is no longer set
+  ([#433]).
+- `OrdinaryDiffEqNonlinearSolve` is a weak dependency, only to require at least v2.9.4 ([#402]).
 
-### Behavior changes
-
-- `NWState(prob)` and `NWParameter(prob)` for an `ODEProblem` now return copies of `prob.u0` and
-  `prob.p` (at `t = prob.tspan[1]`) instead of the metadata defaults.
-- `NWParameter(s::NWState)` now returns a copy of `s.p` instead of the metadata defaults.
-- `NWState(p::NWParameter, uflat)` keeps `p` instead of dropping the parameters.
-- `mtkcompile=true` and `mtkcompile=:compare` throw an error if ModelingToolkit is not loaded. Before,
-  they silently used the stub `mtkcompile` of ModelingToolkitBase, which does no structural
-  simplification.
+[#392]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/392
+[#400]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/400
+[#402]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/402
+[#403]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/403
+[#404]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/404
+[#405]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/405
+[#406]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/406
+[#407]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/407
+[#408]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/408
+[#409]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/409
+[#410]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/410
+[#411]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/411
+[#414]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/414
+[#415]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/415
+[#416]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/416
+[#417]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/417
+[#418]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/418
+[#419]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/419
+[#421]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/421
+[#431]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/431
+[#432]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/432
+[#433]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/433
+[#434]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/434
+[#435]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/435
+[#436]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/436
+[#437]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/437
+[#438]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/438
+[#439]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/439
+[#440]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/440
+[#441]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/441
+[#442]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/442
+[#443]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/443
 
 ## v1.3.0 Changelog
 
