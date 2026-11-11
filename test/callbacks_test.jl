@@ -1,6 +1,6 @@
 using NetworkDynamics
 using NetworkDynamics: wrap_component_callbacks, get_callbacks, getcondition, getaffect, getaffect_neg,
-                       condition_dim, condition_urange, condition_outrange, affect_dim, affect_urange,
+                       condition_dim, condition_urange, condition_outrange, affect_dim,
                        collect_c_or_a_indices, AffectAccess, shortrepr,
                        _batch_condition, _scalar_member_affect, _batch_vector_affect, _gather,
                        IterativeBatches
@@ -65,7 +65,7 @@ end
     @test all(affect_dim.(Ref(cbb), getaffect, 1:7) .== 1)
 
     @test condition_urange.(Ref(cbb), 1:length(cbb)) == [1:5,6:10,11:15,16:20,21:25,26:30,31:35]
-    @test affect_urange.(Ref(cbb), getaffect, 1:length(cbb)) == [1:1,2:2,3:3,4:4,5:5,6:6,7:7]
+    @test AffectAccess(cbb, getaffect).ranges == [1:1,2:2,3:3,4:4,5:5,6:6,7:7]
     @test condition_outrange.(Ref(cbb), 1:length(cbb)) == [1:1,2:2,3:3,4:4,5:5,6:6,7:7]
 
     @test collect_c_or_a_indices(cbb, getcondition) == collect(Iterators.flatten(collect(EIndex(i, [:P, :₋P, :srcθ, :limit, :K])) for i in 1:7))
@@ -733,6 +733,132 @@ end
         @test length(ts) == 2 # initial value and one save at the event
         @test ts[end] ≈ ts[1] + 1e-3
     end
+end
+
+@testset "ctx.derivative_discontinuity opt out" begin
+    # Both vertices fire in one discrete batch at the tstop. The affect rewrites a parameter with
+    # its own value, so the rhs stays the same.
+    function solve_noop(optout)
+        nw = basenetwork()
+        cond = ComponentCondition((u, t) -> t == 1.0, [:Pmech])
+        aff = ComponentAffect([:Pmech]) do u, ctx
+            u[:Pmech] = u[:Pmech]
+            ctx.vidx in optout && (ctx.derivative_discontinuity[] = false)
+        end
+        if !isnothing(optout)
+            foreach(v -> set_callback!(nw.im.vertexm[v], DiscreteComponentCallback(cond, aff)), 1:2)
+            @test length(wrap_component_callbacks(nw)) == 1
+        end
+        s0 = NWState(nw)
+        s0.v[1, :ω] += 0.1
+        solve(ODEProblem(nw, s0, (0, 2.0)), Tsit5(); tstops=[1.0])
+    end
+    sol_plain = solve_noop(nothing)
+    sol_out = solve_noop([1, 2])
+    sol_one = solve_noop([1])
+    # without a discontinuity the solver continues as if the event was a plain tstop
+    @test unique(sol_out.t) == sol_plain.t
+    @test sol_out.stats.nf == sol_plain.stats.nf
+    # one member reporting a discontinuity is enough
+    @test sol_one.stats.nf > sol_plain.stats.nf
+end
+
+@testset "batched preset time callbacks" begin
+    mkkick(dω) = ComponentAffect([:ω]) do u, ctx
+        u[:ω] = u[:ω] + dω
+    end
+    function solve_with(cbs; kwargs...)
+        nw = basenetwork()
+        for (v, cb) in cbs
+            add_callback!(nw.im.vertexm[v], cb)
+        end
+        nw, solve(ODEProblem(nw, NWState(nw), (0, 2.0)), Tsit5(); reltol=1e-10, abstol=1e-10, kwargs...)
+    end
+
+    # one closure per component on the same time grid ends up in one batch
+    ts = [0.5, 1.0]
+    nw, sol = solve_with([v => PresetTimeComponentCallback(ts, mkkick(0.01v)) for v in 1:5])
+    @test length(wrap_component_callbacks(nw)) == 1
+    @test get_callbacks(nw) isa DiscreteCallback # a single DiffEq callback
+
+    # reference: the same kicks from a single network level callback
+    nwref = basenetwork()
+    ωidx = [NetworkDynamics.SII.variable_index(nwref, VIndex(v, :ω)) for v in 1:5]
+    refkick = PresetTimeCallback(ts, integrator -> begin
+        for v in 1:5
+            integrator.u[ωidx[v]] += 0.01v
+        end
+        SciMLBase.auto_dt_reset!(integrator)
+    end)
+    solref = solve(ODEProblem(nwref, NWState(nwref), (0, 2.0); add_nw_cb=refkick), Tsit5();
+        reltol=1e-10, abstol=1e-10)
+    @test sol.u[end] ≈ solref.u[end] rtol=1e-8
+    @test sol(0.75) ≈ solref(0.75) rtol=1e-8
+
+    # different time grids form different batches
+    nw, _ = solve_with([1 => PresetTimeComponentCallback(ts, mkkick(0.01)),
+                        2 => PresetTimeComponentCallback(ts, mkkick(0.02)),
+                        3 => PresetTimeComponentCallback([0.7], mkkick(0.03))])
+    @test length(wrap_component_callbacks(nw)) == 2
+
+    # different affect functions share a batch
+    setp = ComponentAffect([:Pmech]) do u, ctx
+        u[:Pmech] = 0.5
+    end
+    nw, sol = solve_with([1 => PresetTimeComponentCallback(ts, mkkick(0.1)),
+                          2 => PresetTimeComponentCallback(ts, setp)])
+    @test length(wrap_component_callbacks(nw)) == 1
+    @test sol[VPIndex(2, :Pmech)][end] == 0.5
+    iev = findall(==(0.5), sol.t) # saved before and after the event
+    @test sol[VIndex(1, :ω)][last(iev)] ≈ sol[VIndex(1, :ω)][first(iev)] + 0.1
+
+    # two callbacks on one component read the same snapshot, the last write wins
+    _, sol = solve_with([1 => PresetTimeComponentCallback(ts, mkkick(0.1)),
+                         1 => PresetTimeComponentCallback(ts, mkkick(0.2))])
+    iev = findall(==(0.5), sol.t)
+    @test sol[VIndex(1, :ω)][last(iev)] ≈ sol[VIndex(1, :ω)][first(iev)] + 0.2
+
+    # the grid is compared like PresetTimeCallback stores it, the kwargs have to match
+    function batchcount(cbs)
+        nw = basenetwork()
+        for (v, cb) in cbs
+            add_callback!(nw.im.vertexm[v], cb)
+        end
+        length(wrap_component_callbacks(nw))
+    end
+    @test batchcount([1 => PresetTimeComponentCallback(1.0, setp),
+                      2 => PresetTimeComponentCallback([1.0], setp)]) == 1
+    @test batchcount([1 => PresetTimeComponentCallback(0.5:0.5:1.0, setp),
+                      2 => PresetTimeComponentCallback([1.0, 0.5], setp)]) == 1
+    @test batchcount([1 => PresetTimeComponentCallback(ts, setp),
+                      2 => PresetTimeComponentCallback(ts, setp; save_positions=(false, false))]) == 2
+
+    # vertex and edge members share a batch
+    nw = basenetwork()
+    deactivate = ComponentAffect([:active]) do u, ctx
+        u[:active] = 0
+    end
+    add_callback!(nw.im.vertexm[1], PresetTimeComponentCallback(ts, setp))
+    add_callback!(nw.im.edgem[1], PresetTimeComponentCallback(ts, deactivate))
+    @test length(wrap_component_callbacks(nw)) == 1
+    sol = solve(ODEProblem(nw, NWState(nw), (0, 2.0)), Tsit5())
+    @test sol[VPIndex(1, :Pmech)][end] == 0.5
+    @test sol[EPIndex(1, :active)][end] == 0
+
+    # flags are combined over the members, one asking for the discontinuity is enough
+    function noop(optout)
+        ComponentAffect([:Pmech]) do u, ctx
+            u[:Pmech] = u[:Pmech]
+            optout && (ctx.derivative_discontinuity[] = false)
+        end
+    end
+    _, sol_plain = solve_with([]; tstops=[1.0])
+    nw, sol_out = solve_with([v => PresetTimeComponentCallback([1.0], noop(true)) for v in 1:2])
+    @test length(wrap_component_callbacks(nw)) == 1
+    @test sol_out.stats.nf == sol_plain.stats.nf
+    _, sol_one = solve_with([1 => PresetTimeComponentCallback([1.0], noop(true)),
+                             2 => PresetTimeComponentCallback([1.0], noop(false))])
+    @test sol_one.stats.nf > sol_plain.stats.nf
 end
 
 @testset "symbolic view test" begin
