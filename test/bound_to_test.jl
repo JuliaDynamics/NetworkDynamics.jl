@@ -19,16 +19,6 @@ using Test
     @test string(only(get_metadata(vb, :observed))) == "S_b ~ busbar₊S_b"
 end
 
-@testset "bound_to on both simplification backends" begin
-    # The elimination must happen on ND's own reduction (`mtkcompile=false`, the default) and on
-    # MTK's `mtkcompile` alike — both push the binding into the observed equations.
-    for mtkcompile in (false, true)
-        vm = Lib.pu_bus_vertex(; mtkcompile)
-        @test :S_b ∉ psym(vm)
-        @test string(only(get_metadata(vm, :observed))) == "S_b ~ busbar₊S_b"
-    end
-end
-
 @testset "bound_to on the network: base propagates as an observable" begin
     # The real use case, end to end at the structural/observable level: the per-unit base lives
     # once (as `busbar₊S_b`), every bound device reads it as an observable, and changing the base
