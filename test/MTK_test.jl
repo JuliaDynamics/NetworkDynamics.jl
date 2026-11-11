@@ -2181,14 +2181,27 @@ end
         end
     end
     @named node = BoundParamNode()
-    vm1 = VertexModel(node, [:u], [:x]; mtkcompile=true)
-    @test :Sn  ∉ Set(NetworkDynamics.psym(vm1))
-    @test :S_b ∈ Set(NetworkDynamics.psym(vm1))
-    @test :Sn ∈ Set(NetworkDynamics.obssym(vm1)) # sn is observed
-    vm2 = VertexModel(node, [:u], [:x]; mtkcompile=false)
-    @test :Sn  ∉ Set(NetworkDynamics.psym(vm2))
-    @test :S_b ∈ Set(NetworkDynamics.psym(vm2))
-    @test :Sn ∈ Set(NetworkDynamics.obssym(vm2)) # sn is observed
+    vm = VertexModel(node, [:u], [:x])
+    @test :Sn  ∉ Set(NetworkDynamics.psym(vm))
+    @test :S_b ∈ Set(NetworkDynamics.psym(vm))
+    @test :Sn ∈ Set(NetworkDynamics.obssym(vm)) # sn is observed
+end
+
+@testset "mtkcompile=true without ModelingToolkit errors" begin
+    @mtkmodel MTKCompileNode begin
+        @variables begin
+            u(t)
+            x(t) = 0.0
+        end
+        @equations begin
+            Dt(x) ~ u - x
+        end
+    end
+    @named node = MTKCompileNode()
+    # the test env only has ModelingToolkitBase, its `mtkcompile` is a stub
+    @test !Base.root_module_exists(Base.PkgId(Base.UUID("961ee093-0014-501f-94e3-6117800e7a78"), "ModelingToolkit"))
+    @test_throws r"needs ModelingToolkit" VertexModel(node, [:u], [:x]; mtkcompile=true)
+    @test_throws r"needs ModelingToolkit" VertexModel(node, [:u], [:x]; mtkcompile=:compare)
 end
 
 @testset "SimpleLead: Dt(input) requires index reduction" begin

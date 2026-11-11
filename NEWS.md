@@ -128,6 +128,9 @@
   `prob.p` (at `t = prob.tspan[1]`) instead of the metadata defaults.
 - `NWParameter(s::NWState)` now returns a copy of `s.p` instead of the metadata defaults.
 - `NWState(p::NWParameter, uflat)` keeps `p` instead of dropping the parameters.
+- `mtkcompile=true` and `mtkcompile=:compare` throw an error if ModelingToolkit is not loaded. Before,
+  they silently used the stub `mtkcompile` of ModelingToolkitBase, which does no structural
+  simplification.
 
 ## v1.3.0 Changelog
 

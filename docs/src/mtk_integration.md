@@ -6,7 +6,7 @@ which are then connected on network scale using NetworkDynamics.
 
 !!! note "On ModelingToolkit and ModelingToolkitBase"
     End of 2024 the [SciML Steering Council announced](https://discourse.julialang.org/t/modelingtoolkit-v11-library-split-and-licensing-community-feedback-requested/134396) that going forward MTK will be AGPL licensed while MTKBase remains MIT licensed.
-    To avoid a dependency on MTK, ND.jl implements its own simplification pipeline which only depends on MTKBase. The `mtkcompile` keyword on `VertexModel`/`EdgeModel` lets you switch and compare the simplification backend. Be aware: using `mtkcompile=true` **without** importing ModelingToolkit falls back to the stub `mtkcompile` provided by ModelingToolkitBase, which performs no structural simplification.
+    To avoid a dependency on MTK, ND.jl implements its own simplification pipeline which only depends on MTKBase. The `mtkcompile` keyword on `VertexModel`/`EdgeModel` lets you switch and compare the simplification backend. `mtkcompile=true` requires `using ModelingToolkit`, otherwise the constructor throws an error.
 
 The main entry point for this interop are the constructors
 ```julia
