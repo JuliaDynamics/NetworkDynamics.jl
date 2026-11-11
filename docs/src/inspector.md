@@ -100,7 +100,7 @@ We can dump the code which helps us to recreate the app state:
 dump_app_state()
 ```
 
-Now we can use this code to recreate the app state even though we've reseted it.
+Now we can use this code to recreate the app state even though we've reset it.
 ```@example ndi
 buf = IOBuffer() #hide
 dump_app_state(buf) #hide

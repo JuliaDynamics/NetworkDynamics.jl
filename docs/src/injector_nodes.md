@@ -60,7 +60,7 @@ While not strictly necessary, splitting these vertex models into "clusters" can 
 - For ModelingToolkit models, large monolithic components can lead to higher compilation and symbolic simplification times compared to multiple smaller models.
 Notably, injector models have a flipped input-output scheme compared to normal vertices: they take the hub's potential as a direct input and output a flow.
 ```asciiart
-                Hub    Loopback  Satelites
+                Hub    Loopback  Satellites
               ╭──────╮╭────────╮╭──────────╮
    ⋮
   ┏┷━━┓                         ┏━━━━━━━━━━┓
@@ -76,13 +76,13 @@ Notably, injector models have a flipped input-output scheme compared to normal v
 ```
 
 To connect this kind of injector nodes, we use the special EdgeModel `LoopbackConnection`.
-See the docstring below for a detailed explaination of the interfaces.
+See the docstring below for a detailed explanation of the interfaces.
 ```@docs; canonical=false
 LoopbackConnection
 ```
 
 ## Example
-Following the other examples we'll showcase the feature on the a small electrical network.
+Following the other examples we'll showcase the feature on a small electrical network.
 The network to model looks like this:
 ```
                 v1   Resistor   v2
@@ -93,10 +93,10 @@ ideal v source (↗)           ┴  █  ⚕
                 │            ╰──┼──╯
                 ⏚               ⏚
 ```
-For demonstration purposes we'll model second vertex in two ways: as a single model enclosing all three components and as separate injector nodes.
+For demonstration purposes we'll model the second vertex in two ways: as a single model enclosing all three components and as separate injector nodes.
 
 As always, this is mainly a pedagogical example. For such a simple system, it is probably much cleaner to model it as a single vertex.
-However thats not always the case for very large networks with many complex vertex models!
+However that's not always the case for very large networks with many complex vertex models!
 
 ### Prerequisites
 The first few components building blocks are identical to the docs on [ModelingToolkit Integration](@ref).
@@ -211,7 +211,7 @@ end
 Linj_vertex = VertexModel(inductor_inj, [:p₊v], [:p₊i], name=:L_injector, ff_to_constraint=false)
 ```
 Now, we need to define the connections between the hub and the injectors, and between voltage source and hub.
-For the two injectors we define the special `LoopbackConnection` endges from injector to hub.
+For the two injectors we define the special `LoopbackConnection` edges from injector to hub.
 For the connection between voltage source and hub we use a regular edge model.
 ```@example injector
 edges = [
@@ -227,7 +227,7 @@ To simulate the system we use the default initial conditions. We can inspect the
 s0 = NWState(nw)
 s0.v
 ```
-With that knowlege, we can set the initial condition:
+With that knowledge, we can set the initial condition:
 ```@example injector
 s0.v[:hub, :p₊v] = 0.0
 s0.v[:L_injector, :p₊i] = 0.0

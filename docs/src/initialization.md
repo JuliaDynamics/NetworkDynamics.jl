@@ -1,6 +1,6 @@
 # [Initialization](@id initialization-guide)
 
-Initialization is a critical step in simulation dynamical systems on networks, involving finding valid initial conditions that satisfy the system's constraints. NetworkDynamics provides several layers of initialization tools, from individual component initialization to full network initialization.
+Initialization is a critical step in simulating dynamical systems on networks, involving finding valid initial conditions that satisfy the system's constraints. NetworkDynamics provides several layers of initialization tools, from individual component initialization to full network initialization.
 
 ## Initialization Hierarchy
 
@@ -111,7 +111,7 @@ The non-mutating version [`initialize_component`](@ref) is useful when you don't
 # Get initialization results as a dictionary
 init_state = initialize_component(vf; default_overrides=Dict(:x => 4))
 ```
-It will return a `Dict{Symbol,Float64}` which contains values for **all** symbols in the model.
+It will return a `Dict{Symbol,Float64}` which contains values for **all** states, inputs, outputs and parameters of the model.
 
 The mutating version [`initialize_component!`](@ref) directly updates the component's metadata with initialization results:
 
@@ -134,7 +134,7 @@ using ModelingToolkitBase: t_nounits as t, D_nounits as Dt
         u_r(t)=1, [description="bus d-voltage", output=true]
         u_i(t)=0.1, [description="bus q-voltage", output=true]
         i_r(t)=1, [description="bus d-current (flowing into bus)", input=true]
-        i_i(t)=0.1, [description="bus d-current (flowing into bus)", input=true]
+        i_i(t)=0.1, [description="bus q-current (flowing into bus)", input=true]
         ω(t), [guess=0.0, description="Rotor frequency"]
         θ(t), [guess=0.0, description="Rotor angle"]
         Pel(t), [guess=1, description="Electrical Power injected into the grid"]
@@ -166,14 +166,19 @@ Variables that only have `guess`es are considered "tunable" for the initializati
 We can use [`initialize_component`](@ref) to get the initialized values without modifying the component:
 ```@example compinit
 init_values = initialize_component(vf; default_overrides=Dict(:u_i=>0), verbose=true)
+nothing #hide
 ```
 The code returns a dictionary which pins *all* the variables of the component to some values which satisfy the initialization condition.
+```@example compinit
+init_values
+```
 
 ### Using the mutating initialization
 
 Alternatively, we can make use of the mutating version to store the results of the initialization in the metadata:
 ```@example compinit
 initialize_component!(vf; verbose=true)
+nothing #hide
 ```
 Which stored the initialisation results as `:init` metadata of the component model `vf`:
 ```@example compinit
@@ -201,7 +206,7 @@ The execution order is:
 1. Collect defaults, guesses, and bounds from metadata
 2. Apply init formulas → update defaults (fix more variables)
 3. Apply guess formulas → update guesses (improve starting point)
-4. Create and solve the nonlinear least squares problem with additonal constraints
+4. Create and solve the nonlinear least squares problem with additional constraints
 
 #### Initialization Formulas (`InitFormula`)
 
@@ -450,4 +455,4 @@ The metadata is reachable from the ND side too, via `has_default_from`, `get_def
 The two features are complements: use `bound_to` when the values must be *identical by construction* and one of them should stop being a knob; use `default_from` when a component should *start* from its neighbor's value but remain adjustable.
 
 ## Analysing Fixpoints
-In order to analyse fixpoints NetworkDynamis provides the functions [`isfixpoint`](@ref), [`is_linear_stable`](@ref) and [`jacobian_eigenvals`](@ref).
+In order to analyse fixpoints NetworkDynamics provides the functions [`isfixpoint`](@ref), [`is_linear_stable`](@ref) and [`jacobian_eigenvals`](@ref).
