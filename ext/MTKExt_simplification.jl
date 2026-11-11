@@ -1110,7 +1110,15 @@ function get_alias(eq)
     end
 end
 
+const MTK_PKGID = Base.PkgId(Base.UUID("961ee093-0014-501f-94e3-6117800e7a78"), "ModelingToolkit")
+
 function simplify_with_mtkcompile(_sys, allinputs, alloutputs; verbose)
+    # MTKBase only ships a stub `mtkcompile`, the real one comes with loading ModelingToolkit
+    if !Base.root_module_exists(MTK_PKGID)
+        throw(ArgumentError("`mtkcompile=true` (or `:compare`) needs ModelingToolkit to be loaded, \
+            call `using ModelingToolkit` first. Without it, ModelingToolkitBase only provides a stub \
+            `mtkcompile` which does no structural simplification."))
+    end
     missing_inputs = Set{ST}()
     sys = if ModelingToolkitBase.iscomplete(_sys)
         deepcopy(_sys)

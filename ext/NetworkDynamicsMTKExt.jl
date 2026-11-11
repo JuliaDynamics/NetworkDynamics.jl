@@ -69,9 +69,8 @@ Additional kw arguments:
   implicit output terms to all inputs. This forces MTK to consider the dependency during compilation
   and can help in cases where MTK simplification results in derivatives of inputs.
 - `mtkcompile=nothing`: Controls the simplification backend. `false` (default) uses NetworkDynamics'
-  own algebraic reduction pipeline. `true` delegates to MTK's `mtkcompile`: when `ModelingToolkit` is
-  loaded this performs full structural simplification; when only `ModelingToolkitBase` is available it
-  falls back to the stub `mtkcompile` (no structural simplification). `nothing` inherits the global
+  own algebraic reduction pipeline. `true` delegates to MTK's `mtkcompile` and requires
+  `ModelingToolkit` to be loaded (errors otherwise). `nothing` inherits the global
   default set via `NetworkDynamics.set_mtkcompile!`. `:compare` runs both and prints a comparison
   (for debugging).
 """
@@ -137,9 +136,8 @@ Additional kw arguments:
   implicit output terms to all inputs. This forces MTK to consider the dependency during compilation
   and can help in cases where MTK simplification results in derivatives of inputs.
 - `mtkcompile=nothing`: Controls the simplification backend. `false` (default) uses NetworkDynamics'
-  own algebraic reduction pipeline. `true` delegates to MTK's `mtkcompile`: when `ModelingToolkit` is
-  loaded this performs full structural simplification; when only `ModelingToolkitBase` is available it
-  falls back to the stub `mtkcompile` (no structural simplification). `nothing` inherits the global
+  own algebraic reduction pipeline. `true` delegates to MTK's `mtkcompile` and requires
+  `ModelingToolkit` to be loaded (errors otherwise). `nothing` inherits the global
   default set via `NetworkDynamics.set_mtkcompile!`. `:compare` runs both and prints a comparison
   (for debugging).
 """

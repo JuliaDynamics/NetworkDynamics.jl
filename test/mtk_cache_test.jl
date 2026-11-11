@@ -226,8 +226,8 @@ end
     end
     NetworkDynamics.with_mtk_cache() do
         NetworkDynamics.wipe_mtk_cache!()
-        VertexModel(mtksys(), [:i], [:y]; mtkcompile=true)
-        VertexModel(mtksys(), [:i], [:y]; mtkcompile=true)
+        # ModelingToolkit is not loaded in the tests, so the build itself errors
+        @test_throws r"needs ModelingToolkit" VertexModel(mtksys(), [:i], [:y]; mtkcompile=true)
         @test compile_counts() == (0, 0)
         @test isempty(mtkext.COMPILE_CACHE.entries)
     end
