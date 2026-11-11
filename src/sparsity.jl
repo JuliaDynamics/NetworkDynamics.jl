@@ -31,7 +31,7 @@ the forward-diff jacobian. This check will be disabled with a warning for large 
         expr2
     end
     ```
-    Which is not compatible due to the `&` and due to the if..else. This will be repalced by
+    Which is not compatible due to the `&` and due to the if..else. This will be replaced by
     ```
     a = expr1 + expr2
     ```

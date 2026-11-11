@@ -421,7 +421,7 @@ end
 """
     SymbolicIndexingInterface.variable_symbols(nw::Network)
 
-Returns a vector of all symbolic network indices which in the same order as
+Returns a vector of all symbolic network indices in the same order as
 the flat state vector.
 
 See also: [`NWState`](@ref), [`uflat`](@ref).
@@ -477,7 +477,7 @@ end
 """
     SymbolicIndexingInterface.parameter_symbols(nw::Network)
 
-Returns a vector of all symbolic network indices which in the same order as
+Returns a vector of all symbolic network indices in the same order as
 the flat parameter vector.
 
 See also: [`NWParameter`](@ref), [`NWState`](@ref), [`pflat`](@ref).
@@ -554,7 +554,7 @@ end
 
 Save the current parameter values in the integrator. Call this function inside callbacks
 if the parameter values have changed. This will store a timeseries of said parameters in the
-solution object, thus alowing us to recosntruct observables which depend on time-dependet variables.
+solution object, thus allowing us to reconstruct observables which depend on time-dependent parameters.
 """
 function save_parameters!(integrator::SciMLBase.DEIntegrator)
     SciMLBase.save_discretes!(integrator, DEFAULT_PARA_TS_IDX)

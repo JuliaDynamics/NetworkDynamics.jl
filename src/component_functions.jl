@@ -40,7 +40,7 @@ struct NoFeedForward <: FeedForwardType end
 """
     PureStateMap <: FeedForwardType
 
-Trait for component output functions `g` that only depends on state:
+Trait for component output functions `g` that only depend on the state:
 
     g!(outs..., x)
 
@@ -58,14 +58,14 @@ function fftype end
 """
     hasfftype(x)
 
-Defaults to false. Musst be overloaded for objects for which `fftype(x)` is defined.
+Defaults to false. Must be overloaded for objects for which `fftype(x)` is defined.
 """
 hasfftype(::Any) = false
 hasff(x) = fftype(x) isa Union{PureFeedForward, FeedForward}
 
 """
     StateMask(i::AbstractArray)
-    StateMaks(i::Number)
+    StateMask(i::Number)
 
 A `StateMask` is a predefined output function. It can be used to define
 the output of a component model by picking from the internal state.
@@ -76,7 +76,7 @@ the indices, e.g. `g=1:2`.
 
 For [`EdgeModel`](@ref) this needs to be combined with a [`Directed`](@ref),
 [`Symmetric`](@ref), [`AntiSymmetric`](@ref) or [`Fiducial`](@ref) coupling, e.g.
-`g=Fiducial(1:2, 3:4)` forwards states 1:2 to dst and states 3:4 to src.
+`g=Fiducial(1:2, 3:4)` forwards states 1:2 to src and states 3:4 to dst.
 """
 struct StateMask{N,I}
     idxs::I
@@ -104,13 +104,13 @@ abstract type SingleSidedOutputWrapper end
 """
     AntiSymmetric(g_dst)
 
-Wraps a single-sided output function `g_dst` turns it into a double sided
+Wraps a single-sided output function `g_dst` and turns it into a double sided
 output function which applies
 
     y_dst = g_dst(...)
     y_src = -y_dst
 
-`g_dst` can be a `Number`/`AbstractArray` to impicitly wrap the corresponding [`StateMask`](@ref).
+`g_dst` can be a `Number`/`AbstractArray` to implicitly wrap the corresponding [`StateMask`](@ref).
 
 See also [`Symmetric`](@ref), [`Directed`](@ref), [`Fiducial`](@ref) and [`StateMask`](@ref).
 """
@@ -129,13 +129,13 @@ end
 """
     Symmetric(g)
 
-Wraps a single-sided output function `g` turns it into a double sided
+Wraps a single-sided output function `g` and turns it into a double sided
 output function which applies
 
     y_dst = g(...)
     y_src = y_dst
 
-`g` can be a `Number`/`AbstractArray` to impicitly wrap the corresponding [`StateMask`](@ref).
+`g` can be a `Number`/`AbstractArray` to implicitly wrap the corresponding [`StateMask`](@ref).
 
 See also [`AntiSymmetric`](@ref), [`Directed`](@ref), [`Fiducial`](@ref) and [`StateMask`](@ref).
 """
@@ -154,13 +154,13 @@ end
 """
     Directed(g_dst)
 
-Wraps a single-sided output function `g_dst` turns it into a double sided
+Wraps a single-sided output function `g_dst` and turns it into a double sided
 output function which applies
 
     y_dst = g_dst(...)
 
 With `Directed` there is no output for the `src` side.
-`g_dst` can be a `Number`/`AbstractArray` to impicitly wrap the corresponding [`StateMask`](@ref).
+`g_dst` can be a `Number`/`AbstractArray` to implicitly wrap the corresponding [`StateMask`](@ref).
 
 See also [`AntiSymmetric`](@ref), [`Symmetric`](@ref), [`Fiducial`](@ref) and [`StateMask`](@ref).
 """
@@ -177,15 +177,15 @@ end
 """
     Fiducial(g_src, g_dst)
 
-Wraps two single-sided output function `g_src` and `g_dst` and turns them
+Wraps two single-sided output functions `g_src` and `g_dst` and turns them
 into a double sided output function which applies
 
-    y_dst = g_src(...)
-    y_src = g_dst(...)
+    y_src = g_src(...)
+    y_dst = g_dst(...)
 
-`g` can be a `Number`/`AbstractArray` to impicitly wrap the corresponding [`StateMask`](@ref).
+`g_src` and `g_dst` can be a `Number`/`AbstractArray` to implicitly wrap the corresponding [`StateMask`](@ref).
 
-See also [`AntiSymmetric`](@ref), [`Directed`](@ref), [`Fiducial`](@ref) and [`StateMask`](@ref).
+See also [`AntiSymmetric`](@ref), [`Symmetric`](@ref), [`Directed`](@ref) and [`StateMask`](@ref).
 """
 struct Fiducial{GS,GD} <: SingleSidedOutputWrapper
     src::GS
@@ -280,19 +280,19 @@ Build a `VertexModel` according to the keyword arguments.
 
 Main Arguments:
 - `f=nothing`: Dynamic function of the component. Can be nothing if `dim` is 0.
-- `g`: Output function of the component. Usefull helpers: [`StateMask`](@ref)
-- `sym`/`dim`: Symbolic names of the states. If `dim` is provided, `sym` is set automaticially.
+- `g`: Output function of the component. Useful helpers: [`StateMask`](@ref)
+- `sym`/`dim`: Symbolic names of the states. If `dim` is provided, `sym` is set automatically.
 - `outsym`/`outdim`:
-   Symbolic names of the outputs. If `outdim` is provided, `outsym` is set automaticially.
-   Can be infered automaticially if `g` isa `StateMask`.
-- `psym`/`pdim=0`: Symbolic names of the parameters. If `pdim` is provided, `psym` is set automaticially.
+   Symbolic names of the outputs. If `outdim` is provided, `outsym` is set automatically.
+   Can be inferred automatically if `g` isa `StateMask`.
+- `psym`/`pdim=0`: Symbolic names of the parameters. If `pdim` is provided, `psym` is set automatically.
 - `mass_matrix=I`: Mass matrix of component. Can be a vector `v` and is then interpreted as `Diagonal(v)`.
 - `name=dim>0 ? :VertexM : :StaticVertexM`: Name of the component.
 
 Optional Arguments:
-- `insym`/`indim`: Symbolic names of the inputs. If `indim` is provided, `insym` is set automaticially.
+- `insym`/`indim`: Symbolic names of the inputs. If `indim` is provided, `insym` is set automatically.
 - `vidx`: Index of the vertex in the graph, enables graphless constructor.
-- `ff`: `FeedForwardType` of component. Will be typically infered from `g` automaticially.
+- `ff`: `FeedForwardType` of component. Will typically be inferred from `g` automatically.
 - `obssym`/`obsf`: Define additional "observable" states.
 - `aliasmap`: AliasMap of observables which are pure aliases of other symbols.
 - `symmetadata`/`metadata`: Provide prefilled metadata dictionaries.
@@ -333,26 +333,26 @@ end
 """
     EdgeModel(; kwargs...)
 
-Build a `EdgeModel` according to the keyword arguments.
+Build an `EdgeModel` according to the keyword arguments.
 
 Main Arguments:
 - `f=nothing`: Dynamic function of the component. Can be nothing if `dim` is 0.
-- `g`: Output function of the component. Usefull helpers: [`AntiSymmetric`](@ref), [`Symmetric`](@ref), [`Fiducial`](@ref), [`Directed`](@ref) and [`StateMask`](@ref).
-- `sym`/`dim`: Symbolic names of the states. If `dim` is provided, `sym` is set automaticially.
+- `g`: Output function of the component. Useful helpers: [`AntiSymmetric`](@ref), [`Symmetric`](@ref), [`Fiducial`](@ref), [`Directed`](@ref) and [`StateMask`](@ref).
+- `sym`/`dim`: Symbolic names of the states. If `dim` is provided, `sym` is set automatically.
 - `outsym`/`outdim`:
-   Symbolic names of the outputs. If `outdim` is provided, `outsym` is set automaticially.
+   Symbolic names of the outputs. If `outdim` is provided, `outsym` is set automatically.
    In general, outsym for edges isa named tuple `(; src, dst)`. However, depending on the `g` function,
    it might be enough to provide a single vector or even nothing (e.g. `AntiSymmetric(StateMask(1:2))`).
    See [Building `EdgeModel`s](@ref) for examples.
-- `psym`/`pdim=0`: Symbolic names of the parameters. If `pdim` is provided, `psym` is set automaticially.
+- `psym`/`pdim=0`: Symbolic names of the parameters. If `pdim` is provided, `psym` is set automatically.
 - `mass_matrix=I`: Mass matrix of component. Can be a vector `v` and is then interpreted as `Diagonal(v)`.
 - `name=dim>0 ? :EdgeM : :StaticEdgeM`: Name of the component.
 
 Optional Arguments:
-- `insym`/`indim`: Symbolic names of the inputs. If `indim` is provided, `insym` is set automaticially.
-   For edges, `insym` is a named tuple `(; src, dst)`. If give as vector tuple is created automaticially.
+- `insym`/`indim`: Symbolic names of the inputs. If `indim` is provided, `insym` is set automatically.
+   For edges, `insym` is a named tuple `(; src, dst)`. If given as a vector, the tuple is created automatically.
 - `src`/`dst`: Index or name of the vertices at src and dst end. Enables graphless constructor.
-- `ff`: `FeedForwardType` of component. Will be typically infered from `g` automaticially.
+- `ff`: `FeedForwardType` of component. Will typically be inferred from `g` automatically.
 - `obssym`/`obsf`: Define additional "observable" states.
 - `aliasmap`: AliasMap of observables which are pure aliases of other symbols.
 - `symmetadata`/`metadata`: Provide prefilled metadata dictionaries.
@@ -403,7 +403,7 @@ sym(c::ComponentModel)::Vector{Symbol} = c.sym
 
 """
     outdim(c::VertexModel)::Int
-    outdim(c::EdgeModel)::@NamedTuple(src::Int, dst::Int)
+    outdim(c::EdgeModel)::@NamedTuple{src::Int, dst::Int}
 
 Retrieve the output dimension of the component
 """
@@ -414,8 +414,8 @@ outdim_src(c::EdgeModel) = length(outsym(c).src)
 outdim_dst(c::EdgeModel) = length(outsym(c).dst)
 
 """
-   outsym(c::VertexModel)::Vector{Symbol}
-   outsym(c::EdgeModel)::@NamedTuple{src::Vector{Symbol}, dst::Vector{Symbol}}
+    outsym(c::VertexModel)::Vector{Symbol}
+    outsym(c::EdgeModel)::@NamedTuple{src::Vector{Symbol}, dst::Vector{Symbol}}
 
 Retrieve the output symbols of the component.
 """
@@ -455,7 +455,7 @@ obssym(c::ComponentModel)::Vector{Symbol} = c.obssym
 Retrieve the metadata dictionary for the symbols. Keys are the names of the
 symbols as they appear in [`sym`](@ref), [`psym`](@ref), [`obssym`](@ref) and [`insym`](@ref).
 
-See also [`symmetadata`](@ref)
+See also [`metadata`](@ref)
 """
 symmetadata(c::ComponentModel)::Dict{Symbol,Dict{Symbol,Any}} = c.symmetadata
 
@@ -464,20 +464,20 @@ symmetadata(c::ComponentModel)::Dict{Symbol,Dict{Symbol,Any}} = c.symmetadata
 
 Retrieve metadata object for the component.
 
-See also [`metadata`](@ref)
+See also [`symmetadata`](@ref)
 """
 metadata(c::ComponentModel)::Dict{Symbol,Any} = c.metadata
 
 """
     hasinsym(c::ComponentModel)
 
-Checks if the optioan field `insym` is present in the component model.
+Checks if the optional field `insym` is present in the component model.
 """
 hasinsym(c::ComponentModel) = !isnothing(c.insym)
 """
     hasindim(c::ComponentModel)
 
-Checks if the optioan field `insym` is present in the component model.
+Checks if the component model has inputs. Same as [`hasinsym`](@ref).
 """
 hasindim(c::ComponentModel) = hasinsym(c)
 
@@ -485,7 +485,7 @@ hasindim(c::ComponentModel) = hasinsym(c)
     insym(c::VertexModel)::Vector{Symbol}
     insym(c::EdgeModel)::@NamedTuple{src::Vector{Symbol}, dst::Vector{Symbol}}
 
-Musst be called *after* [`hasinsym`](@ref)/[`hasindim`](@ref) returned true.
+Must be called *after* [`hasinsym`](@ref)/[`hasindim`](@ref) returned true.
 Gives the `insym` vector(s). For vertex model just a single vector, for
 edges it returns a named tuple `(; src, dst)` with two symbol vectors.
 """
@@ -501,7 +501,7 @@ insym_flat(c::EdgeModel) = collect(insym_all(c))
     indim(c::VertexModel)::Int
     indim(c::EdgeModel)::@NamedTuple{src::Int,dst::Int}
 
-Musst be called *after* [`hasinsym`](@ref)/[`hasindim`](@ref) returned true.
+Must be called *after* [`hasinsym`](@ref)/[`hasindim`](@ref) returned true.
 Gives the input dimension(s).
 """
 indim(c::VertexModel)::Int = length(insym(c))
@@ -1192,7 +1192,7 @@ _gargs(::PureStateMap, outs, du, u, ins, p, t) = (outs..., u)
 
 Takes `VertexModel` `v` with feed forward and turns all algebraic output
 states into internal states by defining algebraic constraints
-contraints `0 = out - g(...)`. The new output function is
+`0 = out - g(...)`. The new output function is
 just a [`StateMask`](@ref) into the extended internal state vector.
 
 Returns the transformed `VertexModel`.

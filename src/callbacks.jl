@@ -18,7 +18,7 @@ abstract type ComponentCallback end
 """
     ComponentCondition(f::Function, sym)
 
-Creates a callback condition for a [`ComponentCallback`].
+Creates a callback condition for a [`NetworkDynamics.ComponentCallback`](@ref).
 - `f`: The condition function. Must be a function of the form `out=f(u, t)`
   when used for [`ContinuousComponentCallback`](@ref) or
   [`DiscreteComponentCallback`](@ref) and `f!(out, u, t)` when used for
@@ -60,7 +60,7 @@ end
 """
     ComponentAffect(f::Function, sym)
 
-Creates a callback affect for a [`ComponentCallback`].
+Creates a callback affect for a [`NetworkDynamics.ComponentCallback`](@ref).
 - `f`: The affect function. Must be a function of the form `f(u, [event_signs], ctx)` where `event_signs`
   is only available in [`VectorContinuousComponentCallback`](@ref).
   - Arguments of `f`
@@ -129,7 +129,7 @@ It defaults to the same `affect` as on upcrossing.
 
 The `kwargs` will be forwarded to the `VectorContinuousCallback` when the component based
 callbacks are collected for the whole network using `get_callbacks`.
-[`DiffEq.jl docs`](https://docs.sciml.ai/DiffEqDocs/stable/features/callback_functions/)
+See the [`DiffEq.jl docs`](https://docs.sciml.ai/DiffEqDocs/stable/features/callback_functions/)
 for available options.
 """
 struct ContinuousComponentCallback{
@@ -171,7 +171,7 @@ resolving the crossing direction (and any simultaneous crossings) itself. See
 
 The `kwargs` will be forwarded to the `VectorContinuousCallback` when the component based
 callbacks are collected for the whole network using [`get_callbacks(::Network)`](@ref).
-[`DiffEq.jl docs`](https://docs.sciml.ai/DiffEqDocs/stable/features/callback_functions/)
+See the [`DiffEq.jl docs`](https://docs.sciml.ai/DiffEqDocs/stable/features/callback_functions/)
 for available options.
 """
 struct VectorContinuousComponentCallback{
@@ -197,11 +197,11 @@ discrete callback which can be attached to a component model using
 [`add_callback!`](@ref) or [`set_callback!`](@ref).
 
 Note that the `condition` function returns a boolean value, as the discrete
-callback perform no rootfinding.
+callback performs no rootfinding.
 
 The `kwargs` will be forwarded to the `DiscreteCallback` when the component based
 callbacks are collected for the whole network using [`get_callbacks(::Network)`](@ref).
-[`DiffEq.jl docs`](https://docs.sciml.ai/DiffEqDocs/stable/features/callback_functions/)
+See the [`DiffEq.jl docs`](https://docs.sciml.ai/DiffEqDocs/stable/features/callback_functions/)
 for available options.
 
 With `iterative=true` the callback joins the network's event iteration: all iterative callbacks

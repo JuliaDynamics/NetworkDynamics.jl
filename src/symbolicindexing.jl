@@ -523,8 +523,8 @@ Generate collections of valid symbolic indices with flexible filtering criteria.
 - `s=true` - include states
 - `p=true` - include parameters
 - `out=true` - include outputs
-- `obs=false` - include observables
-- `in=false` - include inputs
+- `obs=true` - include observables
+- `in=true` - include inputs
 - `just_count=false` - return count instead of indices
 
 ## Examples
@@ -1040,7 +1040,7 @@ end
 
 Try to extract the `Network` object from thing.
 
-Thing can by many things, e.g. `ODEProblem`, `ODESolution`, `Integrator`, `NWState`, `NWParameter`, ...
+Thing can be many things, e.g. `ODEProblem`, `ODESolution`, `Integrator`, `NWState`, `NWParameter`, ...
 """
 function extract_nw(inpr)
     sc = SII.symbolic_container(inpr)
@@ -1086,7 +1086,7 @@ which can be used as an symbolic index. This is mainly intended for quick
 plotting or export of common "derived" variables, such as the argument of a
 2-component complex state. For example:
 
-    sol(t; idxs=@obsex(arg = atan(VIndex(1,:u_i), VIndex(1,:u_r))]
+    sol(t; idxs=@obsex(arg = atan(VIndex(1,:u_i), VIndex(1,:u_r))))
     sol(t; idxs=@obsex(δrel = VIndex(1,:δ) - VIndex(2,:δ)))
 
 """

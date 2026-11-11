@@ -64,11 +64,12 @@ Additional kw arguments:
 - `extin=nothing`: Provide external inputs as pairs, i.e. `extin=[:extvar => VIndex(1, :a)]`
    will bound the variable `extvar(t)` in the equations to the state `a` of the first vertex.
 - `ff_to_constraint=true`: Controls, whether output transformations `g` which depend on inputs should be
-  transformed into constraints. Defaults to true since ND.jl does not handle vertices with FF yet.
+  transformed into constraints. Defaults to true since ND.jl only supports vertices with FF as
+  injector nodes behind a [`LoopbackConnection`](@ref) (see [Injector Nodes](@ref injector-nodes)).
 - `assume_io_coupling=false`: If true, assumes direct dependency chain from outputs to inputs by adding
   implicit output terms to all inputs. This forces MTK to consider the dependency during compilation
   and can help in cases where MTK simplification results in derivatives of inputs.
-- `mtkcompile=nothing`: Controls the simplification backend. `false` (default) uses NetworkDynamics'
+- `mtkcompile=nothing`: Controls the simplification backend. `false` (the global default) uses NetworkDynamics'
   own algebraic reduction pipeline. `true` delegates to MTK's `mtkcompile` and requires
   `ModelingToolkit` to be loaded (errors otherwise). `nothing` inherits the global
   default set via `NetworkDynamics.set_mtkcompile!`. `:compare` runs both and prints a comparison
@@ -101,7 +102,7 @@ end
 """
     EdgeModel(sys::System, srcin, dstin, AntiSymmetric(dstout); kwargs...)
 
-Create a `EdgeModel` object from a given `System` created with ModelingToolkit for **single sided models**.
+Create an `EdgeModel` object from a given `System` created with ModelingToolkitBase for **single sided models**.
 
 Here you only need to provide one list of output symbols: `dstout`.
 To make it clear how to handle the single-sided output definition, you must wrap
@@ -119,7 +120,7 @@ EdgeModel(sys::System, srcin, dstin, dstout; kwargs...) = EdgeModel(sys, srcin, 
               verbose=false, name=getname(sys), extin=nothing, ff_to_constraint=false,
               mtkcompile=nothing, kwargs...)
 
-Create a `EdgeModel` object from a given `System` created with ModelingToolkitBase.
+Create an `EdgeModel` object from a given `System` created with ModelingToolkitBase.
 You need to provide 4 lists of symbolic names (`Symbol` or `Vector{Symbols}`):
 - `srcin`: names of variables in your equation representing the node state at the source
 - `dstin`: names of variables in your equation representing the node state at the destination
@@ -135,7 +136,7 @@ Additional kw arguments:
 - `assume_io_coupling=false`: If true, assumes direct dependency chain from outputs to inputs by adding
   implicit output terms to all inputs. This forces MTK to consider the dependency during compilation
   and can help in cases where MTK simplification results in derivatives of inputs.
-- `mtkcompile=nothing`: Controls the simplification backend. `false` (default) uses NetworkDynamics'
+- `mtkcompile=nothing`: Controls the simplification backend. `false` (the global default) uses NetworkDynamics'
   own algebraic reduction pipeline. `true` delegates to MTK's `mtkcompile` and requires
   `ModelingToolkit` to be loaded (errors otherwise). `nothing` inherits the global
   default set via `NetworkDynamics.set_mtkcompile!`. `:compare` runs both and prints a comparison

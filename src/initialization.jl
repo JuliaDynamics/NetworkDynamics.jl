@@ -1135,6 +1135,7 @@ initialize_docstring = raw"""
         additional_initconstraint=nothing,
         verbose=false,
         subverbose=false,
+        warn=true,
         tol=1e-10,
         nwtol=1e-10,
         t=NaN,
@@ -1168,6 +1169,7 @@ state again, as it is stored in the metadata.
 - `additional_initconstraint`: Dictionary mapping component indices (VIndex/EIndex) to additional initialization constraints.
 - `verbose`: Whether to print information about each component initialization
 - `subverbose`: Whether to print detailed information within component initialization. Can be Vector [VIndex(1), EIndex(3), ...] for selective output
+- `warn`: Whether to print warnings when a component initialization stalls or fails within tolerance
 - `tol`: Tolerance for individual component residuals. Checked against the raw residual
   `‖du‖` first, then (on a miss) against the Jacobian-row-scaled residual; both must miss to throw.
 - `nwtol`: Tolerance for the full network residual, with the same raw-then-scaled fallback as `tol`.
@@ -1499,7 +1501,7 @@ This function is particularly useful in two-step initialization workflows where 
 1. Solve a simplified static model first (using [`find_fixpoint`](@ref))
 2. Use the resulting interface values to initialize a more complex dynamic model componentwise.
 
-In that scenario, use `interface_values` to for the `default_overrides` argument of
+In that scenario, use `interface_values` for the `default_overrides` argument of
 [`initialize_componentwise`](@ref).
 
 See also: [`initialize_componentwise`](@ref), [`find_fixpoint`](@ref) and [`initialize_component`](@ref).

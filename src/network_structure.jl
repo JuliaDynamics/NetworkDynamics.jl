@@ -155,7 +155,7 @@ nvbatches(::Network) = length(vertexbatches)
     dim(nw::Network)
 
 Returns the number of dynamic states in the network,
-corresponts to the length of the flat state vector.
+corresponds to the length of the flat state vector.
 """
 dim(nw::Network) = dim(nw.im)
 
@@ -163,7 +163,7 @@ dim(nw::Network) = dim(nw.im)
     pdim(nw::Network)
 
 Returns the number of parameters in the network,
-corresponts to the length of the flat parameter vector.
+corresponds to the length of the flat parameter vector.
 """
 pdim(nw::Network) = pdim(nw.im)
 Graphs.nv(nw::Network) = nv(nw.im)
@@ -427,7 +427,7 @@ using `get_jac_prototype` and stores it in the network object.
 # Example Usage
 ```julia
 nw = Network(...)
-set_jac_prototype!(nw) # computs sparsity pattern and stores in network
+set_jac_prototype!(nw) # computes sparsity pattern and stores in network
 prob = ODEProblem(nw, x0, (0.0, 1.0), p0)
 sol = solve(prob, Rodas5P())
 ```

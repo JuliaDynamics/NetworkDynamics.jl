@@ -232,14 +232,14 @@ end
 #### SymbolicView helper type
 ####
 """
-    SymbolicView{N,VT} <: AbstractVetor{VT}
+    SymbolicView{N,VT} <: AbstractVector{VT}
 
 Is a (smallish) fixed size vector type with named dimensions.
-Its main purpose is to allow named acces to variables in
+Its main purpose is to allow named access to variables in
 [`ComponentCondition`](@ref) and [`ComponentAffect`](@ref) functions.
 
-I.e. when the `ComponentAffect` declared `sym=[:x, :y]`, you can
-acces `u[:x]` and `u[:y]` inside the condition function.
+I.e. when the `ComponentAffect` declares `sym=[:x, :y]`, you can
+access `u[:x]` and `u[:y]` inside the affect function.
 """
 struct SymbolicView{N,VT} <: AbstractVector{VT}
     v::VT
@@ -322,7 +322,7 @@ end
 # temp variable to splice docstring into ArgumentError in MTK Ext
 const implicit_output_docstring = """
 This is a helper function to define MTK models with **fully implicit outputs**.
-It is sort of a barrier for `Symbolics` to not descent in to the equation. When added to
+It is sort of a barrier for `Symbolics` to not descend into the equation. When added to
 an equation, it does nothing (defined as 0), but it tricks MTK/Symbolics into believing the
 equation depends on `x`. This can be necessary to define a model with fully implicit outputs.
 
@@ -619,7 +619,7 @@ Values are routed exactly like MTK routes `default` metadata at `System` constru
 that forwarded keywords behave like values written directly onto the declaration:
 
   * a **numeric** value becomes an ordinary default (initial condition), while
-  * a **symbolic** value becomes a parameter *binding* — `set_mtk_defaults(sys, K = K_e)`
+  * a **symbolic** value becomes a parameter *binding* — `set_mtk_defaults(sys, (; K = K_e))`
     is equivalent to declaring `@parameters K = K_e` inside `sys`. `mtkcompile` resolves
     bindings into observed equations: the bound parameter is demoted to an observable and
     the "true" parameter is the one it is bound to.
