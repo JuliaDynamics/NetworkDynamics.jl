@@ -115,25 +115,20 @@ function warn_missing_features(sys)
     cev = _collect_continuous_events(sys)
     dev = _collect_discrete_events(sys)
     if !isempty(cev) || !isempty(dev)
-        @warn "MTK-Model $(sys.name) contains events. They will be ignored by NetworkDynamics.jl. Use ComponentCallbacks on a component level for that!"
+        @warn "MTK-Model $(nameof(sys)) contains events. They will be ignored by NetworkDynamics.jl. Use ComponentCallbacks on a component level for that!"
     end
 
     if !isempty(ModelingToolkitBase.initialization_equations(sys))
         @warn "Model has explicit init equation. Those are currently ignored by NetworkDynamics.jl."
     end
 
+    # flattening is costly, so the variables of each level are checked first and the
+    # flattened ones only collected to name the culprits
+    _has_unsupported_variables(sys) || return
     vars = parameters(sys) ∪ unknowns(sys)
-    calls = filter(iscall, vars)
-    any(x -> operation(x) === Base.getindex, calls) && @warn "NetworkDynamics does not support vector-variables or vector-parameters in MTK models. Detected: $(join(repr.(filter(x -> operation(x) === Base.getindex, calls)), ", "))"
+    any(_is_vector_variable, vars) && @warn "NetworkDynamics does not support vector-variables or vector-parameters in MTK models. Detected: $(join(repr.(filter(_is_vector_variable, vars)), ", "))"
 
-    # `@discretes` symbols land in `parameters` or `unknowns` depending on how the `System`
-    # was built, so check both. `VariableSource` is the macro that declared a symbol;
-    # anything not from a variable macro carries no source.
-    has_discretes = any(vars) do s
-        src = SymbolicUtils.getmetadata(s, Symbolics.VariableSource, nothing)
-        src isa NTuple{2,Symbol} && first(src) === :discretes
-    end
-    if has_discretes
+    if any(_is_discrete, vars)
         @warn "Model contains variables defined via @discretes. This is not supported in NetworkDynamics. \
         For discretely changing variables use normal @parameters with callbacks on the component level."
     end
@@ -149,6 +144,21 @@ function _collect_discrete_events(sys)
         ModelingToolkitBase.get_discrete_events(sys),
         [_collect_discrete_events(sys) for sys in ModelingToolkitBase.get_systems(sys)]...
     )
+end
+function _has_unsupported_variables(sys)
+    found = false
+    _foreach_level(sys) do s, _
+        vars = Iterators.flatten((ModelingToolkitBase.get_unknowns(s), ModelingToolkitBase.get_ps(s)))
+        found = found || any(v -> _is_vector_variable(v) || _is_discrete(v), vars)
+    end
+    found
+end
+_is_vector_variable(v) = iscall(v) && operation(v) === Base.getindex
+# `@discretes` symbols land in `parameters` or `unknowns` depending on how the `System` was
+# built, so both are checked. `VariableSource` is the macro that declared a symbol.
+function _is_discrete(v)
+    src = SymbolicUtils.getmetadata(v, Symbolics.VariableSource, nothing)
+    src isa NTuple{2,Symbol} && first(src) === :discretes
 end
 
 function check_metadata(exprs)
@@ -437,7 +447,7 @@ end
 # A value is a *symbolic constant* iff it has no free variables: a plain `Number`, or a
 # `BasicSymbolic` that folds to one (e.g. an MTKv11 literal `0.0`, or `sqrt(2)`). A value that
 # references other variables/parameters is NOT constant; only constants are stored as plain
-# `:guess` metadata. A non-constant `:guess` is rejected by `_get_metadata` — the `guessf`
+# `:guess` metadata. A non-constant `:guess` is rejected by `symbol_metadata_cache` — the `guessf`
 # variable option (or `set_guessf`) is the way to spell a symbolic guess.
 is_symbolic_constant(x) = (u = unwrap(x); u isa Number || isempty(get_variables(u)))
 
@@ -510,7 +520,8 @@ Symbolic metadata type backing `@parameters S_b [bound_to = :busbar₊S_b]`. Dec
 parameter is a structural alias of another symbol in the *same* component. Realized as a real
 MTK binding in the `VertexModel`/`EdgeModel` constructor, before compilation (see
 [`resolve_bound_to`](@ref)): the bound parameter is demoted to an observable of its target and
-leaves `psym`, so there is exactly one true parameter for the quantity.
+leaves `psym`, so there is exactly one true parameter for the quantity. The observable keeps the
+target's name as `:bound_to` symbol metadata.
 
 The metadata value is the target's full (namespaced with `₊`) symbol name. `bound_to` is
 component-local — the structural binding can only be injected before compilation, so the target
@@ -557,37 +568,138 @@ _unquote_sym(x::QuoteNode) = x.value
 _unquote_sym(x::Symbol) = x
 
 """
-    resolve_bound_to(sys) -> System
+    symbol_metadata_cache(sys) -> OrderedDict{Symbol, Dict{Symbol,Any}}
+
+The metadata `VertexModel`/`EdgeModel` attach to each symbol of `sys`, keyed by its full name.
+Defaults and guesses come from MTK's merged `initial_conditions` and `guesses`. Everything else
+(bounds, description, `default_from`, `bound_to`) is read off each variable on its own level,
+which saves MTK's costly renaming of every variable.
+"""
+function symbol_metadata_cache(sys)
+    mdcache = OrderedDict{Symbol, Dict{Symbol,Any}}()
+    _foreach_level(sys) do s, path
+        for v in ModelingToolkitBase.get_unknowns(s)
+            _add_symbol_metadata!(mdcache, sys, path, v, false)
+        end
+        for v in ModelingToolkitBase.get_ps(s)
+            _add_symbol_metadata!(mdcache, sys, path, v, true)
+        end
+        for eq in ModelingToolkitBase.get_observed(s)
+            _add_symbol_metadata!(mdcache, sys, path, eq.lhs, false)
+        end
+    end
+    for (k, v) in initial_conditions(sys)
+        md = get(mdcache, getname(k), nothing)
+        isnothing(md) || (md[:default] = unwrap_const(v))
+    end
+    for (k, v) in ModelingToolkitBase.guesses(sys)
+        md = get(mdcache, getname(k), nothing)
+        isnothing(md) && continue
+        guess = unwrap_const(v)
+        is_symbolic_constant(guess) || throw(ArgumentError(
+            "Symbolic guess `$(getname(k)) => $guess` is not supported: the `guess` option only \
+             takes constant values. Use the `guessf` variable option \
+             (`@variables $(getname(k)) [guessf = $guess]`) or `set_guessf` to declare a guess \
+             formula instead."))
+        md[:guess] = symbolic_constant_value(guess)
+    end
+    mdcache
+end
+function _add_symbol_metadata!(mdcache, sys, path, v, isparam)
+    v = unwrap(v)
+    # e.g. the `Initial(x)` parameters of an already compiled system
+    ModelingToolkitBase.hasname(v) || return
+    name = _full_name(path, v)
+    # levels are visited parents first, so a ParentScope copy from below doesn't win
+    haskey(mdcache, name) && return
+
+    md = Dict{Symbol,Any}()
+    if ModelingToolkitBase.hasbounds(v)
+        md[:bounds] = ModelingToolkitBase.getbounds(v)
+    end
+    if ModelingToolkitBase.hasdescription(v)
+        md[:description] = ModelingToolkitBase.getdescription(v)
+    end
+    default_from = Symbolics.getmetadata(v, ParameterDefaultFrom, nothing)
+    if !isnothing(default_from)
+        md[:default_from] = normalize_default_from(default_from)
+    end
+    bound_to = Symbolics.getmetadata(v, ParameterBoundTo, nothing)
+    if !isnothing(bound_to)
+        isparam || throw(ArgumentError(
+            "`bound_to` on `$name` is invalid: it only applies to parameters, but `$name` is \
+             not a parameter of component `$(getname(sys))`."))
+        md[:bound_to] = _unquote_sym(bound_to)
+    end
+    mdcache[name] = md
+end
+# The name `unknowns(sys)` would give a variable declared on the level at the end of `path`.
+# Each level on the way up adds its name, unless a ParentScope skips it or a GlobalScope stops.
+function _full_name(path, v)
+    MTKB = ModelingToolkitBase
+    name::Symbol = getname(v)
+    scope = Symbolics.getmetadata(v, MTKB.SymScope, MTKB.LocalScope())
+    for level in Iterators.reverse(path)
+        if scope isa MTKB.LocalScope
+            name = Symbol(level, "₊", name)
+        elseif scope isa MTKB.ParentScope
+            scope = scope.parent
+        elseif scope isa MTKB.GlobalScope
+            break
+        else
+            error()
+        end
+    end
+    name
+end
+
+# Calls `f(s, path)` for `sys` and all its subsystems, parents first. `path` holds the names of
+# the subsystems from below the top down to `s`.
+function _foreach_level(f, sys, path=Symbol[])
+    f(sys, path)
+    for s in ModelingToolkitBase.get_systems(sys)
+        _foreach_level(f, s, [path; nameof(s)])
+    end
+    nothing
+end
+
+# The entries of the `symbol_metadata_cache` which belong to the component built from `gen`,
+# with its unused parameters marked.
+function component_symmetadata(mdcache, gen, ins, outs)
+    symmetadata = Dict{Symbol,Dict{Symbol,Any}}()
+    for s in Iterators.flatten((gen.states, gen.params, gen.obsstates, ins..., outs...))
+        sname = getname(s)
+        if haskey(mdcache, sname)
+            symmetadata[sname] = mdcache[sname]
+        end
+    end
+    for p in gen.unused_params
+        mdforp = get!(symmetadata, getname(p), Dict{Symbol,Any}())
+        mdforp[:unused] = true
+    end
+    symmetadata
+end
+
+"""
+    resolve_bound_to(sys, mdcache) -> System
 
 Turn `bound_to` parameter metadata into MTK bindings before compilation. For each parameter
 `@parameters p [bound_to = :target]`, inject the binding `p = target` (via
 [`set_mtk_defaults`](@ref)), so that `complete`/`mtkcompile` demotes `p` to an observable while
 `target` stays the parameter. Returns `sys` unchanged if no parameter carries `bound_to`.
+The parameters are found in `mdcache`, the [`symbol_metadata_cache`](@ref) of `sys`.
 
 Errors if a `bound_to` parameter also has an explicit default (contradictory intent) or if the
 target cannot be resolved in the component. See [`ParameterBoundTo`](@ref).
 """
-function resolve_bound_to(sys)
-    ps = parameters(sys)
-    pset = Set(unwrap.(ps))
-    defs = initial_conditions(sys)
+function resolve_bound_to(sys, mdcache)
     bindings = Pair{Symbol,Any}[]
-    # every symbol that could carry `bound_to` metadata — parameters, states, observed. It is
-    # only meaningful on a parameter (it becomes an MTK binding); anywhere else is a mistake.
-    candidates = Iterators.flatten((ps, unknowns(sys), (eq.lhs for eq in observed(sys))))
-    for v in candidates
-        uv = unwrap(v)
-        target = Symbolics.getmetadata(uv, ParameterBoundTo, nothing)
-        isnothing(target) && continue
-        if uv ∉ pset
+    for (name, md) in mdcache
+        haskey(md, :bound_to) || continue
+        tname = md[:bound_to]
+        if haskey(md, :default)
             throw(ArgumentError(
-                "`bound_to` on `$(getname(v))` is invalid: it only applies to parameters, but \
-                 `$(getname(v))` is not a parameter of component `$(getname(sys))`."))
-        end
-        tname = target isa QuoteNode ? target.value : target
-        if haskey(defs, v)
-            throw(ArgumentError(
-                "Parameter `$(getname(v))` has both an explicit default (`$(defs[v])`) and \
+                "Parameter `$name` has both an explicit default (`$(md[:default])`) and \
                  `bound_to = $tname`. These are contradictory: a `bound_to` parameter is \
                  eliminated from the parameters. Remove the default or the binding."))
         end
@@ -595,10 +707,11 @@ function resolve_bound_to(sys)
             getproperty_symbolic(sys, tname; might_contain_toplevel_ns=false)
         catch
             throw(ArgumentError(
-                "`bound_to = $tname` on parameter `$(getname(v))` could not be resolved in \
-                 component `$(getname(sys))`. Available parameters: $(sort(getname.(ps)))."))
+                "`bound_to = $tname` on parameter `$name` could not be resolved in \
+                 component `$(getname(sys))`. Available parameters: \
+                 $(sort(getname.(parameters(sys))))."))
         end
-        push!(bindings, getname(v) => tsym)
+        push!(bindings, name => tsym)
     end
     isempty(bindings) && return sys
     NetworkDynamics.set_mtk_defaults(sys, (; bindings...))
@@ -813,19 +926,19 @@ function _resolve_formula(lhs_sym, rhs_expr; kind, weak::Bool=false, optional::B
 end
 
 """
-    add_initformula_lenient!(c, formula)
-    add_guessformula_lenient!(c, formula)
+    add_initformula_lenient!(c, formula; symbolcache=nothing)
+    add_guessformula_lenient!(c, formula; symbolcache=nothing)
 
 Attach an MTK-lowered formula to a compiled component, demoting the compatibility check to a
 warn-and-skip. Lowering is best effort: a recipe whose target or inputs did not survive
 simplification (or which references the independent variable directly) must not fail
 compilation — the model works without it, the initialization just knows less. Only the
 compatibility check is caught; the attach itself runs unchecked, having already been
-validated.
+validated. When attaching many formulas, pass one `NetworkDynamics.formula_symbolcache(c)`.
 """
-function add_initformula_lenient!(c, formula)
+function add_initformula_lenient!(c, formula; symbolcache=nothing)
     try
-        assert_initformula_compat(c, formula)
+        assert_initformula_compat(c, formula; symbolcache)
     catch e
         e isa ArgumentError || rethrow()
         @warn "Skipping an InitFormula which does not fit the compiled component :$(c.name): $(e.msg)" formula
@@ -834,9 +947,9 @@ function add_initformula_lenient!(c, formula)
     add_initformula!(c, formula; check=false)  # already validated
     nothing
 end
-function add_guessformula_lenient!(c, formula)
+function add_guessformula_lenient!(c, formula; symbolcache=nothing)
     try
-        assert_guessformula_compat(c, formula)
+        assert_guessformula_compat(c, formula; symbolcache)
     catch e
         e isa ArgumentError || rethrow()
         @warn "Skipping a GuessFormula which does not fit the compiled component :$(c.name): $(e.msg)" formula

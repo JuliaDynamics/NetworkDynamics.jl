@@ -2933,3 +2933,53 @@ end
     # whose slices are not merged, but when it runs serially it passes the views through. Which
     # one happens depends on free threads, so the result would be flaky.
 end
+
+@testset "symbol_metadata_cache names follow MTK scoping" begin
+    # `c` lives in the top system, two levels above the child which uses it. `explicit` lists it
+    # in the child's parameters too, so both levels carry their own copy of `c`.
+    function scope_child(; name, explicit=false)
+        @parameters c=1.0 [description = "child", bounds = (0, 1)]
+        c = ParentScope(ParentScope(c))
+        @parameters g=2.0
+        g = GlobalScope(g)
+        @parameters k=3.0
+        @variables a(t)=0.0 b(t)
+        eqs = [Dt(a) ~ -k * a + c + g, b ~ 2a]
+        explicit ? System(eqs, t, [a, b], [c, k, g]; name) : System(eqs, t; name)
+    end
+    function scope_parent(; name, declare_c=true, explicit=false)
+        @parameters c [description = "parent", guess = 5.0]
+        @variables y(t)
+        @named ch = scope_child(; explicit)
+        @named mid = System(Equation[], t; systems=[ch]) # extra level between parent and child
+        if declare_c
+            System([y ~ mid.ch.a], t, [y], [c]; systems=[mid], name)
+        else # MTK picks up `c` from the child's equations
+            System([y ~ mid.ch.a], t; systems=[mid], name)
+        end
+    end
+
+    @named declared = scope_parent()
+    @named implicit = scope_parent(declare_c=false)
+    @named twocopies = scope_parent(explicit=true)
+
+    for sys in (declared, implicit, twocopies, complete(declared))
+        mdcache = mtkext.symbol_metadata_cache(sys)
+        mtksyms = [unknowns(sys); parameters(sys); [eq.lhs for eq in observed(sys)]]
+        mtknames = ModelingToolkitBase.getname.(mtksyms)
+        @test Set(keys(mdcache)) == Set(mtknames)
+    end
+    @test haskey(mtkext.symbol_metadata_cache(complete(declared)), :g)
+
+    # only one copy of `c` in the tree: whichever level lists it
+    @test mtkext.symbol_metadata_cache(declared)[:c][:description] == "parent"
+    @test mtkext.symbol_metadata_cache(implicit)[:c][:description] == "child"
+    @test mtkext.symbol_metadata_cache(implicit)[:c][:bounds] == (0, 1)
+
+    # two copies: the parent's metadata wins as a whole, defaults and guesses are merged by MTK
+    md = mtkext.symbol_metadata_cache(twocopies)[:c]
+    @test md[:description] == "parent"
+    @test !haskey(md, :bounds)
+    @test md[:default] == 1.0
+    @test md[:guess] == 5.0
+end

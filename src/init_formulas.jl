@@ -562,21 +562,24 @@ function _formula_macro(type, ex; weak=false, optional=false)
 end
 
 # for metadata check, validates both input and output symbols
-assert_initformula_compat(cf::ComponentModel, c::InitFormula) = _assert_formula_compat(cf, c)
-assert_guessformula_compat(cf::ComponentModel, c::GuessFormula) = _assert_formula_compat(cf, c)
+assert_initformula_compat(cf::ComponentModel, c::InitFormula; kw...) = _assert_formula_compat(cf, c; kw...)
+assert_guessformula_compat(cf::ComponentModel, c::GuessFormula; kw...) = _assert_formula_compat(cf, c; kw...)
 
 # Observables are allowed on both ends. As an input the graph computes them, as an output the
 # formula either lands on an aliased symbol or asserts something that is checked after the solve.
-function _assert_formula_compat(cf::ComponentModel, c::Union{InitFormula,GuessFormula})
+# When checking many formulas, build the `symbolcache` once and pass it in.
+function _assert_formula_compat(cf::ComponentModel, c::Union{InitFormula,GuessFormula}; symbolcache=nothing)
     label = c isa InitFormula ? "InitFormula" : "GuessFormula"
-    settable = settable_symbols(cf)
+    if isnothing(symbolcache)
+        symbolcache = formula_symbolcache(cf)
+    end
 
-    input_mismatch = setdiff(c.sym, settable ∪ obssym(cf))
+    input_mismatch = setdiff(c.sym, symbolcache.input)
     if !isempty(input_mismatch)
         throw(ArgumentError("$label uses input symbols not part of component model: $input_mismatch"))
     end
 
-    output_mismatch = setdiff(c.outsym, settable ∪ keys(get_aliasmap(cf)) ∪ obssym(cf))
+    output_mismatch = setdiff(c.outsym, symbolcache.output)
     if !isempty(output_mismatch)
         throw(ArgumentError("$label output symbols must be settable component symbols, \
                              aliases thereof or observables (pins), but these are not: \
@@ -584,6 +587,12 @@ function _assert_formula_compat(cf::ComponentModel, c::Union{InitFormula,GuessFo
     end
 
     c
+end
+# The symbols a formula may read (`input`) and write (`output`) on component `cf`.
+function formula_symbolcache(cf::ComponentModel)
+    settable = settable_symbols(cf)
+    input = settable ∪ obssym(cf)
+    (; input, output = input ∪ keys(get_aliasmap(cf)))
 end
 
 """
