@@ -637,7 +637,7 @@ end
 # Each level on the way up adds its name, unless a ParentScope skips it or a GlobalScope stops.
 function _full_name(path, v)
     MTKB = ModelingToolkitBase
-    name = getname(v)
+    name::Symbol = getname(v)
     scope = Symbolics.getmetadata(v, MTKB.SymScope, MTKB.LocalScope())
     for level in Iterators.reverse(path)
         if scope isa MTKB.LocalScope
