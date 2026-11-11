@@ -114,7 +114,9 @@ function SciMLBase.ODEProblem(
 
     f = SciMLBase.ODEFunction{true, specialize}(nw)
     alias = _default_alias(alias)
-    SciMLBase.ODEProblem(f, args...; callback=finalcallback, initializealg, alias, kwargs...)
+    # no `callback` key at all without callbacks, like a plain ODEProblem
+    cbkw = isnothing(finalcallback) ? (;) : (; callback=finalcallback)
+    SciMLBase.ODEProblem(f, args...; cbkw..., initializealg, alias, kwargs...)
 end
 
 # Callbacks keep discrete state in `p`, so unless the user decides otherwise every solve gets

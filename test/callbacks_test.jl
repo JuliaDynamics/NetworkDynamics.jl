@@ -893,6 +893,13 @@ end
     s0 = NWState(nw)
     tspan = (0.0, 3.0)
 
+    @testset "no callbacks: no callback keyword" begin
+        # SciMLSensitivity fails on a stored `callback=nothing`
+        prob = ODEProblem(nw, s0, tspan)
+        @test isnothing(get_callbacks(nw))
+        @test !haskey(prob.kwargs, :callback)
+    end
+
     @testset "add_comp_cb: add component callbacks" begin
         empty!(triggered_comp)
         # Test adding component callback via keyword
