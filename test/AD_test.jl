@@ -84,10 +84,11 @@ end
     fp_mtk! = (du, p) -> nw_mtk(du, u_mtk, p, 0.0)
     Jx_mtk = jacobian(fx_mtk!, zeros(dim(nw_mtk)), AutoFiniteDiff(), u_mtk)
     Jp_mtk = jacobian(fp_mtk!, zeros(dim(nw_mtk)), AutoFiniteDiff(), p_mtk)
-    backends = [
-        "ReverseDiff" => AutoReverseDiff(),
-        "Enzyme rev"  => AutoEnzyme(; mode=EnzymeCore.Reverse, function_annotation=EnzymeCore.Const),
-    ]
+    backends = Pair{String,Any}["ReverseDiff" => AutoReverseDiff()]
+    # on Julia 1.10 Enzyme asks for runtime activity here
+    if VERSION ≥ v"1.13"
+        push!(backends, "Enzyme rev" => AutoEnzyme(; mode=EnzymeCore.Reverse, function_annotation=EnzymeCore.Const))
+    end
     @testset "$name" for (name, backend) in backends
         @test jacobian(fx_mtk!, zeros(dim(nw_mtk)), backend, u_mtk) ≈ Jx_mtk rtol=1e-5
         @test jacobian(fp_mtk!, zeros(dim(nw_mtk)), backend, p_mtk) ≈ Jp_mtk rtol=1e-5
