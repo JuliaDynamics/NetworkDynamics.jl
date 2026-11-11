@@ -162,7 +162,7 @@ nothing #hide #md
 
 #=
 We then create the network of nodes and edges by using the constructor `Network`. It combines the component
-model with the topological information contained in the graph **`g`** and returns an `Network` compatible with the
+model with the topological information contained in the graph **`g`** and returns a `Network` compatible with the
 solvers of `DifferentialEquations.jl`.
 =#
 nd = Network(g, nd_diffusion_vertex, nd_diffusion_edge)
