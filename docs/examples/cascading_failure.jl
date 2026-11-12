@@ -9,9 +9,9 @@ This script can be downloaded as a normal Julia script [here](@__NAME__.jl). #md
 > [1] Schäfer, B., Witthaut, D., Timme, M., & Latora, V. (2018). Dynamically induced cascading failures in power grids. Nature communications, 9(1), 1-13. https://www.nature.com/articles/s41467-018-04287-5
 
 This example has three subchapters:
- - first we [define the network model](#define-the-model),
- - secondly, we implement [component based callbacks](#component-based-callbacks) and
- - thirdly we solve the problem using [systemwide callbacks](#system-wide-callbacks).
+ - first we [define the network model](#Defining-the-Model),
+ - secondly, we implement [component based callbacks](#Component-based-Callbacks) and
+ - thirdly we solve the problem using [systemwide callbacks](#System-wide-Callbacks).
 
 
 The system is modeled using swing equation and active power edges. The nodes are
@@ -171,15 +171,22 @@ In order to implement the line failures, we need to create a `VectorContinuousCa
 In the callback, we compare the current flow on the line with the limit. If the limit is reached,
 the coupling `K` is set to 0.
 
-First we can define the affect function:
+First we define a function which trips a single line and the affect function of the
+callback. The affect receives a vector `event_signs` which is nonzero for every line
+whose condition crossed zero.
 =#
-function affect!(integrator, idx)
+function trip_line!(integrator, idx)
     println("Line $idx tripped at t=$(integrator.t)")
     p = NWParameter(integrator) # get indexable parameter object
     p.e[idx, :K] = 0
     auto_dt_reset!(integrator)
     save_parameters!(integrator)
     nothing
+end
+function affect!(integrator, event_signs)
+    for idx in findall(!iszero, event_signs)
+        trip_line!(integrator, idx)
+    end
 end
 nothing #hide #md
 
@@ -198,7 +205,7 @@ function naive_condition(out, u, t, integrator)
     ## therefore construct nwstate with Network info from integrator but u
     s = NWState(integrator, u, integrator.p, t)
     for i in eachindex(out)
-        out[i] = abs(s.e[i,:P]) - s.p.e[1,:limit] # compare flow with limit for line
+        out[i] = abs(s.e[i,:P]) - s.p.e[i,:limit] # compare flow with limit for line
     end
     nothing
 end
@@ -238,7 +245,16 @@ using a `PresetTimeCallback`.
 We see that every flow is below the trip value 1.0. Therefore we need to add a disturbance
 to the network. We do this by manually disabling line 5 at time 1.
 =#
-trip_first_cb = PresetTimeCallback(1.0, integrator->affect!(integrator, 5));
+trip_first_cb = PresetTimeCallback(1.0, integrator -> trip_line!(integrator, 5));
+
+#=
+The edge models still carry the component callbacks from the first part. They would
+trip the lines before our system-wide callback gets the chance, so we remove them.
+=#
+for i in 1:ne(g)
+    delete_callbacks!(nw, EIndex(i))
+end
+nothing #hide #md
 
 #=
 Now we are set for solving the system again. This time we create our own callback

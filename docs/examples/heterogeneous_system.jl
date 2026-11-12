@@ -81,8 +81,8 @@ static! = VertexModel(g=static_g, outsym=[:θ], psym=[:θfix => ω[1]], name=:st
 But wait! NetworkDynamics classified this as [`PureFeedForward`](@ref), because it cannot
 distinguish between the function signatures
 ```
-g(out, u, p, t)    # PureFeedForward
-g(out, ins, p, t)  # NoFeedForward
+g(out, u, p, t)    # NoFeedForward
+g(out, ins, p, t)  # PureFeedForward
 ```
 and since `dim(u)=0` it wrongfully assumes that the latter is meant.
 We can overwrite the classification by passing the ff keyword:
@@ -123,8 +123,6 @@ state = NWState(nw_hetero!)
 
 #=
 The node with inertia is two-dimensional, hence we need to specify two initial conditions.
-For the first dimension we keep the initial conditions from above and insert! another one into `x0` at
-the correct index.
 
 For the θ states we will use the same initial conditions as before:
 =#

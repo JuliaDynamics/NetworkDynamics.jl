@@ -96,7 +96,7 @@ dx = 1.0
 shift = 0.2
 g = SimpleGraph(2*N + 1)
 for i in 1:N
-    add_edge!(g, i, i+N); add_edge!(g, i, i+N)
+    add_edge!(g, i, i+N)
     if i < N
         add_edge!(g, i+1, i+N); add_edge!(g, i, i+1); add_edge!(g, i+N, i+N+1)
     end
@@ -206,3 +206,4 @@ record(fig, "truss.mp4", trange; framerate=fps) do t
     p.elabels = [@sprintf("%.0f", l) for l in load]
     fig
 end
+nothing #hide

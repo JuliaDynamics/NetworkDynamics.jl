@@ -46,7 +46,7 @@ end
 nothing #hide
 
 #=
-Now we'll define three specific node types:
+Now we'll define four specific node types:
 
 **A) A constant pressure node that forces pressure to maintain a specific value**
 =#
@@ -169,7 +169,7 @@ nothing #hide
 Our first step is to define a static model that we'll use to find the steady-state solution.
 This is a crucial step for initializing complex dynamic models.
 
-Step 1: Define all the components of our static model
+We start by defining all the components of our static model.
 First, node 1 is our producer which will later be a controlled producer. For initialization, we use a static model:
 =#
 @named v1_mod_static = ConstantPressureNode(p_set=1)
@@ -275,7 +275,7 @@ nw_dyn(du, uflat(u0_dyn), pflat(u0_dyn), 0.0)
 extrema(du .- zeros(dim(nw_dyn))) # very close to zero, confirming we have a steady state!
 
 # Alternatively, we can use the [`isfixpoint`](@ref) function to check if the state is a fixpoint:
-@assert isfixpoint(nw_dyn, u0_dyn)
+@assert isfixpoint(u0_dyn)
 nothing #hide
 
 #=
@@ -329,20 +329,24 @@ let
     for i in 1:3
         lines!(ax, sol; idxs=VIndex(i, :p), label="Node $i", color=Cycled(i))
     end
+    Legend(fig[1, 2], ax)
 
     ax = Axis(fig[2, 1]; title="Injection by producer")
     lines!(ax, sol; idxs=VIndex(1, :q̃_inj), label="Node 1", color=Cycled(1))
+    Legend(fig[2, 2], ax)
 
     ax = Axis(fig[3, 1]; title="Consumption by consumers")
     for i in 2:3
         lines!(ax, sol; idxs=@obsex(-1*VIndex(i, :q̃_inj)), label="Node $i", color=Cycled(i))
-        lines!(ax, sol; idxs=@obsex(-1*VIndex(i, :q̃_prosumer)), label="Node $i", linestyle=:dash, color=Cycled(i))
+        lines!(ax, sol; idxs=@obsex(-1*VIndex(i, :q̃_prosumer)), label="Node $i (demand)", linestyle=:dash, color=Cycled(i))
     end
+    Legend(fig[3, 2], ax)
 
     ax = Axis(fig[4, 1]; title="Flows through pipes")
     for i in 1:3
         lines!(ax, sol; idxs=@obsex(abs(EIndex(i, :q̃))), label="Pipe $i", color=Cycled(i))
     end
+    Legend(fig[4, 2], ax)
 
     fig
 end

@@ -12,7 +12,7 @@ This example can be downloaded as a normal Julia script [here](@__NAME__.jl). #m
 </div>
 ```
 
-The idea is to show the three Julia colors taking turns. For that we need a dynamical system
+To get there we need a dynamical system
 with three populations where one of them is dominant at all times, and where the dominance
 switches rather quickly from one to the next.
 =#
@@ -77,7 +77,7 @@ end
 fig
 
 #=
-At all times one species dominates, and the switch to the next one is fast.
+After a short transient one species dominates at all times, and the switch to the next one is fast.
 
 ## The Edges: Diffusion
 
@@ -208,9 +208,9 @@ The last section point is our starting point on the cycle, and the time between 
 three returns earlier is the period ``T``.
 =#
 k = findfirst(<(1e-6), return_distance)
+@assert k == 3 #hide
 z = section_points[end]
 T = section_times[end] - section_times[end-k]
-@assert k == 3 #hide
 
 #=
 To see how the areas trade colors, we simulate exactly one period, starting on the section.
