@@ -65,7 +65,7 @@ Additional kw arguments:
    will bound the variable `extvar(t)` in the equations to the state `a` of the first vertex.
 - `ff_to_constraint=true`: Controls, whether output transformations `g` which depend on inputs should be
   transformed into constraints. Defaults to true since ND.jl only supports vertices with FF as
-  injector nodes behind a [`LoopbackConnection`](@ref) (see [Injector Nodes](@ref injector-nodes)).
+  injector nodes behind a [`LoopbackConnection`](@ref NetworkDynamics.LoopbackConnection) (see [Injector Nodes](@ref injector-nodes)).
 - `assume_io_coupling=false`: If true, assumes direct dependency chain from outputs to inputs by adding
   implicit output terms to all inputs. This forces MTK to consider the dependency during compilation
   and can help in cases where MTK simplification results in derivatives of inputs.
