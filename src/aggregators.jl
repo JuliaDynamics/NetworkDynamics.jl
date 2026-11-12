@@ -1,17 +1,17 @@
 """
     abstract type Aggregator end
 
-Abstract sypertype for aggregators. Aggregators operate on the output buffer of
-all components and fill the aggregation buffer with the aggregatated edge values
+Abstract supertype for aggregators. Aggregators operate on the output buffer of
+all components and fill the aggregation buffer with the aggregated edge values
 per vertex.
 
 All aggregators have the constructor
 
-    Aggegator(aggfun)
+    Aggregator(aggfun)
 
 for example
 
-    SequentialAggreator(+)
+    SequentialAggregator(+)
 """
 abstract type Aggregator end
 

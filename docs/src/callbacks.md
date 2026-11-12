@@ -20,7 +20,8 @@ defining those callbacks on a component level and automatically combine them int
 The main entry points are the types [`ContinuousComponentCallback`](@ref),
 [`VectorContinuousComponentCallback`](@ref) and [`DiscreteComponentCallback`](@ref). All of those objects combine a [`ComponentCondition`](@ref) with an [`ComponentAffect`](@ref).
 
-The "normal" [`ContinuousComponentCallback`](@ref) and [`DiscreteComponentCallback`](@ref) have a condition which returns a single value. The corresponding affect is triggered when the return value hits zero.
+The "normal" [`ContinuousComponentCallback`](@ref) has a condition which returns a single value. The corresponding affect is triggered when the return value hits zero.
+The condition of a [`DiscreteComponentCallback`](@ref) returns a boolean instead, and the affect is triggered whenever it is `true`.
 In contrast, the "vector" version has an in-place condition which writes `len` outputs. When any of those outputs hits zero, the affect is triggered once with an additional argument `event_signs`: a length-`len` vector where entry `i` is `0` (no crossing), `+1` (upcrossing) or `-1` (downcrossing) for the `i`-th output. The affect resolves the crossing direction (and any simultaneous crossings) itself. This mirrors the `affect!(integrator, event_signs)` interface of the underlying [`VectorContinuousCallback`](@extref SciMLBase.VectorContinuousCallback).
 
 There is a special type [`PresetTimeComponentCallback`](@ref) which has no explicit condition and triggers the affect at given times.
@@ -207,7 +208,7 @@ Please note a few important things here:
    [`SII.variable_index`](@extref `SymbolicIndexingInterface.variable_index`) and
    [`SII.parameter_index`](@extref `SymbolicIndexingInterface.parameter_index`) for
    even better access patterns.
- - `t` refers to the current time of the zerocrossing-detection-algorithm. This is different from `integrator.t` which refers to the current timestep in which the zerocross-detectio takes place..
+ - `t` refers to the current time of the zerocrossing-detection-algorithm. This is different from `integrator.t` which refers to the current timestep in which the zerocrossing-detection takes place.
 
 ```julia
 function affect!(integrator, vidx)
@@ -217,13 +218,13 @@ function affect!(integrator, vidx)
     save_parameters!(integrator)
 end
 ```
-The affect function is much more straight forward, as it (typically) is called far less frequent and thus less perfomance critical.
+The affect function is much more straightforward, as it (typically) is called far less frequently and thus less performance critical.
 
 Once the `condition` and `affect!` is defined, you can use the [`SciMLBase.ContinuousCallback`](@extref) and [`SciMLBase.VectorContinuousCallback`](@extref) constructors to create the callback.
 
 !!! note "Introducing discontinuities with adaptive timestepping"
     Since changes to `u` and `p` mostly introduce discontinuities in the
-    solution, it is recommend to call [`auto_dt_reset!`](@extref
+    solution, it is recommended to call [`auto_dt_reset!`](@extref
     `SciMLBase.auto_dt_reset!`) within the affect to restart integration with
     small steps afterwards.
 

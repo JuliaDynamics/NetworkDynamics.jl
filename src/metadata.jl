@@ -95,7 +95,6 @@ or for a symbol referenced by `sni` in a network.
 For component models, you can also use a `String` or `Regex` pattern to match symbol names:
 - String patterns use substring matching (e.g., `"δ"` matches `machine₊δ`)
 - Regex patterns use full regex matching (e.g., `r"P\$"` matches symbols ending with "P")
-This will error if there are none or multiple matches.
 
 If the pattern matches multiple symbols, an error is thrown. Use a more specific pattern.
 Throws an error if the symbol does not exist in the component model.
@@ -184,7 +183,7 @@ for md in [:default, :guess, :init, :bounds, :default_from]
             has_$($(QuoteNode(md)))(c::ComponentModel, sym::Symbol)
             has_$($(QuoteNode(md)))(nw::Network, sni::SymbolicIndex)
 
-        Checks if a `$($(QuoteNode(md)))` value is present for symbol `sym` in a component model,
+        Checks if the `$($(QuoteNode(md)))` metadata is present for symbol `sym` in a component model,
         or for a symbol referenced by `sni` in a network.
 
         `sym` can be a String or Regex, to address the only symbol containing the pattern, see [`set_metadata!`](@ref) for details.
@@ -241,8 +240,8 @@ for md in [:default, :guess, :init, :bounds, :default_from]
         $fname_del(c::Comp_or_NW, sym) = delete_metadata!(c, sym, $(QuoteNode(md)))
 
         """
-            strip_$($(QuoteNode(md)))!(c::ComponentModel)
-            strip_$($(QuoteNode(md)))!(nw::Network, idx::Union{VIndex,EIndex})
+            $($(QuoteNode(fname_strip)))(c::ComponentModel)
+            $($(QuoteNode(fname_strip)))(nw::Network, idx::Union{VIndex,EIndex})
 
         Removes all `$($(QuoteNode(md)))` values from a component model,
         or from a component referenced by `idx` in a network.
@@ -984,7 +983,7 @@ end
     get_initial_state(c::ComponentModel, [state=get_defaults_or_inits_dict(c)], syms; missing_val=nothing)
     get_initial_state(nw::Network, sni::SymbolicIndex; missing_val=nothing)
 
-Returns the initial state for symbol `sym` (single symbol or vector) of the component model `c`.
+Returns the initial state for `syms` (single symbol or vector) of the component model `c`.
 Returns `missing_val` if the symbol is not initialized. Also works for observed symbols.
 
 See also: [`dump_initial_state`](@ref).
@@ -1153,12 +1152,12 @@ function _printlines(io, aligned, range; newline=true)
 end
 
 """
-    dump_state([IO=stdout], sol, t, idx; sigdigits=5)
+    dump_state([IO=stdout], sol, t, idx; sigdigits=3)
 
 Takes a Network solution `sol` and prints the state at `t` as well as the initial
 state of the specified component model to `IO` (defaults to `stdout`).
 
-`idx` musst a valid component index, i.e. `VIndex` or `EIndex` without symbol specification.
+`idx` must be a valid component index, i.e. `VIndex` or `EIndex` without symbol specification.
 
     dump_state(sol, 1.0, VIndex(4))
     dump_state(sol, 1.0, EIndex(2))

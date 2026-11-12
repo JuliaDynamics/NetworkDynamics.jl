@@ -2,7 +2,7 @@
     isfixpoint(s0::NWState; tol=1e-10)
 
 Check if the state `s0` is a fixpoint of the network by
-calculating the the RHS and check that every entry is within the
+calculating the RHS and checking that every entry is within the
 given tolerance `tol`.
 """
 function isfixpoint(s0::NWState; tol=1e-10)
@@ -28,7 +28,7 @@ matrices (`M`, `A`, `B`, `C`, `D`) for the perturbation channels specified by
 `in` and observations specified by `out`. The returned system is callable as a
 transfer function: `sys(s) = C * (M*s - A)⁻¹ * B + D`.
 
-The `in` keyword agument specifies the perturbance channel.
+The `in` keyword argument specifies the perturbance channel.
 Perturbance channels are related to the input/output structure of the components
 (input indices must match parameters or input or output states of individual components).
 They can be either
@@ -56,7 +56,7 @@ e ⋯───╯             │              ╭─┴─╮              │ 
                                  more edges
 ```
 
-The output channel `out` can by any observable of the system.
+The output channel `out` can be any observable of the system.
 
 # Examples
 ```julia
@@ -322,7 +322,7 @@ display.
   a range (`1:5`), a vector of indices, a predicate function on eigenvalues
   (e.g. `λ -> abs(imag(λ)) > 1`), or `nothing` (show all). Indices refer to
   the original eigenvalue ordering from `participation_factors`.
-- `threshold=0.01`: Only show participation factors above this threshold (set to 0 to show all)
+- `threshold=0.10`: Only show participation factors above this threshold (set to 0 to show all)
 - `sigdigits=4`: Number of significant digits for displaying values
 - `sortby=nothing`: Sort modes for display. `nothing` preserves `eigen`'s default
   lexicographic order (consistent with `participation_factors` and `eigenvalue_sensitivity`
@@ -454,10 +454,10 @@ differentiation (ForwardDiff).
 
 Arguments:
 - `mode_idx`: The indexes into eigenvalues in the default order of Julia's `eigen`
-(lexicographic by `(real(λ), imag(λ))`). This is the same ordering as returned
-by [`jacobian_eigenvals`](@ref) and [`participation_factors`](@ref).
+  (lexicographic by `(real(λ), imag(λ))`). This is the same ordering as returned
+  by [`jacobian_eigenvals`](@ref) and [`participation_factors`](@ref).
 - `params` (keyword): Symbolic parameter indices to compute sensitivities for. Defaults to
-all parameters (`SII.parameter_symbols(s0)`). Pass a subset to reduce computation.
+  all parameters (`SII.parameter_symbols(s0)`). Pass a subset to reduce computation.
 
 Returns a named tuple:
 - `eigenvalue`: the selected eigenvalue (complex, rad/s)
@@ -534,7 +534,7 @@ function _reduced_jacobian_param_derivative(nw, s0, pidx)
 end
 
 """
-    show_eigenvalue_sensitivity([io::IO, ]result::NamedTuple; threshold=0.01, sigdigits=3, sortby=:mag)
+    show_eigenvalue_sensitivity([io::IO, ]result::NamedTuple; threshold=0.01, sigdigits=4, sortby=:mag)
     show_eigenvalue_sensitivity([io::IO, ]s0::NWState, mode_idx; [params,] kwargs...)
 
 Display eigenvalue sensitivity results in a formatted table, sorted by the specified metric

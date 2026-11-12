@@ -41,6 +41,7 @@ For numeric indexing, use [`StateIdx`](@ref) and [`ParamIdx`](@ref) wrappers:
     g = wheel_graph(5)
     nw = Network(g, vertexf, edgef)
     s = NWState(nw)
+    using Random; Random.seed!(1) #hide
     s.v[:,:storage] .= randn(5)
     prob = ODEProblem(nw, s, (0,2))
     sol = solve(prob, Tsit5())
@@ -115,10 +116,12 @@ No default values were provided in the network components, so the state array is
 
 We can set those values like this:
 ```@example si
+Random.seed!(2) #hide
 s[VIndex(:, :storage)] .= randn(5) # set the (initial) storage for all vertices
 s #hide
 ```
-For both `NWState` and `NWParameter` objects, there is a more convenient way to access the variables and parameters using the [`FilteringProxy`](@ref) interface.
+### Interactive Filtering with FilteringProxy
+For both `NWState` and `NWParameter` objects, there is a more convenient way to access the variables and parameters using the [`FilteringProxy`](@ref) interface. It lets you explore the network variables by refining a filter step by step.
 The filtering proxy can be accessed by calling `.v` or `.e` on a state:
 ```@example si
 s.v
@@ -154,10 +157,6 @@ in these flat arrays corresponds exactly to the order returned by [`variable_sym
     The `NWState` and `NWParameter` wrappers can be constructed from various objects.
     For example, within a callback you might construct `p = NWParameter(integrator)` to then change the parameters of the network within the callback.
 
-## Interactive Filtering with FilteringProxy
-
-The [`FilteringProxy`](@ref) system provides an intuitive way to explore and access network variables through progressive filtering. When you access `.v`, `.e`, or `.p` properties of `NWState`/`NWParameter` objects, you get a filtering proxy that can be refined step by step.
-
 ## Observables
 Sometimes, the "states" you're interested in aren't really states in the DAE sense but rather
 algebraic derivations from DAE states, parameters, and time -- in accordance with the naming in
@@ -189,7 +188,7 @@ plot(sol; idxs=@obsex(vidxs(nw,:,:storage) .- VIndex(1,:storage)))
 Other examples include calculating the magnitude and argument of complex values that are modeled using real and
 imaginary parts.
 ```
-@obsex mag = sqrt(VIndex(1, :u_r)^2 + VIndex(2, :u_i)^2)
+@obsex mag = sqrt(VIndex(1, :u_r)^2 + VIndex(1, :u_i)^2)
 ```
 
 ## Low-level accessors for flat array indices

@@ -1,7 +1,7 @@
 #=
 # Neurodynamic model of synchronization in the human brain
 
-This example can be dowloaded as a normal Julia script [here](@__NAME__.jl). #md
+This example can be downloaded as a normal Julia script [here](@__NAME__.jl). #md
 
 #### Topics covered in this tutorial include:
 
@@ -16,12 +16,12 @@ Dynamics of spiking neurons have been described in a simplified manner by the [F
 
 ```math
 \begin{aligned}
-\varepsilon \dot u &  =  u - \frac{u^3}{3} - v \\
-\dot v & =  u + a
+\dot u &  =  u - \frac{u^3}{3} - v \\
+\dot v & =  \varepsilon (u - a)
 \end{aligned}
 ```
 
-Here $u$ is a fast, excitatory variable corresponding to the membrane potential and $v$ is a slower, inhibitory varibale. $\varepsilon$ is a parameter separating these time-scales, and $a$ is a control parameter.
+Here $u$ is a fast, excitatory variable corresponding to the membrane potential and $v$ is a slower, inhibitory variable. The small parameter $\varepsilon$ separates these time-scales, and $a$ is a control parameter.
 
 In simplified models of the brain, such *relaxation oscillators* may be used to model individual neurons, clusters of neurons or even larger areas in the brain. The FitzHugh-Nagumo model has been widely used for studying synchronization in neuronal activity, which in turn has been connected to physiological phenomena such as epileptic seizures.
 
@@ -31,8 +31,8 @@ While different coupling schemes for FitzHugh-Nagumo oscillators have been propo
 
 ```math
 \begin{aligned}
-\varepsilon \dot u_i & =  u_i - \frac{u_i^3}{3} - v_i - \sigma \sum_{j=1}^N G_{ij}(u_i - u_j) \\
-\dot v_i & =   u_i + a
+\dot u_i & =  u_i - \frac{u_i^3}{3} - v_i - \sigma \sum_{j=1}^N G_{ji}(u_i - u_j) \\
+\dot v_i & =   \varepsilon (u_i - a)
 \end{aligned}
 ```
 
@@ -99,20 +99,20 @@ electricaledge = EdgeModel(g=Directed(electrical_edge!), outdim=1, psym=[:weight
 fhn_network! = Network(g_directed, vertex, electricaledge)
 
 #=
-Since this system is a directed one with thus directed edges, the keyword argument `coupling` is used to set the coupling of the edges to `Directed()`.
+Since the graph is directed, each edge only acts on its destination vertex. That is why the edge function is wrapped in `Directed`.
 
 ## Parameter handling
 
 Some of the parameters have been declared with default values.
 Those default values will be used when creating the `NWParameter` object.
-We can use getindex on the parameter objects to set the missing weight values.
+We can index into the parameter object to set the missing weight values.
 =#
 p = NWParameter(fhn_network!)
 p.e[1:ne(g_directed), :weight] = edge_weights
 nothing #hide #md
 
 #=
-The initial conditions could be created similarly to the parameters as an indexable `NWState` obejct.
+The initial conditions could be created similarly to the parameters as an indexable `NWState` object.
 Since we chose a random initial condition we initialize the flat array directly:
 =#
 
@@ -125,7 +125,7 @@ nothing #hide #md
 
 Now we are ready to create an `ODEProblem`. Since for some choices of parameters the FitzHugh-Nagumo model is *stiff* (i.e. numerically unstable), we use a solver with automated stiffness detection. Such a solver switches to a more stable solver only when the solution enters a region of phase space where the problem is numerically unstable. In this case we use `Tsit5` and switch to `TRBDF2` when necessary. `AutoTsit5` is the switching version of the `Tsit5` algorithm.
 
-Not that we call `pflat` on the `NWParameter` object to get the flat array of parameters.
+Note that we call `pflat` on the `NWParameter` object to get the flat array of parameters.
 =#
 
 tspan = (0.0, 200.0)
@@ -140,4 +140,8 @@ nothing #hide #md
 The plot of the excitatory variables shows that they synchronize for this choice of parameters.
 =#
 
-plot(sol; idxs=vidxs(fhn_network!, :, :u), legend=false, ylim=(-5, 5), fmt=:png)
+fig = plot(sol; idxs=vidxs(fhn_network!, :, :u), legend=false, ylim=(-5, 5))
+savefig(fig, "fhn_sync.png") #hide
+nothing #hide
+
+#md # ![excitatory variables of all brain areas](fhn_sync.png)

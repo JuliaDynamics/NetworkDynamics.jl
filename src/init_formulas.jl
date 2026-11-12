@@ -113,7 +113,7 @@ function _show_recipe(io::IO, @nospecialize(c))
 end
 
 """
-   @initconstraint
+    @initconstraint
 
 Generate an [`InitConstraint`](@ref) from an expression using symbols.
 
@@ -313,7 +313,7 @@ end
 #### InitFormula
 ####
 """
-    InitFormula(f, outsym, sym)
+    InitFormula(f, outsym, sym; weak=false, optional=false)
 
 A representation of initialization formulas that are applied during the initialization phase of a component.
 InitFormulas act earlier in the initialization pipeline than InitConstraints - they essentially set additional
@@ -418,7 +418,7 @@ function Base.show(io::IO, ::MIME"text/plain", @nospecialize(c::GuessFormula))
 end
 
 """
-   @initformula
+    @initformula
 
 Generate an [`InitFormula`](@ref) from an expression using symbols.
 
@@ -459,7 +459,7 @@ end
 
 
 """
-   @guessformula
+    @guessformula
 
 Generate a [`GuessFormula`](@ref) from an expression using symbols.
 

@@ -4,14 +4,14 @@ This script reimplements the minimal example of a dynamic cascading failure
 described in Schäfer et al. (2018) [1].
 This is an example how to use callback functions to change network parameters. In
 this case to disable certain lines.
-This script can be dowloaded as a normal Julia script [here](@__NAME__.jl). #md
+This script can be downloaded as a normal Julia script [here](@__NAME__.jl). #md
 
 > [1] Schäfer, B., Witthaut, D., Timme, M., & Latora, V. (2018). Dynamically induced cascading failures in power grids. Nature communications, 9(1), 1-13. https://www.nature.com/articles/s41467-018-04287-5
 
-This example has three subchaperts:
- - first we [define the network model](#define-the-model),
- - secondly, we implement [component based callbacks](#component-based-callbacks) and
- - thirdly we solve the problem using [systemwide callbacks](#system-wide-callbacks).
+This example has three subchapters:
+ - first we [define the network model](#Defining-the-Model),
+ - secondly, we implement [component based callbacks](#Component-based-Callbacks) and
+ - thirdly we solve the problem using [systemwide callbacks](#System-wide-Callbacks).
 
 
 The system is modeled using swing equation and active power edges. The nodes are
@@ -32,7 +32,7 @@ import SymbolicIndexingInterface as SII
 
 For the nodes we define the swing equation. State `v[1] = δ`, `v[2] = ω`.
 The swing equation has three parameters: `p = (P_ref, I, γ)` where `P_ref`
-is the power setpopint, `I` is the inertia and `γ` is the droop or damping coeficcient.
+is the power setpoint, `I` is the inertia and `γ` is the droop or damping coefficient.
 
 The output of the node is just the first state. `g=1` is a shorthand for `g=StateMask(1:1)`
 which implements a trivial output function `g` which just takes the first element of the
@@ -48,10 +48,10 @@ end
 vertex = VertexModel(f=swing_equation, g=1, sym=[:δ, :ω], psym=[:P_ref, :I=>1, :γ=>0.1])
 
 #=
-Lets define a simple purely active power line whose active power flow is
-completlye determined by the connected voltage angles and the coupling constant
+Let's define a simple purely active power line whose active power flow is
+completely determined by the connected voltage angles and the coupling constant
 `K`.
-We give an additonal parameter, the line limit, which we'll use later in the callback.
+We give an additional parameter, the line limit, which we'll use later in the callback.
 =#
 function simple_edge(e, v_s, v_d, (K,), t)
     e[1] = K * sin(v_s[1] - v_d[1])
@@ -69,7 +69,7 @@ g = SimpleGraph([0 1 1 0 1;
 nw = Network(g, vertex, edge; dealias=true)
 
 #=
-Note that we used `dealias=true` to automaticially generate separate
+Note that we used `dealias=true` to automatically generate separate
 `ComponentModels` for each vertex/edge. Doing so allows us to later
 set different metadata (callbacks, default values, etc.) for each vertex/edge.
 
@@ -84,8 +84,8 @@ nothing #hide #md
 
 #=
 We can use `find_fixpoint` to find a valid initial condition of the network.
-We also use `set_defaults!` to overwirte all the default values for states and parameters
-with the one of the fixpoint, this means that we can allways re-extract this setpoint by
+We also use `set_defaults!` to overwrite all the default values for states and parameters
+with the one of the fixpoint, this means that we can always re-extract this setpoint by
 using `u0 = NWState(nw)`.
 =#
 u0 = find_fixpoint(nw)
@@ -130,7 +130,7 @@ trip_first_cb = PresetTimeComponentCallback(1.0, affect)
 add_callback!(nw[EIndex(5)], trip_first_cb)
 nothing #hide #md
 #=
-When we inspect the edge model for 5 no, we see that we've registered 2 callbacks:
+When we inspect the model of edge 5, we see that we've registered 2 callbacks:
 =#
 nw[EIndex(5)]
 
@@ -171,9 +171,11 @@ In order to implement the line failures, we need to create a `VectorContinuousCa
 In the callback, we compare the current flow on the line with the limit. If the limit is reached,
 the coupling `K` is set to 0.
 
-First we can define the affect function:
+First we define a function which trips a single line and the affect function of the
+callback. The affect receives a vector `event_signs` which is nonzero for every line
+whose condition crossed zero.
 =#
-function affect!(integrator, idx)
+function trip_line!(integrator, idx)
     println("Line $idx tripped at t=$(integrator.t)")
     p = NWParameter(integrator) # get indexable parameter object
     p.e[idx, :K] = 0
@@ -181,39 +183,44 @@ function affect!(integrator, idx)
     save_parameters!(integrator)
     nothing
 end
+function affect!(integrator, event_signs)
+    for idx in findall(!iszero, event_signs)
+        trip_line!(integrator, idx)
+    end
+end
 nothing #hide #md
 
 #=
 There is one important aspect to this function: the [`save_parameters!`](@ref) call.
 In the callback, we change the parameters of the network, making the parameters time
 dependent. The flow on the line is a function `P(t) = f(u(t), p(t))`. Thus we need to
-inform the integrator, that a discrete change in parameters happend. With this, the
+inform the integrator, that a discrete change in parameters happened. With this, the
 solution object not only tracks `u(t)` but also `p(t)` and we may extract the observable `P(t)`
 directly.
 
-The callback trigger condition is a bit more complicated. The straight forward version looks like this:
+The callback trigger condition is a bit more complicated. The straightforward version looks like this:
 =#
 function naive_condition(out, u, t, integrator)
     ## careful,  u != integrator.u
     ## therefore construct nwstate with Network info from integrator but u
     s = NWState(integrator, u, integrator.p, t)
     for i in eachindex(out)
-        out[i] = abs(s.e[i,:P]) - s.p.e[1,:limit] # compare flow with limit for line
+        out[i] = abs(s.e[i,:P]) - s.p.e[i,:limit] # compare flow with limit for line
     end
     nothing
 end
 nothing #hide #md
 
 #=
-However, from a performacne perspectiv there are problems with this solution: on
+However, from a performance perspective there are problems with this solution: on
 every call, we need to perform symbolic indexing into the `NWState` object.
 Symbolic indexing is not cheap, as it requires to gather meta data about the network.
 Luckily, the `SymbolicIndexingInterface` package which powers the symbolic indexing
 provides the lower level functions `getp` and `getu` which can be used to create and
 cache accessors to the internal states.
 
-This still isn't ideal beacuse both `getlim` and `getflow` getters will create arrays
-within the callback. But is far better then resolving the flat state indices every time.
+This still isn't ideal because both `getlim` and `getflow` getters will create arrays
+within the callback. But it is far better than resolving the flat state indices every time.
 =#
 condition = let getlim = SII.getp(nw, epidxs(nw, :, :limit)),
                 getflow = SII.getu(nw, eidxs(nw, :, :P))
@@ -233,12 +240,21 @@ We can combine affect and condition to form the callback.
 trip_cb = VectorContinuousCallback(condition, affect!, ne(g));
 
 #=
-Similarily to before, we need to generate a initial perturbation by failing one line
+Similarly to before, we need to generate an initial perturbation by failing one line
 using a `PresetTimeCallback`.
-We see that every flow is below the trip value 1.0. Therefor we need to add a distrubance
-to the network. We do this by manually disabeling line 5 at time 1.
+We see that every flow is below the trip value 1.0. Therefore we need to add a disturbance
+to the network. We do this by manually disabling line 5 at time 1.
 =#
-trip_first_cb = PresetTimeCallback(1.0, integrator->affect!(integrator, 5));
+trip_first_cb = PresetTimeCallback(1.0, integrator -> trip_line!(integrator, 5));
+
+#=
+The edge models still carry the component callbacks from the first part. They would
+trip the lines before our system-wide callback gets the chance, so we remove them.
+=#
+for i in 1:ne(g)
+    delete_callbacks!(nw, EIndex(i))
+end
+nothing #hide #md
 
 #=
 Now we are set for solving the system again. This time we create our own callback

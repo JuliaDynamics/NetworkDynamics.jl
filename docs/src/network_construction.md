@@ -4,7 +4,7 @@
 The main type of `NetworkDynamics.jl` is a [`Network`](@ref).
 A network bundles various component models (edge and vertex models) together with a graph to form a callable object which represents the right hand side (RHS) of the overall dynamical system, see [Mathematical Model](@ref).
 
-A `Network` is build by passing a graph `g`, vertex models `vertexm` and edge models `edgem` to the [`Network`](@ref) constructor:.
+A `Network` is built by passing a graph `g`, vertex models `vertexm` and edge models `edgem` to the [`Network`](@ref) constructor:
 ```julia
 nw = Network(g, vertexm, edgem; kwargs...)
 ```
@@ -13,12 +13,12 @@ Two important keywords for the [`Network`](@ref) constructor are:
 
 - `execution`:
     Defines the [`ExecutionStyle`](@ref) of the coreloop, e.g. `SequentialExecution{true}()`.
-    A execution style is a special Julia object, which tells the backend how to parallelize (e.g. `ThreadedExecution{true}()` will use native Julia threads to parallelize the RHS call).
-    A list of available executions styles can be found under [Execution Types](@ref) in the API.
+    An execution style is a special Julia object, which tells the backend how to parallelize (e.g. `ThreadedExecution{true}()` will use native Julia threads to parallelize the RHS call).
+    A list of available execution styles can be found under [Execution Types](@ref) in the API.
 
 - `aggregator`:
     Instructs the backend how to perform the aggregation and which aggregation function to use.
-    Aggregation is the process of creating a single vertex input by reducing over the outputs of adjecent edges of said vertex. The `aggregator` contains both the function and the algorithm. E.g. `SequentialAggregator(+)` is a sequential aggregation by summation. A list of availabe Aggregators can be found under [`Aggregators`](@ref) in the API.
+    Aggregation is the process of creating a single vertex input by reducing over the outputs of adjacent edges of said vertex. The `aggregator` contains both the function and the algorithm. E.g. `SequentialAggregator(+)` is a sequential aggregation by summation. A list of available Aggregators can be found under [`Aggregators`](@ref) in the API.
 
 ### Graphless Constructor
 If each of the network components has a "graphelement" [metadata](@ref Metadata), we may omit the explicit graph.
@@ -42,7 +42,7 @@ nw = Network(vertexm, [EdgeModel(; ..., src=1, dst=2, name=:line_a),
 In that case the graphless constructor builds a `NetworkDynamics.ComponentGraph` instead of a
 `SimpleGraph` or `SimpleDiGraph`, and the edge index is simply the position in the provided list.
 Without parallel edges, the edges are sorted into the order of `edges(g)` of a
-`SimpleGraph`/`SimpleDiGraph` as before. Pass `legacy_graph=false` to always get the input order,
+`SimpleGraph`/`SimpleDiGraph`. Pass `legacy_graph=false` to always get the input order,
 which keeps indices stable if parallel edges are added later.
 
 Since `EIndex(1 => 2)` would be ambiguous for parallel edges it throws an error there; address
@@ -51,7 +51,7 @@ such edges by their integer index or by a unique name instead.
 ## Building `VertexModel`s
 This chapter will walk you through the most important aspects of defining a custom vertex model. For a list of all keyword arguments please check out the docstring of [`VertexModel`](@ref).
 
-As an example, we'll construct an second order kuramoto model.
+As an example, we'll construct a second order Kuramoto model.
 ```@example construction
 using NetworkDynamics #hide
 function kuramoto_f!(dv, v, esum, p, t)
@@ -127,18 +127,15 @@ In cases like this, where the edge is actually anti-symmetrical we can define a 
 function edge_g_s!(ydst, vsrc, vdst, p, t)
     ydst[1] = p[1] * sin(vsrc[1] - vdst[1])
 end
-EdgeModel(;g=AntiSymmetric(edge_g_ff!), pdim=1, outdim=1)
+EdgeModel(;g=AntiSymmetric(edge_g_s!), pdim=1, outdim=1)
 ```
 This can also lead to briefer output naming. Available single sided wrappers are:
 - [`Directed`](@ref) (no coupling at `src`),
-- [`AntiSymmetric`](@ref) (same coupling at `src` and `dst`),
-- [`Symmetric`](@ref) (inverse coupling at `dst`) and
+- [`AntiSymmetric`](@ref) (inverse coupling at `src`),
+- [`Symmetric`](@ref) (same coupling at `src` and `dst`) and
 - [`Fiducial`](@ref) (define separate `g` for both ends).
 
-Once again we can add additonal data like defining a `src` and `dst` index
+Once again we can add additional data like defining a `src` and `dst` index
 ```@example construction
-function edge_g_s!(ydst, vsrc, vdst, p, t)
-    ydst[1] = p[1] * sin(vsrc[1] - vdst[1])
-end
-EdgeModel(;g=AntiSymmetric(edge_g_ff!), psym=:K=>1, outsym=:P, insym=:θ, src=1, dst=4)
+EdgeModel(;g=AntiSymmetric(edge_g_s!), psym=:K=>1, outsym=:P, insym=:θ, src=1, dst=4)
 ```

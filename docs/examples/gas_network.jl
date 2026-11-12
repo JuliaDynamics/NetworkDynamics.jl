@@ -9,7 +9,7 @@ This example is based on the paper
 
 and tries to replicate a simple simulation of flow in a 3-node gas network.
 
-This example can be dowloaded as a normal Julia script [here](@__NAME__.jl). #md
+This example can be downloaded as a normal Julia script [here](@__NAME__.jl). #md
 
 We start by importing the necessary packages:
 =#
@@ -99,7 +99,7 @@ destination end, but the source end will just receive that times (-1).
         r, [description="Pipe roughness", unit=u"m"]
         g, [description="Gravitational acceleration", unit=u"m/s^2"]
         T, [description="simulation temperature", unit=u"K"]
-        Tc, [description="crictical temperature", unit=u"K"]
+        Tc, [description="critical temperature", unit=u"K"]
         pc, [description="critical pressure", unit=us"Pa"]
         Rs, [description="Specific gas constant for natural gas", unit=us"J/(kg*K)"]
         c̃, [description="Speed of sound in fluid at standard conditions", unit=u"m/s"]
@@ -147,7 +147,7 @@ nothing #hide
 
 The parameterization turned out to be a bit tricky. There might be errors in there.
 
-Some of them are quite cleare and explicitly given.
+Some of them are quite clear and explicitly given.
 =#
 g = 9.81u"m/s^2"       # that we just know
 Rs = 518.28u"J/(kg*K)" # Specific gas constant for natural gas
@@ -211,7 +211,7 @@ The paper specifies the load profile at two nodes. We use the package [`DataInte
 to get a callable object which represents this piecewise linear interpolation.
 
 Currently, the linear interpolation does not support any units yet. To satisfy the static unit check,
-we multipy the interpolation output by a constant 1 of that unit.
+we multiply the interpolation output by a constant 1 of that unit.
 
 Note however, that the unit check is only performed at the construction of the
 model. Later on, when the numeric code will be generated from the symbolic
@@ -228,7 +228,7 @@ ModelingToolkitBase.get_unit(::LinearInterpolation, _ ) = 1.0 # type piracy!
 nothing #hide
 
 #=
-As a workaround we had to explicitly define `LinearInterpolations` as unitless, which is type piracy! Don't to this in any package code!
+As a workaround we had to explicitly define `LinearInterpolations` as unitless, which is type piracy! Don't do this in any package code!
 
 ## Building the Network
 
@@ -282,8 +282,8 @@ we don't need to pass it explicitly.
 nw = Network([v1, v2, v3], [e12, e13, e23])
 
 #=
-As a result, we recive a network with 3 unique types (v2 and v3 are similar but
-structurally different, because both functions capure a unique loadprofile function).
+As a result, we receive a network with 3 unique types (v2 and v3 are similar but
+structurally different, because both functions capture a unique loadprofile function).
 
 ## Finding a Steady State
 
@@ -300,7 +300,7 @@ that the LHS of the system is zero.
 
 We can use the [`find_fixpoint`](@ref) from `NetworkDynamics.jl` to initialize the system.
 Internally, this uses a numerical solve for the rootfind problem `0 = rhs`.
-The result is automaticially wrapped as a [`NWState`](@ref) object.
+The result is automatically wrapped as a [`NWState`](@ref) object.
 =#
 u0 = find_fixpoint(nw, uguess, t=0)
 
@@ -318,7 +318,7 @@ nothing #hide
 
 Inspecting the solution is all which is left to do.
 =#
-xticks = ((0:4:24)*3600, string.(0:4:24)) # its nice to display hours
+xticks = ((0:4:24)*3600, string.(0:4:24)) # it's nice to display hours
 fig = begin
     _fig = Figure()
     row = 1

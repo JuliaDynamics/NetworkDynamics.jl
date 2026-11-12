@@ -1,8 +1,8 @@
 #=
 # Stress on Truss
-In this exampe we'll simulate the time evolution of a truss structure consisting
+In this example we'll simulate the time evolution of a truss structure consisting
 of joints and stiff springs.
-This example can be dowloaded as a normal Julia script [here](@__NAME__.jl). #md
+This example can be downloaded as a normal Julia script [here](@__NAME__.jl). #md
 
 ![truss animation](truss.mp4)
 
@@ -21,7 +21,7 @@ The vertices cannot absorb any torque, so the beams only exert forces in the dir
 ```math
 |F| = K\cdot(L - |Δd|)
 ```
-where $L$ is the nominal lenth and $|Δd|$ is the actual length of the beam.
+where $L$ is the nominal length and $|Δd|$ is the actual length of the beam.
 
 We start by loading the necessary packages.
 =#
@@ -49,7 +49,7 @@ end
 vertex_fix = VertexModel(g=fixed_g, psym=[:xfix, :yfix], outsym=[:x, :y], ff=NoFeedForward())
 #=
 Here we need to specify the `ff` keyword manually, because NetworkDynamics cannot distinguish between
-`g(out, x, p, t)`  (`NoFeedForwarwd`) and `g(out, in, p, t)` (`PureFeedForward()`)
+`g(out, x, p, t)`  (`NoFeedForward()`) and `g(out, in, p, t)` (`PureFeedForward()`)
 and guesses the latter when $\mathrm{dim}(x)=0$.
 =#
 
@@ -64,10 +64,10 @@ vertex_free = VertexModel(f=free_f, g=3:4, sym=[:vx=>0, :vy=>0, :x, :y],
                              psym=[:M=>10, :γ=>200, :g=>9.81], insym=[:Fx, :Fy])
 #=
 For the edge, we want to do something special. Later on, we want to color the edges according to the force they exert.
-Therefore, are interested in the absolut force rather than just the force vector.
-NetworkDynamics allows you to  define so called `Observed` functions, which can recover additional states,
-so called observed, after the simulations. We can use this mechanis, to define a "recipe" for calculating the beam force
-based on the inputs (nodal positions) and  the beam parameters.
+Therefore, we are interested in the absolute force rather than just the force vector.
+NetworkDynamics allows you to define so called `Observed` functions, which can recover additional states,
+so called observed, after the simulations. We can use this mechanism to define a "recipe" for calculating the beam force
+based on the inputs (nodal positions) and the beam parameters.
 =#
 
 function edge_g!(F, pos_src, pos_dst, (K, L), t)
@@ -89,14 +89,14 @@ end
 beam = EdgeModel(g=AntiSymmetric(edge_g!), psym=[:K=>0.5e6, :L], outsym=[:Fx, :Fy], obsf=observedf, obssym=[:Fabs])
 
 #=
-With the models define we can set up graph topology and initial positions.
+With the models defined we can set up graph topology and initial positions.
 =#
 N = 5
 dx = 1.0
 shift = 0.2
 g = SimpleGraph(2*N + 1)
 for i in 1:N
-    add_edge!(g, i, i+N); add_edge!(g, i, i+N)
+    add_edge!(g, i, i+N)
     if i < N
         add_edge!(g, i+1, i+N); add_edge!(g, i, i+1); add_edge!(g, i+N, i+N+1)
     end
@@ -110,7 +110,7 @@ fixed = [1,4] # set fixed vertices
 nothing #hide
 
 #=
-Now can collect the vertex models and construct the Network object.
+Now we can collect the vertex models and construct the Network object.
 =#
 verts = VertexModel[vertex_free for i in 1:nv(g)]
 for i in fixed
@@ -119,7 +119,7 @@ end
 nw = Network(g, verts, beam)
 #=
 In order to simulate the system we need to initialize the state and parameter vectors.
-Some states and parameters are shared between all vertices/edges. Those have been allready set
+Some states and parameters are shared between all vertices/edges. Those have already been set
 in their constructors. The free symbols are
 - `x` and `y` for the position of the free vertices,
 - `xfix` and `yfix` for the position of the fixed vertices,
@@ -161,7 +161,7 @@ nothing #hide
 ## Plot the solution
 
 Plotting trajectories of points is kinda boring. So instead we're going to use
-[`GraphMakie.jl`](https://github.com/MakieOrg/GraphMakie.jl) to create a animation of the timeseries.
+[`GraphMakie.jl`](https://github.com/MakieOrg/GraphMakie.jl) to create an animation of the timeseries.
 =#
 fig = Figure(size=(1000,550));
 fig[1,1] = title = Label(fig, "Stress on truss", fontsize=30)
@@ -174,7 +174,7 @@ hidedecorations!(ax); # no grid, axis, ...
 limits!(ax, -0.1, pos0[end][1]+0.3, pos0[end][2]-0.5, 1.15) # axis limits to show full plot
 
 ## get the maximum force during the simulation to get the color scale
-## It is only possible to access `:Fabs` directly becaus we've define the observable function for it!
+## It is only possible to access `:Fabs` directly because we've defined the observable function for it!
 (fmin, fmax) = 0.3 .* extrema(Iterators.flatten(sol(sol.t, idxs=eidxs(nw, :, :Fabs))))
 p = graphplot!(ax, g;
                edge_width = 4.0,
@@ -206,3 +206,4 @@ record(fig, "truss.mp4", trange; framerate=fps) do t
     p.elabels = [@sprintf("%.0f", l) for l in load]
     fig
 end
+nothing #hide

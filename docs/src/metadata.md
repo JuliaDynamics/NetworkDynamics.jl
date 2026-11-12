@@ -14,9 +14,10 @@ Special metadata:
 - `:callback`: optional field to define callback functions on the component level. See [Callbacks](@ref) and [Callbacks API](@ref) for more information.
 - `:position`: Store a tuple `(x, y)` with position of the node for plotting. Has special accessors `has_/get_/set_position`.
 - `:marker`: Store a `Symbol` for the graph plot. Possible values could be `:circle`, `:rect`, `:utriangle`, `:cross`, `:diamond`, `:dtriangle`, `:pentagon`, `:xcross` or anything which works as a `marker` keyword argument in Makie.
-- `:initconstraint`: Store additional initialization constrains. Has special `has_/get_/set_/delete_initconstraint` accessors. See [Initialization](@ref initialization-guide) for further
+- `:initconstraint`: Store additional initialization constraints. Has special `has_/get_/set_/delete_initconstraint` accessors. See [Initialization](@ref initialization-guide) for further
 details.
-- `:initformula`: Similar to initconstraint, but is a straight forward explicit mapping to initialize some variables.
+- `:initformula`: Similar to initconstraint, but is a straightforward explicit mapping to initialize some variables.
+- `:guessformula`: Similar to initformula, but computes initial guesses instead of defaults. Has special `has_/get_/set_/add_/delete_guessformula` accessors.
 
 
 ## Symbol Metadata

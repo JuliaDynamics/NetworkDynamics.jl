@@ -4,8 +4,8 @@
 This example can be downloaded as a normal Julia script [here](@__NAME__.jl). #md
 
 One of the main purposes of NetworkDynamics.jl is to facilitate the
-modeling systems whose components can differ in their parameters as well as their dynamics.
-These are known as Coupled systems with heterogeneities.
+modeling of systems whose components can differ in their parameters as well as their dynamics.
+These are known as coupled systems with heterogeneities.
 
 ## Heterogeneous parameters
 
@@ -81,8 +81,8 @@ static! = VertexModel(g=static_g, outsym=[:θ], psym=[:θfix => ω[1]], name=:st
 But wait! NetworkDynamics classified this as [`PureFeedForward`](@ref), because it cannot
 distinguish between the function signatures
 ```
-g(out, u, p, t)    # PureFeedForward
-g(out, ins, p, t)  # NoFeedForward
+g(out, u, p, t)    # NoFeedForward
+g(out, ins, p, t)  # PureFeedForward
 ```
 and since `dim(u)=0` it wrongfully assumes that the latter is meant.
 We can overwrite the classification by passing the ff keyword:
@@ -123,10 +123,8 @@ state = NWState(nw_hetero!)
 
 #=
 The node with inertia is two-dimensional, hence we need to specify two initial conditions.
-For the first dimension we keep the initial conditions from above and insert! another one into `x0` at
-the correct index.
 
-For the θ states we will use the same initial conditins as before:
+For the θ states we will use the same initial conditions as before:
 =#
 state.v[2:8,:θ] = x0[2:8]
 nothing #hide #md
@@ -140,7 +138,7 @@ nothing #hide #md
 #=
 The `NWState` object also contains a parameter object accessible via `state.p`.
 The edge parameters are already filled with default values.
-The vertex parameters can be copied from our old parmeter object `p`.
+The vertex parameters can be copied from our old parameter object `p`.
 =#
 state.p.v[2:8, :ω0] = p.v[2:8, :ω0]
 nothing #hide #md

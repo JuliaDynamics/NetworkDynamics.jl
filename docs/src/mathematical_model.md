@@ -57,7 +57,7 @@ conceptual and not necessarily physical way.)
 </picture>
 ```
 In this graphical representation of a partial network graph,
-three nodes are visible (node 1, node 2, and node 3) as well as the edges connecting node 1 and node 2 ($e_{\mathrm{12}}$).
+three nodes are visible (node 1, node 2, and node 3) as well as the edge connecting node 1 and node 2 ($e_{\mathrm{12}}$).
 Above the network, you can see the dynamical systems for both nodes 1 and 2 as well as the connecting edge.
 The figure shows how the outputs of the edge appear as inputs to the nodes and the outputs of the nodes appear as inputs to the edge models.
 
@@ -169,7 +169,7 @@ To accommodate such cases, we can use the concept of **single-sided edge output 
 A single-sided output function only defines a function for one of the outputs:
 
 ```julia
-function g_single(y, xᵥ, v_src, v_dst, pₑ, t)
+function g_single(y, xₑ, v_src, v_dst, pₑ, t)
     # mutate y
     nothing
 end
@@ -184,8 +184,9 @@ There are multiple wrappers available to automatically convert them into double-
 
 ## Feed Forward Behavior
 !!! warning "Feed Forward Vertices"
-    As of 11/2024, vertices with feed forward behavior (FF) are not supported at all. Use [`ff_to_constraint`](@ref) to
-    transform them into vertex models without FF.
+    Vertices with feed forward behavior (FF) are only supported as injector nodes, i.e. when they are connected
+    to their hub through a [`LoopbackConnection`](@ref) (see [Injector Nodes](@ref injector-nodes)). Otherwise use
+    [`ff_to_constraint`](@ref) to transform them into vertex models without FF.
 
 Component models can have a so-called feed forward behavior, which provides a direct link between the input and the
 output.

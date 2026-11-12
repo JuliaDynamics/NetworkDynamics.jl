@@ -171,7 +171,7 @@ An injector node is an "inverted" `VertexModel`, which gets the networks potenti
 input and outputs a flow variable.
 
 The LoopbackConnection allows a direct, star-like connection of injector nodes
-to a single hub nodes.
+to a single hub node.
 The LoopbackConnection is a **directed edge model from injector to hub**!
 
 ```asciiart

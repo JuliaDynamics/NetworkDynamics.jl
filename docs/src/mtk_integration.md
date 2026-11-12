@@ -11,12 +11,12 @@ which are then connected on network scale using NetworkDynamics.
 The main entry point for this interop are the constructors
 ```julia
 VertexModel(::System, inputs, outputs)
-EdgeModel(::System, srcin, dstin, [srscout], dstout)
+EdgeModel(::System, srcin, dstin, [srcout], dstout)
 ```
 whose docstrings can be found in the [Component Models with MTK](@ref) section in the API.
 
 These constructors will:
-- transform the states marked as input to parameters and `mtkcompile`ing the system,
+- transform the states marked as input to parameters and simplify the system,
 - generate the `f` and `g` functions,
 - generate code for observables,
 - port all supported [Metadata](@ref) from MTK symbols to component symbols and
@@ -27,14 +27,14 @@ component models but interconnect them in a very homogeneous way (i.e. having th
 same output/input pairings in the whole system).
 
 In theory, you can achieve everything you want to do with plain MTK. The idea of
-combining the two is, that NetworkDynamics offers *far less flexibility* when in
+combining the two is, that NetworkDynamics offers *far less flexibility* when it
 comes to interconnection of subsystems on the network level. This might allow ND
 to exploit more knowledge of the structure without very expensive operations such
 as tearing of thousands of equations.
 
 !!! warning
     ModelingToolkit is a fast paced library with lots of functionality and ever
-    growing complexity. As such the provided interface is kinda experimental.
+    growing complexity. As such the provided interface is somewhat experimental.
     Some features of MTK are straight up unsupported, for example events within
     models or delay differential equations.
 
@@ -42,7 +42,7 @@ as tearing of thousands of equations.
 In good [MTK tradition](https://docs.sciml.ai/ModelingToolkit/stable/tutorials/acausal_components/), this feature will be explained along a simple RC circuit example.
 The [Gas Network Example](@ref gas-example) or [Initialization Tutorial](@ref init-tutorial) also showcase the MTK constructors.
 
-The system to model is 2 node, 1 edge network. The node output states are the voltage (to ground), the edge output sates are the currents at both ends.
+The system to model is 2 node, 1 edge network. The node output states are the voltage (to ground), the edge output states are the currents at both ends.
 ```
 
 ideal v source      Resistor     Capacitor
@@ -81,7 +81,7 @@ An ideal voltage source is just a model which pins its output voltage to a fixed
 The source ejects whatever current is necessary. We introduce another variable `i(t)`
 to "capture" this current. This variable will be removed during structural simplify, but will
 be available for plotting through the [Observables](@ref) mechanism.
-The `VertexModel` can be generated from an `System` by providing names of the input and output states:
+The `VertexModel` can be generated from a `System` by providing names of the input and output states:
 
 ```@example mtk
 @mtkmodel VoltageSource begin
@@ -103,7 +103,7 @@ end
 vs_vertex = VertexModel(vs, [:p₊i], [:p₊v]; vidx=1)
 ```
 
-A capacitor is a slightly more complicated model. Its voltage is defined as an differential
+A capacitor is a slightly more complicated model. Its voltage is defined as a differential
 equation based on the inflowing current.
 
 ```@example mtk
@@ -123,7 +123,7 @@ cap_vertex = VertexModel(cap, [:p₊i], [:p₊v], vidx=2)
 ```
 
 For the resistor we need two pins, one for the `src` and one for the `dst` side.
-The equations are straight forward.
+The equations are straightforward.
 
 ```@example mtk
 @mtkmodel Resistor begin
@@ -466,7 +466,8 @@ NetworkDynamics.mtk_cache_stats()
 
 A cached system is shared by every call which hits it, so the body of a cached component has to
 follow a few rules. It must not depend on anything but its keyword arguments, and arguments
-projected by `@structural` must not be used in any other way. Global settings a body reads can be
+projected by `@structural` must not be used in any other way, except as the default of a symbol
+with the same name (like `T` above). Global settings a body reads can be
 made part of the cache key with [`NetworkDynamics.register_cache_context!`](@ref). The
 docstring of [`@cached_component`](@ref NetworkDynamics.@cached_component) lists all rules.
 

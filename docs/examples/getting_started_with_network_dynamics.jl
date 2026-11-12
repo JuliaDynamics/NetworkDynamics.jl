@@ -50,8 +50,8 @@ All vertices have one internal state $v$, which is also the vertex output. It is
 flows connected to the vertex. This directly corresponds to the component model definition outlined in [Mathematical Model](@ref):
 ```math
 \begin{aligned}
-\dot x^\mathrm{v} &= f^{\mathrm v}(u^{\mathrm v}, \sum_k^{\text{incident}} y^{\mathrm e}_k, p^{\mathrm v}, t) &&= \sum_k^\mathrm{incident} y^\mathrm{e}_k \\
-y^\mathrm{v} &= g^{\mathrm v}(u^{\mathrm v}, \sum_k^{\text{incident}} y^{\mathrm e}_k, p^{\mathrm v}, t) &&= x^\mathrm{v}
+\dot x^\mathrm{v} &= f^{\mathrm v}(x^{\mathrm v}, \sum_k^{\text{incident}} y^{\mathrm e}_k, p^{\mathrm v}, t) &&= \sum_k^\mathrm{incident} y^\mathrm{e}_k \\
+y^\mathrm{v} &= g^{\mathrm v}(x^{\mathrm v}, \sum_k^{\text{incident}} y^{\mathrm e}_k, p^{\mathrm v}, t) &&= x^\mathrm{v}
 \end{aligned}
 ```
 =#
@@ -120,7 +120,7 @@ nd_diffusion_edge = EdgeModel(; g=AntiSymmetric(diffusionedge_g!), outsym=[:flow
 
 #=
 ### Defining the `VertexModel`
-Next we need to define the `VertexModel`. For undirected graphs, the `edgefunction!` specifies the coupling from a
+Next we need to define the `VertexModel`. For undirected graphs, the edge function `diffusionedge_g!` specifies the coupling from a
 source to a destination vertex. The contributions of the connected edges to a single vertex are "aggregated".
 By default, the aggregation is the summation of all incident edge states. The aggregated edge state is made available
 via the `esum` argument of the vertex function.
@@ -151,22 +151,22 @@ With the components defined, we can now define the topology and assemble the net
 
 # The first step is to define the number of nodes the network is comprised of:
 N = 20 # number of nodes
-k = 4  # average degree distribution
+k = 4  # number of edges each new node attaches with
 nothing #hide #md
 
 # Then we define the network model. We will use the
 # [Barabási–Albert model](https://en.wikipedia.org/wiki/Barab%C3%A1si%E2%80%93Albert_model) which generates a
-# scale-free random graph.
-g = barabasi_albert(N, k)
+# scale-free random graph. We pass a seeded random number generator to get the same graph every time.
+rng = StableRNG(1)
+g = barabasi_albert(N, k; rng)
 nothing #hide #md
 
 #=
 We then create the network of nodes and edges by using the constructor `Network`. It combines the component
-model with the topological information contained in the graph **`g`** and returns an `Network` compatible with the
+model with the topological information contained in the graph **`g`** and returns a `Network` compatible with the
 solvers of `DifferentialEquations.jl`.
 =#
 nd = Network(g, nd_diffusion_vertex, nd_diffusion_edge)
-rng = StableRNG(1)
 
 # We then generate random initial conditions
 x0 = randn(rng, N)
@@ -176,6 +176,7 @@ We then solve the diffusion problem on the time interval $[0, 2]$ with the `Tsit
 by the authors of `DifferentialEquations.jl` for most non-stiff problems. We first create an `ODEProblem`:
 =#
 ode_prob = ODEProblem(nd, x0, (0.0, 2.0))
+nothing #hide #md
 
 # We test all ex styles #src
 Main.test_execution_styles(ode_prob) #src
@@ -203,8 +204,8 @@ all nodes have the same state, which is to be expected for a simple diffusion pr
 ## Two Dimensional Extension
 
 To illustrate a very simple multi-dimensional case, we simulate two independent diffusions on an identical graph.
-The first diffusion uses the symbol `x` and is initiated with initial conditions drawn from the standard normal
-distribution $N(0,1)$, while the second diffusion uses the symbol `ϕ` with squared standard normal initial conditions.
+The first diffusion uses the symbol `x` and is initiated with squared standard normal initial conditions, while the
+second diffusion uses the symbol `ϕ` with initial conditions drawn from the standard normal distribution $N(0,1)$.
 
 The symbols have to be passed with the keyword **`sym`** to `VertexModel`.
 
@@ -212,8 +213,8 @@ Once again we define the number of nodes and the type of network we want to gene
 =#
 
 N = 10 # number of nodes
-k = 4  # average degrees distribution
-g = barabasi_albert(N, k)
+k = 4  # number of edges each new node attaches with
+g = barabasi_albert(N, k; rng)
 
 # We have two independent diffusions on the network, hence dim = 2. We now define the `VertexModel` and the `EdgeModel`
 nd_diffusion_vertex_2 = VertexModel(; f=diffusionvertex_f!, g=1:2, dim=2, sym=[:x, :ϕ])
@@ -221,20 +222,22 @@ nd_diffusion_edge_2 = EdgeModel(; g=AntiSymmetric(diffusionedge_g!), outsym=[:fl
 nd_2 = Network(g, nd_diffusion_vertex_2, nd_diffusion_edge_2)
 
 #=
-We define the first diffusion as x ~ $N(0,1)^\mathrm{2}$ and the second diffusion as ϕ ~ $N(0,1)$. So the propagation
-of the diffusion from node 0 to node 2 is given by creating a vector:
+We define the first diffusion as x ~ $N(0,1)^\mathrm{2}$ and the second diffusion as ϕ ~ $N(0,1)$. The flat state
+vector holds the states of each vertex next to each other, so we interleave the two:
 =#
 x0_2 = collect(vec(transpose([randn(rng, N) .^ 2 randn(rng, N)])))
 
 # We then define the `ODEProblem`:
 ode_prob_2 = ODEProblem(nd_2, x0_2, (0.0, 3.0))
+nothing #hide #md
 Main.test_execution_styles(ode_prob_2) #src
 
 # Then solve the network using:
 sol_2 = solve(ode_prob_2, Tsit5());
 
-# To plot the evolution of variables ϕ_i over time we use the command:
+# To plot the evolution of the variables x_i over time we use the command:
 plot(sol_2; idxs=vidxs(nd_2, :, :x))
+# The second diffusion can be plotted with `vidxs(nd_2, :, :ϕ)`.
 # [To write ϕ in the terminal type \phi and press TAB]
 
 # Using the `eidxs` helper function we can also plot the evolution of the flow variables over time:
@@ -273,20 +276,20 @@ nd_diffusion_vertex = VertexModel(; f=diffusionvertex_f!, g=StateMask(1:1), dim=
 
 N = 20
 k = 4
-g = barabasi_albert(N, k)
+rng = StableRNG(1)
+g = barabasi_albert(N, k; rng)
 nothing #hide #md
 
 nd = Network(g, nd_diffusion_vertex, nd_diffusion_edge)
-rng = StableRNG(1)
 x0 = randn(rng, N)
 ode_prob = ODEProblem(nd, x0, (0.0, 2.0))
 Main.test_execution_styles(ode_prob) #src
 sol = solve(ode_prob, Tsit5());
 nothing #hide #md
-plot(sol; idxs=vidxs(nd, :, :), fmt=:png)
-N = 10 #
-k = 4  #
-g = barabasi_albert(N, k)
+plot(sol; idxs=vidxs(nd, :, :))
+N = 10
+k = 4
+g = barabasi_albert(N, k; rng)
 nd_diffusion_vertex_2 = VertexModel(; f=diffusionvertex_f!, g=1:2, dim=2, sym=[:x, :ϕ])
 nd_diffusion_edge_2 = EdgeModel(; g=AntiSymmetric(diffusionedge_g!), outsym=[:flow_x, :flow_ϕ])
 nd_2 = Network(g, nd_diffusion_vertex_2, nd_diffusion_edge_2)
@@ -294,7 +297,7 @@ x0_2 = collect(vec(transpose([randn(rng, N) .^ 2 randn(rng, N)])))
 ode_prob_2 = ODEProblem(nd_2, x0_2, (0.0, 3.0))
 Main.test_execution_styles(ode_prob_2) #src
 sol_2 = solve(ode_prob_2, Tsit5());
-plot(sol_2; idxs=vidxs(nd_2, :, :x), xlabel = "x", ylabel = "nd_2",)
+plot(sol_2; idxs=vidxs(nd_2, :, :x))
 plot(sol_2; idxs=eidxs(nd_2, :, :flow_x))
 
 
@@ -306,12 +309,12 @@ The diffusion equation on a network can be rewritten as:
 ```math
 \dot v_i  = \sum_{j=1}^N A_{ji} v_j - d_i v_i =  e_i^T A v - d_i v_i
 ```
-where $d_i$ is the degree distribution of node $i$ and $e_i^T$ is the $i$-th standard basis vector.
+where $d_i$ is the degree of node $i$ and $e_i^T$ is the $i$-th standard basis vector.
 
 By introducing the diagonal matrix $D$, that has the degree of node $i$ in its $i$-th row and the Laplacian matrix
 $L = D - A$ we arrive at:
 ```math
-\dot v = e_i^T(A - D) v
+\dot v_i = e_i^T(A - D) v
 ```
 and finally
 ```math
