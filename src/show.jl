@@ -2,14 +2,18 @@
 
 # overload to reduce excessive printing
 function Base.show(io::IO, @nospecialize(nw::Network))
-    print(io, "Network($(nv(nw.im.g)) vertices, $(ne(nw.im.g)) edges)")
+    nvert, vertword = maybe_plural(nv(nw.im.g), "vertex", "vertices")
+    nedge, edgeword = maybe_plural(ne(nw.im.g), "edge")
+    print(io, "Network($nvert $vertword, $nedge $edgeword)")
 end
 
 function Base.show(io::IO, ::MIME"text/plain", @nospecialize(nw::Network))
     aliased_changed(nw, warn=true)
     compact = get(io, :compact, false)::Bool
+    nvert, vertword = maybe_plural(nv(nw.im.g), "vertex", "vertices")
+    nedge, edgeword = maybe_plural(ne(nw.im.g), "edge")
     if compact
-        print(io, "Network ($(nv(nw.im.g)) vertices, $(ne(nw.im.g)) edges)")
+        print(io, "Network ($nvert $vertword, $nedge $edgeword)")
     else
         print(io, "Network")
         num, word = maybe_plural(dim(nw), "state")
@@ -17,9 +21,9 @@ function Base.show(io::IO, ::MIME"text/plain", @nospecialize(nw::Network))
         num, word = maybe_plural(pdim(nw), "parameter")
         print(io, " and $num $word")
         num, word = maybe_plural(length(nw.vertexbatches), "type")
-        print(io, "\n ├─ $(nv(nw.im.g)) vertices ($num unique $word)")
+        print(io, "\n ├─ $nvert $vertword ($num unique $word)")
         num, word = maybe_plural(length(nw.layer.edgebatches), "type")
-        print(io, "\n └─ $(ne(nw.im.g)) edges ($num unique $word)")
+        print(io, "\n └─ $nedge $edgeword ($num unique $word)")
         print(io, "\nEdge-Aggregation using ")
         print(io, nw.layer.aggregator)
         # print(io, "\n ├─ vertex output dimension: $(nw.im.vdepth)")
@@ -27,19 +31,19 @@ function Base.show(io::IO, ::MIME"text/plain", @nospecialize(nw::Network))
 
         if !isnothing(nw.jac_prototype)
             jac = nw.jac_prototype
-            rate = SparseArrays.nnz(jac) / dim(nw)^2
+            density = SparseArrays.nnz(jac) / dim(nw)^2
             print(io, "\nJacobian prototype defined: ")
-            printstyled(io, (round(rate*100, digits=2)), "% sparsity", color=:blue)
+            printstyled(io, round(density*100, digits=2), "% nonzeros", color=:blue)
         end
 
         Ncb = length(wrap_component_callbacks(nw))
         if Ncb ≥ 1
-            nvert = mapreduce(has_callback, +, nw.im.vertexm)
-            nedge = mapreduce(has_callback, +, nw.im.edgem)
+            ncbvert = mapreduce(has_callback, +, nw.im.vertexm)
+            ncbedge = mapreduce(has_callback, +, nw.im.edgem)
             _, setword = maybe_plural(Ncb, "callback set")
-            _, vertword = maybe_plural(nvert, "vertex", "vertices")
-            _, edgeword = maybe_plural(nedge, "edge")
-            print(io, "\n$Ncb $setword across $nvert $vertword and $nedge $edgeword")
+            _, cbvertword = maybe_plural(ncbvert, "vertex", "vertices")
+            _, cbedgeword = maybe_plural(ncbedge, "edge")
+            print(io, "\n$Ncb $setword across $ncbvert $cbvertword and $ncbedge $cbedgeword")
         end
     end
 end
@@ -457,7 +461,7 @@ function Base.show(io::IO, mime::MIME"text/plain", @nospecialize(p::NWParameter)
         print(io, ")")
     else
         ioc = IOContext(io, :compact => true)
-        print(io, "Parameter{$(typeof(pflat(p)))} of ")
+        print(io, "NWParameter{$(typeof(pflat(p)))} of ")
         show(ioc, mime, p.nw)
 
         @allowscalar strvec = map(SII.parameter_symbols(p.nw), eachindex(p.pflat)) do sym, i
