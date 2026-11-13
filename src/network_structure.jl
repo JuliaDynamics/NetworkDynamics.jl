@@ -362,7 +362,7 @@ function isdense(im::IndexManager)
     sort!(pidxs)
     sort!(stateidxs)
     sort!(outidxs)
-    sort!(outidxs)
+    sort!(extidxs)
     @assert pidxs == 1:im.lastidx_p
     @assert stateidxs == 1:im.lastidx_dynamic
     @assert outidxs == 1:im.lastidx_out
