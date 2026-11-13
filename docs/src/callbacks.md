@@ -117,8 +117,9 @@ changed during the affect and calls [`SciMLBase.auto_dt_reset!`](@extref) and [`
 An affect which only does bookkeeping, for example counting events in a parameter, can keep the
 current step size by setting `ctx.dt_reset[] = false`. The parameter change is saved either way.
 If the affect does not change the right-hand side at all, `ctx.derivative_discontinuity[] = false`
-goes one step further: the solver continues as if the event was a plain tstop, without
-reinitialization or step reset.
+goes one step further: the solver also skips the DAE reinitialization and the re-evaluation of the
+derivative after the affect. Reinitializations elsewhere at the event still happen, e.g. before a
+continuous affect or between rounds of an event iteration.
 
 
 ## Event Iteration

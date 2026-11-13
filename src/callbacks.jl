@@ -82,9 +82,11 @@ Creates a callback affect for a [`NetworkDynamics.ComponentCallback`](@ref).
          If several affects fire at the same time, one of them asking for the reset is enough.
        - `ctx.derivative_discontinuity::Ref{Bool}`: Set `ctx.derivative_discontinuity[] = false` if the
          affect leaves the right-hand side unchanged, e.g. it only writes bookkeeping parameters.
-         The solver then continues as if the event was a plain tstop, without reinitialization or
-         step reset (see [`SciMLBase.derivative_discontinuity!`](@extref)). If several affects
-         fire at the same time, one of them reporting a discontinuity is enough.
+         The solver then skips the step reset, the DAE reinitialization and the re-evaluation of
+         the derivative after the affect (see [`SciMLBase.derivative_discontinuity!`](@extref)).
+         Reinitializations elsewhere at the event still happen, e.g. before a continuous affect or
+         between rounds of an event iteration. If several affects fire at the same time, one of
+         them reporting a discontinuity is enough.
 - `sym`: A vector or tuple of symbols naming **states, parameters, inputs, outputs or observed**
   of the component model. Determines which values will be available through `u` in `f`.
 
