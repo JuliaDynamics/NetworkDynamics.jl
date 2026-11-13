@@ -1,0 +1,39 @@
+#!/bin/bash
+
+# Function to check if a command is available
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# Check for latexmk
+if ! command_exists latexmk; then
+    echo "Error: 'latexmk' is not installed or not in your PATH."
+    exit 1
+fi
+
+# Check for pdf2svg
+if ! command_exists pdf2svg; then
+    echo "Error: 'pdf2svg' is not installed or not in your PATH."
+    exit 1
+fi
+
+# List of figures to generate
+figures=(mathmodel edgemodel nodemodel)
+
+# Generate light versions (default)
+echo "Generating light versions..."
+for fig in "${figures[@]}"; do
+    latexmk -pdflua -shell-escape "${fig}.tex"
+done
+
+# Generate dark versions
+echo "Generating dark versions..."
+for fig in "${figures[@]}"; do
+    cp "${fig}.tex" "${fig}-dark.tex"
+    NDTHEME=dark latexmk -pdflua -shell-escape "${fig}-dark.tex"
+    rm "${fig}-dark.tex"
+done
+
+latexmk -C
+# Clean up remaining temp files that latexmk -C might miss
+rm -f *.aux *.fdb_latexmk *.fls *.log *.pdf
