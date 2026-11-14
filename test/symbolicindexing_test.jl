@@ -1111,3 +1111,66 @@ end
     @test ParamIdx(1:2) == ParamIdx([1,2])
     @test VIndex(1, 1:2) == VIndex(1, [1,2])
 end
+
+@testset "FrozenNWState" begin
+    FrozenNWState = NetworkDynamics.FrozenNWState
+    Lib = @__MODULE__() == Main ? Main.Lib : getfield(Main, :Lib)
+    nw, s0 = Lib.powergridlike_network()
+    s0 = NWState(nw, uflat(s0), pflat(s0), 0.0)
+    s = FrozenNWState(s0)
+    @test s.t == s0.t
+    @test s.uflat == uflat(s0) && s.uflat !== uflat(s0)
+    @test s.pflat == pflat(s0) && s.pflat !== pflat(s0)
+
+    # every way of reading gives the same values as the normal state
+    allidxs = vcat(vidxs(nw), eidxs(nw), vpidxs(nw), epidxs(nw))
+    @test isequal(s[allidxs], s0[allidxs])
+    for idx in allidxs
+        @test isequal(s[idx], s0[idx])
+    end
+    @test isequal(s[(allidxs[1], allidxs[end])], s0[(allidxs[1], allidxs[end])])
+    @test isequal(s[vpidxs(nw)], s0[vpidxs(nw)])
+    @test isequal(s.e[1, :src_P], s0.e[1, :src_P])
+    @test isequal(s.e[:, :src_P], s0.e[:, :src_P])
+    @test isequal(s.v[2, :u_mag], s0.v[2, :u_mag])
+    @test isequal(s.e[1, :X], s0.e[1, :X])
+    @test isequal(s.e.p[1, :X], s0.p.e[1, :X])
+    @test isequal(s.p.e[1, :X], s0.p.e[1, :X])
+    @test isequal(s.p.e[:, :X], s0.p.e[:, :X])
+    @test isequal(s.p[epidxs(nw)[1]], s0.p[epidxs(nw)[1]])
+    @test isequal(s.p[EIndex(1, :X)], s0.p[EIndex(1, :X)])
+    @test isequal(s.p[vpidxs(nw)], s0.p[vpidxs(nw)])
+    @test_throws "read only" s.p.e[1, :X] = 1.0
+    obsex = @obsex(EIndex(1, :src_P) + EIndex(2, :src_P))
+    @test isequal(s[obsex], s0[obsex])
+    @test isequal(s[[obsex, obsex]], s0[[obsex, obsex]])
+
+    # reading does not evaluate the network: its buffers stay untouched
+    netout() = NetworkDynamics.PreallocationTools.get_tmp(nw.caches.output, Float64)
+    NetworkDynamics.get_buffers(nw, uflat(s0), pflat(s0), 0.0; initbufs=false)
+    @test all(isnan, netout())
+    s[allidxs]
+    s.e[1, :src_P]
+    s[obsex]
+    @test all(isnan, netout())
+
+    # the snapshot is independent of the state it was made from and of later network calls
+    ref = s[allidxs]
+    s0.v[1, 1] = s0.v[1, 1] + 1
+    s0.p.e[1, :X] = 2 * s0.p.e[1, :X]
+    nw(zeros(dim(nw)), uflat(s0), pflat(s0), 1.0)
+    @test isequal(s[allidxs], ref)
+    @test !isequal(s0[allidxs], ref)
+
+    # read only
+    @test_throws "read only" s.v[1, 1] = 1.0
+    @test_throws "read only" s[allidxs[1]] = 1.0
+    @test_throws "read only" s.e[1, :X] = 1.0
+    @test_throws "read only" s.v[1:2, 1] .= 1.0
+    @test occursin("FrozenNWState", repr(MIME"text/plain"(), s))
+    @test occursin("FrozenNWState", repr(MIME"text/plain"(), s.v))
+
+    # a state without time
+    snot = FrozenNWState(NWState(nw, uflat(s0), pflat(s0)))
+    @test isequal(snot[allidxs], NWState(nw, uflat(s0), pflat(s0))[allidxs])
+end
