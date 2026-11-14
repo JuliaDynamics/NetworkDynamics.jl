@@ -741,7 +741,7 @@ does that once: it copies states, parameters and time of `s` together with the n
 filled for them. Every read afterwards only evaluates the observed function of the requested
 components.
 
-Supports `getindex` with the same indices as `NWState`, including the `.v` and `.e` proxies.
+Supports `getindex` with symbolic indices like `NWState`, including the `.v` and `.e` proxies.
 There is no `NWParameter` inside: `s.p` is the proxy filtered down to parameters, so `s.p.v[1, :param]`
 and `s.p[idx]` read as usual.
 """
@@ -754,6 +754,7 @@ struct FrozenNWState{U,P,T,NW<:Network,B}
     buffers::B
 end
 function FrozenNWState(s::NWState)
+    isnothing(s.p) && throw(ArgumentError("Cannot freeze an NWState without parameters."))
     nw = extract_nw(s)
     u = copy(uflat(s))
     p = copy(pflat(s))
@@ -764,8 +765,8 @@ end
 
 Base.broadcastable(s::FrozenNWState) = Ref(s)
 
-# The observed function resolves every kind of index. Building it costs about a microsecond
-# though, so single states and parameters are read directly.
+# The observed function resolves every kind of index. Building it costs microseconds though,
+# so single states and parameters are read directly.
 function Base.getindex(s::FrozenNWState, idx::Union{SymbolicIndex, AbstractVector, Tuple})
     if SII.is_variable(s.nw, idx)
         s.uflat[SII.variable_index(s.nw, idx)]
@@ -784,6 +785,8 @@ end
 function Base.view(::FrozenNWState, idx)
     throw(ArgumentError("Cannot create a view into a FrozenNWState, it is a read only snapshot."))
 end
+# without this `s[idx] .= val` would silently write into a temporary
+Base.dotview(s::FrozenNWState, idxs...) = view(s, idxs...)
 
 ####
 #### Indexing proxys

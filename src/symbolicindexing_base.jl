@@ -694,9 +694,9 @@ function SII.observed(nw::Network, snis)
     # big cache for all obs outputs; it is filled with the same eltype as the network buffers
     obsoutcache = DiffCache(Vector{Float64}(undef, total_obs_dim), ad_chunksize(nw.im))
     # capture the buffer caches, not the core: the core would specialize the closure on the network
+    bufcaches = buffer_caches(nw)
     # The closures fill the network buffers for (u, p, t) unless the caller passes `buffers`
     # which already hold them, see `FrozenNWState`.
-    bufcaches = buffer_caches(nw)
     if isscalar
         (u, p, t; buffers=nothing, kwargs...) -> begin
             # assigned once, the closure below captures them

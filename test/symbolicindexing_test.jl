@@ -1114,7 +1114,6 @@ end
 
 @testset "FrozenNWState" begin
     FrozenNWState = NetworkDynamics.FrozenNWState
-    Lib = @__MODULE__() == Main ? Main.Lib : getfield(Main, :Lib)
     nw, s0 = Lib.powergridlike_network()
     s0 = NWState(nw, uflat(s0), pflat(s0), 0.0)
     s = FrozenNWState(s0)
@@ -1144,6 +1143,10 @@ end
     obsex = @obsex(EIndex(1, :src_P) + EIndex(2, :src_P))
     @test isequal(s[obsex], s0[obsex])
     @test isequal(s[[obsex, obsex]], s0[[obsex, obsex]])
+    # direct indexing with colon and array indices
+    for idx in (VIndex(1, :), VIndex(:, 1), VIndex(1:2, 1), EIndex(1, [:R, :X]), VPIndex(1, :), EPIndex(:, 1))
+        @test isequal(s[idx], s0[idx])
+    end
 
     # reading does not evaluate the network: its buffers stay untouched
     netout() = NetworkDynamics.PreallocationTools.get_tmp(nw.caches.output, Float64)
@@ -1167,6 +1170,16 @@ end
     @test_throws "read only" s[allidxs[1]] = 1.0
     @test_throws "read only" s.e[1, :X] = 1.0
     @test_throws "read only" s.v[1:2, 1] .= 1.0
+    @test_throws "read only" s[[EIndex(1, :X)]] .= 1.0
+    @test_throws "read only" s[EIndex(1:2, :X)] .= 1.0
+    @test_throws "read only" view(s, EIndex(1, :X))
+    @test_throws "without parameters" FrozenNWState(NWState(nw, uflat(s0), nothing))
+
+    # the observed function called with buffers stays allocation free
+    obsf = SII.observed(nw, eidxs(nw, :, :src_P))
+    out = zeros(length(eidxs(nw, :, :src_P)))
+    b = @b $obsf($(s.uflat), $(s.pflat), 0.0, $out; buffers=$(s.buffers))
+    @test b.allocs == 0
     @test occursin("FrozenNWState", repr(MIME"text/plain"(), s))
     @test occursin("FrozenNWState", repr(MIME"text/plain"(), s.v))
 
