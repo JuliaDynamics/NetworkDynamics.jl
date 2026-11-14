@@ -241,7 +241,22 @@ end
 
 is_loopback(eb::ComponentBatch) = isnothing(compf(eb)) && compg(eb) == NetworkDynamics.LOOPBACK_G
 is_loopback(em::EdgeModel) = em.g isa Directed && em.g.g == NetworkDynamics.LOOPBACK_G
-has_loopback_edges(im::IndexManager) = any(is_loopback, im.edgem)
+has_loopback_edges(im::IndexManager) = any(im._loopback_edge)
+
+# Topology queries answered from the loopback cache in the IndexManager. On a Network they
+# return symbolic indices, on the IndexManager plain integers.
+is_loopback(nw::Network, eidx) = is_loopback(nw.im, eidx)
+is_loopback(im::IndexManager, eidx::EIndex) = is_loopback(im, resolvecompidx(im, eidx))
+is_loopback(im::IndexManager, eidx::Int) = im._loopback_edge[eidx]
+
+loopback_eidxs(nw::Network) = EIndex.(loopback_eidxs(nw.im))
+loopback_eidxs(im::IndexManager) = findall(im._loopback_edge)
+
+# A hub and its injectors form a cluster. For an injector this is the hub it is connected to
+# through its loopback edge, for any other vertex the vertex itself.
+cluster_hub(nw::Network, vidx) = VIndex(cluster_hub(nw.im, vidx))
+cluster_hub(im::IndexManager, vidx::VIndex) = cluster_hub(im, resolvecompidx(im, vidx))
+cluster_hub(im::IndexManager, vidx::Int) = im._cluster_hub[vidx]
 has_injector_nodes(nw::Network) = !isnothing(nw.loopbackmap)
 
 """
@@ -253,7 +268,7 @@ Injector nodes are vertices at the source end of a [`LoopbackConnection`](@ref) 
 Returns an empty vector if the network has no injector nodes.
 """
 injector_vidxs(nw::Network) = injector_vidxs(nw.im)
-injector_vidxs(im::IndexManager) = VIndex.(im._injector_vidxs)
+injector_vidxs(im::IndexManager) = VIndex.(findall(v -> is_injector(im, v), 1:nv(im)))
 
 """
     is_injector(nw::Network, vidx) -> Bool
@@ -262,14 +277,13 @@ injector_vidxs(im::IndexManager) = VIndex.(im._injector_vidxs)
 Check whether vertex `vidx` is an injector node.
 """
 is_injector(nw::Network, vidx) = is_injector(nw.im, vidx)
-is_injector(im::IndexManager, vidx::VIndex) = is_injector(im, vidx.compidx)
-is_injector(im::IndexManager, vidx::Int) = vidx ∈ im._injector_vidxs
+is_injector(im::IndexManager, vidx::VIndex) = is_injector(im, resolvecompidx(im, vidx))
+is_injector(im::IndexManager, vidx::Int) = im._cluster_hub[vidx] != vidx
 
 function gen_loopback_map(im::IndexManager)
     outindex = Int[]
     aggindex = Int[]
-    for i in 1:ne(im)
-        is_loopback(im.edgem[i]) || continue
+    for i in loopback_eidxs(im)
         e = im.edgevec[i]
         # we want to copy from dst output to src input
         append!(outindex, im.v_out[e.dst])  # output idx of dst vertex

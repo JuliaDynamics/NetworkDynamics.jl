@@ -28,14 +28,16 @@ mutable struct IndexManager
     aliased_edgems::IdDict{EdgeModel, @NamedTuple{idxs::Vector{Int}, hash::UInt}}
     unique_vnames::Dict{Symbol,Int}
     unique_enames::Dict{Symbol,Int}
-    _injector_vidxs::Vector{Int}
+    _loopback_edge::BitVector    # is edge e a loopback?
+    _cluster_hub::Vector{Int}    # hub of v's cluster: the hub for injectors, v itself otherwise
     function IndexManager(g, dyn_states, edepth, vdepth, vertexm, edgem; valias, ealias)
         aliased_vertexm_hashes = _aliased_hashes(VertexModel, vertexm, valias)
         aliased_edgem_hashes = _aliased_hashes(EdgeModel, edgem, ealias)
         unique_vnames = unique_mappings(getproperty.(vertexm, :name), 1:nv(g))
         unique_enames = unique_mappings(getproperty.(edgem, :name), 1:ne(g))
         evec = collect(edges(g))
-        _inj = _find_injector_vidxs(evec, edgem)
+        _lb_edge = BitVector(is_loopback(em) for em in edgem)
+        _cl_hub = _find_cluster_hubs(nv(g), evec, _lb_edge)
         new(
             g, evec,
             (Vector{UnitRange{Int}}(undef, nv(g)) for i in 1:5)...,
@@ -51,7 +53,8 @@ mutable struct IndexManager
             aliased_edgem_hashes,
             unique_vnames,
             unique_enames,
-            _inj
+            _lb_edge,
+            _cl_hub
         )
     end
 end
@@ -69,13 +72,15 @@ function _aliased_hashes(T, cfs, aliastype)
     end
     hashdict
 end
-function _find_injector_vidxs(edgevec, edgem)
-    inj = Int[]
-    for i in eachindex(edgem)
-        is_loopback(edgem[i]) || continue
-        push!(inj, edgevec[i].src)
+# Loopback edges point from injector to hub, every injector has exactly one.
+function _find_cluster_hubs(nv, edgevec, loopback_edge)
+    hub = collect(1:nv)
+    for e in findall(loopback_edge)
+        src, dst = edgevec[e].src, edgevec[e].dst
+        @assert hub[src] == src
+        hub[src] = dst
     end
-    unique!(sort!(inj))
+    hub
 end
 
 dim(im::IndexManager) = im.lastidx_dynamic

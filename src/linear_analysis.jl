@@ -874,7 +874,7 @@ function open_loop_linearization(s0)
 
     inj_idxs = injector_vidxs(nw)
     bus_idxs = [VIndex(i) for i in 1:nv(nw) if !is_injector(nw, i)]
-    edge_idxs = [EIndex(i) for i in 1:ne(nw) if !is_loopback(nw.im.edgem[i])]
+    edge_idxs = [EIndex(i) for i in 1:ne(nw) if !is_loopback(nw, i)]
 
     buffers = get_buffers(nw, uflat(s0), pflat(s0), s0.t; initbufs=true)
     getlti = idx -> linearize_component(s0, idx; buffers)
@@ -934,7 +934,7 @@ function _gen_Ynw_ΓΣ(nw, bus_idxs)
     e_outranges_dst = Dict{Int, UnitRange{Int}}()
     e_in_offset, e_out_offset = 0, 0
     for (i, em) in enumerate(nw.im.edgem)
-        is_loopback(em) && continue
+        is_loopback(nw, i) && continue
         id = indim(em)
         e_inranges_src[i] = e_in_offset+1:e_in_offset+id.src
         e_in_offset += id.src
@@ -969,7 +969,7 @@ function _gen_Ynw_ΓΣ(nw, bus_idxs)
     #   rows e_inranges_dst[i] ← cols v_outranges[dst(i)]
     Γ_I, Γ_J, Γ_V = Int[], Int[], Float64[]
     for i in 1:ne(nw)
-        is_loopback(nw.im.edgem[i]) && continue
+        is_loopback(nw, i) && continue
         edge = nw.im.edgevec[i]
         for (r, c) in zip(e_inranges_src[i], v_outranges[edge.src])
             push!(Γ_I, r); push!(Γ_J, c); push!(Γ_V, 1.0)
@@ -986,7 +986,7 @@ function _gen_Ynw_ΓΣ(nw, bus_idxs)
     #   rows v_inranges[dst(i)] ← cols e_outranges_dst[i]
     Σ_I, Σ_J, Σ_V = Int[], Int[], Float64[]
     for i in 1:ne(nw)
-        is_loopback(nw.im.edgem[i]) && continue
+        is_loopback(nw, i) && continue
         edge = nw.im.edgevec[i]
         for (r, c) in zip(v_inranges[edge.src], e_outranges_src[i])
             push!(Σ_I, r); push!(Σ_J, c); push!(Σ_V, 1.0)
@@ -1050,21 +1050,12 @@ function _gen_Yinj_ΓΣ(nw, bus_idxs, inj_idxs)
         inj_out_offset += od
     end
 
-    # Map each injector to its hub via the loopback edge
-    inj_to_hub = Dict{Int, Int}()  # injector cidx => hub cidx
-    for i in 1:ne(nw)
-        em = nw.im.edgem[i]
-        is_loopback(em) || continue
-        edge = nw.im.edgevec[i]
-        inj_to_hub[edge.src] = edge.dst
-    end
-
     # Γ_inj: (total_inj_indim × total_bus_outdim)
     # For each injector, route the hub's potential to the injector's input
     Γ_I, Γ_J, Γ_V = Int[], Int[], Float64[]
     for vi in inj_idxs
         cidx = resolvecompidx(nw, vi)
-        hub = inj_to_hub[cidx]
+        hub = cluster_hub(nw.im, cidx)
         for (r, c) in zip(inj_inranges[cidx], v_outranges[hub])
             push!(Γ_I, r); push!(Γ_J, c); push!(Γ_V, 1.0)
         end
@@ -1076,7 +1067,7 @@ function _gen_Yinj_ΓΣ(nw, bus_idxs, inj_idxs)
     Σ_I, Σ_J, Σ_V = Int[], Int[], Float64[]
     for vi in inj_idxs
         cidx = resolvecompidx(nw, vi)
-        hub = inj_to_hub[cidx]
+        hub = cluster_hub(nw.im, cidx)
         for (r, c) in zip(v_inranges[hub], inj_outranges[cidx])
             push!(Σ_I, r); push!(Σ_J, c); push!(Σ_V, -1.0)
         end
