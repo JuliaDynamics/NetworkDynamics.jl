@@ -100,6 +100,21 @@ edges1 = [
 vertices1 = [vs_vertex, hub_vertex, Rinj_vertex, Linj_vertex]
 nw1 = Network(vertices1, edges1; warn_order=false)
 
+using NetworkDynamics: is_injector, injector_vidxs, cluster_hub, loopback_eidxs, is_loopback,
+                       resolvecompidx
+@testset "loopback topology queries" begin
+    @test injector_vidxs(nw1) == [VIndex(3), VIndex(4)]
+    @test [is_injector(nw1, VIndex(n)) for n in (:vs, :hub, :R_injector, :L_injector)] == [false, false, true, true]
+    @test cluster_hub(nw1, VIndex(:R_injector)) == VIndex(2)
+    @test cluster_hub(nw1, 4) == VIndex(2)
+    @test cluster_hub(nw1, VIndex(:hub)) == VIndex(2)
+    @test cluster_hub(nw1, VIndex(:vs)) == VIndex(1)
+    lbnames = Set(nw1.im.edgem[resolvecompidx(nw1, e)].name for e in loopback_eidxs(nw1))
+    @test lbnames == Set([:R_loopback, :L_loopback])
+    @test is_loopback(nw1, EIndex(:R_loopback))
+    @test !is_loopback(nw1, EIndex(:vs => :hub))
+end
+
 s0_1 = NWState(nw1)
 s0_1.v[:hub, :p₊v] = 0.0
 s0_1.v[:L_injector, :p₊i] = 0.0
