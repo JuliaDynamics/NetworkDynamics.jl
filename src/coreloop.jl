@@ -1,5 +1,5 @@
 function (nw::Network)(du::dT, u::T, p, t; perturb=nothing, perturb_maps=nothing, RET=Val(:du)) where {dT,T}
-    if dT isa AbstractVector && !(eachindex(du) == eachindex(u) == 1:nw.im.lastidx_dynamic)
+    if du isa AbstractVector && !(eachindex(du) == eachindex(u) == 1:nw.im.lastidx_dynamic)
         throw(ArgumentError("du or u does not have expected size $(nw.im.lastidx_dynamic)"))
     end
     if pdim(nw) > 0 && !(eachindex(p) == 1:nw.im.lastidx_p)
