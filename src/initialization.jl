@@ -81,6 +81,9 @@ end
 
 function find_fixpoint(nw::Network, x0::AbstractVector, p::AbstractVector;
                        alg=nothing, t=NaN, tol=1e-10, kwargs...)
+    # a network without states is trivially at its fixpoint
+    isempty(x0) && return NWState(nw, x0, NWParameter(nw, p))
+
     alg = isnothing(alg) ? default_fixpoint_alg(nw) : alg
     nw_fixed_t = NetworkFixedT(nw, t)
 
