@@ -75,9 +75,13 @@ function Base.show(io::IO, mime::MIME"text/plain", c::ComponentModel)
     # special known metadata of PowerDynamics
     if has_metadata(c, :pfmodel)
         pfm = get_metadata(c, :pfmodel)
-        printstyled(io, "\nPowerflow model ", color=:blue, bold=true)
-        print(io, ":", pfm.name)
-        pdim(pfm) > 0 && print(io, styled" with $(stylesymbolarray(pfm.psym, _pdef(pfm), _pguess(pfm)))")
+        printstyled(io, "\nPowerflow: ", color=:blue, bold=true)
+        if pfm isa ComponentModel
+            print(io, ":", pfm.name)
+            pdim(pfm) > 0 && print(io, styled" with $(stylesymbolarray(pfm.psym, _pdef(pfm), _pguess(pfm)))")
+        else
+            show(IOContext(io, :compact => true), pfm)
+        end
     end
 end
 # enable compact printing in lists of component models
