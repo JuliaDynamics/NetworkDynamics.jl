@@ -729,6 +729,66 @@ end
 
 
 ####
+#### Frozen state
+####
+"""
+    FrozenNWState(s::NWState)
+
+Read only snapshot of `s` on which reading observables is cheap.
+
+Reading an observable from an `NWState` might evaluate the whole network. The snapshot
+does that once: it copies states, parameters and time of `s` together with the network buffers
+filled for them. Every read afterwards only evaluates the observed function of the requested
+components.
+
+Supports `getindex` with symbolic indices like `NWState`, including the `.v` and `.e` proxies.
+There is no `NWParameter` inside: `s.p` is the proxy filtered down to parameters, so `s.p.v[1, :param]`
+and `s.p[idx]` read as usual.
+"""
+struct FrozenNWState{U,P,T,NW<:Network,B}
+    nw::NW
+    uflat::U
+    pflat::P
+    t::T
+    "output, aggregation and external input buffer for (uflat, pflat, t)"
+    buffers::B
+end
+function FrozenNWState(s::NWState)
+    isnothing(s.p) && throw(ArgumentError("Cannot freeze an NWState without parameters."))
+    nw = extract_nw(s)
+    u = copy(uflat(s))
+    p = copy(pflat(s))
+    outbuf, aggbuf, extbuf = get_buffers(nw, u, p, s.t)
+    buffers = (copy(outbuf), copy(aggbuf), isnothing(extbuf) ? nothing : copy(extbuf))
+    FrozenNWState(nw, u, p, s.t, buffers)
+end
+
+Base.broadcastable(s::FrozenNWState) = Ref(s)
+
+# The observed function resolves every kind of index. Building it costs microseconds though,
+# so single states and parameters are read directly.
+function Base.getindex(s::FrozenNWState, idx::Union{SymbolicIndex, AbstractVector, Tuple})
+    if SII.is_variable(s.nw, idx)
+        s.uflat[SII.variable_index(s.nw, idx)]
+    elseif SII.is_parameter(s.nw, idx)
+        s.pflat[SII.parameter_index(s.nw, idx)]
+    else
+        obsf = SII.observed(s.nw, idx)
+        vals = obsf(s.uflat, s.pflat, s.t; buffers=s.buffers)
+        idx isa Tuple ? Tuple(vals) : vals
+    end
+end
+
+function Base.setindex!(::FrozenNWState, val, idx)
+    throw(ArgumentError("Cannot change a FrozenNWState, it is a read only snapshot."))
+end
+function Base.view(::FrozenNWState, idx)
+    throw(ArgumentError("Cannot create a view into a FrozenNWState, it is a read only snapshot."))
+end
+# without this `s[idx] .= val` would silently write into a temporary
+Base.dotview(s::FrozenNWState, idxs...) = view(s, idxs...)
+
+####
 #### Indexing proxys
 ####
 function Base.getproperty(s::Union{NWParameter, NWState}, sym::Symbol)
@@ -736,6 +796,18 @@ function Base.getproperty(s::Union{NWParameter, NWState}, sym::Symbol)
         return FilteringProxy(s).v
     elseif sym === :e
         return FilteringProxy(s).e
+    else
+        return getfield(s, sym)
+    end
+end
+# a frozen state holds no NWParameter, `s.p` is the proxy filtered down to parameters
+function Base.getproperty(s::FrozenNWState, sym::Symbol)
+    if sym === :v
+        return FilteringProxy(s).v
+    elseif sym === :e
+        return FilteringProxy(s).e
+    elseif sym === :p
+        return FilteringProxy(s).p
     else
         return getfield(s, sym)
     end
@@ -853,6 +925,7 @@ function FilteringProxy(
 end
 FilteringProxy(s::NWState) = FilteringProxy(s, nothing, nothing, true, !isnothing(s.p), true, true, true)
 FilteringProxy(s::NWParameter) = FilteringProxy(s, nothing, nothing, false, true, false, false, false)
+FilteringProxy(s::FrozenNWState) = FilteringProxy(s, nothing, nothing, true, true, true, true, true)
 function generate_indices(f::FilteringProxy; kwargs...)
     generate_indices(f.data, f.compfilter, f.varfilter;
         s=f.states,
@@ -1056,6 +1129,7 @@ extract_nw(f::SciMLBase.ODEFunction) = extract_nw(f.sys)
 extract_nw(int::SciMLBase.DEIntegrator) = extract_nw(int.f)
 extract_nw(s::NWState) = s.nw
 extract_nw(p::NWParameter) = p.nw
+extract_nw(s::FrozenNWState) = s.nw
 extract_nw(p::IndexingProxy) = extract_nw(p.data)
 function extract_nw(::Nothing)
     throw(ArgumentError("Needs system context to generate matching indices. Pass Network, sol, prob, ..."))
@@ -1120,16 +1194,16 @@ end
 
 function SII.observed(nw::Network, obsex::ObservableExpression)
     inputf = SII.observed(nw, obsex.inputs)
-    (u, p, t) -> begin
-        input = inputf(u, p, t)
+    (u, p, t; kwargs...) -> begin
+        input = inputf(u, p, t; kwargs...)
         obsex.f(input)
     end
 end
 function SII.observed(nw::Network, obsexs::AbstractVector{<:ObservableExpression})
     inputfs = map(obsex -> SII.observed(nw, obsex.inputs), obsexs)
-    (u, p, t) -> begin
+    (u, p, t; kwargs...) -> begin
         map(obsexs, inputfs) do obsex, inputf
-            input = inputf(u, p, t)
+            input = inputf(u, p, t; kwargs...)
             obsex.f(input)
         end
     end
@@ -1137,6 +1211,10 @@ end
 
 Base.getindex(s::NWState, idx::ObservableExpression) = SII.getu(s, idx)(s)
 Base.getindex(s::NWParameter, idx::ObservableExpression) = SII.getp(s, idx)(s)
+function Base.getindex(s::FrozenNWState, idx::ObservableExpression)
+    obsf = SII.observed(s.nw, idx)
+    obsf(s.uflat, s.pflat, s.t; buffers=s.buffers)
+end
 
 # using getindex to access component models
 function Base.getindex(nw::Network, i::EIndex{<:CONCRETE_COMPIDX, Nothing})

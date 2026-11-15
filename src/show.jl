@@ -403,6 +403,12 @@ Base.show(io::IO, idx::StateIdx) = print(io, "StateIdx(", repr_colon(idx.idx), "
 repr_colon(::Colon) = ":"
 repr_colon(x) = repr(x)
 
+function Base.show(io::IO, mime::MIME"text/plain", @nospecialize(s::FrozenNWState))
+    ioc = IOContext(io, :compact => true)
+    print(io, "FrozenNWState{$(typeof(s.uflat))} at t = ", s.t, " of ")
+    show(ioc, mime, s.nw)
+end
+
 function Base.show(io::IO, mime::MIME"text/plain", @nospecialize(s::NWState))
     ioc = IOContext(io, :compact => true)
     if get(io, :limit, true)::Bool
@@ -487,6 +493,8 @@ function Base.show(io::IO, mime::MIME"text/plain", fp::FilteringProxy)
         print(io, "NWState()")
     elseif fp.data isa NWParameter
         print(io, "NWParameter()")
+    elseif fp.data isa FrozenNWState
+        print(io, "FrozenNWState()")
     else
         print(io, repr(typeof(fp.data)))
     end
