@@ -928,7 +928,7 @@ Dependency type of an equation w.r.t. a state variable:
   :explicit     — linear in the state; coefficient is exactly ±1 (unit coefficient, no division needed)
   :linear_const — linear in the state; coefficient is free of states (constant/parameter-only)
   :linear_state — linear in the state; coefficient involves other states (risky denominator)
-  :unsolvable   — unsolvable in the state (e.g. x^2, sin(x))
+  :unsolvable   — unsolvable in the state (e.g. x^2, sin(x), piecewise coefficient, or irreducible)
   :fake         — fake equation × extended state, the rows and columns this marks only
                   exist to square the matrix when an equation holds nothing but extended
                   states (the algebraic `x` of a differential state)
@@ -956,11 +956,14 @@ function _build_coeff_mat(lineqs, obseqs, match_states::Vector, all_states::Vect
     has_input = falses(N)
 
     function get_coeff_type(eq, s)
+        isirreducible(s) && return :unsolvable
         linex = get!(linexpanders, s) do
-            LinearExpander(s)
+            LinearExpander(s; strict=true)
         end
         a, b, lin = linex(eq)
-        if !lin
+        # LinearExpander treats `ifelse(c, a, b + k*x)` as linear in x with coefficient
+        # `ifelse(c, 0, k)`, which may vanish. So a piecewise coefficient is not solvable.
+        if !lin || _contains_ifelse(unwrap_const(a))
             return :unsolvable
         elseif _is_literal_zero(a)
             return :none
@@ -1021,6 +1024,15 @@ function _build_coeff_mat(lineqs, obseqs, match_states::Vector, all_states::Vect
         coeff, has_input, extended_match_states, filter(s -> s ∈ extended_states_set, extended_match_states)
     else
         coeff, has_input, match_states, ST[]
+    end
+end
+function _contains_ifelse(ex)
+    iscall(ex) || return false
+    op = operation(ex)
+    if op === ifelse || op === SymbolicUtils.ifelse_branching || op === SymbolicUtils.ifelse_eager
+        true
+    else
+        any(_contains_ifelse, arguments(ex))
     end
 end
 

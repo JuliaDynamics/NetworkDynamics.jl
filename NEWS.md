@@ -1,5 +1,24 @@
 # NetworkDynamics Release Notes
 
+## v1.4.1 Changelog
+
+- **Simplification respects `irreducible` and piecewise coefficients.** A variable marked
+  `[irreducible=true]` is never solved for and stays a state. A variable is also no longer solved
+  for when its coefficient contains an `ifelse`, as in `ifelse(c, a, b + k*x)`: one branch may
+  have coefficient zero, and the solved expression would divide by it ([#448]).
+- `NetworkDynamics.FrozenNWState(s)` makes an immutable copy of an `NWState` together with the
+  internal buffers, so reading many observables from one state does not re-evaluate the rhs
+  each time ([#445]).
+- Topology queries for injector clusters: `is_injector`, `injector_vidxs`, `cluster_hub`,
+  `loopback_eidxs` and `is_loopback(nw, idx)` ([#446]).
+- `find_fixpoint` on a network without states returns the state directly instead of calling
+  the solver.
+- Showing a component no longer errors on `:pfmodel` metadata that is not a component model.
+
+[#445]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/445
+[#446]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/446
+[#448]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/448
+
 ## v1.4.0 Changelog
 
 ### Component cache

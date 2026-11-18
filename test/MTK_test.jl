@@ -2996,3 +2996,33 @@ end
     @test md[:default] == 1.0
     @test md[:guess] == 5.0
 end
+
+@testset "piecewise coefficients and irreducible states are never solved for" begin
+    # x only appears algebraically in the equation for y
+    function ifelse_sys(rhs_mode; irreducible=false)
+        @variables x(t) [irreducible=irreducible] y(t) u(t) w(t) o(t) i(t)
+        @parameters p=1.0 c=2.0 a=0.0 b=1.0
+        rhs = if rhs_mode == :linear
+            a + b*x
+        elseif rhs_mode == :branch       # coefficient ifelse(p > 0.5, 0, b)
+            ifelse(p > 0.5, c, a + b*x)
+        elseif rhs_mode == :samecoeff    # coefficient b in both branches
+            ifelse(p > 0.5, c + b*x, a + b*x)
+        elseif rhs_mode == :cond
+            ifelse(x > 0.5, c, a)
+        end
+        eqs = [Dt(u) ~ -u + i,
+               y ~ rhs,
+               0 ~ y - u,
+               Dt(w) ~ x - w,
+               o ~ u]
+        System(eqs, t; name=:test)
+    end
+    is_state(v, s) = s ∈ NetworkDynamics.sym(v) && s ∉ NetworkDynamics.obssym(v)
+
+    @test !is_state(VertexModel(ifelse_sys(:linear), [:i], [:o]), :x)
+    @test !is_state(VertexModel(ifelse_sys(:samecoeff), [:i], [:o]), :x)
+    @test is_state(VertexModel(ifelse_sys(:branch), [:i], [:o]), :x)
+    @test is_state(VertexModel(ifelse_sys(:cond), [:i], [:o]), :x)
+    @test is_state(VertexModel(ifelse_sys(:linear; irreducible=true), [:i], [:o]), :x)
+end
