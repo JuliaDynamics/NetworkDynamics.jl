@@ -3,7 +3,8 @@ const MTK_CACHE_MODE = Ref(:off)
 
 # The properties which make up the structure of a system. Two systems are structurally equal
 # when all of them agree, recursing through `systems`. Names, guesses, descriptions and most
-# defaults are not on the list, those are read from each instance.
+# defaults are not on the list, those are read from each instance. So is the postprocessing,
+# which runs on each built component.
 const STRUCTURAL_PROPERTIES = (
     eqs = ModelingToolkitBase.get_eqs,
     unknowns = ModelingToolkitBase.get_unknowns,
@@ -15,7 +16,6 @@ const STRUCTURAL_PROPERTIES = (
     ignored_connections = ModelingToolkitBase.get_ignored_connections,
     initf = s -> SymbolicUtils.getmetadata(s, NetworkDynamics.SystemInitFormulas, nothing),
     guessf = s -> SymbolicUtils.getmetadata(s, NetworkDynamics.SystemGuessFormulas, nothing),
-    postprocessing = s -> SymbolicUtils.getmetadata(s, ComponentPostprocessing, nothing),
     systems = ModelingToolkitBase.get_systems,
 )
 

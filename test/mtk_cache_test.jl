@@ -201,6 +201,23 @@ end
     @test get_metadata(cached[2], :a, :default) == 3.0
 end
 
+@testset "postprocessing stays per instance" begin
+    # closures capturing equal but distinct vectors hash differently, they must not split the cache
+    function ppsys(data)
+        @variables x(t)=1 i(t) y(t)
+        sys = System([Dt(x) ~ -x + i, y ~ x], t; name=:ppsys)
+        pp = (c, ns) -> set_metadata!(c, :ppdata, data)
+        SymbolicUtils.setmetadata(sys, ComponentPostprocessing, pp)
+    end
+    cached = NetworkDynamics.with_mtk_cache() do
+        NetworkDynamics.wipe_mtk_cache!()
+        built = [VertexModel(ppsys(d), [:i], [:y]) for d in ([1, 2], [1, 2], [3])]
+        @test compile_counts() == (1, 2)
+        built
+    end
+    @test get_metadata.(cached, :ppdata) == [[1, 2], [1, 2], [3]]
+end
+
 @testset "warnings show on the filling build, verbose builds bypass the cache" begin
     function conflicting()
         @variables x(t) i(t) y(t)
