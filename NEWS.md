@@ -11,13 +11,14 @@
   each time ([#445]).
 - Topology queries for injector clusters: `is_injector`, `injector_vidxs`, `cluster_hub`,
   `loopback_eidxs` and `is_loopback(nw, idx)` ([#446]).
+- Feed forward injector vertices can have external inputs ([#449]).
 - `find_fixpoint` on a network without states returns the state directly instead of calling
   the solver.
-- Showing a component no longer errors on `:pfmodel` metadata that is not a component model.
 
 [#445]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/445
 [#446]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/446
 [#448]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/448
+[#449]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/449
 
 ## v1.4.0 Changelog
 
