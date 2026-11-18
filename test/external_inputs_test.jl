@@ -100,3 +100,20 @@ end
     @test NWState(nw, du).v[1, :y] == 3.0
     @test s.e[1, :out] == 3.0
 end
+
+@testset "feed forward injector with external input" begin
+    # injector at vertex 1 reads the cluster input and the cluster state via extin
+    injector = VertexModel(f=(du, u, i, ext, p, t) -> du[1] = -u[1],
+                           g=(o, u, i, ext, p, t) -> o[1] = i[1] + ext[1],
+                           sym=[:z], insym=[:u], outsym=[:i], extin=[VIndex(2, :x)])
+    cluster = VertexModel(f=(du, u, i, p, t) -> du[1] = -u[1] + i[1],
+                          g=1:1, sym=[:x], insym=[:i], outsym=[:u])
+    lb = LoopbackConnection(potential=[:u], flow=[:i])
+    nw = Network(path_graph(2), [injector, cluster], [lb])
+
+    u = [1.0, 2.0]
+    du = zeros(2)
+    nw(du, u, pflat(NWParameter(nw)), 0.0)
+    # injector output i = x + x = 4, the loopback flips its sign, so dx = -2 - 4
+    @test du == [-1.0, -6.0]
+end

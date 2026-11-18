@@ -71,6 +71,9 @@ function (nwc::NetworkCore)(::Val{cacheT}, du, u, p, t, perturb, perturb_maps, R
     # process batches might be async so sync before next step
     ex isa KAExecution && KernelAbstractions.synchronize(get_backend(du))
 
+    # gather the external inputs, only states and outputs of non-ff components are allowed, which are known at this point
+    has_external_input(nwc) && collect_externals!(nwc.extmap, extbuf, u, o)
+
     # if loopback edges are present, we direclty copy cluster output to satelite input
     !isnothing(nwc.loopbackmap) && apply_loopback!(aggbuf, o, nwc.loopbackmap)
 
@@ -80,13 +83,10 @@ function (nwc::NetworkCore)(::Val{cacheT}, du, u, p, t, perturb, perturb_maps, R
     end
 
     # process vg WITH ff (only allowed on loopback edges)
-    process_batches!(ex, Val{:g}(), hasff, nwc.vertexbatches, (aggbuf, nothing), duopt)
+    process_batches!(ex, Val{:g}(), hasff, nwc.vertexbatches, (aggbuf, extbuf), duopt)
 
     # process batches might be async so sync before next step
     ex isa KAExecution && KernelAbstractions.synchronize(get_backend(du))
-
-    # gather the external inputs
-    has_external_input(nwc) && collect_externals!(nwc.extmap, extbuf, u, o)
 
     if !isnothing(perturb)
         apply_perturb!(o, perturb, perturb_maps.vo_map)
