@@ -28,7 +28,8 @@ const STRUCTURAL_VAR_METADATA = (
     VariableGuessFormula,
     ModelingToolkitBase.VariableConnectType,
     ModelingToolkitBase.VariableInput,
-    ModelingToolkitBase.VariableOutput
+    ModelingToolkitBase.VariableOutput,
+    ModelingToolkitBase.VariableIrreducible,
 )
 
 # The key is a hash of the structure of `sys` and of the other arguments of
