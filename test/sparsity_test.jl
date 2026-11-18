@@ -288,6 +288,12 @@ end
     nw = Network(path_graph(3), v, e)
     @test all(isnan, uflat(NWState(nw)))
     @test get_jac_prototype(nw; check=true) == get_jac_prototype(nw; check=false)
+
+    # 0/0 at the check point fills the row with NaN, which is skipped with a warning
+    vnan = VertexModel(f=(dx,x,in,p,t)->(dx[1]=(p[1]-1)/(p[1]-1)*x[1]*in[1]), g=1, dim=1, sym=[:x], psym=[:a], insym=[:i])
+    nwnan = Network(path_graph(3), vnan, e)
+    jnan = @test_logs (:warn, r"NaN entries") get_jac_prototype(nwnan; check=true)
+    @test jnan == get_jac_prototype(nwnan; check=false)
 end
 
 @testset "sparse keyword" begin

@@ -255,8 +255,11 @@ end
 
 function _assert_conservative_pattern(refjac, pattern)
     @assert size(refjac) == size(pattern) "Reference jacobian and template jacobian must have the same size!"
+    # a NaN spreads to every partial of its row, so it says nothing about the pattern
+    nnan = count(isnan, refjac)
+    nnan > 0 && @warn "ForwardDiff jacobian has $nnan NaN entries at the check point, those are not checked."
     for i in eachindex(refjac)
-        if !iszero(refjac[i]) && iszero(pattern[i])
+        if !isnan(refjac[i]) && !iszero(refjac[i]) && iszero(pattern[i])
             error("Sparsity pattern mismatch! ForwardDiff returned nonzero entry where pattern is zero!")
         end
     end
