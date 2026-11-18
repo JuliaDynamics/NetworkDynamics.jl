@@ -236,6 +236,7 @@ function _check_cached(hit, fresh, modelname)
     elseif !_varmeta_isequal(hit, fresh)
         push!(diff, "variable metadata")
     end
+    isequal(_postprocessing_types(hit), _postprocessing_types(fresh)) || push!(diff, "postprocessing")
     nameof(hit) === nameof(fresh) || push!(diff, "name")
     _dict_isequal(initial_conditions(hit), initial_conditions(fresh)) || push!(diff, "initial conditions")
     _dict_isequal(ModelingToolkitBase.guesses(hit), ModelingToolkitBase.guesses(fresh)) || push!(diff, "guesses")
@@ -246,6 +247,10 @@ function _check_cached(hit, fresh, modelname)
         (`wipe_mtk_cache!()`). `cache=:off` skips the cache for a single call.")
 end
 _dict_isequal(a, b) = isequal(Dict(a), Dict(b))
+# closures which capture data compare by identity, so only their types are compared
+function _postprocessing_types(sys)
+    Dict(k => typeof(v) for (k, v) in collect_comp_metadata(sys, ComponentPostprocessing))
+end
 
 # Variable metadata compared in full, apart from the default value. A symbol keeps the default
 # it was declared with, while the instance reads its defaults from the system.
