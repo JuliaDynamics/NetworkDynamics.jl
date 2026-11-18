@@ -80,8 +80,11 @@ function get_jac_prototype(
     _nw = @set nw_compat.core.vertexbatches = vbatches
     nw = @set _nw.core.layer.edgebatches = ebatches
 
-    s0 = NWState(nw)
-    wrap = let nw=nw, p=pflat(s0)
+    # The tracer only sees the structure, conditionals are gone at this point. So any point
+    # will do, and building a state with defaults is expensive on large networks.
+    u0 = fill(NaN, dim(nw))
+    p0 = fill(NaN, pdim(nw))
+    wrap = let nw=nw, p=p0
         function(dx, x)
             nw(dx, x, p, NaN)
             nothing
@@ -91,19 +94,15 @@ function get_jac_prototype(
     # A BitSet is as wide as its largest index, which makes the default tracer quadratic in
     # the network size. A Set only stores the few indices each state actually depends on.
     detector = TracerSparsityDetector(; gradient_pattern_type=Set{Int})
-    jac = jacobian_sparsity(wrap, similar(uflat(s0)), uflat(s0), detector)
+    jac = jacobian_sparsity(wrap, similar(u0), u0, detector)
 
-    # compare with a forward diff jacobian to ensure sparsity pattern is correct
+    # compare with a forward diff jacobian at the defaults, with ones where they leave a gap
     if check
-        s0_orig = NWState(nw_compat)
-        if all(!isnan, uflat(s0_orig)) && all(!isnan, pflat(s0_orig))
-            fwjac = _jacobian_at_point(nw_compat, s0_orig)
-            _assert_conservative_pattern(fwjac, jac)
-        else
-            s0_orig_ones = NWState(nw_compat, ufill=1.0, pfill=1.0) # fill with ones
-            fwjac = _jacobian_at_point(nw_compat, s0_orig_ones)
-            _assert_conservative_pattern(fwjac, jac)
-        end
+        s0 = NWState(nw_compat)
+        ucheck = replace(uflat(s0), NaN => 1.0)
+        pcheck = replace(pflat(s0), NaN => 1.0)
+        fwjac = _jacobian_at_point(nw_compat, ucheck, pcheck)
+        _assert_conservative_pattern(fwjac, jac)
     end
     return jac
 end
@@ -250,12 +249,8 @@ function _test_SCT_compat(batch; error=false, showerror)
     return (; fworks, gworks)
 end
 
-function _jacobian_at_point(nw, s0)
-    ForwardDiff.jacobian(
-        (du, u) -> nw(du, u, pflat(s0), NaN),
-        zeros(dim(nw)),
-        uflat(s0)
-    )
+function _jacobian_at_point(nw, u, p)
+    ForwardDiff.jacobian((du, u) -> nw(du, u, p, NaN), zeros(dim(nw)), u)
 end
 
 function _assert_conservative_pattern(refjac, pattern)

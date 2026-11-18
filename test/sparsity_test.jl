@@ -281,6 +281,15 @@ end
     @test Matrix(nw2.jac_prototype) == Bool[1 0 0; 1 1 0; 0 1 1]
 end
 
+@testset "check without defaults" begin
+    # neither x nor a have a default, a check at the NaN point would flag every entry
+    v = VertexModel(f=(dx,x,in,p,t)->(dx[1]=p[1]*x[1]*in[1]), g=1, dim=1, sym=[:x], psym=[:a], insym=[:i])
+    e = EdgeModel(g=AntiSymmetric((o,vs,vd,p,t)->(o[1]=vs[1]-vd[1])), outdim=1, pdim=0)
+    nw = Network(path_graph(3), v, e)
+    @test all(isnan, uflat(NWState(nw)))
+    @test get_jac_prototype(nw; check=true) == get_jac_prototype(nw; check=false)
+end
+
 @testset "sparse keyword" begin
     v = VertexModel(f=(dx,x,in,p,t)->(dx[1]=in[1]), g=1, dim=1, pdim=0, sym=[:x], insym=[:i])
     e = EdgeModel(g=Directed((o,vs,vd,p,t)->(o[1]=vs[1])), outdim=1, pdim=0)
