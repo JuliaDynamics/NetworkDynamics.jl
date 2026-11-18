@@ -1,7 +1,7 @@
 struct RemainingConditionalsException <: Exception end
 
 """
-    get_jac_prototype(nw::Network; check=:auto, verbose=true, showerror)
+    get_jac_prototype(nw::Network; check=:auto, verbose=false, showerror)
 
 Compute the sparsity pattern of the Jacobian matrix for a NetworkDynamics network.
 
@@ -15,10 +15,11 @@ in that case the function will attempt to
 - first try to replace if/else in RuntimeGeneratedFunctions with something SCT can handle [1]
 - if it still does not work, replace the component function with a dense equivalent.
 
-If `showerror=true` the error which occurred during the compatibility test will be printed to stdout.
+If `verbose=true` it reports which batches needed such a replacement. If `showerror=true` the
+error which occurred during the compatibility test will be printed to stdout.
 
 The `check` argument controls whether the detected sparsity pattern is verified against
-the forward-diff jacobian. This check will be disabled with a warning for large networks.
+the forward-diff jacobian. `:auto` skips it for large networks.
 
 # Returns
 - A sparse matrix representing the sparsity pattern of the Jacobian matrix
@@ -43,13 +44,13 @@ See also [`set_jac_prototype!`](@ref).
 """
 function get_jac_prototype(
     nw_original::Network;
-    check=:auto, make_compatible=true, verbose=true, showerror=false,
+    check=:auto, make_compatible=true, verbose=false, showerror=false,
     dense=nothing, remove_conditions=nothing, # deprecated
 )
     if check == :auto
         if dim(nw_original) > 10_000
             check = false
-            verbose && @warn "Skipping sparsity pattern check for large network (dim=$(dim(nw_original))). Force using `check=true`"
+            verbose && @warn "Skipping sparsity pattern check for large network (dim=$(dim(nw_original))). Force it with check=true."
         else
             check = true
         end
