@@ -14,8 +14,8 @@
 - Feed forward injector vertices can have external inputs ([#449]).
 - `find_fixpoint` on a network without states returns the state directly instead of calling
   the solver.
-- `get_jac_prototype` is quiet by default (`verbose=false`). Pass `verbose=true` to see which
-  batches fall back to a rewritten or dense function, and when the check is skipped ([#451]).
+- `get_jac_prototype` no longer reports batches whose conditionals were rewritten. It only warns
+  when a batch falls back to a dense function, `verbose=false` silences that ([#451]).
 
 [#445]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/445
 [#446]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/446

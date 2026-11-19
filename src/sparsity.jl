@@ -1,7 +1,7 @@
 struct RemainingConditionalsException <: Exception end
 
 """
-    get_jac_prototype(nw::Network; check=:auto, verbose=false, showerror)
+    get_jac_prototype(nw::Network; check=:auto, verbose=true, showerror)
 
 Compute the sparsity pattern of the Jacobian matrix for a NetworkDynamics network.
 
@@ -15,8 +15,10 @@ in that case the function will attempt to
 - first try to replace if/else in RuntimeGeneratedFunctions with something SCT can handle [1]
 - if it still does not work, replace the component function with a dense equivalent.
 
-If `verbose=true` it reports which batches needed such a replacement. If `showerror=true` the
-error which occurred during the compatibility test will be printed to stdout.
+With `verbose=true` it warns about every batch that falls back to a dense function, since this
+usually hints at a problem in the model.
+
+If `showerror=true` the error which occurred during the compatibility test will be printed to stdout.
 
 The `check` argument controls whether the detected sparsity pattern is verified against
 the forward-diff jacobian. `:auto` skips it for large networks.
@@ -44,16 +46,11 @@ See also [`set_jac_prototype!`](@ref).
 """
 function get_jac_prototype(
     nw_original::Network;
-    check=:auto, make_compatible=true, verbose=false, showerror=false,
+    check=:auto, make_compatible=true, verbose=true, showerror=false,
     dense=nothing, remove_conditions=nothing, # deprecated
 )
     if check == :auto
-        if dim(nw_original) > 10_000
-            check = false
-            verbose && @warn "Skipping sparsity pattern check for large network (dim=$(dim(nw_original))). Force it with check=true."
-        else
-            check = true
-        end
+        check = dim(nw_original) <= 10_000
     end
 
     if !isnothing(dense)
@@ -103,7 +100,7 @@ function get_jac_prototype(
         ucheck = replace(uflat(s0), NaN => 1.0)
         pcheck = replace(pflat(s0), NaN => 1.0)
         fwjac = _jacobian_at_point(nw_compat, ucheck, pcheck)
-        _assert_conservative_pattern(fwjac, jac)
+        _assert_conservative_pattern(fwjac, jac; verbose)
     end
     return jac
 end
@@ -120,18 +117,15 @@ function get_compatible_batch(batch::ComponentBatch{T}, i; verbose, showerror) w
         error("ComponentBatch type must be either VertexModel or EdgeModel")
     end
 
-    verbose && println("$type $i containing $(length((batch.indices))) components not directly SCT compatible! Pass `showerror=true` to see full stacktraces, hide message with verbose=false.")
-
     # stage 1, try to replace conditionals. `filter_conditionals` hands back the very same
     # function when there is nothing to rewrite, which is also what we fall back to when it
     # gives up, so an unchanged function means "retesting would tell us nothing new".
     retest = false
     if !fworks
-        verbose && println(" - try to filter conditionals in compf...")
         newf = try
             filter_conditionals(batch.compf)
         catch e
-            verbose && println(" - Failed to remove conditionals from compf: $e")
+            showerror && println("Failed to remove conditionals from compf: $e")
             batch.compf
         end
         if newf !== batch.compf
@@ -140,11 +134,10 @@ function get_compatible_batch(batch::ComponentBatch{T}, i; verbose, showerror) w
         end
     end
     if !gworks
-        verbose && println(" - try to filter conditionals in compg...")
         newg = try
             filter_conditionals(batch.compg)
         catch e
-            verbose && println(" - Failed to remove conditionals from compg: $e")
+            showerror && println("Failed to remove conditionals from compg: $e")
             batch.compg
         end
         if newg !== batch.compg
@@ -158,13 +151,25 @@ function get_compatible_batch(batch::ComponentBatch{T}, i; verbose, showerror) w
     end
     fworks && gworks && return batch
 
-    # stage 2, replace with dense equivalents
+    # stage 2, replace with dense equivalents. Unlike stage 1 this usually points at a
+    # modeling problem, so it is the one thing reported.
+    if verbose
+        if !fworks && !gworks
+            densefns = "f and g"
+        elseif !fworks
+            densefns = "f"
+        else
+            densefns = "g"
+        end
+        @warn "$type $i ($(length(batch.indices)) components) is not compatible with \
+            SparseConnectivityTracer, falling back to a dense $densefns function. The Jacobian \
+            pattern will contain dense blocks. Pass showerror=true to see why, or \
+            verbose=false to silence this."
+    end
     if !fworks
-        verbose && println(" - Fallback to dense f-function for batch")
         batch = @set batch.compf = _generic_dense_f
     end
     if !gworks
-        verbose && println(" - Fallback to dense g-function for batch")
         densg = T == VertexModel ? _generic_dense_vertexg : _generic_dense_edgeg
         batch = @set batch.compg = densg
     end
@@ -254,11 +259,11 @@ function _jacobian_at_point(nw, u, p)
     ForwardDiff.jacobian((du, u) -> nw(du, u, p, NaN), zeros(dim(nw)), u)
 end
 
-function _assert_conservative_pattern(refjac, pattern)
+function _assert_conservative_pattern(refjac, pattern; verbose)
     @assert size(refjac) == size(pattern) "Reference jacobian and template jacobian must have the same size!"
     # a NaN spreads to every partial of its row, so it says nothing about the pattern
     nnan = count(isnan, refjac)
-    nnan > 0 && @warn "ForwardDiff jacobian has $nnan NaN entries at the check point, those are not checked."
+    verbose && nnan > 0 && @warn "ForwardDiff jacobian has $nnan NaN entries at the check point, those are not checked."
     for i in eachindex(refjac)
         if !isnan(refjac[i]) && !iszero(refjac[i]) && iszero(pattern[i])
             error("Sparsity pattern mismatch! ForwardDiff returned nonzero entry where pattern is zero!")

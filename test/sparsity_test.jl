@@ -145,7 +145,7 @@ end
     @named valvet2_mtk = ValveToggle2()
     valvet2 = EdgeModel(valvet2_mtk, [:p_src], [:p_dst], AntiSymmetric([:q]))
     nw2 = Network(g, v, valvet2)
-    j2 = get_jac_prototype(nw2) # should fall bakc to dense
+    j2 = @test_logs (:warn, r"dense g function") get_jac_prototype(nw2) # falls back to dense
     @test j1 == j2 # no diff in that case
 
     @mtkmodel NestedValveToggle begin
@@ -167,7 +167,7 @@ end
     @named nested_mtk = NestedValveToggle()
     nested = EdgeModel(nested_mtk, [:p_src], [:p_dst], AntiSymmetric([:q]))
     nw3 = Network(g, v, nested)
-    j3 = get_jac_prototype(nw3) # nested conditionals collapse from the inside out
+    j3 = @test_logs get_jac_prototype(nw3) # nested conditionals collapse from the inside out
     @test j1 == j3
 
     # the edges have no states, so a dense g gives the same pattern; check the batches instead
