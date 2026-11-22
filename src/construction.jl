@@ -37,7 +37,7 @@ Optional keyword arguments:
     and the initialization use sparse linear algebra. Equivalent to calling
     [`set_jac_prototype!`](@ref) afterwards, see also [`get_jac_prototype`](@ref).
  - `warn=true`:
-    Warn if the sparsity detection falls back to dense blocks (only with `sparse=true`).
+    Warn on unexpected events during construction.
  - `verbose=false`:
     Show additional information during construction.
  - `fullytyped=false`:

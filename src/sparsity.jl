@@ -263,7 +263,7 @@ function _test_SCT_compat(batch; error=false, showerror)
 end
 
 function _jacobian_at_point(nw, u, p)
-    ForwardDiff.jacobian((du, u) -> nw(du, u, p, NaN), zeros(dim(nw)), u)
+    ForwardDiff.jacobian((du, u) -> nw(du, u, p, 0.0), zeros(dim(nw)), u)
 end
 
 function _assert_conservative_pattern(refjac, pattern; warn)
