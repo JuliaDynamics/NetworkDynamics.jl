@@ -300,6 +300,16 @@ end
     @test jnan == get_jac_prototype(nwnan; check=false)
 end
 
+@testset "selection on parameters and time" begin
+    # ifelse on a plain float picks one branch, the pattern has to hold for both
+    e = EdgeModel(g=AntiSymmetric((o,vs,vd,p,t)->(o[1]=vs[1]-vd[1])), outdim=1, pdim=0)
+    vp = VertexModel(f=(dx,x,in,p,t)->(dx[1]=ifelse(p[1] > 0, in[1], 0.0) - x[1]), g=1, dim=1, sym=[:x=>0], psym=[:on=>1], insym=[:i])
+    vt = VertexModel(f=(dx,x,in,p,t)->(dx[1]=ifelse(t > 1, in[1], 0.0) - x[1]), g=1, dim=1, sym=[:x=>0], insym=[:i])
+    coupled = Bool[1 1 0; 1 1 1; 0 1 1]
+    @test Matrix(get_jac_prototype(Network(path_graph(3), vp, e); check=true)) == coupled
+    @test Matrix(get_jac_prototype(Network(path_graph(3), vt, e); check=true)) == coupled
+end
+
 @testset "sparse keyword" begin
     v = VertexModel(f=(dx,x,in,p,t)->(dx[1]=in[1]), g=1, dim=1, pdim=0, sym=[:x], insym=[:i])
     e = EdgeModel(g=Directed((o,vs,vd,p,t)->(o[1]=vs[1])), outdim=1, pdim=0)

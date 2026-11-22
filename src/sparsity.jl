@@ -83,13 +83,15 @@ function get_jac_prototype(
     _nw = @set nw_compat.core.vertexbatches = vbatches
     nw = @set _nw.core.layer.edgebatches = ebatches
 
-    # The tracer only sees the structure, conditionals are gone at this point. So any point
-    # will do, and building a state with defaults is expensive on large networks.
+    # p and t are tracers without an index of their own, so they add nothing to the pattern.
+    # A selection on them, like ifelse(p > 0, ...), then yields both branches, as it did in
+    # the batch test above. Plain floats would pick one branch for one parameter set.
     u0 = fill(NaN, dim(nw))
-    p0 = fill(NaN, pdim(nw))
-    wrap = let nw=nw, p=p0
+    wrap = let nw=nw, np=pdim(nw)
         function(dx, x)
-            nw(dx, x, p, NaN)
+            notrace = zero(eltype(x))
+            p = fill!(similar(x, np), notrace)
+            nw(dx, x, p, notrace)
             nothing
         end
     end
