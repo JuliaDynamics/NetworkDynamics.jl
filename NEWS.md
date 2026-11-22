@@ -15,7 +15,9 @@
 - `find_fixpoint` on a network without states returns the state directly instead of calling
   the solver.
 - `get_jac_prototype` no longer reports batches whose conditionals were rewritten. It only warns
-  when a batch falls back to a dense function, `verbose=false` silences that ([#451]).
+  when a batch falls back to a dense function, `warn=false` silences that. The `verbose` keyword
+  of `get_jac_prototype` is deprecated in favor of `warn`. `Network` takes `warn=true` as well and
+  forwards it when `sparse=true` ([#451]).
 
 [#445]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/445
 [#446]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/446

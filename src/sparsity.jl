@@ -1,7 +1,7 @@
 struct RemainingConditionalsException <: Exception end
 
 """
-    get_jac_prototype(nw::Network; check=:auto, verbose=true, showerror)
+    get_jac_prototype(nw::Network; check=:auto, warn=true, showerror)
 
 Compute the sparsity pattern of the Jacobian matrix for a NetworkDynamics network.
 
@@ -15,7 +15,7 @@ in that case the function will attempt to
 - first try to replace if/else in RuntimeGeneratedFunctions with something SCT can handle [1]
 - if it still does not work, replace the component function with a dense equivalent.
 
-With `verbose=true` it warns about every batch that falls back to a dense function, since this
+With `warn=true` it warns about every batch that falls back to a dense function, since this
 usually hints at a problem in the model.
 
 If `showerror=true` the error which occurred during the compatibility test will be printed to stdout.
@@ -46,9 +46,14 @@ See also [`set_jac_prototype!`](@ref).
 """
 function get_jac_prototype(
     nw_original::Network;
-    check=:auto, make_compatible=true, verbose=true, showerror=false,
-    dense=nothing, remove_conditions=nothing, # deprecated
+    check=:auto, make_compatible=true, warn=true, showerror=false,
+    verbose=nothing, dense=nothing, remove_conditions=nothing, # deprecated
 )
+    if !isnothing(verbose)
+        Base.depwarn("The verbose keyword of get_jac_prototype is deprecated, use warn instead.",
+                     :get_jac_prototype)
+        warn = verbose
+    end
     if check == :auto
         check = dim(nw_original) <= 10_000
     end
@@ -63,13 +68,13 @@ function get_jac_prototype(
     nw_compat = make_compatible ? _to_compatible_execution_scheme(nw_original) : nw_original
     vbatches = map(enumerate(nw_compat.vertexbatches)) do (i, batch)
         showerror && printstyled("Process vertex batch $i:\n";bold=true,color=:blue)
-        b = get_compatible_batch(batch, i; verbose, showerror);
+        b = get_compatible_batch(batch, i; warn, showerror);
         showerror && println()
         b
     end
     ebatches = map(enumerate(nw_compat.layer.edgebatches)) do (i, batch)
         showerror && printstyled("Process edge batch $i:\n";bold=true,color=:blue)
-        b = get_compatible_batch(batch, i; verbose, showerror);
+        b = get_compatible_batch(batch, i; warn, showerror);
         showerror && println()
         b
     end
@@ -100,12 +105,12 @@ function get_jac_prototype(
         ucheck = replace(uflat(s0), NaN => 1.0)
         pcheck = replace(pflat(s0), NaN => 1.0)
         fwjac = _jacobian_at_point(nw_compat, ucheck, pcheck)
-        _assert_conservative_pattern(fwjac, jac; verbose)
+        _assert_conservative_pattern(fwjac, jac; warn)
     end
     return jac
 end
 
-function get_compatible_batch(batch::ComponentBatch{T}, i; verbose, showerror) where T
+function get_compatible_batch(batch::ComponentBatch{T}, i; warn, showerror) where T
     (;fworks, gworks) = _test_SCT_compat(batch; error=false, showerror)
     fworks && gworks && return batch
 
@@ -153,7 +158,7 @@ function get_compatible_batch(batch::ComponentBatch{T}, i; verbose, showerror) w
 
     # stage 2, replace with dense equivalents. Unlike stage 1 this usually points at a
     # modeling problem, so it is the one thing reported.
-    if verbose
+    if warn
         if !fworks && !gworks
             densefns = "f and g"
         elseif !fworks
@@ -164,7 +169,7 @@ function get_compatible_batch(batch::ComponentBatch{T}, i; verbose, showerror) w
         @warn "$type $i ($(length(batch.indices)) components) is not compatible with \
             SparseConnectivityTracer, falling back to a dense $densefns function. The Jacobian \
             pattern will contain dense blocks. Pass showerror=true to see why, or \
-            verbose=false to silence this."
+            warn=false to silence this."
     end
     if !fworks
         batch = @set batch.compf = _generic_dense_f
@@ -259,11 +264,11 @@ function _jacobian_at_point(nw, u, p)
     ForwardDiff.jacobian((du, u) -> nw(du, u, p, NaN), zeros(dim(nw)), u)
 end
 
-function _assert_conservative_pattern(refjac, pattern; verbose)
+function _assert_conservative_pattern(refjac, pattern; warn)
     @assert size(refjac) == size(pattern) "Reference jacobian and template jacobian must have the same size!"
     # a NaN spreads to every partial of its row, so it says nothing about the pattern
     nnan = count(isnan, refjac)
-    verbose && nnan > 0 && @warn "ForwardDiff jacobian has $nnan NaN entries at the check point, those are not checked."
+    warn && nnan > 0 && @warn "ForwardDiff jacobian has $nnan NaN entries at the check point, those are not checked."
     for i in eachindex(refjac)
         if !isnan(refjac[i]) && !iszero(refjac[i]) && iszero(pattern[i])
             error("Sparsity pattern mismatch! ForwardDiff returned nonzero entry where pattern is zero!")

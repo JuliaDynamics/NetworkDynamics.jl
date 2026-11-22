@@ -36,7 +36,8 @@ Optional keyword arguments:
     Detect the Jacobian sparsity pattern and store it in the network, which lets stiff solvers
     and the initialization use sparse linear algebra. Equivalent to calling
     [`set_jac_prototype!`](@ref) afterwards, see also [`get_jac_prototype`](@ref).
-    The detection reports what it is doing only if `verbose` is set.
+ - `warn=true`:
+    Warn if the sparsity detection falls back to dense blocks (only with `sparse=true`).
  - `verbose=false`:
     Show additional information during construction.
  - `fullytyped=false`:
@@ -62,6 +63,7 @@ function Network(g::AbstractGraph,
                  check_graphelement=true,
                  dealias=false,
                  sparse=false,
+                 warn=true,
                  verbose=false,
                  fullytyped=false)
     @argcheck sparse isa Bool "`sparse` must be `true` or `false`."
@@ -257,7 +259,7 @@ function Network(g::AbstractGraph,
 
     end
     # TimerOutputs.print_timer()
-    sparse && set_jac_prototype!(nw; verbose)
+    sparse && set_jac_prototype!(nw; warn)
     return nw
 end
 
@@ -534,6 +536,7 @@ function Network(nw::Network;
                    :dealias => false,
                    # a network built from a sparse one stays sparse
                    :sparse => !isnothing(nw.jac_prototype),
+                   :warn => true,
                    :verbose => false,
                    :fullytyped => isfullytyped(nw))
     for (k, v) in kwargs
