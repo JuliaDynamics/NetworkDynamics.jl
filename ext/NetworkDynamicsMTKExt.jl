@@ -238,6 +238,9 @@ function _mtk_component(T, sys, ins, outs; gwrap=identity, verbose, name, ff_to_
 
     # apply postprocessing functions from subcomponent metadata
     apply_component_postprocessing!(c)
+
+    # from here on, set_metadata!/delete_metadata! record their keys (see touched_metadata)
+    NetworkDynamics.metadata(c)[:touched] = Set{Symbol}()
     c
 end
 # a vertex has one list of inputs and outputs, an edge src and dst (or only dst outputs)

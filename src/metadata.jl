@@ -476,7 +476,12 @@ get_metadata(nw::Network, idx::ECIndex, key::Symbol) = get_metadata(getcomp(nw, 
 
 Sets the metadata `key` for the component to `value`.
 """
-set_metadata!(c::ComponentModel, key::Symbol, val) = setindex!(metadata(c), val, key)
+function set_metadata!(c::ComponentModel, key::Symbol, val)
+    md = metadata(c)
+    md[key] = val
+    _mark_touched!(md, key)
+    md
+end
 set_metadata!(nw::Network, idx::VCIndex, key::Symbol, val) = set_metadata!(getcomp(nw, idx), key, val)
 set_metadata!(nw::Network, idx::ECIndex, key::Symbol, val) = set_metadata!(getcomp(nw, idx), key, val)
 
@@ -492,12 +497,33 @@ function delete_metadata!(c::ComponentModel, key::Symbol)
     md = metadata(c)
     if haskey(md, key)
         delete!(md, key)
+        _mark_touched!(md, key)
         return true
     end
     return false
 end
 delete_metadata!(nw::Network, idx::VCIndex, key::Symbol) = delete_metadata!(getcomp(nw, idx), key)
 delete_metadata!(nw::Network, idx::ECIndex, key::Symbol) = delete_metadata!(getcomp(nw, idx), key)
+
+"""
+    touched_metadata(c::ComponentModel)
+
+Returns the set of plain metadata keys which were set or deleted after the component was
+compiled from an MTK system, or `nothing` for components not built from MTK.
+Constructor kwargs (e.g. `VertexModel(c; vidx=1)`) and writes which bypass
+`set_metadata!`/`delete_metadata!` (e.g. `push!` on a list returned by a getter) are not
+recorded.
+"""
+function touched_metadata(c::ComponentModel)
+    md = metadata(c)
+    haskey(md, :touched) ? md[:touched]::Set{Symbol} : nothing
+end
+# the :touched set only exists on MTK-built components, it is created after postprocessing
+function _mark_touched!(md, key)
+    key === :touched && return
+    haskey(md, :touched) && push!(md[:touched], key)
+    nothing
+end
 
 
 #### graphelement field for edges and vertices

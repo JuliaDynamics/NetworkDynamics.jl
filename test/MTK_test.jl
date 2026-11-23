@@ -616,6 +616,45 @@ end
     @test postprocessing_called[4] == (:toplevel, vm, "")
 end
 
+@testset "touched metadata keys" begin
+    nop = (args...) -> nothing
+    @variables x(t)=1 i(t) y(t)
+    @parameters a=1
+    sys = System([Dt(x) ~ -a*x + i, y ~ x], t; name=:touchsys)
+    pp = (c, ns) -> add_callback!(c, PresetTimeComponentCallback(1.0, ComponentAffect(nop, [:x])))
+    sys = Symbolics.setmetadata(sys, NetworkDynamics.ComponentPostprocessing, pp)
+
+    # writes during construction and postprocessing do not count
+    vm = VertexModel(sys, [:i], [:y])
+    @test has_callback(vm)
+    @test NetworkDynamics.touched_metadata(vm) == Set{Symbol}()
+
+    add_callback!(vm, PresetTimeComponentCallback(2.0, ComponentAffect(nop, [:x])))
+    set_graphelement!(vm, 3)
+    set_metadata!(vm, :custom, 42)
+    set_default!(vm, :a, 2.0)
+    @test NetworkDynamics.touched_metadata(vm) == Set([:callback, :graphelement, :custom])
+
+    delete_metadata!(vm, :odesystem)
+    @test :odesystem ∈ NetworkDynamics.touched_metadata(vm)
+
+    # copies carry an independent set
+    vm2 = copy(vm)
+    @test NetworkDynamics.touched_metadata(vm2) == NetworkDynamics.touched_metadata(vm)
+    set_metadata!(vm2, :other, 1)
+    @test :other ∉ NetworkDynamics.touched_metadata(vm)
+    vm3 = VertexModel(vm; name=:renamed)
+    @test NetworkDynamics.touched_metadata(vm3) == NetworkDynamics.touched_metadata(vm)
+    @test NetworkDynamics.touched_metadata(vm3) !== NetworkDynamics.touched_metadata(vm)
+
+    # components not built from MTK have no set
+    plain = VertexModel(f=(du, u, in, p, t) -> du[1] = 0, g=StateMask(1:1), sym=[:x], name=:plain)
+    @test isnothing(NetworkDynamics.touched_metadata(plain))
+    set_metadata!(plain, :custom, 1)
+    @test get_metadata(plain, :custom) == 1
+    @test isnothing(NetworkDynamics.touched_metadata(plain))
+end
+
 @testset "test assume_io_coupling=true" begin
     @mtkmodel GridFollowingInverter begin
         @parameters begin
