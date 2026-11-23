@@ -145,8 +145,12 @@ end
     @named valvet2_mtk = ValveToggle2()
     valvet2 = EdgeModel(valvet2_mtk, [:p_src], [:p_dst], AntiSymmetric([:q]))
     nw2 = Network(g, v, valvet2)
-    j2 = get_jac_prototype(nw2) # should fall bakc to dense
+    j2 = @test_logs (:warn, r"dense g function") get_jac_prototype(nw2) # falls back to dense
     @test j1 == j2 # no diff in that case
+    @test_logs get_jac_prototype(nw2; warn=false)
+    @test_logs (:warn, r"dense g function") Network(g, v, valvet2; sparse=true)
+    @test_logs Network(g, v, valvet2; sparse=true, warn=false)
+    @test_deprecated get_jac_prototype(nw2; verbose=false)
 
     @mtkmodel NestedValveToggle begin
         @variables begin
@@ -167,11 +171,11 @@ end
     @named nested_mtk = NestedValveToggle()
     nested = EdgeModel(nested_mtk, [:p_src], [:p_dst], AntiSymmetric([:q]))
     nw3 = Network(g, v, nested)
-    j3 = get_jac_prototype(nw3) # nested conditionals collapse from the inside out
+    j3 = @test_logs get_jac_prototype(nw3) # nested conditionals collapse from the inside out
     @test j1 == j3
 
     # the edges have no states, so a dense g gives the same pattern; check the batches instead
-    compg(nw) = NetworkDynamics.get_compatible_batch(only(nw.layer.edgebatches), 1; verbose=false, showerror=false).compg
+    compg(nw) = NetworkDynamics.get_compatible_batch(only(nw.layer.edgebatches), 1; warn=false, showerror=false).compg
     @test compg(nw) !== NetworkDynamics._generic_dense_edgeg
     @test compg(nw2) === NetworkDynamics._generic_dense_edgeg
     @test compg(nw3) !== NetworkDynamics._generic_dense_edgeg
@@ -202,12 +206,12 @@ end
     e = EdgeModel(g=AntiSymmetric((o,vs,vd,p,t)->(o[1]=vs[1]-vd[1])), outdim=1, pdim=0)
     nw = Network(path_graph(2), v, e)
 
-    batch = NetworkDynamics.get_compatible_batch(only(nw.vertexbatches), 1; verbose=false, showerror=false)
+    batch = NetworkDynamics.get_compatible_batch(only(nw.vertexbatches), 1; warn=false, showerror=false)
     @test batch.compf !== NetworkDynamics._generic_dense_f
 
     # states are [y₁, x₁, y₂, x₂], a dense f would couple y to x and to the neighbour
     @test variable_symbols(nw) == [VIndex(1, :y), VIndex(1, :x), VIndex(2, :y), VIndex(2, :x)]
-    @test Matrix(get_jac_prototype(nw; verbose=false)) == Bool[1 0 0 0
+    @test Matrix(get_jac_prototype(nw; warn=false)) == Bool[1 0 0 0
                                                               0 1 0 1
                                                               0 0 1 0
                                                               0 1 0 1]
@@ -233,9 +237,9 @@ end
     end
     @named an = AndNode()
     nw_and = Network(path_graph(2), VertexModel(an, [:i], [:o]), e)
-    batch = NetworkDynamics.get_compatible_batch(only(nw_and.vertexbatches), 1; verbose=false, showerror=false)
+    batch = NetworkDynamics.get_compatible_batch(only(nw_and.vertexbatches), 1; warn=false, showerror=false)
     @test batch.compf !== NetworkDynamics._generic_dense_f
-    @test Matrix(get_jac_prototype(nw_and; verbose=false)) == Bool[1 0 0 0
+    @test Matrix(get_jac_prototype(nw_and; warn=false)) == Bool[1 0 0 0
                                                                   0 1 0 1
                                                                   0 0 1 0
                                                                   0 1 0 1]
@@ -260,7 +264,7 @@ end
     etsv = EdgeModel(tsv, [:p_src], [:p_dst], [:q_src], [:q_dst])
     @test etsv.g isa NetworkDynamics.MultipleOutputWrapper
     nw_tsv = Network(path_graph(2), VertexModel(bn, [:i], [:o]), etsv)
-    batch = NetworkDynamics.get_compatible_batch(only(nw_tsv.layer.edgebatches), 1; verbose=false, showerror=false)
+    batch = NetworkDynamics.get_compatible_batch(only(nw_tsv.layer.edgebatches), 1; warn=false, showerror=false)
     @test batch.compg !== NetworkDynamics._generic_dense_edgeg
 end
 
@@ -279,6 +283,39 @@ end
     nw2 = Network(path_digraph(3), v, e)
     set_jac_prototype!(nw2, sparse(Bool[0 0 0; 1 0 0; 0 1 0]))
     @test Matrix(nw2.jac_prototype) == Bool[1 0 0; 1 1 0; 0 1 1]
+end
+
+@testset "check without defaults" begin
+    # neither x nor a have a default, a check at the NaN point would flag every entry
+    v = VertexModel(f=(dx,x,in,p,t)->(dx[1]=p[1]*x[1]*in[1]), g=1, dim=1, sym=[:x], psym=[:a], insym=[:i])
+    e = EdgeModel(g=AntiSymmetric((o,vs,vd,p,t)->(o[1]=vs[1]-vd[1])), outdim=1, pdim=0)
+    nw = Network(path_graph(3), v, e)
+    @test all(isnan, uflat(NWState(nw)))
+    @test get_jac_prototype(nw; check=true) == get_jac_prototype(nw; check=false)
+
+    # 0/0 at the check point fills the row with NaN, which is skipped with a warning
+    vnan = VertexModel(f=(dx,x,in,p,t)->(dx[1]=(p[1]-1)/(p[1]-1)*x[1]*in[1]), g=1, dim=1, sym=[:x], psym=[:a], insym=[:i])
+    nwnan = Network(path_graph(3), vnan, e)
+    jnan = @test_logs (:warn, r"NaN entries") get_jac_prototype(nwnan; check=true)
+    @test jnan == get_jac_prototype(nwnan; check=false)
+end
+
+@testset "selection on parameters and time" begin
+    # ifelse on a plain float picks one branch, the pattern has to hold for both
+    e = EdgeModel(g=AntiSymmetric((o,vs,vd,p,t)->(o[1]=vs[1]-vd[1])), outdim=1, pdim=0)
+    # the defaults pick the uncoupled branch, a trace at the values would miss the coupling
+    vp = VertexModel(f=(dx,x,in,p,t)->(dx[1]=ifelse(p[1] > 0, in[1], 0.0) - x[1]), g=1, dim=1, sym=[:x=>0], psym=[:on=>0], insym=[:i])
+    vt = VertexModel(f=(dx,x,in,p,t)->(dx[1]=ifelse(t > 1, in[1], 0.0) - x[1]), g=1, dim=1, sym=[:x=>0], insym=[:i])
+    coupled = Bool[1 1 0; 1 1 1; 0 1 1]
+    # no logs, so neither a dense fallback nor a NaN row at the check point
+    jp = @test_logs get_jac_prototype(Network(path_graph(3), vp, e); check=true)
+    jt = @test_logs get_jac_prototype(Network(path_graph(3), vt, e); check=true)
+    @test Matrix(jp) == coupled
+    @test Matrix(jt) == coupled
+
+    # a NaN time would turn the whole row NaN at the check point
+    vsin = VertexModel(f=(dx,x,in,p,t)->(dx[1]=sin(t)*x[1] + in[1]), g=1, dim=1, sym=[:x=>0], insym=[:i])
+    @test_logs get_jac_prototype(Network(path_graph(3), vsin, e); check=true)
 end
 
 @testset "sparse keyword" begin
@@ -398,7 +435,7 @@ end
     @test NetworkDynamics.default_fixpoint_alg(nw) isa SteadyStateDiffEq.SSRootfind
     s_ref = find_fixpoint(nw)
 
-    set_jac_prototype!(nw; verbose=false)
+    set_jac_prototype!(nw; warn=false)
     @test !(NetworkDynamics.default_fixpoint_alg(nw) isa SteadyStateDiffEq.SSRootfind)
     @test uflat(find_fixpoint(nw)) ≈ uflat(s_ref) rtol=1e-6
 
@@ -441,7 +478,7 @@ end
         @test maximum(abs, y.^3 .+ y .- x .- 0.5) < 1e-8
     end
 
-    set_jac_prototype!(nw; verbose=false)
+    set_jac_prototype!(nw; warn=false)
 
     # y=0 is inconsistent, so the initialization actually has to solve
     s0 = NWState(nw)

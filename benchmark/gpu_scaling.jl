@@ -132,7 +132,7 @@ end
 function run_scaling(configs, solvers, Ns; io=devnull)
     results = []
     for N in Ns
-        jac = get_jac_prototype(scaling_network(N); verbose=false)
+        jac = get_jac_prototype(scaling_network(N); warn=false)
         for cfg in configs
             nw, s0 = setup(cfg, N, jac)
             u, p = uflat(s0), pflat(s0)

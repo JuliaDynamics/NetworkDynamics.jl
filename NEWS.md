@@ -14,11 +14,17 @@
 - Feed forward injector vertices can have external inputs ([#449]).
 - `find_fixpoint` on a network without states returns the state directly instead of calling
   the solver.
+- `get_jac_prototype` no longer reports batches whose conditionals were rewritten. It only warns
+  when a batch falls back to a dense function, `warn=false` silences that. The `verbose` keyword
+  of `get_jac_prototype` is deprecated in favor of `warn`. `Network` takes `warn=true` as well and
+  forwards it when `sparse=true` ([#451]).
+- Fix `get_jac_prototype` missing entries for `ifelse` on parameters or time in component code ([#451]).
 
 [#445]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/445
 [#446]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/446
 [#448]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/448
 [#449]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/449
+[#451]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/451
 
 ## v1.4.0 Changelog
 
