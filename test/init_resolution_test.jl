@@ -63,6 +63,27 @@ end
     @test selfref.outsym == selfref.sym == [:x]
 end
 
+@testset "formula equality is structural" begin
+    f = (out, u) -> (out[:y] = u[:x]; nothing)
+    a = InitFormula(f, [:y], [:x]; label="a")
+    b = InitFormula(f, [:y], [:x]; label="a")
+    @test a !== b
+    @test a == b && isequal(a, b) && hash(a) == hash(b)
+    @test a != InitFormula(f, [:y], [:x]; label="b")
+    @test a != InitFormula(f, [:y], [:x]; weak=true, label="a")
+    @test a != InitFormula((out, u) -> nothing, [:y], [:x]; label="a")
+
+    c = InitFormula(f, [:z], [:x])
+    @test setdiff([a, c], [b]) == [c]
+    @test length(Set([a, b, c])) == 2
+
+    g1 = GuessFormula(f, [:y], [:x])
+    g2 = GuessFormula(f, [:y], [:x])
+    @test g1 == g2 && hash(g1) == hash(g2)
+    @test g1 != GuessFormula(f, [:y], [:x]; label="other")
+    @test isempty(setdiff([g1], [g2]))
+end
+
 @testset "rule graph" begin
     rules = [scale(2.0, :y, :x),                                    # 1: x → y
              scale(3.0, :z, :y),                                    # 2: y → z
