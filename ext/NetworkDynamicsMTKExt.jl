@@ -20,6 +20,7 @@ using OrderedCollections: OrderedDict
 using SymbolicIndexingInterface: SymbolicIndexingInterface as SII
 
 using NetworkDynamics: NetworkDynamics, set_metadata!, ComponentPostprocessing,
+                       apply_component_postprocessing!,
                        PureFeedForward, FeedForward, NoFeedForward, PureStateMap,
                        MultipleOutputWrapper, inline_repr, multiline_repr,
                        AliasMap,

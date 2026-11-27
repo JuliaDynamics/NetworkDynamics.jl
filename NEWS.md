@@ -19,12 +19,14 @@
   of `get_jac_prototype` is deprecated in favor of `warn`. `Network` takes `warn=true` as well and
   forwards it when `sparse=true` ([#451]).
 - Fix `get_jac_prototype` missing entries for `ifelse` on parameters or time in component code ([#451]).
+- `InitFormula` and `GuessFormula` compare and hash by their fields, so `setdiff`, `Set` and `unique` work on them ([#453]).
 
 [#445]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/445
 [#446]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/446
 [#448]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/448
 [#449]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/449
 [#451]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/451
+[#453]: https://github.com/JuliaDynamics/NetworkDynamics.jl/pull/453
 
 ## v1.4.0 Changelog
 

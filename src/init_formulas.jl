@@ -417,6 +417,11 @@ function Base.show(io::IO, ::MIME"text/plain", @nospecialize(c::GuessFormula))
     _show_recipe(io, c)
 end
 
+# structural equality, so formulas work in Set, setdiff and unique
+Base.hash(c::Union{InitFormula,GuessFormula}, h::UInt) = hash_fields(c, h)
+Base.:(==)(a::InitFormula, b::InitFormula) = equal_fields(a, b)
+Base.:(==)(a::GuessFormula, b::GuessFormula) = equal_fields(a, b)
+
 """
     @initformula
 

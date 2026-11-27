@@ -491,6 +491,10 @@ The function gets both the component model to *modify* and the namespace (as str
 """
 struct ComponentPostprocessing end
 
+# Runs the `ComponentPostprocessing` functions of the system a component was built from. The MTK
+# constructors call it; the method lives in the MTK extension.
+function apply_component_postprocessing! end
+
 # is defined here to allow for adaption in CUDAExt
 """
     MultipleOutputWrapper{FF, N, G}
