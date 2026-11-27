@@ -1055,7 +1055,7 @@ function _gen_Yinj_ΓΣ(nw, bus_idxs, inj_idxs)
     Γ_I, Γ_J, Γ_V = Int[], Int[], Float64[]
     for vi in inj_idxs
         cidx = resolvecompidx(nw, vi)
-        hub = cluster_hub(nw.im, cidx)
+        hub = _cluster_hub(nw.im, cidx)
         for (r, c) in zip(inj_inranges[cidx], v_outranges[hub])
             push!(Γ_I, r); push!(Γ_J, c); push!(Γ_V, 1.0)
         end
@@ -1067,7 +1067,7 @@ function _gen_Yinj_ΓΣ(nw, bus_idxs, inj_idxs)
     Σ_I, Σ_J, Σ_V = Int[], Int[], Float64[]
     for vi in inj_idxs
         cidx = resolvecompidx(nw, vi)
-        hub = cluster_hub(nw.im, cidx)
+        hub = _cluster_hub(nw.im, cidx)
         for (r, c) in zip(v_inranges[hub], inj_outranges[cidx])
             push!(Σ_I, r); push!(Σ_J, c); push!(Σ_V, -1.0)
         end

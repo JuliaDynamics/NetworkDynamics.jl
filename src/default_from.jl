@@ -111,7 +111,7 @@ function _resolve_default_from_source_vidx(nw, cidx, is_edge, dir, p, cname)
                 "default_from = (:hub, …) on vertex $cidx ($cname): :hub sources are only valid \
                  on injector nodes (the src of a LoopbackConnection edge), but this vertex is \
                  not an injector."))
-            return cluster_hub(im, cidx)
+            return _cluster_hub(im, cidx)
         end
         (dir === :src || dir === :dst) && throw(ArgumentError(
             "default_from = ($(repr(dir)), …) on vertex parameter :$p of $cname: only :hub \
