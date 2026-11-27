@@ -243,20 +243,20 @@ is_loopback(eb::ComponentBatch) = isnothing(compf(eb)) && compg(eb) == NetworkDy
 is_loopback(em::EdgeModel) = em.g isa Directed && em.g.g == NetworkDynamics.LOOPBACK_G
 has_loopback_edges(im::IndexManager) = any(im._loopback_edge)
 
-# Topology queries answered from the loopback cache in the IndexManager. On a Network they
-# return symbolic indices, on the IndexManager plain integers.
+# Topology queries answered from the loopback cache in the IndexManager. Indices they return
+# are symbolic; _cluster_hub is the plain integer version for internal use.
 is_loopback(nw::Network, eidx) = is_loopback(nw.im, eidx)
 is_loopback(im::IndexManager, eidx::EIndex) = is_loopback(im, resolvecompidx(im, eidx))
 is_loopback(im::IndexManager, eidx::Int) = im._loopback_edge[eidx]
 
-loopback_eidxs(nw::Network) = EIndex.(loopback_eidxs(nw.im))
-loopback_eidxs(im::IndexManager) = findall(im._loopback_edge)
+loopback_eidxs(nw::Network) = loopback_eidxs(nw.im)
+loopback_eidxs(im::IndexManager) = EIndex.(findall(im._loopback_edge))
 
 # A hub and its injectors form a cluster. For an injector this is the hub it is connected to
 # through its loopback edge, for any other vertex the vertex itself.
-cluster_hub(nw::Network, vidx) = VIndex(cluster_hub(nw.im, vidx))
-cluster_hub(im::IndexManager, vidx::VIndex) = cluster_hub(im, resolvecompidx(im, vidx))
-cluster_hub(im::IndexManager, vidx::Int) = im._cluster_hub[vidx]
+cluster_hub(nw::Network, vidx) = VIndex(_cluster_hub(nw.im, vidx))
+_cluster_hub(im::IndexManager, vidx::VIndex) = _cluster_hub(im, resolvecompidx(im, vidx))
+_cluster_hub(im::IndexManager, vidx::Int) = im._cluster_hub[vidx]
 has_injector_nodes(nw::Network) = !isnothing(nw.loopbackmap)
 
 """
@@ -283,7 +283,7 @@ is_injector(im::IndexManager, vidx::Int) = im._cluster_hub[vidx] != vidx
 function gen_loopback_map(im::IndexManager)
     outindex = Int[]
     aggindex = Int[]
-    for i in loopback_eidxs(im)
+    for i in findall(im._loopback_edge)
         e = im.edgevec[i]
         # we want to copy from dst output to src input
         append!(outindex, im.v_out[e.dst])  # output idx of dst vertex
