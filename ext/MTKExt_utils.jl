@@ -261,7 +261,7 @@ function _collect_comp_metadata!(md, sys, key, current_namespace)
 end
 
 
-function apply_component_postprocessing!(cf)
+function NetworkDynamics.apply_component_postprocessing!(cf)
     sys = cf.metadata[:odesystem]
     md = collect_comp_metadata(sys, ComponentPostprocessing)
     for (modelname, ppfs) in md
